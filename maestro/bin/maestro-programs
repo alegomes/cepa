@@ -1,39 +1,42 @@
 #!/usr/bin/env python3
-"""maestro-programs — responde "o que eu posso rodar aqui?" antes de rodar.
+"""maestro-programs — answers "what can I run here?" before running.
 
-Existe porque descobrir as opções de /maestro:run custava dois comandos de
-shell e o conhecimento de dois campos que o `ls` não mostra: `mode` (um plano
-single-track NÃO roda aqui) e o `status` das ondas (qual é a próxima pendente).
-Sem isso o usuário chuta o nome do programa e descobre a recusa depois.
+It exists because discovering the options of /maestro:run cost two shell
+commands and the knowledge of two fields that `ls` does not show: `mode` (a
+single-track plan does NOT run here) and the `status` of the waves (which is the
+next pending one). Without this the user guesses the program name and finds out
+about the refusal afterwards.
 
-Lê `<raiz-principal>/.claude/programs/*/plan.yaml` — a MESMA raiz que o
-/maestro:run usa (o pai de `git rev-parse --git-common-dir` sem o `/.git`
-final), para que a listagem e a execução nunca discordem de onde o plano mora.
+Reads `<main-root>/.claude/programs/*/plan.yaml` — the SAME root that
+/maestro:run uses (the parent of `git rev-parse --git-common-dir` without the
+trailing `/.git`), so that the listing and the execution never disagree about
+where the plan lives.
 
-Só lê. Nunca escreve, nunca sobe porteiro, nunca forka.
+It only reads. Never writes, never brings up a gatekeeper, never forks.
 
-Uso:
+Usage:
   maestro-programs [REPO] [--json]
   maestro-programs [REPO] --check-name NOME
   maestro-programs [REPO] --aguardando-merge [--json]
-Saída (humana): uma linha por programa com modo, próxima onda e o veredito
-`roda` / `não roda: <motivo>`. Exit 0 sempre que conseguiu listar (inclusive
-com zero programas); 2 se o diretório não é um repo git.
+Output (human): one line per program with mode, next wave and the verdict
+`roda` / `não roda: <reason>`. Exit 0 whenever it managed to list (even with
+zero programs); 2 if the directory is not a git repo.
 
-`--check-name` responde OUTRA pergunta, antes de escrever: este nome de
-programa está livre? Os dois planejadores do harness gravam no MESMO
-diretório — /board-flow:triage escreve a fila do board em
-`.claude/programs/<project_key>/plan.yaml` (mode: single-track) e
-/maestro:program-plan escreve as ondas em `.claude/programs/<nome>/plan.yaml`
-(mode: parallel-waves) — e o nome do programa é escolha livre de quem chama.
-Sem esta checagem, `/maestro:program-plan WEGO` num board `WEGO` sobrescreve a
-fila priorizada e o `why` de cada item sem uma palavra. Exit 3 = colisão.
+`--check-name` answers ANOTHER question, before writing: is this program name
+free? The harness's two planners write to the SAME directory — /board-flow:triage
+writes the board queue to `.claude/programs/<project_key>/plan.yaml`
+(mode: single-track) and /maestro:program-plan writes the waves to
+`.claude/programs/<name>/plan.yaml` (mode: parallel-waves) — and the program
+name is a free choice of the caller. Without this check,
+`/maestro:program-plan WEGO` on a `WEGO` board overwrites the prioritized queue
+and the `why` of each item without a word. Exit 3 = collision.
 
-`--aguardando-merge` responde a pergunta do /common:next e do doctor: algum
-programa tem slice que terminou (DONE) e ninguém aterrissou? Imprime uma linha
-por programa nessa situação e nada quando não há; exit 0 nos dois casos. Existe
-porque o merge train só roda com a sessão do maestro viva, e quando ela morre o
-disco precisa dizer "onda esperando você", não "onda rodando".
+`--aguardando-merge` answers the question of /common:next and of the doctor: does
+any program have a slice that finished (DONE) and nobody landed? Prints one line
+per program in that situation and nothing when there is none; exit 0 in both
+cases. It exists because the merge train only runs with the maestro session
+alive, and when it dies the disk needs to say "wave waiting for you", not "wave
+running".
 """
 import argparse
 import importlib.machinery
@@ -51,9 +54,9 @@ except ImportError:
     sys.exit(2)
 
 def _wave_state_mod():
-    """O maestro-wave-state, importado: a regra de "esperando merge" mora lá."""
-    caminho = Path(__file__).resolve().parent / "maestro-wave-state"
-    loader = importlib.machinery.SourceFileLoader("maestro_wave_state", str(caminho))
+    """The maestro-wave-state, imported: the "awaiting merge" rule lives there."""
+    path = Path(__file__).resolve().parent / "maestro-wave-state"
+    loader = importlib.machinery.SourceFileLoader("maestro_wave_state", str(path))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     mod = importlib.util.module_from_spec(spec)
     loader.exec_module(mod)
@@ -62,16 +65,17 @@ def _wave_state_mod():
 
 WS = _wave_state_mod()
 
-# Modos de plano que ESTE comando sabe executar. O complemento não é erro do
-# usuário — é outro documento, com outro consumidor (single-track → /common:next).
+# Plan modes that THIS command knows how to execute. The complement is not a
+# user error — it is another document, with another consumer (single-track →
+# /common:next).
 RUNNABLE_MODE = "parallel-waves"
 
 
-def raiz_principal(repo):
-    """O clone principal, mesmo chamado de dentro de uma worktree ligada.
+def main_root(repo):
+    """The main clone, even when called from inside a linked worktree.
 
-    `--git-common-dir` aponta para o .git do clone principal; o pai dele é a
-    raiz. Em repo comum dá o mesmo que `--show-toplevel`.
+    `--git-common-dir` points to the main clone's .git; its parent is the
+    root. In a plain repo it gives the same as `--show-toplevel`.
     """
     common = subprocess.run(
         ["git", "-C", str(repo), "rev-parse", "--git-common-dir"],
@@ -84,7 +88,7 @@ def raiz_principal(repo):
     return p.parent
 
 
-def _pid_vivo(pid):
+def _pid_alive(pid):
     try:
         os.kill(int(pid), 0)
     except (OSError, ValueError):
@@ -92,8 +96,8 @@ def _pid_vivo(pid):
     return True
 
 
-def _run_em_curso(progdir):
-    """O que o disco diz sobre uma execução anterior deste programa."""
+def _run_in_progress(progdir):
+    """What the disk says about a previous execution of this program."""
     info = {"wave_state": None, "gatekeeper_pid": None, "gatekeeper_vivo": False}
     ws = progdir / "wave-state.yaml"
     if ws.is_file():
@@ -103,60 +107,60 @@ def _run_em_curso(progdir):
             data = {}
         slices = data.get("slices") or {}
         if isinstance(slices, dict):
-            estados = {}
-            for nome, s in slices.items():
+            states = {}
+            for name, s in slices.items():
                 st = (s or {}).get("status") if isinstance(s, dict) else None
-                estados[nome] = st or "?"
+                states[name] = st or "?"
         else:
-            estados = {}
-        info["wave_state"] = {"wave": data.get("wave"), "slices": estados,
-                              "aguardando_merge": WS.aguardando_merge(data)}
+            states = {}
+        info["wave_state"] = {"wave": data.get("wave"), "slices": states,
+                              "aguardando_merge": WS.awaiting_merge(data)}
     pidfile = progdir / "gatekeeper" / "gatekeeper.pid"
     if pidfile.is_file():
         pid = pidfile.read_text().strip()
         info["gatekeeper_pid"] = pid
-        info["gatekeeper_vivo"] = _pid_vivo(pid)
+        info["gatekeeper_vivo"] = _pid_alive(pid)
     return info
 
 
-def _avalia(plan):
-    """(elegivel, motivo, proxima_onda, resumo_ondas) para um plano carregado."""
+def _evaluate(plan):
+    """(eligible, reason, next_wave, waves_summary) for a loaded plan."""
     sv = plan.get("schema_version")
     if sv not in (1, 2):
-        falta = "sem `schema_version`" if sv is None else f"schema_version {sv!r} desconhecida"
-        return False, f"{falta} — /maestro:run recusa igual (declare 1 ou 2)", None, None
-    modo = plan.get("mode") or (RUNNABLE_MODE if sv == 1 else None)
-    if modo is None:
+        missing = "sem `schema_version`" if sv is None else f"schema_version {sv!r} desconhecida"
+        return False, f"{missing} — /maestro:run recusa igual (declare 1 ou 2)", None, None
+    mode = plan.get("mode") or (RUNNABLE_MODE if sv == 1 else None)
+    if mode is None:
         return False, "v2 sem `mode` — campo obrigatório no schema 2", None, None
-    if modo == "single-track":
-        itens = plan.get("items") or []
-        pend = [i for i in itens if (i or {}).get("status") in (None, "pending", "in_progress")]
-        prox = pend[0].get("id") if pend else None
-        motivo = "plano de um item por vez — quem responde o próximo é /common:next"
-        if prox:
-            motivo += f" (próximo: {prox})"
-        return False, motivo, None, None
-    if modo != RUNNABLE_MODE:
-        return False, f"mode {modo!r} não é válido (ver common/plan-schema.yaml)", None, None
+    if mode == "single-track":
+        items = plan.get("items") or []
+        pending = [i for i in items if (i or {}).get("status") in (None, "pending", "in_progress")]
+        next_id = pending[0].get("id") if pending else None
+        reason = "plano de um item por vez — quem responde o próximo é /common:next"
+        if next_id:
+            reason += f" (próximo: {next_id})"
+        return False, reason, None, None
+    if mode != RUNNABLE_MODE:
+        return False, f"mode {mode!r} não é válido (ver common/plan-schema.yaml)", None, None
 
-    ondas = plan.get("waves") or []
-    if not ondas:
+    waves = plan.get("waves") or []
+    if not waves:
         return False, "sem `waves` — nada a forkar", None, None
-    resumo = [{"id": w.get("id"), "status": w.get("status") or "pending",
-               "slices": w.get("slices") or []} for w in ondas]
-    pendentes = [w for w in resumo if w["status"] not in ("done",)]
-    if not pendentes:
-        return False, f"todas as {len(resumo)} ondas já estão done", None, resumo
-    return True, None, pendentes[0], resumo
+    summary = [{"id": w.get("id"), "status": w.get("status") or "pending",
+                "slices": w.get("slices") or []} for w in waves]
+    pending_waves = [w for w in summary if w["status"] not in ("done",)]
+    if not pending_waves:
+        return False, f"todas as {len(summary)} ondas já estão done", None, summary
+    return True, None, pending_waves[0], summary
 
 
-def _filas_novas(raiz):
-    """As filas single-track do layout novo, `.claude/queues/<n>/queue.yaml`.
+def _new_queues(root):
+    """The single-track queues of the new layout, `.claude/queues/<n>/queue.yaml`.
 
-    O resolvedor oficial é `common/hooks/_queuepath.py`, mas o maestro é outro
-    plugin e não importa do `common`; aqui só se lista, então duplicar o caminho
-    é mais barato que acoplar os dois."""
-    base = raiz / ".claude" / "queues"
+    The official resolver is `common/hooks/_queuepath.py`, but maestro is another
+    plugin and does not import from `common`; here we only list, so duplicating
+    the path is cheaper than coupling the two."""
+    base = root / ".claude" / "queues"
     if not base.is_dir():
         return []
     return [{"nome": d.name, "dir": str(d), "elegivel": False,
@@ -167,16 +171,16 @@ def _filas_novas(raiz):
             for d in sorted(base.iterdir()) if (d / "queue.yaml").is_file()]
 
 
-def coleta(raiz):
+def collect(root):
     progs = []
-    base = raiz / ".claude" / "programs"
+    base = root / ".claude" / "programs"
     if not base.is_dir():
-        return _filas_novas(raiz)
+        return _new_queues(root)
     for d in sorted(p for p in base.iterdir() if p.is_dir()):
         item = {"nome": d.name, "dir": str(d), "elegivel": False,
                 "motivo": None, "mode": None, "schema_version": None,
                 "proxima_onda": None, "ondas": None}
-        item.update(_run_em_curso(d))
+        item.update(_run_in_progress(d))
         pf = d / "plan.yaml"
         if not pf.is_file():
             item["motivo"] = "sem plan.yaml"
@@ -191,101 +195,101 @@ def coleta(raiz):
         item["schema_version"] = plan.get("schema_version")
         item["mode"] = plan.get("mode") or (
             RUNNABLE_MODE if plan.get("schema_version") == 1 else None)
-        ok, motivo, prox, resumo = _avalia(plan)
-        item["elegivel"], item["motivo"] = ok, motivo
-        item["proxima_onda"], item["ondas"] = prox, resumo
+        ok, reason, next_wave, summary = _evaluate(plan)
+        item["elegivel"], item["motivo"] = ok, reason
+        item["proxima_onda"], item["ondas"] = next_wave, summary
         progs.append(item)
-    novas = {q["nome"] for q in _filas_novas(raiz)}
-    progs = [p for p in progs if p["nome"] not in novas] + _filas_novas(raiz)
+    new = {q["nome"] for q in _new_queues(root)}
+    progs = [p for p in progs if p["nome"] not in new] + _new_queues(root)
     return sorted(progs, key=lambda p: p["nome"])
 
 
-def imprime(raiz, progs):
-    print(f"Programas em {raiz}/.claude/programs\n")
+def render(root, progs):
+    print(f"Programas em {root}/.claude/programs\n")
     if not progs:
         print("  (nenhum) — crie um com /maestro:program-plan <nome>")
         return
     for p in progs:
-        cab = f"  {p['nome']}"
-        modo = p["mode"] or "?"
+        label = f"  {p['nome']}"
+        mode = p["mode"] or "?"
         sv = p["schema_version"]
-        print(f"{cab}  [mode: {modo}{f', schema v{sv}' if sv else ''}]")
+        print(f"{label}  [mode: {mode}{f', schema v{sv}' if sv else ''}]")
         if p["elegivel"]:
             w = p["proxima_onda"]
             slices = ", ".join(str(s) for s in w["slices"]) or "(sem slices)"
-            feitas = sum(1 for x in p["ondas"] if x["status"] == "done")
+            done_count = sum(1 for x in p["ondas"] if x["status"] == "done")
             print(f"      RODA  →  /maestro:run {p['nome']} --wave {w['id']}"
-                  f"   ({len(p['ondas'])} ondas, {feitas} done; onda {w['id']}"
+                  f"   ({len(p['ondas'])} ondas, {done_count} done; onda {w['id']}"
                   f" = {slices})")
         else:
             print(f"      não roda: {p['motivo']}")
         ws = p.get("wave_state")
         if ws:
-            estados = ", ".join(f"{k}={v}" for k, v in (ws["slices"] or {}).items())
+            states = ", ".join(f"{k}={v}" for k, v in (ws["slices"] or {}).items())
             print(f"      execução anterior: onda {ws['wave']}"
-                  + (f" · {estados}" if estados else ""))
+                  + (f" · {states}" if states else ""))
             if ws.get("aguardando_merge"):
-                print("      " + _linha_aguardando(p["nome"], ws))
+                print("      " + _awaiting_line(p["nome"], ws))
         if p.get("gatekeeper_pid"):
-            vivo = "VIVO" if p["gatekeeper_vivo"] else "morto (órfão — o gc do run limpa)"
-            print(f"      porteiro pid {p['gatekeeper_pid']}: {vivo}")
-    rodaveis = [p["nome"] for p in progs if p["elegivel"]]
+            alive = "VIVO" if p["gatekeeper_vivo"] else "morto (órfão — o gc do run limpa)"
+            print(f"      porteiro pid {p['gatekeeper_pid']}: {alive}")
+    runnable = [p["nome"] for p in progs if p["elegivel"]]
     print()
-    if rodaveis:
-        print("Rodáveis agora: " + ", ".join(rodaveis))
+    if runnable:
+        print("Rodáveis agora: " + ", ".join(runnable))
     else:
         print("Nenhum programa rodável — /maestro:program-plan <nome> cria um.")
 
 
-def _linha_aguardando(nome, ws):
-    pend = ws["aguardando_merge"]
-    return (f"{nome}: {len(pend)} slice(s) terminada(s) esperando merge na "
-            f"onda {ws['wave']} ({', '.join(pend)}) → /maestro:resume {nome}")
+def _awaiting_line(name, ws):
+    pending = ws["aguardando_merge"]
+    return (f"{name}: {len(pending)} slice(s) terminada(s) esperando merge na "
+            f"onda {ws['wave']} ({', '.join(pending)}) → /maestro:resume {name}")
 
 
-def cmd_aguardando(raiz, como_json):
-    progs = [p for p in coleta(raiz)
+def cmd_awaiting(root, as_json):
+    progs = [p for p in collect(root)
              if (p.get("wave_state") or {}).get("aguardando_merge")]
-    if como_json:
-        print(json.dumps({"raiz": str(raiz), "programas": [
+    if as_json:
+        print(json.dumps({"raiz": str(root), "programas": [
             {"nome": p["nome"], "wave": p["wave_state"]["wave"],
              "aguardando_merge": p["wave_state"]["aguardando_merge"]}
             for p in progs]}, ensure_ascii=False, indent=2))
     else:
         for p in progs:
-            print(_linha_aguardando(p["nome"], p["wave_state"]))
+            print(_awaiting_line(p["nome"], p["wave_state"]))
     return 0
 
 
-def cmd_check_name(raiz, nome):
-    """Exit 0 = nome livre (ou é o seu próprio plano de ondas). 3 = colisão."""
-    fila = raiz / ".claude" / "queues" / nome / "queue.yaml"
-    if fila.is_file():
-        print(f"COLISÃO: {fila} já é a fila '{nome}' (layout novo, escrita por "
+def cmd_check_name(root, name):
+    """Exit 0 = name free (or it is its own wave plan). 3 = collision."""
+    queue_file = root / ".claude" / "queues" / name / "queue.yaml"
+    if queue_file.is_file():
+        print(f"COLISÃO: {queue_file} já é a fila '{name}' (layout novo, escrita por "
               f"/common:queue). Escrever ondas com este nome esconderia a fila "
               f"de quem a lê. Escolha outro nome de programa.", file=sys.stderr)
         return 3
-    alvo = raiz / ".claude" / "programs" / nome / "plan.yaml"
-    if not alvo.is_file():
-        print(f"nome livre: {alvo} não existe")
+    target = root / ".claude" / "programs" / name / "plan.yaml"
+    if not target.is_file():
+        print(f"nome livre: {target} não existe")
         return 0
     try:
-        plan = yaml.safe_load(alvo.read_text()) or {}
+        plan = yaml.safe_load(target.read_text()) or {}
     except yaml.YAMLError as e:
-        print(f"{alvo} existe e está ilegível ({e.__class__.__name__}) — "
+        print(f"{target} existe e está ilegível ({e.__class__.__name__}) — "
               "não dá para dizer o que sobrescreveria", file=sys.stderr)
         return 3
-    modo = plan.get("mode") or (
+    mode = plan.get("mode") or (
         RUNNABLE_MODE if plan.get("schema_version") == 1 else None)
-    if modo == "single-track":
-        itens = plan.get("items") or []
-        print(f"COLISÃO: {alvo} já é a fila single-track do board "
-              f"'{plan.get('queue') or plan.get('program') or nome}' ({len(itens)} itens, escrita por "
+    if mode == "single-track":
+        items = plan.get("items") or []
+        print(f"COLISÃO: {target} já é a fila single-track do board "
+              f"'{plan.get('queue') or plan.get('program') or name}' ({len(items)} itens, escrita por "
               f"/board-flow:triage). Escrever ondas aqui apaga a ordem e o `why` "
               f"de cada item. Escolha outro nome de programa.", file=sys.stderr)
         return 3
-    print(f"nome ocupado por um plano '{modo}' — reescrever é o fluxo normal "
-          f"de replanejar as ondas de '{nome}'")
+    print(f"nome ocupado por um plano '{mode}' — reescrever é o fluxo normal "
+          f"de replanejar as ondas de '{name}'")
     return 0
 
 
@@ -300,20 +304,20 @@ def main(argv=None):
                     help="só os programas com slice DONE ainda não aterrissada")
     a = ap.parse_args(argv)
 
-    raiz = raiz_principal(a.repo)
-    if raiz is None:
+    root = main_root(a.repo)
+    if root is None:
         print(f"{a.repo} não é um repositório git", file=sys.stderr)
         return 2
     if a.check_name:
-        return cmd_check_name(raiz, a.check_name)
+        return cmd_check_name(root, a.check_name)
     if a.aguardando_merge:
-        return cmd_aguardando(raiz, a.json)
-    progs = coleta(raiz)
+        return cmd_awaiting(root, a.json)
+    progs = collect(root)
     if a.json:
-        print(json.dumps({"raiz": str(raiz), "programas": progs},
+        print(json.dumps({"raiz": str(root), "programas": progs},
                          ensure_ascii=False, indent=2))
     else:
-        imprime(raiz, progs)
+        render(root, progs)
     return 0
 
 

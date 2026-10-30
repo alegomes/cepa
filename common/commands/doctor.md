@@ -49,7 +49,7 @@ brings all of that forward to a moment when fixing is cheap.
 
    The `plano` area (when it shows up) is the single-track queue
    (`.claude/queues/<fila>/queue.yaml`) compared with the project's
-   `BACKLOG.md` — the `cepa-plan divergencia` the script already ran on its
+   `BACKLOG.md` — the `cepa-plan divergence` the script already ran on its
    own: BACKLOG.md sections without `**Plano:**` and a `**Plano:**` citing an id
    that does not exist in that queue. It only shows up when the repo has
    `BACKLOG.md` AND a queue that resolves without ambiguity (via
@@ -82,7 +82,7 @@ brings all of that forward to a moment when fixing is cheap.
    it to a temporary file and run:
 
    ```
-   python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" divergencia <fila> \
+   python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" divergence <fila> \
      --board <arquivo-temporário> --backlog BACKLOG.md --repo . --json
    ```
 

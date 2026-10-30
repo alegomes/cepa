@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-"""Dispensas do humano: leitura, casamento e gravação de `.claude/waivers/`.
+"""The human's waivers: reading, matching and recording `.claude/waivers/`.
 
-Por que existe: sem isto, a fila repete a mesma pergunta toda semana. "O dublê
-da PlugSign engole o sinal, aceito a prova interna?" volta em todo card que
-toca aquele adapter, e a resposta dada da última vez morre no chat que a
-produziu.
+Why it exists: without this, the queue repeats the same question every week.
+"The PlugSign double swallows the signal, do I accept the internal proof?"
+comes back on every card that touches that adapter, and the answer given last
+time dies in the chat that produced it.
 
-Quem dispensa é SEMPRE o humano. O `proof-reviewer` continua sem poder dispensar
-nada e o artefato da prova continua sem campo para isso — a dispensa mora aqui
-fora, com autor, data e gatilho de revisita, e é auditável. Ver a seção "Verdict
-routing" em build-hex/agents/proof-reviewer.md.
+Who waives is ALWAYS the human. The `proof-reviewer` still cannot waive
+anything and the proof artifact still has no field for it: the waiver lives out
+here, with author, date and a revisit trigger, and is auditable. See the
+"Verdict routing" section in build-hex/agents/proof-reviewer.md.
 
-Um waiver casa por MOTIVO + ESCOPO, nunca por card: casar por card não
-economizaria pergunta nenhuma (todo card é novo), e casar só por motivo
-dispensaria o adapter inteiro do projeto por causa de uma resposta sobre uma
-classe.
+A waiver matches by REASON + SCOPE, never by card: matching by card would save
+no question at all (every card is new), and matching by reason alone would
+waive the project's whole adapter because of an answer about one class.
 
-Em run autônomo (`claude -p` do `cepa-until`, ou /common:autonomous-start) NÃO
-existe dono na frente do agente. Uma dispensa gravada ali é o agente dispensando
-prova em nome do dono (fb-20261014-3: um run gravou `autor: alegomes` sozinho).
-Por isso, nesse modo `gravar` vira `propor`: o arquivo nasce como PROPOSTA
-(`status: proposta`, `autor: null`), `carregar` não a enxerga, e só o
-`cepa-plan responde` do dono, num terminal, a converte em dispensa
-(`converter`). Gêmeo inline da conversão: `common/bin/cepa-plan` (`cmd_responde`).
+In an autonomous run (`claude -p` from `cepa-until`, or
+/common:autonomous-start) there is NO owner in front of the agent. A waiver
+recorded there is the agent waiving proof on the owner's behalf (fb-20261014-3:
+a run wrote `autor: alegomes` on its own). So in that mode `write` becomes
+`propose`: the file is born as a PROPOSAL (`status: proposta`, `autor: null`),
+`load` does not see it, and only the owner's `cepa-plan answer`, in a terminal,
+converts it into a waiver (`convert`). Inline twin of the conversion:
+`common/bin/cepa-plan` (`cmd_answer`).
 """
 from __future__ import annotations
 
@@ -33,50 +33,51 @@ from datetime import date
 
 DIR = ".claude/waivers"
 
-STATUS_SEM_EFEITO = ("proposta", "recusada")
+NO_EFFECT_STATUSES = ("proposta", "recusada")
 
-CAMPOS = ("motivo", "escopo", "razao", "autor", "criado_em", "revisit_trigger")
-
-
-def caminho(repo: str, motivo: str, escopo: str) -> str:
-    return os.path.join(repo, DIR, f"{motivo}--{_slug(escopo)}.yaml")
+REQUIRED_FIELDS = ("motivo", "escopo", "razao", "autor", "criado_em", "revisit_trigger")
 
 
-def _slug(texto: str) -> str:
-    """Nome de arquivo legível."""
-    s = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "-", (texto or "").strip())
+def waiver_path(repo: str, reason: str, scope: str) -> str:
+    return os.path.join(repo, DIR, f"{reason}--{_slug(scope)}.yaml")
+
+
+def _slug(text: str) -> str:
+    """Readable file name."""
+    s = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "-", (text or "").strip())
     s = re.sub(r"[^a-zA-Z0-9]+", "-", s).strip("-").lower()
     return s or "sem-escopo"
 
 
-def _chave(texto: str) -> str:
-    """A chave de casamento, mais frouxa que o nome do arquivo de propósito:
-    `PlugSignAdapter`, `PlugSign Adapter` e `plugsign-adapter` são o MESMO
-    escopo. Se cada grafia virasse uma dispensa própria, a pergunta voltaria —
-    que é o defeito que este arquivo existe para eliminar."""
-    return re.sub(r"[^a-z0-9]+", "", (texto or "").lower())
+def _key(text: str) -> str:
+    """The matching key, deliberately looser than the file name:
+    `PlugSignAdapter`, `PlugSign Adapter` and `plugsign-adapter` are the SAME
+    scope. If each spelling became its own waiver, the question would come
+    back, which is the defect this file exists to eliminate."""
+    return re.sub(r"[^a-z0-9]+", "", (text or "").lower())
 
 
-def em_run_autonomo(env=None) -> bool:
-    """True quando o processo é um run sem dono na frente: `CEPA_UNTIL_RUN`
-    (posto pelo `cepa-until` em todo `claude -p`) ou `CLAUDE_AUTONOMOUS_RUN_ID`
-    (posto pelo /common:autonomous-start)."""
+def in_autonomous_run(env=None) -> bool:
+    """True when the process is a run with no owner in front: `CEPA_UNTIL_RUN`
+    (set by `cepa-until` on every `claude -p`) or `CLAUDE_AUTONOMOUS_RUN_ID`
+    (set by /common:autonomous-start)."""
     env = os.environ if env is None else env
     return bool(env.get("CEPA_UNTIL_RUN") or env.get("CLAUDE_AUTONOMOUS_RUN_ID"))
 
 
-def carregar(repo: str) -> list[dict]:
-    """Todo waiver do repo. Arquivo sem os campos obrigatórios é IGNORADO.
+def load(repo: str) -> list[dict]:
+    """Every waiver in the repo. A file missing the required fields is IGNORED.
 
-    Ignorar é o lado seguro: um waiver malformado que valesse dispensaria uma
-    prova sem ninguém conseguir dizer quem dispensou nem até quando.
+    Ignoring is the safe side: a malformed waiver that took effect would waive
+    a proof with nobody able to say who waived it or until when.
     """
     import yaml
 
-    fora = []
+    found = []
     for path in sorted(glob.glob(os.path.join(repo, DIR, "*.yaml"))):
-        # YAML que não parseia (ou arquivo ilegível) é ignorado como o malformado:
-        # um arquivo corrompido não pode derrubar a checagem de todas as demais.
+        # YAML that does not parse (or an unreadable file) is ignored like the
+        # malformed one: a corrupted file cannot bring down the check of all
+        # the others.
         try:
             with open(path) as fh:
                 d = yaml.safe_load(fh)
@@ -84,48 +85,49 @@ def carregar(repo: str) -> list[dict]:
             continue
         if not isinstance(d, dict):
             continue
-        # Proposta e recusa nunca dispensam, mesmo se alguém preencher `autor`:
-        # só a conversão pelo dono tira o `status`.
-        if d.get("status") in STATUS_SEM_EFEITO:
+        # A proposal and a refusal never waive, even if someone fills in
+        # `autor`: only the owner's conversion removes the `status`.
+        if d.get("status") in NO_EFFECT_STATUSES:
             continue
-        if any(not d.get(c) for c in CAMPOS):
+        if any(not d.get(c) for c in REQUIRED_FIELDS):
             continue
         d["_path"] = path
-        fora.append(d)
-    return fora
+        found.append(d)
+    return found
 
 
-def vencido(waiver: dict, hoje: date | None = None) -> bool:
-    """Só vence por DATA. `revisit_trigger` em prosa ("quando o adapter mudar")
-    não é verificável por código: ele é mostrado ao humano, nunca avaliado
-    aqui — inventar uma avaliação seria dispensar por conta própria."""
-    gatilho = str(waiver.get("revisit_trigger") or "")
-    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", gatilho)
+def expired(waiver: dict, today: date | None = None) -> bool:
+    """Expires by DATE only. A prose `revisit_trigger` ("when the adapter
+    changes") is not verifiable by code: it is shown to the human, never
+    evaluated here — inventing an evaluation would be waiving on our own."""
+    trigger = str(waiver.get("revisit_trigger") or "")
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", trigger)
     if not m:
         return False
-    return (hoje or date.today()).isoformat() > m.group(0)
+    return (today or date.today()).isoformat() > m.group(0)
 
 
-def casa(waiver: dict, motivo: str, escopo: str) -> bool:
-    """Mesmo motivo E mesmo escopo, comparando por `_chave` — senão
-    "PlugSignAdapter" e "plugsign adapter" viram duas dispensas da mesma coisa."""
-    return (waiver.get("motivo") == motivo
-            and _chave(str(waiver.get("escopo"))) == _chave(escopo))
+def matches(waiver: dict, reason: str, scope: str) -> bool:
+    """Same reason AND same scope, compared through `_key` — otherwise
+    "PlugSignAdapter" and "plugsign adapter" become two waivers for the same thing."""
+    return (waiver.get("motivo") == reason
+            and _key(str(waiver.get("escopo"))) == _key(scope))
 
 
-def aplicavel(waivers: list[dict], motivo: str, escopo: str,
-              hoje: date | None = None) -> dict | None:
-    """O waiver que dispensa esta pergunta, ou None se ela precisa ser feita.
+def applicable(waivers: list[dict], reason: str, scope: str,
+               today: date | None = None) -> dict | None:
+    """The waiver that waives this question, or None if it has to be asked.
 
-    Vencido não dispensa: volta a ser pergunta, e quem chama diz que venceu.
+    An expired one does not waive: it goes back to being a question, and the
+    caller says it expired.
     """
     for w in waivers:
-        if casa(w, motivo, escopo) and not vencido(w, hoje):
+        if matches(w, reason, scope) and not expired(w, today):
             return w
     return None
 
 
-def _le(path: str):
+def _read(path: str):
     import yaml
 
     try:
@@ -136,7 +138,7 @@ def _le(path: str):
     return d if isinstance(d, dict) else None
 
 
-def _escreve(path: str, d: dict) -> None:
+def _write(path: str, d: dict) -> None:
     import yaml
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -144,156 +146,158 @@ def _escreve(path: str, d: dict) -> None:
         yaml.safe_dump(d, fh, allow_unicode=True, sort_keys=False)
 
 
-def _dispensa_valida(d) -> bool:
-    return (isinstance(d, dict) and d.get("status") not in STATUS_SEM_EFEITO
-            and all(d.get(c) for c in CAMPOS))
+def _is_valid_waiver(d) -> bool:
+    return (isinstance(d, dict) and d.get("status") not in NO_EFFECT_STATUSES
+            and all(d.get(c) for c in REQUIRED_FIELDS))
 
 
-def propor(repo: str, motivo: str, escopo: str, razao: str,
-           revisit_trigger: str, proposto_por: str, hoje: date | None = None,
-           fila: str | None = None, item: str | None = None,
-           pergunta: str | None = None) -> str:
-    """Grava uma PROPOSTA de dispensa: uma pergunta ao dono, não uma decisão.
+def propose(repo: str, reason: str, scope: str, rationale: str,
+            revisit_trigger: str, proposed_by: str, today: date | None = None,
+            queue: str | None = None, item: str | None = None,
+            question: str | None = None) -> str:
+    """Records a waiver PROPOSAL: a question to the owner, not a decision.
 
-    Mesmo caminho do waiver (`caminho`), mas `status: proposta` e `autor: null`
-    explícito — o dono ainda não decidiu. `carregar` a ignora. Se nesse caminho
-    já existe uma dispensa VÁLIDA ou uma proposta `recusada`, o dono já decidiu:
-    devolve o caminho sem tocar no arquivo. A recusa vale até o dono apagar ou
-    editar o arquivo — um run repropor o que o dono recusou é o mesmo padrão de
-    fb-20261014-3. Só proposta pendente antiga é sobrescrita.
+    Same path as the waiver (`waiver_path`), but `status: proposta` and an
+    explicit `autor: null` — the owner has not decided yet. `load` ignores it.
+    If a VALID waiver or a `recusada` proposal already exists at that path, the
+    owner has already decided: returns the path without touching the file. The
+    refusal holds until the owner deletes or edits the file — a run
+    re-proposing what the owner refused is the same pattern as fb-20261014-3.
+    Only an old pending proposal is overwritten.
     """
-    faltando = [n for n, v in (("razao", razao), ("proposto_por", proposto_por),
-                               ("revisit_trigger", revisit_trigger),
-                               ("escopo", escopo), ("motivo", motivo)) if not v]
-    if faltando:
-        raise ValueError(f"proposta sem {', '.join(faltando)} — não gravo")
+    missing = [n for n, v in (("razao", rationale), ("proposto_por", proposed_by),
+                              ("revisit_trigger", revisit_trigger),
+                              ("escopo", scope), ("motivo", reason)) if not v]
+    if missing:
+        raise ValueError(f"proposta sem {', '.join(missing)} — não gravo")
 
-    destino = caminho(repo, motivo, escopo)
-    # `_le` devolve None para YAML corrompido: arquivo corrompido não é dispensa
-    # válida nem recusa, então `propor` pode sobrescrevê-lo.
-    existente = _le(destino)
-    if _dispensa_valida(existente) or (
-            isinstance(existente, dict) and existente.get("status") == "recusada"):
-        return destino
+    dest = waiver_path(repo, reason, scope)
+    # `_read` returns None for corrupted YAML: a corrupted file is neither a
+    # valid waiver nor a refusal, so `propose` may overwrite it.
+    existing = _read(dest)
+    if _is_valid_waiver(existing) or (
+            isinstance(existing, dict) and existing.get("status") == "recusada"):
+        return dest
 
-    por = proposto_por
+    by = proposed_by
     run_id = os.environ.get("CLAUDE_AUTONOMOUS_RUN_ID")
-    if run_id and run_id not in por:
-        por = f"{por} (run {run_id})"
+    if run_id and run_id not in by:
+        by = f"{by} (run {run_id})"
     d = {
         "status": "proposta",
-        "motivo": motivo,
-        "escopo": escopo,
-        "razao": razao,
+        "motivo": reason,
+        "escopo": scope,
+        "razao": rationale,
         "revisit_trigger": revisit_trigger,
         "autor": None,
-        "proposto_por": por,
-        "proposto_em": (hoje or date.today()).isoformat(),
-        "pergunta": " ".join((pergunta or
-                              f"Aceito a dispensa de {escopo} ({motivo}) por: {razao}?"
+        "proposto_por": by,
+        "proposto_em": (today or date.today()).isoformat(),
+        "pergunta": " ".join((question or
+                              f"Aceito a dispensa de {scope} ({reason}) por: {rationale}?"
                               ).split()),
     }
-    if fila:
-        d["fila"] = fila
+    if queue:
+        d["fila"] = queue
     if item:
         d["item"] = str(item)
-    _escreve(destino, d)
-    return destino
+    _write(dest, d)
+    return dest
 
 
-def propostas(repo: str) -> list[dict]:
-    """Toda proposta pendente (`status: proposta`), por caminho."""
-    fora = []
+def proposals(repo: str) -> list[dict]:
+    """Every pending proposal (`status: proposta`), by path."""
+    found = []
     for path in sorted(glob.glob(os.path.join(repo, DIR, "*.yaml"))):
-        d = _le(path)
+        d = _read(path)
         if d and d.get("status") == "proposta":
             d["_path"] = path
-            fora.append(d)
-    return fora
+            found.append(d)
+    return found
 
 
-def converter(repo: str, motivo: str, escopo: str, autor: str,
-              resposta: str | None = None, hoje: date | None = None) -> str:
-    """O dono aceitou: a proposta vira dispensa. Ato do dono, nunca do agente."""
-    if em_run_autonomo():
+def convert(repo: str, reason: str, scope: str, author: str,
+            answer: str | None = None, today: date | None = None) -> str:
+    """The owner accepted: the proposal becomes a waiver. The owner's act, never the agent's."""
+    if in_autonomous_run():
         raise PermissionError("converter proposta em dispensa é ato do dono; "
                               "em run autônomo não há dono — não converto")
-    if not autor or not str(autor).strip():
+    if not author or not str(author).strip():
         raise ValueError("dispensa sem autor — não converto")
-    destino = caminho(repo, motivo, escopo)
-    d = _le(destino)
+    dest = waiver_path(repo, reason, scope)
+    d = _read(dest)
     if d is None:
-        raise FileNotFoundError(f"não há proposta em {destino}")
+        raise FileNotFoundError(f"não há proposta em {dest}")
     if d.get("status") != "proposta":
-        if _dispensa_valida(d):
-            raise ValueError(f"{destino} já é uma dispensa — nada a converter")
-        raise FileNotFoundError(f"não há proposta em {destino}")
-    novo = {k: v for k, v in d.items() if k not in ("status", "autor")}
-    novo["autor"] = autor
-    novo["criado_em"] = (hoje or date.today()).isoformat()
-    if resposta:
-        novo["resposta_do_dono"] = resposta
-    _escreve(destino, novo)
-    return destino
+        if _is_valid_waiver(d):
+            raise ValueError(f"{dest} já é uma dispensa — nada a converter")
+        raise FileNotFoundError(f"não há proposta em {dest}")
+    converted = {k: v for k, v in d.items() if k not in ("status", "autor")}
+    converted["autor"] = author
+    converted["criado_em"] = (today or date.today()).isoformat()
+    if answer:
+        converted["resposta_do_dono"] = answer
+    _write(dest, converted)
+    return dest
 
 
-def recusar(repo: str, motivo: str, escopo: str, resposta: str,
-            hoje: date | None = None) -> str:
-    """O dono recusou: a proposta fica registrada como `recusada`, sem efeito."""
-    if em_run_autonomo():
+def decline(repo: str, reason: str, scope: str, answer: str,
+            today: date | None = None) -> str:
+    """The owner refused: the proposal stays on record as `recusada`, with no effect."""
+    if in_autonomous_run():
         raise PermissionError("recusar proposta é ato do dono; em run autônomo "
                               "não há dono — não recuso")
-    destino = caminho(repo, motivo, escopo)
-    d = _le(destino)
+    dest = waiver_path(repo, reason, scope)
+    d = _read(dest)
     if d is None or d.get("status") != "proposta":
-        raise FileNotFoundError(f"não há proposta em {destino}")
+        raise FileNotFoundError(f"não há proposta em {dest}")
     d["status"] = "recusada"
-    d["recusada_em"] = (hoje or date.today()).isoformat()
-    d["resposta_do_dono"] = resposta
-    _escreve(destino, d)
-    return destino
+    d["recusada_em"] = (today or date.today()).isoformat()
+    d["resposta_do_dono"] = answer
+    _write(dest, d)
+    return dest
 
 
-def gravar(repo: str, motivo: str, escopo: str, razao: str, autor: str,
-           revisit_trigger: str, hoje: date | None = None,
-           fila: str | None = None, item: str | None = None) -> str:
-    """Grava a decisão do humano. Todo campo é obrigatório — inclusive o
-    gatilho de revisita: dispensa sem prazo nem condição é dispensa para sempre,
-    e ninguém decidiu isso.
+def write(repo: str, reason: str, scope: str, rationale: str, author: str,
+          revisit_trigger: str, today: date | None = None,
+          queue: str | None = None, item: str | None = None) -> str:
+    """Records the human's decision. Every field is mandatory — including the
+    revisit trigger: a waiver with no deadline or condition is a waiver forever,
+    and nobody decided that.
 
-    Em run autônomo (`em_run_autonomo()`) NÃO grava dispensa: grava uma proposta
-    (`propor`) e devolve o caminho dela. O agente de um `claude -p` não tem dono
-    na frente; uma dispensa gravada ali é o agente dispensando prova em nome do
-    dono (fb-20261014-3, `autor: alegomes` escrito sozinho). Não há parâmetro que
-    force a dispensa real nesse modo — de propósito. `fila`/`item` amarram a
-    proposta ao item da fila para o `cepa-plan responde` achá-la."""
-    if em_run_autonomo():
-        for n, v in (("razao", razao), ("autor", autor),
+    In an autonomous run (`in_autonomous_run()`) it does NOT record a waiver: it
+    records a proposal (`propose`) and returns its path. The agent of a
+    `claude -p` has no owner in front of it; a waiver recorded there is the
+    agent waiving proof on the owner's behalf (fb-20261014-3, `autor: alegomes`
+    written on its own). There is no parameter that forces the real waiver in
+    this mode — on purpose. `queue`/`item` tie the proposal to the queue item
+    so `cepa-plan answer` can find it."""
+    if in_autonomous_run():
+        for n, v in (("razao", rationale), ("autor", author),
                      ("revisit_trigger", revisit_trigger),
-                     ("escopo", escopo), ("motivo", motivo)):
+                     ("escopo", scope), ("motivo", reason)):
             if not v:
                 raise ValueError(f"waiver sem {n} — não gravo")
-        return propor(repo, motivo, escopo, razao, revisit_trigger,
-                      proposto_por=f"agente em run autônomo, em nome de {autor}",
-                      hoje=hoje, fila=fila, item=item)
+        return propose(repo, reason, scope, rationale, revisit_trigger,
+                       proposed_by=f"agente em run autônomo, em nome de {author}",
+                       today=today, queue=queue, item=item)
 
     import yaml
 
-    faltando = [n for n, v in (("razao", razao), ("autor", autor),
-                               ("revisit_trigger", revisit_trigger),
-                               ("escopo", escopo), ("motivo", motivo)) if not v]
-    if faltando:
-        raise ValueError(f"waiver sem {', '.join(faltando)} — não gravo")
+    missing = [n for n, v in (("razao", rationale), ("autor", author),
+                              ("revisit_trigger", revisit_trigger),
+                              ("escopo", scope), ("motivo", reason)) if not v]
+    if missing:
+        raise ValueError(f"waiver sem {', '.join(missing)} — não gravo")
 
-    destino = caminho(repo, motivo, escopo)
-    os.makedirs(os.path.dirname(destino), exist_ok=True)
-    with open(destino, "w") as fh:
+    dest = waiver_path(repo, reason, scope)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with open(dest, "w") as fh:
         yaml.safe_dump({
-            "motivo": motivo,
-            "escopo": escopo,
-            "razao": razao,
-            "autor": autor,
-            "criado_em": (hoje or date.today()).isoformat(),
+            "motivo": reason,
+            "escopo": scope,
+            "razao": rationale,
+            "autor": author,
+            "criado_em": (today or date.today()).isoformat(),
             "revisit_trigger": revisit_trigger,
         }, fh, allow_unicode=True, sort_keys=False)
-    return destino
+    return dest

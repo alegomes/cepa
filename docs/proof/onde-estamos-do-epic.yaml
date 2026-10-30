@@ -1,0 +1,81 @@
+schema_version: 2
+card: onde-estamos-do-epic
+verdict: proven
+reviewed_at: 2026-10-24T00:30:00-03:00
+base_commit: 4856391
+head_commit: bc2d7fc
+issue_type: Feature
+repo_kind: harness             # NOT Quarkus/Maven: Python CLI (common/bin/cepa-plan) + hook + prompt files, own script-style test suite
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (subcomando `epics`: ladder_rows, queue_belongs, queue_closed, epic_cycles, epic_report, epic_brief/epic_text, cmd_epics; items_from_epic refatorado sobre ladder_rows)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes rodam o cepa-plan real contra filas/Epics de fixture em disco; nenhum fake no lugar da classe
+    - class: "common/hooks/session-mode.py (epic_lines + guarda CEPA_UNTIL_RUN em main)"
+      module: hook
+      external_observable: true
+      substituted_by_double: null   # o teste invoca o hook real por stdin/stdout
+    - class: "common/commands/epic.md, common/commands/whereami.md (prosa de prompt), docs/commands.md, docs/estrategia-intencao-da-sessao.md (docs)"
+      module: prompt
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python sem pitest; perturbacao manual em worktree descartavel e o unico mecanismo"
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida em bc2d7fc: tests/test_epic_where.py 'tudo certo'; test_cepa_mode.py 'tudo verde'; test_whereami_intent.py 'OK'; test_cepa_plan_from_epic.py 'tudo ok'."
+        - "P1 regra (c): regex RE_EPIC_QUEUE_PREFIX quebrada (-c -> -cZZ) -> RED: 'regra (c): ciclo 1 ligado a foo-bar-c1' (sem-fila), 'json: queue_prefix', 'sugestao usa o prefixo do cabecalho'. rc=1."
+        - "Pa regra (a): ramo 'source cita Epic + ciclo N' desligado -> RED: 'ciclo 2 em andamento pela regra (a)' virou sem-fila. rc=1."
+        - "Pb regra (b): ramo `<slug>-c<N>` desligado -> RED: 'ciclo 1 fechado pela regra (b)', 'texto: fechado / em andamento / sem fila'. rc=1."
+        - "P2 queue_closed: `return True or ...` (fila vazia/aberta conta como fechada) -> RED: 'ciclo 2 em andamento pela regra (a)', 'fila vazia: em-andamento com 0/0'. rc=1."
+        - "Ph perguntas na fila: filtro human_pending/owner_question desligado em queue_summary -> RED: 'ciclo 2: duas entradas abertas []'. rc=1."
+        - "Pq perguntas do Epic: regex `- [ ]` quebrada -> RED: 'perguntas em aberto: so as 2 sem marca []', 'texto: pergunta da fila e do Epic'. rc=1."
+        - "P3 sugestao: usa <slug> em vez do prefixo do cabecalho -> RED: 'sugestao usa o prefixo do cabecalho'. rc=1."
+        - "Pe fila ilegivel: aviso redirecionado de stderr para stdout -> teste RED (rc=1; nao imprimiu linha FAIL no grep, falha do mesmo teste test_epic_where)."
+        - "P4 hook primeiro turno: checagem first_prompts <=1 desligada -> RED: 'hook com 2 prompts antes: sem [epic]'. rc=1."
+        - "P5 hook em run do cepa-until: guarda `if not os.environ.get(ENV_WINDOW)` trocada por `if True` (o sed atingiu 2 ocorrencias do mesmo guarda no arquivo, o diff mostrou 2 linhas; a do [epic] e a que importa) -> RED: 'hook em run do cepa-until: sem [epic]'. rc=1."
+        - "P7 items_from_epic sobre ladder_rows: ladder_rows descartando a ultima linha de dados (lines[1:-1]) -> RED em tests/test_cepa_plan_from_epic.py ('outro ciclo, outra fila', 'ciclo com O que atravessa vazio e recusa') e tambem em test_epic_where.py; comportamento da refatoracao protegido. Uma primeira perturbacao (lines[2:]) saiu verde porque lines[1] e a linha separadora ja filtrada: mutante equivalente, descartado, nao e lacuna."
+      run: >-
+        worktree descartavel /tmp/proof-onde-estamos (git worktree add --detach
+        /tmp/proof-onde-estamos bc2d7fc), removido ao final com git worktree
+        remove --force (a arvore principal nunca foi editada). Cada perturbacao
+        via sed -i com caminho absoluto, depois
+        `python3 /tmp/proof-onde-estamos/tests/test_epic_where.py` exigindo
+        rc=1, depois `git checkout -- <arquivo>` antes da seguinte.
+        Rodou o worktree uma segunda vez porque a primeira remocao foi feita
+        antes de achar o mutante nao equivalente de P7.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      leitura estrutural (nao ha ferramenta de cobertura neste repo Python):
+      cada hunk de comportamento listado no card foi perturbado em L3 (regras a/b/c,
+      estados fechado/em-andamento/sem-fila, perguntas abertas, sugestao com prefixo,
+      fila ilegivel, hook primeiro turno e guarda do run, refatoracao). Nenhum
+      hunk de comportamento ficou sem perturbacao correspondente; as unicas
+      linhas sem perturbacao sao prosa de prompt/docs, sem comportamento executavel.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      o diff le Epics (.md) e filas (.yaml) locais do proprio repo e imprime um
+      resumo; nao abre superficie de entrada vinda de fora (sem rede, sem
+      usuario externo), e o caso de entrada malformada (fila ilegivel) e
+      exigido e perturbado em L3 (Pe). Nenhum modulo api-rest tocado.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature, nao Bug"
+routing_reason: >-
+  Todos os comportamentos pedidos pelo card (3 regras de ligacao de ciclo,
+  3 estados, perguntas abertas, sugestao com prefixo, fila ilegivel, hook so no
+  primeiro turno e fora de run do cepa-until, refatoracao de items_from_epic)
+  foram quebrados um a um num worktree descartavel e o teste que cobre cada
+  um ficou VERMELHO (rc=1); GREEN de partida confirmado nos 4 testes. Sem
+  dublê no lugar das classes alteradas. PROVEN.

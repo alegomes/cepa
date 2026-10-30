@@ -1,0 +1,384 @@
+#!/usr/bin/env python3
+"""cepa-intent — the single writer of `.claude/session-intent`.
+
+The problem it solves: sessions drift. Two hours in, nobody (neither the owner
+nor the agent) can say precisely what was intended, which step you are on and
+when to stop. The session intent (purpose, stopping point, plan, cursor) lives
+in one file per worktree; this command is the only hand that writes it.
+
+Why a single writer, instead of the agent editing the YAML:
+  - the `summary:` (a one-line text ready for statusline and hook) must be
+    re-rendered on every write, and the agent would forget;
+  - the rules (plan of 1 to 6 items, no colon in an item) only hold if there
+    is a gate; the reader in `common/hooks/_modes.py` is deliberately tolerant
+    and does not enforce them;
+  - the history (previous purpose and plan, with time and reason) is only
+    trustworthy if nobody rewrites it by hand.
+Format, reader and serializer live in `_modes.py`; there is no second parser here.
+
+The old actions and options (gravar/mostrar/continuar/estado/encerrar,
+--proposito/--para-quando/--plano/--passo/--motivo) are still accepted.
+
+Usage:
+    cepa-intent write --purpose "..." --by-when "..." \
+                      --plan "levantar" "escrever" "decidir"
+    cepa-intent --step 2            # step 1 is done, step 2 is in progress
+    cepa-intent --step 4            # with a 3-item plan: plan fulfilled
+    cepa-intent --purpose "novo" --reason "o dono reformulou"
+    cepa-intent --plan "a" "b" [--reason "..."]
+    # with `write`, the subcommand ALWAYS comes before `--plan` (which consumes
+    # everything up to the next option): `--plan a b write` would be the item "write".
+    cepa-intent [show]            # prints the current intent
+    cepa-intent continue          # adopts, in this session, another session's intent
+    cepa-intent state             # read-only: classifies and prints (whereami)
+    cepa-intent close             # run by /common:wrap-up: end-of-session telemetry
+
+Rules:
+  - `step` is the step IN PROGRESS (1-based). `--step N` accepts 1..M, and M+1,
+    which means "plan fulfilled" (no step in progress): the `summary` becomes
+    "plano cumprido M/M · ..." and the hook suggests /common:wrap-up.
+  - `write` over an existing intent requires `--reason`; the previous purpose
+    and plan go to `history` (time of the change in `at:`).
+  - `--purpose` requires `--reason`. `--plan` resets the cursor (step 1) and
+    stores the previous plan in the history (`previous_plan`, items joined by " | ").
+  - Plan items contain no ':'; a plan has 1 to PLAN_MAX items (more than that
+    is a program: `plan.yaml` / `/common:plan`). Refusal = nothing is written.
+  - `continue` is the "I'll continue" answer to the question the `session-mode.py`
+    hook asks when the intent was written by another session (decision D1): it
+    swaps only `session_id` and `branch` for the current ones. Purpose, plan,
+    cursor and the cursor age (`step_since`) stay as they were.
+  - Atomic write (tmp + os.replace); creates `.claude/` if missing.
+  - Telemetry (fail-silent, without the purpose text): `intent.written`
+    (acao=gravar|proposito|plano, passos=M), `intent.cursor_advanced`
+    (de=, para=, passos=) and `intent.finished_at_last_step` (passo=, passos=;
+    see `close`). All carry `session=` (first 8 characters of the session id,
+    like the `prompt` event), so /common:metrics counts SESSIONS and not
+    events. `intent.asked` originates in the `session-log.py` hook, not here.
+  - `close` is what /common:wrap-up runs (step 0): it only reads and always
+    exits 0. It emits `intent.finished_at_last_step` if the intent belongs to
+    this session and the cursor is on the last step in progress (step == M) OR
+    the plan is fulfilled (step == M+1): in both cases nothing is left to do
+    besides closing out. Cursor before the last step, intent from another
+    session, or no intent: does not emit. There is no "finished without
+    advancing" event: /common:metrics derives it from `intent.written` with no
+    `intent.cursor_advanced` in the same session.
+
+  - `state` is the read that /common:whereami, /common:next (fallback) and
+    /common:recap (opening line) run. It never writes and exits 0 in every
+    state. The first line is `state: empty|normal|fulfilled|other-session`;
+    the "other session" rule is the hook's (`_modes.same_session`). In a
+    `cepa-until` run (`CEPA_UNTIL_RUN`) the state is always `empty` with the
+    line `delegate: /common:next`: there the intent is the plan.yaml item. The
+    second line, `opening:`, is the recap's ("purpose / step N of M"), absent
+    in the empty and other-session states.
+
+Exits: 0 ok · 2 invalid usage or writer rule refused · 3 no intent recorded
+(for --step/--purpose/--plan/show) · 4 an intent already exists and --reason
+is missing to rewrite it.
+"""
+
+import argparse
+import os
+import subprocess
+import sys
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+import _tui  # noqa: E402
+import _modes as M  # noqa: E402
+
+try:
+    import _telemetry as T
+except Exception:  # noqa: BLE001 — telemetry never decides whether the write happens
+    T = None
+
+
+def now_utc():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def git(args, cwd):
+    try:
+        r = subprocess.run(["git", *args], cwd=cwd, capture_output=True,
+                           text=True, timeout=10)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def refuse(msg, code=2):
+    print(f"cepa-intent: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def validate_plan(items):
+    items = [i.strip() for i in items]
+    if not 1 <= len(items) <= M.PLAN_MAX:
+        refuse(f"o plano tem {len(items)} itens; aceito de 1 a {M.PLAN_MAX}. "
+               "Mais que isso é programa: use plan.yaml (/common:plan).")
+    for i in items:
+        if not i:
+            refuse("item de plano vazio.")
+        if ":" in i:
+            refuse(f"item de plano com ':' ({i!r}); reescreva sem dois-pontos.")
+    return items
+
+
+def render_summary(d):
+    """A single line: whitespace (newlines included) collapses to one space,
+    so what is printed is identical to what the file stores."""
+    plan, step = d["plan"], d["step"]
+    m = len(plan)
+    purpose_text = " ".join(d["purpose"].split())
+    if step > m:
+        return f"plano cumprido {m}/{m} · {purpose_text}"
+    return f"passo {step}/{m} · {' '.join(plan[step - 1].split())} · {purpose_text}"
+
+
+def write_intent(root, d):
+    d["summary"] = render_summary(d)
+    target = Path(root) / M.INTENT_FILE
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=".session-intent.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(M.render_intent(d))
+        os.replace(tmp, target)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def emit_event(root, event, **fields):
+    if T is not None:
+        T.emit(event, cwd=str(root), session=current_session()[:8], **fields)
+
+
+def current_session():
+    return (os.environ.get("CLAUDE_CODE_SESSION_ID")
+            or os.environ.get("CLAUDE_SESSION_ID") or "")
+
+
+def current_branch(root):
+    return (git(["rev-parse", "--abbrev-ref", "HEAD"], root)
+            or git(["symbolic-ref", "--short", "HEAD"], root))  # repo with no commits
+
+
+def show_intent(d):
+    print(d.get("summary") or "(sem resumo)")
+    print(f"propósito: {d.get('purpose', '')}")
+    print(f"para quando: {d.get('by_when', '')}")
+    for n, item in enumerate(d.get("plan", []), 1):
+        marker = ">" if n == d.get("step") else " "
+        print(f"  {marker} {n}. {item}")
+    print(f"passo desde {d.get('step_since', '?')} · aberto em {d.get('opened_at', '?')}")
+
+
+RUN_ENV = "CEPA_UNTIL_RUN"  # the marker cepa-until exports on every run
+
+
+def format_age(stamp):
+    """`step_since` -> "2h05" / "12 min" / "agora"; "?" if it cannot be parsed."""
+    d = M.iso_utc(stamp)
+    if d is None:
+        return "?"
+    mins = max(0, int((datetime.now(timezone.utc) - d).total_seconds() // 60))
+    if mins < 1:
+        return "agora"
+    return f"{mins} min" if mins < 60 else f"{mins // 60}h{mins % 60:02d}"
+
+
+def show_state(root, current):
+    """Classify the intent and print the ready-made answer. Read-only."""
+    plan = (current or {}).get("plan")
+    if os.environ.get(RUN_ENV):
+        print("state: empty")
+        print("delegate: /common:next")
+        print("Rodada do cepa-until: a intenção é o item do plan.yaml; "
+              "rode /common:next.")
+        return
+    if not (current and current.get("purpose") and isinstance(plan, list) and plan):
+        print("state: empty")
+        print("Esta sessão não tem intenção gravada. Diga o propósito e eu "
+              "proponho o plano.")
+        return
+    purpose_text = " ".join(current["purpose"].split())
+    if not M.same_session(current.get("session_id"), current_session()):
+        print("state: other-session")
+        print("\n".join(M.other_session_question(current, purpose_text)))
+        return
+    m = len(plan)
+    step = current.get("step")
+    if not isinstance(step, int) or not 1 <= step <= m + 1:
+        step = 1
+    stop_point = " ".join(str(current.get("by_when") or "").split())
+    if step > m:
+        print("state: fulfilled")
+        print(f"opening: {purpose_text} / plano cumprido {m}/{m}")
+        print(f"Os {m} passos estão feitos. Ponto de parada: {stop_point}. "
+              "Próximo: `/common:wrap-up`.")
+        return
+    print("state: normal")
+    print(f"opening: {purpose_text} / passo {step} de {m}")
+    print(f"propósito: {purpose_text}")
+    print(f"para quando: {stop_point}")
+    print("plano:")
+    for n, item in enumerate(plan, 1):
+        marker = ">" if n == step else " "
+        print(f"  {marker} {n}. {' '.join(item.split())}")
+    print(f"passo atual: {step} de {m}, há {format_age(current.get('step_since'))} "
+          f"(desde {current.get('step_since', '?')})")
+
+
+def close_session(root, current):
+    """End-of-session telemetry. Read-only; never fails the wrap-up."""
+    plan = (current or {}).get("plan")
+    if not (current and current.get("purpose") and isinstance(plan, list) and plan):
+        print("encerrar: sem intenção gravada.")
+        return
+    if not M.same_session(current.get("session_id"), current_session()):
+        print("encerrar: a intenção é de outra sessão; nada a registrar.")
+        return
+    m, step = len(plan), current.get("step")
+    if isinstance(step, int) and step >= m:
+        try:
+            emit_event(root, "intent.finished_at_last_step", passo=step, passos=m)
+        except Exception:  # noqa: BLE001 — telemetry never fails the wrap-up
+            pass
+        print(f"encerrar: cursor no último passo ({min(step, m)}/{m}); registrado.")
+    else:
+        print(f"encerrar: cursor no passo {step} de {m}; fora do último, nada registrado.")
+
+
+# Actions: the old (pt-BR) name -> the new one. The old name is still accepted
+# and is mapped right after parsing.
+ACTIONS = {"gravar": "write", "mostrar": "show", "continuar": "continue",
+           "estado": "state", "encerrar": "close"}
+ACTION_NAMES = tuple(ACTIONS) + tuple(ACTIONS.values())
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="cepa-intent", description=__doc__.split("\n")[0])
+    ap.add_argument("action", nargs="?", choices=ACTION_NAMES)
+    ap.add_argument("--purpose", "--proposito", dest="purpose")
+    ap.add_argument("--by-when", "--para-quando", dest="by_when")
+    ap.add_argument("--plan", "--plano", nargs="+", dest="plan")
+    ap.add_argument("--step", "--passo", type=int, dest="step")
+    ap.add_argument("--reason", "--motivo", dest="reason")
+    a = ap.parse_args()
+    a.action = ACTIONS.get(a.action, a.action)  # the old name becomes the new one
+
+    if a.plan and any(i.strip() in ACTION_NAMES for i in a.plan):
+        refuse("um item do plano é exatamente um subcomando: o subcomando "
+               "vai ANTES de --plan (`cepa-intent write --plan a b ...`).")
+    root = git(["rev-parse", "--show-toplevel"], os.getcwd())
+    if not root:
+        refuse("não estou num repositório git; a intenção vive em <repo>/.claude/.")
+    current = M.read_intent(root)
+    exists = bool(current) and bool(current.get("purpose")) and bool(current.get("plan"))
+    edits = a.step is not None or (a.action is None and (a.purpose or a.plan))
+
+    if a.action == "state":
+        if a.step is not None or a.purpose or a.plan or a.by_when or a.reason:
+            refuse("state só lê; não aceita outras opções.")
+        show_state(root, current)
+        return
+
+    if a.action == "close":
+        if a.step is not None or a.purpose or a.plan or a.by_when or a.reason:
+            refuse("close só lê; não aceita outras opções.")
+        close_session(root, current)
+        return
+
+    if a.action == "write":
+        if a.step is not None:
+            refuse("--step não combina com write.")
+        if not (a.purpose and a.by_when and a.plan):
+            refuse("write exige --purpose, --by-when e --plan.")
+        plan = validate_plan(a.plan)
+        history = list((current or {}).get("history") or [])  # preserve even on a partial file
+        if exists:
+            if not a.reason:
+                refuse("já há uma intenção gravada; para regravar diga o porquê com "
+                       "--reason (o anterior vai para o histórico).", 4)
+            history.append({"at": now_utc(), "purpose": current["purpose"],
+                            "previous_plan": " | ".join(current["plan"]),
+                            "change_reason": a.reason})
+        t = now_utc()
+        d = {"purpose": a.purpose.strip(), "by_when": a.by_when.strip(),
+             "plan": plan, "step": 1, "step_since": t,
+             "session_id": current_session(), "branch": current_branch(root),
+             "opened_at": t, "history": history}
+        write_intent(root, d)
+        emit_event(root, "intent.written", acao="gravar", passos=len(plan))
+        print(d["summary"])
+        return
+
+    if a.action == "continue":
+        if not exists:
+            refuse("não há intenção gravada nesta worktree para continuar.", 3)
+        if a.step is not None or a.purpose or a.plan or a.by_when or a.reason:
+            refuse("continue não aceita outras opções; para mudar algo, rode depois.")
+        if not current_session():
+            refuse("não sei o id desta sessão (CLAUDE_CODE_SESSION_ID vazio); "
+                   "sem ele não há o que adotar.")
+        d = dict(current)
+        d["session_id"], d["branch"] = current_session(), current_branch(root)
+        write_intent(root, d)
+        print(d["summary"])
+        return
+
+    if a.action == "show" or not edits:
+        if not exists:
+            refuse("não há intenção gravada nesta worktree.", 3)
+        show_intent(current)
+        return
+
+    if not exists:
+        refuse("não há intenção gravada nesta worktree; comece com "
+               "`cepa-intent write --purpose ... --by-when ... --plan ...`.", 3)
+    if a.step is not None and (a.purpose or a.plan):
+        refuse("--step não combina com --purpose/--plan; rode em dois comandos.")
+
+    d = dict(current)
+    d["history"] = list(current.get("history", []))
+    m = len(d["plan"])
+
+    if a.step is not None:
+        if not 1 <= a.step <= m + 1:
+            refuse(f"passo {a.step} fora do plano; aceito de 1 a {m} "
+                   f"({m + 1} = plano cumprido).")
+        from_step = d.get("step")
+        d["step"], d["step_since"] = a.step, now_utc()
+        write_intent(root, d)
+        emit_event(root, "intent.cursor_advanced", de=from_step, para=a.step, passos=m)
+        print(d["summary"])
+        return
+
+    if a.purpose:
+        if not a.reason:
+            refuse("--purpose exige --reason (o propósito anterior vai para o histórico).")
+        d["history"].append({"at": now_utc(), "purpose": current["purpose"],
+                             "change_reason": a.reason})
+        d["purpose"] = a.purpose.strip()
+    if a.plan:
+        plan = validate_plan(a.plan)
+        d["history"].append({"at": now_utc(), "previous_plan": " | ".join(current["plan"]),
+                             "change_reason": a.reason or "plano substituído"})
+        d["plan"], d["step"], d["step_since"] = plan, 1, now_utc()
+    write_intent(root, d)
+    if a.purpose:
+        emit_event(root, "intent.written", acao="proposito", passos=len(d["plan"]))
+    if a.plan:
+        emit_event(root, "intent.written", acao="plano", passos=len(d["plan"]))
+    print(d["summary"])
+
+
+if __name__ == "__main__":
+    _tui.install()
+    main()

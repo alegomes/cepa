@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""Testes do caderno de feedback do harness — bin/cepa-feedback + feedback-nudge.
+"""Tests for the harness feedback notebook — bin/cepa-feedback + feedback-nudge.
 
-O comportamento que estes casos existem para segurar não é "o arquivo é escrito".
-É o conjunto de recusas que impede o ledger de virar arquivo morto:
+The behavior these cases exist to hold is not "the file is written".
+It is the set of refusals that keeps the ledger from becoming a dead file:
 
-  - registro vazio ou de uma palavra é RECUSADO — queixa de uma palavra não se
-    reconstrói meses depois, e um ledger cheio de "ruim" tem o mesmo valor de um
-    ledger vazio, com a desvantagem de parecer cheio;
-  - o texto entra VERBATIM (o bin não resume nada);
-  - repo, branch e modo entram sozinhos — registro que depende do dono lembrar
-    onde estava nasce inútil;
-  - triagem sem destino, de id inexistente, ou SEGUNDA triagem do mesmo id são
-    recusadas: a re-triagem apagaria em silêncio a decisão anterior;
-  - o estado aberto/triado é replay do ledger append-only, e linha corrompida no
-    meio não derruba o resto;
-  - o hook só fala quando há forma de queixa E alvo do harness, e só uma vez por
-    sessão; falha aberto em tudo.
+  - an empty record or a one-word record is REFUSED — a one-word complaint cannot be
+    reconstructed months later, and a ledger full of "bad" has the same value as an
+    empty ledger, with the disadvantage of looking full;
+  - the text goes in VERBATIM (the bin summarizes nothing);
+  - repo, branch and mode go in by themselves — a record that depends on the owner remembering
+    where they were is born useless;
+  - triage without destination, of a nonexistent id, or a SECOND triage of the same id are
+    refused: re-triage would silently erase the previous decision;
+  - the open/triaged state is a replay of the append-only ledger, and a corrupted line in the
+    middle does not bring down the rest;
+  - the hook only speaks when there is a complaint shape AND a harness target, and only once per
+    session; fails open on everything.
 
-Sem deps de terceiros — rode com `python3 tests/test_cepa_feedback.py`.
+No third-party deps — run with `python3 tests/test_cepa_feedback.py`.
 """
 
 import json
@@ -31,7 +31,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 BIN = REPO / "common" / "bin" / "cepa-feedback"
 HOOK = REPO / "common" / "hooks" / "feedback-nudge.py"
-HOJE = datetime.now(timezone.utc).strftime("%Y%m%d")
+TODAY = datetime.now(timezone.utc).strftime("%Y%m%d")
 
 failures = []
 
@@ -44,8 +44,8 @@ def check(name, cond, detail=""):
         failures.append(name)
 
 
-class Caixa:
-    """Ledger isolado + um git repo descartável para servir de contexto."""
+class Box:
+    """Isolated ledger + a disposable git repo to serve as context."""
 
     def __enter__(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -78,10 +78,10 @@ class Caixa:
                               cwd=str(cwd or self.repo), env=self.env(),
                               capture_output=True, text=True)
 
-    def linhas(self):
+    def lines(self):
         out = []
-        for arq in sorted(self.ledger.glob("feedback-*.jsonl")):
-            out += [json.loads(x) for x in arq.read_text(encoding="utf-8").splitlines() if x.strip()]
+        for file in sorted(self.ledger.glob("feedback-*.jsonl")):
+            out += [json.loads(x) for x in file.read_text(encoding="utf-8").splitlines() if x.strip()]
         return out
 
     def hook(self, prompt, session_id="s1", cwd=None, **extra):
@@ -91,77 +91,77 @@ class Caixa:
                               env=self.env(**extra), capture_output=True, text=True)
 
 
-# --------------------------------------------------------------- registro
+# --------------------------------------------------------------- record
 
-def test_add_grava_verbatim_com_contexto():
-    with Caixa() as c:
-        texto = "o gate barrou meu commit legítimo e eu tive que desligar o modo"
-        p = c.cli("add", texto, "--alvo", "modo-escrita-gate", "--origem", "skill")
+def test_add_writes_verbatim_with_context():
+    with Box() as c:
+        plain_text = "o gate barrou meu commit legítimo e eu tive que desligar o modo"
+        p = c.cli("add", plain_text, "--target", "write-mode-gate", "--origin", "skill")
         check("add: rc=0", p.returncode == 0, p.stderr)
-        evs = c.linhas()
+        evs = c.lines()
         check("add: uma linha no ledger", len(evs) == 1, evs)
         ev = evs[0]
-        check("add: texto verbatim", ev["texto"] == texto, ev.get("texto"))
-        check("add: alvo registrado", ev["alvo"] == "modo-escrita-gate", ev.get("alvo"))
+        check("add: texto verbatim", ev["texto"] == plain_text, ev.get("texto"))
+        check("add: alvo registrado", ev["alvo"] == "write-mode-gate", ev.get("alvo"))
         check("add: origem registrada", ev["origem"] == "skill", ev.get("origem"))
         check("add: repo capturado sozinho", ev["repo"] == "projeto-x", ev.get("repo"))
         check("add: branch capturado sozinho",
               ev["branch"] == "session/exemplo", ev.get("branch"))
         check("add: modo da sessão capturado", ev["modo"] == "construcao", ev.get("modo"))
-        check("add: id do dia", ev["id"] == f"fb-{HOJE}-1", ev.get("id"))
+        check("add: id do dia", ev["id"] == f"fb-{TODAY}-1", ev.get("id"))
 
 
-def test_add_recusa_vazio_e_curto():
-    with Caixa() as c:
+def test_add_refuses_empty_and_short():
+    with Box() as c:
         p = c.cli("add", "   ")
         check("add: vazio recusado (rc=2)", p.returncode == 2, p.returncode)
         p = c.cli("add", "ruim")
         check("add: uma palavra recusada (rc=2)", p.returncode == 2, p.returncode)
         check("add: recusa diz o mínimo", "mínimo 12" in p.stderr, p.stderr)
-        check("add: recusa não grava nada", not c.ledger.exists() or c.linhas() == [],
-              c.linhas() if c.ledger.exists() else "sem dir")
+        check("add: recusa não grava nada", not c.ledger.exists() or c.lines() == [],
+              c.lines() if c.ledger.exists() else "sem dir")
 
 
-def test_ids_sequenciais_no_dia():
-    with Caixa() as c:
+def test_sequential_ids_in_the_day():
+    with Box() as c:
         for i in range(3):
             c.cli("add", f"queixa numero {i} sobre o relatório final")
-        ids = [e["id"] for e in c.linhas()]
+        ids = [e["id"] for e in c.lines()]
         check("id: sequência no dia",
-              ids == [f"fb-{HOJE}-{n}" for n in (1, 2, 3)], ids)
+              ids == [f"fb-{TODAY}-{n}" for n in (1, 2, 3)], ids)
 
 
-def test_fora_de_repo_git_nao_quebra():
-    with Caixa() as c:
-        fora = Path(c.tmp.name) / "sem-git"
-        fora.mkdir()
-        p = c.cli("add", "reclamação feita de um diretório qualquer", cwd=fora)
+def test_outside_git_repo_does_not_break():
+    with Box() as c:
+        outside = Path(c.tmp.name) / "sem-git"
+        outside.mkdir()
+        p = c.cli("add", "reclamação feita de um diretório qualquer", cwd=outside)
         check("add: fora de git ainda grava", p.returncode == 0, p.stderr)
-        ev = c.linhas()[0]
+        ev = c.lines()[0]
         check("add: fora de git não inventa branch", ev["branch"] is None, ev.get("branch"))
 
 
-# ---------------------------------------------------------------- triagem
+# ---------------------------------------------------------------- triage
 
-def test_triar_marca_e_recusa_repeticao():
-    with Caixa() as c:
+def test_triage_marks_and_refuses_repetition():
+    with Box() as c:
         c.cli("add", "o comando pergunta três vezes a mesma coisa")
-        fid = f"fb-{HOJE}-1"
-        p = c.cli("triar", fid, "--destino", "BACKLOG.md § Atrito de decisão")
+        fid = f"fb-{TODAY}-1"
+        p = c.cli("triage", fid, "--destination", "BACKLOG.md § Atrito de decisão")
         check("triar: rc=0", p.returncode == 0, p.stderr)
-        ev = c.linhas()[-1]
+        ev = c.lines()[-1]
         check("triar: grava linha de triagem", ev["tipo"] == "triagem", ev)
         check("triar: cita o id", ev["id"] == fid, ev)
         check("triar: registro original intacto",
-              c.linhas()[0]["texto"] == "o comando pergunta três vezes a mesma coisa",
-              c.linhas()[0])
-        p = c.cli("triar", fid, "--destino", "outro lugar")
+              c.lines()[0]["texto"] == "o comando pergunta três vezes a mesma coisa",
+              c.lines()[0])
+        p = c.cli("triage", fid, "--destination", "outro lugar")
         check("triar: re-triagem recusada (rc=4)", p.returncode == 4, p.returncode)
         check("triar: recusa nomeia o destino anterior",
               "Atrito de decisão" in p.stderr, p.stderr)
 
 
-PLANO = """schema_version: 2
+PLAN_TEXT = """schema_version: 2
 mode: single-track
 program: WEGO
 source: teste
@@ -176,129 +176,129 @@ items:
 """
 
 
-def test_triar_com_plano_acrescenta_a_fila():
-    with Caixa() as c:
+def test_triage_with_plan_appends_to_the_queue():
+    with Box() as c:
         (c.repo / ".claude" / "programs" / "WEGO").mkdir(parents=True)
         (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").write_text(
-            PLANO, encoding="utf-8")
-        texto = "o relatório final do drain não nomeia o card que travou, custou 20min"
-        c.cli("add", texto)
-        fid = f"fb-{HOJE}-1"
-        p = c.cli("triar", fid, "--destino", "fila WEGO", "--plano", "WEGO",
+            PLAN_TEXT, encoding="utf-8")
+        plain_text = "o relatório final do drain não nomeia o card que travou, custou 20min"
+        c.cli("add", plain_text)
+        fid = f"fb-{TODAY}-1"
+        p = c.cli("triage", fid, "--destination", "fila WEGO", "--queue", "WEGO",
                   "--why", "achado real de sessão")
         check("triar --plano: rc=0", p.returncode == 0, p.stderr)
         check("triar --plano: confirma a entrada na fila",
               "também entrou na fila" in p.stdout, p.stdout)
-        fila = (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").read_text(
+        queue = (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").read_text(
             encoding="utf-8")
-        check("triar --plano: item novo no plan.yaml", fid in fila, fila)
+        check("triar --plano: item novo no plan.yaml", fid in queue, queue)
         check("triar --plano: título é o começo do texto do feedback",
-              texto[:60] in fila, fila)
+              plain_text[:60] in queue, queue)
 
 
-def test_triar_com_plano_ja_na_fila_nao_e_erro():
-    with Caixa() as c:
+def test_triage_with_plan_already_in_queue_is_not_an_error():
+    with Box() as c:
         (c.repo / ".claude" / "programs" / "WEGO").mkdir(parents=True)
-        plano_com_item = PLANO.replace("id: WEGO-1", f"id: fb-{HOJE}-1")
+        plan_with_item = PLAN_TEXT.replace("id: WEGO-1", f"id: fb-{TODAY}-1")
         (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").write_text(
-            plano_com_item, encoding="utf-8")
+            plan_with_item, encoding="utf-8")
         c.cli("add", "queixa qualquer que já tem item homônimo na fila")
-        fid = f"fb-{HOJE}-1"
-        p = c.cli("triar", fid, "--destino", "fila WEGO", "--plano", "WEGO")
+        fid = f"fb-{TODAY}-1"
+        p = c.cli("triage", fid, "--destination", "fila WEGO", "--queue", "WEGO")
         check("triar --plano: id já na fila não é erro (rc=0)",
               p.returncode == 0, p.stderr)
         check("triar --plano: avisa sem alarde", "já estava na fila" in p.stdout,
               p.stdout)
 
 
-def test_triar_com_plano_erro_real_nao_desfaz_a_triagem():
-    """`add` falhando por um motivo REAL (não o "já está lá" do exit 4) não
-    pode apagar a triagem que já foi gravada — a escrita do evento de triagem
-    e a tentativa de entrar na fila são dois passos, e o primeiro já
-    aconteceu quando o segundo falha. A prova fica no ARQUIVO do ledger, não
-    só na saída do processo: um `grava()` que só roda condicionado ao sucesso
-    do `add` passaria despercebido se a asserção olhasse só o stdout."""
-    with Caixa() as c:
-        # `mode: waves` é um plano de ONDAS (/maestro:program-plan) — o
-        # `cepa-plan add` recusa com um erro real (exit 3), diferente do
-        # exit 4 de "id já na fila".
-        plano_ondas = PLANO.replace("mode: single-track", "mode: waves")
+def test_triage_with_plan_real_error_does_not_undo_the_triage():
+    """`add` failing for a REAL reason (not the "already there" of exit 4) must not
+    erase the triage that was already recorded — writing the triage event
+    and trying to enter the queue are two steps, and the first has already
+    happened when the second fails. The proof stays in the ledger FILE, not
+    only in the process output: a `write()` that only runs conditioned on the success
+    of `add` would go unnoticed if the assertion looked only at stdout."""
+    with Box() as c:
+        # `mode: waves` is a WAVES plan (/maestro:program-plan) — the
+        # `cepa-plan add` refuses with a real error (exit 3), different from the
+        # exit 4 of "id already in the queue".
+        wave_plan = PLAN_TEXT.replace("mode: single-track", "mode: waves")
         (c.repo / ".claude" / "programs" / "WEGO").mkdir(parents=True)
         (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").write_text(
-            plano_ondas, encoding="utf-8")
+            wave_plan, encoding="utf-8")
         c.cli("add", "queixa que precisa sobreviver a um erro real do add")
-        fid = f"fb-{HOJE}-1"
-        p = c.cli("triar", fid, "--destino", "fila WEGO", "--plano", "WEGO")
+        fid = f"fb-{TODAY}-1"
+        p = c.cli("triage", fid, "--destination", "fila WEGO", "--queue", "WEGO")
         check("triar com erro real do add: rc=0 (a triagem em si teve sucesso)",
               p.returncode == 0, p.stderr)
         check("triar com erro real do add: avisa que NÃO entrou na fila",
               "NÃO entrou na fila" in p.stderr, p.stderr)
-        # A prova de que a triagem sobreviveu está no ARQUIVO, não no stdout.
-        eventos = c.linhas()
-        triagens = [e for e in eventos if e.get("tipo") == "triagem" and e.get("id") == fid]
+        # The proof that the triage survived is in the FILE, not in stdout.
+        events = c.lines()
+        triages = [e for e in events if e.get("tipo") == "triagem" and e.get("id") == fid]
         check("triar com erro real do add: evento de triagem GRAVADO no ledger",
-              len(triagens) == 1 and triagens[0]["destino"] == "fila WEGO",
-              eventos)
+              len(triages) == 1 and triages[0]["destino"] == "fila WEGO",
+              events)
 
 
-def test_triar_sem_plano_nao_toca_em_fila_nenhuma():
-    with Caixa() as c:
+def test_triage_without_plan_touches_no_queue():
+    with Box() as c:
         (c.repo / ".claude" / "programs" / "WEGO").mkdir(parents=True)
         (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").write_text(
-            PLANO, encoding="utf-8")
+            PLAN_TEXT, encoding="utf-8")
         c.cli("add", "queixa comum, sem pedir fila nenhuma desta vez")
-        fid = f"fb-{HOJE}-1"
-        p = c.cli("triar", fid, "--destino", "BACKLOG.md § X")
+        fid = f"fb-{TODAY}-1"
+        p = c.cli("triage", fid, "--destination", "BACKLOG.md § X")
         check("triar sem --plano: rc=0", p.returncode == 0, p.stderr)
-        fila = (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").read_text(
+        queue = (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").read_text(
             encoding="utf-8")
-        check("triar sem --plano: fila intocada", fid not in fila, fila)
+        check("triar sem --plano: fila intocada", fid not in queue, queue)
 
 
-def test_triar_recusa_id_inexistente_e_destino_vazio():
-    with Caixa() as c:
+def test_triage_refuses_unknown_id_and_empty_destination():
+    with Box() as c:
         c.cli("add", "alguma queixa suficientemente longa aqui")
-        p = c.cli("triar", "fb-19700101-9", "--destino", "x")
+        p = c.cli("triage", "fb-19700101-9", "--destination", "x")
         check("triar: id inexistente (rc=3)", p.returncode == 3, p.returncode)
-        p = c.cli("triar", f"fb-{HOJE}-1", "--destino", "   ")
+        p = c.cli("triage", f"fb-{TODAY}-1", "--destination", "   ")
         check("triar: destino vazio (rc=2)", p.returncode == 2, p.returncode)
 
 
-# ------------------------------------------------------------------ lista
+# ------------------------------------------------------------------ list
 
-def test_list_replay_do_ledger():
-    with Caixa() as c:
+def test_list_replay_of_the_ledger():
+    with Box() as c:
         c.cli("add", "primeira queixa longa o suficiente para passar")
         c.cli("add", "segunda queixa longa o suficiente para passar")
-        c.cli("triar", f"fb-{HOJE}-1", "--destino", "BACKLOG.md § X")
+        c.cli("triage", f"fb-{TODAY}-1", "--destination", "BACKLOG.md § X")
         p = c.cli("list", "--json")
-        abertos = json.loads(p.stdout)
-        check("list: default só os abertos", [r["id"] for r in abertos] == [f"fb-{HOJE}-2"],
-              [r["id"] for r in abertos])
+        open_ones = json.loads(p.stdout)
+        check("list: default só os abertos", [r["id"] for r in open_ones] == [f"fb-{TODAY}-2"],
+              [r["id"] for r in open_ones])
         p = c.cli("list", "--status", "todos", "--json")
-        todos = json.loads(p.stdout)
-        check("list: --todos traz os dois", len(todos) == 2, len(todos))
-        triado = [r for r in todos if r["id"] == f"fb-{HOJE}-1"][0]
+        all_ = json.loads(p.stdout)
+        check("list: --todos traz os dois", len(all_) == 2, len(all_))
+        triaged = [r for r in all_ if r["id"] == f"fb-{TODAY}-1"][0]
         check("list: triado carrega o destino",
-              triado["triagem"]["destino"] == "BACKLOG.md § X", triado.get("triagem"))
+              triaged["triagem"]["destino"] == "BACKLOG.md § X", triaged.get("triagem"))
         p = c.cli("list", "--status", "todos", "--repo", "outro-repo", "--json")
         check("list: filtro por repo", json.loads(p.stdout) == [], p.stdout)
 
 
-def test_linha_corrompida_nao_derruba_o_resto():
-    with Caixa() as c:
+def test_corrupted_line_does_not_bring_down_the_rest():
+    with Box() as c:
         c.cli("add", "queixa que precisa sobreviver à linha quebrada")
-        arq = next(c.ledger.glob("feedback-*.jsonl"))
-        with open(arq, "a", encoding="utf-8") as fh:
+        file = next(c.ledger.glob("feedback-*.jsonl"))
+        with open(file, "a", encoding="utf-8") as fh:
             fh.write("{isso não é json\n\n")
         p = c.cli("list", "--json")
         check("ledger: linha corrompida é pulada", p.returncode == 0, p.stderr)
         check("ledger: o registro bom sobrevive", len(json.loads(p.stdout)) == 1, p.stdout)
 
 
-def test_list_sem_nada_registrado():
-    with Caixa() as c:
-        p = c.cli("list", "--sem-cor")
+def test_list_with_nothing_recorded():
+    with Box() as c:
+        p = c.cli("list", "--no-color")
         check("list: ledger vazio não é erro", p.returncode == 0, p.stderr)
         check("list: ledger vazio diz que está vazio",
               "Nenhum feedback" in p.stdout, p.stdout)
@@ -306,15 +306,15 @@ def test_list_sem_nada_registrado():
 
 # -------------------------------------------------------------------- hook
 
-def test_hook_injeta_em_queixa_sobre_o_harness():
-    with Caixa() as c:
+def test_hook_injects_on_complaint_about_the_harness():
+    with Box() as c:
         p = c.hook("esse gate me irrita, barrou um commit legítimo")
         check("hook: queixa + alvo injeta", "feedback-capture" in p.stdout, p.stdout)
         check("hook: nunca bloqueia", p.returncode == 0, p.returncode)
 
 
-def test_hook_calado_sem_uma_das_duas_condicoes():
-    with Caixa() as c:
+def test_hook_silent_without_one_of_the_two_conditions():
+    with Box() as c:
         p = c.hook("implemente o endpoint de assinatura", session_id="a")
         check("hook: prompt normal é silêncio", p.stdout.strip() == "", p.stdout)
         p = c.hook("essa API do fornecedor está errada e me irrita", session_id="b")
@@ -324,8 +324,8 @@ def test_hook_calado_sem_uma_das_duas_condicoes():
         check("hook: alvo sem queixa é silêncio", p.stdout.strip() == "", p.stdout)
 
 
-def test_hook_uma_vez_por_sessao():
-    with Caixa() as c:
+def test_hook_once_per_session():
+    with Box() as c:
         p1 = c.hook("o comando de novo? isso me irrita", session_id="s9")
         p2 = c.hook("e o hook continua chato pra caramba", session_id="s9")
         p3 = c.hook("e o hook continua chato pra caramba", session_id="s10")
@@ -334,8 +334,8 @@ def test_hook_uma_vez_por_sessao():
         check("hook: sessão nova volta a falar", "feedback" in p3.stdout, p3.stdout)
 
 
-def test_hook_kill_switch_e_falha_aberta():
-    with Caixa() as c:
+def test_hook_kill_switch_and_fail_open():
+    with Box() as c:
         p = c.hook("esse gate me irrita demais", CEPA_FEEDBACK_NUDGE="off")
         check("hook: kill switch silencia", p.stdout.strip() == "", p.stdout)
         p = subprocess.run([sys.executable, str(HOOK)], input="isso não é json",
@@ -344,57 +344,57 @@ def test_hook_kill_switch_e_falha_aberta():
         check("hook: payload inválido não injeta", p.stdout.strip() == "", p.stdout)
 
 
-# Formato conferido em .claude/session-log.md (o prompt que o UserPromptSubmit
-# recebeu em 2026-09): o aviso de fim de tarefa vem sozinho no prompt.
-AVISO = ("<task-notification>\n<task-id>a1b2c3d4</task-id>\n"
+# Format checked in .claude/session-log.md (the prompt that UserPromptSubmit
+# received in 2026-09): the end-of-task warning comes alone in the prompt.
+WARNING = ("<task-notification>\n<task-id>a1b2c3d4</task-id>\n"
          "<status>completed</status>\n<summary>Agent \"completion-auditor\" "
          "completed</summary>\n<result>Veredito COMPLETE. O gate não funciona "
          "fora do git e o hook está errado no caso X.</result>\n"
          "</task-notification>")
 
 
-def test_hook_ignora_aviso_de_subagente():
-    with Caixa() as c:
-        p = c.hook(AVISO, session_id="n1")
+def test_hook_ignores_subagent_warning():
+    with Box() as c:
+        p = c.hook(WARNING, session_id="n1")
         check("hook: aviso de subagente sozinho é silêncio",
               p.stdout.strip() == "", p.stdout)
-        p = c.hook(AVISO, session_id="n1")
+        p = c.hook(WARNING, session_id="n1")
         p = c.hook("esse gate me irrita, barrou um commit legítimo", session_id="n1")
         check("hook: aviso não gasta o aviso único da sessão",
               "feedback-capture" in p.stdout, p.stdout)
-        p = c.hook(AVISO + "\nesse gate me irrita demais", session_id="n2")
+        p = c.hook(WARNING + "\nesse gate me irrita demais", session_id="n2")
         check("hook: queixa do dono junto do aviso ainda conta",
               "feedback-capture" in p.stdout, p.stdout)
-        p = c.hook(AVISO + "\nrode o próximo item", session_id="n3")
+        p = c.hook(WARNING + "\nrode o próximo item", session_id="n3")
         check("hook: fala neutra do dono junto do aviso é silêncio",
               p.stdout.strip() == "", p.stdout)
-        cortado = AVISO.replace("</task-notification>", "")
-        p = c.hook(cortado, session_id="n4")
+        cut = WARNING.replace("</task-notification>", "")
+        p = c.hook(cut, session_id="n4")
         check("hook: aviso sem fechamento é silêncio", p.stdout.strip() == "", p.stdout)
-        p = c.hook(AVISO + "\n" + AVISO, session_id="n5")
+        p = c.hook(WARNING + "\n" + WARNING, session_id="n5")
         check("hook: dois avisos seguidos são silêncio", p.stdout.strip() == "", p.stdout)
-        longo = AVISO.replace("Veredito", "x" * 5000 + " Veredito")
-        p = c.hook(longo + "\nesse gate me irrita demais", session_id="n6")
+        long_ = WARNING.replace("Veredito", "x" * 5000 + " Veredito")
+        p = c.hook(long_ + "\nesse gate me irrita demais", session_id="n6")
         check("hook: aviso longo não esconde a queixa curta do dono",
               "feedback-capture" in p.stdout, p.stdout)
 
 
 def main():
     print("test_cepa_feedback")
-    for fn in (test_add_grava_verbatim_com_contexto, test_add_recusa_vazio_e_curto,
-               test_ids_sequenciais_no_dia, test_fora_de_repo_git_nao_quebra,
-               test_triar_marca_e_recusa_repeticao,
-               test_triar_com_plano_acrescenta_a_fila,
-               test_triar_com_plano_ja_na_fila_nao_e_erro,
-               test_triar_com_plano_erro_real_nao_desfaz_a_triagem,
-               test_triar_sem_plano_nao_toca_em_fila_nenhuma,
-               test_triar_recusa_id_inexistente_e_destino_vazio,
-               test_list_replay_do_ledger, test_linha_corrompida_nao_derruba_o_resto,
-               test_list_sem_nada_registrado,
-               test_hook_injeta_em_queixa_sobre_o_harness,
-               test_hook_calado_sem_uma_das_duas_condicoes,
-               test_hook_uma_vez_por_sessao, test_hook_kill_switch_e_falha_aberta,
-               test_hook_ignora_aviso_de_subagente):
+    for fn in (test_add_writes_verbatim_with_context, test_add_refuses_empty_and_short,
+               test_sequential_ids_in_the_day, test_outside_git_repo_does_not_break,
+               test_triage_marks_and_refuses_repetition,
+               test_triage_with_plan_appends_to_the_queue,
+               test_triage_with_plan_already_in_queue_is_not_an_error,
+               test_triage_with_plan_real_error_does_not_undo_the_triage,
+               test_triage_without_plan_touches_no_queue,
+               test_triage_refuses_unknown_id_and_empty_destination,
+               test_list_replay_of_the_ledger, test_corrupted_line_does_not_bring_down_the_rest,
+               test_list_with_nothing_recorded,
+               test_hook_injects_on_complaint_about_the_harness,
+               test_hook_silent_without_one_of_the_two_conditions,
+               test_hook_once_per_session, test_hook_kill_switch_and_fail_open,
+               test_hook_ignores_subagent_warning):
         fn()
     if failures:
         print(f"\n{len(failures)} falha(s): {', '.join(failures)}")

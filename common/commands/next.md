@@ -107,19 +107,19 @@ call, and `/common:next` doesn't do it silently.
 absence, run (read-only):
 
 ```
-python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intencao" estado
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intent" state
 ```
 
-The first line is `estado: <vazio|normal|cumprido|outra-sessao>`; the command
+The first line is `state: <empty|normal|fulfilled|other-session>`; the command
 classifies, not your eye. `normal` → answer from it: the next step is the
 current step of the session plan (passo atual, with its name) and the one after
-it; `cumprido` → the next step is `/common:wrap-up`; `outra-sessao` → show the
+it; `fulfilled` → the next step is `/common:wrap-up`; `other-session` → show the
 question the output carries and wait, don't treat that intent as this session's;
-`vazio` → carry on below. Say that the answer comes from the session intent, not
+`empty` → carry on below. Say that the answer comes from the session intent, not
 from an execution plan (no queue, no reconciliation). Never run this fallback
 when a plan was found above: a plan answers first.
 
-**No plan file anywhere, including those two places, and the intent is `vazio`.** Don't manufacture an
+**No plan file anywhere, including those two places, and the intent is `empty`.** Don't manufacture an
 order — an order nobody chose is worse than an admitted absence, because it reads as a decision. Say there is no
 execution plan, then name the cheapest way to get one **for this repo**:
 
@@ -161,7 +161,7 @@ Collect, in plan order:
   Each line is a night whose branch `until/<run>` is waiting for the owner: the
   run never touches the main branch, and nothing else on disk says it waits.
   List each line verbatim under "Pendente com você", with the
-  `cepa-until aterrissar <fila>/<run>` it prints as the route (without `--sim`
+  `cepa-until aterrissar <fila>/<run>` it prints as the route (without `--yes`
   it only shows the plan). Empty output means no run waits;
 - **the candidate** — the first `pending` item whose `blocked_by` contains no
   unfinished item;
@@ -234,8 +234,8 @@ missing and that `/common:queue <key> --from-jira` is what places them — `/boa
 
 **Closing human debt.** `reconcile` never touches `human_pending` — closing one
 is the user's, and this command's, alone. A `human_pending` is cleared by
-`cepa-plan responde <nome> <id> --resposta "<what the user saw>"` (it refuses
-without a terminal, so hand the user the command, or let `cepa-until decidir`
+`cepa-plan answer <nome> <id> --answer "<what the user saw>"` (it refuses
+without a terminal, so hand the user the command, or let `cepa-until decide`
 ask), and **only the user clears it** — they are the only one who knows whether they
 actually ran the route. Ask, one item at a time, naming the route verbatim
 ("did you open /admin/devolucoes and confirm the refusal?"). Never infer it from

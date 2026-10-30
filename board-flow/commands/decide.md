@@ -149,9 +149,9 @@ What the answer changes:
 - **`executa_e_reporta`** (reversible: run a build, local commit, create a
   non-terminal card, comment on a card, re-run the proof, aggregated infra card)
   → do it, and what was done becomes an **information line** in the report's
-  `### Detalhe técnico` ("Re-ran the proof of 3 cards with Docker down; created
+  `### Technical detail` ("Re-ran the proof of 3 cards with Docker down; created
   WEGO-2004 aggregating 11 cards without PIT"). **Never** a numbered item of
-  `### Decisões e próximos passos`: in the session of 2026-08-03 to 08-10, ~10 of the ~20
+  `### Decisions and next steps`: in the session of 2026-08-03 to 08-10, ~10 of the ~20
   interruptions were questions in this band that the owner just rubber-stamped
   with "sim". If the answer carries `precondicao`, check it before acting (e.g.:
   delete a branch only if `git merge-base --is-ancestor` says it's contained);
@@ -176,7 +176,7 @@ list and where each item came from.
 
 Seven cards stuck on "there is no external test covering adapter X" are ONE
 question with seven cards attached, not seven questions. Queue order: the
-classifier's `ORDEM_FILA` — descending risk, not Jira priority. Whoever gives up
+classifier's `QUEUE_ORDER` — descending risk, not Jira priority. Whoever gives up
 halfway down the list must be giving up on the least serious part.
 
 Each group comes out like this, and the format is mandatory (`plain-report` +
@@ -206,19 +206,19 @@ and at the end of the answer for whoever wants to check.
 The user answers in one line (`1 sim, 2 não, 3 sim`). Only then do you write.
 Per accepted group:
 
-- **accept the proof as is** → `waivers.gravar(...)` with reason, scope, the
+- **accept the proof as is** → `waivers.write(...)` with reason, scope, the
   user's rationale, author and `revisit_trigger` (all mandatory — a waiver with
   no deadline or condition is a waiver forever, and nobody decided that); then
   advance the cards via `atlassian-expert`. The waiver is **the human's**: the
   `proof-reviewer` still cannot waive anything and the proof artifact still has
   no field for it.
   **In an autonomous run** (`CEPA_UNTIL_RUN` or `CLAUDE_AUTONOMOUS_RUN_ID` in
-  the environment) there is no owner in front of you: `waivers.gravar` records a
+  the environment) there is no owner in front of you: `waivers.write` records a
   **proposal** (`status: proposta`, `autor: null`), not a waiver. Pass
   `fila=`/`item=` and open the human route on the item: `cepa-plan finish <fila> <id> --status
   blocked|pending --human-pending "Aceitar ou recusar a dispensa de <escopo>
-  (<motivo>)" --pergunta "Aceito a dispensa de <escopo> por <razão>? Recomendo
-  <sim/não>: <porquê>"`. Only the owner's `cepa-plan responde <fila> <id> --resposta "sim:
+  (<motivo>)" --question "Aceito a dispensa de <escopo> por <razão>? Recomendo
+  <sim/não>: <porquê>"`. Only the owner's `cepa-plan answer <fila> <id> --answer "sim:
   ..."`, in a terminal, converts the proposal into a waiver (fb-20261014-3).
 - **don't accept** → create the card for the missing test (one per real gap,
   not one per stuck card) and send the cards back with `**Reason:**` **per
@@ -254,8 +254,8 @@ how many questions are left, and it only means anything next to what was cut.
   decides whether an action is a question or information; an unlisted action is
   a question, and the question proposes the id. Promoting an action to the
   automatic band is a diff in `common/autonomy.yaml`, never a decision in the turn.
-- **In an autonomous run, never record a waiver:** `waivers.gravar` becomes a
-  proposal and the item gets a human route; the owner's `cepa-plan responde` is
+- **In an autonomous run, never record a waiver:** `waivers.write` becomes a
+  proposal and the item gets a human route; the owner's `cepa-plan answer` is
   what converts it.
 - `atlassian-expert` is the only write path to Jira.
 - **One question per group, never per card** — the cost this command attacks is

@@ -1,30 +1,32 @@
 #!/usr/bin/env python3
-"""Encadeamento de sessões para o launcher `cepa` (CS-3 do ciclo cepa-espiral-c1).
+"""Session chaining for the `cepa` launcher (CS-3 of the cepa-espiral-c1 cycle).
 
-Roda DEPOIS que o `claude` lançado pelo `cepa` sai. Se a sessão que acabou de
-sair deixou o próximo passo gravado em
-`<raiz-principal>/.claude/sessions/<session_id>.next.json`:
+Runs AFTER the `claude` launched by `cepa` exits. If the session that just
+exited left the next step recorded in
+`<main-root>/.claude/sessions/<session_id>.next.json`:
 
-    {"repo": "/abs/path", "modo": "descoberta", "brief": "<texto>"}
+    {"repo": "/abs/path", "mode": "discovery", "brief": "<text>"}
 
-este script apaga o arquivo, entra em `repo` e substitui o próprio processo
-pelo `cepa` de novo, com `--modo <modo>` e o brief como prompt inicial. Se o
-arquivo traz `intencao` ({proposito, para_quando, plano}), vão também
-`--proposito`, `--para-quando` e `--plano` (o cepa grava a intenção da sessão);
-sem ela, a sessão seguinte nasce sem intenção, nunca com o brief no lugar. A
-sessão seguinte abre no repo e no modo certos sem o dono digitar nada. Sem o
-arquivo, sai com o código que recebeu e nada acontece.
+this script deletes the file, enters `repo` and replaces its own process with
+`cepa` again, with `--mode <mode>` and the brief as the initial prompt. If the
+file carries `intent` ({purpose, by_when, plan}; the old `intencao` with
+proposito/para_quando/plano is also valid), `--purpose`, `--by-when` and
+`--plan` go too (cepa records the session's intent);
+without it, the next session is born without intent, never with the brief in
+its place. The next session opens in the right repo and mode without the owner
+typing anything. Without the file, it exits with the code it received and
+nothing happens.
 
-Como o launcher sabe qual `<session_id>` é o da sessão que acabou de sair: ele
-só conhece o `CEPA_LAUNCH_ID` que gerou. O hook `session-registry`, no
-SessionStart, anota cada `session_id` nascido daquela abertura em
-`<raiz-principal>/.claude/sessions/<launch_id>.launch`, um por linha (um
-`/clear` abre outro `session_id` no mesmo processo). Aqui o mais recente que
-deixou `.next.json` vence.
+How the launcher knows which `<session_id>` is the one that just exited: it
+only knows the `CEPA_LAUNCH_ID` it generated. The `session-registry` hook, at
+SessionStart, notes each `session_id` born from that opening in
+`<main-root>/.claude/sessions/<launch_id>.launch`, one per line (a `/clear`
+opens another `session_id` in the same process). Here the most recent one that
+left a `.next.json` wins.
 
-Uso: session-chain.py <launch_id> <cepa> <rc>
-Saída: exec do `cepa` (encadeou), ou exit <rc> (nada a encadear, ou arquivo
-inválido, que fica no lugar para o dono ver).
+Usage: session-chain.py <launch_id> <cepa> <rc>
+Output: exec of `cepa` (chained), or exit <rc> (nothing to chain, or invalid
+file, which stays in place for the owner to see).
 """
 
 import json
@@ -33,6 +35,11 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _wtlib as L  # noqa: E402
+try:
+    from _modes import normalize_mode as _normalize_mode
+except Exception:  # noqa: BLE001 — chaining never breaks because of the table
+    def _normalize_mode(v):
+        return v
 
 
 def breadcrumb_path(root: str, launch_id: str):
@@ -77,10 +84,13 @@ def main() -> int:
         print(f"✗ cepa: próximo passo ilegível em {nxt} ({e}); não encadeei", file=sys.stderr)
         return rc
     repo = spec.get("repo") if isinstance(spec, dict) else None
-    modo = spec.get("modo") if isinstance(spec, dict) else None
+    # `mode` (or the old `modo`); the old value (`descoberta`) becomes the new one
+    mode = (spec.get("mode") or spec.get("modo")) if isinstance(spec, dict) else None
+    if isinstance(mode, str):
+        mode = _normalize_mode(mode)
     brief = spec.get("brief") if isinstance(spec, dict) else None
     if not (isinstance(repo, str) and os.path.isdir(repo)
-            and isinstance(modo, str) and modo
+            and isinstance(mode, str) and mode
             and isinstance(brief, str) and brief.strip()):
         print(f"✗ cepa: próximo passo inválido em {nxt} (precisa de repo existente, "
               f"modo e brief); não encadeei", file=sys.stderr)
@@ -90,36 +100,39 @@ def main() -> int:
         nxt.unlink()
     except OSError:
         pass
-    # O registro da sessão que saiu carrega o pid do `cepa` (o claim é gravado
-    # com ele), que é este processo. Sem o SessionEnd, ele pareceria uma sessão
-    # viva na árvore e a próxima abertura se isolaria numa worktree à toa.
+    # The registry entry of the session that left carries `cepa`'s pid (the
+    # claim is written with it), which is this process. Without SessionEnd, it
+    # would look like a live session in the tree and the next opening would
+    # isolate itself in a worktree for nothing.
     for f, e in L.read_entries(root):
         if e.get("pid") == os.getpid() and e.get("hostname") in (None, L.host()):
             try:
                 f.unlink()
             except OSError:
                 pass
-    print(f"↻ cepa: próxima sessão em {repo} (modo {modo}) — CEPA_ENCADEAR=off desliga",
+    print(f"↻ cepa: próxima sessão em {repo} (modo {mode}) — CEPA_ENCADEAR=off desliga",
           file=sys.stderr)
     os.chdir(repo)
-    os.execv(cepa, [cepa, "--modo", modo, *intencao_args(spec.get("intencao"), nxt), brief])
+    os.execv(cepa, [cepa, "--mode", mode, *intent_args(spec.get("intent") or spec.get("intencao"), nxt), brief])
     return rc  # unreachable
 
 
-def intencao_args(it, nxt) -> list:
-    """Flags do `cepa` que gravam a intenção da sessão seguinte. Só com as três
-    partes escritas para ela; o brief fala da sessão que saiu e não vira propósito."""
+def intent_args(it, nxt) -> list:
+    """`cepa` flags that record the next session's intent. Only with all three
+    parts written for it; the brief talks about the session that left and does
+    not become purpose."""
     if it is None:
         return []
-    plano = it.get("plano") if isinstance(it, dict) else None
-    textos = [it.get(k) for k in ("proposito", "para_quando")] if isinstance(it, dict) else []
-    if not (len(textos) == 2 and all(isinstance(t, str) and t.strip() for t in textos)
-            and isinstance(plano, list) and plano
-            and all(isinstance(i, str) and i.strip() and "\n" not in i for i in plano)):
+    plan = (it.get("plan") or it.get("plano")) if isinstance(it, dict) else None
+    texts = ([it.get("purpose") or it.get("proposito"), it.get("by_when") or it.get("para_quando")]
+              if isinstance(it, dict) else [])
+    if not (len(texts) == 2 and all(isinstance(t, str) and t.strip() for t in texts)
+            and isinstance(plan, list) and plan
+            and all(isinstance(i, str) and i.strip() and "\n" not in i for i in plan)):
         print(f"⚠ cepa: intenção inválida em {nxt}; a sessão seguinte abre sem ela",
               file=sys.stderr)
         return []
-    return ["--proposito", textos[0], "--para-quando", textos[1], "--plano", "\n".join(plano)]
+    return ["--purpose", texts[0], "--by-when", texts[1], "--plan", "\n".join(plan)]
 
 
 if __name__ == "__main__":

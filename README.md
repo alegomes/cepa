@@ -52,8 +52,8 @@ does the work.
 | Height | What it is | Where it lives | Lasts |
 |---|---|---|---|
 | **Epic** | A package of work worth a demonstration. Lists the invariants that must never regress and a ladder of cycles. Written by `/common:epic`. | `docs/epics/<name>.md` | Months |
-| **cycle** | One rung of the ladder. Closes when its demonstration script runs on screen and in the backend. `/common:plan --from-epic --ciclo N` turns it into a queue. | A section of the Epic | Weeks, many sessions |
-| **queue** | The ordered list of items for one slice of work, with the reason each item sits where it sits. Written only by `/common:plan`. Read by `/common:next`, `/common:fila`, `/common:drain-plan` and `cepa-until`. | `.claude/programs/<name>/plan.yaml` | Until its last item closes |
+| **cycle** | One rung of the ladder. Closes when its demonstration script runs on screen and in the backend. `/common:queue --from-epic --cycle N` turns it into a queue. | A section of the Epic | Weeks, many sessions |
+| **queue** | The ordered list of items for one slice of work, with the reason each item sits where it sits. Written only by `/common:queue`. Read by `/common:next`, `/common:queue-status`, `/common:drain-plan` and `cepa-until`. | `.claude/programs/<name>/plan.yaml` | Until its last item closes |
 | **item** | One line of a queue: `id`, `title`, `why`, `status`, `blocked_by`, `human_pending`, `evidence`. In a repo with Jira its mirror on the board is a **card**. The board keeps the status. The queue keeps the order and the why. | Inside the queue | Hours to days |
 
 The session has two attributes:
@@ -62,18 +62,19 @@ The session has two attributes:
   decides where the agent may write and what must be true before the session closes. See
   [Work has modes](#work-has-modes).
 - **intent**: what this session will do inside its mode, as a purpose, a stopping point and
-  one to six **steps**. Stored in `.claude/session-intent` by `cepa-intencao` and shown by
+  one to six **steps**. Stored in `.claude/session-intent` by `cepa-intent` and shown by
   `/common:whereami`. An unattended session (`cepa-until`) has no intent file: its intent is
   the next item of the queue.
 
 Demands wait in **inboxes** before they get an order: `BACKLOG.md`, the feedback ledger
-(`cepa-feedback`), `.claude/desvios.md`, GitHub issues and, with Jira, the backlog column.
-Nothing runs from an inbox. `/common:plan` turns what is there into items.
+(`cepa-feedback`), `.claude/deviations.md`, GitHub issues and, with Jira, the backlog column.
+Nothing runs from an inbox. `/common:queue` turns what is there into items.
 
-Two names are in transition. The queue file is still called `plan.yaml`, under
-`.claude/programs/`, with a `program:` key, and the command that writes it is still
-`/common:plan`. All four are being renamed to *queue*. The `parallel-waves` queues of
-`maestro` are frozen since 2026-10-08 and archived in `.claude/programs/archive/`.
+The old names are kept as deprecated aliases during the transition: `/common:plan` runs
+`/common:queue`, `/common:fila` runs `/common:queue-status`, `/common:modos` runs
+`/common:modes`, `cepa-intencao` and `cepa-modos` run `cepa-intent` and `cepa-modes`. The
+`parallel-waves` queues of `maestro` are frozen since 2026-10-08 and archived in
+`.claude/programs/archive/`.
 
 The full vocabulary, with diagrams of an item's path, is in
 [docs/how-it-fits.md](docs/how-it-fits.md#vocabulary).
@@ -85,19 +86,19 @@ problem, converging on what to build, and building it. Do all three in one sessi
 get a half-specified feature, built too early, interrupted every ten minutes by a question
 the spec should have answered.
 
-Cepa makes the moment explicit. Every session opens in one **mode** (`cepa --modo <name>`),
+Cepa makes the moment explicit. Every session opens in one **mode** (`cepa --mode <name>`),
 and the mode decides where the agent may write and what has to be true before the session
 can close.
 
 | Mode | The moment | You come in with | You leave with |
 |---|---|---|---|
-| **exploração** (exploration) | Wander. No solution yet. | A pain, in plain words | A strategy note with at least two paths considered and one recommended |
-| **descoberta** (discovery) | Converge. | A behaviour you want | Acceptance criteria written at the surface where they will be checked, each with a failing test |
+| **exploration** | Wander. No solution yet. | A pain, in plain words | A strategy note with at least two paths considered and one recommended |
+| **discovery** | Converge. | A behaviour you want | Acceptance criteria written at the surface where they will be checked, each with a failing test |
 | **design** | Shape it before code exists. | A validated opportunity | Flows, states, visual spec, a prototype |
-| **construção** (construction) | Make it real. | **A failing test**, written from the criterion by someone who will not implement it | Code and tests, passed by the acceptance and proof gates |
-| **reforma** (refactor) | Reorganise delivered code. | A declared budget: the closed list of what changes | Same external behaviour. Editing an external test is blocked, because that would mean behaviour changed. |
-| **reflexão** (reflection) | Look at what exists through one lens. | A slice and a lens | Every finding turned into a card or discarded with a reason |
-| **documentação** (documentation) | Document stable code. | Code that is no longer moving | A doc tree where every "why" cites its source |
+| **construction** | Make it real. | **A failing test**, written from the criterion by someone who will not implement it | Code and tests, passed by the acceptance and proof gates |
+| **refactor** | Reorganise delivered code. | A declared budget: the closed list of what changes | Same external behaviour. Editing an external test is blocked, because that would mean behaviour changed. |
+| **reflection** | Look at what exists through one lens. | A slice and a lens | Every finding turned into a card or discarded with a reason |
+| **documentation** | Document stable code. | Code that is no longer moving | A doc tree where every "why" cites its source |
 
 Two things follow from this:
 
@@ -145,7 +146,7 @@ in the queue, one fresh Claude process per item, until the clock runs out.
 **7. Come back.** When the window ends, `cepa-until` asks you in the terminal, one thing at
 a time: land the night branch? and, for every item that only you can unblock, the closed
 question that holds it, with a recommendation. Your answer is applied on the spot. Missed
-it? `cepa-until decidir <queue>/<run>` asks again. `/board-flow:decide` reads what is sitting in Review, drops what is
+it? `cepa-until decide <queue>/<run>` asks again. `/board-flow:decide` reads what is sitting in Review, drops what is
 nobody's decision (Docker was down, a tool was missing), groups the rest by reason and asks
 **one yes/no question per group**, with a recommendation. You answer "1 yes, 2 no" and it
 applies.
@@ -309,7 +310,7 @@ It does not end with a count. It ends with questions: land the night branch, and
 question per item that only you can unblock, answered right there in the terminal.
 
 Two things to know before you use it: it runs with `--dangerously-skip-permissions` by
-default (turn that off with `--com-permissoes`), and it needs a queue on disk.
+default (turn that off with `--with-permissions`), and it needs a queue on disk.
 [More](docs/cepa-until.md)
 
 ## You have been here before
@@ -339,7 +340,7 @@ plugins so you install only what your project needs. There are three kinds.
 
 **The base: `common`. Always installed.** It holds what is shared by everything else: the
 gates (green-or-revert, acceptance-completeness, UI proof), the hooks, the working habits,
-the modes, and the session tooling (`/common:spec`, `plan`, `next`, `session`, `wrap-up`,
+the modes, and the session tooling (`/common:spec`, `queue`, `next`, `session`, `wrap-up`,
 handoff, worktrees, `cepa-until`).
 
 **A team.** A team is a plugin that ships a group of agents plus the instructions that tell
@@ -373,10 +374,10 @@ team behind one of the modes:
 
 | Team | Mode | What it does |
 |---|---|---|
-| **`discovery`** | descoberta | Turns raw signals into validated opportunities and hands engineering a delivery brief |
+| **`discovery`** | discovery | Turns raw signals into validated opportunities and hands engineering a delivery brief |
 | **`design`** | design | Turns a feature brief into a build-ready design spec (flows, visual, prototype, critique) |
 | **`marketing`** | *(none yet)* | Turns a raw content request into reviewed, grounded commercial prose (brief, copy, brand-style and fact-check gates) |
-| **`docs`** | documentação | Sweeps an existing project into a grounded doc tree for onboarding, in five checkpointed phases |
+| **`docs`** | documentation | Sweeps an existing project into a grounded doc tree for onboarding, in five checkpointed phases |
 
 `marketing` has no dedicated session mode yet — drive it with
 `/marketing:brief-write-review` directly, or per-column via `board-flow`.

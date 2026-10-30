@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: lint editorial de conteúdo pt-BR — opt-in por projeto.
+"""PostToolUse hook: editorial lint of pt-BR content, opt-in per project.
 
-As regras de estilo do usuário (zero travessão, não soar LinkedIn-ês, hashtags
-específicas do nicho) eram re-ensinadas a cada sessão — a auditoria de 07/2026
-achou a mesma correção de travessão feita duas vezes e retrofit manual de
-estoque inteiro. Regra clara que ainda é violada precisa de enforcement, não de
-mais prosa (mesmo princípio do proof-verdict-guard).
+The user's style rules (zero em dash, do not sound like LinkedIn-speak,
+niche-specific hashtags) were re-taught every session; the 07/2026 audit found
+the same em dash fix done twice and a manual retrofit of a whole stock of
+posts. A clear rule that is still violated needs enforcement, not more prose
+(same principle as proof-verdict-guard).
 
-OPT-IN estrito: o hook só age se existir `.claude/editorial-lint` na raiz do
-projeto, contendo globs de arquivos de CONTEÚDO (um por linha, # comenta):
+Strictly OPT-IN: the hook only acts if `.claude/editorial-lint` exists at the
+project root, containing globs of CONTENT files (one per line, # comments):
 
     posts/**/*.md
     legendas/*.txt
     docs/produto/**/*.md
 
-Sem o arquivo → inerte (código-fonte nunca é lintado; docstrings usam travessão
-legitimamente). Exit 2 em PostToolUse devolve o aviso ao modelo SEM desfazer a
-escrita — o modelo corrige em seguida. Nunca bloqueia o turno.
+Without the file it is inert (source code is never linted; docstrings use the
+em dash legitimately). Exit 2 in PostToolUse hands the warning back to the model
+WITHOUT undoing the write, and the model fixes it next. It never blocks the turn.
 
-Checagens (v1):
-  - travessão (—) e meia-risca usada como travessão ( – )
-  - frases-marca de texto de IA/LinkedIn-ês pt-BR
-  - hashtags genéricas demais para o nicho
+Checks (v1):
+  - em dash (—) and en dash used as an em dash ( – )
+  - tell-tale phrases of AI/LinkedIn-speak text in pt-BR
+  - hashtags too generic for the niche
 """
 
 import fnmatch
@@ -33,15 +33,15 @@ from pathlib import Path
 
 EM_DASH = re.compile(r"—|\s–\s")
 
-# Frases-marca: presença = cheiro, não crime; o aviso lista, o modelo julga.
-FRASES_MARCA = [
+# Tell-tale phrases: presence = smell, not crime; the warning lists them, the model judges.
+TELLTALE_PHRASES = [
     "além disso,", "é importante ressaltar", "é importante destacar",
     "vale destacar", "vale ressaltar", "nesse sentido,", "em suma,",
     "não é apenas", "mais do que nunca", "em um mundo cada vez mais",
     "game changer", "divisor de águas", "revolucionando",
 ]
 
-HASHTAGS_GENERICAS = [
+GENERIC_HASHTAGS = [
     "#tecnologia", "#programacao", "#programação", "#engenhariadesoftware",
     "#desenvolvimento", "#software", "#coding", "#developer", "#tech",
     "#inovacao", "#inovação", "#ia",
@@ -61,7 +61,7 @@ def load_globs(root: Path):
 
 
 def find_root(start: Path):
-    """Sobe até achar .claude/editorial-lint (limite: raiz do git ou 8 níveis)."""
+    """Climbs until it finds .claude/editorial-lint (limit: git root or 8 levels)."""
     d = start if start.is_dir() else start.parent
     for _ in range(8):
         if (d / ".claude" / "editorial-lint").is_file():
@@ -73,8 +73,8 @@ def find_root(start: Path):
 
 
 def matches(rel: str, globs) -> bool:
-    # fnmatch não conhece "**": "posts/**/*.md" não casaria "posts/a.md".
-    # Testa cada glob também com "**/" colapsado, cobrindo profundidade zero.
+    # fnmatch does not know "**": "posts/**/*.md" would not match "posts/a.md".
+    # Also tests each glob with "**/" collapsed, covering depth zero.
     for g in globs:
         if fnmatch.fnmatch(rel, g) or fnmatch.fnmatch(rel, g.replace("**/", "")):
             return True
@@ -87,10 +87,10 @@ def lint(text: str):
     if n_dash:
         findings.append(f"{n_dash} travessão(ões) '—' — regra do usuário: ZERO travessão em conteúdo; reescreva com vírgula, dois-pontos ou frase nova")
     low = text.lower()
-    hits = [f for f in FRASES_MARCA if f in low]
+    hits = [f for f in TELLTALE_PHRASES if f in low]
     if hits:
         findings.append(f"frases-marca de texto de IA/LinkedIn-ês: {', '.join(repr(h) for h in hits[:5])} — soe humano")
-    tags = [t for t in HASHTAGS_GENERICAS if t in low]
+    tags = [t for t in GENERIC_HASHTAGS if t in low]
     if tags:
         findings.append(f"hashtag(s) genérica(s): {', '.join(tags[:5])} — use hashtags específicas do nicho")
     return findings
@@ -115,16 +115,16 @@ def main():
     root = find_root(Path(payload.get("cwd") or os.getcwd()))
     globs = load_globs(root)
     if not globs:
-        sys.exit(0)  # projeto não opta pelo lint — inerte
+        sys.exit(0)  # project does not opt into the lint: inert
 
     try:
         rel = str(fp.resolve().relative_to(root.resolve()))
     except ValueError:
-        sys.exit(0)  # arquivo fora do projeto configurado
+        sys.exit(0)  # file outside the configured project
     if not matches(rel, globs):
         sys.exit(0)
 
-    # Linta o conteúdo NOVO: no Write vem inteiro; em Edit/MultiEdit, os trechos.
+    # Lints the NEW content: in Write it comes whole; in Edit/MultiEdit, the snippets.
     if payload.get("tool_name") == "Write":
         texts = [tool_input.get("content") or ""]
     elif payload.get("tool_name") == "Edit":
@@ -145,7 +145,7 @@ def main():
         + "\n  Corrija o arquivo agora (a escrita foi aplicada; edite por cima).",
         file=sys.stderr,
     )
-    sys.exit(2)  # PostToolUse: stderr volta ao modelo; não desfaz nada
+    sys.exit(2)  # PostToolUse: stderr goes back to the model; undoes nothing
 
 
 if __name__ == "__main__":

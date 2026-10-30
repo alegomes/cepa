@@ -48,10 +48,10 @@ criterion that decides whether cycle 2 of the intent goes in
    **Exception: session already closed.** If `/common:wrap-up` has already run in
    this same conversation ("Safe to exit" has already been said), do NOT offer
    the action: record it (a section in `BACKLOG.md` when the repo is cepa; in the
-   others, `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" add --origem comando
-   --alvo metrics "<the action and the reason>"`) and say in the report where it
-   was recorded. The list at the end says "Nada pendente." and `**Pra você:**`
-   says "nada". `report-style-lint.py` blocks a closed question there (category
+   others, `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" add --origin comando
+   --target metrics "<the action and the reason>"`) and say in the report where it
+   was recorded. The list at the end says "Nothing pending." and `**For you:**`
+   says "nothing". `report-style-lint.py` blocks a closed question there (category
    `pergunta-pos-wrap-up`).
 
 4. If there are no events yet, explain that telemetry started accumulating in
@@ -83,7 +83,7 @@ criterion that decides whether cycle 2 of the intent goes in
   come in with a one-off sweep:
 
   ```
-  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-tokens" --todas --days 30 --emit
+  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-tokens" --all --days 30 --emit
   ```
 
 - Commands and skills can record their own events (they show up in "Eventos

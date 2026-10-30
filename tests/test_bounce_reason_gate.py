@@ -82,7 +82,7 @@ check("label vazio BLOQUEIA", r.returncode == 2, f"rc={r.returncode}")
 check("label vazio é reportado como vazio, não como ausente",
       "empty" in r.stderr.lower(), r.stderr[:300])
 
-# ── a razão logo abaixo do rótulo (estilo heading) conta ────────────────────
+# ── the reason right below the label (heading style) counts ─────────────────
 BLOCK_STYLE = """### Devolvendo para retrabalho
 
 ### Motivo
@@ -92,7 +92,7 @@ O teste de regressão não fica vermelho no base_commit — sem prova de que o b
 r = run_hook(CLOUD_TOOL, {"commentBody": BLOCK_STYLE})
 check("razão em bloco abaixo do rótulo passa", r.returncode == 0, r.stderr[:300])
 
-# ── pt-BR + wiki markup (o formato real dos comentários do Jira) ────────────
+# ── pt-BR + wiki markup (the real format of Jira comments) ──────────────────
 WIKI_BOUNCE = """h2. Devolvendo o card para In Progress
 
 h3. Motivo
@@ -109,7 +109,7 @@ h3. Artefato
 r = run_hook(LOCAL_TOOL, {"comment": WIKI_BOUNCE_BARE})
 check("wiki + pt-BR sem motivo BLOQUEIA", r.returncode == 2, f"rc={r.returncode}")
 
-# ── razão presente mas sem marcação → problema de FORMATO, não de omissão ───
+# ── reason present but without markup → FORMAT problem, not omission ────────
 UNLABELED = """## Proof gate — UNPROVEN, returning for rework
 
 Reason: falta cobertura externa no endpoint tocado.
@@ -119,7 +119,7 @@ check("razão sem marcação bloqueia", r.returncode == 2, f"rc={r.returncode}")
 check("...e é reportada como formato, não como ausência",
       "NOT in a recognized format" in r.stderr, r.stderr[:300])
 
-# ── comentários que NÃO são devolução nunca são gateados ───────────────────
+# ── comments that are NOT a bounce are never gated ──────────────────────────
 PROVEN_SUMMARY = """## Proof summary — change-driven gate PROVEN
 
 - **L2 external coverage:** every changed line exercised by an integration test.
@@ -170,10 +170,10 @@ APPROVAL_BULLET_RETURNED_VALUE = """**PROVEN**
 - o retry devolve a conexão ao pool
 """
 
-# ── mencionar o veredito não é declarar o veredito (2026-08-03) ─────────────
-# Três comentários barrados numa sessão real por dizerem, no corpo, para NÃO
-# reprovar o card. Cada um mora numa linha que abre com marcador — bullet ou
-# negrito — que a regra antiga contava como heading em qualquer posição.
+# ── mentioning the verdict is not declaring the verdict (2026-08-03) ────────
+# Three comments barred in a real session for saying, in the body, NOT to
+# reject the card. Each lives on a line that opens with a marker — bullet or
+# bold — which the old rule counted as a heading in any position.
 APPROVAL_BULLET_SAYS_NOT_UNPROVEN = """h3. Proof gate — PROVEN
 
 O card segue aprovado.
@@ -183,8 +183,8 @@ APPROVAL_BOLD_SAYS_NOT_UNPROVEN = """## Resumo de implementação
 
 **Nota:** não devolver como UNPROVEN — o teste externo cobre.
 """
-# O mesmo em prosa solta. Já passava antes do fix; fica como par de controle,
-# para que uma regressão futura mostre se quebrou o marcador ou a posição.
+# The same in loose prose. It already passed before the fix; it stays as a control pair,
+# so that a future regression shows whether it broke the marker or the position.
 APPROVAL_PROSE_SAYS_NOT_UNPROVEN = """h3. Proof gate — PROVEN
 
 Não há motivo para marcar UNPROVEN aqui.
@@ -215,13 +215,13 @@ BOUNCE_UNMARKED_FIRST_LINE = """UNPROVEN, returning for rework
 
 Sem motivo estruturado aqui.
 """
-# Heading com marcador de bullet: continua sendo heading porque é a primeira
-# linha não-vazia, não porque abre com `-`.
+# Heading with a bullet marker: it is still a heading because it is the first
+# non-empty line, not because it opens with `-`.
 BOUNCE_BULLET_FIRST_LINE = """- UNPROVEN, returning for rework
 
 Sem motivo estruturado aqui.
 """
-# Linha em branco antes do heading não o empurra para o corpo.
+# A blank line before the heading does not push it into the body.
 BOUNCE_AFTER_BLANK_LINES = """
 
 ## Proof gate — UNPROVEN, returning for rework

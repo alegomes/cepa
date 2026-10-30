@@ -309,7 +309,7 @@ validação. Em troca, três dívidas ficam nomeadas:
 3. ✅ **/maestro:run** — núcleos determinísticos FEITOS + testados 2026-07-15
    (`maestro/bin/`: maestro-fork-settings, maestro-gatekeeper [promovido do
    spike], maestro-poll, maestro-wave-state; 20 testes em
-   `tests/test_maestro_run_cores.py`) + comandos `/maestro:run` e
+   `tests/test_maestro_run_colors.py`) + comandos `/maestro:run` e
    `/maestro:resume` autorados. FALTA a validação ponta a ponta (herdr spawn +
    onda real) — é o Passo 4. maestro 0.2.0.
 4. Primeiro programa real com porteiro em shadow-mode.

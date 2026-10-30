@@ -383,7 +383,7 @@ própria fila, e o próximo run o executa.
      de C4 (o SHA gravado é ancestral do HEAD e nenhum outro item fechou `done` no meio).
    - Acrescenta à fila, na frente, um item de conserto:
      `cepa-plan add WEGO FIX-<teste> --title "Consertar <teste>, vermelho depois do <card>"
-     --antes-de <próximo> --why "<evidência>"`.
+     --before <próximo> --why "<evidência>"`.
    - Devolve o item original para `pending` com `blocked-by FIX-<teste>`, que marca o item de
      conserto como pré-requisito dele, e com um campo apontando para a branch lateral.
 4. **Registro de instabilidade.** Cada build que ficou vermelho e depois verde grava uma linha
@@ -457,9 +457,9 @@ O que mudou (branch `session/until-decidir`, `tests/test_cepa_until_decidir.py`)
   `pending`, a rota `human_pending` fecha, e a resposta entra na evidência que o próximo run
   lê. O `responde` recusa sem TTY: o `claude -p` de um run não tem terminal e não fecha a
   rota no lugar do dono.
-- **De onde vem a pergunta:** o agente grava com `cepa-plan finish --pergunta` (campo
+- **De onde vem a pergunta:** o agente grava com `cepa-plan finish --question` (campo
   `owner_question`), por instrução do `/common:drain-plan`. Para itens antigos, o
   `/common:until-review` grava o bloco `json cepa-decisoes`. O bloco só dá a redação (R2):
   as ações seguem de lista fechada, aterrissar e `responde`.
 - **Sem terminal** o fim lista as pendências com a pergunta e o comando
-  `cepa-until decidir <fila>/<run>`, que refaz as perguntas depois.
+  `cepa-until decide <fila>/<run>`, que refaz as perguntas depois.

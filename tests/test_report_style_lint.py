@@ -1,30 +1,30 @@
 #!/usr/bin/env python3
-"""Testes do medidor de formato de relatório (common/hooks/report-style-lint.py).
+"""Tests of the report-format meter (common/hooks/report-style-lint.py).
 
-O defeito que ele mede (relatado pelo usuário em 03/08/2026): relatórios que
-exigem duas leituras — jargão interno na abertura, mecanismo antes do resultado,
-sem um ponto onde dá pra parar de ler.
+The defect it measures (reported by the user on 2026-08-03): reports that
+require two readings — internal jargon in the opening, mechanism before the result,
+no point where it is possible to stop reading.
 
-Garantias:
-  - turno que ALTEROU algo + relatório fora do formato -> desvio registrado, e o
-    aviso aparece no UserPromptSubmit seguinte;
-  - relatório dentro do formato -> nenhum aviso;
-  - turno de CONVERSA (nada alterado) -> nunca medido, por pior que seja;
-  - relatório curto -> nunca medido (é recado, não relatório);
-  - jargão no bloco de detalhe técnico -> permitido; na abertura -> sinalizado;
-  - higiene ("árvore limpa", "memória atualizada") no topo -> sinalizada; a
-    mesma frase no detalhe técnico -> permitida;
-  - a lista final `### Decisões e próximos passos` é obrigatória, é a última
-    seção, tem itens de lista (ou "Nada pendente.") e fica fora do teto de 200
-    palavras;
-  - cada item da lista final é numerado, faz uma pergunta fechada e traz
-    "Recomendo sim/não" -> item que só nomeia o assunto é sinalizado;
-  - tudo que o `Pra você:` anuncia aparece como item numerado no fim ("Nada
-    pendente." só vale quando o topo diz "nada"), e todo item de tarefa do dono
-    ("Você ...") traz comando ou arquivo e "Pronto quando" — o relatório de
-    14/10/2026 ("fechar as duas rotas humanas ... Nada pendente.") é barrado;
-  - resposta de subagente (sidechain) nunca é confundida com o relatório;
-  - o hook NUNCA bloqueia: exit 0 em todos os casos.
+Guarantees:
+  - a turn that CHANGED something + a report outside the format -> deviation recorded, and the
+    warning shows up in the next UserPromptSubmit;
+  - a report inside the format -> no warning;
+  - a CONVERSATION turn (nothing changed) -> never measured, however bad it is;
+  - a short report -> never measured (it is a note, not a report);
+  - jargon in the technical detail block -> allowed; in the opening -> flagged;
+  - hygiene ("clean tree", "updated memory") at the top -> flagged; the
+    same sentence in the technical detail -> allowed;
+  - the final list `### Decisões e próximos passos` is mandatory, is the last
+    section, has list items (or "Nada pendente.") and stays outside the 200-word
+    ceiling;
+  - each item of the final list is numbered, asks a closed question and carries
+    "Recomendo sim/não" -> an item that only names the subject is flagged;
+  - everything the `Pra você:` announces appears as a numbered item at the end ("Nada
+    pendente." only holds when the top says "nothing"), and every owner-task item
+    ("Você ...") carries a command or file and "Pronto quando" — the report of
+    2026-10-14 ("close the two human routes ... Nada pendente.") is blocked;
+  - a subagent's answer (sidechain) is never mistaken for the report;
+  - the hook NEVER blocks: exit 0 in all cases.
 """
 
 import json
@@ -42,10 +42,10 @@ TMP = Path(tempfile.mkdtemp(prefix="report-style-"))
 STATE = TMP / "state"
 TELEM = TMP / "telemetry"
 
-# A lista do fim, obrigatória desde 03/08/2026. Como todo relatório de
-# trabalho feito precisa dela, ela entra em todos os fixtures; os testes que
-# medem OUTRA coisa não devem falhar por falta dela.
-PASSOS = ("\n\n### Decisões e próximos passos\n"
+# The list at the end, mandatory since 2026-08-03. Since every completed-work
+# report needs it, it enters all the fixtures; tests that measure ANOTHER
+# thing must not fail for lack of it.
+STEPS = ("\n\n### Decisões e próximos passos\n"
           "*Responda por número: sim, não, ou \"vamos falar\".*\n"
           "1. **Você roda `bin/install.sh --clean` agora?**\n"
           "   Onde: raiz do clone do cepa.\n"
@@ -58,16 +58,16 @@ PASSOS = ("\n\n### Decisões e próximos passos\n"
           "   Recomendo **sim** — sem isso a mudança não vale.\n")
 
 
-BOM = ("O verificador de provas aceitava qualquer palavra fora de uma lista de "
+GOOD = ("O verificador de provas aceitava qualquer palavra fora de uma lista de "
        "proibidas, então um erro de digitação virava aprovação. Agora ele só "
        "aceita as palavras previstas para cada checagem, e recusa o resto.\n\n"
        "**Pra você:** nada pra decidir agora; precisa reinstalar pra valer.\n\n"
        "### Detalhe técnico\n"
        "O portão passou a comparar contra um enum fechado por nível; o dublê "
        "segue barrado e cada perturbação foi ao vermelho sozinha. " * 6
-       + PASSOS)
+       + STEPS)
 
-RUIM = ("O portão agora falha fechado. Cada status é conferido contra o enum "
+BAD = ("O portão agora falha fechado. Cada status é conferido contra o enum "
         "fechado do seu nível, não contra uma lista de proibidos. O coletor "
         "virou consciente do caminho para isso ser possível, e o dublê segue "
         "barrado como antes. A perturbação de cada garantia foi ao vermelho "
@@ -88,24 +88,24 @@ def transcript(*rows) -> str:
     return str(p)
 
 
-def turno(relatorio, alterou=True, sidechain_extra=None):
-    """Um turno completo: prompt do usuário, trabalho, relatório final."""
+def turn(report, changed=True, sidechain_extra=None):
+    """A complete turn: user prompt, work, final report."""
     rows = [msg("user", [{"type": "text", "text": "faça a coisa"}], mtype="user")]
-    if alterou:
+    if changed:
         rows.append(msg("assistant", [
             {"type": "tool_use", "name": "Edit", "input": {"file_path": "x.py"}}]))
-    rows.append(msg("assistant", [{"type": "text", "text": relatorio}]))
+    rows.append(msg("assistant", [{"type": "text", "text": report}]))
     if sidechain_extra:
-        # DEPOIS do relatório de propósito: é assim que cai no transcript um
-        # subagente em background, que termina depois da resposta principal.
-        # Sidechain antes do relatório não prova nada — a ordem já resolveria.
+        # AFTER the report on purpose: that is how a background subagent, which
+        # finishes after the main answer, lands in the transcript.
+        # A sidechain before the report proves nothing — the order would already solve it.
         rows.append(msg("assistant", [{"type": "text", "text": sidechain_extra}],
                         sidechain=True))
     return transcript(*rows)
 
 
-def run(evento, transcript_path="", session="s1", stop_hook_active=False):
-    payload = json.dumps({"hook_event_name": evento, "session_id": session,
+def run(event, transcript_path="", session="s1", stop_hook_active=False):
+    payload = json.dumps({"hook_event_name": event, "session_id": session,
                           "transcript_path": transcript_path, "cwd": str(TMP),
                           "stop_hook_active": stop_hook_active})
     env = dict(os.environ, CEPA_REPORT_STYLE_DIR=str(STATE),
@@ -114,32 +114,32 @@ def run(evento, transcript_path="", session="s1", stop_hook_active=False):
                           capture_output=True, text=True, env=env)
 
 
-def motivo_do_bloqueio(saida: str) -> str:
-    """O texto do desvio quando o Stop bloqueia; string vazia quando não."""
-    if not saida.strip():
+def block_reason(output: str) -> str:
+    """The deviation text when the Stop blocks; empty string when it does not."""
+    if not output.strip():
         return ""
     try:
-        dado = json.loads(saida)
+        datum = json.loads(output)
     except json.JSONDecodeError:
         return ""
-    return dado.get("reason", "") if dado.get("decision") == "block" else ""
+    return datum.get("reason", "") if datum.get("decision") == "block" else ""
 
 
-def ciclo(relatorio, **kw):
-    """Stop (mede e, havendo desvio, bloqueia) seguido de UserPromptSubmit.
+def cycle(report, **kw):
+    """Stop (measures and, if there is a deviation, blocks) followed by UserPromptSubmit.
 
-    Devolve o texto do desvio venha ele por qual caminho vier — bloqueio no
-    Stop (o normal desde 25/08/2026) ou aviso no turno seguinte (reincidência).
-    Os casos abaixo checam O QUE o hook diz, não por qual porta ele diz.
+    Returns the deviation text whichever path it comes by — block at the
+    Stop (the normal since 2026-08-25) or warning on the next turn (recurrence).
+    The cases below check WHAT the hook says, not through which door it says it.
     """
-    r1 = run("Stop", turno(relatorio, **kw))
-    check(f"Stop sai com rc=0 mesmo bloqueando — {relatorio[:24]!r}",
+    r1 = run("Stop", turn(report, **kw))
+    check(f"Stop sai com rc=0 mesmo bloqueando — {report[:24]!r}",
           r1.returncode == 0, f"rc={r1.returncode} {r1.stderr[:200]}")
-    bloqueio = motivo_do_bloqueio(r1.stdout)
+    block = block_reason(r1.stdout)
     r2 = run("UserPromptSubmit")
     check("UserPromptSubmit nunca bloqueia (rc=0)", r2.returncode == 0,
           f"rc={r2.returncode}")
-    return bloqueio or r2.stdout
+    return block or r2.stdout
 
 
 def check(name, cond, detail=""):
@@ -150,159 +150,159 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-# ── o caso que motivou tudo ────────────────────────────────────────────────
-aviso = ciclo(RUIM)
+# ── the case that motivated everything ─────────────────────────────────────
+warning = cycle(BAD)
 check("relatório com jargão na abertura → cobra o formato",
-      "plain-report" in aviso, repr(aviso[:200]))
+      "plain-report" in warning, repr(warning[:200]))
 check("…e nomeia os termos que precisam de tradução",
-      "portão" in aviso and "falha fechado" in aviso, repr(aviso[:400]))
-check("…e cobra a linha Pra você", "Pra você" in aviso, repr(aviso[:400]))
+      "portão" in warning and "falha fechado" in warning, repr(warning[:400]))
+check("…e cobra a linha For you", "For you" in warning, repr(warning[:400]))
 
-# ── o mesmo conteúdo, dentro do formato ────────────────────────────────────
-aviso = ciclo(BOM)
-check("relatório no formato → nenhum aviso", aviso.strip() == "", repr(aviso[:300]))
+# ── the same content, inside the format ────────────────────────────────────
+warning = cycle(GOOD)
+check("relatório no formato → nenhum aviso", warning.strip() == "", repr(warning[:300]))
 
-# ── jargão é permitido no bloco técnico ────────────────────────────────────
+# ── jargon is allowed in the technical block ───────────────────────────────
 check("jargão no detalhe técnico não é sinalizado",
-      "portão" in BOM and "dublê" in BOM)
+      "portão" in GOOD and "dublê" in GOOD)
 
-# ── conversa nunca é medida ────────────────────────────────────────────────
-aviso = ciclo(RUIM, alterou=False)
+# ── conversation is never measured ─────────────────────────────────────────
+warning = cycle(BAD, changed=False)
 check("turno sem alteração → não mede, mesmo com relatório ruim",
-      aviso.strip() == "", repr(aviso[:300]))
+      warning.strip() == "", repr(warning[:300]))
 
-# ── recado curto nunca é medido ────────────────────────────────────────────
-aviso = ciclo("O portão agora falha fechado e o dublê segue barrado.")
-check("relatório curto → não mede", aviso.strip() == "", repr(aviso[:300]))
+# ── a short note is never measured ─────────────────────────────────────────
+warning = cycle("O portão agora falha fechado e o dublê segue barrado.")
+check("relatório curto → não mede", warning.strip() == "", repr(warning[:300]))
 
-# ── abertura longa demais ──────────────────────────────────────────────────
-aviso = ciclo("Primeira frase de resultado. Segunda frase. Terceira frase. "
+# ── opening too long ───────────────────────────────────────────────────────
+warning = cycle("Primeira frase de resultado. Segunda frase. Terceira frase. "
               "Quarta frase que já passou do limite. Quinta.\n\n"
               "**Pra você:** nada.\n\n### Detalhe técnico\n" + "x " * 90)
-check("abertura com 5 frases → avisa", "frases" in aviso, repr(aviso[:300]))
+check("abertura com 5 frases → avisa", "frases" in warning, repr(warning[:300]))
 
-# ── falta o Pra você ───────────────────────────────────────────────────────
-aviso = ciclo("Resultado dito de forma clara e sem termo interno nenhum, "
+# ── the Pra você is missing ────────────────────────────────────────────────
+warning = cycle("Resultado dito de forma clara e sem termo interno nenhum, "
               "em uma frase só.\n\n### Detalhe técnico\n" + "x " * 90)
-check("sem a linha Pra você → avisa", "Pra você" in aviso, repr(aviso[:300]))
+check("sem a linha For you → avisa", "For you" in warning, repr(warning[:300]))
 
-# ── teto de palavras antes do técnico ──────────────────────────────────────
-aviso = ciclo("Resultado em uma frase clara.\n\n**Pra você:** nada.\n\n" +
+# ── word ceiling before the technical part ─────────────────────────────────
+warning = cycle("Resultado em uma frase clara.\n\n**Pra você:** nada.\n\n" +
               "palavra " * 210 + "\n\n### Detalhe técnico\nx")
 check("mais de 200 palavras antes do detalhe técnico → avisa",
-      "palavras antes do detalhe" in aviso, repr(aviso[:300]))
+      "palavras antes do detalhe" in warning, repr(warning[:300]))
 
-# ── abstração no lugar do fato (vale no texto INTEIRO) ─────────────────────
-# O bloco técnico era zona franca na v1, e foi exatamente lá que o usuário
-# achou as três frases obscuras em 03/08/2026.
-aviso = ciclo("Resultado dito de forma clara em uma frase.\n\n"
+# ── abstraction in place of the fact (applies to the WHOLE text) ───────────
+# The technical block was a free zone in v1, and that is exactly where the user
+# found the three obscure sentences on 2026-08-03.
+warning = cycle("Resultado dito de forma clara em uma frase.\n\n"
               "**Pra você:** nada.\n\n"
               "### Detalhe técnico\n"
               "O escopo virou um sinal mecânico e o aviso chega por um "
               "caminho indireto. " + "detalhe " * 70)
-check("abstração DENTRO do detalhe técnico → avisa", "abstração" in aviso,
-      repr(aviso[:300]))
+check("abstração DENTRO do detalhe técnico → avisa", "abstração" in warning,
+      repr(warning[:300]))
 check("…e cita as expressões encontradas",
-      "sinal mecânico" in aviso and "caminho indireto" in aviso, repr(aviso[:400]))
+      "sinal mecânico" in warning and "caminho indireto" in warning, repr(warning[:400]))
 
-aviso = ciclo("Resultado dito de forma clara em uma frase.\n\n"
+warning = cycle("Resultado dito de forma clara em uma frase.\n\n"
               "**Pra você:** nada.\n\n### Detalhe técnico\n" + "detalhe " * 90
-              + PASSOS)
-check("detalhe técnico sem abstração → nenhum aviso", aviso.strip() == "",
-      repr(aviso[:300]))
+              + STEPS)
+check("detalhe técnico sem abstração → nenhum aviso", warning.strip() == "",
+      repr(warning[:300]))
 
-# ── higiene relatada como resultado ────────────────────────────────────────
-# 03/08/2026: relatório dentro do formato, e o usuário mesmo assim perguntou
-# "so what?" — quatro linhas dele diziam que a árvore ficou limpa, que nenhum
-# worktree sobrou e que a memória foi atualizada.
-aviso = ciclo("Os três cards que estavam presos passaram e foram para Done. "
+# ── hygiene reported as a result ───────────────────────────────────────────
+# 2026-08-03: a report inside the format, and the user still asked
+# "so what?" — four lines of it said the tree was left clean, that no
+# worktree was left over and that the memory was updated.
+warning = cycle("Os três cards que estavam presos passaram e foram para Done. "
               "A árvore de trabalho ficou limpa e nenhum worktree sobrou.\n\n"
               "**Pra você:** nada pra decidir. Memória atualizada.\n\n"
-              "### Detalhe técnico\n" + "detalhe " * 90 + PASSOS)
-check("higiene na abertura → avisa", "higiene" in aviso, repr(aviso[:300]))
+              "### Detalhe técnico\n" + "detalhe " * 90 + STEPS)
+check("higiene na abertura → avisa", "higiene" in warning, repr(warning[:300]))
 check("…e cita as frases encontradas",
-      "árvore de trabalho limpa" in aviso or "nenhum worktree" in aviso,
-      repr(aviso[:400]))
+      "árvore de trabalho limpa" in warning or "nenhum worktree" in warning,
+      repr(warning[:400]))
 
-aviso = ciclo("Os três cards que estavam presos passaram, agora com prova "
+warning = cycle("Os três cards que estavam presos passaram, agora com prova "
               "refeita do zero.\n\n**Pra você:** nada pra decidir.\n\n"
               "### Detalhe técnico\n"
               "Commit feito; a árvore de trabalho ficou limpa e nenhum "
-              "worktree sobrou. " + "detalhe " * 80 + PASSOS)
+              "worktree sobrou. " + "detalhe " * 80 + STEPS)
 check("mesma higiene DENTRO do detalhe técnico → não avisa",
-      aviso.strip() == "", repr(aviso[:300]))
+      warning.strip() == "", repr(warning[:300]))
 
-# ── voz passiva: densidade, não caça ───────────────────────────────────────
-aviso = ciclo("Resultado dito de forma clara em uma frase.\n\n"
+# ── passive voice: density, not hunting ────────────────────────────────────
+warning = cycle("Resultado dito de forma clara em uma frase.\n\n"
               "**Pra você:** nada.\n\n### Detalhe técnico\n"
               "O arquivo foi criado, o teste foi rodado, a regra é aplicada "
               "e a saída é verificada pelo hook. " + "detalhe " * 70)
-check("quatro passivas → avisa", "passivas" in aviso, repr(aviso[:300]))
+check("quatro passivas → avisa", "passivas" in warning, repr(warning[:300]))
 
-aviso = ciclo("Resultado dito de forma clara em uma frase.\n\n"
+warning = cycle("Resultado dito de forma clara em uma frase.\n\n"
               "**Pra você:** nada.\n\n### Detalhe técnico\n"
-              "O arquivo foi criado pelo hook. " + "detalhe " * 80 + PASSOS)
-check("uma passiva só → não avisa (é português normal)", aviso.strip() == "",
-      repr(aviso[:300]))
+              "O arquivo foi criado pelo hook. " + "detalhe " * 80 + STEPS)
+check("uma passiva só → não avisa (é português normal)", warning.strip() == "",
+      repr(warning[:300]))
 
-# ── a lista do fim ─────────────────────────────────────────────────────────
-# Pedido do usuário em 03/08/2026: "ao final de cada report, uma lista objetiva
-# de decisões a serem tomadas ou próximos passos a serem seguidos".
-CORPO = ("Resultado dito de forma clara em uma frase.\n\n"
+# ── the list at the end ────────────────────────────────────────────────────
+# User request on 2026-08-03: "at the end of each report, an objective list
+# of decisions to be made or next steps to be followed".
+BODY = ("Resultado dito de forma clara em uma frase.\n\n"
          "**Pra você:** um passo manual — lista no fim.\n\n"
          "### Detalhe técnico\n" + "detalhe " * 90)
 
-aviso = ciclo(CORPO)
-check("sem a seção final → avisa", "Decisões e próximos passos" in aviso,
-      repr(aviso[:300]))
+warning = cycle(BODY)
+check("sem a seção final → avisa", "Decisions and next steps" in warning,
+      repr(warning[:300]))
 
-aviso = ciclo(CORPO + PASSOS +
+warning = cycle(BODY + STEPS +
               "\n### Uma observação final\nnão devia existir aqui.\n")
 check("seção final que não é a última → avisa",
-      "não é a última seção" in aviso, repr(aviso[:400]))
+      "não é a última seção" in warning, repr(warning[:400]))
 
-aviso = ciclo(CORPO + "\n\n### Decisões e próximos passos\n"
+warning = cycle(BODY + "\n\n### Decisões e próximos passos\n"
               "Precisa reinstalar e depois decidir se aperta.\n")
 check("lista do fim escrita em prosa → avisa",
-      "itens de lista" in aviso, repr(aviso[:400]))
+      "itens de lista" in warning, repr(warning[:400]))
 
-aviso = ciclo(CORPO.replace("um passo manual — lista no fim.",
+warning = cycle(BODY.replace("um passo manual — lista no fim.",
                             "nada pra decidir.")
               + "\n\n### Próximos passos\nNada pendente.\n")
-check("\"Nada pendente.\" satisfaz a lista", aviso.strip() == "",
-      repr(aviso[:300]))
+check("\"Nada pendente.\" satisfaz a lista", warning.strip() == "",
+      repr(warning[:300]))
 
-# O teto de 200 palavras vale até o detalhe técnico; a lista do fim não entra
-# nele nem quando o relatório não tem bloco técnico nenhum.
-aviso = ciclo("Resultado em uma frase clara.\n\n**Pra você:** um passo.\n\n"
+# The 200-word ceiling applies up to the technical detail; the list at the end does not enter
+# it, not even when the report has no technical block at all.
+warning = cycle("Resultado em uma frase clara.\n\n**Pra você:** um passo.\n\n"
               "### Decisões e próximos passos\n"
               + "- **Você faz —** rodar o install.\n" * 40)
 check("lista longa sem bloco técnico → não estoura o teto",
-      "palavras antes do detalhe" not in aviso, repr(aviso[:300]))
+      "palavras antes do detalhe" not in warning, repr(warning[:300]))
 
-# ── cada item é uma pergunta fechada com recomendação ──────────────────────
-# Segunda correção do usuário no mesmo dia: "qual de fato é a decisão que tenho
-# que tomar? Do jeito que está, preciso interpretar o texto, acessar o card,
-# entender todo o contexto". O item real que ele reprovou está no primeiro caso.
-aviso = ciclo(CORPO + "\n\n### Decisões e próximos passos\n"
+# ── each item is a closed question with a recommendation ───────────────────
+# Second correction from the user on the same day: "what actually is the decision I have
+# to make? The way it is, I need to interpret the text, access the card,
+# understand the whole context". The real item he rejected is in the first case.
+warning = cycle(BODY + "\n\n### Decisões e próximos passos\n"
               "1. **Decidir —** WEGO-1631, critério 6 (recusar pedido de "
               "documento com tipo nulo). Se não tiver opinião, mantenha e "
               "confira o volume em produção antes de implementar.\n")
 check("item que nomeia o assunto sem perguntar → avisa",
-      "pergunta fechada" in aviso, repr(aviso[:400]))
+      "pergunta fechada" in warning, repr(warning[:400]))
 
-aviso = ciclo(CORPO + "\n\n### Decisões e próximos passos\n"
+warning = cycle(BODY + "\n\n### Decisões e próximos passos\n"
               "1. **Mantenho no WEGO-1631 o critério que recusa pedido sem "
               "tipo de documento?** Ele passa a barrar os pedidos legados.\n")
-check("pergunta sem recomendação → avisa", "Recomendo" in aviso,
-      repr(aviso[:400]))
+check("pergunta sem recomendação → avisa", "I recommend" in warning,
+      repr(warning[:400]))
 
-aviso = ciclo(CORPO + "\n\n### Decisões e próximos passos\n"
+warning = cycle(BODY + "\n\n### Decisões e próximos passos\n"
               "- **Você roda o install agora?** Recomendo **sim**.\n")
 check("lista com marcador em vez de número → avisa",
-      "numerada" in aviso, repr(aviso[:400]))
+      "numerada" in warning, repr(warning[:400]))
 
-aviso = ciclo(CORPO + "\n\n### Decisões e próximos passos\n"
+warning = cycle(BODY + "\n\n### Decisões e próximos passos\n"
               "*Responda por número: sim, não, ou \"vamos falar\".*\n"
               "1. **Mantenho no WEGO-1631 o critério que recusa pedido sem "
               "tipo de documento?**\n"
@@ -311,43 +311,43 @@ aviso = ciclo(CORPO + "\n\n### Decisões e próximos passos\n"
               "2. **Rodo o prove-drain nos dois cards de In Review?** "
               "Recomendo **não** — a triagem roteou por evidência.\n")
 check("item mastigado, com a recomendação na linha seguinte → nenhum aviso",
-      aviso.strip() == "", repr(aviso[:400]))
+      warning.strip() == "", repr(warning[:400]))
 
-# ── tarefa do dono vem com o passo a passo (2026-10-15) ───────────────────
-# 14/10/2026: o Pra você dizia "fechar as duas rotas humanas ... e os sete
-# buracos do RIPD" e o fim dizia "Nada pendente." O dono: "O que, afinal, que
-# eu tenho que fazer? Dê-me o passo a passo."
-TOPO_14_10 = ("Resultado dito de forma clara em uma frase.\n\n"
+# ── the owner's task comes with the step by step (2026-10-15) ──────────────
+# 2026-10-14: the Pra você said "close the two human routes ... and the seven
+# holes of the RIPD" and the end said "Nada pendente." The owner: "What, after all, do
+# I have to do? Give me the step by step."
+TOP_14_10 = ("Resultado dito de forma clara em uma frase.\n\n"
               "**Pra você:** fechar as duas rotas humanas no `wego-digitacao-backend` "
               "(o comando do S3-port e a conferência dos 50 documentos) e os sete "
               "buracos do RIPD. Nada mais pendente comigo nesta sessão.\n\n"
               "### Detalhe técnico\n" + "detalhe " * 90)
-aviso = ciclo(TOPO_14_10 + "\n\n### Decisões e próximos passos\n\nNada pendente.\n")
+warning = cycle(TOP_14_10 + "\n\n### Decisões e próximos passos\n\nNada pendente.\n")
 check("14/10: Pra você com categorias + \"Nada pendente.\" → avisa",
-      "Pra você" in aviso and "item numerado" in aviso, repr(aviso[:400]))
+      "For you" in warning and "item numerado" in warning, repr(warning[:400]))
 
-aviso = ciclo(CORPO.replace("um passo manual — lista no fim.", "nada pra decidir.")
+warning = cycle(BODY.replace("um passo manual — lista no fim.", "nada pra decidir.")
               + "\n\n### Decisões e próximos passos\nNada pendente.\n")
 check("Pra você \"nada\" + \"Nada pendente.\" → nenhum aviso",
-      aviso.strip() == "", repr(aviso[:300]))
+      warning.strip() == "", repr(warning[:300]))
 
-aviso = ciclo(CORPO.replace("um passo manual — lista no fim.",
+warning = cycle(BODY.replace("um passo manual — lista no fim.",
                             "nada pra decidir; um commit ficou na branch.")
               + "\n\n### Decisões e próximos passos\nNada pendente.\n")
 check("Pra você \"nada ...; um commit\" + \"Nada pendente.\" → nenhum aviso",
-      aviso.strip() == "", repr(aviso[:300]))
+      warning.strip() == "", repr(warning[:300]))
 
-CABECA_T = ("Resultado dito de forma clara em uma frase.\n\n"
+HEAD_T = ("Resultado dito de forma clara em uma frase.\n\n"
             "**Pra você:** uma tarefa sua — lista no fim.\n\n"
             "### Detalhe técnico\n" + "detalhe " * 90
             + "\n\n### Decisões e próximos passos\n")
 
-aviso = ciclo(CABECA_T + "1. **Você confere os 50 documentos?** Recomendo **sim** — "
+warning = cycle(HEAD_T + "1. **Você confere os 50 documentos?** Recomendo **sim** — "
               "sem ela o S5 não fecha.\n")
 check("tarefa \"Você ...\" sem comando, arquivo nem Pronto quando → avisa",
-      "passo a passo" in aviso, repr(aviso[:400]))
+      "passo a passo" in warning, repr(warning[:400]))
 
-aviso = ciclo(CABECA_T + "1. **Você roda o comando do S3-port?**\n"
+warning = cycle(HEAD_T + "1. **Você roda o comando do S3-port?**\n"
               "   Onde: raiz do clone.\n"
               "   Comando:\n"
               "   ```\n"
@@ -356,9 +356,9 @@ aviso = ciclo(CABECA_T + "1. **Você roda o comando do S3-port?**\n"
               "   Pronto quando: o terminal imprime 20 lotes lidos.\n"
               "   Recomendo **sim** — destrava o S5.\n")
 check("tarefa com comando em bloco cercado + Pronto quando → nenhum aviso",
-      aviso.strip() == "", repr(aviso[:400]))
+      warning.strip() == "", repr(warning[:400]))
 
-aviso = ciclo(CABECA_T + "1. **Você roda o script com linha em branco?**\n"
+warning = cycle(HEAD_T + "1. **Você roda o script com linha em branco?**\n"
               "   Comando:\n"
               "   ```\n"
               "   bin/a.sh\n"
@@ -368,232 +368,285 @@ aviso = ciclo(CABECA_T + "1. **Você roda o script com linha em branco?**\n"
               "   Pronto quando: o terminal imprime ok.\n"
               "   Recomendo **sim** — destrava o S5.\n")
 check("linha em branco dentro de bloco cercado não fecha o item → nenhum aviso",
-      aviso.strip() == "", repr(aviso[:400]))
+      warning.strip() == "", repr(warning[:400]))
 
-aviso = ciclo(CABECA_T + "1. **Você preenche os sete campos do RIPD?**\n"
+warning = cycle(HEAD_T + "1. **Você preenche os sete campos do RIPD?**\n"
               "   Onde: docs/lgpd/ripd.md, seção 9.\n"
               "   Pronto quando: não sobra campo vazio; me diga \"RIPD pronto\".\n"
               "   Recomendo **sim** — dois campos só você sabe.\n")
 check("tarefa com caminho de arquivo sem crase + Pronto quando → nenhum aviso",
-      aviso.strip() == "", repr(aviso[:400]))
+      warning.strip() == "", repr(warning[:400]))
 
-aviso = ciclo(CABECA_T + "1. **Você confere os 50 documentos da amostra?**\n"
+warning = cycle(HEAD_T + "1. **Você confere os 50 documentos da amostra?**\n"
               "   Pronto quando: as 50 linhas têm a classe real preenchida.\n"
               "   Recomendo **sim** — sem ela o S5 não fecha.\n")
 check("tarefa sem comando nem arquivo, com Pronto quando → avisa \"comando ou arquivo\"",
-      "comando ou arquivo" in aviso, repr(aviso[:400]))
+      "comando ou arquivo" in warning, repr(warning[:400]))
 
-aviso = ciclo(CABECA_T + "1. **Você roda `bin/x.sh`?** Recomendo **sim** — destrava.\n")
+warning = cycle(HEAD_T + "1. **Você roda `bin/x.sh`?** Recomendo **sim** — destrava.\n")
 check("tarefa com comando mas sem Pronto quando → avisa",
-      "Pronto quando" in aviso, repr(aviso[:400]))
+      "Done when" in warning, repr(warning[:400]))
 
-aviso = ciclo(CABECA_T + "1. **Mantenho o critério X?** Recomendo **sim** — "
+warning = cycle(HEAD_T + "1. **Mantenho o critério X?** Recomendo **sim** — "
               "é a sua regra de entrada.\n")
 check("pergunta de mérito sem comando → nenhum aviso (regra só vale p/ \"Você\")",
-      aviso.strip() == "", repr(aviso[:400]))
+      warning.strip() == "", repr(warning[:400]))
 
-aviso = ciclo(CABECA_T + "1. **Rodo o prove-drain nos dois cards?** Recomendo "
+warning = cycle(HEAD_T + "1. **Rodo o prove-drain nos dois cards?** Recomendo "
               "**não** — a triagem roteou por evidência.\n")
 check("trabalho meu esperando o vai, sem comando → nenhum aviso",
-      aviso.strip() == "", repr(aviso[:400]))
+      warning.strip() == "", repr(warning[:400]))
 
-# ── resposta de subagente não é o relatório ────────────────────────────────
-aviso = ciclo(BOM, sidechain_extra=RUIM)
-check("texto de subagente (sidechain) é ignorado", aviso.strip() == "",
-      repr(aviso[:300]))
+# ── a subagent's answer is not the report ──────────────────────────────────
+warning = cycle(GOOD, sidechain_extra=BAD)
+check("texto de subagente (sidechain) é ignorado", warning.strip() == "",
+      repr(warning[:300]))
 
-# ── a pendência é consumida uma única vez ──────────────────────────────────
-# Pendência só existe no caminho de aviso (reincidência); o bloqueio corrige
-# o texto no próprio turno e não deixa recado para o turno seguinte.
-run("Stop", turno(RUIM), session="s-uma-vez", stop_hook_active=True)
-primeiro = run("UserPromptSubmit", session="s-uma-vez").stdout
-segundo = run("UserPromptSubmit", session="s-uma-vez").stdout
-check("aviso é entregue uma vez só", primeiro.strip() != "" and segundo.strip() == "",
-      repr(segundo[:200]))
+# ── the pending item is consumed only once ─────────────────────────────────
+# A pending item only exists on the warning path (recurrence); the block fixes
+# the text in the turn itself and leaves no note for the next turn.
+run("Stop", turn(BAD), session="s-uma-vez", stop_hook_active=True)
+first = run("UserPromptSubmit", session="s-uma-vez").stdout
+second = run("UserPromptSubmit", session="s-uma-vez").stdout
+check("aviso é entregue uma vez só", first.strip() != "" and second.strip() == "",
+      repr(second[:200]))
 
-# ── o aperto de 25/08/2026: o Stop bloqueia ────────────────────────────────
-r = run("Stop", turno(RUIM), session="s-bloqueio")
+# ── the tightening of 2026-08-25: the Stop blocks ──────────────────────────
+r = run("Stop", turn(BAD), session="s-bloqueio")
 check("relatório fora do formato → Stop devolve decision=block",
-      motivo_do_bloqueio(r.stdout) != "", repr(r.stdout[:200]))
+      block_reason(r.stdout) != "", repr(r.stdout[:200]))
 check("…e o motivo manda reescrever agora, não no próximo turno",
-      "Reescreva o relatório inteiro" in motivo_do_bloqueio(r.stdout),
+      "Reescreva o relatório inteiro" in block_reason(r.stdout),
       repr(r.stdout[:400]))
 check("…e não deixa pendência para o turno seguinte (o texto já foi corrigido)",
       run("UserPromptSubmit", session="s-bloqueio").stdout.strip() == "")
 
-r = run("Stop", turno(BOM), session="s-bloqueio-bom")
+r = run("Stop", turn(GOOD), session="s-bloqueio-bom")
 check("relatório no formato → Stop não bloqueia",
-      motivo_do_bloqueio(r.stdout) == "", repr(r.stdout[:200]))
+      block_reason(r.stdout) == "", repr(r.stdout[:200]))
 
-# ── trava anti-loop: a reescrita que ainda desvia não bloqueia de novo ─────
-r = run("Stop", turno(RUIM), session="s-loop", stop_hook_active=True)
+# ── anti-loop lock: a rewrite that still deviates does not block again ─────
+r = run("Stop", turn(BAD), session="s-loop", stop_hook_active=True)
 check("parada já vinda de bloqueio → não bloqueia de novo",
-      motivo_do_bloqueio(r.stdout) == "", repr(r.stdout[:200]))
-aviso = run("UserPromptSubmit", session="s-loop").stdout
+      block_reason(r.stdout) == "", repr(r.stdout[:200]))
+warning = run("UserPromptSubmit", session="s-loop").stdout
 check("…e cai no caminho de aviso, no turno seguinte",
-      "plain-report" in aviso, repr(aviso[:200]))
+      "plain-report" in warning, repr(warning[:200]))
 
-# ── sessão encerrada pelo wrap-up (2026-10-16, fb-20261016-4) ──────────────
+# ── session ended by the wrap-up (2026-10-16, fb-20261016-4) ───────────────
 CMD_WRAP = ("<command-message>wrap-up</command-message>\n"
             "<command-name>/common:wrap-up</command-name>")
-FIM_WRAP = ("Tudo integrado e enviado; o handoff está escrito.\n\n"
+END_WRAP = ("Tudo integrado e enviado; o handoff está escrito.\n\n"
             "Safe to `exit`.")
-SEM_PERGUNTA = BOM.replace(PASSOS, "\n\n### Decisões e próximos passos\n"
+NO_QUESTION = GOOD.replace(STEPS, "\n\n### Decisões e próximos passos\n"
                            "Nada pendente. Próxima sessão começa por X.\n")
-assert SEM_PERGUNTA != BOM
+assert NO_QUESTION != GOOD
 
 
-def texto(t, sidechain=False):
+def text(t, sidechain=False):
     return msg("assistant", [{"type": "text", "text": t}], sidechain=sidechain)
 
 
-def multi_turno(abertura, fim_wrap, relatorio, alterou_final=False,
+def multi_turn(opening, end_wrap, report, changed_final=False,
                 sidechain_wrap=False):
-    """wrap-up -> relatório de fecho -> "sim" -> relatório do turno final."""
+    """wrap-up -> closing report -> "sim" -> final-turn report."""
     rows = [msg("user", [{"type": "text", "text": "wrap up"}], mtype="user")]
-    if abertura == "comando":
+    if opening == "comando":
         rows[0] = msg("user", CMD_WRAP, mtype="user")
-    elif abertura == "skill":
+    elif opening == "skill":
         rows.append(msg("assistant", [{"type": "tool_use", "name": "Skill",
                                        "input": {"skill": "common:wrap-up"}}]))
     rows.append(msg("assistant", [{"type": "tool_use", "name": "Bash",
                                    "input": {"command": "git commit -m x"}}]))
-    if fim_wrap:
-        rows.append(texto(fim_wrap, sidechain=sidechain_wrap))
+    if end_wrap:
+        rows.append(text(end_wrap, sidechain=sidechain_wrap))
     rows.append(msg("user", [{"type": "text", "text": "sim"}], mtype="user"))
-    if alterou_final:
+    if changed_final:
         rows.append(msg("assistant", [{"type": "tool_use", "name": "Bash",
                                        "input": {"command": "git commit -m y"}}]))
-    rows.append(texto(relatorio))
+    rows.append(text(report))
     return transcript(*rows)
 
 
-r = run("Stop", multi_turno("comando", FIM_WRAP, BOM), session="s-wrap-a")
+r = run("Stop", multi_turn("comando", END_WRAP, GOOD), session="s-wrap-a")
 check("(a) wrap-up + Safe to exit + metrics sem Edit com pergunta → bloqueia "
-      "citando o wrap-up", "wrap-up" in motivo_do_bloqueio(r.stdout),
+      "citando o wrap-up", "wrap-up" in block_reason(r.stdout),
       repr(r.stdout[:300]))
-motivo_a = motivo_do_bloqueio(r.stdout)
+reason_a = block_reason(r.stdout)
 check("(a) o bloqueio pós-wrap-up manda \"Nada pendente\", sem pedir pergunta",
-      "Nada pendente" in motivo_a
-      and "uma pergunta fechada por item" not in motivo_a, repr(motivo_a[-300:]))
+      "Nothing pending" in reason_a
+      and "uma pergunta fechada por item" not in reason_a, repr(reason_a[-300:]))
 
-r = run("Stop", multi_turno("comando", FIM_WRAP, BOM), session="s-wrap-aw",
+r = run("Stop", multi_turn("comando", END_WRAP, GOOD), session="s-wrap-aw",
         stop_hook_active=True)
 check("(a2) Stop com stop_hook_active em sessão encerrada → não bloqueia",
-      motivo_do_bloqueio(r.stdout) == "", repr(r.stdout[:300]))
+      block_reason(r.stdout) == "", repr(r.stdout[:300]))
 r2 = run("UserPromptSubmit", session="s-wrap-aw")
 check("(a2) aviso do turno seguinte usa o formato de sessão encerrada",
-      "Nada pendente" in r2.stdout
+      "Nothing pending" in r2.stdout
       and "uma pergunta fechada por item" not in r2.stdout, repr(r2.stdout[:400]))
 
-r = run("Stop", multi_turno("comando", FIM_WRAP, SEM_PERGUNTA), session="s-wrap-b")
+r = run("Stop", multi_turn("comando", END_WRAP, NO_QUESTION), session="s-wrap-b")
 check("(b) mesma sequência com \"Nada pendente.\" e Pra você nada → não bloqueia",
-      motivo_do_bloqueio(r.stdout) == "", repr(r.stdout[:300]))
+      block_reason(r.stdout) == "", repr(r.stdout[:300]))
 
-r = run("Stop", multi_turno("comando", "Parei: conflito de merge em x.py.", BOM),
+r = run("Stop", multi_turn("comando", "Parei: conflito de merge em x.py.", GOOD),
         session="s-wrap-c")
 check("(c) wrap-up sem Safe to exit (travou) → pergunta NÃO é barrada como pós-wrap-up",
-      "wrap-up" not in motivo_do_bloqueio(r.stdout), repr(r.stdout[:300]))
+      "wrap-up" not in block_reason(r.stdout), repr(r.stdout[:300]))
 
-fim_com_pergunta = FIM_WRAP + "\n\n" + BOM
-r = run("Stop", multi_turno("comando", None, fim_com_pergunta, alterou_final=True),
+end_with_question = END_WRAP + "\n\n" + GOOD
+r = run("Stop", multi_turn("comando", None, end_with_question, changed_final=True),
         session="s-wrap-d")
 check("(d) o relatório do próprio wrap-up (Safe to exit + pergunta, com commit) → bloqueia",
-      "wrap-up" in motivo_do_bloqueio(r.stdout), repr(r.stdout[:300]))
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
 
 rows_e = [msg("user", [{"type": "text", "text": "faça"}], mtype="user"),
           msg("user", CMD_WRAP, mtype="user", sidechain=True),
-          texto(FIM_WRAP, sidechain=True),
+          text(END_WRAP, sidechain=True),
           msg("assistant", [{"type": "tool_use", "name": "Edit",
                              "input": {"file_path": "x.py"}}]),
-          texto(BOM)]
+          text(GOOD)]
 r = run("Stop", transcript(*rows_e), session="s-wrap-e")
 check("(e) wrap-up e Safe to exit só em sidechain → não encerra",
-      "wrap-up" not in motivo_do_bloqueio(r.stdout), repr(r.stdout[:300]))
+      "wrap-up" not in block_reason(r.stdout), repr(r.stdout[:300]))
 
-r = run("Stop", multi_turno("skill", FIM_WRAP, BOM), session="s-wrap-f")
+r = run("Stop", multi_turn("skill", END_WRAP, GOOD), session="s-wrap-f")
 check("(f) invocação por tool_use Skill common:wrap-up → encerrada, bloqueia",
-      "wrap-up" in motivo_do_bloqueio(r.stdout), repr(r.stdout[:300]))
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
 
-# ── telemetria ─────────────────────────────────────────────────────────────
-eventos = []
+# ── telemetry ──────────────────────────────────────────────────────────────
+events = []
 for f in TELEM.glob("events-*.jsonl"):
-    eventos += [json.loads(l) for l in f.read_text(encoding="utf-8").splitlines() if l.strip()]
+    events += [json.loads(l) for l in f.read_text(encoding="utf-8").splitlines() if l.strip()]
 check("cada medição vira evento de telemetria",
-      any(e.get("event") == "report_style" for e in eventos), str(eventos[:2]))
+      any(e.get("event") == "report_style" for e in events), str(events[:2]))
 check("…com relatório bom registrando zero desvios",
-      any(e.get("event") == "report_style" and e.get("desvios") == 0 for e in eventos))
+      any(e.get("event") == "report_style" and e.get("desvios") == 0 for e in events))
 check("…e o evento diz se aquela medição bloqueou",
       any(e.get("event") == "report_style" and e.get("bloqueou") is True
-          for e in eventos) and
+          for e in events) and
       any(e.get("event") == "report_style" and e.get("bloqueou") is False
-          for e in eventos), str([e.get("bloqueou") for e in eventos][:6]))
+          for e in events), str([e.get("bloqueou") for e in events][:6]))
 
 check("(g) telemetria carrega pos_wrap_up=true no caso (a)",
       any(e.get("event") == "report_style" and e.get("pos_wrap_up") is True
-          and e.get("tipos") == ["pergunta-pos-wrap-up"] for e in eventos),
-      str([(e.get("pos_wrap_up"), e.get("tipos")) for e in eventos][-6:]))
+          and e.get("tipos") == ["pergunta-pos-wrap-up"] for e in events),
+      str([(e.get("pos_wrap_up"), e.get("tipos")) for e in events][-6:]))
 check("…e false nas medições comuns",
       any(e.get("event") == "report_style" and e.get("pos_wrap_up") is False
-          for e in eventos))
+          for e in events))
 
-# (h) Pra você anuncia algo e a lista diz "Nada pendente." (sem pergunta)
-ANUNCIA = BOM.replace("nada pra decidir agora; precisa reinstalar pra valer.",
+# (h) Pra você announces something and the list says "Nada pendente." (no question)
+ANNOUNCES = GOOD.replace("nada pra decidir agora; precisa reinstalar pra valer.",
                       "uma decisão sua, lista no fim.").replace(
-    PASSOS, "\n\n### Decisões e próximos passos\nNada pendente.\n")
-assert ANUNCIA != BOM and "uma decisão sua" in ANUNCIA
-r = run("Stop", multi_turno("comando", FIM_WRAP, ANUNCIA), session="s-wrap-h")
+    STEPS, "\n\n### Decisões e próximos passos\nNada pendente.\n")
+assert ANNOUNCES != GOOD and "uma decisão sua" in ANNOUNCES
+r = run("Stop", multi_turn("comando", END_WRAP, ANNOUNCES), session="s-wrap-h")
 check("(h) pós-wrap-up com Pra você anunciando algo e \"Nada pendente.\" → bloqueia",
-      "wrap-up" in motivo_do_bloqueio(r.stdout), repr(r.stdout[:300]))
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
 
-FECHADO = BOM.replace(PASSOS, "\n\n### Decisões e próximos passos\n"
+CLOSED = GOOD.replace(STEPS, "\n\n### Decisões e próximos passos\n"
                       "Nada pendente. Próxima sessão começa por X.\n")
-r = run("Stop", multi_turno("comando", FIM_WRAP, FECHADO), session="s-wrap-h2")
+r = run("Stop", multi_turn("comando", END_WRAP, CLOSED), session="s-wrap-h2")
 check("(h2) pós-wrap-up com Pra você nada e \"Próxima sessão começa por X.\" → não bloqueia",
-      motivo_do_bloqueio(r.stdout) == "", repr(r.stdout[:300]))
+      block_reason(r.stdout) == "", repr(r.stdout[:300]))
 
-# (h3) turno final ALTEROU algo (Edit): a regra pra-voce-sem-lista fica
-# suprimida pós-wrap-up; só a mensagem de sessão encerrada aparece.
+# (h3) final turn CHANGED something (Edit): the pra-voce-sem-lista rule is
+# suppressed after the wrap-up; only the closed-session message appears.
 rows_h3 = [msg("user", CMD_WRAP, mtype="user"),
            msg("assistant", [{"type": "tool_use", "name": "Bash",
                               "input": {"command": "git commit -m x"}}]),
-           texto(FIM_WRAP),
+           text(END_WRAP),
            msg("user", [{"type": "text", "text": "sim"}], mtype="user"),
            msg("assistant", [{"type": "tool_use", "name": "Edit",
                               "input": {"file_path": "x.py"}}]),
-           texto(ANUNCIA)]
+           text(ANNOUNCES)]
 r = run("Stop", transcript(*rows_h3), session="s-wrap-h3")
-mot_h3 = motivo_do_bloqueio(r.stdout)
+reason_h3 = block_reason(r.stdout)
 check("(h3) pós-wrap-up com Edit, Pra você anunciando e \"Nada pendente.\" → "
       "bloqueia citando wrap-up, sem pra-voce-sem-lista",
-      "wrap-up" in mot_h3 and "item numerado nenhum" not in mot_h3
-      and "pra-voce-sem-lista" not in mot_h3, repr(r.stdout[:400]))
+      "wrap-up" in reason_h3 and "item numerado nenhum" not in reason_h3
+      and "pra-voce-sem-lista" not in reason_h3, repr(r.stdout[:400]))
 
-# ── a prosa que sustenta a regra diz o que o hook cobra ────────────────────
-def ler(rel):
+# ── the prose that sustains the rule says what the hook charges ────────────
+def read_rel(rel):
     return (REPO / rel).read_text(encoding="utf-8")
 
-pr = ler("common/skills/plain-report/SKILL.md")
+pr = read_rel("common/skills/plain-report/SKILL.md")
 check("spec: plain-report tem o título \"Depois do wrap-up\"",
       any(l.startswith("#") and "Depois do wrap-up" in l for l in pr.splitlines()))
-check("spec: plain-report manda \"Nada pendente. Próxima sessão começa por\"",
-      "Nada pendente. Próxima sessão começa por" in pr)
+check("spec: plain-report manda \"Nothing pending. Próxima sessão começa por\"",
+      "Nothing pending. Próxima sessão começa por" in pr)
 
-mt = ler("common/commands/metrics.md")
+mt = read_rel("common/commands/metrics.md")
 check("spec: metrics.md trata \"sessão já encerrada\" e cita pergunta-pos-wrap-up",
       "session already closed" in mt and "Safe to exit" in mt
       and "pergunta-pos-wrap-up" in mt)
 
-wu = ler("common/commands/wrap-up.md")
+wu = read_rel("common/commands/wrap-up.md")
 check("spec: wrap-up.md cita pergunta-pos-wrap-up e \"Próxima sessão começa por\"",
       "pergunta-pos-wrap-up" in wu and "Próxima sessão começa por" in wu)
 
-dy = ler("common/skills/default-yes/SKILL.md")
-sec = dy.split("## Guardar o fio da sessão", 1)[-1].split("\n## ", 1)[0]
-check("spec: default-yes, seção \"Guardar o fio da sessão\" tem \"Depois do wrap-up\"",
-      "## Guardar o fio da sessão" in dy and "Depois do wrap-up" in sec)
+dy = read_rel("common/skills/default-yes/SKILL.md")
+sec = dy.split("## Keep the thread of the session", 1)[-1].split("\n## ", 1)[0]
+check("spec: default-yes, seção \"Keep the thread of the session\" tem \"After the wrap-up\"",
+      "## Keep the thread of the session" in dy and "After the wrap-up" in sec)
 
-# ── entrada corrompida não derruba o turno ─────────────────────────────────
+# ── English labels (interface-in-english, 2026-10-23) ──────────────────────
+# The lint accepts the new labels and the old ones; the message orders writing the new ones.
+STEPS_EN = ("\n\n### Decisions and next steps\n"
+             "*Answer by number: yes, no, or \"let's talk\".*\n"
+             "1. **Do you run `bin/install.sh --clean` now?**\n"
+             "   Where: root of the cepa clone.\n"
+             "   Command:\n"
+             "   ```\n"
+             "   bin/install.sh --clean\n"
+             "   ```\n"
+             "   Done when: the terminal prints `installed`.\n"
+             "   I recommend **yes** — without it the change does not apply.\n")
+GOOD_EN = GOOD.replace(STEPS, STEPS_EN).replace(
+    "**Pra você:**", "**For you:**").replace("### Detalhe técnico", "### Technical detail")
+check("EN: relatório com For you / Technical detail / Decisions and next steps / "
+      "I recommend yes → nenhum aviso", cycle(GOOD_EN).strip() == "", cycle(GOOD_EN)[:300])
+check("EN: BOM_EN não tem nenhum rótulo pt-BR (o teste prova a leitura em inglês)",
+      not any(x in GOOD_EN for x in ("Pra você", "Detalhe técnico", "Decisões", "Recomendo")))
+# mixed (old label at the top, new at the end) also passes
+MIXED = GOOD.replace(STEPS, STEPS_EN)
+check("EN+pt-BR misto → nenhum aviso", cycle(MIXED).strip() == "", cycle(MIXED)[:300])
+check("pt-BR antigo continua passando → nenhum aviso", cycle(GOOD).strip() == "",
+      cycle(GOOD)[:300])
+
+warning = cycle(GOOD_EN.replace("**For you:**", "Resumo:"))
+check("EN: sem a linha For you → avisa citando o rótulo novo",
+      "`**For you:**`" in warning, repr(warning[:300]))
+warning = cycle(GOOD_EN.replace(STEPS_EN, ""))
+check("EN: sem a seção final → avisa citando Decisions and next steps",
+      "### Decisions and next steps" in warning, repr(warning[:300]))
+warning = cycle(GOOD_EN.replace("   I recommend **yes** — without it the change does not apply.\n", ""))
+check("EN: item sem I recommend → avisa (RECOMENDACAO lê o inglês)",
+      "I recommend yes/no" in warning and "item-sem-recomendacao" not in warning
+      and "não trazem" in warning, repr(warning[:300]))
+warning = cycle(GOOD_EN.replace("Do you run", "You run").replace(
+    "   Done when: the terminal prints `installed`.\n", ""))
+check("EN: tarefa \"You ...\" sem Done when → avisa (ITEM_VOCE lê o inglês)",
+      "Done when" in warning, repr(warning[:300]))
+warning = cycle(GOOD_EN.replace("Do you run", "Run").replace(
+    "   Done when: the terminal prints `installed`.\n", ""))
+check("EN: item que não é \"You ...\" não exige Done when", "Done when" not in warning,
+      repr(warning[:300]))
+check("EN: For you \"nothing\" + \"Nothing pending.\" → nenhum aviso",
+      cycle(GOOD_EN.replace("nada pra decidir agora; precisa reinstalar pra valer.",
+                           "nothing to decide.")
+            .replace(STEPS_EN, "\n\n### Decisions and next steps\nNothing pending.\n")
+            ).strip() == "")
+warning = cycle(GOOD_EN.replace("nada pra decidir agora; precisa reinstalar pra valer.",
+                             "one manual step.").replace(
+    STEPS_EN, "\n\n### Decisions and next steps\nNothing pending.\n"))
+check("EN: For you anunciando + Nothing pending. → pra-voce-sem-lista",
+      "item numerado" in warning and "For you" in warning, repr(warning[:400]))
+
+# ── corrupted entry does not take down the turn ────────────────────────────
 r = run("Stop", str(TMP / "nao-existe.jsonl"))
 check("transcript ausente → rc=0", r.returncode == 0, f"rc={r.returncode}")
 r = subprocess.run([sys.executable, str(HOOK)], input="{lixo",

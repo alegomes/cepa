@@ -78,16 +78,16 @@ CASES = [
      lambda t: t == ["src/b.py"],
      "`cp` only reads its source — destination-only, unlike `mv`"),
 
-    # --- a forma BSD do `sed -i`: o sufixo vazio é um OPERANDO ---
-    #     `sed -i '' 's/a/b/' arquivo` (macOS) deixa o `''` na lista de
-    #     não-flags, então o SCRIPT do sed passava a ser o 1º operando e o
-    #     arquivo real vinha depois — `nonflags[1:]` registrava `s/a/b/` como
-    #     arquivo escrito. Fail-closed, e por isso invisível: o alvo de mentira
-    #     só bloqueia MAIS. Consertado em 26/08/2026 filtrando o token vazio,
-    #     e sem este caso o conserto só era visto pelo detector de divergência
-    #     — que compara as duas fontes ENTRE SI e ficaria verde se as duas
-    #     regredissem juntas, que é exatamente o que uma restauração de branch
-    #     antigo faria.
+    # --- the BSD form of `sed -i`: the empty suffix is an OPERAND ---
+    #     `sed -i '' 's/a/b/' file` (macOS) leaves the `''` in the list of
+    #     non-flags, so the sed SCRIPT became the 1st operand and the
+    #     real file came after — `nonflags[1:]` recorded `s/a/b/` as the file
+    #     written. Fail-closed, and therefore invisible: the fake target
+    #     only blocks MORE. Fixed on 26/08/2026 by filtering the empty token,
+    #     and without this case the fix was only seen by the drift detector
+    #     — which compares the two sources AGAINST EACH OTHER and would stay green if both
+    #     regressed together, which is exactly what restoring an old
+    #     branch would do.
     ("sed -i BSD: script is not a file", "sed -i '' 's/a/b/' docs/x.md",
      lambda t: t == ["docs/x.md"],
      "só o arquivo — o script do sed não é alvo de escrita"),
@@ -95,10 +95,10 @@ CASES = [
      lambda t: t == ["docs/x.md"],
      "a forma GNU já estava certa; fica travada junto"),
 
-    # --- baixar/criar/sincronizar também é escrever ---
-    #     Achado do proof-reviewer em 26/08/2026: estes quatro verbos são
-    #     estaticamente decidíveis — o destino está explícito no argv, como em
-    #     `tee`/`dd`/`truncate` — e mesmo assim passavam calados pelos cadeados.
+    # --- downloading/creating/syncing is also writing ---
+    #     Found by the proof-reviewer on 26/08/2026: these four verbs are
+    #     statically decidable — the destination is explicit in the argv, as in
+    #     `tee`/`dd`/`truncate` — and even so they went silently through the locks.
     ("curl -o", "curl -o src/Foo.java https://e.com/f",
      lambda t: t == ["src/Foo.java"], "o destino do -o é o alvo"),
     ("curl --output=", "curl --output=src/Foo.java https://e.com/f",
@@ -116,9 +116,9 @@ CASES = [
     ("wget sem destino no argv", "wget https://e.com/f",
      lambda t: t == [], "idem — grava com o nome remoto, que o argv não diz"),
 
-    # --- `git checkout -- ` e `git restore` sobrescrevem o arquivo no disco ---
-    #     Mesmo efeito do `git mv` acima, na mesma ferramenta já vigiada: era a
-    #     forma mais fácil de reverter em silêncio um arquivo fora da pista.
+    # --- `git checkout -- ` and `git restore` overwrite the file on disk ---
+    #     Same effect as the `git mv` above, in the tool already watched: it was
+    #     the easiest way to silently revert a file outside the lane.
     ("git checkout ref -- path", "git checkout main -- src/Foo.java",
      lambda t: t == ["src/Foo.java"], "o caminho depois do -- é sobrescrito"),
     ("git checkout -- path", "git checkout -- src/Foo.java src/Bar.java",
@@ -142,15 +142,15 @@ def main():
 
     failures = 0
     for hook in HOOKS:
-        topo = hook.parent.parent.name
+        top = hook.parent.parent.name
         mod = load(hook)
         for label, cmd, ok, expect in CASES:
             targets, _ = mod.extract_write_targets(cmd)
             if ok(targets):
-                print(f"PASS [{topo:11}] {label:20} -> {targets}")
+                print(f"PASS [{top:11}] {label:20} -> {targets}")
             else:
                 failures += 1
-                print(f"FAIL [{topo:11}] {label:20} -> {targets}  (expected: {expect})")
+                print(f"FAIL [{top:11}] {label:20} -> {targets}  (expected: {expect})")
 
     print()
     if failures:

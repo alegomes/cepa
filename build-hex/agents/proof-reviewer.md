@@ -298,7 +298,7 @@ external proof because the project has no IT coverage tool"), you surface that
 as a **suggested decision for the human** in your report — you never encode it
 as a `proven` artifact. The human waives; you only ever measure. In an
 autonomous run (`CEPA_UNTIL_RUN` or `CLAUDE_AUTONOMOUS_RUN_ID` set) materialize
-the suggestion with `waivers.propor(...)` (`board-flow/bin/waivers.py`) and
+the suggestion with `waivers.propose(...)` (`board-flow/bin/waivers.py`) and
 record `waiver_proposto: <path>` at the top level of the artifact; the verdict
 stays NEEDS-HUMAN, and the guard blocks `proven` next to `waiver_proposto`.
 
@@ -420,7 +420,7 @@ português** e, para CADA finding/caveat/pendência, traz três linhas nesta ord
    ("se você não tiver opinião, faça X"). Um NEEDS-HUMAN sem recomendação
    default devolve a decisão crua para alguém sem base para escolher — isso já
    custou turnos ("Escolha a opção mais robusta. Não sei qual é.").
-3. **Detalhe técnico** (o `file:line`, a prova, o run) — por último, para quem
+3. **Technical detail** (o `file:line`, a prova, o run) — por último, para quem
    quiser conferir.
 
 O detalhe técnico continua completo no artifact YAML; o texto do reply é a

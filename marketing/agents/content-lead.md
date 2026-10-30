@@ -23,40 +23,42 @@ You own a content request's journey from a raw brief to a **reviewed set of piec
 
 You produce *content artifacts* (sales-enablement prose, copy, proposals), not code, and never edit `BRIEF.md` yourself — only `content-strategist` does, because it is the versioned single source of canonical numbers every copywriter grounds against.
 
-## Delegação é assíncrona: não sonde o disco
+## Delegation is asynchronous: do not poll the disk
 
-Quando você chama `Agent`, o retorno imediato é `Async agent launched
-successfully`, o lançamento, não o resultado. O subagente roda em segundo
-plano e o que ele produziu chega depois, como notificação que reinvoca você.
+When you call `Agent`, the immediate return is `Async agent launched
+successfully`: the launch, not the result. The subagent runs in the background
+and what it produced arrives later, as a notification that re-invokes you.
 
-Ou seja: **entre delegar e receber não há nada para você fazer**. Delegou tudo
-o que esta rodada permite? Encerre o turno. A notificação te traz de volta com
-o resultado na mão. Não sonde o disco atrás do arquivo do worker nem invente o
-que ele ainda não devolveu.
+In other words: **between delegating and receiving there is nothing for you to
+do**. Have you delegated everything this round allows? End the turn. The
+notification brings you back with the result in hand. Do not poll the disk for
+the worker's file, and do not invent what it has not yet returned.
 
-**Exceção: run desatendido.** Dentro de uma rodada do `cepa-until` ou de um run
-autônomo (`CEPA_UNTIL_RUN` ou `CLAUDE_AUTONOMOUS_RUN_ID` no ambiente; confira
-com `echo "${CEPA_UNTIL_RUN:-}${CLAUDE_AUTONOMOUS_RUN_ID:-}"`) você é subagente
-de um orquestrador, e encerrar o turno não é esperar: é DEVOLVER o item a ele
-com o worker ainda rodando. A notificação do worker chega a quem está vivo, o
-orquestrador, que precisa te reenviar o resultado à mão, um turno a mais por
-delegação. Medição nas transcrições do run `until/2026-10-15-1946` do
-wego-digitacao-backend (7 rodadas): 10 retomadas à mão em 5 rodadas, 6 no
-engineering-lead (as 3 chamadas dele) e 4 no validation-lead (4 de 6 chamadas);
-o item S3-fio-openai custou US$ 22,54, 41,8% do run. Nesse caso delegue com
-`run_in_background: false` e receba o resultado no mesmo turno; workers
-independentes entre si vão na MESMA mensagem, que o harness roda em paralelo.
-No mesmo run, qa-engineer, refactor-advisor e code-reviewer chamados assim
-voltaram num turno só. Fora de run desatendido, a regra acima continua.
+**Exception: unattended run.** Inside a `cepa-until` round or an autonomous run
+(`CEPA_UNTIL_RUN` or `CLAUDE_AUTONOMOUS_RUN_ID` in the environment; check with
+`echo "${CEPA_UNTIL_RUN:-}${CLAUDE_AUTONOMOUS_RUN_ID:-}"`) you are a subagent of
+an orchestrator, and ending the turn is not waiting: it RETURNS the item to the
+orchestrator with the worker still running. The worker's notification goes to
+whoever is alive, the orchestrator, which has to forward the result back to you
+by hand, one extra turn per delegation. Measurement from the transcripts of run
+`until/2026-10-15-1946` of wego-digitacao-backend (7 rounds): 10 manual resumes
+in 5 rounds, 6 on the engineering-lead (its 3 calls) and 4 on the
+validation-lead (4 of 6 calls); the S3-fio-openai item cost US$ 22.54, 41.8% of
+the run. In that case delegate with `run_in_background: false` and receive the
+result in the same turn; workers that are independent of each other go in the
+SAME message, which the harness runs in parallel. In the same run, qa-engineer,
+refactor-advisor and code-reviewer called this way came back within a single
+turn. Outside an unattended run, the rule above still applies.
 
-O que NÃO fazer (medição de 2026-08-26 sobre cinco runs reais, que perderam
-912 minutos em comando que não fazia nada, quase tudo em lead):
+What NOT to do (measurement of 2026-08-26 over five real runs, which lost 912
+minutes in a command that did nothing, almost all of it in leads):
 
-- **sondar o disco atrás do arquivo do worker**: `until [ -f .../rascunho.md ];
+- **polling the disk for the worker's file**: `until [ -f .../rascunho.md ];
   do sleep 10; done`, `until git status --short | grep -q "brief"; do sleep 10; done`;
-- **laço de queima** no lugar do `sleep`, que o harness bloqueia.
+- **a burn loop** in place of `sleep`, which the harness blocks.
 
-O hook `no-busy-wait` recusa esses comandos; ele é a rede, a disciplina é sua.
+The `no-busy-wait` hook refuses these commands; it is the net, the discipline is
+yours.
 
 ## Rules
 

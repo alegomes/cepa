@@ -1,43 +1,47 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: bloqueia bloco de Decisão cujo campo Altitude não é um dos
-três valores do vocabulário.
+"""PreToolUse hook: blocks a Decision block whose Altitude field is not one of
+the three values of the vocabulary.
 
-O `**Altitude:**` de um bloco `### Decision:` não descreve a decisão — ele diz
-QUEM revisa: `strategic` vai para o dono no `/common:debrief`, `tactical` fica
-com o lead, `implementation` só aparece com `--all`. É o único mecanismo que o
-debrief tem para separar o que merece a atenção do dono do que é detalhe.
+The `**Altitude:**` of a `### Decision:` block does not describe the decision;
+it says WHO reviews it: `strategic` goes to the owner in `/common:debrief`,
+`tactical` stays with the lead, `implementation` only shows up with `--all`. It
+is the only mechanism the debrief has to separate what deserves the owner's
+attention from what is detail.
 
-O que aconteceu em 2026-08-19: quatro runs autônomos produziram 57 blocos de
-decisão bem formatados, e 51 deles traziam no campo de altitude uma palavra
-livre em português — "contrato", "schema", "fronteira", "retenção", "semântica"
-—, 35 valores distintos. O agente respondeu "de que assunto é esta decisão",
-que é outra pergunta. Com 89% dos blocos fora do vocabulário, o filtro do
-debrief não filtra: o dono revisaria três decisões, todas do primeiro card,
-enquanto as de maior consequência ficavam invisíveis por estarem marcadas com
-palavra que o filtro não reconhece.
+What happened on 2026-08-19: four autonomous runs produced 57 well-formatted
+decision blocks, and 51 of them carried a free Portuguese word in the altitude
+field ("contrato", "schema", "fronteira", "retenção", "semântica"), 35 distinct
+values. The agent answered "what subject is this decision about", which is a
+different question. With 89% of the blocks outside the vocabulary, the debrief
+filter does not filter: the owner would review three decisions, all from the
+first card, while the most consequential ones stayed invisible because they were
+tagged with a word the filter does not recognize.
 
-Nada disso aparece como erro. O bloco está lindo, o run termina, o debrief roda
-e diz "3 decisões estratégicas". Por isso o gate é mecânico e bloqueia na
-escrita, quando o autor ainda está ali para corrigir.
+None of this shows up as an error. The block looks great, the run ends, the
+debrief runs and says "3 strategic decisions". That is why the gate is
+mechanical and blocks at write time, while the author is still there to fix it.
 
-Mecanismo:
-  - Fira em Write/Edit/MultiEdit; só olha conteúdo que tenha um campo Altitude.
-  - Só olha campo Altitude DENTRO de um bloco `### Decision:` — do cabeçalho até
-    o próximo cabeçalho de nível igual ou superior. Fora do bloco, `altitude:` é
-    outro vocabulário: no artefato de aceite (.claude/acceptance/<KEY>.yaml) ele
-    diz em que superfície o critério é observável (http/cli/ui/event/domain/
-    application), e o gate barrava aquela escrita em 2026-08-22, obrigando o
-    completion-auditor a renomear o campo na marra.
-  - Valor aceito: strategic | tactical | implementation (só isso).
-  - A linha-modelo da própria documentação ("strategic | tactical |
-    implementation", ou um <placeholder>) passa — senão o gate impediria editar
-    o documento que define o vocabulário.
-  - Campo ausente NÃO é bloqueado: o debrief já trata ausência como `tactical`,
-    e bloquear ausência transformaria a edição de bloco legado em parede.
+Mechanism:
+  - Fires on Write/Edit/MultiEdit; only looks at content that has an Altitude
+    field.
+  - Only looks at an Altitude field INSIDE a `### Decision:` block, from the
+    heading to the next heading of equal or higher level. Outside the block,
+    `altitude:` is another vocabulary: in the acceptance artifact
+    (.claude/acceptance/<KEY>.yaml) it says on which surface the criterion is
+    observable (http/cli/ui/event/domain/application), and the gate blocked that
+    write on 2026-08-22, forcing the completion-auditor to rename the field by
+    force.
+  - Accepted value: strategic | tactical | implementation (only these).
+  - The template line in the documentation itself ("strategic | tactical |
+    implementation", or a <placeholder>) passes; otherwise the gate would
+    prevent editing the document that defines the vocabulary.
+  - A missing field is NOT blocked: the debrief already treats absence as
+    `tactical`, and blocking absence would turn editing a legacy block into a
+    wall.
 
 Exit codes:
-  0 — liberado
-  2 — bloqueado (o stderr chega ao agente, que corrige sozinho)
+  0 - allowed
+  2 - blocked (stderr reaches the agent, which fixes it on its own)
 """
 
 import json
@@ -47,51 +51,51 @@ from pathlib import Path
 
 GATED_TOOLS = ("Write", "Edit", "MultiEdit")
 
-VOCABULARIO = ("strategic", "tactical", "implementation")
+VOCABULARY = ("strategic", "tactical", "implementation")
 
 MARKER = r"(?:\*\*|__|#{1,6}\s*|h[1-6]\.\s*|[-*+]\s+)"
 
-# Campo Altitude e o resto da linha. pt-BR aceito no rótulo porque o harness
-# manda escrever prosa em pt-BR; o VALOR continua sendo o vocabulário inglês,
-# que é o que o debrief casa.
-# Os dois pontos são OBRIGATÓRIOS: sem eles a regra casava a prosa que FALA do
-# campo ("**Altitude field** classifies who reviews...") e bloqueava a edição do
-# documento que define o vocabulário — gate que impede de consertar a própria
-# definição é como se aprende a desligar o gate.
+# Altitude field and the rest of the line. pt-BR is accepted in the label
+# because the harness mandates writing prose in pt-BR; the VALUE remains the
+# English vocabulary, which is what the debrief matches.
+# The colon is MANDATORY: without it the rule matched prose that TALKS about the
+# field ("**Altitude field** classifies who reviews...") and blocked editing the
+# document that defines the vocabulary. A gate that prevents fixing its own
+# definition is how one learns to switch the gate off.
 ALTITUDE_RE = re.compile(
     rf"^{MARKER}?\s*(?:Altitude|Altitude do bloco)\s*(?:\*\*|__)?\s*:\s*{MARKER}?\s*(.+)$",
     re.MULTILINE | re.IGNORECASE,
 )
 
 
-# Cabeçalho markdown (`### Decision: ...`) e cabeçalho qualquer, para saber onde
-# o bloco termina. O nível é o número de `#`: o bloco vai até o próximo
-# cabeçalho de nível igual ou menor (`###` fecha em `###`, `##` ou `#`).
+# Markdown heading (`### Decision: ...`) and any heading, to know where the
+# block ends. The level is the number of `#`: the block runs to the next heading
+# of equal or lower level (`###` closes at `###`, `##` or `#`).
 DECISION_RE = re.compile(r"^(#{1,6})\s*Decision\s*:", re.IGNORECASE)
 HEADING_RE = re.compile(r"^(#{1,6})\s")
 
 
-def blocos_de_decisao(content: str):
-    """Os trechos que são bloco de decisão, um por cabeçalho `### Decision:`."""
-    linhas = content.splitlines()
-    blocos, atual, nivel = [], None, 0
-    for linha in linhas:
-        m = DECISION_RE.match(linha)
+def decision_blocks(content: str):
+    """The stretches that are decision blocks, one per `### Decision:` heading."""
+    lines = content.splitlines()
+    blocks, current, level = [], None, 0
+    for line in lines:
+        m = DECISION_RE.match(line)
         if m:
-            if atual is not None:
-                blocos.append("\n".join(atual))
-            atual, nivel = [linha], len(m.group(1))
+            if current is not None:
+                blocks.append("\n".join(current))
+            current, level = [line], len(m.group(1))
             continue
-        if atual is not None:
-            h = HEADING_RE.match(linha)
-            if h and len(h.group(1)) <= nivel:
-                blocos.append("\n".join(atual))
-                atual = None
+        if current is not None:
+            h = HEADING_RE.match(line)
+            if h and len(h.group(1)) <= level:
+                blocks.append("\n".join(current))
+                current = None
                 continue
-            atual.append(linha)
-    if atual is not None:
-        blocos.append("\n".join(atual))
-    return blocos
+            current.append(line)
+    if current is not None:
+        blocks.append("\n".join(current))
+    return blocks
 
 
 def extract_content(tool_input: dict):
@@ -109,29 +113,29 @@ def extract_content(tool_input: dict):
     return None
 
 
-def limpa(valor: str) -> str:
-    """Tira marcação e pontuação de borda, preservando o texto do valor."""
-    v = valor.strip()
+def clean(value: str) -> str:
+    """Strips markup and edge punctuation, preserving the value's text."""
+    v = value.strip()
     v = re.sub(r"^(\*\*|__|`)+|(\*\*|__|`)+$", "", v).strip()
     v = v.strip("*_`").strip()
     return v.rstrip(".;,").strip()
 
 
-def e_linha_modelo(valor: str) -> bool:
-    """A linha que ENSINA o vocabulário, não uma decisão real.
+def is_template_line(value: str) -> bool:
+    """The line that TEACHES the vocabulary, not a real decision.
 
-    Duas formas: a enumeração inteira ("strategic | tactical | implementation")
-    e o marcador de preencher ("<strategic|tactical|implementation>").
+    Two forms: the whole enumeration ("strategic | tactical | implementation")
+    and the fill-in marker ("<strategic|tactical|implementation>").
     """
-    v = limpa(valor).lower()
-    # O marcador de preencher pode vir seguido de comentário na mesma linha
-    # ("<strategic|tactical|implementation>   ← escolha uma"), e continua sendo
-    # linha-modelo.
+    v = clean(value).lower()
+    # The fill-in marker may be followed by a comment on the same line
+    # ("<strategic|tactical|implementation>   ← escolha uma"), and is still a
+    # template line.
     if v.startswith("<"):
         return True
     v = v.strip("<>").strip()
-    partes = [p.strip() for p in re.split(r"[|/]", v) if p.strip()]
-    return len(partes) > 1 and all(p in VOCABULARIO for p in partes)
+    parts = [p.strip() for p in re.split(r"[|/]", v) if p.strip()]
+    return len(parts) > 1 and all(p in VOCABULARY for p in parts)
 
 
 def main():
@@ -148,40 +152,41 @@ def main():
     tool_input = payload.get("tool_input") or {}
     content = extract_content(tool_input)
     if content is None:
-        sys.exit(0)          # sem ver o conteúdo, não se bloqueia nada
+        sys.exit(0)          # without seeing the content, nothing is blocked
 
-    alvos = blocos_de_decisao(content)
-    if not alvos:
-        # Um Edit pode trazer só a linha do campo, sem o cabeçalho junto. Nesse
-        # caso o arquivo de destino decide: se ELE tem bloco de decisão, o
-        # fragmento é tratado como parte de um; se não tem (o .yaml de aceite,
-        # por exemplo), nada aqui é bloco de decisão e o gate não opina.
-        caminho = tool_input.get("file_path")
-        if isinstance(caminho, str) and caminho:
+    targets = decision_blocks(content)
+    if not targets:
+        # An Edit may carry only the field line, without the heading. In that
+        # case the destination file decides: if IT has a decision block, the
+        # fragment is treated as part of one; if it does not (the acceptance
+        # .yaml, for example), nothing here is a decision block and the gate
+        # has no opinion.
+        file_path = tool_input.get("file_path")
+        if isinstance(file_path, str) and file_path:
             try:
-                destino = Path(caminho).read_text(encoding="utf-8", errors="replace")
+                destination = Path(file_path).read_text(encoding="utf-8", errors="replace")
             except OSError:
-                destino = ""
-            if blocos_de_decisao(destino):
-                alvos = [content]
-    if not alvos:
+                destination = ""
+            if decision_blocks(destination):
+                targets = [content]
+    if not targets:
         sys.exit(0)
 
-    fora = []
-    for valor in ALTITUDE_RE.findall("\n".join(alvos)):
-        if e_linha_modelo(valor):
+    outside = []
+    for value in ALTITUDE_RE.findall("\n".join(targets)):
+        if is_template_line(value):
             continue
-        v = limpa(valor).lower()
-        if v not in VOCABULARIO:
-            fora.append(limpa(valor))
+        v = clean(value).lower()
+        if v not in VOCABULARY:
+            outside.append(clean(value))
 
-    if not fora:
+    if not outside:
         sys.exit(0)
 
-    lista = ", ".join(f'"{v}"' for v in dict.fromkeys(fora))
+    listing = ", ".join(f'"{v}"' for v in dict.fromkeys(outside))
     print(
         "[decision-altitude-gate] BLOQUEADO: campo Altitude fora do vocabulário: "
-        f"{lista}.\n"
+        f"{listing}.\n"
         "  Altitude tem exatamente três valores — strategic, tactical, "
         "implementation — e diz QUEM revisa a decisão, não sobre o que ela é:\n"
         "   · strategic     — o dono revisa no debrief (escopo, contrato, "

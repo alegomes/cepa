@@ -93,15 +93,15 @@ ALLOWED_STATUSES = {
 }
 KNOWN_STATUSES = set().union(*ALLOWED_STATUSES.values())
 
-# Os nomes de nível também são um conjunto fechado. Artefatos escritos por
-# versões anteriores usam outra grafia para os MESMOS níveis
+# The level names are also a closed set. Artifacts written by earlier versions
+# use another spelling for the SAME levels
 # (`l2_external_coverage`, `l3_diff_mutation`, `bugfix_regression_red_on_base`),
-# e as duas convivem no disco hoje. Quem lê esses arquivos precisa conhecer as
-# duas ou lê metade da base: o classificador de `/board-flow:decide` classificou
-# 7 de 33 cards errado por isso, incluindo o WEGO-1698 que a própria
-# documentação usa de exemplo. A grafia antiga fica aceita para LEITURA e
-# bloqueada para ESCRITA — parar de produzir divergência nova é o que faz a
-# dívida encolher sozinha.
+# and the two coexist on disk today. Whoever reads those files needs to know
+# both or reads half of the base: the `/board-flow:decide` classifier got
+# 7 of 33 cards wrong because of this, including WEGO-1698, which the
+# documentation itself uses as an example. The old spelling stays accepted for
+# READING and blocked for WRITING — stopping the production of new divergence
+# is what makes the debt shrink by itself.
 LEVEL_NAMES = {
     "l2_coverage", "l3_load_bearing", "l4_adversarial_input",
     "bugfix_regression_red_at_base",
@@ -114,7 +114,7 @@ LEVEL_RENAMES = {
 
 
 def unknown_levels(data) -> list:
-    """(nome escrito, nome canônico ou None) para cada nível fora do conjunto."""
+    """(written name, canonical name or None) for each level outside the set."""
     levels = data.get("levels") if isinstance(data, dict) else None
     if not isinstance(levels, dict):
         return []
@@ -250,9 +250,9 @@ def double_offenders(data) -> list:
     return out
 
 
-# Chaves de topo que dizem "há uma dispensa na mesa". Uma dispensa PROPOSTA é uma
-# pergunta ao dono (board-flow/bin/waivers.py `propor`), não prova: o artefato
-# que a carrega não pode declarar `proven`.
+# Top-level keys that say "there is a waiver on the table". A PROPOSED waiver is
+# a question to the owner (board-flow/bin/waivers.py `propor`), not proof: the
+# artifact that carries it cannot declare `proven`.
 WAIVER_KEYS = ("waiver_proposto", "dispensa_proposta", "waiver", "dispensa")
 
 
@@ -262,7 +262,7 @@ def has_waiver(data) -> bool:
 
 def parse_with_yaml(content: str):
     """Return (verdict, [(path, status)], [doubles], [l4 n/a violations],
-    [níveis com nome fora do conjunto fechado], dispensa proposta?).
+    [levels with a name outside the closed set], proposed waiver?).
     Raises if invalid."""
     import yaml  # noqa: deferred so absence falls back instead of crashing
     data = yaml.safe_load(content)
@@ -304,8 +304,8 @@ def parse_with_lines(content: str):
     violations = (["o artefato não pôde ser lido como YAML, então a "
                    "justificativa do `n/a` não pôde ser verificada"]
                   if na else [])
-    # sem pyyaml não dá para ver os nomes de nível: falha aberto, como o resto
-    # deste fallback.
+    # without pyyaml the level names cannot be seen: fail open, like the rest
+    # of this fallback.
     return verdict, statuses, [], violations, [], waiver
 
 
@@ -343,17 +343,17 @@ def main():
     hook_cwd = payload.get("cwd") or os.getcwd()
     declared = verdict.strip().lower() if isinstance(verdict, str) else "?"
 
-    # Nome de nível fora do conjunto fechado bloqueia em QUALQUER veredito: o
-    # ponto é parar de gerar grafia nova divergente, e um `needs-human` escrito
-    # com a grafia antiga envenena a leitura igual.
+    # A level name outside the closed set blocks under ANY verdict: the point is
+    # to stop generating new divergent spelling, and a `needs-human` written
+    # with the old spelling poisons the reading just the same.
     if bad_levels:
-        linhas = "".join(
-            f"    - {escrito}" + (f"  → escreva `{canonico}`\n" if canonico
+        lines = "".join(
+            f"    - {written}" + (f"  → escreva `{canonical}`\n" if canonical
                                   else "  (nível que o esquema não conhece)\n")
-            for escrito, canonico in bad_levels)
+            for written, canonical in bad_levels)
         print(
             f"[build-hex proof-verdict-guard] BLOCKED: {file_path} usa nome de "
-            f"nível fora do conjunto fechado:\n{linhas}"
+            f"nível fora do conjunto fechado:\n{lines}"
             f"  Os níveis são: {', '.join(sorted(LEVEL_NAMES))}.\n"
             f"  A grafia antiga segue LIDA por quem consome os artefatos, mas não\n"
             f"  pode ser escrita de novo: duas grafias para o mesmo nível fizeram o\n"
@@ -377,7 +377,7 @@ def main():
             f"veredito computado: needs-human.\n"
             f"  Grave `verdict: needs-human` e deixe o `waiver_proposto` "
             f"apontando para o arquivo em `.claude/waivers/`. Só o "
-            f"`cepa-plan responde` do dono converte a proposta em dispensa.",
+            f"`cepa-plan answer` do dono converte a proposta em dispensa.",
             file=sys.stderr,
         )
         _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict="proven",

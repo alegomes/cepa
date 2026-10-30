@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""cepa-modes — the table of work modes, to consult mid-session.
+
+Every session declares a mode, and the mode is a STATE that lasts until the
+exit condition is met. Whoever forgets a mode's purpose mid-work will not open
+`docs/modos-de-trabalho.md`, which has 307 lines — they will guess. This
+command is the table, and nothing beyond it.
+
+The source is `common/hooks/_modes.py`, the same file `session-mode.py` reads
+to inject the exit condition on every turn. One table, two readers.
+
+Usage:
+    cepa-modes              # the whole table; marks the current session's mode
+    cepa-modes <name>       # a single mode, with entry/produces/exit/gate
+    cepa-modes --purposes # one line per mode: what it is for
+    cepa-modes --json
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+import _tui  # noqa: E402
+try:
+    from _modes import MODES, read_session_mode, normalize_mode
+except ImportError:
+    print("✗ cepa-modes: não achei common/hooks/_modes.py", file=sys.stderr)
+    sys.exit(2)
+
+# `--json` keeps the legacy (pt-BR) keys of the table: compass reads `saida`
+# from it, and the output was settled by item `interface-in-english`.
+_JSON_KEYS = {"purpose": "proposito", "entry": "entrada", "produces": "produz",
+              "exit": "saida", "gate": "gate", "write": "escrita"}
+
+BOLD, DIM, YELLOW, GREEN, RESET = "\033[1m", "\033[2m", "\033[33m", "\033[32m", "\033[0m"
+
+
+def session_mode():
+    """The mode declared in this tree, if any — the same file the hook reads.
+    Reads `mode:` (or the old `modo:`) and always returns the new name."""
+    try:
+        out = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=5)
+        root = out.stdout.strip() if out.returncode == 0 else os.getcwd()
+    except (OSError, subprocess.SubprocessError):
+        root = os.getcwd()
+    return (read_session_mode(root) or {}).get("mode")
+
+
+def render_block(name, info, current, color):
+    mark = f"  {GREEN}◀ esta sessão{RESET}" if name == current else ""
+    lines = [f"{BOLD}{YELLOW}{name}{RESET}{mark}"]
+    for label, key in (("serve para", "purpose"), ("entra com", "entry"), ("produz", "produces"),
+                       ("fecha quando", "exit"), ("gate", "gate")):
+        body = textwrap.fill(info[key], width=78,
+                              initial_indent="", subsequent_indent=" " * 16)
+        tag = f"{DIM}{label:>13}{RESET} " if color else f"{label:>13} "
+        lines.append(f"  {tag}{body}")
+    return "\n".join(lines)
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Os modos de trabalho e suas fronteiras.")
+    ap.add_argument("mode", nargs="?", metavar="modo", help="só este modo")
+    ap.add_argument("--json", action="store_true", dest="as_json")
+    ap.add_argument("--purposes", "--propositos", action="store_true", dest="purposes",
+                    help="uma linha por modo: para que ele serve")
+    ap.add_argument("--no-color", "--sem-cor", action="store_true", dest="no_color")
+    args = ap.parse_args()
+
+    color = not args.no_color and sys.stdout.isatty()
+    if not color:
+        global BOLD, DIM, YELLOW, GREEN, RESET
+        BOLD = DIM = YELLOW = GREEN = RESET = ""
+
+    if args.mode:
+        args.mode = normalize_mode(args.mode)  # the old name (`reforma`) still works
+    if args.mode and args.mode not in MODES:
+        print(f"✗ modo desconhecido: {args.mode}\n  válidos: {', '.join(MODES)}",
+              file=sys.stderr)
+        return 2
+
+    target = {args.mode: MODES[args.mode]} if args.mode else MODES
+    if args.as_json:
+        legacy = {n: {_JSON_KEYS[k]: v for k, v in d.items()} for n, d in target.items()}
+        print(json.dumps(legacy, indent=2, ensure_ascii=False))
+        return 0
+
+    if args.purposes:
+        print(f"{BOLD}Modos de trabalho{RESET} — para que serve cada um:")
+        width = max(len(n) for n in target)
+        for name, info in target.items():
+            body = textwrap.fill(info["purpose"], width=78,
+                                 initial_indent="", subsequent_indent=" " * (width + 4))
+            print(f"  {YELLOW}{name:<{width}}{RESET}  {body}")
+        print(f"\n{DIM}A tabela inteira (entra com / produz / fecha quando / gate): "
+              f"cepa-modes{RESET}")
+        return 0
+
+    current = session_mode()
+    print(f"{BOLD}Modos de trabalho{RESET} — um estado que dura até a condição de "
+          f"saída ser satisfeita.")
+    print(f"{DIM}Nenhuma sessão sobe sem modo. Desenho completo: "
+          f"docs/modos-de-trabalho.md{RESET}\n")
+    for name, info in target.items():
+        print(render_block(name, info, current, color))
+        print()
+    if not args.mode:
+        if current:
+            print(f"{DIM}Modo desta sessão: {RESET}{YELLOW}{current}{RESET}"
+                  f"{DIM} — trocar exige nova sessão (`cepa --mode <x>`).{RESET}")
+        else:
+            print(f"{DIM}Esta árvore não tem modo declarado.{RESET}")
+        print(f"{DIM}Falta o 8º, `deploy`: fora da rodada por decisão do dono — "
+              f"é o único que depende de infra externa.{RESET}")
+    return 0
+
+
+if __name__ == "__main__":
+    _tui.install()
+    sys.exit(main())

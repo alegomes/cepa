@@ -1,33 +1,33 @@
 #!/usr/bin/env python3
-"""Contract tests: estado por sessão ancora na RAIZ da worktree, não no cwd cru.
+"""Contract tests: per-session state anchors at the worktree ROOT, not at the raw cwd.
 
-Sem dependência de terceiros — rode com
+No third-party dependency — run with
 `python3 tests/test_session_anchor_root.py`.
 
-O defeito, medido duas vezes neste repo (2026-08-04 e 2026-08-18): os hooks
-recebem `cwd` como o diretório CORRENTE do shell, e o diretório do Bash PERSISTE
-entre chamadas. Um único `cd common/hooks` dentro de um comando desvia o resto
-da sessão inteira: o `session-log.md` passou a ser gravado em
-`common/hooks/.claude/session-log.md` e os turnos desviados SUMIRAM do log real
-— não era cópia, era perda, invisível ao git porque o `.gitignore` cobre
-`.claude/`. Só apareceu porque o diretório órfão saltou no `git status`.
+The defect, measured twice in this repo (2026-08-04 and 2026-08-18): the hooks
+receive `cwd` as the shell's CURRENT directory, and Bash's directory PERSISTS
+between calls. A single `cd common/hooks` inside a command diverts the rest
+of the whole session: `session-log.md` started being written to
+`common/hooks/.claude/session-log.md` and the diverted turns VANISHED from the real
+log — it was not a copy, it was a loss, invisible to git because `.gitignore` covers
+`.claude/`. It only showed up because the orphan directory jumped out in `git status`.
 
-Não é um arquivo, é uma CLASSE. Os hooks que ancoram estado no cwd cru falham
-todos do mesmo jeito, e três deles falham ABRINDO um portão em silêncio:
+It is not one file, it is a CLASS. The hooks that anchor state at the raw cwd fail
+all the same way, and three of them fail OPENING a gate in silence:
 
-  session-log.py        log da sessão vai para o subdiretório  → /common:recap
-                        monta "você pediu / eu entreguei" com meia sessão
-  capture-build-result  baseline de build gravada no subdiretório
-  mark-build-stale      edição na raiz vira `relative_to` inválido → o hook sai
-                        em silêncio e a baseline NUNCA fica STALE
-  gate-advance          não acha baseline no subdiretório → push liberado
-  acceptance-gate       não acha o artefato de aceite → transição liberada
-  loop-budget           contagem de repetição zera → o teto de 3 nunca dispara
-  session-checkpoint    lê o log no lugar errado → checkpoint volta vazio
+  session-log.py        the session log goes to the subdirectory  → /common:recap
+                        assembles "you asked / I delivered" with half a session
+  capture-build-result  build baseline written in the subdirectory
+  mark-build-stale      an edit at the root becomes an invalid `relative_to` → the hook exits
+                        in silence and the baseline NEVER becomes STALE
+  gate-advance          does not find the baseline in the subdirectory → push released
+  acceptance-gate       does not find the acceptance artifact → transition released
+  loop-budget           the repetition count resets → the ceiling of 3 never fires
+  session-checkpoint    reads the log in the wrong place → the checkpoint comes back empty
 
-A âncora certa é `_wtlib.session_root` (raiz da worktree), NÃO `main_root`:
-estado que pertence a esta worktree tem de seguir a worktree — ler o build de
-uma worktree como baseline de outra é a mesma mentira ao contrário.
+The right anchor is `_wtlib.session_root` (worktree root), NOT `main_root`:
+state that belongs to this worktree must follow the worktree — reading the build of
+one worktree as the baseline of another is the same lie in reverse.
 """
 
 import json
@@ -38,12 +38,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-# Este teste executa hook que emite telemetria; sem isto os eventos cairiam
-# em ~/.claude/cepa-telemetry/ e entrariam no relatório do /common:metrics
-# como se fossem uso real. Ver tests/_telemetria_isolada.py.
-from _telemetria_isolada import isola
+# This test executes a hook that emits telemetry; without this the events would fall
+# in ~/.claude/cepa-telemetry/ and enter the /common:metrics report
+# as if they were real use. See tests/_isolated_telemetry.py.
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -87,7 +87,7 @@ def make_repo(path):
 
 
 def stray_dirs(root, sub):
-    """Todo `.claude/` que apareceu fora da raiz — a assinatura do defeito."""
+    """Every `.claude/` that showed up outside the root — the signature of the defect."""
     return [str(p) for p in Path(root).rglob(".claude")
             if p.parent.resolve() != Path(root).resolve()]
 
@@ -111,8 +111,8 @@ with tempfile.TemporaryDirectory() as tmp:
     check("nenhum .claude órfão no subdiretório",
           not stray_dirs(r1, sub), stray_dirs(r1, sub))
 
-    # Dois turnos, um da raiz e um do subdiretório, no MESMO arquivo: é isto
-    # que "não era cópia, era perda" significa — o log não pode partir em dois.
+    # Two turns, one from the root and one from the subdirectory, in the SAME file: that is what
+    # "it was not a copy, it was a loss" means — the log cannot split in two.
     run_hook("session-log.py", {"prompt": "turno da raiz", "cwd": str(r1)})
     text = log.read_text(encoding="utf-8")
     check("os dois turnos moram no mesmo log",
@@ -150,9 +150,9 @@ with tempfile.TemporaryDirectory() as tmp:
     # ─────────────────────────────────────────────────────────────────────
     print("\n# mark-build-stale.py — invalidar a baseline (falha ABRINDO portão)")
     # ─────────────────────────────────────────────────────────────────────
-    # cwd no subdiretório, edição num arquivo da RAIZ: com o cwd cru o
-    # `relative_to` estourava ValueError e o hook saía em silêncio, deixando a
-    # baseline verde para sempre.
+    # cwd in the subdirectory, edit on a file of the ROOT: with the raw cwd
+    # `relative_to` blew up with ValueError and the hook exited in silence, leaving the
+    # baseline green forever.
     r = run_hook("mark-build-stale.py", {
         "tool_name": "Edit",
         "tool_input": {"file_path": str(r2 / "src" / "App.java")},
@@ -181,7 +181,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("push BARRADO mesmo com o cwd no subdiretório",
           r.returncode == 2, f"exit={r.returncode} stderr={r.stderr[:200]}")
 
-    # E o opt-out honesto continua sendo lido da raiz.
+    # And the honest opt-out is still read from the root.
     r4 = make_repo(tmp / "r4")
     sub4 = r4 / "docs"
     sub4.mkdir(parents=True)
@@ -206,9 +206,9 @@ with tempfile.TemporaryDirectory() as tmp:
         "tool_response": {"content": "erro: NullPointerException em Foo.java:42"},
         "cwd": str(sub5),
     })
-    # Sem o `or`: com ele, um hook que não gravasse NADA em lugar nenhum
-    # passaria pelo segundo lado da disjunção (apontado pelo auditor de
-    # completude, 2026-08-25).
+    # Without the `or`: with it, a hook that wrote NOTHING anywhere
+    # would pass through the second side of the disjunction (pointed out by the completeness
+    # auditor, 2026-08-25).
     check("estado do loop gravado na RAIZ",
           (r5 / ".claude" / "loop-state.json").exists(),
           f"não existe: {r5 / '.claude' / 'loop-state.json'}")
@@ -217,8 +217,8 @@ with tempfile.TemporaryDirectory() as tmp:
     # ─────────────────────────────────────────────────────────────────────
     print("\n# acceptance-gate.py — barrar transição com aceite INCOMPLETE")
     # ─────────────────────────────────────────────────────────────────────
-    # O artefato de aceite mora na raiz; com o cwd cru o gate não o achava e
-    # saía em silêncio (`sys.exit(0)`) — portão aberto sem uma linha de aviso.
+    # The acceptance artifact lives at the root; with the raw cwd the gate did not find it and
+    # exited in silence (`sys.exit(0)`) — a gate open without a line of warning.
     r6 = make_repo(tmp / "r6")
     sub6 = r6 / "api"
     sub6.mkdir(parents=True)
@@ -241,13 +241,13 @@ with tempfile.TemporaryDirectory() as tmp:
     # ─────────────────────────────────────────────────────────────────────
     print("\n# session-checkpoint.py — o rastro de intenção não pode voltar vazio")
     # ─────────────────────────────────────────────────────────────────────
-    # O checkpoint LÊ o mesmo arquivo que o session-log GRAVA. Se escritor e
-    # leitor usarem âncoras diferentes, o handoff volta vazio em silêncio.
+    # The checkpoint READS the same file that session-log WRITES. If writer and
+    # reader use different anchors, the handoff comes back empty in silence.
     #
-    # Exercitado como PROCESSO, e não importando `recent_intents` e chamando a
-    # função: o hook roda no Stop com um payload no stdin e o produto dele é o
-    # arquivo de handoff no disco. Chamar a função por dentro pularia justo o
-    # `main()`, que é onde a âncora é resolvida.
+    # Exercised as a PROCESS, and not by importing `recent_intents` and calling the
+    # function: the hook runs at Stop with a payload on stdin and its product is the
+    # handoff file on disk. Calling the function from inside would skip precisely
+    # `main()`, which is where the anchor is resolved.
     r7 = make_repo(tmp / "r7")
     sub7 = r7 / "deep" / "nested"
     sub7.mkdir(parents=True)
@@ -264,10 +264,10 @@ with tempfile.TemporaryDirectory() as tmp:
     # ─────────────────────────────────────────────────────────────────────
     print("\n# fora de um repo git — o hook não pode morrer por isto")
     # ─────────────────────────────────────────────────────────────────────
-    # O critério fala no plural — "hook NENHUM morre por isto" — então os SETE
-    # são exercitados, não só o session-log. Não havia bug em nenhum deles; o
-    # que faltava era a trava: uma regressão em qualquer um dos outros seis
-    # passaria despercebida (apontado pelo auditor de completude, 2026-08-25).
+    # The criterion speaks in the plural — "NO hook dies from this" — so all SEVEN
+    # are exercised, not only session-log. There was no bug in any of them; what
+    # was missing was the lock: a regression in any of the other six
+    # would go unnoticed (pointed out by the completeness auditor, 2026-08-25).
     bare = tmp / "sem-git"
     bare.mkdir()
 
@@ -276,7 +276,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("session-log.py cai no próprio cwd",
           (bare / ".claude" / "session-log.md").exists())
 
-    fora = [
+    outside = [
         ("capture-build-result.py", {
             "tool_name": "Bash",
             "tool_input": {"command": "./mvnw verify"},
@@ -302,46 +302,46 @@ with tempfile.TemporaryDirectory() as tmp:
         ("session-checkpoint.py", {
             "session_id": "sessao-de-teste", "cwd": str(bare)}),
     ]
-    # Um diretório POR hook: com um só, o capture-build-result grava uma
-    # baseline ali, o mark-build-stale a suja, e o gate-advance barra o push —
-    # o gate funcionando, mas medindo a coisa errada. O que este caso afirma é
-    # só que nenhum hook MORRE fora de um repo git.
-    for i, (nome, payload) in enumerate(fora):
-        alvo = tmp / f"sem-git-{i}"
-        alvo.mkdir()
-        payload = dict(payload, cwd=str(alvo))
+    # One directory PER hook: with only one, capture-build-result writes a
+    # baseline there, mark-build-stale dirties it, and gate-advance blocks the push —
+    # the gate working, but measuring the wrong thing. What this case asserts is
+    # only that no hook DIES outside a git repo.
+    for i, (name, payload) in enumerate(outside):
+        target = tmp / f"sem-git-{i}"
+        target.mkdir()
+        payload = dict(payload, cwd=str(target))
         ti = payload.get("tool_input")
         if ti and "file_path" in ti:
-            payload["tool_input"] = dict(ti, file_path=str(alvo / "App.java"))
-        r = run_hook(nome, payload)
-        check(f"{nome} sai 0 fora de repo", r.returncode == 0, r.stderr[:200])
+            payload["tool_input"] = dict(ti, file_path=str(target / "App.java"))
+        r = run_hook(name, payload)
+        check(f"{name} sai 0 fora de repo", r.returncode == 0, r.stderr[:200])
 
 
 # ─────────────────────────────────────────────────────────────────────────
 print("\n# guarda de deriva — nenhum hook novo pode voltar a ancorar no cwd cru")
 # ─────────────────────────────────────────────────────────────────────────
-# A lista de hooks que ancoram estado sob `.claude/`. Um hook novo que grave
-# estado e não esteja aqui é omissão; um hook daqui que volte ao cwd cru é
-# regressão. As duas coisas ficam vermelhas.
-ANCORADOS = [
+# The list of hooks that anchor state under `.claude/`. A new hook that writes
+# state and is not here is an omission; a hook from here that goes back to the raw cwd
+# is a regression. Both things turn red.
+ANCHORED = [
     "session-log.py", "session-checkpoint.py", "capture-build-result.py",
     "gate-advance.py", "mark-build-stale.py", "loop-budget.py",
     "acceptance-gate.py",
-    # Lê `.claude/session-mode` em vez de escrever, e por isso mesmo entra: um
-    # `cd` que desvie a leitura faz o hook não achar o modo e liberar TUDO em
-    # silêncio, que é a falha ABRINDO um portão — a mesma dos outros quatro.
-    "modo-escrita-gate.py",
+    # Reads `.claude/session-mode` instead of writing, and for that very reason it enters: a
+    # `cd` that diverts the read makes the hook not find the mode and release EVERYTHING in
+    # silence, which is the failure OPENING a gate — the same as the other four.
+    "write-mode-gate.py",
 ]
 
-for name in ANCORADOS:
+for name in ANCHORED:
     src = (HOOKS / name).read_text(encoding="utf-8")
     check(f"{name}: usa session_root", "session_root(" in src)
 
-# O padrão cru: `Path(payload.get("cwd") ...)` sem passar pelo helper.
-CRU = re.compile(r'Path\(\s*payload\.get\(\s*["\']cwd["\']')
-for name in ANCORADOS:
+# The raw pattern: `Path(payload.get("cwd") ...)` without going through the helper.
+RAW = re.compile(r'Path\(\s*payload\.get\(\s*["\']cwd["\']')
+for name in ANCHORED:
     src = (HOOKS / name).read_text(encoding="utf-8")
-    hits = [ln for ln in src.splitlines() if CRU.search(ln)]
+    hits = [ln for ln in src.splitlines() if RAW.search(ln)]
     check(f"{name}: nenhum Path(payload['cwd']) cru", not hits, hits)
 
 check("_wtlib expõe session_root",

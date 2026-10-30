@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""board-flow-fleet-validate.sh valida o caminho que o atlassian-expert usa: a `twg`.
+"""board-flow-fleet-validate.sh validates the path the atlassian-expert uses: `twg`.
 
-Até 2026-09 o script rodava `claude -p` restrito ao `mcp-atlassian` (token
-estático em ~/.zsecrets). O agente passou a falar com o Jira pela `twg`, então
-um PASS provava um caminho que nenhum run percorre e uma `twg` quebrada passava
-sem aviso. Aqui um `twg` falso registra cada chamada e responde conforme
-FAKE_MODE; o teste confere que o PASS depende da `twg` e que falha dela vira
-BLOCKED, sem `claude` e sem `JIRA_API_TOKEN` no ambiente.
+Until 2026-09 the script ran `claude -p` restricted to `mcp-atlassian` (static token
+in ~/.zsecrets). The agent started talking to Jira through `twg`, so
+a PASS proved a path no run walks and a broken `twg` passed
+without warning. Here a fake `twg` records each call and answers according to
+FAKE_MODE; the test checks that PASS depends on `twg` and that its failure becomes
+BLOCKED, without `claude` and without `JIRA_API_TOKEN` in the environment.
 """
 import json
 import os
@@ -47,13 +47,13 @@ if args[:3] == ["jira", "workitem", "query"]:
 sys.exit(9)
 '''
 
-falhas = []
+failures = []
 
 
-def check(nome, cond, extra=""):
-    print(("ok   " if cond else "FAIL ") + nome + ("" if cond else f"  {extra}"))
+def check(name, cond, extra=""):
+    print(("ok   " if cond else "FAIL ") + name + ("" if cond else f"  {extra}"))
     if not cond:
-        falhas.append(nome)
+        failures.append(name)
 
 
 def run(mode, repo, env_extra=None):
@@ -65,7 +65,7 @@ def run(mode, repo, env_extra=None):
     log.touch()
     env = {k: v for k, v in os.environ.items()
            if k not in ("JIRA_API_TOKEN", "PROJECT_KEY", "TODO_STATUS")}
-    # Sem `claude` alcançável: se o script ainda chamasse `claude -p`, falharia.
+    # No reachable `claude`: if the script still called `claude -p`, it would fail.
     env.update(TWG_BIN=str(twg), FAKE_LOG=str(log), FAKE_MODE=mode,
                CLAUDE_BIN="/nonexistent/claude", HOME=str(tmp))
     env.update(env_extra or {})
@@ -79,7 +79,7 @@ repo = Path(tempfile.mkdtemp())
 (repo / "board-flow.yaml").write_text(
     'defaults:\n  project_key: ABC\n  status_map:\n    to_do: "A fazer"\n')
 
-# 1. Caminho feliz: PASS vem da twg, com key e status lidos do board-flow.yaml.
+# 1. Happy path: PASS comes from twg, with key and status read from board-flow.yaml.
 r, calls = run("ok", repo)
 check("PASS com twg saudável sai 0", r.returncode == 0, r.stderr)
 check("PASS nomeia twg e conta os cards",
@@ -93,7 +93,7 @@ q = [c for c in calls if c[:3] == ["jira", "workitem", "query"]]
 check("consulta a coluna To-Do do board-flow.yaml",
       bool(q) and q[0][3] == 'project = ABC AND status = "A fazer" ORDER BY priority DESC', q)
 
-# 2. twg sem autenticação: BLOCKED de AUTH, e não chega a consultar o quadro.
+# 2. twg without authentication: AUTH BLOCKED, and it does not get to query the board.
 r, calls = run("auth", repo)
 check("twg sem auth sai 1", r.returncode == 1, r.stdout + r.stderr)
 check("BLOCKED diz que é auth, não quadro vazio",
@@ -103,41 +103,41 @@ check("sem auth não consulta o quadro",
       not any(c[:2] == ["jira", "workitem"] for c in calls), calls)
 check("sem auth não imprime PASS", "VALIDATION PASS" not in r.stdout, r.stdout)
 
-# 3. Projeto invisível: BLOCKED.
+# 3. Invisible project: BLOCKED.
 r, calls = run("noproject", repo)
 check("projeto invisível sai 1 com BLOCKED",
       r.returncode == 1 and "BLOCKED: project ABC not visible via twg" in r.stderr, r.stderr)
 
-# 4. Resposta sem data.issues não vira "0 cards".
+# 4. A response without data.issues does not become "0 cards".
 r, calls = run("badquery", repo)
 check("query sem data.issues é BLOCKED, não PASS vazio",
       r.returncode == 1 and "VALIDATION PASS" not in r.stdout, r.stdout + r.stderr)
 
-# 5. Sem board-flow.yaml e sem override: BLOCKED antes de chamar a twg.
-vazio = Path(tempfile.mkdtemp())
-r, calls = run("ok", vazio)
+# 5. Without board-flow.yaml and without override: BLOCKED before calling twg.
+empty = Path(tempfile.mkdtemp())
+r, calls = run("ok", empty)
 check("sem config sai 1", r.returncode == 1 and "no board-flow.yaml" in r.stderr, r.stderr)
 check("sem config não chama a twg", calls == [], calls)
 
-# 6. Override por env dispensa o board-flow.yaml.
-r, calls = run("ok", vazio, {"PROJECT_KEY": "WEGO", "TODO_STATUS": "To Do"})
+# 6. Override by env dispenses with board-flow.yaml.
+r, calls = run("ok", empty, {"PROJECT_KEY": "WEGO", "TODO_STATUS": "To Do"})
 check("override PROJECT_KEY/TODO_STATUS passa",
       r.returncode == 0 and 'WEGO visible, To-Do "To Do"' in r.stdout, r.stdout + r.stderr)
 
-# 7. twg ausente: BLOCKED nomeando a twg.
+# 7. twg missing: BLOCKED naming twg.
 r = subprocess.run(["bash", str(SCRIPT), str(repo)],
                    env={**os.environ, "TWG_BIN": "/nonexistent/twg"},
                    capture_output=True, text=True, timeout=30)
 check("twg ausente é BLOCKED", r.returncode == 1 and "twg not found" in r.stderr, r.stderr)
 
-# 8. O script não depende mais do mcp-atlassian nem do token estático.
+# 8. The script no longer depends on mcp-atlassian nor on the static token.
 src = SCRIPT.read_text()
-codigo = "\n".join(l for l in src.splitlines() if not l.lstrip().startswith("#"))
+code = "\n".join(l for l in src.splitlines() if not l.lstrip().startswith("#"))
 check("código não chama claude -p",
-      "CLAUDE_BIN" not in codigo and "claude -p" not in codigo
-      and "--allowedTools" not in codigo, "")
+      "CLAUDE_BIN" not in code and "claude -p" not in code
+      and "--allowedTools" not in code, "")
 check("código não usa mcp-atlassian nem JIRA_API_TOKEN",
-      "mcp-atlassian" not in codigo and "JIRA_API_TOKEN" not in codigo, "")
+      "mcp-atlassian" not in code and "JIRA_API_TOKEN" not in code, "")
 
-print(f"\n{len(falhas)} falha(s)")
-sys.exit(1 if falhas else 0)
+print(f"\n{len(failures)} falha(s)")
+sys.exit(1 if failures else 0)

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Validade declarada das memórias do Claude Code.
+"""Declared expiry of Claude Code memories.
 
-Uma memória de ESTADO ("não instalado ainda", "falta rodar em repo real") é
-verdadeira no dia em que foi escrita e apodrece calada; o índice `MEMORY.md`
-entra no contexto de toda sessão, e uma linha vencida chega com a mesma cara de
-uma fresca. O campo `validade: AAAA-MM-DD` no frontmatter da memória diz até
-quando o fato pode ser repetido sem reconferir. Depois dessa data, `sweep()`
-marca a linha dela no índice e `notice()` avisa a sessão que está abrindo.
+A STATE memory ("not installed yet", "still to run on a real repo") is true on
+the day it was written and rots silently; the `MEMORY.md` index enters the
+context of every session, and an expired line arrives looking just like a fresh
+one. The `validade: AAAA-MM-DD` field in the memory's frontmatter says until
+when the fact can be repeated without rechecking. After that date, `sweep()`
+marks its line in the index and `notice()` warns the session that is opening.
 
-Memória sem o campo não vence — lição permanente não tem prazo, e alarme
-inventado a partir de dado ausente é pior que silêncio. A marca é reversível:
-estendeu a validade, a próxima varredura a tira.
+A memory without the field does not expire: a permanent lesson has no deadline,
+and an alarm invented from missing data is worse than silence. The mark is
+reversible: extend the expiry and the next sweep removes it.
 
-Pure stdlib. Importado pelo session-registry (SessionStart); também roda à mão:
+Pure stdlib. Imported by session-registry (SessionStart); also runs by hand:
 
     python3 _memval.py sweep [<memory-dir>]
 """
@@ -25,19 +25,19 @@ from pathlib import Path
 
 MARK_PREFIX = "[VENCIDA desde "
 _MARK_RE = re.compile(r"\[VENCIDA desde \d{4}-\d{2}-\d{2}, reconfira antes de afirmar\] ")
-_VALIDADE_RE = re.compile(r"^\s*validade:\s*['\"]?(\d{4}-\d{2}-\d{2})['\"]?\s*$", re.M)
+_EXPIRY_RE = re.compile(r"^\s*validade:\s*['\"]?(\d{4}-\d{2}-\d{2})['\"]?\s*$", re.M)
 _LINK_RE = re.compile(r"^(\s*-\s*\[[^\]]*\]\(([^)]+\.md)\)\s*(?:—|-)\s*)(.*)$")
 
 
 def memory_dir(main_root: str, home: str = None) -> Path:
-    """Onde o Claude Code guarda as memórias deste repo: o caminho do clone
-    principal com todo caractere não alfanumérico trocado por `-`."""
+    """Where Claude Code keeps this repo's memories: the main clone's path with
+    every non-alphanumeric character replaced by `-`."""
     slug = re.sub(r"[^A-Za-z0-9]", "-", str(main_root))
     return Path(home or Path.home()) / ".claude" / "projects" / slug / "memory"
 
 
-def validade_of(path: Path):
-    """A data de validade declarada no frontmatter, ou None (ausente/ilegível)."""
+def expiry_of(path: Path):
+    """The expiry date declared in the frontmatter, or None (absent/unreadable)."""
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
@@ -45,7 +45,7 @@ def validade_of(path: Path):
     if not text.startswith("---\n"):
         return None
     end = text.find("\n---", 4)
-    m = _VALIDADE_RE.search(text[4:end if end != -1 else len(text)])
+    m = _EXPIRY_RE.search(text[4:end if end != -1 else len(text)])
     if not m:
         return None
     try:
@@ -55,19 +55,19 @@ def validade_of(path: Path):
 
 
 def sweep(mdir: Path, today: date = None):
-    """Marca no índice as memórias vencidas, desmarca as que voltaram a valer.
-    Devolve as vencidas: [{"file", "validade"}]."""
+    """Marks the expired memories in the index, unmarks those valid again.
+    Returns the expired ones: [{"file", "validade"}]."""
     today = today or date.today()
     mdir = Path(mdir)
     if not mdir.is_dir():
         return []
-    vencidas = {}
+    expired = {}
     for f in sorted(mdir.glob("*.md")):
         if f.name == "MEMORY.md":
             continue
-        v = validade_of(f)
+        v = expiry_of(f)
         if v and v < today:
-            vencidas[f.name] = v
+            expired[f.name] = v
 
     index = mdir / "MEMORY.md"
     try:
@@ -81,8 +81,8 @@ def sweep(mdir: Path, today: date = None):
             m = _LINK_RE.match(body)
             if m:
                 head, fname, rest = m.group(1), m.group(2), _MARK_RE.sub("", m.group(3))
-                if fname in vencidas:
-                    rest = (f"{MARK_PREFIX}{vencidas[fname].isoformat()}, "
+                if fname in expired:
+                    rest = (f"{MARK_PREFIX}{expired[fname].isoformat()}, "
                             f"reconfira antes de afirmar] {rest}")
                 body = head + rest
             out.append(body + ("\n" if line.endswith("\n") else ""))
@@ -91,15 +91,15 @@ def sweep(mdir: Path, today: date = None):
             tmp = index.with_suffix(".md.tmp")
             tmp.write_text(new, encoding="utf-8")
             os.replace(tmp, index)
-    return [{"file": k, "validade": v.isoformat()} for k, v in vencidas.items()]
+    return [{"file": k, "validade": v.isoformat()} for k, v in expired.items()]
 
 
-def notice(vencidas):
-    if not vencidas:
+def notice(expired):
+    if not expired:
         return None
-    itens = ", ".join(f"`{v['file'][:-3]}` (venceu em {v['validade']})" for v in vencidas)
+    items = ", ".join(f"`{v['file'][:-3]}` (venceu em {v['validade']})" for v in expired)
     return (
-        f"[memória] {len(vencidas)} memória(s) com validade vencida: {itens}. "
+        f"[memória] {len(expired)} memória(s) com validade vencida: {items}. "
         "O que elas afirmam sobre estado (instalado ou não, rodado ou não, pendente) "
         "pode ter mudado: reconfira no disco/git antes de repetir. Ao reconferir, "
         "atualize o texto e a `validade:` da memória; a marca no MEMORY.md sai sozinha."

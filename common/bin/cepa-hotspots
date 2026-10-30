@@ -1,28 +1,29 @@
 #!/usr/bin/env python3
-"""cepa-hotspots — medir os arquivos-cartório de um repositório.
+"""cepa-hotspots — measure a repository's registry files.
 
-Componente 2 do "planejador de lotes paralelos" (docs/spec/planejador-de-lotes-
-paralelos.md). "Arquivo-cartório" = arquivo que agrega contribuição de quase
-toda demanda e por isso quase toda demanda escreve nele (ex.: `openapi.yaml`
-no wego-assinatura-backend, `docs/pendencias.md` no wego-acesso-backend).
+Component 2 of the "parallel batch planner" (docs/spec/planejador-de-lotes-
+paralelos.md). "Registry file" (arquivo-cartório) = a file that aggregates a
+contribution from almost every demand, so almost every demand writes to it
+(e.g. `openapi.yaml` in wego-assinatura-backend, `docs/pendencias.md` in
+wego-acesso-backend).
 
-Método: refaz, em memória, a fusão de cada par de merges reais do histórico
-com `git merge-tree` (sem tocar a working tree). Um par só entra na contagem
-se os dois lados tocaram pelo menos um arquivo em comum — a medição que
-fundamenta a especificação achou 0 conflitos em 441 pares sem arquivo comum,
-então pares sem sobreposição não ensinam nada sobre cartório. Cada arquivo que
-aparece como conflitado num par soma um ponto; o ranking final é esse total,
-decrescente.
+Method: redo in memory the merge of each pair of real merges in the history
+with `git merge-tree` (without touching the working tree). A pair only counts
+if both sides touched at least one file in common; the measurement behind the
+spec found 0 conflicts in 441 pairs with no common file, so non-overlapping
+pairs teach nothing about registry files. Each file that shows up as
+conflicted in a pair adds one point; the final ranking is that total,
+descending.
 
-Sem histórico suficiente, o script devolve lista vazia e diz exatamente por
-quê — nunca uma heurística disfarçada de medição (CS-3).
+Without enough history, the script returns an empty list and says exactly why,
+never a heuristic disguised as a measurement (CS-3).
 
-Uso:
+Usage:
   cepa-hotspots <repo> [--ref REF] [--min-pairs N] [--limit N] [--json]
 
-Exit: 0 = lista produzida (mesmo que vazia por falta de conflito real)
-      1 = histórico insuficiente (menos pares que --min-pairs)
-      2 = erro (repo inexistente, não é repositório git, git falhou)
+Exit: 0 = list produced (even if empty for lack of real conflicts)
+      1 = insufficient history (fewer pairs than --min-pairs)
+      2 = error (repo missing, not a git repository, git failed)
 """
 import argparse
 import json
@@ -202,5 +203,5 @@ def main():
 
 
 if __name__ == "__main__":
-    _tui.instalar()
+    _tui.install()
     main()

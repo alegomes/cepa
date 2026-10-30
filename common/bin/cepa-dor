@@ -1,48 +1,50 @@
 #!/usr/bin/env python3
-"""cepa-dor — Definition of Ready invocável para slices de um plan.yaml.
+"""cepa-dor — invocable Definition of Ready for the slices of a plan.yaml.
 
-Primitiva desacoplada de propósito (design Maestro v1, Componente 4): o
-maestro é o primeiro cliente, mas /board-flow:triage e /board-flow:drain
-podem reusar as checagens não-específicas de onda. 100% leitura.
+Deliberately decoupled primitive (Maestro v1 design, Component 4): the maestro
+is the first client, but /board-flow:triage and /board-flow:drain can reuse the
+checks that are not wave-specific. 100% read-only.
 
-Veredito por slice: READY / NOT-READY com lacunas nomeadas, em pt-BR.
+Verdict per slice: READY / NOT-READY with named gaps, in pt-BR.
 
-Checagens (cada uma existe porque a falha correspondente já custou uma onda):
-  - schema_version em {1, 2} (recusa versão desconhecida). v1 = legado, só
-    ondas; v2 = `mode` explícito e obrigatório
-  - mode == parallel-waves (em v1, ausente = parallel-waves); um plano
-    single-track é recusado apontando /board-flow:triage e /common:next —
-    ver common/plan-schema.yaml
-  - programa com >= 4 demandas (D7)
-  - superfície declarada e DISJUNTA dos demais slices da onda nos
-    arquivos-cartório do plano (globs expandidos contra a árvore de arquivos
-    no fork point; interseção glob×glob no abstrato não é computável) —
-    interseção num arquivo-cartório → NOT-READY dos DOIS; interseção em
-    qualquer outro arquivo → AVISO, não veto (medição em
-    docs/spec/planejador-de-lotes-paralelos.md: exigir disjunção total
-    proibiria 40% dos pares no wego-assinatura-backend, 72% dos quais
-    fundiriam limpo). "Arquivo-cartório" = campo opcional `cartorios:` no
-    topo do plan.yaml, medido por `common/bin/cepa-hotspots`; plano sem o
-    campo não veta nenhuma interseção, só avisa.
-  - superfície não intersecta a zona de enforcement (deny incondicional)
-  - arquivo-cartório que nenhum slice declara → AVISO (não veto)
-  - critério de aceite declarado; em repo .claude/no-build o slice DEVE
-    trazer acceptance_cmd executável (merge train não aterrissa N slices
-    com verificação zero)
-  - forma do aceite: ou o acceptance traz um Given/When/Then observável em
-    alguma superfície (US), ou o slice declara `acceptance_form: substrate`
-    (TS). Um plano que só nomeia passos privados de implementação não é
-    demanda verificável — é palpite com nome de slice
-  - zero decisão estratégica em aberto (human_gate: none ou decisão registrada)
-  - contexto mínimo apontado (context não-vazio)
-  - baseline verde no fork point (.claude/last-build.json — mesmo sinal do
-    green-or-revert; em repo no-build a checagem é dispensada com nota)
+Checks (each exists because the matching failure already cost a wave):
+  - schema_version in {1, 2} (refuses an unknown version). v1 = legacy, waves
+    only; v2 = explicit, mandatory `mode`
+  - mode == parallel-waves (in v1, absent = parallel-waves); a single-track
+    plan is refused, pointing to /board-flow:triage and /common:next, see
+    common/plan-schema.yaml
+  - program with >= 4 demands (D7)
+  - declared surface that is DISJOINT from the other slices of the wave on the
+    plan's registry files (globs expanded against the file tree at the fork
+    point; glob x glob intersection in the abstract is not computable). An
+    intersection on a registry file makes BOTH NOT-READY; an intersection on
+    any other file is a WARNING, not a veto (measurement in
+    docs/spec/planejador-de-lotes-paralelos.md: requiring total disjointness
+    would forbid 40% of the pairs in wego-assinatura-backend, 72% of which
+    would merge cleanly). "Registry file" (arquivo-cartório) = optional
+    `cartorios:` field at the top of plan.yaml, measured by
+    `common/bin/cepa-hotspots`; a plan without the field vetoes no
+    intersection, it only warns.
+  - surface does not intersect the enforcement zone (unconditional deny)
+  - registry file that no slice declares -> WARNING (not a veto)
+  - acceptance criterion declared; in a .claude/no-build repo the slice MUST
+    carry an executable acceptance_cmd (the merge train does not land N slices
+    with zero verification)
+  - acceptance form: either the acceptance carries an observable
+    Given/When/Then on some surface (US), or the slice declares
+    `acceptance_form: substrate` (TS). A plan that only names private
+    implementation steps is not a verifiable demand, it is a guess with a
+    slice name
+  - zero open strategic decision (human_gate: none or a recorded decision)
+  - minimum context pointed to (non-empty context)
+  - green baseline at the fork point (.claude/last-build.json, the same signal
+    as green-or-revert; in a no-build repo the check is waived with a note)
 
-Uso:
+Usage:
   cepa-dor <plan.yaml> [--wave N] [--fork-point REF] [--repo DIR] [--json]
            [--enforcement-zone GLOB ...]
 
-Exit: 0 = todos READY · 1 = READY com avisos · 2 = algum NOT-READY (ou plano inválido)
+Exit: 0 = all READY · 1 = READY with warnings · 2 = some NOT-READY (or invalid plan)
 """
 import argparse
 import fnmatch
@@ -61,9 +63,9 @@ except ImportError:
     print("✗ cepa-dor precisa de PyYAML (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
-# Versões do plan.yaml que este binário sabe ler. v1 = legado (só ondas, sem
-# `mode`); v2 = `mode` explícito. Aceitar as duas é o que evita migrar planos
-# que estão no disco e funcionando — ver common/plan-schema.yaml.
+# plan.yaml versions this binary can read. v1 = legacy (waves only, no
+# `mode`); v2 = explicit `mode`. Accepting both avoids migrating plans that
+# are on disk and working. See common/plan-schema.yaml.
 KNOWN_SCHEMA_VERSIONS = {1, 2}
 
 DEFAULT_ENFORCEMENT_ZONE = [
@@ -74,14 +76,14 @@ DEFAULT_ENFORCEMENT_ZONE = [
     "*/plugins/*",
 ]
 
-# Formas de aceite reconhecidas. 'bdd' = comportamento observável numa
-# superfície (US); 'substrate' = trabalho de substrato assumido como tal (TS),
-# cujo aceite legítimo é técnico. A ausência das duas é o caso que este check
-# existe para pegar: plano que só nomeia passos privados de implementação.
+# Recognised acceptance forms. 'bdd' = behaviour observable on a surface (US);
+# 'substrate' = substrate work declared as such (TS), whose legitimate
+# acceptance is technical. Having neither is the case this check exists to
+# catch: a plan that only names private implementation steps.
 ACCEPTANCE_FORMS = ("bdd", "substrate")
 
-# Triplas BDD aceitas — inglês (canônico) e pt-BR (a prosa do harness).
-# Exigimos as TRÊS palavras: "Given" sozinho é contexto, não critério.
+# Accepted BDD triples: English (canonical) and pt-BR (the harness prose).
+# All THREE words are required: "Given" alone is context, not a criterion.
 BDD_TRIPLES = [
     (r"\bgiven\b", r"\bwhen\b", r"\bthen\b"),
     (r"\bdado\b", r"\bquando\b", r"\bent[ãa]o\b"),
@@ -140,9 +142,9 @@ def main() -> int:
               f"cepa-dor conhece as versões {sorted(KNOWN_SCHEMA_VERSIONS)}")
         return 2
 
-    # v1 não tinha `mode`: todo plano daquela época é de onda. v2 exige o campo
-    # — é o que permite recusar um documento que não se sabe ler, em vez de
-    # tratar a ausência de `waves` como plano vazio.
+    # v1 had no `mode`: every plan from that era is wave-based. v2 requires the
+    # field, which lets us refuse a document we cannot read instead of treating
+    # a missing `waves` as an empty plan.
     mode = plan.get("mode")
     if version == 1:
         if mode is None:
@@ -157,9 +159,9 @@ def main() -> int:
               "(single-track | parallel-waves) — ver common/plan-schema.yaml")
         return 2
 
-    # Um plano single-track não tem ondas nem superfícies a disjuntar — recusar
-    # apontando o caminho certo, em vez de falhar adiante com "nenhuma onda
-    # pending", que não diz o que fazer.
+    # A single-track plan has no waves or surfaces to make disjoint. Refuse,
+    # pointing to the right path, instead of failing further on with "no
+    # pending wave", which does not say what to do.
     if mode == "single-track":
         print("✗ este é um plano single-track (um item por vez, sem fork) — "
               "cepa-dor só avalia slices de onda.\n"
@@ -177,25 +179,25 @@ def main() -> int:
     slices_all: dict = plan.get("slices") or {}
     waves = plan.get("waves") or []
 
-    # arquivos-cartório (campo opcional no topo do plano, medido por
-    # common/bin/cepa-hotspots) — sem o campo, nenhuma interseção é vetada,
-    # só avisada (comportamento afrouxado, ver docstring do módulo)
-    cartorios_raw = plan.get("cartorios")
-    if cartorios_raw is None:
-        cartorios_raw = []
-    elif not isinstance(cartorios_raw, list):
+    # registry files (optional field at the top of the plan, measured by
+    # common/bin/cepa-hotspots); without the field no intersection is vetoed,
+    # only warned (relaxed behaviour, see the module docstring)
+    registry_raw = plan.get("cartorios")
+    if registry_raw is None:
+        registry_raw = []
+    elif not isinstance(registry_raw, list):
         problems_global.append(
-            f"`cartorios` precisa ser uma lista de caminhos (veio {type(cartorios_raw).__name__})")
-        cartorios_raw = []
+            f"`cartorios` precisa ser uma lista de caminhos (veio {type(registry_raw).__name__})")
+        registry_raw = []
 
-    # D7 — piso de 4 demandas no PROGRAMA (memória de cálculo na decisão D7)
-    demandas = {s.get("demanda", k) for k, s in slices_all.items()}
-    if len(demandas) < 4:
+    # D7 — floor of 4 demands in the PROGRAM (calculation memo in decision D7)
+    demands = {s.get("demanda", k) for k, s in slices_all.items()}
+    if len(demands) < 4:
         problems_global.append(
-            f"programa com {len(demandas)} demanda(s) — piso é 4 (D7): abaixo "
+            f"programa com {len(demands)} demanda(s) — piso é 4 (D7): abaixo "
             "disso /board-flow:drain ou sessão única ganham do overhead do maestro")
 
-    # onda alvo
+    # target wave
     wave = None
     if args.wave is not None:
         wave = next((w for w in waves if w.get("id") == args.wave), None)
@@ -220,11 +222,11 @@ def main() -> int:
         print(f"✗ {e}")
         return 2
 
-    cartorio_files = expand([str(c) for c in cartorios_raw], tree)
+    registry_files = expand([str(c) for c in registry_raw], tree)
 
     no_build = (repo / ".claude" / "no-build").exists()
 
-    # baseline no fork point — mesmo sinal do green-or-revert
+    # baseline at the fork point, same signal as green-or-revert
     if no_build:
         warnings_global.append(
             "repo .claude/no-build: baseline dispensada; a verificação recai "
@@ -242,7 +244,7 @@ def main() -> int:
                 f"baseline no fork point não está verde (last-build.json: "
                 f"{status or 'ausente'}) — rode o build/verify antes de forkar a onda")
 
-    # expansão de superfícies
+    # surface expansion
     expanded: dict[str, set[str]] = {}
     per_slice: dict[str, dict] = {}
     for name in wave_slices:
@@ -258,15 +260,15 @@ def main() -> int:
             warns.append("nenhum arquivo EXISTENTE casa com a superfície no fork "
                          "point — ok se o slice só cria arquivos novos; confira os globs")
 
-        # zona de enforcement — deny incondicional
-        zona = expand(args.enforcement_zone, tree) & files
-        # globs também podem cobrir arquivos futuros: cheque glob×glob literal
-        if zona:
+        # enforcement zone: unconditional deny
+        zone_hits = expand(args.enforcement_zone, tree) & files
+        # globs can also cover future files: check literal glob x glob
+        if zone_hits:
             gaps.append("superfície intersecta a zona de enforcement "
-                        f"({len(zona)} arquivo(s), ex.: {sorted(zona)[0]}) — "
+                        f"({len(zone_hits)} arquivo(s), ex.: {sorted(zone_hits)[0]}) — "
                         "nenhum glob de slice pode incluí-la")
 
-        # aceite
+        # acceptance
         acc = (sl.get("acceptance") or "").strip()
         acc_cmd = (sl.get("acceptance_cmd") or "").strip()
         if not acc:
@@ -275,7 +277,7 @@ def main() -> int:
             gaps.append("repo .claude/no-build exige acceptance_cmd executável "
                         "(comando de verificação próprio do slice)")
 
-        # forma do aceite — BDD observável OU substrato declarado
+        # acceptance form: observable BDD OR declared substrate
         form = str(sl.get("acceptance_form") or "").strip().lower()
         if form and form not in ACCEPTANCE_FORMS:
             gaps.append(f"acceptance_form inválido ({form!r}) — use "
@@ -291,7 +293,7 @@ def main() -> int:
                         "privados de implementação: ou declare o comportamento "
                         "observável numa superfície, ou assuma que é substrato")
 
-        # decisão estratégica aberta — preditor nº 1 de mediação
+        # open strategic decision: the #1 predictor of mediation
         hg = sl.get("human_gate", None)
         if hg is None or (isinstance(hg, str) and not hg.strip()):
             gaps.append("human_gate ausente — declare 'none' ou registre a decisão já tomada")
@@ -299,27 +301,27 @@ def main() -> int:
             gaps.append(f"decisão estratégica em aberto (human_gate: {hg!r}) — "
                         "resolva e registre antes do fork")
 
-        # contexto mínimo
+        # minimum context
         if not sl.get("context"):
             gaps.append("contexto mínimo não apontado (context: links de specs/cards/docs)")
 
         per_slice[name] = {"gaps": gaps, "warns": warns}
 
-    # disjunção par a par — interseção num arquivo-cartório derruba os DOIS
-    # slices; interseção em qualquer outro arquivo vira aviso, não veto
-    # (CS-4: exigir disjunção total proibiria 40% dos pares no
-    # wego-assinatura-backend, 72% dos quais fundiriam limpo)
+    # pairwise disjointness: an intersection on a registry file knocks out BOTH
+    # slices; an intersection on any other file becomes a warning, not a veto
+    # (CS-4: requiring total disjointness would forbid 40% of the pairs in
+    # wego-assinatura-backend, 72% of which would merge cleanly)
     names = list(wave_slices)
     for i in range(len(names)):
         for j in range(i + 1, len(names)):
             inter = expanded[names[i]] & expanded[names[j]]
             if not inter:
                 continue
-            cartorio_hits = inter & cartorio_files
-            other_hits = inter - cartorio_files
-            if cartorio_hits:
+            registry_hits = inter & registry_files
+            other_hits = inter - registry_files
+            if registry_hits:
                 msg = (f"superfície intersecta a de {{other}} num arquivo-cartório "
-                       f"({len(cartorio_hits)} arquivo(s), ex.: {sorted(cartorio_hits)[0]})")
+                       f"({len(registry_hits)} arquivo(s), ex.: {sorted(registry_hits)[0]})")
                 per_slice[names[i]]["gaps"].append(msg.format(other=names[j]))
                 per_slice[names[j]]["gaps"].append(msg.format(other=names[i]))
             if other_hits:
@@ -328,18 +330,19 @@ def main() -> int:
                     f"({len(other_hits)} arquivo(s), ex.: {sorted(other_hits)[0]}) — "
                     "conflito incidental fica para o verify pós-merge do merge train")
 
-    # arquivo-cartório que ninguém declara → aviso da onda, não veto (sem
-    # `cartorios` no plano, não há dado — o aviso simplesmente não sai, CS-3)
-    if cartorio_files:
+    # registry file that nobody declares -> wave warning, not a veto (without
+    # `cartorios` in the plan there is no data, so the warning simply does not
+    # fire, CS-3)
+    if registry_files:
         declared = set().union(*expanded.values()) if expanded else set()
-        friction = cartorio_files - declared
+        friction = registry_files - declared
         if friction:
             warnings_global.append(
                 f"{len(friction)} arquivo(s)-cartório fora de toda superfície "
                 f"(ex.: {sorted(friction)[0]}) — nenhum slice declarou escrevê-los; "
                 "confira se algum precisa")
 
-    # ── relatório ──────────────────────────────────────────────────────────
+    # ── report ──────────────────────────────────────────────────────────
     verdicts = {n: ("NOT-READY" if per_slice[n]["gaps"] or problems_global
                     else "READY") for n in names}
 
@@ -376,5 +379,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    _tui.instalar()
+    _tui.install()
     sys.exit(main())

@@ -158,7 +158,7 @@ A listagem de uma coluna é uma foto; o único lugar onde a fila pode ser reserv
 
 **Ler:** `getJiraIssue`; devolva status + responsável + os comentários mais recentes que comecem com `🔒 claim:` ou `🔓 claim` (autor e timestamp), sem alterar nada. Sem nenhum, diga `claim: none` explicitamente.
 
-**Reservar:** `addCommentToJiraIssue` com o corpo do orquestrador, verbatim (`🔒 claim: <claim-id>` ou `🔓 claim <claim-id> liberado`); devolva key + URL do comentário.
+**Reservar:** `addCommentToJiraIssue` com o corpo do orquestrador, verbatim (`🔒 claim: <claim-id>` ou `🔓 claim <claim-id> released`); devolva key + URL do comentário.
 
 Não invente claim-id nem decida se o card está livre. Nenhuma transição faz parte desta rotina.
 

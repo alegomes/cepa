@@ -5,16 +5,16 @@ No third-party deps — run with `python3 tests/test_maven_reactor_guard.py`.
 Exits non-zero on failure.
 
 Guards the contracts of the guard:
-  - `-pl` sem `-am` num reator multi-módulo é BLOQUEADO (exit 2);
-  - `-am` / `--also-make` liberam; `-amd` (also-make-DEPENDENTS) NÃO;
-  - `--projects` (forma longa) e `-pl=x` / `--projects=x` são detectados;
-  - repo de módulo único nunca é bloqueado;
-  - prefixo de env (`FOO=bar ./mvnw`) e wrapper (`timeout 600 mvn`) ainda contam
-    como invocação real — é o padrão do README do wego-assinatura;
-  - Maven dentro de `echo`/`grep` é texto, não execução: NÃO bloqueia;
-  - o escape hatch `# stale-ok` libera;
-  - segmento encadeado (`cd x && ./mvnw test -pl y`) é inspecionado;
-  - outras tools, comando vazio e payload ilegível falham ABERTO.
+  - `-pl` without `-am` in a multi-module reactor is BLOCKED (exit 2);
+  - `-am` / `--also-make` release; `-amd` (also-make-DEPENDENTS) does NOT;
+  - `--projects` (long form) and `-pl=x` / `--projects=x` are detected;
+  - a single-module repo is never blocked;
+  - env prefix (`FOO=bar ./mvnw`) and wrapper (`timeout 600 mvn`) still count
+    as a real invocation — it is the pattern in wego-assinatura's README;
+  - Maven inside `echo`/`grep` is text, not execution: does NOT block;
+  - the `# stale-ok` escape hatch releases;
+  - a chained segment (`cd x && ./mvnw test -pl y`) is inspected;
+  - other tools, empty command and unreadable payload fail OPEN.
 """
 
 import json
@@ -26,12 +26,12 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Este teste executa hook que emite telemetria; sem isto os eventos cairiam
-# em ~/.claude/cepa-telemetry/ e entrariam no relatório do /common:metrics
-# como se fossem uso real. Ver tests/_telemetria_isolada.py.
-from _telemetria_isolada import isola
+# This test executes a hook that emits telemetry; without this the events would fall
+# in ~/.claude/cepa-telemetry/ and enter the /common:metrics report
+# as if they were real use. See tests/_isolated_telemetry.py.
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -88,7 +88,7 @@ def main():
         nopom = Path(td) / "nopom"
         nopom.mkdir()
 
-        # ── o caso que originou o card ──────────────────────────────────────
+        # ── the case that originated the card ───────────────────────────────
         check(
             "-pl sem -am bloqueia",
             blocked(run_hook("./mvnw test -pl bootstrap", multi)),
@@ -102,7 +102,7 @@ def main():
             blocked(run_hook("./mvnw test -pl bootstrap -Dtest=ReenviarCascataE2ETest", multi)),
         )
 
-        # ── o que deve passar ───────────────────────────────────────────────
+        # ── what must pass ──────────────────────────────────────────────────
         check(
             "-am libera",
             not blocked(run_hook("./mvnw test -pl domain,application -am", multi)),
@@ -120,7 +120,7 @@ def main():
             not blocked(run_hook("./mvnw install -DskipTests", multi)),
         )
 
-        # ── a armadilha do -amd ─────────────────────────────────────────────
+        # ── the -amd trap ───────────────────────────────────────────────────
         check(
             "-amd NÃO salva (constrói dependentes, não dependências)",
             blocked(run_hook("./mvnw test -pl domain -amd", multi)),
@@ -130,7 +130,7 @@ def main():
             blocked(run_hook("./mvnw test -pl domain --also-make-dependents", multi)),
         )
 
-        # ── formas alternativas do -pl ──────────────────────────────────────
+        # ── alternative forms of -pl ────────────────────────────────────────
         check(
             "--projects (forma longa) é detectado",
             blocked(run_hook("mvn test --projects bootstrap", multi)),
@@ -144,7 +144,7 @@ def main():
             blocked(run_hook("mvn test --projects=bootstrap", multi)),
         )
 
-        # ── escopo: só reator multi-módulo ──────────────────────────────────
+        # ── scope: only multi-module reactor ────────────────────────────────
         check(
             "repo single-module nunca bloqueia",
             not blocked(run_hook("./mvnw test -pl whatever", single)),
@@ -154,7 +154,7 @@ def main():
             not blocked(run_hook("./mvnw test -pl whatever", nopom)),
         )
 
-        # ── invocação real vs texto citado ──────────────────────────────────
+        # ── real invocation vs quoted text ──────────────────────────────────
         check(
             "prefixo de env conta como invocação (padrão do README)",
             blocked(run_hook("PLUGSIGN_API_KEY=xxx ./mvnw test -pl bootstrap", multi)),
@@ -172,7 +172,7 @@ def main():
             not blocked(run_hook("grep -n 'mvnw test -pl bootstrap' README.md", multi)),
         )
 
-        # ── encadeamento ────────────────────────────────────────────────────
+        # ── chaining ────────────────────────────────────────────────────────
         check(
             "segmento após && é inspecionado",
             blocked(run_hook("cd /tmp && ./mvnw test -pl bootstrap", multi)),
@@ -206,7 +206,7 @@ def main():
             not blocked(run_hook(None, multi, raw="")),
         )
 
-        # ── liberação automática 1: nenhum goal do segmento compila ─────────
+        # ── automatic release 1: no goal of the segment compiles ────────────
         check(
             "-pl domain clean é liberado (clean não compila)",
             not blocked(run_hook("./mvnw -pl domain clean", multi)),
@@ -224,11 +224,11 @@ def main():
             blocked(run_hook("./mvnw -pl domain install", multi)),
         )
 
-        # ── comando encadeado com MAIS DE UM ofensor (-pl sem -am) ──────────
-        # Bypass reproduzido pelo pair-reviewer em 2026-09-27: olhar só o
-        # PRIMEIRO segmento ofensor fazia a regra 1 (nenhum goal compila) ser
-        # avaliada só nele — um `clean` inofensivo no primeiro segmento
-        # blindava um `test` que compila no segundo.
+        # ── chained command with MORE THAN ONE offender (-pl without -am) ───
+        # Bypass reproduced by the pair-reviewer on 2026-09-27: looking only at the
+        # FIRST offending segment made rule 1 (no goal compiles) be
+        # evaluated only on it — a harmless `clean` in the first segment
+        # shielded a `test` that compiles in the second.
         check(
             "clean (não compila) seguido de test (compila) continua bloqueado",
             blocked(run_hook("./mvnw -pl a clean && ./mvnw -pl b test", multi)),
@@ -240,14 +240,14 @@ def main():
             ),
         )
 
-        # ── liberação automática 2: install fresco da raiz ──────────────────
-        # Carimbos de tempo controlados EXPLICITAMENTE por época (epoch), em vez
-        # de `time.sleep` + `datetime.now()`: `at` é gravado com precisão de
-        # SEGUNDO (`isoformat(timespec="seconds")`, igual ao hook real), então
-        # um arquivo criado no mesmo segundo em que `at` é truncado tem mtime
-        # com fração > o `at` truncado mesmo sendo "antes" no relógio de
-        # parede — dar 10s de folga entre os carimbos elimina essa ambiguidade
-        # sem depender de quão rápido o teste roda.
+        # ── automatic release 2: fresh install of the root ──────────────────
+        # Timestamps controlled EXPLICITLY by epoch, instead of
+        # `time.sleep` + `datetime.now()`: `at` is recorded with SECOND
+        # precision (`isoformat(timespec="seconds")`, same as the real hook), so
+        # a file created in the same second in which `at` is truncated has an mtime
+        # with a fraction > the truncated `at` even though it is "before" on the
+        # wall clock — giving 10s of slack between the stamps eliminates this ambiguity
+        # without depending on how fast the test runs.
         def write_root_install(root, at_epoch, command="./mvnw install -DskipTests"):
             claude = Path(root) / ".claude"
             claude.mkdir(parents=True, exist_ok=True)
@@ -271,42 +271,42 @@ def main():
         foo_java.write_text("class Foo {}\n", encoding="utf-8")
 
         now = time.time()
-        # `pom.xml` também é fonte (BUILD_FILES) — sem empurrar o mtime dele
-        # para o passado também, ele fica "mais novo" que qualquer `at` gravado
-        # nos poucos milissegundos seguintes à criação da árvore, e a
-        # liberação nunca dispara. Reseta tudo que já existe na árvore.
+        # `pom.xml` is also a source (BUILD_FILES) — without pushing its mtime
+        # into the past too, it stays "newer" than any `at` recorded
+        # in the few milliseconds after the tree is created, and the
+        # release never fires. Resets everything that already exists in the tree.
         for p in fresh_multi.rglob("*"):
             if p.is_file():
                 os.utime(p, (now - 100, now - 100))
 
-        old_at = now - 200  # `at` ANTES da fonte → não libera
+        old_at = now - 200  # `at` BEFORE the source → does not release
         write_root_install(fresh_multi, old_at)
         check(
             "install file presente mas fonte MAIS NOVA que `at` → continua bloqueado",
             blocked(run_hook("./mvnw test -pl bootstrap", fresh_multi)),
         )
 
-        fresh_at = now  # `at` DEPOIS da fonte (100s de folga) → libera
+        fresh_at = now  # `at` AFTER the source (100s of slack) → releases
         write_root_install(fresh_multi, fresh_at)
         check(
             "install fresco (fonte MAIS ANTIGA que `at`) → liberado",
             not blocked(run_hook("./mvnw test -pl bootstrap", fresh_multi)),
         )
 
-        # editar um arquivo-fonte DEPOIS do `at` gravado volta a bloquear.
+        # editing a source file AFTER the `at` was recorded blocks again.
         os.utime(foo_java, (now + 100, now + 100))
         check(
             "editar fonte depois do install fresco volta a bloquear",
             blocked(run_hook("./mvnw test -pl bootstrap", fresh_multi)),
         )
-        os.utime(foo_java, (now - 100, now - 100))  # devolve ao estado "antiga"
+        os.utime(foo_java, (now - 100, now - 100))  # returns to the "old" state
 
-        # editar um arquivo de TESTE depois do install não invalida a liberação
-        # (src/test não conta como fonte — mesmo critério do mark-build-stale).
+        # editing a TEST file after the install does not invalidate the release
+        # (src/test does not count as a source — same criterion as mark-build-stale).
         (fresh_multi / "domain" / "src" / "test" / "java").mkdir(parents=True)
         test_file = fresh_multi / "domain" / "src" / "test" / "java" / "FooTest.java"
         test_file.write_text("class FooTest {}\n", encoding="utf-8")
-        os.utime(test_file, (now + 100, now + 100))  # depois do install, mas é teste
+        os.utime(test_file, (now + 100, now + 100))  # after the install, but it is a test
         check(
             "editar teste depois do install fresco NÃO bloqueia (src/test não é fonte)",
             not blocked(run_hook("./mvnw test -pl bootstrap", fresh_multi)),
@@ -318,7 +318,7 @@ def main():
             blocked(run_hook("./mvnw test -pl bootstrap", fresh_multi)),
         )
 
-        # ── liberação automática 3: quarkus:* nunca ganha sugestão de -am ────
+        # ── automatic release 3: quarkus:* never gets an -am suggestion ──────
         check(
             "-pl bootstrap quarkus:dev sem install é bloqueado",
             blocked(run_hook("./mvnw -pl bootstrap quarkus:dev", multi)),

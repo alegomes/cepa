@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-"""Testes estruturais da suíte de tarefas douradas (P1-4, revisão 2026-08-17).
+"""Structural tests of the golden-task suite (P1-4, review 2026-08-17).
 
-Sem dependências — rode com `python3 tests/test_eval_suite.py`.
+No dependencies — run with `python3 tests/test_eval_suite.py`.
 
-Estes casos são **baratos**: leem os manifestos e o executor, sem criar worktree
-nem gastar modelo. Eles NÃO substituem `python3 tests/eval/run-eval.py
---validate`, que é a prova de que cada tarefa exige trabalho real — essa custa
-cerca de um minuto e roda sob demanda, não a cada suíte.
+These cases are **cheap**: they read the manifests and the runner, without creating a worktree
+or spending model. They do NOT replace `python3 tests/eval/run-eval.py
+--validate`, which is the proof that each task requires real work — that one costs
+about a minute and runs on demand, not on every suite.
 
-O que está travado aqui:
+What is locked here:
 
-  - todo manifesto declara os campos sem os quais a medição não existe;
-  - `base_commit` e `fix_commit` são commits reais E diferentes (iguais = a
-    tarefa nasce verde, que é a autoilusão que a suíte inteira existe para
-    evitar);
-  - o teste de aceitação existe no `fix_commit` e NÃO existe no `base_commit`
-    — se existisse nos dois, o agente poderia estar sendo medido contra um
-    teste que já estava lá;
-  - o enunciado não entrega a solução;
-  - a suíte tem dificuldade variada — só-difícil e só-fácil medem igualmente
-    pouco.
+  - every manifest declares the fields without which the measurement does not exist;
+  - `base_commit` and `fix_commit` are real AND different commits (equal = the
+    task is born green, which is the self-delusion the whole suite exists to
+    avoid);
+  - the acceptance test exists in `fix_commit` and does NOT exist in `base_commit`
+    — if it existed in both, the agent could be measured against a
+    test that was already there;
+  - the statement does not give away the solution;
+  - the suite has varied difficulty — only-hard and only-easy measure equally
+    little.
 """
 
 import json
@@ -57,8 +57,8 @@ def git(*args):
     return subprocess.run(["git", *args], cwd=str(REPO), capture_output=True, text=True)
 
 
-def test_parser_le_bloco_multilinha():
-    """O enunciado é um bloco `|`; lido errado, a tarefa mede outra coisa."""
+def test_parser_reads_multiline_block():
+    """The statement is a `|` block; read wrong, the task measures something else."""
     m = load_runner()
     d = m.parse_task_yaml(
         'id: x\ntitulo: "com espaço"\nprompt: |\n  linha um\n  linha dois\n'
@@ -71,7 +71,7 @@ def test_parser_le_bloco_multilinha():
     check("parser volta a ler escalar depois do bloco", d.get("dificuldade") == "alta")
 
 
-def test_manifestos_completos():
+def test_manifests_complete():
     m = load_runner()
     tasks = m.load_tasks()
     check("há tarefas declaradas", len(tasks) >= 3, f"{len(tasks)}")
@@ -82,7 +82,7 @@ def test_manifestos_completos():
             check(f"{tid}: campo {field}", bool(t.get(field)))
 
 
-def test_commits_reais_e_distintos():
+def test_commits_real_and_distinct():
     m = load_runner()
     for t in m.load_tasks():
         tid = t["id"]
@@ -93,13 +93,13 @@ def test_commits_reais_e_distintos():
         base = git("rev-parse", t["base_commit"]).stdout.strip()
         fix = git("rev-parse", t["fix_commit"]).stdout.strip()
         check(f"{tid}: base ≠ fix (senão a tarefa nasce verde)", base != fix)
-        # o conserto tem de descender da base, senão o teste não se aplica
+        # the fix must descend from the base, otherwise the test does not apply
         r = git("merge-base", "--is-ancestor", t["base_commit"], t["fix_commit"])
         check(f"{tid}: base é ancestral do conserto", r.returncode == 0)
 
 
-def test_aceitacao_so_existe_depois_do_conserto():
-    """Se o teste já estivesse na base, ele não mediria o trabalho do agente."""
+def test_acceptance_only_exists_after_the_fix():
+    """If the test were already in the base, it would not measure the agent's work."""
     m = load_runner()
     for t in m.load_tasks():
         tid, path = t["id"], t["acceptance_test"]
@@ -110,19 +110,19 @@ def test_aceitacao_so_existe_depois_do_conserto():
               f"{path} já estava lá — o agente seria medido contra um teste preexistente")
 
 
-def test_enunciado_nao_entrega_a_solucao():
-    """O ENUNCIADO descreve o problema; quem nomeia arquivo é o contrato.
+def test_statement_does_not_give_away_the_solution():
+    """The STATEMENT describes the problem; whoever names the file is the contract.
 
-    A separação nasceu da primeira corrida de verdade, que deu 0/3. A causa não
-    era dificuldade: os testes de aceitação exigem o caminho e o nome exatos do
-    arquivo do conserto original, e os enunciados — de propósito — não diziam
-    nada disso. A suíte estava medindo a capacidade de ADIVINHAR o desenho
-    original, não a de resolver o problema, e nenhum agente passaria.
+    The separation was born from the first real run, which scored 0/3. The cause was not
+    difficulty: the acceptance tests require the exact path and name of the original fix's
+    file, and the statements — on purpose — said nothing of the kind. The suite was
+    measuring the ability to GUESS the original design, not to solve the problem,
+    and no agent would pass.
 
-    Então o manifesto tem dois campos com papéis opostos, e este caso guarda os
-    dois lados: o `prompt` segue proibido de nomear os arquivos do conserto
-    (senão vira transcrição), e o `contrato` é obrigado a nomeá-los (senão vira
-    adivinhação).
+    So the manifest has two fields with opposite roles, and this case guards both
+    sides: the `prompt` remains forbidden to name the fix's files
+    (otherwise it becomes a transcript), and the `contrato` is obliged to name them (otherwise it becomes
+    guesswork).
     """
     m = load_runner()
     for t in m.load_tasks():
@@ -135,23 +135,23 @@ def test_enunciado_nao_entrega_a_solucao():
               not leaked, f"vazou: {leaked}")
         check(f"{tid}: o enunciado descreve o problema (tem tamanho de enunciado)",
               len(t["prompt"]) > 400, f"{len(t['prompt'])} chars")
-        # o contrato tem de nomear o arquivo que a aceitação vai procurar
-        alvo = Path(t["acceptance_test"]).name
+        # the contract must name the file the acceptance will look for
+        target = Path(t["acceptance_test"]).name
         check(f"{tid}: o contrato nomeia o teste que julga o trabalho",
-              alvo in t["contrato"], f"{alvo} ausente do contrato")
+              target in t["contrato"], f"{target} ausente do contrato")
         check(f"{tid}: o contrato entra no que o agente recebe",
               "COMO O SEU TRABALHO SERÁ CONFERIDO" in m.build_prompt(t))
 
 
-def test_dificuldade_variada():
+def test_varied_difficulty():
     m = load_runner()
-    niveis = {t.get("dificuldade") for t in m.load_tasks()}
+    levels = {t.get("dificuldade") for t in m.load_tasks()}
     check("a suíte tem dificuldade variada (não só fácil, não só difícil)",
-          len(niveis) >= 2, f"níveis: {sorted(niveis)}")
+          len(levels) >= 2, f"níveis: {sorted(levels)}")
 
 
-def test_validate_e_obrigatorio_no_readme():
-    """A trava contra tarefa vazia precisa estar documentada, não só existir."""
+def test_validate_is_mandatory_in_readme():
+    """The guard against an empty task must be documented, not just exist."""
     readme = (EVAL / "README.md").read_text(encoding="utf-8")
     check("README explica o --validate", "--validate" in readme)
     check("README declara o estado real da suíte (rodou? tem A/B?)",
@@ -160,14 +160,15 @@ def test_validate_e_obrigatorio_no_readme():
           "0/3" in readme and "contrato" in readme.lower())
 
 
-def test_corrida_que_falha_guarda_o_diff_e_nao_deixa_worktree():
-    """Tarefa que falha guardava a worktree inteira em /tmp/cepa-eval como
-    evidência, registrada no `git worktree list` do repo para sempre (3 delas
-    em 2026-09-26). A evidência é o que o agente escreveu: vira um .patch ao
-    lado do resultado, e a worktree sai do registro em qualquer desfecho.
+def test_failing_run_keeps_the_diff_and_leaves_no_worktree():
+    """A failing task used to keep the whole worktree in /tmp/cepa-eval as
+    evidence, registered in the repo's `git worktree list` forever (3 of them
+    on 2026-09-26). The evidence is what the agent wrote: it becomes a .patch next
+    to the result, and the worktree leaves the registry in any outcome.
 
-    Roda o `cmd_run` de verdade contra um repo descartável, com um `claude`
-    falso que escreve um arquivo e uma aceitação que falha."""
+    Runs the real `cmd_run` against a disposable repo, with a fake `claude`
+    that writes a file and an acceptance that fails.
+    """
     import os
     import tempfile
     run = load_runner()
@@ -200,8 +201,8 @@ def test_corrida_que_falha_guarda_o_diff_e_nao_deixa_worktree():
         run.git = lambda *a, cwd=repo, check=True: orig_git(*a, cwd=cwd, check=check)
         run.WORKTREE_ROOT = tmp / "wts"
         run.RESULTS_DIR = tmp / "results"
-        velho_path = os.environ["PATH"]
-        os.environ["PATH"] = f"{binv}:{velho_path}"
+        old_path = os.environ["PATH"]
+        os.environ["PATH"] = f"{binv}:{old_path}"
         try:
             task = {"id": "t1", "base_commit": base, "fix_commit": fix,
                     "acceptance_test": "tests/test_x.py",
@@ -209,14 +210,14 @@ def test_corrida_que_falha_guarda_o_diff_e_nao_deixa_worktree():
                     "prompt": "faça", "contrato": ""}
             run.cmd_run([task], "lbl", 1)
         finally:
-            os.environ["PATH"] = velho_path
+            os.environ["PATH"] = old_path
             run.git = orig_git
 
-        lista = g("worktree", "list", "--porcelain").stdout
+        listing = g("worktree", "list", "--porcelain").stdout
         check("nenhuma worktree da corrida fica registrada",
-              lista.count("worktree ") == 1, lista)
-        restos = list((tmp / "wts").glob("*")) if (tmp / "wts").exists() else []
-        check("nem o diretório dela fica no disco", not restos, str(restos))
+              listing.count("worktree ") == 1, listing)
+        leftovers = list((tmp / "wts").glob("*")) if (tmp / "wts").exists() else []
+        check("nem o diretório dela fica no disco", not leftovers, str(leftovers))
         res = json.loads((tmp / "results" / "lbl.json").read_text())["results"][0]
         check("a tarefa falhou, como devia", res.get("passed") is False, str(res))
         patch = Path(res.get("evidencia_patch") or "/nao/existe")
@@ -229,14 +230,14 @@ def test_corrida_que_falha_guarda_o_diff_e_nao_deixa_worktree():
 
 
 def main():
-    test_parser_le_bloco_multilinha()
-    test_manifestos_completos()
-    test_commits_reais_e_distintos()
-    test_aceitacao_so_existe_depois_do_conserto()
-    test_enunciado_nao_entrega_a_solucao()
-    test_dificuldade_variada()
-    test_validate_e_obrigatorio_no_readme()
-    test_corrida_que_falha_guarda_o_diff_e_nao_deixa_worktree()
+    test_parser_reads_multiline_block()
+    test_manifests_complete()
+    test_commits_real_and_distinct()
+    test_acceptance_only_exists_after_the_fix()
+    test_statement_does_not_give_away_the_solution()
+    test_varied_difficulty()
+    test_validate_is_mandatory_in_readme()
+    test_failing_run_keeps_the_diff_and_leaves_no_worktree()
 
     print()
     if FAILURES:

@@ -362,7 +362,7 @@ três camadas nesta ordem:
    explicitamente ("se você não tiver opinião, faça X"). Um NEEDS-HUMAN sem
    recomendação default devolve a decisão crua para alguém sem base para
    escolher.
-3. **Detalhe técnico** (o fluxo, o script, o run, o screenshot) — por último,
+3. **Technical detail** (o fluxo, o script, o run, o screenshot) — por último,
    para quem quiser conferir.
 
 O detalhe técnico continua completo no artifact YAML; o texto do reply é a

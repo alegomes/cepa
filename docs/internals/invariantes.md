@@ -174,7 +174,8 @@ caso (`rc=128`) e o teste passa. O caso que some é o arquivo ignorado.
 **Regra.** A ferramenta `Agent` devolve `Async agent launched successfully`, e
 não o resultado. Toda spec de agente que delega diz onde o turno termina. Nunca
 sondar disco atrás do arquivo de um worker, nunca inventar o que o subagente
-ainda não devolveu.
+ainda não devolveu. A seção nas specs de agente está, desde 2026-10-23,
+em inglês e se chama "Delegation is asynchronous: do not poll the disk".
 
 **Incidente.** 912 minutos (15 horas) medidos em 5 runs de 2026-08-26, entre
 19% e 52% do relógio de cada um, quase tudo no `engineering-lead` em laço de

@@ -1,40 +1,40 @@
-// Lê o estado do build (`.claude/last-build.json`). O escritor é o hook
-// common/hooks/capture-build-result.py (SUCCESS, FAILURE ou EMPTY, com `at`) e o
-// common/hooks/mark-build-stale.py, que troca o status por STALE depois de uma
-// edição em código-fonte, guardando a última execução real em `last_known_*`.
+// Reads the build state (`.claude/last-build.json`). The writers are the hook
+// common/hooks/capture-build-result.py (SUCCESS, FAILURE or EMPTY, with `at`) and
+// common/hooks/mark-build-stale.py, which swaps the status to STALE after an
+// edit to source code, keeping the last real run in `last_known_*`.
 
-import { idade } from './intent'
+import { age } from './intent'
 
-export type Estado = 'verde' | 'vermelho' | 'vazio' | 'desatualizado' | 'desconhecido'
+export type BuildState = 'verde' | 'vermelho' | 'vazio' | 'desatualizado' | 'desconhecido'
 
-export type Build = { estado: Estado; em: string; anterior: Estado | null; anteriorEm: string }
+export type Build = { state: BuildState; at: string; previous: BuildState | null; previousAt: string }
 
-const ESTADOS: Record<string, Estado> = { SUCCESS: 'verde', FAILURE: 'vermelho', EMPTY: 'vazio', STALE: 'desatualizado' }
+const STATES: Record<string, BuildState> = { SUCCESS: 'verde', FAILURE: 'vermelho', EMPTY: 'vazio', STALE: 'desatualizado' }
 
-const estado = (status: unknown): Estado => ESTADOS[String(status ?? '').toUpperCase()] ?? 'desconhecido'
+const toState = (status: unknown): BuildState => STATES[String(status ?? '').toUpperCase()] ?? 'desconhecido'
 
-const texto = (v: unknown): string => (typeof v === 'string' ? v : '')
+const text = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 export const parseBuild = (json: string): Build | null => {
-  let dados: Record<string, unknown>
+  let data: Record<string, unknown>
   try {
-    dados = JSON.parse(json)
+    data = JSON.parse(json)
   } catch {
     return null
   }
-  if (dados === null || typeof dados !== 'object') return null
-  const atual = estado(dados.status)
-  if (atual !== 'desatualizado') return { estado: atual, em: texto(dados.at), anterior: null, anteriorEm: '' }
-  const anterior = estado(dados.last_known_status)
+  if (data === null || typeof data !== 'object') return null
+  const current = toState(data.status)
+  if (current !== 'desatualizado') return { state: current, at: text(data.at), previous: null, previousAt: '' }
+  const previous = toState(data.last_known_status)
   return {
-    estado: 'desatualizado',
-    em: texto(dados.since),
-    anterior: anterior === 'desatualizado' ? 'desconhecido' : anterior,
-    anteriorEm: texto(dados.last_known_at),
+    state: 'desatualizado',
+    at: text(data.since),
+    previous: previous === 'desatualizado' ? 'desconhecido' : previous,
+    previousAt: text(data.last_known_at),
   }
 }
 
-export const COR: Record<Estado, string | undefined> = {
+export const COLOR: Record<BuildState, string | undefined> = {
   verde: 'green',
   vermelho: 'red',
   vazio: 'yellow',
@@ -42,14 +42,14 @@ export const COR: Record<Estado, string | undefined> = {
   desconhecido: undefined,
 }
 
-const comIdade = (nome: string, desde: string, agora: number): string => {
-  const quando = idade(desde, agora)
-  return quando === '' ? nome : `${nome} ${quando}`
+const withAge = (name: string, since: string, now: number): string => {
+  const when = age(since, now)
+  return when === '' ? name : `${name} ${when}`
 }
 
 // `verde há 12 min`, `vermelho há 2 h`, `desatualizado há 3 min · era verde há 1 h`.
-export const linhaBuild = (b: Build, agora: number): string => {
-  const base = comIdade(b.estado, b.em, agora)
-  if (b.estado !== 'desatualizado' || b.anterior === null || b.anterior === 'desconhecido') return base
-  return `${base} · era ${comIdade(b.anterior, b.anteriorEm, agora)}`
+export const buildLine = (b: Build, now: number): string => {
+  const base = withAge(b.state, b.at, now)
+  if (b.state !== 'desatualizado' || b.previous === null || b.previous === 'desconhecido') return base
+  return `${base} · era ${withAge(b.previous, b.previousAt, now)}`
 }

@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Edição por shell suja a baseline de build tanto quanto edição por Edit/Write.
+"""A shell edit dirties the build baseline as much as an Edit/Write edit does.
 
-Sem dependências — rode com `python3 tests/test_shell_write_marks_stale.py`.
+No dependencies — run with `python3 tests/test_shell_write_marks_stale.py`.
 
-O defeito (BACKLOG, "Modo automático edita por `sed` e três hooks só escutam
-`Edit|Write`", 2026-08-25): o modo automático manda preferir `sed`, heredoc e
-script curto a `Edit`/`Write`, e o `mark-build-stale.py` só era registrado em
-`Edit|Write|MultiEdit`. O código mudava, a `.claude/last-build.json` seguia
-SUCCESS, e o `gate-advance` liberava um verde que descrevia código que já não
-existia. O `session-activity.py` tinha a mesma porta: a sessão que editava por
-`sed` parecia parada.
+The defect (BACKLOG, "Automatic mode edits by `sed` and three hooks only listen to
+`Edit|Write`", 2026-08-25): automatic mode orders preferring `sed`, heredoc and
+a short script to `Edit`/`Write`, and `mark-build-stale.py` was only registered in
+`Edit|Write|MultiEdit`. The code changed, `.claude/last-build.json` stayed
+SUCCESS, and `gate-advance` released a green that described code that no longer
+existed. `session-activity.py` had the same door: a session that edited through
+`sed` looked idle.
 
-O teste cobre as duas metades do conserto, porque qualquer uma sozinha é um
-hook que nunca dispara:
+The test covers both halves of the fix, because either one alone is a
+hook that never fires:
 
-- o hook entende o payload de Bash (`sed -i`, heredoc para arquivo), e só suja
-  quando o alvo é código de produção DENTRO da árvore da sessão;
-- o `plugin.json` registra os dois hooks no `PostToolUse` de `Bash`.
+- the hook understands the Bash payload (`sed -i`, heredoc to a file), and only dirties
+  when the target is production code INSIDE the session's tree;
+- `plugin.json` registers both hooks in the `PostToolUse` of `Bash`.
 """
 
 import json
@@ -25,9 +25,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-from _telemetria_isolada import isola
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 REPO = Path(__file__).resolve().parent.parent
 HOOKS = REPO / "common" / "hooks"
@@ -71,8 +71,8 @@ def state(root):
 
 
 print("\n# plugin.json — os dois hooks escutam Bash no PostToolUse")
-grupos = json.loads(PLUGIN.read_text())["hooks"]["PostToolUse"]
-bash_cmds = " ".join(h["command"] for g in grupos if g["matcher"] == "Bash"
+groups = json.loads(PLUGIN.read_text())["hooks"]["PostToolUse"]
+bash_cmds = " ".join(h["command"] for g in groups if g["matcher"] == "Bash"
                      for h in g["hooks"])
 check("mark-build-stale registrado em Bash", "mark-build-stale.py" in bash_cmds, bash_cmds)
 check("session-activity registrado em Bash", "session-activity.py" in bash_cmds, bash_cmds)
@@ -80,8 +80,8 @@ check("session-activity registrado em Bash", "session-activity.py" in bash_cmds,
 with tempfile.TemporaryDirectory() as tmp:
     tmp = Path(tmp).resolve()
     repo = tmp / "repo"
-    outra = tmp / "proof-wt"
-    for d in (repo, outra):
+    other = tmp / "proof-wt"
+    for d in (repo, other):
         (d / "src" / "main").mkdir(parents=True)
         (d / "docs").mkdir()
         subprocess.run(["git", "init", "-q", str(d)], check=True)
@@ -104,7 +104,7 @@ with tempfile.TemporaryDirectory() as tmp:
           f"{state(repo)} {r.stderr}")
 
     green(repo)
-    run_hook(STALE, bash(repo, f"cd {outra} && sed -i '' 's/a/b/' src/main/X.java"))
+    run_hook(STALE, bash(repo, f"cd {other} && sed -i '' 's/a/b/' src/main/X.java"))
     check("sed -i depois de `cd` para fora da árvore: baseline intacta",
           state(repo)["status"] == "SUCCESS", str(state(repo)))
 
@@ -113,12 +113,12 @@ with tempfile.TemporaryDirectory() as tmp:
     check("sed -i em doc e leitura de código: baseline intacta",
           state(repo)["status"] == "SUCCESS", str(state(repo)))
 
-    for teste in ("tests/test_x.py", "specs/x.py"):
+    for test_file in ("tests/test_x.py", "specs/x.py"):
         green(repo)
         run_hook(STALE, {"tool_name": "Edit", "cwd": str(repo),
-                         "tool_input": {"file_path": str(repo / teste)}})
-        run_hook(STALE, bash(repo, f"sed -i '' 's/a/b/' {teste}"))
-        check(f"{teste} na raiz da árvore não é código de produção",
+                         "tool_input": {"file_path": str(repo / test_file)}})
+        run_hook(STALE, bash(repo, f"sed -i '' 's/a/b/' {test_file}"))
+        check(f"{test_file} na raiz da árvore não é código de produção",
               state(repo)["status"] == "SUCCESS", str(state(repo)))
 
     green(repo)

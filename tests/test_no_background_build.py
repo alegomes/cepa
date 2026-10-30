@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-"""Testes do `common/hooks/no-background-build.py`.
+"""Tests of `common/hooks/no-background-build.py`.
 
-O hook fecha a porta pela qual 34 dos 49 minutos do run de 2026-08-30 saíram:
-dentro do `cepa-until` cada item é um `claude -p`, e um build mandado para o
-segundo plano nunca é colhido — o turno acaba, o processo morre, o item fica
-`in_progress` sem desfecho.
+The hook closes the door through which 34 of the 49 minutes of the 2026-08-30 run went:
+inside `cepa-until` each item is a `claude -p`, and a build sent to the
+background is never harvested — the turn ends, the process dies, the item stays
+`in_progress` with no outcome.
 
-Três eixos, e cada um é uma forma diferente de o hook ficar inútil:
-  - o ESCOPO (só dentro da janela) — sem ele o hook estraga sessão interativa,
-    onde mandar para o segundo plano é a coisa certa;
-  - o EFEITO (as duas vias de desanexar) — barrar só o `run_in_background`
-    deixa o `&` livre, que é o padrão registrado na memória
+Three axes, and each is a different way for the hook to become useless:
+  - the SCOPE (only inside the window) — without it the hook ruins an interactive session,
+    where sending to the background is the right thing;
+  - the EFFECT (the two ways of detaching) — blocking only `run_in_background`
+    leaves `&` free, which is the pattern recorded in the memory
     `gate-por-nome-de-ferramenta-falha-aberto`;
-  - o ALVO (build sim, servidor não) — bloquear servidor mataria o gate de
-    prova de UI, que depende de subir o app de lado.
+  - the TARGET (build yes, server no) — blocking a server would kill the UI proof
+    gate, which depends on starting the app on the side.
 
-As duas portas acrescentadas em 04/09/2026, depois do run que perdeu 6h54 de
-uma janela de 8h sem passar pela porta do Bash:
-  - o VIGIA (Monitor) — vigia que não termina sozinho segura o turno até o
-    relógio do item matar tudo; vigia com fim declarado continua liberado;
-  - a PARADA (Stop) — parar com subagente despachado sem resultado, ou vigia
-    armado sem `TaskStop`, é o mesmo efeito por uma terceira porta.
+The two doors added on 2026-09-04, after the run that lost 6h54 of
+an 8h window without going through the Bash door:
+  - the WATCHER (Monitor) — a watcher that does not end by itself holds the turn until the
+    item's clock kills everything; a watcher with a declared end remains allowed;
+  - the STOP (Stop) — stopping with a dispatched subagent without a result, or an armed
+    watcher without `TaskStop`, is the same effect through a third door.
 
-Rode com `python3 tests/test_no_background_build.py`.
+Run with `python3 tests/test_no_background_build.py`.
 """
 
 import json
@@ -44,11 +44,11 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-def roda(command, background=False, na_janela=True):
-    """Chama o hook como o harness chama: payload no stdin, veredito no exit."""
+def run_hook(command, background=False, in_window=True):
+    """Calls the hook the way the harness calls it: payload on stdin, verdict in the exit."""
     import os
     env = dict(os.environ)
-    if na_janela:
+    if in_window:
         env["CEPA_UNTIL_RUN"] = "1"
     else:
         env.pop("CEPA_UNTIL_RUN", None)
@@ -59,18 +59,19 @@ def roda(command, background=False, na_janela=True):
                           capture_output=True, text=True, env=env)
 
 
-# ── escopo: só dentro da janela ─────────────────────────────────────────────
+# ── scope: only inside the window ───────────────────────────────────────────
 
-def test_fora_da_janela_o_hook_nao_existe():
-    """Numa sessão interativa, `run_in_background` é o conselho CERTO — é o que
-    o próprio no-busy-wait manda fazer. O hook não pode atrapalhar isso."""
-    p = roda("./mvnw verify", background=True, na_janela=False)
+def test_outside_window_the_hook_does_not_exist():
+    """In an interactive session, `run_in_background` is the RIGHT advice — it is what
+    no-busy-wait itself orders to do. The hook must not get in the way of that.
+    """
+    p = run_hook("./mvnw verify", background=True, in_window=False)
     check("build em segundo plano passa fora da janela", p.returncode == 0,
           f"saiu {p.returncode}: {p.stderr[:200]}")
 
 
-def test_dentro_da_janela_o_build_em_segundo_plano_e_bloqueado():
-    p = roda("./mvnw clean verify", background=True)
+def test_inside_window_background_build_is_blocked():
+    p = run_hook("./mvnw clean verify", background=True)
     check("build com run_in_background é bloqueado", p.returncode == 2,
           f"saiu {p.returncode}")
     check("...e a recusa explica que não há turno seguinte",
@@ -80,69 +81,74 @@ def test_dentro_da_janela_o_build_em_segundo_plano_e_bloqueado():
           p.stderr[:400])
 
 
-# ── efeito: as duas vias de desanexar ───────────────────────────────────────
+# ── effect: the two ways of detaching ───────────────────────────────────────
 
-def test_o_mesmo_efeito_pelo_shell_tambem_e_bloqueado():
-    """Barrar só o nome da ferramenta libera calado quando aparece outro
-    mecanismo para o mesmo efeito — é a 4ª vez que o padrão aparece no repo."""
+def test_the_same_effect_through_the_shell_is_also_blocked():
+    """Blocking only the tool name releases quietly when another mechanism appears
+    for the same effect — it is the 4th time this pattern appears in the repo.
+    """
     for cmd in ("./mvnw verify &",
                 "nohup ./mvnw verify > /tmp/b.log 2>&1 &",
                 "setsid npm test",
                 "./gradlew test & disown"):
-        p = roda(cmd)
+        p = run_hook(cmd)
         check(f"desanexado no shell é bloqueado: {cmd[:34]}", p.returncode == 2,
               f"saiu {p.returncode}")
 
 
-def test_build_em_primeiro_plano_passa():
-    """É a saída que o hook manda tomar. Se ele barrasse isto também, não
-    sobraria nenhuma forma de rodar o build e o item nunca fecharia."""
+def test_foreground_build_passes():
+    """It is the exit the hook orders taking. If it blocked this too, there would be
+    no way left to run the build and the item would never close.
+    """
     for cmd in ("./mvnw clean verify",
                 "./mvnw verify 2>&1 | tail -40",
                 "npm test && echo ok"):
-        p = roda(cmd)
+        p = run_hook(cmd)
         check(f"primeiro plano passa: {cmd[:34]}", p.returncode == 0,
               f"saiu {p.returncode}: {p.stderr[:200]}")
 
 
-# ── alvo: build sim, servidor não ───────────────────────────────────────────
+# ── target: build yes, server no ────────────────────────────────────────────
 
-def test_subir_servico_de_apoio_em_segundo_plano_passa():
-    """O gate de prova de UI sobe o app de lado e roda o fluxo contra ele.
-    Bloquear isso mataria o gate — e um servidor não produz veredito nenhum
-    para alguém colher."""
+def test_starting_support_service_in_background_passes():
+    """The UI proof gate starts the app on the side and runs the flow against it.
+    Blocking that would kill the gate — and a server produces no verdict
+    for anyone to harvest.
+    """
     for cmd in ("./mvnw quarkus:dev", "npm run dev", "docker compose up",
                 "python3 -m http.server 8080"):
-        p = roda(cmd, background=True)
+        p = run_hook(cmd, background=True)
         check(f"serviço de apoio passa: {cmd[:34]}", p.returncode == 0,
               f"saiu {p.returncode}: {p.stderr[:200]}")
 
 
-def test_comando_qualquer_em_segundo_plano_passa():
-    """O hook cobra build, não background. Barrar tudo viraria um segundo
-    no-busy-wait, com outro nome e sem a medição que o justifique."""
-    p = roda("git fetch --all", background=True)
+def test_any_command_in_background_passes():
+    """The hook charges for build, not background. Blocking everything would become a second
+    no-busy-wait, with another name and without the measurement that justifies it.
+    """
+    p = run_hook("git fetch --all", background=True)
     check("comando sem veredito de build passa", p.returncode == 0,
           f"saiu {p.returncode}: {p.stderr[:200]}")
 
 
-# ── bordas ──────────────────────────────────────────────────────────────────
+# ── edges ───────────────────────────────────────────────────────────────────
 
-def test_escape_hatch_declarado():
-    p = roda("./mvnw verify  # fundo-ok", background=True)
+def test_declared_escape_hatch():
+    p = run_hook("./mvnw verify  # fundo-ok", background=True)
     check("`# fundo-ok` libera", p.returncode == 0,
           f"saiu {p.returncode}: {p.stderr[:200]}")
 
 
-def test_texto_citado_nao_e_shell():
-    """WEGO-2087: mensagem de commit multilinha lida como vários comandos já
-    barrou escrita fantasma. Um `&` dentro de aspas é texto."""
-    p = roda('git commit -m "roda ./mvnw verify & confere o log"')
+def test_quoted_text_is_not_shell():
+    """WEGO-2087: a multi-line commit message read as several commands has already
+    blocked a phantom write. A `&` inside quotes is text.
+    """
+    p = run_hook('git commit -m "roda ./mvnw verify & confere o log"')
     check("`&` dentro de aspas não é desanexação", p.returncode == 0,
           f"saiu {p.returncode}: {p.stderr[:200]}")
 
 
-def test_payload_ilegivel_libera_em_vez_de_estourar():
+def test_unreadable_payload_releases_instead_of_blowing_up():
     import os
     env = dict(os.environ); env["CEPA_UNTIL_RUN"] = "1"
     p = subprocess.run([sys.executable, str(HOOK)], input="{nao json",
@@ -151,7 +157,7 @@ def test_payload_ilegivel_libera_em_vez_de_estourar():
           f"saiu {p.returncode}")
 
 
-def test_outra_ferramenta_passa_direto():
+def test_other_tool_passes_straight_through():
     import os
     env = dict(os.environ); env["CEPA_UNTIL_RUN"] = "1"
     payload = {"tool_name": "Write", "tool_input": {"file_path": "/tmp/x"}}
@@ -161,22 +167,22 @@ def test_outra_ferramenta_passa_direto():
           f"saiu {p.returncode}")
 
 
-# ── porta 2: o vigia (Monitor) ─────────────────────────────────────────────
-def roda_monitor(entrada, na_janela=True):
+# ── door 2: the watcher (Monitor) ──────────────────────────────────────────
+def run_monitor(entry, in_window=True):
     import os
     env = dict(os.environ)
-    if na_janela:
+    if in_window:
         env["CEPA_UNTIL_RUN"] = "1"
     else:
         env.pop("CEPA_UNTIL_RUN", None)
     payload = {"hook_event_name": "PreToolUse", "tool_name": "Monitor",
-               "tool_input": entrada}
+               "tool_input": entry}
     return subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload),
                           capture_output=True, text=True, env=env)
 
 
-def test_vigia_sem_fim_e_bloqueado_na_janela():
-    casos = [
+def test_watcher_without_end_is_blocked_in_window():
+    cases = [
         ("while true", {"command": "while true; do git log -1; sleep 30; done",
                         "description": "branches", "timeout_ms": 3600000,
                         "persistent": False}),
@@ -184,99 +190,99 @@ def test_vigia_sem_fim_e_bloqueado_na_janela():
         ("tail -f", {"command": "tail -f app.log | grep --line-buffered ERROR"}),
         ("websocket", {"ws": {"url": "wss://x/y"}, "description": "eventos"}),
     ]
-    for nome, entrada in casos:
-        p = roda_monitor(entrada)
-        check(f"vigia sem fim bloqueado: {nome}", p.returncode == 2,
+    for name, entry in cases:
+        p = run_monitor(entry)
+        check(f"vigia sem fim bloqueado: {name}", p.returncode == 2,
               f"saiu {p.returncode}")
 
 
-def test_vigia_com_fim_declarado_passa():
-    entrada = {"command": "for i in 1 2 3; do gh run view --json status; done",
+def test_watcher_with_declared_end_passes():
+    entry = {"command": "for i in 1 2 3; do gh run view --json status; done",
                "description": "CI", "timeout_ms": 60000, "persistent": False}
-    p = roda_monitor(entrada)
+    p = run_monitor(entry)
     check("vigia que termina sozinho passa", p.returncode == 0,
           f"saiu {p.returncode}: {p.stderr[:120]}")
 
 
-def test_vigia_fora_da_janela_passa():
-    entrada = {"command": "while true; do sleep 5; done", "persistent": True}
-    p = roda_monitor(entrada, na_janela=False)
+def test_watcher_outside_window_passes():
+    entry = {"command": "while true; do sleep 5; done", "persistent": True}
+    p = run_monitor(entry, in_window=False)
     check("vigia sem fim passa fora da janela", p.returncode == 0,
           f"saiu {p.returncode}")
 
 
-def test_vigia_com_escape_declarado_passa():
-    entrada = {"command": "while true; do sleep 5; done  # fundo-ok"}
-    p = roda_monitor(entrada)
+def test_watcher_with_declared_escape_passes():
+    entry = {"command": "while true; do sleep 5; done  # fundo-ok"}
+    p = run_monitor(entry)
     check("escape `# fundo-ok` libera o vigia", p.returncode == 0,
           f"saiu {p.returncode}")
 
 
-# ── porta 3: a parada (Stop) ───────────────────────────────────────────────
-def _transcript(tmp, blocos_por_linha):
-    """Escreve um transcript no formato que o harness grava."""
-    caminho = tmp / "t.jsonl"
-    with caminho.open("w", encoding="utf-8") as f:
-        for blocos in blocos_por_linha:
+# ── door 3: the stop (Stop) ────────────────────────────────────────────────
+def _transcript(tmp, blocks_per_line):
+    """Writes a transcript in the format the harness records."""
+    path = tmp / "t.jsonl"
+    with path.open("w", encoding="utf-8") as f:
+        for blocks in blocks_per_line:
             f.write(json.dumps({"type": "assistant",
-                                "message": {"content": blocos}}) + "\n")
-    return caminho
+                                "message": {"content": blocks}}) + "\n")
+    return path
 
 
-def roda_stop(caminho, na_janela=True, stop_hook_active=False):
+def run_stop(path, in_window=True, stop_hook_active=False):
     import os
     env = dict(os.environ)
-    if na_janela:
+    if in_window:
         env["CEPA_UNTIL_RUN"] = "1"
     else:
         env.pop("CEPA_UNTIL_RUN", None)
-    payload = {"hook_event_name": "Stop", "transcript_path": str(caminho),
+    payload = {"hook_event_name": "Stop", "transcript_path": str(path),
                "stop_hook_active": stop_hook_active}
     p = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload),
                        capture_output=True, text=True, env=env)
     try:
-        saida = json.loads(p.stdout) if p.stdout.strip() else {}
+        output = json.loads(p.stdout) if p.stdout.strip() else {}
     except json.JSONDecodeError:
-        saida = {}
-    return p, saida
+        output = {}
+    return p, output
 
 
-DESPACHO = [{"type": "tool_use", "id": "tu_1", "name": "Agent",
+DISPATCH = [{"type": "tool_use", "id": "tu_1", "name": "Agent",
              "input": {"description": "Build WEGO-2224"}}]
-RESULTADO = [{"type": "tool_result", "tool_use_id": "tu_1",
+RESULT = [{"type": "tool_result", "tool_use_id": "tu_1",
               "content": "pronto, Tasks mescladas"}]
-CHAMA_VIGIA = [{"type": "tool_use", "id": "tu_2", "name": "Monitor",
+CALLS_WATCHER = [{"type": "tool_use", "id": "tu_2", "name": "Monitor",
                 "input": {"command": "...", "description": "vigia do build"}}]
-ARMA_VIGIA = [{"type": "tool_result", "tool_use_id": "tu_2",
+ARMS_WATCHER = [{"type": "tool_result", "tool_use_id": "tu_2",
                "content": "Monitor started (task bqwpma178, timeout 3600000ms)."}]
-PARA_VIGIA = [{"type": "tool_result", "tool_use_id": "tu_3",
+STOPS_WATCHER = [{"type": "tool_result", "tool_use_id": "tu_3",
                "content": "{\"message\":\"Successfully stopped task: bqwpma178 (...)\"}"}]
 
 
-def test_parada_com_subagente_pendente_e_bloqueada():
+def test_stop_with_pending_subagent_is_blocked():
     import tempfile
     with tempfile.TemporaryDirectory() as d:
-        c = _transcript(Path(d), [DESPACHO])
-        p, saida = roda_stop(c)
+        c = _transcript(Path(d), [DISPATCH])
+        p, output = run_stop(c)
         check("parada com subagente sem resultado é bloqueada",
-              saida.get("decision") == "block" and p.returncode == 0,
+              output.get("decision") == "block" and p.returncode == 0,
               f"saiu {p.returncode}: {p.stdout[:120]}")
         check("o bloqueio nomeia o subagente pendente",
-              "Build WEGO-2224" in (saida.get("reason") or ""),
-              (saida.get("reason") or "")[:120])
+              "Build WEGO-2224" in (output.get("reason") or ""),
+              (output.get("reason") or "")[:120])
 
 
-def test_parada_com_vigia_armado_e_bloqueada():
+def test_stop_with_armed_watcher_is_blocked():
     import tempfile
     with tempfile.TemporaryDirectory() as d:
-        c = _transcript(Path(d), [CHAMA_VIGIA, ARMA_VIGIA])
-        _, saida = roda_stop(c)
+        c = _transcript(Path(d), [CALLS_WATCHER, ARMS_WATCHER])
+        _, output = run_stop(c)
         check("parada com vigia armado é bloqueada",
-              saida.get("decision") == "block",
-              json.dumps(saida)[:160])
+              output.get("decision") == "block",
+              json.dumps(output)[:160])
 
 
-def test_texto_monitor_started_na_saida_de_outra_ferramenta_nao_arma_vigia():
+def test_monitor_started_text_in_another_tools_output_does_not_arm_watcher():
     import tempfile
     grep_use = [{"type": "tool_use", "id": "tu_grep", "name": "Bash",
                  "input": {"command":
@@ -285,161 +291,161 @@ def test_texto_monitor_started_na_saida_de_outra_ferramenta_nao_arma_vigia():
                      "content": "Monitor started (task b1pa0ro5t, timeout 3600000ms)."}]
     with tempfile.TemporaryDirectory() as d:
         c = _transcript(Path(d), [grep_use, grep_result])
-        p, saida = roda_stop(c)
+        p, output = run_stop(c)
         check("texto 'Monitor started' na saída de um Bash não arma vigia",
-              not saida and p.returncode == 0,
+              not output and p.returncode == 0,
               f"saiu {p.returncode}: {p.stdout[:160]}")
-    orfao = [{"type": "tool_result", "tool_use_id": "tu_sem_tool_use",
+    orphan = [{"type": "tool_result", "tool_use_id": "tu_sem_tool_use",
               "content": "Monitor started (task b1pa0ro5t, timeout 3600000ms)."}]
     with tempfile.TemporaryDirectory() as d:
-        c = _transcript(Path(d), [orfao])
-        p, saida = roda_stop(c)
+        c = _transcript(Path(d), [orphan])
+        p, output = run_stop(c)
         check("tool_result sem tool_use Monitor correspondente não arma vigia",
-              not saida and p.returncode == 0,
+              not output and p.returncode == 0,
               f"saiu {p.returncode}: {p.stdout[:160]}")
-    monitor_sem_id = [{"type": "tool_use", "name": "Monitor",
+    monitor_without_id = [{"type": "tool_use", "name": "Monitor",
                         "input": {"command": "..."}}]
-    resultado_sem_id = [{"type": "tool_result",
+    result_without_id = [{"type": "tool_result",
                           "content": "Monitor started (task b1pa0ro5t, timeout 3600000ms)."}]
     with tempfile.TemporaryDirectory() as d:
-        c = _transcript(Path(d), [monitor_sem_id, resultado_sem_id])
-        p, saida = roda_stop(c)
+        c = _transcript(Path(d), [monitor_without_id, result_without_id])
+        p, output = run_stop(c)
         check("Monitor sem id e tool_result sem tool_use_id não colidem em None",
-              not saida and p.returncode == 0,
+              not output and p.returncode == 0,
               f"saiu {p.returncode}: {p.stdout[:160]}")
 
 
-def test_parada_limpa_passa():
+def test_clean_stop_passes():
     import tempfile
     with tempfile.TemporaryDirectory() as d:
-        c = _transcript(Path(d), [DESPACHO, RESULTADO, CHAMA_VIGIA, ARMA_VIGIA, PARA_VIGIA])
-        p, saida = roda_stop(c)
+        c = _transcript(Path(d), [DISPATCH, RESULT, CALLS_WATCHER, ARMS_WATCHER, STOPS_WATCHER])
+        p, output = run_stop(c)
         check("subagente colhido e vigia parado: a parada passa",
-              not saida and p.returncode == 0,
+              not output and p.returncode == 0,
               f"saiu {p.returncode}: {p.stdout[:160]}")
 
 
-# O vigia que termina SOZINHO: sem `TaskStop`, o fim chega como aviso do
-# harness. Formatos copiados dos transcripts do run 2026-09-26-2203.
-def _aviso(corpo):
-    return f"<task-notification>\n{corpo}\n</task-notification>"
+# A watcher that ends BY ITSELF: without `TaskStop`, the end arrives as a notice from the
+# harness. Formats copied from the transcripts of run 2026-09-26-2203.
+def _notice(body):
+    return f"<task-notification>\n{body}\n</task-notification>"
 
 
-FIM_DA_FONTE = {"type": "queue-operation", "operation": "enqueue",
-                "content": _aviso(
+END_OF_SOURCE = {"type": "queue-operation", "operation": "enqueue",
+                "content": _notice(
                     "<task-id>bqwpma178</task-id>\n<status>completed</status>\n"
                     "<summary>Monitor \"commit\" stream ended</summary>")}
-EXPIROU = {"type": "attachment", "attachment": {
-    "type": "queued_command", "prompt": _aviso(
+EXPIRED = {"type": "attachment", "attachment": {
+    "type": "queued_command", "prompt": _notice(
         "<task-id>bqwpma178</task-id>\n<summary>Monitor event</summary>\n"
         "<event>[Monitor expired after 10m with no events delivered.]</event>")}}
-TIMED_OUT = {"type": "user", "message": {"role": "user", "content": _aviso(
+TIMED_OUT = {"type": "user", "message": {"role": "user", "content": _notice(
     "<task-id>bqwpma178</task-id>\n<event>[Monitor timed out — re-arm if "
     "needed.]</event>")}}
-FALHOU, MORTO = ({"type": "queue-operation", "operation": "enqueue",
-                  "content": _aviso(f"<task-id>bqwpma178</task-id>\n"
+FAILED, DEAD = ({"type": "queue-operation", "operation": "enqueue",
+                  "content": _notice(f"<task-id>bqwpma178</task-id>\n"
                                     f"<status>{st}</status>")}
                  for st in ("failed", "killed"))
-AINDA_RODANDO = {"type": "queue-operation", "operation": "enqueue",
-                 "content": _aviso("<task-id>bqwpma178</task-id>\n"
+STILL_RUNNING = {"type": "queue-operation", "operation": "enqueue",
+                 "content": _notice("<task-id>bqwpma178</task-id>\n"
                                    "<status>running</status>")}
-TASKSTOP_TARDIO = [{"type": "tool_result", "tool_use_id": "tu_4",
+LATE_TASKSTOP = [{"type": "tool_result", "tool_use_id": "tu_4",
                     "content": "<tool_use_error>No task found with ID: "
                                "bqwpma178</tool_use_error>"}]
 
 
-def _transcript_misto(tmp, linhas):
-    caminho = tmp / "t.jsonl"
-    with caminho.open("w", encoding="utf-8") as f:
-        for l in linhas:
+def _mixed_transcript(tmp, lines):
+    path = tmp / "t.jsonl"
+    with path.open("w", encoding="utf-8") as f:
+        for l in lines:
             if isinstance(l, list):
                 l = {"type": "assistant", "message": {"content": l}}
             f.write(json.dumps(l, ensure_ascii=False) + "\n")
-    return caminho
+    return path
 
 
-def test_vigia_que_termina_sozinho_nao_barra_a_parada():
+def test_watcher_that_ends_by_itself_does_not_block_the_stop():
     import tempfile
-    for nome, fim in (("fonte acabou (status completed)", FIM_DA_FONTE),
-                      ("expirou aos 10 min", EXPIROU),
+    for name, end in (("fonte acabou (status completed)", END_OF_SOURCE),
+                      ("expirou aos 10 min", EXPIRED),
                       ("timed out", TIMED_OUT),
-                      ("status failed", FALHOU),
-                      ("status killed", MORTO),
+                      ("status failed", FAILED),
+                      ("status killed", DEAD),
                       ("TaskStop respondeu que a tarefa não existe",
-                       TASKSTOP_TARDIO)):
+                       LATE_TASKSTOP)):
         with tempfile.TemporaryDirectory() as d:
-            c = _transcript_misto(Path(d), [CHAMA_VIGIA, ARMA_VIGIA, fim])
-            p, saida = roda_stop(c)
-            check(f"vigia encerrado sozinho ({nome}): a parada passa",
-                  not saida and p.returncode == 0,
+            c = _mixed_transcript(Path(d), [CALLS_WATCHER, ARMS_WATCHER, end])
+            p, output = run_stop(c)
+            check(f"vigia encerrado sozinho ({name}): a parada passa",
+                  not output and p.returncode == 0,
                   f"saiu {p.returncode}: {p.stdout[:160]}")
 
 
-def test_aviso_nao_terminal_ou_citado_nao_solta_o_vigia():
+def test_non_terminal_or_quoted_notice_does_not_release_the_watcher():
     import tempfile
     with tempfile.TemporaryDirectory() as d:
-        c = _transcript_misto(Path(d), [CHAMA_VIGIA, ARMA_VIGIA, AINDA_RODANDO])
-        _, saida = roda_stop(c)
+        c = _mixed_transcript(Path(d), [CALLS_WATCHER, ARMS_WATCHER, STILL_RUNNING])
+        _, output = run_stop(c)
         check("aviso com status running não encerra o vigia",
-              saida.get("decision") == "block", json.dumps(saida)[:160])
+              output.get("decision") == "block", json.dumps(output)[:160])
     with tempfile.TemporaryDirectory() as d:
-        citado = [{"type": "text", "text": FIM_DA_FONTE["content"]}]
-        c = _transcript_misto(Path(d), [CHAMA_VIGIA, ARMA_VIGIA, citado])
-        _, saida = roda_stop(c)
+        quoted = [{"type": "text", "text": END_OF_SOURCE["content"]}]
+        c = _mixed_transcript(Path(d), [CALLS_WATCHER, ARMS_WATCHER, quoted])
+        _, output = run_stop(c)
         check("o agente citar o aviso não encerra o vigia",
-              saida.get("decision") == "block", json.dumps(saida)[:160])
+              output.get("decision") == "block", json.dumps(output)[:160])
     with tempfile.TemporaryDirectory() as d:
-        outro = {"type": "queue-operation", "content": _aviso(
+        other = {"type": "queue-operation", "content": _notice(
             "<task-id>outra123</task-id>\n<status>completed</status>")}
-        c = _transcript_misto(Path(d), [CHAMA_VIGIA, ARMA_VIGIA, outro])
-        _, saida = roda_stop(c)
+        c = _mixed_transcript(Path(d), [CALLS_WATCHER, ARMS_WATCHER, other])
+        _, output = run_stop(c)
         check("fim de OUTRA tarefa não encerra este vigia",
-              saida.get("decision") == "block", json.dumps(saida)[:160])
+              output.get("decision") == "block", json.dumps(output)[:160])
 
 
-def test_parada_fora_da_janela_passa():
+def test_stop_outside_window_passes():
     import tempfile
     with tempfile.TemporaryDirectory() as d:
-        c = _transcript(Path(d), [DESPACHO, CHAMA_VIGIA, ARMA_VIGIA])
-        _, saida = roda_stop(c, na_janela=False)
-        check("fora da janela a parada nunca é bloqueada", not saida,
-              json.dumps(saida)[:160])
+        c = _transcript(Path(d), [DISPATCH, CALLS_WATCHER, ARMS_WATCHER])
+        _, output = run_stop(c, in_window=False)
+        check("fora da janela a parada nunca é bloqueada", not output,
+              json.dumps(output)[:160])
 
 
-def test_parada_nao_bloqueia_duas_vezes_seguidas():
+def test_stop_does_not_block_twice_in_a_row():
     import tempfile
     with tempfile.TemporaryDirectory() as d:
-        c = _transcript(Path(d), [DESPACHO])
-        _, saida = roda_stop(c, stop_hook_active=True)
+        c = _transcript(Path(d), [DISPATCH])
+        _, output = run_stop(c, stop_hook_active=True)
         check("trava anti-loop: bloqueio já ativo não bloqueia de novo",
-              not saida, json.dumps(saida)[:160])
+              not output, json.dumps(output)[:160])
 
 
-def test_transcript_ausente_nao_estoura():
-    p, saida = roda_stop(Path("/nao/existe/t.jsonl"))
+def test_missing_transcript_does_not_blow_up():
+    p, output = run_stop(Path("/nao/existe/t.jsonl"))
     check("transcript ausente libera em vez de estourar",
-          p.returncode == 0 and not saida, f"saiu {p.returncode}")
+          p.returncode == 0 and not output, f"saiu {p.returncode}")
 
 
-# ── build longo com fim declarado (item until-build-longo-sem-trava) ────────
-# Medido em 27/09/2026: o `claude -p` mata o segundo plano ao fim do turno e o
-# `Monitor` não segura o turno. O build de mais de 10 min só é colhível gravando
-# `EXIT=` num arquivo e esperando esse arquivo em primeiro plano.
+# ── long build with declared end (item until-build-longo-sem-trava) ─────────
+# Measured on 2026-09-27: `claude -p` kills the background at the end of the turn and
+# `Monitor` does not hold the turn. A build of more than 10 min can only be harvested by writing
+# `EXIT=` to a file and waiting for that file in the foreground.
 
-LONGO = "./mvnw -B clean verify > /tmp/b.log 2>&1; echo EXIT=$? >> {fim}"
+LONG = "./mvnw -B clean verify > /tmp/b.log 2>&1; echo EXIT=$? >> {fim}"
 
 
-def test_build_longo_com_fim_declarado_passa_na_janela():
-    p = roda(LONGO.format(fim="/tmp/b.fim"), background=True)
+def test_long_build_with_declared_end_passes_in_window():
+    p = run_hook(LONG.format(fim="/tmp/b.fim"), background=True)
     check("build em segundo plano que grava EXIT= num arquivo passa",
           p.returncode == 0, f"saiu {p.returncode}: {p.stderr[:200]}")
-    p = roda(LONGO.format(fim="/tmp/b.fim") + " &")
+    p = run_hook(LONG.format(fim="/tmp/b.fim") + " &")
     check("...também desanexado no shell", p.returncode == 0,
           f"saiu {p.returncode}: {p.stderr[:200]}")
 
 
-def test_build_longo_sem_fim_declarado_segue_bloqueado_e_ensina_a_receita():
-    p = roda("./mvnw -B clean verify > /tmp/b.log 2>&1", background=True)
+def test_long_build_without_declared_end_stays_blocked_and_teaches_the_recipe():
+    p = run_hook("./mvnw -B clean verify > /tmp/b.log 2>&1", background=True)
     check("sem EXIT= num arquivo, o segundo plano segue bloqueado",
           p.returncode == 2, f"saiu {p.returncode}")
     check("...e a recusa ensina gravar EXIT= e esperar em primeiro plano",
@@ -450,62 +456,63 @@ def test_build_longo_sem_fim_declarado_segue_bloqueado_e_ensina_a_receita():
           p.stderr[-600:])
 
 
-def _lanca_longo(fim):
+def _launch_long(end):
     return [{"type": "tool_use", "id": "tu_9", "name": "Bash",
-             "input": {"command": LONGO.format(fim=fim),
+             "input": {"command": LONG.format(fim=end),
                        "description": "verify da noite",
                        "run_in_background": True}}]
 
 
-def test_parada_antes_do_exit_do_build_longo_e_bloqueada():
+def test_stop_before_the_long_build_exit_is_blocked():
     import tempfile
     with tempfile.TemporaryDirectory() as d:
-        fim = Path(d) / "b.fim"
-        c = _transcript(Path(d), [_lanca_longo(fim)])
-        p, saida = roda_stop(c)
+        end = Path(d) / "b.fim"
+        c = _transcript(Path(d), [_launch_long(end)])
+        p, output = run_stop(c)
         check("parar com o build longo sem EXIT= é bloqueado",
-              saida.get("decision") == "block", str(saida)[:300])
+              output.get("decision") == "block", str(output)[:300])
         check("...e o motivo nomeia o arquivo e a espera em primeiro plano",
-              str(fim) in saida.get("reason", "")
-              and "PRIMEIRO PLANO" in saida.get("reason", "")
-              and "seq 27" in saida.get("reason", ""),
-              saida.get("reason", "")[:400])
-        fim.write_text("EXIT=0\n")
-        p, saida = roda_stop(c)
-        check("com EXIT= gravado, a parada passa", saida == {}, str(saida)[:300])
+              str(end) in output.get("reason", "")
+              and "PRIMEIRO PLANO" in output.get("reason", "")
+              and "seq 27" in output.get("reason", ""),
+              output.get("reason", "")[:400])
+        end.write_text("EXIT=0\n")
+        p, output = run_stop(c)
+        check("com EXIT= gravado, a parada passa", output == {}, str(output)[:300])
 
 
-def test_parada_depois_do_exit_em_subshell_passa():
-    """Run de 27/09 (e2e F): o agente escreveu `(<build>; echo EXIT=$? >>
-    /tmp/b.fim) &`, e o `)` grudava no nome do arquivo. O hook procurava
-    `/tmp/b.fim)`, não achava, e barrava a parada com o build já colhido."""
+def test_stop_after_the_exit_in_subshell_passes():
+    """Run of 09/27 (e2e F): the agent wrote `(<build>; echo EXIT=$? >>
+    /tmp/b.fim) &`, and the `)` stuck to the file name. The hook looked for
+    `/tmp/b.fim)`, did not find it, and blocked the stop with the build already harvested.
+    """
     import tempfile
     with tempfile.TemporaryDirectory() as d:
-        fim = Path(d) / "b.fim"
-        fim.write_text("EXIT=0\n")
-        cmd = f"(make verify > /tmp/b.log 2>&1; echo EXIT=$? >> {fim}) & disown"
+        end = Path(d) / "b.fim"
+        end.write_text("EXIT=0\n")
+        cmd = f"(make verify > /tmp/b.log 2>&1; echo EXIT=$? >> {end}) & disown"
         c = _transcript(Path(d), [[{"type": "tool_use", "id": "tu_8",
                                     "name": "Bash",
                                     "input": {"command": cmd}}]])
-        p, saida = roda_stop(c)
+        p, output = run_stop(c)
         check("build em subshell com EXIT= gravado não barra a parada",
-              saida == {}, str(saida)[:300])
+              output == {}, str(output)[:300])
 
 
-def test_parada_com_build_longo_fora_da_janela_passa():
+def test_stop_with_long_build_outside_window_passes():
     import tempfile
     with tempfile.TemporaryDirectory() as d:
-        c = _transcript(Path(d), [_lanca_longo(Path(d) / "b.fim")])
-        p, saida = roda_stop(c, na_janela=False)
-        check("fora da janela a parada não olha build nenhum", saida == {},
-              str(saida)[:300])
+        c = _transcript(Path(d), [_launch_long(Path(d) / "b.fim")])
+        p, output = run_stop(c, in_window=False)
+        check("fora da janela a parada não olha build nenhum", output == {},
+              str(output)[:300])
 
 
 def main():
     print("no-background-build — build em segundo plano dentro do cepa-until\n")
-    for nome, fn in sorted(globals().items()):
-        if nome.startswith("test_") and callable(fn):
-            print(f"{nome}:")
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            print(f"{name}:")
             fn()
     print()
     if FAILURES:

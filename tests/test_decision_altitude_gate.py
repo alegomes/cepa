@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
-"""Regression tests do decision-altitude-gate.
+"""Regression tests for the decision-altitude-gate.
 
-O campo `**Altitude:**` de um bloco de decisão diz QUEM revisa (o dono no
-debrief, o lead, ou ninguém até pedir `--all`) — não diz sobre o que a decisão
-é. Em 2026-08-19, quatro runs autônomos escreveram 57 blocos e 51 deles traziam
-palavra livre em português nesse campo ("contrato", "schema", "fronteira"),
-35 valores distintos. O debrief filtra por esse campo: com 89% fora do
-vocabulário, ele ofereceu três decisões ao dono — todas do primeiro card —
-enquanto as de maior consequência ficaram invisíveis. Nada apareceu como erro.
+The `**Altitude:**` field of a decision block says WHO reviews (the owner in the
+debrief, the lead, or nobody until `--all` is asked) — it does not say what the
+decision is about. On 2026-08-19, four autonomous runs wrote 57 blocks and 51 of
+them carried a free Portuguese word in that field ("contrato", "schema",
+"fronteira"), 35 distinct values. The debrief filters on that field: with 89%
+outside the vocabulary, it offered the owner three decisions — all from the
+first card — while the ones with the greatest consequence stayed invisible.
+Nothing showed up as an error.
 
-O que estes testes fixam:
-  - valor fora do vocabulário bloqueia, e a mensagem diz o que fazer;
-  - os três valores válidos passam;
-  - a linha-modelo da documentação passa (senão não dá para editar o documento
-    que define o vocabulário);
-  - bloco sem campo Altitude NÃO bloqueia (o debrief já assume tactical, e
-    bloquear ausência viraria parede na edição de bloco legado);
-  - o gate lê Write, Edit e MultiEdit, e nunca bloqueia o que não consegue ver.
+What these tests pin down:
+  - a value outside the vocabulary blocks, and the message says what to do;
+  - the three valid values pass;
+  - the documentation's template line passes (otherwise the document that
+    defines the vocabulary could not be edited);
+  - a block without an Altitude field does NOT block (the debrief already
+    assumes tactical, and blocking absence would become a wall when editing a
+    legacy block);
+  - the gate reads Write, Edit and MultiEdit, and never blocks what it cannot see.
 
 Run: python3 tests/test_decision_altitude_gate.py
 """
@@ -46,16 +48,16 @@ def run(payload):
     return p.returncode, p.stderr
 
 
-def escrita(content, tool="Write"):
-    campo = {"Write": "content", "Edit": "new_string"}.get(tool, "content")
-    return {"tool_name": tool, "tool_input": {"file_path": "/tmp/RESULT.md", campo: content}}
+def write_payload(content, tool="Write"):
+    field = {"Write": "content", "Edit": "new_string"}.get(tool, "content")
+    return {"tool_name": tool, "tool_input": {"file_path": "/tmp/RESULT.md", field: content}}
 
 
-BLOCO = "### Decision: cortar a cadeia de hash\n\n**Altitude:** {}\n\n**Chosen:** A\n"
+BLOCK = "### Decision: cortar a cadeia de hash\n\n**Altitude:** {}\n\n**Chosen:** A\n"
 
 
-def test_palavra_livre_bloqueia():
-    rc, err = run(escrita(BLOCO.format("garantia")))
+def test_free_word_blocks():
+    rc, err = run(write_payload(BLOCK.format("garantia")))
     check("palavra livre no campo Altitude bloqueia", rc == 2, err)
     check("a mensagem mostra o valor recusado", '"garantia"' in err, err)
     check("a mensagem lista os três valores válidos",
@@ -64,37 +66,37 @@ def test_palavra_livre_bloqueia():
           "título" in err and "### Decision:" in err, err)
 
 
-def test_vocabulario_passa():
+def test_vocabulary_passes():
     for v in ("strategic", "tactical", "implementation"):
-        rc, err = run(escrita(BLOCO.format(v)))
+        rc, err = run(write_payload(BLOCK.format(v)))
         check(f"'{v}' passa", rc == 0, err)
-    rc, _ = run(escrita(BLOCO.format("**Tactical**")))
+    rc, _ = run(write_payload(BLOCK.format("**Tactical**")))
     check("valor com marcação e maiúscula passa", rc == 0)
 
 
-def test_linha_modelo_da_documentacao_passa():
-    rc, err = run(escrita("**Altitude:** strategic | tactical | implementation\n"))
+def test_documentation_template_line_passes():
+    rc, err = run(write_payload("**Altitude:** strategic | tactical | implementation\n"))
     check("a enumeração que ensina o vocabulário passa", rc == 0, err)
-    rc, err = run(escrita("**Altitude:** <strategic|tactical|implementation>\n"))
+    rc, err = run(write_payload("**Altitude:** <strategic|tactical|implementation>\n"))
     check("o marcador de preencher passa", rc == 0, err)
 
 
-def test_campo_ausente_nao_bloqueia():
-    rc, err = run(escrita("### Decision: x\n\n**Chosen:** Option A\n"))
+def test_missing_field_does_not_block():
+    rc, err = run(write_payload("### Decision: x\n\n**Chosen:** Option A\n"))
     check("bloco sem campo Altitude não bloqueia", rc == 0, err)
 
 
-def test_edit_e_multiedit():
-    rc, _ = run(escrita(BLOCO.format("fronteira"), tool="Edit"))
+def test_edit_and_multiedit():
+    rc, _ = run(write_payload(BLOCK.format("fronteira"), tool="Edit"))
     check("Edit também é lido", rc == 2)
     rc, _ = run({"tool_name": "MultiEdit", "tool_input": {
         "file_path": "/tmp/RESULT.md",
         "edits": [{"new_string": "nada aqui"},
-                  {"new_string": BLOCO.format("retenção")}]}})
+                  {"new_string": BLOCK.format("retenção")}]}})
     check("MultiEdit também é lido", rc == 2)
 
 
-def test_nunca_bloqueia_o_que_nao_ve():
+def test_never_blocks_what_it_cannot_see():
     rc, _ = run({"tool_name": "Write", "tool_input": {"file_path": "/tmp/x.md"}})
     check("sem conteúdo visível, libera", rc == 0)
     rc, _ = run({"tool_name": "Bash", "tool_input": {"command": "echo Altitude: contrato"}})
@@ -104,36 +106,36 @@ def test_nunca_bloqueia_o_que_nao_ve():
     check("payload ilegível, libera", p.returncode == 0)
 
 
-def test_nao_bloqueia_os_documentos_que_definem_o_campo():
-    """Gate que impede consertar a própria definição ensina a desligar o gate.
+def test_does_not_block_the_documents_that_define_the_field():
+    """A gate that stops you from fixing its own definition teaches people to turn the gate off.
 
-    Os dois documentos citam o campo em prosa ("**Altitude field** classifies
-    who reviews...") e trazem a linha-modelo com comentário ao lado. Ambos
-    passaram a ser bloqueados na primeira versão do gate.
+    The two documents cite the field in prose ("**Altitude field** classifies
+    who reviews...") and carry the template line with a comment beside it. Both
+    were blocked in the first version of the gate.
     """
-    for rel in ("common/skills/autonomous-mode/SKILL.md", "common/commands/debrief.md"):
-        conteudo = (REPO / rel).read_text(encoding="utf-8")
-        rc, err = run(escrita(conteudo))
-        check(f"{rel.split('/')[-1]} passa pelo gate", rc == 0, err[:300])
+    for rel_path in ("common/skills/autonomous-mode/SKILL.md", "common/commands/debrief.md"):
+        content = (REPO / rel_path).read_text(encoding="utf-8")
+        rc, err = run(write_payload(content))
+        check(f"{rel_path.split('/')[-1]} passa pelo gate", rc == 0, err[:300])
 
-    rc, err = run(escrita("**Altitude field** classifies who reviews the decision\n"))
+    rc, err = run(write_payload("**Altitude field** classifies who reviews the decision\n"))
     check("prosa que fala do campo, sem dois pontos, não é valor",
           rc == 0, err)
-    rc, err = run(escrita("**Altitude:** <strategic|tactical|implementation>   ← escolha uma\n"))
+    rc, err = run(write_payload("**Altitude:** <strategic|tactical|implementation>   ← escolha uma\n"))
     check("linha-modelo com comentário ao lado passa", rc == 0, err)
 
 
-def test_so_vale_dentro_do_bloco_de_decisao():
-    """`Altitude` fora de bloco de decisão é OUTRO campo, com outro vocabulário.
+def test_only_applies_inside_the_decision_block():
+    """`Altitude` outside a decision block is ANOTHER field, with another vocabulary.
 
-    Em 2026-08-22 o completion-auditor tentou gravar
-    `.claude/acceptance/WEGO-2085.yaml` com `altitude: http` — ali o campo diz em
-    que superfície o critério é observável (http/cli/ui/event/domain/application),
-    nada a ver com quem revisa a decisão. O gate barrou e o agente contornou
-    renomeando o campo na marra, o que faz cada sessão inventar um nome e os
-    artefatos de aceite deixarem de ser comparáveis.
+    On 2026-08-22 the completion-auditor tried to write
+    `.claude/acceptance/WEGO-2085.yaml` with `altitude: http` — there the field says
+    on which surface the criterion is observable (http/cli/ui/event/domain/application),
+    nothing to do with who reviews the decision. The gate blocked it and the agent
+    worked around it by renaming the field by force, which makes each session invent
+    a name and the acceptance artifacts stop being comparable.
     """
-    rc, err = run(escrita("### Decision: mover o gate\n\n**Altitude:** operacional\n"))
+    rc, err = run(write_payload("### Decision: mover o gate\n\n**Altitude:** operacional\n"))
     check("dentro do bloco, palavra fora do vocabulário bloqueia", rc == 2, err)
 
     yaml = ("key: WEGO-2085\ncriteria:\n  - id: AC1\n    altitude: http\n"
@@ -142,17 +144,17 @@ def test_so_vale_dentro_do_bloco_de_decisao():
         "file_path": "/tmp/WEGO-2085.yaml", "content": yaml}})
     check("yaml de aceite sem bloco de decisão passa", rc == 0, err)
 
-    misto = ("### Decision: cortar a cadeia\n\n**Altitude:** tactical\n\n"
+    mixed = ("### Decision: cortar a cadeia\n\n**Altitude:** tactical\n\n"
              "### Critérios de aceite\n\ncriteria:\n  - altitude: http\n")
-    rc, err = run(escrita(misto))
+    rc, err = run(write_payload(mixed))
     check("altitude fora do bloco, no mesmo arquivo, passa", rc == 0, err)
 
 
-def test_edit_sem_cabecalho_usa_o_arquivo_de_destino():
-    """Um Edit pode trazer só a linha do campo; quem diz se é bloco é o arquivo.
+def test_edit_without_header_uses_the_target_file():
+    """An Edit may carry only the field line; the file says whether it is a block.
 
-    Sem isto, corrigir a altitude de um bloco existente por Edit escaparia do
-    gate — que é exatamente o momento em que o autor está ali para consertar.
+    Without this, fixing the altitude of an existing block through Edit would escape
+    the gate — which is exactly the moment when the author is there to fix it.
     """
     import tempfile, os
     d = tempfile.mkdtemp()
@@ -174,15 +176,15 @@ def test_edit_sem_cabecalho_usa_o_arquivo_de_destino():
 
 
 def main():
-    test_palavra_livre_bloqueia()
-    test_vocabulario_passa()
-    test_linha_modelo_da_documentacao_passa()
-    test_campo_ausente_nao_bloqueia()
-    test_edit_e_multiedit()
-    test_nunca_bloqueia_o_que_nao_ve()
-    test_nao_bloqueia_os_documentos_que_definem_o_campo()
-    test_so_vale_dentro_do_bloco_de_decisao()
-    test_edit_sem_cabecalho_usa_o_arquivo_de_destino()
+    test_free_word_blocks()
+    test_vocabulary_passes()
+    test_documentation_template_line_passes()
+    test_missing_field_does_not_block()
+    test_edit_and_multiedit()
+    test_never_blocks_what_it_cannot_see()
+    test_does_not_block_the_documents_that_define_the_field()
+    test_only_applies_inside_the_decision_block()
+    test_edit_without_header_uses_the_target_file()
     print()
     if FAILURES:
         print(f"{len(FAILURES)} failure(s): {FAILURES}")

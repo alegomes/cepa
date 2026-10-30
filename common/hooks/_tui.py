@@ -1,20 +1,23 @@
-"""Aparência de TUI para a saída dos comandos cepa-*, só quando ela é um terminal.
+"""TUI look for the output of the cepa-* commands, only when it is a terminal.
 
-Os comandos imprimem texto corrido: é o que os testes leem, o que um agente
-recebe pelo Bash e o que um `nohup` grava. Este módulo decora essa mesma saída
-quando, e só quando, ela vai para um terminal: cabeçalho em barra, seção com
-régua, glifos coloridos, separadores apagados e linha longa quebrada com recuo
-pendurado (a continuação alinha com o texto, não com a margem). Fora do
-terminal, com NO_COLOR ou com TERM=dumb, nada muda: a saída é byte a byte a de
-antes. `CEPA_COR=sempre` e `CEPA_COR=nunca` forçam.
+The commands print plain text: it is what the tests read, what an agent
+receives through Bash and what a `nohup` records. This module decorates that
+same output when, and only when, it goes to a terminal: bar header, section
+with a rule, colored glyphs, dimmed separators and long lines wrapped with a
+hanging indent (the continuation aligns with the text, not with the margin).
+Outside a terminal, with NO_COLOR or with TERM=dumb, nothing changes: the
+output is byte for byte the one from before. `CEPA_COR=sempre` and
+`CEPA_COR=nunca` force it on and off.
 
-Dois jeitos de usar:
+Two ways to use it:
 
-  * `instalar()` no `__main__`: troca o sys.stdout por um filtro que decora
-    linha a linha pelo formato do texto (`# título`, `## seção`, `seção (3)`,
-    `✓ [tag] ...`, `18. id — título`, `chave: valor`). É o que todo comando usa.
-  * `TELA` e suas primitivas, para quem monta a tela por conta própria (o
-    `cepa-plan status`). Linha que já traz cor passa pelo filtro intocada.
+  * `install()` in `__main__`: swaps sys.stdout for a filter that decorates
+    line by line according to the text format (`# title`, `## section`,
+    `section (3)`, `✓ [tag] ...`, `18. id — title`, `key: value`). It is what
+    every command uses.
+  * `SCREEN` and its primitives, for whoever builds the screen by hand (the
+    `cepa-plan status`). A line that already carries color goes through the
+    filter untouched.
 """
 
 import os
@@ -23,22 +26,22 @@ import shutil
 import sys
 import textwrap
 
-CORES = {"verde": "32", "vermelho": "31", "amarelo": "33", "azul": "34",
-         "magenta": "35", "ciano": "36", "cinza": "2", "negrito": "1"}
-FIM = "\033[0m"
+COLORS = {"verde": "32", "vermelho": "31", "amarelo": "33", "azul": "34",
+          "magenta": "35", "ciano": "36", "cinza": "2", "negrito": "1"}
+END = "\033[0m"
 
-# Glifo no começo da linha → cor dele.
-MARCADORES = {"✓": "verde", "✔": "verde", "✗": "vermelho", "✘": "vermelho",
-              "⚠": "amarelo", "!": "amarelo", "→": "ciano", "▶": "ciano",
-              "↻": "amarelo", "◆": "magenta", "⊕": "ciano", "●": "ciano",
-              "○": "cinza", "■": "vermelho", "-": "cinza", "•": "cinza",
-              "*": "cinza", ">": "magenta"}
-_MARCADOR = re.compile(r"^(\d+[.)]|[" + re.escape("".join(MARCADORES)) + r"])\s+")
-_ID_TRACO = re.compile(r"^(\S+)( — )")
+# Glyph at the start of the line → its color.
+MARKERS = {"✓": "verde", "✔": "verde", "✗": "vermelho", "✘": "vermelho",
+           "⚠": "amarelo", "!": "amarelo", "→": "ciano", "▶": "ciano",
+           "↻": "amarelo", "◆": "magenta", "⊕": "ciano", "●": "ciano",
+           "○": "cinza", "■": "vermelho", "-": "cinza", "•": "cinza",
+           "*": "cinza", ">": "magenta"}
+_MARKER = re.compile(r"^(\d+[.)]|[" + re.escape("".join(MARKERS)) + r"])\s+")
+_ID_DASH = re.compile(r"^(\S+)( — )")
 _TAG = re.compile(r"^(\[[^\]]{1,32}\])\s")
-_CHAVE = re.compile(r"^([^\W\d][\w À-ÿ/-]{0,22}):\s+(?=\S)")
-_SECAO_CONTAGEM = re.compile(r"^(.*?)\s*\((\d+)\):?$")
-_PALAVRAS = [
+_KEY = re.compile(r"^([^\W\d][\w À-ÿ/-]{0,22}):\s+(?=\S)")
+_SECTION_COUNT = re.compile(r"^(.*?)\s*\((\d+)\):?$")
+_WORDS = [
     (re.compile(r"\b(PROVEN|COMPLETE|PASS|OK|verde)\b"), "verde"),
     (re.compile(r"\b(UNPROVEN|INCOMPLETE|FAIL(?:URE)?|ERRO|vermelho)\b"),
      "vermelho"),
@@ -46,174 +49,174 @@ _PALAVRAS = [
 ]
 
 
-class Tela:
-    def __init__(self, fluxo=None):
-        fluxo = sys.stdout if fluxo is None else fluxo
-        modo = os.environ.get("CEPA_COR", "").strip().lower()
-        if modo in ("sempre", "always", "1"):
-            ligada = True
-        elif modo in ("nunca", "never", "0") or os.environ.get("NO_COLOR"):
-            ligada = False
+class Screen:
+    def __init__(self, stream=None):
+        stream = sys.stdout if stream is None else stream
+        mode = os.environ.get("CEPA_COR", "").strip().lower()
+        if mode in ("sempre", "always", "1"):
+            enabled = True
+        elif mode in ("nunca", "never", "0") or os.environ.get("NO_COLOR"):
+            enabled = False
         else:
             try:
-                ligada = bool(fluxo.isatty()) and os.environ.get("TERM") != "dumb"
+                enabled = bool(stream.isatty()) and os.environ.get("TERM") != "dumb"
             except (AttributeError, ValueError):
-                ligada = False
-        self.ligada = ligada
+                enabled = False
+        self.enabled = enabled
 
-    def largura(self):
+    def width(self):
         try:
             return max(shutil.get_terminal_size((100, 40)).columns - 1, 40)
         except (OSError, ValueError):
             return 99
 
-    def c(self, cor, texto):
-        if not self.ligada or not texto:
-            return texto
-        codigos = ";".join(CORES[x] for x in cor.split("+"))
-        return f"\033[{codigos}m{texto}{FIM}"
+    def c(self, color, text):
+        if not self.enabled or not text:
+            return text
+        codes = ";".join(COLORS[x] for x in color.split("+"))
+        return f"\033[{codes}m{text}{END}"
 
-    # ── primitivas ───────────────────────────────────────────────────────
+    # ── primitives ───────────────────────────────────────────────────────
 
-    def cabecalho(self, titulo, direita=""):
-        """Barra cheia na largura do terminal: título à esquerda, `direita`
-        (contagem, data) encostado à direita."""
-        if not self.ligada:
-            return titulo
-        w = self.largura()
-        esq = f" {titulo} "
-        dir_ = f" {direita} " if direita else ""
-        meio = max(w - len(esq) - len(dir_), 0)
-        return f"\033[1;7;35m{esq}{' ' * meio}{dir_}{FIM}"
+    def header(self, title, right=""):
+        """Full bar at the terminal width: title on the left, `right`
+        (count, date) flush to the right edge."""
+        if not self.enabled:
+            return title
+        w = self.width()
+        left = f" {title} "
+        right_ = f" {right} " if right else ""
+        middle = max(w - len(left) - len(right_), 0)
+        return f"\033[1;7;35m{left}{' ' * middle}{right_}{END}"
 
-    def secao(self, titulo, contagem=None, cor="magenta", glifo=""):
-        """`── glifo título (n) ─────────` até a margem direita."""
-        if not self.ligada:
-            return titulo if contagem is None else f"{titulo} ({contagem})"
-        rotulo = f"{glifo} {titulo}" if glifo else titulo
-        n = "" if contagem is None else f" ({contagem})"
-        resto = max(self.largura() - len(rotulo) - len(n) - 4, 0)
-        return (self.c(cor, "── ") + self.c(f"negrito+{cor}", rotulo)
-                + self.c("cinza", n) + " " + self.c(cor, "─" * resto))
+    def section(self, title, count=None, color="magenta", glyph=""):
+        """`── glyph title (n) ─────────` up to the right margin."""
+        if not self.enabled:
+            return title if count is None else f"{title} ({count})"
+        label = f"{glyph} {title}" if glyph else title
+        n = "" if count is None else f" ({count})"
+        rest = max(self.width() - len(label) - len(n) - 4, 0)
+        return (self.c(color, "── ") + self.c(f"negrito+{color}", label)
+                + self.c("cinza", n) + " " + self.c(color, "─" * rest))
 
-    def quebra(self, texto, recuo=0, pendurado=None, largura=None):
-        """Quebra `texto` na largura do terminal com recuo pendurado. Devolve
-        a lista de linhas, sem cor."""
-        pendurado = recuo if pendurado is None else pendurado
-        w = largura or self.largura()
-        if len(texto) + recuo <= w:
-            return [" " * recuo + texto]
-        return textwrap.wrap(texto, width=w, initial_indent=" " * recuo,
-                             subsequent_indent=" " * pendurado,
-                             break_on_hyphens=False) or [" " * recuo]
+    def wrap(self, text, indent=0, hanging=None, width=None):
+        """Wrap `text` at the terminal width with a hanging indent. Returns
+        the list of lines, without color."""
+        hanging = indent if hanging is None else hanging
+        w = width or self.width()
+        if len(text) + indent <= w:
+            return [" " * indent + text]
+        return textwrap.wrap(text, width=w, initial_indent=" " * indent,
+                             subsequent_indent=" " * hanging,
+                             break_on_hyphens=False) or [" " * indent]
 
-    def corta(self, texto, largura):
-        return texto if len(texto) <= largura else texto[:max(largura - 1, 1)] + "…"
+    def cut(self, text, width):
+        return text if len(text) <= width else text[:max(width - 1, 1)] + "…"
 
-    def barra(self, frac, n=24, cor="verde"):
+    def bar(self, frac, n=24, color="verde"):
         k = round(max(0.0, min(1.0, frac)) * n)
-        return self.c(cor, "▰" * k) + self.c("cinza", "▱" * (n - k))
+        return self.c(color, "▰" * k) + self.c("cinza", "▱" * (n - k))
 
-    def realce(self, texto):
-        """Separadores apagados e palavras de veredito na cor delas."""
-        if not self.ligada:
-            return texto
-        texto = texto.replace(" · ", self.c("cinza", " · "))
-        texto = texto.replace(" — ", self.c("cinza", " — "))
-        for padrao, cor in _PALAVRAS:
-            texto = padrao.sub(lambda m, cor=cor: self.c(cor, m.group(0)), texto)
-        return texto
+    def highlight(self, text):
+        """Dimmed separators and verdict words in their own color."""
+        if not self.enabled:
+            return text
+        text = text.replace(" · ", self.c("cinza", " · "))
+        text = text.replace(" — ", self.c("cinza", " — "))
+        for pattern, color in _WORDS:
+            text = pattern.sub(lambda m, color=color: self.c(color, m.group(0)), text)
+        return text
 
-    # ── decoração linha a linha, pelo formato do texto ──────────────────
+    # ── line-by-line decoration, by the shape of the text ──────────────
 
-    def linha(self, linha):
-        if (not self.ligada or "\033" in linha or "\r" in linha
-                or not linha.strip()):
-            return linha
-        corpo = linha.strip()
-        if corpo[0] in "{}[]\"":
-            return linha
-        recuo = len(linha) - len(linha.lstrip(" "))
+    def line(self, line):
+        if (not self.enabled or "\033" in line or "\r" in line
+                or not line.strip()):
+            return line
+        body = line.strip()
+        if body[0] in "{}[]\"":
+            return line
+        indent = len(line) - len(line.lstrip(" "))
 
-        m = re.match(r"^#\s+(.+)$", linha)
+        m = re.match(r"^#\s+(.+)$", line)
         if m:
-            return self.cabecalho(m.group(1))
-        m = re.match(r"^(?:#{2,}|──)\s+(.+?)\s*─*$", linha)
+            return self.header(m.group(1))
+        m = re.match(r"^(?:#{2,}|──)\s+(.+?)\s*─*$", line)
         if m:
-            return self._secao_livre(m.group(1))
-        if recuo == 0 and len(corpo) <= 72 and ": " not in corpo and (
-                corpo.endswith(":") or _SECAO_CONTAGEM.match(corpo)):
-            return self._secao_livre(corpo)
+            return self._free_section(m.group(1))
+        if indent == 0 and len(body) <= 72 and ": " not in body and (
+                body.endswith(":") or _SECTION_COUNT.match(body)):
+            return self._free_section(body)
 
-        prefixo, resto, cor = "", corpo, None
-        m = _MARCADOR.match(resto)
+        prefix, rest, color = "", body, None
+        m = _MARKER.match(rest)
         if m:
-            prefixo, resto = m.group(0), resto[m.end():]
-            cor = "cinza" if m.group(1)[0].isdigit() else MARCADORES[m.group(1)]
-        chave = None
-        m = _TAG.match(resto) or _CHAVE.match(resto)
+            prefix, rest = m.group(0), rest[m.end():]
+            color = "cinza" if m.group(1)[0].isdigit() else MARKERS[m.group(1)]
+        key = None
+        m = _TAG.match(rest) or _KEY.match(rest)
         if m:
-            chave = m.group(0)
-            resto = resto[m.end():]
-        pendurado = recuo + len(prefixo) + (len(chave) if chave and len(chave) <= 24 else 0)
-        linhas = self.quebra(prefixo + (chave or "") + resto, recuo, pendurado)
+            key = m.group(0)
+            rest = rest[m.end():]
+        hanging = indent + len(prefix) + (len(key) if key and len(key) <= 24 else 0)
+        lines = self.wrap(prefix + (key or "") + rest, indent, hanging)
 
-        primeira = linhas[0][recuo + len(prefixo) + len(chave or ""):]
-        id_traco = _ID_TRACO.match(primeira) if prefixo[:1].isdigit() else None
-        if id_traco:
-            primeira = (self.c("negrito+ciano", id_traco.group(1))
-                        + self.c("cinza", id_traco.group(2))
-                        + self.realce(primeira[id_traco.end():]))
+        first = lines[0][indent + len(prefix) + len(key or ""):]
+        id_dash = _ID_DASH.match(first) if prefix[:1].isdigit() else None
+        if id_dash:
+            first = (self.c("negrito+ciano", id_dash.group(1))
+                     + self.c("cinza", id_dash.group(2))
+                     + self.highlight(first[id_dash.end():]))
         else:
-            primeira = self.realce(primeira)
-        saida = (" " * recuo + self.c(cor, prefixo) if prefixo else " " * recuo)
-        if chave:
-            saida += self.c("ciano" if chave.startswith("[") else "cinza", chave)
-        saida += primeira
-        return "\n".join([saida] + [self.realce(x) for x in linhas[1:]])
+            first = self.highlight(first)
+        out = (" " * indent + self.c(color, prefix) if prefix else " " * indent)
+        if key:
+            out += self.c("ciano" if key.startswith("[") else "cinza", key)
+        out += first
+        return "\n".join([out] + [self.highlight(x) for x in lines[1:]])
 
-    def _secao_livre(self, texto):
-        texto = texto.rstrip(":").rstrip()
-        m = _SECAO_CONTAGEM.match(texto)
+    def _free_section(self, text):
+        text = text.rstrip(":").rstrip()
+        m = _SECTION_COUNT.match(text)
         if m:
-            return self.secao(m.group(1), m.group(2))
-        return self.secao(texto)
+            return self.section(m.group(1), m.group(2))
+        return self.section(text)
 
 
-class Filtro:
-    """Stdout que decora cada linha completa e repassa o resto como veio."""
+class Filter:
+    """Stdout that decorates each complete line and passes the rest through as it came."""
 
-    def __init__(self, fluxo, tela):
-        self._fluxo = fluxo
-        self._tela = tela
-        self._pendente = ""
+    def __init__(self, stream, screen):
+        self._stream = stream
+        self._screen = screen
+        self._pending = ""
 
-    def write(self, texto):
-        self._pendente += texto
-        if "\n" not in self._pendente:
-            return len(texto)
-        *completas, self._pendente = self._pendente.split("\n")
-        self._fluxo.write("".join(self._tela.linha(l) + "\n" for l in completas))
-        return len(texto)
+    def write(self, text):
+        self._pending += text
+        if "\n" not in self._pending:
+            return len(text)
+        *complete, self._pending = self._pending.split("\n")
+        self._stream.write("".join(self._screen.line(l) + "\n" for l in complete))
+        return len(text)
 
     def flush(self):
-        if self._pendente:
-            self._fluxo.write(self._pendente)
-            self._pendente = ""
-        self._fluxo.flush()
+        if self._pending:
+            self._stream.write(self._pending)
+            self._pending = ""
+        self._stream.flush()
 
-    def __getattr__(self, nome):
-        return getattr(self._fluxo, nome)
-
-
-TELA = Tela()
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
 
 
-def instalar():
-    """Decora o stdout do comando quando ele é um terminal. Saída em JSON
-    (`--json`) e pedido explícito de texto puro (`--sem-cor`) nunca são
-    tocados."""
-    if (not TELA.ligada or isinstance(sys.stdout, Filtro)
-            or {"--json", "--sem-cor"} & set(sys.argv)):
+SCREEN = Screen()
+
+
+def install():
+    """Decorate the command's stdout when it is a terminal. JSON output
+    (`--json`) and an explicit request for plain text (`--no-color`, or the
+    old `--sem-cor`) are never touched."""
+    if (not SCREEN.enabled or isinstance(sys.stdout, Filter)
+            or {"--json", "--no-color", "--sem-cor"} & set(sys.argv)):
         return
-    sys.stdout = Filtro(sys.stdout, TELA)
+    sys.stdout = Filter(sys.stdout, SCREEN)

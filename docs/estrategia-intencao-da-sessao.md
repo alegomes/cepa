@@ -14,7 +14,7 @@ Base: `common/hooks/session-mode.py`, `common/bin/cepa` (função `write_modo`, 
 - **Sessão**: um processo `claude` aberto pelo launcher `cepa`, numa pasta de trabalho, até ser encerrado.
 - **Turno**: um prompt do dono e a resposta do agente a ele.
 - **Harness**: o conjunto de hooks, comandos, skills e scripts em `common/` e nos outros plugins deste repo, que disciplina o agente.
-- **Modo**: o estado declarado em `cepa --modo <x>` (exploração, construção, reforma...). Dura a sessão inteira; cada modo tem condição de saída fixa em `common/hooks/_modos.py`.
+- **Modo**: o estado declarado em `cepa --mode <x>` (exploração, construção, reforma...). Dura a sessão inteira; cada modo tem condição de saída fixa em `common/hooks/_modos.py`.
 - **Rotina**: um comando que executa uma tarefa inteira e termina (`/board-flow:prove-drain`, `/common:drain-plan`).
 - **Programa**: uma fila ordenada de itens em `.claude/programs/<nome>/plan.yaml`, escrita pelo `/common:plan`.
 - **Ciclo**: uma rodada de trabalho que entrega algo demonstrável, a unidade de custo deste repo.
@@ -67,7 +67,7 @@ Conclusão: as quatro perguntas são sobre um objeto só, que o harness não gua
 
 Um arquivo `.claude/session-intent`, separado do `session-mode`, com propósito, ponto de parada, plano, cursor e histórico. O hook `session-mode.py` injeta propósito e passo atual a cada turno. Um comando `whereami` imprime as quatro respostas. A statusline mostra uma linha pré-renderizada.
 
-Por que arquivo próprio e não campos no `session-mode` (primeira versão deste doc): `write_modo` no `cepa` reescreve o `session-mode` inteiro com `>` a cada lançamento, então a intenção morreria em todo relançamento. Seis leitores (`session-mode.py`, `modo-escrita-gate.py`, `reforma-gate.py`, `cepa-feedback`, `cepa-modos`, statusline) fazem parse linha a linha e nenhum entende lista. E a doutrina do repo é escritor único por artefato (`/common:plan` é "o ÚNICO escritor da fila"; `_modos.py` existe porque três cópias da mesma tabela custaram caro).
+Por que arquivo próprio e não campos no `session-mode` (primeira versão deste doc): `write_modo` no `cepa` reescreve o `session-mode` inteiro com `>` a cada lançamento, então a intenção morreria em todo relançamento. Seis leitores (`session-mode.py`, `modo-escrita-gate.py`, `reforma-gate.py`, `cepa-feedback`, `cepa-modes`, statusline) fazem parse linha a linha e nenhum entende lista. E a doutrina do repo é escritor único por artefato (`/common:plan` é "o ÚNICO escritor da fila"; `_modos.py` existe porque três cópias da mesma tabela custaram caro).
 
 ### C2. C1 mais nomeação de desvio por passo
 
@@ -98,11 +98,11 @@ Proposto pelo painel. Os três primeiros prompts do `session-log.md` são a inte
 
 Respostas às cinco discordâncias do painel (detalhe na síntese, no fim):
 
-- **D1. Ciclo de vida.** A intenção vive por branch/worktree e sobrevive a relançamento e `/clear`. O arquivo grava `session_id` e `aberto_em`; quando a sessão atual difere da que gravou, o hook injeta "intenção de <data>, gravada em outra sessão: continuo ou abro nova?" em vez de exibi-la como atual.
-- **D2. Cursor.** O agente atualiza, rodando `cepa-intencao --passo N` ao concluir um passo. Nenhum mecanismo decide sozinho que um passo acabou. O que torna isso tolerável: o comando é evento observável (telemetria), o hook mostra há quantos turnos o cursor está parado, e o `whereami` confronta o gravado com os últimos prompts do log. O dono pode rodar o comando à mão.
+- **D1. Ciclo de vida.** A intenção vive por branch/worktree e sobrevive a relançamento e `/clear`. O arquivo grava `session_id` e `opened_at`; quando a sessão atual difere da que gravou, o hook injeta "intenção de <data>, gravada em outra sessão: continuo ou abro nova?" em vez de exibi-la como atual.
+- **D2. Cursor.** O agente atualiza, rodando `cepa-intent --step N` ao concluir um passo. Nenhum mecanismo decide sozinho que um passo acabou. O que torna isso tolerável: o comando é evento observável (telemetria), o hook mostra há quantos turnos o cursor está parado, e o `whereami` confronta o gravado com os últimos prompts do log. O dono pode rodar o comando à mão.
 - **D3. C2.** Entra reescrito, sem "não atendo", roteando ramo longo para `/common:branch`. Segundo ciclo.
 - **D4. Comando.** `whereami`, nome único, sem alias. `/common:next` ganha fallback para sessão sem programa e `/common:recap` abre com "propósito / passo N de M".
-- **D5. Statusline.** Entra como conveniência local, fora das garantias e testes do harness, lendo um campo `resumo:` pré-renderizado. Primeira tarefa: spike de 5 minutos para ver se o Claude Code renderiza duas linhas.
+- **D5. Statusline.** Entra como conveniência local, fora das garantias e testes do harness, lendo um campo `summary:` pré-renderizado. Primeira tarefa: spike de 5 minutos para ver se o Claude Code renderiza duas linhas.
 
 Também decidido, sem discordância no painel:
 
@@ -116,36 +116,36 @@ Também decidido, sem discordância no painel:
 ### O arquivo `.claude/session-intent`
 
 ```yaml
-proposito: "institucionalizar as quatro perguntas de aterrissagem"
-para_quando: "doc de estratégia em docs/ passado pelo /common:advisors e decidido"
-plano:
+purpose: "institucionalizar as quatro perguntas de aterrissagem"
+by_when: "doc de estratégia em docs/ passado pelo /common:advisors e decidido"
+plan:
   - levantar o que o harness já cobre
   - escrever o doc com 2+ caminhos
   - rodar advisors e registrar as discordâncias
   - decidir
-passo: 3                      # o passo EM ANDAMENTO (não o último concluído)
-passo_desde: 2026-10-16T21:40:00Z
+step: 3                       # o passo EM ANDAMENTO (não o último concluído)
+step_since: 2026-10-16T21:40:00Z
 session_id: 209286bf
 branch: main
-aberto_em: 2026-10-16T18:30:00Z
-resumo: "passo 3/4 · rodar advisors · institucionalizar as quatro perguntas"
-historico:
-  - em: 2026-10-16T18:30:00Z
-    proposito: "criar um comando whereami"
-    motivo_da_troca: "o dono reformulou: o objeto é a intenção, não o comando"
+opened_at: 2026-10-16T18:30:00Z
+summary: "passo 3/4 · rodar advisors · institucionalizar as quatro perguntas"
+history:
+  - at: 2026-10-16T18:30:00Z
+    purpose: "criar um comando whereami"
+    change_reason: "o dono reformulou: o objeto é a intenção, não o comando"
 ```
 
 Itens do plano não contêm dois-pontos (o escritor recusa). O parser mora em `_modos.py` ou `_wtlib.py`, com teste, e o nome entra em `RESCUE` de `_wtlib.py` para o resgate de worktree não o arrastar. Plano de 1 a 6 passos; mais que isso é programa (`plan.yaml`).
 
 ### Quem escreve
 
-Um único escritor: o comando `cepa-intencao`. Subcomandos: gravar (propósito, ponto de parada, plano), `--passo N`, `--proposito "..." --motivo "..."`, `--plano` (substitui, preservando o anterior no histórico). Ele renderiza o `resumo:`. O agente nunca edita o YAML à mão.
+Um único escritor: o comando `cepa-intent`. Subcomandos: write (propósito, ponto de parada, plano), `--step N`, `--purpose "..." --reason "..."`, `--plan` (substitui, preservando o anterior no histórico). Ele renderiza o `summary:`. O agente nunca edita o YAML à mão.
 
 Quem chama o comando, por origem da sessão:
 
 | Origem | Quem grava | Quando |
 |---|---|---|
-| `cepa --modo x` e conversa | o agente, no primeiro turno com conteúdo | o hook pede enquanto falta |
+| `cepa --mode x` e conversa | o agente, no primeiro turno com conteúdo | o hook pede enquanto falta |
 | `/common:session <rotina>` | a própria rotina, a partir das perguntas de largada | sem segundo ritual |
 | encadeada por `next.json` | o launcher `cepa`, com o `brief` como propósito | antes do primeiro turno |
 | `cepa-until` | ninguém; a intenção é o item do `plan.yaml` | `whereami` delega ao `/common:next` |
@@ -153,7 +153,7 @@ Quem chama o comando, por origem da sessão:
 
 ### O primeiro turno (texto fixo)
 
-O hook, sem intenção gravada, injeta: "Esta sessão ainda não tem intenção gravada. Primeiros prompts: <três primeiros do log>. Se este prompt tem conteúdo, proponha em três linhas (propósito, para quando, plano numerado), grave com `cepa-intencao`, e feche com: a qualquer momento `/common:whereami` mostra onde estamos. Se o prompt é trivial ou um comando de abertura, não proponha ainda."
+O hook, sem intenção gravada, injeta: "Esta sessão ainda não tem intenção gravada. Primeiros prompts: <três primeiros do log>. Se este prompt tem conteúdo, proponha em três linhas (propósito, para quando, plano numerado), grave com `cepa-intent`, e feche com: a qualquer momento `/common:whereami` mostra onde estamos. Se o prompt é trivial ou um comando de abertura, não proponha ainda."
 
 O agente mostra as três linhas e segue trabalhando no mesmo turno. "sim" ou silêncio mantém; qualquer outra coisa é correção e regrava. Pergunta fechada aqui é a exceção "bifurcação genuína de preferência" do `default-yes`: o propósito é do dono.
 
@@ -165,12 +165,20 @@ O agente mostra as três linhas e segue trabalhando no mesmo turno. "sim" ou sil
 
 - Vazio: "Esta sessão não tem intenção gravada. Diga o propósito e eu proponho o plano." Em run do `cepa-until`: delega ao `/common:next`.
 - Normal: as quatro respostas por extenso, o plano com o cursor marcado, a idade do cursor, e a conferência contra o log ("o arquivo diz passo 2; os últimos 3 prompts parecem do passo 3. Avanço?").
-- Plano cumprido: "Os 4 passos estão feitos. Ponto de parada: <para_quando>. Próximo: `/common:wrap-up`."
+- Plano cumprido: "Os 4 passos estão feitos. Ponto de parada: <by_when>. Próximo: `/common:wrap-up`."
 - Intenção de outra sessão: mostra a data e pergunta se continua.
+
+### Altitude do Epic (2026-10-24)
+
+Em 2026-10-20 o dono pediu o mesmo resumo na altitude do projeto: uma sessão perdeu o fio do Epic e teve de reescrevê-lo. A intenção da sessão cobre só a altitude da sessão.
+
+Decisão: o resumo é derivado, não escrito. Um bloco mantido à mão desvia do Epic; o comando `cepa-plan epics` (só lê) monta o resumo da escada de valor mais as filas `single-track`. Cada fila é ligada a um ciclo por uma de três regras: (a) o `source` da fila cita `docs/epics/<nome>.md` e "ciclo N"; (b) a fila se chama `<nome>-c<N>`; (c) o cabeçalho do Epic declara `<prefixo>-c<N>` e a fila se chama `<prefixo>-c<N>`.
+
+Aparece em dois lugares: no hook de sessão, uma linha `[epic]` só no primeiro turno (fora de run do `cepa-until`), e no passo 0 do `/common:whereami`, com o detalhe completo.
 
 ### Statusline (conveniência local)
 
-Linha 2 = `sed -n 's/^resumo: //p' .claude/session-intent`, cortada a 80 colunas. O `resumo:` já vem na ordem de corte certa: passo, nome do passo, propósito. Não repete o modo, que está na linha 1. Se o spike mostrar que duas linhas não renderizam, a linha 1 perde o segmento de tokens e ganha o passo; isso é decisão do dono.
+Linha 2 = `sed -n 's/^summary: //p' .claude/session-intent`, cortada a 80 colunas. O `summary:` já vem na ordem de corte certa: passo, nome do passo, propósito. Não repete o modo, que está na linha 1. Se o spike mostrar que duas linhas não renderizam, a linha 1 perde o segmento de tokens e ganha o passo; isso é decisão do dono.
 
 Spike (2026-10-17, C1-7, Claude Code 2.1.302): duas linhas renderizam. A prova é documental, não visual (o run desatendido não tem terminal): a página oficial da statusline (code.claude.com/docs/en/statusline) diz que "each `echo` or `print` statement displays as a separate row" e traz um exemplo de duas linhas. A linha 2 entrou em `~/.claude/statusline-command.sh` (backup em `statusline-command.sh.bak-2026-10-17`): prefixo `🧭`, texto esmaecido, some sem `resumo:`, tira as aspas e os escapes do serializador de `_modos.py`, e corta por caractere (python3; o `cut -c` do macOS corta por byte e partiria o `·`) em 80 colunas contando o prefixo, com `…` quando corta.
 
@@ -184,7 +192,7 @@ Número do scorecard (decisão 8 de `estrategia-cepa-proximo-nivel.md`) que isto
 
 Ciclo 1:
 1. Formato e parser compartilhado, nome em `RESCUE`, teste.
-2. `cepa-intencao` (gravar, `--passo`, `--proposito`, `--plano`, render do `resumo`), teste.
+2. `cepa-intent` (write, `--step`, `--purpose`, `--plan`, render do `summary`), teste.
 3. `session-mode.py`: estado vazio (com os três primeiros prompts), intenção de outra sessão, injeção normal de duas linhas; `tests/test_cepa_modo.py` acompanha.
 4. `cepa`: grava o brief do `next.json` como propósito; `/common:session` grava a partir das perguntas de largada.
 5. `whereami.md` com os quatro estados; fallback no `/common:next`; linha de abertura no `/common:recap`.
@@ -207,7 +215,7 @@ Ciclo 2 (condicional ao critério acima): C2 reescrito, roteando para `/common:b
 
 ### Convergências (achados independentes de 2+ lentes)
 
-- **V1. A intenção não pode morar em `session-mode`** (custo, executor, fundamentalista, expansionista, contrarian). Fatos conferidos no repo: `write_modo` reescreve o arquivo inteiro com `>` a cada `cepa`, então propósito e plano morreriam em todo relançamento; seis leitores fazem `partition(':')` por linha (session-mode.py, modo-escrita-gate.py, reforma-gate.py, cepa-feedback, cepa-modos, statusline) e nenhum entende lista YAML; a doutrina do repo é escritor único por artefato. Q2 não é gosto: arquivo próprio.
+- **V1. A intenção não pode morar em `session-mode`** (custo, executor, fundamentalista, expansionista, contrarian). Fatos conferidos no repo: `write_modo` reescreve o arquivo inteiro com `>` a cada `cepa`, então propósito e plano morreriam em todo relançamento; seis leitores fazem `partition(':')` por linha (session-mode.py, modo-escrita-gate.py, reforma-gate.py, cepa-feedback, cepa-modes, statusline) e nenhum entende lista YAML; a doutrina do repo é escritor único por artefato. Q2 não é gosto: arquivo próprio.
 - **V2. O primeiro turno não tem gatilho mecânico** (contrarian, executor, primeiro-uso, fundamentalista). "Skill curta para o primeiro turno" é a mesma instrução-só-no-contexto que o doc usa para adiar C2. O primeiro prompt costuma ser `/common:doctor`, "continua" ou um handoff, não a intenção. Conserto apontado pelos quatro: `session-mode.py` já roda a cada turno; enquanto não houver intenção gravada, injeta "proponha e grave".
 - **V3. O cursor é o estado mais frágil e a mitigação no Stop hook não tem definição** (contrarian, custo, executor, fundamentalista, outsider). "Concluiu algo" não é decidível; o único sinal do `report-style-lint.py` é Edit/Write/commit, que fica mudo justamente em sessão de exploração.
 - **V4. A evidência da worktree apagada é non sequitur** (contrarian, outsider, expansionista, executor). Existe `worktree-remove-guard.py` para isso desde 2026-08-17; o incidente é um guard falhando ou contornado pelo wrap-up de outra sessão. Nenhum dos quatro campos de C1 detectaria. Sai do doc; vira investigação própria (registrado em `.claude/desvios.md`).
@@ -222,10 +230,10 @@ Ciclo 2 (condicional ao critério acima): C2 reescrito, roteando para `/common:b
 
 **DA. Ciclo de vida da intenção: por sessão ou por trabalho.**
 Contrarian diz que a falha mais provável é a **intenção obsoleta herdada**: o arquivo vive por checkout, nunca é apagado, e a próxima sessão na mesma raiz exibe a intenção da anterior com a mesma confiança. Mitigação dele: gravar `session_id` e o hook descartar o que não bate. Expansionista diz o oposto: a intenção **pertence ao trabalho**, deve sobreviver a `/clear`, relançamento e encadeamento, morar por branch (como o label que `session-label.py` já guarda) e aparecer no `/common:worktree-list`, que é a visão multi-projeto que o dono administra de cabeça.
-O que decide: se a dor é "entre turnos" (sessão) ou "entre projetos" (trabalho). O dono disse as duas. Recomendação do sintetizador: por branch/worktree, com `session_id` e `aberto_em` gravados; quando a sessão atual difere da que gravou, o hook injeta "intenção de <data>, gravada em outra sessão: continuo ou abro nova?" em vez de descartar ou exibir como atual.
+O que decide: se a dor é "entre turnos" (sessão) ou "entre projetos" (trabalho). O dono disse as duas. Recomendação do sintetizador: por branch/worktree, com `session_id` e `opened_at` gravados; quando a sessão atual difere da que gravou, o hook injeta "intenção de <data>, gravada em outra sessão: continuo ou abro nova?" em vez de descartar ou exibir como atual.
 
 **DB. Quem mantém o cursor.**
-Executor: o agente, via um comando (`cepa-intencao --passo N`), porque só assim há evento observável. Custo-de-manutenção e primeiro-uso: ninguém mantém; o cursor é **derivado na hora da pergunta** pelo `whereami`, que lê o `session-log` contra o plano gravado (o plano é régua fixa, então a crítica a C3 não vale). Fundamentalista: se for mantido, a statusline mostra "cursor parado há N turnos", nunca um número que parece certo. Contrarian: C4, sem cursor e sem arquivo, só injetando os primeiros prompts do log a cada turno.
+Executor: o agente, via um comando (`cepa-intent --step N`), porque só assim há evento observável. Custo-de-manutenção e primeiro-uso: ninguém mantém; o cursor é **derivado na hora da pergunta** pelo `whereami`, que lê o `session-log` contra o plano gravado (o plano é régua fixa, então a crítica a C3 não vale). Fundamentalista: se for mantido, a statusline mostra "cursor parado há N turnos", nunca um número que parece certo. Contrarian: C4, sem cursor e sem arquivo, só injetando os primeiros prompts do log a cada turno.
 O que decide: se a segunda linha de statusline fica no escopo. Statusline é shell e não deriva nada; com ela, o cursor tem de estar gravado. Sem ela, derivar é mais barato e não mente. Recomendação: cursor gravado por comando (DB-executor), com idade visível (DB-fundamentalista), e `whereami` confrontando o gravado com o log (DB-primeiro-uso) para poder dizer "o arquivo diz 2, os últimos prompts parecem 3". C4 fica como comportamento do estado vazio: sem intenção gravada, o hook injeta os três primeiros prompts.
 
 **DC. C2 e quem é dono da fronteira.**
@@ -242,9 +250,9 @@ O que decide: se o hook injetando as quatro linhas no agente conta como "o dono 
 
 ### Propostas consolidadas, em ordem
 
-1. **Arquivo próprio `.claude/session-intent`** com `proposito`, `para_quando`, `plano`, `passo`, `passo_desde`, `session_id`, `branch`, `aberto_em`, `resumo` (uma linha pré-renderizada), `historico` (propósitos e planos anteriores com hora). Parser compartilhado em `_modos.py`/`_wtlib.py`, nome em `RESCUE`, teste junto. (V1, DA, DB, V6)
+1. **Arquivo próprio `.claude/session-intent`** com `purpose`, `by_when`, `plan`, `step`, `step_since`, `session_id`, `branch`, `opened_at`, `summary` (uma linha pré-renderizada), `history` (propósitos e planos anteriores com hora). Parser compartilhado em `_modos.py`/`_wtlib.py`, nome em `RESCUE`, teste junto. (V1, DA, DB, V6)
 2. **Gatilho no `session-mode.py`**: sem intenção gravada, injeta "proponha propósito, ponto de parada e plano, grave, e termine com: a qualquer momento /common:whereami mostra onde estamos"; com intenção de outra sessão, injeta a pergunta de DA; com intenção, injeta só propósito e passo atual com idade (teto do docstring "saída enxuta"). (V2, DA, V10)
-3. **Comando `cepa-intencao`** (escrever, `--passo N`, `--proposito` com motivo) como único escritor; o agente nunca edita o YAML à mão. (DB, V1)
+3. **Comando `cepa-intent`** (escrever, `--step N`, `--purpose` com motivo) como único escritor; o agente nunca edita o YAML à mão. (DB, V1)
 4. **`whereami.md`** canônico, `/common:next` com fallback, `/common:recap` com linha de abertura. Estados: vazio (ensina o caminho), plano cumprido (aponta wrap-up), um passo só (grava sem perguntar), aberto por `/common:session` (a rotina grava, sem segundo ritual), `next.json` (launcher grava o brief), `cepa-until` (sem intenção; delega ao `plan.yaml`). (V7, V8, V9, DD)
 5. **Telemetria** `intent.written`, `intent.cursor_advanced`, `intent.asked`, `intent.finished_at_last_step`; linha no `/common:metrics`; ligar ao número "turnos depois da rotina" do scorecard. (V5)
 6. **Retirar do doc**: a evidência da worktree apagada (vira investigação do `worktree-remove-guard.py`, já em `desvios.md`); a mitigação no Stop hook (sem sinal definido); "propósito imutável"; "statusline que mente é melhor que nenhuma"; "um ciclo" (conta honesta: dois). (V3, V4, V6)

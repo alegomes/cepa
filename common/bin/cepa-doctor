@@ -1,40 +1,40 @@
 #!/usr/bin/env python3
-"""cepa-doctor — valida a instalação do harness contra a realidade.
+"""cepa-doctor — validates the harness installation against reality.
 
-Quase toda falha de infraestrutura do harness é descoberta no meio de uma
-tarefa, no pior momento: plugin que não carregou (cards criados sem custom
-fields), board-flow.yaml de outro módulo, baseline FAILURE de semanas,
-worktrees órfãs, handoffs stale pós-rename. Este comando transforma isso em
-manutenção de 30 segundos.
+Almost every harness infrastructure failure is discovered in the middle of a
+task, at the worst moment: a plugin that did not load (cards created without
+custom fields), a board-flow.yaml from another module, a weeks-old FAILURE
+baseline, orphan worktrees, stale handoffs after a rename. This command turns
+that into 30 seconds of maintenance.
 
-Checks globais (independem do projeto):
-  - settings.json parseia; plugins @cepa habilitados
-  - versão de cada plugin no repo vs. o cache instalado (edição sem reinstall)
-  - todos os hooks .py do cache compilam
-  - diretório de telemetria gravável
+Global checks (independent of the project):
+  - settings.json parses; @cepa plugins enabled
+  - each plugin's version in the repo vs. the installed cache (edit without reinstall)
+  - every cached hook .py compiles
+  - telemetry directory is writable
 
-Checks do projeto (cwd):
-  - é git repo (rituais degradam sem git)
-  - board-flow.yaml: estrutura mínima do bloco defaults
-  - .claude/last-build.json: status e idade do baseline
-  - worktrees session/*: stale (>14d sem commit) e diretórios órfãos
-  - worktrees de agente esquecidas DENTRO do repo (.claude/worktrees/): elas
-    duplicam o código-fonte para toda ferramenta que varre o projeto com find
-  - handoffs: arquivos sem update há >30d (fonte de fatos stale)
-  - ambiente (docs/env.yaml, legado .claude/env.yaml ainda lido; ver
-    docs/env-manifest.md): portas declaradas ocupadas por processo de OUTRO
-    diretório (lsof) e containers de `services`
-    ausentes no `docker ps` (best-effort; sem docker → skip silencioso).
-    O `healthcheck:` do manifest NUNCA roda aqui — doctor é só leitura.
-  - versão da CLI `twg` (Atlassian): a instalada (`twg --version`) contra a
-    declarada em `twg_version:` no manifesto de ambiente (docs/env.yaml ganha
-    de .claude/env.yaml) — ela se autoatualiza
-    sozinha e pode trocar entre dois cards do mesmo lote desatendido. Sem
-    `twg_version:` declarado, silêncio total.
+Project checks (cwd):
+  - is a git repo (rituals degrade without git)
+  - board-flow.yaml: minimal structure of the defaults block
+  - .claude/last-build.json: baseline status and age
+  - session/* worktrees: stale (>14d without a commit) and orphan directories
+  - forgotten agent worktrees INSIDE the repo (.claude/worktrees/): they
+    duplicate the source code for every tool that scans the project with find
+  - handoffs: files without an update for >30d (source of stale facts)
+  - environment (docs/env.yaml, legacy .claude/env.yaml still read; see
+    docs/env-manifest.md): declared ports held by a process from ANOTHER
+    directory (lsof) and `services` containers
+    missing from `docker ps` (best-effort; no docker → silent skip).
+    The manifest's `healthcheck:` NEVER runs here — doctor is read-only.
+  - `twg` CLI (Atlassian) version: the installed one (`twg --version`) against
+    the one declared in `twg_version:` in the environment manifest (docs/env.yaml
+    wins over .claude/env.yaml) — it self-updates
+    and can change between two cards of the same unattended batch. With no
+    `twg_version:` declared, total silence.
 
-Saída: ✓ / ⚠ / ✗ por check. Exit 0 = tudo ok, 1 = só warnings, 2 = falhas.
-O check VIVO do board-flow.yaml contra o Jira não acontece aqui (script sem
-MCP) — o comando /common:doctor delega essa parte ao atlassian-expert.
+Output: ✓ / ⚠ / ✗ per check. Exit 0 = all ok, 1 = warnings only, 2 = failures.
+The LIVE check of board-flow.yaml against Jira does not happen here (script
+without MCP) — the /common:doctor command delegates that part to atlassian-expert.
 """
 
 import json
@@ -50,29 +50,30 @@ from pathlib import Path
 CLAUDE_DIR = Path.home() / ".claude"
 RESULTS = []  # (level, area, message, fix)  level: "ok" | "warn" | "fail"
 
-# `fix` é None ou um dict {"kind": ..., ...}. Um kind só existe aqui quando a
-# correção é MECÂNICA (não há escolha a fazer) e REVERSÍVEL (dá para desfazer
-# sem perder trabalho) — esse é o critério para `--fix` poder aplicá-la sem
-# perguntar. Tudo que exige decisão (descartar worktree, editar board-flow.yaml,
-# apagar handoff) fica de fora de propósito e sai no bloco "precisa de você".
+# `fix` is None or a dict {"kind": ..., ...}. A kind only exists here when the
+# fix is MECHANICAL (no choice to make) and REVERSIBLE (can be undone without
+# losing work) — that is the criterion for `--fix` to apply it without
+# asking. Anything that requires a decision (discard a worktree, edit
+# board-flow.yaml, delete a handoff) is left out on purpose and goes in the
+# "needs you" block.
 
-# O comparador repo↔cache é compartilhado com session-registry.py, que faz a
-# mesma pergunta no boot da sessão. Fonte única, em hooks/ (ver _pluginver.py).
+# The repo<->cache comparator is shared with session-registry.py, which asks
+# the same question at session boot. Single source, in hooks/ (see _pluginver.py).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
 try:
     import _pluginver as PV
-except Exception:  # noqa: BLE001 — doctor degrada, nunca morre por causa disso
+except Exception:  # noqa: BLE001 — doctor degrades, never dies because of this
     PV = None
 
-# Onde mora a fila single-track (dois layouts na transição): fonte única.
+# Where the single-track queue lives (two layouts during the transition): single source.
 try:
     import _queuepath as QP
 except Exception:  # noqa: BLE001
     QP = None
 
-# `_wtlib.env_manifest_path` é a mesma resolução de caminho do seeding de
-# worktree (docs/env.yaml ganha de .claude/env.yaml, o legado) — fonte única.
+# `_wtlib.env_manifest_path` is the same path resolution as the worktree
+# seeding (docs/env.yaml wins over .claude/env.yaml, the legacy one) — single source.
 try:
     import _wtlib as WT
 except Exception:  # noqa: BLE001
@@ -119,7 +120,7 @@ def git(args, cwd=None):
         return 1, "", str(e)
 
 
-# ── Checks globais ──────────────────────────────────────────────────────
+# ── Global checks ──────────────────────────────────────────────────────
 
 def check_settings():
     path = CLAUDE_DIR / "settings.json"
@@ -205,8 +206,8 @@ def check_plugins(settings, rec=None):
             fail("plugins", f"{name}: nenhuma versão no cache — rode bin/install.sh",
                  fix={"kind": "install", "repo": str(repo)})
         elif p["drift"]:
-            # A idade do drift é o que separa "acabei de editar" de "faz duas
-            # semanas que trabalho contra um harness que não é o instalado".
+            # The age of the drift is what separates "I just edited" from "I have
+            # been working for two weeks against a harness that is not the installed one".
             a = age_days((rec or {}).get("finished_at") or (rec or {}).get("started_at"))
             atxt = f"; o último install foi há {a:.0f}d" if a is not None else ""
             warn("plugins", f"{name}: repo está em {repo_v} mas o cache instalado é {cache_v}{atxt} — edições não valem; rode bin/install.sh",
@@ -216,8 +217,8 @@ def check_plugins(settings, rec=None):
 
 
 def main_worktree_root(cwd: Path):
-    """Raiz da worktree PRINCIPAL — é lá que o registry de sessões vive, mesmo
-    quando o doctor roda de dentro de uma worktree de sessão."""
+    """Root of the MAIN worktree — that is where the session registry lives, even
+    when the doctor runs from inside a session worktree."""
     try:
         r = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=str(cwd),
                            capture_output=True, text=True, timeout=5)
@@ -232,9 +233,9 @@ def main_worktree_root(cwd: Path):
 
 
 def parse_worktrees(porcelain: str):
-    """`git worktree list --porcelain` em registros — path, branch, detached,
-    prunable. O parse linha-a-linha antigo só enxergava quem tinha `branch`, e
-    worktree de agente costuma estar em HEAD destacado."""
+    """`git worktree list --porcelain` as records — path, branch, detached,
+    prunable. The old line-by-line parse only saw entries that had `branch`, and
+    agent worktrees are usually on a detached HEAD."""
     out, cur = [], None
     for line in porcelain.splitlines():
         if line.startswith("worktree "):
@@ -257,7 +258,7 @@ def parse_worktrees(porcelain: str):
     return out
 
 
-def dentro_do_repo(root: Path, path: str) -> bool:
+def is_inside_repo(root: Path, path: str) -> bool:
     try:
         Path(path).resolve().relative_to(root.resolve())
         return True
@@ -266,7 +267,7 @@ def dentro_do_repo(root: Path, path: str) -> bool:
 
 
 def base_branch(root: Path) -> str:
-    """A branch onde o trabalho desemboca — mesma heurística do _wtlib."""
+    """The branch where work lands — same heuristic as _wtlib."""
     rc, out, _ = git(["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"], cwd=str(root))
     if rc == 0 and out.strip():
         return out.strip().replace("refs/remotes/origin/", "")
@@ -277,40 +278,40 @@ def base_branch(root: Path) -> str:
     return "main"
 
 
-def contido_na_base(root: Path, ref: str, base: str) -> bool:
-    """True quando `ref` não tem nada que a base já não tenha."""
+def is_contained_in_base(root: Path, ref: str, base: str) -> bool:
+    """True when `ref` has nothing the base does not already have."""
     if not ref:
         return False
     rc, _, _ = git(["merge-base", "--is-ancestor", ref, base], cwd=str(root))
     return rc == 0
 
 
-def sujeira(path: str):
-    """Arquivos não rastreados + modificações pendentes na worktree.
+def dirty_files(path: str):
+    """Untracked files + pending modifications in the worktree.
 
-    Ignorados ficam de fora de propósito: build output nunca deixaria uma
-    worktree removível, e o que se quer proteger é trabalho que só existe ali.
+    Ignored files are left out on purpose: build output would never leave a
+    worktree removable, and what we want to protect is work that only exists there.
     """
     rc, out, _ = git(["status", "--porcelain", "--untracked-files=all"], cwd=path)
     if rc != 0:
-        return None          # não deu para saber → trata como perigoso
+        return None          # could not tell → treat as dangerous
     return [l for l in out.splitlines() if l.strip()]
 
 
-def check_worktree_interna(root: Path, wt):
-    """Worktree registrada DENTRO do próprio repositório.
+def check_internal_worktree(root: Path, wt):
+    """Worktree registered INSIDE the repository itself.
 
-    A ferramenta de subagente do Claude Code cria worktree em
-    `.claude/worktrees/agent-<id>` — dentro da árvore, não em ~/cepa-worktrees/.
-    Deveria sumir sozinha quando nada muda, mas SOBREVIVE se o agente commitar.
-    E, por morar dentro do repo, ela duplica o código-fonte inteiro aos olhos de
-    qualquer ferramenta que varra o projeto com `find`.
+    Claude Code's subagent tool creates a worktree at
+    `.claude/worktrees/agent-<id>` — inside the tree, not in ~/cepa-worktrees/.
+    It should vanish by itself when nothing changes, but it SURVIVES if the agent commits.
+    And, since it lives inside the repo, it duplicates the entire source code in the eyes of
+    any tool that scans the project with `find`.
 
-    O caso que pagou por este check (2026-08-19, wego-acesso-backend): a sobra
-    `agent-a3494bc82de7f33a6` fez o `bin/run-dev.sh doctor` contar cada migration
-    duas vezes e acusar 14 versões duplicadas inexistentes. Isso barrou o boot do
-    backend, derrubou o portão de prova de UI de outro repo e a auditoria de
-    aceite de dois cards — e o preflight do cepa-doctor tinha rodado limpo.
+    The case that paid for this check (2026-08-19, wego-acesso-backend): the leftover
+    `agent-a3494bc82de7f33a6` made `bin/run-dev.sh doctor` count each migration
+    twice and report 14 nonexistent duplicate versions. That blocked the backend
+    boot, took down another repo's UI-proof gate and the acceptance audit of
+    two cards — and the cepa-doctor preflight had run clean.
     """
     path = wt["path"]
     rel = Path(path).resolve()
@@ -320,42 +321,42 @@ def check_worktree_interna(root: Path, wt):
         pass
     ref = wt["branch"] or wt["head"]
     base = base_branch(root)
-    idade = ""
+    age_note = ""
     rc, out, _ = git(["log", "-1", "--format=%ct"], cwd=path)
     if rc == 0 and out.strip().isdigit():
         d = (datetime.now(timezone.utc).timestamp() - int(out.strip())) / 86400
-        idade = f", último commit há {d:.0f}d"
+        age_note = f", último commit há {d:.0f}d"
 
-    dano = "duplica o código-fonte para qualquer ferramenta que varra o repo com find"
-    suja = sujeira(path)
-    if suja is None:
-        warn("worktrees", f"worktree de agente em {rel} — {dano}; "
+    damage = "duplica o código-fonte para qualquer ferramenta que varra o repo com find"
+    dirty = dirty_files(path)
+    if dirty is None:
+        warn("worktrees", f"worktree de agente em {rel} — {damage}; "
                           f"não deu para ler o estado dela, remova à mão se for lixo")
         return
-    if suja:
-        warn("worktrees", f"worktree de agente em {rel} com {len(suja)} arquivo(s) "
-                          f"não rastreado(s)/modificado(s){idade} — {dano}; "
+    if dirty:
+        warn("worktrees", f"worktree de agente em {rel} com {len(dirty)} arquivo(s) "
+                          f"não rastreado(s)/modificado(s){age_note} — {damage}; "
                           f"salve o que importa antes de remover (decisão sua, não do doctor)")
         return
-    if not contido_na_base(root, ref, base):
-        warn("worktrees", f"worktree de agente em {rel} com commit que {base} não tem{idade} "
-                          f"— {dano}; mescle ou descarte (decisão sua, não do doctor)")
+    if not is_contained_in_base(root, ref, base):
+        warn("worktrees", f"worktree de agente em {rel} com commit que {base} não tem{age_note} "
+                          f"— {damage}; mescle ou descarte (decisão sua, não do doctor)")
         return
-    alvo = f" e apaga a branch {wt['branch']}" if wt["branch"] else ""
+    branch_note = f" e apaga a branch {wt['branch']}" if wt["branch"] else ""
     warn("worktrees", f"worktree de agente esquecida em {rel} (já contida em {base}, "
-                      f"sem arquivo pendente){idade} — {dano}",
-         fix={"kind": "worktree_interna", "root": str(root), "path": path,
-              "branch": wt["branch"] or "", "base": base, "alvo": alvo})
+                      f"sem arquivo pendente){age_note} — {damage}",
+         fix={"kind": "internal_worktree", "root": str(root), "path": path,
+              "branch": wt["branch"] or "", "base": base, "branch_note": branch_note})
 
 
-def check_sessoes_desatualizadas():
-    """Sessões ABERTAS que carregaram uma versão que o cache já não tem.
+def check_stale_sessions():
+    """OPEN sessions that loaded a version the cache no longer has.
 
-    O check de plugins acima compara repo com cache: pega quem editou e não
-    instalou. Este pega o oposto — instalou com a sessão aberta. O cache fica
-    novo, a sessão segue executando os hooks que leu na abertura, e nada na
-    tela distingue os dois. Foi assim que "isso já está valendo" virou a
-    afirmação mais cara deste harness.
+    The plugins check above compares repo with cache: it catches whoever edited and did not
+    install. This one catches the opposite — installed while the session was open. The cache becomes
+    new, the session keeps running the hooks it read at startup, and nothing on
+    screen tells the two apart. That is how "this is already in effect" became the
+    most expensive claim in this harness.
     """
     if PV is None:
         return
@@ -365,27 +366,27 @@ def check_sessoes_desatualizadas():
     sdir = root / ".claude" / "sessions"
     if not sdir.is_dir():
         return
-    achou = False
-    sem_foto = 0
+    found = False
+    without_snapshot = 0
     for f in sorted(sdir.glob("*.json")):
         try:
             entry = json.loads(f.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
             continue
         if not entry.get("plugin_versions"):
-            sem_foto += 1
+            without_snapshot += 1
             continue
-        fora = PV.session_stale(entry)
-        if not fora:
+        outdated = PV.session_stale(entry)
+        if not outdated:
             continue
-        achou = True
-        quais = ", ".join(f"{n} {vb} → cache {va}" for n, vb, va in fora)
-        onde = entry.get("branch") or entry.get("cwd") or f.stem
-        warn("sessões", f"{onde}: carregou {quais} — os hooks dessa sessão são os "
+        found = True
+        which = ", ".join(f"{n} {vb} → cache {va}" for n, vb, va in outdated)
+        location = entry.get("branch") or entry.get("cwd") or f.stem
+        warn("sessões", f"{location}: carregou {which} — os hooks dessa sessão são os "
                         f"antigos; reinicie a sessão para valer")
-    if not achou:
-        if sem_foto:
-            ok("sessões", f"nenhuma sessão desatualizada ({sem_foto} sem foto de "
+    if not found:
+        if without_snapshot:
+            ok("sessões", f"nenhuma sessão desatualizada ({without_snapshot} sem foto de "
                           f"versão — abertas antes deste check existir)")
         else:
             ok("sessões", "toda sessão aberta está na versão que o cache tem")
@@ -426,7 +427,7 @@ def check_telemetry():
         warn("telemetria", f"ledger não gravável ({e}) — métricas não acumulam")
 
 
-# ── Checks do projeto (cwd) ─────────────────────────────────────────────
+# ── Project checks (cwd) ─────────────────────────────────────────────
 
 def check_project(cwd: Path):
     rc, out, _ = git(["rev-parse", "--show-toplevel"], cwd=str(cwd))
@@ -436,7 +437,7 @@ def check_project(cwd: Path):
     root = Path(out.strip())
     ok("projeto", f"git repo: {root}")
 
-    # board-flow.yaml — estrutura mínima
+    # board-flow.yaml — minimal structure
     bf = root / "board-flow.yaml"
     if bf.exists():
         text = bf.read_text(encoding="utf-8", errors="replace")
@@ -449,7 +450,7 @@ def check_project(cwd: Path):
         else:
             ok("board-flow", "board-flow.yaml com estrutura mínima (checagem VIVA contra o Jira: /common:doctor --live)")
 
-    # baseline de build
+    # build baseline
     no_build = (root / ".claude" / "no-build").exists()
     lb = root / ".claude" / "last-build.json"
     if no_build:
@@ -475,14 +476,14 @@ def check_project(cwd: Path):
     else:
         warn("build", "sem baseline de build — o primeiro push será bloqueado; rode o verify do projeto (ou crie .claude/no-build)")
 
-    # worktrees session/*
+    # session/* worktrees
     rc, out, _ = git(["worktree", "list", "--porcelain"], cwd=str(root))
     registered = set()
     if rc == 0:
-        # Registro apontando para diretório que não existe mais: o git segue
-        # citando a worktree (e recusando recriar a branch) até um prune. É a
-        # correção mais mecânica que existe — não apaga trabalho, só limpa
-        # ponteiro para o que já sumiu.
+        # Registry entry pointing at a directory that no longer exists: git keeps
+        # citing the worktree (and refusing to recreate the branch) until a prune. It is the
+        # most mechanical fix there is — it deletes no work, only clears a
+        # pointer to what is already gone.
         prunable = sum(1 for line in out.splitlines() if line.startswith("prunable"))
         if prunable:
             warn("worktrees", f"{prunable} registro(s) de worktree apontando para diretório "
@@ -492,8 +493,8 @@ def check_project(cwd: Path):
             wt_path, branch = wt["path"], wt["branch"]
             if wt["prunable"] or Path(wt_path).resolve() == root.resolve():
                 continue
-            if dentro_do_repo(root, wt_path):
-                check_worktree_interna(root, wt)
+            if is_inside_repo(root, wt_path):
+                check_internal_worktree(root, wt)
                 continue
             if branch and "session/" in branch:
                 registered.add(Path(wt_path).name)
@@ -514,7 +515,7 @@ def check_project(cwd: Path):
     if not any(r[1] == "worktrees" for r in RESULTS):
         ok("worktrees", "sem worktrees stale ou órfãs")
 
-    # handoffs stale
+    # stale handoffs
     hdir = root / ".claude" / "handoffs"
     stale = 0
     for f in hdir.glob("*.md") if hdir.is_dir() else []:
@@ -527,21 +528,21 @@ def check_project(cwd: Path):
     if hdir.is_dir() and not stale:
         ok("handoffs", "sem handoffs vencidos")
 
-    check_arvore_suja(root)
+    check_dirty_tree(root)
     check_env_manifest(root)
     check_twg_version(root)
-    check_divergencia_plano(root)
-    check_aguardando_merge(root)
-    check_until_esperando(root)
-    check_layout_da_fila(root)
+    check_plan_divergence(root)
+    check_awaiting_merge(root)
+    check_until_waiting(root)
+    check_queue_layout(root)
 
 
-# ── Ambiente (docs/env.yaml, legado .claude/env.yaml) ───────────────────
+# ── Environment (docs/env.yaml, legacy .claude/env.yaml) ───────────────────
 
 def env_manifest_list(path: Path, key: str):
-    """Lê uma chave-lista de topo do env.yaml sem pyyaml (formato raso —
-    ver docs/env-manifest.md). Suporta listas em bloco ('- item') e inline
-    ('key: [a, b]'). Qualquer problema → lista vazia (fail-silent)."""
+    """Reads a top-level list key from env.yaml without pyyaml (shallow format —
+    see docs/env-manifest.md). Supports block lists ('- item') and inline
+    ('key: [a, b]'). Any problem → empty list (fail-silent)."""
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -573,8 +574,8 @@ def env_manifest_list(path: Path, key: str):
 
 
 def port_holder(port: str):
-    """Quem escuta TCP:<port>? Retorna (pid, comando, cwd) ou None se livre.
-    Best-effort: lsof ausente/erro → None (porta tratada como livre)."""
+    """Who listens on TCP:<port>? Returns (pid, command, cwd) or None if free.
+    Best-effort: lsof missing/error → None (port treated as free)."""
     try:
         p = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-Fpc"],
                            capture_output=True, text=True, timeout=10)
@@ -601,73 +602,73 @@ def port_holder(port: str):
     return pid, cmd or "?", cwd
 
 
-def fila_com_pendente(root: Path):
-    """Nome da 1ª fila `single-track` do repo que tem item `pending`, ou None.
+def queue_with_pending(root: Path):
+    """Name of the repo's 1st `single-track` queue that has a `pending` item, or None.
 
-    Leitura rasa, sem pyyaml — mesma escolha do `env_manifest_list`: o doctor
-    roda em toda abertura de sessão e não pode depender de dependência
-    instalada. O que se procura é literal e ancorado na coluna zero do bloco de
-    item, então regex basta; qualquer problema vira None (fail-silent), porque
-    um diagnóstico não pode quebrar a largada da sessão.
+    Shallow read, no pyyaml — same choice as `env_manifest_list`: the doctor
+    runs on every session start and cannot depend on an installed
+    dependency. What is searched for is literal and anchored at column zero of the item
+    block, so regex is enough; any problem becomes None (fail-silent), because
+    a diagnostic must not break the session launch.
     """
-    for nome, plano in candidatas_de_fila(root):
+    for name, plan_file in candidate_queues(root):
         try:
-            texto = plano.read_text(encoding="utf-8", errors="replace")
+            text = plan_file.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        if not re.search(r"^mode:\s*single-track\s*$", texto, re.M):
+        if not re.search(r"^mode:\s*single-track\s*$", text, re.M):
             continue
-        if re.search(r"^\s+status:\s*pending\s*$", texto, re.M):
-            return nome
+        if re.search(r"^\s+status:\s*pending\s*$", text, re.M):
+            return name
     return None
 
 
-def candidatas_de_fila(root: Path):
-    """[(nome, arquivo)] das filas candidatas nos dois layouts (novo ganha)."""
+def candidate_queues(root: Path):
+    """[(name, file)] of the candidate queues in both layouts (new wins)."""
     if QP is None:
         return []
     return QP.queue_files(root)
 
 
-def tem_dir_de_planos(root: Path):
+def has_plans_dir(root: Path):
     return (root / ".claude" / "programs").is_dir() or \
         (root / ".claude" / "queues").is_dir()
 
 
-def check_arvore_suja(root: Path):
-    """Árvore suja com uma fila esperando execução desatendida.
+def check_dirty_tree(root: Path):
+    """Dirty tree with a queue waiting for unattended execution.
 
-    O aviso é GATEADO na fila de propósito. Árvore suja é o estado normal de
-    quem está trabalhando, e um aviso em toda abertura de sessão é exatamente o
-    ruído que o usuário aprende a pular — a mesma razão de o modo resumido não
-    imprimir "está tudo ok". O que não é normal é ter fila pendente E árvore
-    suja, porque aí o `cepa-until` RECUSA a largada, e descobrir isso às 23h
-    custa a janela inteira. Então o doctor cobra antes, na abertura.
+    The warning is GATED on the queue on purpose. A dirty tree is the normal state of
+    someone who is working, and a warning on every session start is exactly the
+    noise the user learns to skip — the same reason the brief mode does not
+    print "all ok". What is not normal is having a pending queue AND a dirty
+    tree, because then `cepa-until` REFUSES to launch, and finding that out at 11pm
+    costs the whole window. So the doctor flags it earlier, at session start.
     """
-    fila = fila_com_pendente(root)
-    if not fila:
+    queue = queue_with_pending(root)
+    if not queue:
         return
-    suja = sujeira(str(root))
-    if suja is None:
+    dirty = dirty_files(str(root))
+    if dirty is None:
         return
-    # o registro dos runs anteriores não conta: o `cepa-until` também o ignora
-    suja = [l for l in suja
+    # the record of previous runs does not count: `cepa-until` ignores it too
+    dirty = [l for l in dirty
             if not re.match(r"^.. \.claude/(programs|queues)/[^/]+/until/", l)]
-    if not suja:
-        ok("execucao", f"fila `{fila}` pendente e árvore limpa — "
-                       f"`cepa-until {fila} --for 12h` larga sem recusa")
+    if not dirty:
+        ok("execucao", f"fila `{queue}` pendente e árvore limpa — "
+                       f"`cepa-until {queue} --for 12h` larga sem recusa")
         return
     warn("execucao",
-         f"árvore com {len(suja)} arquivo(s) pendente(s) e a fila `{fila}` com "
+         f"árvore com {len(dirty)} arquivo(s) pendente(s) e a fila `{queue}` com "
          f"item a executar — o `cepa-until` RECUSA largar assim (é como ele "
          f"separa o que o run fez do que já estava aqui). Commite, limpe, ou "
-         f"largue com --sujo-ok. Achar isso na hora de dormir custa a janela")
+         f"largue com --dirty-ok. Achar isso na hora de dormir custa a janela")
 
 
 def check_env_manifest(root: Path):
-    """Confere o manifesto de ambiente (docs/env.yaml, legado .claude/env.yaml
-    ainda lido) contra a realidade. Só leitura: o `healthcheck:` declarado
-    NUNCA é executado aqui."""
+    """Checks the environment manifest (docs/env.yaml, legacy .claude/env.yaml
+    still read) against reality. Read-only: the declared `healthcheck:`
+    is NEVER executed here."""
     if WT is None:
         return
     ef = WT.env_manifest_path(str(root))
@@ -702,9 +703,9 @@ def check_env_manifest(root: Path):
             p = subprocess.run(["docker", "ps", "--format", "{{.Names}}"],
                                capture_output=True, text=True, timeout=15)
         except Exception:
-            return  # docker ausente/indisponível → skip silencioso
+            return  # docker missing/unavailable → silent skip
         if p.returncode != 0:
-            return  # daemon fora do ar → skip silencioso (best-effort)
+            return  # daemon down → silent skip (best-effort)
         running = set(p.stdout.split())
         for svc in services:
             if svc in running:
@@ -714,12 +715,12 @@ def check_env_manifest(root: Path):
                                  f"— suba com o comando `up:` do manifest")
 
 
-def twg_version_instalada():
-    """Versão da CLI `twg` (Atlassian) instalada, extraída da saída de
-    `twg --version` com regex `\\d+(\\.\\d+)+`. None quando a CLI não está no
-    PATH, o comando falha, ou a saída não tem nada que pareça versão. Timeout
-    curto e qualquer exceção viram None — este check nunca pode travar/quebrar
-    o doctor por causa de uma CLI de terceiro."""
+def installed_twg_version():
+    """Installed `twg` (Atlassian) CLI version, extracted from the output of
+    `twg --version` with regex `\\d+(\\.\\d+)+`. None when the CLI is not on
+    PATH, the command fails, or the output has nothing that looks like a version.
+    Short timeout and any exception become None — this check must never hang/break
+    the doctor because of a third-party CLI."""
     try:
         p = subprocess.run(["twg", "--version"], capture_output=True, text=True, timeout=10)
     except Exception:  # noqa: BLE001
@@ -729,199 +730,199 @@ def twg_version_instalada():
 
 
 def check_twg_version(root: Path):
-    """Confere a CLI `twg` instalada contra a `twg_version:` declarada no
-    manifesto de ambiente (ver docs/env-manifest.md).
+    """Checks the installed `twg` CLI against the `twg_version:` declared in the
+    environment manifest (see docs/env-manifest.md).
 
-    A `twg` roda um agendador (`com.atlassian.twg.upkeep`) a cada 12 minutos
-    que checa atualização sozinho — a versão pode trocar ENTRE dois cards do
-    mesmo lote desatendido, sem sinal nenhum. Sem `twg_version:` declarado,
-    silêncio total: o doctor roda em toda abertura de sessão e aviso sem
-    pedido é ruído.
+    `twg` runs a scheduler (`com.atlassian.twg.upkeep`) every 12 minutes
+    that checks for updates on its own — the version can change BETWEEN two cards of the
+    same unattended batch, with no signal at all. With no `twg_version:` declared,
+    total silence: the doctor runs on every session start and an unrequested
+    warning is noise.
     """
     if WT is None:
         return
     manifest = WT.env_manifest_path(str(root))
     if manifest is None:
         return
-    declarada = env_manifest_list(manifest, "twg_version")
-    if not declarada:
+    declared = env_manifest_list(manifest, "twg_version")
+    if not declared:
         return
-    declarada_v = declarada[0]
-    instalada_v = twg_version_instalada()
-    if instalada_v is None:
-        warn("ambiente", f"env.yaml declara twg_version {declarada_v}, mas a CLI `twg` "
+    declared_v = declared[0]
+    installed_v = installed_twg_version()
+    if installed_v is None:
+        warn("ambiente", f"env.yaml declara twg_version {declared_v}, mas a CLI `twg` "
                          f"não está instalada ou não está no PATH")
         return
-    if instalada_v == declarada_v:
-        ok("ambiente", f"twg {instalada_v}, a versão declarada no env.yaml")
+    if installed_v == declared_v:
+        ok("ambiente", f"twg {installed_v}, a versão declarada no env.yaml")
         return
-    warn("ambiente", f"twg instalado está em {instalada_v}, mas o env.yaml declara "
-                     f"{declarada_v} — o agendador `com.atlassian.twg.upkeep` atualiza "
+    warn("ambiente", f"twg instalado está em {installed_v}, mas o env.yaml declara "
+                     f"{declared_v} — o agendador `com.atlassian.twg.upkeep` atualiza "
                      f"a CLI sozinho, e o que os agentes leem da saída dela mudou de "
                      f"ferramenta desde então; reinstale a versão declarada ou atualize "
                      f"`twg_version:` depois de conferir")
 
 
-# ── Divergência da fila única (A3) ──────────────────────────────────────
+# ── Single-track queue divergence (A3) ──────────────────────────────────
 #
-# Reporta, nunca corrige: fechar um card órfão ou inventar um `**Plano:**` no
-# BACKLOG.md é decisão do dono, não do doctor. Delega o cálculo inteiro ao
-# `cepa-plan divergencia`, que é quem sabe comparar fila × BACKLOG (a leitura
-# viva do Jira, cards_sem_item/itens_com_card_done, entra no passo `--live`
-# do /common:doctor, que passa `--board`).
+# Reports, never fixes: closing an orphan card or inventing a `**Plano:**` in
+# BACKLOG.md is the owner's decision, not the doctor's. Delegates the whole
+# calculation to `cepa-plan divergence`, which knows how to compare queue × BACKLOG (the
+# live Jira read, cards_sem_item/itens_com_card_done, goes in the `--live` step
+# of /common:doctor, which passes `--board`).
 
-def resolve_fila_unica(root: Path):
-    """Nome da fila `single-track` deste repo, do mesmo jeito que o
-    /common:next resolve: `board-flow.yaml` → `defaults.project_key` primeiro;
-    senão, se houver exatamente UMA fila `mode: single-track` em
-    `.claude/queues/*/queue.yaml` (ou o layout antigo
-    `.claude/programs/*/plan.yaml`), essa. Mais de uma → None (ambíguo — o
-    doctor não adivinha qual fila o dono quer ver)."""
+def resolve_single_track_queue(root: Path):
+    """Name of this repo's `single-track` queue, resolved the same way
+    /common:next does: `board-flow.yaml` → `defaults.project_key` first;
+    otherwise, if there is exactly ONE `mode: single-track` queue in
+    `.claude/queues/*/queue.yaml` (or the old layout
+    `.claude/programs/*/plan.yaml`), that one. More than one → None (ambiguous — the
+    doctor does not guess which queue the owner wants to see)."""
     bf = root / "board-flow.yaml"
     if bf.is_file():
         try:
-            texto = bf.read_text(encoding="utf-8", errors="replace")
-            m = re.search(r"^\s*project_key:\s*['\"]?([\w-]+)", texto, re.M)
+            text = bf.read_text(encoding="utf-8", errors="replace")
+            m = re.search(r"^\s*project_key:\s*['\"]?([\w-]+)", text, re.M)
             if m:
                 return m.group(1)
         except OSError:
             pass
-    filas = []
-    for nome, plano in candidatas_de_fila(root):
+    queues = []
+    for name, plan_file in candidate_queues(root):
         try:
-            texto = plano.read_text(encoding="utf-8", errors="replace")
+            text = plan_file.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        if re.search(r"^mode:\s*single-track\s*$", texto, re.M):
-            filas.append(nome)
-    return filas[0] if len(filas) == 1 else None
+        if re.search(r"^mode:\s*single-track\s*$", text, re.M):
+            queues.append(name)
+    return queues[0] if len(queues) == 1 else None
 
 
-def check_divergencia_plano(root: Path):
+def check_plan_divergence(root: Path):
     backlog = root / "BACKLOG.md"
     if not backlog.is_file():
         return
-    fila = resolve_fila_unica(root)
-    if fila is None:
-        return  # sem fila resolvível (nenhuma ou mais de uma) — nada a comparar
+    queue = resolve_single_track_queue(root)
+    if queue is None:
+        return  # no resolvable queue (none or more than one) — nothing to compare
     cepa_plan = Path(__file__).resolve().parent / "cepa-plan"
     if not cepa_plan.is_file():
         return
     try:
         p = subprocess.run(
-            [sys.executable, str(cepa_plan), "divergencia", fila,
+            [sys.executable, str(cepa_plan), "divergencia", queue,
              "--backlog", str(backlog), "--repo", str(root), "--json"],
             capture_output=True, text=True, timeout=30)
-    except Exception as e:  # noqa: BLE001 — diagnóstico não pode quebrar o doctor
-        warn("plano", f"divergência da fila `{fila}` não rodou: {e}")
+    except Exception as e:  # noqa: BLE001 — a diagnostic must not break the doctor
+        warn("plano", f"divergência da fila `{queue}` não rodou: {e}")
         return
     if p.returncode not in (0,):
-        return  # sem fila / plano de ondas / erro de leitura — silencioso, cepa-plan já loga
+        return  # no queue / wave plan / read error — silent, cepa-plan already logs
     try:
-        saida = json.loads(p.stdout)
+        output = json.loads(p.stdout)
     except (ValueError, json.JSONDecodeError):
         return
-    sem_plano = saida.get("secoes_sem_plano") or []
-    inexistente = saida.get("plano_inexistente") or []
-    if not sem_plano and not inexistente:
-        ok("plano", f"fila `{fila}` × BACKLOG.md sem divergência")
+    without_plan = output.get("secoes_sem_plano") or []
+    nonexistent = output.get("plano_inexistente") or []
+    if not without_plan and not nonexistent:
+        ok("plano", f"fila `{queue}` × BACKLOG.md sem divergência")
         return
-    partes = []
-    if sem_plano:
-        partes.append(f"{len(sem_plano)} seção(ões) do BACKLOG.md sem `**Plano:**`: "
-                      + ", ".join(f"{s['secao']} (linha {s['linha']})" for s in sem_plano))
-    if inexistente:
-        partes.append(f"{len(inexistente)} `**Plano:**` citando id fora da fila `{fila}`: "
-                      + ", ".join(f"{i['secao']} → {i['plano']}" for i in inexistente))
-    warn("plano", f"fila `{fila}` × BACKLOG.md diverge — " + "; ".join(partes))
+    parts = []
+    if without_plan:
+        parts.append(f"{len(without_plan)} seção(ões) do BACKLOG.md sem `**Plano:**`: "
+                      + ", ".join(f"{s['secao']} (linha {s['linha']})" for s in without_plan))
+    if nonexistent:
+        parts.append(f"{len(nonexistent)} `**Plano:**` citando id fora da fila `{queue}`: "
+                      + ", ".join(f"{i['secao']} → {i['plano']}" for i in nonexistent))
+    warn("plano", f"fila `{queue}` × BACKLOG.md diverge — " + "; ".join(parts))
 
 
 def maestro_programs():
-    """O listador do plugin maestro: irmão deste arquivo no repo cepa, ou no
-    clone do marketplace. Sem ele (maestro não instalado), None."""
+    """The maestro plugin's lister: sibling of this file in the cepa repo, or in the
+    marketplace clone. Without it (maestro not installed), None."""
     for base in (Path(__file__).resolve().parents[2], cepa_repo_root()):
         if base and (base / "maestro" / "bin" / "maestro-programs").is_file():
             return base / "maestro" / "bin" / "maestro-programs"
     return None
 
 
-def check_layout_da_fila(root: Path):
-    """A fila saiu de `.claude/programs/<n>/plan.yaml` para
-    `.claude/queues/<n>/queue.yaml`. Nome nos dois layouts é aviso (o novo
-    esconde o antigo); fila antiga sozinha é só a dica de migrar."""
+def check_queue_layout(root: Path):
+    """The queue moved from `.claude/programs/<n>/plan.yaml` to
+    `.claude/queues/<n>/queue.yaml`. A name in both layouts is a warning (the new one
+    hides the old); an old queue alone is just a hint to migrate."""
     if QP is None:
         return
-    antigas = []
-    for nome, arq in QP.queue_files(root):
-        if QP.both_layouts(root, nome):
-            warn("fila", f"`{nome}` existe nos dois layouts "
+    legacy = []
+    for name, queue_file in QP.queue_files(root):
+        if QP.both_layouts(root, name):
+            warn("fila", f"`{name}` existe nos dois layouts "
                          f"(.claude/queues e .claude/programs) — o novo "
                          f"esconde o antigo; apague o que sobrou depois de "
                          f"conferir qual vale")
-        if arq.parent.parent.name == "programs":
+        if queue_file.parent.parent.name == "programs":
             try:
-                texto = arq.read_text(encoding="utf-8", errors="replace")
+                text = queue_file.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            if re.search(r"^mode:\s*single-track\s*$", texto, re.M):
-                antigas.append(nome)
-    if antigas:
-        ok("fila", f"{len(antigas)} fila(s) no layout antigo "
-                   f"(.claude/programs: {', '.join(antigas)}) — "
+            if re.search(r"^mode:\s*single-track\s*$", text, re.M):
+                legacy.append(name)
+    if legacy:
+        ok("fila", f"{len(legacy)} fila(s) no layout antigo "
+                   f"(.claude/programs: {', '.join(legacy)}) — "
                    "`cepa-plan migrate --all` move para .claude/queues")
 
 
-def check_aguardando_merge(root: Path):
-    """Onda do Maestro que terminou e ninguém aterrissou é ação humana.
+def check_awaiting_merge(root: Path):
+    """A Maestro wave that finished and nobody landed is a human action.
 
-    O merge train só roda com a sessão do maestro viva. Quando ela morre, as
-    slices DONE esperam sem nada dizer que esperam (onda 1 do WEGO-paralelo,
-    2026-08-24: cinco branches prontas, mescladas à mão horas depois). A regra
-    é do maestro-wave-state; aqui só se traduz em ⚠.
+    The merge train only runs while the maestro session is alive. When it dies, the
+    DONE slices wait without anything saying they are waiting (wave 1 of WEGO-paralelo,
+    2026-08-24: five branches ready, merged by hand hours later). The rule
+    belongs to maestro-wave-state; here it is only translated into ⚠.
     """
     mp = maestro_programs()
-    if mp is None or not tem_dir_de_planos(root):
+    if mp is None or not has_plans_dir(root):
         return
     try:
         p = subprocess.run([sys.executable, str(mp), str(root),
                             "--aguardando-merge", "--json"],
                            capture_output=True, text=True, timeout=30)
         if p.returncode != 0:
-            return  # fora de repo git — o check de projeto já disse
-        progs = json.loads(p.stdout).get("programas") or []
-    except Exception as e:  # noqa: BLE001 — diagnóstico não pode quebrar o doctor
+            return  # outside a git repo — the project check already said so
+        programs = json.loads(p.stdout).get("programas") or []
+    except Exception as e:  # noqa: BLE001 — a diagnostic must not break the doctor
         warn("maestro", f"checagem de merge pendente não rodou: {e}")
         return
-    for prog in progs:
-        pend = prog["aguardando_merge"]
-        warn("maestro", f"programa `{prog['nome']}`: {len(pend)} slice(s) "
-                        f"terminada(s) esperando merge na onda {prog['wave']} "
-                        f"({', '.join(pend)}) — /maestro:resume {prog['nome']} "
+    for program in programs:
+        pending = program["aguardando_merge"]
+        warn("maestro", f"programa `{program['nome']}`: {len(pending)} slice(s) "
+                        f"terminada(s) esperando merge na onda {program['wave']} "
+                        f"({', '.join(pending)}) — /maestro:resume {program['nome']} "
                         f"vai direto ao merge train")
 
 
-def check_until_esperando(root: Path):
-    """Run do `cepa-until` que terminou com a branch da noite esperando o
-    dono (C6 de docs/estrategia-fim-do-cepa-until.md). O run não toca a branch
-    principal, e sem este aviso nada lembra que ele espera: o mesmo modo de
-    falha da onda do maestro que ninguém aterrissou."""
+def check_until_waiting(root: Path):
+    """A `cepa-until` run that finished with the night's branch waiting for the
+    owner (C6 of docs/estrategia-fim-do-cepa-until.md). The run does not touch the main
+    branch, and without this warning nothing reminds anyone it is waiting: the same failure
+    mode as the maestro wave nobody landed."""
     until = Path(__file__).resolve().parent / "cepa-until"
-    if not until.is_file() or not tem_dir_de_planos(root):
+    if not until.is_file() or not has_plans_dir(root):
         return
     try:
         p = subprocess.run([sys.executable, str(until), "pendentes",
                             "--repo", str(root), "--json"],
                            capture_output=True, text=True, timeout=60)
-        dados = json.loads(p.stdout) if p.returncode == 0 else {}
-        runs = dados.get("runs") or []
-        mortos = dados.get("mortos") or []
-    except Exception as e:  # noqa: BLE001 — diagnóstico não pode quebrar o doctor
+        data = json.loads(p.stdout) if p.returncode == 0 else {}
+        runs = data.get("runs") or []
+        dead = data.get("mortos") or []
+    except Exception as e:  # noqa: BLE001 — a diagnostic must not break the doctor
         warn("until", f"checagem de run esperando o dono não rodou: {e}")
         return
-    # Run `rodando` cujo supervisor morreu (WEGO 2026-09-28-2003): o registro
-    # parou no meio, e o build completo do último `done` nunca rodou. A frase
-    # e o comando vêm prontos do `pendentes`.
-    for m in mortos:
+    # A `rodando` run whose supervisor died (WEGO 2026-09-28-2003): the record
+    # stopped midway, and the full build of the last `done` never ran. The sentence
+    # and the command come ready-made from `pendentes`.
+    for m in dead:
         item = ""
         if m.get("item"):
             item = f"; {m['item']} ficou `{m.get('status')}`"
@@ -930,47 +931,47 @@ def check_until_esperando(root: Path):
                       + (f"o build completo que faltou: {m['comando']}"
                          if m.get("comando") else
                          "o run não tinha build completo")
-                      + (f"; {m['fechar']} mostra o plano, com --sim roda o "
+                      + (f"; {m['fechar']} mostra o plano, com --yes roda o "
                          "build e deixa o run pronto para aterrissar"
                          if m.get("fechar") else ""))
     for r in runs:
         warn("until", f"fila `{r['fila']}`: o run {r['run']} deixou "
                       f"`{r['branch']}` esperando aterrissagem em "
                       f"`{r['destino']}` — {r['comando']} mostra o plano, "
-                      "com --sim executa")
+                      "com --yes executa")
 
 
-# ── Correções em lote (--fix) ───────────────────────────────────────────
+# ── Batch fixes (--fix) ─────────────────────────────────────────────────
 #
-# Por que existe: sem isso o ciclo é "acha 1 → propõe → confirma → acha o
-# próximo → propõe → confirma...", e a preparação consome mais atenção que a
-# tarefa. Aqui as correções mecânicas viram um lote só, aplicado de uma vez,
-# com o diagnóstico rodando de novo até parar de mudar.
+# Why it exists: without it the cycle is "find 1 → propose → confirm → find the
+# next → propose → confirm...", and the preparation consumes more attention than the
+# task. Here the mechanical fixes become a single batch, applied at once,
+# with the diagnosis rerunning until it stops changing.
 
-def install_automatico_permitido():
-    """O `--fix` pode reinstalar os plugins? Duas portas fechadas.
+def auto_install_allowed():
+    """May `--fix` reinstall the plugins? Two closed doors.
 
-    O `fix_install` roda o `bin/install.sh` do repo do cepa — a instalação REAL
-    da máquina, independente do diretório onde o doctor foi chamado. Isso é o
-    que se quer no preflight de uma sessão, e é exatamente o que NÃO se quer
-    quando quem chamou foi um teste: em 2026-08-19 a suíte do próprio doctor,
-    rodando em repositórios temporários, viu o repo à frente do cache e trocou
-    a instalação viva do dono no meio do `python3 tests/...`. Teste que troca o
-    harness instalado pode causar a falha que o doctor existe para achar.
+    `fix_install` runs the cepa repo's `bin/install.sh` — the machine's REAL
+    installation, regardless of the directory the doctor was called from. That is
+    what we want in a session preflight, and exactly what we do NOT want
+    when the caller was a test: on 2026-08-19 the doctor's own suite,
+    running in temporary repositories, saw the repo ahead of the cache and swapped
+    the owner's live installation in the middle of `python3 tests/...`. A test that swaps the
+    installed harness can cause the very failure the doctor exists to find.
 
-    Porta 1: CEPA_DOCTOR_INSTALL=off desliga explicitamente.
-    Porta 2: doctor chamado de dentro de um diretório temporário — ninguém
-    mantém projeto real ali, e é onde toda suíte roda. Vale como rede para o
-    teste que ainda não foi escrito e vai esquecer a porta 1.
+    Door 1: CEPA_DOCTOR_INSTALL=off turns it off explicitly.
+    Door 2: doctor called from inside a temporary directory — nobody
+    keeps a real project there, and it is where every suite runs. It works as a net for the
+    test not yet written that will forget door 1.
     """
     if os.environ.get("CEPA_DOCTOR_INSTALL", "on").lower() == "off":
         return False
     try:
         cwd = Path.cwd().resolve()
     except OSError:
-        return False          # sem saber onde estamos, não se reinstala nada
-    # gettempdir() sozinho não basta: no macOS ele aponta para /var/folders/...
-    # e a suíte que rodar de /tmp passaria batido.
+        return False          # without knowing where we are, nothing is reinstalled
+    # gettempdir() alone is not enough: on macOS it points to /var/folders/...
+    # and a suite running from /tmp would slip through.
     for base in (tempfile.gettempdir(), "/tmp", "/private/tmp", "/var/folders"):
         try:
             cwd.relative_to(Path(base).resolve())
@@ -981,7 +982,7 @@ def install_automatico_permitido():
 
 
 def fix_install(fx):
-    if not install_automatico_permitido():
+    if not auto_install_allowed():
         return False, ("reinstalar plugins é a única correção que sai do projeto e mexe "
                        "na instalação da máquina — desligada aqui; rode bin/install.sh à mão")
     repo = fx.get("repo")
@@ -1020,33 +1021,33 @@ def fix_worktree_prune(fx):
     return True, "registros de worktree órfãos limpos"
 
 
-def fix_worktree_interna(fx):
-    """Remove worktree de agente esquecida — só quando ela não guarda trabalho.
+def fix_internal_worktree(fx):
+    """Removes a forgotten agent worktree — only when it holds no work.
 
-    As três travas são deliberadas e redundantes: o diagnóstico já checou, mas
-    entre diagnosticar e corrigir cabe uma sessão inteira, e o que se perde aqui
-    não volta. No caso real havia um teste de medição do WEGO-2037 que só existia
-    dentro da worktree.
+    The three locks are deliberate and redundant: the diagnosis already checked, but
+    a whole session fits between diagnosing and fixing, and what is lost here
+    does not come back. In the real case there was a WEGO-2037 measurement test that only existed
+    inside the worktree.
     """
     path, root = fx["path"], fx["root"]
     branch, base = fx.get("branch") or "", fx.get("base") or "main"
 
-    suja = sujeira(path)
-    if suja is None:
+    dirty = dirty_files(path)
+    if dirty is None:
         return False, f"não deu para ler o estado de {path} — nada removido"
-    if suja:
-        return False, (f"{Path(path).name} ganhou {len(suja)} arquivo(s) pendente(s) "
+    if dirty:
+        return False, (f"{Path(path).name} ganhou {len(dirty)} arquivo(s) pendente(s) "
                        f"desde o diagnóstico — nada removido")
-    if not contido_na_base(Path(root), branch or "HEAD", base):
+    if not is_contained_in_base(Path(root), branch or "HEAD", base):
         return False, f"{Path(path).name} tem commit que {base} não tem — nada removido"
 
-    # sem --force de propósito: o próprio git recusa se ainda houver sujeira.
+    # no --force on purpose: git itself refuses if there is still dirt.
     rc, _, err = git(["worktree", "remove", path], cwd=root)
     if rc != 0:
         return False, f"git worktree remove recusou: {err.strip()[:160]}"
     msg = f"worktree de agente {Path(path).name} removida"
     if branch:
-        # -d, nunca -D: se o git achar que a branch não está mesclada, ela fica.
+        # -d, never -D: if git thinks the branch is not merged, it stays.
         rc, _, err = git(["branch", "-d", branch], cwd=root)
         msg += f" e branch {branch} apagada" if rc == 0 else f" (branch {branch} mantida: {err.strip()[:80]})"
     return True, msg
@@ -1056,32 +1057,32 @@ FIXERS = {
     "install": fix_install,
     "archive_handoff": fix_archive_handoff,
     "worktree_prune": fix_worktree_prune,
-    "worktree_interna": fix_worktree_interna,
+    "internal_worktree": fix_internal_worktree,
 }
 
-# Rótulo leigo por tipo de correção — o relatório fala do efeito, não do comando.
+# Plain-language label per fix kind — the report speaks of the effect, not the command.
 FIX_LABEL = {
     "install": "reinstalar os plugins (o que está valendo passa a ser o que está no repo)",
     "archive_handoff": "arquivar handoff vencido (move para archive/, não apaga)",
     "worktree_prune": "limpar registro de worktree cujo diretório já não existe",
-    "worktree_interna": "remover worktree de agente esquecida dentro do repo (só a que não guarda trabalho)",
+    "internal_worktree": "remover worktree de agente esquecida dentro do repo (só a que não guarda trabalho)",
 }
 
 
 def fix_key(fx):
-    """Identidade de uma correção — mesma chave usada para não repeti-la."""
+    """Identity of a fix — the same key used to avoid repeating it."""
     return (fx["kind"], fx.get("path") or fx.get("repo") or fx.get("root") or "")
 
 
 def pending_fixes():
-    """Correções automáticas dos achados atuais, sem repetir a mesma duas vezes."""
+    """Automatic fixes for the current findings, without repeating the same one twice."""
     seen, out = set(), []
     for level, _area, _msg, fx in RESULTS:
         if level == "ok" or not fx:
             continue
-        # Sem esta linha o install bloqueado viraria "falhou ao corrigir" em vez
-        # de "isto é com você" — e o relatório mentiria sobre o que aconteceu.
-        if fx["kind"] == "install" and not install_automatico_permitido():
+        # Without this line the blocked install would become "failed to fix" instead
+        # of "this is on you" — and the report would lie about what happened.
+        if fx["kind"] == "install" and not auto_install_allowed():
             continue
         key = fix_key(fx)
         if key in seen:
@@ -1091,53 +1092,53 @@ def pending_fixes():
     return out
 
 
-def run_checks(somente_projeto=False):
-    """`--projeto` corta os checks globais (settings, plugins, hooks, telemetria).
+def run_checks(project_only=False):
+    """`--projeto` cuts the global checks (settings, plugins, hooks, telemetry).
 
-    Existe porque o veredito do doctor misturava duas perguntas: "este projeto
-    está são?" e "a instalação desta máquina está sã?". Para quem só quer olhar
-    o projeto — e para a suíte de testes, que não pode depender do estado da
-    máquina de quem roda — a segunda metade é ruído que muda o exit code.
+    It exists because the doctor's verdict mixed two questions: "is this project
+    healthy?" and "is this machine's installation healthy?". For whoever only wants to look at
+    the project — and for the test suite, which cannot depend on the state of the
+    machine of whoever runs it — the second half is noise that changes the exit code.
     """
     RESULTS.clear()
-    if somente_projeto:
+    if project_only:
         check_project(Path.cwd())
         return
     settings = check_settings()
     rec = last_install()
     check_ops(rec)
     check_plugins(settings, rec)
-    check_sessoes_desatualizadas()
+    check_stale_sessions()
     check_hooks_compile()
     check_telemetry()
     check_project(Path.cwd())
 
 
-def apply_fixes(max_passes=3, somente_projeto=False):
-    """Aplica tudo que é automático, re-diagnosticando entre as rodadas.
+def apply_fixes(max_passes=3, project_only=False):
+    """Applies everything that is automatic, re-diagnosing between rounds.
 
-    Re-rodar é o ponto: uma correção muda o que os outros checks enxergam (o
-    install, por exemplo, troca o cache que o check de hooks compila). Sem isso
-    o usuário voltaria a ser o loop entre uma correção e a próxima.
+    Rerunning is the point: a fix changes what the other checks see (the
+    install, for example, swaps the cache that the hooks check compiles). Without it
+    the user would go back to being the loop between one fix and the next.
     """
     applied, failed = [], []
-    tentadas = set()
+    attempted = set()
     for _ in range(max_passes):
-        todo = [fx for fx in pending_fixes() if fix_key(fx) not in tentadas]
+        todo = [fx for fx in pending_fixes() if fix_key(fx) not in attempted]
         if not todo:
             break
         for fx in todo:
             fixer = FIXERS.get(fx["kind"])
             if not fixer:
                 continue
-            # Uma tentativa por correção, mesmo que o achado sobreviva. Sem
-            # isto, a correção que não resolve o próprio achado era refeita a
-            # cada passada: o relatório listava a mesma linha três vezes e o
-            # doctor rodava um install inteiro três vezes para nada.
-            tentadas.add(fix_key(fx))
+            # One attempt per fix, even if the finding survives. Without
+            # this, a fix that does not resolve its own finding was redone on
+            # every pass: the report listed the same line three times and the
+            # doctor ran a whole install three times for nothing.
+            attempted.add(fix_key(fx))
             good, msg = fixer(fx)
             (applied if good else failed).append((fx["kind"], msg))
-        run_checks(somente_projeto=somente_projeto)
+        run_checks(project_only=project_only)
     return applied, failed
 
 
@@ -1151,7 +1152,7 @@ def stamp_path():
 
 
 def stamp_run():
-    """Grava o carimbo que o nudge diário do session-registry consulta."""
+    """Writes the stamp that the session-registry daily nudge consults."""
     stamp = stamp_path()
     if stamp is None:
         return
@@ -1163,11 +1164,11 @@ def stamp_run():
 
 
 def fresh_within(hours: float) -> bool:
-    """O diagnóstico já rodou neste repo há menos de `hours`?
+    """Has the diagnosis run in this repo less than `hours` ago?
 
-    É o que permite pendurar o preflight na abertura de CADA sessão (o wrapper
-    `cepa`) sem cobrar o diagnóstico toda vez: a primeira sessão do dia paga,
-    as seguintes saem na hora.
+    It is what allows hanging the preflight on the opening of EVERY session (the `cepa`
+    wrapper) without charging for the diagnosis every time: the first session of the day pays,
+    the following ones exit right away.
     """
     stamp = stamp_path()
     if stamp is None or not stamp.exists():
@@ -1180,8 +1181,8 @@ def fresh_within(hours: float) -> bool:
 
 
 def parse_if_stale(argv):
-    """`--if-stale H` (ou `--if-stale=H`): só rode se o último diagnóstico
-    neste repo tiver mais de H horas. Retorna as horas, ou None."""
+    """`--if-stale H` (or `--if-stale=H`): only run if the last diagnosis
+    in this repo is more than H hours old. Returns the hours, or None."""
     for i, a in enumerate(argv):
         if a.startswith("--if-stale="):
             val = a.split("=", 1)[1]
@@ -1200,19 +1201,19 @@ def main():
     argv = sys.argv[1:]
     do_fix = "--fix" in argv
     brief = "--brief" in argv
-    somente_projeto = "--projeto" in argv
+    project_only = "--projeto" in argv
 
-    # Preflight de abertura de sessão: silencioso e barato quando não há nada a
-    # dizer. Sem isso o wrapper cobraria o diagnóstico inteiro a cada `cepa`.
+    # Session-start preflight: silent and cheap when there is nothing to
+    # say. Without it the wrapper would charge the whole diagnosis on every `cepa`.
     stale_h = parse_if_stale(argv)
     if stale_h is not None and fresh_within(stale_h):
         return 0
 
-    run_checks(somente_projeto=somente_projeto)
+    run_checks(project_only=project_only)
 
     applied, failed = ([], [])
     if do_fix:
-        applied, failed = apply_fixes(somente_projeto=somente_projeto)
+        applied, failed = apply_fixes(project_only=project_only)
     stamp_run()
 
     icons = {"ok": "✓", "warn": "⚠", "fail": "✗"}
@@ -1227,8 +1228,8 @@ def main():
         print(f"\n{fails} falha(s), {warns} aviso(s), "
               f"{sum(1 for r in RESULTS if r[0] == 'ok')} ok.")
     elif not (applied or failed or fails or warns):
-        # Modo resumido e nada a dizer: não imprima nada. Uma linha "está tudo
-        # ok" em toda abertura de sessão é ruído que o usuário aprende a pular.
+        # Brief mode and nothing to say: print nothing. An "all ok" line
+        # on every session start is noise the user learns to skip.
         return 0
     else:
         print(f"cepa-doctor: {fails} falha(s), {warns} aviso(s)"
@@ -1258,14 +1259,14 @@ def main():
             for fx in auto:
                 print(f" · {FIX_LABEL.get(fx['kind'], fx['kind'])}")
 
-    # O que sobra depois do lote é o que realmente custa atenção: cada um destes
-    # é uma ESCOLHA (descartar trabalho, editar config, decidir entre reinstalar
-    # e voltar), não uma tarefa mecânica — por isso nenhum é aplicado sozinho.
+    # What is left after the batch is what really costs attention: each of these
+    # is a CHOICE (discard work, edit config, decide between reinstalling
+    # and rolling back), not a mechanical task — so none is applied automatically.
     manual = [(lvl, area, msg) for lvl, area, msg, fx in RESULTS
               if lvl != "ok" and not fx]
     if manual and brief:
-        # Na largada da sessão o usuário precisa saber QUE existe algo e o que
-        # é, não o parágrafo inteiro de cada achado.
+        # At session launch the user needs to know THAT something exists and what
+        # it is, not the whole paragraph of each finding.
         print(f" ⚠ {len(manual)} pendência(s) que só você decide "
               f"({', '.join(sorted({a for _l, a, _m in manual}))}) — "
               f"veja com: /common:doctor")
@@ -1278,5 +1279,5 @@ def main():
 
 
 if __name__ == "__main__":
-    _tui.instalar()
+    _tui.install()
     sys.exit(main())

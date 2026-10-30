@@ -149,14 +149,14 @@ empty_map = make_project(audit=AUDIT_INCOMPLETE,
 r = run_hook(empty_map, tool_input=cloud("31"))
 check("board-flow.yaml sem transition_ids → BLOQUEIA", r.returncode == 2)
 
-# ── worktree nova: o artefato mora no clone principal (WEGO-2218, 2026-09-16) ─
+# ── new worktree: the artifact lives in the main clone (WEGO-2218, 2026-09-16) ─
 def git(*args, cwd):
     subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
 
 
 def make_worktree_pair(audit, where=Path(".claude") / "acceptance"):
-    """Clone principal com o artefato em `where` e uma worktree ligada sem ele,
-    como deixa o seed-worktree (que não copia `.claude/acceptance/`)."""
+    """Main clone with the artifact at `where` and a linked worktree without it,
+    as seed-worktree leaves it (it does not copy `.claude/acceptance/`)."""
     main = Path(tempfile.mkdtemp(prefix="acceptance-gate-main-"))
     git("init", "-q", "-b", "main", cwd=main)
     (main / "board-flow.yaml").write_text(BOARD_FLOW, encoding="utf-8")
@@ -197,24 +197,24 @@ r = run_hook(wt, tool_input=cloud("51"))
 check("artefato em docs/acceptance/ do principal → Done BLOQUEIA",
       r.returncode == 2, r.stderr[:200])
 
-docs_proj = make_project(board_flow=BOARD_FLOW)
-(docs_proj / "docs" / "acceptance").mkdir(parents=True)
-(docs_proj / "docs" / "acceptance" / f"{KEY}.yaml").write_text(AUDIT_INCOMPLETE, encoding="utf-8")
-r = run_hook(docs_proj, tool_input=cloud("41"))
+proj_docs = make_project(board_flow=BOARD_FLOW)
+(proj_docs / "docs" / "acceptance").mkdir(parents=True)
+(proj_docs / "docs" / "acceptance" / f"{KEY}.yaml").write_text(AUDIT_INCOMPLETE, encoding="utf-8")
+r = run_hook(proj_docs, tool_input=cloud("41"))
 check("artefato em docs/acceptance/ da própria árvore → In Review BLOQUEIA",
       r.returncode == 2, r.stderr[:200])
 
-# Fora de git o main_root é "", e Path("") seria o diretório do PROCESSO. Com
-# o processo parado numa árvore que tem artefato incompleto, um projeto limpo
-# fora de git não pode herdar esse artefato.
-# Alvo In Review (não done) para não confundir com a regra nova de "ausente +
-# done bloqueia" — o que este teste verifica é só o vazamento entre árvores.
-alheio = make_project(audit=AUDIT_INCOMPLETE)
-limpo = make_project(board_flow=BOARD_FLOW)
+# Outside git the main_root is "", and Path("") would be the PROCESS directory. With
+# the process parked in a tree that has an incomplete artifact, a clean project
+# outside git must not inherit that artifact.
+# Target In Review (not done) so as not to mix with the new rule of "absent +
+# done blocks" — what this test checks is only the leak between trees.
+foreign = make_project(audit=AUDIT_INCOMPLETE)
+clean_proj = make_project(board_flow=BOARD_FLOW)
 r = subprocess.run(
-    [sys.executable, str(HOOK)], cwd=alheio, capture_output=True, text=True,
+    [sys.executable, str(HOOK)], cwd=foreign, capture_output=True, text=True,
     input=json.dumps({"tool_name": CLOUD_TOOL, "tool_input": cloud("41"),
-                      "cwd": str(limpo)}))
+                      "cwd": str(clean_proj)}))
 check("fora de git, artefato no diretório do processo não conta → In Review PASSA",
       r.returncode == 0, r.stderr[:200])
 
@@ -251,9 +251,9 @@ clean = make_project(board_flow=BOARD_FLOW)
 r = run_hook(clean, tool_input=cloud("41"))
 check("sem artefato de auditoria → PASSA", r.returncode == 0, r.stderr[:200])
 
-done_proj = make_project(audit=AUDIT_COMPLETE, board_flow=BOARD_FLOW)
+proj_done = make_project(audit=AUDIT_COMPLETE, board_flow=BOARD_FLOW)
 for tid in ("41", "31"):
-    r = run_hook(done_proj, tool_input=cloud(tid))
+    r = run_hook(proj_done, tool_input=cloud(tid))
     check(f"auditoria complete → PASSA (id {tid})", r.returncode == 0, r.stderr[:200])
 
 r = run_hook(proj, tool_name="mcp__claude_ai_Atlassian__addCommentToJiraIssue",

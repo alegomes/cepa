@@ -198,7 +198,7 @@ check(
     r.stderr[:400],
 )
 
-# ── A6: dívida declarada exige Revisit trigger ───────────────────────────────
+# ── A6: declared debt requires a Revisit trigger ─────────────────────────────
 DEBT_NO_TRIGGER = FULL_SUMMARY.replace(
     "**New debt introduced:** none",
     "**New debt introduced:** PlugSignGateway duplica a normalização de CPF",
@@ -220,7 +220,7 @@ r = run_hook(CLOUD_TOOL, {"commentBody": DEBT_WITH_TRIGGER})
 check("dívida declarada COM Revisit trigger passa", r.returncode == 0,
       r.stderr[:400])
 
-# "none" e "unknown" não exigem trigger — unknown é o que o triage escreve
+# "none" and "unknown" do not require a trigger — unknown is what triage writes
 r = run_hook(CLOUD_TOOL, {"commentBody": FULL_SUMMARY})
 check("dívida 'none' não exige trigger", r.returncode == 0, r.stderr[:200])
 
@@ -232,26 +232,26 @@ r = run_hook(CLOUD_TOOL, {"commentBody": TRIAGE_UNKNOWN})
 check("dívida 'unknown' (rota do triage) não exige trigger",
       r.returncode == 0, r.stderr[:300])
 
-# pt-BR: "nenhuma" isenta; dívida real em pt-BR exige o gatilho
-PTBR_SEM_DIVIDA = ptbr
-r = run_hook(CLOUD_TOOL, {"commentBody": PTBR_SEM_DIVIDA})
+# pt-BR: "nenhuma" exempts; real debt in pt-BR requires the trigger
+PTBR_WITHOUT_DEBT = ptbr
+r = run_hook(CLOUD_TOOL, {"commentBody": PTBR_WITHOUT_DEBT})
 check("pt-BR 'nenhuma' não exige trigger", r.returncode == 0, r.stderr[:200])
 
-PTBR_COM_DIVIDA = ptbr.replace(
+PTBR_WITH_DEBT = ptbr.replace(
     "**Dívida nova introduzida:** nenhuma",
     "**Dívida nova introduzida:** o adapter ainda faz parsing manual de data",
 )
-r = run_hook(CLOUD_TOOL, {"commentBody": PTBR_COM_DIVIDA})
+r = run_hook(CLOUD_TOOL, {"commentBody": PTBR_WITH_DEBT})
 check("pt-BR com dívida real exige trigger", r.returncode == 2,
       f"rc={r.returncode}")
-r = run_hook(CLOUD_TOOL, {"commentBody": PTBR_COM_DIVIDA.replace(
+r = run_hook(CLOUD_TOOL, {"commentBody": PTBR_WITH_DEBT.replace(
     "**Release necessária:** não",
     "**Gatilho de revisita:** na próxima mudança do adapter\n\n"
     "**Release necessária:** não")})
 check("pt-BR com dívida + gatilho de revisita passa", r.returncode == 0,
       r.stderr[:400])
 
-# wiki markup: dívida em bloco também dispara a exigência
+# wiki markup: debt in a block also fires the requirement
 WIKI_DEBT = WIKI_FULL.replace("h3. Nova dívida introduzida\nnenhuma",
                               "h3. Nova dívida introduzida\nfalta índice na tabela de contratos")
 r = run_hook(LOCAL_TOOL, {"comment": WIKI_DEBT})

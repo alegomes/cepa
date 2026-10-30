@@ -1,41 +1,40 @@
 #!/usr/bin/env python3
-"""cepa-promptcov — cobertura de checkpoints anotados num comando conversacional.
+"""cepa-promptcov — coverage of annotated checkpoints in a conversational command.
 
-Nasceu do card P1-sweep-mode (docs/spec/planejador-de-lotes-paralelos.md): um
-comando `interaction: conversational` (ex. `maestro/commands/program-plan.md`)
-é PROSA que um agente Claude segue numa sessão, não código que um interpretador
-executa. Não existe função para chamar, não existe linha para instrumentar com
-cobertura no sentido usual — e o proof-reviewer travou o veredito PROVEN desse
-card em `l2_coverage: assumed` por essa razão exata: nenhuma ferramenta media
-"quanto da prosa foi de fato exercitada".
+Born from the P1-sweep-mode card (docs/spec/planejador-de-lotes-paralelos.md):
+a command with `interaction: conversational` (e.g.
+`maestro/commands/program-plan.md`) is PROSE that a Claude agent follows in a
+session, not code an interpreter executes. There is no function to call and no
+line to instrument with coverage in the usual sense. The proof-reviewer pinned
+that card's PROVEN verdict to `l2_coverage: assumed` for exactly this reason:
+no tool measured "how much of the prose was actually exercised".
 
-Este script mede uma coisa mais estreita e honesta: dado um comando cujos
-blocos de comportamento estão marcados com `**[tag:id]**` (convenção nova,
-ver `maestro/commands/program-plan.md`), e um teste de regressão cujas
-checagens embutem o mesmo `tag:id` no nome — cruza os dois conjuntos e aponta
-todo `id` do comando que NENHUMA checagem do teste referencia.
+This script measures something narrower and more honest: given a command whose
+behaviour blocks are tagged with `**[tag:id]**` (a new convention, see
+`maestro/commands/program-plan.md`), and a regression test whose checks embed
+the same `tag:id` in their name, it crosses the two sets and flags every
+command `id` that NO test check references.
 
-O que isto NÃO prova: que a checagem existente é semanticamente correta, ou
-que um agente seguiu a prosa do jeito certo numa sessão real (isso é papel do
-proof-reviewer perturbando o teste, ou de uma execução independente — ver
-docs/proof/P1-sweep-mode.yaml). O que isto PROVA: que todo bloco de
-comportamento documentado tem PELO MENOS UMA checagem mecânica vigiando — a
-mesma pergunta que cobertura de linha responde para código, aplicada ao nível
-de granularidade que um comando conversacional tem: o parágrafo anotado, não
-a linha.
+What this does NOT prove: that the existing check is semantically correct, or
+that an agent followed the prose the right way in a real session (that is the
+proof-reviewer's job, by perturbing the test, or an independent run, see
+docs/proof/P1-sweep-mode.yaml). What this PROVES: that every documented
+behaviour block has AT LEAST ONE mechanical check watching it, the same
+question line coverage answers for code, applied at the granularity a
+conversational command has: the annotated paragraph, not the line.
 
-Convenção:
-  - no comando: `**[sweep:full-source]** Leia a fonte INTEIRA...`
-  - no teste:   `check("[sweep:full-source] varre a fonte inteira", ...)`
+Convention:
+  - in the command: `**[sweep:full-source]** Read the ENTIRE source...`
+  - in the test:    `check("[sweep:full-source] sweeps the whole source", ...)`
 
-Sem nenhum `[tag:id]` no comando → nada para medir, o script diz isso
-explicitamente (nunca declara 100% de cobertura por vacuidade).
+No `[tag:id]` in the command means nothing to measure; the script says so
+explicitly (it never declares 100% coverage by vacuity).
 
-Uso:
-  cepa-promptcov <comando.md> <teste.py> [--tag TAG] [--json]
+Usage:
+  cepa-promptcov <command.md> <test.py> [--tag TAG] [--json]
 
-Exit: 0 = todo checkpoint tem cobertura · 1 = há checkpoint sem cobertura
-      2 = erro (arquivo inexistente, ou nenhum checkpoint do TAG pedido)
+Exit: 0 = every checkpoint is covered · 1 = some checkpoint is uncovered
+      2 = error (missing file, or no checkpoint for the requested TAG)
 """
 import argparse
 import json
@@ -46,16 +45,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
 
-# `**[tag:id]**` no arquivo do comando — captura tag e id separadamente para
-# permitir filtrar por --tag (um comando pode ter mais de uma família de
-# anotação um dia).
+# `**[tag:id]**` in the command file; captures tag and id separately so
+# --tag can filter (a command may one day carry more than one annotation
+# family).
 _CMD_TAG_RE = re.compile(r"\*\*\[(?P<tag>[\w-]+):(?P<id>[\w-]+)\]\*\*")
 
-# `tag:id` solto em qualquer lugar do texto do teste (comentário, docstring,
-# ou — convenção adotada aqui — dentro do primeiro argumento de check()).
-# Não exige que seja dentro de check() especificamente: um comentário
-# `# covers: sweep:full-source` também conta. Menos rígido de propósito —
-# rigidez de formato é o tipo de coisa que expulsa quem for manter isto.
+# A bare `tag:id` anywhere in the test text (comment, docstring, or, by the
+# convention adopted here, inside the first argument of check()). It does not
+# have to be inside check() specifically: a comment
+# `# covers: sweep:full-source` counts too. Deliberately loose: format
+# rigidity is the kind of thing that drives away whoever maintains this.
 _TEST_TAG_RE = re.compile(r"\b(?P<tag>[\w-]+):(?P<id>[\w-]+)\b")
 
 
@@ -79,16 +78,16 @@ def find_covered(test_text: str, tag: str | None) -> set[str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(prog="cepa-promptcov")
-    ap.add_argument("comando", help="arquivo .md do comando conversacional")
-    ap.add_argument("teste", help="arquivo de teste que deveria cobrir os checkpoints")
+    ap.add_argument("command", metavar="comando", help="arquivo .md do comando conversacional")
+    ap.add_argument("test", metavar="teste", help="arquivo de teste que deveria cobrir os checkpoints")
     ap.add_argument("--tag", default=None,
                      help="restringe a uma família de anotação (ex.: sweep); "
                           "default: todas as [tag:id] encontradas")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
-    cmd_path = Path(args.comando)
-    test_path = Path(args.teste)
+    cmd_path = Path(args.command)
+    test_path = Path(args.test)
     for p in (cmd_path, test_path):
         if not p.is_file():
             print(f"✗ cepa-promptcov: arquivo não encontrado: {p}", file=sys.stderr)
@@ -136,5 +135,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    _tui.instalar()
+    _tui.install()
     sys.exit(main())

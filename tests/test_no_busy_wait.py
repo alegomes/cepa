@@ -30,8 +30,8 @@ def load():
     return mod
 
 
-# (rótulo, comando) — todos verbatim de transcript real, salvo onde marcado
-BLOQUEIA = [
+# (label, command) — all verbatim from a real transcript, except where marked
+BLOCKS = [
     ("sondagem por arquivo",
      'until [ -f api-rest/src/test/java/com/wego/acesso/api/rest/dto/'
      'CredencialHabilitadaResponse.java ]; do sleep 10; done'),
@@ -49,10 +49,10 @@ BLOQUEIA = [
      'then break; fi\n  sleep 10\ndone'),
     ("sleep longo solto",
      'sleep 60; git status --short | head -12'),
-    ("while true", 'while true; do echo x; done'),  # sintetico
+    ("while true", 'while true; do echo x; done'),  # synthetic
 ]
 
-LIBERA = [
+RELEASES = [
     ("build de verdade", './mvnw -pl bootstrap -am verify'),
     ("build longo com tee", './mvnw clean verify 2>&1 | tail -40'),
     ("texto citado nao e shell",
@@ -69,25 +69,25 @@ LIBERA = [
 
 def main():
     mod = load()
-    falhas = []
+    failures = []
 
-    for rotulo, cmd in BLOQUEIA:
-        if mod.bloqueia(cmd) is None:
-            falhas.append(f"DEVIA BLOQUEAR ({rotulo}): {cmd[:70]!r}")
+    for label, cmd in BLOCKS:
+        if mod.blocks(cmd) is None:
+            failures.append(f"DEVIA BLOQUEAR ({label}): {cmd[:70]!r}")
 
-    for rotulo, cmd in LIBERA:
-        r = mod.bloqueia(cmd)
+    for label, cmd in RELEASES:
+        r = mod.blocks(cmd)
         if r is not None:
-            falhas.append(f"DEVIA LIBERAR ({rotulo}): {cmd[:70]!r} — pegou {r[0]}")
+            failures.append(f"DEVIA LIBERAR ({label}): {cmd[:70]!r} — pegou {r[0]}")
 
-    if falhas:
-        for f in falhas:
+    if failures:
+        for f in failures:
             print("FAIL:", f, file=sys.stderr)
-        print(f"\n{len(falhas)} falha(s) de {len(BLOQUEIA) + len(LIBERA)} casos",
+        print(f"\n{len(failures)} falha(s) de {len(BLOCKS) + len(RELEASES)} casos",
               file=sys.stderr)
         return 1
 
-    print(f"ok — {len(BLOQUEIA)} bloqueios e {len(LIBERA)} liberações conferidos")
+    print(f"ok — {len(BLOCKS)} bloqueios e {len(RELEASES)} liberações conferidos")
     return 0
 
 

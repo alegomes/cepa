@@ -21,13 +21,13 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "common" / "hooks"))
 import _wtlib as L  # noqa: E402
 
-# Este teste cita hook emissor de telemetria. Hoje ele não chega a executá-lo,
-# mas citar e executar são um passo um do outro, e foi essa distância que
-# deixou 7 testes poluindo o ledger real por um mês. Ver
-# tests/_telemetria_isolada.py.
-from _telemetria_isolada import isola
+# This test cites a telemetry emitter hook. Today it does not get to execute it,
+# but citing and executing are one step apart, and that distance is what
+# left 7 tests polluting the real ledger for a month. See
+# tests/_isolated_telemetry.py.
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 
 FAILURES = []
@@ -93,8 +93,8 @@ def test_doomed_lists_artifacts_and_skips_ephemeral(tmp):
           not any("sessions/" in d for d in doomed), doomed)
     check("last-build.json is skipped",
           ".claude/last-build.json" not in doomed, doomed)
-    # 26/09/2026: o resgate guardou dois session-mode e mais nada, e o aviso do
-    # SessionStart anunciou "plans, proof and acceptance files" por causa deles.
+    # 2026-09-26: the rescue kept two session-modes and nothing else, and the SessionStart
+    # warning announced "plans, proof and acceptance files" because of them.
     check("session-mode is skipped",
           ".claude/session-mode" not in doomed, doomed)
 
@@ -181,10 +181,10 @@ def test_cli_refuses_the_main_worktree(tmp):
 
 
 def test_acceptance_goes_back_where_the_gate_looks(tmp):
-    """28/09/2026, fechando o WEGO-2283: o resgate guardou os <KEY>.yaml do
-    completion-auditor em .claude/rescued/<branch>/acceptance/, pasta que o
-    acceptance-gate.py não consulta. A ida para Done de quatro cards com
-    auditoria COMPLETE seria barrada como "sem auditoria"."""
+    """2026-09-28, closing WEGO-2283: the rescue kept the completion-auditor's <KEY>.yaml
+    in .claude/rescued/<branch>/acceptance/, a folder that acceptance-gate.py does not
+    consult. The move to Done of four cards with a COMPLETE audit would be blocked as "no audit".
+    """
     r, w = make_repo(Path(tmp) / "accept")
     (w / ".claude" / "acceptance").mkdir()
     (w / ".claude" / "acceptance" / "WEGO-2283.yaml").write_text(
@@ -210,8 +210,9 @@ def test_acceptance_goes_back_where_the_gate_looks(tmp):
 
 
 def test_acceptance_restore_never_clobbers_the_clone(tmp):
-    """O clone já tem um aceite do mesmo card: ele é de outra árvore e pode
-    ser mais novo. Sobrescrever trocaria uma perda silenciosa por outra."""
+    """The clone already has an acceptance of the same card: it is from another tree and may be
+    newer. Overwriting would swap one silent loss for another.
+    """
     r, w = make_repo(Path(tmp) / "accept-clobber")
     (w / ".claude" / "acceptance").mkdir()
     (w / ".claude" / "acceptance" / "WEGO-2283.yaml").write_text(
@@ -228,10 +229,11 @@ def test_acceptance_restore_never_clobbers_the_clone(tmp):
 
 
 def test_acceptance_lands_in_the_main_clone_not_the_base(tmp):
-    """session-registry passa como base a worktree de onde a sessão saiu, que
-    pode ser outra worktree ligada. O gate procura na worktree da sessão e no
-    clone PRINCIPAL; devolver o aceite para uma worktree base o esconderia de
-    novo assim que ela também fosse removida."""
+    """session-registry passes as base the worktree the session came from, which
+    may be another linked worktree. The gate looks in the session's worktree and in the
+    MAIN clone; returning the acceptance to a base worktree would hide it
+    again as soon as it too was removed.
+    """
     r, w = make_repo(Path(tmp) / "accept-base")
     b = Path(tmp) / "accept-base" / "b"
     git(["worktree", "add", "-q", str(b), "-b", "session/base"], r)
@@ -246,8 +248,9 @@ def test_acceptance_lands_in_the_main_clone_not_the_base(tmp):
 
 
 def test_only_acceptance_yaml_goes_back(tmp):
-    """Só o aceite volta. Um proof/<KEY>.yaml copiado para acceptance/ seria
-    uma auditoria que ninguém fez, e o gate a aceitaria."""
+    """Only the acceptance goes back. A proof/<KEY>.yaml copied into acceptance/ would be
+    an audit that nobody did, and the gate would accept it.
+    """
     r, w = make_repo(Path(tmp) / "accept-filter")
     (w / ".claude" / "proof" / "WEGO-9.yaml").write_text("verdict: PROVEN\n")
     acc = w / ".claude" / "acceptance"

@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-"""Testes do aviso repo↔cache no boot da sessão (P0-4 da revisão 2026-08-17).
+"""Tests of the repo↔cache warning at session boot (P0-4 of the 2026-08-17 review).
 
-Sem dependências — rode com `python3 tests/test_pluginver_boot.py`.
-Sai não-zero em falha.
+No dependencies — run with `python3 tests/test_pluginver_boot.py`.
+Exits non-zero on failure.
 
-O que está sendo travado, e por quê cada caso existe:
+What is being locked, and why each case exists:
 
-  - **Divergência avisa.** É a falha nº 1 do projeto (conserto commitado, não
-    instalado, todos operando como se estivesse valendo). Se este caso passar a
-    ficar verde com o aviso ausente, o alarme sumiu.
-  - **Silêncio quando em dia.** Aviso que aparece toda sessão vira ruído e
-    treina o olho a pular o dia em que importa. O silêncio é requisito, não
-    acaso.
-  - **Cache vazio conta como divergência.** "Nada instalado" é a versão extrema
-    de "o que roda não é o repo".
-  - **A mensagem nomeia o custo, não só o fato.** Dizer "0.28.0 → 0.27.1" para
-    quem não conhece o esquema de versões não informa nada; o aviso tem que
-    dizer o que NÃO está valendo.
-  - **Nunca quebra o boot.** Um comparador que derruba o SessionStart seria
-    desligado, e aí não protege ninguém. Diretório inexistente, JSON corrompido
-    e permissão negada precisam sair como silêncio, não como exceção.
+  - **Divergence warns.** It is the project's failure no. 1 (fix committed, not
+    installed, everyone operating as if it were in force). If this case starts
+    to go green with the warning absent, the alarm has vanished.
+  - **Silence when up to date.** A warning that shows up every session becomes noise and
+    trains the eye to skip the day it matters. Silence is a requirement, not
+    chance.
+  - **An empty cache counts as divergence.** "Nothing installed" is the extreme version
+    of "what runs is not the repo".
+  - **The message names the cost, not just the fact.** Saying "0.28.0 → 0.27.1" to
+    someone who does not know the versioning scheme informs nothing; the warning has to
+    say what is NOT in force.
+  - **Never breaks the boot.** A comparator that takes down SessionStart would be
+    switched off, and then it protects no one. A nonexistent directory, corrupted JSON
+    and denied permission must come out as silence, not as an exception.
 """
 
 import importlib.machinery
@@ -30,13 +30,13 @@ import sys
 import tempfile
 from pathlib import Path
 
-# Este teste cita hook emissor de telemetria. Hoje ele não chega a executá-lo,
-# mas citar e executar são um passo um do outro, e foi essa distância que
-# deixou 7 testes poluindo o ledger real por um mês. Ver
-# tests/_telemetria_isolada.py.
-from _telemetria_isolada import isola
+# This test cites a telemetry emitter hook. Today it does not get to execute it,
+# but citing and executing are one step apart, and that distance is what
+# left 7 tests polluting the real ledger for a month. See
+# tests/_isolated_telemetry.py.
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -54,10 +54,10 @@ def check(label, cond, detail=""):
 
 
 def load(home: Path):
-    """Carrega _pluginver com HOME apontando para um mundo de mentira.
+    """Loads _pluginver with HOME pointing to a fake world.
 
-    CLAUDE_DIR é resolvido no import (module-level), então cada cenário precisa
-    de um import fresco — daí o loader manual em vez de um import comum.
+    CLAUDE_DIR is resolved at import (module-level), so each scenario needs
+    a fresh import — hence the manual loader instead of a plain import.
     """
     os.environ["HOME"] = str(home)
     Path.home.cache_clear() if hasattr(Path.home, "cache_clear") else None
@@ -69,7 +69,7 @@ def load(home: Path):
 
 
 def make_world(tmp: Path, repo_versions: dict, cache_versions: dict, install=None):
-    """Monta um ~/.claude + um clone do repo com as versões pedidas."""
+    """Builds a ~/.claude + a clone of the repo with the requested versions."""
     home = tmp
     claude = home / ".claude"
     repo = home / "src" / "cepa"
@@ -90,9 +90,9 @@ def make_world(tmp: Path, repo_versions: dict, cache_versions: dict, install=Non
     return home
 
 
-# ── casos ────────────────────────────────────────────────────────────────────
+# ── cases ────────────────────────────────────────────────────────────────────
 
-def test_drift_avisa(tmp):
+def test_drift_warns(tmp):
     home = make_world(
         Path(tmp) / "a",
         repo_versions={"common": "0.28.0", "board-flow": "0.12.0"},
@@ -110,7 +110,7 @@ def test_drift_avisa(tmp):
         check("o aviso nomeia a saída", "install.sh" in n)
 
 
-def test_em_dia_cala(tmp):
+def test_up_to_date_stays_silent(tmp):
     home = make_world(
         Path(tmp) / "b",
         repo_versions={"common": "0.27.1"},
@@ -120,12 +120,12 @@ def test_em_dia_cala(tmp):
     check("repo == cache → silêncio", m.boot_notice() is None)
 
 
-def test_cache_mais_novo_cala(tmp):
-    """Cache à frente do repo não é o problema deste alarme.
+def test_newer_cache_stays_silent(tmp):
+    """A cache ahead of the repo is not this alarm's problem.
 
-    Acontece de verdade: outro clone instalou uma versão mais nova. Isso merece
-    o doctor, não um alarme no boot — o aviso existe para "editei e não
-    instalei", e disparar aqui só ensinaria a ignorá-lo.
+    It really happens: another clone installed a newer version. That deserves
+    the doctor, not an alarm at boot — the warning exists for "I edited and did not
+    install", and firing here would only teach people to ignore it.
     """
     home = make_world(
         Path(tmp) / "c",
@@ -136,7 +136,7 @@ def test_cache_mais_novo_cala(tmp):
     check("cache à frente do repo → silêncio", m.boot_notice() is None)
 
 
-def test_cache_vazio_avisa(tmp):
+def test_empty_cache_warns(tmp):
     home = make_world(
         Path(tmp) / "d",
         repo_versions={"common": "0.27.1"},
@@ -149,7 +149,7 @@ def test_cache_vazio_avisa(tmp):
         check("diz que não há nada instalado", "nada instalado" in n)
 
 
-def test_idade_do_install_entra(tmp):
+def test_install_age_enters(tmp):
     home = make_world(
         Path(tmp) / "e",
         repo_versions={"common": "0.28.0"},
@@ -161,8 +161,8 @@ def test_idade_do_install_entra(tmp):
     check("a idade do último install aparece", "último install há" in n)
 
 
-def test_nunca_quebra_o_boot(tmp):
-    # 1. ~/.claude inexistente
+def test_never_breaks_the_boot(tmp):
+    # 1. ~/.claude nonexistent
     home = Path(tmp) / "f"
     home.mkdir(parents=True, exist_ok=True)
     m = load(home)
@@ -171,7 +171,7 @@ def test_nunca_quebra_o_boot(tmp):
     except Exception as e:  # noqa: BLE001
         check("sem ~/.claude → None, sem exceção", False, repr(e))
 
-    # 2. known_marketplaces.json corrompido
+    # 2. corrupted known_marketplaces.json
     home2 = Path(tmp) / "g"
     (home2 / ".claude" / "plugins").mkdir(parents=True, exist_ok=True)
     (home2 / ".claude" / "plugins" / "known_marketplaces.json").write_text("{isto não é json")
@@ -181,7 +181,7 @@ def test_nunca_quebra_o_boot(tmp):
     except Exception as e:  # noqa: BLE001
         check("marketplaces corrompido → None, sem exceção", False, repr(e))
 
-    # 3. plugin.json ilegível no repo — o plugin some do scan, os outros seguem
+    # 3. unreadable plugin.json in the repo — the plugin vanishes from the scan, the others go on
     home3 = make_world(
         Path(tmp) / "h",
         repo_versions={"common": "0.28.0"},
@@ -198,17 +198,17 @@ def test_nunca_quebra_o_boot(tmp):
         check("plugin.json quebrado não derruba o resto", False, repr(e))
 
 
-def test_hook_importa_o_modulo():
-    """O session-registry precisa realmente chamar isto — não basta existir.
+def test_hook_imports_the_module():
+    """The session-registry must really call this — it is not enough to exist.
 
-    Perturbação equivalente: apagar a chamada em session-registry.py deixa este
-    caso vermelho. É o que separa "módulo escrito" de "alarme ligado".
+    Equivalent perturbation: deleting the call in session-registry.py turns this
+    case red. It is what separates "module written" from "alarm on".
     """
     src = (REPO / "common" / "hooks" / "session-registry.py").read_text(encoding="utf-8")
     check("session-registry importa _pluginver", "import _pluginver" in src)
     check("session-registry chama boot_notice", "boot_notice()" in src)
-    # O aviso precisa ser o PRIMEIRO da lista: um drift de versão contamina a
-    # leitura de todos os outros avisos da sessão.
+    # The warning must be the FIRST of the list: a version drift contaminates the
+    # reading of all the other warnings of the session.
     i_drift = src.find("boot_notice()")
     i_overlap = src.find("other live session")
     check("o aviso de versão vem antes do de overlap",
@@ -219,16 +219,16 @@ def main():
     real_home = os.environ.get("HOME")
     with tempfile.TemporaryDirectory() as tmp:
         try:
-            test_drift_avisa(tmp)
-            test_em_dia_cala(tmp)
-            test_cache_mais_novo_cala(tmp)
-            test_cache_vazio_avisa(tmp)
-            test_idade_do_install_entra(tmp)
-            test_nunca_quebra_o_boot(tmp)
+            test_drift_warns(tmp)
+            test_up_to_date_stays_silent(tmp)
+            test_newer_cache_stays_silent(tmp)
+            test_empty_cache_warns(tmp)
+            test_install_age_enters(tmp)
+            test_never_breaks_the_boot(tmp)
         finally:
             if real_home:
                 os.environ["HOME"] = real_home
-    test_hook_importa_o_modulo()
+    test_hook_imports_the_module()
 
     print()
     if FAILURES:

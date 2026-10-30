@@ -1,53 +1,55 @@
 #!/usr/bin/env python3
-"""UserPromptSubmit: ativa a skill default-yes quando o prompt dispara um
-comando de ROTINA, e a mantém ativa run adentro.
+"""UserPromptSubmit: activates the default-yes skill when the prompt triggers a
+ROUTINE command, and keeps it active throughout the run.
 
-## O modo de falha que este hook existe para matar
+## The failure mode this hook exists to kill
 
-A skill `default-yes` (common/skills/default-yes/SKILL.md) diz o que fazer com
-uma recomendação: se a ação é reversível ou só registra alguma coisa, execute e
-preste contas no relatório; pergunte só o irreversível, e em lote nas pontas.
-Ela foi escrita a pedido do dono do harness em 18/08/2026.
+The `default-yes` skill (common/skills/default-yes/SKILL.md) says what to do
+with a recommendation: if the action is reversible or merely records something,
+execute it and account for it in the report; ask only about the irreversible,
+and in batches at the ends. It was written at the request of the harness owner
+on 2026-08-18.
 
-Só que uma skill não se ativa sozinha — ela entra em cena quando o comando que
-está rodando manda ativá-la. E em 22/08/2026 a contagem era esta: de 56
-comandos do repo, 6 citavam a skill (`triage`, `execute`, `drain`,
-`prove-drain`, `doctor`, `session`). Os outros 50, não.
+But a skill does not activate itself; it enters the scene when the running
+command orders it activated. And on 2026-08-22 the count was this: of 56 repo
+commands, 6 cited the skill (`triage`, `execute`, `drain`, `prove-drain`,
+`doctor`, `session`). The other 50 did not.
 
-O efeito prático não era 50 comandos ligeiramente mais tagarelas. Era isto:
-`/board-flow:drain` cita a skill, mas por card ele chama
-`/board-flow:execute`, que despacha para `plan-build-validate` ou
-`reproduce-fix-verify` da topologia, que por sua vez chamam `prove` e
-`advance` — e nenhum desses quatro citava a skill. A política valia na casca do
-run e evaporava assim que ele entrava num card. Ou seja: valia exatamente onde
-uma pergunta seria barata (a largada) e sumia exatamente onde ela é cara (o
-meio do drain, quando responder custa recarregar o contexto inteiro).
+The practical effect was not 50 slightly chattier commands. It was this:
+`/board-flow:drain` cites the skill, but per card it calls
+`/board-flow:execute`, which dispatches to the topology's `plan-build-validate`
+or `reproduce-fix-verify`, which in turn call `prove` and `advance`, and none of
+those four cited the skill. The policy held in the shell of the run and
+evaporated as soon as it entered a card. That is: it held exactly where a
+question would be cheap (the start) and vanished exactly where it is expensive
+(the middle of the drain, when answering costs reloading the whole context).
 
-## Mecanismo
+## Mechanism
 
-  - Fira em UserPromptSubmit. Sai na hora se o prompt não começa com um comando
-    `<plugin>:<cmd>` — o custo do scan só é pago nessa ocasião.
-  - Resolve o arquivo do comando e lê o campo `interaction:` do frontmatter,
-    pelo helper `_cmdmeta.py` (compartilhado com o session-routine-guard, que
-    lê o mesmo campo para a decisão oposta).
-  - `routine`         → injeta a política como contexto do turno.
-  - `conversational`  → NÃO injeta nada. É o caso do /common:spec, onde a skill
-    guided-interrogation suspende a default-yes de propósito: na construção
-    adivinhar economiza turno, na especificação produz uma spec plausível e
-    errada. Injetar aqui seria reabrir a contradição que o session-routine-guard
-    fecha.
-  - Campo ausente, arquivo não encontrado, qualquer imprevisto → não injeta
-    nada. Este hook concede autonomia; na dúvida ele não concede.
+  - Fires on UserPromptSubmit. Exits at once if the prompt does not start with a
+    `<plugin>:<cmd>` command; the scan cost is only paid on that occasion.
+  - Resolves the command file and reads the frontmatter `interaction:` field,
+    through the `_cmdmeta.py` helper (shared with session-routine-guard, which
+    reads the same field for the opposite decision).
+  - `routine`         -> injects the policy as turn context.
+  - `conversational`  -> injects NOTHING. This is the case of /common:spec,
+    where the guided-interrogation skill suspends default-yes on purpose: in
+    construction guessing saves a turn, in specification it produces a
+    plausible and wrong spec. Injecting here would reopen the contradiction that
+    session-routine-guard closes.
+  - Field missing, file not found, any surprise -> injects nothing. This hook
+    grants autonomy; when in doubt it does not grant.
 
-## Por que injetar em vez de editar os 50 arquivos
+## Why inject instead of editing the 50 files
 
-O texto injetado vale para o TURNO, o que inclui os comandos e subagentes que o
-comando de largada invocar — que é justamente onde escrever nos arquivos não
-alcançaria sem editar cada um deles e todos os futuros. Os quatro comandos
-internos do caminho do drain ganharam a menção por escrito também, como rede: o
-hook cobre quem não tem, e o texto cobre o caso de o hook não estar instalado.
+The injected text holds for the TURN, which includes the commands and subagents
+the launching command invokes, which is precisely where writing into the files
+would not reach without editing each one of them and every future one. The four
+internal commands on the drain path also got the mention in writing, as a net:
+the hook covers those without it, and the text covers the case of the hook not
+being installed.
 
-Este hook nunca bloqueia: só exit 0, com ou sem contexto.
+This hook never blocks: only exit 0, with or without context.
 """
 
 import json
@@ -57,19 +59,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 try:
-    from _cmdmeta import ROUTINE, acha_comando, interaction
-except Exception:  # noqa: BLE001 — sem o helper não há o que injetar
-    ROUTINE = acha_comando = interaction = None
+    from _cmdmeta import ROUTINE, find_command, interaction
+except Exception:  # noqa: BLE001 — without the helper there is nothing to inject
+    ROUTINE = find_command = interaction = None
 
-# O primeiro token do prompt, quando ele é uma invocação de comando de plugin.
-COMANDO_RE = re.compile(r"^\s*/([A-Za-z0-9_-]+:[A-Za-z0-9_-]+)")
+# The first token of the prompt, when it is a plugin command invocation.
+COMMAND_RE = re.compile(r"^\s*/([A-Za-z0-9_-]+:[A-Za-z0-9_-]+)")
 
-# O /common:session recebe a rotina-alvo como primeiro argumento. Quem manda na
-# política do run é o ALVO, não o invólucro.
-ALVO_DO_SESSION_RE = re.compile(
+# /common:session receives the target routine as its first argument. What
+# governs the run's policy is the TARGET, not the wrapper.
+SESSION_TARGET_RE = re.compile(
     r"^\s*/common:session\s+/?(\S+)", re.IGNORECASE
 )
-APELIDOS = {
+ALIASES = {
     "prove-drain": "board-flow:prove-drain",
     "drain": "board-flow:drain",
     "drain-plan": "common:drain-plan",
@@ -80,8 +82,8 @@ APELIDOS = {
     "docs": "docs:survey",
 }
 
-POLITICA = (
-    "[default-yes] /{alvo} é um comando de rotina: a skill `default-yes` está "
+POLICY = (
+    "[default-yes] /{target} é um comando de rotina: a skill `default-yes` está "
     "ATIVA neste turno, e vale para o run inteiro — inclusive para os comandos "
     "e subagentes que ele invocar (é aí que ela sumia). "
     "Ação reversível, que só registra algo, ou de investigação, e você já tem "
@@ -90,23 +92,23 @@ POLITICA = (
     "force-push, publicar para fora), para custo real (rodar N provas caras) e "
     "para bifurcação de preferência sem default defensável — e vai para uma "
     "das pontas: na largada, se a resposta muda o plano inteiro, ou no "
-    "relatório final, em lista numerada com `Recomendo sim/não`. "
+    "relatório final, em lista numerada com `I recommend yes/no`. "
     "Nunca no meio da execução. "
     "Toda decisão que você tomar sozinho é NOMEADA no relatório final — é isso "
     "que torna a autonomia revisável em vez de temerária."
 )
 
 
-def alvo_do(prompt: str):
-    """`<plugin>:<cmd>` que rege a política deste turno, ou None."""
-    m = ALVO_DO_SESSION_RE.match(prompt)
+def target_of(prompt: str):
+    """The `<plugin>:<cmd>` that governs this turn's policy, or None."""
+    m = SESSION_TARGET_RE.match(prompt)
     if m:
         token = m.group(1)
-        alvo = token if ":" in token else APELIDOS.get(token)
-        if alvo and ":" in alvo:
-            return alvo
+        target = token if ":" in token else ALIASES.get(token)
+        if target and ":" in target:
+            return target
         return "common:session"
-    m = COMANDO_RE.match(prompt)
+    m = COMMAND_RE.match(prompt)
     return m.group(1) if m else None
 
 
@@ -114,21 +116,21 @@ def main():
     try:
         raw = sys.stdin.read()
         payload = json.loads(raw) if raw.strip() else {}
-        if not isinstance(payload, dict) or acha_comando is None:
+        if not isinstance(payload, dict) or find_command is None:
             sys.exit(0)
 
-        alvo = alvo_do(payload.get("prompt") or "")
-        if not alvo:
-            sys.exit(0)      # o custo do scan só é pago numa invocação
+        target = target_of(payload.get("prompt") or "")
+        if not target:
+            sys.exit(0)      # the scan cost is only paid on an invocation
 
-        plugin, _, cmd = alvo.partition(":")
-        cmd_file = acha_comando(plugin, cmd)
+        plugin, _, cmd = target.partition(":")
+        cmd_file = find_command(plugin, cmd)
         if cmd_file is None or interaction(cmd_file) != ROUTINE:
-            sys.exit(0)      # não sabe, ou é conversa: não concede autonomia
+            sys.exit(0)      # unknown, or conversational: grants no autonomy
 
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
-            "additionalContext": POLITICA.format(alvo=alvo),
+            "additionalContext": POLICY.format(target=target),
         }}))
     except Exception as e:  # noqa: BLE001
         print(f"[default-yes-inject] {e}", file=sys.stderr)

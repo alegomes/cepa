@@ -1,0 +1,52 @@
+key: onde-estamos-do-epic
+status: complete
+diff_range: 4856391..92d3768
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: "`cepa-plan epics --repo <dir> [--json|--brief]` como subprocesso; ciclos fechado/em-andamento/sem-fila pelas regras (a) source+ciclo N, (b) <slug>-c<N>, (c) prefixo do cabeçalho; contagens done/pending/blocked"
+    test: "tests/test_epic_where.py::test_cycles_and_rules, test_rule_c"
+    layer: cli/subprocess sobre repo temporário
+    evidence: verified
+    run: "python3 tests/test_epic_where.py -> 44 checks ok, 'tudo certo' (regras a, b, c e contagens asseridas)"
+    verdict: complete
+  - id: AC2
+    altitude: cli
+    surface: "saída de `cepa-plan epics`: ciclos sem fila com `/common:queue <slug|prefixo>-c<N> --from-epic docs/epics/x.md --cycle N`; contagens pending/blocked em ciclos em andamento"
+    test: "tests/test_epic_where.py::test_cycles_and_rules, test_rule_c"
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_epic_where.py -> 'texto: próximo ciclo sem fila com o comando', 'sugestão usa o prefixo do cabeçalho', 'ciclo 2: contagens' ok"
+    verdict: complete
+  - id: AC3
+    altitude: cli
+    surface: "perguntas `- [ ]` abertas do Epic e owner_question/human_pending abertos nas filas, na saída de `cepa-plan epics`"
+    test: "tests/test_epic_where.py::test_cycles_and_rules"
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_epic_where.py -> 'perguntas em aberto: só as 2 sem marca', 'ciclo 2: pergunta do dono preservada', 'texto: pergunta da fila e do Epic' ok"
+    verdict: complete
+  - id: AC4
+    altitude: event
+    surface: "common/hooks/session-mode.py (UserPromptSubmit) como subprocesso: linha [epic] só no 1o turno, ausente nos seguintes, ausente sob CEPA_UNTIL_RUN, fail-silent"
+    test: "tests/test_epic_where.py::test_hook, test_hook_fail_silent"
+    layer: hook/subprocess (cópia de common/hooks com cepa-plan falso exit 3 e ausente)
+    evidence: verified
+    run: "python3 tests/test_epic_where.py -> 'tudo certo'; controle imprime [epic]; fail-silent (exit 3) e (missing): rc 0, sem [epic], sem traceback; 1o turno/2o turno/CEPA_UNTIL_RUN ok"
+    verdict: complete
+  - id: AC5
+    altitude: prompt
+    surface: "common/commands/whereami.md passo 0 documenta `python3 \"${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan\" epics --repo .`; teste executa esse comando documentado"
+    test: "tests/test_epic_where.py::test_whereami_step0_runs"
+    layer: comando extraído do .md por regex e executado via bash com CLAUDE_PLUGIN_ROOT
+    evidence: verified
+    run: "python3 tests/test_epic_where.py -> 'whereami.md: linha do passo 0 extraível', 'passo 0 do whereami: rc 0', 'passo 0 do whereami: linhas de ciclo' ok"
+    verdict: complete
+  - id: AC6
+    altitude: cli
+    surface: "robustez: sem docs/epics, fila ilegível, items_from_epic"
+    test: "tests/test_epic_where.py::test_no_epics, test_unreadable_and_empty_queue; tests/test_cepa_plan_from_epic.py"
+    layer: cli/subprocess
+    evidence: verified
+    run: "test_epic_where.py ok (rc 0 vazio; fila corrompida rc 0 com aviso em stderr); python3 tests/test_cepa_plan_from_epic.py -> 'tudo ok'. Nota: items_from_epic foi refatorado (extraiu ladder_rows) e não ficou textualmente intacto, mas o comportamento segue coberto pelos testes verdes."
+    verdict: complete

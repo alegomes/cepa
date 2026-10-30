@@ -1,25 +1,24 @@
 #!/usr/bin/env python3
-"""Contract test: /maestro:run confere no GIT que a worktree da slice existe.
+"""Contract test: /maestro:run checks IN GIT that the slice's worktree exists.
 
-A perda que isto guarda, medida numa execução real (programa WEGO-paralelo,
-onda 2, repo wego-acesso-backend, 2026-08-24, herdr 0.7.3): em 4 de 5 chamadas
-o `herdr worktree create --json` devolveu JSON de sucesso COMPLETO — com
-`path`, `branch`, `workspace_id` e `"is_prunable": false` — e o git não
-registrou worktree nenhuma; os diretórios também não existiam. O
-`herdr worktree list` seguia mostrando as fantasmas, porque o herdr mantém
-registro próprio. Sem conferir `git worktree list` na mão, os passos seguintes
-(seed do .env, maestro-fork-settings, herdr agent start) rodariam contra
-caminhos inexistentes e a onda inteira nasceria morta — falhando de um jeito
-que parece problema das filhas, não do fork.
+The loss this guards, measured in a real execution (WEGO-paralelo program,
+wave 2, repo wego-acesso-backend, 2026-08-24, herdr 0.7.3): in 4 of 5 calls
+`herdr worktree create --json` returned a COMPLETE success JSON — with
+`path`, `branch`, `workspace_id` and `"is_prunable": false` — and git did not
+register any worktree; the directories did not exist either. `herdr worktree list`
+kept showing the ghosts, because herdr keeps its own registry. Without checking
+`git worktree list` by hand, the following steps (seed of .env, maestro-fork-settings,
+herdr agent start) would run against nonexistent paths and the whole wave would be
+born dead — failing in a way that looks like a problem of the daughters, not of the fork.
 
-O gatilho está no herdr, fora do nosso alcance. O que é nosso: não aceitar a
-palavra de ferramenta externa sobre um efeito que o git confere em um comando —
-o mesmo padrão do marcador `MAESTRO-EXIT`, que sincroniza por ARQUIVO e não
-pelo pane.
+The trigger is in herdr, out of our reach. What is ours: not accepting an external
+tool's word about an effect that git checks in one command —
+the same pattern as the `MAESTRO-EXIT` marker, which synchronizes by FILE and not
+by pane.
 
-Como o contrato mora em prosa de comando (o modelo é quem executa), o guard tem
-de ser mecânico, no molde de tests/test_plan_anchor_root.py: prosa dizendo
-"confie no --json" é exatamente o que erode em silêncio.
+Since the contract lives in command prose (the model is the one who executes), the guard has
+to be mechanical, in the mold of tests/test_plan_anchor_root.py: prose saying
+"trust the --json" is exactly what erodes in silence.
 
 Run: python3 tests/test_worktree_create_verify.py
 """
@@ -43,27 +42,28 @@ def check(label, cond, extra=""):
 
 
 def flat(txt):
-    """Texto com espaços colapsados: as checagens casam FRASE, não quebra de
-    linha — senão uma re-quebra inocente fica vermelha e ensina a afrouxar o
-    guard, que é como um guard mecânico vira decoração."""
+    """Text with collapsed whitespace: the checks match a PHRASE, not a line
+    break — otherwise an innocent re-wrap goes red and teaches loosening the
+    guard, which is how a mechanical guard becomes decoration.
+    """
     return " ".join(txt.split())
 
 
-def passo_6a(txt):
-    """O trecho do passo 6a — do 'a. **Worktree herdr**' até o item 'b.'."""
-    ini = txt.find("a. **Worktree herdr**")
-    if ini == -1:
+def step_6a(txt):
+    """The snippet of step 6a — from 'a. **Worktree herdr**' to item 'b.'."""
+    start = txt.find("a. **Worktree herdr**")
+    if start == -1:
         return ""
-    fim = txt.find("\n   b. ", ini)
-    return txt[ini:fim if fim != -1 else len(txt)]
+    end_marker = txt.find("\n   b. ", start)
+    return txt[start:end_marker if end_marker != -1 else len(txt)]
 
 
 def main():
     run = RUN.read_text(encoding="utf-8")
-    bloco = passo_6a(run)
-    check("run.md ainda tem o passo 6a (fork da worktree da slice)", bool(bloco),
+    block = step_6a(run)
+    check("run.md ainda tem o passo 6a (fork da worktree da slice)", bool(block),
           "o passo mudou de forma — reancore este teste antes de seguir")
-    fb = flat(bloco)
+    fb = flat(block)
 
     check("6a: chama o `herdr worktree create`",
           "herdr worktree create" in fb)
@@ -84,9 +84,9 @@ def main():
     check("6a: proíbe forkar as demais slices em silêncio",
           "do **not** fork silently" in fb)
 
-    # resume.md hoje NÃO cria worktree (só reconcilia e retoma o event loop).
-    # Se um dia passar a criar, a mesma conferência tem de vir junto — este é o
-    # guard que impede a regra nascer só num dos dois comandos.
+    # resume.md today does NOT create a worktree (it only reconciles and resumes the event loop).
+    # If one day it starts creating, the same check must come along — this is the
+    # guard that keeps the rule from being born in only one of the two commands.
     res = flat(RESUME.read_text(encoding="utf-8"))
     if "herdr worktree create" in res:
         check("resume.md: se cria worktree, confere por `git worktree list`",

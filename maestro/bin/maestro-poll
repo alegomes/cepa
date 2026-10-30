@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-"""maestro-poll — uma iteração do event loop da onda (design rev2.1, Comp. 2a).
+"""maestro-poll — one iteration of the wave event loop (design rev2.1, Comp. 2a).
 
-Núcleo determinístico e testável: a sincronização primária é por ARQUIVO
-(resultado.txt de cada filha + wave-state), NUNCA pelo pane do herdr (o pane é
-cosmético). Este script NÃO fala com o herdr nem mata processos — ele INSPECIONA
-o estado em disco e reporta as transições que a sessão maestro deve efetivar.
+Deterministic, testable core: the primary synchronization is by FILE
+(each child's resultado.txt + wave-state), NEVER by the herdr pane (the pane is
+cosmetic). This script does NOT talk to herdr nor kill processes — it INSPECTS
+the state on disk and reports the transitions the maestro session must carry out.
 
-Por que iteração-inspetor em vez de loop interno: sem event loop há deadlock (a
-sessão presa num wait bloqueante não drena a fila de escalação). O /maestro:run
-chama isto em rodízio, age sobre a saída e repete.
+Why an inspector iteration instead of an internal loop: with an event loop there
+is deadlock (a session stuck in a blocking wait does not drain the escalation
+queue). /maestro:run calls this in rotation, acts on the output and repeats.
 
-Para cada slice `running`, decide o estado terminal lendo o marcador no
-resultado.txt (o wrapper normativo garante que ele aparece):
+For each `running` slice, decides the terminal state by reading the marker in
+resultado.txt (the normative wrapper guarantees it shows up):
   MAESTRO-EXIT:0                 → DONE
   MAESTRO-EXIT:<n≠0>             → FAIL
-  MAESTRO-EXIT:ESCALATED:<id>    → ESCALATED (protocolo 3a; não é falha)
-  (sem marcador, mtime velho)    → suspeita de heartbeat / TIMEOUT por T_slice
+  MAESTRO-EXIT:ESCALATED:<id>    → ESCALATED (protocol 3a; not a failure)
+  (no marker, stale mtime)       → heartbeat suspicion / TIMEOUT by T_slice
 
-Uso:
+Usage:
   maestro-poll <program-dir> [--now EPOCH] [--heartbeat-s 300]
-Lê <program-dir>/wave-state.yaml e os <program-dir>/slices/<S>/resultado.txt.
-Emite JSON: {transitions:[...], escalations:[...], alive:[...]}.
---now permite teste determinístico (Date.now não existe no runtime de workflow,
-mas aqui é CLI normal; ainda assim aceitamos --now para os testes).
+Reads <program-dir>/wave-state.yaml and <program-dir>/slices/<S>/resultado.txt.
+Emits JSON: {transitions:[...], escalations:[...], alive:[...]}.
+--now allows deterministic testing (Date.now does not exist in the workflow
+runtime, but here it is a normal CLI; we still accept --now for the tests).
 """
 import argparse
 import json
@@ -40,12 +40,12 @@ except ImportError:
 EXIT_RE = re.compile(r"MAESTRO-EXIT:(ESCALATED:(\S+)|(\d+))")
 
 
-def read_marker(resultado: Path):
-    """Retorna (estado_terminal, detalhe) ou (None, None) se ainda rodando."""
-    if not resultado.is_file():
+def read_marker(result_file: Path):
+    """Returns (terminal_state, detail) or (None, None) if still running."""
+    if not result_file.is_file():
         return None, None
-    txt = resultado.read_text(errors="replace")
-    # o ÚLTIMO marcador vale (a filha pode logar antes de sair)
+    txt = result_file.read_text(errors="replace")
+    # the LAST marker counts (the child may log before exiting)
     last = None
     for m in EXIT_RE.finditer(txt):
         last = m
@@ -57,16 +57,16 @@ def read_marker(resultado: Path):
     return ("DONE" if code == 0 else "FAIL"), code
 
 
-def resultado_path(program_dir: Path, name: str, st: dict) -> Path:
-    """Onde vive o resultado.txt da filha.
+def result_path(program_dir: Path, name: str, st: dict) -> Path:
+    """Where the child's resultado.txt lives.
 
-    O wrapper normativo roda com `--cwd <worktree>` e faz `tee resultado.txt`,
-    então o arquivo nasce NA RAIZ DO WORKTREE — que o wave-state registra em
-    `worktree:`. Procurar só em `<progdir>/slices/<S>/` fazia o poll nunca ver
-    marcador nenhum: toda slice ficava `running` até estourar o T_slice e cair
-    em TIMEOUT, mesmo tendo terminado com MAESTRO-EXIT:0 (onda WEGO-paralelo,
-    2026-08-24 — 5 slices prontas e o estado dizendo running).
-    O caminho sob `slices/` segue valendo como fallback.
+    The normative wrapper runs with `--cwd <worktree>` and does `tee resultado.txt`,
+    so the file is born AT THE WORKTREE ROOT — which the wave-state records in
+    `worktree:`. Looking only in `<progdir>/slices/<S>/` made the poll never see
+    any marker: every slice stayed `running` until blowing T_slice and falling
+    into TIMEOUT, even though it had finished with MAESTRO-EXIT:0 (WEGO-parallel
+    wave, 2026-08-24 — 5 slices done and the state saying running).
+    The path under `slices/` remains valid as a fallback.
     """
     wt = st.get("worktree")
     if wt:
@@ -86,26 +86,26 @@ def poll(program_dir: Path, now: float, heartbeat_s: int):
     for name, st in slices.items():
         if st.get("status") != "running":
             continue
-        resultado = resultado_path(program_dir, name, st)
-        term, detail = read_marker(resultado)
+        result_file = result_path(program_dir, name, st)
+        term, detail = read_marker(result_file)
         if term:
             tr = {"slice": name, "to": term, "detail": detail}
             transitions.append(tr)
             continue
-        # ainda rodando — heartbeat + timeout
+        # still running — heartbeat + timeout
         started = st.get("started_epoch")
         t_slice = int(st.get("timeout_min", default_timeout // 60)) * 60
         if started and (now - started) > t_slice:
             transitions.append({"slice": name, "to": "TIMEOUT",
                                 "detail": f"sem MAESTRO-EXIT após {t_slice}s"})
             continue
-        mtime = resultado.stat().st_mtime if resultado.is_file() else started
+        mtime = result_file.stat().st_mtime if result_file.is_file() else started
         if mtime and (now - mtime) > heartbeat_s:
             stalled.append({"slice": name,
                             "idle_s": round(now - mtime)})
         alive.append(name)
 
-    # escalações pendentes na fila do porteiro
+    # pending escalations in the gatekeeper queue
     escalations = []
     esc_dir = program_dir / "gatekeeper" / "escalations"
     if esc_dir.is_dir():
@@ -117,7 +117,7 @@ def poll(program_dir: Path, now: float, heartbeat_s: int):
             if isinstance(e, dict) and e.get("estado") == "pending":
                 escalations.append(e)
 
-    # saúde do porteiro
+    # gatekeeper health
     gk_pid = None
     pidf = program_dir / "gatekeeper" / "gatekeeper.pid"
     if pidf.is_file():
@@ -143,7 +143,7 @@ def _pid_alive(pid):
     try:
         os.kill(pid, 0)
     except (ProcessLookupError, PermissionError):
-        return isinstance(pid, int)  # PermissionError → existe mas de outro dono
+        return isinstance(pid, int)  # PermissionError → exists but under another owner
     except OSError:
         return False
     return True

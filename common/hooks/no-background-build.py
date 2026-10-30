@@ -1,103 +1,106 @@
 #!/usr/bin/env python3
-"""PreToolUse hook (common) — dentro do `cepa-until`, jogar build para segundo
-plano é perder o item. Bloqueia.
+"""PreToolUse hook (common) -- inside `cepa-until`, sending a build to the
+background means losing the item. It blocks.
 
 WHY THIS EXISTS
 ---------------
-O `cepa-until` roda cada item da fila como um `claude -p` separado. Nesse modo
-**não existe turno seguinte**: o processo morre quando o turno acaba. Um build
-disparado em segundo plano nunca é colhido — vira processo órfão, o item fica
-`in_progress` sem desfecho e a próxima janela o encontra como reserva órfã e
-recomeça do zero.
+`cepa-until` runs each queue item as a separate `claude -p`. In that mode
+**there is no next turn**: the process dies when the turn ends. A build started
+in the background is never collected -- it becomes an orphan process, the item
+stays `in_progress` with no outcome, and the next window finds it as an orphan
+reservation and starts over from zero.
 
-Medido no run de 2026-08-30 (`WEGO`, janela de 2h):
+Measured in the 2026-08-30 run (`WEGO`, 2h window):
 
-| tentativa | item      | gasto  | exit | como acabou                                   |
-|-----------|-----------|--------|------|-----------------------------------------------|
-| 1         | WEGO-2206 | 10m50s |    0 | "aguardo a notificação do `clean verify`"      |
-| 3         | WEGO-1941 | 23m46s |    0 | "está compilando em segundo plano... quando    |
-|           |           |        |      |  ficar verde: push, `finish`, transição"       |
+| attempt | item      | spent  | exit | how it ended                                  |
+|---------|-----------|--------|------|-----------------------------------------------|
+| 1       | WEGO-2206 | 10m50s |    0 | "I await the notification of `clean verify`"  |
+| 3       | WEGO-1941 | 23m46s |    0 | "it is compiling in the background... when    |
+|         |           |        |      |  it turns green: push, `finish`, transition"  |
 
-34 dos 49 minutos da janela, e as duas ÚNICAS falhas que não foram teto de uso
-da conta. As duas saíram 0: do lado de fora é indistinguível de trabalho feito.
+34 of the window's 49 minutes, and the only TWO failures that were not the
+account's usage ceiling. Both exited 0: from the outside that is
+indistinguishable from work done.
 
-E o agente não estava sendo criativo — estava seguindo conselho da casa. O
-`no-busy-wait` bloqueia esperar, e a saída dele sugere `run_in_background` como
-alternativa. Isso vale numa sessão interativa, onde a notificação de término
-REINVOCA a sessão. Sob `claude -p` não vale, e é justamente onde o `cepa-until`
-roda. Este hook fecha essa porta só onde ela é armadilha.
+And the agent was not being creative -- it was following house advice.
+`no-busy-wait` blocks waiting, and its output suggests `run_in_background` as
+the alternative. That holds in an interactive session, where the completion
+notification RE-INVOKES the session. Under `claude -p` it does not hold, and
+that is exactly where `cepa-until` runs. This hook closes that door only where
+it is a trap.
 
-ESCOPO — só dispara com `CEPA_UNTIL_RUN` no ambiente, que o `cepa-until`
-exporta para cada subprocesso. Fora dele o hook não existe: numa sessão
-interativa mandar o build para o segundo plano é a coisa certa.
+SCOPE -- fires only with `CEPA_UNTIL_RUN` in the environment, which
+`cepa-until` exports to every subprocess. Outside it the hook does not exist:
+in an interactive session sending the build to the background is the right
+thing.
 
-Bloqueia um comando de BUILD/TESTE que vá para segundo plano, pelas duas vias:
-  1. `run_in_background: true` no próprio Bash;
-  2. desanexação no shell (`&` final, `nohup`, `disown`, `setsid`), fora de
-     aspas — porque barrar só o nome da ferramenta faz nascer o próximo
-     mecanismo para o mesmo efeito (memória `gate-por-nome-de-ferramenta-falha-
-     aberto`).
+It blocks a BUILD/TEST command that goes to the background, by both routes:
+  1. `run_in_background: true` on the Bash call itself;
+  2. detaching in the shell (trailing `&`, `nohup`, `disown`, `setsid`), outside
+     quotes -- because blocking only the tool name makes the next mechanism for
+     the same effect appear (memory `gate-por-nome-de-ferramenta-falha-
+     aberto`, "a gate keyed on a tool name fails open").
 
-NÃO bloqueia subir servidor/serviço em segundo plano (`quarkus:dev`, `npm run
-dev`, `serve`, `docker compose up`): esses são processos de apoio que PRECISAM
-ficar de lado, e o gate de prova de UI depende deles. O que este hook cobra é o
-comando que produz um VEREDITO que alguém tem de colher.
+It does NOT block starting a server/service in the background (`quarkus:dev`,
+`npm run dev`, `serve`, `docker compose up`): those are support processes that
+MUST stay on the side, and the UI proof gate depends on them. What this hook
+charges is the command that produces a VERDICT somebody has to collect.
 
-AS OUTRAS DUAS PORTAS PARA O MESMO EFEITO (04/09/2026)
--------------------------------------------------------
-O run de 2026-09-03 perdeu 6h54 de uma janela de 8h sem passar por nenhuma
-delas: o item WEGO-2224 armou um `Monitor` com `while true` (um vigia que
-observa branches e NUNCA termina sozinho) e encerrou o turno escrevendo
-"Aguardo", com subagentes ainda rodando. O `claude -p` esperou o segundo plano,
-bateu o teto de 600s e se matou — exit 0, item pela metade, clone principal
-parado numa branch de integração. A conferência de branch do `cepa-until` leu
-isso como troca de branch e encerrou a janela inteira.
+THE OTHER TWO DOORS FOR THE SAME EFFECT (2026-09-04)
+----------------------------------------------------
+The 2026-09-03 run lost 6h54 of an 8h window without going through either of
+them: item WEGO-2224 armed a `Monitor` with `while true` (a watcher that
+observes branches and NEVER ends on its own) and ended the turn writing
+"I wait", with subagents still running. `claude -p` waited for the background,
+hit the 600s ceiling and killed itself -- exit 0, item half done, main clone
+parked on an integration branch. `cepa-until`'s branch check read that as a
+branch switch and ended the whole window.
 
-Barrar só o `Bash` era barrar por MECANISMO. O efeito é `o turno acaba com
-trabalho de segundo plano que ninguém vai colher`, e ele tem três portas:
+Blocking only `Bash` was blocking by MECHANISM. The effect is `the turn ends
+with background work nobody will collect`, and it has three doors:
 
-  Bash      — build desanexado (a porta original, acima);
-  Monitor   — vigia sem fim: `persistent: true`, `ws:`, ou comando que não
-              retorna (`while true`, `tail -f`, `inotifywait -m`). Dentro da
-              janela ele só segura o turno até o relógio do item matar tudo.
-              Vigia com fim declarado continua liberado: ele termina e é colhido;
-  Stop      — a parada em si. Se ficou subagente despachado sem resultado no
-              transcript, ou vigia armado que nem recebeu `TaskStop` nem
-              terminou sozinho (aviso `<task-notification>` de fim), a parada
-              é bloqueada uma vez com a lista do que falta colher.
+  Bash      -- detached build (the original door, above);
+  Monitor   -- endless watcher: `persistent: true`, `ws:`, or a command that
+               does not return (`while true`, `tail -f`, `inotifywait -m`).
+               Inside the window it only holds the turn until the item clock
+               kills everything. A watcher with a declared end stays allowed:
+               it finishes and is collected;
+  Stop      -- the stop itself. If a dispatched subagent has no result in the
+               transcript, or an armed watcher received neither `TaskStop` nor
+               ended on its own (end `<task-notification>` notice), the stop is
+               blocked once with the list of what is left to collect.
 
-O par com o `cepa-until`: o supervisor agora exporta
-`CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` para o item esperar o segundo plano em
-vez de morrer aos 10 minutos. Isso só é seguro porque estas duas portas novas
-barram o segundo plano que nunca termina — sem elas, esperar sem teto trocaria
-um corte de 10 min pelo limite do item inteiro.
+The pairing with `cepa-until`: the supervisor now exports
+`CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` so the item waits for the background
+instead of dying at 10 minutes. That is only safe because these two new doors
+block background work that never ends -- without them, waiting with no ceiling
+would trade a 10 min cut for the limit of the whole item.
 
-BUILD DE MAIS DE 10 MIN (27/09/2026)
-------------------------------------
-Barrar todo build em segundo plano deixava o build de mais de 10 min sem
-saída: o Bash o empurra para o segundo plano aos 10 min de qualquer jeito, e
-no run WEGO de 25/09 o WEGO-2334 travou com `EXIT=124` e virou tarefa do dono.
-Medido em 27/09 (claude 2.1.283): a espera que o parágrafo acima atribui ao
-`CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` não acontece. O `claude -p` sai no fim
-do turno e mata o segundo plano com o teto em 0, ausente ou 120000, e um
-`Monitor` armado não segura o turno (o agente parou dizendo "a notificação vai
-me reinvocar", e nada foi colhido).
+BUILD OF MORE THAN 10 MIN (2026-09-27)
+--------------------------------------
+Blocking every background build left the build of more than 10 min with no way
+out: Bash pushes it to the background at 10 min anyway, and in the WEGO run of
+09-25 WEGO-2334 hung with `EXIT=124` and became an owner task. Measured on
+09-27 (claude 2.1.283): the wait that the paragraph above attributes to
+`CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` does not happen. `claude -p` exits at
+the end of the turn and kills the background with the ceiling at 0, absent or
+120000, and an armed `Monitor` does not hold the turn (the agent stopped saying
+"the notification will re-invoke me", and nothing was collected).
 
-Então o segundo plano é liberado quando o comando DECLARA O FIM
-(`...; echo EXIT=$? >> <arquivo>`), e a espera é em primeiro plano, no mesmo
-turno, num laço que sai sozinho antes dos 10 min (`for i in $(seq 27); do
-grep -q EXIT= <arquivo> && break; sleep 20; done # espera-ok`), repetido até o
-`EXIT=`. Uma espera de 10 min cheios é empurrada para o segundo plano como o
-próprio build: no experimento de 27/09 foi isso que fez o agente parar
-"aguardando a notificação", e só a porta 3 o segurou. A porta 3 barra parar
-enquanto esse arquivo não tem `EXIT=`. Sem fim declarado,
-o bloqueio continua como antes.
+So the background is allowed when the command DECLARES THE END
+(`...; echo EXIT=$? >> <file>`), and the wait is in the foreground, in the same
+turn, in a loop that exits on its own before 10 min (`for i in $(seq 27); do
+grep -q EXIT= <file> && break; sleep 20; done # espera-ok`), repeated until
+`EXIT=`. A full 10 min wait is pushed to the background like the build itself:
+in the 09-27 experiment that is what made the agent stop "awaiting the
+notification", and only door 3 held it. Door 3 blocks stopping while that file
+has no `EXIT=`. With no declared end, the block stays as before.
 
-ESCAPE HATCH: `# fundo-ok` no comando (Bash e Monitor).
+ESCAPE HATCH: `# fundo-ok` in the command (Bash and Monitor).
 
 Exit codes:
-  0 — liberado (e, no Stop, o bloqueio viaja no JSON de stdout)
-  2 — bloqueado: trabalho em segundo plano dentro de uma janela do cepa-until
+  0 -- allowed (and, on Stop, the block travels in the stdout JSON)
+  2 -- blocked: background work inside a cepa-until window
 """
 
 import json
@@ -108,7 +111,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     import _telemetry as T
-except Exception:  # telemetria nunca pode quebrar o gate
+except Exception:  # telemetry must never break the gate
 
     class T:  # type: ignore
         @staticmethod
@@ -120,17 +123,17 @@ try:
     import _shellscan as S
 
     _unquoted_view = S._unquoted_view
-except Exception:  # sem o motor compartilhado, analisa a linha crua
+except Exception:  # without the shared engine, analyze the raw line
 
     def _unquoted_view(c):
         return c
 
 
 _ESCAPE = "fundo-ok"
-ENV_JANELA = "CEPA_UNTIL_RUN"
+ENV_WINDOW = "CEPA_UNTIL_RUN"
 
-# Comandos que produzem um VEREDITO — alguém tem de ler o resultado, e é
-# exatamente esse alguém que não existe no turno seguinte.
+# Commands that produce a VERDICT -- somebody has to read the result, and that
+# somebody is exactly who does not exist in the next turn.
 _BUILD = re.compile(
     r"\b(?:\./)?mvnw?\b(?!.*\b(?:quarkus:dev|spring-boot:run)\b)"
     r"|\bgradlew?\b(?!.*\bbootRun\b)"
@@ -143,62 +146,63 @@ _BUILD = re.compile(
     r"|\bctest\b|\btox\b",
     re.I)
 
-# Desanexação escrita no shell. O `&` só conta quando não é `&&` nem `2>&1`.
-_DESANEXA = re.compile(r"\bnohup\b|\bdisown\b|\bsetsid\b|(?<![&>])&\s*(?:$|[;\n])")
+# Detaching written in the shell. `&` only counts when it is not `&&` nor `2>&1`.
+_DETACH = re.compile(r"\bnohup\b|\bdisown\b|\bsetsid\b|(?<![&>])&\s*(?:$|[;\n])")
 
 
-def desanexa(command: str, background: bool):
-    """(via, trecho) de como o comando vai para segundo plano, ou None."""
+def detached_via(command: str, background: bool):
+    """(via, snippet) of how the command goes to the background, or None."""
     if background:
         return ("run_in_background", command.strip()[:90])
     v = _unquoted_view(command)
-    m = _DESANEXA.search(v)
+    m = _DETACH.search(v)
     if m:
         return ("desanexado no shell", v[max(0, m.start() - 60):m.end()].strip())
     return None
 
 
-def bloqueia(command: str, background: bool, ambiente=None):
-    """A decisão completa: (via, trecho) ou None.
+def blocks(command: str, background: bool, environ=None):
+    """The full decision: (via, snippet) or None.
 
-    O ambiente entra por parâmetro para o teste conseguir exercer as duas
-    metades — dentro e fora da janela — sem mexer no processo dele.
+    The environment comes in as a parameter so the test can exercise both
+    halves -- inside and outside the window -- without touching its own process.
     """
-    env = os.environ if ambiente is None else ambiente
-    if not env.get(ENV_JANELA):
+    env = os.environ if environ is None else environ
+    if not env.get(ENV_WINDOW):
         return None
     if not command or _ESCAPE in command:
         return None
     if not _BUILD.search(_unquoted_view(command)):
         return None
-    if marca_de_fim(command):
-        # Build com fim declarado: o turno colhe esperando o arquivo em
-        # primeiro plano, e a porta 3 (Stop) barra parar antes do `EXIT=`.
+    if end_marker(command):
+        # Build with a declared end: the turn collects by waiting for the file
+        # in the foreground, and door 3 (Stop) blocks stopping before `EXIT=`.
         return None
-    return desanexa(command, background)
+    return detached_via(command, background)
 
 
-# Build que passa de 10 min não cabe em primeiro plano: o Bash o empurra para
-# o segundo plano aos 10 min de qualquer jeito. O jeito colhível é o comando
-# gravar o próprio fim num arquivo (`...; echo EXIT=$? >> /tmp/x.fim`) e o
-# turno esperar esse arquivo em primeiro plano. Medido em 27/09/2026 (claude
-# 2.1.283): o `claude -p` NÃO espera tarefa de segundo plano ao fim do turno,
-# com `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` em 0, ausente ou 120000 (saiu em
-# 15s e matou o build nos três), e um `Monitor` armado não segura o turno.
-_MARCA_FIM = re.compile(
+# A build that runs past 10 min does not fit in the foreground: Bash pushes it
+# to the background at 10 min anyway. The collectable way is for the command
+# to write its own end to a file (`...; echo EXIT=$? >> /tmp/x.fim`) and for
+# the turn to wait for that file in the foreground. Measured on 2026-09-27
+# (claude 2.1.283): `claude -p` does NOT wait for a background task at the end
+# of the turn, with `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` at 0, absent or
+# 120000 (it exited in 15s and killed the build in all three), and an armed
+# `Monitor` does not hold the turn.
+_END_MARKER = re.compile(
     r"""EXIT=\$\?["']?\s*>{1,2}\s*["']?([^\s;&|"'()`<>]+)""")
 
 
-def marca_de_fim(command: str):
-    """O arquivo em que o comando grava `EXIT=<código>` ao terminar, ou None."""
-    m = _MARCA_FIM.search(command or "")
+def end_marker(command: str):
+    """The file where the command writes `EXIT=<code>` when it finishes, or None."""
+    m = _END_MARKER.search(command or "")
     return m.group(1) if m else None
 
 
-# ── porta 2: o vigia que não termina (Monitor) ──────────────────────────────
-# Um `Monitor` só é colhível dentro da janela se ele ACABA. Estes são os jeitos
-# de escrever um que não acaba — o de cima é o do run de 2026-09-03.
-_VIGIA_SEM_FIM = re.compile(
+# ── door 2: the watcher that does not end (Monitor) ──────────────────────────────
+# A `Monitor` is only collectable inside the window if it ENDS. These are the
+# ways to write one that does not end -- the first is the 2026-09-03 run's.
+_ENDLESS_WATCHER = re.compile(
     r"\bwhile\s+(?:true|:)\b"
     r"|\buntil\s+false\b"
     r"|\bfor\s*\(\s*;\s*;\s*\)"
@@ -207,187 +211,187 @@ _VIGIA_SEM_FIM = re.compile(
     re.I)
 
 
-def vigia_bloqueia(entrada, ambiente=None):
-    """(via, trecho) se este Monitor não termina sozinho dentro da janela."""
-    env = os.environ if ambiente is None else ambiente
-    if not env.get(ENV_JANELA):
+def watcher_blocks(tool_input, environ=None):
+    """(via, snippet) if this Monitor does not end on its own inside the window."""
+    env = os.environ if environ is None else environ
+    if not env.get(ENV_WINDOW):
         return None
-    entrada = entrada or {}
-    comando = entrada.get("command") or ""
-    rotulo = (entrada.get("description") or comando).strip()[:90]
-    if _ESCAPE in comando:
+    tool_input = tool_input or {}
+    command = tool_input.get("command") or ""
+    label = (tool_input.get("description") or command).strip()[:90]
+    if _ESCAPE in command:
         return None
-    if entrada.get("persistent"):
-        return ("persistent: true", rotulo)
-    if entrada.get("ws"):
-        # O socket só fecha quando o outro lado fecha: do lado de cá não há fim.
-        return ("ws (o socket não fecha sozinho)", rotulo)
-    m = _VIGIA_SEM_FIM.search(_unquoted_view(comando))
+    if tool_input.get("persistent"):
+        return ("persistent: true", label)
+    if tool_input.get("ws"):
+        # The socket only closes when the other side closes: from here there is no end.
+        return ("ws (o socket não fecha sozinho)", label)
+    m = _ENDLESS_WATCHER.search(_unquoted_view(command))
     if m:
-        return ("comando sem fim", comando[max(0, m.start() - 40):m.end() + 20].strip())
+        return ("comando sem fim", command[max(0, m.start() - 40):m.end() + 20].strip())
     return None
 
 
-# ── porta 3: a parada com trabalho pendente (Stop) ──────────────────────────
-_VIGIA_ARMADO = re.compile(r"Monitor started \(task ([A-Za-z0-9_-]{4,})")
-_VIGIA_PARADO = re.compile(
+# ── door 3: the stop with pending work (Stop) ──────────────────────────
+_WATCHER_ARMED = re.compile(r"Monitor started \(task ([A-Za-z0-9_-]{4,})")
+_WATCHER_STOPPED = re.compile(
     r"[Ss]topped task:? ([A-Za-z0-9_-]{4,})"
     r"|No task found with ID:? ([A-Za-z0-9_-]{4,})")
-_DESPACHO = ("Agent", "Task")
+_DISPATCH = ("Agent", "Task")
 
-# O vigia que termina SOZINHO não passa por `TaskStop`: o harness grava um
-# `<task-notification>` com `<status>` terminal (fonte acabou) ou com o evento
-# de expiração. Sem ler isso, o hook tratava o vigia como armado para sempre e
-# barrava a parada legítima — no run de 2026-09-27 (item
-# until-build-longo-sem-trava) o relatório final virou resposta ao bloqueio.
-# Formatos conferidos nos transcripts de 2026-09: `completed`/`failed`/`killed`
-# e "Monitor expired after 10m ..." / "Monitor timed out". `running` não fecha.
-_AVISO = re.compile(r"<task-notification>(.*?)</task-notification>", re.S)
-_AVISO_ID = re.compile(r"<task-id>([A-Za-z0-9_-]{4,})</task-id>")
-_AVISO_FIM = re.compile(
+# A watcher that ends ON ITS OWN does not go through `TaskStop`: the harness
+# writes a `<task-notification>` with a terminal `<status>` (source finished)
+# or with the expiry event. Without reading that, the hook treated the watcher
+# as armed forever and blocked the legitimate stop -- in the 2026-09-27 run
+# (item until-build-longo-sem-trava) the final report became a reply to the
+# block. Formats checked in the 2026-09 transcripts: `completed`/`failed`/
+# `killed` and "Monitor expired after 10m ..." / "Monitor timed out".
+# `running` does not close.
+_NOTICE = re.compile(r"<task-notification>(.*?)</task-notification>", re.S)
+_NOTICE_ID = re.compile(r"<task-id>([A-Za-z0-9_-]{4,})</task-id>")
+_NOTICE_END = re.compile(
     r"<status>(?:completed|failed|killed)</status>"
     r"|Monitor expired\b|Monitor timed out\b")
 
 
-def _blocos(linha):
-    conteudo = ((linha.get("message") or {}).get("content"))
-    return conteudo if isinstance(conteudo, list) else []
+def _blocks(line):
+    content = ((line.get("message") or {}).get("content"))
+    return content if isinstance(content, list) else []
 
 
-def _textos_do_harness(linha):
-    """O texto que o HARNESS escreveu nesta linha — onde mora o aviso de fim.
+def _harness_texts(line):
+    """The text the HARNESS wrote on this line -- where the end notice lives.
 
-    O aviso aparece como `queue-operation` (content), como `attachment`
-    (prompt) ou como mensagem de usuário. Linha de assistente fica de fora:
-    o agente citar um aviso não encerra vigia nenhum.
+    The notice shows up as `queue-operation` (content), as `attachment`
+    (prompt) or as a user message. Assistant lines are left out: the agent
+    quoting a notice does not end any watcher.
     """
-    if linha.get("type") == "assistant":
+    if line.get("type") == "assistant":
         return []
-    textos = []
-    if isinstance(linha.get("content"), str):
-        textos.append(linha["content"])
-    anexo = linha.get("attachment")
-    if isinstance(anexo, dict) and isinstance(anexo.get("prompt"), str):
-        textos.append(anexo["prompt"])
-    conteudo = (linha.get("message") or {}).get("content")
-    if isinstance(conteudo, str):
-        textos.append(conteudo)
-    elif isinstance(conteudo, list):
-        textos.extend(b.get("text") for b in conteudo
+    texts = []
+    if isinstance(line.get("content"), str):
+        texts.append(line["content"])
+    attachment = line.get("attachment")
+    if isinstance(attachment, dict) and isinstance(attachment.get("prompt"), str):
+        texts.append(attachment["prompt"])
+    content = (line.get("message") or {}).get("content")
+    if isinstance(content, str):
+        texts.append(content)
+    elif isinstance(content, list):
+        texts.extend(b.get("text") for b in content
                       if isinstance(b, dict) and b.get("type") == "text"
                       and isinstance(b.get("text"), str))
-    return textos
+    return texts
 
 
-def vigias_encerrados(texto):
-    """Ids de tarefa que um `<task-notification>` terminal dá por encerradas."""
-    for m in _AVISO.finditer(texto or ""):
-        corpo = m.group(1)
-        ident = _AVISO_ID.search(corpo)
-        if ident and _AVISO_FIM.search(corpo):
-            yield ident.group(1)
+def closed_watchers(text):
+    """Task ids that a terminal `<task-notification>` reports as ended."""
+    for m in _NOTICE.finditer(text or ""):
+        body = m.group(1)
+        task_id = _NOTICE_ID.search(body)
+        if task_id and _NOTICE_END.search(body):
+            yield task_id.group(1)
 
 
-def pendencias(transcript_path):
-    """(subagentes despachados sem resultado, vigias armados sem parada).
+def pending(transcript_path):
+    """(dispatched subagents without a result, armed watchers without a stop).
 
-    Lê o transcript porque é a ÚNICA fonte que sabe o que foi despachado: o
-    payload do Stop não lista tarefa de segundo plano nenhuma.
+    Reads the transcript because it is the ONLY source that knows what was
+    dispatched: the Stop payload lists no background task at all.
     """
-    despachados, respondidos, armados, parados = {}, set(), {}, set()
-    marcas = {}
-    vigias_chamados = set()
+    dispatched, answered, armed, stopped = {}, set(), {}, set()
+    markers = {}
+    monitor_calls = set()
     try:
         with open(transcript_path, encoding="utf-8", errors="replace") as f:
-            for bruta in f:
-                bruta = bruta.strip()
-                if not bruta:
+            for raw_line in f:
+                raw_line = raw_line.strip()
+                if not raw_line:
                     continue
                 try:
-                    linha = json.loads(bruta)
+                    line = json.loads(raw_line)
                 except json.JSONDecodeError:
                     continue
-                if not isinstance(linha, dict):
+                if not isinstance(line, dict):
                     continue
-                for texto in _textos_do_harness(linha):
-                    parados.update(vigias_encerrados(texto))
-                for b in _blocos(linha):
-                    tipo = b.get("type")
-                    if tipo == "tool_use" and b.get("name") == "Bash":
-                        ent = b.get("input") or {}
-                        cmd = ent.get("command") or ""
-                        arq = marca_de_fim(cmd)
-                        if arq and _BUILD.search(_unquoted_view(cmd)) and \
-                                desanexa(cmd, bool(ent.get("run_in_background"))):
-                            marcas[arq] = (ent.get("description") or cmd)[:80]
-                    if tipo == "tool_use" and b.get("name") == "Monitor":
-                        ident = b.get("id")
-                        if ident:
-                            vigias_chamados.add(ident)
-                    if tipo == "tool_use" and b.get("name") in _DESPACHO:
-                        rotulo = (b.get("input") or {}).get("description") or b.get("name")
-                        despachados[b.get("id")] = str(rotulo)[:80]
-                    elif tipo == "tool_result":
-                        alvo = b.get("tool_use_id")
-                        if alvo:
-                            respondidos.add(alvo)
-                        texto = b.get("content")
-                        if not isinstance(texto, str):
-                            texto = json.dumps(texto, ensure_ascii=False)
-                        # Só conta "Monitor started" como vigia armado se o
-                        # tool_result responde a um tool_use Monitor de
-                        # verdade. Sem isso, um `grep` do agente sobre
-                        # transcripts antigos que ecoa esse texto no
-                        # resultado do Bash já disparava alarme falso (run
-                        # 2026-09-28-0558): o Stop era bloqueado por um
-                        # vigia que nunca existiu.
-                        if alvo in vigias_chamados:
-                            for m in _VIGIA_ARMADO.finditer(texto):
-                                armados[m.group(1)] = m.group(1)
-                        for m in _VIGIA_PARADO.finditer(texto):
-                            parados.add(m.group(1) or m.group(2))
+                for text in _harness_texts(line):
+                    stopped.update(closed_watchers(text))
+                for b in _blocks(line):
+                    kind = b.get("type")
+                    if kind == "tool_use" and b.get("name") == "Bash":
+                        inp = b.get("input") or {}
+                        cmd = inp.get("command") or ""
+                        marker_file = end_marker(cmd)
+                        if marker_file and _BUILD.search(_unquoted_view(cmd)) and \
+                                detached_via(cmd, bool(inp.get("run_in_background"))):
+                            markers[marker_file] = (inp.get("description") or cmd)[:80]
+                    if kind == "tool_use" and b.get("name") == "Monitor":
+                        task_id = b.get("id")
+                        if task_id:
+                            monitor_calls.add(task_id)
+                    if kind == "tool_use" and b.get("name") in _DISPATCH:
+                        label = (b.get("input") or {}).get("description") or b.get("name")
+                        dispatched[b.get("id")] = str(label)[:80]
+                    elif kind == "tool_result":
+                        target = b.get("tool_use_id")
+                        if target:
+                            answered.add(target)
+                        text = b.get("content")
+                        if not isinstance(text, str):
+                            text = json.dumps(text, ensure_ascii=False)
+                        # Only count "Monitor started" as an armed watcher if
+                        # the tool_result answers a real Monitor tool_use.
+                        # Without that, an agent `grep` over old transcripts
+                        # that echoes this text in the Bash result already
+                        # triggered a false alarm (run 2026-09-28-0558): the
+                        # Stop was blocked by a watcher that never existed.
+                        if target in monitor_calls:
+                            for m in _WATCHER_ARMED.finditer(text):
+                                armed[m.group(1)] = m.group(1)
+                        for m in _WATCHER_STOPPED.finditer(text):
+                            stopped.add(m.group(1) or m.group(2))
     except OSError:
         return [], [], []
-    subagentes = [r for i, r in despachados.items() if i not in respondidos]
-    vigias = [v for v in armados if v not in parados]
-    builds = [f"{rotulo} (sem `EXIT=` em {arq})"
-              for arq, rotulo in marcas.items() if not _terminou(arq)]
-    return subagentes, vigias, builds
+    subagents = [r for i, r in dispatched.items() if i not in answered]
+    watchers = [v for v in armed if v not in stopped]
+    builds = [f"{label} (sem `EXIT=` em {marker_file})"
+              for marker_file, label in markers.items() if not _finished(marker_file)]
+    return subagents, watchers, builds
 
 
-def _terminou(arquivo):
+def _finished(path):
     try:
-        with open(os.path.expanduser(arquivo), encoding="utf-8",
+        with open(os.path.expanduser(path), encoding="utf-8",
                   errors="replace") as f:
             return "EXIT=" in f.read()
     except OSError:
         return False
 
 
-def motivo_da_parada(payload, ambiente=None):
-    """O texto do bloqueio da parada, ou None se não há o que colher."""
-    env = os.environ if ambiente is None else ambiente
-    if not env.get(ENV_JANELA):
+def stop_reason(payload, environ=None):
+    """The stop block text, or None if there is nothing to collect."""
+    env = os.environ if environ is None else environ
+    if not env.get(ENV_WINDOW):
         return None
-    # Anti-loop: se esta parada JÁ veio de um bloqueio, não bloqueia de novo.
-    # Uma chance de colher é o aperto; prender a sessão seria trocar um item
-    # perdido por uma janela travada.
+    # Anti-loop: if this stop ALREADY came from a block, do not block again.
+    # One chance to collect is the squeeze; trapping the session would trade a
+    # lost item for a stuck window.
     if payload.get("stop_hook_active"):
         return None
-    caminho = payload.get("transcript_path")
-    if not caminho:
+    transcript = payload.get("transcript_path")
+    if not transcript:
         return None
-    subagentes, vigias, builds = pendencias(caminho)
-    if not subagentes and not vigias and not builds:
+    subagents, watchers, builds = pending(transcript)
+    if not subagents and not watchers and not builds:
         return None
-    partes = []
-    if subagentes:
-        partes.append("subagente(s) despachado(s) e sem resultado no "
-                      "transcript: " + ", ".join(subagentes[:5]))
-    if vigias:
-        partes.append("vigia(s) do Monitor ainda armado(s): " + ", ".join(vigias[:5]))
+    parts = []
+    if subagents:
+        parts.append("subagente(s) despachado(s) e sem resultado no "
+                      "transcript: " + ", ".join(subagents[:5]))
+    if watchers:
+        parts.append("vigia(s) do Monitor ainda armado(s): " + ", ".join(watchers[:5]))
     if builds:
-        partes.append("build(s) em segundo plano ainda sem fim: "
+        parts.append("build(s) em segundo plano ainda sem fim: "
                       + ", ".join(builds[:5]) + ". Espere o arquivo em "
                       "PRIMEIRO PLANO com um laço que sai antes dos 10 min: "
                       "`for i in $(seq 27); do grep -q EXIT= <arquivo> && "
@@ -398,7 +402,7 @@ def motivo_da_parada(payload, ambiente=None):
     return (
         "[no-background-build] Você está numa janela do `cepa-until` e NÃO HÁ "
         "TURNO SEGUINTE: parar agora mata o processo com trabalho por colher.\n"
-        + "".join(f"  - {p}\n" for p in partes) +
+        + "".join(f"  - {p}\n" for p in parts) +
         "\n  Faça uma destas, na ordem:\n"
         "    1. Colha agora: espere o resultado do subagente e siga o item até "
         "o fim neste turno.\n"
@@ -420,27 +424,27 @@ def main():
 
     if (payload.get("hook_event_name") or "") == "Stop":
         try:
-            motivo = motivo_da_parada(payload)
+            reason = stop_reason(payload)
         except Exception:
-            motivo = None  # o gate nunca derruba o turno por erro próprio
-        if motivo:
+            reason = None  # the gate never takes the turn down over its own error
+        if reason:
             T.emit("background_pending_stop_block")
-            print(json.dumps({"decision": "block", "reason": motivo},
+            print(json.dumps({"decision": "block", "reason": reason},
                              ensure_ascii=False))
         sys.exit(0)
 
-    ferramenta = payload.get("tool_name")
-    entrada = payload.get("tool_input") or {}
+    tool_name = payload.get("tool_name")
+    tool_input = payload.get("tool_input") or {}
 
-    if ferramenta == "Monitor":
-        achado = vigia_bloqueia(entrada)
-        if not achado:
+    if tool_name == "Monitor":
+        found = watcher_blocks(tool_input)
+        if not found:
             sys.exit(0)
-        via, trecho = achado
+        via, snippet = found
         T.emit("background_monitor_block", reason=via)
         print(
             f"[no-background-build] BLOQUEADO: vigia sem fim ({via}).\n"
-            f"  Trecho: {trecho}\n\n"
+            f"  Trecho: {snippet}\n\n"
             "  Você está dentro de uma janela do `cepa-until`: este processo é\n"
             "  um `claude -p` e NÃO HÁ TURNO SEGUINTE. Um vigia que não termina\n"
             "  sozinho segura o turno até o relógio do item matar tudo — foi\n"
@@ -457,19 +461,19 @@ def main():
         )
         sys.exit(2)
 
-    if ferramenta != "Bash":
+    if tool_name != "Bash":
         sys.exit(0)
 
-    achado = bloqueia(entrada.get("command", "") or "",
-                      bool(entrada.get("run_in_background")))
-    if not achado:
+    found = blocks(tool_input.get("command", "") or "",
+                      bool(tool_input.get("run_in_background")))
+    if not found:
         sys.exit(0)
 
-    via, trecho = achado
+    via, snippet = found
     T.emit("background_build_block", reason=via)
     print(
         f"[no-background-build] BLOQUEADO: build em segundo plano ({via}).\n"
-        f"  Trecho: {trecho}\n\n"
+        f"  Trecho: {snippet}\n\n"
         "  Você está dentro de uma janela do `cepa-until`: este processo é um\n"
         "  `claude -p` e NÃO HÁ TURNO SEGUINTE. O turno acaba, o processo morre,\n"
         "  o build vira órfão e o item fica `in_progress` sem desfecho — a\n"

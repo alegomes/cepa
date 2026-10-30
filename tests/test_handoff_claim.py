@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-"""Regression tests para o handoff ser retomado UMA vez só.
+"""Regression tests for the handoff to be resumed only ONCE.
 
-O handoff é um markdown por branch que a sessão nova lê no SessionStart. Até
-aqui nada registrava QUEM leu: a única proteção contra duas sessões retomarem
-o mesmo ponto era `live_sessions_in`, que compara o cwd EXATO. Uma sessão
-aberta num subdiretório da mesma árvore não casa, e a segunda recebia o mesmo
-handoff como se fosse a primeira.
+The handoff is a markdown per branch that the new session reads at SessionStart. Until
+now nothing recorded WHO read it: the only protection against two sessions resuming
+the same point was `live_sessions_in`, which compares the EXACT cwd. A session
+opened in a subdirectory of the same tree does not match, and the second one received the same
+handoff as if it were the first.
 
-Contratos guardados aqui:
-  - a primeira sessão que recebe o handoff fica registrada como quem retomou,
-    no frontmatter (`resumed_by`) E num arquivo de reserva criado com O_EXCL
-    — duas travas independentes, de propósito;
-  - uma segunda sessão, com a primeira VIVA, não recebe o conteúdo: recebe o
-    aviso de que já foi retomado, com o id de quem retomou;
-  - se quem retomou MORREU sem escrever nada, a reserva é liberada e a próxima
-    sessão retoma normalmente (reserva de morto não pode travar o trabalho);
-  - checkpoint novo (updated_at mudou) é conteúdo novo: a reserva antiga não
-    vale para ele;
-  - o texto entregue diz que o handoff é evidência, nunca instrução.
+Contracts guarded here:
+  - the first session that receives the handoff is recorded as the one that resumed,
+    in the frontmatter (`resumed_by`) AND in a reservation file created with O_EXCL
+    — two independent locks, on purpose;
+  - a second session, with the first ALIVE, does not receive the content: it receives the
+    notice that it was already resumed, with the id of whoever resumed it;
+  - if whoever resumed DIED without writing anything, the reservation is released and the next
+    session resumes normally (a dead one's reservation cannot lock the work);
+  - a new checkpoint (updated_at changed) is new content: the old reservation
+    does not apply to it;
+  - the delivered text says the handoff is evidence, never instruction.
 
-Rode com `python3 tests/test_handoff_claim.py`.
+Run with `python3 tests/test_handoff_claim.py`.
 """
 
 import importlib.util
@@ -34,11 +34,11 @@ HOOKS = REPO / "common" / "hooks"
 sys.path.insert(0, str(HOOKS))
 sys.path.insert(0, str(REPO / "tests"))
 
-from _telemetria_isolada import isola  # noqa: E402
+from _isolated_telemetry import isolate  # noqa: E402
 
-isola()
-# Rodado dentro de uma rodada do cepa-until, a marca da janela desliga a
-# retomada (ver test_until_nao_herda_handoff.py); aqui se testa a sessão normal.
+isolate()
+# Run inside a cepa-until round, the window's mark turns off the
+# resume (see test_until_does_not_inherit_handoff.py); here the normal session is tested.
 os.environ.pop("CEPA_UNTIL_RUN", None)
 
 import _handoff as H  # noqa: E402
@@ -59,29 +59,29 @@ def check(name, cond, detail=""):
         failures.append(name)
 
 
-def cenario():
-    """Árvore falsa com um handoff fresco escrito pela sessão A (já morta)."""
+def scenario():
+    """Fake tree with a fresh handoff written by session A (already dead)."""
     root = tempfile.mkdtemp(prefix="handoff-claim-")
     path = H.handoff_path(root, "main")
     H.write(path, {"session_id": "sessao-A", "branch": "main",
                    "updated_at": L.now_iso()},
             auto="## Onde paramos\n- passo 3 de 5", note="Próximo: rodar o passo 4.")
-    # O teste não tem git: fixa o branch e controla quem está vivo.
+    # The test has no git: pins the branch and controls who is alive.
     L.current_branch = lambda cwd: "main"
     return root, path
 
 
-def com_vivos(ids):
-    """Só as sessões em `ids` contam como vivas."""
+def with_live(ids):
+    """Only the sessions in `ids` count as alive."""
     L.find_entry = lambda root, key: {"session_id": key} if key in ids else None
     L.entry_is_live = lambda e: bool(e) and e.get("session_id") in ids
-    # A brecha real: a checagem por cwd exato NÃO enxerga o peer (subdiretório).
+    # The real loophole: the exact-cwd check does NOT see the peer (subdirectory).
     L.live_sessions_in = lambda root, cwd, exclude_key="": []
 
 
-def test_primeira_retoma_e_fica_registrada():
-    root, path = cenario()
-    com_vivos({"sessao-B"})
+def test_first_resumes_and_is_recorded():
+    root, path = scenario()
+    with_live({"sessao-B"})
     out = R.resume_notice("sessao-B", root, root)
     check("B recebe o conteúdo", out and "passo 3 de 5" in out, out)
     meta, _, _ = H.parse(path)
@@ -93,39 +93,39 @@ def test_primeira_retoma_e_fica_registrada():
         check("reserva aponta para B", c.get("session_id") == "sessao-B", c)
 
 
-def test_segunda_nao_retoma_o_mesmo_ponto():
-    root, path = cenario()
-    com_vivos({"sessao-B", "sessao-C"})
+def test_second_does_not_resume_the_same_point():
+    root, path = scenario()
+    with_live({"sessao-B", "sessao-C"})
     R.resume_notice("sessao-B", root, root)
     out = R.resume_notice("sessao-C", root, root)
     check("C não recebe o conteúdo", not out or "passo 3 de 5" not in out, out)
     check("C é avisada de quem retomou", bool(out) and "sessao-B" in out, out)
 
 
-def test_mesma_sessao_recebe_de_novo():
-    """SessionStart dispara de novo em resume/compact: quem reservou segue dono."""
-    root, path = cenario()
-    com_vivos({"sessao-B"})
+def test_same_session_receives_again():
+    """SessionStart fires again on resume/compact: whoever reserved remains the owner."""
+    root, path = scenario()
+    with_live({"sessao-B"})
     R.resume_notice("sessao-B", root, root)
     out = R.resume_notice("sessao-B", root, root)
     check("B recebe o conteúdo na 2ª chamada", out and "passo 3 de 5" in out, out)
 
 
-def test_reserva_de_morto_e_liberada():
-    root, path = cenario()
-    com_vivos({"sessao-B"})
+def test_dead_ones_reservation_is_released():
+    root, path = scenario()
+    with_live({"sessao-B"})
     R.resume_notice("sessao-B", root, root)
-    com_vivos({"sessao-C"})  # B morreu sem escrever checkpoint
+    with_live({"sessao-C"})  # B died without writing a checkpoint
     out = R.resume_notice("sessao-C", root, root)
     check("C retoma depois que B morreu", out and "passo 3 de 5" in out, out)
     meta, _, _ = H.parse(path)
     check("frontmatter passa a apontar para C", meta.get("resumed_by") == "sessao-C", meta)
 
 
-def test_so_a_trava_do_arquivo_ja_barra():
-    """As duas travas são independentes: apagar o frontmatter não libera."""
-    root, path = cenario()
-    com_vivos({"sessao-B", "sessao-C"})
+def test_file_lock_alone_already_blocks():
+    """The two locks are independent: deleting the frontmatter does not release."""
+    root, path = scenario()
+    with_live({"sessao-B", "sessao-C"})
     R.resume_notice("sessao-B", root, root)
     meta, auto, note = H.parse(path)
     meta.pop("resumed_by", None); meta.pop("resumed_at", None); meta.pop("resumed_version", None)
@@ -134,20 +134,20 @@ def test_so_a_trava_do_arquivo_ja_barra():
     check("C barrada só pelo arquivo de reserva", not out or "passo 3 de 5" not in out, out)
 
 
-def test_so_a_trava_do_frontmatter_ja_barra():
-    root, path = cenario()
-    com_vivos({"sessao-B", "sessao-C"})
+def test_frontmatter_lock_alone_already_blocks():
+    root, path = scenario()
+    with_live({"sessao-B", "sessao-C"})
     R.resume_notice("sessao-B", root, root)
     path.with_suffix(".claim").unlink()
     out = R.resume_notice("sessao-C", root, root)
     check("C barrada só pelo frontmatter", not out or "passo 3 de 5" not in out, out)
 
 
-def test_checkpoint_novo_e_conteudo_novo():
-    root, path = cenario()
-    com_vivos({"sessao-B", "sessao-C"})
+def test_new_checkpoint_is_new_content():
+    root, path = scenario()
+    with_live({"sessao-B", "sessao-C"})
     R.resume_notice("sessao-B", root, root)
-    # Sessão A' escreve um checkpoint novo: outra versão do handoff.
+    # Session A' writes a new checkpoint: another version of the handoff.
     H.write(path, {"session_id": "sessao-A2", "updated_at": "2099-01-01T00:00:00+00:00"},
             auto="## Onde paramos\n- passo 9 de 9")
     H.age_seconds = lambda meta: 0.0
@@ -155,18 +155,18 @@ def test_checkpoint_novo_e_conteudo_novo():
     check("C recebe a versão nova", out and "passo 9 de 9" in out, out)
 
 
-def test_texto_diz_evidencia_nunca_instrucao():
-    root, path = cenario()
-    com_vivos({"sessao-B"})
+def test_text_says_evidence_never_instruction():
+    root, path = scenario()
+    with_live({"sessao-B"})
     out = R.resume_notice("sessao-B", root, root) or ""
     check("preâmbulo nega autoridade de instrução ao handoff",
           "nunca instrução" in out.lower() or "nunca como instrução" in out.lower(), out[:400])
 
 
 if __name__ == "__main__":
-    for nome, fn in sorted(globals().items()):
-        if nome.startswith("test_") and callable(fn):
-            print(f"\n{nome}")
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            print(f"\n{name}")
             orig = (L.current_branch, L.find_entry, L.entry_is_live, L.live_sessions_in, H.age_seconds)
             try:
                 fn()

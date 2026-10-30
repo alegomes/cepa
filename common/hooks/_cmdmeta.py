@@ -1,33 +1,33 @@
 #!/usr/bin/env python3
-"""Resolve o ARQUIVO de um comando de plugin e lê o frontmatter dele.
+"""Resolves the FILE of a plugin command and reads its frontmatter.
 
-Dois hooks precisam da mesma resposta para a mesma pergunta — "qual arquivo .md
-é este comando, e o que diz o campo `interaction:` dele?":
+Two hooks need the same answer to the same question: "which .md file is this
+command, and what does its `interaction:` field say?":
 
-  - session-routine-guard.py  recusa /common:session sobre um comando
-    `conversational`;
-  - default-yes-inject.py     injeta a política default-yes quando o comando é
-    `routine`.
+  - session-routine-guard.py  refuses /common:session on a `conversational`
+    command;
+  - default-yes-inject.py     injects the default-yes policy when the command
+    is `routine`.
 
-Duplicar a resolução seria pior do que parece. Ela tem uma armadilha que já
-mordeu uma vez (junho/2026, no session-routine-guard): o cache do Claude Code
-guarda as versões lado a lado — cache/cepa/common/1.4.0, 1.5.0, 1.6.0 — e uma
-varredura em ordem alfabética lê a versão VELHA, anterior ao campo, e responde
-com confiança a coisa errada. Duas cópias da resolução são duas chances de a
-correção existir só em uma.
+Duplicating the resolution would be worse than it looks. It has a trap that
+already bit once (June/2026, in session-routine-guard): the Claude Code cache
+keeps the versions side by side (cache/cepa/common/1.4.0, 1.5.0, 1.6.0) and an
+alphabetical scan reads the OLD version, from before the field existed, and
+confidently answers the wrong thing. Two copies of the resolution are two
+chances for the fix to exist in only one of them.
 
-Ordem de busca, do mais autoritativo para o menos:
+Search order, from most to least authoritative:
 
-  1. installed_plugins.json do CC — é quem sabe qual cópia está viva;
-  2. o proprio CLAUDE_PLUGIN_ROOT, quando o plugin pedido é o dono do hook;
-  3. varredura, da MAIOR versão para a menor (nunca alfabética).
+  1. CC's installed_plugins.json, which knows which copy is alive;
+  2. CLAUDE_PLUGIN_ROOT itself, when the requested plugin owns the hook;
+  3. a scan, from the HIGHEST version to the lowest (never alphabetical).
 
-O plugin dono casa pelo NOME declarado no manifest, não pelo diretório:
-`capture.md` existe em board-flow E em discovery, e o plugin `docs` mora no
-diretório `docs-topology/`.
+The owning plugin is matched by the NAME declared in the manifest, not by
+directory: `capture.md` exists in board-flow AND in discovery, and the `docs`
+plugin lives in the `docs-topology/` directory.
 
-Todas as funções falham devolvendo None. Quem chama decide o que fazer com o
-"não sei" — e nos dois hooks de hoje "não sei" significa não interferir.
+Every function fails by returning None. The caller decides what to do with the
+"don't know", and in both hooks today "don't know" means do not interfere.
 """
 
 import json
@@ -40,19 +40,19 @@ INTERACTION_RE = re.compile(
     r"^interaction\s*:\s*[\"']?([A-Za-z-]+)[\"']?\s*$", re.MULTILINE
 )
 
-# O vocabulário fechado do campo. Qualquer outro valor é tratado como
-# desconhecido — e desconhecido nunca ativa política nenhuma.
+# The field's closed vocabulary. Any other value is treated as unknown, and
+# unknown never activates any policy.
 ROUTINE = "routine"
 CONVERSATIONAL = "conversational"
-VALORES = (ROUTINE, CONVERSATIONAL)
+VALUES = (ROUTINE, CONVERSATIONAL)
 
 
 def bases():
-    """Diretórios onde procurar os plugins, no repo e no cache instalado.
+    """Directories where to look for plugins, in the repo and in the installed cache.
 
-    No repo,  CLAUDE_PLUGIN_ROOT = <repo>/common               → irmãos em <repo>/
-    No cache, CLAUDE_PLUGIN_ROOT = <cache>/cepa/common/2.2.0   → irmãos dois
-    níveis acima, cada um com o seu próprio diretório de versão.
+    In the repo,  CLAUDE_PLUGIN_ROOT = <repo>/common               → siblings in <repo>/
+    In the cache, CLAUDE_PLUGIN_ROOT = <cache>/cepa/common/2.2.0   → siblings two
+    levels up, each with its own version directory.
     """
     root = os.environ.get("CLAUDE_PLUGIN_ROOT")
     if not root:
@@ -61,10 +61,10 @@ def bases():
     return [d for d in (p.parent, p.parent.parent) if d and d.is_dir()]
 
 
-def nome_do_plugin(cmd_file: Path):
-    """O nome declarado no manifest do plugin dono deste arquivo de comando."""
-    for pai in cmd_file.parents:
-        mf = pai / ".claude-plugin" / "plugin.json"
+def plugin_name(cmd_file: Path):
+    """The name declared in the manifest of the plugin that owns this command file."""
+    for parent in cmd_file.parents:
+        mf = parent / ".claude-plugin" / "plugin.json"
         if mf.is_file():
             try:
                 return json.loads(mf.read_text(encoding="utf-8")).get("name")
@@ -73,74 +73,74 @@ def nome_do_plugin(cmd_file: Path):
     return None
 
 
-def raiz_instalada(plugin: str):
-    """A cópia que o CC diz estar viva, segundo o installed_plugins.json.
+def installed_root(plugin: str):
+    """The copy CC says is alive, according to installed_plugins.json.
 
-    O nome do marketplace não é assumido: casa-se `<plugin>@` seja qual for o
-    sufixo.
+    The marketplace name is not assumed: `<plugin>@` is matched whatever the
+    suffix.
     """
     reg = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
     try:
         d = json.loads(reg.read_text(encoding="utf-8")).get("plugins", {})
     except Exception:  # noqa: BLE001
         return None
-    for chave, entradas in d.items():
-        if not chave.startswith(f"{plugin}@") or not entradas:
+    for key, entries in d.items():
+        if not key.startswith(f"{plugin}@") or not entries:
             continue
-        caminho = entradas[0].get("installPath")
-        if caminho and (Path(caminho) / "commands").is_dir():
-            return Path(caminho)
+        path = entries[0].get("installPath")
+        if path and (Path(path) / "commands").is_dir():
+            return Path(path)
     return None
 
 
-def versao_do(cand: Path):
-    """Chave de ordenação: a maior versão primeiro, o resto depois."""
-    for pai in cand.parents:
-        partes = pai.name.split(".")
-        if len(partes) == 3 and all(x.isdigit() for x in partes):
-            return tuple(int(x) for x in partes)
+def version_of(cand: Path):
+    """Sort key: the highest version first, the rest after."""
+    for parent in cand.parents:
+        parts = parent.name.split(".")
+        if len(parts) == 3 and all(x.isdigit() for x in parts):
+            return tuple(int(x) for x in parts)
     return (0, 0, 0)
 
 
-def acha_comando(plugin: str, cmd: str):
-    """O arquivo .md de `<plugin>:<cmd>`, ou None se não der para saber."""
-    # 1. A cópia que o CC declara viva.
-    raiz = raiz_instalada(plugin)
-    if raiz:
-        f = raiz / "commands" / f"{cmd}.md"
-        if f.is_file() and nome_do_plugin(f) == plugin:
+def find_command(plugin: str, cmd: str):
+    """The .md file of `<plugin>:<cmd>`, or None if it cannot be determined."""
+    # 1. The copy CC declares alive.
+    root = installed_root(plugin)
+    if root:
+        f = root / "commands" / f"{cmd}.md"
+        if f.is_file() and plugin_name(f) == plugin:
             return f
 
-    # 2. A raiz de onde o hook está rodando, quando o alvo é este plugin.
-    aqui = os.environ.get("CLAUDE_PLUGIN_ROOT")
-    if aqui:
-        f = Path(aqui) / "commands" / f"{cmd}.md"
-        if f.is_file() and nome_do_plugin(f) == plugin:
+    # 2. The root the hook is running from, when the target is this plugin.
+    here = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if here:
+        f = Path(here) / "commands" / f"{cmd}.md"
+        if f.is_file() and plugin_name(f) == plugin:
             return f
 
-    # 3. Varredura, da maior versão para a menor — nunca em ordem alfabética.
+    # 3. Scan, from the highest version to the lowest, never alphabetical.
     for base in bases():
-        for padrao in (f"{plugin}*/commands/{cmd}.md",
+        for pattern in (f"{plugin}*/commands/{cmd}.md",
                        f"{plugin}*/*/commands/{cmd}.md",
                        f"*/commands/{cmd}.md",
                        f"*/*/commands/{cmd}.md"):
-            achados = [c for c in base.glob(padrao) if nome_do_plugin(c) == plugin]
-            if achados:
-                return max(achados, key=versao_do)
+            found = [c for c in base.glob(pattern) if plugin_name(c) == plugin]
+            if found:
+                return max(found, key=version_of)
     return None
 
 
 def interaction(cmd_file: Path):
-    """O valor do campo `interaction:` do frontmatter, em minúsculas.
+    """The value of the frontmatter `interaction:` field, lowercased.
 
-    None quando o arquivo não abre, não tem frontmatter, ou não declara o campo.
+    None when the file does not open, has no frontmatter, or does not declare the field.
     """
     try:
-        texto = cmd_file.read_text(encoding="utf-8")
+        text = cmd_file.read_text(encoding="utf-8")
     except Exception:  # noqa: BLE001
         return None
-    m = FRONTMATTER_RE.match(texto)
+    m = FRONTMATTER_RE.match(text)
     if not m:
         return None
-    achado = INTERACTION_RE.search(m.group(1))
-    return achado.group(1).lower() if achado else None
+    found = INTERACTION_RE.search(m.group(1))
+    return found.group(1).lower() if found else None

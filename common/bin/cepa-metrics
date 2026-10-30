@@ -13,7 +13,7 @@ Usage:
   cepa-metrics --month 2026-07  # a specific month
   cepa-metrics --repo wego-acesso-backend   # filter to one repo
   cepa-metrics --json           # machine-readable dump of the aggregates
-  cepa-metrics scorecard        # os três números do scorecard, com a conta
+  cepa-metrics scorecard        # the three scorecard numbers, with the arithmetic
 
 Reading the numbers:
   - gate_block reason=stale/failure with HIGH counts on one repo → the verify
@@ -72,49 +72,49 @@ def fmt_counter(c: Counter, indent="    ", top=None) -> str:
 
 
 # ── Scorecard ──────────────────────────────────────────────────────────
-# Os três números que a estratégia (docs/estrategia-cepa-proximo-nivel.md,
-# decisão 8, achados F3, F8 e F10) pôs como base de comparação do Epic Cepa em
-# espiral: mudança no harness que não move nenhum deles não entra. As contas
-# são as mesmas do documento, para que o número daqui e o de lá batam.
+# The three numbers the strategy (docs/estrategia-cepa-proximo-nivel.md,
+# decision 8, findings F3, F8 and F10) set as the comparison baseline for the
+# spiral Cepa Epic: a harness change that moves none of them does not ship. The
+# formulas are the same as the document's, so the number here matches the one there.
 SCORECARD_REPO = "cepa"
 
 
-def _turnos_apos_rotina(events):
-    """F3: prompts depois da ÚLTIMA rotina, somados, ÷ sessões com rotina."""
-    por_sessao = defaultdict(list)
+def _turns_after_routine(events):
+    """F3: prompts after the LAST routine, summed, ÷ sessions with a routine."""
+    by_session = defaultdict(list)
     for e in events:
         if e.get("event") == "prompt" and e.get("session"):
-            por_sessao[e["session"]].append(e)
-    sessoes, depois = 0, 0
-    for evs in por_sessao.values():
+            by_session[e["session"]].append(e)
+    sessions_count, after = 0, 0
+    for evs in by_session.values():
         evs.sort(key=lambda x: x.get("ts", ""))
         idx = [i for i, x in enumerate(evs) if x.get("kind") == "rotina"]
         if not idx:
             continue
-        sessoes += 1
-        depois += len(evs) - idx[-1] - 1
-    return depois, sessoes
+        sessions_count += 1
+        after += len(evs) - idx[-1] - 1
+    return after, sessions_count
 
 
-def _builds_vermelhos(events):
-    """F8: builds FAILURE ÷ todos os build_result (EMPTY entra no denominador)."""
-    st = [e.get("status") for e in events if e.get("event") == "build_result"]
-    return sum(1 for s in st if s == "FAILURE"), len(st)
+def _red_builds(events):
+    """F8: FAILURE builds ÷ all build_result events (EMPTY counts in the denominator)."""
+    statuses = [e.get("status") for e in events if e.get("event") == "build_result"]
+    return sum(1 for s in statuses if s == "FAILURE"), len(statuses)
 
 
-def _sessoes_no_cepa(events):
-    """F10: session_start no repo cepa ÷ session_start em todos os repos."""
-    rs = [e.get("repo") for e in events if e.get("event") == "session_start"]
-    return sum(1 for r in rs if r == SCORECARD_REPO), len(rs)
+def _sessions_in_cepa(events):
+    """F10: session_start in the cepa repo ÷ session_start across all repos."""
+    repos = [e.get("repo") for e in events if e.get("event") == "session_start"]
+    return sum(1 for r in repos if r == SCORECARD_REPO), len(repos)
 
 
-def intencao_linhas(events):
-    """Linhas do bloco "Intenção da sessão", com a conta (ciclo 1 de
-    docs/estrategia-intencao-da-sessao.md). Sessão = campo `session` (8
-    caracteres); evento sem ele não forma sessão e fica fora das contagens
-    por sessão. Devolve [] se não houver nenhum evento intent.*."""
-    por_ev = defaultdict(set)
-    asked, sem_sessao = 0, 0
+def intent_lines(events):
+    """Lines of the "Intenção da sessão" block, with the calculation (cycle 1 of
+    docs/estrategia-intencao-da-sessao.md). Session = `session` field (8
+    characters); an event without it forms no session and stays out of the
+    per-session counts. Returns [] if there is no intent.* event."""
+    by_event_name = defaultdict(set)
+    asked, no_session = 0, 0
     for e in events:
         ev = e.get("event", "")
         if not ev.startswith("intent."):
@@ -122,29 +122,29 @@ def intencao_linhas(events):
         if ev == "intent.asked":
             asked += 1
         if e.get("session"):
-            por_ev[ev].add(e["session"])
+            by_event_name[ev].add(e["session"])
         else:
-            sem_sessao += 1
-    if not (por_ev or asked or sem_sessao):
+            no_session += 1
+    if not (by_event_name or asked or no_session):
         return []
-    gravou = por_ev["intent.written"]
-    avancou = gravou & por_ev["intent.cursor_advanced"]
-    nunca = gravou - avancou
-    ultimo = gravou & por_ev["intent.finished_at_last_step"]
-    n = len(gravou)
+    written = by_event_name["intent.written"]
+    advanced = written & by_event_name["intent.cursor_advanced"]
+    never_advanced = written - advanced
+    at_last_step = written & by_event_name["intent.finished_at_last_step"]
+    n = len(written)
 
     def pct(x):
         return f"{100 * x / n:.1f}%" if n else "sem dados"
 
     L = [f"    sessões com intenção gravada: {n}",
-         f"    com cursor avançado ao menos uma vez: {len(avancou)} de {n} "
-         f"({len(avancou)} ÷ {n} × 100 = {pct(len(avancou))})",
-         f"    com cursor NUNCA avançado: {len(nunca)} de {n} "
-         f"({len(nunca)} ÷ {n} × 100 = {pct(len(nunca))})",
+         f"    com cursor avançado ao menos uma vez: {len(advanced)} de {n} "
+         f"({len(advanced)} ÷ {n} × 100 = {pct(len(advanced))})",
+         f"    com cursor NUNCA avançado: {len(never_advanced)} de {n} "
+         f"({len(never_advanced)} ÷ {n} × 100 = {pct(len(never_advanced))})",
          f"    terminaram no último passo (wrap-up com cursor em M ou M+1): "
-         f"{len(ultimo)} de {n} ({len(ultimo)} ÷ {n} × 100 = {pct(len(ultimo))})",
+         f"{len(at_last_step)} de {n} ({len(at_last_step)} ÷ {n} × 100 = {pct(len(at_last_step))})",
          f"    perguntas \"onde estamos / próximo passo\" (intent.asked): {asked}"]
-    if n >= 10 and len(nunca) * 2 > n:
+    if n >= 10 and len(never_advanced) * 2 > n:
         L.append("    ⚠ critério do ciclo 2: com 10+ sessões, mais da metade nunca "
                  "avançou o cursor — C2 entra.")
     elif n < 10:
@@ -157,17 +157,17 @@ def intencao_linhas(events):
           "      perguntas = total de intent.asked (eventos, não sessões).",
           "      C2 entra se, com 10+ sessões gravadas, nunca-avançou > metade, ou se os",
           "      turnos DEPOIS da rotina (seção Atrito das pontas) não caírem."]
-    if sem_sessao:
-        L.append(f"    ({sem_sessao} evento(s) intent.* sem session, fora das contagens por sessão)")
+    if no_session:
+        L.append(f"    ({no_session} evento(s) intent.* sem session, fora das contagens por sessão)")
     return L
 
 
-def _linha(nome, num, den, pct, unid):
-    if not den:
-        return f"    {nome}: sem dados ({unid[1]} = 0)"
-    res = f"{100 * num / den:.1f}%" if pct else f"{num / den:.1f}"
-    op = f"{num} ÷ {den} × 100" if pct else f"{num} ÷ {den}"
-    return f"    {nome}: {res}  ({num} {unid[0]} ÷ {den} {unid[1]}; {op} = {res})"
+def _line(name, numerator, denominator, pct, units):
+    if not denominator:
+        return f"    {name}: sem dados ({units[1]} = 0)"
+    result = f"{100 * numerator / denominator:.1f}%" if pct else f"{numerator / denominator:.1f}"
+    operation = f"{numerator} ÷ {denominator} × 100" if pct else f"{numerator} ÷ {denominator}"
+    return f"    {name}: {result}  ({numerator} {units[0]} ÷ {denominator} {units[1]}; {operation} = {result})"
 
 
 def scorecard(argv):
@@ -177,15 +177,15 @@ def scorecard(argv):
     args = ap.parse_args(argv)
 
     now = datetime.now(timezone.utc)
-    janelas = [("últimos 7 dias", now - timedelta(days=7)),
+    windows = [("últimos 7 dias", now - timedelta(days=7)),
                ("desde o início", datetime.min.replace(tzinfo=timezone.utc))]
     out = {}
-    for rotulo, since in janelas:
+    for label, since in windows:
         evs = load_events(since, now)
-        out[rotulo] = {
-            "turnos após rotina por sessão": _turnos_apos_rotina(evs),
-            "builds vermelhos": _builds_vermelhos(evs),
-            "sessões no repo cepa": _sessoes_no_cepa(evs),
+        out[label] = {
+            "turnos após rotina por sessão": _turns_after_routine(evs),
+            "builds vermelhos": _red_builds(evs),
+            "sessões no repo cepa": _sessions_in_cepa(evs),
         }
 
     if args.as_json:
@@ -196,13 +196,13 @@ def scorecard(argv):
         return 0
 
     print(f"# Scorecard do harness · ledger: {TELEMETRY_DIR}")
-    for rotulo, m in out.items():
-        print(f"\n## {rotulo}")
-        print(_linha("turnos após rotina por sessão", *m["turnos após rotina por sessão"],
+    for label, m in out.items():
+        print(f"\n## {label}")
+        print(_line("turnos após rotina por sessão", *m["turnos após rotina por sessão"],
                      False, ("prompts depois da última rotina", "sessões com rotina")))
-        print(_linha("builds vermelhos", *m["builds vermelhos"],
+        print(_line("builds vermelhos", *m["builds vermelhos"],
                      True, ("builds FAILURE", "builds")))
-        print(_linha("sessões no repo cepa", *m["sessões no repo cepa"],
+        print(_line("sessões no repo cepa", *m["sessões no repo cepa"],
                      True, ("sessões no cepa", "sessões")))
     print("\nmemória de cálculo (docs/estrategia-cepa-proximo-nivel.md, F3, F8, F10):")
     print("  turnos após rotina = soma, nas sessões com algum comando de rotina, dos")
@@ -235,7 +235,7 @@ def main():
     if args.repo:
         events = [e for e in events if e.get("repo") == args.repo]
 
-    # carimbo que o nudge semanal do session-registry consulta
+    # stamp that the session-registry weekly nudge reads
     try:
         TELEMETRY_DIR.mkdir(parents=True, exist_ok=True)
         (TELEMETRY_DIR / "last-metrics-review").write_text(
@@ -275,88 +275,88 @@ def main():
         elif e.get("event") == "proof_block":
             proof_blocks[e.get("repo") or "?"] += 1
 
-    # Formato de relatório. Desde 25/08/2026 o report-style-lint BLOQUEIA a
-    # parada quando o relatório sai do formato, e o turno reescreve. Por isso
-    # uma medição fora do formato não é um relatório ruim que o usuário leu:
-    # pode ser a primeira escrita, que o bloqueio devolveu. O número que
-    # importa é quantos desvios PERSISTIRAM após a reescrita (evento com
-    # `reincidente`), porque só esses chegam ao usuário. Correção de
-    # 06/10/2026: até aqui o agregador somava os dois e sugeria "passar para
-    # bloqueio" de um hook que já bloqueava.
-    relatorios = 0
-    relatorios_fora = 0
-    relatorios_bloqueados = 0
-    relatorios_persistiram = 0
-    desvios_tipo = Counter()
-    desvios_persistiram_tipo = Counter()
+    # Report format. Since 2026-08-25 the report-style-lint BLOCKS the stop
+    # when the report leaves the format, and the turn rewrites. So an
+    # off-format measurement is not a bad report the user read: it may be the
+    # first draft, which the block sent back. The number that matters is how
+    # many deviations PERSISTED after the rewrite (event with `reincidente`),
+    # because only those reach the user. Fix of 2026-10-06: until then the
+    # aggregator summed both and suggested "switch to blocking" for a hook
+    # that already blocked.
+    reports = 0
+    reports_off_format = 0
+    reports_blocked = 0
+    reports_persisted = 0
+    deviations_by_type = Counter()
+    persisted_deviations_by_type = Counter()
     for e in events:
         if e.get("event") != "report_style":
             continue
-        relatorios += 1
-        fora = (e.get("desvios") or 0) > 0
-        if fora:
-            relatorios_fora += 1
+        reports += 1
+        off_format = (e.get("desvios") or 0) > 0
+        if off_format:
+            reports_off_format += 1
         if e.get("bloqueou"):
-            relatorios_bloqueados += 1
-        if fora and e.get("reincidente"):
-            relatorios_persistiram += 1
+            reports_blocked += 1
+        if off_format and e.get("reincidente"):
+            reports_persisted += 1
             for t in (e.get("tipos") or []):
-                desvios_persistiram_tipo[t] += 1
+                persisted_deviations_by_type[t] += 1
         for t in (e.get("tipos") or []):
-            desvios_tipo[t] += 1
+            deviations_by_type[t] += 1
 
-    # Atrito das pontas: quantos turnos o usuário gasta ANTES de conseguir
-    # disparar a rotina pela qual a sessão existe, e quantos gasta DEPOIS dela
-    # até encerrar. Os dois números existem porque a queixa ("gasto 15-20% do
-    # contexto só em preparação") era anedótica e precisava virar evidência.
-    prompts_por_sessao = defaultdict(list)
+    # Edge friction: how many turns the user spends BEFORE being able to fire
+    # the routine the session exists for, and how many AFTER it until closing.
+    # Both numbers exist because the complaint ("I spend 15-20% of the context
+    # on preparation alone") was anecdotal and had to become evidence.
+    prompts_by_session = defaultdict(list)
     for e in events:
         if e.get("event") == "prompt" and e.get("session"):
-            prompts_por_sessao[e["session"]].append(e)
+            prompts_by_session[e["session"]].append(e)
 
-    antes, depois = [], []
-    for _sid, evs in prompts_por_sessao.items():
+    before, after = [], []
+    for _sid, evs in prompts_by_session.items():
         evs.sort(key=lambda x: x.get("ts", ""))
         idx = [i for i, x in enumerate(evs) if x.get("kind") == "rotina"]
         if not idx:
-            continue  # sessão sem rotina não mede atrito de rotina
-        antes.append(idx[0])                  # turnos digitados antes da 1ª rotina
-        cauda = evs[idx[-1] + 1:]             # o que veio depois da última
-        # o próprio wrap-up/handoff é o encerramento, não atrito: conta o que
-        # veio ANTES dele.
-        fim = next((i for i, x in enumerate(cauda) if x.get("kind") == "fechamento"),
-                   len(cauda))
-        depois.append(fim)
+            continue  # a session without a routine has no routine friction to measure
+        before.append(idx[0])                  # turns typed before the 1st routine
+        tail = evs[idx[-1] + 1:]             # what came after the last one
+        # the wrap-up/handoff itself is the closing, not friction: count what
+        # came BEFORE it.
+        end_idx = next((i for i, x in enumerate(tail) if x.get("kind") == "fechamento"),
+                       len(tail))
+        after.append(end_idx)
 
-    def mediana(xs):
+    def median(xs):
         if not xs:
             return None
         s = sorted(xs)
         m = len(s) // 2
         return s[m] if len(s) % 2 else (s[m - 1] + s[m]) / 2
 
-    # Tokens: um evento token_usage por sessão, gravado pelo cepa-tokens no fim
-    # dela. A mesma sessão pode ter sido gravada duas vezes (fim automático +
-    # varredura manual); vale o último evento de cada sessão.
-    ultimo_tokens = {}
+    # Tokens: one token_usage event per session, written by cepa-tokens at its
+    # end. The same session may have been written twice (automatic end +
+    # manual sweep); the last event of each session wins.
+    last_tokens = {}
     for e in sorted((e for e in events if e.get("event") == "token_usage"),
                     key=lambda x: x.get("ts", "")):
-        ultimo_tokens[e.get("sessao") or id(e)] = e
+        last_tokens[e.get("sessao") or id(e)] = e
     tok_total = Counter()
-    tok_agente = defaultdict(Counter)
+    tok_agent = defaultdict(Counter)
     tok_chars = Counter()
     tok_repo = Counter()
-    for e in ultimo_tokens.values():
-        novo = (e.get("entrada") or 0) + (e.get("cache_w") or 0)
-        tok_total["novo"] += novo
+    for e in last_tokens.values():
+        new_ctx = (e.get("entrada") or 0) + (e.get("cache_w") or 0)
+        tok_total["novo"] += new_ctx
         tok_total["cache_r"] += e.get("cache_r") or 0
         tok_total["saida"] += e.get("saida") or 0
-        tok_repo[e.get("repo") or "?"] += novo
-        for tipo, u in (e.get("por_agente") or {}).items():
-            tok_agente[tipo]["novo"] += (u.get("entrada") or 0) + (u.get("cache_w") or 0)
-            tok_agente[tipo]["n"] += u.get("n") or 0
-        for nome, c in (e.get("resultado_chars") or {}).items():
-            tok_chars[nome] += c or 0
+        tok_repo[e.get("repo") or "?"] += new_ctx
+        for kind_name, u in (e.get("por_agente") or {}).items():
+            tok_agent[kind_name]["novo"] += (u.get("entrada") or 0) + (u.get("cache_w") or 0)
+            tok_agent[kind_name]["n"] += u.get("n") or 0
+        for name, c in (e.get("resultado_chars") or {}).items():
+            tok_chars[name] += c or 0
 
     known = {"session_start", "session_end", "build_result", "gate_block", "gate_warn",
              "proof_verdict", "proof_block", "report_style", "prompt", "token_usage",
@@ -375,21 +375,21 @@ def main():
             "gate_warns": {" ".join(k): v for k, v in gate_warns.items()},
             "proof_verdicts": {" ".join(k): v for k, v in proof_verdicts.items()},
             "proof_blocks": dict(proof_blocks),
-            "report_style": {"medidos": relatorios, "fora": relatorios_fora,
-                             "bloqueados": relatorios_bloqueados,
-                             "persistiram": relatorios_persistiram,
-                             "desvios_por_tipo": dict(desvios_tipo),
+            "report_style": {"medidos": reports, "fora": reports_off_format,
+                             "bloqueados": reports_blocked,
+                             "persistiram": reports_persisted,
+                             "desvios_por_tipo": dict(deviations_by_type),
                              "desvios_persistiram_por_tipo":
-                                 dict(desvios_persistiram_tipo)},
-            "atrito": {"sessoes_medidas": len(antes),
-                       "turnos_antes_da_rotina": antes,
-                       "turnos_depois_da_rotina": depois,
-                       "mediana_antes": mediana(antes),
-                       "mediana_depois": mediana(depois)},
-            "tokens": {"sessoes_medidas": len(ultimo_tokens),
+                                 dict(persisted_deviations_by_type)},
+            "atrito": {"sessoes_medidas": len(before),
+                       "turnos_antes_da_rotina": before,
+                       "turnos_depois_da_rotina": after,
+                       "mediana_antes": median(before),
+                       "mediana_depois": median(after)},
+            "tokens": {"sessoes_medidas": len(last_tokens),
                        "total": dict(tok_total),
                        "contexto_novo_por_repo": dict(tok_repo),
-                       "por_agente": {k: dict(v) for k, v in tok_agente.items()},
+                       "por_agente": {k: dict(v) for k, v in tok_agent.items()},
                        "resultado_chars": dict(tok_chars)},
             "custom_events": dict(custom),
         }, indent=2, ensure_ascii=False, default=str))
@@ -409,10 +409,10 @@ def main():
             ok, fail = c.get("SUCCESS", 0), c.get("FAILURE", 0)
             total = sum(c.values())
             rate = f"{100 * fail / total:.0f}%" if total else "-"
-            # EMPTY: rodada com filtro de teste que executou zero teste (não é verde).
+            # EMPTY: run with a test filter that executed zero tests (not green).
             empty = c.get("EMPTY", 0)
-            vaz = f", {empty} vazios (filtro casou zero teste)" if empty else ""
-            print(f"    {repo}: {ok} verdes, {fail} vermelhos{vaz} (taxa de falha {rate})")
+            empty_note = f", {empty} vazios (filtro casou zero teste)" if empty else ""
+            print(f"    {repo}: {ok} verdes, {fail} vermelhos{empty_note} (taxa de falha {rate})")
     else:
         print("    (nenhum)")
 
@@ -421,11 +421,11 @@ def main():
     print("\n## Gate-advance — avisos sem bloqueio")
     print(fmt_counter(Counter({f"{r} · {t} · {m}": v for (r, t, m), v in gate_warns.items()})))
 
-    if antes:
-        ma, md = mediana(antes), mediana(depois)
-        print(f"\n## Atrito das pontas ({len(antes)} sessão(ões) com rotina)")
-        print(f"    turnos ANTES da 1ª rotina:  mediana {ma}  (todas: {sorted(antes)})")
-        print(f"    turnos DEPOIS da última:    mediana {md}  (todas: {sorted(depois)})")
+    if before:
+        median_before, median_after = median(before), median(after)
+        print(f"\n## Atrito das pontas ({len(before)} sessão(ões) com rotina)")
+        print(f"    turnos ANTES da 1ª rotina:  mediana {median_before}  (todas: {sorted(before)})")
+        print(f"    turnos DEPOIS da última:    mediana {median_after}  (todas: {sorted(after)})")
         print("    memória de cálculo: por sessão, conta-se cada prompt do usuário;")
         print("      ANTES = quantos vieram antes do primeiro comando de rotina")
         print("      (drain, prove-drain, triage, execute, autonomous, session, ...);")
@@ -433,10 +433,10 @@ def main():
         print("      (o próprio fechamento não conta). Mediana = valor do meio da lista.")
         print("    Zero nos dois é o alvo: abrir, rodar, receber o relatório, encerrar.")
 
-    il = intencao_linhas(events)
-    if il:
+    intent_block = intent_lines(events)
+    if intent_block:
         print("\n## Intenção da sessão")
-        print("\n".join(il))
+        print("\n".join(intent_block))
 
     print("\n## Proof gate — vereditos escritos (repo · veredito)")
     print(fmt_counter(Counter({f"{r} · {v}": n for (r, v), n in proof_verdicts.items()})))
@@ -444,72 +444,72 @@ def main():
         print("\n## Proof gate — `proven` sobre-declarado barrado pelo guard ⚠")
         print(fmt_counter(proof_blocks))
 
-    if relatorios:
-        pct = 100.0 * relatorios_fora / relatorios
-        pct_p = 100.0 * relatorios_persistiram / relatorios
-        print(f"\n## Formato de relatório — {relatorios_persistiram}/{relatorios} "
+    if reports:
+        pct = 100.0 * reports_off_format / reports
+        pct_p = 100.0 * reports_persisted / reports
+        print(f"\n## Formato de relatório — {reports_persisted}/{reports} "
               f"chegaram ao usuário fora do padrão ({pct_p:.0f}%)")
-        print(f"    primeira escrita fora do padrão: {relatorios_fora} "
+        print(f"    primeira escrita fora do padrão: {reports_off_format} "
               f"({pct:.0f}%) · bloqueadas e reescritas pelo report-style-lint: "
-              f"{relatorios_bloqueados} · persistiram após a reescrita: "
-              f"{relatorios_persistiram}")
-        print(f"    memória de cálculo: {relatorios_persistiram} medições com "
+              f"{reports_blocked} · persistiram após a reescrita: "
+              f"{reports_persisted}")
+        print(f"    memória de cálculo: {reports_persisted} medições com "
               f"desvio E marcadas `reincidente` (a parada já vinha de um "
-              f"bloqueio do hook) ÷ {relatorios} medidas × 100 = {pct_p:.0f}%; "
-              f"a primeira escrita é {relatorios_fora} com desvio ÷ "
-              f"{relatorios} × 100 = {pct:.0f}%")
-        if desvios_persistiram_tipo:
+              f"bloqueio do hook) ÷ {reports} medidas × 100 = {pct_p:.0f}%; "
+              f"a primeira escrita é {reports_off_format} com desvio ÷ "
+              f"{reports} × 100 = {pct:.0f}%")
+        if persisted_deviations_by_type:
             print("    desvios que persistiram após a reescrita:")
-            print(fmt_counter(desvios_persistiram_tipo))
-        if desvios_tipo:
+            print(fmt_counter(persisted_deviations_by_type))
+        if deviations_by_type:
             print("    desvios na primeira escrita (o bloqueio devolve estes):")
-            print(fmt_counter(desvios_tipo))
+            print(fmt_counter(deviations_by_type))
 
-    # ── Relógio: espera ativa e onde foi o tempo ───────────────────────
-    espera_blocks = Counter(
+    # ── Clock: busy-wait and where the time went ───────────────────────
+    wait_blocks = Counter(
         e.get("reason", "?") for e in events if e.get("event") == "busy_wait_block")
-    if espera_blocks:
+    if wait_blocks:
         print("\n## Espera ativa barrada pelo no-busy-wait (por padrão)")
-        print(fmt_counter(espera_blocks))
+        print(fmt_counter(wait_blocks))
         print("    cada bloqueio é um `until/sleep` ou laço de queima que não rodou —\n"
               "    a medição de 2026-08-26 pôs esses comandos entre 19% e 52% do relógio.")
 
     clocks = [e for e in events if e.get("event") == "clock_breakdown"]
     if clocks:
-        def _s(e, k):
+        def _secs(e, k):
             try:
                 return float(e.get(k) or 0)
             except (TypeError, ValueError):
                 return 0.0
-        tw = sum(_s(e, "relogio_s") for e in clocks)
-        te = sum(_s(e, "espera_s") for e in clocks)
-        tb = sum(_s(e, "build_s") for e in clocks)
+        total_wall = sum(_secs(e, "relogio_s") for e in clocks)
+        total_wait = sum(_secs(e, "espera_s") for e in clocks)
+        total_build = sum(_secs(e, "build_s") for e in clocks)
         print(f"\n## Relógio medido — {len(clocks)} sessão(ões) via cepa-clock")
-        print(f"    relógio total : {tw/3600:.1f} h")
-        if tw:
-            print(f"    espera ativa  : {te/60:.0f} min ({te/tw*100:.0f}%)")
-            print(f"    build         : {tb/60:.0f} min ({tb/tw*100:.0f}%)")
+        print(f"    relógio total : {total_wall/3600:.1f} h")
+        if total_wall:
+            print(f"    espera ativa  : {total_wait/60:.0f} min ({total_wait/total_wall*100:.0f}%)")
+            print(f"    build         : {total_build/60:.0f} min ({total_build/total_wall*100:.0f}%)")
             print(f"    memória de cálculo: soma de espera_s ÷ soma de relogio_s × 100")
 
-    if ultimo_tokens:
+    if last_tokens:
         base = tok_total["novo"] or 1
-        print(f"\n## Tokens — {len(ultimo_tokens)} sessão(ões) medidas")
+        print(f"\n## Tokens — {len(last_tokens)} sessão(ões) medidas")
         print(f"    contexto novo {tok_total['novo']:,} · cache lido {tok_total['cache_r']:,} "
               f"· saída {tok_total['saida']:,}")
-        # Worktree já removida não resolve para o repo principal e aparece com o
-        # nome do próprio diretório; por isso só os 10 maiores.
+        # A worktree already removed does not resolve to the main repo and shows
+        # up under its own directory name; hence only the 10 largest.
         print(f"    contexto novo por repo (10 maiores de {len(tok_repo)}):")
         for repo, v in tok_repo.most_common(10):
             print(f"      {repo:40}{v:>13,}  {v/base*100:5.1f}%")
         print("    contexto novo por agente (tokens · % do total):")
-        for tipo, u in sorted(tok_agente.items(), key=lambda kv: -kv[1]["novo"])[:10]:
+        for kind_name, u in sorted(tok_agent.items(), key=lambda kv: -kv[1]["novo"])[:10]:
             n = f" ×{u['n']}" if u["n"] else ""
-            print(f"      {tipo + n:40}{u['novo']:>13,}  {u['novo']/base*100:5.1f}%")
+            print(f"      {kind_name + n:40}{u['novo']:>13,}  {u['novo']/base*100:5.1f}%")
         if tok_chars:
             tc = sum(tok_chars.values()) or 1
             print("    o que entrou por resultado de ferramenta (caracteres · %):")
-            for nome, c in tok_chars.most_common(8):
-                print(f"      {nome:40}{c:>13,}  {c/tc*100:5.1f}%")
+            for name, c in tok_chars.most_common(8):
+                print(f"      {name:40}{c:>13,}  {c/tc*100:5.1f}%")
         print("    memória de cálculo: contexto novo = input_tokens + cache_creation_input_tokens")
         print("      do transcript, uma vez por resposta do modelo; % = linha ÷ total × 100.")
         print("      Resultado de ferramenta é medido em caracteres (o transcript não dá tokens")
@@ -519,20 +519,20 @@ def main():
         print("\n## Eventos custom (emitidos por comandos/skills)")
         print(fmt_counter(custom))
 
-    # ── Leituras sugeridas ─────────────────────────────────────────────
+    # ── Suggested readings ─────────────────────────────────────────────
     hints = []
-    if relatorios >= 20 and relatorios_persistiram / relatorios > 0.05:
-        hints.append(f"- formato de relatório: {relatorios_persistiram} de "
-                     f"{relatorios} chegaram ao usuário fora do padrão "
-                     f"({100.0*relatorios_persistiram/relatorios:.0f}%) mesmo "
+    if reports >= 20 and reports_persisted / reports > 0.05:
+        hints.append(f"- formato de relatório: {reports_persisted} de "
+                     f"{reports} chegaram ao usuário fora do padrão "
+                     f"({100.0*reports_persisted/reports:.0f}%) mesmo "
                      f"após o bloqueio e a reescrita — o motivo do bloqueio não "
                      f"está sendo entendido; veja os tipos que persistem.")
-    elif relatorios >= 20 and relatorios_fora / relatorios > 0.3:
+    elif reports >= 20 and reports_off_format / reports > 0.3:
         hints.append(f"- formato de relatório: a primeira escrita sai fora do "
-                     f"padrão em {100.0*relatorios_fora/relatorios:.0f}% "
-                     f"({relatorios_fora} de {relatorios}), mas o report-style-lint "
+                     f"padrão em {100.0*reports_off_format/reports:.0f}% "
+                     f"({reports_off_format} de {reports}), mas o report-style-lint "
                      f"bloqueia e a reescrita corrige — só "
-                     f"{relatorios_persistiram} chegaram ao usuário. Custo é o "
+                     f"{reports_persisted} chegaram ao usuário. Custo é o "
                      f"turno extra de reescrita, não relatório ruim.")
     for (repo, tier, reason), n in gate_blocks.items():
         if reason in ("stale", "failure") and n >= 5:
@@ -542,8 +542,8 @@ def main():
     for (repo, tier, reason), n in gate_warns.items():
         if reason == "no-build-manifest" and n >= 3:
             hints.append(f"- {repo}: {n} avisos de repo sem build — commite `.claude/no-build` e silencie.")
-    if espera_blocks and sum(espera_blocks.values()) >= 5:
-        hints.append(f"- espera ativa: {sum(espera_blocks.values())} bloqueios — o hook "
+    if wait_blocks and sum(wait_blocks.values()) >= 5:
+        hints.append(f"- espera ativa: {sum(wait_blocks.values())} bloqueios — o hook "
                      f"está segurando o vazamento, mas o agente segue tentando esperar; "
                      f"vale ver se algum lead ainda delega e sonda em vez de aguardar o retorno.")
     for repo, n in proof_blocks.items():
@@ -555,7 +555,7 @@ def main():
 
 
 if __name__ == "__main__":
-    _tui.instalar()
+    _tui.install()
     if sys.argv[1:2] == ["scorecard"]:
         sys.exit(scorecard(sys.argv[2:]))
     sys.exit(main())

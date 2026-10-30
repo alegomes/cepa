@@ -6,11 +6,11 @@ build-hex.yaml, but the default-layout path used here never touches it) — run
 with `python3 tests/test_write_lock_rename.py`. Exits non-zero on failure.
 
 docs/spec/planejador-de-lotes-paralelos.md, CS-5:
-  "Um slice travado para escrever em `api-rest/**` que renomeia um arquivo
-  para `application/**` é barrado, porque renomear conta como escrita na
-  origem E no destino."
-  Teste vermelho: hoje um `git mv` de um caminho declarado para um caminho
-  não declarado passa pela trava sem ser barrado.
+  "A slice locked to write in `api-rest/**` that renames a file
+  to `application/**` is blocked, because renaming counts as a write at
+  the source AND at the destination."
+  Red test: today a `git mv` from a declared path to an undeclared path
+  passes through the lock without being blocked.
 
 This drives the full `bash-path-lock.py` PIPELINE end-to-end (subprocess, real
 exit code) — not just the target-extraction helper, which
@@ -69,8 +69,8 @@ def main():
     import tempfile
 
     for hook in HOOKS:
-        topo = hook.parent.parent.name
-        if topo != "build-hex":
+        topology = hook.parent.parent.name
+        if topology != "build-hex":
             # Only build-hex ships role-keyed agents (domain-dev, api-dev...);
             # the other 4 topologies gate different agent names. Skip those —
             # the mechanism under test (source counted, not just destination
@@ -85,7 +85,7 @@ def main():
         rc, err = run(hook, "build-hex:domain-dev",
                       "git mv domain/src/main/Foo.java infrastructure/src/main/Foo.java",
                       proj)
-        check(f"[{topo}] domain-dev: rename INTO disallowed dest is blocked",
+        check(f"[{topology}] domain-dev: rename INTO disallowed dest is blocked",
               rc == 2, f"exit={rc} stderr={err[:200]}")
 
         # rename FROM a disallowed path TO an allowed one — this is the gap
@@ -94,16 +94,16 @@ def main():
         rc, err = run(hook, "build-hex:domain-dev",
                       "git mv infrastructure/src/main/Foo.java domain/src/main/Foo.java",
                       proj)
-        check(f"[{topo}] domain-dev: rename FROM disallowed source is blocked",
+        check(f"[{topology}] domain-dev: rename FROM disallowed source is blocked",
               rc == 2, f"exit={rc} stderr={err[:200]}")
-        check(f"[{topo}] the block names the origin path",
+        check(f"[{topology}] the block names the origin path",
               "infrastructure/src/main/Foo.java" in err, err[:300])
 
         # rename fully inside the agent's own lane — must still pass.
         rc, err = run(hook, "build-hex:domain-dev",
                       "git mv domain/src/main/Old.java domain/src/main/New.java",
                       proj)
-        check(f"[{topo}] domain-dev: rename inside own lane is allowed",
+        check(f"[{topology}] domain-dev: rename inside own lane is allowed",
               rc == 0, f"exit={rc} stderr={err[:200]}")
 
     print()

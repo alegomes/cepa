@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
-"""_shellscan — o motor de leitura de linha de comando compartilhado do common.
+"""_shellscan — the shared command-line reading engine of common.
 
-## Por que existe
+## Why it exists
 
-Dois hooks do `common` analisam comando Bash para decidir se barram: o
-`enforcement-guard.py` (nenhum subagente escreve em `plugins/`, `hooks/` ou
-`settings.json`) e o `maven-reactor-guard.py` (nenhum build de reator parcial
-sem `-am`). Os dois tinham cópia manual do mesmo motor de parsing, copiada do
-`bash-path-lock.py`, e essa duplicação silenciosa já custou caro:
+Two `common` hooks analyze a Bash command to decide whether to block it:
+`enforcement-guard.py` (no subagent writes to `plugins/`, `hooks/` or
+`settings.json`) and `maven-reactor-guard.py` (no partial-reactor build
+without `-am`). Both had a manual copy of the same parsing engine, copied from
+`bash-path-lock.py`, and that silent duplication has already cost dearly:
 
-- o falso-positivo do `>=` (o `>` do operador de comparação lido como
-  redirecionamento) foi consertado nas 5 cópias do `bash-path-lock` em
-  11/06/2026 e **sobreviveu 2 meses** no `enforcement-guard`, porque o detector
-  de divergência entre cópias (`tests/test_lock_copies_drift.py`) e o gerador
-  (`bin/gen-locks.py`) só conheciam aquelas 5;
-- o mesmo aconteceu com o commit de várias linhas (22/08/2026, WEGO-2087): o
-  buraco estava em 7 hooks e o radar cobria 5.
+- the `>=` false positive (the `>` of the comparison operator read as a
+  redirection) was fixed in the 5 copies of `bash-path-lock` on 11/06/2026 and
+  **survived 2 months** in `enforcement-guard`, because the divergence detector
+  between copies (`tests/test_lock_copies_drift.py`) and the generator
+  (`bin/gen-locks.py`) only knew those 5;
+- the same happened with the multi-line commit (22/08/2026, WEGO-2087): the
+  hole was in 7 hooks and the radar covered 5.
 
-Aqui os dois guards importam em vez de copiar. As 5 cópias do
-`bash-path-lock.py` continuam geradas do molde — elas vivem em outros plugins e
-não podem importar do `common`. Sobram, então, **duas** fontes do motor em vez
-de sete, e `tests/test_lock_copies_drift.py` compara as duas por árvore
-sintática.
+Here the two guards import instead of copying. The 5 copies of
+`bash-path-lock.py` are still generated from the template, since they live in
+other plugins and cannot import from `common`. That leaves **two** sources of
+the engine instead of seven, and `tests/test_lock_copies_drift.py` compares the
+two by syntax tree.
 
-Uso, seguindo o padrão dos outros helpers privados desta pasta:
+Usage, following the pattern of the other private helpers in this folder:
 
     import sys, os
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -44,87 +44,88 @@ _REDIR_RE = re.compile(r"""(?<![0-9&])>>?\s*(?![&=])("[^"]+"|'[^']+'|[^\s;&|<>()
 # Targets that are never real files.
 _PSEUDO = ("/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty")
 
-# Separadores de comando, aplicados só FORA de aspas (ver _quoted_mask).
+# Command separators, applied only OUTSIDE quotes (see _quoted_mask).
 _SEP_PAIRS = ("||", "&&")
 _SEP_CHARS = ";|&\n"
 
 
 def _quoted_mask(s: str) -> list:
-    """Um booleano por caractere: True onde ele está entre aspas ou escapado.
+    """One boolean per character: True where it is inside quotes or escaped.
 
-    Existe porque o hook lia texto citado como se fosse shell. O caso real
-    (22/08/2026, WEGO-2087): `git commit -m "titulo\n\ncorpo com A -> B"`. O
-    `\n` do corpo era tratado como separador de comando, cada linha da mensagem
-    virava um "segmento", e o `->` de uma frase casava com _REDIR_RE — o hook
-    acusava escrita fantasma em `B` e barrava o commit. O dev só conseguiu
-    commitar depois de encurtar a mensagem para uma linha.
+    It exists because the hook used to read quoted text as if it were shell. The
+    real case (22/08/2026, WEGO-2087): `git commit -m "title\n\nbody with A -> B"`.
+    The body's `\n` was treated as a command separator, each line of the message
+    became a "segment", and the `->` of a sentence matched _REDIR_RE: the hook
+    reported a phantom write to `B` and blocked the commit. The dev could only
+    commit after shortening the message to one line.
 
-    Aspas não fechadas mascaram o resto da string: é fail-open, coerente com o
-    contrato do hook, e um comando com aspas não fechadas não roda no shell.
+    Unclosed quotes mask the rest of the string: it is fail-open, consistent
+    with the hook's contract, and a command with unclosed quotes does not run in
+    the shell.
 
-    O corpo de um heredoc (`<<EOF`, `<<-EOF`, `<<'EOF'`) também é dado, não
-    shell, e também é mascarado. Mesmo defeito das aspas, um degrau adiante e
-    medido em 04/09/2026: uma mensagem de commit passada por
-    `git commit -F - <<'MSG'` que CITAVA `while true` fez o `no-busy-wait`
-    barrar o commit como se fosse espera ativa. A citação estava dentro do
-    corpo, não numa linha de comando. Um here-string (`<<<`) não abre corpo e
-    fica de fora.
+    The body of a heredoc (`<<EOF`, `<<-EOF`, `<<'EOF'`) is also data, not
+    shell, and is masked too. Same defect as the quotes, one step further and
+    measured on 04/09/2026: a commit message passed via
+    `git commit -F - <<'MSG'` that QUOTED `while true` made `no-busy-wait`
+    block the commit as if it were a busy wait. The quote was inside the body,
+    not on a command line. A here-string (`<<<`) does not open a body and is
+    left out.
     """
     mask = [False] * len(s)
     quote = None
-    pendentes = []
+    pending_heredocs = []
     i = 0
     n = len(s)
     while i < n:
         c = s[i]
         if quote is None:
-            # O corpo de um heredoc anunciado nesta linha começa depois da
-            # quebra de linha e vai até a linha do delimitador. Nada dele é
-            # shell — é dado.
-            if c == "\n" and pendentes:
+            # The body of a heredoc announced on this line starts after the
+            # line break and runs to the delimiter line. None of it is
+            # shell, it is data.
+            if c == "\n" and pending_heredocs:
                 j = i + 1
-                for delim, apara in pendentes:
+                for delim, strip_tabs in pending_heredocs:
                     while j < n:
-                        fim_linha = s.find("\n", j)
-                        if fim_linha == -1:
-                            fim_linha = n
-                        linha = s[j:fim_linha]
-                        j = fim_linha + 1 if fim_linha < n else n
-                        if (linha.lstrip("\t") if apara else linha).strip() == delim:
+                        line_end = s.find("\n", j)
+                        if line_end == -1:
+                            line_end = n
+                        line = s[j:line_end]
+                        j = line_end + 1 if line_end < n else n
+                        if (line.lstrip("\t") if strip_tabs else line).strip() == delim:
                             break
-                # A quebra de linha que ABRE o corpo entra na máscara junto:
-                # ela ainda é separador de comando para `_split_segments`, e sem
-                # ela o corpo inteiro virava um "segundo comando" — que foi
-                # exatamente como a prosa do corpo voltou a ser lida como shell.
+                # The line break that OPENS the body goes into the mask too:
+                # it is still a command separator for `_split_segments`, and
+                # without it the whole body became a "second command", which
+                # is exactly how the body's prose came to be read as shell again.
                 for p in range(i, min(j, n)):
                     mask[p] = True
-                pendentes = []
+                pending_heredocs = []
                 i = min(j, n)
                 continue
             if s[i:i + 2] == "<<" and s[i:i + 3] != "<<<":
                 k = i + 2
-                apara = k < n and s[k] == "-"
-                if apara:
+                strip_tabs = k < n and s[k] == "-"
+                if strip_tabs:
                     k += 1
                 while k < n and s[k] in " \t":
                     k += 1
-                citado = s[k] if k < n and s[k] in "\"'" else None
-                if citado:
+                quoted = s[k] if k < n and s[k] in "\"'" else None
+                if quoted:
                     k += 1
-                inicio = k
+                delim_start = k
                 while k < n and (s[k].isalnum() or s[k] in "_-."):
                     k += 1
-                delim = s[inicio:k]
-                if citado and k < n and s[k] == citado:
+                delim = s[delim_start:k]
+                if quoted and k < n and s[k] == quoted:
                     k += 1
                 if delim:
-                    # O operador e o delimitador ficam VISÍVEIS de propósito:
-                    # `cat <<EOF > out.txt` escreve, e é o `<<` na visão sem
-                    # aspas que sustenta o sinal "não sei analisar isto"
-                    # (_UNCOVERED_RE). Só o CORPO é dado. Mascarar o operador
-                    # junto apagaria o sinal e o heredoc passaria a escrever
-                    # calado.
-                    pendentes.append((delim, apara))
+                    # The operator and the delimiter stay VISIBLE on purpose:
+                    # `cat <<EOF > out.txt` writes, and it is the `<<` in the
+                    # unquoted view that sustains the "cannot analyze this"
+                    # signal (_UNCOVERED_RE). Only the BODY is data. Masking
+                    # the operator too would erase the signal and the heredoc
+                    # would start writing silently.
+                    pending_heredocs.append((delim, strip_tabs))
                     i = k
                     continue
             if c == "\\":
@@ -151,7 +152,7 @@ def _quoted_mask(s: str) -> list:
 
 
 def _split_segments(command: str) -> list:
-    """Quebra em segmentos de comando ignorando separadores dentro de aspas."""
+    """Splits into command segments, ignoring separators inside quotes."""
     mask = _quoted_mask(command)
     segments = []
     start = i = 0
@@ -175,43 +176,43 @@ def _split_segments(command: str) -> list:
     return segments
 
 
-# Um redirecionamento inteiro — descritor opcional (`2>`), operador, `&`
-# opcional (`>&2`) e o operando. Serve só para APAGAR o redirecionamento antes
-# de tokenizar o comando: `tee saida.txt < entrada.txt` tokenizava como
-# `["tee", "saida.txt", "<", "entrada.txt"]`, e a regra do `tee` — todo
-# argumento que não é flag é escrito — registrava `<` e `entrada.txt` como
-# alvos de escrita. `entrada.txt` está sendo LIDO. Mesma família do falso
-# positivo do commit multilinha: um pedaço da linha lido como o que não é.
+# A whole redirection: optional descriptor (`2>`), operator, optional `&`
+# (`>&2`) and the operand. It serves only to ERASE the redirection before
+# tokenizing the command: `tee out.txt < in.txt` used to tokenize as
+# `["tee", "out.txt", "<", "in.txt"]`, and the `tee` rule (every argument that
+# is not a flag is written) recorded `<` and `in.txt` as write targets.
+# `in.txt` is being READ. Same family as the multi-line commit false
+# positive: a piece of the line read as what it is not.
 _REDIR_STRIP_RE = re.compile(
     r"""[0-9]?(?:>>?|<<?)&?\s*(?:"[^"]*"|'[^']*'|[^\s;&|<>()]+)?"""
 )
 
 
 def _strip_redirections(segment: str, mask: list) -> str:
-    """Remove os redirecionamentos FORA de aspas, preservando o resto intacto."""
-    cortes = [
+    """Removes the redirections OUTSIDE quotes, leaving the rest intact."""
+    cuts = [
         (m.start(), m.end())
         for m in _REDIR_STRIP_RE.finditer(segment)
         if m.group() and not mask[m.start()]
     ]
-    if not cortes:
+    if not cuts:
         return segment
     out, pos = [], 0
-    for ini, fim in cortes:
-        out.append(segment[pos:ini])
-        pos = fim
+    for span_start, span_end in cuts:
+        out.append(segment[pos:span_start])
+        pos = span_end
     out.append(segment[pos:])
     return " ".join(p for p in out if p)
 
 
 def _unquoted_view(command: str) -> str:
-    """A linha de comando com o conteúdo citado trocado por espaço.
+    """The command line with the quoted content replaced by spaces.
 
-    O detector de construção indecidível (_UNCOVERED_RE) varria a linha inteira,
-    aspas incluídas: uma mensagem de commit com a palavra `ed`, ou com um `<<`
-    no meio da prosa, gerava uma entrada falsa no log de cobertura. O log só
-    existe para dizer o que o hook NÃO conseguiu analisar — enchê-lo de prosa
-    ensina a ignorá-lo.
+    The undecidable-construct detector (_UNCOVERED_RE) used to scan the whole
+    line, quotes included: a commit message with the word `ed`, or with a `<<`
+    in the middle of the prose, generated a false entry in the coverage log.
+    The log exists only to say what the hook could NOT analyze, and filling it
+    with prose teaches people to ignore it.
     """
     mask = _quoted_mask(command)
     return "".join(" " if m else c for c, m in zip(command, mask))
@@ -228,16 +229,17 @@ def _is_flag(tok: str) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Extração de ALVOS DE ESCRITA — o degrau acima do parsing.
+# Extraction of WRITE TARGETS: the step above parsing.
 #
-# Portado verbatim do `bash-path-lock.py` do build-hex em 26/08/2026, quando o
-# `modo-escrita-gate` precisou da mesma pergunta que os locks já respondiam:
-# "que arquivos esta linha de comando ESCREVE?". A cópia que existia no
-# `enforcement-guard.py` já havia divergido em silêncio — ela não conhece
-# `git mv` nem conta a ORIGEM de um `mv` como escrita, então um agente move um
-# arquivo para fora da pista e o guard vê só o destino. Copiar uma terceira vez
-# seria repetir a doença que este módulo trata; `tests/test_lock_copies_drift.py`
-# compara estas duas funções entre as duas fontes do motor.
+# Ported verbatim from build-hex's `bash-path-lock.py` on 26/08/2026, when
+# `write-mode-gate` needed the same question the locks already answered:
+# "which files does this command line WRITE?". The copy that existed in
+# `enforcement-guard.py` had already diverged silently: it does not know
+# `git mv` nor count the SOURCE of an `mv` as a write, so an agent moves a
+# file out of its lane and the guard sees only the destination. Copying a
+# third time would repeat the disease this module treats;
+# `tests/test_lock_copies_drift.py` compares these two functions between the
+# two sources of the engine.
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Constructs we cannot statically analyze — fail open but log.
@@ -256,21 +258,21 @@ def _segment_targets(segment: str) -> list:
     targets = []
 
     # 1. Redirections (covers `cat > f`, `echo .. >> f`, `cmd > f`, heredoc-to-file).
-    #    O `>` precisa estar fora de aspas: um `->` no meio de uma mensagem de
-    #    commit é prosa, não redirecionamento.
+    #    The `>` must be outside quotes: a `->` in the middle of a commit
+    #    message is prose, not a redirection.
     redir_mask = _quoted_mask(segment)
     for m in _REDIR_RE.finditer(segment):
         if not redir_mask[m.start()]:
             targets.append(_unquote(m.group(1)))
 
     # 2. argv-shaped writers — tokenize; fall back silently if shlex chokes.
-    #    Sem os redirecionamentos: eles já viraram alvo no passo 1, e deixá-los
-    #    aqui faz o `tee` contar o operando de entrada como escrita.
-    sem_redir = _strip_redirections(segment, redir_mask)
+    #    Without the redirections: they already became targets in step 1, and
+    #    leaving them here makes `tee` count the input operand as a write.
+    no_redir = _strip_redirections(segment, redir_mask)
     try:
-        argv = shlex.split(sem_redir, posix=True)
+        argv = shlex.split(no_redir, posix=True)
     except ValueError:
-        argv = sem_redir.split()
+        argv = no_redir.split()
     if not argv:
         return targets
 
@@ -304,29 +306,29 @@ def _segment_targets(segment: str) -> list:
             if t.startswith("of="):
                 targets.append(t[3:])
     elif cmd == "git":
-        # `git mv <src> <dst>` — move real de arquivo, que o path-lock precisa
-        # governar como qualquer outra escrita. Estava só na cópia do docs
-        # (structure-surgeon usa git mv para preservar histórico); as outras
-        # quatro deixavam passar. Encontrado pelo detector de divergência.
+        # `git mv <src> <dst>` is a real file move, which the path-lock must
+        # govern like any other write. It was only in the docs copy
+        # (structure-surgeon uses git mv to preserve history); the other
+        # four let it through. Found by the divergence detector.
         #
-        # Origem E destino contam como escrita (P4, CS-5): `git mv` apaga o
-        # caminho de origem tanto quanto cria o de destino — um slice travado
-        # para escrever em domain/** que renomeia infrastructure/Foo.java para
-        # domain/Foo.java "escreveu" fora da própria pista (removeu um arquivo
-        # de infrastructure/), mesmo o destino sendo permitido. Checar só o
-        # destino, como antes, deixava esse sentido passar batido.
+        # Source AND destination count as a write (P4, CS-5): `git mv` deletes
+        # the source path as much as it creates the destination one. A slice
+        # locked to write in domain/** that renames infrastructure/Foo.java to
+        # domain/Foo.java "wrote" outside its own lane (it removed a file from
+        # infrastructure/), even though the destination is allowed. Checking
+        # only the destination, as before, let this direction slip by.
         if len(nonflags) >= 3 and nonflags[0] == "mv":
             targets.extend(nonflags[1:])
         elif nonflags and nonflags[0] in ("checkout", "restore"):
-            # `git checkout <ref> -- arquivo` e `git restore arquivo`
-            # SOBRESCREVEM o arquivo no disco com a versão de outro lugar —
-            # mesmo efeito do `git mv` acima, na mesma ferramenta já vigiada,
-            # e era a forma mais fácil de reverter em silêncio um arquivo fora
-            # da pista (achado do proof-reviewer, 26/08/2026).
+            # `git checkout <ref> -- file` and `git restore file`
+            # OVERWRITE the file on disk with the version from elsewhere,
+            # the same effect as the `git mv` above, in the same tool already
+            # watched, and it was the easiest way to silently revert a file
+            # outside the lane (proof-reviewer finding, 26/08/2026).
             #
-            # Sem `--`, o `checkout` é troca de branch: escreve muita coisa,
-            # mas não é escrita dirigida a um caminho, e tratá-lo como alvo
-            # transformaria todo `git checkout main` num bloqueio.
+            # Without `--`, `checkout` is a branch switch: it writes a lot,
+            # but it is not a write aimed at a path, and treating it as a
+            # target would turn every `git checkout main` into a block.
             if "--" in rest:
                 targets.extend(t for t in rest[rest.index("--") + 1:]
                                if not _is_flag(t))
@@ -335,24 +337,24 @@ def _segment_targets(segment: str) -> list:
     elif cmd == "truncate":
         targets.extend(nonflags[1:] if nonflags else [])
     elif cmd in ("curl", "wget"):
-        # Baixar para um arquivo é escrever nele. Achado do proof-reviewer em
-        # 26/08/2026: `curl -o` e `wget -O` são estaticamente decidíveis — o
-        # destino está explícito no argv — e mesmo assim passavam calados, nem
-        # bloqueados nem registrados. A forma sem destino explícito (`curl -O`,
-        # `wget <url>`, que gravam com o nome remoto no diretório corrente)
-        # continua fora: ali o nome não está na linha de comando.
-        destino = ("-o", "--output") if cmd == "curl" else ("-O", "--output-document")
-        prefixos = tuple(f"{d}=" for d in destino if d.startswith("--"))
+        # Downloading to a file is writing to it. Proof-reviewer finding on
+        # 26/08/2026: `curl -o` and `wget -O` are statically decidable (the
+        # destination is explicit in argv) and yet they went through silent,
+        # neither blocked nor logged. The form without an explicit destination
+        # (`curl -O`, `wget <url>`, which save under the remote name in the
+        # current directory) stays out: there the name is not on the command line.
+        dest = ("-o", "--output") if cmd == "curl" else ("-O", "--output-document")
+        prefixes = tuple(f"{d}=" for d in dest if d.startswith("--"))
         for i, t in enumerate(rest):
-            if t in destino and i + 1 < len(rest):
+            if t in dest and i + 1 < len(rest):
                 targets.append(rest[i + 1])
-            elif t.startswith(prefixos):
+            elif t.startswith(prefixes):
                 targets.append(t.split("=", 1)[1])
     elif cmd == "touch":
-        # Cria o arquivo se ele não existe: é escrita, mesmo com conteúdo vazio.
+        # Creates the file if it does not exist: it is a write, even with empty content.
         targets.extend(nonflags)
     elif cmd == "rsync":
-        # Como `cp`: lê a origem, escreve no último operando.
+        # Like `cp`: reads the source, writes to the last operand.
         if len(nonflags) >= 2:
             targets.append(nonflags[-1])
 
@@ -379,23 +381,23 @@ def extract_write_targets(command: str) -> tuple:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# "Que arquivos esta chamada de ferramenta escreveu?" — a mesma pergunta para
-# Edit/Write e para Bash.
+# "Which files did this tool call write?" The same question for Edit/Write
+# and for Bash.
 #
-# Os hooks de PostToolUse que reagem a escrita (`mark-build-stale`,
-# `session-activity`) só eram registrados em `Edit|Write|MultiEdit`. O modo
-# automático manda preferir `sed`, heredoc e script curto a `Edit`/`Write`, e
-# aí o código mudava com a baseline de build ainda marcada como fresca: o
-# `gate-advance` liberava um verde que descrevia código que não existia mais
-# (BACKLOG, "Modo automático edita por `sed`...", 2026-08-25). Em vez de cada
-# hook ganhar a própria leitura de shell, todos perguntam aqui.
+# The PostToolUse hooks that react to writes (`mark-build-stale`,
+# `session-activity`) were only registered on `Edit|Write|MultiEdit`. Auto
+# mode prefers `sed`, heredoc and a short script over `Edit`/`Write`, and then
+# the code changed with the build baseline still marked fresh: `gate-advance`
+# let through a green that described code that no longer existed
+# (BACKLOG, "Auto mode edits via `sed`...", 2026-08-25). Instead of each hook
+# getting its own shell reading, all of them ask here.
 # ─────────────────────────────────────────────────────────────────────────────
 
 WRITE_TOOLS = ("Edit", "Write", "MultiEdit")
 
 
 def _cd_target(segment: str):
-    """O diretório de um segmento `cd X`, ou None se o segmento não é um cd."""
+    """The directory of a `cd X` segment, or None if the segment is not a cd."""
     try:
         argv = shlex.split(segment, posix=True)
     except ValueError:
@@ -406,10 +408,10 @@ def _cd_target(segment: str):
 
 
 def _git_dash_c(segment: str):
-    """Os argumentos de `-C` de um segmento `git [-C X]... subcomando`, em ordem.
+    """The `-C` arguments of a `git [-C X]... subcommand` segment, in order.
 
-    Lista vazia se o segmento não é git ou não tem `-C`. `-c chave=valor` é
-    pulado (não muda de diretório).
+    Empty list if the segment is not git or has no `-C`. `-c key=value` is
+    skipped (it does not change directory).
     """
     try:
         argv = shlex.split(segment, posix=True)
@@ -433,14 +435,14 @@ def _git_dash_c(segment: str):
 
 
 def segment_dirs(command: str, cwd: str) -> list:
-    """`[(segmento, diretório, explícito)]` para cada segmento que NÃO é `cd`.
+    """`[(segment, directory, explicit)]` for each segment that is NOT a `cd`.
 
-    O diretório é onde o segmento roda: o do último `cd` que o antecede na
-    linha (relativo ao `cwd`; `~` expandido) e, num `git -C X ...`, o `X`
-    resolvido a partir daí. `explícito` é False quando nem `cd` nem `-C`
-    mexeram no diretório (o segmento roda no `cwd` do payload). É a mesma
-    resolução do `edited_paths`, exposta para quem precisa saber ONDE um
-    comando age (ex.: `gate-advance`, que avalia o repo que recebe o commit).
+    The directory is where the segment runs: that of the last `cd` before it on
+    the line (relative to `cwd`; `~` expanded) and, in a `git -C X ...`, the `X`
+    resolved from there. `explicit` is False when neither `cd` nor `-C` moved
+    the directory (the segment runs in the payload's `cwd`). It is the same
+    resolution as `edited_paths`, exposed for whoever needs to know WHERE a
+    command acts (e.g. `gate-advance`, which judges the repo that receives the commit).
     """
     base = os.path.abspath(cwd)
     explicit = False
@@ -449,9 +451,9 @@ def segment_dirs(command: str, cwd: str) -> list:
         seg = seg.strip()
         if not seg:
             continue
-        destino = _cd_target(seg)
-        if destino is not None:
-            base = os.path.normpath(os.path.join(base, destino))
+        cd_dir = _cd_target(seg)
+        if cd_dir is not None:
+            base = os.path.normpath(os.path.join(base, cd_dir))
             explicit = True
             continue
         d, exp = base, explicit
@@ -463,15 +465,15 @@ def segment_dirs(command: str, cwd: str) -> list:
 
 
 def edited_paths(payload: dict) -> list:
-    """Caminhos absolutos que esta chamada de ferramenta escreveu.
+    """Absolute paths that this tool call wrote.
 
-    Edit/Write/MultiEdit: o `file_path`. Bash: os alvos de escrita que o
-    `extract_write_targets` sabe ler (redirecionamento, heredoc para arquivo,
-    `sed -i`, `tee`, `cp`, `mv`...). Um alvo relativo é resolvido contra o
-    diretório do último `cd` que o antecede na linha, e sem `cd` contra o `cwd`
-    do payload: `cd /tmp/wt && sed -i ... X.java` escreveu em /tmp/wt, não na
-    árvore da sessão. O que o motor não sabe analisar (`python -c`, `perl -e`,
-    `awk -i inplace`, `ed`, `patch`) não aparece aqui — os limites são os dele.
+    Edit/Write/MultiEdit: the `file_path`. Bash: the write targets that
+    `extract_write_targets` knows how to read (redirection, heredoc to file,
+    `sed -i`, `tee`, `cp`, `mv`...). A relative target is resolved against the
+    directory of the last `cd` before it on the line, and with no `cd` against
+    the payload's `cwd`: `cd /tmp/wt && sed -i ... X.java` wrote in /tmp/wt, not
+    in the session tree. What the engine cannot analyze (`python -c`, `perl -e`,
+    `awk -i inplace`, `ed`, `patch`) does not show up here: the limits are its own.
     """
     tool = payload.get("tool_name", "")
     tool_input = payload.get("tool_input") or {}
@@ -487,9 +489,9 @@ def edited_paths(payload: dict) -> list:
         seg = seg.strip()
         if not seg:
             continue
-        destino = _cd_target(seg)
-        if destino is not None:
-            base = os.path.normpath(os.path.join(base, destino))
+        cd_dir = _cd_target(seg)
+        if cd_dir is not None:
+            base = os.path.normpath(os.path.join(base, cd_dir))
             continue
         for t in _segment_targets(seg):
             t = _unquote(t).strip()

@@ -1,51 +1,54 @@
 #!/usr/bin/env python3
-"""PreToolUse (common) — card novo no Jira nasce com os `required_fields` do board-flow.yaml.
+"""PreToolUse (common): a new Jira card is born with the `required_fields` of board-flow.yaml.
 
-## Por que existe
+## Why it exists
 
-O `board-flow.yaml` de cada repo WeGo declara, em `required_fields`, os campos
-que todo card do projeto precisa ter (Team e Módulo do sistema). O Jira NÃO
-recusa um card sem eles: a criação passa, e o card some dos quadros filtrados
-por Team. A única coisa que garantia o preenchimento era uma frase no
-`atlassian-expert.md` ("Read project config first, every time").
+Each WeGo repo's `board-flow.yaml` declares, in `required_fields`, the fields
+every card of the project must have (Team and system Module). Jira does NOT
+refuse a card without them: the creation goes through, and the card vanishes
+from the boards filtered by Team. The only thing guaranteeing they were filled
+in was a sentence in `atlassian-expert.md` ("Read project config first, every
+time").
 
-Não bastou. Em 14/09 e 22/09/2026 o próprio atlassian-expert criou 35 cards
-(WEGO-2273 a 2278, WEGO-2302 a 2330) sem os dois campos: o pedido que recebeu
-não citava os campos, dizia "não invente campo customizado", e ele nunca abriu o
-board-flow.yaml. O dono preencheu os 35 à mão depois. Em 17/09 o mesmo agente
-criou com os campos. Regra que depende do agente lembrar falha de vez em quando.
+It was not enough. On 14/09 and 22/09/2026 atlassian-expert itself created 35
+cards (WEGO-2273 to 2278, WEGO-2302 to 2330) without the two fields: the request
+it received did not mention the fields, said "don't invent a custom field", and
+it never opened board-flow.yaml. The owner filled in the 35 by hand afterwards.
+On 17/09 the same agent created with the fields. A rule that depends on the
+agent remembering fails now and then.
 
-Este hook tira a decisão do agente: toda criação de card é conferida contra o
-arquivo, qualquer que seja o caminho.
+This hook takes the decision away from the agent: every card creation is checked
+against the file, whatever the path.
 
-## O que ele confere
+## What it checks
 
-Caminhos de criação cobertos:
-- `twg jira workitem create` (Bash): lê `--field id=valor`, `--fields-json` e
-  `--variables-json`.
-- MCP de qualquer servidor (`createJiraIssue`, `jira_create_issue`,
-  `jira_batch_create_issues`): procura os campos em qualquer nível do input
-  (`additional_fields`, `fields`, ou solto), inclusive JSON dentro de string.
-- `twg api -X POST .../rest/api/N/issue` (REST cru): barrado sempre que há
-  `required_fields`, porque o corpo pode estar num arquivo que o hook não lê.
+Creation paths covered:
+- `twg jira workitem create` (Bash): reads `--field id=value`, `--fields-json`
+  and `--variables-json`.
+- MCP from any server (`createJiraIssue`, `jira_create_issue`,
+  `jira_batch_create_issues`): looks for the fields at any level of the input
+  (`additional_fields`, `fields`, or loose), including JSON inside a string.
+- `twg api -X POST .../rest/api/N/issue` (raw REST): always blocked when there
+  are `required_fields`, because the body may be in a file the hook does not
+  read.
 
-Para cada campo de `required_fields` (por `id` ou por `name`), o valor passado
-precisa bater com o `value` do arquivo. UUID cru e `{"id": "..."}` contam como o
-mesmo valor.
+For each `required_fields` entry (by `id` or by `name`), the passed value must
+match the file's `value`. A raw UUID and `{"id": "..."}` count as the same
+value.
 
-`required_fields` segue a mesma resolução do atlassian-expert:
-`topologies.<ativa>.required_fields` substitui `defaults.required_fields`, com a
-topologia ativa vinda de `.claude/topology`, depois `default_topology`.
+`required_fields` follows the same resolution as atlassian-expert:
+`topologies.<active>.required_fields` replaces `defaults.required_fields`, with
+the active topology coming from `.claude/topology`, then `default_topology`.
 
-## O que passa
+## What passes
 
-- Repo sem board-flow.yaml, ou com `required_fields` vazio.
-- Card de outro projeto (a chave do projeto na chamada difere da do arquivo):
-  as regras deste arquivo não valem lá.
-- Qualquer chamada que não cria card.
+- A repo without board-flow.yaml, or with empty `required_fields`.
+- A card from another project (the project key in the call differs from the
+  file's): this file's rules do not hold there.
+- Any call that does not create a card.
 
-Vale para a sessão principal também: o pedido do dono é que TODO card nasça
-conforme o arquivo, em qualquer modo.
+It applies to the main session too: the owner's request is that EVERY card be
+born according to the file, in any mode.
 """
 
 import json
@@ -66,11 +69,11 @@ _WRITE_METHODS = {"POST", "PUT", "PATCH"}
 # ---------------------------------------------------------------- config
 
 def _find_config(cwd):
-    """Sobe de cwd até achar o board-flow.yaml, parando na raiz do git."""
+    """Climbs from cwd until it finds board-flow.yaml, stopping at the git root."""
     d = os.path.abspath(cwd or ".")
     while True:
-        for nome in _CONFIG_NAMES:
-            p = os.path.join(d, nome)
+        for name in _CONFIG_NAMES:
+            p = os.path.join(d, name)
             if os.path.isfile(p):
                 return d, p
         if os.path.exists(os.path.join(d, ".git")):
@@ -82,10 +85,10 @@ def _find_config(cwd):
 
 
 def _load_rules(cwd):
-    """(project_key, required_fields, config_path) ou None quando não há regra.
+    """(project_key, required_fields, config_path) or None when there is no rule.
 
-    Levanta RuntimeError quando o arquivo existe mas não dá para ler: nesse caso
-    o gate barra, porque liberar seria repetir o furo que ele existe para fechar.
+    Raises RuntimeError when the file exists but cannot be read: in that case
+    the gate blocks, because allowing would repeat the hole it exists to close.
     """
     root, path = _find_config(cwd)
     if not path:
@@ -102,15 +105,15 @@ def _load_rules(cwd):
         raise RuntimeError(f"{path} não é YAML válido: {e}")
 
     defaults = data.get("defaults") or {}
-    topo = None
+    topology = None
     marker = os.path.join(root, ".claude", "topology")
     if os.path.isfile(marker):
         try:
-            topo = open(marker, encoding="utf-8").read().strip() or None
+            topology = open(marker, encoding="utf-8").read().strip() or None
         except OSError:
-            topo = None
-    topo = topo or defaults.get("default_topology") or data.get("default_topology")
-    override = ((data.get("topologies") or {}).get(topo) or {}) if topo else {}
+            topology = None
+    topology = topology or defaults.get("default_topology") or data.get("default_topology")
+    override = ((data.get("topologies") or {}).get(topology) or {}) if topology else {}
 
     fields = override.get("required_fields", defaults.get("required_fields")) or []
     project = override.get("project_key") or defaults.get("project_key")
@@ -120,7 +123,7 @@ def _load_rules(cwd):
     return project, fields, path
 
 
-# ---------------------------------------------------------------- valores
+# ---------------------------------------------------------------- values
 
 def _parse_json(v):
     if isinstance(v, str):
@@ -134,7 +137,7 @@ def _parse_json(v):
 
 
 def _norm(v):
-    """Forma comparável de um valor de campo: UUID cru == {"id": UUID}."""
+    """Comparable form of a field value: raw UUID == {"id": UUID}."""
     v = _parse_json(v)
     if isinstance(v, dict):
         for k in ("id", "value", "accountId", "key", "name"):
@@ -147,7 +150,7 @@ def _norm(v):
 
 
 def _collect(obj, out):
-    """Junta em `out` todo par chave→valor, em qualquer nível, abrindo JSON em string."""
+    """Gathers into `out` every key->value pair, at any level, opening JSON in strings."""
     obj = _parse_json(obj)
     if isinstance(obj, dict):
         for k, v in obj.items():
@@ -171,7 +174,7 @@ def _project_of(found):
 
 
 def _missing(found, fields):
-    """Lista de (campo, esperado, recebido|None) que não batem."""
+    """List of (field, got|None) that do not match."""
     bad = []
     for f in fields:
         keys = [str(f["id"]).casefold()]
@@ -183,10 +186,10 @@ def _missing(found, fields):
     return bad
 
 
-# ---------------------------------------------------------------- caminhos
+# ---------------------------------------------------------------- paths
 
 def _twg_creates(command):
-    """Cada criação legível pela `twg`, como dict de campos achados, ou "opaque"."""
+    """Each creation readable through `twg`, as a dict of found fields, or "opaque"."""
     out = []
     for seg in S._split_segments(command):
         seg = seg.strip()
@@ -256,8 +259,8 @@ def _mcp_creates(tool_name, tool_input):
 
 # ---------------------------------------------------------------- main
 
-def _exemplo(fields, mecanismo):
-    if mecanismo == "twg":
+def _example(fields, mechanism):
+    if mechanism == "twg":
         return " ".join(
             f"--field '{f['id']}={json.dumps(f.get('value'), ensure_ascii=False)}'" for f in fields
         )
@@ -281,10 +284,10 @@ def main():
         if "twg" not in cmd:
             sys.exit(0)
         creates = _twg_creates(cmd)
-        mecanismo = "twg"
+        mechanism = "twg"
     elif tool.startswith("mcp__") and _MCP_CREATE.search(tool):
         creates = _mcp_creates(tool, ti)
-        mecanismo = "mcp"
+        mechanism = "mcp"
     else:
         sys.exit(0)
 
@@ -301,29 +304,29 @@ def main():
         sys.exit(0)
     project, fields, path = rules
 
-    problemas = []
+    problems = []
     for n, found in enumerate(creates, 1):
         if found == "opaque":
-            problemas.append(
+            problems.append(
                 f"  card {n}: criação por REST cru (`twg api`) ou linha ilegível; não dá "
                 "para conferir os campos. Use `twg jira workitem create` com `--field`."
             )
             continue
-        alvo = _project_of(found)
-        if alvo and project and str(alvo).strip().upper() != str(project).strip().upper():
+        target = _project_of(found)
+        if target and project and str(target).strip().upper() != str(project).strip().upper():
             continue
         for f, got in _missing(found, fields):
-            nome = f.get("name") or f["id"]
-            esperado = json.dumps(f.get("value"), ensure_ascii=False)
+            label = f.get("name") or f["id"]
+            expected = json.dumps(f.get("value"), ensure_ascii=False)
             if got is None:
-                problemas.append(f"  card {n}: falta {nome} ({f['id']}), esperado {esperado}")
+                problems.append(f"  card {n}: falta {label} ({f['id']}), esperado {expected}")
             else:
-                problemas.append(
-                    f"  card {n}: {nome} ({f['id']}) veio "
-                    f"{json.dumps(_parse_json(got), ensure_ascii=False)}, esperado {esperado}"
+                problems.append(
+                    f"  card {n}: {label} ({f['id']}) veio "
+                    f"{json.dumps(_parse_json(got), ensure_ascii=False)}, esperado {expected}"
                 )
 
-    if not problemas:
+    if not problems:
         sys.exit(0)
 
     print(
@@ -331,8 +334,8 @@ def main():
         f"  {path} exige em todo card novo do projeto {project}:\n"
         + "\n".join(f"    - {f.get('name') or f['id']} ({f['id']}) = "
                     f"{json.dumps(f.get('value'), ensure_ascii=False)}" for f in fields)
-        + "\n  O que faltou:\n" + "\n".join(problemas)
-        + f"\n  Refaça a criação incluindo: {_exemplo(fields, mecanismo)}\n"
+        + "\n  O que faltou:\n" + "\n".join(problems)
+        + f"\n  Refaça a criação incluindo: {_example(fields, mechanism)}\n"
         "  Esses campos não são 'campo inventado': vêm do arquivo e valem mesmo que o\n"
         "  pedido não os cite.",
         file=sys.stderr,

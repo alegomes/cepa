@@ -1,34 +1,38 @@
 #!/usr/bin/env python3
-"""cepa-feedback — o caderno de reclamações do próprio harness.
+"""cepa-feedback — the harness's own complaint notebook.
 
-O problema que ele resolve: o incômodo com o harness aparece SEMPRE no meio de
-outra coisa. O gate barra o que não devia, o comando pergunta demais, o relatório
-sai ilegível — e nesse instante existem duas saídas, largar a tarefa para abrir o
-BACKLOG.md do repo da Cepa (que quase nunca é o repo onde você está), ou seguir e
-esquecer. Seguir e esquecer sempre ganha. Este arquivo é a terceira saída.
+The problem it solves: annoyance with the harness ALWAYS shows up in the middle
+of something else. The gate blocks what it shouldn't, the command asks too much,
+the report comes out unreadable — and at that moment there are two exits: drop
+the task to open the Cepa repo's BACKLOG.md (which is almost never the repo you
+are in), or move on and forget. Moving on and forgetting always wins. This file
+is the third exit.
 
-Desenho, e o porquê de cada escolha:
+Design, and the reason for each choice:
 
-  - **Global, não por repo.** O alvo do feedback é a Cepa, e o incômodo acontece
-    no repo do cliente. Um `.claude/feedback.md` por repo espalharia a mesma
-    queixa por cinco lugares que ninguém relê. Tudo cai em
-    ~/.claude/cepa-feedback/feedback-AAAA-MM.jsonl (CEPA_FEEDBACK_DIR sobrescreve).
-  - **Append-only.** Registro nunca é reescrito; a triagem é OUTRA linha que cita
-    o id. O estado ("aberto" / "triado") é replay do ledger, como na telemetria.
-  - **Contexto capturado sozinho** — repo, branch, modo da sessão. Se o registro
-    depender de você lembrar onde estava, ele nasce inútil: a queixa de agosto
-    lida em outubro sem o comando que a causou não vira card nenhum.
-  - **Texto é do dono, não do agente.** O comando não resume nem reescreve o que
-    você disse; grava verbatim.
+  - **Global, not per repo.** The target of the feedback is Cepa, and the
+    annoyance happens in the client's repo. A `.claude/feedback.md` per repo
+    would scatter the same complaint across five places nobody rereads.
+    Everything lands in ~/.claude/cepa-feedback/feedback-YYYY-MM.jsonl
+    (CEPA_FEEDBACK_DIR overrides it).
+  - **Append-only.** A record is never rewritten; triage is ANOTHER line that
+    cites the id. The state ("aberto" / "triado") is a replay of the ledger, as
+    in telemetry.
+  - **Context captured automatically** — repo, branch, session mode. If the
+    record depends on you remembering where you were, it is born useless: an
+    August complaint read in October without the command that caused it never
+    becomes a card.
+  - **The text belongs to the owner, not the agent.** The command neither
+    summarizes nor rewrites what you said; it records it verbatim.
 
-Uso:
-    cepa-feedback add "o gate X barrou o commit legítimo" --alvo modo-escrita-gate
-    cepa-feedback list                     # os abertos
+Usage:
+    cepa-feedback add "o gate X barrou o commit legítimo" --target write-mode-gate
+    cepa-feedback list                     # the open ones
     cepa-feedback list --status todos --json
-    cepa-feedback triar fb-20260826-1 --destino "BACKLOG.md § Gate de escrita"
-    cepa-feedback triar fb-20260826-1 --destino "fila WEGO" --plano WEGO --why "..."
+    cepa-feedback triage fb-20260826-1 --destination "BACKLOG.md § Gate de escrita"
+    cepa-feedback triage fb-20260826-1 --destination "queue WEGO" --queue WEGO --why "..."
 
-Saídas: 0 ok · 2 uso inválido · 3 id inexistente · 4 já triado.
+Exits: 0 ok · 2 invalid usage · 3 unknown id · 4 already triaged.
 """
 
 import argparse
@@ -39,20 +43,20 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-MIN_TEXTO = 12  # queixa de uma palavra não se reconstrói meses depois
-ORIGENS = ("comando", "skill", "hook", "manual")
+MIN_TEXT = 12  # a one-word complaint cannot be reconstructed months later
+ORIGINS = ("comando", "skill", "hook", "manual")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
 try:
     import _telemetry as T
-except Exception:  # noqa: BLE001 — telemetria nunca decide se o registro acontece
+except Exception:  # noqa: BLE001 — telemetry never decides whether the record happens
     T = None
 
-BOLD, DIM, AMARELO, VERDE, RESET = "\033[1m", "\033[2m", "\033[33m", "\033[32m", "\033[0m"
+BOLD, DIM, YELLOW, GREEN, RESET = "\033[1m", "\033[2m", "\033[33m", "\033[32m", "\033[0m"
 
 
-def dir_ledger():
+def ledger_dir():
     d = os.environ.get("CEPA_FEEDBACK_DIR")
     return Path(d) if d else Path.home() / ".claude" / "cepa-feedback"
 
@@ -66,67 +70,67 @@ def _git(args, cwd):
         return ""
 
 
-def contexto(cwd):
-    """Repo, branch e modo — o que faz a queixa ser reconstruível depois."""
-    raiz = _git(["rev-parse", "--show-toplevel"], cwd) or str(cwd)
-    comum = _git(["rev-parse", "--path-format=absolute", "--git-common-dir"], cwd)
-    if comum.endswith("/.git"):
-        repo = Path(comum).parent.name
-    elif comum:
-        repo = Path(comum).name
+def context(cwd):
+    """Repo, branch and mode — what makes the complaint reconstructable later."""
+    root = _git(["rev-parse", "--show-toplevel"], cwd) or str(cwd)
+    git_common = _git(["rev-parse", "--path-format=absolute", "--git-common-dir"], cwd)
+    if git_common.endswith("/.git"):
+        repo = Path(git_common).parent.name
+    elif git_common:
+        repo = Path(git_common).name
     else:
-        repo = Path(raiz).name
+        repo = Path(root).name
     branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], cwd) or None
-    modo = None
-    arq = Path(raiz) / ".claude" / "session-mode"
-    if arq.is_file():
+    mode = None
+    path = Path(root) / ".claude" / "session-mode"
+    if path.is_file():
         try:
-            for linha in arq.read_text(encoding="utf-8", errors="replace").splitlines():
-                k, _, v = linha.partition(":")
-                if k.strip() == "modo":
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                k, _, v = line.partition(":")
+                if k.strip() in ("mode", "modo"):  # `modo` = file from an old cepa
                     v = v.strip().strip('"')
-                    modo = v if v and v != "null" else None
+                    mode = v if v and v != "null" else None
         except OSError:
             pass
-    return {"repo": repo or None, "branch": branch, "modo": modo}
+    return {"repo": repo or None, "branch": branch, "modo": mode}
 
 
-def arquivos():
-    d = dir_ledger()
+def ledger_files():
+    d = ledger_dir()
     return sorted(d.glob("feedback-*.jsonl")) if d.is_dir() else []
 
 
-def eventos():
-    """Todas as linhas do ledger, em ordem de arquivo. Linha corrompida é pulada:
-    um ledger que morre por uma linha ruim perde o resto do que estava certo."""
-    for arq in arquivos():
+def events():
+    """Every ledger line, in file order. A corrupted line is skipped: a ledger
+    that dies on one bad line loses the rest of what was right."""
+    for path in ledger_files():
         try:
-            texto = arq.read_text(encoding="utf-8", errors="replace")
+            content = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for linha in texto.splitlines():
-            linha = linha.strip()
-            if not linha:
+        for line in content.splitlines():
+            line = line.strip()
+            if not line:
                 continue
             try:
-                ev = json.loads(linha)
+                ev = json.loads(line)
             except ValueError:
                 continue
             if isinstance(ev, dict) and ev.get("id"):
                 yield ev
 
 
-def registros():
-    """Replay do ledger: id → registro com `status` e a triagem, quando houve."""
+def records():
+    """Ledger replay: id → record with `status` and the triage, when there was one."""
     out = {}
-    for ev in eventos():
-        tipo = ev.get("tipo")
-        if tipo == "feedback":
+    for ev in events():
+        kind = ev.get("tipo")
+        if kind == "feedback":
             r = dict(ev)
             r["status"] = "aberto"
             r["triagem"] = None
             out.setdefault(ev["id"], r)
-        elif tipo == "triagem" and ev["id"] in out:
+        elif kind == "triagem" and ev["id"] in out:
             out[ev["id"]]["status"] = "triado"
             out[ev["id"]]["triagem"] = {
                 "destino": ev.get("destino"), "nota": ev.get("nota"), "ts": ev.get("ts"),
@@ -134,162 +138,163 @@ def registros():
     return out
 
 
-def novo_id(agora):
-    dia = agora.strftime("%Y%m%d")
-    n = sum(1 for ev in eventos() if ev.get("tipo") == "feedback"
-            and str(ev.get("id", "")).startswith(f"fb-{dia}-"))
-    return f"fb-{dia}-{n + 1}"
+def new_id(now):
+    day = now.strftime("%Y%m%d")
+    n = sum(1 for ev in events() if ev.get("tipo") == "feedback"
+            and str(ev.get("id", "")).startswith(f"fb-{day}-"))
+    return f"fb-{day}-{n + 1}"
 
 
-def grava(ev):
-    d = dir_ledger()
+def write_event(ev):
+    d = ledger_dir()
     d.mkdir(parents=True, exist_ok=True)
-    arq = d / f"feedback-{datetime.now(timezone.utc):%Y-%m}.jsonl"
-    with open(arq, "a", encoding="utf-8") as fh:
+    path = d / f"feedback-{datetime.now(timezone.utc):%Y-%m}.jsonl"
+    with open(path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(ev, ensure_ascii=False) + "\n")
-    return arq
+    return path
 
 
 def cmd_add(args):
-    texto = " ".join(args.texto).strip()
-    if not texto:
+    text = " ".join(args.text).strip()
+    if not text:
         print("✗ feedback vazio: diga o que incomodou.", file=sys.stderr)
         return 2
-    if len(texto) < MIN_TEXTO:
-        print(f"✗ feedback curto demais ({len(texto)} caracteres, mínimo {MIN_TEXTO}).\n"
+    if len(text) < MIN_TEXT:
+        print(f"✗ feedback curto demais ({len(text)} caracteres, mínimo {MIN_TEXT}).\n"
               "  Uma palavra não se reconstrói meses depois — diga o que o harness "
               "fez e o que você esperava.", file=sys.stderr)
         return 2
-    if args.origem not in ORIGENS:
-        print(f"✗ origem inválida: {args.origem} (válidas: {', '.join(ORIGENS)})",
+    if args.origin not in ORIGINS:
+        print(f"✗ origem inválida: {args.origin} (válidas: {', '.join(ORIGINS)})",
               file=sys.stderr)
         return 2
 
-    agora = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
     ev = {
-        "ts": agora.isoformat(),
+        "ts": now.isoformat(),
         "tipo": "feedback",
-        "id": novo_id(agora),
-        "texto": texto,
-        "alvo": args.alvo or None,
-        "origem": args.origem,
+        "id": new_id(now),
+        "texto": text,
+        "alvo": args.target or None,
+        "origem": args.origin,
     }
-    ev.update(contexto(args.repo or os.getcwd()))
-    arq = grava(ev)
+    ev.update(context(args.repo or os.getcwd()))
+    path = write_event(ev)
     if T:
         try:
-            T.emit("feedback_capturado", origem=args.origem, alvo=args.alvo or "none")
+            T.emit("feedback_capturado", origem=args.origin, alvo=args.target or "none")
         except Exception:  # noqa: BLE001
             pass
 
     if args.as_json:
-        print(json.dumps({"id": ev["id"], "arquivo": str(arq)}, ensure_ascii=False))
+        print(json.dumps({"id": ev["id"], "arquivo": str(path)}, ensure_ascii=False))
     else:
-        print(f"✔ feedback {ev['id']} registrado ({arq}).")
+        print(f"✔ feedback {ev['id']} registrado ({path}).")
     return 0
 
 
-def _linha(r, cor):
-    marca = VERDE + "aberto" + RESET if r["status"] == "aberto" else DIM + "triado" + RESET
-    if not cor:
-        marca = r["status"]
-    cab = f"{BOLD}{r['id']}{RESET}  {marca}  {DIM}{r['ts'][:16]}{RESET}"
+def _format_record(r, color):
+    mark = GREEN + "aberto" + RESET if r["status"] == "aberto" else DIM + "triado" + RESET
+    if not color:
+        mark = r["status"]
+    header = f"{BOLD}{r['id']}{RESET}  {mark}  {DIM}{r['ts'][:16]}{RESET}"
     ctx = " · ".join(x for x in (r.get("repo"), r.get("branch"), r.get("modo"),
                                  r.get("alvo")) if x)
-    corpo = [cab, f"  {r['texto']}"]
+    body = [header, f"  {r['texto']}"]
     if ctx:
-        corpo.append(f"  {DIM}{ctx}{RESET}")
+        body.append(f"  {DIM}{ctx}{RESET}")
     if r["status"] == "triado" and r.get("triagem"):
-        corpo.append(f"  {DIM}→ {r['triagem'].get('destino')}{RESET}")
-    return "\n".join(corpo)
+        body.append(f"  {DIM}→ {r['triagem'].get('destino')}{RESET}")
+    return "\n".join(body)
 
 
 def cmd_list(args):
-    todos = list(registros().values())
-    todos.sort(key=lambda r: r.get("ts", ""))
-    sel = [r for r in todos
-           if (args.status == "todos" or r["status"] == args.status)
-           and (not args.repo_nome or r.get("repo") == args.repo_nome)]
+    everything = list(records().values())
+    everything.sort(key=lambda r: r.get("ts", ""))
+    selected = [r for r in everything
+                if (args.status == "todos" or r["status"] == args.status)
+                and (not args.repo_name or r.get("repo") == args.repo_name)]
     if args.max:
-        sel = sel[-args.max:]
+        selected = selected[-args.max:]
 
     if args.as_json:
-        print(json.dumps(sel, ensure_ascii=False, indent=2))
+        print(json.dumps(selected, ensure_ascii=False, indent=2))
         return 0
 
-    cor = sys.stdout.isatty() and not args.sem_cor
-    if not cor:
-        global BOLD, DIM, AMARELO, VERDE, RESET
-        BOLD = DIM = AMARELO = VERDE = RESET = ""
-    if not sel:
-        d = dir_ledger()
+    color = sys.stdout.isatty() and not args.no_color
+    if not color:
+        global BOLD, DIM, YELLOW, GREEN, RESET
+        BOLD = DIM = YELLOW = GREEN = RESET = ""
+    if not selected:
+        d = ledger_dir()
         print(f"Nenhum feedback {args.status} em {d}."
               if d.is_dir() else f"Nenhum feedback registrado ainda ({d} não existe).")
         return 0
-    for r in sel:
-        print(_linha(r, cor))
+    for r in selected:
+        print(_format_record(r, color))
         print()
-    abertos = sum(1 for r in todos if r["status"] == "aberto")
-    print(f"{DIM}{len(sel)} exibido(s) · {abertos} aberto(s) no total.{RESET}")
+    open_count = sum(1 for r in everything if r["status"] == "aberto")
+    print(f"{DIM}{len(selected)} exibido(s) · {open_count} aberto(s) no total.{RESET}")
     return 0
 
 
-def cmd_triar(args):
-    destino = (args.destino or "").strip()
-    if not destino:
+def cmd_triage(args):
+    destination = (args.destination or "").strip()
+    if not destination:
         print("✗ triagem sem destino: diga onde o item foi parar "
               "(card, seção do BACKLOG.md, commit).", file=sys.stderr)
         return 2
-    regs = registros()
-    r = regs.get(args.id)
+    recs = records()
+    r = recs.get(args.id)
     if not r:
         print(f"✗ id inexistente: {args.id}", file=sys.stderr)
         return 3
     if r["status"] == "triado":
-        anterior = (r.get("triagem") or {}).get("destino")
-        print(f"✗ {args.id} já foi triado → {anterior}", file=sys.stderr)
+        previous = (r.get("triagem") or {}).get("destino")
+        print(f"✗ {args.id} já foi triado → {previous}", file=sys.stderr)
         return 4
     ev = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "tipo": "triagem",
         "id": args.id,
-        "destino": destino,
-        "nota": (args.nota or None),
+        "destino": destination,
+        "nota": (args.note or None),
     }
-    grava(ev)
+    write_event(ev)
     if T:
         try:
             T.emit("feedback_triado")
         except Exception:  # noqa: BLE001
             pass
-    print(f"✔ {args.id} → {destino}")
+    print(f"✔ {args.id} → {destination}")
 
-    # A1: --plano acrescenta o item à fila single-track no MESMO passo em que
-    # a triagem fecha, para o feedback não sumir num destino em prosa que
-    # ninguém revisita. A triagem já está gravada acima — uma falha daqui em
-    # diante é "não entrou na fila", nunca "a triagem não aconteceu".
-    if args.plano:
-        titulo = r["texto"][:100]
+    # A1: --queue appends the item to the single-track queue in the SAME step
+    # in which the triage closes, so the feedback does not vanish into a
+    # prose destination nobody revisits. The triage is already written above —
+    # a failure from here on means "did not enter the queue", never "the
+    # triage did not happen".
+    if args.queue:
+        title = r["texto"][:100]
         cepa_plan = Path(__file__).resolve().parent / "cepa-plan"
-        cmd = [sys.executable, str(cepa_plan), "add", args.plano, args.id,
-               "--title", titulo, "--repo", args.repo]
+        cmd = [sys.executable, str(cepa_plan), "add", args.queue, args.id,
+               "--title", title, "--repo", args.repo]
         if args.why:
             cmd += ["--why", args.why]
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         except (OSError, subprocess.SubprocessError) as e:
-            print(f"⚠ {args.id} não entrou na fila '{args.plano}': "
+            print(f"⚠ {args.id} não entrou na fila '{args.queue}': "
                   f"cepa-plan não rodou ({e})", file=sys.stderr)
             return 0
         if p.returncode == 0:
-            print(f"✔ {args.id} também entrou na fila '{args.plano}'.")
+            print(f"✔ {args.id} também entrou na fila '{args.queue}'.")
         elif p.returncode == 4:
-            print(f"· {args.id} já estava na fila '{args.plano}' — nada mudou lá.")
+            print(f"· {args.id} já estava na fila '{args.queue}' — nada mudou lá.")
         else:
-            detalhe = (p.stderr or p.stdout).strip().splitlines()
+            detail = (p.stderr or p.stdout).strip().splitlines()
             print(f"⚠ triagem registrada, mas {args.id} NÃO entrou na fila "
-                  f"'{args.plano}': "
-                  f"{detalhe[-1] if detalhe else 'erro desconhecido'}",
+                  f"'{args.queue}': "
+                  f"{detail[-1] if detail else 'erro desconhecido'}",
                   file=sys.stderr)
     return 0
 
@@ -301,26 +306,26 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     a = sub.add_parser("add", help="registra um feedback (texto verbatim)")
-    a.add_argument("texto", nargs="+")
-    a.add_argument("--alvo", help="comando/hook/agente que causou o incômodo")
-    a.add_argument("--origem", default="manual", choices=ORIGENS)
+    a.add_argument("text", nargs="+", metavar="texto")
+    a.add_argument("--target", "--alvo", dest="target", help="comando/hook/agente que causou o incômodo")
+    a.add_argument("--origin", "--origem", dest="origin", default="manual", choices=ORIGINS)
     a.add_argument("--repo", help="diretório de onde tirar repo/branch/modo (default: cwd)")
     a.add_argument("--json", action="store_true", dest="as_json")
     a.set_defaults(func=cmd_add)
 
     l = sub.add_parser("list", help="lista os feedbacks registrados")
     l.add_argument("--status", default="aberto", choices=("aberto", "triado", "todos"))
-    l.add_argument("--repo", dest="repo_nome", help="filtra pelo nome do repo")
+    l.add_argument("--repo", dest="repo_name", help="filtra pelo nome do repo")
     l.add_argument("--max", type=int, help="só os N mais recentes")
     l.add_argument("--json", action="store_true", dest="as_json")
-    l.add_argument("--sem-cor", action="store_true")
+    l.add_argument("--no-color", "--sem-cor", dest="no_color", action="store_true")
     l.set_defaults(func=cmd_list)
 
-    t = sub.add_parser("triar", help="marca um feedback como triado, com destino")
+    t = sub.add_parser("triage", aliases=["triar"], help="marca um feedback como triado, com destino")
     t.add_argument("id")
-    t.add_argument("--destino", required=True, help="onde o item foi parar")
-    t.add_argument("--nota")
-    t.add_argument("--plano", metavar="FILA",
+    t.add_argument("--destination", "--destino", dest="destination", required=True, help="onde o item foi parar")
+    t.add_argument("--note", "--nota", dest="note")
+    t.add_argument("--queue", "--plano", dest="queue", metavar="FILA",
                    help="acrescenta o feedback à fila single-track FILA via "
                         "`cepa-plan add` (título = os ~100 primeiros "
                         "caracteres do texto do feedback). Exit 4 do add "
@@ -328,15 +333,15 @@ def main(argv=None):
                         "add não desfaz a triagem, só avisa que o item ficou "
                         "de fora da fila")
     t.add_argument("--why", help="`--why` repassado ao `cepa-plan add`, "
-                                 "quando --plano é usado")
+                                 "quando --queue é usado")
     t.add_argument("--repo", default=".",
-                   help="repo onde mora a fila de --plano (default: cwd)")
-    t.set_defaults(func=cmd_triar)
+                   help="repo onde mora a fila de --queue (default: cwd)")
+    t.set_defaults(func=cmd_triage)
 
     args = ap.parse_args(argv)
     return args.func(args)
 
 
 if __name__ == "__main__":
-    _tui.instalar()
+    _tui.install()
     sys.exit(main())

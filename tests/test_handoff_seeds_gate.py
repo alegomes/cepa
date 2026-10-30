@@ -132,7 +132,7 @@ def main():
     r = write(PATH, "# Delivery brief\n\nNothing else.\n")
     check("brief sem nenhum dos dois bloqueia", r.returncode == 2, r.stdout)
 
-    # ── ausente vs. mal-formatado (a lição do falso positivo de 21/07) ─────
+    # ── absent vs. malformatted (the lesson of the 07/21 false positive) ───
     r = write(PATH, UNLABELED)
     check("presente-mas-sem-marcação bloqueia", r.returncode == 2, r.stdout)
     check("diagnostica FORMATO, não omissão",
@@ -141,7 +141,7 @@ def main():
     check("manda re-formatar, não re-escrever",
           "only the label's markup is wrong" in r.stderr, r.stderr)
 
-    # ── escopo: só o handoff do discovery é vigiado ────────────────────────
+    # ── scope: only the discovery handoff is watched ───────────────────────
     for other in ("docs/discovery/DISC-12/framing.md",
                   "docs/discovery/DISC-12/research.md",
                   "docs/handoff.md",

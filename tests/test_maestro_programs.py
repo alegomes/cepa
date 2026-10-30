@@ -4,16 +4,16 @@
 Run with `python3 tests/test_maestro_programs.py` (no third-party deps beyond
 the PyYAML the script itself needs). Exits non-zero on first failure.
 
-O que estes testes seguram é a razão do script existir: ele responde "o que dá
-para rodar aqui?" e essa resposta só vale se BATER com a recusa do
-/maestro:run. Um listador que diz RODA sobre um plano single-track (ou sobre um
-plano sem schema_version) é pior que nenhum listador — manda o usuário para uma
-recusa que ele já poderia ter visto. Daí os casos 2-5 serem todos de recusa.
+What these tests hold is the reason the script exists: it answers "what can
+be run here?" and that answer is only worth anything if it MATCHES the refusal of
+/maestro:run. A lister that says RUNS about a single-track plan (or about a
+plan without schema_version) is worse than no lister — it sends the user to a
+refusal he could already have seen. Hence cases 2-5 are all refusals.
 
-O caso 6 segura o invariante de costura: chamado de dentro de uma worktree
-ligada, o script tem que enxergar os programas do CLONE PRINCIPAL — a mesma
-raiz que o /maestro:run usa. Se divergir, a listagem mostra um programa que a
-execução não acha (ou esconde o que ela acharia).
+Case 6 holds the seam invariant: called from inside a linked
+worktree, the script has to see the programs of the MAIN CLONE — the same
+root /maestro:run uses. If they diverge, the listing shows a program that the
+execution does not find (or hides what it would find).
 """
 
 import json
@@ -56,14 +56,14 @@ def as_json(repo):
     return {p["nome"]: p for p in data["programas"]}, data["raiz"]
 
 
-def write_program(repo, nome, texto):
-    d = Path(repo) / ".claude" / "programs" / nome
+def write_program(repo, name, text):
+    d = Path(repo) / ".claude" / "programs" / name
     d.mkdir(parents=True, exist_ok=True)
-    (d / "plan.yaml").write_text(texto)
+    (d / "plan.yaml").write_text(text)
     return d
 
 
-ONDAS_PENDENTES = """\
+PENDING_WAVES = """\
 schema_version: 2
 mode: parallel-waves
 program: com-onda
@@ -76,7 +76,7 @@ waves:
     status: pending
 """
 
-TUDO_DONE = """\
+ALL_DONE = """\
 schema_version: 2
 mode: parallel-waves
 program: acabado
@@ -99,7 +99,7 @@ items:
     status: pending
 """
 
-SEM_SCHEMA = """\
+NO_SCHEMA = """\
 program: legado-sem-versao
 waves:
   - id: 1
@@ -120,29 +120,29 @@ def fixture_repo(base):
     return repo
 
 
-def test_elegivel_aponta_a_proxima_onda(tmp):
+def test_eligible_points_to_the_next_wave(tmp):
     repo = fixture_repo(tmp)
-    write_program(repo, "com-onda", ONDAS_PENDENTES)
+    write_program(repo, "com-onda", PENDING_WAVES)
     progs, _ = as_json(repo)
     p = progs["com-onda"]
     check("plano com onda pendente é elegível", p["elegivel"], p["motivo"])
     check("aponta a PRIMEIRA onda pendente",
           p["proxima_onda"] and p["proxima_onda"]["id"] == 1, p["proxima_onda"])
-    saida = run(repo).stdout
+    output = run(repo).stdout
     check("saída humana traz a linha de comando pronta",
-          "/maestro:run com-onda --wave 1" in saida, saida)
+          "/maestro:run com-onda --wave 1" in output, output)
 
 
-def test_ondas_todas_done_nao_roda(tmp):
+def test_waves_all_done_does_not_run(tmp):
     repo = fixture_repo(tmp)
-    write_program(repo, "acabado", TUDO_DONE)
+    write_program(repo, "acabado", ALL_DONE)
     progs, _ = as_json(repo)
     p = progs["acabado"]
     check("programa acabado não é elegível", not p["elegivel"])
     check("motivo diz que as ondas acabaram", "done" in (p["motivo"] or ""), p["motivo"])
 
 
-def test_single_track_recusado_com_a_rota_certa(tmp):
+def test_single_track_refused_with_the_right_route(tmp):
     repo = fixture_repo(tmp)
     write_program(repo, "fila", SINGLE_TRACK)
     progs, _ = as_json(repo)
@@ -153,16 +153,16 @@ def test_single_track_recusado_com_a_rota_certa(tmp):
           "ITEM-2" in (p["motivo"] or ""), p["motivo"])
 
 
-def test_sem_schema_version_recusa_igual_ao_run(tmp):
+def test_without_schema_version_refuses_like_run(tmp):
     repo = fixture_repo(tmp)
-    write_program(repo, "legado", SEM_SCHEMA)
+    write_program(repo, "legado", NO_SCHEMA)
     progs, _ = as_json(repo)
     p = progs["legado"]
     check("plano sem schema_version não é elegível", not p["elegivel"])
     check("motivo cita schema_version", "schema_version" in (p["motivo"] or ""), p["motivo"])
 
 
-def test_diretorio_sem_plano_aparece_como_tal(tmp):
+def test_directory_without_plan_shows_up_as_such(tmp):
     repo = fixture_repo(tmp)
     (Path(repo) / ".claude" / "programs" / "vazio").mkdir(parents=True)
     progs, _ = as_json(repo)
@@ -171,27 +171,27 @@ def test_diretorio_sem_plano_aparece_como_tal(tmp):
     check("motivo é 'sem plan.yaml'", p["motivo"] == "sem plan.yaml", p["motivo"])
 
 
-def test_de_dentro_da_worktree_le_o_clone_principal(tmp):
+def test_from_inside_the_worktree_reads_the_main_clone(tmp):
     repo = fixture_repo(tmp)
-    write_program(repo, "com-onda", ONDAS_PENDENTES)
+    write_program(repo, "com-onda", PENDING_WAVES)
     wt = Path(tmp) / "wt"
     git(repo, "worktree", "add", "-q", "-b", "session/x", str(wt))
-    progs, raiz = as_json(wt)
+    progs, root = as_json(wt)
     check("worktree ligada enxerga o programa do clone principal",
           "com-onda" in progs, list(progs))
     check("a raiz reportada é a do clone principal",
-          Path(raiz).resolve() == repo.resolve(), raiz)
+          Path(root).resolve() == repo.resolve(), root)
 
 
-def test_fora_de_repo_git_sai_2(tmp):
-    fora = Path(tmp) / "nao-repo"
-    fora.mkdir()
-    r = run(fora)
+def test_outside_git_repo_exits_2(tmp):
+    outside = Path(tmp) / "nao-repo"
+    outside.mkdir()
+    r = run(outside)
     check("diretório sem git sai com 2", r.returncode == 2, r.returncode)
     check("e diz por quê", "git" in r.stderr, r.stderr)
 
 
-def test_check_name_recusa_fila_do_board(tmp):
+def test_check_name_refuses_board_queue(tmp):
     repo = fixture_repo(tmp)
     write_program(repo, "WEGO", SINGLE_TRACK)
     r = run(repo, "--check-name", "WEGO")
@@ -202,25 +202,26 @@ def test_check_name_recusa_fila_do_board(tmp):
           "/board-flow:triage" in r.stderr, r.stderr)
 
 
-def test_check_name_libera_replanejar_as_proprias_ondas(tmp):
+def test_check_name_releases_replanning_its_own_waves(tmp):
     repo = fixture_repo(tmp)
-    write_program(repo, "com-onda", ONDAS_PENDENTES)
+    write_program(repo, "com-onda", PENDING_WAVES)
     r = run(repo, "--check-name", "com-onda")
     check("reescrever plano de ondas é liberado", r.returncode == 0, r.stderr)
     check("mas avisa que o nome está ocupado",
           "ocupado" in r.stdout, r.stdout)
 
 
-def test_check_name_libera_nome_novo(tmp):
+def test_check_name_releases_new_name(tmp):
     repo = fixture_repo(tmp)
     r = run(repo, "--check-name", "ainda-nao-existe")
     check("nome inédito é livre", r.returncode == 0, r.stderr)
     check("e diz que o caminho não existe", "livre" in r.stdout, r.stdout)
 
 
-def test_program_plan_chama_a_checagem_antes_de_gravar(tmp):
-    """Contrato de prompt: o passo 4 do /maestro:program-plan tem que rodar a
-    checagem ANTES da escrita. Sem isto o script existe e ninguém o chama."""
+def test_program_plan_calls_the_check_before_writing(tmp):
+    """Prompt contract: step 4 of /maestro:program-plan has to run the
+    check BEFORE the write. Without this the script exists and nobody calls it.
+    """
     cmd = (REPO / "maestro" / "commands" / "program-plan.md").read_text()
     check("o passo 4 chama --check-name", "--check-name" in cmd)
     check("e trata o exit 3 como parada", "Exit 3 = stop" in cmd)
@@ -232,17 +233,17 @@ def test_program_plan_chama_a_checagem_antes_de_gravar(tmp):
 
 
 def main():
-    tests = [test_elegivel_aponta_a_proxima_onda,
-             test_ondas_todas_done_nao_roda,
-             test_single_track_recusado_com_a_rota_certa,
-             test_sem_schema_version_recusa_igual_ao_run,
-             test_diretorio_sem_plano_aparece_como_tal,
-             test_de_dentro_da_worktree_le_o_clone_principal,
-             test_fora_de_repo_git_sai_2,
-             test_check_name_recusa_fila_do_board,
-             test_check_name_libera_replanejar_as_proprias_ondas,
-             test_check_name_libera_nome_novo,
-             test_program_plan_chama_a_checagem_antes_de_gravar]
+    tests = [test_eligible_points_to_the_next_wave,
+             test_waves_all_done_does_not_run,
+             test_single_track_refused_with_the_right_route,
+             test_without_schema_version_refuses_like_run,
+             test_directory_without_plan_shows_up_as_such,
+             test_from_inside_the_worktree_reads_the_main_clone,
+             test_outside_git_repo_exits_2,
+             test_check_name_refuses_board_queue,
+             test_check_name_releases_replanning_its_own_waves,
+             test_check_name_releases_new_name,
+             test_program_plan_calls_the_check_before_writing]
     for t in tests:
         print(t.__name__)
         with tempfile.TemporaryDirectory() as d:

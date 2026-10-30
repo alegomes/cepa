@@ -1,89 +1,93 @@
 ---
 name: default-yes
-description: Decida em vez de perguntar. Quando você tem uma recomendação clara e a ação é reversível ou apenas registra algo, EXECUTE e registre no relatório final — não pergunte. Perguntas só para o irreversível, e sempre em lote nas pontas da sessão (largada ou relatório), nunca pingadas no meio do trabalho. Use em todo comando de rotina (doctor, triage, drain, prove-drain, execute, wrap-up) e em qualquer sessão assistida.
+description: Decide instead of asking. When you have a clear recommendation and the action is reversible or only records something, EXECUTE it and report it in the final report, do not ask. Questions are only for the irreversible, and always batched at the edges of the session (kickoff or report), never dribbled out in the middle of the work. Use in every routine command (doctor, triage, drain, prove-drain, execute, wrap-up) and in any assisted session.
 ---
 
 # Skill: default-yes
 
-**Se você já sabe o que recomendaria, a pergunta não muda o resultado — só
-custa um turno e tira o usuário do fio.**
+**If you already know what you would recommend, the question does not change the
+outcome: it only costs a turn and pulls the user off the thread.**
 
-Este skill trata de *quando perguntar ao usuário*. Não confunda com
-`zero-micromanagement`, que trata de *quando delegar a um worker*: um é sobre
-a fronteira com a pessoa, o outro sobre a fronteira com os agentes.
+This skill is about *when to ask the user*. Do not confuse it with
+`zero-micromanagement`, which is about *when to delegate to a worker*: one is
+about the boundary with the person, the other about the boundary with the agents.
 
-## O problema que ele existe para resolver
+## The problem it exists to solve
 
-Registrado pelo dono do harness (2026-08-18): toda rotina cobra ciclos de
-confirmação **antes** da operação principal (rode o doctor → siga a
-recomendação → que gera outra recomendação → ...) e **depois** dela (vaivém até
-ter certeza de que acabou). O custo não é o tempo: é que o usuário perde de
-vista qual era o propósito da sessão, e no fim não consegue consolidar o que
-foi feito. Nas palavras dele: *"eu geralmente tendo a aceitar a sua
-recomendação"* — ou seja, as perguntas quase nunca alteraram a decisão.
+Recorded by the harness owner (2026-08-18): every routine charges confirmation
+cycles **before** the main operation (run the doctor, follow the recommendation,
+which generates another recommendation, ...) and **after** it (back and forth
+until you are sure it is over). The cost is not the time: it is that the user
+loses sight of what the purpose of the session was, and in the end cannot
+consolidate what was done. In their words: *"I usually tend to accept your
+recommendation"* (original: "eu geralmente tendo a aceitar a sua recomendação"),
+meaning the questions almost never changed the decision.
 
-## A regra
+## The rule
 
-Antes de escrever uma pergunta, classifique a ação:
+Before writing a question, classify the action:
 
-| A ação é... | Faça |
+| The action is... | Do |
 |---|---|
-| **Reversível** (dá para desfazer sem perder trabalho: commit em branch de sessão, mover arquivo, reinstalar plugin, devolver card com motivo) | **Execute.** Registre no relatório. |
-| **Apenas registra** (criar card/item de backlog, escrever handoff, anotar débito, abrir issue) | **Execute.** Nunca pergunte "quer que eu crie um card?". |
-| **Investigação / leitura** | **Execute.** |
-| **Irreversível ou destrutiva** (apagar branch com commits únicos, `Won't Do` em card, force-push, apagar arquivo sem cópia, publicar para fora) | **Pergunte** — em lote, no fim. |
-| **Custo real** (rodar N provas caras, gastar orçamento grande) | **Pergunte** — na largada, junto com todo o resto. |
-| **Bifurcação genuína de preferência**, sem default defensável (reinstalar *ou* voltar versão; qual escopo atacar) | **Pergunte** — em lote. |
+| **Reversible** (can be undone without losing work: commit on a session branch, move a file, reinstall a plugin, return a card with a reason) | **Execute.** Record it in the report. |
+| **Only records** (create a card/backlog item, write a handoff, note a debt, open an issue) | **Execute.** Never ask "do you want me to create a card?". |
+| **Investigation / reading** | **Execute.** |
+| **Irreversible or destructive** (delete a branch with unique commits, `Won't Do` on a card, force-push, delete a file with no copy, publish externally) | **Ask**, in a batch, at the end. |
+| **Real cost** (run N expensive proofs, spend a large budget) | **Ask**, at kickoff, together with everything else. |
+| **Genuine fork of preference**, with no defensible default (reinstall *or* roll back a version; which scope to tackle) | **Ask**, in a batch. |
 
-O exemplo canônico do dono: *"encontrei uma falha e sugiro criar um card"* →
-**crie o card**. Contar depois é suficiente; pedir licença antes, não.
+The owner's canonical example: *"I found a flaw and I suggest creating a card"*
+(original: "encontrei uma falha e sugiro criar um card") -> **create the card**.
+Telling them afterwards is enough; asking permission beforehand is not.
 
-## Perguntas vão nas pontas, nunca no meio
+## Questions go at the edges, never in the middle
 
-Quando sobra algo que exige o usuário:
+When something is left that requires the user:
 
-1. **Na largada**, se a resposta muda o plano inteiro (escopo, máximo de
-   cards, o que fazer com o que empacar). Faça TODAS de uma vez, inclusive as
-   que a rotina só encontraria no meio do caminho.
-2. **No relatório final**, para o resto — lista numerada, uma pergunta fechada
-   por item, cada uma com `Recomendo sim/não` (formato `plain-report`).
+1. **At kickoff**, if the answer changes the whole plan (scope, maximum number of
+   cards, what to do with whatever gets stuck). Ask ALL of them at once, including
+   the ones the routine would only find midway.
+2. **In the final report**, for the rest: a numbered list, one closed question per
+   item, each with `I recommend yes/no` (`plain-report` format).
 
-Nunca no meio da execução: a pergunta que interrompe um drain no card 3 de 5
-força o usuário a recarregar o contexto inteiro para responder.
+Never in the middle of execution: a question that interrupts a drain at card 3 of
+5 forces the user to reload the entire context in order to answer.
 
-## Guardar o fio da sessão
+## Keep the thread of the session
 
-Autonomia sem memória vira outra forma de ruído. Três obrigações:
+Autonomy without memory becomes another form of noise. Three obligations:
 
-- **Proposta em aberto não some.** Se você propôs algo e o usuário ainda não
-  respondeu (muitas vezes porque estava trazendo mais informação, não porque
-  ignorou), a proposta **reaparece no próximo relatório**, atualizada, até ser
-  aceita, recusada, ou descartada por você **com o motivo escrito**.
-- **Assunto lateral fica estacionado.** Achado paralelo e aviso de
-  SessionStart (worktree não integrada, handoff vencido, débito de outro
-  módulo) **não viram pergunta no meio de outro assunto**. Anote e traga no
-  fechamento da sessão. A exceção é o que bloqueia o assunto atual — aí é
-  parte do assunto, não desvio.
-- **Depois do wrap-up, nada novo abre.** O estacionamento é esvaziado no
-  próprio wrap-up, dentro do handoff, do BACKLOG ou do `cepa-feedback add`. Um
-  relatório depois do "Safe to exit" nunca propõe a próxima coisa: diz onde o
-  assunto ficou registrado e termina.
+- **An open proposal does not vanish.** If you proposed something and the user has
+  not answered yet (often because they were bringing more information, not
+  because they ignored it), the proposal **reappears in the next report**,
+  updated, until it is accepted, refused, or dropped by you **with the reason
+  written down**.
+- **A side topic gets parked.** A parallel finding and a SessionStart warning
+  (unintegrated worktree, expired handoff, debt in another module) **do not become
+  a question in the middle of another topic**. Note it and bring it up at the
+  close of the session. The exception is what blocks the current topic: then it is
+  part of the topic, not a detour.
+- **After the wrap-up, nothing new opens.** The parking lot is emptied in the
+  wrap-up itself, into the handoff, the BACKLOG or `cepa-feedback add`. A report
+  after "Safe to exit" never proposes the next thing: it says where the topic was
+  recorded and ends.
 
-## Rede de segurança
+## Safety net
 
-O que torna isto seguro em vez de temerário:
+What makes this safe instead of reckless:
 
-1. **Toda decisão auto-aplicada é nomeada no relatório final** — o usuário
-   revisa depois, em bloco, em vez de autorizar antes, uma a uma.
-2. **O canal de overrule existe:** `/common:debrief` (mantém/derruba decisões
-   de um run) e o handoff da sessão.
-3. **A fronteira do irreversível continua fechada** — default-yes nunca
-   autoriza apagar trabalho.
+1. **Every self-applied decision is named in the final report**: the user reviews
+   afterwards, in bulk, instead of authorizing beforehand, one by one.
+2. **The overrule channel exists:** `/common:debrief` (keeps/overturns the
+   decisions of a run) and the session handoff.
+3. **The irreversible boundary stays closed**: default-yes never authorizes
+   deleting work.
 
 ## Sniff tests
 
-- Escreveu "quer que eu...?" para algo reversível → apague a pergunta e faça.
-- Vai perguntar duas coisas em turnos diferentes → junte numa lista só.
-- A pergunta é sobre um assunto que não é o da sessão → estacione para o fim.
-- Terminou a rotina e ficou "aguardando confirmação para prosseguir" sem ter
-  entregue relatório → o relatório é que era o próximo passo.
+- You wrote "do you want me to...?" for something reversible: delete the question
+  and do it.
+- You are about to ask two things in different turns: merge them into one list.
+- The question is about a topic that is not the session's: park it for the end.
+- You finished the routine and are "awaiting confirmation to proceed" without
+  having delivered a report: the report was the next step.

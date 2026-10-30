@@ -310,15 +310,15 @@ Each item is reserved before it is touched (`cepa-plan start` — the trackerles
 equivalent of the claim `/board-flow:drain` posts on a card) and gets a named
 terminal outcome with evidence (`cepa-plan finish`). An item that ends `blocked`, or
 that opens a `human_pending`, also records the closed question that would unblock it
-(`finish --pergunta`, stored as `owner_question`). The owner answers it with
-`cepa-plan responde <queue> <id> --resposta "..."`: a `blocked` item goes back to
+(`finish --question`, stored as `owner_question`). The owner answers it with
+`cepa-plan answer <queue> <id> --answer "..."`: a `blocked` item goes back to
 `pending` and an open route closes, with the answer prepended to the evidence the
-next run reads. With `--mantem` the answer is recorded and the item stays as it
+next run reads. With `--keep` the answer is recorded and the item stays as it
 was: still `blocked`, route still open. `responde` refuses without a terminal, so an unattended `claude -p`
 cannot close a human route on the owner's behalf. `cepa-until` calls it for you when
 it asks its end-of-run questions. It also refuses (exit 6) a text that does not answer the
 route — a request for clarification ("não entendi", "como assim") or a question — printing
-the route's question instead; `--forca` records it anyway (on 2026-10-14 a "não entendi"
+the route's question instead; `--force` records it anyway (on 2026-10-14 a "não entendi"
 said in chat about something else landed as the owner's answer on an item).
 
 **Every write commits the queue or says it did not.** `responde` and `add` commit the

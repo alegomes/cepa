@@ -669,23 +669,25 @@ items:
   status: blocked
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-10-23: não: Devolvo a calibragem do porteiro
+  evidence: 'Resposta do dono em 2026-10-30: não: Devolvo a calibragem do porteiro
     à fila agora, mesmo sem nenhuma onda ter rodado?. O dono manteve o item como
-    estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-22: não:
+    estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-23: não:
     Devolvo a calibragem do porteiro à fila agora, mesmo sem nenhuma onda ter rodado?.
     O dono manteve o item como estava (`blocked`). Evidência anterior: Resposta
-    do dono em 2026-10-20: não: Devolvo a calibragem do porteiro à fila agora, mesmo
+    do dono em 2026-10-22: não: Devolvo a calibragem do porteiro à fila agora, mesmo
     sem nenhuma onda ter rodado?. O dono manteve o item como estava (`blocked`).
-    Evidência anterior: Resposta do dono em 2026-10-17: não: Devolvo a calibragem
-    do porteiro à fila agora, antes de qualquer onda rodar?. O dono manteve o item
-    como estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-15:
-    não: Mando calibrar o porteiro agora, antes de qualquer onda rodar?. O dono
-    manteve o item como estava (`blocked`). Evidência anterior: Condicao de fora
-    nao cumprida: o BACKLOG.md (secao ''Calibrar as regras do porteiro'', decisao
-    do dono 2026-08-24) adia o que falta (liberar escrita por shell cujo alvo cai
-    dentro da superficie da slice) ate a 0.4.3 do porteiro rodar pelo menos uma
-    onda de verdade. Conferido em 2026-09-27: o unico ledger de porteiro no disco
-    (wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl,
+    Evidência anterior: Resposta do dono em 2026-10-20: não: Devolvo a calibragem
+    do porteiro à fila agora, mesmo sem nenhuma onda ter rodado?. O dono manteve
+    o item como estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-17:
+    não: Devolvo a calibragem do porteiro à fila agora, antes de qualquer onda rodar?.
+    O dono manteve o item como estava (`blocked`). Evidência anterior: Resposta
+    do dono em 2026-10-15: não: Mando calibrar o porteiro agora, antes de qualquer
+    onda rodar?. O dono manteve o item como estava (`blocked`). Evidência anterior:
+    Condicao de fora nao cumprida: o BACKLOG.md (secao ''Calibrar as regras do porteiro'',
+    decisao do dono 2026-08-24) adia o que falta (liberar escrita por shell cujo
+    alvo cai dentro da superficie da slice) ate a 0.4.3 do porteiro rodar pelo menos
+    uma onda de verdade. Conferido em 2026-09-27: o unico ledger de porteiro no
+    disco (wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl,
     166 linhas) e de 2026-08-24 10:12, anterior ao commit 9b9846e da 0.4.3 (10:13);
     nenhuma onda rodou depois. As duas ondas da fila (rodar-onda-lotes-*) estao
     blocked por herdr fora do ar. Nada implementado, nenhum commit. Quem resolve:
@@ -2338,20 +2340,40 @@ items:
     CLAUDE.md dele. Títulos do Epic e da spec entram aqui porque spec-readiness-gate.py
     e cepa-plan --from-epic os leem; rótulos do plain-report porque report-style-lint.py
     os lê'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
-  evidence: 'Resposta do dono em 2026-10-23: sim: Devolvo o item para a fila, retomando
-    das quatro partes já feitas que você guardou? Instrução: retomar da branch until/2026-10-23-1919-interface-wip
-    (rebase sobre main depois do aterrissar); as 4 fatias A-D estão feitas; corrigir
-    tests/test_cepa_until_aliases_ingles.py para isolar o ledger de telemetria (CEPA_TELEMETRY_DIR
-    / isola(), como tests/test_cepa_until.py faz) para tests/test_telemetria_isolada.py
-    passar; rodar tests/run-all.sh inteiro; passar pair-reviewer e completion-auditor;
-    commitar. O item voltou de `blocked` para `pending`. Evidência anterior: 2 tentativas
-    seguidas do `cepa-until` na mesma janela sem tirar o item do lugar. Isto NÃO
-    é veredito sobre o trabalho nem condição de fora: é o supervisor tirando o item
-    da frente para a fila andar. A saída do `claude` de cada tentativa está no `.log`
-    do run; devolva o item para `pending` quando souber o que travou.'
+  human_pending: Decidir se os motivos de parada/adiamento do cepa-plan queue --json
+    (teto, fim-da-fila, bloqueado, reservado, depende-de-adiado, bloqueado-antes)
+    também vão para inglês
+  evidence: 'Código na branch da rodada until/2026-10-23-2130 (sem merge, sem push:
+    build completo e pouso são do supervisor). Commits: 290f157 (cherry-pick -x
+    de 80edad2, skills-agents-in-english, porque a branch until/2026-10-23-1919
+    não pousou na main e as 4 fatias foram escritas em cima dele), f26a765 (as 4
+    fatias A-D recuperadas da árvore SUJA do worktree cepa-until-2026-10-23-1919
+    — a branch *-interface-wip da instrução nunca foi criada; 114 arquivos: cepa-intencao->cepa-intent,
+    cepa-modos->cepa-modes, /common:fila->/common:queue-status, /common:modos->/common:modes,
+    ~40 flags, 7 modos, chaves de session-mode/session-intent, prefixo ''queue <nome>:'',
+    status/títulos de Epic e spec, rótulos do plain-report, texto fixo de Jira;
+    nomes antigos aceitos como alias; tests/test_cepa_until_aliases_ingles.py passou
+    a chamar isola(), o único vermelho que a 1919 deixou), 84fde4d (chave de cabeçalho
+    da fila demonstra->demonstrates com leitores aceitando as duas e 2 testes novos;
+    corpo do commit do cepa-plan answer em inglês). Suíte inteira tests/run-all.sh
+    verde: 140 arquivos (45 na passada direta + 92 em 4 blocos paralelos para caber
+    nos 10 min + 3 pytest, 79 casos). Gates: pair-reviewer APPROVE (2x: fatias e
+    delta demonstrates; nits de docstring anotados, não bloqueantes), completion-auditor
+    COMPLETE com ressalva em .claude/acceptance/interface-in-english.yaml. proof-reviewer
+    não rodou: topologia build-solo não o tem e o dono pediu só pair-reviewer +
+    completion-auditor; a prova RED é por ordem (teste de alias escrito antes).
+    FICOU DE FORA, por ser leitura do título e não decisão: os motivos de parada/adiamento
+    que cepa-plan queue --json emite (teto, fim-da-fila, bloqueado, reservado, depende-de-adiado,
+    bloqueado-antes) seguem em português e são lidos por 18 arquivos (cepa-until,
+    compass, contrato do drain-plan, testes). ATENÇÃO: o worktree /Users/alegomes/cepa-worktrees/cepa-until-2026-10-23-1919
+    continua com os 114 arquivos sujos (agora redundantes, já estão em f26a765)
+    e por isso ''cepa-until aterrissar cepa/2026-10-23-1919'' segue recusado; descartar
+    essa sujeira é decisão do dono.'
+  owner_question: 'Traduzo também os motivos de parada do cepa-plan queue (teto,
+    fim-da-fila, bloqueado-antes...) para inglês? Recomendo sim: é texto fixo do
+    produto, regra que você já decidiu'
 - id: renomear-para-queue
   title: 'Renomear plan.yaml, .claude/programs/, a chave program: e o comando /common:plan
     para o termo queue, com migração das filas existentes nos repos de cliente'
@@ -2410,11 +2432,44 @@ items:
     lê o código, e esperar cada arquivo ser mexido por outro motivo não termina
     nunca. Vem depois de renomear-para-queue para não brigar com os mesmos arquivos
     (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by:
   - renomear-para-queue
   human_pending: null
-  evidence: null
+  evidence: 'Rodada until/2026-10-23-2130, quinta passada: fecha o item. 15 commits
+    nesta rodada na branch da rodada (8052307..4856391), sem merge nem push; build
+    completo e pouso são do supervisor. Feito: (1) common/hooks inteiro — 13 hooks
+    folha (8052307), no-background-build/report-style-lint/spec-readiness-gate (b3c10c7),
+    _autonomy com chamadores (0898b94), _tui Screen/Filter/install/header/section/bar/cut/width/line/wrap/highlight
+    com 14 pontos de chamada em common/bin (25391c4), resíduos em 9 hooks + common/bin/cepa
+    shell (7487265), enforcement-guard (582f2fd); (2) tests/: 780 funções test_
+    e helpers em 135 arquivos (423a134), _telemetria_isolada.isola -> _isolated_telemetry.isolate
+    em 36 importadores (4e3c26f), e2e_build_longo -> e2e_long_build (8f24fef); (3)
+    board-flow/bin: API de waivers (write/load/applicable/expired/matches/propose/proposals/convert/decline,
+    parâmetros em inglês), classify_needs_human (REASONS, NOT_A_QUESTION, QUEUE_ORDER),
+    shims idênticos byte a byte, prosa de comandos que manda chamar função atualizada
+    em decide.md, drain-plan.md, proof-reviewer.md, autonomous-mode SKILL.md (6d6f584);
+    (4) maestro/bin 6 scripts, motor bash-path-lock: _shellscan, molde e 6 cópias
+    regeneradas por gen-locks (7090560, 9335007); (5) compass/hooks restantes build/intent/epics/gate/until/register/test/types
+    (273b6a0). Invariantes conferidos em cada arquivo: constantes de string fora
+    de docstring idênticas ao HEAD anterior via ast (únicas exceções: 2 nomes de
+    parametrize do pytest, regex do teste que lê MODES= no cepa, e o teste que confere
+    a chamada isolate()); --help dos 14 common/bin e dos 6 maestro/bin idênticos
+    (cmp); cepa-plan queue com CEPA_COR=sempre idêntico byte a byte; shell cepa
+    idêntico em 7 invocações com claude stub; gen-locks --check verde; claude plugin
+    test compass 102 pass. Texto ao dono, chaves YAML/JSON/telemetria, flags, env
+    vars e códigos de saída intactos. Mantidos de propósito: APELIDOS (teste faz
+    grep da fonte), a.aguardando_merge (dest do argparse), nomes de teste que citam
+    subcomando legado decidir/fila/triar, títulos de test() do compass. Gates: pair-reviewer
+    OK ou OK-WITH-NOTES (só estética) nos 9 grupos; completion-auditor em 3 passadas
+    (.claude/acceptance/code-names-in-english.yaml): AC1-AC4 e AC6 complete; AC5
+    ''suíte verde a cada commit'' fica assumed porque a suíte completa é do supervisor
+    nesta branch (9 scripts de teste + 79 pytest verdes no HEAD por mim). Auditor
+    anotou commits que carregam mais de um diretório por chamadores/cópias regeneradas
+    (4238a28, 46c3ce2, 7090560, 9335007, 6d6f584). proof-reviewer não rodado: mudança
+    só de nomes, sem comportamento novo. Menções históricas aos nomes antigos em
+    BACKLOG.md, docs/proof, .claude/acceptance antigos e prosa da fila ficaram como
+    registro.'
 - id: onde-estamos-do-epic
   title: 'Resumo ''onde estamos'' do Epic sempre à mão: ciclos fechados e em andamento,
     o que falta e a pergunta pendente do dono, lido pelo hook de sessão e pelo /common:whereami'
@@ -2424,10 +2479,23 @@ items:
     bloco ''Onde estamos'' dentro do próprio Epic em docs/epics/<nome>.md, escrito
     pelo /common:epic ao abrir e fechar cada ciclo, lido pelo hook session-mode
     no primeiro turno e pelo whereami (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Volta 2 de 2. Aproveitei a lateral until/2026-10-23-2130-vermelho-onde-estamos-do-epic:
+    cherry-pick dos 3 commits (bc2d7fc->f33e726 cepa-plan epics + hook session-mode
+    + whereami/epic.md; 92d3768->bab04cc test_epic_where; 7b3fe8c->f36ce36 acceptance
+    COMPLETE + proof PROVEN) sem conflito, mais o conserto 5835d80. Causa do vermelho
+    da volta 1: tests/test_isolated_telemetry.py (varredura estática) pegou test_epic_where.py
+    rodando o hook session-mode e citando .claude/session-log.md sem isolate();
+    o conserto é a chamada isolate() no topo do teste, nenhum comportamento mudou.
+    O 1o build da volta 1 tambem falhou em test_cepa_until_dead_supervisor.py (Ctrl+C),
+    que nao caiu no 2o build: e a instabilidade do proximo item da fila (until-sigterm-teste-instavel),
+    fora do escopo. Rodados aqui: run-all.sh com filtro epic_where/isolated_telemetry/intent_telemetry/whereami/cepa_plan/epic/session_mode/session_anchor/until_sigterm,
+    13 arquivos, tudo verde; build completo fica para o supervisor. Artefatos .claude/acceptance/onde-estamos-do-epic.yaml
+    (diff_range 4856391..92d3768) e docs/proof/onde-estamos-do-epic.yaml (head bc2d7fc)
+    referem os SHAs anteriores ao cherry-pick; o diff de codigo e identico byte
+    a byte. Codigo esta na branch da noite, sem merge nem push.'
 - id: until-sigterm-teste-instavel
   title: Estabilizar o teste 'SIGTERM encerra o claude do item' de tests/test_cepa_until_supervisor_morto.py,
     que falha de vez em quando na suíte completa e passa isolado
@@ -2435,10 +2503,24 @@ items:
     1551d88, pid_filho None no evento run_interrompido), verde nas 4 outras. Falha
     intermitente num teste que o gate de merge roda vira falso vermelho na próxima
     landagem (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits f96834c (teste) e 09eecba (aceite) na branch da noite until/2026-10-23-2130.
+    Causa: _interrupt() mandava o sinal ao ver item_start no ledger, mas o supervisor
+    grava item_start ANTES do Popen do claude e do on_launch (cepa-until 3367-3376
+    / 932-946); sinal nessa janela achava filho nenhum e pid_filho saia None. Conserto
+    so no teste: espera segue.pid (gravado pelo claude falso como primeira acao,
+    logo depois do Popen) antes de sinalizar, com check nomeado se estourar o timeout;
+    leitura do pid tolerante a arquivo ausente (achado do pair-reviewer, aplicado).
+    Nenhuma mudanca em common/bin/cepa-until. Prova por estresse (6 hogs de CPU,
+    8 workers x 8 execucoes): teste antigo 5/64 vermelhos todos com pid_filho null;
+    teste novo 0/64. Gates: pair-reviewer APPROVE, completion-auditor COMPLETE (.claude/acceptance/until-sigterm-teste-instavel.yaml).
+    proof-reviewer nao rodado: o item nao muda comportamento de produto, so a ordenacao
+    do teste; a prova vermelho->verde e o estresse acima. Build completo: delegado
+    ao supervisor. Fora do escopo: estresse de SIGINT (mesmo helper _interrupt,
+    mesma correcao) e a lacuna teorica de microssegundos entre Popen retornar e
+    on_launch rodar.'
 - id: until-processo-nao-sai
   title: cepa-until termina a rodada, grava a análise e o processo não sai
   why: 'Decisão do dono em 2026-10-23: aconteceu duas vezes. PID 57237 (fila cepa,
@@ -2447,7 +2529,22 @@ items:
     em 2026-10-08 07:20, vivo 15 dias depois). Processo pendurado confunde quem
     confere o que está rodando. O 84993 fica vivo por decisão do dono e serve para
     reproduzir o problema (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Causa confirmada com sample no PID 84993 (vivo 16 dias): thread principal
+    em builtin_input — no fim do run close_with_owner() vê tty e chama decide()
+    -> read_line() -> input() sem limite. Fix em common/bin/cepa-until: read_line(wait)
+    faz select no stdin antes do input() e levanta NoAnswer; close_with_owner(wait=ANSWER_WAIT_SEC)
+    captura, imprime ''cepa-until decide <fila>/<run>'' e sai 0. ANSWER_WAIT_SEC
+    = env CEPA_UNTIL_ESPERA_RESPOSTA, default 600 s; só o fim do run em main() passa
+    wait, cmd_decide (manual) continua sem limite. Testes novos em tests/test_cepa_until_decide.py:
+    test_run_on_terminal_without_answer_exits_after_the_wait (processo real em pty,
+    sem input, exit 0, comando impresso, item segue blocked) e test_read_line_raises_when_nobody_types.
+    RED no base 09eecba observado (trava até timeout 90s). Commits na branch da
+    noite until/2026-10-23-2130: db13ae5 (fix+teste), b07485e (doc), a0c6179 (gates).
+    pair-reviewer APPROVE; completion-auditor COMPLETE (.claude/acceptance/until-processo-nao-sai.yaml);
+    proof-reviewer PROVEN (docs/proof/until-processo-nao-sai.yaml, perturbação removendo
+    wait volta a travar). Build completo: delegado ao supervisor. Fora do escopo:
+    o PID 84993 continua vivo (reprodutor mantido por decisão do dono); matar é
+    decisão dele.'

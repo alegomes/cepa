@@ -13,14 +13,14 @@
 #
 #   - **script** — a maioria. `python3 tests/test_x.py` imprime `ok`/`FAIL` por
 #     caso e sai não-zero em falha. Não precisa de nada instalado.
-#   - **pytest** — os que fazem `import pytest` (hoje test_needs_human_motivos e
+#   - **pytest** — os que fazem `import pytest` (hoje test_needs_human_reasons e
 #     test_waivers). Sem o pytest instalado eles não rodam.
 #
 # O modo de falha que este runner existe para matar: sem o pytest, os arquivos
 # da segunda família não davam erro — eles simplesmente sumiam de qualquer
 # varredura, e um `for t in tests/test_*.py; do python3 "$t"; done` terminava
 # parecendo verde. Em 22/08/2026 isso escondia quatro expectativas erradas em
-# test_needs_human_motivos, que por sua vez faziam o classificador de motivos
+# test_needs_human_reasons, que por sua vez faziam o classificador de motivos
 # esconder quatro cards com achado de L4 da fila do /board-flow:decide. Falha
 # silenciosa em cima de falha silenciosa.
 #

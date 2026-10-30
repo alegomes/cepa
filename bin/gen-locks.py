@@ -1,44 +1,43 @@
 #!/usr/bin/env python3
-"""gen-locks — gera as cópias por topologia do bash-path-lock a partir de um molde.
+"""gen-locks — generates the per-topology copies of bash-path-lock from a template.
 
-## Por que existe
+## Why it exists
 
-`bash-path-lock.py` vive em cinco cópias, uma por topologia com hook. Até
-2026-08-17 a regra de manutenção era humana: "todo fix aterrissa nas 5". Ela
-falhou duas vezes de forma verificável:
+`bash-path-lock.py` lives in five copies, one per topology with a hook. Until
+2026-08-17 the maintenance rule was human: "every fix lands in all 5". It
+failed twice in a verifiable way:
 
-- o conserto do falso-positivo do `>=` (o hook lia o `>` de `>=` como
-  redirecionamento e bloqueava comando legítimo) teve de ser propagado à mão;
-- o tratamento de `git mv` como escrita ficou só na cópia do `docs-topology`.
-  Nas outras quatro, um agente movia arquivo para fora da própria pista com
-  `git mv` e o cadeado não via nada. Ninguém percebeu até um teste comparar as
-  cópias.
+- the fix for the `>=` false positive (the hook read the `>` of `>=` as a
+  redirection and blocked a legitimate command) had to be propagated by hand;
+- the treatment of `git mv` as a write stayed only in the `docs-topology` copy.
+  In the other four, an agent moved a file out of its own lane with `git mv`
+  and the lock saw nothing. Nobody noticed until a test compared the copies.
 
-O modo de falha é silencioso — a cópia defasada não quebra, ela **permite** o
-que as outras bloqueiam, e o relatório do agente lê como sucesso.
+The failure mode is silent — the lagging copy does not break, it **allows** what
+the others block, and the agent's report reads as success.
 
-`tests/test_lock_copies_drift.py` detecta a divergência **depois** que ela
-acontece. Este gerador a torna impossível: existe um molde, e as cinco cópias
-são função dele.
+`tests/test_lock_copies_drift.py` detects the divergence **after** it happens.
+This generator makes it impossible: there is one template, and the five copies
+are a function of it.
 
-## Por que só o bash-path-lock, e não o path-lock
+## Why only bash-path-lock, and not path-lock
 
-O `path-lock.py` carrega o `ALLOWED_WRITES` — o mapa de quem escreve onde, que
-é **dado da topologia**, não do motor. Centralizá-lo aqui tiraria a lista de
-permissões de perto dos agentes que ela governa, que é onde ela precisa estar
-para alguém conferir contra o `Writes:` do agente. O `bash-path-lock` não tem
-esse problema: ele importa o allowlist do irmão e é 100% mecânica.
+`path-lock.py` carries `ALLOWED_WRITES` — the map of who writes where, which is
+**topology data**, not engine. Centralizing it here would take the permission
+list away from the agents it governs, which is where it needs to be so someone
+can check it against the agent's `Writes:`. `bash-path-lock` does not have that
+problem: it imports the allowlist from its sibling and is 100% mechanical.
 
-Para o `path-lock`, a garantia continua sendo o detector — declarado, com o
-motivo, em vez de uma centralização que pioraria a leitura.
+For `path-lock`, the guarantee remains the detector — declared, with the
+reason, instead of a centralization that would worsen readability.
 
-## Uso
+## Usage
 
-    python3 bin/gen-locks.py --check    # as cópias no disco batem com o molde?
-    python3 bin/gen-locks.py --write    # regenera as cinco
-    python3 bin/gen-locks.py --diff     # mostra o que mudaria
+    python3 bin/gen-locks.py --check    # do the copies on disk match the template?
+    python3 bin/gen-locks.py --write    # regenerates the five
+    python3 bin/gen-locks.py --diff     # shows what would change
 
-`--check` é o que o teste chama. Sai não-zero quando alguma cópia divergiu.
+`--check` is what the test calls. Exits non-zero when some copy diverged.
 """
 
 import argparse
@@ -50,17 +49,17 @@ REPO = Path(__file__).resolve().parent.parent
 TEMPLATE = REPO / "common" / "hooks" / "_templates" / "bash-path-lock.py.tmpl"
 TARGET = "hooks/bash-path-lock.py"
 
-# Tabela por topologia. É a ÚNICA coisa que legitimamente varia entre as cópias
-# — e, por estar aqui, é auditável de uma olhada. Adicionar uma topologia nova
-# com hook é acrescentar uma linha e rodar --write.
+# Per-topology table. It is the ONLY thing that legitimately varies between the
+# copies — and, being here, it is auditable at a glance. Adding a new topology
+# with a hook is adding a line and running --write.
 #
-#   dir     diretório da topologia no repo
-#   plugin  nome do plugin (o prefixo que chega em agent_type)
-#   alias   prefixo do módulo importado via importlib (não pode colidir)
-#   noun    o que a topologia escreve — muda a frase do bloqueio: as topologias
-#           de build escrevem `código`; design/discovery/docs escrevem
-#           `artefatos`. Dizer "source" a quem só escreve documento faz a
-#           mensagem soar errada para quem a lê.
+#   dir     the topology's directory in the repo
+#   plugin  plugin name (the prefix that arrives in agent_type)
+#   alias   prefix of the module imported via importlib (must not collide)
+#   noun    what the topology writes — changes the block sentence: the build
+#           topologies write `código`; design/discovery/docs write
+#           `artefatos`. Saying "source" to someone who only writes documents
+#           makes the message sound wrong to whoever reads it.
 TOPOLOGIES = [
     {"dir": "build-team",    "plugin": "build-team", "alias": "multiteam", "noun": "código"},
     {"dir": "build-hex",     "plugin": "build-hex",  "alias": "hex",       "noun": "código"},
@@ -70,9 +69,10 @@ TOPOLOGIES = [
     {"dir": "marketing",     "plugin": "marketing",  "alias": "marketing", "noun": "artefatos"},
 ]
 
-# Como cada cópia obtém o allowlist do path-lock irmão. O build-hex é o único
-# que resolve papéis arquiteturais (domain/api/adapter…) para nomes de módulo,
-# lendo `build-hex.yaml` do projeto; as outras leem o dict fixo do módulo.
+# How each copy obtains the allowlist from the sibling path-lock. build-hex is
+# the only one that resolves architectural roles (domain/api/adapter…) to module
+# names, reading the project's `build-hex.yaml`; the others read the module's
+# fixed dict.
 HEX_RESOLUTION = """    roles, extra = pl.load_config(project_root)
     allowed_writes = pl.build_allowed_writes(roles, extra)
     agent = pl.detect_agent(payload)
@@ -84,11 +84,11 @@ PLAIN_RESOLUTION = """    agent = pl.detect_agent(payload)
 
 def render(topo: dict) -> str:
     src = TEMPLATE.read_text(encoding="utf-8")
-    # O cabeçalho do molde explica o molde, não a cópia. A cópia ganha o seu.
+    # The template header explains the template, not the copy. The copy gets its own.
     body = src.split("\n#!/usr/bin/env python3\n", 1)
     if len(body) == 2:
         src = "#!/usr/bin/env python3\n" + body[1]
-    else:  # o shebang é a 1ª linha do molde? então tira só o bloco de comentário
+    else:  # is the shebang the template's 1st line? then drop only the comment block
         lines = src.splitlines()
         start = next(i for i, l in enumerate(lines) if l.startswith("#!"))
         src = "\n".join(lines[start:])

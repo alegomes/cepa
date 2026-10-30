@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""O exemplo de `required_fields` mostra os dois formatos de valor do Jira.
+"""The `required_fields` example shows the two Jira value formats.
 
-fb-20260902-1: Team (customfield_10001) é campo Atlassian Teams e só aceita o
-UUID puro; mandar o nome ou `{id: uuid}` dá HTTP 400 `Team id ... is not valid`.
-O campo vizinho de select de opção usa `{ id: "<optionId>" }`. O exemplo antigo
-mostrava o NOME do time, exatamente o formato que o Jira recusa.
+fb-20260902-1: Team (customfield_10001) is an Atlassian Teams field and only accepts the
+bare UUID; sending the name or `{id: uuid}` gives HTTP 400 `Team id ... is not valid`.
+The neighbouring option-select field uses `{ id: "<optionId>" }`. The old example
+showed the team NAME, exactly the format Jira refuses.
 
 Run: python3 tests/test_board_flow_example_team_format.py
 """
@@ -16,9 +16,9 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
-EXEMPLO = REPO / "discovery" / "board-flow.example.yaml"
+EXAMPLE = REPO / "discovery" / "board-flow.example.yaml"
 DOC = REPO / "docs" / "board-flow.md"
-AGENTE = REPO / "board-flow" / "agents" / "atlassian-expert.md"
+AGENT_NAME = REPO / "board-flow" / "agents" / "atlassian-expert.md"
 
 FAILURES = []
 
@@ -32,7 +32,7 @@ def check(name, cond, detail=""):
 
 
 def team_values(node):
-    """Todos os `value` de entradas com name == "Team", em qualquer nível."""
+    """All the `value`s of entries with name == "Team", at any level."""
     if isinstance(node, dict):
         if node.get("name") == "Team" and "value" in node:
             yield node["value"]
@@ -44,20 +44,20 @@ def team_values(node):
 
 
 def main():
-    texto = EXEMPLO.read_text(encoding="utf-8")
-    dados = yaml.safe_load(texto)
-    check("exemplo continua YAML válido", isinstance(dados, dict))
-    valores = list(team_values(dados))
-    check("exemplo tem entradas Team em topologies", len(valores) >= 2, repr(valores))
-    nomes = [v for v in valores if not (isinstance(v, str) and re.fullmatch(r"<uuid[^>]*>", v))]
-    check("nenhum Team usa nome como value", not nomes, repr(nomes))
-    for nome in ("Engineering", "Product", "Platform"):
-        check(f"value nunca é o nome {nome}", f'value: "{nome}"' not in texto)
-    check("comentário traz o 400 do Team", "Team id ... is not valid" in texto)
-    check("comentário traz o formato do select", '{ id: "<optionId>" }' in texto)
+    text = EXAMPLE.read_text(encoding="utf-8")
+    data = yaml.safe_load(text)
+    check("exemplo continua YAML válido", isinstance(data, dict))
+    vals = list(team_values(data))
+    check("exemplo tem entradas Team em topologies", len(vals) >= 2, repr(vals))
+    names = [v for v in vals if not (isinstance(v, str) and re.fullmatch(r"<uuid[^>]*>", v))]
+    check("nenhum Team usa nome como value", not names, repr(names))
+    for given_name in ("Engineering", "Product", "Platform"):
+        check(f"value nunca é o nome {given_name}", f'value: "{given_name}"' not in text)
+    check("comentário traz o 400 do Team", "Team id ... is not valid" in text)
+    check("comentário traz o formato do select", '{ id: "<optionId>" }' in text)
     check("doc traz os dois formatos", "Team id ... is not valid" in DOC.read_text(encoding="utf-8")
           and '{ id: "<optionId>" }' in DOC.read_text(encoding="utf-8"))
-    check("atlassian-expert traz a frase do Team", "Team id ... is not valid" in AGENTE.read_text(encoding="utf-8"))
+    check("atlassian-expert traz a frase do Team", "Team id ... is not valid" in AGENT_NAME.read_text(encoding="utf-8"))
     print()
     if FAILURES:
         print(f"{len(FAILURES)} failure(s): {FAILURES}")

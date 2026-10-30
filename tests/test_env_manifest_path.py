@@ -1,35 +1,35 @@
 #!/usr/bin/env python3
-"""Regressão do leitor do manifesto de ambiente (`common/hooks/_wtlib.py`).
+"""Regression test for the environment manifest reader (`common/hooks/_wtlib.py`).
 
-Sem dependências — rode com `python3 tests/test_env_manifest_path.py`.
-Sai não-zero em falha.
+No dependencies — run with `python3 tests/test_env_manifest_path.py`.
+Exits non-zero on failure.
 
-## O que este arquivo existe para segurar
+## What this file exists to hold
 
-O manifesto de ambiente declara o runtime do projeto: portas, como subir o app,
-healthcheck, e a lista `seed:` de arquivos gitignored que uma worktree nova
-precisa receber para funcionar (`.env`, credenciais locais). Quem lê é a
-semeadura de worktree (`seed-worktree.py`, `/common:worktree-start`) e o gate de
-tela, quando o `up:` dele diz `env.yaml`.
+The environment manifest declares the project's runtime: ports, how to start the app,
+healthcheck, and the `seed:` list of gitignored files that a new worktree
+needs to receive in order to work (`.env`, local credentials). Whoever reads it is the
+worktree seeding (`seed-worktree.py`, `/common:worktree-start`) and the screen
+gate, when its `up:` says `env.yaml`.
 
-Ele morava em `.claude/env.yaml` até 22/08/2026 — e `.claude/` é gitignored nos
-projetos que usam o harness, então o manifesto era invisível para o git e sumia
-com a worktree descartável da sessão. Agora o lugar é `docs/env.yaml`, e o
-antigo continua sendo lido.
+It lived in `.claude/env.yaml` until 2026-08-22 — and `.claude/` is gitignored in the
+projects that use the harness, so the manifest was invisible to git and vanished
+with the session's disposable worktree. Now the place is `docs/env.yaml`, and the
+old one is still read.
 
-**Aqui não há hook para travar o destino, e isso é uma diferença real** em
-relação ao veredito de prova e ao manifesto de prova de UI: aqueles dois são
-escritos por um agente, então um hook consegue barrar a escrita no lugar errado.
-Este é declarado à mão pelo dono do projeto — não existe escrita para barrar. A
-ordem de leitura testada abaixo é a ÚNICA mecânica que move a convenção, o que a
-torna a única coisa que pode quebrá-la em silêncio: se a preferência inverter, o
-projeto que moveu o arquivo passa a ser semeado pela declaração velha, e uma
-worktree nasce sem os arquivos que o `seed:` novo listava.
+**There is no hook here to lock the destination, and that is a real difference** from
+the proof verdict and the UI proof manifest: those two are
+written by an agent, so a hook can block the write in the wrong place.
+This one is declared by hand by the project owner — there is no write to block. The
+read order tested below is the ONLY mechanics that moves the convention, which
+makes it the only thing that can break it silently: if the preference inverts, the
+project that moved the file starts being seeded by the old declaration, and a
+worktree is born without the files the new `seed:` listed.
 
-## Perturbação (como saber que este teste prova algo)
+## Perturbation (how to know this test proves something)
 
-Inverta a ordem de `ENV_MANIFEST_PATHS` e o caso "os dois → docs ganha" fica
-vermelho.
+Invert the order of `ENV_MANIFEST_PATHS` and the case "both → docs wins" turns
+red.
 """
 
 import importlib.util
@@ -54,22 +54,22 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-def repo_com(**manifestos):
-    """Cria um repo temporário com os manifestos pedidos: docs=..., claude=..."""
+def repo_with(**manifests):
+    """Creates a temporary repo with the requested manifests: docs=..., claude=..."""
     root = tempfile.mkdtemp()
-    for onde, conteudo in manifestos.items():
-        d = os.path.join(root, "docs" if onde == "docs" else ".claude")
+    for where, content in manifests.items():
+        d = os.path.join(root, "docs" if where == "docs" else ".claude")
         os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, "env.yaml"), "w") as fh:
-            fh.write(conteudo)
+            fh.write(content)
     return root
 
 
-NOVO = "ports:\n  - 8083\nseed:\n  - .env\n  - novo.local\n"
-ANTIGO = "ports:\n  - 9999\nseed:\n  - .env\n  - antigo.local\n"
+NEW = "ports:\n  - 8083\nseed:\n  - .env\n  - novo.local\n"
+OLD = "ports:\n  - 9999\nseed:\n  - .env\n  - antigo.local\n"
 
-# ── precedência ───────────────────────────────────────────────────────────
-r = repo_com(docs=NOVO, claude=ANTIGO)
+# ── precedence ────────────────────────────────────────────────────────────
+r = repo_with(docs=NEW, claude=OLD)
 check("os dois no disco → docs/env.yaml ganha",
       wtlib.env_manifest_list(r, "seed") == [".env", "novo.local"],
       wtlib.env_manifest_list(r, "seed"))
@@ -77,35 +77,35 @@ check("…e o caminho devolvido é o de docs/",
       str(wtlib.env_manifest_path(r)).endswith("docs/env.yaml"),
       str(wtlib.env_manifest_path(r)))
 
-r = repo_com(claude=ANTIGO)
+r = repo_with(claude=OLD)
 check("só o antigo → segue sendo lido (repo que ainda não moveu)",
       wtlib.env_manifest_list(r, "seed") == [".env", "antigo.local"],
       wtlib.env_manifest_list(r, "seed"))
 
-r = repo_com(docs=NOVO)
+r = repo_with(docs=NEW)
 check("só o novo → lido", wtlib.env_manifest_list(r, "seed") == [".env", "novo.local"],
       wtlib.env_manifest_list(r, "seed"))
 
-# ── ausência e lixo: fail-silent, como todo o caminho de semeadura ────────
+# ── absence and garbage: fail-silent, like the whole seeding path ─────────
 r = tempfile.mkdtemp()
 check("nenhum manifesto → lista vazia, sem exceção",
       wtlib.env_manifest_list(r, "seed") == [], wtlib.env_manifest_list(r, "seed"))
 check("nenhum manifesto → caminho None", wtlib.env_manifest_path(r) is None)
 
-r = repo_com(docs=":::: isto não é yaml ::::\n")
+r = repo_with(docs=":::: isto não é yaml ::::\n")
 check("manifesto ilegível → lista vazia, nunca estoura",
       wtlib.env_manifest_list(r, "seed") == [], wtlib.env_manifest_list(r, "seed"))
 
-r = repo_com(docs=NOVO)
+r = repo_with(docs=NEW)
 check("chave ausente → lista vazia",
       wtlib.env_manifest_list(r, "inexistente") == [])
 
-# ── as duas formas de lista que o parser tolerante aceita ─────────────────
-r = repo_com(docs="seed: [.env, cred.local]\n")
+# ── the two list forms that the tolerant parser accepts ───────────────────
+r = repo_with(docs="seed: [.env, cred.local]\n")
 check("lista inline → lida", wtlib.env_manifest_list(r, "seed") == [".env", "cred.local"],
       wtlib.env_manifest_list(r, "seed"))
 
-r = repo_com(docs="ports:\n  - 8083\nseed:\n  - .env   # comentário\n")
+r = repo_with(docs="ports:\n  - 8083\nseed:\n  - .env   # comentário\n")
 check("comentário no fim da linha → removido",
       wtlib.env_manifest_list(r, "seed") == [".env"], wtlib.env_manifest_list(r, "seed"))
 

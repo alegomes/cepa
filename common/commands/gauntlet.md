@@ -137,10 +137,10 @@ wins; if still tied, the first in the order of the designs — and the report
 
 ### 5. Report (pt-BR, `plain-report` format)
 
-Follow the `plain-report` skill: plain-language opening, `**Pra você:**`,
-technical detail, `### Decisões e próximos passos`. Explain in plain language who
+Follow the `plain-report` skill: plain-language opening, `**For you:**`,
+technical detail, `### Decisions and next steps`. Explain in plain language who
 won and why, with the Borda arithmetic, say whether the bar was met and what is
-left. End with numbered closed questions, each with `Recomendo sim/não` (e.g.
+left. End with numbered closed questions, each with `I recommend yes/no` (e.g.
 "Abro um item de fila para implementar o design vencedor?" — "Do I open a queue
 item to implement the winning design?"). Never hand back the decision without a
 recommendation.

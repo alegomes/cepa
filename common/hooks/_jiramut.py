@@ -1,47 +1,47 @@
 #!/usr/bin/env python3
-"""_jiramut — reconhece mutação de Jira (e de Bitbucket) por EFEITO, não por nome de ferramenta.
+"""_jiramut: recognizes a Jira (and Bitbucket) mutation by EFFECT, not by tool name.
 
-## Por que existe
+## Why it exists
 
-Quatro gates do `common` decidem se uma mudança no Jira pode passar:
-`acceptance-gate` (critério de aceite cumprido), `merge-truth-gate` (o código
-está mesmo na branch de integração), `summary-nulls-gate` (sumário sem buraco) e
-`bounce-reason-gate` (motivo de devolução preenchido).
+Four `common` gates decide whether a change in Jira may pass:
+`acceptance-gate` (acceptance criterion met), `merge-truth-gate` (the code is
+really on the integration branch), `summary-nulls-gate` (summary without holes)
+and `bounce-reason-gate` (bounce reason filled in).
 
-Os quatro casavam pelo **nome da ferramenta MCP** e liberavam quando o nome não
-batia:
+All four matched on the **MCP tool name** and let the call through when the name
+did not match:
 
     if "transitionJiraIssue" not in tool_name and "jira_transition_issue" not in tool_name:
-        sys.exit(0)          # <- exit 0 é LIBERAR
+        sys.exit(0)          # <- exit 0 means ALLOW
 
-Isso funcionava enquanto o único caminho até o Jira era MCP. Deixou de funcionar
-quando a Atlassian lançou a CLI `twg` (2026-08): a chamada chega como
-`tool_name == "Bash"`, não casa com nenhum dos dois nomes, e os quatro gates
-liberam **em silêncio**. Não é enforcement enfraquecido, é enforcement
-desligado — e o `twg` já está instalado e autenticado nesta máquina, com skills
-`twg-*` visíveis a qualquer sessão, então a exposição não depende de ninguém
-migrar nada.
+That worked while the only path to Jira was MCP. It stopped working when
+Atlassian released the `twg` CLI (2026-08): the call arrives as
+`tool_name == "Bash"`, matches neither name, and the four gates allow it
+**silently**. That is not weakened enforcement, it is disabled enforcement, and
+`twg` is already installed and authenticated on this machine, with `twg-*`
+skills visible to any session, so the exposure does not depend on anyone
+migrating anything.
 
-Este módulo é a resposta: dado o payload do hook, ele diz se a chamada **muta o
-Jira**, por qual mecanismo, e devolve os campos já normalizados para os nomes que
-os gates sempre usaram — de forma que cada gate continue com sua lógica de
-negócio intacta.
+This module is the answer: given the hook payload, it says whether the call
+**mutates Jira**, by which mechanism, and returns the fields already normalized
+to the names the gates always used, so each gate keeps its business logic
+intact.
 
-## A regra que não pode ser afrouxada
+## The rule that must not be loosened
 
-Diante de uma chamada que toca o Jira e que ele **não consegue classificar**,
-este módulo devolve `opaque=True` e o gate deve **barrar**. O caso concreto é
-`twg api`, a escapatória REST/GraphQL da CLI:
+Faced with a call that touches Jira and that it **cannot classify**, this module
+returns `opaque=True` and the gate must **block**. The concrete case is
+`twg api`, the CLI's REST/GraphQL escape hatch:
 
     twg api jira:/rest/api/3/issue -X POST --input payload.json
 
-Isso cria card sem conter `create` na linha de comando, e com `--input` o corpo
-sequer aparece na string inspecionada. Qualquer desenho por lista negra de
-verbos é furado por essa única linha. Por isso o reconhecimento de leitura aqui
-é **lista branca**: o que não está declarado como leitura conhecida é tratado
-como mutação, e o que é mutação e não dá para inspecionar é barrado.
+This creates a card without containing `create` on the command line, and with
+`--input` the body does not even appear in the inspected string. Any
+verb-denylist design is defeated by that single line. That is why read
+recognition here is an **allowlist**: whatever is not declared a known read is
+treated as a mutation, and what is a mutation and cannot be inspected is blocked.
 
-Uso, seguindo o padrão dos outros helpers privados desta pasta:
+Usage, following the pattern of the other private helpers in this folder:
 
     import sys, os
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -49,10 +49,10 @@ Uso, seguindo o padrão dos outros helpers privados desta pasta:
 
     m = J.classify(payload)
     if m is None:
-        sys.exit(0)                      # não é mutação de Jira
+        sys.exit(0)                      # not a Jira mutation
     if m["opaque"]:
-        J.block(m, "nome-do-gate")       # barra com exit 2 e explicação
-    tool_input = m["tool_input"]         # normalizado; use como antes
+        J.block(m, "gate-name")          # blocks with exit 2 and an explanation
+    tool_input = m["tool_input"]         # normalized; use as before
 """
 
 import os
@@ -67,14 +67,14 @@ _split_segments = S._split_segments
 
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]+-\d+$")
 
-# Nomes MCP que os gates sempre conheceram. Mantidos porque o caminho MCP
-# continua vivo (rotina cloud `/schedule` não tem shell).
+# MCP names the gates always knew. Kept because the MCP path is still alive
+# (the `/schedule` cloud routine has no shell).
 _MCP_TRANSITION = ("transitionJiraIssue", "jira_transition_issue")
 _MCP_COMMENT = ("addCommentToJiraIssue", "jira_add_comment")
 
-# Caminhos `twg jira ...` que são comprovadamente leitura. LISTA BRANCA: o que
-# não estiver aqui e cair sob `twg jira` é tratado como mutação. Verificado no
-# `--help` da CLI 1.2.5.
+# `twg jira ...` paths that are proven reads. ALLOWLIST: whatever is not here
+# and falls under `twg jira` is treated as a mutation. Verified against the
+# CLI 1.2.5 `--help`.
 _TWG_JIRA_READ = frozenset({
     ("workitem", "get"), ("workitem", "bulk-get"), ("workitem", "query"),
     ("workitem", "search"), ("workitem", "similar"), ("workitem", "statuses"),
@@ -90,94 +90,94 @@ _TWG_JIRA_READ = frozenset({
     ("dashboard", "get"), ("dashboard", "query"), ("dashboard", "list"),
 })
 
-# Versão da `twg` cujo `help describe` conferiu as listas brancas abaixo. O
-# atlassian-expert.md cita o mesmo número, e tests/test_atlassian_expert_spec.py
-# falha se os dois divergirem. Versão nova não quebra nada sozinha: verbo
-# desconhecido já cai como escrita opaca.
-TWG_VERIFICADA = "1.3.1"
+# `twg` version whose `help describe` was checked against the allowlists below.
+# atlassian-expert.md cites the same number, and tests/test_atlassian_expert_spec.py
+# fails if the two diverge. A new version breaks nothing by itself: an unknown
+# verb already falls as an opaque write.
+TWG_VERIFIED = "1.3.1"
 
-# Leituras de terceiro nível (`twg jira workitem link query`). Verificado no
-# `twg help describe` da CLI 1.3.1.
+# Third-level reads (`twg jira workitem link query`). Verified against the
+# CLI 1.3.1 `twg help describe`.
 _TWG_JIRA_READ_SUB = frozenset({
     ("workitem", "link", "query"),
     ("workitem", "field", "create-metadata"),
     ("workitem", "attachment", "query"), ("workitem", "attachment", "get"),
 })
 
-# Opções de `workitem update` que transicionam, comentam ou carregam JSON livre.
-# `--field <id>=<valor>` fica de fora: nomeia um campo só, visível na linha, e o
-# Jira não aceita status nem comentário como campo de edição.
-_UPDATE_OPACO = (
+# `workitem update` options that transition, comment or carry free JSON.
+# `--field <id>=<value>` is left out: it names a single field, visible on the
+# line, and Jira accepts neither status nor comment as an edit field.
+_UPDATE_OPAQUE = (
     "--status", "--comment", "--transition-comment", "--resolution",
     "--fields-json", "--variables-json",
 )
 
-# Subcomandos de `comment` que gravam texto no card.
+# `comment` subcommands that write text to the card.
 _TWG_COMMENT_WRITE = frozenset({"create", "update"})
 
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
-# `twg bitbucket pull-requests ...` que sao comprovadamente leitura. LISTA BRANCA,
-# pelo mesmo motivo do Jira. Verificado no --help da CLI 1.2.5.
+# `twg bitbucket pull-requests ...` that are proven reads. ALLOWLIST, for the
+# same reason as Jira. Verified against the CLI 1.2.5 --help.
 _TWG_BB_PR_READ = frozenset({
     "get", "query", "list", "activity", "commits", "diff", "diffstat", "patch",
     "for-commit", "merge-status", "effective-default-reviewer",
 })
 
-# Verbos de PR que decidem o destino do codigo. Aprovar e mergear o proprio PR e
-# exatamente o que o review-gate existe para impedir.
+# PR verbs that decide the code's fate. Approving and merging one's own PR is
+# exactly what the review-gate exists to prevent.
 _TWG_BB_PR_DECIDE = frozenset({
     "approve", "merge", "decline", "request-changes", "remove-request-changes",
 })
 
 
-# Chaves lógicas de status que os gates entendem (as do `status_map` e do
-# `transition_ids` do board-flow.yaml).
+# Logical status keys the gates understand (those of `status_map` and
+# `transition_ids` in board-flow.yaml).
 LOGICAL_STATUSES = frozenset({"to_do", "in_progress", "in_review", "done", "wont_do"})
 _CONFIG_NAMES = ("board-flow.yaml", ".claude/board-flow.lifecycle.yaml")
 
 
 def logical_status(name, cwd):
-    """Traduz o NOME de um status (como a CLI `twg` o aceita) para a chave lógica.
+    """Translates a status NAME (as the `twg` CLI accepts it) to the logical key.
 
-    A `twg` aceita `--transition-id "In Review"`. Só baixar a caixa dava
-    `in review`, que não é chave nenhuma, e o acceptance-gate lia isso como
-    movimento lateral e liberava o card (furo reproduzido em 2026-09-19).
+    `twg` accepts `--transition-id "In Review"`. Just lowercasing gave
+    `in review`, which is no key at all, and the acceptance-gate read that as a
+    lateral move and let the card through (hole reproduced on 2026-09-19).
 
-    Ordem: o nome técnico declarado no `status_map` do board-flow.yaml (é ali
-    que "Em Revisão" vira `in_review`); depois a forma normalizada (espaço e
-    hífen viram `_`). Nome que não resolve devolve None: alvo NÃO resolvido,
-    que o gate trata como na dúvida, e não como movimento lateral.
+    Order: the technical name declared in the `status_map` of board-flow.yaml
+    (that is where "Em Revisão" becomes `in_review`); then the normalized form
+    (space and hyphen become `_`). A name that does not resolve returns None: an
+    UNRESOLVED target, which the gate treats as in doubt, not as a lateral move.
     """
     if not name or not str(name).strip():
         return None
-    alvo = " ".join(str(name).split()).casefold()
-    for nome_cfg in _CONFIG_NAMES:
-        path = os.path.join(str(cwd), nome_cfg)
+    target = " ".join(str(name).split()).casefold()
+    for cfg_name in _CONFIG_NAMES:
+        path = os.path.join(str(cwd), cfg_name)
         if not os.path.isfile(path):
             continue
         try:
-            import yaml  # noqa: adiado, a ausência cai no caminho normalizado
+            import yaml  # noqa: deferred, absence falls to the normalized path
             with open(path, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
             smap = (data.get("defaults") or {}).get("status_map") or {}
         except Exception:
             smap = {}
         if isinstance(smap, dict):
-            for chave, tecnico in smap.items():
-                if " ".join(str(tecnico).split()).casefold() == alvo:
-                    return str(chave).strip().lower()
+            for key, technical in smap.items():
+                if " ".join(str(technical).split()).casefold() == target:
+                    return str(key).strip().lower()
         break
-    norm = re.sub(r"[\s\-]+", "_", alvo)
+    norm = re.sub(r"[\s\-]+", "_", target)
     return norm if norm in LOGICAL_STATUSES else None
 
 
 def classify_bitbucket(command: str):
-    """Mutacao de Bitbucket via `twg`. None quando nao ha nenhuma.
+    """Bitbucket mutation via `twg`. None when there is none.
 
-    Devolve {"verb", "decides", "reason"} — `decides` marca os verbos que
-    determinam se o codigo entra (approve/merge/decline/request-changes), que sao
-    os que so o agente do review-gate pode executar.
+    Returns {"verb", "decides", "reason"}; `decides` marks the verbs that
+    determine whether the code gets in (approve/merge/decline/request-changes),
+    which are the ones only the review-gate agent may run.
     """
     if not command or "twg" not in command:
         return None
@@ -209,7 +209,7 @@ def classify_bitbucket(command: str):
             return {"verb": f"{resource} {verb}",
                     "decides": verb in _TWG_BB_PR_DECIDE,
                     "reason": f"`twg bitbucket {resource} {verb}` escreve no pull request"}
-        # repo/branch/deployment/pipeline: leitura conhecida passa, resto e escrita
+        # repo/branch/deployment/pipeline: a known read passes, the rest is a write
         if verb in ("get", "query", "list", "url", "file", "contributors", "search"):
             return None
         return {"verb": f"{resource} {verb}", "decides": False,
@@ -217,8 +217,8 @@ def classify_bitbucket(command: str):
     return None
 
 
-def _legivel(kind, rest):
-    """Escrita que o gate consegue ler e que não é transição nem comentário."""
+def _readable(kind, rest):
+    """A write the gate can read and that is neither a transition nor a comment."""
     key = _flag(rest, "--id", "--issue-id", "--key") or _first_key(rest)
     return {
         "kind": kind, "mechanism": "twg",
@@ -228,7 +228,7 @@ def _legivel(kind, rest):
 
 
 def _flag(argv, *names):
-    """Valor de `--flag valor` ou `--flag=valor`, o primeiro que aparecer."""
+    """Value of `--flag value` or `--flag=value`, whichever appears first."""
     for i, tok in enumerate(argv):
         for n in names:
             if tok == n and i + 1 < len(argv):
@@ -239,7 +239,7 @@ def _flag(argv, *names):
 
 
 def _first_key(argv):
-    """Primeira chave de card entre os argumentos posicionais (ex.: WEGO-123)."""
+    """First card key among the positional arguments (e.g. WEGO-123)."""
     for tok in argv:
         if KEY_RE.match(tok.strip()):
             return tok.strip()
@@ -247,14 +247,14 @@ def _first_key(argv):
 
 
 def _classify_twg(argv):
-    """argv já tokenizado, argv[0] é o `twg`. Devolve dict ou None."""
+    """Tokenized argv, argv[0] is `twg`. Returns a dict or None."""
     rest = [a for a in argv[1:] if a]
     if not rest:
         return None
 
     head = rest[0]
 
-    # ---- escapatória REST/GraphQL: o furo que derruba qualquer lista negra ----
+    # ---- REST/GraphQL escape hatch: the hole that defeats any denylist ----
     if head == "api":
         method = (_flag(rest, "-X", "--method") or "GET").upper()
         target = rest[1] if len(rest) > 1 else ""
@@ -272,13 +272,13 @@ def _classify_twg(argv):
                 ),
                 "target_status": None,
             }
-        return None  # GET, ou endpoint que não é Jira
+        return None  # GET, or an endpoint that is not Jira
 
     if head != "jira":
-        return None  # bitbucket, confluence, goals... não são deste gate
+        return None  # bitbucket, confluence, goals... are not this gate's business
 
-    # `--help` só imprime ajuda, qualquer que seja o caminho. Sem isto até
-    # `twg jira workitem create --help` era barrado como escrita opaca.
+    # `--help` only prints help, whatever the path. Without this even
+    # `twg jira workitem create --help` was blocked as an opaque write.
     if "--help" in rest or "-h" in rest:
         return None
 
@@ -290,45 +290,45 @@ def _classify_twg(argv):
 
     resource, verb = path
 
-    # Terceiro nível: `workitem link query`, `workitem field create-metadata`.
+    # Third level: `workitem link query`, `workitem field create-metadata`.
     words = [a for a in rest[1:] if not a.startswith("-")]
     sub = words[2] if len(words) > 2 else None
     if (resource, verb, sub) in _TWG_JIRA_READ_SUB:
         return None
 
-    # ---- escrita que não transiciona nem comenta ----
-    # Criar card, editar campo e ligar cards não são o que os quatro gates
-    # auditam (pelo MCP também nunca foram). São escrita LEGÍVEL: o gate deixa
-    # passar, e quem pode escrever é o `jira-write-lock` que decide.
+    # ---- write that neither transitions nor comments ----
+    # Creating a card, editing a field and linking cards are not what the four
+    # gates audit (they never were over MCP either). They are a READABLE write:
+    # the gate lets it pass, and `jira-write-lock` decides who may write.
     if resource == "workitem" and verb == "create":
-        return _legivel("create", rest)
+        return _readable("create", rest)
     if resource == "workitem" and verb == "link" and sub == "workitem":
-        return _legivel("link", rest)
+        return _readable("link", rest)
     if resource == "workitem" and verb == "update":
-        # `update --status` transiciona e `--comment` comenta: o mesmo efeito dos
-        # dois caminhos auditáveis, por uma porta que o gate não lê. E
-        # `--fields-json` e `--variables-json` carregam JSON livre. Nesses casos,
-        # opaco.
-        escondido = [f for f in _UPDATE_OPACO if _flag(rest, f) is not None]
-        if escondido:
+        # `update --status` transitions and `--comment` comments: the same effect
+        # as the two auditable paths, through a door the gate does not read. And
+        # `--fields-json` and `--variables-json` carry free JSON. In those
+        # cases, opaque.
+        hidden = [f for f in _UPDATE_OPAQUE if _flag(rest, f) is not None]
+        if hidden:
             return {
                 "kind": "mutation", "mechanism": "twg", "tool_input": {},
                 "opaque": True,
                 "reason": (
-                    f"`twg jira workitem update` com {', '.join(escondido)} muda status, "
+                    f"`twg jira workitem update` com {', '.join(hidden)} muda status, "
                     "comenta ou carrega JSON livre. Use `workitem transition` e "
                     "`workitem comment create`, que o gate consegue ler"
                 ),
                 "target_status": None,
             }
-        return _legivel("edit", rest)
+        return _readable("edit", rest)
 
-    # ---- transição ----
+    # ---- transition ----
     if (resource, verb) == ("workitem", "transition"):
         tid = _flag(rest, "--transition-id", "--transitionId")
         if tid is None:
-            # Sem --transition-id o comando é descoberta read-only: lista as
-            # transições disponíveis. Verificado no `--help` e em execução real.
+            # Without --transition-id the command is read-only discovery: it lists
+            # the available transitions. Verified in `--help` and in a real run.
             return None
         key = _flag(rest, "--id", "--issue-id", "--key") or _first_key(rest)
         ti = {}
@@ -338,8 +338,9 @@ def _classify_twg(argv):
         if tid.isdigit():
             ti["transition_id"] = tid
         else:
-            # A CLI aceita o NOME do status no lugar do id. Nesse caso não há o
-            # que procurar no transition_ids do board-flow.yaml — o alvo já veio.
+            # The CLI accepts the status NAME in place of the id. In that case
+            # there is nothing to look up in board-flow.yaml's transition_ids:
+            # the target already came.
             target_status = tid.strip().lower()
         comment = _flag(rest, "--transition-comment")
         if comment:
@@ -353,7 +354,7 @@ def _classify_twg(argv):
             "target_status": target_status,
         }
 
-    # ---- comentário ----
+    # ---- comment ----
     if resource == "comment" or (resource == "workitem" and verb == "comment"):
         sub = None
         for tok in rest[2:]:
@@ -363,7 +364,7 @@ def _classify_twg(argv):
                 sub = tok
                 break
         if sub is not None and sub not in _TWG_COMMENT_WRITE:
-            return None  # query/delete: delete não carrega corpo para auditar
+            return None  # query/delete: delete carries no body to audit
         key = _flag(rest, "--issue-id", "--id", "--key") or _first_key(rest)
         body = _flag(rest, "--body")
         ti = {}
@@ -384,9 +385,9 @@ def _classify_twg(argv):
             "target_status": None,
         }
 
-    # ---- qualquer outra coisa sob `twg jira` ----
-    # Lista branca: create, update, delete, archive, clone, bulk-transition,
-    # create-bulk, link, worklog, watcher... e o que a CLI ganhar amanhã.
+    # ---- anything else under `twg jira` ----
+    # Allowlist: create, update, delete, archive, clone, bulk-transition,
+    # create-bulk, link, worklog, watcher... and whatever the CLI gains tomorrow.
     return {
         "kind": "mutation",
         "mechanism": "twg",
@@ -401,7 +402,7 @@ def _classify_twg(argv):
 
 
 def _scan_bash(command: str):
-    """Varre a linha de comando inteira. Devolve a primeira mutação achada."""
+    """Scans the whole command line. Returns the first mutation found."""
     if not command or "twg" not in command:
         return None
     for seg in _split_segments(command):
@@ -411,8 +412,8 @@ def _scan_bash(command: str):
         try:
             argv = shlex.split(seg)
         except ValueError:
-            # Aspas não fechadas. Se o segmento menciona twg, não dá para ler —
-            # e não ler é justamente quando se barra.
+            # Unclosed quotes. If the segment mentions twg it cannot be read,
+            # and not being able to read is exactly when to block.
             if re.search(r"(^|/)twg\b", seg):
                 return {
                     "kind": "mutation", "mechanism": "twg", "tool_input": {},
@@ -423,7 +424,7 @@ def _scan_bash(command: str):
             continue
         if not argv:
             continue
-        # pula env vars à frente do comando: FOO=1 twg ...
+        # skip env vars ahead of the command: FOO=1 twg ...
         while argv and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", argv[0]):
             argv.pop(0)
         if not argv:
@@ -437,7 +438,7 @@ def _scan_bash(command: str):
 
 
 def classify(payload: dict):
-    """None quando a chamada não muta o Jira; senão o dict descrito no topo."""
+    """None when the call does not mutate Jira; else the dict described at the top."""
     tool_name = payload.get("tool_name", "") or ""
     tool_input = payload.get("tool_input") or {}
 
@@ -455,7 +456,7 @@ def classify(payload: dict):
 
 
 def block(m: dict, gate: str):
-    """Barra uma mutação que o gate não consegue auditar. Não retorna."""
+    """Blocks a mutation the gate cannot audit. Does not return."""
     print(
         f"[{gate}] BLOCKED: mutação de Jira que este gate não consegue auditar.\n"
         f"  Motivo: {m['reason']}\n"

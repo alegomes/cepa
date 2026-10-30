@@ -1,53 +1,55 @@
 #!/usr/bin/env python3
-"""maestro-prune — remove Space + worktree do herdr das slices que ATERRISSARAM.
+"""maestro-prune — removes the herdr Space + worktree of the slices that LANDED.
 
-Por que existir (reflexão 2026-08-24 + fato verificado ao vivo no herdr 0.9.1,
-2026-09-26): o `/maestro:run` cria cada slice com `herdr worktree create`, e o
-herdr trata worktree **como** Space — a própria remoção do herdr é
-`herdr worktree remove --workspace ID`, não um comando de git puro. Sem prune,
-cada onda acrescenta um Space por slice à barra lateral e eles nunca somem
-sozinhos: em 2026-08-24 havia 11 Spaces (`w12`–`w1D`) sobrando de duas ondas.
+Why it exists (reflection 2026-08-24 + fact verified live on herdr 0.9.1,
+2026-09-26): `/maestro:run` creates each slice with `herdr worktree create`, and
+herdr treats a worktree **as** a Space — herdr's own removal is
+`herdr worktree remove --workspace ID`, not a plain git command. Without prune,
+each wave adds one Space per slice to the sidebar and they never go away by
+themselves: on 2026-08-24 there were 11 Spaces (`w12`–`w1D`) left over from two
+waves.
 
-O que este script NÃO remove, e por quê: DONE-não-aterrissada (a evidência da
-filha ainda não virou merge — apagar o worktree apagaria a evidência antes de
-alguém decidir), FAIL/TIMEOUT/ESCALATED (essas slices re-forkam na onda
-seguinte a partir do worktree onde pararam) e qualquer slice ainda pending ou
-running. Só LANDED — merge já está na integração, nada mais a preservar ali —
-é candidata a prune. `landed` no formato antigo (lista solta no topo do
-wave-state, sem `status: LANDED` na slice) também conta, pela mesma regra que
-`maestro-wave-state aguardando-merge` já usa.
+What this script does NOT remove, and why: DONE-not-landed (the child's evidence
+has not become a merge yet — deleting the worktree would delete the evidence
+before anyone decides), FAIL/TIMEOUT/ESCALATED (those slices re-fork in the next
+wave from the worktree where they stopped) and any slice still pending or
+running. Only LANDED — merge already in the integration, nothing more to
+preserve there — is a prune candidate. `landed` in the old format (loose list at
+the top of the wave-state, no `status: LANDED` on the slice) also counts, by the
+same rule `maestro-wave-state aguardando-merge` already uses.
 
-Fatos verificados ao vivo contra o herdr 0.9.1 (repo descartável em /tmp,
-2026-09-26), porque o BACKLOG só tinha esboço não confirmado:
-  - `herdr worktree remove --workspace ID --trust-repository` derruba o Space
-    E a worktree git E o diretório numa tacada só; a BRANCH fica.
-  - Worktree suja (arquivo não commitado/untracked) sem `--force`: exit 1,
-    `dirty_worktree_requires_force` — nada é removido. Este script NUNCA passa
-    `--force`; dono decide o que fazer com uma slice LANDED ainda suja.
-  - A forma posicional `herdr worktree remove <path>` NÃO existe no 0.9.1
-    ("unknown option: <path>") — só `--workspace ID` identifica o alvo.
-  - `herdr worktree list` sem `--cwd` lista o repo do Space em FOCO, não o
-    do diretório corrente — daí o `--cwd <repo>` explícito.
-  - `herdr worktree list --json` só devolve `open_workspace_id` para worktree
-    com Space aberto; se o dono fechou o Space à mão, a chave some e este
-    script cai para `git worktree remove` puro (sem `--force`).
+Facts verified live against herdr 0.9.1 (disposable repo in /tmp, 2026-09-26),
+because the BACKLOG only had an unconfirmed sketch:
+  - `herdr worktree remove --workspace ID --trust-repository` takes down the
+    Space AND the git worktree AND the directory in one go; the BRANCH stays.
+  - Dirty worktree (uncommitted/untracked file) without `--force`: exit 1,
+    `dirty_worktree_requires_force` — nothing is removed. This script NEVER
+    passes `--force`; the owner decides what to do with a still-dirty LANDED slice.
+  - The positional form `herdr worktree remove <path>` does NOT exist in 0.9.1
+    ("unknown option: <path>") — only `--workspace ID` identifies the target.
+  - `herdr worktree list` without `--cwd` lists the repo of the Space in FOCUS,
+    not of the current directory — hence the explicit `--cwd <repo>`.
+  - `herdr worktree list --json` only returns `open_workspace_id` for a worktree
+    with an open Space; if the owner closed the Space by hand, the key vanishes
+    and this script falls back to a plain `git worktree remove` (without `--force`).
 
-Mesmo princípio do passo 6a do `/maestro:run` (confira pelo git, não pela
-palavra de ferramenta externa): depois de mandar remover, este script relê
-`git worktree list --porcelain` do repo e só marca "removida" se o path já não
-está lá. Path ausente de saída já ao PRIMEIRO exame conta como "já removida"
-(o dono limpou à mão) — não é falha e não dispara remove nenhum.
+Same principle as step 6a of `/maestro:run` (check with git, not with an
+external tool's word): after ordering the removal, this script re-reads
+`git worktree list --porcelain` of the repo and only marks "removed" if the path
+is no longer there. A path absent from the output already at the FIRST look
+counts as "already removed" (the owner cleaned it by hand) — it is not a
+failure and triggers no remove.
 
-Uso:
-  maestro-prune <program-dir> --repo <raiz-principal> [--dry-run] [--json]
+Usage:
+  maestro-prune <program-dir> --repo <main-root> [--dry-run] [--json]
 
-Variável de ambiente `MAESTRO_HERDR` troca o binário do herdr (default:
-`herdr`) — é o que os testes usam para injetar um fake.
+The environment variable `MAESTRO_HERDR` swaps the herdr binary (default:
+`herdr`) — it is what the tests use to inject a fake.
 
-Exit 0 = nenhuma falha (removidas/mantidas/já-removidas contam como sucesso).
-Exit 1 = alguma slice LANDED falhou ao remover (worktree suja, herdr/git deu
-erro, ou o git ainda mostra o path depois do remove).
-Exit 2 = uso incorreto ou wave-state.yaml ausente.
+Exit 0 = no failure (removed/kept/already-removed count as success).
+Exit 1 = some LANDED slice failed to remove (dirty worktree, herdr/git errored,
+or git still shows the path after the remove).
+Exit 2 = incorrect usage or wave-state.yaml missing.
 """
 import argparse
 import json
@@ -75,9 +77,9 @@ def _load_wave_state(program_dir):
 
 
 def landed_slices(ws):
-    """Slices aterrissadas: `status: LANDED` OU listadas no `landed:` legado
-    (mesma regra de compatibilidade que `maestro-wave-state
-    aguardando-merge` usa para o formato antigo)."""
+    """Landed slices: `status: LANDED` OR listed in the legacy `landed:`
+    (same compatibility rule that `maestro-wave-state
+    aguardando-merge` uses for the old format)."""
     landed_names = set((ws or {}).get("landed") or [])
     slices = (ws or {}).get("slices") or {}
     out = {}
@@ -92,8 +94,8 @@ def landed_slices(ws):
 
 
 def git_worktree_paths(repo):
-    """Paths de worktree ligadas registradas pelo git, resolvidos (realpath),
-    para comparar com o que o wave-state/herdr apontam."""
+    """Linked worktree paths registered by git, resolved (realpath),
+    to compare with what the wave-state/herdr point to."""
     r = subprocess.run(["git", "-C", str(repo), "worktree", "list", "--porcelain"],
                        capture_output=True, text=True)
     paths = []
@@ -104,18 +106,18 @@ def git_worktree_paths(repo):
 
 
 def herdr_worktree_map(repo):
-    """path resolvido -> open_workspace_id (ausente = sem Space aberto).
+    """resolved path -> open_workspace_id (absent = no open Space).
 
-    `--cwd` é obrigatório: sem ele o herdr 0.9.1 lista o repo do Space EM
-    FOCO e ignora o diretório corrente do processo (medido ao vivo em
-    2026-09-26: rodado de dentro do repo da onda, devolveu o clone do cepa,
-    que estava em foco; nenhuma slice casou, tudo caiu no `git worktree
-    remove` puro e os Spaces ficaram na barra lateral — o defeito inteiro)."""
+    `--cwd` is mandatory: without it herdr 0.9.1 lists the repo of the Space IN
+    FOCUS and ignores the process's current directory (measured live on
+    2026-09-26: run from inside the wave's repo, it returned the cepa clone,
+    which was in focus; no slice matched, everything fell to the plain `git
+    worktree remove` and the Spaces stayed in the sidebar — the whole defect)."""
     r = subprocess.run([herdr_bin(), "worktree", "list",
                         "--cwd", str(repo), "--json"],
                        capture_output=True, text=True)
     if r.returncode != 0:
-        # Sem herdr respondendo, cai tudo para o fallback git puro.
+        # With no herdr answering, everything falls back to plain git.
         return {}
     try:
         data = json.loads(r.stdout)
@@ -193,8 +195,8 @@ def prune(program_dir, repo, dry_run):
             result["failed"].append({"slice": slice_name, "detail": f"{via}: {msg}"})
             continue
 
-        # Confirmação por git, não pela palavra do herdr — mesmo princípio do
-        # passo 6a do /maestro:run.
+        # Confirmation by git, not by herdr's word — same principle as step 6a
+        # of /maestro:run.
         git_paths_after = git_worktree_paths(repo)
         if real_path in git_paths_after:
             result["failed"].append({
@@ -211,8 +213,8 @@ def prune(program_dir, repo, dry_run):
 def render_human(result, dry_run):
     lines = []
     for r in result["removed"]:
-        prefixo = "removeria" if dry_run else "removida"
-        lines.append(f"{r['slice']}: {prefixo} ({r['via']})")
+        prefix = "removeria" if dry_run else "removida"
+        lines.append(f"{r['slice']}: {prefix} ({r['via']})")
     for k in result["kept"]:
         lines.append(f"{k['slice']}: mantida — status {k['status']}")
     for a in result["already_gone"]:

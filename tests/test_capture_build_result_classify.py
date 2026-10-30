@@ -1,6 +1,6 @@
-"""capture-build-result classifica pelo comando SEM texto citado e exige um Maven de
-verdade (fb-20261008-1, 2026-10-08): `grep -E 'no-build|verify' x` virava FAILURE
-maven e barrava o commit; `./mvnw -q verify > log` nunca virava SUCCESS."""
+"""capture-build-result classifies by the command WITHOUT quoted text and requires a real
+Maven (fb-20261008-1, 2026-10-08): `grep -E 'no-build|verify' x` became a Maven
+FAILURE and blocked the commit; `./mvnw -q verify > log` never became SUCCESS."""
 import json
 import os
 import subprocess
@@ -8,11 +8,11 @@ import sys
 import importlib.util
 from pathlib import Path
 
-# Pedido explícito de isolamento: tests/test_telemetria_isolada.py exige que todo
-# teste que cite um hook emissor isole a telemetria por conta própria.
-from _telemetria_isolada import isola
+# Explicit isolation request: tests/test_isolated_telemetry.py requires that every
+# test that cites an emitting hook isolate the telemetry on its own.
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 HOOK = Path(__file__).resolve().parents[1] / "common" / "hooks" / "capture-build-result.py"
 spec = importlib.util.spec_from_file_location("capture_build_result", HOOK)
@@ -22,8 +22,8 @@ spec.loader.exec_module(cbr)
 ERR1 = "Error: Exit code 1\n"
 
 
-# Os comandos abaixo CASAM o regex no comando cru (há espaço antes do token, dentro
-# das aspas) e NÃO casam na visão sem texto citado: sem a visão, viram build.
+# The commands below MATCH the regex on the raw command (there is a space before the token, inside
+# the quotes) and do NOT match on the view without quoted text: without the view, they become a build.
 def test_grep_with_mvnw_verify_in_quoted_pattern_is_not_a_build():
     status, kind, _ = cbr.classify("grep -E 'no-build| mvnw verify' common/bin/cepa-until", ERR1, 1)
     assert (status, kind) == (None, None)
@@ -48,7 +48,7 @@ def test_echo_of_npm_test_is_not_a_build():
 
 
 def test_maven_words_without_a_real_invoker_are_not_a_build():
-    # casa o regex Maven na visão (`mvnw verify` solto), mas `ls` não é Maven
+    # matches the Maven regex on the view (loose `mvnw verify`), but `ls` is not Maven
     assert cbr.classify("ls ./mvnw verify", "BUILD SUCCESS", None)[:2] == (None, None)
 
 
@@ -140,14 +140,14 @@ def test_echo_of_quoted_mvnw_verify_leaves_no_state(tmp_path):
     assert _run_hook(tmp_path, 'echo " ./mvnw verify"', None) is None
 
 
-# ── 2026-10-16: marcadores Maven ancorados em início de linha + build_dir real ──
+# ── 2026-10-16: Maven markers anchored at line start + real build_dir ──
 
 LAST_BUILD_CMD = (
     "./mvnw -o -pl infrastructure,bootstrap -am test -Dtest='LerLoteTest' "
     "-Dsurefire.failIfNoSpecifiedTests=false 2>&1 | grep -E \"Tests run:.*Fail|BUILD|ERROR\" "
     "| tail -15; cat .claude/last-build.json"
 )
-# O JSON do registro anterior vem em UMA linha, com \n literal dentro da string.
+# The JSON of the previous record comes on ONE line, with a literal \n inside the string.
 CAT_JSON_OUT = (
     "[INFO] Tests run: 74, Failures: 0, Errors: 0, Skipped: 0\n[INFO] BUILD SUCCESS\n"
     "{\n  \"status\": \"FAILURE\",\n"

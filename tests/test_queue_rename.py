@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Testes da renomeação da fila single-track (decisão do dono, 2026-10-20):
+"""Tests of the single-track queue rename (owner's decision, 2026-10-20):
 
-    .claude/programs/<n>/plan.yaml  (chave `program:`, /common:plan)
- -> .claude/queues/<n>/queue.yaml   (chave `queue:`,   /common:queue)
+    .claude/programs/<n>/plan.yaml  (key `program:`, /common:plan)
+ -> .claude/queues/<n>/queue.yaml   (key `queue:`,   /common:queue)
 
-Durante a transição todo consumidor LÊ os dois layouts e `cepa-plan migrate`
-move as filas existentes. Cada teste chama o binário de verdade (subprocess)
-num repo git temporário, como os vizinhos (`test_cepa_plan_escrita_commita.py`).
+During the transition every consumer READS both layouts and `cepa-plan migrate`
+moves the existing queues. Each test calls the real binary (subprocess)
+in a temporary git repo, like the neighbors (`test_cepa_plan_write_commits.py`).
 
-Rode com `python3 tests/test_queue_rename.py` ou com pytest (cada teste cria o
-próprio diretório temporário).
+Run with `python3 tests/test_queue_rename.py` or with pytest (each test creates its
+own temporary directory).
 
-O que estes testes NÃO provam: que o painel compass (TypeScript) lê os dois
-layouts — ele tem o runner próprio (`claude plugin test`); nem que o comando
-`/common:queue` conversa direito, que é prompt.
+What these tests do NOT prove: that the compass panel (TypeScript) reads both
+layouts — it has its own runner (`claude plugin test`); nor that the
+`/common:queue` command converses right, which is prompt.
 """
 
 import importlib.machinery
@@ -49,8 +49,8 @@ def git(repo, *args):
                           capture_output=True, text=True, check=True).stdout
 
 
-def novo_repo(base, nome="r"):
-    d = Path(base) / nome
+def new_repo(base, name="r"):
+    d = Path(base) / name
     d.mkdir(parents=True)
     git(d, "init", "-q")
     git(d, "config", "user.email", "t@t")
@@ -68,13 +68,13 @@ def item(ident, **kw):
     return base
 
 
-def escreve_itens(d, itens):
+def write_items(d, items):
     p = Path(d) / "itens.json"
-    p.write_text(json.dumps(itens), encoding="utf-8")
+    p.write_text(json.dumps(items), encoding="utf-8")
     return p
 
 
-LEGADA = """\
+LEGACY = """\
 # comentario que a migracao nao pode perder
 schema_version: 2
 mode: single-track
@@ -90,52 +90,52 @@ items:
 """
 
 
-def fila_legada(d, nome="x", texto=None, commita=True, bak=True):
-    """Fila no layout antigo, escrita à mão, com `until/` e `.bak` ao lado."""
-    pasta = Path(d) / ".claude" / "programs" / nome
-    (pasta / "until").mkdir(parents=True)
-    (pasta / "plan.yaml").write_text(texto or LEGADA.format(nome=nome),
+def legacy_queue(d, name="x", text=None, commit_all=True, bak=True):
+    """A queue in the old layout, written by hand, with `until/` and `.bak` beside it."""
+    folder = Path(d) / ".claude" / "programs" / name
+    (folder / "until").mkdir(parents=True)
+    (folder / "plan.yaml").write_text(text or LEGACY.format(nome=name),
                                      encoding="utf-8")
-    (pasta / "until" / "2026-10-20-0900.jsonl").write_text("{}\n")
+    (folder / "until" / "2026-10-20-0900.jsonl").write_text("{}\n")
     if bak:
-        (pasta / "plan.yaml.bak").write_text("# anterior\n")
-    if commita:
+        (folder / "plan.yaml.bak").write_text("# anterior\n")
+    if commit_all:
         git(d, "add", "-f", ".claude")
         git(d, "commit", "-q", "-m", "fila legada")
-    return pasta
+    return folder
 
 
-def com_repo(fn):
-    def corpo():
+def with_repo(fn):
+    def body():
         with tempfile.TemporaryDirectory() as base:
-            fn(novo_repo(base))
-    corpo.__name__ = fn.__name__
-    return corpo
+            fn(new_repo(base))
+    body.__name__ = fn.__name__
+    return body
 
 
-# ── (a) fila nova nasce no layout novo ───────────────────────────────────────
+# ── (a) a new queue is born in the new layout ────────────────────────────────
 
-@com_repo
-def test_fila_nova_nasce_em_queues(d):
-    r = plan(d, "write", "fila", "--items", str(escreve_itens(d, [item("A")])),
+@with_repo
+def test_new_queue_is_born_in_queues(d):
+    r = plan(d, "write", "fila", "--items", str(write_items(d, [item("A")])),
              "--source", "t", "--quando", "2026-10-20", "--repo", ".")
     assert r.returncode == 0, r.stderr
-    novo = d / ".claude" / "queues" / "fila" / "queue.yaml"
-    assert novo.is_file(), r.stdout
+    new = d / ".claude" / "queues" / "fila" / "queue.yaml"
+    assert new.is_file(), r.stdout
     assert not (d / ".claude" / "programs" / "fila").exists()
-    dados = yaml.safe_load(novo.read_text(encoding="utf-8"))
-    assert dados.get("queue") == "fila" and "program" not in dados, dados
-    assert plan(d, "validate", str(novo)).returncode == 0
+    data = yaml.safe_load(new.read_text(encoding="utf-8"))
+    assert data.get("queue") == "fila" and "program" not in data, data
+    assert plan(d, "validate", str(new)).returncode == 0
     r = plan(d, "status", "fila", "--json", "--repo", ".")
-    saida = json.loads(r.stdout)
-    assert saida["queue"] == "fila" and saida["program"] == "fila", saida
+    output = json.loads(r.stdout)
+    assert output["queue"] == "fila" and output["program"] == "fila", output
 
 
-# ── (b) fila legada segue sendo lida e marcada no lugar ─────────────────────
+# ── (b) a legacy queue is still read and marked in place ────────────────────
 
-@com_repo
-def test_fila_legada_e_lida_e_marcada_no_lugar(d):
-    pasta = fila_legada(d, commita=False)
+@with_repo
+def test_legacy_queue_is_read_and_marked_in_place(d):
+    folder = legacy_queue(d, commit_all=False)
     r = plan(d, "queue", "x", "--json", "--repo", ".")
     assert r.returncode == 0, r.stderr
     assert json.loads(r.stdout)["path"].endswith("programs/x/plan.yaml")
@@ -143,42 +143,42 @@ def test_fila_legada_e_lida_e_marcada_no_lugar(d):
     r = plan(d, "finish", "x", "A", "--status", "done", "--evidence", "ok",
              "--repo", ".")
     assert r.returncode == 0, r.stderr
-    dados = yaml.safe_load((pasta / "plan.yaml").read_text(encoding="utf-8"))
-    assert dados["items"][0]["status"] == "done"
-    assert dados.get("program") == "x", "a chave antiga segue até migrar"
+    data = yaml.safe_load((folder / "plan.yaml").read_text(encoding="utf-8"))
+    assert data["items"][0]["status"] == "done"
+    assert data.get("program") == "x", "a chave antiga segue até migrar"
     assert not (d / ".claude" / "queues").exists()
-    # reescrever uma fila legada mantém o arquivo e a chave dela
-    r = plan(d, "write", "x", "--items", str(escreve_itens(d, [item("A"), item("B")])),
+    # rewriting a legacy queue keeps its file and key
+    r = plan(d, "write", "x", "--items", str(write_items(d, [item("A"), item("B")])),
              "--repo", ".")
     assert r.returncode == 0, r.stderr
-    assert (pasta / "plan.yaml.bak").is_file()
-    assert yaml.safe_load((pasta / "plan.yaml").read_text())["program"] == "x"
+    assert (folder / "plan.yaml.bak").is_file()
+    assert yaml.safe_load((folder / "plan.yaml").read_text())["program"] == "x"
     assert not (d / ".claude" / "queues").exists()
 
 
-# ── (c) mesmo nome nos dois layouts: o novo ganha ───────────────────────────
+# ── (c) same name in both layouts: the new one wins ─────────────────────────
 
-@com_repo
-def test_nome_nos_dois_layouts_o_novo_ganha(d):
-    fila_legada(d, commita=False)
-    novo = d / ".claude" / "queues" / "x"
-    novo.mkdir(parents=True)
-    (novo / "queue.yaml").write_text(
-        LEGADA.format(nome="x").replace("program:", "queue:").replace("item A", "item NOVO"),
+@with_repo
+def test_name_in_both_layouts_the_new_wins(d):
+    legacy_queue(d, commit_all=False)
+    new = d / ".claude" / "queues" / "x"
+    new.mkdir(parents=True)
+    (new / "queue.yaml").write_text(
+        LEGACY.format(nome="x").replace("program:", "queue:").replace("item A", "item NOVO"),
         encoding="utf-8")
     r = plan(d, "status", "x", "--json", "--repo", ".")
     assert r.returncode == 0, r.stderr
-    saida = json.loads(r.stdout)
-    assert saida["path"].endswith("queues/x/queue.yaml"), saida["path"]
-    assert saida["items"][0]["title"] == "item NOVO"
+    output = json.loads(r.stdout)
+    assert output["path"].endswith("queues/x/queue.yaml"), output["path"]
+    assert output["items"][0]["title"] == "item NOVO"
 
 
 # ── (d) migrate ──────────────────────────────────────────────────────────────
 
-@com_repo
-def test_migrate_move_renomeia_reescreve_commita_e_e_idempotente(d):
-    fila_legada(d)
-    antes = git(d, "rev-list", "--count", "HEAD").strip()
+@with_repo
+def test_migrate_moves_renames_rewrites_commits_and_is_idempotent(d):
+    legacy_queue(d)
+    before = git(d, "rev-list", "--count", "HEAD").strip()
     r = plan(d, "migrate", "--all", "--dry-run", "--repo", ".")
     assert r.returncode == 0 and "x" in r.stdout, r.stdout + r.stderr
     assert (d / ".claude" / "programs" / "x" / "plan.yaml").is_file(), \
@@ -186,67 +186,67 @@ def test_migrate_move_renomeia_reescreve_commita_e_e_idempotente(d):
 
     r = plan(d, "migrate", "--all", "--repo", ".")
     assert r.returncode == 0, r.stdout + r.stderr
-    novo = d / ".claude" / "queues" / "x"
+    new = d / ".claude" / "queues" / "x"
     assert not (d / ".claude" / "programs" / "x").exists()
-    assert (novo / "queue.yaml").is_file() and not (novo / "plan.yaml").exists()
-    assert (novo / "queue.yaml.bak").is_file()
-    assert (novo / "until" / "2026-10-20-0900.jsonl").is_file()
-    texto = (novo / "queue.yaml").read_text(encoding="utf-8")
-    assert texto.startswith("# comentario que a migracao nao pode perder\n"), texto
-    assert "\nqueue: x\n" in texto and "program:" not in texto, texto
-    assert git(d, "rev-list", "--count", "HEAD").strip() == str(int(antes) + 1), \
+    assert (new / "queue.yaml").is_file() and not (new / "plan.yaml").exists()
+    assert (new / "queue.yaml.bak").is_file()
+    assert (new / "until" / "2026-10-20-0900.jsonl").is_file()
+    text = (new / "queue.yaml").read_text(encoding="utf-8")
+    assert text.startswith("# comentario que a migracao nao pode perder\n"), text
+    assert "\nqueue: x\n" in text and "program:" not in text, text
+    assert git(d, "rev-list", "--count", "HEAD").strip() == str(int(before) + 1), \
         "um commit só"
     assert git(d, "status", "--porcelain").strip() == "", git(d, "status", "--porcelain")
 
     r = plan(d, "migrate", "--all", "--repo", ".")
     assert r.returncode == 0 and "nada a migrar" in r.stdout, r.stdout + r.stderr
-    assert git(d, "rev-list", "--count", "HEAD").strip() == str(int(antes) + 1)
+    assert git(d, "rev-list", "--count", "HEAD").strip() == str(int(before) + 1)
     r = plan(d, "migrate", "x", "--repo", ".")
     assert r.returncode == 0, r.stdout + r.stderr
 
 
-# ── (e) migrate pula ondas e recusa destino existente ───────────────────────
+# ── (e) migrate skips waves and refuses an existing destination ─────────────
 
-@com_repo
-def test_migrate_pula_ondas_e_recusa_destino_existente(d):
-    ondas = d / ".claude" / "programs" / "ondas"
-    ondas.mkdir(parents=True)
-    (ondas / "plan.yaml").write_text(yaml.dump(
+@with_repo
+def test_migrate_skips_waves_and_refuses_existing_destination(d):
+    waves = d / ".claude" / "programs" / "ondas"
+    waves.mkdir(parents=True)
+    (waves / "plan.yaml").write_text(yaml.dump(
         {"schema_version": 2, "mode": "parallel-waves", "program": "ondas",
          "waves": []}), encoding="utf-8")
     r = plan(d, "migrate", "--all", "--repo", ".")
     assert r.returncode == 0, r.stdout + r.stderr
-    assert (ondas / "plan.yaml").is_file() and not (d / ".claude" / "queues").exists()
+    assert (waves / "plan.yaml").is_file() and not (d / ".claude" / "queues").exists()
     r = plan(d, "migrate", "ondas", "--repo", ".")
-    assert r.returncode != 0 and (ondas / "plan.yaml").is_file()
+    assert r.returncode != 0 and (waves / "plan.yaml").is_file()
 
-    pasta = fila_legada(d, commita=False)
+    folder = legacy_queue(d, commit_all=False)
     (d / ".claude" / "queues" / "x").mkdir(parents=True)
     r = plan(d, "migrate", "x", "--repo", ".")
     assert r.returncode != 0 and "já existe" in r.stderr, r.stderr
-    assert (pasta / "plan.yaml").is_file(), "nada foi movido"
-    assert "program: x" in (pasta / "plan.yaml").read_text()
+    assert (folder / "plan.yaml").is_file(), "nada foi movido"
+    assert "program: x" in (folder / "plan.yaml").read_text()
 
 
-# ── (f) migrate recusa reserva viva ──────────────────────────────────────────
+# ── (f) migrate refuses a live reservation ───────────────────────────────────
 
-@com_repo
-def test_migrate_recusa_reserva_viva(d):
-    dono = {"session_id": "S-VIVA", "pid": os.getpid(),
+@with_repo
+def test_migrate_refuses_live_reservation(d):
+    owner = {"session_id": "S-VIVA", "pid": os.getpid(),
             "hostname": socket.gethostname(),
             "started_at": datetime.now(timezone.utc).isoformat()}
-    texto = LEGADA.format(nome="x").replace(
+    text = LEGACY.format(nome="x").replace(
         "  status: pending\n",
-        "  status: in_progress\n  claimed_by: " + json.dumps(dono) + "\n")
-    pasta = fila_legada(d, texto=texto)
+        "  status: in_progress\n  claimed_by: " + json.dumps(owner) + "\n")
+    folder = legacy_queue(d, text=text)
     r = plan(d, "migrate", "x", "--repo", ".")
     assert r.returncode != 0 and "VIVA" in r.stderr, r.stdout + r.stderr
-    assert (pasta / "plan.yaml").is_file()
+    assert (folder / "plan.yaml").is_file()
     assert not (d / ".claude" / "queues").exists()
 
-    # reserva órfã (pid morto) não segura a migração
-    morto = dict(dono, pid=2 ** 22 + 12345, session_id="S-MORTA")
-    (pasta / "plan.yaml").write_text(texto.replace(json.dumps(dono), json.dumps(morto)),
+    # orphan reservation (dead pid) does not hold the migration
+    dead = dict(owner, pid=2 ** 22 + 12345, session_id="S-MORTA")
+    (folder / "plan.yaml").write_text(text.replace(json.dumps(owner), json.dumps(dead)),
                                      encoding="utf-8")
     git(d, "commit", "-q", "-am", "reserva órfã")
     r = plan(d, "migrate", "x", "--repo", ".")
@@ -254,61 +254,61 @@ def test_migrate_recusa_reserva_viva(d):
     assert (d / ".claude" / "queues" / "x" / "queue.yaml").is_file()
 
 
-# ── (f2) migrate recusa run vivo do cepa-until, mesmo entre itens ───────────
+# ── (f2) migrate refuses a live cepa-until run, even between items ──────────
 
-def _estado_rodando(pasta, pid):
-    (pasta / "until" / "2026-10-20-2055.estado.json").write_text(json.dumps(
+def _running_state(folder, pid):
+    (folder / "until" / "2026-10-20-2055.estado.json").write_text(json.dumps(
         {"estado": "rodando", "pid": pid, "host": socket.gethostname(),
          "run": "2026-10-20-2055"}), encoding="utf-8")
 
 
-@com_repo
-def test_migrate_recusa_run_vivo_do_cepa_until(d):
-    pasta = fila_legada(d)
-    falso = subprocess.Popen(["bash", "-c", "exec -a cepa-until sleep 60"])
+@with_repo
+def test_migrate_refuses_live_cepa_until_run(d):
+    folder = legacy_queue(d)
+    fake = subprocess.Popen(["bash", "-c", "exec -a cepa-until sleep 60"])
     try:
-        _estado_rodando(pasta, falso.pid)
+        _running_state(folder, fake.pid)
         r = plan(d, "migrate", "x", "--repo", ".")
         assert r.returncode != 0 and "cepa-until" in r.stderr, r.stdout + r.stderr
-        assert (pasta / "plan.yaml").is_file()
+        assert (folder / "plan.yaml").is_file()
         assert not (d / ".claude" / "queues").exists()
     finally:
-        falso.kill()
-        falso.wait()
-    _estado_rodando(pasta, falso.pid)  # agora morto
+        fake.kill()
+        fake.wait()
+    _running_state(folder, fake.pid)  # now dead
     r = plan(d, "migrate", "x", "--repo", ".")
     assert r.returncode == 0, r.stdout + r.stderr
     assert (d / ".claude" / "queues" / "x" / "queue.yaml").is_file()
 
 
-# ── (f3) migrate recusa fila com mudança não commitada ──────────────────────
+# ── (f3) migrate refuses a queue with an uncommitted change ─────────────────
 
-@com_repo
-def test_migrate_recusa_fila_nao_commitada(d):
-    pasta = fila_legada(d)
-    with open(pasta / "plan.yaml", "a", encoding="utf-8") as f:
+@with_repo
+def test_migrate_refuses_uncommitted_queue(d):
+    folder = legacy_queue(d)
+    with open(folder / "plan.yaml", "a", encoding="utf-8") as f:
         f.write("# status mexido e não commitado\n")
     r = plan(d, "migrate", "x", "--repo", ".")
     assert r.returncode != 0 and "não commitadas" in r.stderr, r.stdout + r.stderr
-    assert (pasta / "plan.yaml").is_file()
+    assert (folder / "plan.yaml").is_file()
     assert not (d / ".claude" / "queues").exists()
 
 
-# ── (f4) fila sem `program:` no topo ganha `queue:` na migração ─────────────
+# ── (f4) a queue without `program:` at the top gets `queue:` on migration ───
 
-@com_repo
-def test_migrate_fila_sem_chave_ganha_queue(d):
-    fila_legada(d, texto=LEGADA.format(nome="x").replace("program: x\n", ""))
+@with_repo
+def test_migrate_queue_without_key_gets_queue(d):
+    legacy_queue(d, text=LEGACY.format(nome="x").replace("program: x\n", ""))
     r = plan(d, "migrate", "x", "--repo", ".")
     assert r.returncode == 0, r.stdout + r.stderr
-    texto = (d / ".claude" / "queues" / "x" / "queue.yaml").read_text()
-    assert texto.startswith("# comentario que a migracao nao pode perder\n"), texto
-    assert yaml.safe_load(texto)["queue"] == "x", texto
+    text = (d / ".claude" / "queues" / "x" / "queue.yaml").read_text()
+    assert text.startswith("# comentario que a migracao nao pode perder\n"), text
+    assert yaml.safe_load(text)["queue"] == "x", text
 
 
-# ── (g) cepa-until: sujeira ignora o registro nos dois layouts ──────────────
+# ── (g) cepa-until: dirt ignores the record in both layouts ─────────────────
 
-def carrega_until():
+def load_until():
     loader = importlib.machinery.SourceFileLoader("cepa_until_qr", str(CEPA_UNTIL))
     spec = importlib.util.spec_from_loader("cepa_until_qr", loader)
     mod = importlib.util.module_from_spec(spec)
@@ -316,41 +316,41 @@ def carrega_until():
     return mod
 
 
-def test_cepa_until_filtros_de_sujeira_aceitam_os_dois_layouts():
-    cu = carrega_until()
-    for base, arq in ((".claude/programs", "plan.yaml"), (".claude/queues", "queue.yaml")):
-        assert cu.REGISTRO_DO_RUN.match(f"?? {base}/f/until/2026-10-20-0900.jsonl"), base
-        assert cu.BAK_DA_FILA.match(f"?? {base}/f/{arq}.bak"), base
-        m = cu.PLANO_MODIFICADO.match(f" M {base}/f/{arq}")
-        assert m and m.group(1) == f"{base}/f/{arq}", base
+def test_cepa_until_dirt_filters_accept_both_layouts():
+    cu = load_until()
+    for base, filename in ((".claude/programs", "plan.yaml"), (".claude/queues", "queue.yaml")):
+        assert cu.RUN_RECORD.match(f"?? {base}/f/until/2026-10-20-0900.jsonl"), base
+        assert cu.QUEUE_BAK.match(f"?? {base}/f/{filename}.bak"), base
+        m = cu.PLAN_MODIFIED.match(f" M {base}/f/{filename}")
+        assert m and m.group(1) == f"{base}/f/{filename}", base
         assert (m.group(2) or m.group(3)) == "f", base
-    assert not cu.BAK_DA_FILA.match("?? .claude/queues/f/plan.yaml.bak")
-    assert not cu.REGISTRO_DO_RUN.match("?? .claude/outro/f/until/x")
+    assert not cu.QUEUE_BAK.match("?? .claude/queues/f/plan.yaml.bak")
+    assert not cu.RUN_RECORD.match("?? .claude/outro/f/until/x")
 
 
-@com_repo
-def test_cepa_until_arvore_suja_ignora_registro_e_bak_dos_dois_layouts(d):
-    cu = carrega_until()
-    # com algo rastreado em .claude/ o git lista cada arquivo não rastreado
+@with_repo
+def test_cepa_until_dirty_tree_ignores_record_and_bak_of_both_layouts(d):
+    cu = load_until()
+    # with something tracked in .claude/ git lists each untracked file
     for base in ("programs", "queues"):
         (d / ".claude" / base / "f" / "until").mkdir(parents=True)
         (d / ".claude" / base / "f" / "keep").write_text("x\n")
     git(d, "add", "-f", ".claude")
     git(d, "commit", "-q", "-m", "keep")
-    for base, arq in (("programs", "plan.yaml"), ("queues", "queue.yaml")):
-        pasta = d / ".claude" / base / "f"
-        (pasta / "until" / "2026-10-20-0900.jsonl").write_text("{}\n")
-        (pasta / (arq + ".bak")).write_text("x\n")
-    assert cu.arvore_suja(d) == [], cu.arvore_suja(d)
+    for base, filename in (("programs", "plan.yaml"), ("queues", "queue.yaml")):
+        folder = d / ".claude" / base / "f"
+        (folder / "until" / "2026-10-20-0900.jsonl").write_text("{}\n")
+        (folder / (filename + ".bak")).write_text("x\n")
+    assert cu.dirty_tree(d) == [], cu.dirty_tree(d)
     (d / "sujeira.txt").write_text("x\n")
-    assert [l for l in cu.arvore_suja(d)] == ["?? sujeira.txt"]
+    assert [l for l in cu.dirty_tree(d)] == ["?? sujeira.txt"]
 
 
-@com_repo
-def test_cepa_until_resolve_ledger_e_fila_pelo_resolvedor(d):
-    cu = carrega_until()
+@with_repo
+def test_cepa_until_resolves_ledger_and_queue_through_the_resolver(d):
+    cu = load_until()
     assert cu.qp.queue_dir(d, "f") == d / ".claude" / "queues" / "f"
-    fila_legada(d, nome="f", commita=False)
+    legacy_queue(d, name="f", commit_all=False)
     assert cu.qp.queue_dir(d, "f") == d / ".claude" / "programs" / "f"
     (d / ".claude" / "queues" / "f").mkdir(parents=True)
     (d / ".claude" / "queues" / "f" / "queue.yaml").write_text("queue: f\n")
@@ -360,41 +360,41 @@ def test_cepa_until_resolve_ledger_e_fila_pelo_resolvedor(d):
     assert cu.qp.queue_name_of({}, "z") == "z"
 
 
-# ── (h) maestro-programs --check-name enxerga o layout novo ─────────────────
+# ── (h) maestro-programs --check-name sees the new layout ───────────────────
 
-@com_repo
-def test_maestro_programs_check_name_recusa_nome_de_fila_nova(d):
-    pasta = d / ".claude" / "queues" / "minha"
-    pasta.mkdir(parents=True)
-    (pasta / "queue.yaml").write_text(
-        LEGADA.format(nome="minha").replace("program:", "queue:"), encoding="utf-8")
+@with_repo
+def test_maestro_programs_check_name_refuses_new_queue_name(d):
+    folder = d / ".claude" / "queues" / "minha"
+    folder.mkdir(parents=True)
+    (folder / "queue.yaml").write_text(
+        LEGACY.format(nome="minha").replace("program:", "queue:"), encoding="utf-8")
     r = run(MAESTRO_PROGRAMS, d, str(d), "--check-name", "minha")
     assert r.returncode == 3, r.stdout + r.stderr
     assert "minha" in r.stderr
     r = run(MAESTRO_PROGRAMS, d, str(d), "--check-name", "livre")
     assert r.returncode == 0, r.stderr
     r = run(MAESTRO_PROGRAMS, d, str(d), "--json")
-    nomes = [p["nome"] for p in json.loads(r.stdout)["programas"]]
-    assert "minha" in nomes, nomes
+    names = [p["nome"] for p in json.loads(r.stdout)["programas"]]
+    assert "minha" in names, names
 
 
-@com_repo
-def test_cepa_plan_check_name_ve_onda_legada(d):
-    ondas = d / ".claude" / "programs" / "ondas"
-    ondas.mkdir(parents=True)
-    (ondas / "plan.yaml").write_text(yaml.dump(
+@with_repo
+def test_cepa_plan_check_name_sees_legacy_wave(d):
+    waves = d / ".claude" / "programs" / "ondas"
+    waves.mkdir(parents=True)
+    (waves / "plan.yaml").write_text(yaml.dump(
         {"schema_version": 2, "mode": "parallel-waves", "program": "ondas",
          "waves": []}), encoding="utf-8")
     assert plan(d, "check-name", "ondas", "--repo", ".").returncode == 3
-    r = plan(d, "write", "ondas", "--items", str(escreve_itens(d, [item("A")])),
+    r = plan(d, "write", "ondas", "--items", str(write_items(d, [item("A")])),
              "--repo", ".")
     assert r.returncode == 3, "plano de ondas no caminho antigo segue recusado"
     assert not (d / ".claude" / "queues").exists()
 
 
-# ── (i) o comando ────────────────────────────────────────────────────────────
+# ── (i) the command ──────────────────────────────────────────────────────────
 
-def test_comando_queue_existe_e_plan_e_alias():
+def test_queue_command_exists_and_plan_is_alias():
     q = REPO / "common" / "commands" / "queue.md"
     p = REPO / "common" / "commands" / "plan.md"
     assert q.is_file() and p.is_file()
@@ -408,31 +408,31 @@ def test_comando_queue_existe_e_plan_e_alias():
     assert "| `/common:queue` |" in cat and "| `/common:plan` |" in cat
 
 
-def test_doctor_avisa_nome_nos_dois_layouts_e_sugere_migrar():
+def test_doctor_warns_name_in_both_layouts_and_suggests_migrating():
     with tempfile.TemporaryDirectory() as base:
-        d = novo_repo(base)
-        fila_legada(d, commita=False)
+        d = new_repo(base)
+        legacy_queue(d, commit_all=False)
         loader = importlib.machinery.SourceFileLoader(
             "cepa_doctor_qr", str(REPO / "common" / "bin" / "cepa-doctor"))
         spec = importlib.util.spec_from_loader("cepa_doctor_qr", loader)
         mod = importlib.util.module_from_spec(spec)
         loader.exec_module(mod)
         mod.RESULTS.clear()
-        mod.check_layout_da_fila(d)
+        mod.check_queue_layout(d)
         assert any("migrate --all" in m for _, _, m, _ in mod.RESULTS), mod.RESULTS
-        novo = d / ".claude" / "queues" / "x"
-        novo.mkdir(parents=True)
-        (novo / "queue.yaml").write_text("queue: x\nmode: single-track\n")
+        new = d / ".claude" / "queues" / "x"
+        new.mkdir(parents=True)
+        (new / "queue.yaml").write_text("queue: x\nmode: single-track\n")
         mod.RESULTS.clear()
-        mod.check_layout_da_fila(d)
+        mod.check_queue_layout(d)
         assert any(k == "warn" and "dois layouts" in m for k, _, m, _ in mod.RESULTS), \
             mod.RESULTS
 
 
 
-# ── (j) lacunas da prova: consumidores do layout NOVO ───────────────────────
-# Cada teste abaixo existe porque uma perturbação de docs/proof/
-# renomear-para-queue.yaml sobrevivia com a suíte verde (id entre colchetes).
+# ── (j) proof gaps: consumers of the NEW layout ─────────────────────────────
+# Each test below exists because a perturbation of docs/proof/
+# rename-to-queue.yaml survived with the suite green (id in brackets).
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import shutil  # noqa: E402
@@ -441,183 +441,187 @@ DOCTOR = REPO / "common" / "bin" / "cepa-doctor"
 DIGEST = REPO / "common" / "bin" / "cepa-until-digest"
 
 
-def para_layout_novo(raiz, nome="fila"):
-    """Converte a fila `nome` de um repo montado por `monta_repo` (que escreve
-    no layout antigo) para `.claude/queues/<nome>/queue.yaml` com `queue:`, e
-    commita."""
-    velho = Path(raiz) / ".claude" / "programs" / nome
-    novo = Path(raiz) / ".claude" / "queues" / nome
-    novo.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(velho), str(novo))
-    (novo / "plan.yaml").rename(novo / "queue.yaml")
-    dados = yaml.safe_load((novo / "queue.yaml").read_text(encoding="utf-8"))
-    dados["queue"] = dados.pop("program")
-    (novo / "queue.yaml").write_text(yaml.safe_dump(dados, allow_unicode=True),
+def to_new_layout(root, name="fila"):
+    """Converts the queue `name` of a repo built by `build_repo` (which writes
+    in the old layout) to `.claude/queues/<name>/queue.yaml` with `queue:`, and
+    commits.
+    """
+    old = Path(root) / ".claude" / "programs" / name
+    new = Path(root) / ".claude" / "queues" / name
+    new.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(old), str(new))
+    (new / "plan.yaml").rename(new / "queue.yaml")
+    data = yaml.safe_load((new / "queue.yaml").read_text(encoding="utf-8"))
+    data["queue"] = data.pop("program")
+    (new / "queue.yaml").write_text(yaml.safe_dump(data, allow_unicode=True),
                                      encoding="utf-8")
-    shutil.rmtree(Path(raiz) / ".claude" / "programs", ignore_errors=True)
-    git(raiz, "add", "-A")
-    git(raiz, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
+    shutil.rmtree(Path(root) / ".claude" / "programs", ignore_errors=True)
+    git(root, "add", "-A")
+    git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
         "fila no layout novo")
 
 
-# [R4] queue_files: nome nos dois layouts, o novo ganha (direto e pela CLI)
+# [R4] queue_files: name in both layouts, the new one wins (directly and through the CLI)
 
-def test_queue_files_nome_nos_dois_layouts_devolve_o_caminho_novo():
-    qp = carrega_until().qp
+def test_queue_files_name_in_both_layouts_returns_the_new_path():
+    qp = load_until().qp
     with tempfile.TemporaryDirectory() as base:
-        d = novo_repo(base)
-        fila_legada(d, nome="x", commita=False)
-        fila_legada(d, nome="so-velha", commita=False)
-        novo = d / ".claude" / "queues" / "x"
-        novo.mkdir(parents=True)
-        (novo / "queue.yaml").write_text("queue: x\n")
-        achados = dict(qp.queue_files(d))
-        assert achados["x"] == novo / "queue.yaml", achados
-        assert achados["so-velha"].name == "plan.yaml", achados
+        d = new_repo(base)
+        legacy_queue(d, name="x", commit_all=False)
+        legacy_queue(d, name="so-velha", commit_all=False)
+        new = d / ".claude" / "queues" / "x"
+        new.mkdir(parents=True)
+        (new / "queue.yaml").write_text("queue: x\n")
+        findings = dict(qp.queue_files(d))
+        assert findings["x"] == new / "queue.yaml", findings
+        assert findings["so-velha"].name == "plan.yaml", findings
         assert [n for n, _ in qp.queue_files(d)] == ["so-velha", "x"]
 
 
-@com_repo
-def test_cepa_plan_status_sem_nome_escolhe_a_fila_nova_quando_o_nome_esta_nos_dois(d):
-    fila_legada(d, nome="x", commita=False)
-    novo = d / ".claude" / "queues" / "x"
-    novo.mkdir(parents=True)
-    (novo / "queue.yaml").write_text(
-        LEGADA.format(nome="x").replace("program:", "queue:").replace("item A", "item NOVO"),
+@with_repo
+def test_cepa_plan_status_without_name_picks_the_new_queue_when_the_name_is_in_both(d):
+    legacy_queue(d, name="x", commit_all=False)
+    new = d / ".claude" / "queues" / "x"
+    new.mkdir(parents=True)
+    (new / "queue.yaml").write_text(
+        LEGACY.format(nome="x").replace("program:", "queue:").replace("item A", "item NOVO"),
         encoding="utf-8")
-    # sem nome: a lista de candidatas vem de queue_files; é ela que escolhe o arquivo
+    # no name: the list of candidates comes from queue_files; it is what chooses the file
     r = plan(d, "status", "--json", "--repo", ".")
     assert r.returncode == 0, r.stderr
-    saida = json.loads(r.stdout)
-    assert saida["path"].endswith("queues/x/queue.yaml"), saida["path"]
-    assert saida["items"][0]["title"] == "item NOVO"
+    output = json.loads(r.stdout)
+    assert output["path"].endswith("queues/x/queue.yaml"), output["path"]
+    assert output["items"][0]["title"] == "item NOVO"
 
 
-# [W3] sobrescrever fila do layout novo: backup é queue.yaml.bak
+# [W3] overwriting a queue of the new layout: the backup is queue.yaml.bak
 
-@com_repo
-def test_cepa_plan_sobrescrever_fila_nova_faz_backup_queue_yaml_bak(d):
-    itens = escreve_itens(d, [item("A")])
-    r = plan(d, "write", "fila", "--items", str(itens), "--repo", ".")
+@with_repo
+def test_cepa_plan_overwriting_new_queue_makes_backup_queue_yaml_bak(d):
+    items = write_items(d, [item("A")])
+    r = plan(d, "write", "fila", "--items", str(items), "--repo", ".")
     assert r.returncode == 0, r.stderr
-    pasta = d / ".claude" / "queues" / "fila"
-    assert (pasta / "queue.yaml").is_file()
-    assert not (pasta / "queue.yaml.bak").exists()
-    antes = (pasta / "queue.yaml").read_text(encoding="utf-8")
-    itens = escreve_itens(d, [item("A"), item("B")])
-    r = plan(d, "write", "fila", "--items", str(itens), "--repo", ".")
+    folder = d / ".claude" / "queues" / "fila"
+    assert (folder / "queue.yaml").is_file()
+    assert not (folder / "queue.yaml.bak").exists()
+    before = (folder / "queue.yaml").read_text(encoding="utf-8")
+    items = write_items(d, [item("A"), item("B")])
+    r = plan(d, "write", "fila", "--items", str(items), "--repo", ".")
     assert r.returncode == 0, r.stderr
-    assert sorted(p.name for p in pasta.iterdir() if p.is_file()) == \
-        ["queue.yaml", "queue.yaml.bak"], list(pasta.iterdir())
-    assert (pasta / "queue.yaml.bak").read_text(encoding="utf-8") == antes
+    assert sorted(p.name for p in folder.iterdir() if p.is_file()) == \
+        ["queue.yaml", "queue.yaml.bak"], list(folder.iterdir())
+    assert (folder / "queue.yaml.bak").read_text(encoding="utf-8") == before
 
 
-# [U4 U5 U6 G1] cepa-until com fila no layout novo, de ponta a ponta
+# [U4 U5 U6 G1] cepa-until with a queue in the new layout, end to end
 
-def test_cepa_until_dry_run_fila_nova_cabecalho_e_ledger_dir():
-    """[G1] o cabeçalho mostra o nome vindo de `queue:`; [U6] a pasta do
-    registro nasce em queues/<n>/until, e não em programs/."""
-    from test_cepa_until import monta_repo, item as it
+def test_cepa_until_dry_run_new_queue_header_and_ledger_dir():
+    """[G1] the header shows the name coming from `queue:`; [U6] the record
+    folder is born in queues/<n>/until, and not in programs/.
+    """
+    from test_cepa_until import build_repo, item as it
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [it("a1")])
-        para_layout_novo(raiz)
+        root = build_repo(tmp, [it("a1")])
+        to_new_layout(root)
         r = subprocess.run([sys.executable, str(CEPA_UNTIL), "fila", "--repo",
-                            str(raiz), "--for", "1h", "--dry-run", "--sem-verify",
+                            str(root), "--for", "1h", "--dry-run", "--sem-verify",
                             "--sem-analise"], capture_output=True, text=True,
-                           cwd=str(raiz), timeout=120)
+                           cwd=str(root), timeout=120)
         assert r.returncode == 0, r.stdout + r.stderr
-        primeira = r.stdout.splitlines()[0]
-        assert "fila fila" in primeira.replace("\x1b[36m", "").replace("\x1b[0m", ""), \
-            primeira
-        assert (raiz / ".claude" / "queues" / "fila" / "until").is_dir()
-        assert not (raiz / ".claude" / "programs").exists()
+        first_line = r.stdout.splitlines()[0]
+        assert "fila fila" in first_line.replace("\x1b[36m", "").replace("\x1b[0m", ""), \
+            first_line
+        assert (root / ".claude" / "queues" / "fila" / "until").is_dir()
+        assert not (root / ".claude" / "programs").exists()
 
 
-def test_cepa_until_cabecalho_mostra_nome_de_fila_com_so_queue():
-    """[G1] o `cepa-plan queue` hoje devolve `program` E `queue`; se um dia só
-    devolver `queue:`, o cabeçalho tem de continuar mostrando o nome. Chama o
-    `main()` de verdade, com a consulta da fila devolvendo só `queue`."""
+def test_cepa_until_header_shows_queue_name_with_only_queue():
+    """[G1] `cepa-plan queue` today returns `program` AND `queue`; if one day it only
+    returns `queue:`, the header must keep showing the name. Calls the real
+    `main()`, with the queue query returning only `queue`.
+    """
     import contextlib
     import io
-    from test_cepa_until import monta_repo, item as it
-    cu = carrega_until()
+    from test_cepa_until import build_repo, item as it
+    cu = load_until()
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [it("a1")])
-        para_layout_novo(raiz)
-        real = cu.consulta_fila
+        root = build_repo(tmp, [it("a1")])
+        to_new_layout(root)
+        real = cu.query_queue
 
-        def so_queue(nome, repo):
-            dados, erro = real(nome, repo)
-            dados.pop("program", None)
-            dados["queue"] = "NOME-GRAVADO"
-            return dados, erro
-        cu.consulta_fila = so_queue
-        saida = io.StringIO()
-        with contextlib.redirect_stdout(saida):
-            rc = cu.main(["fila", "--repo", str(raiz), "--for", "1h", "--dry-run",
+        def only_queue(name, repo):
+            data, error = real(name, repo)
+            data.pop("program", None)
+            data["queue"] = "NOME-GRAVADO"
+            return data, error
+        cu.query_queue = only_queue
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            rc = cu.main(["fila", "--repo", str(root), "--for", "1h", "--dry-run",
                           "--sem-verify", "--sem-analise"])
-        assert rc == 0, saida.getvalue()
-        assert "NOME-GRAVADO" in saida.getvalue().splitlines()[0], saida.getvalue()[:300]
-        assert (raiz / ".claude" / "queues" / "fila" / "until").is_dir()
+        assert rc == 0, output.getvalue()
+        assert "NOME-GRAVADO" in output.getvalue().splitlines()[0], output.getvalue()[:300]
+        assert (root / ".claude" / "queues" / "fila" / "until").is_dir()
 
 
-def test_cepa_until_noite_aterrissa_e_pendentes_e_doctor_enxergam_fila_nova():
-    """[U6] ledger e log em queues/<n>/until; [U5] o run vivo ali é achado por
-    `pendentes` e pelo doctor ([D5]: repo só com .claude/queues); [U4] a fila
-    suja no clone, no layout novo, não impede `aterrissar`."""
-    from test_cepa_until import fake_claude, item as it, monta_repo, roda
-    from test_cepa_until_branch_da_noite import TRABALHA, VERIFY
+def test_cepa_until_run_landing_pending_and_doctor_see_new_queue():
+    """[U6] ledger and log in queues/<n>/until; [U5] the live run there is found by
+    `pendentes` and by the doctor ([D5]: repo with only .claude/queues); [U4] the queue
+    dirty in the clone, in the new layout, does not prevent `aterrissar`.
+    """
+    from test_cepa_until import fake_claude, item as it, build_repo, run_until
+    from test_cepa_until_run_branch import WORKS, VERIFY
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [it("a1")])
-        para_layout_novo(raiz)
-        binv = fake_claude(Path(tmp), TRABALHA)
-        plano = raiz / ".claude" / "queues" / "fila" / "queue.yaml"
-        roda(raiz, binv, plano, ["--for", "2h", "--verify", VERIFY])
-        until = raiz / ".claude" / "queues" / "fila" / "until"
+        root = build_repo(tmp, [it("a1")])
+        to_new_layout(root)
+        binv = fake_claude(Path(tmp), WORKS)
+        plan_file = root / ".claude" / "queues" / "fila" / "queue.yaml"
+        run_until(root, binv, plan_file, ["--for", "2h", "--verify", VERIFY])
+        until = root / ".claude" / "queues" / "fila" / "until"
         assert list(until.glob("*.jsonl")) and list(until.glob("*.log")), list(until.glob("*"))
-        assert not (raiz / ".claude" / "programs").exists()
+        assert not (root / ".claude" / "programs").exists()
         run_id = sorted(until.glob("*.jsonl"))[-1].stem
-        assert "status: done" in plano.read_text(), "a fila do clone foi marcada (suja)"
-        assert git(raiz, "status", "--porcelain").count("queues/fila/queue.yaml") == 1
+        assert "status: done" in plan_file.read_text(), "a fila do clone foi marcada (suja)"
+        assert git(root, "status", "--porcelain").count("queues/fila/queue.yaml") == 1
 
         p = subprocess.run([sys.executable, str(CEPA_UNTIL), "pendentes",
-                            "--repo", str(raiz)], capture_output=True, text=True,
-                           cwd=str(raiz), timeout=60)
+                            "--repo", str(root)], capture_output=True, text=True,
+                           cwd=str(root), timeout=60)
         assert f"cepa-until aterrissar fila/{run_id}" in p.stdout, p.stdout + p.stderr
 
         d = subprocess.run([sys.executable, str(DOCTOR), "--projeto"],
-                           cwd=str(raiz), capture_output=True, text=True,
+                           cwd=str(root), capture_output=True, text=True,
                            timeout=120, env=dict(os.environ, CEPA_DOCTOR_INSTALL="off"))
         out = d.stdout + d.stderr
         assert "[until]" in out and f"cepa-until aterrissar fila/{run_id}" in out, out[-1500:]
 
-        (raiz / ".claude" / "doctor-last-run").unlink(missing_ok=True)  # rastro do doctor
+        (root / ".claude" / "doctor-last-run").unlink(missing_ok=True)  # doctor trace
         env = dict(os.environ, CEPA_WORKTREE_HOME=str(Path(tmp) / "worktrees"))
         a = subprocess.run([sys.executable, str(CEPA_UNTIL), "aterrissar",
-                            f"fila/{run_id}", "--repo", str(raiz), "--sim"],
-                           capture_output=True, text=True, cwd=str(raiz), env=env,
+                            f"fila/{run_id}", "--repo", str(root), "--sim"],
+                           capture_output=True, text=True, cwd=str(root), env=env,
                            timeout=120)
         assert a.returncode == 0, a.stdout + a.stderr
         assert "mudança sem commit" not in a.stderr
 
 
-# [U7 U8] cepa-until-digest com o registro em queues/<n>/until
+# [U7 U8] cepa-until-digest with the record in queues/<n>/until
 
-def _monta_run_novo(tmp):
-    from test_cepa_until_digest import monta_run
-    ledger = monta_run(tmp)
-    velho = Path(tmp) / ".claude" / "programs" / "F"
-    novo = Path(tmp) / ".claude" / "queues" / "F"
-    novo.parent.mkdir(parents=True)
-    shutil.move(str(velho), str(novo))
-    (novo / "plan.yaml").rename(novo / "queue.yaml")
-    return novo / "until" / ledger.name, novo / "queue.yaml"
+def _build_new_run(tmp):
+    from test_cepa_until_digest import build_run
+    ledger = build_run(tmp)
+    old = Path(tmp) / ".claude" / "programs" / "F"
+    new = Path(tmp) / ".claude" / "queues" / "F"
+    new.parent.mkdir(parents=True)
+    shutil.move(str(old), str(new))
+    (new / "plan.yaml").rename(new / "queue.yaml")
+    return new / "until" / ledger.name, new / "queue.yaml"
 
 
-def test_digest_le_o_arquivo_vizinho_queue_yaml_fora_de_repo_git():
-    """[U8] sem git, a fila é o arquivo ao lado do registro: queue.yaml."""
+def test_digest_reads_neighbor_file_queue_yaml_outside_git_repo():
+    """[U8] without git, the queue is the file beside the record: queue.yaml."""
     with tempfile.TemporaryDirectory() as tmp:
-        ledger, arq = _monta_run_novo(tmp)
+        ledger, filename = _build_new_run(tmp)
         p = subprocess.run([sys.executable, str(DIGEST), str(ledger)],
                            capture_output=True, text=True, timeout=60)
         assert p.returncode == 0, p.stderr
@@ -625,22 +629,23 @@ def test_digest_le_o_arquivo_vizinho_queue_yaml_fora_de_repo_git():
         assert "queue.yaml" in p.stdout, p.stdout[-900:]
 
 
-def test_digest_le_a_fila_do_clone_principal_no_layout_novo():
-    """[U7] com o registro numa worktree, a fila de verdade é a do clone
-    principal em queues/<n>/queue.yaml (a cópia da worktree está velha)."""
-    from test_cepa_until_digest import monta_run
+def test_digest_reads_the_main_clone_queue_in_new_layout():
+    """[U7] with the record in a worktree, the real queue is the one of the main
+    clone in queues/<n>/queue.yaml (the worktree's copy is stale).
+    """
+    from test_cepa_until_digest import build_run
     with tempfile.TemporaryDirectory() as tmp:
-        principal = Path(tmp) / "principal"
-        principal.mkdir()
-        git(principal, "init", "-q")
-        git(principal, "-c", "user.email=t@t", "-c", "user.name=t", "commit",
+        main_clone = Path(tmp) / "principal"
+        main_clone.mkdir()
+        git(main_clone, "init", "-q")
+        git(main_clone, "-c", "user.email=t@t", "-c", "user.name=t", "commit",
             "-q", "--allow-empty", "-m", "raiz")
         wt = Path(tmp) / "wt"
-        git(principal, "worktree", "add", "-q", "--detach", str(wt))
-        ledger, copia = _monta_run_novo(wt)
-        fila = principal / ".claude" / "queues" / "F"
-        fila.mkdir(parents=True)
-        (fila / "queue.yaml").write_text(yaml.safe_dump({"items": [
+        git(main_clone, "worktree", "add", "-q", "--detach", str(wt))
+        ledger, copied = _build_new_run(wt)
+        queue = main_clone / ".claude" / "queues" / "F"
+        queue.mkdir(parents=True)
+        (queue / "queue.yaml").write_text(yaml.safe_dump({"items": [
             {"id": "A1", "status": "done", "blocked_by": [], "evidence": "ok"},
             {"id": "A2", "status": "done", "blocked_by": [],
              "evidence": "FECHADO NO CLONE PRINCIPAL"}]}), encoding="utf-8")
@@ -649,19 +654,19 @@ def test_digest_le_a_fila_do_clone_principal_no_layout_novo():
         assert p.returncode == 0, p.stderr
         assert "FECHADO NO CLONE PRINCIPAL" in p.stdout, p.stdout[-900:]
         assert "depende do A1 que não está na main" not in p.stdout
-        assert str(fila / "queue.yaml") in p.stdout or \
-            str((fila / "queue.yaml").resolve()) in p.stdout, p.stdout[-900:]
+        assert str(queue / "queue.yaml") in p.stdout or \
+            str((queue / "queue.yaml").resolve()) in p.stdout, p.stdout[-900:]
 
 
-# [D4] o doctor CHAMA check_layout_da_fila (pela CLI)
+# [D4] the doctor CALLS check_queue_layout (through the CLI)
 
-def test_doctor_cli_avisa_nome_nos_dois_layouts():
+def test_doctor_cli_warns_name_in_both_layouts():
     with tempfile.TemporaryDirectory() as base:
-        d = novo_repo(base)
-        fila_legada(d, nome="x", commita=False)
-        novo = d / ".claude" / "queues" / "x"
-        novo.mkdir(parents=True)
-        (novo / "queue.yaml").write_text("queue: x\nmode: single-track\n")
+        d = new_repo(base)
+        legacy_queue(d, name="x", commit_all=False)
+        new = d / ".claude" / "queues" / "x"
+        new.mkdir(parents=True)
+        (new / "queue.yaml").write_text("queue: x\nmode: single-track\n")
         r = subprocess.run([sys.executable, str(DOCTOR), "--projeto"],
                            cwd=str(d), capture_output=True, text=True, timeout=120,
                            env=dict(os.environ, CEPA_DOCTOR_INSTALL="off"))
@@ -669,46 +674,46 @@ def test_doctor_cli_avisa_nome_nos_dois_layouts():
         assert "dois layouts" in out, out[-1500:]
 
 
-# [MP] maestro-programs lista as filas do layout novo
+# [MP] maestro-programs lists the queues of the new layout
 
-@com_repo
-def test_maestro_programs_lista_filas_novas_junto_com_ondas_e_dedupe(d):
-    ondas = d / ".claude" / "programs" / "ondas"
-    ondas.mkdir(parents=True)
-    (ondas / "plan.yaml").write_text(yaml.dump(
+@with_repo
+def test_maestro_programs_lists_new_queues_with_waves_and_dedupes(d):
+    waves = d / ".claude" / "programs" / "ondas"
+    waves.mkdir(parents=True)
+    (waves / "plan.yaml").write_text(yaml.dump(
         {"schema_version": 2, "mode": "parallel-waves", "program": "ondas",
          "waves": [{"id": 1, "status": "pending", "slices": []}]}), encoding="utf-8")
-    fila_legada(d, nome="dupla", commita=False)           # nos dois layouts
-    fila_legada(d, nome="so-velha", commita=False)
-    for nome in ("dupla", "so-nova"):
-        pasta = d / ".claude" / "queues" / nome
-        pasta.mkdir(parents=True)
-        (pasta / "queue.yaml").write_text(
-            LEGADA.format(nome=nome).replace("program:", "queue:"), encoding="utf-8")
-    (d / ".claude" / "queues" / "sem-arquivo").mkdir()      # pasta sem queue.yaml
+    legacy_queue(d, name="dupla", commit_all=False)           # in both layouts
+    legacy_queue(d, name="so-velha", commit_all=False)
+    for name in ("dupla", "so-nova"):
+        folder = d / ".claude" / "queues" / name
+        folder.mkdir(parents=True)
+        (folder / "queue.yaml").write_text(
+            LEGACY.format(nome=name).replace("program:", "queue:"), encoding="utf-8")
+    (d / ".claude" / "queues" / "sem-arquivo").mkdir()      # folder without queue.yaml
     r = run(MAESTRO_PROGRAMS, d, str(d), "--json")
     assert r.returncode == 0, r.stderr
-    lista = json.loads(r.stdout)["programas"]
-    assert len(lista) == len({p["nome"] for p in lista}), \
-        f"nome nos dois layouts aparece uma vez só: {[p['nome'] for p in lista]}"
-    progs = {p["nome"]: p for p in lista}
+    listing = json.loads(r.stdout)["programas"]
+    assert len(listing) == len({p["nome"] for p in listing}), \
+        f"nome nos dois layouts aparece uma vez só: {[p['nome'] for p in listing]}"
+    progs = {p["nome"]: p for p in listing}
     assert sorted(progs) == ["dupla", "ondas", "so-nova", "so-velha"], sorted(progs)
-    for nome in ("dupla", "so-nova"):
-        assert progs[nome]["dir"].endswith(f".claude/queues/{nome}"), progs[nome]
-        assert progs[nome]["mode"] == "single-track" and not progs[nome]["elegivel"]
-        assert ".claude/queues" in progs[nome]["motivo"]
+    for name in ("dupla", "so-nova"):
+        assert progs[name]["dir"].endswith(f".claude/queues/{name}"), progs[name]
+        assert progs[name]["mode"] == "single-track" and not progs[name]["elegivel"]
+        assert ".claude/queues" in progs[name]["motivo"]
     assert progs["so-velha"]["dir"].endswith(".claude/programs/so-velha")
     assert progs["ondas"]["elegivel"] is True
 
 
 if __name__ == "__main__":
-    falhas = []
-    for nome, fn in sorted(globals().items()):
-        if nome.startswith("test_") and callable(fn):
+    failures = []
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
             try:
                 fn()
-                print(f"  ok  {nome}")
+                print(f"  ok  {name}")
             except Exception as e:  # noqa: BLE001
-                print(f"FAIL  {nome}  {e!r}")
-                falhas.append(nome)
-    sys.exit(1 if falhas else 0)
+                print(f"FAIL  {name}  {e!r}")
+                failures.append(name)
+    sys.exit(1 if failures else 0)

@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""Classifica um veredito NEEDS-HUMAN em um dos sete motivos.
+"""Classifies a NEEDS-HUMAN verdict into one of the seven reasons.
 
-Entrada: o dicionário de um artefato de prova (`docs/proof/<KEY>.yaml`, ou o
-         `.claude/proof/<KEY>.yaml` das rodadas antigas).
-Saída:   (slug, evidência) — a evidência é a frase que fez a regra casar, para
-         o comando mostrar sem o usuário abrir o arquivo.
+Input:  the dict of a proof artifact (`docs/proof/<KEY>.yaml`, or the
+        `.claude/proof/<KEY>.yaml` of the old rounds).
+Output: (slug, evidence) — the evidence is the phrase that made the rule match,
+        so the command can show it without the user opening the file.
 
-Os motivos, o que cada um significa e quem decide cada um estão em
-docs/needs-human-motivos.md. A lista é FECHADA: um caso que não casa com
-nenhuma regra sai como `sem-motivo`, e `/board-flow:decide` para e avisa — ele
-nunca inventa um oitavo motivo em tempo de execução, porque motivo inventado é
-o que faz um waiver gravado casar depois com o card errado.
+The reasons, what each one means and who decides each one are in
+docs/needs-human-motivos.md. The list is CLOSED: a case that matches no rule
+comes out as `sem-motivo`, and `/board-flow:decide` stops and warns — it never
+invents an eighth reason at run time, because an invented reason is what makes
+a recorded waiver later match the wrong card.
 
-A suíte de regressão é tests/test_needs_human_motivos.py, montada sobre 33
-artefatos reais de wego-assinatura-backend e wego-tasy-gateway.
+The regression suite is tests/test_needs_human_reasons.py, built on 33 real
+artifacts from wego-assinatura-backend and wego-tasy-gateway.
 
-Uso como script (leitura, não escreve nada):
+Usage as a script (read-only, writes nothing):
     classify_needs_human.py <repo> [<repo> ...]
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ import os
 import re
 import sys
 
-MOTIVOS = {
+REASONS = {
     "nao-rodou": "A prova não chegou a rodar",
     "teste-cego": "O teste não consegue enxergar essa mudança",
     "sem-cobertura": "Apareceu comportamento que nenhum teste confere",
@@ -36,13 +36,14 @@ MOTIVOS = {
     "sem-motivo": ">>> não cabe em nenhum motivo",
 }
 
-# Só este não vira pergunta para o humano: ninguém decide nada sobre um Docker
-# que não subiu. O comando re-roda e, persistindo, abre UM card de infra.
-NAO_PERGUNTA = {"nao-rodou"}
+# Only this one does not become a question for the human: nobody decides
+# anything about a Docker that did not come up. The command re-runs and, if it
+# persists, opens ONE infra card.
+NOT_A_QUESTION = {"nao-rodou"}
 
-# A ordem da fila que o usuário lê: risco decrescente. `nao-rodou` fica fora
-# porque não chega a ser pergunta.
-ORDEM_FILA = [
+# The order of the queue the user reads: decreasing risk. `nao-rodou` is left
+# out because it never becomes a question.
+QUEUE_ORDER = [
     "sem-cobertura",
     "teste-cego",
     "guarda-fraca",
@@ -51,8 +52,8 @@ ORDEM_FILA = [
     "nada-a-provar",
 ]
 
-# Os artefatos no disco usam duas grafias para os mesmos níveis (ver
-# docs/needs-human-motivos.md). Ler só a documentada perde metade da base.
+# The artifacts on disk use two spellings for the same levels (see
+# docs/needs-human-motivos.md). Reading only the documented one loses half the base.
 ALIAS = {
     "l2": ("l2_coverage", "l2_external_coverage"),
     "l3": ("l3_load_bearing", "l3_diff_mutation"),
@@ -61,52 +62,53 @@ ALIAS = {
 }
 
 
-def _nivel(levels: dict, chave: str) -> dict:
-    for nome in ALIAS[chave]:
-        if nome in levels:
-            valor = levels[nome]
-            return valor if isinstance(valor, dict) else {"status": valor}
+def _level(levels: dict, key: str) -> dict:
+    for name in ALIAS[key]:
+        if name in levels:
+            value = levels[name]
+            return value if isinstance(value, dict) else {"status": value}
     return {}
 
 
-def _texto(*valores) -> str:
-    return " ".join(str(v) for v in valores if v).lower()
+def _text(*values) -> str:
+    return " ".join(str(v) for v in values if v).lower()
 
 
-# Cada padrão abaixo saiu de um artefato real; o card citado é o exemplo vivo.
-FORA_DO_ALCANCE = [
+# Each pattern below came from a real artifact; the cited card is the living example.
+OUT_OF_REACH = [
     (r"decis[ãa]o operacional", "decisão operacional fora da sessão"),        # WEGO-1757
     (r"n[ãa]o fa[çc]o merge|n[ãa]o edito o schedule|fora do meu poder", "ação que a sessão não pode executar"),
     (r"n[ãa]o confirmad[ao] com a |aguardando (o |a )?(fornecedor|terceiro)", "pendente de confirmação de terceiro"),
 ]
 
-# Só o diff é assunto aqui: nenhuma linha de produção mudou.
-DIFF_SEM_PRODUCAO = [
+# Only the diff matters here: no production line changed.
+DIFF_WITHOUT_PRODUCTION = [
     (r"no production (code|line)|nenhuma linha de produ[çc][ãa]o", "diff sem código de produção"),   # WEGO-1709
     (r"pure adr|doc-only|somente documenta|apenas documenta", "diff só de documentação"),            # WEGO-1658
     (r"nothing to perturb|structurally inapplicable|estruturalmente inaplic", "não há o que perturbar"),
 ]
 
-# A outra metade do motivo 6: tudo foi provado, e UMA checagem não cabe nesse
-# tipo de mudança. Só vale com o teste estrutural em `classify` — a frase
-# sozinha aparece em prosa de artefato nenhum relacionada ("PIT não se aplica",
-# "regression check not applicable" num card que não é bug) e roubaria metade
-# da base para o motivo errado.
-CHECAGEM_INAPLICAVEL = [
+# The other half of reason 6: everything was proved, and ONE check does not fit
+# this kind of change. Only valid with the structural test in `classify` — the
+# phrase alone shows up in the prose of unrelated artifacts ("PIT does not
+# apply", "regression check not applicable" on a card that is not a bug) and
+# would steal half the base for the wrong reason.
+CHECK_NOT_APPLICABLE = [
     (r"n[ãa]o se aplica|not applicable|n[ãa]o [ée] aplic[áa]vel|lacuna de expressividade do schema",
      "checagem que não cabe nesse tipo de mudança"),                                                 # WEGO-1962
 ]
 
-NAO_RODOU = [
-    # A polaridade é obrigatória. A versão anterior casava a palavra "docker"
-    # solta e, num projeto Quarkus, TODO artefato de prova externa bem-feita cita
-    # Testcontainers — inclusive dizendo "Docker OK". Como `nao-rodou` é o único
-    # motivo que sai da fila sem passar pelo humano, a regra apagava justamente
-    # as provas que rodaram direito. Achado em 14/08/2026 no prove-drain de
-    # wego-acesso-backend: WEGO-1894 e WEGO-1897, ambos com Postgres real e
-    # achado de segurança, foram classificados "Docker indisponível" por causa da
-    # frase "Docker OK". As demais regras deste bloco sempre exigiram o marcador
-    # de indisponibilidade ("jacoco ausente", "pit absent"); esta era a exceção.
+DID_NOT_RUN = [
+    # The polarity is mandatory. The previous version matched the bare word
+    # "docker" and, in a Quarkus project, EVERY well-made external proof
+    # artifact cites Testcontainers — even saying "Docker OK". Since `nao-rodou`
+    # is the only reason that leaves the queue without going through the human,
+    # the rule erased precisely the proofs that ran right. Found on 2026-08-14
+    # in the prove-drain of wego-acesso-backend: WEGO-1894 and WEGO-1897, both
+    # with real Postgres and a security finding, were classified "Docker
+    # unavailable" because of the phrase "Docker OK". The other rules in this
+    # block always required the unavailability marker ("jacoco ausente", "pit
+    # absent"); this one was the exception.
     (r"(docker|dev services|testcontainers?)[^.\n]{0,60}"
      r"(indispon[íi]vel|unavailable|not (available|running|started|installed)|"
      r"n[ãa]o (subiu|iniciou|est[áa] (dispon[íi]vel|rodando)|dispon[íi]vel)|"
@@ -126,27 +128,28 @@ NAO_RODOU = [
     (r"build (falhou|failed|quebrado)|compilation (error|failure)", "build não subiu"),
 ]
 
-NAO_SEPARAVEL = [
+NOT_SEPARABLE = [
     (r"n[ãa]o (consegui|foi poss[íi]vel) separar|not separable|aggregate verdict",
      "evidência não atribuível a um card"),
 ]
 
-# A cegueira NOMEADA vence tudo: quando o artefato diz qual desenho impede a
-# prova, é isso que o humano vai decidir — mesmo que o mesmo artefato também
-# reclame de ferramenta ausente (WEGO-1540 tem os dois, e o que importa é o
-# dublê no-op, não o jacoco que faltou).
-TESTE_CEGO_NOMEADO = [
+# NAMED blindness beats everything: when the artifact says which design
+# prevents the proof, that is what the human will decide — even if the same
+# artifact also complains about a missing tool (WEGO-1540 has both, and what
+# matters is the no-op double, not the jacoco that was missing).
+NAMED_BLIND_TEST = [
     (r"no-op|noop|mock.*(engole|swallow)", "dublê engole o sinal"),                                      # WEGO-1540
     (r"n[ãa]o alcan[çc]|not reachable", "a superfície real não é alcançável pelo teste"),
     (r"only collective|apenas coletiv|s[óo] coletiv|double-gate|both .{0,30}layers|layered.defense|ambas as camadas",
      "só vai vermelho quando as duas camadas caem juntas"),                                              # WEGO-1778
 ]
 
-TESTE_CEGO = [
+BLIND_TEST = [
     (r"nenhum @quarkustest|no @quarkustest|sem teste externo|unobservable at (the )?http",
      "nenhum teste externo passa por esse caminho"),
-    # base/revert que não compila é obstáculo da FORMA DO CÓDIGO, não do
-    # ambiente: a máquina rodou, o vermelho-no-base é que não é produzível.
+    # a base/revert that does not compile is an obstacle of the SHAPE OF THE
+    # CODE, not of the environment: the machine ran, it is the red-on-base
+    # that cannot be produced.
     (r"n[ãa]o compila|do(es)? not compile", "reverter só esse pedaço não compila no commit-base"),       # WEGO-1614, 1710, 1783
     (r"analytical proof|prova anal[íi]tica|argumento estrutural|structural argument|an[áa]lise est[áa]tica",
      "sobrou argumento analítico no lugar da prova"),                                                    # WEGO-1710
@@ -155,65 +158,65 @@ TESTE_CEGO = [
 ]
 
 
-PASSOU = ("pass", "clean", "ran", "n/a", None)
+PASSED = ("pass", "clean", "ran", "n/a", None)
 
 
-def _travados(levels: dict) -> list[tuple[str, str]]:
-    """Níveis que impedem PROVEN — o que sobrou sem evidência, por nome."""
-    fora = []
-    for chave, rotulo in (("l2", "L2"), ("l3", "L3"), ("l4", "L4"), ("bug", "regressão")):
-        nivel = _nivel(levels, chave)
-        if not nivel:
+def _blocked_levels(levels: dict) -> list[tuple[str, str]]:
+    """Levels that prevent PROVEN — what is left without evidence, by name."""
+    out = []
+    for key, label in (("l2", "L2"), ("l3", "L3"), ("l4", "L4"), ("bug", "regressão")):
+        level = _level(levels, key)
+        if not level:
             continue
-        status = nivel.get("status")
-        pert = nivel.get("perturbation")
-        if isinstance(pert, dict) and pert.get("status") not in PASSOU:
-            fora.append((rotulo, pert.get("status")))
-        elif status not in PASSOU:
-            fora.append((rotulo, status))
-    return fora
+        status = level.get("status")
+        pert = level.get("perturbation")
+        if isinstance(pert, dict) and pert.get("status") not in PASSED:
+            out.append((label, pert.get("status")))
+        elif status not in PASSED:
+            out.append((label, status))
+    return out
 
 
 DOC_EXT = (".md", ".adoc", ".rst", ".txt")
 
 
-def _so_documentacao(changed_files) -> bool:
-    """Verdadeiro se a lista de arquivos (quando existe) é toda documentação.
+def _docs_only(changed_files) -> bool:
+    """True if the file list (when there is one) is all documentation.
 
-    Lista ausente não reprova: o artefato só declarou as classes. Lista
-    presente precisa ter todo arquivo em `docs/` ou com extensão de texto.
+    An absent list does not fail: the artifact only declared the classes. A
+    present list needs every file under `docs/` or with a text extension.
     """
     if changed_files is None:
         return True
     for item in changed_files:
-        caminho = str(item.get("file") if isinstance(item, dict) else item or "")
-        if not (caminho.startswith("docs/") or caminho.lower().endswith(DOC_EXT)):
+        path = str(item.get("file") if isinstance(item, dict) else item or "")
+        if not (path.startswith("docs/") or path.lower().endswith(DOC_EXT)):
             return False
     return True
 
 
-def _casa(regras, blob):
-    for padrao, evidencia in regras:
-        if re.search(padrao, blob):
-            return evidencia
+def _match(rules, blob):
+    for pattern, evidence in rules:
+        if re.search(pattern, blob):
+            return evidence
     return None
 
 
 def classify(d: dict) -> tuple[str, str]:
-    """Retorna (slug, evidência) para um artefato de prova já lido."""
+    """Returns (slug, evidence) for an already-read proof artifact."""
     levels = d.get("levels") or {}
-    l3 = _nivel(levels, "l3")
-    l2 = _nivel(levels, "l2")
-    l4 = _nivel(levels, "l4")
-    bug = _nivel(levels, "bug")
-    # no schema 2 a perturbação é um sub-bloco; na grafia antiga o nível é raso
+    l3 = _level(levels, "l3")
+    l2 = _level(levels, "l2")
+    l4 = _level(levels, "l4")
+    bug = _level(levels, "bug")
+    # in schema 2 the perturbation is a sub-block; in the old spelling the level is flat
     pert = l3.get("perturbation") or {
         "status": l3.get("status"),
         "results": l3.get("results") or l3.get("note"),
     }
     scope = d.get("scope") or {}
 
-    blob = _texto(
+    blob = _text(
         d.get("routing_reason"),
         pert.get("results"), pert.get("note"),
         l2.get("run"), l2.get("note"),
@@ -222,133 +225,138 @@ def classify(d: dict) -> tuple[str, str]:
         bug.get("run"), bug.get("note"),
     )
 
-    # ESTRUTURAL, e por isso vem antes de qualquer casador de prosa: se o L4
-    # registrou achado, a prova rodou E encontrou defeito na superfície mudada.
-    # Isso é decisão do humano por definição, e nenhuma frase pode reroteá-lo.
+    # STRUCTURAL, and therefore it comes before any prose matcher: if L4
+    # recorded a finding, the proof ran AND found a defect in the changed
+    # surface. That is the human's decision by definition, and no phrase can
+    # reroute it.
     #
-    # Esta checagem existia, mas lá embaixo, depois dos casadores de texto — e o
-    # blob inclui `l4.findings`, isto é, a PROSA DO PRÓPRIO ACHADO. Um achado que
-    # descrevesse "jacoco ausente" ou "docker" era classificado pela sua própria
-    # descrição e caía em `nao-rodou`, o único balde que dispensa o humano.
-    # Achado em 14/08/2026 no prove-drain de wego-acesso-backend: WEGO-1894
-    # (colisão de hash) e WEGO-1897 (NUL byte derrubando a API) sumiam da fila,
-    # os dois achados mais graves do lote. O fato vence o texto.
+    # This check existed, but further down, after the text matchers — and the
+    # blob includes `l4.findings`, that is, the PROSE OF THE FINDING ITSELF. A
+    # finding that described "jacoco ausente" or "docker" was classified by its
+    # own description and fell into `nao-rodou`, the only bucket that spares the
+    # human. Found on 2026-08-14 in the prove-drain of wego-acesso-backend:
+    # WEGO-1894 (hash collision) and WEGO-1897 (NUL byte taking the API down)
+    # vanished from the queue, the two most serious findings of the batch. The
+    # fact beats the text.
     #
-    # `findings` guarda prosa, não estado: WEGO-1819 está marcado `findings` e o
-    # texto diz que o achado já foi fechado. Por isso a evidência devolvida é o
-    # próprio texto — quem lê é o humano; o comando não afirma que está aberto.
+    # `findings` holds prose, not state: WEGO-1819 is marked `findings` and the
+    # text says the finding was already closed. So the evidence returned is the
+    # text itself — the reader is the human; the command does not claim it is open.
     if l4.get("status") == "findings":
         return "sem-cobertura", str(l4.get("findings") or "")[:200]
 
-    # A ordem é precedência, não gosto. "Depende de alguém de fora" e "diff sem
-    # produção" vêm primeiro porque também citam ambiente na prosa e seriam
-    # engolidos por "não rodou".
-    ev = _casa(FORA_DO_ALCANCE, blob)
+    # The order is precedence, not taste. "Depends on someone outside" and "diff
+    # without production" come first because they also cite the environment in
+    # the prose and would be swallowed by "did not run".
+    ev = _match(OUT_OF_REACH, blob)
     if ev:
         return "fora-do-alcance", ev
 
-    ev = _casa(TESTE_CEGO_NOMEADO, blob)
+    ev = _match(NAMED_BLIND_TEST, blob)
     if ev:
         return "teste-cego", ev
 
-    ev = _casa(DIFF_SEM_PRODUCAO, blob)
+    ev = _match(DIFF_WITHOUT_PRODUCTION, blob)
     if ev:
         return "nada-a-provar", ev
 
-    sem_base = scope.get("base_commit_resolved") is False or not d.get("base_commit")
+    no_base = scope.get("base_commit_resolved") is False or not d.get("base_commit")
 
-    # Um Epic-mãe não tem diff próprio: o trabalho mora nas Stories filhas, cada
-    # uma com seu base_commit e seu artefato. Sem esta guarda ele cai na regra de
-    # commit-base ausente logo abaixo e sai como `nao-rodou` — o ÚNICO motivo que
-    # dispensa o humano sem perguntar, e cuja saída prescrita é re-rodar a prova.
-    # Re-rodar num Epic devolve o mesmo resultado para sempre e o card fica em
-    # Review em silêncio. Achado no primeiro run real do comando (WEGO-1550,
-    # 2026-08-04), cujo artefato já dizia em prosa "um Epic-mãe, por definição,
-    # não produz esse diff" — o campo issue_type é o que faltava a regra olhar.
-    if sem_base and str(d.get("issue_type") or "").strip().lower() == "epic":
+    # A parent Epic has no diff of its own: the work lives in the child Stories,
+    # each with its own base_commit and artifact. Without this guard it falls
+    # into the missing-base-commit rule right below and comes out as
+    # `nao-rodou` — the ONLY reason that spares the human without asking, and
+    # whose prescribed exit is to re-run the proof. Re-running on an Epic
+    # returns the same result forever and the card sits in Review in silence.
+    # Found in the command's first real run (WEGO-1550, 2026-08-04), whose
+    # artifact already said in prose "a parent Epic, by definition, does not
+    # produce this diff" — the issue_type field is what the rule was missing.
+    if no_base and str(d.get("issue_type") or "").strip().lower() == "epic":
         return "nada-a-provar", "Epic agrega Stories filhas e não tem diff próprio"
 
-    if sem_base:
+    if no_base:
         return "nao-rodou", "commit-base não resolvido"
-    ev = _casa(NAO_RODOU, blob)
+    ev = _match(DID_NOT_RUN, blob)
     if ev:
         return "nao-rodou", ev
 
-    ev = _casa(NAO_SEPARAVEL, blob)
+    ev = _match(NOT_SEPARABLE, blob)
     if ev:
         return "nao-separavel", ev
 
-    ev = _casa(TESTE_CEGO, blob)
+    ev = _match(BLIND_TEST, blob)
     if ev:
         return "teste-cego", ev
 
-    # Diff só de documentação reconhecido pela ESTRUTURA, não pela prosa: o
-    # artefato declara `scope.changed_classes: []`, o L4 saiu `n/a` e a
-    # perturbação `skipped`. Sem esta regra o card cai no fallback logo abaixo
-    # e vira `teste-cego`, juntando spec com teste cego de verdade no
-    # agrupamento do /board-flow:decide. Achado em 2026-09-25 no prove-drain de
-    # wego-acesso-backend: WEGO-2117, 2275 e 2276 (só .md) cujo texto não casou
-    # DIFF_SEM_PRODUCAO. A lista vazia tem que estar ESCRITA: chave ausente é
-    # artefato que não disse, e não prova diff sem produção. E classe nenhuma
-    # não basta quando o artefato lista os arquivos: o WEGO-2021 também tem
-    # `changed_classes: []`, mas o diff é o application.properties — mudança
-    # de configuração, que muda comportamento.
+    # A docs-only diff recognized by STRUCTURE, not by prose: the artifact
+    # declares `scope.changed_classes: []`, L4 came out `n/a` and the
+    # perturbation `skipped`. Without this rule the card falls into the
+    # fallback right below and becomes `teste-cego`, mixing spec with truly
+    # blind tests in the /board-flow:decide grouping. Found on 2026-09-25 in the
+    # prove-drain of wego-acesso-backend: WEGO-2117, 2275 and 2276 (.md only)
+    # whose text did not match DIFF_WITHOUT_PRODUCTION. The empty list has to be
+    # WRITTEN: an absent key is an artifact that did not say, and does not
+    # prove a diff without production. And no class at all is not enough when
+    # the artifact lists the files: WEGO-2021 also has `changed_classes: []`,
+    # but the diff is application.properties — a configuration change, which
+    # changes behavior.
     if (scope.get("changed_classes") == []
             and pert.get("status") == "skipped"
             and l4.get("status") == "n/a"
-            and _so_documentacao(scope.get("changed_files"))):
+            and _docs_only(scope.get("changed_files"))):
         return "nada-a-provar", "diff sem classe de produção (changed_classes vazio)"
 
     if pert.get("status") == "skipped":
         return "teste-cego", "perturbação externa não pôde rodar"
 
-    # A segunda metade do motivo 6, e ela é ESTRUTURAL: tudo passou menos uma
-    # checagem, e essa checagem não cabe no tipo da mudança. Sem esta condição
-    # a frase "não se aplica" (que aparece solta em meio artefato) levava cards
-    # de ferramenta ausente para o motivo errado.
-    travados = _travados(levels)
-    if len(travados) == 1 and _casa(CHECAGEM_INAPLICAVEL, blob):
-        return "nada-a-provar", f"{travados[0][0]} não cabe nesse tipo de mudança"
+    # The second half of reason 6, and it is STRUCTURAL: everything passed but
+    # one check, and that check does not fit the kind of change. Without this
+    # condition the phrase "não se aplica" (which shows up loose in half the
+    # artifacts) sent missing-tool cards to the wrong reason.
+    blocked = _blocked_levels(levels)
+    if len(blocked) == 1 and _match(CHECK_NOT_APPLICABLE, blob):
+        return "nada-a-provar", f"{blocked[0][0]} não cabe nesse tipo de mudança"
 
-    # (A checagem de `l4.status == "findings"` que ficava aqui subiu para antes
-    # dos casadores de prosa — ver o comentário lá em cima. Daqui ela nunca era
-    # alcançada quando o texto do próprio achado casava outra regra.)
+    # (The `l4.status == "findings"` check that used to be here moved up to before
+    # the prose matchers — see the comment above. From here it was never reached
+    # when the text of the finding itself matched another rule.)
 
     for r in ((l3.get("pit") or {}).get("results") or []):
         m = re.search(r"\((\d+)%\)", str(r))
         if m and int(m.group(1)) < 70:
             return "guarda-fraca", str(r)[:200]
 
-    for nome, nivel in (("L2", l2), ("perturbação", pert), ("L4", l4), ("regressão", bug)):
-        if nivel.get("status") in ("assumed", "skipped"):
-            return "sem-motivo", f"{nome} = {nivel.get('status')}, sem causa reconhecida"
+    for name, level in (("L2", l2), ("perturbação", pert), ("L4", l4), ("regressão", bug)):
+        if level.get("status") in ("assumed", "skipped"):
+            return "sem-motivo", f"{name} = {level.get('status')}, sem causa reconhecida"
     return "sem-motivo", "needs-human sem nível bloqueado identificável"
 
 
-# Os dois diretórios de artefato, na ordem em que ganham. `docs/proof/` é onde
-# o proof-reviewer grava desde que o path-lock passou a travá-lo ali: nos
-# projetos que rodam o portão, `.claude/` é gitignored, então um veredito
-# gravado lá morre junto com a worktree descartável da sessão. `.claude/proof/`
-# segue LIDO porque é onde está a base inteira que já existe no disco — foi
-# sobre 33 desses artefatos que a suíte de regressão dos motivos foi montada.
-# Estreitar o leitor para um caminho só o cegaria para ela.
+# The two artifact directories, in the order they win. `docs/proof/` is where
+# the proof-reviewer writes since the path-lock started locking it there: in
+# projects that run the gate, `.claude/` is gitignored, so a verdict written
+# there dies along with the session's disposable worktree. `.claude/proof/`
+# is still READ because it holds the whole base that already exists on disk —
+# the reasons' regression suite was built on 33 of those artifacts.
+# Narrowing the reader to a single path would blind it to them.
 PROOF_DIRS = ("docs/proof", ".claude/proof")
 
 
 def proof_artifacts(repo: str) -> list:
-    """Caminhos dos artefatos de um repo, um por card.
+    """Paths of a repo's artifacts, one per card.
 
-    Quando o mesmo card tem artefato nos dois diretórios — o caso normal de um
-    card provado antes da mudança de destino e re-provado depois — o de
-    `docs/proof/` vence, porque é o que sobrevive à worktree e, sendo o destino
-    de escrita atual, é também o mais novo. O outro é ignorado em silêncio: não
-    é divergência a resolver, é a versão que ficou para trás.
+    When the same card has an artifact in both directories — the normal case of
+    a card proved before the change of destination and re-proved after — the
+    one in `docs/proof/` wins, because it is the one that survives the worktree
+    and, being the current write destination, is also the newest. The other is
+    silently ignored: it is not a divergence to resolve, it is the version that
+    was left behind.
     """
-    escolhidos: dict = {}
+    chosen: dict = {}
     for d in PROOF_DIRS:
         for path in sorted(glob.glob(os.path.join(repo, d, "*.yaml"))):
-            escolhidos.setdefault(os.path.basename(path), path)
-    return [escolhidos[k] for k in sorted(escolhidos)]
+            chosen.setdefault(os.path.basename(path), path)
+    return [chosen[k] for k in sorted(chosen)]
 
 
 def _main(repos):
@@ -370,16 +378,16 @@ def _main(repos):
             buckets.setdefault(slug, []).append((card, os.path.basename(repo), ev))
 
     print(f"NEEDS-HUMAN nos artefatos: {total}\n")
-    for slug in ORDEM_FILA + ["nao-rodou", "sem-motivo"]:
-        itens = buckets.get(slug) or []
-        if not itens:
+    for slug in QUEUE_ORDER + ["nao-rodou", "sem-motivo"]:
+        items = buckets.get(slug) or []
+        if not items:
             continue
-        print(f"[{len(itens)}] {MOTIVOS[slug]}  ({slug})")
-        for card, repo, ev in itens:
+        print(f"[{len(items)}] {REASONS[slug]}  ({slug})")
+        for card, repo, ev in items:
             print(f"    {card:12} {repo:26} {ev}")
         print()
-    nao_pergunta = sum(len(buckets.get(s) or []) for s in NAO_PERGUNTA)
-    print(f"{total} artefatos − {nao_pergunta} que não são decisão sua = {total - nao_pergunta}")
+    not_question = sum(len(buckets.get(s) or []) for s in NOT_A_QUESTION)
+    print(f"{total} artefatos − {not_question} que não são decisão sua = {total - not_question}")
     print("⚠ isto conta ARTEFATOS, não a fila: a fila são os cards que estão em Review agora.")
 
 

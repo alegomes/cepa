@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""Regression tests para `--prompt` / `--prompt-substitui` em common/bin/cepa.
+"""Regression tests for `--prompt` / `--prompt-substitui` in common/bin/cepa.
 
-O cepa aceita um system prompt customizado e o entrega ao claude como flag.
-Contratos guardados aqui:
+cepa accepts a custom system prompt and hands it to claude as a flag.
+Contracts guarded here:
 
-  - `--prompt <caminho>` vira `--append-system-prompt <conteúdo>`, ou seja SOMA
-    ao system prompt padrão do Claude Code (o que ensina ferramentas, hooks e
-    CLAUDE.md) em vez de apagá-lo;
-  - `--prompt-substitui <caminho>` vira `--system-prompt <conteúdo>`, o modo
-    destrutivo, e só ele;
-  - a flag entra ANTES dos args do usuário e não engole nenhum deles;
-  - nome solto (sem barra) é procurado na biblioteca — $CEPA_PROMPTS_HOME e
-    <repo>/.claude/prompts — com e sem o sufixo .md;
-  - prompt inexistente ou vazio é erro (rc=2) e a sessão NÃO sobe: abrir calado
-    sem o prompt pedido é pior que não abrir;
-  - CEPA_PROMPT/CEPA_PROMPT_MODO dão o default persistente;
-  - sem --prompt, nada muda (o cepa de antes).
+  - `--prompt <path>` becomes `--append-system-prompt <content>`, that is, it ADDS
+    to Claude Code's default system prompt (the one that teaches tools, hooks and
+    CLAUDE.md) instead of erasing it;
+  - `--prompt-substitui <path>` becomes `--system-prompt <content>`, the destructive
+    mode, and only it;
+  - the flag goes BEFORE the user's args and swallows none of them;
+  - a loose name (without a slash) is looked up in the library — $CEPA_PROMPTS_HOME and
+    <repo>/.claude/prompts — with and without the .md suffix;
+  - a missing or empty prompt is an error (rc=2) and the session does NOT start: opening
+    silently without the requested prompt is worse than not opening;
+  - CEPA_PROMPT/CEPA_PROMPT_MODO give the persistent default;
+  - without --prompt, nothing changes (the cepa of before).
 
-Sem deps de terceiros — rode com `python3 tests/test_cepa_prompt.py`.
+No third-party deps — run with `python3 tests/test_cepa_prompt.py`.
 """
 
 import os
@@ -25,18 +25,18 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-# O cepa lê CEPA_PROMPT/CEPA_PROMPT_MODO do ambiente. Herdadas do shell de quem
-# roda a suíte (o cepa-until roda com elas), viram um prompt que o teste não
-# pediu e quebram o "repassa só os args do usuário". Quem quer o prompt passa
-# no env= do próprio caso.
+# cepa reads CEPA_PROMPT/CEPA_PROMPT_MODO from the environment. Inherited from the shell of whoever
+# runs the suite (cepa-until runs with them), they become a prompt the test did not
+# ask for and break the "passes only the user's args". Whoever wants the prompt passes
+# it in the env= of the case itself.
 for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODO"):
     os.environ.pop(_k, None)
 
 REPO = Path(__file__).resolve().parent.parent
 CEPA = REPO / "common" / "bin" / "cepa"
 
-# Um claude falso que imprime cada argumento numa linha, para o teste ver
-# fronteira de argumento (um prompt multilinha não pode virar vários args).
+# A fake claude that prints each argument on a line, so the test sees the
+# argument boundary (a multiline prompt must not become several args).
 MARK = "---CEPA-ARG---"
 FAKE_CLAUDE = f'#!/bin/sh\nfor a in "$@"; do printf "%s\\n{MARK}\\n" "$a"; done\n'
 
@@ -82,62 +82,62 @@ class Repo:
 
 
 def args_of(proc):
-    """Os argumentos exatos que o claude recebeu — separados por um marcador,
-    e não por linha, porque um prompt multilinha é UM argumento só."""
+    """The exact arguments claude received — separated by a marker,
+    and not by line, because a multiline prompt is ONE argument only."""
     parts = proc.stdout.split(f"\n{MARK}\n")
     return parts[:-1]
 
 
 PROMPT_FLAGS = ("--append-system-prompt", "--system-prompt")
-# Flags que o PRÓPRIO cepa acrescenta, e que portanto não são "args do usuário":
-# hoje só a de permissão (toda sessão nasce em bypassPermissions).
-FLAGS_DO_CEPA = ("--dangerously-skip-permissions", "--permission-mode")
+# Flags that cepa ITSELF adds, and which therefore are not "user args":
+# today only the permission one (every session is born in bypassPermissions).
+CEPA_FLAGS = ("--dangerously-skip-permissions", "--permission-mode")
 
 
 def prompt_par(a):
-    """(flag de prompt, conteúdo, args do usuário depois dela).
+    """(prompt flag, content, user args after it).
 
-    O contrato guardado é a ordem RELATIVA — a flag de prompt vem antes do que
-    você digitou — e não o índice absoluto: o cepa prefixa flags próprias antes
-    das do usuário, e uma flag nova não pode quebrar este teste."""
+    The contract guarded is the RELATIVE order — the prompt flag comes before what
+    you typed — and not the absolute index: cepa prefixes its own flags before
+    the user's, and a new flag must not break this test."""
     for i, x in enumerate(a):
         if x in PROMPT_FLAGS:
             return x, (a[i + 1] if i + 1 < len(a) else None), a[i + 2:]
     return None, None, a
 
 
-def do_usuario(a):
-    """Só o que o usuário digitou — sem as flags do próprio cepa nem o par
-    flag-de-prompt + conteúdo."""
-    fora, i = [], 0
+def from_user(a):
+    """Only what the user typed — without cepa's own flags nor the pair
+    prompt-flag + content."""
+    outside, i = [], 0
     while i < len(a):
         x = a[i]
         if x in PROMPT_FLAGS:
             i += 2
-        elif x.split("=")[0] in FLAGS_DO_CEPA:
+        elif x.split("=")[0] in CEPA_FLAGS:
             i += 1
         else:
-            fora.append(x)
+            outside.append(x)
             i += 1
-    return fora
+    return outside
 
 
-def test_append_e_o_default():
+def test_append_is_the_default():
     with Repo() as r:
         f = r.path / "p.md"
         f.write_text("SEJA CONCISO\nlinha dois\n")
         p = r.run("--prompt", str(f), "--resume")
         a = args_of(p)
         check("append: rc=0", p.returncode == 0, p.stderr)
-        flag, conteudo, depois = prompt_par(a)
+        flag, content, after = prompt_par(a)
         check("append: usa --append-system-prompt", flag == "--append-system-prompt", a)
         check("append: entrega o conteúdo como UM argumento",
-              conteudo == "SEJA CONCISO\nlinha dois", a)
-        check("append: preserva os args do usuário", depois == ["--resume"], a)
+              content == "SEJA CONCISO\nlinha dois", a)
+        check("append: preserva os args do usuário", after == ["--resume"], a)
         check("append: diz qual prompt subiu", "system prompt (append)" in p.stderr, p.stderr)
 
 
-def test_substitui_e_explicito():
+def test_replace_is_explicit():
     with Repo() as r:
         f = r.path / "p.md"
         f.write_text("prompt inteiro\n")
@@ -147,7 +147,7 @@ def test_substitui_e_explicito():
               "--append-system-prompt" not in a, a)
 
 
-def test_forma_com_igual():
+def test_form_with_equals():
     with Repo() as r:
         f = r.path / "p.md"
         f.write_text("x\n")
@@ -159,7 +159,7 @@ def test_forma_com_igual():
               prompt_par(a)[0] == "--system-prompt", a)
 
 
-def test_nome_na_biblioteca():
+def test_name_in_the_library():
     with Repo() as r:
         (r.lib / "smartass.md").write_text("da biblioteca\n")
         a = args_of(r.run("--prompt", "smartass"))
@@ -167,7 +167,7 @@ def test_nome_na_biblioteca():
               prompt_par(a)[1] == "da biblioteca", a)
 
 
-def test_nome_na_biblioteca_do_repo():
+def test_name_in_the_repo_library():
     with Repo() as r:
         d = r.path / ".claude" / "prompts"
         d.mkdir(parents=True)
@@ -177,7 +177,7 @@ def test_nome_na_biblioteca_do_repo():
               prompt_par(a)[1] == "do repo", a)
 
 
-def test_biblioteca_do_usuario_ganha():
+def test_user_library_wins():
     with Repo() as r:
         (r.lib / "x.md").write_text("usuario\n")
         d = r.path / ".claude" / "prompts"
@@ -188,7 +188,7 @@ def test_biblioteca_do_usuario_ganha():
               prompt_par(a)[1] == "usuario", a)
 
 
-def test_inexistente_recusa():
+def test_missing_refuses():
     with Repo() as r:
         p = r.run("--prompt", "naoexiste")
         check("inexistente: rc=2", p.returncode == 2, str(p.returncode))
@@ -196,7 +196,7 @@ def test_inexistente_recusa():
         check("inexistente: diz onde procurou", "procurei em" in p.stderr, p.stderr)
 
 
-def test_caminho_errado_nao_cai_na_biblioteca():
+def test_wrong_path_does_not_fall_to_the_library():
     with Repo() as r:
         (r.lib / "x.md").write_text("nao me use\n")
         p = r.run("--prompt", "./x")
@@ -204,7 +204,7 @@ def test_caminho_errado_nao_cai_na_biblioteca():
               p.returncode == 2 and MARK not in p.stdout, p.stdout)
 
 
-def test_vazio_recusa():
+def test_empty_refuses():
     with Repo() as r:
         f = r.path / "vazio.md"
         f.write_text("")
@@ -213,7 +213,7 @@ def test_vazio_recusa():
         check("vazio: não lançou o claude", MARK not in p.stdout, p.stdout)
 
 
-def test_sem_valor_recusa():
+def test_without_value_refuses():
     with Repo() as r:
         p = r.run("--prompt")
         check("--prompt sem valor: rc=2", p.returncode == 2, str(p.returncode))
@@ -232,7 +232,7 @@ def test_env_default():
         check("CEPA_PROMPT_MODO inválido: rc=2", p.returncode == 2, p.stderr)
 
 
-def test_flag_vence_o_env():
+def test_flag_beats_the_env():
     with Repo() as r:
         (r.lib / "padrao.md").write_text("do env\n")
         (r.lib / "outro.md").write_text("da flag\n")
@@ -240,11 +240,11 @@ def test_flag_vence_o_env():
         check("flag vence o env", prompt_par(a)[1] == "da flag", a)
 
 
-def test_sem_prompt_nada_muda():
+def test_without_prompt_nothing_changes():
     with Repo() as r:
         a = args_of(r.run("--resume"))
         check("sem --prompt: repassa só os args do usuário",
-              do_usuario(a) == ["--resume"], a)
+              from_user(a) == ["--resume"], a)
 
 
 for fn in [v for k, v in sorted(globals().items()) if k.startswith("test_")]:

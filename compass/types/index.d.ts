@@ -1,25 +1,25 @@
-export type ItemFila = { id: string; titulo: string }
+export type QueueItem = { id: string; title: string }
 
-export type Fila = {
-  nome: string
-  fonte: string
-  pendentes: number
-  emAndamento: number
-  bloqueados: number
-  feitos: number
-  descartados: number
-  proximo: ItemFila | null
-  travado: ItemFila | null
+export type Queue = {
+  name: string
+  source: string
+  pending: number
+  inProgress: number
+  blocked: number
+  done: number
+  dropped: number
+  next: QueueItem | null
+  stuck: QueueItem | null
 }
 
-export type Ciclo = { numero: number; rotulo: string }
+export type Cycle = { number: number; label: string }
 
 export type Epic = {
-  arquivo: string
-  nome: string
+  file: string
+  name: string
   status: string
-  padraoFila: string
-  ciclos: Ciclo[]
+  queuePattern: string
+  cycles: Cycle[]
 }
 
 declare module 'claude-code' {
@@ -27,14 +27,14 @@ declare module 'claude-code' {
     compass: {
       texto: string | null
       agora: number
-      filas: Fila[]
+      filas: Queue[]
       epics: Epic[]
       modo: string | null
       desvios: string | null
       build: string | null
       saidas: Record<string, string>
-      until: { fila: string; id: string; texto: string } | null
-      gate: { gate: 'gate-advance' | 'acceptance-gate' | 'worktree-guard'; frase: string; quando: string; vezes: number } | null
+      until: { queue: string; id: string; text: string } | null
+      gate: { gate: 'gate-advance' | 'acceptance-gate' | 'worktree-guard'; phrase: string; when: string; times: number } | null
     }
   }
 }

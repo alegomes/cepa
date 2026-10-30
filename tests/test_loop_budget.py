@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Testes do teto de iteração (P0-2 da revisão 2026-08-17).
+"""Tests of the iteration ceiling (P0-2 of the 2026-08-17 review).
 
-Sem dependências — rode com `python3 tests/test_loop_budget.py`.
-Sai não-zero em falha.
+No dependencies — run with `python3 tests/test_loop_budget.py`.
+Exits non-zero on failure.
 
-A regra que este arquivo protege tem duas metades, e as duas custam caro se
-quebrarem:
+The rule this file protects has two halves, and both are costly if
+broken:
 
-  - **Repetir bloqueia.** A mesma falha pela 3ª vez para a delegação. Sem isso,
-    um card patológico consome a sessão inteira ciclando no mesmo vermelho.
-  - **Iterar NÃO bloqueia.** Falha diferente, progresso, build verde — tudo
-    isso segue. Um teto que morde a iteração legítima seria desligado no
-    primeiro dia, e aí não protege nada. Metade dos casos abaixo existe só
-    para provar que ele não morde.
+  - **Repeating blocks.** The same failure for the 3rd time stops the delegation. Without it,
+    a pathological card consumes the whole session cycling on the same red.
+  - **Iterating does NOT block.** A different failure, progress, a green build — all
+    of that goes on. A ceiling that bites legitimate iteration would be switched off on the
+    first day, and then it protects nothing. Half of the cases below exist only
+    to prove that it does not bite.
 """
 
 import json
@@ -21,12 +21,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-# Este teste executa hook que emite telemetria; sem isto os eventos cairiam
-# em ~/.claude/cepa-telemetry/ e entrariam no relatório do /common:metrics
-# como se fossem uso real. Ver tests/_telemetria_isolada.py.
-from _telemetria_isolada import isola
+# This test executes a hook that emits telemetry; without this the events would fall
+# in ~/.claude/cepa-telemetry/ and enter the /common:metrics report
+# as if they were real use. See tests/_isolated_telemetry.py.
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -69,7 +69,7 @@ RED_A = """
 [ERROR] TenantResourceTest.shouldRejectUnknownTenant:88 expected 422 but was 500
 BUILD FAILURE
 """
-RED_A_OUTRO_RUN = """
+RED_A_OTHER_RUN = """
 [ERROR] Tests run: 12, Failures: 1, Errors: 0, Skipped: 0
 [ERROR] TenantResourceTest.shouldRejectUnknownTenant:88 expected 422 but was 500
 BUILD FAILURE
@@ -81,12 +81,12 @@ RED_B = """
 [ERROR] SignatureAdapterTest.shouldRetryOnTimeout:41 expected 3 calls but was 1
 BUILD FAILURE
 """
-VERDE = "Tests run: 12, Failures: 0, Errors: 0\nBUILD SUCCESS"
+GREEN = "Tests run: 12, Failures: 0, Errors: 0\nBUILD SUCCESS"
 
 
-# ── repetir bloqueia ─────────────────────────────────────────────────────────
+# ── repeating blocks ─────────────────────────────────────────────────────────
 
-def test_terceira_falha_igual_bloqueia(tmp):
+def test_third_identical_failure_blocks(tmp):
     d = fresh(tmp, "repete")
     for i in (1, 2):
         run("PostToolUse", d, RED_A)
@@ -102,22 +102,22 @@ def test_terceira_falha_igual_bloqueia(tmp):
           "DIAGNOSTIQUE" in r.stderr and "BLOCKED" in r.stderr)
 
 
-def test_ruido_volatil_nao_disfarca_a_mesma_falha(tmp):
-    """Timestamp e duração mudam a cada run — não podem virar 'falha nova'.
+def test_volatile_noise_does_not_disguise_the_same_failure(tmp):
+    """Timestamp and duration change on every run — they cannot become a 'new failure'.
 
-    Sem a normalização, cada volta teria assinatura própria e o teto nunca
-    dispararia: o detector ficaria verde para sempre enquanto o loop roda.
+    Without the normalization, each lap would have its own signature and the ceiling would never
+    fire: the detector would stay green forever while the loop runs.
     """
     d = fresh(tmp, "ruido")
     run("PostToolUse", d, RED_A)
-    run("PostToolUse", d, RED_A_OUTRO_RUN)
+    run("PostToolUse", d, RED_A_OTHER_RUN)
     run("PostToolUse", d, RED_A)
     r = run("PreToolUse", d)
     check("mesma falha com timestamp/duração diferentes conta como a mesma",
           r.returncode == 2, f"exit {r.returncode}")
 
 
-def test_aviso_antes_do_bloqueio(tmp):
+def test_warning_before_the_block(tmp):
     d = fresh(tmp, "aviso")
     run("PostToolUse", d, RED_A)
     r = run("PostToolUse", d, RED_A)
@@ -125,9 +125,9 @@ def test_aviso_antes_do_bloqueio(tmp):
           "BLOQUEADA" in r.stderr or "⚠" in r.stderr, r.stderr[:120])
 
 
-# ── iterar NÃO bloqueia ──────────────────────────────────────────────────────
+# ── iterating does NOT block ─────────────────────────────────────────────────
 
-def test_falhas_diferentes_nao_bloqueiam(tmp):
+def test_different_failures_do_not_block(tmp):
     d = fresh(tmp, "progresso")
     for text in (RED_A, RED_B, RED_A, RED_B):
         run("PostToolUse", d, text)
@@ -136,12 +136,12 @@ def test_falhas_diferentes_nao_bloqueiam(tmp):
           r.returncode == 0, f"exit {r.returncode}")
 
 
-def test_verde_zera_o_contador(tmp):
+def test_green_resets_the_counter(tmp):
     d = fresh(tmp, "verde")
     run("PostToolUse", d, RED_A)
     run("PostToolUse", d, RED_A)
     (d / ".claude" / "last-build.json").write_text(json.dumps({"status": "SUCCESS"}))
-    run("PostToolUse", d, VERDE)
+    run("PostToolUse", d, GREEN)
     (d / ".claude" / "last-build.json").write_text(json.dumps({"status": "STALE"}))
     run("PostToolUse", d, RED_A)
     r = run("PreToolUse", d)
@@ -149,7 +149,7 @@ def test_verde_zera_o_contador(tmp):
           r.returncode == 0, f"exit {r.returncode}")
 
 
-def test_sucesso_nao_conta(tmp):
+def test_success_does_not_count(tmp):
     d = fresh(tmp, "sucesso")
     for _ in range(5):
         run("PostToolUse", d, "APPROVED. Tests run: 40, Failures: 0, Errors: 0")
@@ -159,12 +159,12 @@ def test_sucesso_nao_conta(tmp):
     check("nenhuma assinatura registrada num run limpo", state["signatures"] == {})
 
 
-def test_assinatura_envelhece(tmp):
-    """Vermelho resolvido não pode seguir contando meia hora depois."""
+def test_signature_ages(tmp):
+    """A resolved red cannot keep counting half an hour later."""
     d = fresh(tmp, "idade")
     run("PostToolUse", d, RED_A)
     run("PostToolUse", d, RED_A)
-    for _ in range(7):  # AGE_OUT = 6 delegações sem a assinatura aparecer
+    for _ in range(7):  # AGE_OUT = 6 delegations without the signature appearing
         run("PostToolUse", d, "tudo certo por aqui")
     run("PostToolUse", d, RED_A)
     r = run("PreToolUse", d)
@@ -172,9 +172,9 @@ def test_assinatura_envelhece(tmp):
           r.returncode == 0, f"exit {r.returncode}")
 
 
-# ── nunca atrapalha ──────────────────────────────────────────────────────────
+# ── never gets in the way ────────────────────────────────────────────────────
 
-def test_outras_tools_passam(tmp):
+def test_other_tools_pass(tmp):
     d = fresh(tmp, "outras")
     payload = {"tool_name": "Bash", "hook_event_name": "PreToolUse", "cwd": str(d),
                "tool_input": {"command": "ls"}}
@@ -183,20 +183,20 @@ def test_outras_tools_passam(tmp):
     check("hook só age em Task", r.returncode == 0)
 
 
-def test_payload_ilegivel_libera(tmp):
+def test_unreadable_payload_releases(tmp):
     r = subprocess.run([sys.executable, str(HOOK)], input="{isto não é json",
                        capture_output=True, text=True)
     check("payload ilegível libera (fail-open)", r.returncode == 0)
 
 
-def test_estado_corrompido_libera(tmp):
+def test_corrupted_state_releases(tmp):
     d = fresh(tmp, "corrompido")
     (d / ".claude" / "loop-state.json").write_text("{lixo")
     r = run("PreToolUse", d)
     check("estado corrompido libera em vez de travar a sessão", r.returncode == 0)
 
 
-def test_desligavel_explicitamente(tmp):
+def test_explicitly_disableable(tmp):
     import os
     d = fresh(tmp, "off")
     for _ in range(4):
@@ -209,17 +209,17 @@ def test_desligavel_explicitamente(tmp):
 
 def main():
     with tempfile.TemporaryDirectory() as tmp:
-        test_terceira_falha_igual_bloqueia(tmp)
-        test_ruido_volatil_nao_disfarca_a_mesma_falha(tmp)
-        test_aviso_antes_do_bloqueio(tmp)
-        test_falhas_diferentes_nao_bloqueiam(tmp)
-        test_verde_zera_o_contador(tmp)
-        test_sucesso_nao_conta(tmp)
-        test_assinatura_envelhece(tmp)
-        test_outras_tools_passam(tmp)
-        test_payload_ilegivel_libera(tmp)
-        test_estado_corrompido_libera(tmp)
-        test_desligavel_explicitamente(tmp)
+        test_third_identical_failure_blocks(tmp)
+        test_volatile_noise_does_not_disguise_the_same_failure(tmp)
+        test_warning_before_the_block(tmp)
+        test_different_failures_do_not_block(tmp)
+        test_green_resets_the_counter(tmp)
+        test_success_does_not_count(tmp)
+        test_signature_ages(tmp)
+        test_other_tools_pass(tmp)
+        test_unreadable_payload_releases(tmp)
+        test_corrupted_state_releases(tmp)
+        test_explicitly_disableable(tmp)
 
     print()
     if FAILURES:

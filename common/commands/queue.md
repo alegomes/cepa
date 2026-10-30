@@ -1,6 +1,6 @@
 ---
-description: The single writer of the repo's `single-track` queue, `.claude/queues/<name>/queue.yaml`: the document that keeps the ORDER of the items and the WHY of each position, which is what a tracker loses. Four sources: `--from-spec` turns each success criterion of a /common:spec specification into an item, inheriting the order of the text (and saying so); `--from-epic` with `--ciclo N` turns each sentence of a cycle's "O que atravessa" in a /common:epic Epic into an item and the cycle's demonstration script into the queue's `demonstra:`; `--from-jira` takes the classification of /board-flow:triage (which reads the cards and hunts evidence in the code) and records the order it proposed; or a queue dictated by hand, for a repo with no tracker and no spec. Needs no Jira. Refuses to overwrite a `parallel-waves` file of /maestro:program-plan. /common:next reads the queue afterwards.
-argument-hint: <name> [--from-spec docs/spec/<slug>.md | --from-epic docs/epics/<name>.md --ciclo N | --from-jira [column|handoff.json]] [--dry-run] [--on-missing refuse|keep|drop]
+description: The single writer of the repo's `single-track` queue, `.claude/queues/<name>/queue.yaml`: the document that keeps the ORDER of the items and the WHY of each position, which is what a tracker loses. Four sources: `--from-spec` turns each success criterion of a /common:spec specification into an item, inheriting the order of the text (and saying so); `--from-epic` with `--cycle N` turns each sentence of a cycle's "What it crosses" in a /common:epic Epic into an item and the cycle's demonstration script into the queue's `demonstrates:`; `--from-jira` takes the classification of /board-flow:triage (which reads the cards and hunts evidence in the code) and records the order it proposed; or a queue dictated by hand, for a repo with no tracker and no spec. Needs no Jira. Refuses to overwrite a `parallel-waves` file of /maestro:program-plan. /common:next reads the queue afterwards.
+argument-hint: <name> [--from-spec docs/spec/<slug>.md | --from-epic docs/epics/<name>.md --cycle N | --from-jira [column|handoff.json]] [--dry-run] [--on-missing refuse|keep|drop]
 interaction: conversational
 ---
 
@@ -55,10 +55,10 @@ instead of erasing it.
 - `--from-spec docs/spec/<slug>.md` — each success criterion of the
   specification becomes an item of the queue.
 - `--from-epic docs/epics/<name>.md` — the queue comes from ONE cycle of the
-  value ladder of a `/common:epic` Epic: each sentence of the "O que atravessa"
+  value ladder of a `/common:epic` Epic: each sentence of the "What it crosses"
   column becomes an item, and the cycle's demonstration script becomes the
-  header's `demonstra:`. Always with `--ciclo`.
-- `--ciclo N` — which cycle of the ladder becomes a queue (the number in the
+  header's `demonstrates:`. Always with `--cycle`.
+- `--cycle N` — which cycle of the ladder becomes a queue (the number in the
   "Ciclo" column). An Epic has several cycles and a queue belongs to only one;
   the custom is for the queue name to end in `-c<N>`.
 - `--from-jira [column|handoff.json]` — the queue comes from the
@@ -153,7 +153,7 @@ python3 common/bin/cepa-plan from-spec docs/spec/<slug>.md
 It returns the list of items as JSON — **one item per success criterion**
 (`### CS-N`), in the order they appear in the text — and warns on stderr when
 the spec is still a draft, when a `- [ ]` question is left over or when some
-criterion does not declare **Teste vermelho:** (red test). It is not decoration
+criterion does not declare **Red test:**. It is not decoration
 that this is code: the sentence that records the inherited order must appear in
 the written file, and a prose instruction only proves the command PROMISES to
 write it.
@@ -166,8 +166,8 @@ final result:
 - `title` — the criterion in observable terms, the line of the `### CS-N`
   itself.
 - `why` — the script builds it from what the specification already wrote: the
-  **Superfície** (surface) where the criterion is observable, the declared
-  **Teste vermelho**, and the sentence that records the inheritance —
+  **Surface** where the criterion is observable, the declared
+  **Red test**, and the sentence that records the inheritance —
   **"herdado da ordem do texto da especificação; ninguém priorizou os critérios
   entre si"** (inherited from the order of the specification's text; nobody
   prioritized the criteria among themselves). Where the Problema/Escopo section
@@ -189,28 +189,28 @@ inherit the order of the text and **say that it inherited it** — not to ask it
 once. Offer to reorder in ONE closed question at the end, with the whole queue
 in view.
 
-**Spec still a draft.** If `**Status:**` is not `pronta-para-construir`, say
+**Spec still a draft.** If `**Status:**` is not `ready-to-build` (or the old `pronta-para-construir`), say
 how many `- [ ]` questions are still open and ask ONE closed question: close
 the specification first (`/common:spec --fechar <slug>`) or write the queue
 anyway. Recommend closing first — a criterion without an observable surface
 becomes a queue item nobody knows when finished.
 
-#### With `--from-epic` and `--ciclo`
+#### With `--from-epic` and `--cycle`
 
 The source here is a cycle of the value ladder of an Epic
 (`docs/epics/<name>.md`, written by `/common:epic`). **The reading is
 mechanical**, not yours:
 
 ```
-python3 common/bin/cepa-plan from-epic docs/epics/<name>.md --ciclo N
+python3 common/bin/cepa-plan from-epic docs/epics/<name>.md --cycle N
 ```
 
-It returns a JSON with the cycle's `demonstra` and `items`, and applies the
+It returns a JSON with the cycle's `demonstrates` and `items`, and applies the
 rules that previously had no owner:
 
-- **the queue's `demonstra:` is the cycle's script**, verbatim. It is what the
+- **the queue's `demonstrates:` is the cycle's script**, verbatim. It is what the
   Epic declares as acceptance, and it is what `cepa-plan show` prints later;
-- **one item per sentence of "O que atravessa"**, in the order of the text,
+- **one item per sentence of "What it crosses"**, in the order of the text,
   with id `C<N>-<k>`. A sentence is the stretch ending in `.` or `;` outside
   backticks: `/common:epic` writes one sentence per piece, and an Epic written
   by hand before it separates the pieces with `;`. An abbreviation with a
@@ -219,23 +219,23 @@ rules that previously had no owner:
 - **the `why` of each item says** which cycle and which Epic the piece came
   from, that the order was inherited from the text (nobody prioritized the
   pieces among themselves), the **acceptance criterion** (the cycle's script)
-  and the **surface where it is observed** (the "Efeito em tela" and "Efeito em
+  and the **surface where it is observed** (the "Effect on screen" and "Effect in
   backend" columns). No piece gets an invented criterion of its own: the Epic
   did not write one;
 - **an Epic without the effect columns is not refused**, and that is said:
   each item is born with the surface "não declarada" (not declared) and a
   warning. Recommend that the owner fill in the cycle through `/common:epic`
   before draining the queue;
-- **an Epic in `rascunho` (draft), or with a `- [ ]` question, is a warning**,
+- **an Epic in `draft` (old `rascunho`), or with a `- [ ]` question, is a warning**,
   as with the spec. Ask the same closed question: close the Epic first or
   write the queue anyway. Recommend closing first;
-- **a cycle that does not exist, has no script or has an empty "O que
-  atravessa" is a refusal**, with exit 2 and the reason. Do not fill the gap on
+- **a cycle that does not exist, has no script or has an empty "What it
+  crosses" is a refusal**, with exit 2 and the reason. Do not fill the gap on
   your own.
 
 When nothing changed in what `from-epic` returned, write directly with
-`--from-epic <file> --ciclo N` in place of `--items`: it is the only path
-that brings `demonstra:` into the header, because the item list does not carry
+`--from-epic <file> --cycle N` in place of `--items`: it is the only path
+that brings `demonstrates:` into the header, because the item list does not carry
 it.
 
 #### With `--from-jira`
@@ -335,12 +335,12 @@ review. Ask it in Brazilian Portuguese (pt-BR).
 
 ```
 python3 common/bin/cepa-plan write <name> \
-  --items <file.json> --source "<where it came from>" --quando <YYYY-MM-DD> --repo .
+  --items <file.json> --source "<where it came from>" --when <YYYY-MM-DD> --repo .
 ```
 
 When nothing changed in what `from-spec` (or `from-triage`, or `from-epic`)
 returned, `--from-spec <file>` / `--from-triage <file>` /
-`--from-epic <file> --ciclo N` does both things at once, in place of
+`--from-epic <file> --cycle N` does both things at once, in place of
 `--items`.
 
 Write the items into a temporary JSON file (or send them via stdin with `-`).

@@ -627,9 +627,9 @@ build-ready (`Status: ready`) while some success criterion still has no
 surface + red test: the failure mode is the `/common:spec` interrogation
 ending from agent fatigue rather than actual readiness. Epics (`docs/epics/*.md`
 or a document opening with `# Epic:`, written by `/common:epic`) get their own
-sieve: `Status: pronta` is blocked until every cycle of the value ladder fills
-"Roteiro", "Efeito em tela" and "Efeito em backend", the invariants list has at
-least one item, the "Decidido sem perguntar" section exists and no open
+sieve: `Status: ready` is blocked until every cycle of the value ladder fills
+"Script", "Effect on screen" and "Effect in backend", the invariants list has at
+least one item, the "Decided without asking" section exists and no open
 question is left.
 
 ### ui-proof-verdict-guard.py (PreToolUse, matcher `Write`)
@@ -656,16 +656,16 @@ that were being re-taught every session and still getting violated.
 ### session-mode.py (UserPromptSubmit)
 
 Owner: `common/hooks/`. Injects the active work mode (set via `cepa
---modo <x>`, stored in `.claude/session-mode`) into context every turn:
+--mode <x>`, stored in `.claude/session-mode`) into context every turn:
 a session-long STATE, distinct from a routine (a task that ends). Full
 design: `docs/modos-de-trabalho.md`.
 
 It also injects the session intent (`.claude/session-intent`, written only by
-`cepa-intencao`), capped at two lines, in one of three states: no intent yet
+`cepa-intent`), capped at two lines, in one of three states: no intent yet
 (only when a mode is set, i.e. the session came from `cepa`): the session's
 first three prompts plus the request to propose and record one; intent recorded
 by ANOTHER session: the date and "continuo ou abro nova?" instead of showing it
-as current (answered by `cepa-intencao continuar` or `gravar --motivo`); and
+as current (answered by `cepa-intent continue` or `write --reason`); and
 the normal state: purpose, step N/M, how many turns the cursor has sat there,
 and the next step. Silent about intent inside a `cepa-until` round
 (`CEPA_UNTIL_RUN`), where the intent is the `plan.yaml` item. Design:
@@ -684,10 +684,10 @@ Owner: `common/hooks/`. Measures the turn's final report against the
 `plain-report` skill's format (2 plain-language sentences, explicit
 default recommendation, technical detail last), added after the user
 reported having to read reports more than once to understand them.
-Since 2026-10-15 it also blocks a report whose `Pra você:` announces
-something pending while the final list is "Nada pendente." or has no numbered
+Since 2026-10-15 it also blocks a report whose `For you:` announces
+something pending while the final list is "Nothing pending." or has no numbered
 item (`pra-voce-sem-lista`), and a "Você ..." list item that carries no command,
-file path or "Pronto quando" line (`tarefa-sem-passo`), after the owner's
+file path or "Done when" line (`tarefa-sem-passo`), after the owner's
 "O que, afinal, que eu tenho que fazer?" feedback of 2026-10-14.
 
 ### proof-verdict-guard.py (PreToolUse, matcher `Edit\|Write\|MultiEdit\|NotebookEdit`)

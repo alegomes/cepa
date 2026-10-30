@@ -65,7 +65,7 @@ If 0 cards → report "Nothing in column <column>" (note the effective scope, so
 - `queue.yaml` exists → run:
 
   ```
-  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" ordena <project_key> --keys <K1,K2,...> --json
+  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" order <project_key> --keys <K1,K2,...> --json
   ```
 
   (`common/bin/cepa-plan` is a relative path that only exists inside the
@@ -205,14 +205,12 @@ And decide, mechanically:
   without the `🔓` release** → another session is on it right now. **Skip** it,
   record `SKIPPED (reserved by <claim-id> at <hh:mm>)` and move on.
 - **Otherwise** → reserve it, publishing the comment via `atlassian-expert`. The
-  comment body is posted verbatim, in pt-BR (`atlassian-expert` looks for the
-  `🔒 claim:` / `🔓 claim` prefixes):
+  comment body is posted verbatim, in English (`atlassian-expert` looks for the
+  `🔒 claim:` / `🔓 claim` prefixes; claims written earlier in pt-BR, with
+  `em andamento desde` / `liberado`, are still recognized):
 
-  > `🔒 claim: <claim-id> — <nome do comando> em andamento desde <timestamp>.`
-  > `Outra sessão deve pular este card. A reserva expira em 90 minutos.`
-
-  ("claim: <claim-id> — <command name> in progress since <timestamp>. Another
-  session must skip this card. The reservation expires in 90 minutes.")
+  > `🔒 claim: <claim-id> — <command name> in progress since <timestamp>.`
+  > `Another session must skip this card. The reservation expires in 90 minutes.`
 
   Only after that comment exists may the card be worked.
 
@@ -220,11 +218,9 @@ And decide, mechanically:
 (implementation summary, bounce with `**Reason:**`) is already the signal that
 the reservation is over. When the card ends WITHOUT a verdict (`ERROR`, `BLOCKED`
 without a comment, run interruption), publish the explicit release (verbatim,
-pt-BR), otherwise the card stays untouchable for 90 minutes:
+English), otherwise the card stays untouchable for 90 minutes:
 
-> `🔓 claim <claim-id> liberado — <motivo>.`
-
-("claim <claim-id> released — <reason>.")
+> `🔓 claim <claim-id> released — <reason>.`
 
 **Why 90 minutes and not a permanent lock:** a session that dies midway must not
 freeze the queue. The window is longer than one card's time and shorter than a
