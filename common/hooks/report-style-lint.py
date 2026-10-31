@@ -153,6 +153,7 @@ def _definition_patterns(code: str) -> list:
             re.compile(r"^\s*\|\s*\**" + c + r"\**\s*\|", re.M),
             re.compile(r"^\s*(?:[-*+]|\d+[.)])?\s*\**" + c + r"\**\s*[:—–-]\s*\S", re.M)]
 # Names that look like codes and are vocabulary, not labels.
+MAX_INLINE_CODES = 3   # above this, inline parentheses become noise: legend block
 REF_CODE_ALLOW = {"S3", "MD5", "UTF8", "H1", "H2", "H3", "H4", "H5", "H6",
                   "L0", "L1", "L2", "L3", "L4"}
 
@@ -573,6 +574,54 @@ def codes_without_legend(report: str) -> list:
     return found
 
 
+LEGEND_LINE = re.compile(
+    r"^\s*(?:\|\s*\**[A-Z]{1,3}\d{1,2}\**\s*\||(?:[-*+]|\d+[.)])?\s*\**[A-Z]{1,3}\d{1,2}\**\s*[:—–-]\s)",
+    re.M)
+
+
+def distinct_codes(report: str) -> list:
+    text = INLINE_CODE.sub(" ", report)
+    seen = []
+    for m in REF_CODE.finditer(text):
+        c = m.group(1)
+        if c not in REF_CODE_ALLOW and c not in seen:
+            seen.append(c)
+    return seen
+
+
+def decision_list(report: str) -> bool:
+    """A numbered list with a recommendation: the shape of the closing list,
+    even when the turn wrote nothing (the batch of questions of 2026-10-31)."""
+    return bool(NUMBERED_ITEM.search(report) and RECOMMENDATION.search(report))
+
+
+def code_deviations(report: str) -> list:
+    """The two code measurements, applied to any decision list."""
+    out = []
+    codes = codes_without_legend(report)
+    if codes:
+        shown = ", ".join(codes[:5])
+        rest = f" (+{len(codes) - 5})" if len(codes) > 5 else ""
+        out.append(("codigo-sem-legenda",
+                    f"código de referência sem legenda nesta mensagem: "
+                    f"{shown}{rest} — o leitor não sabe a que se refere nem "
+                    f"onde buscar; defina na primeira menção, "
+                    f"`E2 (o que E2 é)`, ou numa linha de legenda "
+                    f"(`- **E2**: ...`), e código de turno anterior se "
+                    f"redefine aqui"))
+    total = distinct_codes(report)
+    if len(total) > MAX_INLINE_CODES and not LEGEND_LINE.search(
+            INLINE_CODE.sub(" ", report)):
+        out.append(("legenda-inline",
+                    f"{len(total)} códigos distintos ({', '.join(total[:6])}"
+                    f"{'...' if len(total) > 6 else ''}) definidos só entre "
+                    f"parênteses dentro das frases — acima de "
+                    f"{MAX_INLINE_CODES} a lista fica ilegível; ponha um bloco "
+                    f"`Legenda:` com uma linha `- **E2**: ...` por código "
+                    f"antes da lista final e deixe as perguntas limpas"))
+    return out
+
+
 def measure(report: str, jargon: list, abstractions: list = (),
           hygiene: list = (), closed: bool = False) -> list:
     """Returns the deviations as (category, message). Category is a stable label
@@ -672,17 +721,7 @@ def measure(report: str, jargon: list, abstractions: list = (),
                         f"coisa, não a categoria da coisa (ver a seção "
                         f"\"Abstrações a evitar\" do glossário)"))
 
-    codes = codes_without_legend(report)
-    if codes:
-        shown = ", ".join(codes[:5])
-        rest = f" (+{len(codes) - 5})" if len(codes) > 5 else ""
-        deviations.append(("codigo-sem-legenda",
-                        f"código de referência sem legenda nesta mensagem: "
-                        f"{shown}{rest} — o leitor não sabe a que se refere nem "
-                        f"onde buscar; defina na primeira menção, "
-                        f"`E2 (o que E2 é)`, ou numa linha de legenda "
-                        f"(`- **E2**: ...`), e código de turno anterior se "
-                        f"redefine aqui"))
+    deviations += code_deviations(report)
 
     passives = PASSIVE.findall(report)
     if len(passives) > MAX_PASSIVES:
@@ -710,10 +749,15 @@ def on_stop(payload):
     # Scope: report of work done. Narrow exception: session closed by wrap-up,
     # where even the turn that only reads (metrics) is measured, but only by
     # the `pergunta-pos-wrap-up` category.
-    if not changed and not closed:
+    report = last_report(rows)
+    # Third scope (2026-10-31): a decision list that the turn only WROTE --
+    # no edit, no commit -- still carries codes the owner has to answer by
+    # number. The batch of eight questions with `PR8`, `E1`, `E3` undefined
+    # went out through this door. Only the code measurements apply here.
+    listed = decision_list(report)
+    if not changed and not closed and not listed:
         return None
 
-    report = last_report(rows)
     if count_words(report) < MIN_WORDS_TO_MEASURE:
         return None
     if interview_turn(rows, report):
@@ -722,9 +766,11 @@ def on_stop(payload):
     if changed:
         deviations = measure(report, load_jargon(), load_abstractions(),
                         load_hygiene(), closed=closed)
-    else:
+    elif closed:
         d = post_wrap_up_deviation(report)
         deviations = [d] if d else []
+    else:
+        deviations = code_deviations(report)
     cwd = payload.get("cwd") or os.getcwd()
 
     # Anti-loop lock: this stop is already the consequence of a block by this hook.
@@ -749,7 +795,8 @@ def on_stop(payload):
         # The report is rewritten NOW, in the same turn: no pending item for the
         # next turn, otherwise the user gets the warning for an already fixed text.
         p.unlink(missing_ok=True)
-        return block_reason([m for _, m in deviations], closed)
+        return block_reason([m for _, m in deviations], closed,
+                            codes_only=not changed and not closed)
 
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -770,7 +817,16 @@ CLOSED_FORMAT = (
     "(BACKLOG.md, item de fila ou `cepa-feedback add`) e o relatório diz onde.")
 
 
-def block_reason(deviations, closed: bool = False) -> str:
+def block_reason(deviations, closed: bool = False,
+                 codes_only: bool = False) -> str:
+    if codes_only:
+        return ("Sua lista de decisões usa código de referência que o leitor "
+                "não consegue resolver:\n" +
+                "".join(f"  - {d}\n" for d in deviations) +
+                "Reenvie a MESMA lista com um bloco `Legenda:` antes dela, uma "
+                "linha `- **CÓDIGO**: o que é` por código, e as perguntas sem "
+                "parênteses de definição. Não mude o resto, não peça desculpa "
+                "e não explique a reescrita.")
     if closed:
         ending = ("Reescreva o relatório inteiro nesta ordem, antes de encerrar o "
                "turno: " + CLOSED_FORMAT + " ")
