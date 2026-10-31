@@ -233,6 +233,34 @@ A lista de abstrações vive na seção "Abstrações a evitar" do
 `common/glossario.md` e cresce com evidência: toda vez que o usuário apontar
 uma frase obscura, ela entra lá.
 
+## Código de referência só com legenda
+
+Em 31/10/2026 o dono leu uma lista final com "Mantenho E2 como recomendação de
+P1, com a comparação reescrita por PR8?" e respondeu: *"Você assume que eu sei
+de cabeça a que se referem todos esses códigos. EU NÃO SEI! Não sei a que se
+referem e tampouco sei onde buscar seus significados. Não tem problema usar a
+codificação, desde que ela venha corretamente contextualizada."*
+
+Os códigos vinham de dois lugares: da instrução que rotula achados, decisões e
+opções como `F1`, `D1`, `O1`, e dos rótulos por lente do painel do
+`/common:advisors` (`E2`, `CR2`, `PR8`). Nenhum dos dois obrigava o relatório a
+dizer o que o código significa.
+
+Regras:
+
+- **Todo código é definido na mesma mensagem.** Na primeira menção, entre
+  parênteses: *"mantenho E2 (exportar o XML pelo Konsist)?"*. Ou numa linha de
+  legenda antes da lista final: `- **E2**: exportar o XML pelo Konsist`.
+- **Código de turno anterior se redefine.** O relatório é lido sozinho; a
+  mensagem que criou o código já rolou para cima.
+- **A lista final não usa código sem a frase.** É onde o dono lê primeiro.
+- **Se há mais de três códigos, use a legenda**, não três parênteses na mesma
+  frase.
+
+O `report-style-lint.py` procura códigos (uma a três maiúsculas seguidas de um
+ou dois dígitos, fora de crases) e devolve o relatório com a categoria
+`codigo-sem-legenda` quando algum não tem definição na mensagem.
+
 ## O teste do "e daí?"
 
 Um relatório pode passar em tudo acima — frases curtas, zero jargão, cada coisa

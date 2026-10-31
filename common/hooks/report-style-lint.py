@@ -77,6 +77,21 @@ metrics turn only reads, so the scope rule above (turn that changed something)
 would leave the incident unmeasured; that is why, with the session closed, the
 hook reads the report even without a change and measures only this category.
 
+Reference code without a legend (2026-10-31, feedback fb-20261031-1). The
+owner read a closing list that asked "Mantenho E2 como recomendação de P1, com a
+comparação reescrita por PR8?" and said: "EU NÃO SEI! Não sei a que se referem e
+tampouco sei onde buscar seus significados." The codes came from two places --
+the "Reference Points" instruction that labels findings/decisions/options as
+F1/D1/O1, and the lens labels of `/common:advisors` (E2, CR2, PR8) -- and
+nothing checked that the report itself said what they meant. New measurement,
+category `codigo-sem-legenda`: every code (one to three capitals followed by
+one or two digits, outside backticks) must be defined in the SAME message,
+either inline on first mention -- `E2 (exportar XML pelo Konsist)` -- or in a
+legend line (`| E2 | ... |`, `- **E2**: ...`, `E2: ...`). A code from an earlier
+turn is dead on arrival: the report is read on its own. Short allowlist for
+names that look like codes and are not (S3, MD5, UTF8, L0..L4 of the glossary,
+H1..H6).
+
 Output: always exit 0. The block travels in the stdout JSON, not in the exit
 code -- the hook never takes the turn down over its own error.
 """
@@ -124,6 +139,22 @@ PATH_RE = re.compile(
     r"(?:(?:^|[\s(])(?:~|\.{1,2})?/[\w.-]+)"
     r"|(?:(?:^|[\s(])[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+)"
     r"|(?:\b[A-Za-z0-9_-]+\.[A-Za-z]\w{0,4}\b)")
+
+# Reference code (2026-10-31): `E2`, `P1`, `CR2`, `PR8`, `F6`. Inside backticks
+# it is code, not a label, so the inline-code spans are blanked before the scan.
+REF_CODE = re.compile(r"(?<![\w/-])([A-Z]{1,3}\d{1,2})(?![\w/-])")
+INLINE_CODE = re.compile(r"```.*?```|`[^`\n]*`", re.S)
+# A definition: the code followed by an opening parenthesis on the same line, or
+# a legend line -- a table row, a bullet, or a line that starts with the code
+# and a colon/dash.
+def _definition_patterns(code: str) -> list:
+    c = re.escape(code)
+    return [re.compile(r"(?<![\w/-])" + c + r"\s*\("),
+            re.compile(r"^\s*\|\s*\**" + c + r"\**\s*\|", re.M),
+            re.compile(r"^\s*(?:[-*+]|\d+[.)])?\s*\**" + c + r"\**\s*[:—–-]\s*\S", re.M)]
+# Names that look like codes and are vocabulary, not labels.
+REF_CODE_ALLOW = {"S3", "MD5", "UTF8", "H1", "H2", "H3", "H4", "H5", "H6",
+                  "L0", "L1", "L2", "L3", "L4"}
 
 STATE_DIR = Path(os.environ.get("CEPA_REPORT_STYLE_DIR")
                  or (Path.home() / ".claude" / "cepa-report-style"))
@@ -529,6 +560,19 @@ def post_wrap_up_deviation(report: str):
             "<o Próximo do handoff>.\"")
 
 
+def codes_without_legend(report: str) -> list:
+    """Reference codes used in the report and defined nowhere in it."""
+    text = INLINE_CODE.sub(" ", report)
+    found = []
+    for m in REF_CODE.finditer(text):
+        code = m.group(1)
+        if code in REF_CODE_ALLOW or code in found:
+            continue
+        if not any(p.search(text) for p in _definition_patterns(code)):
+            found.append(code)
+    return found
+
+
 def measure(report: str, jargon: list, abstractions: list = (),
           hygiene: list = (), closed: bool = False) -> list:
     """Returns the deviations as (category, message). Category is a stable label
@@ -627,6 +671,18 @@ def measure(report: str, jargon: list, abstractions: list = (),
                         f"abstração no lugar do fato: {shown}{rest} — nomeie a "
                         f"coisa, não a categoria da coisa (ver a seção "
                         f"\"Abstrações a evitar\" do glossário)"))
+
+    codes = codes_without_legend(report)
+    if codes:
+        shown = ", ".join(codes[:5])
+        rest = f" (+{len(codes) - 5})" if len(codes) > 5 else ""
+        deviations.append(("codigo-sem-legenda",
+                        f"código de referência sem legenda nesta mensagem: "
+                        f"{shown}{rest} — o leitor não sabe a que se refere nem "
+                        f"onde buscar; defina na primeira menção, "
+                        f"`E2 (o que E2 é)`, ou numa linha de legenda "
+                        f"(`- **E2**: ...`), e código de turno anterior se "
+                        f"redefine aqui"))
 
     passives = PASSIVE.findall(report)
     if len(passives) > MAX_PASSIVES:

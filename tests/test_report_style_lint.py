@@ -23,6 +23,9 @@ Guarantees:
     pendente." only holds when the top says "nothing"), and every owner-task item
     ("Você ...") carries a command or file and "Pronto quando" — the report of
     2026-10-14 ("close the two human routes ... Nada pendente.") is blocked;
+  - a reference code (E2, P1, CR2, PR8) used without a definition in the same
+    message is flagged; defined inline on first mention, in a legend line, or
+    inside backticks -> allowed (2026-10-31, fb-20261031-1);
   - a subagent's answer (sidechain) is never mistaken for the report;
   - the hook NEVER blocks: exit 0 in all cases.
 """
@@ -343,7 +346,7 @@ HEAD_T = ("Resultado dito de forma clara em uma frase.\n\n"
             + "\n\n### Decisões e próximos passos\n")
 
 warning = cycle(HEAD_T + "1. **Você confere os 50 documentos?** Recomendo **sim** — "
-              "sem ela o S5 não fecha.\n")
+              "sem ela o S5 (a etapa de medir o acerto) não fecha.\n")
 check("tarefa \"Você ...\" sem comando, arquivo nem Pronto quando → avisa",
       "passo a passo" in warning, repr(warning[:400]))
 
@@ -354,7 +357,7 @@ warning = cycle(HEAD_T + "1. **Você roda o comando do S3-port?**\n"
               "   bin/ler-lote.sh --porta s3 inob/282243\n"
               "   ```\n"
               "   Pronto quando: o terminal imprime 20 lotes lidos.\n"
-              "   Recomendo **sim** — destrava o S5.\n")
+              "   Recomendo **sim** — destrava o S5 (a etapa de medir o acerto).\n")
 check("tarefa com comando em bloco cercado + Pronto quando → nenhum aviso",
       warning.strip() == "", repr(warning[:400]))
 
@@ -366,7 +369,7 @@ warning = cycle(HEAD_T + "1. **Você roda o script com linha em branco?**\n"
               "   bin/b.sh\n"
               "   ```\n"
               "   Pronto quando: o terminal imprime ok.\n"
-              "   Recomendo **sim** — destrava o S5.\n")
+              "   Recomendo **sim** — destrava o S5 (a etapa de medir o acerto).\n")
 check("linha em branco dentro de bloco cercado não fecha o item → nenhum aviso",
       warning.strip() == "", repr(warning[:400]))
 
@@ -379,7 +382,7 @@ check("tarefa com caminho de arquivo sem crase + Pronto quando → nenhum aviso"
 
 warning = cycle(HEAD_T + "1. **Você confere os 50 documentos da amostra?**\n"
               "   Pronto quando: as 50 linhas têm a classe real preenchida.\n"
-              "   Recomendo **sim** — sem ela o S5 não fecha.\n")
+              "   Recomendo **sim** — sem ela o S5 (a etapa de medir o acerto) não fecha.\n")
 check("tarefa sem comando nem arquivo, com Pronto quando → avisa \"comando ou arquivo\"",
       "comando ou arquivo" in warning, repr(warning[:400]))
 
@@ -645,6 +648,38 @@ warning = cycle(GOOD_EN.replace("nada pra decidir agora; precisa reinstalar pra 
     STEPS_EN, "\n\n### Decisions and next steps\nNothing pending.\n"))
 check("EN: For you anunciando + Nothing pending. → pra-voce-sem-lista",
       "item numerado" in warning and "For you" in warning, repr(warning[:400]))
+
+# ── reference code without a legend (2026-10-31, fb-20261031-1) ───────────
+CODED = GOOD.replace(
+    "nada pra decidir agora; precisa reinstalar pra valer.",
+    "uma decisão — lista no fim.").replace(
+    STEPS,
+    "\n\n### Decisões e próximos passos\n"
+    "1. **Mantenho E2 como recomendação de P1, com a comparação reescrita "
+    "por PR8?**\n   Recomendo **sim** — nenhuma lente derrubou E2.\n")
+warning = cycle(CODED)
+check("código sem legenda na lista final → codigo-sem-legenda",
+      "sem legenda" in warning and "E2" in warning and "PR8" in warning,
+      repr(warning[:400]))
+LEGEND = ("\n\nLegenda:\n- **E2**: exportar o XML pelo Konsist\n"
+          "- **P1**: a proposta de construir a camada 1 primeiro\n"
+          "| PR8 | a comparação entre os dois caminhos reescrita pela lente de produto |\n")
+warning = cycle(CODED.replace("\n\n### Decisões", LEGEND + "\n\n### Decisões"))
+check("mesmos códigos com legenda na mensagem → nenhum aviso sobre código",
+      "sem legenda" not in warning, repr(warning[:400]))
+warning = cycle(CODED.replace("Mantenho E2 como", "Mantenho E2 (exportar o XML "
+                              "pelo Konsist) como")
+                .replace("por PR8?", "por PR8 (a lente de produto)?")
+                .replace("de P1,", "de P1 (construir a camada 1 primeiro),"))
+check("definição inline na primeira menção basta",
+      "sem legenda" not in warning, repr(warning[:400]))
+warning = cycle(CODED.replace("E2", "`E2`").replace("P1", "`P1`")
+                .replace("PR8", "`PR8`"))
+check("código entre crases é código, não rótulo → não cobra",
+      "sem legenda" not in warning, repr(warning[:400]))
+warning = cycle(GOOD.replace("por nível;", "por nível (S3, MD5, L4, UTF8);"))
+check("S3, MD5, L4, UTF8 não são códigos de referência",
+      "sem legenda" not in warning, repr(warning[:400]))
 
 # ── corrupted entry does not take down the turn ────────────────────────────
 r = run("Stop", str(TMP / "nao-existe.jsonl"))
