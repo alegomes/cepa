@@ -171,13 +171,25 @@ Execution notes:
 With the N JSONs in hand, produce the synthesis. **Never mediate, never choose
 silently, never "they are all right".** Mandatory structure — the rendered
 synthesis is in Brazilian Portuguese (pt-BR), and the section labels below
-(`Painel de advisors`, `Vereditos por lente`, `Convergências`,
+(`Painel de advisors`, `Vereditos por lente`, `Legenda`, `Convergências`,
 `DISCORDÂNCIAS NOMEADAS`, `O que decide entre elas`, `Propostas consolidadas
 priorizadas`) stay verbatim:
 
 > ## Painel de advisors — `<artifact>` (area: `<area>`, N lenses)
 >
 > **Vereditos por lente** (verdicts per lens) — one line each: `contrarian: "<verdict>"`, ...
+>
+> ### Legenda
+>
+> (Legend.) Every finding the synthesis refers to by a code gets one row here,
+> and the code is `<lens initials><n>` — `CR2`, `PR8`, `E2`:
+> `| código | lente | achado em uma frase |`. Below this table a code may be
+> used bare; outside this message it may not: the owner reads the closing
+> list first and on its own (2026-10-31, feedback fb-20261031-1 — "não sei a
+> que se referem e tampouco sei onde buscar"). A later report that cites a
+> finding repeats the phrase on first mention, `CR2 (a comparação sem
+> tabela)`, or carries its own legend; `report-style-lint.py` blocks a report
+> whose codes have no definition in the message.
 >
 > ### Convergências
 >
