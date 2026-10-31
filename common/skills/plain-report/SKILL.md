@@ -254,12 +254,22 @@ Regras:
 - **Código de turno anterior se redefine.** O relatório é lido sozinho; a
   mensagem que criou o código já rolou para cima.
 - **A lista final não usa código sem a frase.** É onde o dono lê primeiro.
-- **Se há mais de três códigos, use a legenda**, não três parênteses na mesma
-  frase.
+- **Acima de três códigos distintos, a definição vai num bloco `Legenda:`**
+  antes da lista, uma linha `- **E2**: ...` por código, e as perguntas ficam
+  sem parênteses. A primeira correção (31/10/2026, mesma manhã) pôs oito
+  parênteses por item e o dono devolveu a lista como "parcialmente resolvido":
+  cada pergunta tinha virado um parágrafo.
+- **Vale para qualquer lista de decisões, não só para relatório de trabalho
+  feito.** O lote de oito perguntas que saiu com `PR8`, `E1` e `E3` sem
+  definição não editou arquivo nenhum, e por isso o hook não o media.
 
 O `report-style-lint.py` procura códigos (uma a três maiúsculas seguidas de um
-ou dois dígitos, fora de crases) e devolve o relatório com a categoria
-`codigo-sem-legenda` quando algum não tem definição na mensagem.
+ou dois dígitos, fora de crases) em todo turno que alterou algo e em todo turno
+cuja resposta tem lista numerada com "Recomendo"/"I recommend". Devolve a
+mensagem com `codigo-sem-legenda` quando algum código não tem definição, e com
+`legenda-inline` quando há mais de três códigos e nenhuma linha de legenda. No
+turno que não alterou nada, só essas duas medições se aplicam, e o pedido de
+reescrita é "reenvie a mesma lista com o bloco `Legenda:`".
 
 ## O teste do "e daí?"
 

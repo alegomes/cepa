@@ -681,6 +681,39 @@ warning = cycle(GOOD.replace("por nível;", "por nível (S3, MD5, L4, UTF8);"))
 check("S3, MD5, L4, UTF8 não são códigos de referência",
       "sem legenda" not in warning, repr(warning[:400]))
 
+# ── the batch of 2026-10-31: no edit in the turn, eight inline parentheses ──
+BATCH = ("Aqui estão, para responder em lote. Cada resposta vai para a seção 12 "
+         "do documento antes do commit.\n\n"
+         "1. Mantenho E2 (Digitação como primeira fatia) como recomendação de P1 "
+         "(o nome do produto), reescrevendo a comparação com E1 e E3 como manda "
+         "a PR8? Recomendo sim: nenhuma lente derrubou E2.\n"
+         "2. Inverto P2 (o caminho de integração) de C1 (a WeGo entrega JSON) "
+         "para C2 (a WeGo gera o XML)? Recomendo sim: C2 usa o adapter.\n"
+         "3. O código das fases F2 a F6 (conferência, criação, envio) nasce num "
+         "repositório só da ferramenta? Recomendo sim: evita três backends.\n"
+         "4. Confiro na amostra se a guia traz valor por procedimento? Recomendo "
+         "sim: o XSD exige o valor.\n" + "Depois das quatro, o sim continua pendente. " * 6)
+warning = cycle(BATCH, changed=False)
+check("turno sem edição + lista de decisões com código indefinido → mede",
+      "sem legenda" in warning and "PR8" in warning and "E1" in warning,
+      repr(warning[:400]))
+check("…e cobra bloco de legenda quando há mais de 3 códigos só entre parênteses",
+      "legenda-inline" not in warning and "Legenda:" in warning, repr(warning[:600]))
+check("…sem cobrar o resto do formato num turno que não alterou nada",
+      "For you" not in warning and "abertura" not in warning, repr(warning[:600]))
+BATCH_LEGEND = BATCH.replace("\n\n1. ", "\n\nLegenda:\n"
+    "- **E1**: a fatia de conferência\n- **E2**: Digitação como primeira fatia\n"
+    "- **E3**: a fatia de envio\n- **P1**: o nome do produto\n"
+    "- **P2**: o caminho de integração\n- **PR8**: a proposta de reescrever a comparação\n"
+    "- **C1**: a WeGo entrega JSON\n- **C2**: a WeGo gera o XML\n"
+    "- **F2**: conferência\n- **F6**: anexos\n\n1. ")
+warning = cycle(BATCH_LEGEND, changed=False)
+check("mesma lista com bloco Legenda → nenhum aviso",
+      warning.strip() == "", repr(warning[:400]))
+warning = cycle(BATCH.replace("Recomendo sim", "assim"), changed=False)
+check("turno sem edição e sem lista de decisões → segue não medido",
+      warning.strip() == "", repr(warning[:300]))
+
 # ── corrupted entry does not take down the turn ────────────────────────────
 r = run("Stop", str(TMP / "nao-existe.jsonl"))
 check("transcript ausente → rc=0", r.returncode == 0, f"rc={r.returncode}")
