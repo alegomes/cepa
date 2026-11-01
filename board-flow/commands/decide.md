@@ -222,7 +222,9 @@ Per accepted group:
   ..."`, in a terminal, converts the proposal into a waiver (fb-20261014-3).
 - **don't accept** → create the card for the missing test (one per real gap,
   not one per stuck card) and send the cards back with `**Reason:**` **per
-  card** — `bounce-reason-gate` blocks a comment without it, and the same reason
+  card**, in the comment's technical section, after an **Em linguagem simples**
+  section in pt-BR (what was asked, what works, what is missing, who
+  decides; no card key, commit, file or verdict) — `bounce-reason-gate` blocks a comment without it, and the same reason
   pasted across N cards is exactly the failure it exists to catch.
 - **`fora-do-alcance`** → the decision is *who this goes to*: record the owner
   and the condition on the card and name the real state (**Blocked** waiting on

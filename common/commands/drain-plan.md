@@ -368,8 +368,9 @@ For each item of the batch, in order:
 
      If the build does not fit in the turn, the outcome is not silence: it is
      `finish --status blocked --evidence "build disparado e não colhido: <o
-     comando, e onde está o log>"` (build started and not collected: the command,
-     and where the log is), or `--status pending` with the same evidence. An item
+     comando, e onde está o log>" --impede "os testes não terminaram dentro do
+     turno"` (build started and not collected: the command, and where the log
+     is), or `--status pending` with the same evidence. An item
      with a named outcome comes back in the next window knowing where it stopped;
      an item with no outcome comes back as an orphan reservation and starts over
      from scratch.
@@ -415,11 +416,50 @@ For each item of the batch, in order:
      `in_progress` forever and blocks the next batch. Don't ask anything now:
      the user already answered that at the start.
 
+     **Two sections, two readers.** A blocked item is read by the next agent
+     and by the owner, who never opened the card. Write each one separately:
+
+     - `--evidence` is the **agent section**. Card keys, commit hashes, gate
+       verdicts, branches and file paths go here: the next run resumes from it.
+     - `--pedido`, `--pronto`, `--impede`, `--se-sim`, `--se-nao` are the
+       **human section**, in pt-BR, for a lay reader. `--impede` is mandatory
+       on `blocked`; write all five whenever the item goes to the owner. Each
+       one up to 30 words, with no card key, commit, branch, file, gate name or
+       verdict: `cepa-plan finish` refuses them and names the field.
+       `--impede` names the real reason, not its category: "o card manda
+       entregar com os casos travados marcados, mas a revisão final exige
+       todos passando", never "travou por algo de fora do código".
+       `--se-sim` and `--se-nao` say what each answer does to the WORK ("o
+       trabalho vai para revisão com os 18 casos pendentes do defeito"), not
+       to the queue.
+
+     The case that created this rule (WEGO-2381, run 2026-10-31-1033): the
+     human saw "travou por algo de fora do código" and a log with 8 commit
+     hashes and 5 gate names, and the real reason was the sixth sentence.
+     Written for a lay reader, the same item reads:
+
+     ```
+     --pedido "testar a parte do sistema que controla as sessões de acesso"
+     --pronto "136 dos 154 casos estão testados e passando"
+     --impede "18 casos dependem de um defeito do sistema: ele responde em
+               branco quando nega um acesso. O card aceita isso, a revisão
+               final não"
+     --se-sim "o trabalho vai para revisão com os 18 casos marcados como
+               pendentes do defeito"
+     --se-nao "o trabalho espera o defeito ser corrigido"
+     --pergunta "O card permite entregar com os 18 casos pendentes, mas a
+                 revisão final não aceita. Sigo a regra do card?"
+     ```
+
      **Atualizar o Jira (grava no quadro), on block.** An item that is a card and
      closed `blocked`, or went back to `pending`, with a board and without
-     `--offline`: delegate to `atlassian-expert` a comment on the card with the
-     reason from the evidence, the gate verdicts and the branch where the commits
-     stayed. If `defaults.status_map.blocked` is declared, move the card to it;
+     `--offline`: delegate to `atlassian-expert` a comment on the card in two
+     sections, in this order. First **"Em linguagem simples"**: the human
+     section (what was asked, what is ready, what stops it, the question and
+     what each answer does), the same text given to `finish`. Then
+     **"Detalhe técnico (para agentes)"**: the reason from the evidence, the
+     gate verdicts and the branch where the commits stayed. Whoever opens the
+     card reads the first section without needing the second. If `defaults.status_map.blocked` is declared, move the card to it;
      without that column, the card stays in `defaults.status_map.in_progress`,
      where the reservation put it. Never leave it in `to_do`: the board would say
      no one touched a card that has finished code.

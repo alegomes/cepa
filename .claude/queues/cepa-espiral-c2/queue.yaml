@@ -1,0 +1,54 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/epics/cepa-em-espiral.md, ciclo 2 (2 peças de "O que atravessa"; ordem herdada do texto)
+# Escrito em: 2026-10-31
+
+schema_version: 2
+mode: single-track
+queue: cepa-espiral-c2
+source: docs/epics/cepa-em-espiral.md, ciclo 2 (2 peças de "O que atravessa"; ordem
+  herdada do texto)
+demonstrates: 'Com a escada do Epic Contratos aprovada, o dono vai dormir e de manhã
+  o ciclo 2 do Contratos está demonstrável: construção (drain), prova (`ui-proof-reviewer`
+  com nonce) e aterrissagem em branch própria rodaram sozinhas, em worktrees filhas
+  com o modo de cada estágio. Um needs-human em item com dependentes parou o ciclo
+  em `aguardando-dono` e a pergunta está no terminal.'
+items:
+- id: C2-1
+  title: '`cepa-until` como tronco + fork de filhos e merge train extraídos do Maestro
+    como biblioteca'
+  why: 'peça 1 de 2 do ciclo "2. Conduzir" do Epic docs/epics/cepa-em-espiral.md
+    · herdado da ordem do texto da coluna "What it crosses"; ninguém priorizou as
+    peças entre si · critério de aceite: o roteiro do ciclo — Com a escada do Epic
+    Contratos aprovada, o dono vai dormir e de manhã o ciclo 2 do Contratos está
+    demonstrável: construção (drain), prova (`ui-proof-reviewer` com nonce) e aterrissagem
+    em branch própria rodaram sozinhas, em worktrees filhas com o modo de cada estágio.
+    Um needs-human em item com dependentes parou o ciclo em `aguardando-dono` e
+    a pergunta está no terminal. · superfície onde se observa: não declarada no
+    Epic (a escada não tem "Effect on screen" nem "Effect in backend" para este
+    ciclo; quem pergunta é o /common:epic)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: C2-2
+  title: '`/maestro:run` deprecado'
+  why: 'peça 2 de 2 do ciclo "2. Conduzir" do Epic docs/epics/cepa-em-espiral.md
+    · herdado da ordem do texto da coluna "What it crosses"; ninguém priorizou as
+    peças entre si · critério de aceite: o roteiro do ciclo — Com a escada do Epic
+    Contratos aprovada, o dono vai dormir e de manhã o ciclo 2 do Contratos está
+    demonstrável: construção (drain), prova (`ui-proof-reviewer` com nonce) e aterrissagem
+    em branch própria rodaram sozinhas, em worktrees filhas com o modo de cada estágio.
+    Um needs-human em item com dependentes parou o ciclo em `aguardando-dono` e
+    a pergunta está no terminal. · superfície onde se observa: não declarada no
+    Epic (a escada não tem "Effect on screen" nem "Effect in backend" para este
+    ciclo; quem pergunta é o /common:epic)'
+  status: pending
+  blocked_by: []
+  human_pending: null

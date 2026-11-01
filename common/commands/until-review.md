@@ -184,7 +184,11 @@ take the `deferred` list. Those with reason `bloqueado-antes` and
 `human_pending` go in; `reservado` and `depende-de-adiado` are not the owner's
 and stay out. An item that already has a `question` (the question the agent
 recorded with `finish --question`) needs no line, unless you recommend
-something else.
+something else. An item whose `owner_summary` (the human section the agent
+wrote with `finish --impede`, `--pedido` and the others) is present needs no
+`contexto`: the terminal already shows it. An item WITHOUT `owner_summary`
+(blocked before 2026-11-01, or by the supervisor) always gets `contexto`,
+`se_sim` and `se_nao`, because otherwise the owner reads only the log.
 
 The string values of the block are shown to the owner and are written in
 Brazilian Portuguese (pt-BR); the example below is in English for reference:
@@ -196,6 +200,8 @@ Brazilian Portuguese (pt-BR); the example below is in English for reference:
     "contexto": "The code is ready on a side branch and only one fixture test stayed red. The round over the 20 batches is the task that stayed with you, and it is only possible after the merge.",
     "pergunta": "Do I leave the 20-batch round for after the merge and return the item to the queue?",
     "instrucao": "resume from until/2026-10-15-1128-vermelho-WEGO-2336 and give ink above the cut to the textless fixture of PipelineMultimodalSemVazamentoNoLogTest, like the other 4",
+    "se_sim": "the code goes to the main branch and the 20-batch round becomes the next task",
+    "se_nao": "the code stays on the side branch and the item stays stuck",
     "recomendo": "sim",
     "porque": "the round is only possible after the merge, and the red test is a fixture the agent foresaw and knows how to fix"}
  ]}
@@ -230,6 +236,14 @@ asked "o que diabos isso quer dizer?" — "what the hell does that mean?"):
   (if yes, the next run receives:) and records it together with the yes in the
   item's evidence. Only when there is something to send; without it, the yes
   records only the question.
+- `se_sim` and `se_nao` say what each answer does to the WORK, in lay
+  words ("o trabalho vai para revisão"), not to the queue: the terminal
+  already says the item returns to the queue on yes. Up to 30 words each,
+  with no code. The terminal shows them in the menu legend.
+- The lay fields (`contexto`, `pergunta`, `se_sim`, `se_nao`, `porque`) carry
+  no card key, commit hash, gate name (`completion-auditor`,
+  `proof-reviewer`...) or verdict (`INCOMPLETE`, `PROVEN`...). Those belong to
+  `instrucao` and the evidence, which are the agents' section.
 - `recomendo` is `sim` or `não`; `porque` fits in one line.
 - A `human_pending` route that is a task (validate by hand, run a real login):
   ask whether it has already been done and what was seen, and say what the

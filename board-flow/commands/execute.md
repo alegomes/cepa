@@ -153,7 +153,7 @@ The four explicit-null fields (**New debt introduced**, **Scope captured outside
 
 If BLOCKED: leave the card where it is (in `<defaults.status_map.in_progress>`). If `defaults.status_map.blocked` is set (non-null), **move it to the blocked column** — the board declared that column precisely for this, and moving is reversible. Do not ask for a preference: apply `default-yes`, do it, and say in the report what you did. With no column declared, the card stays in `in_progress` with the comment giving the reason. Delegate to `atlassian-expert`:
 
-> Add a comment to $ARGUMENTS with the specific block reason from validation-lead and any failing-test paths. Do NOT transition.
+> Add a comment to $ARGUMENTS in two sections: first **Em linguagem simples**, in pt-BR for someone who never opened the card (what the card asked, what already works, what stops it, what has to be decided and by whom, with no card key, commit, file or verdict), then **Detalhe técnico (para agentes)** with the specific block reason from validation-lead and any failing-test paths. Do NOT transition.
 
 ## Report
 

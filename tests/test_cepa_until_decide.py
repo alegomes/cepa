@@ -119,7 +119,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
     check("um cartão por item, com i/n e id na régua",
           "┌─ 1/2 · W-1 ─" in plain_text and "┌─ 2/2 · W-2 ─" in plain_text, plain_text)
     check("rótulos numa coluna, com o curto no lugar do longo",
-          "│  Parou porque   travou" in plain_text
+          "│  Parou porque   o agente marcou" in plain_text
           and "│  Contexto       dois clientes" in plain_text
           and "│  Tarefa         rotacionar no cofre" in plain_text, plain_text)
     check("a pergunta marcada e a instrução embaixo dela",
@@ -130,7 +130,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
           plain_text)
     check("menu em chips dentro do cartão, com a recomendada marcada",
           "│  [s] sim · [n] não (recomendado) · [t] escrevo a resposta · "
-          "[e] evidência inteira" in plain_text, plain_text)
+          "[e] detalhe técnico" in plain_text, plain_text)
     check("o prompt fica dentro do cartão e o cartão fecha",
           ANSI.sub("", prompts[1]) == "│  ▸ " and plain_text.count("└─") == 3,
           (prompts, plain_text))
@@ -204,6 +204,7 @@ def test_finish_writes_the_question_and_queue_returns_it():
         p = subprocess.run(
             [sys.executable, str(CEPA_PLAN), "finish", "fila", "a1",
              "--status", "blocked", "--evidence", "não há produção para medir",
+             "--impede", "ainda não há usuários reais para medir",
              "--pergunta", "Fecho o card como medir depois do go-live?",
              "--repo", str(root)], capture_output=True, text=True)
         check("finish com --pergunta sai 0", p.returncode == 0, p.stderr)
@@ -427,7 +428,7 @@ def test_decide_s_and_n_answer_the_drafted_question():
     check("o menu completo, com evidência: s, n, t, e, Enter, q",
           menus and all("[s] sim" in p_ and "[n] não" in p_
                         and "[t] escrevo a resposta" in p_
-                        and "[e] evidência inteira" in p_
+                        and "[e] detalhe técnico" in p_
                         and "[Enter] depois" in p_ and "[q] encerra" in p_
                         for p_ in menus), menus)
     check("...e sem as teclas antigas [r]/[f]/[m]",
@@ -1011,6 +1012,158 @@ def test_loose_text_on_terminal_warns_and_still_writes():
         check("...e a resposta dada depois do r chega ao plano",
               rc == 0 and a1["status"] == "pending"
               and "não sei ainda" in a1["evidence"], a1)
+
+
+def _finish(root, *args):
+    return subprocess.run(
+        [sys.executable, str(CEPA_PLAN), "finish", "fila", "a1", *args,
+         "--repo", str(root)], capture_output=True, text=True)
+
+
+def test_finish_keeps_agent_and_human_sections_apart():
+    """The owner (2026-11-01), on WEGO-2381: "Sua escrita é enigmática, cheia
+    de códigos e pressupostos de entendimento." The screen said "travou por
+    algo de fora do código" and the reason was in the sixth sentence of a log.
+    Now `evidence` is the agents' section (codes allowed) and `owner_summary`
+    is the human one: required on `blocked`, refused with codes."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        log = ("Matriz 154 = 136 cobertos + 18 bloqueados (WEGO-2490). "
+               "completion-auditor INCOMPLETE, proof-reviewer PROVEN, "
+               "commits 2a86075d..99818a34")
+        p = _finish(root, "--status", "blocked", "--evidence", log)
+        check("blocked sem --impede é recusado", p.returncode == 2, p.stderr)
+        check("...dizendo que o dono lê a seção humana",
+              "--impede" in p.stderr and "seção humana" in p.stderr, p.stderr)
+        check("...e nada muda no disco",
+              items_of(root)["a1"]["status"] == "pending", items_of(root)["a1"])
+
+        p = _finish(root, "--status", "blocked", "--evidence", log,
+                    "--impede", "o bug WEGO-2490 deixa o 403 sem corpo")
+        check("código de card na seção humana é recusado",
+              p.returncode == 2 and "--impede: código de card ou de commit"
+              in p.stderr, p.stderr)
+        p = _finish(root, "--status", "blocked", "--evidence", log,
+                    "--impede", "o sistema responde em branco",
+                    "--pergunta", "Aceito o INCOMPLETE do completion-auditor?")
+        check("verificador e veredito na pergunta são recusados",
+              p.returncode == 2
+              and "--question: nome de verificador ou veredito interno"
+              in p.stderr, p.stderr)
+        p = _finish(root, "--status", "blocked", "--evidence", log,
+                    "--impede", "palavra " * 31)
+        check("campo humano acima de 30 palavras é recusado",
+              p.returncode == 2 and "31 palavras, o limite é 30" in p.stderr,
+              p.stderr)
+
+        p = _finish(root, "--status", "blocked", "--evidence", log,
+                    "--pedido", "testar a parte que controla quem entra no "
+                                "sistema",
+                    "--pronto", "136 de 154 casos testados e passando",
+                    "--impede", "o sistema responde em branco quando nega um "
+                                "acesso, e 18 testes dependem dessa resposta",
+                    "--se-sim", "o trabalho vai para revisão com os 18 casos "
+                                "marcados como pendentes do defeito",
+                    "--se-nao", "o trabalho espera o defeito ser corrigido",
+                    "--pergunta", "Entrego com os 18 casos pendentes do "
+                                  "defeito?")
+        check("com a seção humana leiga, blocked fecha", p.returncode == 0,
+              p.stderr)
+        it = items_of(root)["a1"]
+        check("...a seção dos agentes guarda os códigos",
+              it["evidence"] == log, it)
+        check("...e a seção humana fica em owner_summary",
+              it.get("owner_summary", {}).get("impede", "").startswith(
+                  "o sistema responde em branco")
+              and set(it["owner_summary"]) == {"pedido", "pronto", "impede",
+                                               "se_sim", "se_nao"}, it)
+        q = subprocess.run(
+            [sys.executable, str(CEPA_PLAN), "queue", "fila", "--json",
+             "--repo", str(root)], capture_output=True, text=True)
+        deferred = json.loads(q.stdout)["deferred"][0]
+        check("o queue devolve a seção humana junto com o adiado",
+              deferred.get("owner_summary") == it["owner_summary"], deferred)
+        st = subprocess.run(
+            [sys.executable, str(CEPA_PLAN), "status", "fila",
+             "--repo", str(root)], capture_output=True, text=True,
+            env={**os.environ, "NO_COLOR": "1"})
+        check("o status mostra o motivo leigo, não a 1ª frase do log",
+              "o sistema responde em branco" in st.stdout
+              and "Matriz 154" not in st.stdout, st.stdout)
+        p = _finish(root, "--status", "pending", "--evidence", "voltou")
+        check("pending limpa a seção humana, que era do travamento",
+              "owner_summary" not in items_of(root)["a1"], items_of(root)["a1"])
+
+
+def test_decide_shows_human_section_and_what_each_answer_does():
+    """The screen opens with the human section (why it stopped, what was
+    asked, what is ready), and the menu legend says what sim and não do to
+    the WORK. The codes only show on [e], under "Detalhe técnico"."""
+    m = load_module()
+    deferred_ones = [{
+        "id": "WEGO-2381", "title": "Ampliar cobertura de testes",
+        "reason": "bloqueado-antes", "human_pending": None,
+        "question": "Entrego com os 18 casos pendentes do defeito?",
+        "evidence": "completion-auditor INCOMPLETE; WEGO-2490 criado",
+        "owner_summary": {
+            "pedido": "testar a parte que controla quem entra no sistema",
+            "pronto": "136 de 154 casos testados e passando",
+            "impede": "o sistema responde em branco quando nega um acesso",
+            "se_sim": "o trabalho vai para revisão",
+            "se_nao": "o trabalho espera o defeito ser corrigido"}}]
+    answers = iter(["e", "", "q"])
+    screen = []
+    m.decide(Path("/nao/existe"), "fila", "run1", {}, deferred_ones, {},
+             question=lambda _p: next(answers), output=screen.append,
+             answer=lambda *a, **k: (0, "ok"))
+    text = "\n".join(screen)
+    flat = " ".join(text.split())
+    order = [flat.find(x) for x in (
+        "Parou porque: o sistema responde em branco",
+        "Era para: testar a parte",
+        "Já está pronto: 136 de 154",
+        "Pergunta: Entrego com os 18 casos",
+        "sim = o trabalho vai para revisão. O item volta para a fila",
+        "não = o trabalho espera o defeito ser corrigido")]
+    check("motivo, pedido, pronto, pergunta e legenda, nesta ordem",
+          -1 not in order and order == sorted(order), text)
+    check("a etiqueta genérica some quando há motivo leigo",
+          "o agente marcou o item como travado" not in text
+          and "travou por algo de fora do código" not in text, text)
+    before_e = text.split("Detalhe técnico")[0]
+    check("os códigos só aparecem no detalhe técnico, no [e]",
+          "WEGO-2490" not in before_e
+          and "Detalhe técnico (para agentes): completion-auditor" in text, text)
+
+
+def test_old_blocked_item_gets_a_true_generic_reason():
+    """An item blocked before the human section existed: the screen no longer
+    claims "algo de fora do código", which was false on WEGO-2381."""
+    m = load_module()
+    screen = []
+    m.decide(Path("/nao/existe"), "fila", "run1", {},
+             [{"id": "a1", "title": "t", "reason": "bloqueado-antes",
+               "human_pending": None, "question": None, "evidence": "x"}],
+             {}, question=lambda _p: "q", output=screen.append,
+             answer=lambda *a, **k: (0, "ok"))
+    text = "\n".join(screen)
+    check("item antigo mostra o motivo genérico verdadeiro",
+          "Parou porque: o agente marcou o item como travado." in text
+          and "fora do código" not in text, text)
+
+
+def test_supervisor_block_writes_a_lay_reason():
+    """`block_item` is the supervisor closing an item nobody explained; it
+    passes `cepa-plan`'s new rule with its own lay reason."""
+    m = load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        err = m.block_item("fila", root, "a1", 3)
+        it = items_of(root)["a1"]
+        check("block_item fecha blocked sob a regra nova", err is None, err)
+        check("...com o motivo leigo na seção humana",
+              (it.get("owner_summary") or {}).get("impede", "").startswith(
+                  "o executor tentou 3 vezes seguidas"), it)
 
 
 def main():
