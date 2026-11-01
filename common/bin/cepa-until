@@ -223,6 +223,7 @@ except ImportError:
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "hooks"))
 import _queuepath as qp  # noqa: E402  (the queue lives in two layouts during the transition)
+import _ownertext  # noqa: E402  (the human section of a blocked item)
 
 CEPA_PLAN = HERE / "cepa-plan"
 CEPA_UNTIL_DIGEST = HERE / "cepa-until-digest"
@@ -1081,7 +1082,9 @@ def block_item(name, repo, ident, attempts, side_branch=None):
     if side_branch:
         evidence += (f" Os commits das tentativas, que não passaram pelo "
                       f"build do supervisor, estão em `{side_branch}`.")
-    return finish_item(name, repo, ident, "blocked", evidence)
+    impede = (f"o executor tentou {attempts} vezes seguidas e o item não "
+              "andou. Ninguém investigou o motivo ainda.")
+    return finish_item(name, repo, ident, "blocked", evidence, impede)
 
 
 # ── start-up guards ─────────────────────────────────────────────────────────
@@ -1615,12 +1618,22 @@ def emit_telemetry(event, repo, **fields):
         pass
 
 
-def finish_item(name, repo, ident, status, evidence):
-    """`cepa-plan finish`. Returns None or the error as text."""
+def finish_item(name, repo, ident, status, evidence, impede=None, owner=None):
+    """`cepa-plan finish`. Returns None or the error as text. `impede` is the
+    human section's reason, required by `cepa-plan` on `blocked`; `owner` is a
+    whole human section to carry over (`finish` replaces it)."""
+    owner = dict(owner or {})
+    if impede:
+        owner["impede"] = impede
+    flags = []
+    for key, flag, _ in _ownertext.FIELDS:
+        if str(owner.get(key) or "").strip():
+            flags += [flag, str(owner[key])]
     try:
         p = subprocess.run(
             [sys.executable, str(CEPA_PLAN), "finish", name, str(ident),
-             "--status", status, "--evidence", evidence, "--repo", str(repo)],
+             "--status", status, "--evidence", evidence, "--repo", str(repo)]
+            + flags,
             capture_output=True, text=True, timeout=60)
     except (subprocess.TimeoutExpired, OSError) as e:
         return f"o `cepa-plan finish` não respondeu: {e}"
@@ -1894,8 +1907,12 @@ def land_action(repo, tree, queue, run_id, n):
 # answer. The question text may come from the model's analysis, but it is only shown:
 # no wording decides what is executed.
 
+# The generic reason, shown only when the agent did not write the human
+# section (`owner_summary.impede`). Until 2026-11-01 it said "travou por algo
+# de fora do código" for every blocked item, and on WEGO-2381 that was false:
+# the work was done and two rules disagreed.
 OWNER_REASON = {
-    "bloqueado-antes": "travou por algo de fora do código",
+    "bloqueado-antes": "o agente marcou o item como travado",
     "human_pending": "ficou uma tarefa que só você faz",
 }
 NO_OWNER_REASON = {
@@ -1948,25 +1965,40 @@ def recommended_letter(d):
 
 
 WORDS_IN_QUESTION = 25
-JARGON_IN_QUESTION = re.compile(
-    r"until/|session/|\b\w+Test\b|\w+\.(?:py|java|yaml|yml|md|sh|json)\b"
-    r"|\(a alternativa")
 
 
 def question_breaks_rules(text):
-    """What the analysis question breaks of the `/common:until-review` rules
-    (up to 25 words; no branch, test class or file; no
+    """What the question breaks of the human-section rule (up to 25 words;
+    no branch, test class, file, card, commit, gate name or verdict; no
     alternative in parentheses), in one sentence, or None. It only warns: the
     question is shown all the same, because it is what the `sim` records
     (decidir WEGO 2026-10-15-1128: 71 words, with branch and class)."""
-    text = " ".join(str(text or "").split())
-    reasons = []
-    n = len(text.split())
-    if n > WORDS_IN_QUESTION:
-        reasons.append(f"{n} palavras, o limite é {WORDS_IN_QUESTION}")
-    if JARGON_IN_QUESTION.search(text):
-        reasons.append("nome de branch, classe de teste ou arquivo")
-    return "; ".join(reasons) or None
+    return "; ".join(_ownertext.problems(text, WORDS_IN_QUESTION)) or None
+
+
+def owner_summary_of(ad, d):
+    """The human section of a deferred item: what the agent wrote with
+    `finish`, completed by the analysis's `se_sim`/`se_nao`. Only text."""
+    raw = ad.get("owner_summary")
+    summary = {k: " ".join(str(v).split()) for k, v in
+               (raw.items() if isinstance(raw, dict) else ())
+               if v is not None and str(v).strip()}
+    for key in ("se_sim", "se_nao"):
+        if not summary.get(key) and str((d or {}).get(key) or "").strip():
+            summary[key] = " ".join(str(d[key]).split())
+    return summary
+
+
+def answers_legend(summary):
+    """What `sim` and `não` lead to. The mechanics never change (sim returns
+    the item to the queue, não keeps it); what the owner needs is what that
+    means for the WORK, which only the agent knows (WEGO-2381: "libero o In
+    Review?" next to "sim = o item volta para a fila")."""
+    yes = summary.get("se_sim")
+    no = summary.get("se_nao")
+    return (f"sim = {yes or 'o item volta para a fila com a sua resposta'}"
+            + (". O item volta para a fila com a sua resposta" if yes else "")
+            + f"; não = {no or 'fica como está e eu só gravo o que você disser'}")
 
 
 def pending_action(item_states):
@@ -2234,9 +2266,9 @@ class Panel:
 
     def evidence(self, text):
         if not self.enabled:
-            self.output(indented(f"Evidência: {text}"))
+            self.output(indented(f"Detalhe técnico (para agentes): {text}"))
             return
-        self.label("Evidência", text)
+        self.label("Detalhe técnico", text, short_path="Para agentes")
 
     def recorded(self, msg, ok=True):
         if not self.enabled:
@@ -2310,8 +2342,17 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # between context, question and menu. Whole title: cut at 60
         # characters the owner answered a question he saw only half of
         # (feedback of 10/15, decidir WEGO 2026-10-15-1128).
+        summary = owner_summary_of(ad, d)
         screen.item(i, len(owner_items), ident, ad.get("title") or "")
-        screen.label("Parou porque", f"{OWNER_REASON[ad['reason']]}.")
+        # The human section first, in the order a person reads a story:
+        # what stopped, what was asked, what is already done. The agent
+        # section (the evidence, with its codes) only on `[e]`.
+        screen.label("Parou porque", summary.get("impede")
+                     or f"{OWNER_REASON[ad['reason']]}.")
+        if summary.get("pedido"):
+            screen.label("Era para", summary["pedido"])
+        if summary.get("pronto"):
+            screen.label("Já está pronto", summary["pronto"])
         if route is not None:
             screen.label("Tarefa que ficou para você", route, short_path="Tarefa")
         if context:
@@ -2327,12 +2368,14 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             screen.question(question_text)
             outside = question_breaks_rules(question_text)
             if outside:
-                screen.warning(f"(a análise escreveu esta pergunta fora das "
+                screen.warning(f"(esta pergunta foi escrita fora das "
                            f"regras: {outside}. Se ela não fizer sentido, "
-                           "[e] mostra a evidência inteira)")
+                           "[e] mostra o detalhe técnico)")
         elif route is not None:
             screen.question("já fez? Com sim, a tarefa fecha e o item volta "
                           "para a fila.")
+        elif summary.get("impede"):
+            screen.question("destravo o item e devolvo para a fila?")
         else:
             screen.label("O agente parou porque",
                         summarize_reason(ad.get('evidence') or ''),
@@ -2344,12 +2387,11 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         if rec:
             screen.recommend(rec)
         screen.blank()
-        screen.legend("sim = o item volta para a fila com a sua resposta; "
-                     "não = fica como está e eu só gravo o que você disser")
+        screen.legend(answers_legend(summary))
         show = bool(ad.get("evidence"))
         chips = [("s", "sim"), ("n", "não"), ("t", "escrevo a resposta")]
         if show:
-            chips.append(("e", "evidência inteira"))
+            chips.append(("e", "detalhe técnico"))
         chips += [("Enter", "depois"), ("q", "encerra")]
         prompt = screen.menu(chips, recommended_letter(d))
         valid = {"s", "n", "t", "", "q"} | ({"e"} if show else set())
@@ -2423,7 +2465,8 @@ def pending_as_text(queue, run_id, item_states, deferred, analysis, output=print
         d = by_item.get(str(ad.get("id"))) or {}
         q = ad.get("question") or d.get("pergunta") or ad.get("human_pending") \
             or summarize_reason(ad.get("evidence") or "")
-        output(f"   - {ad.get('id')} ({OWNER_REASON[ad['reason']]}): {q}")
+        why = owner_summary_of(ad, d).get("impede") or OWNER_REASON[ad["reason"]]
+        output(f"   - {ad.get('id')} ({why}): {q}")
     output(f"   Para responder uma por uma, num terminal: cepa-until decide "
           f"{queue}/{run_id}")
 
@@ -3585,7 +3628,12 @@ def main(argv=None):
                             f"Saída no `.log` do run {run_id}. NÃO consegui "
                             f"tirar os commits da branch da noite: "
                             f"{undo_error}")
-                finish_error = finish_item(a.queue, repo, ident, new_status, evid)
+                finish_error = finish_item(
+                    a.queue, repo, ident, new_status, evid,
+                    "o agente entregou, mas a bateria completa de testes do "
+                    "projeto falhou depois dele, e falhou de novo quando o "
+                    "item voltou para ser corrigido." if new_status == "blocked"
+                    else None)
                 reds.append((ident, side_branch, verify_reason))
                 log_event({"evento": "verify_vermelho", "id": ident,
                           "lateral": side_branch, "erro": undo_error or finish_error})
@@ -3626,13 +3674,20 @@ def main(argv=None):
                     inherited.discard(ident)
                     reread, _ = read_item(plan_path, ident)
                     ev = str((reread or {}).get("evidence") or "").strip()
+                    # The agent's human section survives the re-finish: only
+                    # the agents' section gets the supervisor's note.
+                    kept = (reread or {}).get("owner_summary") or {}
                     finish_error = finish_item(
                         a.queue, repo, ident, "blocked",
                         (ev + " " if ev else "") +
                         f"[supervisor] Os commits do item, que não passaram "
                         f"pelo build do supervisor (ele só roda depois de "
                         f"`done`), estão em `{side_branch}`; a branch da noite "
-                        f"voltou para {since[:10]}.")
+                        f"voltou para {since[:10]}.",
+                        None if isinstance(kept, dict) and kept.get("impede")
+                        else "o agente marcou o item como travado sem explicar "
+                             "o motivo em palavras simples.",
+                        kept if isinstance(kept, dict) else None)
                 log_event({"evento": "travado_separado", "id": ident,
                           "lateral": side_branch,
                           "erro": undo_error or finish_error})

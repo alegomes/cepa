@@ -377,7 +377,8 @@ with tempfile.TemporaryDirectory() as tmp:
     check("…e a recusa nomeia o build vazio",
           "EMPTY" in f.stderr and "zero" in f.stderr.lower(), f.stderr[:400])
     f = cepa_plan(r, "finish", "fila", "B", "--status", "blocked",
-                  "--evidence", "travou no build vazio", "--repo", ".")
+                  "--evidence", "travou no build vazio",
+                  "--impede", "os testes não rodaram", "--repo", ".")
     check("cepa-plan finish --status blocked ACEITA com baseline EMPTY",
           f.returncode == 0, f.stderr[:300])
     f = cepa_plan(r, "finish", "fila", "B", "--status", "pending",
@@ -500,7 +501,8 @@ with tempfile.TemporaryDirectory() as tmp:
     check("…e a recusa diz que o código mudou desde o build vazio",
           "zero" in f.stderr.lower() and "mudou" in f.stderr.lower(), f.stderr[:500])
     f = cepa_plan(r, "finish", "fila", "B", "--status", "blocked",
-                  "--evidence", "travou", "--repo", ".")
+                  "--evidence", "travou",
+                  "--impede", "os testes não rodaram", "--repo", ".")
     check("finish blocked ACEITA com STALE herdado de EMPTY",
           f.returncode == 0, f.stderr[:300])
 

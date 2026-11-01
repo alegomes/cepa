@@ -241,6 +241,7 @@ except ImportError:
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _queuepath as qp  # noqa: E402  (resolver for both queue layouts)
+import _ownertext  # noqa: E402  (the human section of a blocked item)
 
 MODE = "single-track"
 SCHEMA_VERSION = 2
@@ -1255,6 +1256,7 @@ def build_batch(items, max_items, reservation_state=reservation_of):
         deferred.append({"id": ident, "title": it.get("title"),
                         "reason": reason, "detail": detail,
                         "question": it.get("owner_question"),
+                        "owner_summary": it.get("owner_summary"),
                         "human_pending": it.get("human_pending"),
                         "evidence": it.get("evidence")})
 
@@ -1460,6 +1462,7 @@ def cmd_status(root, name, status_filter, as_json):
             "blocked_by": it.get("blocked_by") or [],
             "human_pending": it.get("human_pending"),
             "evidence": it.get("evidence"),
+            "owner_summary": it.get("owner_summary"),
             "claimed_by": ({"session_id": owner.get("session_id"),
                             "branch": owner.get("branch"),
                             "started_at": owner.get("started_at")}
@@ -1504,8 +1507,8 @@ def cmd_status(root, name, status_filter, as_json):
                 print(f"       espera: {', '.join(map(str, l['blocked_by']))}")
             if l["human_pending"] is not None:
                 print(f"       ação humana: {first_sentence(l['human_pending'])}")
-            if st == "blocked" and l["evidence"]:
-                print(f"       motivo: {first_sentence(l['evidence'])}")
+            if st == "blocked" and blocked_reason(l):
+                print(f"       motivo: {blocked_reason(l)}")
     return 0
 
 
@@ -1582,9 +1585,8 @@ def status_on_screen(program, target, lines, counts, visible):
             if l["human_pending"] is not None:
                 details.append(("ação humana", first_sentence(l["human_pending"]),
                                  "amarelo"))
-            if st == "blocked" and l["evidence"]:
-                details.append(("motivo", first_sentence(l["evidence"]),
-                                 "vermelho"))
+            if st == "blocked" and blocked_reason(l):
+                details.append(("motivo", blocked_reason(l), "vermelho"))
             for label, text, d_color in details:
                 key = f"↳ {label}: "
                 wrapped = t.wrap(key + text, 7, 7 + len(key))
@@ -2374,8 +2376,54 @@ def missing_validation(repo, ident):
             "ele nomeou, ou feche como `blocked` com o motivo.")
 
 
+def blocked_reason(line):
+    """Why a `blocked` item stopped, for a person: the human section's
+    `impede` when the agent wrote it, else the first sentence of the agent
+    section (items blocked before 2026-11-01)."""
+    summary = line.get("owner_summary") or {}
+    if isinstance(summary, dict) and summary.get("impede"):
+        return " ".join(str(summary["impede"]).split())
+    return first_sentence(line["evidence"]) if line.get("evidence") else ""
+
+
+def human_section_refusal(status, owner, question):
+    """Why `finish` refuses the human section, as text, or None.
+
+    `evidence` is for agents and keeps its codes. `owner_summary` and the
+    question are for someone who never opened the card, so they carry no
+    code at all (see `_ownertext`)."""
+    if status == "blocked" and not str(owner.get("impede") or "").strip():
+        return ("`blocked` sem `--impede` não fecha: o dono lê a seção humana "
+                "e não o log. Diga, em uma frase leiga, o que impede o item "
+                "de andar (ex.: \"o sistema responde em branco quando nega um "
+                "acesso, e 18 testes dependem dessa resposta\"). Junte "
+                "`--pedido` (o que era para fazer) e `--pronto` (o que já "
+                "funciona). Códigos, commits e vereditos ficam no `--evidence`.")
+    bad = []
+    for key, flag, _ in _ownertext.FIELDS:
+        found = _ownertext.problems(owner.get(key))
+        if found:
+            bad.append(f"{flag}: {'; '.join(found)}")
+    if question is not None:
+        found = _ownertext.problems(question, limit=25)
+        if found:
+            bad.append(f"--question: {'; '.join(found)}")
+    if bad:
+        return ("a seção humana é lida por quem nunca abriu o card, e estes "
+                "campos fogem da regra: " + " | ".join(bad) + ". Reescreva "
+                "em palavras leigas. Códigos, commits e vereditos ficam no "
+                "`--evidence`, que é a seção dos agentes.")
+    return None
+
+
 def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
-               question=None, commit=False):
+               question=None, commit=False, owner=None):
+    owner = {k: " ".join(str(v).split()) for k, v in (owner or {}).items()
+             if v is not None and str(v).strip()}
+    refusal = human_section_refusal(status, owner, question)
+    if refusal:
+        print(f"`{status}` recusado para {ident}: {refusal}", file=sys.stderr)
+        return 2
     if status == "done":
         gap = missing_validation(repo, ident)
         if gap is not None:
@@ -2425,6 +2473,10 @@ def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
     elif status in ("done", "pending"):
         # The question belonged to the jam; the item moved on, and it no longer applies.
         it.pop("owner_question", None)
+    if owner:
+        it["owner_summary"] = owner
+    elif status in ("done", "pending"):
+        it.pop("owner_summary", None)
     write_body(target, plan, plan.get("items") or [])
     print(f"{ident} → `{status}` em {target}")
     if human_pending:
@@ -2627,6 +2679,7 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
     if not keep:
         # Kept, the question stays open and the next `cepa-until decide` redoes it.
         it.pop("owner_question", None)
+        it.pop("owner_summary", None)
     it.pop("claimed_by", None)
     write_body(target, plan, plan.get("items") or [])
     if keep:
@@ -3718,6 +3771,21 @@ def main(argv=None):
                          "fixo: sim = o item volta para a fila com esta "
                          "resposta, não = fica como está. Use com `blocked` "
                          "e com `--human-pending`")
+    # The HUMAN section (see _ownertext). `--evidence` is the agents' section.
+    owner_help = {
+        "pedido": "seção humana: o que o item pedia, em palavras leigas",
+        "pronto": "seção humana: o que já funciona, em palavras leigas",
+        "impede": "seção humana: o que impede o item de andar, em uma frase "
+                  "leiga. Obrigatório com `blocked`",
+        "se_sim": "seção humana: o que acontece com o trabalho se o dono "
+                  "responder sim à pergunta",
+        "se_nao": "seção humana: o que acontece com o trabalho se o dono "
+                  "responder não",
+    }
+    for key, flag, _ in _ownertext.FIELDS:
+        fi.add_argument(flag, dest=f"owner_{key}", metavar="TEXTO",
+                        help=owner_help[key] + ". Até 30 palavras, sem card, "
+                             "commit, arquivo ou veredito")
     fi.add_argument("--commit", action="store_true",
                     help="commita a fila (só ela) no mesmo passo; sem isso a "
                          "saída diz que falta commitar")
@@ -3881,7 +3949,9 @@ def main(argv=None):
         return cmd_start(root, a.name, a.id, a.repo, a.commit)
     if a.cmd == "finish":
         return cmd_finish(root, a.name, a.id, a.status, a.evidence,
-                          a.human_pending, a.repo, a.question, a.commit)
+                          a.human_pending, a.repo, a.question, a.commit,
+                          {key: getattr(a, f"owner_{key}")
+                           for key, _, _ in _ownertext.FIELDS})
     if a.cmd == "answer":
         return cmd_answer(root, a.name, a.id, a.answer, a.keep,
                             a.force, not a.no_commit, a.repo, a.author)

@@ -395,7 +395,8 @@ def test_marking_preserves_header_and_extra_fields(base):
                         if l.startswith("#") or not l.strip())
     run(d, "start", "fila", "A", "--repo", ".")
     r = run(d, "finish", "fila", "A", "--status", "blocked",
-            "--evidence", "travou no docker ausente", "--repo", ".")
+            "--evidence", "travou no docker ausente",
+            "--impede", "falta o programa que sobe o banco de testes", "--repo", ".")
     after = target.read_text(encoding="utf-8")
     check("o cabeçalho escrito à mão sobrevive à marcação",
           after.startswith(header.rstrip("\n")), after[:200])
@@ -901,7 +902,8 @@ def test_finish_done_requires_the_validation_lead_verdict(base):
           by_id(plan_of(target))["A"]["status"] == "pending")
 
     r = run(d, "finish", "fila", "A", "--status", "blocked",
-            "--evidence", "validation-lead não rodou", "--repo", ".")
+            "--evidence", "validation-lead não rodou",
+            "--impede", "a revisão final não rodou", "--repo", ".")
     check("sem o veredito, blocked continua aceito", r.returncode == 0, r.stderr)
 
     val = d / "docs" / "validation"

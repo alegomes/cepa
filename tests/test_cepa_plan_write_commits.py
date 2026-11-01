@@ -243,7 +243,8 @@ def test_start_and_finish_warn_to_commit_and_commit_commits():
               and "--commit" in p.stdout, p.stdout)
         check("...e não commitou", last_commit(root) == "base")
         p = plan(root, "finish", "fila", "a1", "--status", "blocked",
-                 "--evidence", "condição de fora", "--commit")
+                 "--evidence", "condição de fora", "--impede", "falta um acesso de fora",
+                 "--commit")
         check("finish --commit sai 0", p.returncode == 0, p.stderr)
         check("...commita a fila", last_commit(root) == "queue fila: a1 -> blocked",
               last_commit(root))

@@ -409,7 +409,8 @@ def stop_reason(payload, environ=None):
         "    2. Se um vigia já cumpriu o papel, encerre-o com `TaskStop` antes "
         "de parar.\n"
         "    3. Se o item não cabe no turno, NOMEIE O DESFECHO antes de parar: "
-        "`cepa-plan finish <fila> <id> --status blocked --evidence \"...\"`, e "
+        "`cepa-plan finish <fila> <id> --status blocked --evidence \"...\" "
+        "--impede \"<o motivo em palavras leigas>\"`, e "
         "deixe o clone na branch da largada — foi a branch parada numa "
         "integração que encerrou a janela de 2026-09-03 com 6h54 de sobra.")
 
@@ -485,7 +486,8 @@ def main():
         "       bloqueia, ele barra laço com `sleep`.\n"
         "    2. Se o build não cabe no turno, NOMEIE O DESFECHO antes de parar:\n"
         "       `cepa-plan finish <fila> <id> --status blocked --evidence`\n"
-        "       \"build disparado e não colhido: <comando>, log em <caminho>\".\n"
+        "       \"build disparado e não colhido: <comando>, log em <caminho>\"\n"
+        "       `--impede \"os testes não terminaram dentro do turno\"`.\n"
         "       Um item com desfecho volta sabendo onde parou.\n"
         "    3. Se o build passa de 10 min (o Bash o empurraria para o segundo\n"
         "       plano de qualquer jeito), declare o fim e espere em primeiro\n"
