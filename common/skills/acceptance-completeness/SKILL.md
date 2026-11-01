@@ -98,4 +98,7 @@ pattern applied to build state.)
   `assumed` is not `verified`.
 - A genuine, named deferral is allowed — but it goes in `gap:` with a
   follow-up card, and it keeps the criterion `incomplete`. Silent last-mile
-  gaps are the thing being stopped.
+  gaps are the thing being stopped. The exception is a deferral the card's
+  own criteria already accept (blocked with a linked bug, the bug confirmed
+  open, no test asserting the defect): see the rule in
+  `common/agents/completion-auditor.md`.
