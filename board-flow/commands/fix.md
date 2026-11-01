@@ -187,7 +187,7 @@ Leave the card in `defaults.status_map.in_progress`. Delegate to `atlassian-expe
 
 > Topology: `<default_topology>`.
 >
-> Add a comment to $ARGUMENTS with the blocker reason and any failing-test paths. Do NOT transition.
+> Add a comment to $ARGUMENTS in two sections: first **Em linguagem simples**, in pt-BR for someone who never opened the card (what the card asked, what already works, what stops it, what has to be decided and by whom, with no card key, commit, file or verdict), then **Detalhe técnico (para agentes)** with the blocker reason and any failing-test paths. Do NOT transition.
 
 ## Report
 

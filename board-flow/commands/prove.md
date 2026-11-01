@@ -175,6 +175,14 @@ The change is provably not load-bearing somewhere. Send it back. Read
 > ```markdown
 > ## Proof gate — UNPROVEN, returning for rework
 >
+> **Em linguagem simples**
+>
+> <two or three lay sentences in pt-BR: what the card asked, what the code
+> already does, and which behavior no test checks from the outside yet. No
+> card key, commit, file, class or verdict>
+>
+> **Detalhe técnico (para agentes)**
+>
 > The change is not demonstrably reflected at the external surface:
 >
 > - <for each failure: `file:line` — which level caught it — the external test that must exist to close it>

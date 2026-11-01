@@ -126,7 +126,7 @@ The four explicit-null fields are mandatory even when negative — the summary-n
 
 If BLOCKED: Leave In Progress. Delegate to `atlassian-expert`:
 
-> Add a comment to Story <key> with the block reason and the path to the failing test or finding. Do NOT transition.
+> Add a comment to Story <key> in two sections: first **Em linguagem simples**, in pt-BR for someone who never opened the card (what the card asked, what already works, what stops it, what has to be decided and by whom, with no card key, commit, file or verdict), then **Detalhe técnico (para agentes)** with the block reason and the path to the failing test or finding. Do NOT transition.
 
 ## Report
 
