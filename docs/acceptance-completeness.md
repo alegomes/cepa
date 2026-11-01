@@ -140,7 +140,14 @@ Its rules:
 5. **A named deferral stays incomplete.** A genuine, justified gap goes in
    `gap:` with a suggested follow-up — but the criterion stays `incomplete`.
    Deeming a known gap acceptable is the human's call at review, not the
-   auditor's.
+   auditor's. Exception: when the card's own criteria say a scenario that
+   hits a defect is marked blocked with a linked bug, the human already made
+   that call. The auditor then marks the criterion `complete` with a
+   `deferral:` list, but only if three checks pass: the card criterion is
+   quoted verbatim, every bug was confirmed open in Jira, and no test asserts
+   the defective behavior. Otherwise the rule stands. (Origin: on
+   2026-10-31 four cards with the same blocked scenarios got two different
+   verdicts, WEGO-2381/2382 incomplete and WEGO-2383/2385 complete.)
 
 It writes `.claude/acceptance/<KEY>.yaml` and returns `COMPLETE` or
 `INCOMPLETE` with the precise missing altitude per gap, so the flow can

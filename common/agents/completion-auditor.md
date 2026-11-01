@@ -77,10 +77,28 @@ unit test does not count, however correct.
   confirm the outermost layer the user touches actually changed in the diff AND
   is exercised. Inner-layer-only (domain/application with no controller/wire
   change or test) is `incomplete`.
-- **A named deferral stays incomplete.** A genuine, justified gap goes in
-  `gap:` with a suggested follow-up — but the criterion remains `incomplete`
-  and `status` cannot be `complete`. You do not get to deem a known gap
-  acceptable; that is the human's call at review.
+- **A named deferral stays incomplete — unless the card already accepted it.**
+  A genuine, justified gap goes in `gap:` with a suggested follow-up — but the
+  criterion remains `incomplete` and `status` cannot be `complete`. You do not
+  get to deem a known gap acceptable; that is the human's call at review.
+  The one exception is a gap the card's own criteria already accepted: the
+  human made that call when writing the card. The criterion is `complete`,
+  with a `deferral:` list (each blocked scenario and its bug key), only when
+  ALL three checks pass:
+  1. **The card accepts it.** A criterion of the card, quoted verbatim in
+     `deferral_rule:`, says that a scenario hitting a defect is marked
+     blocked with a linked bug (or words to that effect).
+  2. **Every bug exists and is open.** Each blocked scenario names a bug
+     card, and you confirmed each one with Bash (`twg jira workitem get
+     <KEY> <KEY>...`): it exists and is not Done. Could not confirm → this
+     check fails; the report of whoever called you is not confirmation.
+  3. **No test asserts the defect.** You read the tests touching each
+     blocked scenario: none asserts the wrong behavior (e.g. the empty body
+     the bug describes), and no assertion was weakened to make it pass.
+  If the card says nothing about blocked scenarios, or any check fails, the
+  rule above applies: `incomplete`, the human decides. This exception only
+  ever reads what the card says; it never judges whether a gap is
+  acceptable.
 
 ## Procedure
 
@@ -98,7 +116,8 @@ unit test does not count, however correct.
    verified` + `run:` on green; `evidence: assumed` if you genuinely can't run
    it; `evidence: missing` if no such test exists.
 5. **Verdict per criterion.** `complete` iff a demonstrating test exists at the
-   right altitude AND `evidence: verified`. Else `incomplete` with a precise
+   right altitude AND `evidence: verified` (for scenarios blocked by a bug,
+   the card-accepted deferral exception above). Else `incomplete` with a precise
    `gap:` (what surface is unexercised, and what the missing test must do).
 6. **Write the artifact.** Write `.claude/acceptance/<KEY>.yaml` per the schema
    in `acceptance-completeness`. `status: complete` iff every criterion is
