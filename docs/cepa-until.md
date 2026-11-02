@@ -135,6 +135,15 @@ question (a "não entendi", a question back), showing the route's question, and 
 (`--no-commit` writes without committing and says so). Without a terminal (`nohup`, cron) the run prints
 the same list and the command to come back: `cepa-until decide <fila>/<run>`.
 
+`cepa-until decide <fila>`, with no run, goes over the whole queue: every item a run skips
+because it waits on the owner, plus the `done` items that still carry a task only the owner
+does (create a role, validate by hand). Each card has `[d]`: on a pending or blocked item it
+takes the item out of the queue (`dropped`); on a delivered one it closes the leftover task as
+no longer needed. `sim` always means "back to the queue", so it cannot stand for "discard".
+`cepa-plan status` says which `pending` items are ready (the next run takes them) and which wait
+on the owner or on another item; readiness is derived from the same rule the run uses, never
+stored.
+
 ## Before you leave it running
 
 - **The tree must be clean.** It refuses a dirty working tree, because otherwise nothing

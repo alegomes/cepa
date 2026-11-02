@@ -130,7 +130,8 @@ def test_decide_on_terminal_draws_one_card_per_question():
           plain_text)
     check("menu em chips dentro do cartão, com a recomendada marcada",
           "│  [s] sim · [n] não (recomendado) · [t] escrevo a resposta · "
-          "[e] detalhe técnico" in plain_text, plain_text)
+          "[d] descarta o item" in plain_text
+          and "[e] detalhe técnico" in plain_text, plain_text)
     check("o prompt fica dentro do cartão e o cartão fecha",
           ANSI.sub("", prompts[1]) == "│  ▸ " and plain_text.count("└─") == 3,
           (prompts, plain_text))

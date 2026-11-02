@@ -1914,6 +1914,7 @@ def land_action(repo, tree, queue, run_id, n):
 OWNER_REASON = {
     "bloqueado-antes": "o agente marcou o item como travado",
     "human_pending": "ficou uma tarefa que só você faz",
+    "pos-entrega": "o item foi entregue e sobrou uma tarefa que só você faz",
 }
 NO_OWNER_REASON = {
     "reservado": "outra sessão está nele agora",
@@ -2288,17 +2289,19 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     analysis = analysis or {}
     by_item = analysis.get("itens") or {}
     if answer is None:
-        def answer(ident, text, keep=False):
+        def answer(ident, text, keep=False, drop=False):
             p = subprocess.run(
                 [sys.executable, str(CEPA_PLAN), "answer", queue, ident,
                  "--answer", text, "--repo", str(repo)]
-                + (["--keep"] if keep else []),
+                + (["--keep"] if keep else [])
+                + (["--drop"] if drop else []),
                 capture_output=True, text=True, timeout=60)
             return p.returncode, (p.stdout or p.stderr).strip()
     if land is None:
         def land():
             return cmd_land([f"{queue}/{run_id}", "--repo", str(repo),
                                    "--yes"])
+    back = f"cepa-until decide {queue}" + (f"/{run_id}" if run_id else "")
     screen = Panel(SCREEN, output)
     applied, for_later = [], []
     owner_items = [ad for ad in deferred if ad.get("reason") in OWNER_REASON]
@@ -2371,6 +2374,9 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 screen.warning(f"(esta pergunta foi escrita fora das "
                            f"regras: {outside}. Se ela não fizer sentido, "
                            "[e] mostra o detalhe técnico)")
+        elif route is not None and ad.get("reason") == "pos-entrega":
+            screen.question("já fez? Com sim, a tarefa fecha; o item segue "
+                          "concluído.")
         elif route is not None:
             screen.question("já fez? Com sim, a tarefa fecha e o item volta "
                           "para a fila.")
@@ -2387,14 +2393,23 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         if rec:
             screen.recommend(rec)
         screen.blank()
-        screen.legend(answers_legend(summary))
+        screen.legend("sim = a tarefa fecha; não = continua aberta; d = ela "
+                      "não vale mais e fecha sem ter sido feita"
+                      if ad.get("reason") == "pos-entrega"
+                      else answers_legend(summary) + "; d = o item sai da fila")
         show = bool(ad.get("evidence"))
-        chips = [("s", "sim"), ("n", "não"), ("t", "escrevo a resposta")]
+        delivered = ad.get("reason") == "pos-entrega"
+        # `d` exists because "sim" always means "back to the queue": on
+        # 2026-11-02 the owner said sim to "descarto este pedido?" (WEGO-2463)
+        # and the item went back to `pending`, for the next run to redo.
+        chips = [("s", "sim"), ("n", "não"), ("t", "escrevo a resposta"),
+                 ("d", "a tarefa não vale mais" if delivered
+                  else "descarta o item")]
         if show:
             chips.append(("e", "detalhe técnico"))
         chips += [("Enter", "depois"), ("q", "encerra")]
         prompt = screen.menu(chips, recommended_letter(d))
-        valid = {"s", "n", "t", "", "q"} | ({"e"} if show else set())
+        valid = {"s", "n", "t", "d", "", "q"} | ({"e"} if show else set())
         while True:
             raw = str(question(prompt))
             r = raw.strip().lower()
@@ -2412,8 +2427,15 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             break
         if r == "q":
             stopped = True
-        text, give_back = "", False
-        if r == "t":
+        text, give_back, drop = "", False, False
+        if r == "d":
+            drop = True
+            base = question_text or route or "o item"
+            extra = str(question(screen.follow_up(
+                "Por quê, numa linha? [Enter pula] "))).strip()
+            text = (("tarefa encerrada" if delivered else "descartado")
+                    + f": {base}" + (f". {extra}" if extra else ""))
+        elif r == "t":
             text = str(question(screen.follow_up("Sua resposta, numa linha (o "
                                                "próximo run lê isto): "))).strip()
             if text:
@@ -2432,7 +2454,8 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                         else "")
                      + (f". {extra}" if extra else ""))
         if text:
-            rc, msg = (answer(ident, text) if give_back
+            rc, msg = (answer(ident, text, drop=True) if drop
+                       else answer(ident, text) if give_back
                        else answer(ident, text, keep=True))
             if rc == 0:
                 applied.append(f"{ident}: {msg}")
@@ -2445,7 +2468,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
 
     screen.close_panel([f"{ad.get('id')} ({NO_OWNER_REASON[ad['reason']]})"
                 for ad in without_owner], applied, for_later,
-               f"cepa-until decide {queue}/{run_id}")
+               back)
     return applied, for_later
 
 
@@ -2468,19 +2491,43 @@ def pending_as_text(queue, run_id, item_states, deferred, analysis, output=print
         why = owner_summary_of(ad, d).get("impede") or OWNER_REASON[ad["reason"]]
         output(f"   - {ad.get('id')} ({why}): {q}")
     output(f"   Para responder uma por uma, num terminal: cepa-until decide "
-          f"{queue}/{run_id}")
+          f"{queue}" + (f"/{run_id}" if run_id else ""))
+
+
+def delivered_leftovers(queue, repo):
+    """The `done` items that still carry a `human_pending`: delivered work with
+    a task only the owner does (create a role, validate by hand). No run asks
+    about them, so on 2026-11-02 the WEGO queue had 37 of them and the owner
+    had to know `cepa-plan answer` to close each one."""
+    try:
+        p = subprocess.run(
+            [sys.executable, str(CEPA_PLAN), "status", queue, "--status", "done",
+             "--repo", str(repo), "--json"],
+            capture_output=True, text=True, timeout=60)
+        items = json.loads(p.stdout).get("items") or [] if p.returncode == 0 else []
+    except (subprocess.TimeoutExpired, ValueError):
+        items = []
+    return [{"id": l.get("id"), "title": l.get("title"), "reason": "pos-entrega",
+             "question": None, "human_pending": l.get("human_pending"),
+             "owner_summary": l.get("owner_summary"),
+             "evidence": l.get("evidence")}
+            for l in items if l.get("human_pending") is not None]
 
 
 def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=None,
                      wait=None):
     """The closing of the run and of `cepa-until decide`: queries the queue again (its
-    state now, not the launch one) and asks, or lists without a terminal."""
+    state now, not the launch one) and asks, or lists without a terminal.
+    Without `run_id` (`cepa-until decide <fila>`), it goes over the whole queue:
+    every deferred item plus the leftover tasks of the delivered ones."""
     data, error = query_queue(queue, repo)
     if error:
         print(f"\n── não consegui listar os adiados ({error})")
         deferred = []
     else:
         deferred = (data or {}).get("deferred") or []
+    if not run_id:
+        deferred = deferred + delivered_leftovers(queue, repo)
     analysis = {}
     if review:
         try:
@@ -2497,27 +2544,44 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
         decide(repo, queue, run_id, item_states, deferred, analysis, wait=wait)
     except NoAnswer:
         print(f"\n   ninguém respondeu em {wait / 60:g} min; o run termina aqui. "
-              f"Para responder depois: cepa-until decide {queue}/{run_id}")
+              f"Para responder depois: cepa-until decide {queue}"
+              + (f"/{run_id}" if run_id else ""))
     except (EOFError, KeyboardInterrupt):
-        print(f"\n   perguntas interrompidas; volte com: cepa-until decide "
-              f"{queue}/{run_id}")
+        print("\n   perguntas interrompidas; volte com: cepa-until decide "
+              f"{queue}" + (f"/{run_id}" if run_id else ""))
     return 0
 
 
 def cmd_decide(argv):
     """`cepa-until decide <queue>/<run>`: the end-of-run questions, again,
-    for when the owner wasn't there or left some for later."""
+    for when the owner wasn't there or left some for later.
+    `cepa-until decide <queue>`: every question the queue holds for the owner,
+    from any run, including the leftover tasks of delivered items (owner,
+    2026-11-02: "eu odeio ter que usar qualquer outro comando cepa que não seja
+    o cepa-until")."""
     ap = argparse.ArgumentParser(
         prog="cepa-until decide",
-        description="pergunta, uma por vez, o que um run deixou para o dono: "
-                    "aterrissar e cada item adiado que só ele destrava")
-    ap.add_argument("target", metavar="alvo", help="<fila>/<run>, como o resumo do run imprime")
+        description="pergunta, uma por vez, o que espera o dono: com <fila>, "
+                    "tudo o que a fila guarda para ele; com <fila>/<run>, "
+                    "aterrissar e cada item adiado daquele run")
+    ap.add_argument("target", metavar="alvo",
+                    help="<fila> (a fila inteira) ou <fila>/<run>, como o "
+                         "resumo do run imprime")
     ap.add_argument("--repo", default=".")
     a = ap.parse_args(argv)
     if "/" not in a.target:
-        print("cepa-until decide: o alvo é <fila>/<run> (ex.: "
-              "WEGO/2026-09-29-2059)", file=sys.stderr)
-        return 2
+        if not (re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", a.target)
+                and ".." not in a.target):
+            print(f"cepa-until decide: fila inválida {a.target!r}",
+                  file=sys.stderr)
+            return 2
+        repo = Path(a.repo).resolve()
+        _, error = query_queue(a.target, repo)
+        if error:
+            print(f"cepa-until decide: não li a fila {a.target!r} ({error})",
+                  file=sys.stderr)
+            return 2
+        return close_with_owner(repo, a.target, None, {})
     queue, run_id = a.target.split("/", 1)
     # Queue and run names are a single segment: `queue/../../x` would read a
     # state from outside the run folder and ask about it.

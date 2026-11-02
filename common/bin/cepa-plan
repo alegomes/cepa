@@ -1426,6 +1426,29 @@ def first_sentence(text, limit=160):
     return t[:limit - 1].rstrip() + "…"
 
 
+def owner_lines(lines, queue):
+    """The summary under the scoreboard: how many `pending` a run would take,
+    and what waits on the owner, split by kind. The old single line ("43 com
+    ação humana aberta") mixed 6 items that hold the queue with 37 delivered
+    ones carrying a leftover task, and gave no way to answer them."""
+    pending = [l for l in lines if l["status"] == "pending"]
+    ready = [l for l in pending if l["pronto"]]
+    out = [f"{len(ready)} de {len(pending)} pendentes prontos para o agente"
+           + (": " + ", ".join(str(l["id"]) for l in ready) if ready else "")
+           + ("; os outros esperam você ou outro item" if len(ready) < len(pending)
+              else "")]
+    holding = [l for l in lines if l["status"] not in ("done", "dropped")
+               and (l["human_pending"] is not None or l["status"] == "blocked")]
+    leftover = [l for l in lines if l["status"] == "done"
+                and l["human_pending"] is not None]
+    if holding or leftover:
+        out.append(f"esperam você: {len(holding)} itens parados"
+                   + (f" ({', '.join(str(l['id']) for l in holding)})" if holding else "")
+                   + f" e {len(leftover)} tarefas que sobraram em itens "
+                   f"concluídos. Responda uma por uma: cepa-until decide {queue}")
+    return out
+
+
 def cmd_status(root, name, status_filter, as_json):
     if not name:
         names = single_track_queues(root)
@@ -1453,10 +1476,17 @@ def cmd_status(root, name, status_filter, as_json):
         return 3
 
     items = plan.get("items") or []
+    # "Pendente" is not "pronto": a `pending` with an open human route, or
+    # waiting on an item that will not close, is skipped by every run. Ready
+    # is what `build_batch` would hand a run now, with no ceiling (owner,
+    # 2026-11-02: "o cepa-until não deve perder tempo em itens que certamente
+    # não irão avançar"). Derived, never stored: a stored flag goes stale.
+    ready_ids = {b["id"] for b in build_batch(items, 10 ** 6)[0]}
     lines = []
     for pos, it in enumerate(items, 1):
         owner = it.get("claimed_by") or {}
         lines.append({
+            "pronto": str(it.get("id")) in ready_ids,
             "posicao": pos, "id": it.get("id"), "title": it.get("title"),
             "status": status_of(it), "why": it.get("why"),
             "blocked_by": it.get("blocked_by") or [],
@@ -1476,20 +1506,19 @@ def cmd_status(root, name, status_filter, as_json):
         print(json.dumps({"program": qp.queue_name_of(plan, name),
                           "queue": qp.queue_name_of(plan, name),
                           "path": str(target), "total": len(lines),
-                          "por_status": counts, "filtro": status_filter,
+                          "por_status": counts, "prontos": len(ready_ids),
+                          "filtro": status_filter,
                           "items": visible}, ensure_ascii=False, indent=2))
         return 0
     if _tui.SCREEN.enabled:
-        return status_on_screen(plan.get("program") or name, target, lines,
+        return status_on_screen(qp.queue_name_of(plan, name), target, lines,
                               counts, visible)
 
     print(f"fila {qp.queue_name_of(plan, name)} · {target}")
     print("  " + " · ".join(f"{counts[st]} {grp_label}" for st, grp_label in STATUS_GROUPS)
           + f" · {len(lines)} no total")
-    open_items = [l for l in lines if l["human_pending"] is not None]
-    if open_items:
-        print(f"  {len(open_items)} com ação humana aberta: "
-              + ", ".join(l["id"] for l in open_items))
+    for text in owner_lines(lines, qp.queue_name_of(plan, name)):
+        print("  " + text)
     for st, grp_label in STATUS_GROUPS:
         group = [l for l in visible if l["status"] == st]
         if not group:
@@ -1503,6 +1532,8 @@ def cmd_status(root, name, status_filter, as_json):
                 c = l["claimed_by"]
                 print(f"       reservado: sessão {c['session_id'] or '?'}"
                       f" desde {c['started_at'] or '?'}")
+            if l["pronto"]:
+                print("       pronto: o próximo cepa-until pega")
             if l["blocked_by"]:
                 print(f"       espera: {', '.join(map(str, l['blocked_by']))}")
             if l["human_pending"] is not None:
@@ -1544,10 +1575,7 @@ def status_on_screen(program, target, lines, counts, visible):
           + t.c("negrito", f"{round(frac * 100)}%")
           + t.c("cinza", f" fechados ({counts['done']} concluídos + "
                 f"{counts['dropped']} descartados) ÷ {total}"))
-    open_items = [l for l in lines if l["human_pending"] is not None]
-    if open_items:
-        text = (f"{len(open_items)} com ação humana aberta: "
-                 + ", ".join(l["id"] for l in open_items))
+    for text in owner_lines(lines, program):
         wrapped = t.wrap(text, 4, 4)
         print("  " + t.c("amarelo", "⚑ ") + t.c("amarelo", wrapped[0][4:]))
         for x in wrapped[1:]:
@@ -1575,6 +1603,8 @@ def status_on_screen(program, target, lines, counts, visible):
             for x in t.wrap(" ".join(str(l["title"] or "").split()), 7):
                 print(x)
             details = []
+            if l["pronto"]:
+                details.append(("pronto", "o próximo cepa-until pega", "verde"))
             if l["claimed_by"]:
                 c = l["claimed_by"]
                 details.append(("reservado", f"sessão {c['session_id'] or '?'}"
@@ -2614,7 +2644,7 @@ def decide_waivers(proposals, answer, keep, today, author):
 
 
 def cmd_answer(root, name, ident, answer, keep=False, force=False,
-                 commit=True, repo=".", author=None):
+                 commit=True, repo=".", author=None, drop=False):
     if not sys.stdin.isatty():
         print("`answer` é a resposta do dono e só roda num terminal: sem "
               "TTY, quem chama é um agente, e só o humano fecha uma rota "
@@ -2625,6 +2655,10 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
         print("resposta vazia não destrava nada: o próximo run precisa saber "
               "o que você decidiu ou viu.", file=sys.stderr)
         return 2
+    if keep and drop:
+        print("--keep e --drop se contradizem: um deixa o item como está, o "
+              "outro o tira da fila.", file=sys.stderr)
+        return 2
     target, plan, by_id, rc = open_plan_for_marking(root, name)
     if rc:
         return rc
@@ -2634,7 +2668,10 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
         return 2
     st = status_of(it)
     route = it.get("human_pending")
-    if st != "blocked" and route is None:
+    # A plain `pending` the owner gives up on is reachable only with `--drop`
+    # (WEGO-2463 on 2026-11-02: "descarto este pedido? sim" sent it back to
+    # `pending`, and the next run would have picked it up again).
+    if st != "blocked" and route is None and not (drop and st == "pending"):
         print(f"{ident} está `{st}` e sem rota humana aberta: não há o que "
               "responder.", file=sys.stderr)
         return 2
@@ -2670,7 +2707,15 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
             # com o humano volta a ser invisível" (seen on 2026-10-15: S5's
             # answer erased the key and cepa-until refused the queue).
             it["human_pending"] = None
-        if st == "blocked":
+        if drop and st == "done":
+            # A delivered item stays delivered: dropping it means the leftover
+            # task no longer applies, not that the work is undone.
+            parts.append("O dono deu a tarefa que sobrou como encerrada; o "
+                          "item segue `done`.")
+        elif drop:
+            it["status"] = "dropped"
+            parts.append(f"O dono descartou o item (estava `{st}`).")
+        elif st == "blocked":
             it["status"] = "pending"
             parts.append("O item voltou de `blocked` para `pending`.")
     if previous:
@@ -3803,6 +3848,9 @@ def main(argv=None):
     rs.add_argument("--keep", "--mantem", dest="keep", action="store_true",
                     help="grava a resposta e deixa o item como está: o "
                          "`blocked` segue travado e a rota segue aberta")
+    rs.add_argument("--drop", "--descarta", dest="drop", action="store_true",
+                    help="descarta o item (`dropped`) e fecha a rota; num item "
+                         "`done`, só fecha a tarefa que sobrou")
     rs.add_argument("--force", "--forca", dest="force", action="store_true",
                     help="grava mesmo um texto que parece não responder à "
                          "rota (pedido de esclarecimento, pergunta)")
@@ -3954,7 +4002,7 @@ def main(argv=None):
                            for key, _, _ in _ownertext.FIELDS})
     if a.cmd == "answer":
         return cmd_answer(root, a.name, a.id, a.answer, a.keep,
-                            a.force, not a.no_commit, a.repo, a.author)
+                            a.force, not a.no_commit, a.repo, a.author, a.drop)
     return cmd_write(root, a)
 
 
