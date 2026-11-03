@@ -1,0 +1,46 @@
+key: epic-metrica-de-resultado
+status: complete
+audited_at: HEAD d17cabe (base a50e629)
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: common/commands/epic.md (entrevista e formato)
+    test: tests/test_epic_readiness_gate.py::test_command_teaches_outcome_and_impact
+    layer: teste de conteúdo do comando
+    evidence: verified
+    run: "python3 tests/test_epic_readiness_gate.py -> OK (122 ok, 0 falhas)"
+    verdict: complete
+    note: ordem lida em epic.md passo 3 (intenção, quem, métrica, fora de escopo, invariantes, escada)
+  - id: AC2
+    altitude: event
+    surface: hook spec-readiness-gate como subprocesso (stdin JSON -> exit 2 + stderr)
+    test: test_ready_requires_who_out_of_scope_and_metric, test_metric_fields_on_one_line_are_each_checked
+    layer: subprocess do hook
+    evidence: verified
+    run: "python3 tests/test_epic_readiness_gate.py -> OK (122 ok, 0 falhas)"
+    verdict: complete
+  - id: AC3
+    altitude: event
+    surface: hook (closed) e CLI cepa-plan from-epic
+    test: test_closed_requires_impact (Impact ausente, sem Measured on, sem Measured value, closed sem ready) ; test_cepa_plan_from_epic.py (closed sem aviso)
+    layer: subprocess do hook + subprocess do cepa-plan
+    evidence: verified
+    run: "test_epic_readiness_gate OK 122 ok; python3 tests/test_cepa_plan_from_epic.py -> tudo ok (60 ok)"
+    verdict: complete
+    note: epic.md passo 6 preenche Impact (lido)
+  - id: AC4
+    altitude: event
+    surface: hook
+    test: test_old_pronta_keeps_old_screen, test_draft_never_blocks, test_template_status_line_with_closed_passes
+    layer: subprocess do hook
+    evidence: verified
+    run: "python3 tests/test_epic_readiness_gate.py -> OK; tests/test_spec_readiness_gate.py -> all green (47 ok)"
+    verdict: complete
+  - id: AC5
+    altitude: domain
+    surface: docs/commands.md e common/.claude-plugin/plugin.json
+    test: nenhum teste automatizado; verificado por diff e leitura
+    layer: inspeção do diff
+    evidence: verified
+    run: "git diff a50e629 HEAD: version 2.30.3 -> 3.0.0; linha /common:epic de docs/commands.md reescrita; docs/versionamento.md classifica gate que passa a bloquear formato aceito como MAJOR"
+    verdict: complete
