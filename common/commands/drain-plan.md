@@ -140,6 +140,41 @@ them in is `/common:queue <nome> --from-jira`.
 A status the `status_map` does not describe is not reconciled, and comes back as
 a warning. Pass the warning on instead of guessing its role.
 
+### 0b. Move what already landed to Done — only when there is a board with `done`
+
+Skip with no `board-flow.yaml`, with `--offline`, or when
+`defaults.status_map.done` is not set (the same condition under which
+`/board-flow:prove` does not auto-advance).
+
+On the overnight branch the rule is "no merge, no push, no Done", so a card
+proven there stays in Review. `cepa-until aterrissar` later merges the branch
+into main and never speaks to Jira, and nothing else moved those cards: on
+2026-11-03 eleven WEGO cards sat in Review with PROVEN proof, complete
+acceptance and code on main (fb-20261103-1). This step closes that gap at the
+start of every batch, with no command for the owner to remember.
+
+Ask `atlassian-expert` for the cards in `defaults.status_map.in_review`,
+applying the effective scope (`{"cards": [{"key", "status"}]}`, no transition),
+save it, and let the code decide which are ready:
+
+```
+python3 common/bin/cepa-plan landed --board <arquivo.json> --repo . --json
+```
+
+A card is in `prontos` only with `docs/proof/<KEY>.yaml` PROVEN, the
+acceptance audit `complete`, the validation-lead verdict when the topology
+requires it, and the proof's `head_commit` contained in the integration
+branch. Delegate to `atlassian-expert` the transition of each `prontos` card to
+`defaults.status_map.done`, with a comment that opens with an **Em linguagem
+simples** section in pt-BR ("a mudança foi provada por teste independente, os
+critérios de aceite foram conferidos e o código já está na main") followed by
+the technical line (proof and acceptance paths, the `head_commit`). This is
+the auto-advance the owner already decided for PROVEN cards (`done` in
+`board-flow.yaml`), applied after the landing instead of at proof time: it is
+not a question, and it becomes an information line in the report. `retidos`
+stay where they are, each with the reason the command printed; list them in
+the report only when the reason is something other than "não proven".
+
 ### 1. Resolve the queue and build the batch
 
 The queue lives in the **main clone**: `<raiz-principal>/.claude/queues/<nome>/`,
