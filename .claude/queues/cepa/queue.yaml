@@ -2575,3 +2575,14 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: spec-isento-do-report-style-lint
+  title: Estender ao /common:spec a exceção do report-style-lint que poupa o turno
+    de entrevista do /common:epic
+  why: 'Pergunta CS-5 da fila cepa-espiral-c1, sem resposta num item done. Recomendação
+    do agente: sim, porque a entrevista do spec também grava no arquivo a cada turno,
+    e o lint a obriga ao formato de relatório com pergunta numerada. Dono aprovou
+    virar item em 2026-11-03. (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
