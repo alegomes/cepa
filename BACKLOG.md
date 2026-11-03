@@ -4596,3 +4596,25 @@ Em `tests/test_cepa_until_aterrissar.py`: fixture com worktree contendo `.env.lo
 distinto do clone; depois do pouso o arquivo existe em `.claude/rescued/<run>/` e a saída
 contém o aviso. Sem Docker: o passo 2 se testa com um `docker` falso no PATH que devolve um
 `working_dir` dentro da worktree.
+
+---
+
+## `/common:spec` também pede métrica de resultado?
+
+**Status:** aberto · **Lar:** `common` · **Origem:** revisão das regras de PRD (2026-11-02). O dono aprovou a métrica de resultado só no `/common:epic` e deixou a spec para depois.
+
+### Quando rever
+
+Quando o primeiro Epic chegar a `Status: closed`, ou seja, quando alguém tiver preenchido a seção `## Impact` com o valor medido. Antes disso não há como saber se o campo ajuda ou só cria uma pergunta a mais na entrevista.
+
+### Pergunta a responder
+
+O `Measured value` do Epic fechado saiu de uma `Source` que já existia, ou alguém teve de inventar a medição na hora? Se saiu de uma fonte existente, o campo se paga e vale levar para a spec. Se não, a spec fica como está.
+
+---
+
+## Teste instável: Ctrl+C do `cepa-until`
+
+**Status:** aberto · **Lar:** `common` · **Origem:** suíte completa de 2026-11-02.
+
+`tests/test_cepa_until_dead_supervisor.py` falha também em `a50e629`, sem mudança nenhuma, e cada rodada falha numa verificação diferente: numa foi "...e encerra o build", na outra "Ctrl+C encerra o `claude` do item antes de sair" (`filho_encerrado: False`). Tem cara de corrida entre o sinal e o encerramento do processo filho. Um teste que falha a cada rodada num ponto diferente ensina a ignorar vermelho na suíte.
