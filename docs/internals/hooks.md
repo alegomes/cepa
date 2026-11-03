@@ -14,7 +14,7 @@ CC supports several hook events. This marketplace uses six:
 | `UserPromptSubmit` | When the user submits a prompt. Hook can observe; can inject system reminders. | `session-log.py`, `session-subject.py`, `session-mode.py`, `session-routine-guard.py`, `report-style-lint.py`, `feedback-nudge.py` (common) |
 | `SessionStart` | Session boot. Hook can inject context. | `session-registry.py` (common) — registry hygiene + transparent handoff resume |
 | `SessionEnd` | Session teardown. | `session-registry.py` (common) — WIP-autosave + deregister |
-| `Stop` | After the main agent finishes a turn. | `session-checkpoint.py`, `report-style-lint.py`, `no-background-build.py` (common) |
+| `Stop` | After the main agent finishes a turn. | `session-checkpoint.py`, `report-style-lint.py`, `no-background-build.py`, `validation-owed-gate.py` (common) |
 
 `Monitor` (a CC tool name, used to poll a `run_in_background` job) is a
 **matcher**, not a separate event; it shows up as a `PreToolUse` matcher on
@@ -521,6 +521,18 @@ polling a marker file, `wait` on a backgrounded PID), measured as the
 single biggest wall-clock cost in the harness's own transcripts
 (2026-08-26 measurement). Steers the agent toward `run_in_background` +
 being re-invoked on completion instead of burning a turn in a spin-loop.
+
+### validation-owed-gate.py (Stop)
+
+Owner: `common/hooks/`. Blocks the end of a turn while the session owes a
+validation-lead verdict for an item it built. `cepa-plan finish` writes a
+marker in `~/.claude/cepa-validation-owed/<session-id>/` when it refuses
+`done` for lack of `docs/validation/<id>.yaml`, or when the item goes back to
+`pending` without it; `done` or `blocked` removes it. The block message names
+each item and the way out (delegate to validation-lead, close `blocked`, or
+delete the marker if the item was not built). Does not block twice in a row
+(`stop_hook_active`). Origin: fb-20261103-1, two built WEGO items left
+`pending` while the session asked the owner whether to run the validator.
 
 ### no-background-build.py (PreToolUse, matchers `Bash` and `Monitor`; also `Stop`)
 

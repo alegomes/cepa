@@ -261,12 +261,13 @@ def test_start_and_finish_warn_to_commit_and_commit_commits():
               last_commit(root) == "queue fila: a1 -> blocked")
 
 
-def test_failing_commit_becomes_warning_and_does_not_change_the_exit():
-    """Queue outside git (`.claude/programs` ignored): the write happens, the
-    commit does not, and the output says so instead of pretending."""
+def test_queue_in_ignored_dir_is_committed_anyway():
+    """Host repo that ignores `.claude/` whole, as WEGO does (fb-20261103-1):
+    the queue was never versioned and every answer printed a warning whose
+    suggested command failed the same way. Now the queue is force-added."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
-        (root / ".gitignore").write_text(".claude/\n")
+        (root / ".gitignore").write_text(".claude\n")
         subprocess.run(["git", "-C", str(root), "rm", "-rq", "--cached", ".claude"],
                        check=True)
         subprocess.run(["git", "-C", str(root), "add", ".gitignore"], check=True)
@@ -274,6 +275,28 @@ def test_failing_commit_becomes_warning_and_does_not_change_the_exit():
                         "user.name=t", "commit", "-qm", "ignora"], check=True)
         p = plan(root, "add", "fila", "novo", "--title", "um item novo")
         check("add com fila ignorada sai 0", p.returncode == 0, p.stderr)
+        check("...gravou o item", "novo" in items_of(root), items_of(root).keys())
+        check("...não avisa NÃO commitada", "NÃO commitada" not in p.stdout, p.stdout)
+        check("...commitou a fila", last_commit(root).startswith("queue fila"),
+              last_commit(root))
+        check("...que agora é rastreada",
+              git(root, "ls-files", ".claude/programs/fila/plan.yaml")
+              == ".claude/programs/fila/plan.yaml")
+        p = plan(root, "start", "fila", "a1")
+        check("sem --commit, o comando sugerido força o add",
+              "add -f --" in p.stdout, p.stdout)
+
+
+def test_failing_commit_becomes_warning_and_does_not_change_the_exit():
+    """A commit git refuses (here a pre-commit hook): the write happens, the
+    commit does not, and the output says so instead of pretending."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        hook = root / ".git" / "hooks" / "pre-commit"
+        hook.write_text("#!/bin/sh\necho recusado pelo hook >&2\nexit 1\n")
+        hook.chmod(0o755)
+        p = plan(root, "add", "fila", "novo", "--title", "um item novo")
+        check("add com commit recusado sai 0", p.returncode == 0, p.stderr)
         check("...gravou o item", "novo" in items_of(root), items_of(root).keys())
         check("...e avisa que NÃO commitou", "NÃO commitada" in p.stdout, p.stdout)
 
