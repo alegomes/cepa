@@ -691,6 +691,10 @@ def test_closed_requires_impact():
     rc, err = write(epic_en(status="closed", outcome=OUTCOME_EN + no_date))
     check("closed sem Measured on bloqueia",
           rc == 2 and "Impact: falta **Measured on:**" in err, err)
+    no_value = IMPACT.replace("14 min por conta", "<valor>")
+    rc, err = write(epic_en(status="closed", outcome=OUTCOME_EN + no_value))
+    check("closed sem Measured value bloqueia",
+          rc == 2 and "Impact: falta **Measured value:**" in err, err)
     rc, err = write(epic_en(status="closed", outcome=IMPACT, ladder=""))
     check("closed também passa pelo crivo de ready",
           rc == 2 and "## Value ladder" in err and "Who it is for" in err, err)
