@@ -2204,11 +2204,20 @@ def close_write(root, target, message, commit, inside_run=None, extras=()):
     `extras`: other paths the same write touched (the waivers of `answer`).
     They enter the commit only if `git add` accepts them; `.claude/` is
     ignored in host repos and `add` refuses — then the file stays out,
-    without failing the write."""
+    without failing the write.
+
+    The queue itself is added with `-f`. Host repos ignore `.claude/` whole
+    (WEGO's `.gitignore` line 79), so a plain `add` refused `plan.yaml` on
+    every write, the warning came back on every answer, and the command it
+    suggested failed the same way: the queue of WEGO had no version at all
+    (fb-20261103-1). The queue is Cepa's own file and the owner decided it is
+    versioned, ignored directory or not."""
     rel = _queue_rel(root, target)
-    command = f"git -C {shlex.quote(str(root))} commit -m {shlex.quote(message)} -- {rel}"
+    q = shlex.quote(str(root))
+    command = (f"git -C {q} add -f -- {rel} && "
+               f"git -C {q} commit -m {shlex.quote(message)} -- {rel}")
     if commit:
-        rc, _, err = _git(root, "add", "--", rel)
+        rc, _, err = _git(root, "add", "-f", "--", rel)
         included = [rel]
         if rc == 0:
             for extra in extras:
@@ -2406,6 +2415,50 @@ def missing_validation(repo, ident):
             "ele nomeou, ou feche como `blocked` com o motivo.")
 
 
+# ── validation owed: built, not validated, session ending ───────────────────
+#
+# On 2026-11-02 a session built WEGO-2416 and WEGO-2012, recorded the evidence,
+# left both `pending` because `done` needs the validation-lead verdict, and
+# ended its turn asking the owner whether to run the validator
+# (fb-20261103-1). The gate held; the session just stopped short of it. Here
+# `finish` leaves a marker per item it could not close for lack of that
+# verdict, under the session's own folder, and the Stop hook
+# `validation-owed-gate.py` refuses to end the turn while one is open.
+# `done` or `blocked` on the item clears it, from any session.
+
+def owed_root():
+    return Path(os.environ.get("HOME", str(Path.home()))) / ".claude" / "cepa-validation-owed"
+
+
+def _owed_name(name, ident):
+    return re.sub(r"[^A-Za-z0-9._-]", "_", f"{name}__{ident}") + ".json"
+
+
+def mark_validation_owed(name, ident, repo, gap):
+    sid = os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get("CLAUDE_SESSION_ID")
+    if not sid:
+        return None
+    folder = owed_root() / re.sub(r"[^A-Za-z0-9._-]", "_", sid)
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / _owed_name(name, ident)
+        path.write_text(json.dumps({"queue": name, "item": str(ident),
+                                    "repo": str(Path(repo).resolve()),
+                                    "gap": gap, "at": now_iso()},
+                                   ensure_ascii=False), encoding="utf-8")
+        return path
+    except OSError:
+        return None
+
+
+def clear_validation_owed(name, ident):
+    for path in owed_root().glob(f"*/{_owed_name(name, ident)}"):
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
 def blocked_reason(line):
     """Why a `blocked` item stopped, for a person: the human section's
     `impede` when the agent wrote it, else the first sentence of the agent
@@ -2457,6 +2510,7 @@ def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
     if status == "done":
         gap = missing_validation(repo, ident)
         if gap is not None:
+            mark_validation_owed(name, ident, repo, gap)
             print(f"`done` recusado para {ident}: {gap}", file=sys.stderr)
             return 2
         empty = empty_build(repo)
@@ -2509,6 +2563,15 @@ def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
         it.pop("owner_summary", None)
     write_body(target, plan, plan.get("items") or [])
     print(f"{ident} → `{status}` em {target}")
+    if status in ("done", "blocked"):
+        clear_validation_owed(name, ident)
+    elif status == "pending":
+        gap = missing_validation(repo, ident)
+        if gap is not None and mark_validation_owed(name, ident, repo, gap):
+            print(f"  {ident} voltou para `pending` sem o veredito do "
+                  "validation-lead. Se ele foi construído, delegue ao "
+                  "validation-lead ainda nesta sessão e feche com `done`; o "
+                  "fim do turno cobra isso.")
     if human_pending:
         print(f"  rota aberta para você: {human_pending}")
     close_write(root, target, f"queue {name}: {ident} -> {status}", commit)
