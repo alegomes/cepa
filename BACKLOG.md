@@ -5,6 +5,24 @@ e onde provavelmente mora. Sem ordem de prioridade fixa.
 
 ---
 
+## Vigia da coluna In Review
+
+Registrado em 2026-11-03 a pedido do dono (fb-20261103-1).
+
+### Problema
+
+A coluna Review do board WEGO tinha 94 cards contra 4 em Done. O `cepa-until`
+só põe cards em Review, e o que tira de lá (`/board-flow:prove-drain`,
+`/board-flow:decide`) depende de o dono lembrar de rodar.
+
+### Esboço de solução
+
+Um agente que vigia a coluna In Review o tempo todo e entra em ação sempre que
+ela não está vazia, sem depender de comando lembrado. O dono descartou uma
+lista de pendências por comando, porque seria mais um comando para lembrar.
+
+---
+
 ## Política default-yes — matar as micro-interações nas pontas da sessão
 
 **Plano:** `cepa/politica-default-yes`
