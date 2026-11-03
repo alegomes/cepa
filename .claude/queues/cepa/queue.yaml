@@ -668,7 +668,11 @@ items:
     train porque calibrar um porteiro de ondas que não aterrissam mede a coisa errada.
   status: blocked
   blocked_by: []
-  human_pending: null
+  human_pending: 'Destrava quando o C2-1 da fila cepa-espiral-c2 (cepa-until como
+    tronco, com fork de filhos e merge train extraídos do Maestro) rodar uma onda real
+    do porteiro 0.4.3. Os itens rodar-onda-* de que ele dependia foram descartados
+    em 2026-10-16. Decisão do dono em 2026-11-03: não refazer a pergunta "devolvo
+    à fila agora?" a cada run enquanto essa condição não mudar.'
   evidence: 'Resposta do dono em 2026-10-30: não: Devolvo a calibragem do porteiro
     à fila agora, mesmo sem nenhuma onda ter rodado?. O dono manteve o item como
     estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-23: não:
