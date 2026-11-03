@@ -2564,3 +2564,14 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: wrap-up-comando-primeira-linha
+  title: O launcher da sessão encadeada põe o campo comando, gravado pelo /common:wrap-up,
+    como primeira linha do prompt inicial da sessão seguinte
+  why: 'Pergunta CS-4 da fila cepa-espiral-c1, sem resposta num item done. Recomendação
+    do agente: sim, porque hoje o comando é gravado e ignorado, e a sessão seguinte
+    só o executa se o parágrafo Próximo passo o citar. Dono aprovou virar item em
+    2026-11-03. (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
