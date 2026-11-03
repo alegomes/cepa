@@ -669,8 +669,8 @@ items:
   status: blocked
   blocked_by: []
   human_pending: 'Destrava quando o C2-1 da fila cepa-espiral-c2 (cepa-until como
-    tronco, com fork de filhos e merge train extraídos do Maestro) rodar uma onda real
-    do porteiro 0.4.3. Os itens rodar-onda-* de que ele dependia foram descartados
+    tronco, com fork de filhos e merge train extraídos do Maestro) rodar uma onda
+    real do porteiro 0.4.3. Os itens rodar-onda-* de que ele dependia foram descartados
     em 2026-10-16. Decisão do dono em 2026-11-03: não refazer a pergunta "devolvo
     à fila agora?" a cada run enquanto essa condição não mudar.'
   evidence: 'Resposta do dono em 2026-10-30: não: Devolvo a calibragem do porteiro
@@ -2552,3 +2552,15 @@ items:
     wait volta a travar). Build completo: delegado ao supervisor. Fora do escopo:
     o PID 84993 continua vivo (reprodutor mantido por decisão do dono); matar é
     decisão dele.'
+- id: stop-reasons-in-english
+  title: Traduzir para inglês os 6 motivos de parada emitidos por cepa-plan queue
+    --json (teto, fim-da-fila, bloqueado, reservado, depende-de-adiado, bloqueado-antes),
+    com os leitores (cepa-until, compass, contrato do drain-plan, testes) aceitando
+    o valor antigo e o novo; mesmo método de alias dos commits f26a765 e 84fde4d
+  why: 'Sobra do interface-in-english, que fechou com esses motivos ainda em português
+    (common/bin/cepa-plan:1192). Dono aprovou em 2026-11-03 depois de o run 2026-10-23-2130
+    recomendar sim. (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
