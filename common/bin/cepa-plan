@@ -3040,6 +3040,104 @@ def reconcile(items, board, missing_keys, role_of):
     return div, in_sync, missing, warnings
 
 
+# ── landed: proven cards whose code already reached the integration branch ──
+#
+# On the overnight branch the rule is "no merge, no push, no Done": the card
+# is proven there and stays in Review, which is right while the code lives
+# only on that branch. `cepa-until aterrissar` then merges it into main and
+# never speaks to Jira, so nothing moved those cards afterwards. On
+# 2026-11-03 eleven WEGO cards sat in Review with PROVEN proof, complete
+# acceptance and code on main since the landing (fb-20261103-1). This lists
+# them; step 0 of /common:drain-plan sends them to Done through
+# atlassian-expert, the same auto-advance `/board-flow:prove` applies when
+# `defaults.status_map.done` is set.
+
+LANDED_PROOF_DIRS = (("docs", "proof"), (".claude", "proof"))
+LANDED_ACCEPTANCE_DIRS = ((".claude", "acceptance"), ("docs", "acceptance"))
+
+
+def _first_yaml(root, dirs, key):
+    for parts in dirs:
+        p = Path(root).joinpath(*parts, f"{key}.yaml")
+        if p.is_file():
+            try:
+                return p, (yaml.safe_load(p.read_text(encoding="utf-8")) or {})
+            except (yaml.YAMLError, OSError):
+                return p, None
+    return None, None
+
+
+def integration_ref(root, into=None):
+    for ref in ([into] if into else ["origin/HEAD", "origin/main", "main"]):
+        rc, out, _ = _git(root, "rev-parse", "--verify", "--quiet", ref)
+        if rc == 0 and out.strip():
+            return ref
+    return None
+
+
+def landed_check(root, key, ref):
+    """(ready, reason): ready only with PROVEN proof, complete acceptance,
+    validation when the topology asks for it, and the proof's head_commit
+    contained in `ref`."""
+    p, proof = _first_yaml(root, LANDED_PROOF_DIRS, key)
+    if p is None:
+        return False, "sem artefato de prova"
+    if not isinstance(proof, dict):
+        return False, f"{p} ilegível"
+    verdict = str(proof.get("verdict") or "").lower().replace("_", "-")
+    if verdict != "proven":
+        return False, f"prova `{verdict or '<ausente>'}`, não proven"
+    a, acc = _first_yaml(root, LANDED_ACCEPTANCE_DIRS, key)
+    if a is None:
+        return False, "sem auditoria de aceite"
+    if not isinstance(acc, dict):
+        return False, f"{a} ilegível (YAML inválido)"
+    if str(acc.get("status") or "").lower() != "complete":
+        return False, f"auditoria `{acc.get('status')}`, não complete"
+    gap = missing_validation(root, key)
+    if gap is not None:
+        return False, "sem veredito do validation-lead"
+    head = str(proof.get("head_commit") or "").strip()
+    if not head:
+        return False, "a prova não registra head_commit"
+    rc, _, _ = _git(root, "merge-base", "--is-ancestor", head, ref)
+    if rc != 0:
+        return False, f"head_commit {head} ainda não está em {ref}"
+    return True, f"proven, aceite completo, {head} em {ref}"
+
+
+def cmd_landed(root, filename, config, into, as_json):
+    board, _, error = read_board(filename)
+    if error:
+        print(error, file=sys.stderr)
+        return 2
+    role_of, _, error = repo_status_map(root, config)
+    if error:
+        print(error, file=sys.stderr)
+        return 2
+    review = [k for k, st in board.items() if role_of.get(st) == "em-revisao"]
+    ref = integration_ref(root, into)
+    if ref is None:
+        print("não achei a branch de integração (origin/HEAD, origin/main, "
+              "main); passe --into", file=sys.stderr)
+        return 2
+    ready, held = [], []
+    for key in sorted(review):
+        ok, why = landed_check(root, key, ref)
+        (ready if ok else held).append({"key": key, "motivo": why})
+    if as_json:
+        print(json.dumps({"into": ref, "prontos": ready, "retidos": held},
+                         ensure_ascii=False, indent=2))
+        return 0
+    print(f"{len(review)} card(s) em revisão; {len(ready)} pronto(s) para "
+          f"Done (código em {ref}):")
+    for r in ready:
+        print(f"  {r['key']}: {r['motivo']}")
+    for h in held:
+        print(f"  · {h['key']} fica: {h['motivo']}")
+    return 0
+
+
 def cmd_reconcile(root, name, filename, config, apply_changes, as_json):
     target = queue_path(root, name)
     if not target.is_file():
@@ -3941,6 +4039,17 @@ def main(argv=None):
     rc.add_argument("--repo", default=".")
     rc.add_argument("--json", action="store_true", dest="as_json")
 
+    ld = sub.add_parser("landed", aliases=["aterrissados"],
+                        help="cards em revisão com prova PROVEN, aceite "
+                             "completo e código já na branch de integração")
+    ld.add_argument("--board", required=True, metavar="ARQUIVO",
+                    help="JSON/YAML do atlassian-expert: lista de {key, status}")
+    ld.add_argument("--config", help="board-flow.yaml a usar (default: o do repo)")
+    ld.add_argument("--into", help="ref de integração (default: origin/HEAD, "
+                                   "origin/main ou main)")
+    ld.add_argument("--repo", default=".")
+    ld.add_argument("--json", action="store_true", dest="as_json")
+
     ad = sub.add_parser("add",
                         help="acrescenta UM item a uma fila existente, sem "
                              "reescrever os outros")
@@ -4053,6 +4162,8 @@ def main(argv=None):
         return cmd_queue(root, a.name, a.max_items, a.as_json)
     if a.cmd == "promote":
         return cmd_promote(root, a.name, a.as_json, a.when)
+    if a.cmd in ("landed", "aterrissados"):
+        return cmd_landed(root, a.board, a.config, a.into, a.as_json)
     if a.cmd == "reconcile":
         return cmd_reconcile(root, a.name, a.board, a.config, a.apply_changes,
                              a.as_json)
