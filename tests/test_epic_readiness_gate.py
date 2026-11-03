@@ -660,6 +660,9 @@ def test_ready_requires_who_out_of_scope_and_metric():
     check("ready sem Who it is for bloqueia só por ela",
           rc == 2 and "falta a seção `## Who it is for`" in err
           and "## Out of scope` —" not in err and "Out of scope:" not in err, err)
+    rc, err = write(epic_en(outcome="## Who it is for\n\n<quem>\n\n" + METRIC + OUT))
+    check("Who it is for só com placeholder bloqueia",
+          rc == 2 and "Who it is for: a seção está vazia" in err, err)
     rc, err = write(epic_en(outcome=WHO + "\n## Out of scope\n\n- <item>\n" + METRIC))
     check("Out of scope só com placeholder bloqueia",
           rc == 2 and "Out of scope: a lista está vazia" in err, err)
