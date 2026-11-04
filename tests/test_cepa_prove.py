@@ -446,6 +446,89 @@ def test_cepa_still_launches_a_session_for_flags_and_non_scripts():
               str([g[-1:] for g in got]))
 
 
+def test_cepa_help_flags_and_typos():
+    """Discovery of the subcommands (2026-11-04): `--help`/`-h` print the same
+    list as `cepa help` plus the launcher's flags; deprecated aliases carry a
+    clean label; a lone word within two typos of a sibling is refused with the
+    nearest name instead of opening a session whose first message is the typo."""
+    ref = subprocess.run([str(CEPA), "help"], capture_output=True, text=True, timeout=60).stdout
+    for flag in ("--help", "-h"):
+        p = subprocess.run([str(CEPA), flag], capture_output=True, text=True, timeout=60)
+        check(f"`cepa {flag}` lista os subcomandos como `cepa help`",
+              p.returncode == 0 and p.stdout == ref and "until" in p.stdout, (p.stdout + p.stderr)[-300:])
+    check("...e a seção de flags do launcher", "flags do launcher:" in ref and "--slice" in ref
+          and "--mode" in ref and "--prompt" in ref, ref[-600:])
+    check("...e os aliases com rótulo limpo", "(alias antigo de intent)" in ref
+          and "(alias antigo de modes)" in ref and "Deprecated" not in ref, ref)
+    for typo, near in (("untl", "until"), ("prov", "prove"), ("docto", "doctor")):
+        p = subprocess.run([str(CEPA), typo], capture_output=True, text=True, timeout=60)
+        check(f"`cepa {typo}` recusa e sugere `cepa {near}`",
+              p.returncode == 2 and f"cepa {near}" in p.stderr and "cepa help" in p.stderr,
+              (p.stdout + p.stderr)[-300:])
+    # Short words and words far from any sibling are prompts, not typos: they
+    # reach claude (cwd outside a repo, fake claude records argv).
+    with tempfile.TemporaryDirectory() as tmp:
+        fake = Path(tmp) / "claude"
+        fake.write_text(f"#!{sys.executable}\nimport sys, json\n"
+                        f"open({str(Path(tmp) / 'argv')!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
+        fake.chmod(0o755)
+        env = dict(os.environ, CLAUDE_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT="off")
+        env.pop("CEPA_PROMPT", None)
+        for word in ("go", "xyzzyqq"):
+            p = subprocess.run([str(CEPA), word], capture_output=True, text=True, env=env, cwd=tmp, timeout=60)
+            check(f"`cepa {word}` abre sessão, não é tratado como erro de digitação",
+                  p.returncode == 0, (p.stdout + p.stderr)[-300:])
+        got = [json.loads(l)[-1] for l in (Path(tmp) / "argv").read_text().splitlines()]
+        check("...e o claude recebeu a palavra", got == ["go", "xyzzyqq"], str(got))
+
+
+def test_mode_menu_points_to_cepa_help():
+    """The interactive mode menu (needs a tty) carries the footer that names
+    `cepa help`, so whoever never thought of asking for help still sees it."""
+    import pty, select
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp)
+        env = dict(os.environ, CEPA_PREFLIGHT="off", CEPA_MODO="")
+        env.pop("CEPA_MODO_DEFAULT", None)
+        pid, fd = pty.fork()
+        if pid == 0:
+            os.chdir(root)
+            os.execve(str(CEPA), [str(CEPA)], env)
+        out = b""
+        try:
+            while b"modo? [" not in out:
+                r, _, _ = select.select([fd], [], [], 30)
+                if not r:
+                    break
+                try:
+                    chunk = os.read(fd, 4096)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                out += chunk
+            os.write(fd, b"\n")   # empty Enter gives up: no session opens
+            try:
+                while True:
+                    r, _, _ = select.select([fd], [], [], 5)
+                    if not r:
+                        break
+                    chunk = os.read(fd, 4096)
+                    if not chunk:
+                        break
+                    out += chunk
+            except OSError:
+                pass
+        finally:
+            try:
+                os.waitpid(pid, 0)
+            except ChildProcessError:
+                pass
+        text = out.decode("utf-8", "replace")
+        check("o menu de modo mostra o rodapé `cepa help`",
+              "Em qual modo" in text and "subcomandos do cepa: cepa help" in text, text[-600:])
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:
