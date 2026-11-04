@@ -85,9 +85,9 @@ def fake_claude(tmp, rounds):
     return binv
 
 
-def run_prove(root, binv, tmp, args, timeout=120):
+def run_prove(root, binv, tmp, args, timeout=120, path=None):
     env = dict(os.environ)
-    env["PATH"] = f"{binv}:{env['PATH']}"
+    env["PATH"] = path if path is not None else f"{binv}:{env['PATH']}"
     env["FAKE_TMP"] = str(tmp)
     env["CEPA_UNTIL_GRACA_SIGTERM"] = "2"
     p = subprocess.run([sys.executable, str(CEPA_PROVE), "--repo", str(root)] + list(args),
@@ -149,6 +149,82 @@ def test_rounds_skip_handled_keys_and_end_on_empty_review():
               state["estado"] == "esperando-dono", state["estado"])
         check("o resumo diz quem ficou pra você", "NEEDS-HUMAN" in p.stdout and "WEGO-2" in p.stdout,
               p.stdout[-600:])
+        kinds = [e["evento"] for e in ev]
+        check("registro: run_start, rodada_start/rodada_end por rodada, run_end",
+              kinds[0] == "run_start" and kinds.count("rodada_start") == 3
+              and kinds.count("rodada_end") == 3 and kinds[-1] == "run_end", str(kinds))
+        ends = [e for e in ev if e.get("evento") == "rodada_end"]
+        check("...e cada rodada_end traz o veredito lido do artefato",
+              ends[0]["cards"] == [{"key": "WEGO-1", "veredito": "PROVEN",
+                                    "arquivo": "docs/proof/WEGO-1.yaml"}]
+              and ends[1]["cards"][0]["veredito"] == "NEEDS-HUMAN" and ends[2]["cards"] == [],
+              json.dumps(ends)[:600])
+        starts = [e for e in ev if e.get("evento") == "rodada_start"]
+        check("...e o rodada_start registra o --skip da vez",
+              starts[0]["skip"] == [] and starts[2]["skip"] == ["WEGO-1", "WEGO-2"],
+              json.dumps(starts)[:400])
+
+
+def test_state_is_encerrado_without_needs_human():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp)
+        binv = fake_claude(tmp, [("proof", "WEGO-1", "proven"), ("proof", "WEGO-2", "unproven")])
+        p, calls = run_prove(root, binv, tmp, ["--for", "2h"])
+        state = json.loads(next((root / ".claude" / "prove").glob("*.estado.json")).read_text())
+        check("sem NEEDS-HUMAN o estado final é `encerrado`", state["estado"] == "encerrado",
+              state["estado"])
+        check("...com os cards e o motivo", state["cards"] == {"WEGO-1": "PROVEN", "WEGO-2": "UNPROVEN"}
+              and state["motivo"] == "review-vazia", json.dumps(state)[:300])
+
+
+def test_rewritten_artifact_and_nonzero_exit_still_count():
+    """The truth of a round is the artifact: a file that already existed and was
+    rewritten counts, and a `claude` that exits non-zero after writing it too."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp)
+        old = root / "docs" / "proof" / "WEGO-1.yaml"
+        old.write_text("schema_version: 2\ncard: WEGO-1\nverdict: unproven\n")
+        subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+        subprocess.run(["git", "commit", "-qm", "prova antiga"], cwd=root, check=True)
+        binv = fake_claude(tmp, [("proof", "WEGO-1", "proven")])
+        script = Path(binv) / "claude"
+        script.write_text(script.read_text().replace(
+            "print(json.dumps(", "print(json.dumps(") + "sys.exit(3) if n == 0 else None\n")
+        p, calls = run_prove(root, binv, tmp, ["--for", "2h"])
+        ev = ledger_of(root)
+        ends = [e for e in ev if e.get("evento") == "rodada_end"]
+        check("artefato reescrito é lido com o veredito novo, mesmo com exit 3",
+              ends and ends[0]["exit_code"] == 3
+              and ends[0]["cards"] == [{"key": "WEGO-1", "veredito": "PROVEN",
+                                        "arquivo": "docs/proof/WEGO-1.yaml"}],
+              json.dumps(ends)[:400])
+        check("...e vai para o --skip da rodada seguinte", len(calls) == 2
+              and "--skip WEGO-1" in calls[1][1], str(calls))
+        check("...e foi commitado", "proof: WEGO-1 PROVEN" in git_log(root), git_log(root)[:200])
+        end = [e for e in ev if e.get("evento") == "run_end"]
+        check("...sem contar como falha do disjuntor", end and end[0]["motivo"] == "review-vazia",
+              json.dumps(end)[:300])
+
+
+def test_until_with_permissions_and_cwd():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp)
+        binv = fake_claude(tmp, [])
+        script = Path(binv) / "claude"
+        script.write_text(script.read_text().replace(
+            "text = ''\n",
+            "open(os.path.join(tmp, 'cwd'), 'w').write(os.getcwd())\n"
+            "text = ''\n"))
+        from datetime import datetime, timedelta
+        later = (datetime.now() + timedelta(hours=2)).strftime("%H:%M")
+        p, calls = run_prove(root, binv, tmp, ["--until", later, "--with-permissions"])
+        check("--until HH:MM abre a janela e dispara", p.returncode == 0 and len(calls) == 1,
+              p.stderr[-300:] + str(calls))
+        check("--with-permissions tira o --dangerously-skip-permissions",
+              calls and "--dangerously-skip-permissions" not in calls[0], str(calls))
+        check("a rodada roda com o clone como diretório de trabalho",
+              Path((Path(tmp) / "cwd").read_text()).resolve() == root.resolve(),
+              (Path(tmp) / "cwd").read_text())
 
 
 def test_env_marks_the_round_as_unattended():
@@ -230,6 +306,22 @@ def test_dirty_tree_outside_proofs_is_refused_but_proofs_are_not():
         check("arquivo solto fora de docs/proof/ recusa o run", p.returncode == 2
               and "docs/proof" in p.stderr, p.stderr[-300:])
         check("...sem disparar nada", len(calls2) == len(calls), str(calls2))
+        p, calls3 = run_prove(root, binv, tmp, ["--for", "2h", "--dirty-ok"])
+        check("--dirty-ok contorna a recusa", p.returncode == 0 and len(calls3) == len(calls) + 1,
+              p.stderr[-300:])
+
+
+def test_without_claude_on_path_refuses():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp)
+        binv = fake_claude(tmp, [("proof", "WEGO-1", "proven")])
+        empty = Path(tmp) / "empty-bin"
+        empty.mkdir()
+        p, calls = run_prove(root, binv, tmp, ["--for", "2h"],
+                             path=f"{empty}:/usr/bin:/bin")
+        check("sem `claude` no PATH sai 2 e nomeia o claude",
+              p.returncode == 2 and "`claude`" in p.stderr, p.stderr[-300:])
+        check("...sem disparar nada", not calls, str(calls))
 
 
 def test_without_board_flow_yaml_refuses():
@@ -292,6 +384,30 @@ def test_cepa_dispatches_to_sibling_scripts():
           (p.stdout + p.stderr)[-500:])
     check("...com a primeira linha de cada docstring",
           "Review" in p.stdout and "TIME WINDOW" in p.stdout, p.stdout[-800:])
+
+
+def test_cepa_still_launches_a_session_for_flags_and_non_scripts():
+    """A flag or a word that is not a sibling script is a session launch: the
+    arguments reach the real `claude` untouched and no `cepa-*` runs."""
+    with tempfile.TemporaryDirectory() as tmp:
+        fake = Path(tmp) / "claude"
+        fake.write_text(f"#!{sys.executable}\nimport sys, json\n"
+                        f"open({str(Path(tmp) / 'argv')!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
+        fake.chmod(0o755)
+        env = dict(os.environ, CLAUDE_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT="off")
+        env.pop("CEPA_PROMPT", None)   # the machine's default prompt would pad the argv
+        for args in (["--version"], ["FOO-1"], ["plan the migration"]):
+            # cwd outside any git repo: the launcher then "just is claude".
+            p = subprocess.run([str(CEPA), *args], capture_output=True, text=True,
+                               env=env, cwd=tmp, timeout=60)
+            check(f"`cepa {' '.join(args)}` abre sessão, não despacha", p.returncode == 0,
+                  (p.stdout + p.stderr)[-300:])
+        got = [json.loads(l) for l in (Path(tmp) / "argv").read_text().splitlines()]
+        # The launcher prepends its own flags (permission mode); the user's
+        # arguments come last and untouched.
+        check("...e o claude recebeu os argumentos intactos",
+              [g[-1] for g in got] == ["--version", "FOO-1", "plan the migration"],
+              str([g[-1:] for g in got]))
 
 
 if __name__ == "__main__":
