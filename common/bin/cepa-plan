@@ -1427,6 +1427,29 @@ def first_sentence(text, limit=160):
     return t[:limit - 1].rstrip() + "…"
 
 
+def owner_lines(lines, queue):
+    """The summary under the scoreboard: how many `pending` a run would take,
+    and what waits on the owner, split by kind. The old single line ("43 com
+    ação humana aberta") mixed 6 items that hold the queue with 37 delivered
+    ones carrying a leftover task, and gave no way to answer them."""
+    pending = [l for l in lines if l["status"] == "pending"]
+    ready = [l for l in pending if l["pronto"]]
+    out = [f"{len(ready)} de {len(pending)} pendentes prontos para o agente"
+           + (": " + ", ".join(str(l["id"]) for l in ready) if ready else "")
+           + ("; os outros esperam você ou outro item" if len(ready) < len(pending)
+              else "")]
+    holding = [l for l in lines if l["status"] not in ("done", "dropped")
+               and (l["human_pending"] is not None or l["status"] == "blocked")]
+    leftover = [l for l in lines if l["status"] == "done"
+                and l["human_pending"] is not None]
+    if holding or leftover:
+        out.append(f"esperam você: {len(holding)} itens parados"
+                   + (f" ({', '.join(str(l['id']) for l in holding)})" if holding else "")
+                   + f" e {len(leftover)} tarefas que sobraram em itens "
+                   f"concluídos. Responda uma por uma: cepa-until decide {queue}")
+    return out
+
+
 def cmd_status(root, name, status_filter, as_json):
     if not name:
         names = single_track_queues(root)
@@ -1454,10 +1477,17 @@ def cmd_status(root, name, status_filter, as_json):
         return 3
 
     items = plan.get("items") or []
+    # "Pendente" is not "pronto": a `pending` with an open human route, or
+    # waiting on an item that will not close, is skipped by every run. Ready
+    # is what `build_batch` would hand a run now, with no ceiling (owner,
+    # 2026-11-02: "o cepa-until não deve perder tempo em itens que certamente
+    # não irão avançar"). Derived, never stored: a stored flag goes stale.
+    ready_ids = {b["id"] for b in build_batch(items, 10 ** 6)[0]}
     lines = []
     for pos, it in enumerate(items, 1):
         owner = it.get("claimed_by") or {}
         lines.append({
+            "pronto": str(it.get("id")) in ready_ids,
             "posicao": pos, "id": it.get("id"), "title": it.get("title"),
             "status": status_of(it), "why": it.get("why"),
             "blocked_by": it.get("blocked_by") or [],
@@ -1477,20 +1507,19 @@ def cmd_status(root, name, status_filter, as_json):
         print(json.dumps({"program": qp.queue_name_of(plan, name),
                           "queue": qp.queue_name_of(plan, name),
                           "path": str(target), "total": len(lines),
-                          "por_status": counts, "filtro": status_filter,
+                          "por_status": counts, "prontos": len(ready_ids),
+                          "filtro": status_filter,
                           "items": visible}, ensure_ascii=False, indent=2))
         return 0
     if _tui.SCREEN.enabled:
-        return status_on_screen(plan.get("program") or name, target, lines,
+        return status_on_screen(qp.queue_name_of(plan, name), target, lines,
                               counts, visible)
 
     print(f"fila {qp.queue_name_of(plan, name)} · {target}")
     print("  " + " · ".join(f"{counts[st]} {grp_label}" for st, grp_label in STATUS_GROUPS)
           + f" · {len(lines)} no total")
-    open_items = [l for l in lines if l["human_pending"] is not None]
-    if open_items:
-        print(f"  {len(open_items)} com ação humana aberta: "
-              + ", ".join(l["id"] for l in open_items))
+    for text in owner_lines(lines, qp.queue_name_of(plan, name)):
+        print("  " + text)
     for st, grp_label in STATUS_GROUPS:
         group = [l for l in visible if l["status"] == st]
         if not group:
@@ -1504,6 +1533,8 @@ def cmd_status(root, name, status_filter, as_json):
                 c = l["claimed_by"]
                 print(f"       reservado: sessão {c['session_id'] or '?'}"
                       f" desde {c['started_at'] or '?'}")
+            if l["pronto"]:
+                print("       pronto: o próximo cepa-until pega")
             if l["blocked_by"]:
                 print(f"       espera: {', '.join(map(str, l['blocked_by']))}")
             if l["human_pending"] is not None:
@@ -1545,10 +1576,7 @@ def status_on_screen(program, target, lines, counts, visible):
           + t.c("negrito", f"{round(frac * 100)}%")
           + t.c("cinza", f" fechados ({counts['done']} concluídos + "
                 f"{counts['dropped']} descartados) ÷ {total}"))
-    open_items = [l for l in lines if l["human_pending"] is not None]
-    if open_items:
-        text = (f"{len(open_items)} com ação humana aberta: "
-                 + ", ".join(l["id"] for l in open_items))
+    for text in owner_lines(lines, program):
         wrapped = t.wrap(text, 4, 4)
         print("  " + t.c("amarelo", "⚑ ") + t.c("amarelo", wrapped[0][4:]))
         for x in wrapped[1:]:
@@ -1576,6 +1604,8 @@ def status_on_screen(program, target, lines, counts, visible):
             for x in t.wrap(" ".join(str(l["title"] or "").split()), 7):
                 print(x)
             details = []
+            if l["pronto"]:
+                details.append(("pronto", "o próximo cepa-until pega", "verde"))
             if l["claimed_by"]:
                 c = l["claimed_by"]
                 details.append(("reservado", f"sessão {c['session_id'] or '?'}"
@@ -2175,11 +2205,20 @@ def close_write(root, target, message, commit, inside_run=None, extras=()):
     `extras`: other paths the same write touched (the waivers of `answer`).
     They enter the commit only if `git add` accepts them; `.claude/` is
     ignored in host repos and `add` refuses — then the file stays out,
-    without failing the write."""
+    without failing the write.
+
+    The queue itself is added with `-f`. Host repos ignore `.claude/` whole
+    (WEGO's `.gitignore` line 79), so a plain `add` refused `plan.yaml` on
+    every write, the warning came back on every answer, and the command it
+    suggested failed the same way: the queue of WEGO had no version at all
+    (fb-20261103-1). The queue is Cepa's own file and the owner decided it is
+    versioned, ignored directory or not."""
     rel = _queue_rel(root, target)
-    command = f"git -C {shlex.quote(str(root))} commit -m {shlex.quote(message)} -- {rel}"
+    q = shlex.quote(str(root))
+    command = (f"git -C {q} add -f -- {rel} && "
+               f"git -C {q} commit -m {shlex.quote(message)} -- {rel}")
     if commit:
-        rc, _, err = _git(root, "add", "--", rel)
+        rc, _, err = _git(root, "add", "-f", "--", rel)
         included = [rel]
         if rc == 0:
             for extra in extras:
@@ -2377,6 +2416,50 @@ def missing_validation(repo, ident):
             "ele nomeou, ou feche como `blocked` com o motivo.")
 
 
+# ── validation owed: built, not validated, session ending ───────────────────
+#
+# On 2026-11-02 a session built WEGO-2416 and WEGO-2012, recorded the evidence,
+# left both `pending` because `done` needs the validation-lead verdict, and
+# ended its turn asking the owner whether to run the validator
+# (fb-20261103-1). The gate held; the session just stopped short of it. Here
+# `finish` leaves a marker per item it could not close for lack of that
+# verdict, under the session's own folder, and the Stop hook
+# `validation-owed-gate.py` refuses to end the turn while one is open.
+# `done` or `blocked` on the item clears it, from any session.
+
+def owed_root():
+    return Path(os.environ.get("HOME", str(Path.home()))) / ".claude" / "cepa-validation-owed"
+
+
+def _owed_name(name, ident):
+    return re.sub(r"[^A-Za-z0-9._-]", "_", f"{name}__{ident}") + ".json"
+
+
+def mark_validation_owed(name, ident, repo, gap):
+    sid = os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get("CLAUDE_SESSION_ID")
+    if not sid:
+        return None
+    folder = owed_root() / re.sub(r"[^A-Za-z0-9._-]", "_", sid)
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / _owed_name(name, ident)
+        path.write_text(json.dumps({"queue": name, "item": str(ident),
+                                    "repo": str(Path(repo).resolve()),
+                                    "gap": gap, "at": now_iso()},
+                                   ensure_ascii=False), encoding="utf-8")
+        return path
+    except OSError:
+        return None
+
+
+def clear_validation_owed(name, ident):
+    for path in owed_root().glob(f"*/{_owed_name(name, ident)}"):
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
 def blocked_reason(line):
     """Why a `blocked` item stopped, for a person: the human section's
     `impede` when the agent wrote it, else the first sentence of the agent
@@ -2428,6 +2511,7 @@ def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
     if status == "done":
         gap = missing_validation(repo, ident)
         if gap is not None:
+            mark_validation_owed(name, ident, repo, gap)
             print(f"`done` recusado para {ident}: {gap}", file=sys.stderr)
             return 2
         empty = empty_build(repo)
@@ -2480,6 +2564,15 @@ def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
         it.pop("owner_summary", None)
     write_body(target, plan, plan.get("items") or [])
     print(f"{ident} → `{status}` em {target}")
+    if status in ("done", "blocked"):
+        clear_validation_owed(name, ident)
+    elif status == "pending":
+        gap = missing_validation(repo, ident)
+        if gap is not None and mark_validation_owed(name, ident, repo, gap):
+            print(f"  {ident} voltou para `pending` sem o veredito do "
+                  "validation-lead. Se ele foi construído, delegue ao "
+                  "validation-lead ainda nesta sessão e feche com `done`; o "
+                  "fim do turno cobra isso.")
     if human_pending:
         print(f"  rota aberta para você: {human_pending}")
     close_write(root, target, f"queue {name}: {ident} -> {status}", commit)
@@ -2615,7 +2708,7 @@ def decide_waivers(proposals, answer, keep, today, author):
 
 
 def cmd_answer(root, name, ident, answer, keep=False, force=False,
-                 commit=True, repo=".", author=None):
+                 commit=True, repo=".", author=None, drop=False):
     if not sys.stdin.isatty():
         print("`answer` é a resposta do dono e só roda num terminal: sem "
               "TTY, quem chama é um agente, e só o humano fecha uma rota "
@@ -2626,6 +2719,10 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
         print("resposta vazia não destrava nada: o próximo run precisa saber "
               "o que você decidiu ou viu.", file=sys.stderr)
         return 2
+    if keep and drop:
+        print("--keep e --drop se contradizem: um deixa o item como está, o "
+              "outro o tira da fila.", file=sys.stderr)
+        return 2
     target, plan, by_id, rc = open_plan_for_marking(root, name)
     if rc:
         return rc
@@ -2635,7 +2732,10 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
         return 2
     st = status_of(it)
     route = it.get("human_pending")
-    if st != "blocked" and route is None:
+    # A plain `pending` the owner gives up on is reachable only with `--drop`
+    # (WEGO-2463 on 2026-11-02: "descarto este pedido? sim" sent it back to
+    # `pending`, and the next run would have picked it up again).
+    if st != "blocked" and route is None and not (drop and st == "pending"):
         print(f"{ident} está `{st}` e sem rota humana aberta: não há o que "
               "responder.", file=sys.stderr)
         return 2
@@ -2671,7 +2771,15 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
             # com o humano volta a ser invisível" (seen on 2026-10-15: S5's
             # answer erased the key and cepa-until refused the queue).
             it["human_pending"] = None
-        if st == "blocked":
+        if drop and st == "done":
+            # A delivered item stays delivered: dropping it means the leftover
+            # task no longer applies, not that the work is undone.
+            parts.append("O dono deu a tarefa que sobrou como encerrada; o "
+                          "item segue `done`.")
+        elif drop:
+            it["status"] = "dropped"
+            parts.append(f"O dono descartou o item (estava `{st}`).")
+        elif st == "blocked":
             it["status"] = "pending"
             parts.append("O item voltou de `blocked` para `pending`.")
     if previous:
@@ -2931,6 +3039,104 @@ def reconcile(items, board, missing_keys, role_of):
             in_sync.append(ident)
     missing = sorted(k for k in board if k not in seen)
     return div, in_sync, missing, warnings
+
+
+# ── landed: proven cards whose code already reached the integration branch ──
+#
+# On the overnight branch the rule is "no merge, no push, no Done": the card
+# is proven there and stays in Review, which is right while the code lives
+# only on that branch. `cepa-until aterrissar` then merges it into main and
+# never speaks to Jira, so nothing moved those cards afterwards. On
+# 2026-11-03 eleven WEGO cards sat in Review with PROVEN proof, complete
+# acceptance and code on main since the landing (fb-20261103-1). This lists
+# them; step 0 of /common:drain-plan sends them to Done through
+# atlassian-expert, the same auto-advance `/board-flow:prove` applies when
+# `defaults.status_map.done` is set.
+
+LANDED_PROOF_DIRS = (("docs", "proof"), (".claude", "proof"))
+LANDED_ACCEPTANCE_DIRS = ((".claude", "acceptance"), ("docs", "acceptance"))
+
+
+def _first_yaml(root, dirs, key):
+    for parts in dirs:
+        p = Path(root).joinpath(*parts, f"{key}.yaml")
+        if p.is_file():
+            try:
+                return p, (yaml.safe_load(p.read_text(encoding="utf-8")) or {})
+            except (yaml.YAMLError, OSError):
+                return p, None
+    return None, None
+
+
+def integration_ref(root, into=None):
+    for ref in ([into] if into else ["origin/HEAD", "origin/main", "main"]):
+        rc, out, _ = _git(root, "rev-parse", "--verify", "--quiet", ref)
+        if rc == 0 and out.strip():
+            return ref
+    return None
+
+
+def landed_check(root, key, ref):
+    """(ready, reason): ready only with PROVEN proof, complete acceptance,
+    validation when the topology asks for it, and the proof's head_commit
+    contained in `ref`."""
+    p, proof = _first_yaml(root, LANDED_PROOF_DIRS, key)
+    if p is None:
+        return False, "sem artefato de prova"
+    if not isinstance(proof, dict):
+        return False, f"{p} ilegível"
+    verdict = str(proof.get("verdict") or "").lower().replace("_", "-")
+    if verdict != "proven":
+        return False, f"prova `{verdict or '<ausente>'}`, não proven"
+    a, acc = _first_yaml(root, LANDED_ACCEPTANCE_DIRS, key)
+    if a is None:
+        return False, "sem auditoria de aceite"
+    if not isinstance(acc, dict):
+        return False, f"{a} ilegível (YAML inválido)"
+    if str(acc.get("status") or "").lower() != "complete":
+        return False, f"auditoria `{acc.get('status')}`, não complete"
+    gap = missing_validation(root, key)
+    if gap is not None:
+        return False, "sem veredito do validation-lead"
+    head = str(proof.get("head_commit") or "").strip()
+    if not head:
+        return False, "a prova não registra head_commit"
+    rc, _, _ = _git(root, "merge-base", "--is-ancestor", head, ref)
+    if rc != 0:
+        return False, f"head_commit {head} ainda não está em {ref}"
+    return True, f"proven, aceite completo, {head} em {ref}"
+
+
+def cmd_landed(root, filename, config, into, as_json):
+    board, _, error = read_board(filename)
+    if error:
+        print(error, file=sys.stderr)
+        return 2
+    role_of, _, error = repo_status_map(root, config)
+    if error:
+        print(error, file=sys.stderr)
+        return 2
+    review = [k for k, st in board.items() if role_of.get(st) == "em-revisao"]
+    ref = integration_ref(root, into)
+    if ref is None:
+        print("não achei a branch de integração (origin/HEAD, origin/main, "
+              "main); passe --into", file=sys.stderr)
+        return 2
+    ready, held = [], []
+    for key in sorted(review):
+        ok, why = landed_check(root, key, ref)
+        (ready if ok else held).append({"key": key, "motivo": why})
+    if as_json:
+        print(json.dumps({"into": ref, "prontos": ready, "retidos": held},
+                         ensure_ascii=False, indent=2))
+        return 0
+    print(f"{len(review)} card(s) em revisão; {len(ready)} pronto(s) para "
+          f"Done (código em {ref}):")
+    for r in ready:
+        print(f"  {r['key']}: {r['motivo']}")
+    for h in held:
+        print(f"  · {h['key']} fica: {h['motivo']}")
+    return 0
 
 
 def cmd_reconcile(root, name, filename, config, apply_changes, as_json):
@@ -3804,6 +4010,9 @@ def main(argv=None):
     rs.add_argument("--keep", "--mantem", dest="keep", action="store_true",
                     help="grava a resposta e deixa o item como está: o "
                          "`blocked` segue travado e a rota segue aberta")
+    rs.add_argument("--drop", "--descarta", dest="drop", action="store_true",
+                    help="descarta o item (`dropped`) e fecha a rota; num item "
+                         "`done`, só fecha a tarefa que sobrou")
     rs.add_argument("--force", "--forca", dest="force", action="store_true",
                     help="grava mesmo um texto que parece não responder à "
                          "rota (pedido de esclarecimento, pergunta)")
@@ -3830,6 +4039,17 @@ def main(argv=None):
                          "`human_pending` e nunca anexa card novo")
     rc.add_argument("--repo", default=".")
     rc.add_argument("--json", action="store_true", dest="as_json")
+
+    ld = sub.add_parser("landed", aliases=["aterrissados"],
+                        help="cards em revisão com prova PROVEN, aceite "
+                             "completo e código já na branch de integração")
+    ld.add_argument("--board", required=True, metavar="ARQUIVO",
+                    help="JSON/YAML do atlassian-expert: lista de {key, status}")
+    ld.add_argument("--config", help="board-flow.yaml a usar (default: o do repo)")
+    ld.add_argument("--into", help="ref de integração (default: origin/HEAD, "
+                                   "origin/main ou main)")
+    ld.add_argument("--repo", default=".")
+    ld.add_argument("--json", action="store_true", dest="as_json")
 
     ad = sub.add_parser("add",
                         help="acrescenta UM item a uma fila existente, sem "
@@ -3943,6 +4163,8 @@ def main(argv=None):
         return cmd_queue(root, a.name, a.max_items, a.as_json)
     if a.cmd == "promote":
         return cmd_promote(root, a.name, a.as_json, a.when)
+    if a.cmd in ("landed", "aterrissados"):
+        return cmd_landed(root, a.board, a.config, a.into, a.as_json)
     if a.cmd == "reconcile":
         return cmd_reconcile(root, a.name, a.board, a.config, a.apply_changes,
                              a.as_json)
@@ -3955,7 +4177,7 @@ def main(argv=None):
                            for key, _, _ in _ownertext.FIELDS})
     if a.cmd == "answer":
         return cmd_answer(root, a.name, a.id, a.answer, a.keep,
-                            a.force, not a.no_commit, a.repo, a.author)
+                            a.force, not a.no_commit, a.repo, a.author, a.drop)
     return cmd_write(root, a)
 
 

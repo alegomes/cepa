@@ -117,7 +117,7 @@ def test_text_groups_and_shows_reason_and_human_action(base):
     check("pendente mostra de quem depende", "espera: b-pendente" in t, t)
     check("ação humana aberta aparece no item e no cabeçalho",
           "ação humana: validar à mão no navegador" in t
-          and "1 com ação humana aberta: e-espera" in t, t)
+          and "esperam você: 2 itens parados (c-travado, e-espera)" in t, t)
     check("concluído sai numa linha só, sem evidência",
           "commit abc" not in t and "1. a-feito — item a-feito" in t, t)
 

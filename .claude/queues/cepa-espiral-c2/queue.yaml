@@ -36,7 +36,10 @@ items:
     ciclo; quem pergunta é o /common:epic)'
   status: pending
   blocked_by: []
-  human_pending: null
+  human_pending: 'Condição do Epic (docs/epics/cepa-em-espiral.md, coluna Quando do
+    ciclo 2): só começar depois de um ciclo inteiro do Epic Contratos medido de ponta
+    a ponta com o dono como condutor manual. Fecha quando o dono confirmar que essa
+    medição existe. Registrado em 2026-11-03 por decisão do dono.'
 - id: C2-2
   title: '`/maestro:run` deprecado'
   why: 'peça 2 de 2 do ciclo "2. Conduzir" do Epic docs/epics/cepa-em-espiral.md
@@ -51,4 +54,7 @@ items:
     ciclo; quem pergunta é o /common:epic)'
   status: pending
   blocked_by: []
-  human_pending: null
+  human_pending: 'Condição do Epic (docs/epics/cepa-em-espiral.md, coluna Quando do
+    ciclo 2): só começar depois de um ciclo inteiro do Epic Contratos medido de ponta
+    a ponta com o dono como condutor manual. Fecha quando o dono confirmar que essa
+    medição existe. Registrado em 2026-11-03 por decisão do dono.'

@@ -5,6 +5,24 @@ e onde provavelmente mora. Sem ordem de prioridade fixa.
 
 ---
 
+## Vigia da coluna In Review
+
+Registrado em 2026-11-03 a pedido do dono (fb-20261103-1).
+
+### Problema
+
+A coluna Review do board WEGO tinha 94 cards contra 4 em Done. O `cepa-until`
+só põe cards em Review, e o que tira de lá (`/board-flow:prove-drain`,
+`/board-flow:decide`) depende de o dono lembrar de rodar.
+
+### Esboço de solução
+
+Um agente que vigia a coluna In Review o tempo todo e entra em ação sempre que
+ela não está vazia, sem depender de comando lembrado. O dono descartou uma
+lista de pendências por comando, porque seria mais um comando para lembrar.
+
+---
+
 ## Política default-yes — matar as micro-interações nas pontas da sessão
 
 **Plano:** `cepa/politica-default-yes`
@@ -1008,6 +1026,14 @@ Universo de demandas da auditoria de sessões de 07/2026 + discussão de lacunas
 Plano de execução em ondas: `.claude/programs/melhorias-2026-07/plan.yaml`.
 Também é o v0 do Maestro: valida o formato de plano/ondas antes do daemon existir.
 
+### Episódio de feedback (triagem 2026-11-03)
+
+Episódio novo: sessão em modo exploração, barrada pelo gate, lançou um subprocesso em modo construção e deixou o merge para o dono.
+
+> eu acho que a necessidade de execução de comandos fora da sessão é um forte indicativo de que esta sessão fugiu da sua intenção e modo originais. Estou correto? Se o hook da sessão em modo exploração impede de rodar o merge, provavelmente é porque esta sessão não deveria ter feito nada que implicasse em necessidade de merge. (contexto: o agente, barrado pelo gate ao editar código, lançou cepa --modo construcao -p em subprocesso e depois precisou que o dono rodasse o merge à mão)
+>
+> `fb-20261023-1`, 2026-10-23 · wego-digitacao-backend · main · exploracao · modo-escrita-gate / sessão em modo exploracao
+
 ## P1. Lint editorial como hook
 
 **Plano:** `melhorias-2026-07/P1-lint-editorial`
@@ -1177,6 +1203,14 @@ comentário de devolução sem `Reason:`/`Motivo:` + texto é bloqueado; templat
 devolução em prove.md/prove-drain.md/atlassian-expert.md ganham o campo. Regra
 anexa em prosa: "Attention não é estado — nomeie a condição real (Blocked/
 Deferred/Dropped + razão)". Aceite: teste novo + devolução real bloqueada sem razão.
+
+### Episódio de feedback (triagem 2026-11-03)
+
+Episódio novo: o `bounce-reason-gate` exigiu **Reason:** num comentário de avanço para In Review, porque o título tinha a palavra UNPROVEN. Não consulta a direção da transição.
+
+> bounce-reason-gate barrou um comentário de AVANÇO (transição 351 → In Review) do WEGO-2464 por conter a palavra UNPROVEN no título do Implementation Summary ('retrabalho após gate de prova UNPROVEN'). O hook não distinguiu direção pela transição (board-flow.yaml mapeia 351 → in_review) e exigiu **Reason:**. Contorno: renomear o título. Esperado: hook consultar transition_ids antes de exigir Reason.
+>
+> `fb-20261029-1`, 2026-10-29 · wego-assinatura-backend · session/WEGO-2464 · construcao
 
 ## A5. Regras de fechamento acoplado no drain
 
@@ -2125,6 +2159,18 @@ Cuidados que o desenho precisa respeitar:
   segunda cópia do comparador, que é a mesma doença do item dos locks).
 
 ---
+
+### Episódio de feedback (triagem 2026-11-03)
+
+Episódio novo: renomear hooks do common na 2.30.3 sem alias derrubou Bash, Edit e Write das sessões já abertas até `/reload-plugins`. O aviso de versão desatualizada no SessionStart só aparece para a sessão nova.
+
+> Hooks do plugin common renomeados (reforma-gate.py -> refactor-gate.py, modo-escrita-gate.py -> write-mode-gate.py) na 2.30.3 sem compat: sessões abertas antes do upgrade ficaram sem Bash e sem Edit/Write (PreToolUse falha com 'No such file'), inclusive subagentes. Só /reload-plugins destravou. Sugestão: manter shim com o nome antigo por uma versão ou avisar no SessionStart que a config carregada está desatualizada.
+>
+> `fb-20261030-1`, 2026-10-30 · wego-assinatura-backend · session/WEGO-2464 · construcao
+
+> Renomear hooks do plugin common (modo-escrita-gate.py -> write-mode-gate.py, reforma-gate.py -> refactor-gate.py) com uma sessão aberta derrubou todo Bash, Edit e Write dessa sessão: o Claude Code guarda os comandos dos hooks na abertura e não relê o manifesto. A sessão baed6a19 (wego-product, 2026-10-31) ficou sem poder gravar a síntese do painel de advisors até reiniciar. O /common:doctor poderia avisar quando o manifesto carregado na sessão difere do instalado, ou a renomeação deixar um alias por uma versão.
+>
+> `fb-20261031-2`, 2026-10-31 · wego-product · main · exploracao
 
 ## O path-lock existe em 5 cópias, e a correção depende de disciplina (P0-3)
 
@@ -4215,6 +4261,14 @@ invocador `mvnw`/`mvn`; para (a) falta o hook ignorar builds cujo `cwd` não é 
 da sessão (ou que rodam em worktree de perturbação). Teste que falta: `cat log-com-BUILD-FAILURE`
 não grava nada; `./mvnw verify` rodado em `/tmp/perturb-*` não altera `.claude/last-build.json`.
 
+### Episódio de feedback (triagem 2026-11-03)
+
+Episódio novo, depois do status feito: o mesmo falso build vermelho voltou num comando `grep`/`sed` de subagente.
+
+> gate-advance registrou build FAILURE a partir de um comando grep/sed de um subagente (texto do comando: F=...PipelineMultimodalSemVazamentoNoLogTest.java && grep -rn camposDeItemLidosPorTecnica ... | head -4; sed -), classificado como kind=maven, e barrou o commit/merge seguinte; não havia build vermelho, o verify em 46aa786 estava verde. Precisou rodar um mvn test só para limpar o estado.
+>
+> `fb-20261021-1`, 2026-10-21 · wego-digitacao-backend · session/ciclo1 · construcao · common/hooks/gate-advance.py
+
 ## Comentário do campo Team (`customfield_10001`) no `board-flow.yaml` não mostra o formato que falha
 
 **Plano:** `fb-2026-10/board-flow-yaml-comentario-team-dois-formatos` (fila `fb-2026-10`, gravada em 2026-10-19)
@@ -4502,6 +4556,14 @@ Regra escrita em `common/commands/wrap-up.md` (L8 e Discard), `common/commands/m
 `common/skills/default-yes/SKILL.md`. Testes em `tests/test_report_style_lint.py`. Plugin
 `common` na 2.29.0.
 
+### Episódio de feedback (triagem 2026-11-03)
+
+Episódio novo, efeito colateral da correção: o `report-style-lint` barra pergunta fechada depois de "Safe to exit" mesmo quando o dono pediu trabalho novo na mesma sessão.
+
+> report-style-lint bloqueia pergunta fechada em qualquer relatório depois de 'Safe to exit', mesmo quando o dono pediu trabalho novo na mesma sessão (triagem da coluna To Do) que exige decisão dele. As 7 decisões da triagem tiveram de ir para arquivo em vez de ser perguntadas.
+>
+> `fb-20261102-2`, 2026-11-02 · wego-assinatura-backend · session/WEGO-2464 · construcao
+
 ## `/common:plan` aceita item de feedback sem conferir se o `BACKLOG.md` já o dá como feito
 
 **Plano:** sem item ainda (abrir na fila `cepa` quando entrar na rodada)
@@ -4597,6 +4659,151 @@ distinto do clone; depois do pouso o arquivo existe em `.claude/rescued/<run>/` 
 contém o aviso. Sem Docker: o passo 2 se testa com um `docker` falso no PATH que devolve um
 `working_dir` dentro da worktree.
 
+## `cepa-plan responde` só aceita resposta digitada num terminal fora do Claude Code
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-plan`, guarda `sys.stdin.isatty()` do `answer`) · **Origem:** feedback `fb-20261021-2`, 2026-10-21, `fb-20261022-1`, 2026-10-22, `fb-20261028-1`, 2026-10-28
+
+### Problema
+
+O `answer`/`responde` recusa quem não tem stdin em terminal (`common/bin/cepa-plan:2711`). O agente não consegue gravar uma resposta que o dono já deu no chat, e o prefixo `!` do Claude Code também é recusado. Resultado: o dono copia e roda comandos longos num terminal à parte para registrar o que já respondeu.
+
+### Palavras do dono
+
+> Não estou nem um pouco satisfeito com essa constante necessidade de rodar cepa-plan responde. (Contexto do agente: em 2026-10-21 o dono precisou rodar o responde 4 vezes para fechar rotas humanas que já estavam cumpridas e documentadas; a primeira tentativa falhou por faltar --resposta; o comando é owner-only, então o agente só consegue ditar o comando em vez de fechar a rota a partir da evidência.)
+>
+> `fb-20261021-2`, 2026-10-21 · wego-digitacao-backend · session/ciclo1 · construcao · cepa-plan
+
+> cepa-plan responde exige TTY e recusa o agente mesmo quando o dono respondeu explicitamente no chat (sim/não com o porquê). Resultado em 2026-10-22: o dono teve de copiar e rodar 3 comandos longos com ! para gravar respostas que já tinha dado em texto. Mesma queixa do fb-20261021-2. Sugestão: aceitar a resposta vinda do agente quando o prompt do dono a contém verbatim, ou oferecer um modo interativo que pergunte as 3 de uma vez.
+>
+> `fb-20261022-1`, 2026-10-22 · wego-digitacao-backend · session/ciclo1 · construcao · cepa-plan
+
+> O dono rodou 'cepa-plan responde WEGO WEGO-2351 ...' pelo prefixo '!' do Claude Code e o guarda de TTY (sys.stdin.isatty) recusou com a mesma mensagem dada ao agente: o '!' nao anexa stdin a um terminal. O unico caminho que o guarda aceita e um terminal fora do Claude Code; o agente nao tem como distinguir o dono digitando '!' de si mesmo. Ideia: aceitar uma variavel que o '!' do Claude Code exporta (ou um --eu-sou-o-dono interativo que pede confirmacao por outro canal), ou documentar na mensagem de recusa que o '!' do Claude Code nao conta como terminal.
+>
+> `fb-20261028-1`, 2026-10-28 · wego-acessos-backend · main · construcao · cepa-plan
+
+## A dispensa de cobertura aceita pelo dono não é lida pelo esquema de prova e volta como NEEDS-HUMAN
+
+**Status:** pendente · **Lar provável:** build-hex (`build-hex/hooks/proof-verdict-guard.py`, esquema `l2_coverage`) · **Origem:** feedback `fb-20261020-1`, 2026-10-20, `fb-20261028-2`, 2026-10-28
+
+### Problema
+
+Em projeto Java sem jacoco, `l2_coverage` nunca é medido. O dono dispensa, mas o `proof-verdict-guard` não aceita `l2_coverage: waived` mesmo com arquivo em `docs/waivers/`, e cada card volta a pedir a mesma dispensa.
+
+### Palavras do dono
+
+> sim, mas esse excesso de dispensas me incomoda. Por que está havendo isso? [contexto do agente: dispensa de cobertura nao medida assinada em S5-tela-conferencia-valores, S5-tela-prepreenche-tabela, S5-classificador-jev-imagem e pedida de novo para S6-metrica-principal-por-item, diff so docs; causa: projeto Java sem jacoco, l2_coverage nunca passa por medicao, e o esquema nao tem campo para dispensa aceita, entao ela reaparece como NEEDS-HUMAN em todo card]
+>
+> `fb-20261020-1`, 2026-10-20 · wego-digitacao-backend · session/ciclo1 · construcao · proof-reviewer / esquema de prova (l2_coverage) e dispensas sem-cobertura
+
+> proof-verdict-guard não aceita l2_coverage: waived mesmo com arquivo válido em docs/waivers/; toda dispensa do dono vira NEEDS-HUMAN de novo na leitura mecânica (WEGO-2461 em 2026-10-28: dono dispensou 4 linhas de manhã, proof-reviewer refez a prova, 21 perturbações vermelhas, e ainda assim NEEDS-HUMAN por formato). WEGO-2138 foi gravado como waived antes do guard.
+>
+> `fb-20261028-2`, 2026-10-28 · wego-acessos-backend · session/todas-creds · construcao
+
+## `completion-auditor` não aceita o build completo delegado ao supervisor na branch da noite
+
+**Status:** pendente · **Lar provável:** common (`common/agents/completion-auditor.md`) + `common:drain-plan` · **Origem:** feedback `fb-20261029-2`, 2026-10-29, `fb-20261030-2`, 2026-10-30
+
+### Problema
+
+Com `--na-branch`, a regra proíbe o item de rodar o build completo, que é do supervisor do `cepa-until`. O auditor marca o critério do build como incompleto, o item nunca sai COMPLETE e o `acceptance-gate` segura o card em In Progress. O `validation-lead` já tem a saída `build: delegated-to-supervisor`; o auditor não tem equivalente.
+
+### Palavras do dono
+
+> No drain-plan com --na-branch, o completion-auditor devolve INCOMPLETE só porque o ./mvnw verify completo não rodou antes dele — mas a regra da branch da noite proíbe o item de rodar o build completo e o entrega ao supervisor do cepa-until (que roda logo depois do finish --status done e reverte se vermelho). Resultado: o item nunca consegue COMPLETE na janela autônoma, mesmo com AC1-AC4 verificados e 12/12 bin/tests verdes. O validation-lead já tem a saída 'build: delegated-to-supervisor'; o auditor precisa do equivalente, ou o drain-plan precisa dizer o que fazer com INCOMPLETE restrito ao critério do build (WEGO-2360, run until/2026-10-29-2017).
+>
+> `fb-20261029-2`, 2026-10-29 · wego-acessos-backend · until/2026-10-29-2017 · common:completion-auditor
+
+> drain-plan na branch da noite (--na-branch): o acceptance-gate barra a transição para In Review porque o completion-auditor deixa AC 'verify completo' incomplete por regra (verify é do supervisor e só roda depois do done). Mesma raiz da fb-20261029-2, um passo adiante: o item fecha done na fila, o comentário entra no card, mas o card fica em In Progress e vira divergência na próxima reconciliação. Run until/2026-10-30-1941, WEGO-2360.
+>
+> `fb-20261030-2`, 2026-10-30 · wego-acessos-backend · until/2026-10-30-1941
+
+## `cepa-until decide` diz "nada espera por você" com itens esperando o dono
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-until`, `query_queue` e `close_with_owner`) · **Origem:** feedback `fb-20261101-1`, 2026-11-01
+
+### Problema
+
+`query_queue` chama `cepa-plan queue --max 1` (`common/bin/cepa-until:700`), e o `cepa-plan` só lista como adiados os itens percorridos antes do teto. Com um item pending no topo, a lista de adiados sai vazia.
+
+### Palavras do dono
+
+> cepa-until decide WEGO/2026-10-31-1033 disse 'nada espera por você neste run' com 12 itens esperando o dono (7 bloqueado-antes, 5 human_pending). Causa: query_queue em common/bin/cepa-until chama 'cepa-plan queue --max 1', e o cepa-plan só lista como adiados os itens percorridos antes do teto; com WEGO-2381 pending no topo, a lista sai vazia. close_with_owner (fechamento de todo run) usa a mesma consulta. Reproduzido: com --max 200 aparecem 14 adiados. Correção: consultar sem teto para listar adiados, com teste de item pending no topo e travados depois.
+>
+> `fb-20261101-1`, 2026-11-01 · wego-acessos-backend · main · construcao · cepa-until decide
+
+## `capture-build-result` não reconhece a saída do Playwright como sucesso
+
+**Status:** pendente · **Lar provável:** common (`common/hooks/capture-build-result.py`) · **Origem:** feedback `fb-20261024-1`, 2026-10-24, `fb-20261024-2`, 2026-10-24
+
+### Problema
+
+Para npm/yarn, o hook só conta testes numa linha que começa com `Tests` (formato do jest e do vitest). O Playwright imprime `15 passed (7.6s)` sem esse prefixo, o `last-build.json` fica STALE depois de rodadas verdes e o `gate-advance` barra o commit.
+
+### Palavras do dono
+
+> capture-build-result não reconhece a saída do Playwright ('9 passed (8.0s)' de 'npm test') como SUCCESS: o exit code 0 some da tool_response e _JS_SUCCESS só tem marcadores de build. gate-advance ficou STALE após 'npm test' verde no wego-digitacao-demo (run until/2026-10-23-2127, CS-14); precisei rodar pytest para limpar.
+>
+> `fb-20261024-1`, 2026-10-24 · wego-digitacao-demo · until/2026-10-23-2127
+
+> capture-build-result não reconhece 'N passed' do Playwright: em wego-digitacao-demo o verify command é npm test = playwright test, que imprime '15 passed (7.6s)' e nenhum marcador JS da lista (Compiled successfully, built in, Done in). Resultado: last-build.json ficou STALE depois de duas rodadas verdes de npm test, o gate-advance barrou o git commit do pair-dev, e o drain-plan (rodada cepa-until 2026-10-23-2127, CS-20) teve de rodar npm run build, que a regra da branch da madrugada reserva ao supervisor, só para o hook gravar o baseline. Pedido: marcador de sucesso para Playwright/Jest/Vitest ('N passed', 'Tests: N passed') e marcador de falha ('N failed').
+>
+> `fb-20261024-2`, 2026-10-24 · wego-digitacao-demo · until/2026-10-23-2127
+
+## `worktree-guard` trata o processo `claude bg-spare` como sessão viva dona da `main`
+
+**Status:** pendente · **Lar provável:** common (`common/hooks/worktree-guard.py`) · **Origem:** feedback `fb-20261025-1`, 2026-10-25
+
+### Problema
+
+O spare pré-aquecido do Claude Code tem PID vivo com cwd no clone base. O guard o lê como sessão dona e barra o merge do `/common:wrap-up`.
+
+### Palavras do dono
+
+> worktree-guard tratou um processo 'claude bg-spare' (spare pré-aquecido, PID vivo com cwd no repo base) como sessão viva dona de main e barrou o merge do wrap-up
+>
+> `fb-20261025-1`, 2026-10-25 · wego-digitacao-demo · session/layout · construcao
+
+## `gate-advance` procura o `last-build.json` no clone base durante o merge e nunca o acha
+
+**Status:** pendente · **Lar provável:** common (`common/hooks/gate-advance.py`, `capture-build-result.py`) · **Origem:** feedback `fb-20261026-1`, 2026-10-26
+
+### Problema
+
+No `/common:worktree-merge`, o merge e o push feitos com `cd` para o clone base são barrados por falta de `.claude/last-build.json` ali. O hook que grava o build só escreve no worktree da sessão, então rodar o build no clone base não resolve.
+
+### Palavras do dono
+
+> No /common:worktree-merge, o gate-advance barra o git merge e o git push feitos no clone base (cd para a main) por falta de .claude/last-build.json ali. Rodar npm run build no clone base não resolve: o hook que grava o build só escreve no worktree da sessão (o cwd da sessão), então o registro nunca aparece onde o gate procura. Contornei fazendo o push a partir do worktree, depois de confirmar que a árvore da main era idêntica à do branch validado. Esperado: o build rodado com cd para outro diretório deve ser gravado no .claude daquele diretório, ou o gate deve aceitar o build do branch de origem quando a árvore do merge é a mesma.
+>
+> `fb-20261026-1`, 2026-10-26 · wego-digitacao-demo · session/1026-0908 · construcao · gate-advance
+
+## `jira-create-fields-gate` não lê comando composto e barra criação com os campos presentes
+
+**Status:** pendente · **Lar provável:** common (`common/hooks/jira-create-fields-gate.py`) · **Origem:** feedback `fb-20261102-1`, 2026-11-02
+
+### Problema
+
+Três criações de card com Team e Módulo presentes foram barradas quando o comando usava pipe e `cd &&`. Passaram só redirecionando a saída para arquivo.
+
+### Palavras do dono
+
+> jira-create-fields-gate bloqueou 3 criações de card com Team e Módulo presentes quando o comando usava pipe e 'cd &&'; passou só redirecionando a saída para arquivo. O hook parece não parsear bem comando composto.
+>
+> `fb-20261102-1`, 2026-11-02 · wego-assinatura-backend · main · construcao
+
+## `/common:wrap-up` não tem como encerrar sem abrir a sessão encadeada
+
+**Status:** pendente · **Lar provável:** common (`common/commands/wrap-up.md` e o launcher da sessão seguinte) · **Origem:** feedback `fb-20261025-2`, 2026-10-25
+
+### Problema
+
+O dono quis finalizar sem a sessão encadeada que o ciclo 1 do Epic cepa-em-espiral introduziu, e não há opção para isso.
+
+### Palavras do dono
+
+> Vamos finalizar, mas não quero a sessão encadeada.
+>
+> `fb-20261025-2`, 2026-10-25 · wego-digitacao-backend · main · descoberta · /common:wrap-up
 ---
 
 ## `/common:spec` também pede métrica de resultado?

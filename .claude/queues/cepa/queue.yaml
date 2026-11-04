@@ -668,7 +668,11 @@ items:
     train porque calibrar um porteiro de ondas que não aterrissam mede a coisa errada.
   status: blocked
   blocked_by: []
-  human_pending: null
+  human_pending: 'Destrava quando o C2-1 da fila cepa-espiral-c2 (cepa-until como
+    tronco, com fork de filhos e merge train extraídos do Maestro) rodar uma onda
+    real do porteiro 0.4.3. Os itens rodar-onda-* de que ele dependia foram descartados
+    em 2026-10-16. Decisão do dono em 2026-11-03: não refazer a pergunta "devolvo
+    à fila agora?" a cada run enquanto essa condição não mudar.'
   evidence: 'Resposta do dono em 2026-10-30: não: Devolvo a calibragem do porteiro
     à fila agora, mesmo sem nenhuma onda ter rodado?. O dono manteve o item como
     estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-23: não:
@@ -2548,3 +2552,37 @@ items:
     wait volta a travar). Build completo: delegado ao supervisor. Fora do escopo:
     o PID 84993 continua vivo (reprodutor mantido por decisão do dono); matar é
     decisão dele.'
+- id: stop-reasons-in-english
+  title: Traduzir para inglês os 6 motivos de parada emitidos por cepa-plan queue
+    --json (teto, fim-da-fila, bloqueado, reservado, depende-de-adiado, bloqueado-antes),
+    com os leitores (cepa-until, compass, contrato do drain-plan, testes) aceitando
+    o valor antigo e o novo; mesmo método de alias dos commits f26a765 e 84fde4d
+  why: 'Sobra do interface-in-english, que fechou com esses motivos ainda em português
+    (common/bin/cepa-plan:1192). Dono aprovou em 2026-11-03 depois de o run 2026-10-23-2130
+    recomendar sim. (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: wrap-up-comando-primeira-linha
+  title: O launcher da sessão encadeada põe o campo comando, gravado pelo /common:wrap-up,
+    como primeira linha do prompt inicial da sessão seguinte
+  why: 'Pergunta CS-4 da fila cepa-espiral-c1, sem resposta num item done. Recomendação
+    do agente: sim, porque hoje o comando é gravado e ignorado, e a sessão seguinte
+    só o executa se o parágrafo Próximo passo o citar. Dono aprovou virar item em
+    2026-11-03. (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: spec-isento-do-report-style-lint
+  title: Estender ao /common:spec a exceção do report-style-lint que poupa o turno
+    de entrevista do /common:epic
+  why: 'Pergunta CS-5 da fila cepa-espiral-c1, sem resposta num item done. Recomendação
+    do agente: sim, porque a entrevista do spec também grava no arquivo a cada turno,
+    e o lint a obriga ao formato de relatório com pergunta numerada. Dono aprovou
+    virar item em 2026-11-03. (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
