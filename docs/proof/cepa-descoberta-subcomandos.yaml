@@ -1,9 +1,9 @@
 schema_version: 2
 card: cepa-descoberta-subcomandos
 verdict: unproven
-reviewed_at: 2026-11-04T12:00:00-03:00
+reviewed_at: 2026-11-04T13:00:00-03:00
 base_commit: 195f0df
-head_commit: 2926146
+head_commit: 6a1506e
 issue_type: Feature
 repo_kind: harness            # sh launcher + suite python; sem Quarkus/PIT
 scope:
@@ -18,6 +18,7 @@ scope:
       reason: "arquivo de teste; sem superfície própria"
       substituted_by_double: null
   base_commit_resolved: true
+  note: "Rodada 2: head avançou de 2926146 para 6a1506e; common/bin/cepa inalterado, só tests/test_cepa_prove.py mudou."
 levels:
   l3_load_bearing:
     technique: perturbation
@@ -36,15 +37,15 @@ levels:
         - "RED  (e) guarda ${#1} -ge 4 baixada para -ge 1 -> 2 falhas (`cepa go`); subida para -ge 9 -> 3 falhas"
         - "RED  (f) limiar de distância _bestd=3 -> 1 -> 1 falha (`cepa untl`)"
         - "RED  (g) printf do rodapé do menu de modo removido -> 1 falha"
-        - "SOBREVIVEU (d) texto 'Você quis dizer' trocado por 'Talvez' -> 19 ok; o teste só confere 'cepa <nome>' e 'cepa help' no stderr"
-        - "SOBREVIVEU (e) condição `[ $# -eq 1 ]` removida (fica só ${#1} -ge 4) -> 19 ok; nenhum teste passa palavra de typo MAIS argumentos (ex.: `cepa untl foo`), que deveria abrir sessão"
-        - "SOBREVIVEU (f) atalho de prefixo em nearest_subcommand removido -> 19 ok; os 3 typos testados (untl, prov, docto) ficam a <=2 edições sem o atalho; falta caso que só o prefixo resolve (ex.: `cepa autono`, distância 3 de autonomy)"
+        - "RODADA 2 (6a1506e) baseline: python3 tests/test_cepa_prove.py -> '19 teste(s) ok'"
+        - "RODADA 2 RED  (d) 'Você quis dizer' trocado por 'Talvez' -> 4 falhas (as 4 recusas); fechada"
+        - "RODADA 2 RED  (e) `[ $# -eq 1 ]` removido -> 2 falhas (`cepa untl foo` abre sessão); fechada"
+        - "RODADA 2 SOBREVIVEU (f) `case \"$_name\" in \"$1\"*)` removido -> 19 ok. O caso novo `cepa autono` não isola o atalho: autono -> autonomy é distância 2 (inserir m,y), então o Levenshtein sozinho acha. Sondagem manual em worktree descartável: com o atalho `cepa feed` sugere `cepa feedback`; sem o atalho `cepa feed` (distância 4) abre sessão claude em vez de sugerir. Comportamento muda, logo não é equivalente; falta teste."
   l2_coverage:
     status: gap
     uncovered_lines:
-      - "common/bin/cepa: atalho de prefixo (case \"$_name\" in \"$1\"*) em nearest_subcommand"
-      - "common/bin/cepa: condição [ $# -eq 1 ] da recusa de typo"
-    run: "sem JaCoCo no harness; lacunas determinadas pelas perturbações que sobreviveram (3 de 15)"
+      - "common/bin/cepa: atalho de prefixo (case \"$_name\" in \"$1\"*) em nearest_subcommand) para prefixos a 3 ou mais edições do nome"
+    run: "sem JaCoCo no harness; lacuna determinada pela perturbação (f) que sobreviveu (1 de 3 na rodada 2)"
   l4_adversarial_input:
     status: skipped
     reason: ""
@@ -52,4 +53,4 @@ levels:
   bugfix_regression_red_at_base:
     status: n/a
     run: "issue_type Feature"
-routing_reason: "12 de 15 perturbações vermelhas; 3 sobreviveram em comportamento externamente observável (atalho de prefixo, exigência de argumento único, frase da sugestão). Sem teste que as quebre, 'proven' é indisponível. Devolver ao dev para 3 asserções."
+routing_reason: "Rodada 2: 2 das 3 sobreviventes fecharam (frase da sugestão, exigência de argumento único). O atalho de prefixo de nearest_subcommand ainda sobrevive: `cepa autono` está a 2 edições de autonomy e passa sem o atalho. Falta caso de prefixo a 3 ou mais edições, como `cepa feed` exigindo `cepa feedback`. UNPROVEN; L4 não rodado porque o veredito não virou PROVEN."

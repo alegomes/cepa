@@ -460,8 +460,8 @@ def test_cepa_help_flags_and_typos():
           and "--mode" in ref and "--prompt" in ref, ref[-600:])
     check("...e os aliases com rótulo limpo", "(alias antigo de intent)" in ref
           and "(alias antigo de modes)" in ref and "Deprecated" not in ref, ref)
-    # `autono` is 3 edits from `autonomy`: only the prefix fast path finds it.
-    for typo, near in (("untl", "until"), ("prov", "prove"), ("docto", "doctor"), ("autono", "autonomy")):
+    # `feed` is 4 edits from `feedback`: only the prefix fast path finds it.
+    for typo, near in (("untl", "until"), ("prov", "prove"), ("docto", "doctor"), ("feed", "feedback")):
         p = subprocess.run([str(CEPA), typo], capture_output=True, text=True, timeout=60)
         check(f"`cepa {typo}` recusa e sugere `cepa {near}`",
               p.returncode == 2 and "Você quis dizer" in p.stderr
