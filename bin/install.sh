@@ -326,6 +326,10 @@ if [ -f "${UNTIL_BIN}" ]; then
   echo "  Larga com --dangerously-skip-permissions (sem isso o subprocesso trava"
   echo "  no 1º pedido e a noite morre calada) e RECUSA árvore suja. O doctor"
   echo "  cobra a árvore suja na abertura, para você não descobrir às 23h."
+  echo ""
+  echo "  Todo cepa-* também responde por 'cepa <subcomando>' (cepa help lista):"
+  echo "    cepa until <fila> --for 12h    # o mesmo que cepa-until"
+  echo "    cepa prove --for 3h            # prova a coluna Review, um card por subprocesso"
 fi
 
 # --- Shell completion for cepa (zsh) ---

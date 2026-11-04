@@ -91,6 +91,38 @@ DOCTOR="$SCRIPT_DIR/cepa-doctor"
 MODES_BIN="$SCRIPT_DIR/cepa-modes"
 INTENT_BIN="$SCRIPT_DIR/cepa-intent"
 
+# `cepa <subcommand>`: the single entry to the `cepa-*` scripts next to this
+# file (2026-11-03). `cepa until <queue> --for 3h` runs `cepa-until ...`,
+# `cepa help` lists them. Only an EXACT match of a sibling script dispatches:
+# a flag, a Jira key or a quoted prompt is a session launch, as before. The
+# `cepa-*` names keep working — this is a door, not a rename.
+if [ $# -ge 1 ]; then
+  case "$1" in
+    help|ajuda|subcommands|subcomandos)
+      echo "cepa <subcomando> [args]   — roda common/bin/cepa-<subcomando>"
+      echo "cepa [flags do launcher]   — abre uma sessão claude (como antes)"
+      echo ""
+      for _s in "$SCRIPT_DIR"/cepa-*; do
+        [ -x "$_s" ] || continue
+        _name="${_s##*/cepa-}"
+        # Line 2 of a python script is `"""cepa-x — summary`; shell scripts
+        # carry `# cepa-x — summary`. Anything else prints just the name.
+        _desc=$(sed -n 2p "$_s" | sed -e 's/^"""//' -e 's/^# *//' -e "s/^cepa-$_name *[—-]* *//")
+        case "$_desc" in
+          *"Deprecated alias"*|*"alias"*) _desc="(alias antigo) $_desc" ;;
+        esac
+        printf '  %-14s %s\n' "$_name" "$_desc"
+      done
+      exit 0 ;;
+    -*|"") ;;
+    *)
+      if [ -x "$SCRIPT_DIR/cepa-$1" ]; then
+        _sub="$SCRIPT_DIR/cepa-$1"; shift
+        exec "$_sub" "$@"
+      fi ;;
+  esac
+fi
+
 # Preflight: gets the harness ready BEFORE the session starts, instead of the
 # user finding out mid-task that the installed plugin is not the repo's.
 # Runs at most once every CEPA_PREFLIGHT_TTL hours per repo (the stamp lives in

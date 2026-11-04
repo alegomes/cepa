@@ -1,0 +1,104 @@
+schema_version: 1
+card: cepa-prove-e-porta-cepa
+status: complete
+audited_at: 2026-11-03T12:00:00-03:00
+criteria:
+  - id: AC1
+    text: "cepa <name> dispatches to sibling cepa-<name>; cepa help lists; flag/non-sibling first arg still launches a session"
+    altitude: cli
+    surface: "common/bin/cepa"
+    demonstrated_by:
+      test: "tests/test_cepa_prove.py::test_cepa_dispatches_to_sibling_scripts"
+      layer: cli-subprocess
+      evidence: verified
+      run: "python3 tests/test_cepa_prove.py -> 17 teste(s) ok (commit d2e5f25) ; plus test_cepa_still_launches_a_session_for_flags_and_non_scripts"
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "cepa-prove --for/--until runs claude -p /board-flow:prove-drain --max 1, skip-permissions unless --with-permissions, fresh process, cwd=repo, CEPA_UNTIL_RUN=1"
+    altitude: cli
+    surface: "cepa-prove + fake claude argv/env"
+    demonstrated_by:
+      test: "test_rounds_skip_handled_keys_and_end_on_empty_review; test_env_marks_the_round_as_unattended"
+      layer: cli-subprocess
+      evidence: verified
+      run: "python3 tests/test_cepa_prove.py -> 17 teste(s) ok (commit d2e5f25)"
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "round outcome read from docs/proof/<KEY>.yaml (new/rewritten), not exit code; verdict keys passed as --skip to later rounds"
+    altitude: cli
+    surface: "cepa-prove artifact reading + --skip argv"
+    demonstrated_by:
+      test: "test_rounds_skip_handled_keys_and_end_on_empty_review"
+      layer: cli-subprocess
+      evidence: verified
+      run: "python3 tests/test_cepa_prove.py -> 17 teste(s) ok (commit d2e5f25)"
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: "breaker (3 without artifact -> disjuntor; artifact resets), review-vazia, --max N -> teto"
+    altitude: cli
+    surface: "cepa-prove run_end motivo"
+    demonstrated_by:
+      test: "test_rounds_without_artifact_trip_the_breaker; test_progress_resets_the_breaker; test_max_caps_the_cards; happy-run test (review-vazia)"
+      layer: cli-subprocess
+      evidence: verified
+      run: "python3 tests/test_cepa_prove.py -> 17 teste(s) ok (commit d2e5f25)"
+    verdict: complete
+    gap: null
+  - id: AC5
+    text: "deadline checked before each round (--min-reserve); window smaller than reserve fires nothing, ends prazo"
+    altitude: cli
+    surface: "cepa-prove --for 10m --min-reserve 25m"
+    demonstrated_by:
+      test: "test_window_smaller_than_reserve_fires_nothing"
+      layer: cli-subprocess
+      evidence: verified
+      run: "python3 tests/test_cepa_prove.py -> 17 teste(s) ok (commit d2e5f25)"
+    verdict: complete
+    gap: null
+  - id: AC6
+    text: "artifacts committed on current branch 'proof: K VERDICT, ...' unless --no-commit"
+    altitude: cli
+    surface: "git log after cepa-prove"
+    demonstrated_by:
+      test: "happy-run test (commit per round, clean tree); test_no_commit_leaves_the_artifacts"
+      layer: cli-subprocess
+      evidence: verified
+      run: "python3 tests/test_cepa_prove.py -> 17 teste(s) ok (commit d2e5f25)"
+    verdict: complete
+    gap: null
+  - id: AC7
+    text: "guards exit 2: no board-flow.yaml, claude not on PATH, dirty tree outside docs/proof and .claude/prove (unless --dirty-ok); --dry-run fires nothing, no record"
+    altitude: cli
+    surface: "cepa-prove exit codes"
+    demonstrated_by:
+      test: "test_without_board_flow_yaml_refuses; test_dirty_tree_outside_proofs_is_refused_but_proofs_are_not; test_dry_run_executes_nothing"
+      layer: cli-subprocess
+      evidence: verified
+      run: "python3 tests/test_cepa_prove.py -> 17 teste(s) ok (commit d2e5f25)"
+    verdict: complete
+    gap: null
+  - id: AC8
+    text: "record .claude/prove/<run>.jsonl with run_start/rodada_start/rodada_end/run_end and <run>.estado.json ending encerrado or esperando-dono"
+    altitude: cli
+    surface: ".claude/prove/ files"
+    demonstrated_by:
+      test: "happy-run test (run_end motivo+cards, estado esperando-dono)"
+      layer: cli-subprocess
+      evidence: verified
+      run: "python3 tests/test_cepa_prove.py -> 17 teste(s) ok (commit d2e5f25)"
+    verdict: complete
+    gap: null
+  - id: AC9
+    text: "prove-drain.md documents --skip and unattended rule; atlassian-expert appends AND key NOT IN (Skip); spec tests pass"
+    altitude: application
+    surface: "prompt text + spec tests"
+    demonstrated_by:
+      test: "tests/test_flags_hint_variables.py; tests/test_atlassian_expert_spec.py"
+      layer: spec-lint
+      evidence: verified
+      run: "python3 tests/test_flags_hint_variables.py -> 'tudo ok (71 comandos varridos)'; python3 tests/test_atlassian_expert_spec.py -> 'all green'. Diff read: --skip in argument-hint and Variables, CEPA_UNTIL_RUN rule at step 1 and step 3, 'AND key NOT IN (Skip)' in selection ops."
+    verdict: complete
+    gap: null

@@ -1,0 +1,655 @@
+#!/usr/bin/env python3
+"""cepa-prove — proves the Review column for a TIME WINDOW, one card per subprocess.
+
+## Why it exists
+
+`/board-flow:prove-drain` is limited by COUNT (`--max N`) and runs inside one
+session: a long Review column blows the context long before the column is
+empty, and whoever resumes it is a person typing — at 3am nobody types. The
+owner asked (2026-11-03) for "a command like `cepa-until`, but only to do the
+work of `/board-flow:prove-drain`, in separate sessions".
+
+Hence the same shape as `cepa-until`: **one card per subprocess**. This
+supervisor fires
+
+    claude -p "/board-flow:prove-drain --max 1 --skip <keys already handled>"
+
+once per round, in a fresh process every time, until the window closes or the
+column is empty. Context overflow stops being a failure and becomes the normal
+end of a round.
+
+## What it deliberately does NOT do
+
+It does not talk to Jira, does not list the column and does not know what a
+card is. Whoever does that is `/board-flow:prove-drain` + `atlassian-expert`,
+which already reserve the card (the `🔒 claim` comment, 90 min), prove it and
+route the verdict. This file is the wiring around that: clock, circuit
+breaker, quota pause, log — and TWO things only a supervisor can do:
+
+  - **remember what the earlier rounds handled.** A card that stays in Review
+    after its verdict (NEEDS-HUMAN, or PROVEN without a done status
+    configured) would be picked again by the next round, forever. The
+    supervisor reads the verdict in `docs/proof/<KEY>.yaml` after each round
+    and passes the keys as `--skip`, so the round only sees what nobody
+    proved yet;
+  - **read the outcome from disk, not from the agent's prose.** The truth of a
+    round is the proof artifact `proof-reviewer` wrote (`card:` and
+    `verdict:`), the same file `/board-flow:decide` reads. A round that
+    exits 0 and writes no artifact made no progress.
+
+## Decisions taken without asking (2026-11-03)
+
+1. **The source is the board, through the subprocess.** Unlike `cepa-until`,
+   there is no on-disk queue to read: the Review column IS the queue, and the
+   round lists it. The supervisor's own record is the `.jsonl` next to this
+   run (`.claude/prove/<run>.jsonl`), one event per round and per card.
+2. **No separate branch.** The only thing a round leaves in the tree is
+   `docs/proof/<KEY>.yaml` (the perturbations happen in a throwaway worktree
+   the proof itself opens and removes). The supervisor commits each artifact
+   on the CURRENT branch after the round (`proof: <KEY> <VERDICT>`), so the
+   next round starts clean and the morning has nothing to merge. `--no-commit`
+   leaves the files for you.
+3. **Circuit breaker at 3 rounds in a row without an artifact**, as in
+   `cepa-until`. Below that it is bad luck (a card reserved by another
+   session, a proof that could not open its worktree); above it the problem
+   is systemic and the window would burn on it.
+4. **`--dangerously-skip-permissions` on**, for the same reason as
+   `cepa-until`: without it the first permission prompt hangs the round and
+   the night dies in silence. `--with-permissions` turns it off.
+5. **The round knows it is unattended** through the same mark `cepa-until`
+   sets (`CEPA_UNTIL_RUN=1`): `/board-flow:prove-drain` then takes its single
+   confirmation as yes + (a) instead of asking a terminal nobody is reading,
+   and the session hooks behave as in a window (no intent, no background
+   wait).
+
+## Where the cut happens
+
+Between rounds, never in the middle of one: a card killed mid-proof keeps its
+`🔒 claim` on the board for 90 minutes and the throwaway worktree on disk. The
+deadline is checked BEFORE each round (`--min-reserve`), and a round already
+running may pass the deadline by `--slack` before being killed.
+
+## Usage
+
+    cepa-prove --for 3h                 # or --until 07:00
+    cepa-prove --for 3h --dry-run       # the plan of the run, nothing executed
+    cepa-prove --for 3h --scope 'labels = squad-a'
+    cepa-prove --for 3h --max 4         # at most 4 cards, even with time left
+"""
+
+import argparse
+import importlib.machinery
+import importlib.util
+import json
+import os
+import re
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import time
+from datetime import datetime, timedelta
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+
+
+def _load_until():
+    """`cepa-until` as a module: the clock, quota, network and screen helpers
+    live there, and a second copy of each would diverge."""
+    loader = importlib.machinery.SourceFileLoader("cepa_until", str(HERE / "cepa-until"))
+    spec = importlib.util.spec_from_loader("cepa_until", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+U = _load_until()
+SCREEN = U.SCREEN
+
+DEFAULT_MIN_RESERVE = "20m"   # a proof takes 9 to 12 minutes (prove-drain.md)
+DEFAULT_SLACK = "30m"
+DEFAULT_MAX_FAILURES = 3
+PROOF_DIR = Path("docs") / "proof"
+LEDGER_DIR = Path(".claude") / "prove"
+VERDICTS = {"proven": "PROVEN", "unproven": "UNPROVEN",
+            "needs-human": "NEEDS-HUMAN", "needs_human": "NEEDS-HUMAN"}
+# The subprocess told the column is empty. prove-drain.md step 2 prints
+# "Nothing in Review"; the pt-BR rendering varies, so the match is loose.
+EMPTY_REVIEW = re.compile(r"nothing in review|nada em review|review (está )?vazi[ao]"
+                          r"|nenhum card em review|0 cards? (in|em) review", re.I)
+KEY_RE = re.compile(r"^card:\s*['\"]?([A-Za-z][A-Za-z0-9_-]*-\d+|[\w.-]+)['\"]?\s*$", re.M)
+VERDICT_RE = re.compile(r"^verdict:\s*['\"]?([a-z_-]+)['\"]?", re.M)
+
+
+# ── proof artifacts ───────────────────────────────────────────────────────────
+
+def snapshot_proofs(repo):
+    """{relative path: mtime_ns} of every proof artifact on disk now."""
+    d = repo / PROOF_DIR
+    if not d.is_dir():
+        return {}
+    out = {}
+    for p in d.glob("*.yaml"):
+        try:
+            out[str(p.relative_to(repo))] = p.stat().st_mtime_ns
+        except OSError:
+            pass
+    return out
+
+
+def read_proof(path):
+    """(key, VERDICT) of one artifact, or (None, None) when it is not one."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None, None
+    k = KEY_RE.search(text)
+    v = VERDICT_RE.search(text)
+    key = k.group(1) if k else None
+    verdict = VERDICTS.get(v.group(1).lower()) if v else None
+    return key, verdict
+
+
+def proofs_written(repo, before):
+    """The artifacts a round created or rewrote: [(key, verdict, relative path)].
+    A `ui-<KEY>.yaml` (the UI proof) is folded into its backend card."""
+    after = snapshot_proofs(repo)
+    cards = []
+    for rel, mtime in sorted(after.items()):
+        if before.get(rel) == mtime:
+            continue
+        key, verdict = read_proof(repo / rel)
+        if not key:
+            key = Path(rel).stem
+        if key.startswith("ui-"):
+            key = key[3:]
+        cards.append((key, verdict or "?", rel))
+    return cards
+
+
+# ── git ──────────────────────────────────────────────────────────────────────
+
+def git(args, cwd, timeout=120):
+    try:
+        p = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True,
+                           text=True, timeout=timeout)
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, str(e)
+    return p.returncode, (p.stdout + p.stderr).strip()
+
+
+def dirty_outside_proofs(repo):
+    """Porcelain lines of the tree, minus the proof artifacts (they are the
+    run's product, and a leftover one does not hide what the run did)."""
+    code, out = git(["status", "--porcelain", "--untracked-files=all"], repo)
+    if code != 0:
+        return []
+    lines = []
+    for l in out.splitlines():
+        path = l[3:].strip().strip('"')
+        # The run's own record (`.claude/prove/`) is not dirt either, as the
+        # `until/` record is not for cepa-until (RUN_RECORD there).
+        if path.startswith((str(PROOF_DIR) + "/", str(LEDGER_DIR) + "/")):
+            continue
+        lines.append(l)
+    return lines
+
+
+def commit_proofs(repo, cards):
+    """Commits the round's artifacts on the current branch. Returns (sha, error)."""
+    files = [rel for _, _, rel in cards]
+    code, out = git(["add", "--", *files], repo)
+    if code != 0:
+        return None, out
+    code, out = git(["diff", "--cached", "--quiet", "--", *files], repo)
+    if code == 0:
+        return None, None            # the round itself committed them
+    msg = "proof: " + ", ".join(f"{k} {v}" for k, v, _ in cards)
+    code, out = git(["commit", "-q", "-m", msg, "--", *files], repo)
+    if code != 0:
+        return None, out
+    code, sha = git(["rev-parse", "--short", "HEAD"], repo)
+    return (sha if code == 0 else "?"), None
+
+
+def current_branch(repo):
+    code, out = git(["rev-parse", "--abbrev-ref", "HEAD"], repo)
+    return out if code == 0 else "?"
+
+
+# ── the round ─────────────────────────────────────────────────────────────────
+
+def build_command(skip, scope, no_scope, permissions):
+    request = "/board-flow:prove-drain --max 1"
+    if skip:
+        request += " --skip " + ",".join(skip)
+    if no_scope:
+        request += " --no-scope"
+    elif scope:
+        request += f" --scope {json.dumps(scope)}"
+    cmd = ["claude", "-p", request, "--output-format", "stream-json", "--verbose"]
+    if not permissions:
+        cmd.append("--dangerously-skip-permissions")
+    return cmd
+
+
+def run_round(repo, cmd, limit_sec, log, on_launch=None):
+    """Launches ONE subprocess with the clone as cwd.
+    Returns (code, killed_by_timeout, seconds, this_round_output)."""
+    start = time.monotonic()
+    try:
+        mark = os.path.getsize(log)
+    except OSError:
+        mark = 0
+    with open(log, "ab", buffering=0) as output:
+        output.write(f"\n===== {datetime.now().isoformat(timespec='seconds')} "
+                     f"· {' '.join(cmd)}\n".encode("utf-8"))
+        try:
+            proc = subprocess.Popen(cmd, cwd=str(repo), stdout=output,
+                                    stderr=subprocess.STDOUT,
+                                    stdin=subprocess.DEVNULL,
+                                    env=U.item_environment(),
+                                    start_new_session=True)
+        except OSError as e:
+            output.write(f"CEPA-PROVE-SPAWN-FALHOU: {e}\n".encode("utf-8"))
+            return -2, False, time.monotonic() - start, ""
+        if on_launch:
+            on_launch(proc.pid)
+        if U.wait_for_child(proc, limit_sec, "claude"):
+            code, killed = proc.returncode, False
+        else:
+            killed = True
+            U.terminate_group(proc.pid, U.SIGTERM_GRACE)
+            code = proc.returncode if proc.returncode is not None else -1
+    return code, killed, time.monotonic() - start, U.log_excerpt(log, mark)
+
+
+def final_text(output):
+    results = [e.get("result") for e in U._json_objects(output or "", "result")
+               if isinstance(e.get("result"), str)]
+    return results[-1] if results else ""
+
+
+# ── other runs ────────────────────────────────────────────────────────────────
+
+def supervisor_alive(pid):
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        pass
+    except (OSError, ValueError, TypeError):
+        return True
+    try:
+        p = subprocess.run(["ps", "-o", "command=", "-p", str(int(pid))],
+                           capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return True
+    if p.returncode != 0 and not p.stdout.strip():
+        return False
+    return "cepa-prove" in p.stdout
+
+
+def live_run(repo):
+    d = repo / LEDGER_DIR
+    if not d.is_dir():
+        return None
+    for st in sorted(d.glob("*.estado.json")):
+        try:
+            body = json.loads(st.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if body.get("estado") == "rodando" \
+                and body.get("host") == socket.gethostname() \
+                and supervisor_alive(body.get("pid")):
+            return body
+    return None
+
+
+# ── main ──────────────────────────────────────────────────────────────────────
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    ap = argparse.ArgumentParser(
+        prog="cepa-prove",
+        description="prova a coluna Review do Jira por uma janela de tempo, "
+                    "um card por subprocesso (/board-flow:prove-drain --max 1)")
+    window = ap.add_mutually_exclusive_group(required=True)
+    window.add_argument("--for", dest="duration", metavar="3h",
+                        help="quanto tempo rodar (ex.: 3h, 90m)")
+    window.add_argument("--until", dest="until_at", metavar="07:00",
+                        help="até que horas rodar (próximo HH:MM)")
+    ap.add_argument("--repo", default=".")
+    ap.add_argument("--max", type=int, default=0, metavar="N",
+                    help="teto de cards com veredito nesta janela (default: "
+                         "sem teto, só o relógio)")
+    ap.add_argument("--max-failures", type=int, default=DEFAULT_MAX_FAILURES,
+                    dest="max_failures", metavar="N",
+                    help=f"disjuntor: rodadas SEGUIDAS sem artefato de prova que "
+                         f"encerram o run (default {DEFAULT_MAX_FAILURES})")
+    ap.add_argument("--min-reserve", default=DEFAULT_MIN_RESERVE, dest="min_reserve",
+                    metavar="RESERVA",
+                    help=f"não começa rodada se sobra menos que isso (default "
+                         f"{DEFAULT_MIN_RESERVE})")
+    ap.add_argument("--slack", default=DEFAULT_SLACK, metavar="FOLGA",
+                    help=f"quanto uma rodada já em voo pode passar do prazo antes "
+                         f"de ser morta (default {DEFAULT_SLACK})")
+    scope = ap.add_mutually_exclusive_group()
+    scope.add_argument("--scope", metavar="JQL",
+                       help="fatia da coluna Review para este run (repassado ao "
+                            "prove-drain)")
+    scope.add_argument("--no-scope", action="store_true", dest="no_scope",
+                       help="ignora o scope configurado no board-flow.yaml")
+    ap.add_argument("--with-permissions", action="store_true", dest="with_permissions",
+                    help="NÃO passa --dangerously-skip-permissions (o subprocesso "
+                         "trava no 1º pedido — só com alguém olhando)")
+    ap.add_argument("--no-commit", action="store_true", dest="no_commit",
+                    help="não commita docs/proof/<KEY>.yaml depois de cada rodada")
+    ap.add_argument("--dirty-ok", action="store_true", dest="dirty_ok",
+                    help="começa mesmo com a árvore suja fora de docs/proof/")
+    ap.add_argument("--dry-run", action="store_true", dest="dry",
+                    help="mostra o plano do run e sai sem executar nada")
+    a = ap.parse_args(argv)
+
+    repo = Path(a.repo).resolve()
+    now = datetime.now()
+    try:
+        deadline = (now + U.parse_duration(a.duration)) if a.duration \
+            else U.parse_until(a.until_at, now)
+        reserve = U.parse_duration(a.min_reserve, "--min-reserve")
+        slack = U.parse_duration(a.slack, "--slack")
+    except ValueError as e:
+        print(f"cepa-prove: {e}", file=sys.stderr)
+        return 2
+    if a.max_failures < 1:
+        print("cepa-prove: --max-failures precisa ser >= 1", file=sys.stderr)
+        return 2
+    if a.max < 0:
+        print("cepa-prove: --max precisa ser >= 0", file=sys.stderr)
+        return 2
+    if not shutil.which("claude"):
+        print("cepa-prove: `claude` não está no PATH — sem ele não há o que "
+              "supervisionar", file=sys.stderr)
+        return 2
+    if not (repo / "board-flow.yaml").is_file():
+        print(f"cepa-prove: não há `board-flow.yaml` em {repo} — o prove-drain "
+              "lê a coluna Review por ele; sem quadro, não há o que provar",
+              file=sys.stderr)
+        return 2
+    code, _ = git(["rev-parse", "--is-inside-work-tree"], repo)
+    if code != 0:
+        print(f"cepa-prove: {repo} não é um clone git", file=sys.stderr)
+        return 2
+
+    alive = live_run(repo)
+    if alive:
+        print(f"cepa-prove: já há um run em andamento neste repo (run "
+              f"{alive.get('run')}, pid {alive.get('pid')}, prazo "
+              f"{alive.get('prazo')}). Espere ele terminar, ou encerre-o "
+              "(kill do pid) antes de largar outro.", file=sys.stderr)
+        return 2
+
+    dirt = dirty_outside_proofs(repo)
+    if dirt and not a.dirty_ok:
+        print(f"cepa-prove: a árvore tem {len(dirt)} arquivo(s) modificado(s) "
+              "fora de docs/proof/. Commite ou limpe antes — o run commita os "
+              "artefatos de prova na branch atual, e não dá para separar o que "
+              "ele fez do que já estava aqui. (--dirty-ok ignora este guarda.)",
+              file=sys.stderr)
+        for l in dirt[:10]:
+            print(f"    {l}", file=sys.stderr)
+        return 2
+
+    ledger_dir = repo / LEDGER_DIR
+    run_id = now.strftime("%Y-%m-%d-%H%M")
+    ledger = ledger_dir / f"{run_id}.jsonl"
+    log = ledger_dir / f"{run_id}.log"
+    branch = current_branch(repo)
+
+    lbl = lambda r: SCREEN.c("cinza", r)  # noqa: E731
+    print(SCREEN.c("negrito", "cepa-prove") + f" · {repo.name} · até "
+          + SCREEN.c("negrito", deadline.strftime('%d/%m %H:%M'))
+          + f" ({U.human(deadline - now)})")
+    print(lbl("  rodada : ") + "/board-flow:prove-drain --max 1, um `claude -p` por card; "
+          "os cards já tratados vão em --skip")
+    print(lbl("  escopo : ") + ("nenhum (coluna inteira)" if a.no_scope else
+                                 a.scope or "o do board-flow.yaml"))
+    print(lbl("  commit : ") + ("não commito docs/proof/" if a.no_commit else
+                                 f"docs/proof/<KEY>.yaml em `{branch}` depois de cada rodada"))
+    print(lbl("  paradas: ") + f"{a.max_failures} rodadas seguidas sem artefato (disjuntor)"
+          + (f" · {a.max} card(s) com veredito (teto)" if a.max else ""))
+    print(lbl("  tempo  : ") + f"não começa rodada com menos de {U.human(reserve)}; "
+          f"mata rodada que passar {U.human(slack)} do prazo")
+    print(lbl("  permissões: ")
+          + SCREEN.c("amarelo", "PEDE (vai travar sem alguém olhando)" if a.with_permissions
+                     else "--dangerously-skip-permissions LIGADO"))
+    if a.dry:
+        print("\n(--dry-run: nada foi executado)")
+        return 0
+
+    ledger_dir.mkdir(parents=True, exist_ok=True)
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    sys.stdout = U.TolerantOutput(sys.stdout)
+    sys.stderr = U.TolerantOutput(sys.stderr)
+    pid, host = os.getpid(), socket.gethostname()
+
+    def log_event(event):
+        event["quando"] = datetime.now().isoformat(timespec="seconds")
+        with ledger.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+    state_path = ledger_dir / f"{run_id}.estado.json"
+
+    def save_state(run_state, **rest):
+        body = {"run": run_id, "estado": run_state, "branch": branch,
+                "registro": ledger.name, "pid": pid, "host": host,
+                "prazo": deadline.isoformat(),
+                "atualizado": datetime.now().isoformat(timespec="seconds")}
+        body.update(rest)
+        tmp = state_path.with_suffix(".tmp")
+        try:
+            tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2) + "\n",
+                           encoding="utf-8")
+            os.replace(tmp, state_path)
+        except OSError as e:
+            print(f"  aviso: não gravei o estado do run em {state_path}: {e}")
+
+    log_event({"evento": "run_start", "prazo": deadline.isoformat(),
+               "branch": branch, "scope": a.scope, "no_scope": a.no_scope,
+               "max": a.max, "max_falhas": a.max_failures, "pid": pid, "host": host})
+    save_state("rodando")
+
+    handled = []          # keys with a verdict this run, in order (→ --skip)
+    verdicts = {}         # key → VERDICT
+    rounds, consecutive_failures = 0, 0
+    starts, last_reading, fresh_reading = [], None, False
+    consecutive_drops, drops = 0, []
+    costs = {}
+    in_flight = {}
+    closed = [False]
+    end_reason, end_detail = None, None
+
+    def interrupt(signum, _frame):
+        name = signal.Signals(signum).name
+        if closed[0]:
+            raise SystemExit(128 + signum)
+        closed[0] = True
+        child = in_flight.get("pid_filho")
+        terminated = U.terminate_group(child, min(U.SIGTERM_GRACE, 10)) if child else None
+        log_event({"evento": "run_interrompido", "sinal": name, "rodada": rounds,
+                   "pid_filho": child, "filho_encerrado": terminated})
+        save_state("interrompido", sinal=name, cards=verdicts)
+        print(f"\ncepa-prove: interrompido por {name}"
+              + (" com uma rodada em voo" if child else " entre rodadas")
+              + f". Registrei em {ledger.relative_to(repo)}.", file=sys.stderr)
+        if child:
+            print("  o card em voo pode ter ficado com o `🔒 claim` no Jira: ele "
+                  "expira sozinho em 90 minutos.", file=sys.stderr)
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, interrupt)
+    signal.signal(signal.SIGINT, interrupt)
+
+    def launched(child_pid):
+        in_flight["pid_filho"] = child_pid
+
+    print()
+    while True:
+        in_flight.clear()
+        remaining = deadline - datetime.now()
+        if remaining < reserve:
+            end_reason = "prazo"
+            end_detail = (f"sobram {U.human(remaining)}, menos que a reserva mínima "
+                          f"de {U.human(reserve)} — começar uma prova agora seria "
+                          "trabalho jogado fora")
+            break
+        if a.max and len(handled) >= a.max:
+            end_reason = "teto"
+            end_detail = f"{len(handled)} card(s) com veredito, o --max pedido"
+            break
+
+        reset = U.quota_pause(last_reading, fresh_reading, U.item_cost(starts),
+                              datetime.now())
+        if reset:
+            wake_at = reset + timedelta(seconds=U.RESET_MARGIN)
+            if deadline - wake_at < reserve:
+                print(SCREEN.stamp() + f" cota de 5h em {last_reading[0]:.0%}; o reset "
+                      f"({reset.strftime('%H:%M')}) não cabe na janela · começo assim mesmo")
+                log_event({"evento": "cota_apertada", "uso": last_reading[0],
+                           "reset": reset.isoformat()})
+            else:
+                print(SCREEN.stamp() + f" cota de 5h em {last_reading[0]:.0%}, a próxima "
+                      f"prova não cabe · espero o reset e retomo às "
+                      f"{wake_at.strftime('%H:%M')}")
+                log_event({"evento": "pausa_de_cota", "uso": last_reading[0],
+                           "reset": reset.isoformat(), "acorda": wake_at.isoformat()})
+                U.wait_until(wake_at)
+                last_reading, fresh_reading = None, False
+                continue
+
+        rounds += 1
+        cmd = build_command(handled, a.scope, a.no_scope, a.with_permissions)
+        print(SCREEN.stamp() + " " + SCREEN.c("negrito", f"rodada {rounds}")
+              + SCREEN.c("cinza", f"   {U.human(remaining)} restam · "
+                         f"{len(handled)} card(s) em --skip"))
+        before = snapshot_proofs(repo)
+        log_event({"evento": "rodada_start", "rodada": rounds, "skip": list(handled),
+                   "restante_seg": int(remaining.total_seconds())})
+        in_flight.update(rodada=rounds)
+        limit = (remaining + slack).total_seconds()
+        code, killed, spent, output = run_round(repo, cmd, limit, log, on_launch=launched)
+        in_flight.pop("pid_filho", None)
+
+        cards = proofs_written(repo, before)
+        text = final_text(output)
+        readings = U.quota_readings(output)
+        U.round_costs(costs, output)
+        if readings:
+            starts.append(readings[0])
+            last_reading = readings[-1]
+            fresh_reading = readings[-1][0] > readings[0][0]
+
+        sha, commit_error = None, None
+        if cards and not a.no_commit:
+            sha, commit_error = commit_proofs(repo, cards)
+        for key, verdict, rel in cards:
+            verdicts[key] = verdict
+            if key not in handled:
+                handled.append(key)
+            U.step(f"{key}: {verdict} ({rel})")
+        if sha:
+            U.step(f"commit {sha} em `{branch}`")
+        elif commit_error:
+            U.step(f"não commitei os artefatos: {commit_error}")
+
+        log_event({"evento": "rodada_end", "rodada": rounds, "exit_code": code,
+                   "timeout": killed, "segundos": int(spent),
+                   "cards": [{"key": k, "veredito": v, "arquivo": r} for k, v, r in cards],
+                   "commit": sha, "erro_commit": commit_error,
+                   "texto_final": text[:400],
+                   "cota_5h": ([readings[0][0], readings[-1][0]] if readings else None)})
+
+        hit, reset_text, reset_at = U.usage_limit(output)
+        if hit and not cards:
+            if reset_at and deadline - reset_at >= reserve:
+                print(SCREEN.stamp() + f" limite de uso da conta; espero o reset "
+                      f"({reset_text}) e sigo")
+                log_event({"evento": "limite_de_uso", "reset": reset_at.isoformat()})
+                U.wait_until(reset_at + timedelta(seconds=U.RESET_MARGIN))
+                continue
+            end_reason = "limite-de-uso"
+            end_detail = (f"a conta bateu o limite de uso e o reset "
+                          f"({reset_text or 'hora desconhecida'}) não cabe na janela")
+            break
+
+        if not cards and U.network_drop(output):
+            consecutive_drops += 1
+            drops.append(datetime.now().isoformat(timespec="seconds"))
+            log_event({"evento": "sem_rede", "rodada": rounds, "seguidas": consecutive_drops})
+            if consecutive_drops >= U.MAX_CONSECUTIVE_DROPS:
+                end_reason = "sem-rede"
+                end_detail = f"{consecutive_drops} rodadas seguidas sem alcançar a API"
+                break
+            U.step("sem rede; espero ela voltar")
+            if not U.wait_for_network(deadline):
+                end_reason = "sem-rede"
+                end_detail = "a rede não voltou dentro da janela"
+                break
+            continue
+        consecutive_drops = 0
+
+        if not cards:
+            if EMPTY_REVIEW.search(text):
+                end_reason = "review-vazia"
+                end_detail = ("a rodada listou a coluna Review e não achou card "
+                              "fora do --skip" if handled else
+                              "a coluna Review está vazia")
+                break
+            consecutive_failures += 1
+            U.step(f"nenhum artefato de prova nesta rodada "
+                   f"({consecutive_failures}/{a.max_failures} seguidas"
+                   + (", morta pelo prazo" if killed else f", exit {code}") + ")")
+            if consecutive_failures >= a.max_failures:
+                end_reason = "disjuntor"
+                end_detail = (f"{consecutive_failures} rodadas seguidas sem escrever "
+                              "docs/proof/<KEY>.yaml — card reservado por outra sessão, "
+                              "prova sem ambiente ou o prove-drain parando antes de "
+                              "provar. Veja o .log do run")
+                break
+        else:
+            consecutive_failures = 0
+
+    counts = {}
+    for v in verdicts.values():
+        counts[v] = counts.get(v, 0) + 1
+    log_event({"evento": "run_end", "motivo": end_reason, "detalhe": end_detail,
+               "rodadas": rounds, "cards": verdicts, "contagem": counts,
+               "custo_usd": round(sum(costs.values()), 2) if costs else None})
+    held = [k for k, v in verdicts.items() if v == "NEEDS-HUMAN"]
+    save_state("esperando-dono" if held else "encerrado", motivo=end_reason,
+               cards=verdicts)
+
+    print()
+    print(SCREEN.c("negrito", "fim do run") + f" · {end_reason}: {end_detail}")
+    print(f"  rodadas: {rounds} · cards com veredito: {len(verdicts)}"
+          + (f" · custo US$ {sum(costs.values()):.2f}" if costs else ""))
+    for v in ("PROVEN", "UNPROVEN", "NEEDS-HUMAN", "?"):
+        keys = [k for k, x in verdicts.items() if x == v]
+        if keys:
+            print(f"  {v:<12} {len(keys)}  {', '.join(keys)}")
+    if held:
+        print(f"  pra você: {len(held)} card(s) NEEDS-HUMAN ficaram em Review; "
+              "/board-flow:decide agrupa as perguntas")
+    print(f"  registro: {ledger.relative_to(repo)}")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        print("\ncepa-prove: interrompido.", file=sys.stderr)
+        sys.exit(130)
