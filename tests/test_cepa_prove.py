@@ -391,6 +391,23 @@ def test_cepa_dispatches_to_sibling_scripts():
           (p.stdout + p.stderr)[-500:])
     check("...com a primeira linha de cada docstring",
           "Review" in p.stdout and "TIME WINDOW" in p.stdout, p.stdout[-800:])
+    # `help` lists only EXECUTABLE siblings: a copy of the launcher in a temp
+    # dir (SCRIPT_DIR follows the script's location) next to one executable and
+    # one non-executable `cepa-*`.
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp) / "bin"
+        d.mkdir()
+        launcher = d / "cepa"
+        launcher.write_bytes(CEPA.read_bytes())
+        launcher.chmod(0o755)
+        (d / "cepa-bar").write_text('#!/bin/sh\n# cepa-bar — listed sibling\n')
+        (d / "cepa-bar").chmod(0o755)
+        (d / "cepa-foo").write_text('#!/bin/sh\n# cepa-foo — NOT executable\n')
+        (d / "cepa-foo").chmod(0o644)
+        p = subprocess.run([str(launcher), "help"], capture_output=True, text=True, timeout=60)
+        check("`cepa help` lista só os cepa-* executáveis",
+              p.returncode == 0 and "bar" in p.stdout and "foo" not in p.stdout,
+              (p.stdout + p.stderr)[-300:])
     # Real arguments after the subcommand reach the script WITHOUT the
     # subcommand word (the `shift`): with it, argparse would choke on "prove".
     with tempfile.TemporaryDirectory() as tmp:
