@@ -460,10 +460,12 @@ def test_cepa_help_flags_and_typos():
           and "--mode" in ref and "--prompt" in ref, ref[-600:])
     check("...e os aliases com rótulo limpo", "(alias antigo de intent)" in ref
           and "(alias antigo de modes)" in ref and "Deprecated" not in ref, ref)
-    for typo, near in (("untl", "until"), ("prov", "prove"), ("docto", "doctor")):
+    # `autono` is 3 edits from `autonomy`: only the prefix fast path finds it.
+    for typo, near in (("untl", "until"), ("prov", "prove"), ("docto", "doctor"), ("autono", "autonomy")):
         p = subprocess.run([str(CEPA), typo], capture_output=True, text=True, timeout=60)
         check(f"`cepa {typo}` recusa e sugere `cepa {near}`",
-              p.returncode == 2 and f"cepa {near}" in p.stderr and "cepa help" in p.stderr,
+              p.returncode == 2 and "Você quis dizer" in p.stderr
+              and f"cepa {near}" in p.stderr and "cepa help" in p.stderr,
               (p.stdout + p.stderr)[-300:])
     # Short words and words far from any sibling are prompts, not typos: they
     # reach claude (cwd outside a repo, fake claude records argv).
@@ -474,12 +476,14 @@ def test_cepa_help_flags_and_typos():
         fake.chmod(0o755)
         env = dict(os.environ, CLAUDE_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT="off")
         env.pop("CEPA_PROMPT", None)
-        for word in ("go", "xyzzyqq"):
-            p = subprocess.run([str(CEPA), word], capture_output=True, text=True, env=env, cwd=tmp, timeout=60)
-            check(f"`cepa {word}` abre sessão, não é tratado como erro de digitação",
+        # `untl foo` is two words: a prompt, never a typo, even with `untl` in it.
+        for args in (["go"], ["xyzzyqq"], ["untl", "foo"]):
+            p = subprocess.run([str(CEPA), *args], capture_output=True, text=True, env=env, cwd=tmp, timeout=60)
+            check(f"`cepa {' '.join(args)}` abre sessão, não é tratado como erro de digitação",
                   p.returncode == 0, (p.stdout + p.stderr)[-300:])
-        got = [json.loads(l)[-1] for l in (Path(tmp) / "argv").read_text().splitlines()]
-        check("...e o claude recebeu a palavra", got == ["go", "xyzzyqq"], str(got))
+        got = [json.loads(l)[-2:] for l in (Path(tmp) / "argv").read_text().splitlines()]
+        check("...e o claude recebeu as palavras",
+              [g[-1] for g in got[:2]] == ["go", "xyzzyqq"] and got[2] == ["untl", "foo"], str(got))
 
 
 def test_mode_menu_points_to_cepa_help():

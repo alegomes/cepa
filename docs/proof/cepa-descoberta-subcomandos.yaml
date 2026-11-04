@@ -1,0 +1,55 @@
+schema_version: 2
+card: cepa-descoberta-subcomandos
+verdict: unproven
+reviewed_at: 2026-11-04T12:00:00-03:00
+base_commit: 195f0df
+head_commit: 2926146
+issue_type: Feature
+repo_kind: harness            # sh launcher + suite python; sem Quarkus/PIT
+scope:
+  changed_classes:
+    - class: "common/bin/cepa (show_help, nearest_subcommand, braço --help|-h, recusa de typo, rodapé do menu de modo)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null     # cepa real como subprocesso; só o `claude` (borda) é falso
+    - class: "tests/test_cepa_prove.py (17 -> 19 casos)"
+      module: test-harness
+      external_observable: false
+      reason: "arquivo de teste; sem superfície própria"
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "harness sh/python: sem PIT"
+    perturbation:
+      status: survived
+      results:
+        - "baseline em worktree descartável 2926146: python3 tests/test_cepa_prove.py -> '19 teste(s) ok'"
+        - "RED  (a) braços --help|-h removidos -> 2 falhas; só -h -> 1 falha; só --help -> 1 falha"
+        - "RED  (b) seção 'flags do launcher' esvaziada -> 1 falha; só a linha --slice removida -> 1 falha"
+        - "RED  (c) rótulo '(alias antigo de X)' trocado por '(alias antigo) ...' -> 1 falha"
+        - "RED  (d) recusa com exit 0 -> 3 falhas; recusa desligada (if false) -> 3 falhas"
+        - "RED  (e) guarda ${#1} -ge 4 baixada para -ge 1 -> 2 falhas (`cepa go`); subida para -ge 9 -> 3 falhas"
+        - "RED  (f) limiar de distância _bestd=3 -> 1 -> 1 falha (`cepa untl`)"
+        - "RED  (g) printf do rodapé do menu de modo removido -> 1 falha"
+        - "SOBREVIVEU (d) texto 'Você quis dizer' trocado por 'Talvez' -> 19 ok; o teste só confere 'cepa <nome>' e 'cepa help' no stderr"
+        - "SOBREVIVEU (e) condição `[ $# -eq 1 ]` removida (fica só ${#1} -ge 4) -> 19 ok; nenhum teste passa palavra de typo MAIS argumentos (ex.: `cepa untl foo`), que deveria abrir sessão"
+        - "SOBREVIVEU (f) atalho de prefixo em nearest_subcommand removido -> 19 ok; os 3 typos testados (untl, prov, docto) ficam a <=2 edições sem o atalho; falta caso que só o prefixo resolve (ex.: `cepa autono`, distância 3 de autonomy)"
+  l2_coverage:
+    status: gap
+    uncovered_lines:
+      - "common/bin/cepa: atalho de prefixo (case \"$_name\" in \"$1\"*) em nearest_subcommand"
+      - "common/bin/cepa: condição [ $# -eq 1 ] da recusa de typo"
+    run: "sem JaCoCo no harness; lacunas determinadas pelas perturbações que sobreviveram (3 de 15)"
+  l4_adversarial_input:
+    status: skipped
+    reason: ""
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature"
+routing_reason: "12 de 15 perturbações vermelhas; 3 sobreviveram em comportamento externamente observável (atalho de prefixo, exigência de argumento único, frase da sugestão). Sem teste que as quebre, 'proven' é indisponível. Devolver ao dev para 3 asserções."
