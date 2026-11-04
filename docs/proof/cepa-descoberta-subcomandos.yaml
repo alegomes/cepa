@@ -1,9 +1,9 @@
 schema_version: 2
 card: cepa-descoberta-subcomandos
-verdict: unproven
-reviewed_at: 2026-11-04T13:00:00-03:00
+verdict: proven
+reviewed_at: 2026-11-04T14:00:00-03:00
 base_commit: 195f0df
-head_commit: 6a1506e
+head_commit: d04bdb2
 issue_type: Feature
 repo_kind: harness            # sh launcher + suite python; sem Quarkus/PIT
 scope:
@@ -18,7 +18,7 @@ scope:
       reason: "arquivo de teste; sem superfície própria"
       substituted_by_double: null
   base_commit_resolved: true
-  note: "Rodada 2: head avançou de 2926146 para 6a1506e; common/bin/cepa inalterado, só tests/test_cepa_prove.py mudou."
+  note: "Rodadas 2 e 3: common/bin/cepa inalterado desde 2926146; só tests/test_cepa_prove.py mudou (6a1506e, d04bdb2)."
 levels:
   l3_load_bearing:
     technique: perturbation
@@ -27,30 +27,32 @@ levels:
       results:
         - "harness sh/python: sem PIT"
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "baseline em worktree descartável 2926146: python3 tests/test_cepa_prove.py -> '19 teste(s) ok'"
+        - "baseline em worktree descartável d04bdb2: python3 tests/test_cepa_prove.py -> '✓ 19 teste(s) ok'"
         - "RED  (a) braços --help|-h removidos -> 2 falhas; só -h -> 1 falha; só --help -> 1 falha"
         - "RED  (b) seção 'flags do launcher' esvaziada -> 1 falha; só a linha --slice removida -> 1 falha"
         - "RED  (c) rótulo '(alias antigo de X)' trocado por '(alias antigo) ...' -> 1 falha"
         - "RED  (d) recusa com exit 0 -> 3 falhas; recusa desligada (if false) -> 3 falhas"
+        - "RED  (d) 'Você quis dizer' trocado por 'Talvez' -> 4 falhas (rodada 2, 6a1506e)"
         - "RED  (e) guarda ${#1} -ge 4 baixada para -ge 1 -> 2 falhas (`cepa go`); subida para -ge 9 -> 3 falhas"
+        - "RED  (e) `[ $# -eq 1 ]` removido -> 2 falhas (`cepa untl foo`) (rodada 2, 6a1506e)"
         - "RED  (f) limiar de distância _bestd=3 -> 1 -> 1 falha (`cepa untl`)"
+        - "RED  (f) atalho de prefixo `case \"$_name\" in \"$1\"*)` removido -> 1 falha: `cepa feed` recusa e sugere `cepa feedback` (rodada 3, d04bdb2) [última sobrevivente, fechada]"
         - "RED  (g) printf do rodapé do menu de modo removido -> 1 falha"
-        - "RODADA 2 (6a1506e) baseline: python3 tests/test_cepa_prove.py -> '19 teste(s) ok'"
-        - "RODADA 2 RED  (d) 'Você quis dizer' trocado por 'Talvez' -> 4 falhas (as 4 recusas); fechada"
-        - "RODADA 2 RED  (e) `[ $# -eq 1 ]` removido -> 2 falhas (`cepa untl foo` abre sessão); fechada"
-        - "RODADA 2 SOBREVIVEU (f) `case \"$_name\" in \"$1\"*)` removido -> 19 ok. O caso novo `cepa autono` não isola o atalho: autono -> autonomy é distância 2 (inserir m,y), então o Levenshtein sozinho acha. Sondagem manual em worktree descartável: com o atalho `cepa feed` sugere `cepa feedback`; sem o atalho `cepa feed` (distância 4) abre sessão claude em vez de sugerir. Comportamento muda, logo não é equivalente; falta teste."
+        - "15 de 15 perturbações vermelhas, nenhuma sobrevivente"
   l2_coverage:
-    status: gap
-    uncovered_lines:
-      - "common/bin/cepa: atalho de prefixo (case \"$_name\" in \"$1\"*) em nearest_subcommand) para prefixos a 3 ou mais edições do nome"
-    run: "sem JaCoCo no harness; lacuna determinada pela perturbação (f) que sobreviveu (1 de 3 na rodada 2)"
+    status: pass
+    uncovered_lines: []
+    run: "sem JaCoCo no harness; alcance estabelecido pelas 15 perturbações vermelhas: cada comportamento alterado de common/bin/cepa tem teste que o quebra"
   l4_adversarial_input:
-    status: skipped
+    status: clean
     reason: ""
-    findings: []
+    findings:
+      - "cepa com 'FEED', 'feed;touch /tmp/pwn_l4', '$(touch /tmp/pwn_l4)', '`id`', 'fe*', '[a', '-', 'cepa-until', '../until', 'ünti', 'a-1234', palavra de 70 letras: nenhum tratado como typo (abrem sessão como prompt); /tmp/pwn_l4 não foi criado (sem injeção); nenhuma mensagem de erro do sh"
+      - "'untl-' e 'until-d' recusam com sugestão (until, until-digest); 'untl foo', 'help x', '-h x' se comportam como especificado (sessão, ajuda, ajuda)"
+    run: "sh p.sh em worktree descartável d04bdb2 (cwd /tmp, claude=/usr/bin/true) -> 0 falhas de sh, 0 injeção"
   bugfix_regression_red_at_base:
     status: n/a
     run: "issue_type Feature"
-routing_reason: "Rodada 2: 2 das 3 sobreviventes fecharam (frase da sugestão, exigência de argumento único). O atalho de prefixo de nearest_subcommand ainda sobrevive: `cepa autono` está a 2 edições de autonomy e passa sem o atalho. Falta caso de prefixo a 3 ou mais edições, como `cepa feed` exigindo `cepa feedback`. UNPROVEN; L4 não rodado porque o veredito não virou PROVEN."
+routing_reason: "Contra d04bdb2 a última sobrevivente (atalho de prefixo, agora exercitado por `cepa feed`) fica vermelha. Com as demais, as 15 perturbações de common/bin/cepa viram vermelho; L4 limpo. Nada externo ficou sem prova."
