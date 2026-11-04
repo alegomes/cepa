@@ -1,6 +1,6 @@
 ---
 description: Bulk-prove the Review column. Iterates cards in `defaults.status_map.in_review` (priority order) and runs the equivalent of /board-flow:prove on each — change-driven proof, then routes the verdict. Unlike /board-flow:drain, it does NOT stop on a failed card: UNPROVEN bounces back and the drain continues, because clearing the queue is the whole point. PROVEN auto-advances (if a done status is configured), NEEDS-HUMAN stays for you. Use to triage a backlogged Review column.
-argument-hint: [--max N] [--scope "<jql>"] [--no-scope]
+argument-hint: [--max N] [--scope "<jql>"] [--no-scope] [--skip K1,K2]
 interaction: routine
 ---
 
@@ -22,6 +22,7 @@ PIT, in a throwaway worktree). Use `--max` to cap per run. Default `--max 5`.
 - `$ARGUMENTS` — optionally `--max N`. Default max = 5.
 - `--scope "<jql>"` — a raw JQL fragment that narrows the drain to a slice of the Review column for this run only, overriding any configured scope.
 - `--no-scope` — ignore configured scope entirely; sweep the whole Review column.
+- `--skip K1,K2,...` — card keys this run must NOT pick, on top of whatever scope applies. It only subtracts cards; it never replaces the scope. Passed by `cepa-prove` (the window supervisor, `common/bin/cepa-prove`) with the keys its earlier rounds already handled, so a card that stays in Review (NEEDS-HUMAN, or PROVEN with no done status configured) is not proved again by the next round.
 
 **Scope** lets you triage a slice of Review (e.g. one team's cards, or `labels = needs-review`) instead of the entire column. By default the drain applies the effective scope resolved from `board-flow.yaml` (`defaults.scope` / `scope_overrides.prove_drain` / the active topology's `scope`); the two flags above override that for one run. You don't resolve the precedence yourself — pass the command name and any flag to `atlassian-expert`, which resolves and reports the effective fragment.
 
@@ -38,6 +39,8 @@ deliberate difference from `/board-flow:drain`).
 
 - Max cards: parse `--max N`. Default 5.
 - Scope flags: detect `--no-scope` and `--scope "<jql>"` (mutually exclusive; if both appear, abort with "pass either --scope or --no-scope, not both"). Build the **scope directive**: `--no-scope` → `Scope: none`; `--scope "<jql>"` → `Scope: <jql>`; neither → omit the line (atlassian-expert resolves the effective scope from config).
+- Skip list: parse `--skip K1,K2,...` into the **skip directive** `Skip: K1, K2` (omit the line when the flag is absent). It travels next to the scope directive in every listing delegation; `atlassian-expert` turns it into `AND key NOT IN (...)` after the effective scope.
+- **Unattended round (`CEPA_UNTIL_RUN` set in the environment).** The process is a `claude -p` fired by `cepa-prove`, with nobody to answer: step 3 does not ask. Take the answer as yes + (a) for the whole batch, and say so in one line of the report ("confirmação assumida: janela desatendida").
 - **The run's claim id**: generate one, now, as described in
   **Card reservation**. It identifies THIS run on every card
   it touches.
@@ -98,7 +101,9 @@ run that announced itself as the ONLY stop charges two. That's how it was until
 22/08/2026. A dry "yes" still counts: it's (a), the default.
 
 If the run came from `/common:session`, these answers were already collected at
-the start — don't ask again.
+the start — don't ask again. In an unattended round (`CEPA_UNTIL_RUN` set, see
+step 1) there is nobody to ask: yes + (a), without showing the screen as a
+question.
 
 ### 4. Iterate
 
