@@ -4804,6 +4804,7 @@ O dono quis finalizar sem a sessão encadeada que o ciclo 1 do Epic cepa-em-espi
 > Vamos finalizar, mas não quero a sessão encadeada.
 >
 > `fb-20261025-2`, 2026-10-25 · wego-digitacao-backend · main · descoberta · /common:wrap-up
+
 ---
 
 ## `/common:spec` também pede métrica de resultado?
