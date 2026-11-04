@@ -1,5 +1,5 @@
 ---
-description: Interviews the owner "grill me" style until a package of work becomes an Epic demonstrable in cycles, and writes `docs/epics/<name>.md`. One question per turn, in prose, with no list of options; the agent proposes the answer, the owner corrects it, and each answer is challenged once ("quem vê isso e onde?" — who sees this and where?; "o que quebra se faltar?" — what breaks if it is missing?) before being accepted and written down in the same turn. Only declares `Status: ready` when every cycle of the ladder has a script with an observable effect on screen and in the backend, there is at least one invariant and the "Decided without asking" section exists; the `spec-readiness-gate` blocks the rest. Writes no code. Resumable: running it again on the same name continues where it stopped.
+description: Interviews the owner "grill me" style until a package of work becomes an Epic demonstrable in cycles, and writes `docs/epics/<name>.md`. One question per turn, in prose, with no list of options; the agent proposes the answer, the owner corrects it, and each answer is challenged once ("quem vê isso e onde?" — who sees this and where?; "o que quebra se faltar?" — what breaks if it is missing?) before being accepted and written down in the same turn. Only declares `Status: ready` when every cycle of the ladder has a script with an observable effect on screen and in the backend, there is at least one invariant, the "Decided without asking" section exists, and the Epic says who it is for, what stays out and which outcome metric shows it helped; `Status: closed` also requires the Impact section, with the metric measured after the last cycle. The `spec-readiness-gate` blocks the rest. Writes no code. Resumable: running it again on the same name continues where it stopped.
 argument-hint: <name> [the intent in prose]
 interaction: conversational
 ---
@@ -75,7 +75,7 @@ question and none of that can be anticipated.
 If `docs/epics/<name>.md` exists, read it whole and resume from the first gap
 (step 3 gives the order): do not start over, and do not ask again a question
 that already has `- [x]`. If it does not exist, create it with the skeleton of
-step 6 and `**Status:** draft` before the first question. The gate
+step 7 and `**Status:** draft` before the first question. The gate
 never bothers you while the status is `draft`.
 
 ### 2. Read before asking
@@ -97,15 +97,27 @@ The order of the gaps:
    If the intent came in the argument, record it and ask only what the
    operator (or whoever suffers) does today; what hurts along that path is
    the question of the following turn.
-2. **Invariants** — what must never regress while the cycles move.
-3. **The ladder** — how many cycles and the name of each; then, cycle by cycle:
+2. **Who it is for** — the person who has the problem, named by role
+   ("operador de faturamento do hospital"), never "users". The challenge is
+   "quem vê isso e onde?".
+3. **Outcome metric** — the number that would show the Epic helped, not
+   only that it works: its value today (**Baseline**), the value that counts
+   as success (**Target**) and where it is read (**Source**: a command, a
+   query, a dashboard). Propose a number the repo already measures before
+   inventing a new one (`/common:metrics` in the Cepa itself). A script proves
+   the thing works; only this number proves it was worth it.
+4. **Out of scope** — what this Epic explicitly does not deliver, one item
+   per line, with the why in half a line. It is the list nobody writes and
+   the one that stops a cycle from growing.
+5. **Invariants** — what must never regress while the cycles move.
+6. **The ladder** — how many cycles and the name of each; then, cycle by cycle:
    **Script** (what the owner sees working at the end of the cycle),
    **Effect on screen** (where, on screen, someone sees that it
    happened), **Effect in backend** (the record, endpoint or
    event that proves it really happened, not only on screen), **What it
    crosses** (the pieces that change, one sentence per
    piece) and **When**.
-4. **Open questions** that the conversation itself raised.
+7. **Open questions** that the conversation itself raised.
 
 Each turn has exactly **one question**, written in **prose**, ending with `?`,
 and it is the only `?` of the turn: "this, and also that?" is two.
@@ -179,6 +191,8 @@ The Epic becomes `**Status:** ready` when, and only when:
 - `## Invariants` has at least one item;
 - the `## Decided without asking` section exists (empty of decisions is
   acceptable; missing, no);
+- `## Who it is for` has text, `## Out of scope` has at least one item and
+  `## Outcome metric` fills **Baseline:**, **Target:** and **Source:**;
 - no `- [ ]` is left in "Perguntas em aberto".
 
 The `spec-readiness-gate` hook applies this sieve to every file in
@@ -198,9 +212,24 @@ On closing, tell the owner the file path and the next step: `/common:queue
 <name>-c1 --from-epic docs/epics/<name>.md --cycle 1` derives the queue of the
 first cycle.
 
-### 6. The file format
+### 6. Close the Epic by its impact
 
-The document is written in pt-BR. Keep the `## Value ladder`, `## Invariants` and `## Decided without asking`
+`ready` says the Epic can be built; `**Status:** closed` says it is over, and
+over means someone went back and measured. When the owner runs
+`/common:epic <name>` again on a `ready` Epic whose cycles are all closed
+(`cepa-plan epics` says so), the only gap left is `## Impact`: ask for the
+measured value, propose reading it from the **Source** the metric declared,
+and fill **Measured value:** (the number now, next to the Baseline and the
+Target) and **Measured on:** (the date and how it was read). Only then write
+`closed`. An Epic whose metric did not move still closes: the Impact says so
+in one sentence, and that sentence is the reason this section exists.
+
+The gate refuses `closed` without the two Impact fields.
+
+### 7. The file format
+
+The document is written in pt-BR. Keep the `## Value ladder`, `## Invariants`, `## Decided without asking`,
+`## Who it is for`, `## Outcome metric`, `## Out of scope` and `## Impact`
 headings, the `**Status:**` label and the ladder column names verbatim:
 `spec-readiness-gate` and `cepa-plan --from-epic` parse them (they also still
 read the old pt-BR names `pronta`, `rascunho`, `Escada de valor`,
@@ -216,6 +245,18 @@ Only the placeholders below are in English.
 ## Intenção
 
 <what the owner wants and what hurts today, in their voice>
+
+## Who it is for
+
+<the person who has the problem, by role, never "users">
+
+## Outcome metric
+
+**Baseline:** <the value today> · **Target:** <the value that counts as success> · **Source:** <where it is read: command, query, dashboard>
+
+## Out of scope
+
+- <what this Epic does not deliver> — <why, in half a line>.
 
 ## Invariants (never regress)
 
@@ -239,9 +280,17 @@ Only the placeholders below are in English.
 ## Riscos
 
 - <disagreement left over from a challenge, or a risk the conversation raised>
+
+## Impact
+
+**Measured value:** <the number after the last cycle, next to Baseline and Target> · **Measured on:** <date and how it was read>
 ```
 
-`Status` accepts `draft | ready`. The "What it crosses" column is written
+`Status` accepts `draft | ready | closed`. `## Impact` is filled only in step 6
+and its placeholders are fine until then; the other new headings (`Who it is for`, `Outcome
+metric`, `Out of scope`) and their field labels are parsed by the gate, so keep
+them verbatim too. An Epic marked with the old `pronta` keeps the earlier
+sieve and is not asked for them. The "What it crosses" column is written
 in short sentences ending in a period, one per piece, because `/common:queue`'s
 `--from-epic` turns each sentence into an item of that cycle's queue.
 
@@ -253,7 +302,7 @@ in short sentences ending in a period, one per piece, because `/common:queue`'s
 - **Each answer is challenged exactly once** before being accepted.
 - **The accepted answer is written down in the same turn**, before the next
   question.
-- **Never declares `ready` what the sieve refuses.** If the gate blocks, go
+- **Never declares `ready` or `closed` what the sieve refuses.** If the gate blocks, go
   back to asking.
 - **Only writes `docs/epics/<name>.md`.** Neither code nor queue: the queue
   belongs to `/common:queue --from-epic`.

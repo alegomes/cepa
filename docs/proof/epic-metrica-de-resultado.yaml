@@ -1,0 +1,39 @@
+schema_version: 2
+card: epic-metrica-de-resultado
+verdict: proven
+reviewed_at: 2026-11-03T10:00:00-03:00
+base_commit: a50e629
+head_commit: d17cabe
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/hooks/spec-readiness-gate.py (outcome_problems, field_value, has_text, EPIC_OUTCOME/EPIC_CLOSED, block_epic status)", module: harness, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-plan (items_from_epic aceita Status: closed)", module: harness, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python (hooks + scripts); nao ha PIT. Mecanismo universal de perturbacao usado abaixo."
+    perturbation:
+      status: pass
+      results:
+        - "worktree descartavel /tmp/proof-epic-metrica (git worktree add --detach d17cabe). Base verde: `python3 tests/test_epic_readiness_gate.py` -> OK; `python3 tests/test_cepa_plan_from_epic.py` -> tudo ok."
+        - "As 3 sobreviventes da rodada anterior (e6bbfa5) agora morrem: (1) `problems.append(\"Who it is for: a seção está vazia\")` -> `pass` -> RED, 1 FAILURE 'Who it is for só com placeholder bloqueia'; (2) IMPACT_FIELDS sem Measured value -> RED, 1 FAILURE 'closed sem Measured value bloqueia'; (3) cepa-plan sem \"closed\" em items_from_epic -> RED (plan rc=1), 1 FAILURE 'Status: closed não vira aviso de Epic não pronto'."
+        - "Perturbacoes adicionais, todas RED: Who ausente (2 FAILURE); has_text sempre True (1); has_text ignora placeholder (1); Out of scope ausente (1); Out of scope vazia (1); Outcome metric ausente (1); sem Baseline (1); sem Target (1); sem Source (1); Impact ausente (2); sem Measured on (1); closed nao exige Impact (`claimed == EPIC_CLOSED` -> False, 4); EPIC_CLOSED errado (4); EPIC_OUTCOME sem ready (8); EPIC_OUTCOME sem closed (4); EPIC_OUTCOME incluindo pronta (7, quebra a compatibilidade do pronta); EPIC_READY sem closed (5); block_epic com status fixo (1, 'diz Status: closed na mensagem'); `if claimed in EPIC_OUTCOME` -> False (12); claimed fixo 'pronta' (12); field_value aceitando vazio (5); field_value sem separar por `·` (2); field_value devolvendo sempre valor (5); cepa-plan sem 'ready' (plan rc=1, 2 FAILURE: --cycle e --ciclo)."
+        - "Total: 31 perturbacoes aplicadas (27 + 4 refeitas), 0 sobreviventes. 4 perturbacoes por regex falharam ao aplicar (NOOP) na primeira passada e foram refeitas por rebind (IMPACT_FIELDS[:1], OUTCOME_FIELDS[1:], [:2], tira Target): todas RED, 1 FAILURE cada."
+        - "Cada perturbacao restaurada com git checkout; git status limpo (so scripts .p2.sh/.perturb.sh nao rastreados, no worktree descartavel, removido ao fim). tests/test_cepa_until_dead_supervisor.py (flaky conhecido, nao relacionado) nao entra na prova."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; alcance determinado pela perturbacao: toda ramificacao alterada (who, out of scope, metric, tres campos, Impact, dois campos, EPIC_OUTCOME/EPIC_CLOSED/EPIC_READY, status na mensagem, field_value, has_text, cepa-plan closed/ready) derruba um teste quando quebrada."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o hook le o conteudo de um .md de Epic escrito pelo proprio harness/dono e falha aberto fora de docs/epics; nao ha modulo de entrada externa (api-rest) no diff nem parser de dado de terceiros novo."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: ""
+routing_reason: "As 3 perturbacoes que sobreviviam em e6bbfa5 agora deixam os testes vermelhos, e as outras 28 sobre o comportamento alterado (outcome_problems, field_value, has_text, EPIC_OUTCOME/EPIC_CLOSED/EPIC_READY, status em block_epic, items_from_epic) tambem; base verde. Nenhum nivel assumed/skipped/gap: PROVEN."
