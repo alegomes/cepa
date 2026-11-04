@@ -1,0 +1,58 @@
+schema_version: 2
+card: cepa-descoberta-subcomandos
+verdict: proven
+reviewed_at: 2026-11-04T14:00:00-03:00
+base_commit: 195f0df
+head_commit: d04bdb2
+issue_type: Feature
+repo_kind: harness            # sh launcher + suite python; sem Quarkus/PIT
+scope:
+  changed_classes:
+    - class: "common/bin/cepa (show_help, nearest_subcommand, braço --help|-h, recusa de typo, rodapé do menu de modo)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null     # cepa real como subprocesso; só o `claude` (borda) é falso
+    - class: "tests/test_cepa_prove.py (17 -> 19 casos)"
+      module: test-harness
+      external_observable: false
+      reason: "arquivo de teste; sem superfície própria"
+      substituted_by_double: null
+  base_commit_resolved: true
+  note: "Rodadas 2 e 3: common/bin/cepa inalterado desde 2926146; só tests/test_cepa_prove.py mudou (6a1506e, d04bdb2)."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "harness sh/python: sem PIT"
+    perturbation:
+      status: pass
+      results:
+        - "baseline em worktree descartável d04bdb2: python3 tests/test_cepa_prove.py -> '✓ 19 teste(s) ok'"
+        - "RED  (a) braços --help|-h removidos -> 2 falhas; só -h -> 1 falha; só --help -> 1 falha"
+        - "RED  (b) seção 'flags do launcher' esvaziada -> 1 falha; só a linha --slice removida -> 1 falha"
+        - "RED  (c) rótulo '(alias antigo de X)' trocado por '(alias antigo) ...' -> 1 falha"
+        - "RED  (d) recusa com exit 0 -> 3 falhas; recusa desligada (if false) -> 3 falhas"
+        - "RED  (d) 'Você quis dizer' trocado por 'Talvez' -> 4 falhas (rodada 2, 6a1506e)"
+        - "RED  (e) guarda ${#1} -ge 4 baixada para -ge 1 -> 2 falhas (`cepa go`); subida para -ge 9 -> 3 falhas"
+        - "RED  (e) `[ $# -eq 1 ]` removido -> 2 falhas (`cepa untl foo`) (rodada 2, 6a1506e)"
+        - "RED  (f) limiar de distância _bestd=3 -> 1 -> 1 falha (`cepa untl`)"
+        - "RED  (f) atalho de prefixo `case \"$_name\" in \"$1\"*)` removido -> 1 falha: `cepa feed` recusa e sugere `cepa feedback` (rodada 3, d04bdb2) [última sobrevivente, fechada]"
+        - "RED  (g) printf do rodapé do menu de modo removido -> 1 falha"
+        - "15 de 15 perturbações vermelhas, nenhuma sobrevivente"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem JaCoCo no harness; alcance estabelecido pelas 15 perturbações vermelhas: cada comportamento alterado de common/bin/cepa tem teste que o quebra"
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings:
+      - "cepa com 'FEED', 'feed;touch /tmp/pwn_l4', '$(touch /tmp/pwn_l4)', '`id`', 'fe*', '[a', '-', 'cepa-until', '../until', 'ünti', 'a-1234', palavra de 70 letras: nenhum tratado como typo (abrem sessão como prompt); /tmp/pwn_l4 não foi criado (sem injeção); nenhuma mensagem de erro do sh"
+      - "'untl-' e 'until-d' recusam com sugestão (until, until-digest); 'untl foo', 'help x', '-h x' se comportam como especificado (sessão, ajuda, ajuda)"
+    run: "sh p.sh em worktree descartável d04bdb2 (cwd /tmp, claude=/usr/bin/true) -> 0 falhas de sh, 0 injeção"
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature"
+routing_reason: "Contra d04bdb2 a última sobrevivente (atalho de prefixo, agora exercitado por `cepa feed`) fica vermelha. Com as demais, as 15 perturbações de common/bin/cepa viram vermelho; L4 limpo. Nada externo ficou sem prova."

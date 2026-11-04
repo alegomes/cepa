@@ -15,6 +15,7 @@
 #                        #   completion which Warp's own engine ignores
 #   cepa --resume        # any other args pass straight through to claude
 #
+#   cepa help | --help   # subcommands (cepa-*) and launcher flags, then exits
 #   cepa --mode help     # the purpose of each mode, then exits (opens no session);
 #                        #   in the interactive menu, `?` does the same and shows the menu again
 #
@@ -93,32 +94,89 @@ INTENT_BIN="$SCRIPT_DIR/cepa-intent"
 
 # `cepa <subcommand>`: the single entry to the `cepa-*` scripts next to this
 # file (2026-11-03). `cepa until <queue> --for 3h` runs `cepa-until ...`,
-# `cepa help` lists them. Only an EXACT match of a sibling script dispatches:
-# a flag, a Jira key or a quoted prompt is a session launch, as before. The
-# `cepa-*` names keep working — this is a door, not a rename.
+# `cepa help` (also `--help`, `-h`) lists them plus the launcher's own flags.
+# Only an EXACT match of a sibling script dispatches: a flag, a Jira key or a
+# quoted prompt is a session launch, as before. The `cepa-*` names keep
+# working — this is a door, not a rename.
+#
+# A lone word that is NOT a sibling but is within two typos of one (`cepa untl`,
+# `cepa prov`) is almost never a prompt: it is refused with the nearest name,
+# instead of silently opening a session whose first message is "untl".
+show_help() {
+  echo "cepa <subcomando> [args]   — roda common/bin/cepa-<subcomando>"
+  echo "cepa [flags do launcher]   — abre uma sessão claude (como antes)"
+  echo ""
+  echo "subcomandos:"
+  for _s in "$SCRIPT_DIR"/cepa-*; do
+    [ -x "$_s" ] || continue
+    _name="${_s##*/cepa-}"
+    # Line 2 of a python script is `"""cepa-x — summary`; shell scripts
+    # carry `# cepa-x — summary`. Anything else prints just the name.
+    _desc=$(sed -n 2p "$_s" | sed -e 's/^"""//' -e 's/^# *//' -e "s/^cepa-$_name *[—-]* *//")
+    case "$_desc" in
+      *"Deprecated alias: renamed to cepa-"*)
+        _target=$(printf '%s' "$_desc" | sed -e 's/.*renamed to cepa-//' -e 's/[^a-z0-9-].*//')
+        _desc="(alias antigo de $_target)" ;;
+      *"Deprecated alias"*|*"alias"*) _desc="(alias antigo) $_desc" ;;
+    esac
+    printf '  %-14s %s\n' "$_name" "$_desc"
+  done
+  echo ""
+  echo "flags do launcher:"
+  echo "  -s, --slice <nome>         força/retoma a worktree session/<nome>; sem nome, escolhe uma"
+  echo "  -m, --mode <modo>          modo da sessão (--mode help lista o propósito de cada um)"
+  echo "      --budget <escopo>      orçamento fechado, exigido pelo modo refactor"
+  echo "      --purpose, --by-when, --plan   intenção da sessão (grava .claude/session-intent)"
+  echo "      --prompt <nome|path>   acrescenta um system prompt ao padrão"
+  echo "      --prompt-substitui <nome|path>   SUBSTITUI o system prompt inteiro"
+  echo "  qualquer outro argumento vai direto ao claude (ex.: cepa --resume, cepa WEGO-123)"
+}
+
+# Nearest sibling script name within 2 edits (prefix counts as 0). Prints the
+# name, or nothing. awk Levenshtein, so it runs where only sh and awk exist.
+nearest_subcommand() {
+  _best=""; _bestd=3
+  for _s in "$SCRIPT_DIR"/cepa-*; do
+    [ -x "$_s" ] || continue
+    _name="${_s##*/cepa-}"
+    case "$_name" in "$1"*) printf '%s\n' "$_name"; return 0 ;; esac
+    _d=$(awk -v a="$1" -v b="$_name" 'BEGIN{
+      la=length(a); lb=length(b);
+      for(i=0;i<=la;i++) d[i,0]=i; for(j=0;j<=lb;j++) d[0,j]=j;
+      for(i=1;i<=la;i++) for(j=1;j<=lb;j++){
+        c=(substr(a,i,1)==substr(b,j,1))?0:1;
+        m=d[i-1,j]+1; if(d[i,j-1]+1<m)m=d[i,j-1]+1; if(d[i-1,j-1]+c<m)m=d[i-1,j-1]+c;
+        d[i,j]=m }
+      print d[la,lb] }')
+    if [ "$_d" -lt "$_bestd" ]; then _bestd=$_d; _best=$_name; fi
+  done
+  [ -n "$_best" ] && printf '%s\n' "$_best"
+  return 0
+}
+
 if [ $# -ge 1 ]; then
   case "$1" in
-    help|ajuda|subcommands|subcomandos)
-      echo "cepa <subcomando> [args]   — roda common/bin/cepa-<subcomando>"
-      echo "cepa [flags do launcher]   — abre uma sessão claude (como antes)"
-      echo ""
-      for _s in "$SCRIPT_DIR"/cepa-*; do
-        [ -x "$_s" ] || continue
-        _name="${_s##*/cepa-}"
-        # Line 2 of a python script is `"""cepa-x — summary`; shell scripts
-        # carry `# cepa-x — summary`. Anything else prints just the name.
-        _desc=$(sed -n 2p "$_s" | sed -e 's/^"""//' -e 's/^# *//' -e "s/^cepa-$_name *[—-]* *//")
-        case "$_desc" in
-          *"Deprecated alias"*|*"alias"*) _desc="(alias antigo) $_desc" ;;
-        esac
-        printf '  %-14s %s\n' "$_name" "$_desc"
-      done
-      exit 0 ;;
+    help|ajuda|subcommands|subcomandos|--help|-h) show_help; exit 0 ;;
     -*|"") ;;
     *)
       if [ -x "$SCRIPT_DIR/cepa-$1" ]; then
         _sub="$SCRIPT_DIR/cepa-$1"; shift
         exec "$_sub" "$@"
+      fi
+      # One lowercase word, alone, 4+ letters, that looks like a command name (no
+      # space, no uppercase, not a Jira key, not a path) and is near a real one.
+      # Shorter words ("ok", "go") are too close to everything to judge.
+      if [ $# -eq 1 ] && [ ${#1} -ge 4 ]; then
+        case "$1" in
+          *[!a-z0-9-]*) ;;
+          *)
+            _near=$(nearest_subcommand "$1")
+            if [ -n "$_near" ]; then
+              printf '✗ cepa: "%s" não é um subcomando. Você quis dizer: cepa %s\n' "$1" "$_near" >&2
+              printf '  Lista completa: cepa help\n' >&2
+              exit 2
+            fi ;;
+        esac
       fi ;;
   esac
 fi
@@ -197,6 +255,7 @@ ask_mode() {
     _i=0
     for _m in $MODES; do _i=$((_i+1)); printf '  %d) %s\n' "$_i" "$_m" >&2; done
     printf '  ?) ajuda — o propósito de cada modo\n' >&2
+    printf '  (subcomandos do cepa: cepa help)\n' >&2
     printf 'modo? [número, nome ou ?] > ' >&2
     _ans=""
     read -r _ans < /dev/tty || return 1

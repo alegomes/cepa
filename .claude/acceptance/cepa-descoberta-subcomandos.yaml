@@ -1,0 +1,58 @@
+key: cepa-descoberta-subcomandos
+diff: 195f0df..2926146
+status: complete
+criteria:
+  - id: AC1
+    text: "`cepa --help` e `cepa -h` imprimem exatamente o que `cepa help` imprime (subcomandos + secao 'flags do launcher:'), exit 0, sem abrir sessao."
+    altitude: cli
+    surface: "common/bin/cepa real como subprocess (--help, -h, help)"
+    test:
+      - tests/test_cepa_prove.py::test_cepa_help_flags_and_typos
+    layer: subprocess do launcher real; compara stdout byte a byte com `cepa help`, rc 0, checa --slice/--mode/--prompt na saida
+    evidence: verified
+    run: |
+      $ python3 tests/test_cepa_prove.py
+      ok `cepa --help` / `cepa -h` lista os subcomandos como `cepa help`; ok ...e a secao de flags do launcher; 19 teste(s) ok
+      $ common/bin/cepa -h | diff - <(common/bin/cepa help)  -> same
+    verdict: complete
+    notes: "'Sem sessao' e inferido do rc 0 + stdout identico ao help (nao ha fake claude nesse trecho); o launcher sai antes de qualquer exec."
+  - id: AC2
+    text: "O menu interativo de modo traz o rodape '(subcomandos do cepa: cepa help)'."
+    altitude: cli
+    surface: "cepa sem args numa tty dentro de um repo (menu ask_mode)"
+    test:
+      - tests/test_cepa_prove.py::test_mode_menu_points_to_cepa_help
+    layer: launcher real sob pty.fork, le a saida do menu, Enter vazio desiste
+    evidence: verified
+    run: |
+      $ python3 tests/test_cepa_prove.py
+      ok o menu de modo mostra o rodape `cepa help`; 19 teste(s) ok
+    verdict: complete
+  - id: AC3
+    text: "`cepa <palavra>` (minuscula, 4+ chars, nao-irma, a <=2 edicoes ou prefixo de irma) sai 2 com stderr nomeando `cepa <nome>` e `cepa help`, sem abrir sessao; curtas, distantes, chaves Jira, flags e prompts multi-palavra seguem ao claude."
+    altitude: cli
+    surface: "common/bin/cepa real como subprocess (untl, prov, docto; go, xyzzyqq; --version, FOO-1, prompt multi-palavra)"
+    test:
+      - tests/test_cepa_prove.py::test_cepa_help_flags_and_typos
+      - tests/test_cepa_prove.py::test_cepa_still_launches_a_session_for_flags_and_non_scripts
+    layer: subprocess real; claude falso grava argv para provar que as palavras nao-typo chegam intactas
+    evidence: verified
+    run: |
+      $ python3 tests/test_cepa_prove.py
+      ok `cepa untl|prov|docto` recusa e sugere ...; ok `cepa go`/`xyzzyqq` abre sessao; ok `cepa FOO-1`/`--version`/`plan the migration` abre sessao; 19 teste(s) ok
+      manual: cepa untl / prov / docto -> rc=2, stderr 'Voce quis dizer: cepa until|prove|doctor' + 'Lista completa: cepa help'
+    verdict: complete
+    notes: "Os casos de recusa nao usam claude falso: provam 'sem sessao' pelo rc 2 + mensagem (o launcher sai antes do exec). Aceito, mas nao e uma asserção negativa direta."
+  - id: AC4
+    text: "Na listagem, aliases mostram '(alias antigo de intent)' / '(alias antigo de modes)' e 'Deprecated' nao aparece."
+    altitude: cli
+    surface: "stdout de `cepa help`"
+    test:
+      - tests/test_cepa_prove.py::test_cepa_help_flags_and_typos
+    layer: subprocess real, assercao sobre o texto da listagem
+    evidence: verified
+    run: |
+      $ python3 tests/test_cepa_prove.py
+      ok ...e os aliases com rotulo limpo; 19 teste(s) ok
+      manual: linhas 'intencao (alias antigo de intent)' e 'modos (alias antigo de modes)'
+    verdict: complete
