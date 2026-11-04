@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-modes — the table of work modes, to consult mid-session.
+"""cepa-modes — a tabela de modos de trabalho, para consultar no meio da sessão.
 
 Every session declares a mode, and the mode is a STATE that lasts until the
 exit condition is met. Whoever forgets a mode's purpose mid-work will not open
@@ -97,14 +97,36 @@ def render_block(name, info, current, color):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Os modos de trabalho e suas fronteiras.")
-    ap.add_argument("mode", nargs="?", metavar="modo", help="só este modo")
-    ap.add_argument("--json", action="store_true", dest="as_json")
+    ap = argparse.ArgumentParser(
+        prog="cepa-modes",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "A tabela dos modos de trabalho e suas fronteiras.\n"
+            "\n"
+            "Toda sessão declara um modo, e o modo é um ESTADO que dura até a\n"
+            "condição de saída ser satisfeita. Quem esquece o propósito do modo no\n"
+            "meio do trabalho não vai abrir docs/modos-de-trabalho.md: vai chutar.\n"
+            "Este comando é a tabela, e nada além dela. A fonte é\n"
+            "common/hooks/_modes.py, a mesma que o hook de sessão lê."),
+        epilog=(
+            "exemplos:\n"
+            "  cepa-modes                  # a tabela inteira; marca o modo desta sessão\n"
+            "  cepa-modes exploration      # um modo só: entra com, produz, fecha quando, gate\n"
+            "  cepa-modes --purposes       # uma linha por modo: para que serve\n"
+            "  cepa-modes --exit           # o veredito de saída do modo desta sessão\n"
+            "  cepa-modes --json\n"
+            "\n"
+            "saída com --exit: 0 = modo fechado · 1 = ainda aberto · 2 = o modo não tem\n"
+            "veredito mecânico aqui"))
+    ap.add_argument("mode", nargs="?", metavar="modo", help="só este modo (default: todos)")
+    ap.add_argument("--json", action="store_true", dest="as_json",
+                    help="saída em JSON, para código")
     ap.add_argument("--purposes", "--propositos", action="store_true", dest="purposes",
                     help="uma linha por modo: para que ele serve")
     ap.add_argument("--exit", "--saida", action="store_true", dest="exit_",
                     help="veredito de saída do modo desta sessão (ou do modo dado), lido do disco")
-    ap.add_argument("--no-color", "--sem-cor", action="store_true", dest="no_color")
+    ap.add_argument("--no-color", "--sem-cor", action="store_true", dest="no_color",
+                    help="sem cores no terminal")
     args = ap.parse_args()
 
     color = not args.no_color and sys.stdout.isatty()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-until-digest — the summary of a `cepa-until` run that fits in one session.
+"""cepa-until-digest — o resumo de uma rodada do `cepa-until` que cabe numa sessão.
 
 ## Why it exists
 
@@ -467,11 +467,41 @@ def build_digest(ledger, result_max):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="summary of a cepa-until run")
-    ap.add_argument("ledger", help="the cepa-until <run>.jsonl")
-    ap.add_argument("--result-max", type=int, default=DEFAULT_RESULT_MAX,
-                    help=f"characters of each round's final report "
-                         f"(default {DEFAULT_RESULT_MAX})")
+    ap = argparse.ArgumentParser(
+        prog="cepa-until-digest",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "O resumo de um run do cepa-until que cabe numa sessão.\n"
+            "\n"
+            "Um run deixa dois arquivos: o registro (<run>.jsonl, alguns KB) e a\n"
+            "saída bruta de cada subprocesso (<run>.log, que passa de 10 MB e não\n"
+            "cabe em sessão nenhuma). Este script escolhe MECANICAMENTE o que ler,\n"
+            "e diz o que escolheu:\n"
+            "  - o registro inteiro (início, fim, cada item, cada build)\n"
+            "  - por rodada: o relatório final do claude, as chamadas de agente por\n"
+            "    tipo, os erros de ferramenta e o custo\n"
+            "  - por rodada, os SINAIS DE PROCESSO: worktree aberta por alguém que\n"
+            "    não o proof-reviewer, gate de build contornado com o verde de outro\n"
+            "    módulo\n"
+            "  - o fim da saída de cada build completo do supervisor\n"
+            "  - o status e a evidência ATUAIS de cada item tocado, lidos da fila\n"
+            "\n"
+            "Quem interpreta é /common:until-review. Este script não opina."),
+        epilog=(
+            "exemplos:\n"
+            "  cepa-until-digest .claude/queues/wego/until/2026-09-23-1826.jsonl\n"
+            "  cepa-until-digest <run>.jsonl --result-max 4000\n"
+            "\n"
+            "saída: 0 ok · 2 o registro não existe"))
+    ap.add_argument("ledger", metavar="registro",
+                    help="o <run>.jsonl que o cepa-until gravou (o .log é lido do lado dele)")
+    ap.add_argument("--result-max", type=int, default=DEFAULT_RESULT_MAX, metavar="N",
+                    help=f"quantos caracteres do relatório final de cada rodada "
+                         f"entram no resumo (default: {DEFAULT_RESULT_MAX})")
+    argv = sys.argv[1:] if argv is None else argv
+    if not argv:
+        ap.print_help(sys.stderr)
+        return 2
     a = ap.parse_args(argv)
     if not Path(a.ledger).is_file():
         print(f"cepa-until-digest: {a.ledger} does not exist", file=sys.stderr)

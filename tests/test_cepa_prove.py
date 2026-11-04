@@ -390,7 +390,7 @@ def test_cepa_dispatches_to_sibling_scripts():
           and "until" in p.stdout and "prove" in p.stdout and "doctor" in p.stdout,
           (p.stdout + p.stderr)[-500:])
     check("...com a primeira linha de cada docstring",
-          "Review" in p.stdout and "TIME WINDOW" in p.stdout, p.stdout[-800:])
+          "Review" in p.stdout and "JANELA DE TEMPO" in p.stdout, p.stdout[-800:])
     # `help` lists only EXECUTABLE siblings: a copy of the launcher in a temp
     # dir (SCRIPT_DIR follows the script's location) next to one executable and
     # one non-executable `cepa-*`.

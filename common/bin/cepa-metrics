@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-metrics — aggregate the harness's own telemetry into a readable report.
+"""cepa-metrics — agrega a telemetria do próprio harness num relatório legível.
 
 Reads the JSONL ledgers written by _telemetry.py (and inline emitters) at
 ~/.claude/cepa-telemetry/events-YYYY-MM.jsonl and answers the questions the
@@ -172,8 +172,12 @@ def _line(name, numerator, denominator, pct, units):
 
 def scorecard(argv):
     ap = argparse.ArgumentParser(prog="cepa-metrics scorecard",
-                                 description="Os três números do scorecard, com a conta.")
-    ap.add_argument("--json", action="store_true", dest="as_json")
+                                 description="Os três números do scorecard (turnos após "
+                                             "rotina, builds vermelhos, sessões no repo "
+                                             "cepa), em três janelas, com a memória de "
+                                             "cálculo de cada um.")
+    ap.add_argument("--json", action="store_true", dest="as_json",
+                    help="saída em JSON, para código")
     args = ap.parse_args(argv)
 
     now = datetime.now(timezone.utc)
@@ -213,11 +217,39 @@ def scorecard(argv):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Aggregate cepa harness telemetry.")
-    ap.add_argument("--days", type=int, default=30)
-    ap.add_argument("--month", help="YYYY-MM (overrides --days)")
-    ap.add_argument("--repo", help="filter to one repo name")
-    ap.add_argument("--json", action="store_true", dest="as_json")
+    ap = argparse.ArgumentParser(
+        prog="cepa-metrics",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Agrega a telemetria do próprio harness num relatório legível.\n"
+            "\n"
+            "Lê os ledgers JSONL em ~/.claude/cepa-telemetry/events-AAAA-MM.jsonl, que\n"
+            "os hooks alimentam sozinhos, e responde o que o harness não sabia sobre\n"
+            "si: quantas sessões cada repo consome, com que frequência os gates\n"
+            "bloqueiam (e por quê), como os builds andam por repo, que vereditos de\n"
+            "prova dominam, e quantos turnos você gasta antes e depois de uma rotina.\n"
+            "\n"
+            "subcomando:\n"
+            "  cepa-metrics scorecard [--json]   os três números do scorecard, com a conta"),
+        epilog=(
+            "exemplos:\n"
+            "  cepa-metrics                      # últimos 30 dias\n"
+            "  cepa-metrics --days 7\n"
+            "  cepa-metrics --month 2026-10\n"
+            "  cepa-metrics --repo wego-acessos-backend\n"
+            "  cepa-metrics --json               # os agregados, para código\n"
+            "\n"
+            "como ler: gate_block stale/failure alto num repo = verify lento ou escopo\n"
+            "da baseline errado; no-baseline num repo COM build = sessões empurrando\n"
+            "sem nunca rodar o verify; proof_block > 0 = um agente carimbou `proven`\n"
+            "acima do nível permitido e o guard pegou."))
+    ap.add_argument("--days", type=int, default=30, metavar="N",
+                    help="janela: os últimos N dias (default: 30)")
+    ap.add_argument("--month", metavar="AAAA-MM",
+                    help="janela: um mês fechado (prevalece sobre --days)")
+    ap.add_argument("--repo", metavar="NOME", help="só os eventos deste repo (pelo nome)")
+    ap.add_argument("--json", action="store_true", dest="as_json",
+                    help="saída em JSON, para código")
     args = ap.parse_args()
 
     now = datetime.now(timezone.utc)

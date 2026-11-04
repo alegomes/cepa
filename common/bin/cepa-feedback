@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-feedback — the harness's own complaint notebook.
+"""cepa-feedback — o caderno de reclamações do próprio harness.
 
 The problem it solves: annoyance with the harness ALWAYS shows up in the middle
 of something else. The gate blocks what it shouldn't, the command asks too much,
@@ -302,29 +302,69 @@ def cmd_triage(args):
 def main(argv=None):
     ap = argparse.ArgumentParser(
         prog="cepa-feedback",
-        description="Registra e acompanha o feedback sobre o próprio harness.")
-    sub = ap.add_subparsers(dest="cmd", required=True)
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Registra e acompanha o feedback sobre o próprio harness.\n"
+            "\n"
+            "O incômodo com o harness sempre aparece no meio de outra coisa: o gate\n"
+            "que barrou o que não devia, o comando que perguntou demais, o relatório\n"
+            "ilegível. Em vez de largar a tarefa para abrir o BACKLOG.md do Cepa, ou\n"
+            "seguir e esquecer, registre aqui.\n"
+            "\n"
+            "O ledger é GLOBAL e append-only: ~/.claude/cepa-feedback/feedback-AAAA-MM.jsonl\n"
+            "(CEPA_FEEDBACK_DIR sobrescreve). Repo, branch e modo da sessão são\n"
+            "capturados sozinhos; o texto é gravado verbatim, nunca resumido."),
+        epilog=(
+            "exemplos:\n"
+            "  cepa-feedback add \"o gate X barrou o commit legítimo\" --target write-mode-gate\n"
+            "  cepa-feedback list                      # os abertos\n"
+            "  cepa-feedback list --status todos --json\n"
+            "  cepa-feedback triage fb-20260826-1 --destination \"BACKLOG.md § Gate de escrita\"\n"
+            "  cepa-feedback triage fb-20260826-1 --destination \"fila WEGO\" --queue WEGO --why \"...\"\n"
+            "\n"
+            "saída: 0 ok · 2 uso inválido · 3 id desconhecido · 4 já triado\n"
+            "cada subcomando tem o próprio --help."))
+    sub = ap.add_subparsers(dest="cmd", metavar="<subcomando>")
 
-    a = sub.add_parser("add", help="registra um feedback (texto verbatim)")
-    a.add_argument("text", nargs="+", metavar="texto")
-    a.add_argument("--target", "--alvo", dest="target", help="comando/hook/agente que causou o incômodo")
-    a.add_argument("--origin", "--origem", dest="origin", default="manual", choices=ORIGINS)
-    a.add_argument("--repo", help="diretório de onde tirar repo/branch/modo (default: cwd)")
-    a.add_argument("--json", action="store_true", dest="as_json")
+    a = sub.add_parser("add", help="registra um feedback (texto verbatim)",
+                       description="Registra um feedback. O texto vai verbatim para o "
+                                   "ledger, com repo, branch e modo da sessão capturados "
+                                   "sozinhos. Recusa texto vazio ou de uma palavra só.")
+    a.add_argument("text", nargs="+", metavar="texto",
+                   help="o feedback, nas suas palavras (aspas opcionais)")
+    a.add_argument("--target", "--alvo", dest="target", metavar="ALVO",
+                   help="comando, hook ou agente que causou o incômodo")
+    a.add_argument("--origin", "--origem", dest="origin", default="manual", choices=ORIGINS,
+                   help="quem está registrando (default: manual)")
+    a.add_argument("--repo", metavar="DIR",
+                   help="diretório de onde tirar repo, branch e modo (default: o atual)")
+    a.add_argument("--json", action="store_true", dest="as_json",
+                   help="saída em JSON, para código")
     a.set_defaults(func=cmd_add)
 
-    l = sub.add_parser("list", help="lista os feedbacks registrados")
-    l.add_argument("--status", default="aberto", choices=("aberto", "triado", "todos"))
-    l.add_argument("--repo", dest="repo_name", help="filtra pelo nome do repo")
-    l.add_argument("--max", type=int, help="só os N mais recentes")
-    l.add_argument("--json", action="store_true", dest="as_json")
-    l.add_argument("--no-color", "--sem-cor", dest="no_color", action="store_true")
+    l = sub.add_parser("list", help="lista os feedbacks registrados",
+                       description="Lista os feedbacks do ledger, os abertos por default.")
+    l.add_argument("--status", default="aberto", choices=("aberto", "triado", "todos"),
+                   help="quais listar (default: aberto)")
+    l.add_argument("--repo", dest="repo_name", metavar="NOME",
+                   help="só os registrados neste repo (pelo nome)")
+    l.add_argument("--max", type=int, metavar="N", help="só os N mais recentes")
+    l.add_argument("--json", action="store_true", dest="as_json",
+                   help="saída em JSON, para código")
+    l.add_argument("--no-color", "--sem-cor", dest="no_color", action="store_true",
+                   help="sem cores no terminal")
     l.set_defaults(func=cmd_list)
 
-    t = sub.add_parser("triage", aliases=["triar"], help="marca um feedback como triado, com destino")
-    t.add_argument("id")
-    t.add_argument("--destination", "--destino", dest="destination", required=True, help="onde o item foi parar")
-    t.add_argument("--note", "--nota", dest="note")
+    t = sub.add_parser("triage", aliases=["triar"],
+                       help="marca um feedback como triado, com destino",
+                       description="Marca um feedback como triado, dizendo onde ele foi "
+                                   "parar. A triagem é outra linha do ledger citando o id; "
+                                   "um id já triado é recusado (saída 4).")
+    t.add_argument("id", help="o id do feedback, como o `list` imprime (ex.: fb-20260826-1)")
+    t.add_argument("--destination", "--destino", dest="destination", required=True,
+                   metavar="DESTINO", help="onde o item foi parar (seção do BACKLOG, fila, card)")
+    t.add_argument("--note", "--nota", dest="note", metavar="NOTA",
+                   help="observação livre sobre a triagem")
     t.add_argument("--queue", "--plano", dest="queue", metavar="FILA",
                    help="acrescenta o feedback à fila single-track FILA via "
                         "`cepa-plan add` (título = os ~100 primeiros "
@@ -339,6 +379,9 @@ def main(argv=None):
     t.set_defaults(func=cmd_triage)
 
     args = ap.parse_args(argv)
+    if not args.cmd:
+        ap.print_help(sys.stderr)
+        return 2
     return args.func(args)
 
 
