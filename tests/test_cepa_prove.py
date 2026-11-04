@@ -175,6 +175,13 @@ def test_state_is_encerrado_without_needs_human():
               state["estado"])
         check("...com os cards e o motivo", state["cards"] == {"WEGO-1": "PROVEN", "WEGO-2": "UNPROVEN"}
               and state["motivo"] == "review-vazia", json.dumps(state)[:300])
+        check("...e o resumo na tela nomeia o UNPROVEN", "UNPROVEN     1  WEGO-2" in p.stdout,
+              p.stdout[-400:])
+        # A second run right after: the first run's record in .claude/prove/ is
+        # not dirt, otherwise every run after the first would be refused.
+        p2, calls2 = run_prove(root, binv, tmp, ["--for", "2h"])
+        check("o registro do run anterior não é árvore suja para o próximo",
+              p2.returncode == 0 and len(calls2) == len(calls) + 1, p2.stderr[-300:])
 
 
 def test_rewritten_artifact_and_nonzero_exit_still_count():
@@ -384,6 +391,18 @@ def test_cepa_dispatches_to_sibling_scripts():
           (p.stdout + p.stderr)[-500:])
     check("...com a primeira linha de cada docstring",
           "Review" in p.stdout and "TIME WINDOW" in p.stdout, p.stdout[-800:])
+    # Real arguments after the subcommand reach the script WITHOUT the
+    # subcommand word (the `shift`): with it, argparse would choke on "prove".
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp)
+        binv = fake_claude(tmp, [])
+        env = dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}")
+        p = subprocess.run([str(CEPA), "prove", "--repo", str(root), "--for", "1h",
+                            "--dry-run", "--scope", "labels = via-porta"],
+                           capture_output=True, text=True, env=env, timeout=60)
+        check("`cepa prove <args>` entrega os args ao cepa-prove sem a palavra `prove`",
+              p.returncode == 0 and "labels = via-porta" in p.stdout
+              and "dry-run" in p.stdout, (p.stdout + p.stderr)[-400:])
 
 
 def test_cepa_still_launches_a_session_for_flags_and_non_scripts():
