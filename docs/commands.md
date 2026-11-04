@@ -139,6 +139,10 @@ form (`/plan-build-validate`) returns "Unknown command".
 
 - `/common:doctor` checks the install against reality. `/common:metrics` shows where the harness blocks or costs you. `/common:feedback "<complaint>"` records it so it becomes a backlog item. `/common:modes` reminds you which mode the session is in.
 
+### "I want the terminal commands, not the slash commands"
+
+- `cepa` (the launcher) and the `cepa-*` scripts (`cepa plan`, `cepa until`, `cepa doctor`, `cepa intent`...) are documented in [cepa-cli.md](cepa-cli.md): one section per script with usage, flags and exit codes. Every one of them answers `--help`.
+
 # Part 2: reference by plugin
 
 ## common
