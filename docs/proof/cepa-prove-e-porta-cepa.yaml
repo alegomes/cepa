@@ -1,0 +1,84 @@
+schema_version: 2
+card: cepa-prove-e-porta-cepa
+verdict: proven
+reviewed_at: 2026-11-03T14:00:00-03:00
+base_commit: 00c4b1f
+head_commit: a483e3f
+issue_type: Feature
+repo_kind: harness            # NOT Quarkus/Maven: Python CLI + sh launcher + prompt files; suite is tests/test_cepa_prove.py
+scope:
+  changed_classes:
+    - class: "common/bin/cepa (bloco de despacho `cepa <subcomando>` logo após INTENT_BIN=)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null     # cepa e cepa-prove reais; só o `claude` (borda) é falso no PATH
+    - class: "common/bin/cepa-prove (supervisor novo: --skip, proofs_written, VERDICTS, review-vazia, disjuntor, --max, reserva, commit_proofs, guardas, --dry-run, env, --scope/--no-scope, esperando-dono)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "tests/test_cepa_prove.py (12 -> 17 casos)"
+      module: test-harness
+      external_observable: false
+      reason: "arquivo de teste; não tem superfície própria"
+      substituted_by_double: null
+    - class: "board-flow/commands/prove-drain.md"
+      module: prompt
+      external_observable: false
+      reason: "texto de prompt, sem runtime a perturbar"
+      substituted_by_double: null
+    - class: "board-flow/agents/atlassian-expert.md"
+      module: prompt
+      external_observable: false
+      reason: "texto de prompt; orçamento de bytes coberto por tests/test_atlassian_expert_spec.py (17278 <= 17280, verde)"
+      substituted_by_double: null
+    - class: "bin/install.sh + 2x plugin.json (bump de versão)"
+      module: install
+      external_observable: false
+      reason: "instalação/metadado, sem comportamento de runtime coberto por esta prova"
+      substituted_by_double: null
+  base_commit_resolved: true
+  note: >-
+    Rodada 3: head avançou de 8a52ac9 para a483e3f. `git diff 8a52ac9..a483e3f --stat`
+    mostra só tests/test_cepa_prove.py (+17); `git diff cbc09d3..a483e3f --stat -- common/bin`
+    é vazio, ou seja, a implementação não mudou desde cbc09d3. Refiz as 4
+    perturbações de common/bin/cepa contra a483e3f. As 21 de common/bin/cepa-prove
+    foram medidas na rodada 2 contra 8a52ac9 (24 de 25 vermelhas); o binário é o
+    mesmo e a mudança de teste desde então é aditiva e restrita ao caso de despacho
+    do cepa, então reaproveito esses resultados (não refeitos nesta rodada).
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "harness Python/sh: sem PIT"
+    perturbation:
+      status: pass
+      results:
+        - "baseline em worktree descartável a483e3f: python3 tests/test_cepa_prove.py -> '17 teste(s) ok' (verde antes de perturbar)"
+        - "RODADA 3 (a483e3f) RED  filtro `[ -x \"$_s\" ] || continue` do help removido -> 1 falha (`cepa help` lista só os cepa-* executáveis) [última sobrevivente, agora fechada]"
+        - "RODADA 3 (a483e3f) RED  despacho `-x` trocado por `[ -e ] || true` -> 3 falhas (`cepa FOO-1` e `cepa plan the migration` abrem sessão, não despacham)"
+        - "RODADA 3 (a483e3f) RED  `shift` removido -> 1 falha (`cepa prove <args>` entrega os args sem a palavra `prove`)"
+        - "RODADA 3 (a483e3f) RED  case do `help` trocado -> 3 falhas"
+        - "RODADA 2 (8a52ac9, binário idêntico) RED  VERDICTS['unproven']->PROVEN -> 2 falhas; VERDICTS needs-human->UNPROVEN -> 5 falhas"
+        - "RODADA 2 RED  dirty_outside_proofs sem excluir .claude/prove/ -> 1 falha; sem excluir docs/proof/ -> 1 falha; guarda desligado -> 3 falhas"
+        - "RODADA 2 RED  --skip acumulado -> 1 falha; proofs_written mtime -> travamento (RED por timeout; o teste tem timeout=120 em run_prove, mensagem de falha do próprio teste não medida)"
+        - "RODADA 2 RED  review-vazia -> 4 falhas; EMPTY regex -> 10 falhas; disjuntor contagem -> 1 falha; disjuntor reset -> 2 falhas"
+        - "RODADA 2 RED  --max -> 1 falha; reserva->prazo -> 2 falhas; commit_proofs mensagem -> 2 falhas; --no-commit -> 1 falha"
+        - "RODADA 2 RED  guarda board-flow.yaml -> 1 falha; --dry-run criando .claude/prove -> 1 falha; env CEPA_UNTIL_RUN -> 1 falha; --no-scope -> 1 falha; --scope sem aspas -> 1 falha; esperando-dono -> 1 falha"
+        - "25 de 25 perturbações vermelhas, nenhuma sobrevivente"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem JaCoCo/PIT no harness; alcance estabelecido pelas 25 perturbações: cada comportamento alterado do diff tem teste que o quebra"
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings:
+      - "REAPROVEITADO da rodada 2 (binário de produção inalterado; só teste mudou): --for abc, --for 0m, --for -5m, --max -1, --max-failures 0, --until 99:99, --scope sem valor, --scope + --no-scope, --min-reserve zz -> rc=2 com mensagem, 0 Traceback"
+      - "REAPROVEITADO: run com docs/proof/ contendo binário, artefato sem card e card '../../etc/passwd' -> rc=0, 0 Traceback, fim por review-vazia"
+    run: "sh l4.sh em worktree descartável 8a52ac9 (rodada 2) -> 9x rc=2 sem traceback; run hostil rc=0"
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature"
+routing_reason: "Contra a483e3f a última sobrevivente (filtro de executável na listagem do `cepa help`) agora fica vermelha, junto das outras 3 de common/bin/cepa. Com a rodada 2, as 25 perturbações viram vermelho; a implementação não mudou desde cbc09d3. Nada externo ficou sem prova."
