@@ -87,7 +87,8 @@ QUESTIONS_PT = """## Perguntas em aberto
 
 
 def epic(status="pronta", ladder=LADDER_PT, invariants=INVARIANTS_PT,
-         decided=DECIDED_PT, questions=QUESTIONS_PT, title="# Epic: Contratos"):
+         decided=DECIDED_PT, questions=QUESTIONS_PT, title="# Epic: Contratos",
+         outcome=""):
     return f"""{title}
 
 **Status:** {status} · **Aberto em:** 2026-10-08
@@ -99,7 +100,8 @@ O operador deixa de ler contrato à mão.
 {invariants}
 {ladder}
 {decided}
-{questions}"""
+{questions}
+{outcome}"""
 
 
 def test_draft_status_never_blocks():
@@ -588,10 +590,29 @@ DECIDED_EN = DECIDED_PT.replace("## Decidido sem perguntar (vete aqui)",
                                   "## Decided without asking (veto here)")
 
 
+WHO = """## Who it is for
+
+O operador de faturamento do hospital, que hoje lê o contrato à mão.
+"""
+METRIC = """## Outcome metric
+
+**Baseline:** 40 min por conta · **Target:** 10 min por conta · **Source:** `GET /api/v1/metricas/tempo-por-conta`
+"""
+OUT = """## Out of scope
+
+- Contratos em papel sem digitalização — o extrator só lê PDF.
+"""
+OUTCOME_EN = WHO + "\n" + METRIC + "\n" + OUT
+IMPACT = """## Impact
+
+**Measured value:** 14 min por conta · **Measured on:** 2026-12-01, pela mesma rota da Source
+"""
+
+
 def epic_en(status="ready", ladder=LADDER_EN, invariants=INVARIANTS_EN,
-            decided=DECIDED_EN, **kw):
+            decided=DECIDED_EN, outcome=OUTCOME_EN, **kw):
     return epic(status=status, ladder=ladder, invariants=invariants,
-                decided=decided, **kw)
+                decided=decided, outcome=outcome, **kw)
 
 
 def test_complete_english_passes_and_complete_old_passes():
@@ -626,6 +647,71 @@ def test_draft_never_blocks():
     rc, err = write(epic_en(status="draft", ladder="## Value ladder\n",
                             invariants="", decided=""))
     check("Epic `Status: draft` todo furado passa", rc == 0, err)
+
+
+# ── Outcome screen (2026-11-02): who, out of scope, metric; closed needs impact ─
+def test_ready_requires_who_out_of_scope_and_metric():
+    rc, err = write(epic_en(outcome=""))
+    check("ready sem as três seções de resultado bloqueia", rc == 2, err)
+    check("...nomeando as três",
+          all(n in err for n in ("## Who it is for", "## Out of scope",
+                                 "## Outcome metric")), err)
+    rc, err = write(epic_en(outcome=METRIC + OUT))
+    check("ready sem Who it is for bloqueia só por ela",
+          rc == 2 and "falta a seção `## Who it is for`" in err
+          and "## Out of scope` —" not in err and "Out of scope:" not in err, err)
+    rc, err = write(epic_en(outcome="## Who it is for\n\n<quem>\n\n" + METRIC + OUT))
+    check("Who it is for só com placeholder bloqueia",
+          rc == 2 and "Who it is for: a seção está vazia" in err, err)
+    rc, err = write(epic_en(outcome=WHO + "\n## Out of scope\n\n- <item>\n" + METRIC))
+    check("Out of scope só com placeholder bloqueia",
+          rc == 2 and "Out of scope: a lista está vazia" in err, err)
+
+
+def test_metric_fields_on_one_line_are_each_checked():
+    for field in ("Baseline", "Target", "Source"):
+        metric = re.sub(rf"\*\*{field}:\*\* [^·\n]*", f"**{field}:** a definir ", METRIC)
+        rc, err = write(epic_en(outcome=WHO + metric + OUT))
+        check(f"métrica sem {field} bloqueia, nomeando o campo",
+              rc == 2 and f"Outcome metric: falta **{field}:**" in err, err)
+
+
+def test_old_pronta_keeps_old_screen():
+    rc, err = write(epic(status="pronta"))
+    check("Epic `pronta` sem seções de resultado segue passando", rc == 0, err)
+
+
+def test_closed_requires_impact():
+    rc, err = write(epic_en(status="closed"))
+    check("closed sem Impact bloqueia", rc == 2 and "## Impact" in err, err)
+    check("...e diz `Status: closed` na mensagem", "`Status: closed`" in err, err)
+    rc, err = write(epic_en(status="closed", outcome=OUTCOME_EN + IMPACT))
+    check("closed com Impact completo passa", rc == 0, err)
+    no_date = IMPACT.replace("2026-12-01, pela mesma rota da Source", "<data>")
+    rc, err = write(epic_en(status="closed", outcome=OUTCOME_EN + no_date))
+    check("closed sem Measured on bloqueia",
+          rc == 2 and "Impact: falta **Measured on:**" in err, err)
+    no_value = IMPACT.replace("14 min por conta", "<valor>")
+    rc, err = write(epic_en(status="closed", outcome=OUTCOME_EN + no_value))
+    check("closed sem Measured value bloqueia",
+          rc == 2 and "Impact: falta **Measured value:**" in err, err)
+    rc, err = write(epic_en(status="closed", outcome=IMPACT, ladder=""))
+    check("closed também passa pelo crivo de ready",
+          rc == 2 and "## Value ladder" in err and "Who it is for" in err, err)
+
+
+def test_template_status_line_with_closed_passes():
+    rc, err = write(epic_en(status="draft | ready | closed", outcome=""))
+    check("linha-modelo 'draft | ready | closed' não é gateada", rc == 0, err)
+
+
+def test_command_teaches_outcome_and_impact():
+    text = CMD.read_text()
+    for h in ("## Who it is for", "## Outcome metric", "## Out of scope",
+              "## Impact", "**Baseline:**", "**Target:**", "**Source:**",
+              "**Measured value:**", "**Measured on:**"):
+        check(f"/common:epic ensina {h}", h in text)
+    check("/common:epic aceita closed", "draft | ready | closed" in text)
 
 
 def main():

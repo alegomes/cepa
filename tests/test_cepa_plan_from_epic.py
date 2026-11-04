@@ -243,6 +243,13 @@ def test_new_and_old_epic_names(base):
     check("Status: draft vira aviso que nomeia `ready`",
           r.returncode == 0 and "Status: draft" in r.stderr
           and "só `ready`" in r.stderr, r.stderr)
+    closed = d / "fechado.md"
+    closed.write_text(EPIC_EN.replace("**Status:** ready", "**Status:** closed"),
+                      encoding="utf-8")
+    r = run(d, "from-epic", str(closed), "--cycle", "1")
+    check("Status: closed não vira aviso de Epic não pronto",
+          r.returncode == 0 and "Status: closed" not in r.stderr
+          and "só `ready`" not in r.stderr, r.stderr)
 
 
 def test_writes_and_rewrites(base):

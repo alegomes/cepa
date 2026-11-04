@@ -854,7 +854,8 @@ def items_from_epic(text, cycle, path):
     warnings = []
     m = re.search(r"^\*\*Status:\*\*\s*([^\s·*]+)", text, re.M)
     status = m.group(1) if m else None
-    if status not in ("ready", "pronta", "ready-to-build", "pronta-para-construir"):
+    if status not in ("ready", "closed", "pronta", "ready-to-build",
+                      "pronta-para-construir"):
         warnings.append(f"o Epic está com `Status: {status}` — só `ready` passou "
                       "pelo crivo do /common:epic (todo ciclo com roteiro e "
                       "efeito observável em tela e em backend)")

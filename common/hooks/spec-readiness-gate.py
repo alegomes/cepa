@@ -63,6 +63,20 @@ Epic screen (`/common:epic`, CS-5 of cycle 1 of the spiral Cepa Epic):
       * the `## Decided without asking` section (or the old Decidido sem
         perguntar) exists;
       * no open question (`- [ ]`) was left over.
+  - Outcome screen (2026-11-02, owner's "1. sim" and "3. sim" on the PRD
+    rules review): an Epic that declares the NEW word `ready` (or `closed`)
+    must also say who it is for, what stays out and which number shows it
+    helped, not only that it works:
+      * `## Who it is for` has text that is not a placeholder;
+      * `## Out of scope` has at least one list item;
+      * `## Outcome metric` fills **Baseline:**, **Target:** and **Source:**.
+    The old `pronta` keeps the earlier screen, so an Epic already closed
+    before this rule (wego-product `leitura-de-guias-fase-0-kairos.md`) is not
+    blocked on its next unrelated edit.
+  - `Status: closed` is the claim that the Epic is over: it passes the whole
+    `ready` screen plus `## Impact` filling **Measured value:** and
+    **Measured on:**. Delivered is not the same as helped; closed requires
+    someone to have gone back and measured.
   - A document that is not an Epic keeps the earlier yardstick: `Status:
     pronta` in it is not gated, only `ready-to-build` (or the old
     `pronta-para-construir`).
@@ -114,7 +128,12 @@ OPEN_RE = re.compile(r"^\s*[-*+]\s*\[\s\]\s*(.+)$", re.MULTILINE)
 
 # Epic: the status it claims when closing. `pronta-para-construir` also counts,
 # otherwise an Epic that uses the specification's word would escape its screen.
-EPIC_READY = ("ready", "pronta", READY, READY_OLD)
+EPIC_READY = ("ready", "pronta", READY, READY_OLD, "closed")
+
+# Words that also get the outcome screen (who, out of scope, metric). The old
+# `pronta` does not: see the docstring.
+EPIC_OUTCOME = ("ready", "closed")
+EPIC_CLOSED = "closed"
 
 EPIC_TITLE_RE = re.compile(r"^#\s+Epic\s*:", re.MULTILINE | re.IGNORECASE)
 EPIC_PATH_RE = re.compile(r"(^|/)docs/epics/[^/]+\.md$")
@@ -343,17 +362,88 @@ def epic_problems(content: str):
     return problems
 
 
-def block_epic(problems):
+def field_value(body: str, names):
+    """The value of `**<name>:** value` inside a section body, or None. The
+    fields may share a line, separated by `·` (the format puts Baseline, Target
+    and Source on one line), so each value runs up to the next `·` or the end
+    of the line."""
+    for name in names:
+        pat = (rf"(?:^|[·•])[ \t]*{MARKER}?[ \t]*{re.escape(name)}[ \t]*"
+               rf"(?:\*\*|__)?[ \t]*:[ \t]*(?:\*\*|__)?[ \t]*([^·•\n]*)")
+        for m in re.finditer(pat, body, re.MULTILINE | re.IGNORECASE):
+            if not is_empty(m.group(1)):
+                return m.group(1)
+    return None
+
+
+def has_text(body: str) -> bool:
+    for line in body.splitlines():
+        v = line.strip()
+        if not v or v.startswith("|") or v.startswith("#"):
+            continue
+        v = re.sub(r"^[-*+]\s+", "", v)
+        if not is_empty(v):
+            return True
+    return False
+
+
+# (accepted field names, label for the message) per required field.
+OUTCOME_FIELDS = (("Baseline",), "Baseline"), (("Target",), "Target"), \
+    (("Source",), "Source")
+IMPACT_FIELDS = (("Measured value",), "Measured value"), \
+    (("Measured on",), "Measured on")
+
+
+def outcome_problems(content: str, closed: bool):
+    problems = []
+    who = section(content, ("who it is for",))
+    if who is None:
+        problems.append("falta a seção `## Who it is for` — diga quem tem o "
+                        "problema, um papel concreto e não \"usuários\"")
+    elif not has_text(who):
+        problems.append("Who it is for: a seção está vazia")
+
+    out = section(content, ("out of scope",))
+    if out is None:
+        problems.append("falta a seção `## Out of scope` — o que este Epic "
+                        "explicitamente não entrega")
+    elif not [v for v in ITEM_RE.findall(out) if not is_empty(v)]:
+        problems.append("Out of scope: a lista está vazia")
+
+    metric = section(content, ("outcome metric",))
+    if metric is None:
+        problems.append("falta a seção `## Outcome metric` — o número que "
+                        "diz que o Epic ajudou, não só que funciona")
+    else:
+        for names, label in OUTCOME_FIELDS:
+            if field_value(metric, names) is None:
+                problems.append(f"Outcome metric: falta **{label}:**")
+
+    if closed:
+        impact = section(content, ("impact",))
+        if impact is None:
+            problems.append("falta a seção `## Impact` — `closed` exige que "
+                            "alguém tenha voltado e medido a métrica")
+        else:
+            for names, label in IMPACT_FIELDS:
+                if field_value(impact, names) is None:
+                    problems.append(f"Impact: falta **{label}:**")
+    return problems
+
+
+def block_epic(problems, status="ready"):
     lines = "\n".join(f"   · {p}" for p in problems)
     columns = "\n".join(f'   · "{name}": {what}' for _, name, what in EPIC_COLUMNS)
     print(
-        "[spec-readiness-gate] BLOQUEADO: o Epic se declara `Status: ready` "
+        f"[spec-readiness-gate] BLOQUEADO: o Epic se declara `Status: {status}` "
         "mas ainda não passa no crivo.\n"
         f"{lines}\n"
         "  O que o crivo exige de CADA ciclo da escada:\n"
         f"{columns}\n"
         "  E do documento: pelo menos um invariante, a seção \"Decided without "
-        "asking\" e nenhuma pergunta em aberto.\n"
+        "asking\" e nenhuma pergunta em aberto. Em `ready` e `closed`, também "
+        "\"Who it is for\", \"Out of scope\" e \"Outcome metric\" (Baseline, "
+        "Target, Source); em `closed`, \"Impact\" (Measured value, Measured on).\n"
         "  Enquanto faltar qualquer um, o Status correto é `draft` — e a "
         "resposta certa é voltar a perguntar ao dono, não relaxar o campo.",
         file=sys.stderr,
@@ -399,9 +489,12 @@ def main():
                      for s in status]
         if not any(s in EPIC_READY for s in first_words):
             sys.exit(0)      # a draft runs free
+        claimed = next(s for s in first_words if s in EPIC_READY)
         problems = epic_problems(content)
+        if claimed in EPIC_OUTCOME:
+            problems += outcome_problems(content, claimed == EPIC_CLOSED)
         if problems:
-            block_epic(problems)
+            block_epic(problems, claimed)
         sys.exit(0)
 
     if not any(s in SPEC_READY for s in status):
