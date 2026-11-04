@@ -208,6 +208,12 @@ priorizadas`) stay verbatim:
 >   information that would settle it — and your recommendation as synthesizer,
 >   if the inputs are enough to have one. If they are not, say exactly what is
 >   missing. "Both have a point" is not a resolution.
+> - **Decisão do dono:** `_pendente_` — (the owner's decision) written exactly
+>   as this placeholder by the synthesizer, inside the same bullet. When the
+>   owner decides (in the conversation, or by editing the file), replace the
+>   placeholder with the decision in one line. This line is what closes the
+>   **exploration** mode: `cepa-modes --exit` and the `session-mode` hook count
+>   the disagreements of the saved report whose line is still `_pendente_`.
 >
 > ### Propostas consolidadas priorizadas
 >
@@ -218,6 +224,17 @@ priorizadas`) stay verbatim:
 
 Findings of severity `critica`/`alta` from a single lens (no convergence) still
 go into the proposals — convergence prioritizes, it does not filter.
+
+### 5b. Save the report
+
+Write the synthesis, as rendered above, to
+`docs/reviews/<YYYY-MM-DD>-painel-<slug>.md` (the chat copy stays as well).
+The header must be the template's, `## Painel de advisors — \`<artifact>\``,
+with the artifact's path relative to the repo root: the exploration exit
+verdict (`common/hooks/_modes.py`, `exploration_exit`) reads the most recent
+report in that folder, checks that the artifact exists, and counts the
+`**Decisão do dono:**` lines still pending. A report that is only in the chat
+leaves the mode open forever.
 
 ### 6. Telemetry
 

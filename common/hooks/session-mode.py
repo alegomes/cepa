@@ -67,6 +67,13 @@ try:
     from _modes import parse_session_mode
 except Exception:  # noqa: BLE001
     parse_session_mode = None
+# The exit VERDICT of exploration, read from the disk (docs/reviews/): the
+# condition alone was a reminder nobody measured, and the agent kept proposing
+# one more turn. Only exploration has it; the other modes close by their gates.
+try:
+    from _modes import exploration_exit_line
+except Exception:  # noqa: BLE001
+    exploration_exit_line = None
 
 # The mark `cepa-until` exports on each run (same as session-registry).
 ENV_WINDOW = "CEPA_UNTIL_RUN"
@@ -291,6 +298,8 @@ def main():
                 lines.append(f"Orçamento declarado: {mode['budget']}.")
             if name in EXIT:
                 lines.append(f"Fecha quando: {EXIT[name]}.")
+            if name == "exploration" and exploration_exit_line is not None:
+                lines.append(exploration_exit_line(root))
             lines.append(
                 "Ação fora deste modo NÃO vira pergunta e NÃO vira trabalho agora: "
                 "registre pelo skill `off-mode-capture` e siga. As capturas entram "

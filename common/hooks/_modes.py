@@ -48,7 +48,7 @@ MODES = {
                   "recomendado, e a dor reformulada com o que se aprendeu",
         "exit": "um documento de estratégia com 2+ caminhos considerados, "
                  "passado pelo painel /common:advisors com as discordâncias nomeadas",
-        "gate": "parcial — o painel existe, o veredito não; o write-mode-gate já barra escrita fora de docs/**",
+        "gate": "mecânico: o hook e `cepa-modes --exit` conferem no disco o painel salvo em docs/reviews, o documento que ele avaliou e a `Decisão do dono` em cada discordância nomeada; o write-mode-gate barra escrita fora de docs/**",
         "write": ["docs/**", ".claude/**", "BACKLOG.md"],
     },
     "discovery": {
@@ -387,3 +387,171 @@ def other_session_question(intent, purpose):
         "Pergunte ao dono: continuo ou abro nova? Continuar = `cepa-intent "
         "continue`; abrir nova = `cepa-intent write ... --reason \"...\"`.",
     ]
+
+
+# ---------------------------------------------------------------------------
+# The exit verdict of the exploration mode
+# ---------------------------------------------------------------------------
+#
+# Exploration was the only mode whose exit nobody measured: the hook repeated
+# the condition every turn, nothing checked it, and the agent kept proposing
+# one more turn until the owner had to ask "is anything still pending?"
+# (2026-11-04). The condition has three parts, and the third — the owner's
+# decision on each named disagreement — had nowhere to live on disk, so the
+# mode could never be declared closed from the disk.
+#
+# The unit of proof is the PANEL REPORT that `/common:advisors` saves in
+# `docs/reviews/<date>-painel-<slug>.md`:
+#   1. its header names the artifact it ran over -> the strategy document exists;
+#   2. its `### DISCORDÂNCIAS NOMEADAS` section -> the panel ran and named them;
+#   3. each disagreement carries a `**Decisão do dono:**` line that is not
+#      pending -> the decision is recorded, not lost in the conversation.
+# The most recent report is the one judged, and the verdict names it, so a
+# report about some other document is visible instead of silently counting.
+# Readers: `session-mode.py` (one line per turn) and `cepa-modes --exit`.
+
+PANEL_DIR = os.path.join("docs", "reviews")
+NEXT_MODE = {"exploration": "discovery"}
+DECISION_LABEL = "**Decisão do dono:**"
+DECISION_PENDING = "_pendente_"
+# `## Painel de advisors — `doc`` is the template; real reports also open with
+# `# Painel de advisors: `doc``. Both count.
+_PANEL_HEADER = re.compile(r"^#{1,2}\s+Painel de advisors\s*[:—–-]+\s*`([^`]+)`", re.M)
+# the template says `### DISCORDÂNCIAS NOMEADAS`; real reports also use
+# `## Discordâncias nomeadas`. Both count.
+_DISAGREE_SECTION = re.compile(
+    r"^#{2,3}\s+DISCORD[ÂA]NCIAS NOMEADAS\s*$(.*?)(?=^#{1,3}\s|\Z)", re.M | re.S | re.I)
+_DECISION = re.compile(r"\*\*Decis[ãa]o do dono:\*\*\s*(.*)$")
+_PENDING_VALUES = {"", "pendente", "-", "--", "n/a", "na", "tbd", "?"}
+_DATE_PREFIX = re.compile(r"^(\d{4}-\d{2}-\d{2})")
+
+
+def panel_reports(root):
+    """The panel reports under `docs/reviews/`, most recent first (the date
+    prefix of the file name, then mtime) -> [(path, text)]. Never raises."""
+    d = os.path.join(str(root), PANEL_DIR)
+    try:
+        names = [n for n in os.listdir(d) if n.endswith(".md")]
+    except OSError:
+        return []
+    found = []
+    for n in names:
+        p = os.path.join(d, n)
+        try:
+            with open(p, encoding="utf-8", errors="replace") as f:
+                text = f.read()
+            mtime = os.path.getmtime(p)
+        except OSError:
+            continue
+        if not _PANEL_HEADER.search(text):
+            continue
+        m = _DATE_PREFIX.match(n)
+        found.append(((m.group(1) if m else ""), mtime, p, text))
+    found.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    return [(p, text) for _, _, p, text in found]
+
+
+def parse_panel(text):
+    """Text of a panel report -> (artifact path from the header or None,
+    whether the named-disagreements section exists, [{"title", "decision"}]).
+    A disagreement is a top-level `- ` bullet of the section; its decision is
+    the `**Decisão do dono:**` line anywhere inside the bullet (None if absent)."""
+    m = _PANEL_HEADER.search(text or "")
+    artifact = m.group(1).strip() if m else None
+    sec = _DISAGREE_SECTION.search(text or "")
+    items, cur = [], None
+    if sec:
+        for line in sec.group(1).splitlines():
+            # older reports put `- **O que decide:**` as a bullet of its own,
+            # below the disagreement: a continuation, not a new disagreement
+            if line.startswith("- ") and not re.match(
+                    r"- \*\*(O que decide|Decis[ãa]o do dono)", line):
+                cur = {"title": line[2:].strip(), "decision": None}
+                items.append(cur)
+            if cur is None:
+                continue
+            dm = _DECISION.search(line)
+            if dm:
+                cur["decision"] = dm.group(1).strip()
+    return artifact, sec is not None, items
+
+
+def decision_recorded(value):
+    """Is this `Decisão do dono` value a decision, not a placeholder?"""
+    v = re.sub(r"[_*`]", "", str(value or "")).strip().lower()
+    return v not in _PENDING_VALUES
+
+
+def exploration_exit(root, panel=None):
+    """The mechanical exit verdict of exploration, computed from the disk.
+
+    -> {"closed": bool, "items": [(label, ok, detail)], "panel": relative path
+    or None, "next_mode": "discovery"}. `panel` pins one report instead of the
+    most recent. Never raises: a disk problem reads as "not closed"."""
+    root = str(root)
+    nxt = NEXT_MODE["exploration"]
+    try:
+        if panel:
+            path = panel if os.path.isabs(panel) else os.path.join(root, panel)
+            try:
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    reports = [(path, f.read())]
+            except OSError:
+                reports = []
+        else:
+            reports = panel_reports(root)
+        if not reports:
+            where = panel or f"{PANEL_DIR}/"
+            items = [
+                ("painel de advisors salvo em docs/reviews/", False,
+                 f"nenhum relatório com o cabeçalho `## Painel de advisors — `<documento>`` em {where}"),
+                ("documento de estratégia que o painel avaliou", False,
+                 "sem painel não há documento apontado"),
+                ("decisão do dono em cada discordância nomeada", False,
+                 "sem painel não há discordâncias"),
+            ]
+            return {"closed": False, "items": items, "panel": None, "next_mode": nxt}
+        path, text = reports[0]
+        rel = os.path.relpath(path, root)
+        artifact, has_section, disagreements = parse_panel(text)
+        art_ok = bool(artifact) and os.path.isfile(os.path.join(root, artifact))
+        pending = [d for d in disagreements if not decision_recorded(d["decision"])]
+        n, p = len(disagreements), len(pending)
+        if not has_section:
+            third = ("decisão do dono em cada discordância nomeada", False,
+                     "o painel não tem a seção `### DISCORDÂNCIAS NOMEADAS`")
+        elif n == 0:
+            third = ("decisão do dono em cada discordância nomeada", True,
+                     "o painel não nomeou discordâncias: nada a decidir")
+        elif p:
+            third = (f"decisão do dono nas {n} discordâncias nomeadas", False,
+                     f"{p} de {n} sem `{DECISION_LABEL}` preenchida em {rel}")
+        else:
+            third = (f"decisão do dono nas {n} discordâncias nomeadas", True,
+                     f"as {n} registradas em {rel}")
+        items = [
+            (f"painel de advisors salvo: {rel}", True, ""),
+            (f"documento de estratégia existe: {artifact or '(sem caminho no cabeçalho)'}",
+             art_ok, "" if art_ok else "o caminho do cabeçalho do painel não existe no disco"),
+            third,
+        ]
+        return {"closed": all(ok for _, ok, _ in items), "items": items,
+                "panel": rel, "next_mode": nxt}
+    except Exception:  # noqa: BLE001 — a reader runs every turn; never break it
+        return {"closed": False, "items": [("veredito de saída", False,
+                                            "erro ao ler o disco")],
+                "panel": None, "next_mode": nxt}
+
+
+def exploration_exit_line(root, panel=None):
+    """The one line `session-mode.py` injects after the exit condition."""
+    v = exploration_exit(root, panel)
+    done = sum(1 for _, ok, _ in v["items"])
+    ok = sum(1 for _, ok_, _ in v["items"] if ok_)
+    if v["closed"]:
+        return (f"Saída: FECHADA ({ok}/{done}, painel {v['panel']}). Não proponha mais "
+                f"turnos de exploração; próximo modo: {v['next_mode']} "
+                f"(`cepa --mode {v['next_mode']}` em nova sessão).")
+    missing = "; ".join(f"{label} ({detail})" if detail else label
+                        for label, ok_, detail in v["items"] if not ok_)
+    return f"Saída: {ok}/{done}. Falta: {missing}. Detalhe: `cepa-modes --exit`."

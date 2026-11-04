@@ -14,6 +14,12 @@ Usage:
     cepa-modes <name>       # a single mode, with entry/produces/exit/gate
     cepa-modes --purposes # one line per mode: what it is for
     cepa-modes --json
+    cepa-modes --exit       # the exit verdict of this session's mode, from the disk
+
+`--exit` is the verdict that exploration lacked: it reads docs/reviews/ and
+says which of the three parts of the exit condition are on disk (panel saved,
+strategy document it ran over, owner's decision on each named disagreement).
+rc 0 = closed, 1 = still open, 2 = the mode has no mechanical verdict here.
 """
 
 import argparse
@@ -27,7 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
 try:
-    from _modes import MODES, read_session_mode, normalize_mode
+    from _modes import MODES, read_session_mode, normalize_mode, exploration_exit
 except ImportError:
     print("✗ cepa-modes: não achei common/hooks/_modes.py", file=sys.stderr)
     sys.exit(2)
@@ -40,16 +46,42 @@ _JSON_KEYS = {"purpose": "proposito", "entry": "entrada", "produces": "produz",
 BOLD, DIM, YELLOW, GREEN, RESET = "\033[1m", "\033[2m", "\033[33m", "\033[32m", "\033[0m"
 
 
-def session_mode():
-    """The mode declared in this tree, if any — the same file the hook reads.
-    Reads `mode:` (or the old `modo:`) and always returns the new name."""
+def repo_root():
     try:
         out = subprocess.run(["git", "rev-parse", "--show-toplevel"],
                              capture_output=True, text=True, timeout=5)
-        root = out.stdout.strip() if out.returncode == 0 else os.getcwd()
+        return out.stdout.strip() if out.returncode == 0 else os.getcwd()
     except (OSError, subprocess.SubprocessError):
-        root = os.getcwd()
-    return (read_session_mode(root) or {}).get("mode")
+        return os.getcwd()
+
+
+def session_mode():
+    """The mode declared in this tree, if any — the same file the hook reads.
+    Reads `mode:` (or the old `modo:`) and always returns the new name."""
+    return (read_session_mode(repo_root()) or {}).get("mode")
+
+
+def render_exit(name):
+    """`--exit`: the exit verdict of `name` computed from the disk. Only
+    exploration has one (the other modes close by their own gates)."""
+    if name != "exploration":
+        print(f"{YELLOW}{name}{RESET} não tem veredito mecânico de saída aqui. "
+              f"Fecha quando: {MODES[name]['exit']}.")
+        return 2
+    v = exploration_exit(repo_root())
+    ok = sum(1 for _, good, _ in v["items"] if good)
+    print(f"{BOLD}Saída da exploração{RESET} — {ok}/{len(v['items'])} no disco"
+          + (f" (painel: {v['panel']})" if v["panel"] else ""))
+    for label, good, detail in v["items"]:
+        mark = f"{GREEN}✓{RESET}" if good else f"{YELLOW}✗{RESET}"
+        print(f"  {mark} {label}" + (f"\n      {DIM}{detail}{RESET}" if detail else ""))
+    if v["closed"]:
+        print(f"\n{GREEN}FECHADA.{RESET} Próximo modo: {YELLOW}{v['next_mode']}{RESET} "
+              f"— `cepa --mode {v['next_mode']}` em nova sessão.")
+        return 0
+    print(f"\n{YELLOW}ABERTA.{RESET} O modo só fecha com as três no disco. A decisão do dono "
+          f"vai na linha `**Decisão do dono:**` de cada discordância do painel.")
+    return 1
 
 
 def render_block(name, info, current, color):
@@ -70,6 +102,8 @@ def main():
     ap.add_argument("--json", action="store_true", dest="as_json")
     ap.add_argument("--purposes", "--propositos", action="store_true", dest="purposes",
                     help="uma linha por modo: para que ele serve")
+    ap.add_argument("--exit", "--saida", action="store_true", dest="exit_",
+                    help="veredito de saída do modo desta sessão (ou do modo dado), lido do disco")
     ap.add_argument("--no-color", "--sem-cor", action="store_true", dest="no_color")
     args = ap.parse_args()
 
@@ -84,6 +118,14 @@ def main():
         print(f"✗ modo desconhecido: {args.mode}\n  válidos: {', '.join(MODES)}",
               file=sys.stderr)
         return 2
+
+    if args.exit_:
+        name = args.mode or session_mode()
+        if not name:
+            print("✗ esta árvore não tem modo declarado; diga qual: cepa-modes --exit exploration",
+                  file=sys.stderr)
+            return 2
+        return render_exit(name)
 
     target = {args.mode: MODES[args.mode]} if args.mode else MODES
     if args.as_json:

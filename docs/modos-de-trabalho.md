@@ -5,10 +5,11 @@
 > No ar: a declaração do modo (`cepa --mode <nome>`, gravada em `.claude/session-mode`), o
 > hook `session-mode.py` que lembra o modo a cada turno, a captura de desvio (skill
 > `off-mode-capture`), a trava de destino de escrita por modo (`modo-escrita-gate.py`), a
-> trava da Reforma (`reforma-gate.py`) e a da Reflexão (`reflexao-gate.py`). `/common:modes`
-> mostra a tabela e o modo da sessão.
+> trava da Reforma (`reforma-gate.py`), a da Reflexão (`reflexao-gate.py`) e o veredito de
+> saída da Exploração (`cepa-modes --exit`, e a linha `Saída: n/3` que o hook injeta a cada
+> turno; construído em 2026-11-04). `/common:modes` mostra a tabela e o modo da sessão.
 >
-> Falta: o veredito de saída da Exploração, o resto da cobrança do critério de aceite na
+> Falta: o resto da cobrança do critério de aceite na
 > passagem da Descoberta para a Construção (a parte textual já existe, no
 > `spec-readiness-gate.py`), e o modo Deploy. A lista completa está em
 > [O que precisa ser construído](#o-que-precisa-ser-construído).
@@ -58,7 +59,12 @@ sem ela o modo é rótulo, não fronteira.
 - **Saída:** painel `/common:advisors` rodado sobre o documento, com as
   discordâncias entre lentes **nomeadas** (não mediadas), e sua decisão
   registrada sobre cada uma.
-- **Gate:** existe parcialmente (`advisors`). Falta o veredito.
+- **Gate:** existe. O veredito é mecânico e lido do disco: o painel salvo em
+  `docs/reviews/<data>-painel-<slug>.md`, o documento que o cabeçalho dele
+  aponta, e a linha `**Decisão do dono:**` de cada discordância nomeada sem o
+  placeholder `_pendente_`. O hook `session-mode.py` injeta `Saída: n/3` com o
+  que falta a cada turno, e `cepa-modes --exit` mostra o detalhe. Fechou, o hook
+  diz FECHADA e aponta a Descoberta; ninguém precisa perguntar.
 
 ### 2. Descoberta
 
@@ -365,7 +371,9 @@ Em ordem:
    `common/hooks/modo-escrita-gate.py`.
 3. ~~**Gate da Reforma**~~ — feito: `common/hooks/reforma-gate.py`.
 4. ~~**Gate da Reflexão**~~ — feito: `common/hooks/reflexao-gate.py`.
-5. **Gate da Exploração** — o veredito que falta ao `advisors`.
+5. ~~**Gate da Exploração**~~ — feito (2026-11-04): `exploration_exit` em
+   `common/hooks/_modes.py`, lido pelo hook e por `cepa-modes --exit`; o
+   `advisors` grava a linha `Decisão do dono` por discordância.
 6. **Cobrança do critério de aceite na saída da Descoberta / entrada da
    Construção** — a peça que dá dente ao `completion-auditor`. **Em parte:** o
    `/common:spec` e o hook `common/hooks/spec-readiness-gate.py` barram uma
