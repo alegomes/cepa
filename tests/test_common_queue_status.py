@@ -371,6 +371,57 @@ def test_show_item_resolves_title_codes_in_the_epic(base):
     check("id desconhecido no show sai com 2", r.returncode == 2, r.stderr)
 
 
+def test_show_item_on_the_terminal_screen_splits_why_and_evidence(base):
+    import os, re
+    d = git_repo(base, "show-item-tela")
+    write_epic_queue(d)
+    env = dict(os.environ, CEPA_COR="sempre", COLUMNS="100")
+    r = subprocess.run([sys.executable, str(CEPA_PLAN), "show", "fila", "C1-1",
+                        "--repo", "."], capture_output=True, text=True,
+                       cwd=str(d), env=env)
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", r.stdout)
+    check("tela decorada do item sai com 0", r.returncode == 0, r.stderr)
+    check("tela decorada resolve os códigos no Epic",
+          "S11 · linha 13" in plain and "L1 · linha 17" in plain, plain)
+    check("tela decorada mostra o why uma parte por linha",
+          "    - peça 1 de 2" in plain and "    - critério de aceite: roteiro" in plain
+          and " · herdado" not in plain, plain)
+    check("tela decorada mostra a evidência por rodada, mais recente primeiro",
+          "evidência (mais recente primeiro)" in plain
+          and plain.index("- Resposta do dono") < plain.index("- Rodada cepa-until")
+          and "Evidência anterior:" not in plain, plain)
+
+
+def test_show_item_with_missing_epic_file(base):
+    d = git_repo(base, "show-item-epic-sumido")
+    p = d / "itens.json"
+    p.write_text(json.dumps([item("a", title="Coisa (S3)")]), encoding="utf-8")
+    r = run(d, "write", "fila", "--items", str(p), "--source",
+            "docs/epics/nao-existe.md, ciclo 1", "--quando", "2026-11-05",
+            "--repo", ".")
+    assert r.returncode == 0, r.stderr
+    r = run(d, "show", "fila", "a", "--repo", ".")
+    check("Epic citado mas ausente: sai com 0 e diz que não achou o arquivo",
+          r.returncode == 0 and "docs/epics/nao-existe.md" in r.stdout
+          and "não achei o arquivo" in r.stdout and "S3 · não achei" in r.stdout,
+          r.stdout + r.stderr)
+    r = run(d, "show", "fila", "a", "--json", "--repo", ".")
+    out = json.loads(r.stdout)
+    check("--json diz source.found=false e lista o código sem linha",
+          out["source"]["found"] is False
+          and out["source"]["refs"] == [{"code": "S3", "line": None, "text": None}],
+          out["source"])
+
+
+def test_show_queue_header(base):
+    d = git_repo(base, "show-cabecalho")
+    write_epic_queue(d)
+    r = run(d, "show", "fila", "--repo", ".")
+    check("show <fila> sem id mostra a fonte e aponta o show <id>",
+          r.returncode == 0 and "fonte: docs/epics/e.md, ciclo 1" in r.stdout
+          and "cepa-plan show fila <id>" in r.stdout, r.stdout + r.stderr)
+
+
 def test_show_item_without_epic_says_so(base):
     d = git_repo(base, "show-item-sem-epic")
     write_queue(d, [item("a", title="Coisa (S3)")])
@@ -388,6 +439,9 @@ def main():
         for fn in (test_lists_all_items_in_recorded_order,
                    test_show_item_resolves_title_codes_in_the_epic,
                    test_show_item_without_epic_says_so,
+                   test_show_item_on_the_terminal_screen_splits_why_and_evidence,
+                   test_show_item_with_missing_epic_file,
+                   test_show_queue_header,
                    test_text_groups_and_shows_reason_and_human_action,
                    test_filter_by_status,
                    test_one_item_in_full,
