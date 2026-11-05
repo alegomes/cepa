@@ -42,6 +42,14 @@ What does NOT get gated:
     only produces a dead end (seen in practice: `git push` blocked on a
     browser-extension repo that has no build at all). The warning still
     asks for the `.claude/no-build` marker to make the opt-out explicit.
+  - A LOCAL `git add <tests> && git commit -m ...` whose files are ALL test
+    files while the baseline is FAILURE of TESTS (not of compilation/collection):
+    allowed with a loud warning. It is the red regression test the test-first
+    rule asks to commit BEFORE the fix (seen 2026-11-04, WEGO-2511/2513/2514/
+    2515). Only that shape is inspected: -a / --include / --only / pathspec /
+    --amend / command substitution / any other git command before the commit
+    keep the block, as do a production file, an unknown file list, STALE/EMPTY,
+    a compile failure and every SHARING operation (push / PR / deploy).
 
 Which repo is judged: the one that RECEIVES the commit/push, not the one the
 session runs in. `cd X && git commit` / `git -C X push` read `.claude/no-build`,
@@ -57,6 +65,8 @@ FAILURE (something's off; don't proceed).
 import json
 import os
 import re
+import shlex
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -191,6 +201,282 @@ def target_dir(command: str, cwd: str):
     return None
 
 
+# ─── Red-test-only commit (test-first) ───────────────────────────────────
+# capture-build-result's `kind` is the build TOOL, not the failure type, so the
+# test-vs-compile distinction is read from the state's `tail` (last 12 lines).
+COMPILE_MARKERS = [re.compile(p, re.M) for p in (
+    # maven
+    r"COMPILATION ERROR", r"Compilation failure", r"maven-compiler-plugin",
+    r"cannot find symbol",
+    # pytest collection
+    r"errors? during collection", r"ImportError", r"ModuleNotFoundError",
+    r"SyntaxError", r"IndentationError",
+    # js
+    r"Failed to compile", r"Cannot find module", r"\bTS\d{4}\b",
+    # go
+    r"\[build failed\]", r"undefined:", r"cannot use", r"syntax error",
+    # cargo
+    r"error\[E\d+\]", r"could not compile",
+)]
+TEST_MARKERS = [re.compile(p, re.M) for p in (
+    # maven
+    r"Tests run: \d+, Failures: [1-9]", r"Tests run: \d+, Failures: \d+, Errors: [1-9]",
+    r"There (?:are|were) test failures", r"<<< FAILURE!", r"<<< ERROR!",
+    r"maven-surefire-plugin", r"maven-failsafe-plugin",
+    # pytest
+    r"\b\d+ failed\b",
+    # jest / vitest
+    r"Tests:?\s+.*\b\d+ failed", r"✕", r"^FAIL ",
+    # go (also covers the repo's script-style `FAIL  name`)
+    r"--- FAIL:", r"^FAIL\s",
+    # cargo
+    r"test result: FAILED", r"panicked at",
+)]
+
+TEST_DIR_SEGMENTS = {"test", "tests", "__tests__", "spec", "specs", "testing"}
+TEST_BASENAME = re.compile(
+    r"^(?:test_.*\.py|.*_test\.py|conftest\.py|.*Tests?\.java|.*IT\.java|"
+    r".*TestCase\.java|.*Test\.kt|.*Spec\.kt|.*Spec\.scala|"
+    r".*\.(?:test|spec)\.(?:jsx?|tsx?|mjs|cjs)|.*_test\.go|.*_spec\.rb|.*_test\.rb)$"
+)
+
+
+def failure_is_test_failure(state: dict) -> bool:
+    """True only when the FAILURE baseline is positively a failing TEST.
+
+    Fail-closed: no tail, no marker, or any compile/collection marker -> False.
+    A build stopped by Claude Code did not fail at all -> False.
+    """
+    try:
+        if state.get("stopped_by") == "claude-code":
+            return False
+        text = "\n".join(str(state.get(k) or "") for k in ("tail", "reason"))
+        if not text.strip():
+            return False
+        if any(m.search(text) for m in COMPILE_MARKERS):
+            return False
+        return any(m.search(text) for m in TEST_MARKERS)
+    except Exception:
+        return False
+
+
+def is_test_path(path: str) -> bool:
+    """True for test sources and fixtures/resources under a test directory."""
+    parts = [x for x in path.replace("\\", "/").split("/") if x]
+    if not parts:
+        return False
+    if any(seg in TEST_DIR_SEGMENTS for seg in parts[:-1]):
+        return True
+    return bool(TEST_BASENAME.match(parts[-1]))
+
+
+_FLAGS_WITH_ARG = {
+    "-m", "-F", "-C", "-c", "--author", "--date", "--message", "--file",
+    "--fixup", "--squash", "--reuse-message", "--reedit-message", "--trailer",
+    "-t", "--template", "--cleanup",
+}
+
+
+def _git_lines(repo_dir: str, args: list):
+    r = subprocess.run(["git", "-C", repo_dir] + args, capture_output=True,
+                       text=True, timeout=15)
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.strip())
+    return [ln for ln in r.stdout.splitlines() if ln]
+
+
+def _status_paths(repo_dir: str, pathspec=None) -> list:
+    """Paths `git status` reports (tracked changes + untracked files), repo-relative."""
+    args = ["status", "--porcelain", "-z", "--untracked-files=all"]
+    if pathspec:
+        args += ["--", pathspec]
+    r = subprocess.run(["git", "-C", repo_dir] + args, capture_output=True,
+                       text=True, timeout=15)
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.strip())
+    out, entries, i = [], r.stdout.split("\0"), 0
+    while i < len(entries):
+        e = entries[i]
+        i += 1
+        if len(e) < 4:
+            continue
+        out.append(e[3:])
+        if e[0] in "RC" or e[1] in "RC":
+            # rename/copy: the origin path follows as its own entry; a rename
+            # deletes it, so it counts as touched too
+            if i < len(entries) and entries[i]:
+                out.append(entries[i])
+            i += 1
+    return out
+
+
+_ADD_ALL_FLAGS = {"--all", "--update", "--patch", "--interactive"}
+
+# Subcommands that change the index/tree in ways the hook cannot simulate: when
+# one runs before the commit in the same command, the file list is unknowable.
+_UNSIMULABLE_GIT = {"mv", "rm", "apply", "checkout", "restore", "reset", "stash",
+                    "cherry-pick", "revert", "merge", "rebase"}
+
+
+def _git_subcommand(toks: list):
+    """Subcommand of a tokenized `git ...` segment (skips -C <dir> / -c k=v), or None."""
+    if not toks or toks[0] != "git":
+        return None
+    i = 1
+    while i < len(toks):
+        if toks[i] in ("-C", "-c"):
+            i += 2
+        elif toks[i].startswith("-"):
+            i += 1
+        else:
+            return toks[i]
+    return None
+
+
+_WRAPPERS = {"env", "command", "sudo", "nice", "time"}
+_READONLY_GIT = {"status", "log", "diff", "show", "ls-files", "rev-parse", "branch"}
+
+
+def _prior_segment_kind(seg: str) -> str:
+    """Classify a segment that runs BEFORE the commit: 'add', 'safe' or 'unknown'.
+
+    'add' = a plain `git add`; 'safe' = read-only git; anything that mentions git
+    in any other way (VAR=x git ..., env/sudo git ..., sh -c "git ...") is 'unknown';
+    everything else is 'other'. No non-git command is trusted as a no-op (echo, :,
+    export can hide writes via redirection, $(...) or backticks).
+    """
+    toks = _tokens(seg)
+    if toks and toks[0] == "git":
+        sub = _git_subcommand(toks)
+        if sub == "add":
+            return "add"
+        if sub in _READONLY_GIT:
+            return "safe"
+        return "unknown"
+    if re.search(r"\bgit\b", seg):
+        return "unknown"  # git behind VAR=value / env / sudo / sh -c ...
+    return "other"  # not git: irrelevant to a plain commit (only the index counts)
+
+
+def _tokens(seg: str) -> list:
+    try:
+        return shlex.split(seg)
+    except ValueError:
+        return seg.split()
+
+
+def _add_files(seg: str, seg_dir: str, repo_dir: str, earlier_other: bool = False) -> list:
+    """Paths a `git add` segment would stage (over-inclusive; may raise).
+
+    A status-based add (-A/-u/-p/-i/./:/, a directory or a glob) reads the tree
+    NOW, before an earlier non-git segment (`rm x;`) has run: it raises then.
+    """
+    def status_based(pathspec=None):
+        if earlier_other:
+            raise ValueError("status-based git add after a non-git segment")
+        return _status_paths(repo_dir, pathspec)
+
+    try:
+        toks = shlex.split(seg)
+    except ValueError:
+        toks = seg.split()
+    args = toks[toks.index("add") + 1:]
+    out, after_dd = [], False
+    for t in args:
+        if any(c in t for c in "$`("):
+            raise ValueError("shell expansion in git add")  # cannot evaluate: fail-closed
+        if t.startswith(("--pathspec-from-file", "--pathspec-file-nul")):
+            raise ValueError("pathspec from file")  # cannot read it: fail-closed
+        if not after_dd and t == "--":
+            after_dd = True
+            continue
+        if not after_dd and t.startswith("-") and len(t) > 1:
+            if t in _ADD_ALL_FLAGS or (not t.startswith("--") and set(t[1:]) & set("Auip")):
+                return status_based()
+            continue
+        if t in (".", ":/", ":/."):
+            return status_based()
+        rel = os.path.relpath(
+            os.path.normpath(os.path.join(os.path.realpath(seg_dir), t)),
+            os.path.realpath(repo_dir))
+        expands = os.path.isdir(os.path.join(os.path.realpath(seg_dir), t)) or any(
+            c in t for c in "*?[")
+        found = status_based(rel) if expands else _status_paths(repo_dir, rel)
+        out += found or [rel]
+    return out
+
+
+# Why the last commit_files() call answered None ("widen" = -a/--include/--only/
+# pathspec form); read by main() to pick the BLOCKED hint.
+_WHY = {"reason": None}
+
+
+def commit_files(command: str, repo_dir: str, session_cwd=None):
+    """Files the gated `git commit` would include, or None when unknown.
+
+    Only the shape `git add <paths> && git commit -m ...` is inspected: staged
+    files (`diff --cached`) plus the paths of any plain `git add` that comes
+    BEFORE the commit in the same command (the hook runs before it, so the index
+    does not have them yet). Forms whose file list depends on the working tree or
+    on something the hook cannot evaluate answer None (fail-closed): -a/--all,
+    --include/-i, --only/-o, pathspecs, --amend, command substitution, any git
+    command before the commit other than a plain `git add` / read-only git.
+    """
+    _WHY["reason"] = None
+    try:
+        if "$(" in command or "`" in command:
+            return None  # command substitution the hook cannot evaluate
+        base = session_cwd or repo_dir
+        seg, files, earlier_other = None, set(), False
+        add_re = re.compile(r"^git" + GIT_C + r"\s+add\b")
+        for s_, d_, _e in S.segment_dirs(command, base):
+            if classify(s_) == "local":
+                seg = s_
+                break
+            kind = _prior_segment_kind(s_)
+            if kind == "unknown" or _git_subcommand(_tokens(s_)) in _UNSIMULABLE_GIT:
+                return None
+            if kind == "add" and add_re.search(s_.strip()):
+                files |= set(_add_files(s_, d_, repo_dir, earlier_other))
+            elif kind == "other":
+                earlier_other = True
+        if seg is None:
+            return None
+        toks = _tokens(seg)
+        if "commit" not in toks:
+            return None
+        args = toks[toks.index("commit") + 1:]
+        i = 0
+        while i < len(args):
+            t = args[i]
+            if t == "--amend":
+                return None  # the amended commit also carries the previous commit's files
+            widen = False
+            if t == "--":
+                widen = i + 1 < len(args)
+            elif t in _FLAGS_WITH_ARG:
+                i += 2
+                continue
+            elif (not t.startswith("--") and len(t) > 2 and t.startswith("-")
+                  and t[-1] in "mFCct" and not set(t[1:-1]) & set("aio")):
+                i += 2  # cluster ending in an option that takes the next token: -qm "msg"
+                continue
+            elif t.startswith("--"):
+                widen = t in ("--all", "--include", "--only")
+            elif t.startswith("-") and len(t) > 1:
+                widen = bool(set(t[1:]) & set("aio"))
+            else:
+                widen = True  # positional pathspec
+            if widen:
+                _WHY["reason"] = "widen"
+                return None
+            i += 1
+        files |= set(_git_lines(repo_dir, ["diff", "--cached", "--no-renames", "--name-only"]))
+        return sorted(files) or None
+    except Exception:
+        return None
+
+
 def main():
     raw = sys.stdin.read()
     try:
@@ -310,6 +596,7 @@ def main():
         sys.exit(0)
 
     status = state.get("status", "UNKNOWN")
+    extra_note = ""
     if status == "SUCCESS":
         sys.exit(0)
 
@@ -347,6 +634,42 @@ def main():
             # build's own output (e.g. CC stopped the background task).
             reason += f": {state['reason']}"
         suggestion = "Fix the failing tests / build errors, re-run the verify command, and try again. Don't proceed with broken state."
+        if tier == "local":
+            if not failure_is_test_failure(state):
+                if state.get("stopped_by") != "claude-code":
+                    extra_note = (
+                        "\n  the failure is a compilation/collection error, not a red test "
+                        "— the tests-only exemption does not apply"
+                    )
+            else:
+                files = commit_files(command, str(cwd), session_cwd)
+                if files and all(is_test_path(f) for f in files):
+                    shown = ", ".join(files[:5]) + (" ..." if len(files) > 5 else "")
+                    print(
+                        "\n[gate-advance] ⚠ ALLOWED WITH WARNING: local commit touching only "
+                        f"test files ({shown}) while the baseline is a TEST failure.\n"
+                        "  This is the red regression test the test-first rule asks to commit "
+                        "BEFORE the fix.\n"
+                        "  Push / PR / deploy still require a SUCCESS baseline. Disabling or "
+                        "deleting the red test is not a fix.",
+                        file=sys.stderr,
+                    )
+                    T.emit("gate_warn", cwd=str(cwd), tier=tier,
+                           reason="red-test-only-commit", files=len(files))
+                    sys.exit(0)
+                if not files and _WHY["reason"] == "widen":
+                    extra_note = (
+                        "\n  the tests-only exemption applies to `git add <tests> && git "
+                        "commit -m ...` only: -a / --include / pathspec forms are not inspected"
+                    )
+                elif not files:
+                    extra_note = (
+                        "\n  no files found for this commit: stage the test files (git add) "
+                        "in a previous command or in this same command, before git commit"
+                    )
+                if files:
+                    prod = next(f for f in files if not is_test_path(f))
+                    extra_note = f"\n  not a tests-only commit: {prod}"
         if state.get("stopped_by") == "claude-code":
             suggestion = (
                 "The build did not fail — it was stopped before it ended. Re-run it with a "
@@ -363,7 +686,8 @@ def main():
         f"  Command: {command[:200]}\n"
         f"  Suggestion: {suggestion}\n"
         f"  State file: {state_path}\n"
-        f"  Override by re-establishing green build, not by editing the state file.",
+        f"  Override by re-establishing green build, not by editing the state file."
+        f"{extra_note}",
         file=sys.stderr,
     )
     T.emit(
