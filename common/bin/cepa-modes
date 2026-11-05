@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-modes — the table of work modes, to consult mid-session.
+"""cepa-modes — shows the table of work modes and their exit conditions.
 
 Every session declares a mode, and the mode is a STATE that lasts until the
 exit condition is met. Whoever forgets a mode's purpose mid-work will not open
@@ -22,7 +22,6 @@ strategy document it ran over, owner's decision on each named disagreement).
 rc 0 = closed, 1 = still open, 2 = the mode has no mechanical verdict here.
 """
 
-import argparse
 import json
 import os
 import subprocess
@@ -32,6 +31,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
+import _clihelp  # noqa: E402
 try:
     from _modes import MODES, read_session_mode, normalize_mode, exploration_exit
 except ImportError:
@@ -97,28 +97,35 @@ def render_block(name, info, current, color):
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        prog="cepa-modes",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    ap = _clihelp.Parser(
+        prog="cepa modes",
         description=(
-            "The table of work modes and their boundaries.\n"
-            "\n"
             "Every session declares a mode, and the mode is a STATE that lasts until\n"
             "its exit condition is met. Whoever forgets the mode's purpose mid-work\n"
             "will not open docs/modos-de-trabalho.md: they will guess. This command\n"
             "is the table and nothing else. The source is common/hooks/_modes.py,\n"
-            "the same one the session hook reads."),
-        epilog=(
-            "examples:\n"
-            "  cepa-modes                  # the whole table; marks this session's mode\n"
-            "  cepa-modes exploration      # one mode: enters with, produces, closes when, gate\n"
-            "  cepa-modes --purposes       # one line per mode: what it is for\n"
-            "  cepa-modes --exit           # the exit verdict of this session's mode\n"
-            "  cepa-modes --json\n"
+            "the same one the session hook reads.\n"
             "\n"
-            "exit status with --exit: 0 = mode closed · 1 = still open · 2 = the mode has\n"
-            "no mechanical verdict here"))
-    ap.add_argument("mode", nargs="?", metavar="mode", help="only this mode (default: all)")
+            "--exit is the verdict exploration lacked: it reads docs/reviews/ and says\n"
+            "which of the three parts of the exit condition are on disk (panel saved,\n"
+            "the strategy document it ran over, the owner's decision on each named\n"
+            "disagreement). Only exploration has a mechanical verdict."),
+        examples=[
+            ("cepa modes", "the whole table; marks this session's mode"),
+            ("cepa modes exploration", "one mode: enters with, produces, closes when, gate"),
+            ("cepa modes --purposes", "one line per mode: what it is for"),
+            ("cepa modes --exit", "the exit verdict of this session's mode"),
+            ("cepa modes --json", "the table as JSON (pt-BR keys), for code"),
+        ],
+        exit_codes=[
+            (0, "table printed; with --exit, the mode is closed"),
+            (1, "with --exit, the mode is still open"),
+            (2, "invalid usage or unknown mode; with --exit, no mode declared in this "
+                "tree or the mode has no mechanical verdict here"),
+        ],
+        see_also=["docs/modos-de-trabalho.md: the full design of the work modes",
+                  "cepa --mode help: the same purposes, from the launcher"])
+    ap.add_argument("mode", nargs="?", metavar="MODE", help="only this mode (default: all)")
     ap.add_argument("--json", action="store_true", dest="as_json",
                     help="JSON output, for code")
     ap.add_argument("--purposes", "--propositos", action="store_true", dest="purposes",

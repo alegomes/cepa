@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-metrics — aggregate the harness's own telemetry into a readable report.
+"""cepa-metrics — aggregates the harness telemetry into a readable report.
 
 Reads the JSONL ledgers written by _telemetry.py (and inline emitters) at
 ~/.claude/cepa-telemetry/events-YYYY-MM.jsonl and answers the questions the
@@ -37,6 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
+import _clihelp  # noqa: E402
 
 TELEMETRY_DIR = Path(os.environ.get("CEPA_TELEMETRY_DIR") or (Path.home() / ".claude" / "cepa-telemetry"))
 
@@ -171,11 +172,20 @@ def _line(name, numerator, denominator, pct, units):
 
 
 def scorecard(argv):
-    ap = argparse.ArgumentParser(prog="cepa-metrics scorecard",
-                                 description="The three scorecard numbers (turns after "
-                                             "routine, red builds, sessions in the cepa "
-                                             "repo), over three windows, with the "
-                                             "arithmetic behind each one.")
+    ap = _clihelp.Parser(
+        prog="cepa metrics scorecard",
+        summary="shows the three scorecard numbers, with the arithmetic",
+        description=(
+            "The three numbers the harness strategy tracks: turns after a routine per\n"
+            "session, red builds and sessions in the cepa repo. Each one over two\n"
+            "windows (the last 7 days and since the start of the ledger), printed with\n"
+            "numerator, denominator and the operation behind the result."),
+        examples=[
+            ("cepa metrics scorecard", "the numbers, with the arithmetic"),
+            ("cepa metrics scorecard --json", "numerator, denominator and result, for code"),
+        ],
+        exit_codes=[(0, "scorecard printed (even with no data)"), (2, "invalid usage")],
+        see_also=["docs/estrategia-cepa-proximo-nivel.md: where the three numbers come from"])
     ap.add_argument("--json", action="store_true", dest="as_json",
                     help="JSON output, for code")
     args = ap.parse_args(argv)
@@ -217,32 +227,32 @@ def scorecard(argv):
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        prog="cepa-metrics",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    ap = _clihelp.Parser(
+        prog="cepa metrics",
         description=(
-            "Aggregates the harness's own telemetry into a readable report.\n"
-            "\n"
             "Reads the JSONL ledgers in ~/.claude/cepa-telemetry/events-YYYY-MM.jsonl,\n"
             "which the hooks feed automatically, and answers what the harness did not\n"
             "know about itself: how many sessions each repo uses, how often the gates\n"
             "block (and why), how builds go per repo, which proof verdicts dominate,\n"
             "and how many turns you spend before and after a routine.\n"
             "\n"
-            "subcommand:\n"
-            "  cepa-metrics scorecard [--json]   the three scorecard numbers, with the arithmetic"),
-        epilog=(
-            "examples:\n"
-            "  cepa-metrics                      # last 30 days\n"
-            "  cepa-metrics --days 7\n"
-            "  cepa-metrics --month 2026-10\n"
-            "  cepa-metrics --repo wego-acessos-backend\n"
-            "  cepa-metrics --json               # the aggregates, for code\n"
-            "\n"
-            "how to read: high gate_block stale/failure in a repo = slow verify or wrong\n"
-            "baseline scope; no-baseline in a repo WITH a build = sessions pushing\n"
+            "How to read it: high gate_block stale/failure in a repo = slow verify or\n"
+            "wrong baseline scope; no-baseline in a repo WITH a build = sessions pushing\n"
             "without ever running verify; proof_block > 0 = an agent stamped `proven`\n"
-            "above the allowed level and the guard caught it."))
+            "above the allowed level and the guard caught it."),
+        commands=[("scorecard", "shows the three scorecard numbers, with the arithmetic")],
+        examples=[
+            ("cepa metrics", "last 30 days"),
+            ("cepa metrics --days 7", "last week"),
+            ("cepa metrics --month 2026-10", "one closed month"),
+            ("cepa metrics --repo wego-acessos-backend", "one repo only"),
+            ("cepa metrics --json", "the aggregates, for code"),
+            ("cepa metrics scorecard", "the three scorecard numbers"),
+        ],
+        exit_codes=[(0, "report printed (even with no events in the window)"),
+                    (1, "invalid --month (not YYYY-MM)"),
+                    (2, "invalid usage")],
+        see_also=["/common:metrics: the skill that reads this report with you"])
     ap.add_argument("--days", type=int, default=30, metavar="N",
                     help="window: the last N days (default: 30)")
     ap.add_argument("--month", metavar="YYYY-MM",

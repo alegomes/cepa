@@ -61,6 +61,7 @@ RESULTS = []  # (level, area, message, fix)  level: "ok" | "warn" | "fail"
 # the same question at session boot. Single source, in hooks/ (see _pluginver.py).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
+import _clihelp  # noqa: E402
 try:
     import _pluginver as PV
 except Exception:  # noqa: BLE001 — doctor degrades, never dies because of this
@@ -1197,66 +1198,77 @@ def parse_if_stale(argv):
     return None
 
 
-HELP = """\
-usage: cepa-doctor [--fix] [--brief] [--projeto] [--if-stale H]
-
-Validates the harness installation against reality, in 30 seconds.
-
-Almost every infrastructure failure of the harness shows up in the middle of a
-task, at the worst time: a plugin that did not load, a board-flow.yaml from
-another module, an expired build baseline, an orphan worktree, a stale handoff
-after a rename. This command turns that into half a minute of maintenance.
-
-Global checks (independent of the project):
-  - settings.json parses and the @cepa plugins are enabled
-  - each plugin's version in the repo against the installed cache (edited
-    without reinstalling)
-  - open sessions running hooks from a version the cache no longer has
-  - every .py hook in the cache compiles
-  - telemetry directory is writable
-
-Project checks (current directory):
-  - it is a git repo (without git the rituals degrade)
-  - board-flow.yaml: minimal structure of the defaults block
-  - .claude/last-build.json: status and age of the build baseline
-  - session/* worktrees: stale (>14d without a commit) and orphan directories
-  - forgotten agent worktree INSIDE the repo (.claude/worktrees/)
-  - handoffs not updated for >30d
-  - single-track queue diverging from BACKLOG.md
-  - cepa-until runs waiting for the owner or with a dead supervisor
-  - environment manifest (docs/env.yaml): ports held by a process from
-    ANOTHER directory and `services` containers missing from docker ps
-  - installed `twg` version against the one declared in the environment manifest
-
-Output: ✓ / ⚠ / ✗ per check; then the list of what has a mechanical fix and
-the list of what needs you. The LIVE check of board-flow.yaml against Jira
-does not happen here (script without MCP): /common:doctor --live delegates
-that part to atlassian-expert.
-
-options:
-  --fix          applies all mechanical fixes at once (reinstall plugins,
-                 archive expired handoff, clean orphan worktree); what is your
-                 decision stays in the "Precisa de você" list
-  --brief        only the one-line summary; with nothing to say, prints nothing
-                 (the mode `cepa` uses when opening a session)
-  --projeto      only the project checks, skips the global ones
-  --if-stale H   only runs if the last diagnosis in this repo is older than H
-                 hours; otherwise exits silently (the `cepa` preflight)
-  -h, --help     this help
-
-examples:
-  cepa-doctor                    # the full diagnosis
-  cepa-doctor --fix              # diagnosis + mechanical fixes
-  cepa-doctor --brief --if-stale 12
-
-exit: 0 = all ok · 1 = warnings only · 2 = some failure
-"""
+def help_parser():
+    """The help of this command, in the cepa layout. Only the help: the
+    options are still read by hand in main() (unknown arguments are ignored,
+    as they always were), so this parser never parses anything."""
+    ap = _clihelp.Parser(
+        prog="cepa doctor",
+        description=(
+            "Almost every infrastructure failure of the harness shows up in the middle\n"
+            "of a task, at the worst time: a plugin that did not load, a board-flow.yaml\n"
+            "from another module, an expired build baseline, an orphan worktree, a stale\n"
+            "handoff after a rename. This command turns that into half a minute of\n"
+            "maintenance.\n"
+            "\n"
+            "Global checks (independent of the project):\n"
+            "  - settings.json parses and the @cepa plugins are enabled\n"
+            "  - each plugin's version in the repo against the installed cache (edited\n"
+            "    without reinstalling)\n"
+            "  - open sessions running hooks from a version the cache no longer has\n"
+            "  - every .py hook in the cache compiles\n"
+            "  - telemetry directory is writable\n"
+            "\n"
+            "Project checks (current directory):\n"
+            "  - it is a git repo (without git the rituals degrade)\n"
+            "  - board-flow.yaml: minimal structure of the defaults block\n"
+            "  - .claude/last-build.json: status and age of the build baseline\n"
+            "  - session/* worktrees: stale (>14d without a commit) and orphan directories\n"
+            "  - forgotten agent worktree INSIDE the repo (.claude/worktrees/)\n"
+            "  - handoffs not updated for >30d\n"
+            "  - single-track queue diverging from BACKLOG.md\n"
+            "  - cepa until runs waiting for the owner or with a dead supervisor\n"
+            "  - environment manifest (docs/env.yaml): ports held by a process from\n"
+            "    ANOTHER directory and `services` containers missing from docker ps\n"
+            "  - installed `twg` version against the one declared in the environment\n"
+            "    manifest\n"
+            "\n"
+            "Output: ✓ / ⚠ / ✗ per check; then the list of what has a mechanical fix and\n"
+            "the list of what needs you. The LIVE check of board-flow.yaml against Jira\n"
+            "does not happen here (script without MCP): /common:doctor --live delegates\n"
+            "that part to atlassian-expert."),
+        examples=[
+            ("cepa doctor", "the full diagnosis"),
+            ("cepa doctor --fix", "diagnosis plus every mechanical fix"),
+            ("cepa doctor --projeto", "only the checks of the current project"),
+            ("cepa doctor --brief --if-stale 12", "the `cepa` preflight: silent if run <12h ago"),
+        ],
+        exit_codes=[
+            (0, "all ok, or skipped by --if-stale (help also exits 0)"),
+            (1, "warnings only"),
+            (2, "some failure"),
+        ],
+        see_also=["/common:doctor: the same diagnosis inside a session, plus the "
+                  "--live check against Jira"])
+    ap.add_argument("--fix", action="store_true",
+                    help="applies all mechanical fixes at once (reinstall plugins, archive "
+                         "expired handoff, clean orphan worktree); what is your decision "
+                         "stays in the \"Precisa de você\" list")
+    ap.add_argument("--brief", action="store_true",
+                    help="only the one-line summary; with nothing to say, prints nothing "
+                         "(the mode `cepa` uses when opening a session)")
+    ap.add_argument("--projeto", action="store_true",
+                    help="only the project checks, skips the global ones")
+    ap.add_argument("--if-stale", metavar="H", type=float,
+                    help="only runs if the last diagnosis in this repo is older than H "
+                         "hours; otherwise exits silently (the `cepa` preflight)")
+    return ap
 
 
 def main():
     argv = sys.argv[1:]
     if any(a in ("-h", "--help", "help", "ajuda") for a in argv):
-        print(HELP, end="")
+        help_parser().print_help()
         return 0
     do_fix = "--fix" in argv
     brief = "--brief" in argv

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-clock — where a session's wall clock went.
+"""cepa-clock — shows where a session's wall-clock time went.
 
 ## Why it exists
 
@@ -46,7 +46,6 @@ Usage:
     cepa-clock --json
 """
 
-import argparse
 import glob
 import json
 import os
@@ -59,6 +58,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
+import _clihelp  # noqa: E402
 
 PROJECTS = Path.home() / ".claude" / "projects"
 WAIT_RE = re.compile(r"\buntil\b|\bsleep\b|\bwhile\b|\bfor\b.*\bseq\b")
@@ -205,12 +205,9 @@ def report(r):
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        prog="cepa-clock",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    ap = _clihelp.Parser(
+        prog="cepa clock",
         description=(
-            "Where a session's wall clock went.\n"
-            "\n"
             "Reads the transcript Claude Code writes to ~/.claude/projects/<slug>/\n"
             "(plus one file per subagent) and splits the session time into busy\n"
             "waiting (a Bash command sitting idle: `until ...; do sleep; done`,\n"
@@ -221,13 +218,18 @@ def main():
             "The ABSOLUTE MINUTES are the reliable number. In an interactive session\n"
             "the clock includes the time it waited for you, so the percentages come\n"
             "out diluted: only compare percentages between unattended runs."),
-        epilog=(
-            "examples:\n"
-            "  cepa-clock                     # the most recent session of this repo\n"
-            "  cepa-clock --slug <slug>       # the sessions of another project directory\n"
-            "  cepa-clock --all --days 7      # every session of the last week\n"
-            "  cepa-clock --emit              # also writes to the telemetry ledger\n"
-            "  cepa-clock --json              # for code (relogio_s, espera_s, build_s, outro_s)"))
+        examples=[
+            ("cepa clock", "the most recent session of this repo"),
+            ("cepa clock --slug <slug>", "the sessions of another project directory"),
+            ("cepa clock --all --days 7", "every session of the last week"),
+            ("cepa clock --emit", "also writes to the telemetry ledger"),
+            ("cepa clock --json", "for code (relogio_s, espera_s, build_s, outro_s)"),
+        ],
+        exit_codes=[
+            (0, "report printed, or no session with 5+ minutes of clock in the period"),
+            (2, "invalid usage, or no transcript found"),
+        ],
+        see_also=["cepa tokens: how many tokens the same session spent"])
     ap.add_argument("--slug", metavar="SLUG",
                     help="directory under ~/.claude/projects to read (default: this repo's)")
     ap.add_argument("--all", "--todas", dest="all_sessions", action="store_true",

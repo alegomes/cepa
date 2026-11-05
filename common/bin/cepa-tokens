@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-tokens — how many tokens a session spent, and on whom.
+"""cepa-tokens — shows how many tokens a session spent, and on which agents.
 
 ## Why it exists
 
@@ -43,7 +43,6 @@ Usage:
     cepa-tokens --json
 """
 
-import argparse
 import glob
 import json
 import os
@@ -55,6 +54,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
+import _clihelp  # noqa: E402
 
 PROJECTS = Path.home() / ".claude" / "projects"
 FIELDS = ("entrada", "cache_w", "cache_r", "saida")
@@ -206,18 +206,16 @@ def emit(r):
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        prog="cepa-tokens",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    ap = _clihelp.Parser(
+        prog="cepa tokens",
         description=(
-            "How many tokens a session spent, and on whom.\n"
+            "Reads the same source as cepa clock: the transcript in\n"
+            "~/.claude/projects/<slug>/ plus one file per subagent, with the agent\n"
+            "type in the .meta.json next to it. Each message.id is counted once, from\n"
+            "the `usage` of its last line (the same response appears on several lines;\n"
+            "summing all of them inflates the total).\n"
             "\n"
-            "Reads the same source as cepa-clock: the transcript in ~/.claude/projects/<slug>/\n"
-            "plus one file per subagent, with the agent type in the .meta.json next to it.\n"
-            "Each message.id is counted once, from the `usage` of its last line\n"
-            "(the same response appears on several lines; summing all of them inflates the total).\n"
-            "\n"
-            "four numbers per response (the keys stay in pt-BR in the JSON and telemetry):\n"
+            "Four numbers per response (the keys stay in pt-BR in JSON and telemetry):\n"
             "  entrada   input_tokens (new text, not cached)\n"
             "  cache_w   cache_creation_input_tokens (new text written to the cache)\n"
             "  cache_r   cache_read_input_tokens (reused context, ~10% of the price)\n"
@@ -226,13 +224,18 @@ def main():
             "\"New context\" = entrada + cache_w: it is what grows when a large file\n"
             "enters the conversation. To know WHAT entered, it counts the characters\n"
             "of each tool result (Read, Bash, Agent...)."),
-        epilog=(
-            "examples:\n"
-            "  cepa-tokens                      # the most recent session of this repo\n"
-            "  cepa-tokens --file <x.jsonl>     # one specific session\n"
-            "  cepa-tokens --all --days 30      # every session in the period\n"
-            "  cepa-tokens --emit               # writes to the ledger (token_usage event)\n"
-            "  cepa-tokens --json"))
+        examples=[
+            ("cepa tokens", "the most recent session of this repo"),
+            ("cepa tokens --file <x.jsonl>", "one specific session"),
+            ("cepa tokens --all --days 30", "every session in the period"),
+            ("cepa tokens --emit", "writes to the ledger (token_usage event)"),
+            ("cepa tokens --json", "JSON output, for code"),
+        ],
+        exit_codes=[
+            (0, "report printed or written; also with --emit when no transcript was found"),
+            (2, "invalid usage, or no transcript with token usage found (without --emit)"),
+        ],
+        see_also=["cepa clock: where the same session's wall-clock time went"])
     ap.add_argument("--file", "--arquivo", dest="file", metavar="FILE",
                     help="the main .jsonl of a session (default: the most recent of this repo)")
     ap.add_argument("--all", "--todas", dest="all_sessions", action="store_true",
@@ -240,7 +243,7 @@ def main():
     ap.add_argument("--days", type=int, default=30, metavar="N",
                     help="window, in days, that --all considers (default: 30)")
     ap.add_argument("--emit", action="store_true",
-                    help="besides printing, writes the result to the telemetry ledger")
+                    help="writes the result to the telemetry ledger instead of printing the report")
     ap.add_argument("--json", action="store_true", dest="as_json",
                     help="JSON output, for code")
     args = ap.parse_args()

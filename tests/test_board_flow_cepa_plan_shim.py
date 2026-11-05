@@ -188,5 +188,5 @@ def test_real_integration_reaches_the_real_cepa_plan(tmp_path):
     r = _run(SHIM_REAL, ["--help"], cwd=tmp_path)
 
     assert r.returncode == 0, r.stderr
-    assert "cepa-plan" in r.stdout
+    assert "cepa plan" in r.stdout
     assert "single-track" in r.stdout or "single-track" in r.stdout.lower()

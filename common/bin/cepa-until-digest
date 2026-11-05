@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-until-digest — the summary of a `cepa-until` run that fits in one session.
+"""cepa-until-digest — summarizes a cepa until run so it fits in one session.
 
 ## Why it exists
 
@@ -28,7 +28,6 @@ Usage:
     cepa-until-digest <run>.jsonl --result-max 4000
 """
 
-import argparse
 import json
 import re
 import subprocess
@@ -38,6 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
+import _clihelp  # noqa: E402
 import _queuepath as qp  # noqa: E402  (the queue lives in two layouts during the transition)
 
 try:
@@ -467,15 +467,12 @@ def build_digest(ledger, result_max):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(
-        prog="cepa-until-digest",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    ap = _clihelp.Parser(
+        prog="cepa until-digest",
         description=(
-            "The summary of a cepa-until run that fits in one session.\n"
-            "\n"
             "A run leaves two files: the record (<run>.jsonl, a few KB) and the\n"
             "raw output of each subprocess (<run>.log, which goes past 10 MB and\n"
-            "fits in no session). This script MECHANICALLY picks what to read,\n"
+            "fits in no session). This command MECHANICALLY picks what to read,\n"
             "and says what it picked:\n"
             "  - the whole record (start, end, each item, each build)\n"
             "  - per round: claude's final report, agent calls by type,\n"
@@ -486,15 +483,22 @@ def main(argv=None):
             "  - the tail of each full build the supervisor ran\n"
             "  - the CURRENT status and evidence of each touched item, read from the queue\n"
             "\n"
-            "/common:until-review interprets it. This script has no opinion."),
-        epilog=(
-            "examples:\n"
-            "  cepa-until-digest .claude/queues/wego/until/2026-09-23-1826.jsonl\n"
-            "  cepa-until-digest <run>.jsonl --result-max 4000\n"
-            "\n"
-            "exit: 0 ok · 2 the record does not exist"))
-    ap.add_argument("ledger", metavar="ledger",
-                    help="the <run>.jsonl that cepa-until wrote (the .log next to it is read too)")
+            "/common:until-review interprets it. This command has no opinion."),
+        examples=[
+            ("cepa until-digest .claude/queues/wego/until/<run>.jsonl",
+             "the digest of one run"),
+            ("cepa until-digest <run>.jsonl --result-max 4000",
+             "longer final reports per round"),
+        ],
+        exit_codes=[
+            (0, "digest printed"),
+            (2, "invalid usage (also with no arguments), or the record does not exist"),
+        ],
+        see_also=["cepa until: writes the record this command reads",
+                  "/common:until-review: reads this digest and says what to do"])
+    ap.add_argument("ledger", metavar="LEDGER",
+                    help="the <run>.jsonl that cepa until wrote (the .log next to it "
+                         "is read too)")
     ap.add_argument("--result-max", type=int, default=DEFAULT_RESULT_MAX, metavar="N",
                     help=f"how many characters of each round's final report "
                          f"go into the summary (default: {DEFAULT_RESULT_MAX})")

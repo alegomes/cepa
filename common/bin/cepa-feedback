@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-feedback — the harness's own complaint notebook.
+"""cepa-feedback — records and tracks feedback about the harness itself.
 
 The problem it solves: annoyance with the harness ALWAYS shows up in the middle
 of something else. The gate blocks what it shouldn't, the command asks too much,
@@ -48,6 +48,7 @@ ORIGINS = ("comando", "skill", "hook", "manual")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
+import _clihelp  # noqa: E402
 try:
     import _telemetry as T
 except Exception:  # noqa: BLE001 — telemetry never decides whether the record happens
@@ -300,37 +301,50 @@ def cmd_triage(args):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(
-        prog="cepa-feedback",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    ap = _clihelp.Parser(
+        prog="cepa feedback",
         description=(
-            "Records and tracks feedback about the harness itself.\n"
-            "\n"
             "Annoyance with the harness always shows up in the middle of something\n"
             "else: the gate that blocked what it should not, the command that asked\n"
             "too much, the unreadable report. Instead of dropping the task to open\n"
             "Cepa's BACKLOG.md, or moving on and forgetting, record it here.\n"
             "\n"
-            "The ledger is GLOBAL and append-only: ~/.claude/cepa-feedback/feedback-YYYY-MM.jsonl\n"
-            "(CEPA_FEEDBACK_DIR overrides it). The session's repo, branch and mode are\n"
-            "captured automatically; the text is stored verbatim, never summarized."),
-        epilog=(
-            "examples:\n"
-            "  cepa-feedback add \"gate X blocked a legitimate commit\" --target write-mode-gate\n"
-            "  cepa-feedback list                      # the open ones\n"
-            "  cepa-feedback list --status todos --json\n"
-            "  cepa-feedback triage fb-20260826-1 --destination \"BACKLOG.md § Write gate\"\n"
-            "  cepa-feedback triage fb-20260826-1 --destination \"WEGO queue\" --queue WEGO --why \"...\"\n"
-            "\n"
-            "exit: 0 ok · 2 invalid usage · 3 unknown id · 4 already triaged\n"
-            "each subcommand has its own --help."))
-    sub = ap.add_subparsers(dest="cmd", metavar="<subcommand>")
+            "The ledger is GLOBAL and append-only:\n"
+            "~/.claude/cepa-feedback/feedback-YYYY-MM.jsonl (CEPA_FEEDBACK_DIR overrides\n"
+            "it). The session's repo, branch and mode are captured automatically; the\n"
+            "text is stored verbatim, never summarized."),
+        examples=[
+            ('cepa feedback add "gate X blocked a legitimate commit" --target write-mode-gate',
+             "record one"),
+            ("cepa feedback list", "the open ones"),
+            ('cepa feedback triage fb-20260826-1 --destination "BACKLOG.md § Write gate"',
+             "close one"),
+        ],
+        exit_codes=[
+            (0, "ok"),
+            (2, "invalid usage (no subcommand, empty or too short text)"),
+            (3, "unknown id (triage)"),
+            (4, "already triaged (triage)"),
+        ],
+        see_also=["/common:feedback: the skill that records and triages from a session",
+                  "cepa plan add: where `triage --queue` puts the item"])
+    sub = ap.add_subparsers(dest="cmd")
 
-    a = sub.add_parser("add", help="records a feedback (verbatim text)",
-                       description="Records a feedback. The text goes verbatim to the "
-                                   "ledger, with the session's repo, branch and mode "
-                                   "captured automatically. Refuses empty or one-word text.")
-    a.add_argument("text", nargs="+", metavar="text",
+    a = sub.add_parser(
+        "add", help="records a feedback, verbatim",
+        description=(
+            "The text goes verbatim to the ledger, with the session's repo, branch and\n"
+            "mode captured automatically. Refuses empty or too short text: one word\n"
+            "cannot be rebuilt months later."),
+        examples=[
+            ('cepa feedback add "gate X blocked a legitimate commit" --target write-mode-gate',
+             "with the culprit"),
+            ('cepa feedback add "the report was unreadable" --origin skill --json',
+             "from a skill, id as JSON"),
+        ],
+        exit_codes=[(0, "recorded"),
+                    (2, "invalid usage (empty or too short text, invalid --origin)")])
+    a.add_argument("text", nargs="+", metavar="TEXT",
                    help="the feedback, in your own words (quotes optional)")
     a.add_argument("--target", "--alvo", dest="target", metavar="TARGET",
                    help="command, hook or agent that caused the annoyance")
@@ -342,10 +356,19 @@ def main(argv=None):
                    help="JSON output, for code")
     a.set_defaults(func=cmd_add)
 
-    l = sub.add_parser("list", help="lists the recorded feedback",
-                       description="Lists the feedback in the ledger, the open ones by default.")
+    l = sub.add_parser(
+        "list", help="lists the recorded feedback",
+        description=(
+            "Lists the feedback in the ledger, oldest first, the open ones by default,\n"
+            "with the repo, branch, mode and target captured when each was recorded."),
+        examples=[
+            ("cepa feedback list", "the open ones"),
+            ("cepa feedback list --status todos --json", "everything, as JSON"),
+            ("cepa feedback list --repo cepa --max 5", "the 5 most recent from one repo"),
+        ],
+        exit_codes=[(0, "listed (even when nothing matches)"), (2, "invalid usage")])
     l.add_argument("--status", default="aberto", choices=("aberto", "triado", "todos"),
-                   help="which ones to list (default: aberto)")
+                   help="which ones to list: open, triaged or all (default: aberto)")
     l.add_argument("--repo", dest="repo_name", metavar="NAME",
                    help="only the ones recorded in this repo (by name)")
     l.add_argument("--max", type=int, metavar="N", help="only the N most recent")
@@ -355,26 +378,38 @@ def main(argv=None):
                    help="no terminal colors")
     l.set_defaults(func=cmd_list)
 
-    t = sub.add_parser("triage", aliases=["triar"],
-                       help="marks a feedback as triaged, with a destination",
-                       description="Marks a feedback as triaged, saying where it ended "
-                                   "up. The triage is another ledger line citing the id; "
-                                   "an already triaged id is refused (exit 4).")
-    t.add_argument("id", help="the feedback id, as `list` prints it (e.g. fb-20260826-1)")
+    t = sub.add_parser(
+        "triage", aliases=["triar"],
+        help="marks a feedback as triaged, with a destination",
+        description=(
+            "Says where a feedback ended up. The triage is another ledger line citing\n"
+            "the id; the original record is never rewritten. With --queue the item also\n"
+            "enters a single-track queue in the same step; a failure there only warns,\n"
+            "the triage stays recorded."),
+        examples=[
+            ('cepa feedback triage fb-20260826-1 --destination "BACKLOG.md § Write gate"',
+             "close it"),
+            ('cepa feedback triage fb-20260826-1 --destination "WEGO queue" --queue WEGO '
+             '--why "..."', "and queue it"),
+        ],
+        exit_codes=[(0, "triaged (even if --queue could not add the item)"),
+                    (2, "invalid usage (missing or empty --destination)"),
+                    (3, "unknown id"),
+                    (4, "already triaged")])
+    t.add_argument("id", metavar="ID",
+                   help="the feedback id, as `list` prints it (e.g. fb-20260826-1)")
     t.add_argument("--destination", "--destino", dest="destination", required=True,
                    metavar="DESTINATION", help="where the item ended up (BACKLOG section, queue, card)")
     t.add_argument("--note", "--nota", dest="note", metavar="NOTE",
                    help="free-form note about the triage")
     t.add_argument("--queue", "--plano", dest="queue", metavar="QUEUE",
-                   help="appends the feedback to the single-track queue QUEUE via "
-                        "`cepa-plan add` (title = the first ~100 characters "
-                        "of the feedback text). Exit 4 from add (id already "
-                        "in the queue) is not an error; any other add failure "
-                        "does not undo the triage, it only warns that the "
-                        "item was left out of the queue")
-    t.add_argument("--why", help="`--why` passed on to `cepa-plan add` "
-                                 "when --queue is used")
-    t.add_argument("--repo", default=".",
+                   help="also appends the feedback to the single-track queue QUEUE via "
+                        "`cepa plan add` (title = the first ~100 characters "
+                        "of the text); an id already in the queue is not an error, "
+                        "any other failure only warns")
+    t.add_argument("--why", metavar="TEXT", help="`--why` passed on to `cepa plan add` "
+                                                 "when --queue is used")
+    t.add_argument("--repo", default=".", metavar="DIR",
                    help="repo where the --queue queue lives (default: cwd)")
     t.set_defaults(func=cmd_triage)
 

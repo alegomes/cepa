@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-promptcov — coverage of annotated checkpoints in a conversational command.
+"""cepa-promptcov — measures checkpoint coverage of a conversational command.
 
 Born from the P1-sweep-mode card (docs/spec/planejador-de-lotes-paralelos.md):
 a command with `interaction: conversational` (e.g.
@@ -36,7 +36,6 @@ Usage:
 Exit: 0 = every checkpoint is covered · 1 = some checkpoint is uncovered
       2 = error (missing file, or no checkpoint for the requested TAG)
 """
-import argparse
 import json
 import re
 import sys
@@ -44,6 +43,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
+import _clihelp  # noqa: E402
 
 # `**[tag:id]**` in the command file; captures tag and id separately so
 # --tag can filter (a command may one day carry more than one annotation
@@ -77,33 +77,35 @@ def find_covered(test_text: str, tag: str | None) -> set[str]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(
-        prog="cepa-promptcov",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    ap = _clihelp.Parser(
+        prog="cepa promptcov",
         description=(
-            "Coverage of the annotated checkpoints of a conversational command.\n"
-            "\n"
             "A conversational command (a .md an agent follows) is prose, not code:\n"
             "there is no line to instrument. This script measures something narrower\n"
             "and honest: given a command whose behavior blocks are marked with\n"
             "`**[tag:id]**` and a test whose checks carry the same `tag:id` in their\n"
             "name, it crosses the two and points out every `id` that NO check references.\n"
             "\n"
-            "convention:\n"
+            "The convention:\n"
             "  in the command:  **[sweep:full-source]** Read the WHOLE source...\n"
             "  in the test:     check(\"[sweep:full-source] scans the whole source\", ...)\n"
             "\n"
             "With no [tag:id] in the command there is nothing to measure, and it says\n"
             "so (it never declares 100% vacuously)."),
-        epilog=(
-            "examples:\n"
-            "  cepa-promptcov maestro/commands/program-plan.md tests/test_program_plan_sweep.py\n"
-            "  cepa-promptcov cmd.md test.py --tag sweep --json\n"
-            "\n"
-            "exit: 0 = every checkpoint covered · 1 = some uncovered\n"
-            "      2 = error (missing file, or no checkpoint for the requested TAG)"))
-    ap.add_argument("command", metavar="command", help=".md file of the conversational command")
-    ap.add_argument("test", metavar="test", help="test file that should cover the checkpoints")
+        examples=[
+            ("cepa promptcov maestro/commands/program-plan.md "
+             "tests/test_program_plan_sweep.py", "coverage of every tag"),
+            ("cepa promptcov cmd.md test.py --tag sweep --json",
+             "only the sweep family, JSON for code"),
+        ],
+        exit_codes=[
+            (0, "every checkpoint covered"),
+            (1, "some checkpoint uncovered"),
+            (2, "invalid usage, no arguments, missing file, or no checkpoint "
+                "(for the requested TAG) in the command"),
+        ])
+    ap.add_argument("command", metavar="COMMAND", help=".md file of the conversational command")
+    ap.add_argument("test", metavar="TEST", help="test file that should cover the checkpoints")
     ap.add_argument("--tag", default=None, metavar="TAG",
                     help="restricts to one annotation family (e.g. sweep); "
                          "default: every [tag:id] found")

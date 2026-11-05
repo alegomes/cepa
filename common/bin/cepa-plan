@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-plan — the mechanical writer of the `single-track` queue (.claude/queues/<nome>/queue.yaml).
+"""cepa-plan — writes, validates and reads the single-track queue.
 
 It exists because step 1 of the "one writer, three sources" design (BACKLOG.md,
 "Cinco portas de planejamento", approved on 2026-08-24) cannot live only in the
@@ -220,7 +220,6 @@ repo's `cepa` plan has several, with the evidence of each `done`). Before
 overwriting, the previous file is copied to `<arquivo>.bak` and the path comes
 out in the report.
 """
-import argparse
 import json
 import os
 import re
@@ -232,6 +231,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
+import _clihelp  # noqa: E402
 
 try:
     import yaml
@@ -3920,164 +3920,319 @@ def cmd_migrate(root, name, all_queues, dry_run):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(
-        prog="cepa-plan",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    repo_help = "repository root (default: the current directory)"
+    json_help = "JSON output, for code"
+    commit_help = ("commits the queue (only it) in the same step; without it "
+                   "the output says a commit is missing")
+    not_git = "--repo is not a git repository"
+    waves = "the name holds a waves plan (/maestro:program-plan), not a queue"
+    no_queue = "the queue does not exist or cannot be read"
+
+    ap = _clihelp.Parser(
+        prog="cepa plan",
         description=(
-            "Writes and validates the harness single-track queue.\n"
-            "\n"
             "The queue (.claude/queues/<name>/queue.yaml) is the document that keeps\n"
             "the ORDER of the items and the WHY of each position, which is what a\n"
-            "tracker loses. This script is the mechanical writer: it validates,\n"
+            "tracker loses. This script is its mechanical writer: it validates,\n"
             "resolves the right root, refuses collisions and writes. /common:queue\n"
-            "drives the conversation; /common:drain-plan and cepa-until execute;\n"
+            "drives the conversation; /common:drain-plan and cepa until execute;\n"
             "/common:next and /common:queue-status read.\n"
             "\n"
-            "Knows only `mode: single-track`. A wave plan is another document, with\n"
-            "another author (/maestro:program-plan) and another reader (/maestro:run).\n"
-            "\n"
-            "subcommands by family:\n"
-            "  sources (read only, return JSON)   from-spec, from-epic, from-triage\n"
-            "  writing                            write, add, migrate, check-name, validate\n"
-            "  reading                            queue, status, show, epics, promote, order\n"
-            "  one item's cycle                   start, finish, answer\n"
-            "  against the Jira board             reconcile, landed, divergence"),
-        epilog=(
-            "examples:\n"
-            "  cepa-plan write wego --from-spec docs/spec/assinatura.md\n"
-            "  cepa-plan write wego --from-epic docs/epics/x.md --cycle 2\n"
-            "  cepa-plan status                 # the whole queue, by status\n"
-            "  cepa-plan status wego S3         # one item in full, nothing cut\n"
-            "  cepa-plan queue wego --max 3     # what the next batch may execute\n"
-            "  cepa-plan start wego WEGO-123\n"
-            "  cepa-plan finish wego WEGO-123 --status done --evidence \"commit abc, build green\"\n"
-            "  cepa-plan answer wego WEGO-124 --answer \"yes, close it\"\n"
-            "  cepa-plan add wego WEGO-130 --title \"...\" --before WEGO-125 --why \"...\"\n"
-            "\n"
-            "each subcommand has its own --help (e.g. cepa-plan finish --help)."))
-    sub = ap.add_subparsers(dest="cmd", metavar="<subcommand>")
+            "It knows only `mode: single-track`. A wave plan is another document,\n"
+            "with another author (/maestro:program-plan) and another reader\n"
+            "(/maestro:run)."),
+        groups=[
+            ("sources (read only, return JSON)", ["from-spec", "from-epic", "from-triage"]),
+            ("writing", ["write", "add", "migrate", "check-name", "validate"]),
+            ("reading", ["queue", "status", "show", "epics", "promote", "order"]),
+            ("one item's cycle", ["start", "finish", "answer"]),
+            ("against the Jira board", ["reconcile", "landed", "divergence"]),
+        ],
+        examples=[
+            ("cepa plan write wego --from-spec docs/spec/assinatura.md",
+             "one item per success criterion"),
+            ("cepa plan write wego --from-epic docs/epics/wego.md --cycle 2",
+             "the queue of one Epic cycle"),
+            ("cepa plan status", "the whole queue, by status"),
+            ("cepa plan status wego WEGO-123", "one item in full, nothing cut"),
+            ("cepa plan queue wego --max 3", "what the next batch may execute"),
+            ("cepa plan start wego WEGO-123", "reserve an item"),
+            ('cepa plan finish wego WEGO-123 --status done --evidence "commit abc, build green"',
+             "record the outcome"),
+        ],
+        exit_codes=[
+            (0, "the subcommand succeeded (each subcommand lists its own codes)"),
+            (2, "invalid usage: no subcommand, unknown subcommand or option, "
+                "--repo outside git"),
+        ],
+        see_also=["/common:queue: the conversation that calls `cepa plan write`",
+                  "/common:next: names the next step from the queue",
+                  "/common:drain-plan: runs the queue in batch"])
+    sub = ap.add_subparsers(dest="cmd")
 
-    mg = sub.add_parser("migrate",
-                        help="moves the queue from .claude/programs/<n>/plan.yaml "
-                             "to .claude/queues/<n>/queue.yaml")
+    mg = sub.add_parser(
+        "migrate",
+        help="moves a queue from the old .claude/programs/ layout to .claude/queues/",
+        description=(
+            "Moves the queue from .claude/programs/<n>/plan.yaml (key `program:`) to\n"
+            ".claude/queues/<n>/queue.yaml (key `queue:`), with the whole directory\n"
+            "(until/ included) and one commit. Refuses a LIVE session reservation\n"
+            "and a destination that already exists. A wave plan is skipped."),
+        examples=[("cepa plan migrate wego --dry-run", "what would move, without moving"),
+                  ("cepa plan migrate wego", "move one queue, with its commit"),
+                  ("cepa plan migrate --all", "every queue still in the old layout")],
+        exit_codes=[(0, "migrated, or nothing to migrate"),
+                    (2, f"invalid usage (a name and --all, or neither), {not_git}, "
+                        "the named queue cannot be migrated"),
+                    (3, "at least one queue refused (live reservation, destination "
+                        "exists, wave plan named explicitly)")])
     mg.add_argument("name", nargs="?", metavar="name",
                     help="name of the queue to migrate (or --all)")
     mg.add_argument("--all", action="store_true", dest="all_queues",
                     help="every single-track queue in the old layout")
     mg.add_argument("--dry-run", action="store_true", dest="dry_run",
                     help="says what it would move, without moving")
-    mg.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
+    mg.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
-    c = sub.add_parser("check-name",
-                       help="is the name free for a queue? (exit 3 = collides "
-                            "with a wave plan)")
+    c = sub.add_parser(
+        "check-name",
+        help="tells whether a name is free for a queue",
+        description=(
+            "Mirror of `maestro-programs --check-name`, which asks the same question\n"
+            "from the other side. A name that is already a queue counts as free:\n"
+            "rewriting it is the normal replanning flow. A name that holds a WAVES\n"
+            "plan collides, because writing the queue there erases the waves\n"
+            "without a word."),
+        examples=[("cepa plan check-name wego", "free, or collides with a wave plan?"),
+                  ("cepa plan check-name wego --repo ../wego-backend", "in another repo")],
+        exit_codes=[(0, "free, or already a queue"),
+                    (2, f"invalid usage, {not_git}"),
+                    (3, "collision with a waves plan, or the file there cannot be read")])
     c.add_argument("name", metavar="name", help="intended name for the queue")
-    c.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
+    c.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
-    v = sub.add_parser("validate", help="validates a plan.yaml on disk")
+    v = sub.add_parser(
+        "validate", help="validates a queue file already on disk",
+        description=(
+            "Runs the item checks of `write` on a file: unique `id`, `title`, a\n"
+            "non-empty `why`, `status` in the closed vocabulary, `blocked_by` only\n"
+            "to ids of this queue and with no cycle, the `human_pending` key\n"
+            "present, at least one item. The gaps come out named."),
+        examples=[("cepa plan validate .claude/queues/wego/queue.yaml", "check one queue"),
+                  ("cepa plan validate /tmp/queue.yaml", "check a draft before writing it")],
+        exit_codes=[(0, "valid"),
+                    (2, "invalid usage, missing or unreadable file, invalid queue "
+                        "(gaps named)")])
     v.add_argument("plan_file", metavar="plan", help="path of the queue.yaml to validate")
 
-    s = sub.add_parser("from-spec",
-                       help="reads a /common:spec spec and returns the items (JSON)")
+    s = sub.add_parser(
+        "from-spec", help="reads a /common:spec specification and returns the items (JSON)",
+        description=(
+            "One item per success criterion `### CS-N`, IN TEXT ORDER. Writes\n"
+            "nothing: the writer is `write`, which also accepts --from-spec directly.\n"
+            "Each item's `why` is assembled from what the spec already wrote (its\n"
+            "surface and red test) and, when the text does not say why a criterion\n"
+            "comes before the others, it carries the sentence that records the\n"
+            "inheritance instead of an invented criterion."),
+        examples=[("cepa plan from-spec docs/spec/assinatura.md", "the items, as JSON"),
+                  ("cepa plan from-spec docs/spec/assinatura.md > /tmp/items.json",
+                   "save them to edit before `write --items`")],
+        exit_codes=[(0, "items printed"),
+                    (2, "invalid usage, missing file, the spec has no criterion")])
     s.add_argument("spec", metavar="FILE",
                    help="the specification (docs/spec/<slug>.md), one item per `### CS-N`")
 
-    e = sub.add_parser("from-epic",
-                       help="extracts the queue of one cycle of an Epic (JSON with "
-                            "`demonstrates` and `items`); read only")
+    e = sub.add_parser(
+        "from-epic", help="extracts the queue of one cycle of an Epic (JSON)",
+        description=(
+            "Reads a /common:epic Epic and returns `demonstrates` (the cycle's\n"
+            "demonstration script) and `items` (one per sentence of the cycle's\n"
+            "\"What it crosses\"). Writes nothing: the writer is\n"
+            "`write --from-epic F --cycle N`."),
+        examples=[("cepa plan from-epic docs/epics/wego.md --cycle 1", "the first cycle"),
+                  ("cepa plan from-epic docs/epics/wego.md --cycle 2 > /tmp/c2.json",
+                   "save cycle 2 to review")],
+        exit_codes=[(0, "JSON printed"),
+                    (2, "invalid usage, the Epic or the cycle cannot be read")])
     e.add_argument("epic", metavar="FILE", help="the Epic (docs/epics/<name>.md)")
     e.add_argument("--cycle", "--ciclo", dest="cycle", type=int, required=True, metavar="N",
                    help="the value-ladder cycle that becomes the queue")
 
-    t = sub.add_parser("from-triage",
-                       help="reads the handoff of a /board-flow:triage run "
-                            "and returns the items (JSON)")
+    t = sub.add_parser(
+        "from-triage", help="reads the handoff of a /board-flow:triage run and returns the items (JSON)",
+        description=(
+            "The handoff is the classification of the cards into buckets, already in\n"
+            "the execution order the owner confirmed. Writes nothing; the writer is\n"
+            "`write`, which also accepts --from-triage directly.\n"
+            "  - only a `ready` card becomes a `pending` item: `implemented` belongs\n"
+            "    to the proof queue and `needs-refinement` stays in the backlog\n"
+            "  - `obsolete` enters as `dropped`, with the reason, so the discard\n"
+            "    does not vanish from the document\n"
+            "Refuses a ready card without `why`, an obsolete card without a reason,\n"
+            "and a card still parked in `needs-decision` (unfinished grid)."),
+        examples=[("cepa plan from-triage /tmp/triage.json", "the items, as JSON"),
+                  ("cat /tmp/triage.json | cepa plan from-triage -", "read from stdin")],
+        exit_codes=[(0, "items printed"),
+                    (2, "invalid usage, unreadable handoff, refused (reason named)")])
     t.add_argument("handoff", metavar="handoff", help="JSON/YAML file, or '-' for stdin")
 
-    q = sub.add_parser("queue",
-                       help="which items the batch may execute now, in queue "
-                            "order, and where it stops")
+    q = sub.add_parser(
+        "queue", help="lists the items the batch may execute now, and where it stops",
+        description=(
+            "The items /common:drain-plan can execute NOW, in queue order. Does not\n"
+            "execute and writes nothing. Walks the list from the start and stops at\n"
+            "the first thing it cannot resolve by itself: an open `human_pending`, an\n"
+            "item blocked by something that is not in the batch, an item already\n"
+            "reserved by another session, or the cap. Skipping a stuck item to reach\n"
+            "the one below would reorder the queue silently, which is what this\n"
+            "document exists to prevent."),
+        examples=[("cepa plan queue wego", "the next batch, default cap"),
+                  ("cepa plan queue wego --max 1 --json", "only the next item, for code")],
+        exit_codes=[(0, "batch listed (even empty)"),
+                    (2, f"invalid usage, {not_git}, {no_queue}, invalid queue"),
+                    (3, waves)])
     q.add_argument("name", metavar="name", help="queue name")
-    q.add_argument("--max", type=int, default=DEFAULT_MAX, dest="max_items", metavar="CAP",
+    q.add_argument("--max", type=int, default=DEFAULT_MAX, dest="max_items", metavar="N",
                    help=f"cap on items in the batch (default {DEFAULT_MAX}: each "
                         "item is a whole build with acceptance and proof gates)")
-    q.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
-    q.add_argument("--json", action="store_true", dest="as_json",
-                help="JSON output, for code")
+    q.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
+    q.add_argument("--json", action="store_true", dest="as_json", help=json_help)
 
-    stt = sub.add_parser("status",
-                         help="the whole queue grouped by status, in the recorded "
-                              "order; read only, reserves and executes nothing")
+    stt = sub.add_parser(
+        "status", help="shows the whole queue grouped by status, in the recorded order",
+        description=(
+            "Read only: reserves and executes nothing. With an item id, shows that\n"
+            "one item with every field and nothing cut (the list view shortens the\n"
+            "action and the reason)."),
+        examples=[("cepa plan status", "the only queue in the repo, by status"),
+                  ("cepa plan status wego --status blocked", "only the stuck items"),
+                  ("cepa plan status wego WEGO-123", "one item in full")],
+        exit_codes=[(0, "shown"),
+                    (2, f"invalid usage, {not_git}, no queue or several and no name, "
+                        f"{no_queue}, unknown item id"),
+                    (3, waves)])
     stt.add_argument("name", nargs="?", metavar="name",
                      help="queue name; if omitted, uses the only one that exists")
     stt.add_argument("item", nargs="?", metavar="id",
-                     help="shows only this item, with every field and nothing "
-                          "cut (e.g. cepa-plan status wego S3)")
+                     help="shows only this item, with every field and nothing cut")
     stt.add_argument("--status", choices=STATUSES, dest="status_filter",
                      help="shows only the items with this status")
-    stt.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
-    stt.add_argument("--json", action="store_true", dest="as_json",
-                help="JSON output, for code")
+    stt.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
+    stt.add_argument("--json", action="store_true", dest="as_json", help=json_help)
 
-    sh = sub.add_parser("show",
-                        help="the queue header: source and what it "
-                             "`demonstrates:` when done; read only")
+    sh = sub.add_parser(
+        "show", help="shows the queue header: its source and what it demonstrates when done",
+        description=(
+            "Read only. `demonstrates:` is the script that shows the queue's work\n"
+            "done (from an Epic cycle); `source` is where the demands came from."),
+        examples=[("cepa plan show wego", "the header, for a human"),
+                  ("cepa plan show wego --json", "the header, for code")],
+        exit_codes=[(0, "shown"),
+                    (2, f"invalid usage, {not_git}, {no_queue}"),
+                    (3, waves)])
     sh.add_argument("name", metavar="name", help="queue name")
-    sh.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
-    sh.add_argument("--json", action="store_true", dest="as_json",
-                help="JSON output, for code")
+    sh.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
+    sh.add_argument("--json", action="store_true", dest="as_json", help=json_help)
 
-    ep = sub.add_parser("epics",
-                        help="the \"where are we\" of each Epic in docs/epics/, "
-                             "derived from the ladder and each cycle's queues; read only")
-    ep.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
-    ep.add_argument("--json", action="store_true", dest="as_json",
-                help="JSON output, for code")
+    ep = sub.add_parser(
+        "epics", help="says where each Epic in docs/epics/ stands",
+        description=(
+            "Read only. Derived from each Epic's value ladder and the queues of its\n"
+            "cycles: cycles closed, in progress, without a queue, and open owner\n"
+            "questions. An unreadable queue is warned and skipped."),
+        examples=[("cepa plan epics", "every Epic, for a human"),
+                  ("cepa plan epics --brief", "one line per Epic (session hook)"),
+                  ("cepa plan epics --json", "for code")],
+        exit_codes=[(0, "shown (even with no Epic)"),
+                    (2, f"invalid usage, {not_git}")])
+    ep.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
+    ep.add_argument("--json", action="store_true", dest="as_json", help=json_help)
     ep.add_argument("--brief", action="store_true",
                     help="one line per Epic (for the session hook)")
 
-    pr = sub.add_parser("promote",
-                        help="the demands the queue hands to "
-                             "/maestro:program-plan --from-plan")
+    pr = sub.add_parser(
+        "promote", help="lists the demands the queue hands to /maestro:program-plan --from-plan",
+        description=(
+            "The queue → waves promotion. Writes nothing, decides neither surface\n"
+            "nor acceptance (that is the program-plan conversation) and does not\n"
+            "touch the queue. Says what only the queue knows: which items can become\n"
+            "a slice, which CANNOT and why, and the wave floor `blocked_by` imposes.\n"
+            "Only `pending` becomes a demand: `in_progress` is reserved by another\n"
+            "session, `blocked` is stuck on an outside condition, `done`/`dropped`\n"
+            "already left. An open `human_pending` becomes `human_gate: \"open:\n"
+            "<route>\"` in the slice, which cepa dor fails until someone decides.\n"
+            "Below 4 demands the fork loses to /common:drain-plan."),
+        examples=[("cepa plan promote wego", "what can become a slice, and why not"),
+                  ("cepa plan promote wego --json --when 2026-11-05",
+                   "for program-plan, with the date to record")],
+        exit_codes=[(0, "demands listed"),
+                    (2, f"invalid usage, {not_git}, {no_queue}, invalid queue"),
+                    (3, "the plan is a waves plan (nothing to promote)"),
+                    (4, "fewer than 4 demands: run /common:drain-plan instead")])
     pr.add_argument("name", metavar="name", help="queue name")
-    pr.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
-    pr.add_argument("--json", action="store_true", dest="as_json",
-                help="JSON output, for code")
-    pr.add_argument("--when", "--quando", dest="when", metavar="WHEN", help="date to record on the wave plan's "
-                                     "`source` line (YYYY-MM-DD)")
+    pr.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
+    pr.add_argument("--json", action="store_true", dest="as_json", help=json_help)
+    pr.add_argument("--when", "--quando", dest="when", metavar="DATE",
+                    help="date to record on the wave plan's `source` line (YYYY-MM-DD)")
 
-    st = sub.add_parser("start",
-                        help="reserves a batch item (status: in_progress) and "
-                             "signs the reservation with the owning session")
+    st = sub.add_parser(
+        "start", help="reserves a queue item and signs the reservation with the owning session",
+        description=(
+            "`pending` → `in_progress`, signed with `claimed_by` (session_id, pid,\n"
+            "hostname, cwd, time). The reservation keeps two sessions from building\n"
+            "the same item. With a live owner the refusal NAMES who is on the item;\n"
+            "with a dead owner the reservation is orphaned and claiming it is right,\n"
+            "otherwise the queue jams forever because of a run that ended. Liveness\n"
+            "is _wtlib's (pid alive on the same host, 24h horizon), the same rule the\n"
+            "worktree system uses."),
+        examples=[("cepa plan start wego WEGO-123", "reserve the item"),
+                  ("cepa plan start wego WEGO-123 --commit", "reserve and commit the queue")],
+        exit_codes=[(0, "reserved (or an orphaned reservation reclaimed)"),
+                    (2, f"invalid usage, {not_git}, {no_queue}, unknown item id"),
+                    (3, waves),
+                    (5, "refused: reserved by a live session, not `pending`, or an "
+                        "open `human_pending`")])
     st.add_argument("name", metavar="name", help="queue name")
     st.add_argument("id", help="item id in the queue")
-    st.add_argument("--commit", action="store_true",
-                    help="commits the queue (only it) in the same step; without "
-                         "it the output says a commit is missing")
-    st.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
+    st.add_argument("--commit", action="store_true", help=commit_help)
+    st.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
-    fi = sub.add_parser("finish",
-                        help="records the outcome of a batch item")
+    fi = sub.add_parser(
+        "finish", help="records the outcome of a queue item",
+        description=(
+            "--evidence is mandatory: `done` without what happened is just a word.\n"
+            "--human-pending OPENS a route only the human closes; closing it (empty)\n"
+            "is refused, because only whoever ran the route knows whether it passed.\n"
+            "`--status done` is refused when:\n"
+            "  - the .claude/last-build.json of the --repo session is EMPTY (a test\n"
+            "    filter that matched zero tests): green without a test closes nothing\n"
+            "  - the session topology has validation-lead (build-hex, build-team)\n"
+            "    and there is no docs/validation/<id>.yaml with verdict\n"
+            "    READY-TO-SHIP or READY-WITH-CAVEATS"),
+        examples=[('cepa plan finish wego WEGO-123 --status done --evidence "commit abc, build green"',
+                   "close the item"),
+                  ('cepa plan finish wego WEGO-124 --status blocked --evidence "staging 502" '
+                   '--impede "the test server is down"',
+                   "stuck, with the reason in plain words"),
+                  ('cepa plan finish wego WEGO-125 --status pending --evidence "split in two" --commit',
+                   "back to the queue, committed")],
+        exit_codes=[(0, "recorded"),
+                    (2, f"invalid usage, {not_git}, {no_queue}, unknown item id, "
+                        "empty --evidence or --human-pending, missing human section, "
+                        "`done` refused (empty build, missing validation)"),
+                    (3, waves)])
     fi.add_argument("name", metavar="name", help="queue name")
     fi.add_argument("id", help="item id in the queue")
     fi.add_argument("--status", required=True,
                     choices=("done", "blocked", "pending"),
                     help="done = closed; blocked = stuck on an outside condition; "
                          "pending = back to the queue without closing")
-    fi.add_argument("--evidence", required=True,
+    fi.add_argument("--evidence", required=True, metavar="TEXT",
                     help="what happened: commits, verdicts, what got stuck")
-    fi.add_argument("--human-pending", dest="human_pending",
+    fi.add_argument("--human-pending", dest="human_pending", metavar="ROUTE",
                     help="OPENS a route only a human closes (validate by hand, "
                          "approve a PR). Never closes one: only the human does")
-    fi.add_argument("--question", "--pergunta", dest="question", metavar="QUESTION",
+    fi.add_argument("--question", "--pergunta", dest="question", metavar="TEXT",
                     help="the CLOSED question that unblocks the item, up to 25 "
                          "words, no branch, class or file name, "
                          "with your recommendation (\"Close the card as 'measure "
@@ -4101,19 +4256,34 @@ def main(argv=None):
         fi.add_argument(flag, dest=f"owner_{key}", metavar="TEXT",
                         help=owner_help[key] + ". Up to 30 words, no card, "
                              "commit, file or verdict")
-    fi.add_argument("--commit", action="store_true",
-                    help="commits the queue (only it) in the same step; without "
-                         "it the output says a commit is missing")
-    fi.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
+    fi.add_argument("--commit", action="store_true", help=commit_help)
+    fi.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
-    rs = sub.add_parser("answer", aliases=["responde"],
-                        help="the OWNER answers a deferred item: `blocked` goes back "
-                             "to `pending` with the answer, and the "
-                             "`human_pending` route closes. Terminal only")
+    rs = sub.add_parser(
+        "answer", aliases=["responde"],
+        help="records the owner's answer to a deferred item (terminal only)",
+        description=(
+            "`blocked` goes back to `pending` with the answer, and the\n"
+            "`human_pending` route closes. The answer is kept verbatim in the item's\n"
+            "evidence, where the next run reads it. Refuses a text that does not\n"
+            "look like an answer (a request for clarification, a question) unless\n"
+            "--force. Runs only on a terminal: an agent cannot answer for the owner.\n"
+            "By default commits only the queue in the same step."),
+        examples=[('cepa plan answer wego WEGO-124 --answer "yes, close it"',
+                   "unblock with the answer"),
+                  ('cepa plan answer wego WEGO-124 --answer "wait for go-live" --keep',
+                   "record it, leave the item stuck"),
+                  ('cepa plan answer wego WEGO-124 --answer "no longer needed" --drop',
+                   "drop the item")],
+        exit_codes=[(0, "recorded"),
+                    (2, f"invalid usage, not a terminal, empty answer, --keep with "
+                        f"--drop, {not_git}, {no_queue}, unknown item id, item not "
+                        "deferred"),
+                    (3, waves),
+                    (6, "the text does not look like an answer (repeat with --force)")])
     rs.add_argument("name", metavar="name", help="queue name")
     rs.add_argument("id", help="id of the deferred item")
-    rs.add_argument("--answer", "--resposta", dest="answer", metavar="ANSWER", required=True,
+    rs.add_argument("--answer", "--resposta", dest="answer", metavar="TEXT", required=True,
                     help="the owner's answer, verbatim; the next run reads it "
                          "in the item's evidence")
     rs.add_argument("--keep", "--mantem", dest="keep", action="store_true",
@@ -4125,55 +4295,99 @@ def main(argv=None):
     rs.add_argument("--force", "--forca", dest="force", action="store_true",
                     help="records even a text that does not seem to answer the "
                          "route (a request for clarification, a question)")
-    rs.add_argument("--author", "--autor", dest="author", metavar="AUTHOR", default=None,
+    rs.add_argument("--author", "--autor", dest="author", metavar="NAME", default=None,
                     help="who signs the waiver that a \"yes\" answer accepts "
                          "(default: `git config user.name`, then $USER)")
     rs.add_argument("--no-commit", action="store_true", dest="no_commit",
                     help="writes the queue without committing (by default `answer` "
                          "commits only the queue in the same step)")
-    rs.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
+    rs.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
-    rc = sub.add_parser("reconcile",
-                        help="compares the queue with the board and (with --apply) "
-                             "records the reconciliation")
+    rc = sub.add_parser(
+        "reconcile", help="compares the queue with the board and, with --apply, records it",
+        description=(
+            "Who closed outside the plan, who vanished, and which cards exist on the\n"
+            "board with no position in the queue. Does not talk to Jira: the board\n"
+            "is read by atlassian-expert and arrives through --board. Without\n"
+            "--apply it only reports. It NEVER closes a `human_pending` (only the\n"
+            "human does), NEVER appends a card the queue does not have (placing it\n"
+            "is /common:queue --from-jira) and NEVER demotes a `done` item: a card\n"
+            "that went backwards on the board becomes a warning."),
+        examples=[("cepa plan reconcile wego --board /tmp/board.json", "report only"),
+                  ("cepa plan reconcile wego --board /tmp/board.json --apply",
+                   "record the reconciled statuses"),
+                  ("cat /tmp/board.json | cepa plan reconcile wego --board - --json",
+                   "board from stdin, JSON out")],
+        exit_codes=[(0, "reconciled (or reported)"),
+                    (2, f"invalid usage, {not_git}, {no_queue}, unreadable board or "
+                        "board-flow.yaml, no status map"),
+                    (3, waves)])
     rc.add_argument("name", metavar="name", help="queue name")
     rc.add_argument("--board", required=True, metavar="FILE",
                     help="JSON/YAML produced by atlassian-expert: a list of "
                          "{key, status}, or {cards: [...], missing: [...]}. "
                          "'-' reads from standard input")
-    rc.add_argument("--config", help="board-flow.yaml to use (default: the "
-                                     "repo's)")
+    rc.add_argument("--config", metavar="FILE",
+                    help="board-flow.yaml to use (default: the repo's)")
     rc.add_argument("--apply", action="store_true", dest="apply_changes",
                     help="writes the reconciled statuses to the plan. Never closes "
                          "`human_pending` and never appends a new card")
-    rc.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
-    rc.add_argument("--json", action="store_true", dest="as_json",
-                help="JSON output, for code")
+    rc.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
+    rc.add_argument("--json", action="store_true", dest="as_json", help=json_help)
 
-    ld = sub.add_parser("landed", aliases=["aterrissados"],
-                        help="cards in review with a PROVEN proof, complete "
-                             "acceptance and code already on the integration branch")
+    ld = sub.add_parser(
+        "landed", aliases=["aterrissados"],
+        help="lists the cards in review that already landed on the integration branch",
+        description=(
+            "A card in review lands when its proof is PROVEN, its acceptance is\n"
+            "complete and its code is already on the integration branch. The others\n"
+            "come out with the reason they are held. Reads the board from --board,\n"
+            "never from Jira."),
+        examples=[("cepa plan landed --board /tmp/board.json", "what can leave review"),
+                  ("cepa plan landed --board /tmp/board.json --into origin/develop --json",
+                   "another integration ref, for code")],
+        exit_codes=[(0, "listed"),
+                    (2, f"invalid usage, {not_git}, unreadable board or "
+                        "board-flow.yaml, no integration ref found")])
     ld.add_argument("--board", required=True, metavar="FILE",
                     help="JSON/YAML from atlassian-expert: a list of {key, status}")
-    ld.add_argument("--config", help="board-flow.yaml to use (default: the repo's)")
-    ld.add_argument("--into", help="integration ref (default: origin/HEAD, "
-                                   "origin/main or main)")
-    ld.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
-    ld.add_argument("--json", action="store_true", dest="as_json",
-                help="JSON output, for code")
+    ld.add_argument("--config", metavar="FILE",
+                    help="board-flow.yaml to use (default: the repo's)")
+    ld.add_argument("--into", metavar="REF",
+                    help="integration ref (default: origin/HEAD, origin/main or main)")
+    ld.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
+    ld.add_argument("--json", action="store_true", dest="as_json", help=json_help)
 
-    ad = sub.add_parser("add",
-                        help="adds ONE item to an existing queue, without "
-                             "rewriting the others")
+    ad = sub.add_parser(
+        "add", help="adds ONE item to an existing queue, without rewriting the others",
+        description=(
+            "Unlike `write`, which replaces the whole list. It is what\n"
+            "/board-flow:capture, cepa feedback triage and the owner's own hand call\n"
+            "so a new card does not stay only in Jira or only in BACKLOG.md.\n"
+            "Without --before the item enters at the END and its `why` carries\n"
+            "\"ainda não priorizado\" (every entry door creates the item, even\n"
+            "without knowing the position). With --before, --why is MANDATORY: a\n"
+            "position chosen without its reason is what the queue exists to prevent.\n"
+            "By default commits only the queue in the same step."),
+        examples=[('cepa plan add wego WEGO-130 --title "Export the signed PDF"',
+                   "at the end, not prioritized yet"),
+                  ('cepa plan add wego WEGO-130 --title "Export the signed PDF" '
+                   '--before WEGO-125 --why "the client demo needs it first"',
+                   "at a chosen position"),
+                  ('cepa plan add wego WEGO-131 --title "Audit log" --blocked-by WEGO-130 --no-commit',
+                   "blocked by another item, no commit")],
+        exit_codes=[(0, "added"),
+                    (2, f"invalid usage, {not_git}, {no_queue}, --before or "
+                        "--blocked-by naming an id not in the queue, --before without "
+                        "--why, the result does not validate"),
+                    (3, waves),
+                    (4, "the id already exists (the message states its status)")])
     ad.add_argument("name", metavar="name", help="queue name")
     ad.add_argument("id", help="id of the new item (Jira key or free id)")
     ad.add_argument("--title", required=True, metavar="TITLE", help="item title")
-    ad.add_argument("--why", help="required with --before; without "
-                                  "--before, becomes the item's `why` with "
-                                  "'not prioritized yet' appended")
+    ad.add_argument("--why", metavar="TEXT",
+                    help="required with --before; without --before, becomes the "
+                         "item's `why` with 'not prioritized yet' appended")
     ad.add_argument("--before", "--antes-de", dest="before", metavar="ID",
                     help="inserts right before this id (requires --why)")
     ad.add_argument("--blocked-by", dest="blocked_by", metavar="ID,ID",
@@ -4181,25 +4395,52 @@ def main(argv=None):
     ad.add_argument("--no-commit", action="store_true", dest="no_commit",
                     help="writes the queue without committing (by default `add` "
                          "commits only the queue in the same step)")
-    ad.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
+    ad.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
-    od = sub.add_parser("order", aliases=["ordena"],
-                        help="sorts a list of Jira keys by queue "
-                             "order")
+    od = sub.add_parser(
+        "order", aliases=["ordena"],
+        help="sorts a list of Jira keys by queue order",
+        description=(
+            "Gives /board-flow:drain the queue order for a list of Jira keys. Keys\n"
+            "that are plan items come first, in queue order; the others come after,\n"
+            "in the order they arrived, marked `fora_do_plano`. Does not decide what\n"
+            "to do with a `done`/`dropped` item: it only orders and states each\n"
+            "key's status."),
+        examples=[("cepa plan order wego --keys WEGO-125,WEGO-123,WEGO-140",
+                   "queue order for these keys"),
+                  ("cepa plan order wego --keys WEGO-125,WEGO-123 --json", "for code")],
+        exit_codes=[(0, "ordered"),
+                    (2, f"invalid usage, {not_git}, {no_queue} (the caller falls "
+                        "back to the Jira order)"),
+                    (3, waves)])
     od.add_argument("name", metavar="name", help="queue name")
     od.add_argument("--keys", required=True, metavar="K1,K2,...",
                     help="keys in Jira order; those that are plan items "
                          "come back in queue order, the rest after them, "
                          "marked `fora_do_plano`")
-    od.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
-    od.add_argument("--json", action="store_true", dest="as_json",
-                help="JSON output, for code")
+    od.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
+    od.add_argument("--json", action="store_true", dest="as_json", help=json_help)
 
-    dv = sub.add_parser("divergence", aliases=["divergencia"],
-                        help="lists (without fixing) the queue × the board × "
-                             "BACKLOG.md")
+    dv = sub.add_parser(
+        "divergence", aliases=["divergencia"],
+        help="lists, without fixing, where the queue, the board and BACKLOG.md disagree",
+        description=(
+            "What /common:doctor lists. Read only on purpose: closing an orphan card\n"
+            "or inventing a `**Plano:**` line on its own would rewrite the queue or\n"
+            "the document without the owner seeing. Three lists:\n"
+            "  - cards_sem_item: card open in Jira with no item in the queue\n"
+            "  - itens_com_card_done: open item whose card the board says is done\n"
+            "  - secoes_sem_plano / plano_inexistente: BACKLOG.md section without\n"
+            "    the `**Plano:**` line, or citing an id not in this queue\n"
+            "Without --board the first two are left out (warned, not silenced);\n"
+            "without --backlog, the third."),
+        examples=[("cepa plan divergence wego --board /tmp/board.json --backlog BACKLOG.md",
+                   "all three lists"),
+                  ("cepa plan divergence wego --backlog BACKLOG.md --json",
+                   "only the BACKLOG.md check, for code")],
+        exit_codes=[(0, "report printed, even with divergence"),
+                    (2, f"invalid usage, {not_git}, an input file is unreadable"),
+                    (3, waves)])
     dv.add_argument("name", metavar="name", help="queue name")
     dv.add_argument("--board", metavar="FILE",
                     help="same format as `reconcile`. Without it, "
@@ -4207,17 +4448,37 @@ def main(argv=None):
     dv.add_argument("--backlog", metavar="FILE",
                     help="the BACKLOG.md to scan. Without it, secoes_sem_plano and "
                          "plano_inexistente come out empty")
-    dv.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
-    dv.add_argument("--json", action="store_true", dest="as_json",
-                help="JSON output, for code")
+    dv.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
+    dv.add_argument("--json", action="store_true", dest="as_json", help=json_help)
 
-    w = sub.add_parser("write",
-                       help="writes the queue from --items, --from-spec, "
-                            "--from-epic or --from-triage; refuses an empty `why`, a "
-                            "duplicate id, a dangling blocked_by and a cycle")
+    w = sub.add_parser(
+        "write", help="writes the queue from a list of items, a spec, an Epic cycle or a triage",
+        description=(
+            "Refuses an empty `why`, a duplicate id, a dangling `blocked_by` and a\n"
+            "cycle. On a rewrite the new list rules order, `title` and `why`; the\n"
+            "disk keeps what came from execution: its `status` always wins, and its\n"
+            "`human_pending` wins while open. The previous file is copied to\n"
+            "<file>.bak first (hand-written comments are not preserved).\n"
+            "--on-missing decides the on-disk items the new list does not mention;\n"
+            "`keep` puts them at the end. With --from-triage there is no refusal:\n"
+            "absent `done`/`dropped` are kept at the start, the triage enters in its\n"
+            "order and absent open items go after (`drop` marks only those)."),
+        examples=[("cepa plan write wego --from-spec docs/spec/assinatura.md",
+                   "one item per success criterion"),
+                  ("cepa plan write wego --from-epic docs/epics/wego.md --cycle 2",
+                   "the queue of one Epic cycle"),
+                  ("cepa plan write wego --items /tmp/items.json --on-missing keep --dry-run",
+                   "preview a hand-made list"),
+                  ("cepa plan write wego --from-triage /tmp/triage.json --source \"triage 2026-11-05\"",
+                   "the order of a triage")],
+        exit_codes=[(0, "written (or printed, with --dry-run)"),
+                    (2, f"invalid usage (no item source, --from-epic without --cycle), "
+                        f"{not_git}, invalid items"),
+                    (3, "name collision: a waves plan, or an unreadable file on disk"),
+                    (4, "the file on disk has items the new list does not mention "
+                        "(see --on-missing)")])
     w.add_argument("name", metavar="name", help="queue name")
-    w.add_argument("--items",
+    w.add_argument("--items", metavar="FILE",
                    help="JSON/YAML file with the item list, or '-' for stdin")
     w.add_argument("--from-spec", metavar="FILE",
                    help="reads the items from a /common:spec specification, one "
@@ -4232,9 +4493,9 @@ def main(argv=None):
                    help="the value-ladder cycle that becomes the queue (with --from-epic)")
     w.add_argument("--source", metavar="TEXT",
                    help="where the demands came from, recorded in the header")
-    w.add_argument("--when", "--quando", dest="when", metavar="WHEN", help="date to record in the header (YYYY-MM-DD)")
-    w.add_argument("--repo", default=".", metavar="DIR",
-                help="repository root (default: the current directory)")
+    w.add_argument("--when", "--quando", dest="when", metavar="DATE",
+                   help="date to record in the header (YYYY-MM-DD)")
+    w.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
     w.add_argument("--on-missing", choices=("refuse", "keep", "drop"),
                    default="refuse",
                    help="what to do with an on-disk item the new list does not mention")
