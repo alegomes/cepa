@@ -91,7 +91,8 @@ Subcommands:
       2026-11-05: "os itens prontos para serem construídos de todas as filas
       disponíveis"). A queue with nothing ready is still listed, in one line,
       with what holds it. An unreadable queue is warned and skipped.
-      Exit 0 = shown (even with zero ready); 2 = no single-track queue.
+      Exit 0 = shown (even with zero ready, even when every queue file is
+      unreadable — there IS a queue, it is sick); 2 = no queue file at all.
 
   cepa-plan reconcile <nome> --board ARQUIVO [--apply] [--repo DIR] [--json]
       The queue against the board: who closed outside the plan, who vanished,
@@ -4401,7 +4402,7 @@ def main(argv=None):
         examples=[("cepa plan ready", "every queue, for a human"),
                   ("cepa plan ready --json", "for code")],
         exit_codes=[(0, "shown (even with zero ready)"),
-                    (2, f"invalid usage, {not_git}, no single-track queue")])
+                    (2, f"invalid usage, {not_git}, no queue file at all")])
     rd.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
     rd.add_argument("--json", action="store_true", dest="as_json", help=json_help)
 
