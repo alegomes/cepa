@@ -14,6 +14,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 try:
@@ -241,6 +242,75 @@ def test_owner_can_finish_from_a_subdirectory(base):
           r.returncode == 0, r.stderr)
     check("grava head_commit",
           plan_item(d).get("head_commit") == git(d, "rev-parse", "HEAD"))
+
+
+def test_run_records_under_until_do_not_dirty_the_tree(base):
+    d = make_repo(base, "runlog", [item("A")])
+    start(d)
+    until = d / ".claude/queues/fila/until"
+    until.mkdir(parents=True)
+    (until / "run.log").write_text("log\n")
+    (until / "2026-11-05-1634.estado.json").write_text("{}\n")
+    r = finish(d, "done")
+    check("done com run.log e .estado.json não rastreados em until/: aceito",
+          r.returncode == 0, r.stderr)
+
+
+def test_live_stranger_with_smaller_uuid_does_not_refuse_the_owner(base):
+    d = make_repo(base, "estranho", [item("A")])
+    sys.path.insert(0, str(REPO / "common" / "hooks"))
+    import _wtlib
+    sessions = d / ".claude" / "sessions"
+    sessions.mkdir(parents=True)
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    for sid in ("00000000-estranho", "ffffffff-dono"):
+        (sessions / f"{sid}.json").write_text(json.dumps(
+            {"session_id": sid, "pid": os.getpid(), "hostname": _wtlib.host(),
+             "cwd": str(d.resolve()), "branch": "main", "started_at": now,
+             "last_seen": now}), encoding="utf-8")
+    git(d, "add", "-A")  # registry files are tree content here; keep the tree clean
+    git(d, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "registry")
+    start(d, "ffffffff-dono")
+    check("pré-condição: o dono gravado é o da env, não o estranho",
+          plan_item(d)["claimed_by"]["session_id"] == "ffffffff-dono",
+          plan_item(d).get("claimed_by"))
+    r = finish(d, "done", session="ffffffff-dono")
+    check("finish com a sessão da env, havendo estranho vivo de uuid menor: aceito",
+          r.returncode == 0, r.stderr)
+
+
+def test_unregistered_owner_can_finish_from_a_subdirectory(base):
+    d = make_repo(base, "subdir-semsessao", [item("A")])
+    start(d, session=None)
+    sub = d / "sub"
+    sub.mkdir()
+    r = finish(sub, "done", session=None)
+    check("sem sessão, start na raiz e finish a partir de sub/: aceito",
+          r.returncode == 0, r.stderr)
+
+
+def test_start_from_a_subdirectory_stores_the_tree_root(base):
+    d = make_repo(base, "start-sub", [item("A")])
+    sub = d / "sub"
+    sub.mkdir()
+    start(sub, session=None)
+    check("start a partir de sub/ grava a raiz da árvore em claimed_by.cwd",
+          os.path.realpath(plan_item(d)["claimed_by"]["cwd"]) == os.path.realpath(d),
+          plan_item(d)["claimed_by"])
+    r = finish(d, "done", session=None)
+    check("...e o finish na raiz é aceito", r.returncode == 0, r.stderr)
+
+
+def test_supervisor_does_not_bypass_the_clean_tree_rule(base):
+    d = make_repo(base, "super-suja", [item("A")])
+    start(d)
+    (d / "code.py").write_text("x = 9\n")
+    r = finish(d, "done", "evidência", "--supervisor", session="outra")
+    check("--supervisor com done e arquivo rastreado modificado: recusado",
+          r.returncode == 2, r.stderr)
+    it = plan_item(d)
+    check("sem head_commit e o item segue in_progress",
+          "head_commit" not in it and it["status"] == "in_progress", it)
 
 
 def test_never_started_item_can_be_blocked(base):

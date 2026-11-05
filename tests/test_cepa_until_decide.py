@@ -1170,6 +1170,22 @@ def test_supervisor_block_writes_a_lay_reason():
                   "o executor tentou 3 vezes seguidas"), it)
 
 
+def test_finish_item_reopens_an_item_the_agent_closed_done():
+    """DUR-2: `cepa-plan finish` refuses a second finish on a terminal item;
+    the supervisor's `finish_item` must pass `--supervisor` (red full build puts
+    the agent's `done` back to `pending`)."""
+    m = load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        done = item("a1", status="done")
+        done["evidence"] = "o agente fechou"
+        root = build_repo(tmp, [done])
+        err = m.finish_item("fila", root, "a1", "pending", "build vermelho")
+        check("finish_item reabre item done (devolve None)", err is None, err)
+        it = items_of(root)["a1"]
+        check("...o status virou pending e a evidence foi trocada",
+              it["status"] == "pending" and it["evidence"] == "build vermelho", it)
+
+
 def main():
     print("cepa-until decidir — o fim do run pergunta\n")
     for given_name, fn in sorted(globals().items()):
