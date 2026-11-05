@@ -135,7 +135,7 @@ def test_without_mode_without_tty():
         check("sem modo: recusa subir", p.returncode == 2, str(p.returncode))
         check("sem modo: não grava", not r.mode_file.exists())
         check("sem modo: não caiu no menu interativo",
-              "Em qual modo" not in p.stderr, p.stderr)
+              "Which mode does this session operate in" not in p.stderr, p.stderr)
         check("sem modo: ensina o escape", "CEPA_MODO=off" in p.stderr, p.stderr)
 
 
@@ -211,7 +211,7 @@ def test_hook_overhaul_shows_budget():
         c = ctx(p)
         check("hook reforma: mostra o orçamento", "só o módulo de auth" in c, c)
         check("hook reforma: cobra teste externo não editado",
-              "teste" in c and "externo" in c, c)
+              "external test edited" in c, c)
 
 
 def test_hook_silent_without_mode():
@@ -660,7 +660,7 @@ def test_help_non_interactive():
                   ("exploration", "discovery", "design", "construction",
                    "refactor", "reflection", "documentation")), output)
         check("ajuda: diz o propósito, não só o nome",
-              "comportamento externo" in output or "sem mudar nada que se veja" in output,
+              "without changing anything visible from outside" in output,
               output)
 
 
@@ -713,13 +713,13 @@ def test_help_in_the_menu_and_re_presents():
     """In the menu, `?` shows the purposes and the menu comes back — it is not an invalid choice."""
     with Repo() as r:
         rc, output = _pty_run(r, ["?\n", "construction\n"])
-        check("menu: oferece a ajuda", "?" in output and "ajuda" in output, output)
+        check("menu: oferece a ajuda", "?) help" in output, output)
         check("menu ?: mostra o propósito",
-              "comportamento externo" in output or "sem mudar nada que se veja" in output,
+              "without changing anything visible from outside" in output,
               output)
         check("menu ?: não trata como modo desconhecido",
               "modo desconhecido" not in output, output)
-        check("menu ?: pergunta de novo", output.count("modo?") >= 2, output)
+        check("menu ?: pergunta de novo", output.count("mode? [") >= 2, output)
         check("menu ?: a escolha seguinte vale", rc == 0, str(rc) + output)
         body = r.mode_file.read_text() if r.mode_file.exists() else ""
         check("menu ?: grava o modo escolhido", "mode: construction" in body, body)

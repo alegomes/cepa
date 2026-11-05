@@ -28,9 +28,9 @@ completion-auditor and the proof-reviewer enforce, and in refactor the
 the round by the owner's decision (it is the only one that depends on external
 infra). When it comes in, it comes in here first.
 
-The VALUES of the table (purpose/entry/produces/exit/gate prose) stay in
-pt-BR: they are shown to the user and injected into the turn, and
-`cepa-modes --json` prints them. The dict KEYS are English here; `cepa-modes
+The VALUES (purpose/entry/produces/exit/gate prose) are English: they are
+shown to the user (`cepa --mode help`, `cepa-modes`), injected into the turn,
+and `cepa-modes --json` prints them. The dict KEYS are English here; `cepa-modes
 --json` maps them back to the legacy keys (`proposito`, `entrada`, `produz`,
 `saida`, `gate`, `escrita`) because compass reads `saida` from that JSON.
 """
@@ -41,70 +41,70 @@ import re
 # order = the order of the work cycle, not alphabetical
 MODES = {
     "exploration": {
-        "purpose": "entender uma dor que ainda não tem solução proposta, e sair com um caminho recomendado",
-        "entry": "uma dor em linguagem natural, SEM solução proposta — se você "
-                   "já sabe a solução, não é exploração",
-        "produces": "um documento de estratégia com 2+ caminhos considerados, um "
-                  "recomendado, e a dor reformulada com o que se aprendeu",
-        "exit": "um documento de estratégia com 2+ caminhos considerados, "
-                 "passado pelo painel /common:advisors com as discordâncias nomeadas",
-        "gate": "mecânico: o hook e `cepa-modes --exit` conferem no disco o painel salvo em docs/reviews, o documento que ele avaliou e a `Decisão do dono` em cada discordância nomeada; o write-mode-gate barra escrita fora de docs/**",
+        "purpose": "understand a pain that has no proposed solution yet, and leave with a recommended path",
+        "entry": "a pain in plain language, WITHOUT a proposed solution; if you "
+                 "already know the solution, it is not exploration",
+        "produces": "a strategy document with 2+ paths considered, one "
+                    "recommended, and the pain restated with what was learned",
+        "exit": "a strategy document with 2+ paths considered, "
+                "run through the /common:advisors panel with the disagreements named",
+        "gate": "mechanical: the hook and `cepa-modes --exit` check on disk the panel saved in docs/reviews, the document it evaluated and the `Decisão do dono` on each named disagreement; the write-mode-gate blocks writes outside docs/**",
         "write": ["docs/**", ".claude/**", "BACKLOG.md"],
     },
     "discovery": {
-        "purpose": "virar um comportamento desejado em critério de aceite cobrável, com evidência atrás",
-        "entry": "um comportamento desejado, vindo da exploração ou direto",
-        "produces": "oportunidade enquadrada, evidência coletada, e os critérios de "
-                  "aceite escritos NA ALTITUDE em que serão cobrados",
-        "exit": "evidence-auditor Confirmed nas suposições de risco + os "
-                 "critérios de aceite escritos na altitude + o teste vermelho de cada um",
-        "gate": "em parte: o spec-readiness-gate barra especificação pronta sem superfície e teste vermelho declarados por critério, mas não roda o teste; o write-mode-gate barra escrita fora de docs/discovery, docs/spec e docs/epics",
+        "purpose": "turn a desired behavior into an enforceable acceptance criterion, with evidence behind it",
+        "entry": "a desired behavior, coming from exploration or directly",
+        "produces": "a framed opportunity, collected evidence, and the acceptance "
+                    "criteria written AT THE ALTITUDE where they will be enforced",
+        "exit": "evidence-auditor Confirmed on the risky assumptions + the "
+                "acceptance criteria written at the altitude + the red test of each one",
+        "gate": "partly: the spec-readiness-gate blocks a ready spec without a declared surface and red test per criterion, but does not run the test; the write-mode-gate blocks writes outside docs/discovery, docs/spec and docs/epics",
         "write": ["docs/discovery/**", "docs/spec/**", "docs/epics/**", ".claude/**", "BACKLOG.md"],
     },
     "design": {
-        "purpose": "desenhar como a coisa funciona e como ela se parece, antes de existir código",
-        "entry": "oportunidade validada",
-        "produces": "fluxos, estados, spec visual reconciliada com o design system, "
-                  "protótipo compartilhável",
-        "exit": "design-critic devolvendo SHIP",
-        "gate": "existe e funciona (topologia design); o write-mode-gate barra escrita fora de docs/design",
+        "purpose": "design how the thing works and how it looks, before any code exists",
+        "entry": "a validated opportunity",
+        "produces": "flows, states, a visual spec reconciled with the design system, "
+                    "a shareable prototype",
+        "exit": "design-critic returning SHIP",
+        "gate": "exists and works (design topology); the write-mode-gate blocks writes outside docs/design",
         "write": ["docs/design/**", ".claude/**", "BACKLOG.md"],
     },
     "construction": {
-        "purpose": "escrever o código que faz o teste vermelho do critério ficar verde",
-        "entry": "UM TESTE VERMELHO escrito a partir do critério de aceite, antes "
-                   "do código, por quem não vai implementar",
-        "produces": "código + testes",
-        "exit": "completion-auditor COMPLETE e proof-reviewer PROVEN",
-        "gate": "existe e funciona (os dois gates, nesta ordem)",
+        "purpose": "write the code that turns the criterion's red test green",
+        "entry": "ONE RED TEST written from the acceptance criterion, before "
+                 "the code, by someone who will not implement it",
+        "produces": "code + tests",
+        "exit": "completion-auditor COMPLETE and proof-reviewer PROVEN",
+        "gate": "exists and works (the two gates, in this order)",
         "write": "tudo",
     },
     "refactor": {
-        "purpose": "reorganizar código já entregue sem mudar nada que se veja de fora",
-        "entry": "ORÇAMENTO DECLARADO — a lista fechada do que será reformado e o "
-                   "limite; sem orçamento a reforma nunca termina",
-        "produces": "código reorganizado, comportamento externo idêntico",
-        "exit": "o orçamento declarado exaurido, build verde, e NENHUM teste "
-                 "externo editado (teste editado = mudou comportamento = não era reforma)",
-        "gate": "refactor-gate.py bloqueia editar teste externo enquanto o modo dura",
+        "purpose": "reorganize delivered code without changing anything visible from outside",
+        "entry": "A DECLARED BUDGET: the closed list of what will be refactored and the "
+                 "limit; without a budget the refactor never ends",
+        "produces": "reorganized code, identical external behavior",
+        "exit": "the declared budget used up, green build, and NO external "
+                "test edited (edited test = changed behavior = it was not a refactor)",
+        "gate": "refactor-gate.py blocks editing an external test while the mode lasts",
         "write": "tudo",
     },
     "reflection": {
-        "purpose": "olhar o que já existe por uma lente escolhida e transformar cada achado em destino",
-        "entry": "um RECORTE e uma LENTE, ambos escolhidos de menu — reflexão sem "
-                   "recorte vira leitura infinita do repo",
-        "produces": "um relatório de achados classificados",
-        "exit": "nenhum achado sem destino — cada um virou card ou foi "
-                 "descartado com motivo escrito",
-        "gate": "reflection-gate.py barra relatório fechado com achado solto, e o write-mode-gate barra escrita fora de docs/** e .claude/reflection (ou o legado .claude/reflexao)",
+        "purpose": "look at what already exists through a chosen lens and give each finding a destination",
+        "entry": "a SCOPE and a LENS, both chosen from a menu; reflection without "
+                 "a scope becomes an endless read of the repo",
+        "produces": "a report of classified findings",
+        "exit": "no finding without a destination: each one became a card or was "
+                "discarded with a written reason",
+        "gate": "reflection-gate.py blocks a closed report with a loose finding, and the write-mode-gate blocks writes outside docs/** and .claude/reflection (or the legacy .claude/reflexao)",
         "write": [".claude/reflection/**", ".claude/reflexao/**", "docs/**", "BACKLOG.md"],
     },
     "documentation": {
-        "purpose": "documentar código estável na árvore Diátaxis, com cada porquê citando sua fonte",
-        "entry": "código estável, não em construção ativa",
-        "produces": "a árvore Diátaxis fundamentada",
-        "exit": "consistency-reviewer PASS e sua assinatura em /docs:finalize",
-        "gate": "existe e funciona (topologia docs); o write-mode-gate barra escrita fora de docs/**",
+        "purpose": "document stable code in the Diátaxis tree, with every why citing its source",
+        "entry": "stable code, not under active construction",
+        "produces": "the grounded Diátaxis tree",
+        "exit": "consistency-reviewer PASS and its signature in /docs:finalize",
+        "gate": "exists and works (docs topology); the write-mode-gate blocks writes outside docs/**",
         "write": ["docs/**", ".claude/**", "BACKLOG.md"],
     },
 }

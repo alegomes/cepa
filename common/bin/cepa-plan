@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-plan — o escritor mecânico da fila `single-track` (.claude/queues/<nome>/queue.yaml).
+"""cepa-plan — the mechanical writer of the `single-track` queue (.claude/queues/<nome>/queue.yaml).
 
 It exists because step 1 of the "one writer, three sources" design (BACKLOG.md,
 "Cinco portas de planejamento", approved on 2026-08-24) cannot live only in the
@@ -3869,318 +3869,318 @@ def main(argv=None):
         prog="cepa-plan",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            "Escreve e valida a fila single-track do harness.\n"
+            "Writes and validates the harness single-track queue.\n"
             "\n"
-            "A fila (.claude/queues/<nome>/queue.yaml) é o documento que guarda a\n"
-            "ORDEM dos itens e o PORQUÊ de cada posição, que é o que um tracker\n"
-            "perde. Este script é o escritor mecânico: valida, resolve a raiz certa,\n"
-            "recusa colisões e grava. Quem conduz a conversa é /common:queue; quem\n"
-            "executa é /common:drain-plan e cepa-until; quem lê, /common:next e\n"
-            "/common:queue-status.\n"
+            "The queue (.claude/queues/<name>/queue.yaml) is the document that keeps\n"
+            "the ORDER of the items and the WHY of each position, which is what a\n"
+            "tracker loses. This script is the mechanical writer: it validates,\n"
+            "resolves the right root, refuses collisions and writes. /common:queue\n"
+            "drives the conversation; /common:drain-plan and cepa-until execute;\n"
+            "/common:next and /common:queue-status read.\n"
             "\n"
-            "Só conhece `mode: single-track`. Plano de ondas é outro documento, com\n"
-            "outro autor (/maestro:program-plan) e outro consumidor (/maestro:run).\n"
+            "Knows only `mode: single-track`. A wave plan is another document, with\n"
+            "another author (/maestro:program-plan) and another reader (/maestro:run).\n"
             "\n"
-            "subcomandos por família:\n"
-            "  fontes (só leem, devolvem JSON)   from-spec, from-epic, from-triage\n"
-            "  escrita                            write, add, migrate, check-name, validate\n"
-            "  leitura                            queue, status, show, epics, promote, order\n"
-            "  ciclo de um item                   start, finish, answer\n"
-            "  contra o quadro Jira               reconcile, landed, divergence"),
+            "subcommands by family:\n"
+            "  sources (read only, return JSON)   from-spec, from-epic, from-triage\n"
+            "  writing                            write, add, migrate, check-name, validate\n"
+            "  reading                            queue, status, show, epics, promote, order\n"
+            "  one item's cycle                   start, finish, answer\n"
+            "  against the Jira board             reconcile, landed, divergence"),
         epilog=(
-            "exemplos:\n"
+            "examples:\n"
             "  cepa-plan write wego --from-spec docs/spec/assinatura.md\n"
             "  cepa-plan write wego --from-epic docs/epics/x.md --cycle 2\n"
-            "  cepa-plan status                 # a fila inteira, por status\n"
-            "  cepa-plan queue wego --max 3     # o que o próximo lote pode executar\n"
+            "  cepa-plan status                 # the whole queue, by status\n"
+            "  cepa-plan queue wego --max 3     # what the next batch may execute\n"
             "  cepa-plan start wego WEGO-123\n"
-            "  cepa-plan finish wego WEGO-123 --status done --evidence \"commit abc, build verde\"\n"
-            "  cepa-plan answer wego WEGO-124 --answer \"sim, fecha\"\n"
+            "  cepa-plan finish wego WEGO-123 --status done --evidence \"commit abc, build green\"\n"
+            "  cepa-plan answer wego WEGO-124 --answer \"yes, close it\"\n"
             "  cepa-plan add wego WEGO-130 --title \"...\" --before WEGO-125 --why \"...\"\n"
             "\n"
-            "cada subcomando tem o próprio --help (ex.: cepa-plan finish --help)."))
-    sub = ap.add_subparsers(dest="cmd", metavar="<subcomando>")
+            "each subcommand has its own --help (e.g. cepa-plan finish --help)."))
+    sub = ap.add_subparsers(dest="cmd", metavar="<subcommand>")
 
     mg = sub.add_parser("migrate",
-                        help="move a fila de .claude/programs/<n>/plan.yaml "
-                             "para .claude/queues/<n>/queue.yaml")
-    mg.add_argument("name", nargs="?", metavar="nome",
-                    help="nome da fila a migrar (ou --all)")
+                        help="moves the queue from .claude/programs/<n>/plan.yaml "
+                             "to .claude/queues/<n>/queue.yaml")
+    mg.add_argument("name", nargs="?", metavar="name",
+                    help="name of the queue to migrate (or --all)")
     mg.add_argument("--all", action="store_true", dest="all_queues",
-                    help="todas as filas single-track do layout antigo")
+                    help="every single-track queue in the old layout")
     mg.add_argument("--dry-run", action="store_true", dest="dry_run",
-                    help="diz o que moveria, sem mover")
+                    help="says what it would move, without moving")
     mg.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
 
     c = sub.add_parser("check-name",
-                       help="o nome está livre para uma fila? (saída 3 = colide "
-                            "com um plano de ondas)")
-    c.add_argument("name", metavar="nome", help="nome pretendido para a fila")
+                       help="is the name free for a queue? (exit 3 = collides "
+                            "with a wave plan)")
+    c.add_argument("name", metavar="name", help="intended name for the queue")
     c.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
 
-    v = sub.add_parser("validate", help="valida um plan.yaml no disco")
-    v.add_argument("plan_file", metavar="plano", help="caminho do queue.yaml a validar")
+    v = sub.add_parser("validate", help="validates a plan.yaml on disk")
+    v.add_argument("plan_file", metavar="plan", help="path of the queue.yaml to validate")
 
     s = sub.add_parser("from-spec",
-                       help="lê uma spec do /common:spec e devolve os itens (JSON)")
-    s.add_argument("spec", metavar="ARQUIVO",
-                   help="a especificação (docs/spec/<slug>.md), um item por `### CS-N`")
+                       help="reads a /common:spec spec and returns the items (JSON)")
+    s.add_argument("spec", metavar="FILE",
+                   help="the specification (docs/spec/<slug>.md), one item per `### CS-N`")
 
     e = sub.add_parser("from-epic",
-                       help="extrai a fila de um ciclo de um Epic (JSON com "
-                            "`demonstrates` e `items`); só lê")
-    e.add_argument("epic", metavar="ARQUIVO", help="o Epic (docs/epics/<nome>.md)")
+                       help="extracts the queue of one cycle of an Epic (JSON with "
+                            "`demonstrates` and `items`); read only")
+    e.add_argument("epic", metavar="FILE", help="the Epic (docs/epics/<name>.md)")
     e.add_argument("--cycle", "--ciclo", dest="cycle", type=int, required=True, metavar="N",
-                   help="o ciclo da escada de valor que vira fila")
+                   help="the value-ladder cycle that becomes the queue")
 
     t = sub.add_parser("from-triage",
-                       help="lê o repasse de uma triagem do /board-flow:triage "
-                            "e devolve os itens (JSON)")
-    t.add_argument("handoff", metavar="repasse", help="arquivo JSON/YAML, ou '-' para stdin")
+                       help="reads the handoff of a /board-flow:triage run "
+                            "and returns the items (JSON)")
+    t.add_argument("handoff", metavar="handoff", help="JSON/YAML file, or '-' for stdin")
 
     q = sub.add_parser("queue",
-                       help="quais itens o lote pode executar agora, na ordem "
-                            "da fila, e onde ele para")
-    q.add_argument("name", metavar="nome", help="nome da fila")
-    q.add_argument("--max", type=int, default=DEFAULT_MAX, dest="max_items", metavar="TETO",
-                   help=f"teto de itens no lote (default {DEFAULT_MAX}: cada "
-                        "item é um build inteiro com gate de aceite e de prova)")
+                       help="which items the batch may execute now, in queue "
+                            "order, and where it stops")
+    q.add_argument("name", metavar="name", help="queue name")
+    q.add_argument("--max", type=int, default=DEFAULT_MAX, dest="max_items", metavar="CAP",
+                   help=f"cap on items in the batch (default {DEFAULT_MAX}: each "
+                        "item is a whole build with acceptance and proof gates)")
     q.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
     q.add_argument("--json", action="store_true", dest="as_json",
-                help="saída em JSON, para código")
+                help="JSON output, for code")
 
     stt = sub.add_parser("status",
-                         help="a fila inteira agrupada por status, na ordem "
-                              "gravada; só lê, não reserva nem executa")
-    stt.add_argument("name", nargs="?", metavar="nome",
-                     help="nome da fila; omitido, usa a única que existir")
+                         help="the whole queue grouped by status, in the recorded "
+                              "order; read only, reserves and executes nothing")
+    stt.add_argument("name", nargs="?", metavar="name",
+                     help="queue name; if omitted, uses the only one that exists")
     stt.add_argument("--status", choices=STATUSES, dest="status_filter",
-                     help="mostra só os itens com este status")
+                     help="shows only the items with this status")
     stt.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
     stt.add_argument("--json", action="store_true", dest="as_json",
-                help="saída em JSON, para código")
+                help="JSON output, for code")
 
     sh = sub.add_parser("show",
-                        help="o cabeçalho da fila: fonte e o que ela "
-                             "`demonstrates:` quando acaba; só lê")
-    sh.add_argument("name", metavar="nome", help="nome da fila")
+                        help="the queue header: source and what it "
+                             "`demonstrates:` when done; read only")
+    sh.add_argument("name", metavar="name", help="queue name")
     sh.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
     sh.add_argument("--json", action="store_true", dest="as_json",
-                help="saída em JSON, para código")
+                help="JSON output, for code")
 
     ep = sub.add_parser("epics",
-                        help="o \"onde estamos\" de cada Epic em docs/epics/, "
-                             "derivado da escada e das filas de cada ciclo; só lê")
+                        help="the \"where are we\" of each Epic in docs/epics/, "
+                             "derived from the ladder and each cycle's queues; read only")
     ep.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
     ep.add_argument("--json", action="store_true", dest="as_json",
-                help="saída em JSON, para código")
+                help="JSON output, for code")
     ep.add_argument("--brief", action="store_true",
-                    help="uma linha por Epic (para o hook de sessão)")
+                    help="one line per Epic (for the session hook)")
 
     pr = sub.add_parser("promote",
-                        help="as demandas que a fila entrega ao "
+                        help="the demands the queue hands to "
                              "/maestro:program-plan --from-plan")
-    pr.add_argument("name", metavar="nome", help="nome da fila")
+    pr.add_argument("name", metavar="name", help="queue name")
     pr.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
     pr.add_argument("--json", action="store_true", dest="as_json",
-                help="saída em JSON, para código")
-    pr.add_argument("--when", "--quando", dest="when", metavar="QUANDO", help="data a registrar na linha `source` do "
-                                     "plano de ondas (AAAA-MM-DD)")
+                help="JSON output, for code")
+    pr.add_argument("--when", "--quando", dest="when", metavar="WHEN", help="date to record on the wave plan's "
+                                     "`source` line (YYYY-MM-DD)")
 
     st = sub.add_parser("start",
-                        help="reserva um item do lote (status: in_progress) e "
-                             "assina a reserva com a sessão dona")
-    st.add_argument("name", metavar="nome", help="nome da fila")
-    st.add_argument("id", help="id do item na fila")
+                        help="reserves a batch item (status: in_progress) and "
+                             "signs the reservation with the owning session")
+    st.add_argument("name", metavar="name", help="queue name")
+    st.add_argument("id", help="item id in the queue")
     st.add_argument("--commit", action="store_true",
-                    help="commita a fila (só ela) no mesmo passo; sem isso a "
-                         "saída diz que falta commitar")
+                    help="commits the queue (only it) in the same step; without "
+                         "it the output says a commit is missing")
     st.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
 
     fi = sub.add_parser("finish",
-                        help="registra o desfecho de um item do lote")
-    fi.add_argument("name", metavar="nome", help="nome da fila")
-    fi.add_argument("id", help="id do item na fila")
+                        help="records the outcome of a batch item")
+    fi.add_argument("name", metavar="name", help="queue name")
+    fi.add_argument("id", help="item id in the queue")
     fi.add_argument("--status", required=True,
                     choices=("done", "blocked", "pending"),
-                    help="done = fechou; blocked = travou em condição de fora; "
-                         "pending = volta para a fila sem ter fechado")
+                    help="done = closed; blocked = stuck on an outside condition; "
+                         "pending = back to the queue without closing")
     fi.add_argument("--evidence", required=True,
-                    help="o que aconteceu: commits, vereditos, o que travou")
+                    help="what happened: commits, verdicts, what got stuck")
     fi.add_argument("--human-pending", dest="human_pending",
-                    help="ABRE uma rota que só o humano fecha (validar à mão, "
-                         "aprovar PR). Nunca fecha uma: só o humano faz isso")
-    fi.add_argument("--question", "--pergunta", dest="question", metavar="PERGUNTA",
-                    help="a pergunta FECHADA que destrava o item, até 25 "
-                         "palavras, sem nome de branch, classe ou arquivo, "
-                         "com a sua recomendação (\"Fecho o card como 'medir "
-                         "depois do go-live' e devolvo à fila? Recomendo sim: "
-                         "...\"). O `cepa-until decide` a mostra num menu "
-                         "fixo: sim = o item volta para a fila com esta "
-                         "resposta, não = fica como está. Use com `blocked` "
-                         "e com `--human-pending`")
+                    help="OPENS a route only a human closes (validate by hand, "
+                         "approve a PR). Never closes one: only the human does")
+    fi.add_argument("--question", "--pergunta", dest="question", metavar="QUESTION",
+                    help="the CLOSED question that unblocks the item, up to 25 "
+                         "words, no branch, class or file name, "
+                         "with your recommendation (\"Close the card as 'measure "
+                         "after go-live' and return it to the queue? I recommend yes: "
+                         "...\"). `cepa-until decide` shows it in a fixed "
+                         "menu: yes = the item returns to the queue with this "
+                         "answer, no = it stays as is. Use with `blocked` "
+                         "and with `--human-pending`")
     # The HUMAN section (see _ownertext). `--evidence` is the agents' section.
     owner_help = {
-        "pedido": "seção humana: o que o item pedia, em palavras leigas",
-        "pronto": "seção humana: o que já funciona, em palavras leigas",
-        "impede": "seção humana: o que impede o item de andar, em uma frase "
-                  "leiga. Obrigatório com `blocked`",
-        "se_sim": "seção humana: o que acontece com o trabalho se o dono "
-                  "responder sim à pergunta",
-        "se_nao": "seção humana: o que acontece com o trabalho se o dono "
-                  "responder não",
+        "pedido": "human section: what the item asked for, in plain words",
+        "pronto": "human section: what already works, in plain words",
+        "impede": "human section: what keeps the item from moving, in one plain "
+                  "sentence. Required with `blocked`",
+        "se_sim": "human section: what happens to the work if the owner "
+                  "answers yes to the question",
+        "se_nao": "human section: what happens to the work if the owner "
+                  "answers no",
     }
     for key, flag, _ in _ownertext.FIELDS:
-        fi.add_argument(flag, dest=f"owner_{key}", metavar="TEXTO",
-                        help=owner_help[key] + ". Até 30 palavras, sem card, "
-                             "commit, arquivo ou veredito")
+        fi.add_argument(flag, dest=f"owner_{key}", metavar="TEXT",
+                        help=owner_help[key] + ". Up to 30 words, no card, "
+                             "commit, file or verdict")
     fi.add_argument("--commit", action="store_true",
-                    help="commita a fila (só ela) no mesmo passo; sem isso a "
-                         "saída diz que falta commitar")
+                    help="commits the queue (only it) in the same step; without "
+                         "it the output says a commit is missing")
     fi.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
 
     rs = sub.add_parser("answer", aliases=["responde"],
-                        help="o DONO responde a um item adiado: `blocked` volta "
-                             "para `pending` com a resposta, e a rota "
-                             "`human_pending` fecha. Só num terminal")
-    rs.add_argument("name", metavar="nome", help="nome da fila")
-    rs.add_argument("id", help="id do item adiado")
-    rs.add_argument("--answer", "--resposta", dest="answer", metavar="RESPOSTA", required=True,
-                    help="a resposta do dono, verbatim; o próximo run a lê "
-                         "na evidência do item")
+                        help="the OWNER answers a deferred item: `blocked` goes back "
+                             "to `pending` with the answer, and the "
+                             "`human_pending` route closes. Terminal only")
+    rs.add_argument("name", metavar="name", help="queue name")
+    rs.add_argument("id", help="id of the deferred item")
+    rs.add_argument("--answer", "--resposta", dest="answer", metavar="ANSWER", required=True,
+                    help="the owner's answer, verbatim; the next run reads it "
+                         "in the item's evidence")
     rs.add_argument("--keep", "--mantem", dest="keep", action="store_true",
-                    help="grava a resposta e deixa o item como está: o "
-                         "`blocked` segue travado e a rota segue aberta")
+                    help="records the answer and leaves the item as is: "
+                         "`blocked` stays stuck and the route stays open")
     rs.add_argument("--drop", "--descarta", dest="drop", action="store_true",
-                    help="descarta o item (`dropped`) e fecha a rota; num item "
-                         "`done`, só fecha a tarefa que sobrou")
+                    help="drops the item (`dropped`) and closes the route; on a "
+                         "`done` item, only closes the leftover task")
     rs.add_argument("--force", "--forca", dest="force", action="store_true",
-                    help="grava mesmo um texto que parece não responder à "
-                         "rota (pedido de esclarecimento, pergunta)")
-    rs.add_argument("--author", "--autor", dest="author", metavar="AUTOR", default=None,
-                    help="quem assina a dispensa que a resposta \"sim\" aceita "
-                         "(default: `git config user.name`, depois $USER)")
+                    help="records even a text that does not seem to answer the "
+                         "route (a request for clarification, a question)")
+    rs.add_argument("--author", "--autor", dest="author", metavar="AUTHOR", default=None,
+                    help="who signs the waiver that a \"yes\" answer accepts "
+                         "(default: `git config user.name`, then $USER)")
     rs.add_argument("--no-commit", action="store_true", dest="no_commit",
-                    help="grava a fila sem commitar (por default o `answer` "
-                         "commita só a fila no mesmo passo)")
+                    help="writes the queue without committing (by default `answer` "
+                         "commits only the queue in the same step)")
     rs.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
 
     rc = sub.add_parser("reconcile",
-                        help="compara a fila com o quadro e (com --apply) "
-                             "grava a reconciliação")
-    rc.add_argument("name", metavar="nome", help="nome da fila")
-    rc.add_argument("--board", required=True, metavar="ARQUIVO",
-                    help="JSON/YAML que o atlassian-expert produziu: lista de "
-                         "{key, status}, ou {cards: [...], missing: [...]}. "
-                         "'-' lê da entrada padrão")
-    rc.add_argument("--config", help="board-flow.yaml a usar (default: o do "
-                                     "repo)")
+                        help="compares the queue with the board and (with --apply) "
+                             "records the reconciliation")
+    rc.add_argument("name", metavar="name", help="queue name")
+    rc.add_argument("--board", required=True, metavar="FILE",
+                    help="JSON/YAML produced by atlassian-expert: a list of "
+                         "{key, status}, or {cards: [...], missing: [...]}. "
+                         "'-' reads from standard input")
+    rc.add_argument("--config", help="board-flow.yaml to use (default: the "
+                                     "repo's)")
     rc.add_argument("--apply", action="store_true", dest="apply_changes",
-                    help="grava os status reconciliados no plano. Nunca fecha "
-                         "`human_pending` e nunca anexa card novo")
+                    help="writes the reconciled statuses to the plan. Never closes "
+                         "`human_pending` and never appends a new card")
     rc.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
     rc.add_argument("--json", action="store_true", dest="as_json",
-                help="saída em JSON, para código")
+                help="JSON output, for code")
 
     ld = sub.add_parser("landed", aliases=["aterrissados"],
-                        help="cards em revisão com prova PROVEN, aceite "
-                             "completo e código já na branch de integração")
-    ld.add_argument("--board", required=True, metavar="ARQUIVO",
-                    help="JSON/YAML do atlassian-expert: lista de {key, status}")
-    ld.add_argument("--config", help="board-flow.yaml a usar (default: o do repo)")
-    ld.add_argument("--into", help="ref de integração (default: origin/HEAD, "
-                                   "origin/main ou main)")
+                        help="cards in review with a PROVEN proof, complete "
+                             "acceptance and code already on the integration branch")
+    ld.add_argument("--board", required=True, metavar="FILE",
+                    help="JSON/YAML from atlassian-expert: a list of {key, status}")
+    ld.add_argument("--config", help="board-flow.yaml to use (default: the repo's)")
+    ld.add_argument("--into", help="integration ref (default: origin/HEAD, "
+                                   "origin/main or main)")
     ld.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
     ld.add_argument("--json", action="store_true", dest="as_json",
-                help="saída em JSON, para código")
+                help="JSON output, for code")
 
     ad = sub.add_parser("add",
-                        help="acrescenta UM item a uma fila existente, sem "
-                             "reescrever os outros")
-    ad.add_argument("name", metavar="nome", help="nome da fila")
-    ad.add_argument("id", help="id do item novo (chave do Jira ou id livre)")
-    ad.add_argument("--title", required=True, metavar="TÍTULO", help="título do item")
-    ad.add_argument("--why", help="obrigatório com --before; sem "
-                                  "--before, vira o `why` do item com a "
-                                  "frase 'ainda não priorizado' anexada")
+                        help="adds ONE item to an existing queue, without "
+                             "rewriting the others")
+    ad.add_argument("name", metavar="name", help="queue name")
+    ad.add_argument("id", help="id of the new item (Jira key or free id)")
+    ad.add_argument("--title", required=True, metavar="TITLE", help="item title")
+    ad.add_argument("--why", help="required with --before; without "
+                                  "--before, becomes the item's `why` with "
+                                  "'not prioritized yet' appended")
     ad.add_argument("--before", "--antes-de", dest="before", metavar="ID",
-                    help="insere imediatamente antes deste id (exige --why)")
+                    help="inserts right before this id (requires --why)")
     ad.add_argument("--blocked-by", dest="blocked_by", metavar="ID,ID",
-                    help="ids desta MESMA fila que bloqueiam o item novo")
+                    help="ids in this SAME queue that block the new item")
     ad.add_argument("--no-commit", action="store_true", dest="no_commit",
-                    help="grava a fila sem commitar (por default o `add` "
-                         "commita só a fila no mesmo passo)")
+                    help="writes the queue without committing (by default `add` "
+                         "commits only the queue in the same step)")
     ad.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
 
     od = sub.add_parser("order", aliases=["ordena"],
-                        help="ordena uma lista de chaves do Jira pela ordem "
-                             "da fila")
-    od.add_argument("name", metavar="nome", help="nome da fila")
+                        help="sorts a list of Jira keys by queue "
+                             "order")
+    od.add_argument("name", metavar="name", help="queue name")
     od.add_argument("--keys", required=True, metavar="K1,K2,...",
-                    help="chaves na ordem do Jira; as que são item do plano "
-                         "voltam na ordem da fila, as outras depois, "
-                         "marcadas `fora_do_plano`")
+                    help="keys in Jira order; those that are plan items "
+                         "come back in queue order, the rest after them, "
+                         "marked `fora_do_plano`")
     od.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
     od.add_argument("--json", action="store_true", dest="as_json",
-                help="saída em JSON, para código")
+                help="JSON output, for code")
 
     dv = sub.add_parser("divergence", aliases=["divergencia"],
-                        help="lista (sem corrigir) a fila × o quadro × o "
+                        help="lists (without fixing) the queue × the board × "
                              "BACKLOG.md")
-    dv.add_argument("name", metavar="nome", help="nome da fila")
-    dv.add_argument("--board", metavar="ARQUIVO",
-                    help="mesmo formato do `reconcile`. Sem ele, "
-                         "cards_sem_item e itens_com_card_done saem vazios")
-    dv.add_argument("--backlog", metavar="ARQUIVO",
-                    help="o BACKLOG.md a varrer. Sem ele, secoes_sem_plano e "
-                         "plano_inexistente saem vazios")
+    dv.add_argument("name", metavar="name", help="queue name")
+    dv.add_argument("--board", metavar="FILE",
+                    help="same format as `reconcile`. Without it, "
+                         "cards_sem_item and itens_com_card_done come out empty")
+    dv.add_argument("--backlog", metavar="FILE",
+                    help="the BACKLOG.md to scan. Without it, secoes_sem_plano and "
+                         "plano_inexistente come out empty")
     dv.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
     dv.add_argument("--json", action="store_true", dest="as_json",
-                help="saída em JSON, para código")
+                help="JSON output, for code")
 
     w = sub.add_parser("write",
-                       help="grava a fila a partir de --items, --from-spec, "
-                            "--from-epic ou --from-triage; recusa `why` vazio, id "
-                            "duplicado, blocked_by fantasma e ciclo")
-    w.add_argument("name", metavar="nome", help="nome da fila")
+                       help="writes the queue from --items, --from-spec, "
+                            "--from-epic or --from-triage; refuses an empty `why`, a "
+                            "duplicate id, a dangling blocked_by and a cycle")
+    w.add_argument("name", metavar="name", help="queue name")
     w.add_argument("--items",
-                   help="arquivo JSON/YAML com a lista de itens, ou '-' para stdin")
-    w.add_argument("--from-spec", metavar="ARQUIVO",
-                   help="lê os itens de uma especificação do /common:spec, um "
-                        "por critério de sucesso, na ordem do texto")
-    w.add_argument("--from-triage", metavar="ARQUIVO",
-                   help="lê os itens do repasse de uma triagem do "
-                        "/board-flow:triage, na ordem que ela classificou")
-    w.add_argument("--from-epic", metavar="ARQUIVO",
-                   help="lê os itens de um ciclo de um Epic do /common:epic, "
-                        "um por frase de \"What it crosses\"; pede --cycle")
+                   help="JSON/YAML file with the item list, or '-' for stdin")
+    w.add_argument("--from-spec", metavar="FILE",
+                   help="reads the items from a /common:spec specification, one "
+                        "per success criterion, in text order")
+    w.add_argument("--from-triage", metavar="FILE",
+                   help="reads the items from the handoff of a "
+                        "/board-flow:triage run, in the order it classified")
+    w.add_argument("--from-epic", metavar="FILE",
+                   help="reads the items of one cycle of a /common:epic Epic, "
+                        "one per sentence of \"What it crosses\"; needs --cycle")
     w.add_argument("--cycle", "--ciclo", dest="cycle", type=int, metavar="N",
-                   help="o ciclo da escada de valor que vira fila (com --from-epic)")
-    w.add_argument("--source", metavar="TEXTO",
-                   help="de onde as demandas vieram, gravado no cabeçalho")
-    w.add_argument("--when", "--quando", dest="when", metavar="QUANDO", help="data a registrar no cabeçalho (YYYY-MM-DD)")
+                   help="the value-ladder cycle that becomes the queue (with --from-epic)")
+    w.add_argument("--source", metavar="TEXT",
+                   help="where the demands came from, recorded in the header")
+    w.add_argument("--when", "--quando", dest="when", metavar="WHEN", help="date to record in the header (YYYY-MM-DD)")
     w.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
     w.add_argument("--on-missing", choices=("refuse", "keep", "drop"),
                    default="refuse",
-                   help="o que fazer com item do disco que a lista nova não cita")
+                   help="what to do with an on-disk item the new list does not mention")
     w.add_argument("--dry-run", action="store_true",
-                   help="imprime o arquivo que seria gravado, sem gravar")
+                   help="prints the file that would be written, without writing")
 
     a = ap.parse_args(argv)
     if not a.cmd:

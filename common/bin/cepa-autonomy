@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-autonomy — consulta as faixas de autonomia (`common/autonomy.yaml`).
+"""cepa-autonomy — queries the autonomy bands (`common/autonomy.yaml`).
 
     cepa-autonomy listar [--repo .] [--json]
     cepa-autonomy classificar (--bash CMD | --mcp TOOL | --path P [--op OP] | --slash S | --id ID) [--repo .] [--json]
@@ -100,56 +100,56 @@ def main(argv=None):
         prog="cepa-autonomy",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            "Consulta as faixas de autonomia do harness (common/autonomy.yaml).\n"
+            "Queries the harness autonomy bands (common/autonomy.yaml).\n"
             "\n"
-            "O arquivo decide \"pergunta ou faz\", não o agente do turno. É por aqui\n"
-            "que um comando (hoje /board-flow:decide, passo 5b) pergunta em que faixa\n"
-            "uma ação cai antes de transformá-la em pergunta para o dono:\n"
+            "The file decides \"ask or do\", not the agent of the turn. This is how a\n"
+            "command (today /board-flow:decide, step 5b) asks which band an action\n"
+            "falls into before turning it into a question for the owner:\n"
             "\n"
-            "  executa_e_reporta   faz, e relata numa linha de informação\n"
-            "  sempre_pergunta     entra no lote de perguntas do dono\n"
-            "  não listada         pergunta (default), e a pergunta termina propondo o id\n"
+            "  executa_e_reporta   does it, and reports it in one info line\n"
+            "  sempre_pergunta     goes into the owner's batch of questions\n"
+            "  not listed          asks (default), and the question ends proposing the id\n"
             "\n"
-            "Saída humana em pt-BR; --json para consumo por código."),
+            "Human output in pt-BR; --json for code."),
         epilog=(
-            "exemplos:\n"
+            "examples:\n"
             "  cepa-autonomy listar\n"
             "  cepa-autonomy listar --json\n"
             "  cepa-autonomy classificar --bash 'git push --force'\n"
             "  cepa-autonomy classificar --path src/Main.java --op delete\n"
             "  cepa-autonomy classificar --slash /board-flow:advance --cond label=infra\n"
             "\n"
-            "saída: 0 = a consulta rodou, seja qual for a faixa · 2 = argumento inválido\n"
-            "cada subcomando tem o próprio --help."))
-    sub = ap.add_subparsers(dest="cmd", metavar="<subcomando>")
+            "exit: 0 = the query ran, whatever the band · 2 = invalid argument\n"
+            "each subcommand has its own --help."))
+    sub = ap.add_subparsers(dest="cmd", metavar="<subcommand>")
     summary = {
-        "listar": "lista as faixas e os ids declarados no autonomy.yaml",
-        "classificar": "diz em que faixa UMA ação cai: comando bash, ferramenta "
-                       "MCP, caminho, slash command ou id já declarado",
+        "listar": "lists the bands and the ids declared in autonomy.yaml",
+        "classificar": "says which band ONE action falls into: a bash command, an "
+                       "MCP tool, a path, a slash command or an already declared id",
     }
     for name in ("listar", "classificar"):
         p = sub.add_parser(name, help=summary[name], description=summary[name])
         p.add_argument("--repo", default=".", metavar="DIR",
-                       help="repositório cujo common/autonomy.yaml é lido "
-                            "(default: o diretório atual)")
-        p.add_argument("--json", action="store_true", help="saída em JSON, para código")
+                       help="repository whose common/autonomy.yaml is read "
+                            "(default: the current directory)")
+        p.add_argument("--json", action="store_true", help="JSON output, for code")
         if name == "classificar":
             g = p.add_mutually_exclusive_group(required=True)
             g.add_argument("--bash", metavar="CMD",
-                           help="um comando de shell, como seria executado")
-            g.add_argument("--mcp", metavar="FERRAMENTA",
-                           help="o nome de uma ferramenta MCP (ex.: jira_transition_issue)")
-            g.add_argument("--path", metavar="CAMINHO",
-                           help="um arquivo ou diretório que a ação tocaria (veja --op)")
+                           help="a shell command, as it would be run")
+            g.add_argument("--mcp", metavar="TOOL",
+                           help="the name of an MCP tool (e.g. jira_transition_issue)")
+            g.add_argument("--path", metavar="PATH",
+                           help="a file or directory the action would touch (see --op)")
             g.add_argument("--slash", metavar="/CMD",
-                           help="um slash command (ex.: /board-flow:advance)")
+                           help="a slash command (e.g. /board-flow:advance)")
             g.add_argument("--id", metavar="ID",
-                           help="o id de uma ação já declarada no autonomy.yaml")
+                           help="the id of an action already declared in autonomy.yaml")
             p.add_argument("--op", metavar="OP",
-                           help="com --path: a operação sobre o caminho, delete, edit ou any")
-            p.add_argument("--cond", action="append", default=[], metavar="CHAVE=VALOR",
-                           help="condição do detect já conferida por você (ex.: label=infra, "
-                                "branch_atual=main, destino_terminal=true); repetível")
+                           help="with --path: the operation on the path, delete, edit or any")
+            p.add_argument("--cond", action="append", default=[], metavar="KEY=VALUE",
+                           help="a detect condition you already checked (e.g. label=infra, "
+                                "branch_atual=main, destino_terminal=true); repeatable")
     args = ap.parse_args(argv)
     if not args.cmd:
         ap.print_help(sys.stderr)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-clock — para onde foi o tempo de relógio de uma sessão.
+"""cepa-clock — where a session's wall clock went.
 
 ## Why it exists
 
@@ -209,35 +209,35 @@ def main():
         prog="cepa-clock",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            "Onde foi parar o relógio de uma sessão.\n"
+            "Where a session's wall clock went.\n"
             "\n"
-            "Lê a transcrição que o Claude Code grava em ~/.claude/projects/<slug>/\n"
-            "(mais um arquivo por subagente) e separa o tempo da sessão em espera\n"
-            "ativa (um comando Bash parado sem trabalhar: `until ...; do sleep; done`,\n"
-            "loops de queima usados como sleep), build e outro. Intervalos de agentes\n"
-            "em paralelo são fundidos antes de somar; sem isso o mesmo minuto\n"
-            "contaria uma vez por agente.\n"
+            "Reads the transcript Claude Code writes to ~/.claude/projects/<slug>/\n"
+            "(plus one file per subagent) and splits the session time into busy\n"
+            "waiting (a Bash command sitting idle: `until ...; do sleep; done`,\n"
+            "burn loops used as sleep), build and other. Intervals of parallel agents\n"
+            "are merged before summing; otherwise the same minute would count once\n"
+            "per agent.\n"
             "\n"
-            "Os MINUTOS ABSOLUTOS são o número confiável. Numa sessão interativa o\n"
-            "relógio inclui o tempo em que ela esperou por você, e os percentuais\n"
-            "saem diluídos: só compare percentuais entre runs desatendidos."),
+            "The ABSOLUTE MINUTES are the reliable number. In an interactive session\n"
+            "the clock includes the time it waited for you, so the percentages come\n"
+            "out diluted: only compare percentages between unattended runs."),
         epilog=(
-            "exemplos:\n"
-            "  cepa-clock                     # a sessão mais recente deste repo\n"
-            "  cepa-clock --slug <slug>       # as sessões de outro diretório de projeto\n"
-            "  cepa-clock --all --days 7      # todas as sessões da última semana\n"
-            "  cepa-clock --emit              # também grava no ledger de telemetria\n"
-            "  cepa-clock --json              # para código (relogio_s, espera_s, build_s, outro_s)"))
+            "examples:\n"
+            "  cepa-clock                     # the most recent session of this repo\n"
+            "  cepa-clock --slug <slug>       # the sessions of another project directory\n"
+            "  cepa-clock --all --days 7      # every session of the last week\n"
+            "  cepa-clock --emit              # also writes to the telemetry ledger\n"
+            "  cepa-clock --json              # for code (relogio_s, espera_s, build_s, outro_s)"))
     ap.add_argument("--slug", metavar="SLUG",
-                    help="diretório em ~/.claude/projects a ler (default: o deste repo)")
+                    help="directory under ~/.claude/projects to read (default: this repo's)")
     ap.add_argument("--all", "--todas", dest="all_sessions", action="store_true",
-                    help="todas as sessões do período, não só a última")
+                    help="every session in the period, not just the last one")
     ap.add_argument("--days", type=int, default=30, metavar="N",
-                    help="janela, em dias, que --all considera (default: 30)")
+                    help="window, in days, that --all considers (default: 30)")
     ap.add_argument("--emit", action="store_true",
-                    help="além de imprimir, grava o resultado no ledger de telemetria")
+                    help="besides printing, writes the result to the telemetry ledger")
     ap.add_argument("--json", action="store_true", dest="as_json",
-                    help="saída em JSON, para código")
+                    help="JSON output, for code")
     args = ap.parse_args()
 
     files = sessions(args.slug, args.all_sessions, args.days)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-promptcov — cobertura dos checkpoints anotados de um comando conversacional.
+"""cepa-promptcov — coverage of annotated checkpoints in a conversational command.
 
 Born from the P1-sweep-mode card (docs/spec/planejador-de-lotes-paralelos.md):
 a command with `interaction: conversational` (e.g.
@@ -81,33 +81,33 @@ def main() -> int:
         prog="cepa-promptcov",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            "Cobertura dos checkpoints anotados de um comando conversacional.\n"
+            "Coverage of the annotated checkpoints of a conversational command.\n"
             "\n"
-            "Um comando conversacional (.md que um agente segue) é prosa, não código:\n"
-            "não há linha para instrumentar. Este script mede algo mais estreito e\n"
-            "honesto: dado um comando cujos blocos de comportamento estão marcados com\n"
-            "`**[tag:id]**` e um teste cujos checks trazem o mesmo `tag:id` no nome,\n"
-            "cruza os dois e aponta todo `id` que NENHUM check referencia.\n"
+            "A conversational command (a .md an agent follows) is prose, not code:\n"
+            "there is no line to instrument. This script measures something narrower\n"
+            "and honest: given a command whose behavior blocks are marked with\n"
+            "`**[tag:id]**` and a test whose checks carry the same `tag:id` in their\n"
+            "name, it crosses the two and points out every `id` that NO check references.\n"
             "\n"
-            "convenção:\n"
-            "  no comando:  **[sweep:full-source]** Leia a fonte INTEIRA...\n"
-            "  no teste:    check(\"[sweep:full-source] varre a fonte inteira\", ...)\n"
+            "convention:\n"
+            "  in the command:  **[sweep:full-source]** Read the WHOLE source...\n"
+            "  in the test:     check(\"[sweep:full-source] scans the whole source\", ...)\n"
             "\n"
-            "Sem nenhum [tag:id] no comando, não há o que medir, e ele diz isso\n"
-            "(nunca declara 100% por vacuidade)."),
+            "With no [tag:id] in the command there is nothing to measure, and it says\n"
+            "so (it never declares 100% vacuously)."),
         epilog=(
-            "exemplos:\n"
+            "examples:\n"
             "  cepa-promptcov maestro/commands/program-plan.md tests/test_program_plan_sweep.py\n"
             "  cepa-promptcov cmd.md test.py --tag sweep --json\n"
             "\n"
-            "saída: 0 = todo checkpoint coberto · 1 = algum descoberto\n"
-            "       2 = erro (arquivo ausente, ou nenhum checkpoint para a TAG pedida)"))
-    ap.add_argument("command", metavar="comando", help="arquivo .md do comando conversacional")
-    ap.add_argument("test", metavar="teste", help="arquivo de teste que deveria cobrir os checkpoints")
+            "exit: 0 = every checkpoint covered · 1 = some uncovered\n"
+            "      2 = error (missing file, or no checkpoint for the requested TAG)"))
+    ap.add_argument("command", metavar="command", help=".md file of the conversational command")
+    ap.add_argument("test", metavar="test", help="test file that should cover the checkpoints")
     ap.add_argument("--tag", default=None, metavar="TAG",
-                    help="restringe a uma família de anotação (ex.: sweep); "
-                         "default: todas as [tag:id] encontradas")
-    ap.add_argument("--json", action="store_true", help="saída em JSON, para código")
+                    help="restricts to one annotation family (e.g. sweep); "
+                         "default: every [tag:id] found")
+    ap.add_argument("--json", action="store_true", help="JSON output, for code")
     if len(sys.argv) == 1:
         ap.print_help(sys.stderr)
         return 2
