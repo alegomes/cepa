@@ -378,6 +378,58 @@ with tempfile.TemporaryDirectory() as tmp:
     check("ai: add -A sozinho com só teste novo, exit 0", r.returncode == 0,
           f"exit={r.returncode} {r.stderr[:300]}")
 
+    print("\n# aj-ao. cobertura adicional: formas amplas, sharing, EMPTY/STALE, $(date), -C")
+    r1 = make_repo(tmp / "aj")
+    baseline(r1, "FAILURE", MVN_TEST_TAIL)
+    stage(r1, TEST_FILE)
+    (r1 / "src/main/java/Foo.java").write_text("class Foo { int w; }", encoding="utf-8")
+    for form in ("git commit -a -m x", "git commit --all -m x",
+                 "git commit --include -m x", "git commit --only -m x"):
+        r = gate(form, r1)
+        check(f"aj: {form!r} com teste staged, exit 2", r.returncode == 2,
+              f"exit={r.returncode} {r.stderr[:300]}")
+        check(f"aj: {form!r} traz a dica da forma não inspecionada",
+              "forms are not inspected" in r.stderr, r.stderr[:400])
+
+    r1 = make_repo(tmp / "ak")
+    baseline(r1, "FAILURE", MVN_TEST_TAIL)
+    untracked(r1, "tests/x_test.py")
+    r = gate("git add tests/x_test.py && git commit -m x && git push origin main", r1)
+    check("ak: commit isento encadeado com push, exit 2", r.returncode == 2,
+          f"exit={r.returncode} {r.stderr[:300]}")
+    for cmd in ("gh pr create --title x", "gh pr merge 1"):
+        r = gate(cmd, r1)
+        check(f"al: {cmd!r} com baseline vermelho de teste, exit 2", r.returncode == 2,
+              f"exit={r.returncode} {r.stderr[:300]}")
+
+    r1 = make_repo(tmp / "am")
+    baseline(r1, "EMPTY", MVN_TEST_TAIL)
+    stage(r1, TEST_FILE)
+    r = gate("git commit -m x", r1)
+    check("am: baseline EMPTY, exit 2", r.returncode == 2, f"exit={r.returncode} {r.stderr[:300]}")
+    r1 = make_repo(tmp / "am2")
+    baseline(r1, "STALE", MVN_TEST_TAIL, after_edit_to="x", since="2026-11-05T10:00:00+00:00")
+    stage(r1, TEST_FILE)
+    r = gate("git commit -m x", r1)
+    check("am2: STALE com tail de teste vermelho, exit 2", r.returncode == 2,
+          f"exit={r.returncode} {r.stderr[:300]}")
+
+    r1 = make_repo(tmp / "an")
+    baseline(r1, "FAILURE", PYTEST_TAIL, kind="pytest")
+    untracked(r1, "tests/x_test.py")
+    r = gate('git add tests/x_test.py && git commit -m "$(date)"', r1)
+    check("an: $(date) fora do git add, exit 2", r.returncode == 2,
+          f"exit={r.returncode} {r.stderr[:300]}")
+
+    r1 = make_repo(tmp / "ao")
+    outside_ao = tmp / "ao_outside"
+    outside_ao.mkdir()
+    baseline(r1, "FAILURE", MVN_TEST_TAIL)
+    untracked(r1, TEST_FILE)
+    r = gate(f"git -C {r1} add {TEST_FILE} && git -C {r1} commit -m x", outside_ao)
+    check("ao: git -C add + git -C commit de fora do repo, exit 0", r.returncode == 0,
+          f"exit={r.returncode} {r.stderr[:300]}")
+
     import shutil
     tmp_real = Path(tempfile.mkdtemp(dir="/tmp"))
     try:
