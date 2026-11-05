@@ -1716,7 +1716,8 @@ def finish_item(name, repo, ident, status, evidence, impede=None, owner=None):
     try:
         p = subprocess.run(
             [sys.executable, str(CEPA_PLAN), "finish", name, str(ident),
-             "--status", status, "--evidence", evidence, "--repo", str(repo)]
+             "--status", status, "--evidence", evidence, "--repo", str(repo),
+             "--supervisor"]  # DUR-2: the supervisor re-marks what the agent closed
             + flags,
             capture_output=True, text=True, timeout=60)
     except (subprocess.TimeoutExpired, OSError) as e:

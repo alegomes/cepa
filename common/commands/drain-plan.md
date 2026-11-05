@@ -598,7 +598,10 @@ A single report, in the `plain-report` format, written in Brazilian Portuguese
   there is no "when it goes green I'll come back". Await and collect in the same
   turn, or name the outcome before stopping.
 - **Marking is mechanical** (`cepa-plan start` / `finish`). Editing the YAML by
-  hand bypasses all the refusals.
+  hand bypasses all the refusals. `finish --status done` requires a clean tree
+  (commit first) and records `head_commit`; a second `finish` on a closed item,
+  or from a session that does not hold it, is refused and logged in
+  `finish_recusado`.
 - **The order never comes from the board.** Reconciling is reading each item's
   STATE; the position remains the one `/common:queue` recorded. Taking the order
   from the board rank is `/board-flow:drain`, and it is what this command exists

@@ -836,7 +836,7 @@ def test_question_leaves_when_the_item_moves_again_and_reservation_vanishes_in_a
         root = build_repo(tmp, [stuck, other_one])
         subprocess.run(
             [sys.executable, str(CEPA_PLAN), "finish", "fila", "a1",
-             "--status", "pending", "--evidence", "destravou",
+             "--status", "pending", "--evidence", "destravou", "--supervisor",
              "--repo", str(root)], capture_output=True, text=True, check=True)
         check("finish pending sem --pergunta tira a pergunta velha",
               "owner_question" not in items_of(root)["a1"], items_of(root)["a1"])
@@ -1092,7 +1092,9 @@ def test_finish_keeps_agent_and_human_sections_apart():
         check("o status mostra o motivo leigo, não a 1ª frase do log",
               "o sistema responde em branco" in st.stdout
               and "Matriz 154" not in st.stdout, st.stdout)
-        p = _finish(root, "--status", "pending", "--evidence", "voltou")
+        # DUR-2: the item is already `blocked`; reopening it is the supervisor's act.
+        p = _finish(root, "--status", "pending", "--evidence", "voltou",
+                    "--supervisor")
         check("pending limpa a seção humana, que era do travamento",
               "owner_summary" not in items_of(root)["a1"], items_of(root)["a1"])
 

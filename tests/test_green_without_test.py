@@ -78,7 +78,18 @@ def make_repo(path):
     path.mkdir(parents=True, exist_ok=True)
     git(["init", "-q", "-b", "main"], path)
     (path / "pom.xml").write_text("<project/>\n", encoding="utf-8")
+    # DUR-2: `finish --status done` needs a clean tree and a HEAD. Like the host
+    # repos, ignore `.claude/` (hook state) and the fixture's own items file.
+    (path / ".gitignore").write_text(".claude/\nitens.json\n", encoding="utf-8")
+    settle(path)
     return path
+
+
+def settle(path):
+    """Commits everything not ignored, so the tree is clean (DUR-2)."""
+    git(["add", "-A"], path)
+    git(["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
+         "commit", "-qm", "fixture", "--allow-empty"], path)
 
 
 def capture(repo, command, output, exit_code=None):
@@ -382,7 +393,8 @@ with tempfile.TemporaryDirectory() as tmp:
     check("cepa-plan finish --status blocked ACEITA com baseline EMPTY",
           f.returncode == 0, f.stderr[:300])
     f = cepa_plan(r, "finish", "fila", "B", "--status", "pending",
-                  "--evidence", "volta para a fila", "--repo", ".")
+                  "--evidence", "volta para a fila", "--repo", ".",
+                  "--supervisor")  # DUR-2: B is already `blocked`; reopening is the supervisor's
     check("cepa-plan finish --status pending ACEITA com baseline EMPTY",
           f.returncode == 0, f.stderr[:300])
 
@@ -391,6 +403,7 @@ with tempfile.TemporaryDirectory() as tmp:
     g = transition(r, "41")
     check("depois de verde com teste, acceptance-gate libera in_review",
           g.returncode == 0, g.stderr[:200])
+    settle(r)
     f = cepa_plan(r, "finish", "fila", "A", "--status", "done",
                   "--evidence", "commit abc", "--repo", ".")
     check("depois de verde com teste, cepa-plan finish --status done aceita",
@@ -529,6 +542,7 @@ with tempfile.TemporaryDirectory() as tmp:
     g = transition(r, "41")
     check("acceptance-gate NÃO barra STALE herdado de SUCCESS",
           g.returncode == 0, f"exit={g.returncode} stderr={g.stderr[:300]}")
+    settle(r)
     f = cepa_plan(r, "finish", "fila", "A", "--status", "done",
                   "--evidence", "commit abc", "--repo", ".")
     check("finish done ACEITA STALE herdado de SUCCESS",

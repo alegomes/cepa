@@ -300,7 +300,14 @@ def current_owner(root, cwd):
     """
     w = _wt()
     if w:
-        for e in w.live_sessions_in(str(root), str(cwd)):
+        live = w.live_sessions_in(str(root), str(cwd))
+        # DUR-2 hardening: a second live session may register in the same tree
+        # between `start` and `finish` (the owner's interactive one). Taking the
+        # first entry would refuse the agent on its own item, so the session the
+        # caller says it is (CLAUDE_SESSION_ID) wins when it is registered.
+        mine = os.environ.get("CLAUDE_SESSION_ID")
+        live.sort(key=lambda e: e.get("session_id") != mine)
+        for e in live[:1]:
             return {"session_id": e.get("session_id"), "pid": e.get("pid"),
                     "hostname": e.get("hostname") or w.host(),
                     "cwd": e.get("cwd") or str(cwd), "branch": e.get("branch"),
@@ -2581,7 +2588,10 @@ def cmd_start(root, name, ident, cwd=".", commit=False):
               file=sys.stderr)
         return 5
     it["status"] = "in_progress"
-    it["claimed_by"] = current_owner(root, cwd)
+    # The resolved TREE ROOT on purpose: `finish` compares this `cwd` with the
+    # caller's tree (DUR-2), a "." stored here would match every tree, and a
+    # `finish` run from a subdirectory must still match the owner.
+    it["claimed_by"] = current_owner(root, session_root(cwd))
     write_body(target, plan, plan.get("items") or [])
     print(f"{ident} reservado (`in_progress`) em {target}")
     if recovered:
@@ -2781,8 +2791,127 @@ def human_section_refusal(status, owner, question):
     return None
 
 
+# ── finish: who may close the item, and on what commit (DUR-2) ───────────────
+#
+# 2026-11-05, docs/estrategia-durabilidade.md O1 item 1. `finish` used to
+# overwrite `evidence` unconditionally: a second `finish` on an already closed
+# item silently erased the first one's evidence (confirmed on disk: two finishes
+# leave only the last text), and `done` was accepted with code still uncommitted
+# in the tree, which the supervisor then stashed, so the next card never saw it.
+# So: a terminal item is not re-marked, only the session that holds the item
+# closes it, `done` needs a clean tree and records the HEAD it closed on, and
+# every refusal is written on the item (`finish_recusado`) because a refusal
+# nobody can read afterwards is the same silence in another place.
+# `--supervisor` (cepa-until only) bypasses the first two: the supervisor
+# legitimately re-marks what the agent closed (red full build, side branch note).
+
+TERMINAL = ("done", "blocked", "dropped")
+NO_SESSION = "sessão não registrada"
+KEEP_REFUSALS = 5
+
+
+def _same_tree(a, b):
+    try:
+        return os.path.realpath(str(a)) == os.path.realpath(str(b))
+    except (OSError, ValueError):
+        return str(a) == str(b)
+
+
+def _first_line(text):
+    for line in str(text or "").splitlines():
+        if line.strip():
+            return line.strip()
+    return ""
+
+
+def dirty_paths(tree, queue_rel):
+    """Paths in `git status` of `tree` that are NOT the queue, its `.yaml.bak`
+    or the untracked run records beside it
+    (`start` leaves the queue modified inside a `cepa-until` run on purpose).
+    None if `tree` is not a git repo."""
+    rc, out, _ = _git(tree, "rev-parse", "--verify", "-q", "HEAD")
+    if rc != 0:  # not a repo, or a repo with no commit: there is no SHA to record
+        return None
+    rc, out, _ = _git(tree, "status", "--porcelain", "--untracked-files=all")
+    if rc != 0:
+        return None
+    queue_dir = os.path.dirname(queue_rel)
+    found = []
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        path = line[3:].strip().strip('"')
+        if path == queue_rel:
+            continue
+        # The run's own records (`<queue dir>/until/*`: log, state, heartbeat)
+        # are not work; `cepa-until` itself ignores them (RUN_RECORD).
+        if line.startswith("??") and path.startswith(queue_dir + "/until/"):
+            continue
+        if line.startswith("??") and path.endswith(".yaml.bak") \
+                and os.path.dirname(path) == queue_dir:
+            continue
+        found.append(path)
+    return found
+
+
+def finish_gate(root, target, it, ident, status, repo, supervisor):
+    """The reason `finish` is refused on this item (rules 1-3 of DUR-2), or None."""
+    st = status_of(it)
+    if not supervisor and st in TERMINAL:
+        first = _first_line(it.get("evidence")) or "(sem evidência)"
+        return (f"{ident} já está `{st}`: um segundo `finish` apagaria a "
+                f"evidência de quem fechou. Primeira linha dela: \"{first}\"")
+    claim = it.get("claimed_by")
+    caller = current_owner(root, session_root(repo))
+    if not supervisor and isinstance(claim, dict) and claim.get("session_id"):
+        if caller.get("session_id") == NO_SESSION:
+            same = (caller.get("hostname") == claim.get("hostname")
+                    and _same_tree(caller.get("cwd"), claim.get("cwd")))
+        else:
+            same = caller.get("session_id") == claim.get("session_id")
+        if not same:
+            return (f"{ident} está reservado por {claim.get('session_id')} "
+                    f"(host {claim.get('hostname')}, pid {claim.get('pid')}, "
+                    f"cwd {claim.get('cwd')}) e quem chamou foi "
+                    f"{caller.get('session_id')} (host {caller.get('hostname')}, "
+                    f"pid {caller.get('pid')}, cwd {caller.get('cwd')}). Só o "
+                    "dono do item o fecha")
+    if status == "done":
+        tree = session_root(repo)
+        dirty = dirty_paths(tree, _queue_rel(root, target))
+        if dirty is None:
+            return (f"`done` exige gravar o SHA em que o item fechou, e {tree} "
+                    "não é um repositório git com ao menos um commit (ou o git falhou)")
+        if dirty:
+            shown = ", ".join(dirty[:5]) + (f" e mais {len(dirty) - 5}"
+                                            if len(dirty) > 5 else "")
+            return (f"`done` exige a árvore limpa e há {len(dirty)} caminho(s) "
+                    f"sem commit em {tree}: {shown}. Commite antes de fechar "
+                    "(desabilitar ou apagar teste não é conserto)")
+    return None
+
+
+def record_refusal(root, name, target, plan, it, status, reason, commit, repo):
+    """Writes the refusal on the item (`finish_recusado`, last 5). Never touches
+    status, evidence, claimed_by or the human section."""
+    caller = current_owner(root, session_root(repo))
+    log = it.get("finish_recusado")
+    log = list(log) if isinstance(log, list) else []
+    log.append({"quando": now_iso(),
+                "quem": {"session_id": caller.get("session_id"),
+                         "hostname": caller.get("hostname"),
+                         "pid": caller.get("pid")},
+                "status_pedido": status,
+                "motivo": _first_line(reason)[:300]})
+    it["finish_recusado"] = log[-KEEP_REFUSALS:]
+    write_body(target, plan, plan.get("items") or [])
+    close_write(root, target,
+                f"queue {name}: {it.get('id')} finish recusado",
+                commit)
+
+
 def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
-               question=None, commit=False, owner=None):
+               question=None, commit=False, owner=None, supervisor=False):
     owner = {k: " ".join(str(v).split()) for k, v in (owner or {}).items()
              if v is not None and str(v).strip()}
     refusal = human_section_refusal(status, owner, question)
@@ -2818,6 +2947,11 @@ def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
     if it is None:
         print(f"a fila {name} não tem item '{ident}'", file=sys.stderr)
         return 2
+    reason = finish_gate(root, target, it, ident, status, repo, supervisor)
+    if reason:
+        print(f"`{status}` recusado para {ident}: {reason}", file=sys.stderr)
+        record_refusal(root, name, target, plan, it, status, reason, commit, repo)
+        return 2
     if not str(evidence or "").strip():
         print(f"desfecho sem evidência não fecha item nenhum: `{status}` é uma "
               "palavra, e o que torna ela auditável é o que aconteceu (commits, "
@@ -2827,6 +2961,11 @@ def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
     it["status"] = status
     it["evidence"] = evidence
     it.pop("claimed_by", None)
+    if status == "done":
+        _, head, _ = _git(session_root(repo), "rev-parse", "HEAD")
+        it["head_commit"] = head.strip()
+    else:
+        it.pop("head_commit", None)  # a re-opened item no longer closes on that commit
     if human_pending is not None:
         if not str(human_pending).strip():
             print("`--human-pending` vazio seria FECHAR a dívida, e só o humano "
@@ -4443,7 +4582,15 @@ def main(argv=None):
             "    filter that matched zero tests): green without a test closes nothing\n"
             "  - the session topology has validation-lead (build-hex, build-team)\n"
             "    and there is no docs/validation/<id>.yaml with verdict\n"
-            "    READY-TO-SHIP or READY-WITH-CAVEATS"),
+            "    READY-TO-SHIP or READY-WITH-CAVEATS\n"
+            "  - the --repo tree has changes not committed (only the queue file and\n"
+            "    its .yaml.bak are tolerated): commit first; disabling a test is no fix\n"
+            "  - the tree is not a git repo (the HEAD sha cannot be recorded)\n"
+            "`--status done` records `head_commit`: the HEAD of the --repo tree.\n"
+            "Any status is refused when the item is already done/blocked/dropped\n"
+            "(a second finish would erase the first one's evidence), or when the item\n"
+            "is reserved (`claimed_by`) by another session. Each refusal is kept on\n"
+            "the item in `finish_recusado` (last 5)."),
         examples=[('cepa plan finish wego WEGO-123 --status done --evidence "commit abc, build green"',
                    "close the item"),
                   ('cepa plan finish wego WEGO-124 --status blocked --evidence "staging 502" '
@@ -4454,7 +4601,9 @@ def main(argv=None):
         exit_codes=[(0, "recorded"),
                     (2, f"invalid usage, {not_git}, {no_queue}, unknown item id, "
                         "empty --evidence or --human-pending, missing human section, "
-                        "`done` refused (empty build, missing validation)"),
+                        "`done` refused (empty build, missing validation, dirty tree, "
+                        "no git), item already terminal, item held by another "
+                        "session"),
                     (3, waves)])
     fi.add_argument("name", metavar="name", help="queue name")
     fi.add_argument("id", help="item id in the queue")
@@ -4462,6 +4611,10 @@ def main(argv=None):
                     choices=("done", "blocked", "pending"),
                     help="done = closed; blocked = stuck on an outside condition; "
                          "pending = back to the queue without closing")
+    fi.add_argument("--supervisor", action="store_true",
+                    help="the run supervisor re-opening or re-marking an item it "
+                         "does not own, after the agent's own finish (skips the "
+                         "terminal-status and owner refusals only)")
     fi.add_argument("--evidence", required=True, metavar="TEXT",
                     help="what happened: commits, verdicts, what got stuck")
     fi.add_argument("--human-pending", dest="human_pending", metavar="ROUTE",
@@ -4797,7 +4950,8 @@ def main(argv=None):
         return cmd_finish(root, a.name, a.id, a.status, a.evidence,
                           a.human_pending, a.repo, a.question, a.commit,
                           {key: getattr(a, f"owner_{key}")
-                           for key, _, _ in _ownertext.FIELDS})
+                           for key, _, _ in _ownertext.FIELDS},
+                          a.supervisor)
     if a.cmd == "answer":
         return cmd_answer(root, a.name, a.id, a.answer, a.keep,
                             a.force, not a.no_commit, a.repo, a.author, a.drop)
