@@ -1450,7 +1450,7 @@ def owner_lines(lines, queue):
     return out
 
 
-def cmd_status(root, name, status_filter, as_json, item_id=None):
+def cmd_status(root, name, status_filter, as_json, item_id=None, via_show=False):
     if not name:
         names = single_track_queues(root)
         if not names:
@@ -1513,8 +1513,12 @@ def cmd_status(root, name, status_filter, as_json, item_id=None):
                   f"{qp.queue_name_of(plan, name)}; ids: "
                   + ", ".join(str(l["id"]) for l in lines), file=sys.stderr)
             return 2
+        if not via_show:
+            print(f"dica: cepa plan show {name} {item_id} é o nome deste "
+                  "comando; status <fila> <id> segue como atalho",
+                  file=sys.stderr)
         return item_detail(qp.queue_name_of(plan, name), target,
-                           found[0], as_json)
+                           found[0], as_json, plan=plan, root=root)
 
     if as_json:
         print(json.dumps({"program": qp.queue_name_of(plan, name),
@@ -1557,45 +1561,194 @@ def cmd_status(root, name, status_filter, as_json, item_id=None):
     return 0
 
 
-def item_detail(program, target, l, as_json):
-    """`cepa-plan status <fila> <id>`: one item with every field in full."""
+# ── one item in full: `cepa-plan show <fila> <id>` ──────────────────────────
+#
+# On 2026-11-05 the owner read item C1-15 of the kairos queue and could not tell
+# what "L1 a L6" or "S11" in the title meant, nor where to look: the queue
+# stores the title as the Epic wrote it and nothing else. The Epic is named in
+# the queue's `source`, so the codes are resolved HERE, at read time — a field
+# written per item would be stale for every queue that already exists.
+
+CODE_RE = re.compile(r"(?<![\w-])([A-Z]{1,2})-?(\d+(?:\.\d+)?[a-z]?)(?![\w.])")
+RANGE_RE = re.compile(r"(?<![\w-])([A-Z]{1,2})(\d+) a \1(\d+)(?![\w.])")
+
+
+def codes_in(text):
+    """The codes a title cites, each once, the section codes (S11) first: a
+    range `L1 a L6` comes as the phrase plus its six members, `CA-11.1` as
+    written. Returns [(code, members)]: members is the expansion of a range,
+    [] for a plain code."""
+    out = []
+    for m in RANGE_RE.finditer(text):
+        lo, hi = int(m.group(2)), int(m.group(3))
+        out.append((m.group(0), [f"{m.group(1)}{n}" for n in range(lo, hi + 1)]))
+    for m in CODE_RE.finditer(text):
+        out.append((m.group(1) + ("-" if "-" in m.group(0) else "") + m.group(2), []))
+    seen, uniq = set(), []
+    for c, members in out:
+        if c not in seen:
+            seen.add(c)
+            uniq.append((c, members))
+    uniq.sort(key=lambda cm: 0 if cm[0].startswith("S") else 1)
+    return uniq
+
+
+def epic_of(root, plan):
+    """(path as written in `source`, lines) — lines is None when the file
+    is not there, path is None when `source` names no .md file."""
+    m = re.search(r"\S+\.md", str(plan.get("source") or ""))
+    if not m:
+        return None, None
+    rel = m.group(0).rstrip(",;:)")
+    p = Path(rel) if Path(rel).is_absolute() else Path(root) / rel
+    if not p.is_file():
+        return rel, None
+    return rel, p.read_text(encoding="utf-8").splitlines()
+
+
+def _plain(line):
+    t = re.sub(r"^\s*(?:[-*]\s+|#{1,6}\s+)", "", line)
+    return " ".join(t.replace("**", "").split())
+
+
+def find_code(lines, code, first=(0, None)):
+    """(line number, text) of where the Epic defines `code`: a heading
+    (`### S11.`), a bold label (`**CA-11.1**`) or a `L1:` definition. Looks in
+    `first` (a line range) before the whole file."""
+    heading = re.compile(rf"^#{{1,6}}\s+{re.escape(code)}(?=[.\s:])")
+    bold = re.compile(rf"\*\*{re.escape(code)}\*\*")
+    defn = re.compile(rf"(?<![\w-]){re.escape(code)}:")
+    ranges = [first, (0, None)] if first != (0, None) else [(0, None)]
+    for pat in (heading, bold, defn):
+        for lo, hi in ranges:
+            for i, ln in enumerate(lines[lo:hi], lo + 1):
+                if pat.search(ln):
+                    return i, _plain(ln)
+    return None, None
+
+
+def section_range(lines, n):
+    """The lines under heading number `n` (1-based) up to the next heading
+    of the same or higher level."""
+    level = len(lines[n - 1]) - len(lines[n - 1].lstrip("#"))
+    for j in range(n, len(lines)):
+        m = re.match(r"^(#{1,6})\s", lines[j])
+        if m and len(m.group(1)) <= level:
+            return (n, j)
+    return (n, None)
+
+
+def source_refs(root, plan, title):
+    """What the item's title cites, resolved in the Epic the queue came from:
+    {"epic": path or None, "refs": [{"code", "line", "text"}]}."""
+    epic, lines = epic_of(root, plan)
+    refs = []
+    codes = codes_in(str(title or ""))
+    if lines is None:
+        return {"epic": epic, "found": False,
+                "refs": [{"code": c, "line": None, "text": None} for c, _ in codes]}
+    within = (0, None)
+    done = set()
+    for c, members in codes:
+        if c in done:
+            continue
+        n, text = find_code(lines, c, within)
+        if n is None and members:
+            # The Epic may define the range member by member (L1, L2, ...)
+            # instead of as one phrase ("D1 a D8").
+            for m in members:
+                done.add(m)
+                mn, mt = find_code(lines, m, within)
+                refs.append({"code": m, "line": mn, "text": mt})
+            continue
+        done.update(members)
+        refs.append({"code": c, "line": n, "text": text})
+        if n and c.startswith("S") and within == (0, None):
+            within = section_range(lines, n)
+    return {"epic": epic, "found": True, "refs": refs}
+
+
+def why_parts(text):
+    """The `why` of a queue item written by --from-epic/--from-spec is four
+    sentences glued with " · "; shown as one paragraph it is unreadable."""
+    return [p.strip() for p in str(text or "").split(" · ") if p.strip()]
+
+
+def evidence_parts(text):
+    """Each `finish`/`answer` prepends its round and keeps the older ones
+    behind "Evidência anterior:". One entry per round, newest first."""
+    parts = re.split(r"\s*Evidência anterior:\s*", str(text or ""))
+    return [p.strip() for p in parts if p.strip()]
+
+
+def item_detail(program, target, l, as_json, plan=None, root=None):
+    """`cepa-plan show <fila> <id>`: one item, every field in full, the codes of
+    the title resolved in the Epic named by the queue's `source`."""
+    src = source_refs(root, plan or {}, l["title"]) if plan is not None else None
     if as_json:
         print(json.dumps({"program": program, "queue": program,
-                          "path": str(target), "item": l},
+                          "path": str(target), "item": l, "source": src},
                          ensure_ascii=False, indent=2))
         return 0
     label = dict(STATUS_GROUPS).get(l["status"], l["status"])
     c = l["claimed_by"]
+    source_lines = []
+    if src and src["epic"]:
+        source_lines.append(src["epic"] + " (campo `source` da fila)")
+        if not src["found"]:
+            source_lines.append("não achei o arquivo a partir do repo")
+        for r in src["refs"]:
+            if r["line"]:
+                source_lines.append(f"{r['code']} · linha {r['line']} · {r['text']}")
+            else:
+                source_lines.append(f"{r['code']} · não achei no Epic")
+    elif src is not None:
+        source_lines.append("a fila não aponta um Epic em `source`; o título "
+                            "vem de: " + (str((plan or {}).get("source")) or "(vazio)"))
+    ev = evidence_parts(l["evidence"])
     fields = [
-        ("status", f"{l['status']} ({label})"
-                   + (" · pronto: o próximo cepa-until pega" if l["pronto"] else "")),
-        ("título", l["title"]),
-        ("por que nesta posição", l["why"]),
-        ("espera", ", ".join(map(str, l["blocked_by"])) or None),
-        ("ação humana", l["human_pending"]),
-        ("evidência", l["evidence"]),
-        ("resumo para o dono", l["owner_summary"]),
-        ("reservado", (f"sessão {c['session_id'] or '?'} na branch "
-                       f"{c['branch'] or '?'} desde {c['started_at'] or '?'}")
-                      if c else None),
+        ("status", [f"{l['status']} ({label})"
+                    + (" · pronto: o próximo cepa-until pega" if l["pronto"] else "")]),
+        ("título", [l["title"]]),
+        ("fonte", source_lines),
+        ("por que nesta posição", why_parts(l["why"])),
+        ("espera", [", ".join(map(str, l["blocked_by"]))] if l["blocked_by"] else []),
+        ("ação humana", [l["human_pending"]] if l["human_pending"] else []),
+        ("evidência" + (" (mais recente primeiro)" if len(ev) > 1 else ""), ev),
+        ("resumo para o dono", [l["owner_summary"]] if l["owner_summary"] else []),
+        ("reservado", [f"sessão {c['session_id'] or '?'} na branch "
+                       f"{c['branch'] or '?'} desde {c['started_at'] or '?'}"]
+                      if c else []),
     ]
     t = _tui.SCREEN
     if t.enabled:
         print(t.header(f"fila {program} · item {l['posicao']}", str(l["id"])))
         print(t.c("cinza", f"  {target}"))
-        for key, text in fields:
-            if text in (None, ""):
+        for key, texts in fields:
+            texts = [x for x in texts if x not in (None, "")]
+            if not texts:
                 continue
             print()
             print("  " + t.c("negrito", key))
-            for x in t.wrap(" ".join(str(text).split()), 4):
-                print(x)
+            if len(texts) == 1:
+                for x in t.wrap(" ".join(str(texts[0]).split()), 4):
+                    print(x)
+                continue
+            for text in texts:
+                for x in t.wrap("- " + " ".join(str(text).split()), 4, hanging=6):
+                    print(x)
         return 0
     print(f"fila {program} · item {l['posicao']} · {l['id']}")
-    for key, text in fields:
-        if text in (None, ""):
+    for key, texts in fields:
+        texts = [x for x in texts if x not in (None, "")]
+        if not texts:
             continue
-        print(f"\n{key}:\n  {' '.join(str(text).split())}")
+        if len(texts) == 1:
+            print(f"\n{key}:\n  {' '.join(str(texts[0]).split())}")
+            continue
+        print(f"\n{key}:")
+        for text in texts:
+            print(f"  - {' '.join(str(text).split())}")
     return 0
 
 
@@ -1682,12 +1835,15 @@ def status_on_screen(program, target, lines, counts, visible):
     return 0
 
 
-def cmd_show(root, name, as_json):
+def cmd_show(root, name, as_json, item_id=None):
     """The queue header: where it came from and what it demonstrates when it ends.
 
     `status` answers "where do the items stand"; this one answers "what is this
-    queue for", which is the question of whoever opens a cycle queue.
+    queue for", which is the question of whoever opens a cycle queue. With an
+    item id, the same question about ONE item: `show <fila> <id>`.
     """
+    if item_id is not None:
+        return cmd_status(root, name, None, as_json, item_id, via_show=True)
     target = queue_path(root, name)
     if not target.is_file():
         print(f"{target} não existe — quem escreve a fila é o /common:queue",
@@ -1714,7 +1870,8 @@ def cmd_show(root, name, as_json):
     print(f"  fonte: {plan.get('source') or '(sem `source`)'}")
     print(f"  demonstrates: {demonstrates}" if demonstrates else
           "  sem `demonstrates:` — a fila não diz o que demonstra quando acaba")
-    print(f"  {len(items)} itens · a situação de cada um: cepa-plan status {name}")
+    print(f"  {len(items)} itens · a situação de cada um: cepa-plan status {name}"
+          f" · um deles em detalhe: cepa-plan show {name} <id>")
     return 0
 
 
@@ -3954,7 +4111,7 @@ def main(argv=None):
             ("cepa plan write wego --from-epic docs/epics/wego.md --cycle 2",
              "the queue of one Epic cycle"),
             ("cepa plan status", "the whole queue, by status"),
-            ("cepa plan status wego WEGO-123", "one item in full, nothing cut"),
+            ("cepa plan show wego WEGO-123", "one item in full, nothing cut"),
             ("cepa plan queue wego --max 3", "what the next batch may execute"),
             ("cepa plan start wego WEGO-123", "reserve an item"),
             ('cepa plan finish wego WEGO-123 --status done --evidence "commit abc, build green"',
@@ -4101,12 +4258,12 @@ def main(argv=None):
     stt = sub.add_parser(
         "status", help="shows the whole queue grouped by status, in the recorded order",
         description=(
-            "Read only: reserves and executes nothing. With an item id, shows that\n"
-            "one item with every field and nothing cut (the list view shortens the\n"
-            "action and the reason)."),
+            "Read only: reserves and executes nothing. With an item id, same as\n"
+            "`show <name> <id>`: that one item with every field and nothing cut\n"
+            "(the list view shortens the action and the reason)."),
         examples=[("cepa plan status", "the only queue in the repo, by status"),
                   ("cepa plan status wego --status blocked", "only the stuck items"),
-                  ("cepa plan status wego WEGO-123", "one item in full")],
+                  ("cepa plan show wego WEGO-123", "one item in full")],
         exit_codes=[(0, "shown"),
                     (2, f"invalid usage, {not_git}, no queue or several and no name, "
                         f"{no_queue}, unknown item id"),
@@ -4114,23 +4271,32 @@ def main(argv=None):
     stt.add_argument("name", nargs="?", metavar="name",
                      help="queue name; if omitted, uses the only one that exists")
     stt.add_argument("item", nargs="?", metavar="id",
-                     help="shows only this item, with every field and nothing cut")
+                     help="shows only this item, with every field and nothing cut "
+                          "(shortcut for `show <name> <id>`)")
     stt.add_argument("--status", choices=STATUSES, dest="status_filter",
                      help="shows only the items with this status")
     stt.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
     stt.add_argument("--json", action="store_true", dest="as_json", help=json_help)
 
     sh = sub.add_parser(
-        "show", help="shows the queue header: its source and what it demonstrates when done",
+        "show", help="shows the queue header, or one item in full with the codes "
+                     "of its title resolved in the Epic",
         description=(
-            "Read only. `demonstrates:` is the script that shows the queue's work\n"
-            "done (from an Epic cycle); `source` is where the demands came from."),
+            "Read only. Without an id: `demonstrates:` is the script that shows\n"
+            "the queue's work done (from an Epic cycle); `source` is where the\n"
+            "demands came from. With an id: that item, every field in full, the\n"
+            "`why` and the evidence split per part, and each code the title\n"
+            "cites (S11, L1 a L6, CA-11.1) looked up in the Epic that `source`\n"
+            "names, with the line where it is defined."),
         examples=[("cepa plan show wego", "the header, for a human"),
+                  ("cepa plan show wego WEGO-123", "one item in full, codes resolved"),
                   ("cepa plan show wego --json", "the header, for code")],
         exit_codes=[(0, "shown"),
                     (2, f"invalid usage, {not_git}, {no_queue}"),
                     (3, waves)])
     sh.add_argument("name", metavar="name", help="queue name")
+    sh.add_argument("item", nargs="?", metavar="id",
+                    help="shows this one item instead of the header")
     sh.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
     sh.add_argument("--json", action="store_true", dest="as_json", help=json_help)
 
@@ -4544,7 +4710,7 @@ def main(argv=None):
     if a.cmd == "status":
         return cmd_status(root, a.name, a.status_filter, a.as_json, a.item)
     if a.cmd == "show":
-        return cmd_show(root, a.name, a.as_json)
+        return cmd_show(root, a.name, a.as_json, a.item)
     if a.cmd == "epics":
         return cmd_epics(root, a.as_json, a.brief)
     if a.cmd == "queue":
