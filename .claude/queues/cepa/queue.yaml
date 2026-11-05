@@ -2594,10 +2594,11 @@ items:
   why: 'Decisão do dono em 2026-11-05 (itens 1 e 2): o 51d6764 escreveu o help em
     pt-BR contra a decisão de 2026-10-22 de texto fixo do produto em inglês (ainda
     não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: help em inglês na main (b4848ee, dd8f490); padronização de todos os
+    helps em session/help_layout, suíte 147/147 verde
 - id: pt-names-to-english
   title: 'Renomear para inglês os nomes de flag e subcomando que ficaram em português,
     mantendo o nome antigo como alias: cepa-autonomy listar/classificar; cepa-until
