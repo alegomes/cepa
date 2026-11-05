@@ -220,12 +220,70 @@ def test_one_item_in_full(base):
           r.returncode == 2 and "a-feito" in r.stderr, r.stderr)
 
 
+def test_one_item_on_the_terminal_screen(base):
+    import os, re
+    d = git_repo(base, "um-item-tela")
+    longo = "validar à mão. " + "detalhe " * 60 + "FIM-DO-TEXTO"
+    write_queue(d, [item("a"), item("b", human_pending=longo)])
+    env = dict(os.environ, CEPA_COR="sempre", COLUMNS="80")
+    r = subprocess.run([sys.executable, str(CEPA_PLAN), "status", "fila", "b",
+                        "--repo", "."], capture_output=True, text=True,
+                       cwd=str(d), env=env)
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", r.stdout)
+    check("tela decorada liga (campo em negrito, sem dois-pontos)",
+          "\x1b[1mação humana\x1b[0m" in r.stdout
+          and "ação humana:" not in plain, r.stdout)
+    check("tela decorada traz a ação humana inteira",
+          "FIM-DO-TEXTO" in plain and "…" not in plain, plain)
+    check("tela decorada não lista os outros itens", "item a" not in plain, plain)
+    check("tela decorada esconde campo vazio", "None" not in plain, plain)
+
+
+def test_reserved_item_shows_owner(base):
+    d = git_repo(base, "um-item-reservado")
+    write_queue(d, [item("a"), item("b")])
+    r = run(d, "start", "fila", "a", "--repo", ".")
+    check("start reserva o item", r.returncode == 0, r.stderr)
+    r = run(d, "status", "fila", "a", "--repo", ".")
+    check("item reservado mostra a sessão dona",
+          "reservado:" in r.stdout and "desde" in r.stdout, r.stdout)
+    _, out = status_json(d, "fila", "a")
+    check("--json traz claimed_by", bool(out and out["item"]["claimed_by"]), out)
+
+
+def test_help_documents_item(base):
+    r = run(base, "status", "--help")
+    check("status --help documenta o id",
+          "shows only this item" in r.stdout, r.stdout)
+    r = run(base, "--help")
+    check("--help geral tem o exemplo", "cepa-plan status wego S3" in r.stdout,
+          r.stdout)
+
+
+def test_one_item_shows_every_filled_field(base):
+    d = git_repo(base, "um-item-campos")
+    write_queue(d, [item("a", title="TITULO-A", evidence="EVID-A",
+                         owner_summary="RESUMO-A")])
+    r = run(d, "status", "fila", "a", "--repo", ".")
+    t = r.stdout
+    check("mostra título, evidência e resumo para o dono",
+          all(x in t for x in ("TITULO-A", "EVID-A", "RESUMO-A")), t)
+    check("item pronto diz que o próximo cepa-until pega",
+          "pronto: o próximo cepa-until pega" in t, t)
+    check("campo vazio não aparece", "None" not in t
+          and "espera:" not in t and "ação humana:" not in t, t)
+
+
 def main():
     with tempfile.TemporaryDirectory() as base:
         for fn in (test_lists_all_items_in_recorded_order,
                    test_text_groups_and_shows_reason_and_human_action,
                    test_filter_by_status,
                    test_one_item_in_full,
+                   test_one_item_on_the_terminal_screen,
+                   test_reserved_item_shows_owner,
+                   test_help_documents_item,
+                   test_one_item_shows_every_filled_field,
                    test_omitted_name,
                    test_does_not_touch_the_file,
                    test_refuses_wave_plan,
