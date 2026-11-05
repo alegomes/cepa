@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-dor — invocable Definition of Ready for the slices of a plan.yaml.
+"""cepa-dor — checks the Definition of Ready of each slice of a wave plan.
 
 Deliberately decoupled primitive (Maestro v1 design, Component 4): the maestro
 is the first client, but /board-flow:triage and /board-flow:drain can reuse the
@@ -46,7 +46,6 @@ Usage:
 
 Exit: 0 = all READY · 1 = READY with warnings · 2 = some NOT-READY (or invalid plan)
 """
-import argparse
 import fnmatch
 import json
 import re
@@ -56,6 +55,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
+import _clihelp  # noqa: E402
 
 try:
     import yaml
@@ -115,12 +115,9 @@ def expand(globs: list[str], tree: list[str]) -> set[str]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(
-        prog="cepa-dor",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    ap = _clihelp.Parser(
+        prog="cepa dor",
         description=(
-            "Definition of Ready for the slices of a wave plan (plan.yaml).\n"
-            "\n"
             "Verdict per slice: READY or NOT-READY, with the gaps named. 100%\n"
             "read-only. First client: /maestro:program-plan, which iterates the plan\n"
             "with you until every slice comes out READY.\n"
@@ -131,7 +128,7 @@ def main() -> int:
             "  - program with 4+ demands (floor D7)\n"
             "  - declared surface DISJOINT from the wave's other slices on the\n"
             "    registry files (`cartorios:` at the top of the plan, measured by\n"
-            "    cepa-hotspots); overlap on any other file is a warning, not a veto\n"
+            "    cepa hotspots); overlap on any other file is a warning, not a veto\n"
             "  - surface outside the enforcement zone (unconditional denial)\n"
             "  - acceptance criterion declared; in a .claude/no-build repo, an\n"
             "    executable acceptance_cmd\n"
@@ -139,14 +136,22 @@ def main() -> int:
             "    `acceptance_form: substrate` declared\n"
             "  - zero open strategic decisions (human_gate)\n"
             "  - minimal context pointed to and a green baseline at the fork point"),
-        epilog=(
-            "examples:\n"
-            "  cepa-dor .claude/programs/wego/plan.yaml\n"
-            "  cepa-dor .claude/programs/wego/plan.yaml --wave 2 --json\n"
-            "  cepa-dor plan.yaml --fork-point origin/main --enforcement-zone 'infra/**'\n"
-            "\n"
-            "exit: 0 = all READY · 1 = READY with warnings · 2 = some NOT-READY or invalid plan"))
-    ap.add_argument("plan", metavar="plan", help="path to the wave plan.yaml")
+        examples=[
+            ("cepa dor .claude/programs/wego/plan.yaml", "checks the first pending wave"),
+            ("cepa dor .claude/programs/wego/plan.yaml --wave 2 --json",
+             "wave 2, JSON for code"),
+            ("cepa dor plan.yaml --fork-point origin/main --enforcement-zone 'infra/**'",
+             "another fork point and enforcement zone"),
+        ],
+        exit_codes=[
+            (0, "every slice READY"),
+            (1, "every slice READY, with warnings"),
+            (2, "invalid usage, no plan given, some slice NOT-READY, or an invalid "
+                "or unreadable plan (single-track, unknown schema, missing wave)"),
+        ],
+        see_also=["cepa hotspots: measures the registry files that `cartorios:` lists",
+                  "common/plan-schema.yaml: the plan.yaml schema"])
+    ap.add_argument("plan", metavar="PLAN", help="path to the wave plan.yaml")
     ap.add_argument("--wave", type=int, default=None, metavar="N",
                     help="id of the wave to check (default: the first pending one)")
     ap.add_argument("--fork-point", default="HEAD", metavar="REF",

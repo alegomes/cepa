@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-autonomy — queries the autonomy bands (`common/autonomy.yaml`).
+"""cepa-autonomy — says which autonomy band an action falls into (common/autonomy.yaml).
 
     cepa-autonomy listar [--repo .] [--json]
     cepa-autonomy classificar (--bash CMD | --mcp TOOL | --path P [--op OP] | --slash S | --id ID) [--repo .] [--json]
@@ -24,6 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
+import _clihelp  # noqa: E402
 
 
 def _load_lib():
@@ -96,12 +97,9 @@ def cmd_classify(args, lib):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(
-        prog="cepa-autonomy",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    ap = _clihelp.Parser(
+        prog="cepa autonomy",
         description=(
-            "Queries the harness autonomy bands (common/autonomy.yaml).\n"
-            "\n"
             "The file decides \"ask or do\", not the agent of the turn. This is how a\n"
             "command (today /board-flow:decide, step 5b) asks which band an action\n"
             "falls into before turning it into a question for the owner:\n"
@@ -111,24 +109,55 @@ def main(argv=None):
             "  not listed          asks (default), and the question ends proposing the id\n"
             "\n"
             "Human output in pt-BR; --json for code."),
-        epilog=(
-            "examples:\n"
-            "  cepa-autonomy listar\n"
-            "  cepa-autonomy listar --json\n"
-            "  cepa-autonomy classificar --bash 'git push --force'\n"
-            "  cepa-autonomy classificar --path src/Main.java --op delete\n"
-            "  cepa-autonomy classificar --slash /board-flow:advance --cond label=infra\n"
-            "\n"
-            "exit: 0 = the query ran, whatever the band · 2 = invalid argument\n"
-            "each subcommand has its own --help."))
-    sub = ap.add_subparsers(dest="cmd", metavar="<subcommand>")
+        examples=[
+            ("cepa autonomy listar", "every band and its ids"),
+            ("cepa autonomy classificar --bash 'git push --force'", "band of a shell command"),
+            ("cepa autonomy classificar --path src/Main.java --op delete",
+             "band of deleting a file"),
+        ],
+        exit_codes=[
+            (0, "the query ran, whatever the band"),
+            (2, "invalid usage (no subcommand, unknown flag, bad --cond)"),
+        ],
+        see_also=["common/autonomy.yaml: the bands themselves",
+                  "/board-flow:decide: the command that asks the file before asking the owner"])
+    sub = ap.add_subparsers(dest="cmd")
     summary = {
         "listar": "lists the bands and the ids declared in autonomy.yaml",
-        "classificar": "says which band ONE action falls into: a bash command, an "
-                       "MCP tool, a path, a slash command or an already declared id",
+        "classificar": "says which band one action falls into",
+    }
+    description = {
+        "listar": (
+            "Prints each band (executa_e_reporta, sempre_pergunta) with the ids it\n"
+            "declares, their detect fields, preconditions and who moved them, then the\n"
+            "default for actions not listed. Warnings from loading the file go to stderr."),
+        "classificar": (
+            "Takes ONE action, described by exactly one of --bash, --mcp, --path,\n"
+            "--slash or --id, and says its band: do it and report, always ask, or not\n"
+            "listed (ask, and propose the id to add to common/autonomy.yaml)."),
+    }
+    examples = {
+        "listar": [
+            ("cepa autonomy listar", "the bands, human-readable"),
+            ("cepa autonomy listar --json", "the loaded file as JSON, for code"),
+        ],
+        "classificar": [
+            ("cepa autonomy classificar --bash 'git push --force'", "a shell command"),
+            ("cepa autonomy classificar --path src/Main.java --op delete", "deleting a path"),
+            ("cepa autonomy classificar --slash /board-flow:advance --cond label=infra",
+             "a slash command, condition checked"),
+            ("cepa autonomy classificar --id commit-local --json", "a declared id, as JSON"),
+        ],
+    }
+    exit_codes = {
+        "listar": [(0, "the bands were listed"), (2, "invalid usage")],
+        "classificar": [(0, "the query ran, whatever the band"),
+                        (2, "invalid usage (no action flag, two action flags, "
+                            "--cond without KEY=VALUE)")],
     }
     for name in ("listar", "classificar"):
-        p = sub.add_parser(name, help=summary[name], description=summary[name])
+        p = sub.add_parser(name, help=summary[name], description=description[name],
+                           examples=examples[name], exit_codes=exit_codes[name])
         p.add_argument("--repo", default=".", metavar="DIR",
                        help="repository whose common/autonomy.yaml is read "
                             "(default: the current directory)")
@@ -148,7 +177,7 @@ def main(argv=None):
             p.add_argument("--op", metavar="OP",
                            help="with --path: the operation on the path, delete, edit or any")
             p.add_argument("--cond", action="append", default=[], metavar="KEY=VALUE",
-                           help="a detect condition you already checked (e.g. label=infra, "
+                           help="a detect condition already checked (e.g. label=infra, "
                                 "branch_atual=main, destino_terminal=true); repeatable")
     args = ap.parse_args(argv)
     if not args.cmd:

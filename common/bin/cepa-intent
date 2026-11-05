@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-intent — the single writer of `.claude/session-intent`.
+"""cepa-intent — writes and shows the session intent (.claude/session-intent).
 
 The problem it solves: sessions drift. Two hours in, nobody (neither the owner
 nor the agent) can say precisely what was intended, which step you are on and
@@ -87,6 +87,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
+import _clihelp  # noqa: E402
 import _modes as M  # noqa: E402
 
 try:
@@ -262,43 +263,56 @@ ACTIONS = {"gravar": "write", "mostrar": "show", "continuar": "continue",
 ACTION_NAMES = tuple(ACTIONS) + tuple(ACTIONS.values())
 
 
+class _ActionChoices(tuple):
+    """The English action names, which are what help and errors list; `in`
+    also accepts the old pt-BR names, so they keep working unlisted."""
+
+    def __contains__(self, value):
+        return value in ACTION_NAMES
+
+
 def main():
-    ap = argparse.ArgumentParser(
-        prog="cepa-intent",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    ap = _clihelp.Parser(
+        prog="cepa intent",
         description=(
-            "The single writer of .claude/session-intent: the session intent.\n"
-            "\n"
             "Sessions drift: two hours in, nobody can say what was intended, which\n"
             "step you are on and when to stop. The intent (purpose, stopping point,\n"
-            "a plan of 1 to %d steps, cursor) lives in one file per worktree, and\n"
+            f"a plan of 1 to {M.PLAN_MAX} steps, cursor) lives in one file per worktree, and\n"
             "only this command writes it. Readers: /common:whereami, /common:next,\n"
             "/common:recap and the session hook.\n"
             "\n"
-            "actions (the old names gravar/mostrar/continuar/estado/encerrar still work):\n"
+            "ACTION is one of:\n"
             "  write      records a new intent; over an existing one it requires --reason\n"
             "  show       prints the current intent (the default with no action)\n"
             "  continue   adopts in this session the intent recorded by another session\n"
             "  state      read-only: classifies it (empty, normal, fulfilled, other-session)\n"
             "  close      what /common:wrap-up runs: end-of-session telemetry\n"
             "\n"
-            "With no action, --step/--purpose/--plan edit the existing intent." % M.PLAN_MAX),
-        epilog=(
-            "examples:\n"
-            "  cepa-intent write --purpose \"...\" --by-when \"today\" --plan \"survey\" \"write\" \"decide\"\n"
-            "  cepa-intent --step 2             # step 1 done, step 2 in progress\n"
-            "  cepa-intent --step 4             # with a 3-item plan: plan fulfilled\n"
-            "  cepa-intent --purpose \"new\" --reason \"the owner rephrased it\"\n"
-            "  cepa-intent --plan \"a\" \"b\"      # resets the cursor to step 1\n"
-            "  cepa-intent                      # shows the current intent\n"
-            "\n"
-            "rules: a plan item has no ':'; with `write`, the action comes BEFORE --plan\n"
-            "(which consumes everything up to the next option). Atomic write, creates .claude/ if missing.\n"
-            "\n"
-            "exit: 0 ok · 2 invalid usage or a writer rule refused · 3 no intent\n"
-            "recorded · 4 an intent exists and --reason is missing to rewrite it"))
-    ap.add_argument("action", nargs="?", choices=ACTION_NAMES, metavar="<action>",
-                    help="write, show, continue, state or close (default: show)")
+            "With no action, --step/--purpose/--plan edit the existing intent. A plan\n"
+            "item has no ':'; with `write`, the action comes BEFORE --plan (which\n"
+            "consumes everything up to the next option). The write is atomic and\n"
+            "creates .claude/ if missing."),
+        examples=[
+            ('cepa intent write --purpose "..." --by-when "today" --plan "survey" "write" "decide"',
+             "record an intent"),
+            ("cepa intent --step 2", "step 1 done, step 2 in progress"),
+            ("cepa intent --step 4", "with a 3-item plan: plan fulfilled"),
+            ('cepa intent --purpose "new" --reason "the owner rephrased it"', "change the purpose"),
+            ('cepa intent --plan "a" "b"', "new plan, cursor back to step 1"),
+            ("cepa intent", "show the current intent"),
+            ("cepa intent state", "classify it, read-only"),
+        ],
+        exit_codes=[
+            (0, "ok (state and close always exit 0 when called without extra options)"),
+            (2, "invalid usage, not a git repo, or a writer rule refused (nothing written)"),
+            (3, "no intent recorded (show, continue, --step/--purpose/--plan)"),
+            (4, "an intent exists and --reason is missing to rewrite it with write"),
+        ],
+        see_also=["/common:whereami: reads the intent and the cursor",
+                  "common/hooks/_modes.py: format, reader and serializer of the file"])
+    ap.add_argument("action", nargs="?", choices=_ActionChoices(ACTIONS.values()),
+                    metavar="ACTION",
+                    help="one of write, show, continue, state or close (default: show)")
     ap.add_argument("--purpose", "--proposito", dest="purpose", metavar="TEXT",
                     help="what this session wants to deliver, in one sentence")
     ap.add_argument("--by-when", "--para-quando", dest="by_when", metavar="WHEN",

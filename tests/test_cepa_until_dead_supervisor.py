@@ -506,17 +506,23 @@ def test_close_dead_accepts_interrupted_run():
 
 def test_help_lists_the_subcommands():
     """The subcommands are dispatched before the argparse of the main mode: without
-    the epilog, `--help` does not say they exist."""
+    `commands=` in the top parser, `--help` does not say they exist."""
     p = subprocess.run([sys.executable, str(CEPA_UNTIL), "--help"],
                        capture_output=True, text=True, timeout=30)
-    for sub in ("aterrissar", "pendentes", "fecha-morto"):
+    listed = p.stdout.split("subcommands:", 1)[-1].split("arguments:", 1)[0]
+    for sub in ("aterrissar", "pendentes", "fecha-morto", "decide"):
         check(f"--help cita o subcomando {sub}",
-              f"cepa-until {sub}" in p.stdout, p.stdout[-800:])
-        q = subprocess.run([sys.executable, str(CEPA_UNTIL), sub, "--help"],
-                           capture_output=True, text=True, timeout=30)
-        check(f"...e `{sub} --help` mostra o uso dele",
-              q.returncode == 0 and f"cepa-until {sub}" in q.stdout,
-              q.stdout + q.stderr)
+              p.returncode == 0 and f"\n  {sub} " in listed, p.stdout[-800:])
+        for word in ("--help", "help"):
+            q = subprocess.run([sys.executable, str(CEPA_UNTIL), sub, word],
+                               capture_output=True, text=True, timeout=30)
+            check(f"...e `{sub} {word}` mostra o uso dele",
+                  q.returncode == 0 and f"usage: cepa until {sub}" in q.stdout,
+                  q.stdout + q.stderr)
+    q = subprocess.run([sys.executable, str(CEPA_UNTIL), "help"],
+                       capture_output=True, text=True, timeout=30)
+    check("`cepa-until help` é o mesmo texto de --help, exit 0",
+          q.returncode == 0 and q.stdout == p.stdout, q.stdout + q.stderr)
 
 
 def test_until_review_checks_the_dead_supervisor():
