@@ -358,6 +358,15 @@ def build_digest(ledger, result_max):
         out.append(f"- ATENÇÃO: {len(starts)} item_start no registro e "
                    f"{len(rounds)} rodadas no `.log` — o pareamento abaixo "
                    "pode estar deslocado")
+    # Acceptance of the new record format: every `item_end` of a `versao_registro >= 2`
+    # run carries the session id and the end reason. Old records are not judged.
+    version = start.get("versao_registro")
+    if isinstance(version, int) and version >= 2:
+        missing = [str(e.get("id")) for e in ends
+                   if not e.get("session_id") or not e.get("motivo_fim")]
+        if missing:
+            out.append("- ATENÇÃO: item_end sem session_id/motivo_fim: "
+                       + ", ".join(missing))
     out.append("")
 
     out.append("## Eventos do registro fora das rodadas")
@@ -380,7 +389,9 @@ def build_digest(ledger, result_max):
         out.append(f"- desfecho no registro: status `{en.get('status')}`, "
                    f"{en.get('segundos')} s, exit {en.get('exit_code')}, "
                    f"commits na branch da noite: {en.get('commits')}, "
-                   f"tentativa {en.get('tentativa')}")
+                   f"tentativa {en.get('tentativa')}, "
+                   f"sessão {en.get('session_id') or st.get('session_id')}, "
+                   f"fim `{en.get('motivo_fim')}`")
         if r:
             out.append(f"- custo US$ {cost} · {r['turns']} turnos · "
                        f"fim `{r['terminal']}`"

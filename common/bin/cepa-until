@@ -163,6 +163,10 @@ group, `claude` runs in its own session and survives, the supervisor doesn't.
   - **SIGTERM and Ctrl+C** record `run_interrompido` in the `.jsonl` (signal, in-flight
     item, phase and child pid) and leave `<run>.estado.json` as
     `interrompido`.
+  - `run_start` says `versao_registro: 2`; `item_start`/`item_end` record the
+    `session_id` given to `claude --session-id`, `item_end` the closed-set `motivo_fim`,
+    the state file a `heartbeat`, and `item_pulado` an item skipped for a live
+    reservation (see docs/cepa-until.md).
   - `run_start` and the state record the supervisor's **pid and host**. The
     `cepa-until pendentes` (and through it `cepa-doctor` and
     `/common:until-review`) points at the `rodando` run whose pid died, and at the
@@ -210,6 +214,7 @@ import select
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -443,6 +448,23 @@ NO_NETWORK = re.compile(
     r"|ENETUNREACH)\b"
     r"|\bfetch failed\b", re.I)
 
+# What `claude` writes in the final `result` when the conversation outgrew the model's
+# context window. Only read on the final `result` (or the output tail), for `motivo_fim`.
+CONTEXT_OVERFLOW = re.compile(
+    r"prompt is too long|context window|context limit"
+    r"|exceeds? the (?:maximum )?context", re.I)
+
+# A hook (Stop, PreToolUse...) refusing to let the attempt go on, as the final `result`
+# words it. Only counts together with `is_error` (or a non-zero exit).
+HOOK_BLOCK = re.compile(
+    r"\bhook\b.{0,80}\b(?:blocked|bloqueou|bloqueado|recusou|denied)"
+    r"|\bStop hook\b", re.I | re.S)
+
+# Seconds between two heartbeats written to the run's `estado.json` while a child (or a
+# quota/network wait) is running. `cepa-plan` reads the age of it to tell a dead run on
+# another host from a live one.
+HEARTBEAT_INTERVAL = float(os.environ.get("CEPA_UNTIL_HEARTBEAT", "60"))
+
 # Where the supervisor knocks to find out whether the network is back (host:port, TCP), and how
 # often. The API is the right target: it is what `claude` needs to reach.
 NETWORK_PROBE = os.environ.get("CEPA_UNTIL_SONDA_REDE", "api.anthropic.com:443")
@@ -657,15 +679,23 @@ def step(text):
     print("       " + SCREEN.c(color, f"{glyph} {head_}") + rest)
 
 
-def wait_for_child(proc, limit_sec, label):
+def wait_for_child(proc, limit_sec, label, on_tick=None):
     """Waits for the subprocess up to `limit_sec`. Returns True if it finished, False
     if it overran. On a terminal, redraws every 30s a line with the elapsed
-    time: without it the supervisor goes mute for up to an hour inside the item."""
+    time: without it the supervisor goes mute for up to an hour inside the item.
+    `on_tick` runs every HEARTBEAT_INTERVAL seconds (the run's heartbeat)."""
     start = time.monotonic()
     limit = max(limit_sec, 1)
     last_item = -LIVE_LINE_INTERVAL
+    last_tick = start
     while True:
         spent = time.monotonic() - start
+        if on_tick and time.monotonic() - last_tick >= HEARTBEAT_INTERVAL:
+            last_tick = time.monotonic()
+            try:
+                on_tick()
+            except Exception:  # noqa: BLE001  (a heartbeat must never kill the child's wait)
+                pass
         if SCREEN.enabled and spent - last_item >= LIVE_LINE_INTERVAL:
             last_item = spent
             sys.stdout.write(
@@ -739,7 +769,7 @@ def read_item(plan_path, ident):
 
 # ── running an item ─────────────────────────────────────────────────────────
 
-def build_command(name, branch, permissions):
+def build_command(name, branch, permissions, session_id=None):
     # stream-json is what carries the `rate_limit_event` with the quota usage. `--verbose`
     # is required by `claude` itself for that format with `-p`.
     # `--na-branch` tells drain-plan that the tree it wakes up in IS the
@@ -749,6 +779,10 @@ def build_command(name, branch, permissions):
         request += f" --na-branch {branch}"
     cmd = ["claude", "-p", request,
            "--output-format", "stream-json", "--verbose"]
+    if session_id:
+        # The supervisor owns the id: it is what `item_start`/`item_end` record and what
+        # a resume would need. Fresh per launch (claude refuses a reused one).
+        cmd += ["--session-id", session_id]
     if not permissions:
         cmd.append("--dangerously-skip-permissions")
     return cmd
@@ -896,14 +930,17 @@ def quota_pause(reading, fresh, cost, now):
     return reset if projected > 1.0 else None
 
 
-def wait_until(when):
+def wait_until(when, on_tick=None):
     """Sleeps until `when` by the wall clock, in short steps: `time.sleep`
-    doesn't advance while the machine is suspended, the clock does."""
+    doesn't advance while the machine is suspended, the clock does.
+    `on_tick` runs once per step (at most every 60s): the heartbeat of the wait."""
     while True:
         missing = (when - datetime.now()).total_seconds()
         if missing <= 0:
             return
-        time.sleep(min(missing, 60))
+        if on_tick:
+            on_tick()
+        time.sleep(min(missing, 60, max(HEARTBEAT_INTERVAL, 0.05)))
 
 
 def network_drop(output):
@@ -920,6 +957,48 @@ def network_drop(output):
     return bool(NO_NETWORK.search(text))
 
 
+def end_reason_of(code, killed, output):
+    """Why ONE attempt ended, from what the supervisor already observes. One of the
+    closed set `ok`, `contexto`, `cota`, `rede`, `folga`, `sinal`, `hook`,
+    `desconhecido`. First match wins, in this order:
+
+      1. `folga`   — `killed`: the supervisor killed it at the slack limit.
+      2. `sinal`   — the process died by an external signal (negative return code other
+                     than the -2 of a failed spawn, or 128 < code < 160 without `killed`).
+      3. `cota`    — `usage_limit(output)` hit (rejected `rate_limit_event` first).
+      4. `rede`    — `network_drop(output)`.
+      5. `contexto`— the final `result` (or the output tail) matches CONTEXT_OVERFLOW.
+      6. `hook`    — the final `result` is an error (or exit != 0) and HOOK_BLOCK matches.
+      7. `ok`      — exit code 0.
+      8. `desconhecido` — anything else.
+    """
+    if killed:
+        return "folga"
+    if isinstance(code, int) and (
+            (code < 0 and code != -2) or 128 < code < 160):
+        return "sinal"
+    output = output or ""
+    if usage_limit(output)[0]:
+        return "cota"
+    if network_drop(output):
+        return "rede"
+    results = list(_json_objects(output, "result"))
+    last = results[-1] if results else None
+    text = ""
+    if last is not None:
+        text = last.get("result") if isinstance(last.get("result"), str) else ""
+    else:
+        text = output[-OUTPUT_TAIL:]
+    if text and CONTEXT_OVERFLOW.search(text):
+        return "contexto"
+    failed = code != 0 or bool(last and last.get("is_error"))
+    if failed and text and HOOK_BLOCK.search(text):
+        return "hook"
+    if code == 0:
+        return "ok"
+    return "desconhecido"
+
+
 def network_reachable(target=None, timeout=5):
     """Opens a TCP connection to `host:port` and closes it. False on any error:
     DNS, refusal, timeout."""
@@ -931,11 +1010,15 @@ def network_reachable(target=None, timeout=5):
         return False
 
 
-def wait_for_network(until_at, probe=network_reachable, interval=None):
+def wait_for_network(until_at, probe=network_reachable, interval=None, on_tick=None):
     """Probes until the network is back or until `until_at` (wall clock). Returns True
-    if it came back."""
+    if it came back. `on_tick` runs before each probe (the heartbeat of the wait)."""
     step = PROBE_INTERVAL if interval is None else interval
+    if on_tick:
+        step = min(step, max(HEARTBEAT_INTERVAL, 0.05))
     while True:
+        if on_tick:
+            on_tick()
         if probe():
             return True
         missing = (until_at - datetime.now()).total_seconds()
@@ -972,13 +1055,13 @@ def installed_twg_version():
 
 
 def run_item(name, tree, branch, permissions, limit_sec, log,
-                 on_launch=None):
+                 on_launch=None, session_id=None, on_tick=None):
     """Launches ONE subprocess, with `tree` (the night worktree) as cwd.
     Returns (code, killed_by_timeout, seconds, this_attempt_output).
     `on_launch` receives the child's pid: it is what `run_interrompido` says
     was left running."""
     repo = tree
-    cmd = build_command(name, branch, permissions)
+    cmd = build_command(name, branch, permissions, session_id)
     start = time.monotonic()
     try:
         mark = os.path.getsize(log)
@@ -1004,7 +1087,7 @@ def run_item(name, tree, branch, permissions, limit_sec, log,
             return -2, False, time.monotonic() - start, ""
         if on_launch:
             on_launch(proc.pid)
-        if wait_for_child(proc, limit_sec, "claude"):
+        if wait_for_child(proc, limit_sec, "claude", on_tick):
             code = proc.returncode
             killed = False
         else:
@@ -1464,7 +1547,7 @@ def verify_command(repo, explicit, waived):
     return "", None
 
 
-def run_verify(command, tree, limit_sec, log, on_launch=None):
+def run_verify(command, tree, limit_sec, log, on_launch=None, on_tick=None):
     """Runs the full build on the night branch, with the output going to the run's `.log`.
     Returns (green, seconds, reason)."""
     start = time.monotonic()
@@ -1480,7 +1563,7 @@ def run_verify(command, tree, limit_sec, log, on_launch=None):
             return False, time.monotonic() - start, f"não lançou: {e}"
         if on_launch:
             on_launch(proc.pid)
-        if wait_for_child(proc, limit_sec, "build"):
+        if wait_for_child(proc, limit_sec, "build", on_tick):
             code = proc.returncode
         else:
             try:
@@ -3418,7 +3501,7 @@ def main(argv=None):
               "arvore": str(tree), "base": run_base,
               "herdou": inheritance,
               "branch_do_clone": current_branch(repo), "verify": verify,
-              "pid": pid, "host": host})
+              "pid": pid, "host": host, "versao_registro": 2})
     # The run state, next to the `.jsonl` (C6): `rodando` now, and at the end
     # `esperando-dono` (there is an action or pending item) or `encerrado`. It is written BEFORE
     # the model analysis, which may fail on the quota (C7); `/common:until-review`
@@ -3431,6 +3514,8 @@ def main(argv=None):
                  "verify": verify, "pid": pid, "host": host,
                  "arvore": str(tree), "prazo": deadline.isoformat(),
                  "atualizado": datetime.now().isoformat(timespec="seconds")}
+        # Liveness proof for readers on other hosts (pid can't be probed there).
+        body["heartbeat"] = body["atualizado"]
         body.update(rest)
         tmp = state_path.parent / (state_path.name + ".tmp")
         try:
@@ -3442,6 +3527,18 @@ def main(argv=None):
                   f"{e}")
 
     save_state("rodando")
+
+    def tick():
+        """Re-saves the state as `rodando` with the in-flight item and a fresh heartbeat."""
+        extra = {k: in_flight[k] for k in ("tentativa", "session_id", "fase")
+                 if k in in_flight}
+        if "id" in in_flight:
+            extra["item"] = in_flight["id"]
+        save_state("rodando", **extra)
+
+    def tick_wait():
+        """Heartbeat while the supervisor itself waits (quota reset, network probe)."""
+        save_state("rodando", fase="espera")
 
     # What is in flight when a SIGTERM or Ctrl+C arrives: the item, the phase
     # (`item` is `claude`, `verify` is the full build) and the child's pid, which
@@ -3518,6 +3615,7 @@ def main(argv=None):
     # items had already been delivered by then: it is up to that HEAD that the red returns
     # the night branch, and only if nobody closed `done` in the middle (C4).
     first = {}
+    skipped_logged = set()
     # Inherited item (left half-done in the previous run): its 1st attempt
     # started there, and the return point is the clone before the inheritance merge. The
     # other inherited items still open enter the "in the middle": the return would take
@@ -3626,6 +3724,13 @@ def main(argv=None):
         for warning in data.get("warnings") or []:
             print(f"  aviso: {warning}")
             log_event({"evento": "aviso", "texto": warning})
+        # An item the queue skipped because ANOTHER live session holds its reservation:
+        # logged once per item per run, so the record says why it never started.
+        for skip in data.get("deferred") or []:
+            if skip.get("reason") == "reservado" and skip.get("id") not in skipped_logged:
+                skipped_logged.add(skip.get("id"))
+                log_event({"evento": "item_pulado", "id": skip.get("id"),
+                          "motivo": "reservado", "detalhe": skip.get("detail")})
         if not data.get("batch"):
             stop = data.get("stop") or {}
             end_reason = stop.get("reason") or "fim-da-fila"
@@ -3665,7 +3770,7 @@ def main(argv=None):
                           "reset": reset.isoformat(),
                           "acorda": wake_at.isoformat()})
                 waits.append(("antes do item", ident, reset))
-                wait_until(wake_at)
+                wait_until(wake_at, on_tick=tick_wait)
                 last_reading, fresh_reading = None, False
                 continue
 
@@ -3692,16 +3797,20 @@ def main(argv=None):
                   + (f", tentativa {round_n}/{a.attempts_per_item}" if round_n > 1 else "") + ")")
         before = head_of(tree)
         first.setdefault(ident, (before, len(delivered)))
+        # Fresh per launch: `claude --session-id` refuses a reused one.
+        session_id = str(uuid.uuid4())
         log_event({"evento": "item_start", "id": ident, "title": item.get("title"),
                   "restante_seg": int(remaining.total_seconds()),
                   "tentativa": round_n, "twg_version": installed_twg_version(),
-                  "head": before})
+                  "head": before, "session_id": session_id})
 
-        in_flight.update(id=ident, fase="item", tentativa=round_n)
+        in_flight.update(id=ident, fase="item", tentativa=round_n,
+                         session_id=session_id)
+        tick()
         limit = (remaining + slack).total_seconds()
         code, killed, spent, output = run_item(
             a.queue, tree, start_branch, a.with_permissions, limit, log,
-            on_launch=launched)
+            on_launch=launched, session_id=session_id, on_tick=tick)
         in_flight.pop("pid_filho", None)
 
         # Uncommitted leftovers don't carry over to the next item.
@@ -3743,6 +3852,8 @@ def main(argv=None):
             fresh_reading = readings[-1][0] > readings[0][0]
 
         log_event({"evento": "item_end", "id": ident, "status": run_state,
+                  "session_id": session_id,
+                  "motivo_fim": end_reason_of(code, killed, output),
                   "human_pending": pending_item, "exit_code": code,
                   "timeout": killed, "segundos": int(spent),
                   "tentativa": round_n, "progresso": progress,
@@ -3766,7 +3877,7 @@ def main(argv=None):
             left = (deadline + slack - datetime.now()).total_seconds()
             in_flight["fase"] = "verify"
             green, verify_sec, verify_reason = run_verify(
-                verify, tree, left, log, on_launch=launched)
+                verify, tree, left, log, on_launch=launched, on_tick=tick)
             in_flight.pop("pid_filho", None)
             log_event({"evento": "verify", "id": ident, "verde": green,
                       "segundos": int(verify_sec), "motivo": verify_reason})
@@ -3780,7 +3891,8 @@ def main(argv=None):
                     step(f"vermelho ({verify_reason}); rodo o "
                           "build completo de novo, no mesmo código")
                     green, sec2, reason2 = run_verify(verify, tree, left,
-                                                       log, on_launch=launched)
+                                                       log, on_launch=launched,
+                                                       on_tick=tick)
                     in_flight.pop("pid_filho", None)
                     log_event({"evento": "verify", "id": ident, "verde": green,
                               "segundos": int(sec2), "motivo": reason2,
@@ -4003,7 +4115,7 @@ def main(argv=None):
             if fits:
                 step(f"sondo {NETWORK_PROBE} até a rede voltar (no "
                       f"máximo até {until_at.strftime('%H:%M')}) e retomo o {ident}")
-                if wait_for_network(until_at):
+                if wait_for_network(until_at, on_tick=tick_wait):
                     returned = datetime.now()
                     drop[2] = returned
                     log_event({"evento": "rede_voltou", "id": ident,
@@ -4059,7 +4171,7 @@ def main(argv=None):
                     step(f"espero o reset e retomo o {ident} às "
                           f"{wake_at.strftime('%H:%M')}")
                     waits.append(("item cortado", ident, reset_at))
-                    wait_until(wake_at)
+                    wait_until(wake_at, on_tick=tick_wait)
                     last_reading, fresh_reading = None, False
                     continue
                 end_reason = "limite-de-uso"

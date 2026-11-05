@@ -311,7 +311,35 @@ def current_owner(root, cwd):
             "cwd": str(cwd), "branch": None, "started_at": now_iso()}
 
 
-def reservation_of(it):
+# A reservation held from ANOTHER host is live only while the run that holds it keeps
+# writing its heartbeat: older than this many seconds, the run is presumed dead.
+HEARTBEAT_STALE_SEC = float(os.environ.get("CEPA_HEARTBEAT_ORFA", "900"))
+
+
+def run_heartbeat_of(root, claimed_by):
+    """The newest run state (`*.estado.json` under `.claude/queues/*/until/` or
+    `.claude/programs/*/until/`) whose `host` and `arvore` are the reservation's
+    `hostname` and `cwd` AND that carries a `heartbeat`. (path, state) or None."""
+    if not root:
+        return None
+    best = None
+    for layout in ("queues", "programs"):
+        for path in Path(root).glob(f".claude/{layout}/*/until/*.estado.json"):
+            try:
+                est = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if not isinstance(est, dict) or not est.get("heartbeat"):
+                continue
+            if est.get("host") != claimed_by.get("hostname") \
+                    or est.get("arvore") != claimed_by.get("cwd"):
+                continue
+            if best is None or str(est["heartbeat"]) > str(best[1]["heartbeat"]):
+                best = (path, est)
+    return best
+
+
+def reservation_of(it, root=None):
     """(state, detail) of an `in_progress` item.
 
       - `viva`     — has an owner and the owner responds. Executing on top
@@ -324,6 +352,11 @@ def reservation_of(it):
                      this registry existed, or written by hand. Undecidable, and
                      the honest thing is to say so instead of guessing one of
                      the two.
+
+    A reservation from another host can't be pid-probed. When `root` is given and a
+    run state file of that host/worktree carries a `heartbeat`, its age decides
+    (HEARTBEAT_STALE_SEC, and the run must still say `rodando`); with no such file,
+    the 24h rule stands.
     """
     c = it.get("claimed_by")
     if not isinstance(c, dict) or not c:
@@ -337,6 +370,24 @@ def reservation_of(it):
     since = c.get("started_at") or "?"
     w = _wt()
     is_live = w.entry_is_live(c) if w else True
+    if w and root and c.get("hostname") not in (None, w.host()):
+        found = run_heartbeat_of(root, c)
+        if found:
+            path, est = found
+            try:
+                beat = datetime.fromisoformat(str(est["heartbeat"]))
+                age = (datetime.now(beat.tzinfo) - beat).total_seconds()
+            except ValueError:
+                age = None
+            if age is not None:
+                if est.get("estado") == "rodando" and age <= HEARTBEAT_STALE_SEC:
+                    return "viva", (f"sessão {who} está nele desde {since} "
+                                    f"(host {c.get('hostname')}, {where}); o run "
+                                    f"{path.name} bateu o coração há {int(age)}s")
+                return "orfa", (f"a sessão {who} que reservou em {since} não existe "
+                                f"mais: o run {path.name} (host {c.get('hostname')}) "
+                                f"está `{est.get('estado')}` e o último heartbeat "
+                                f"tem {int(age)}s")
     if is_live:
         return "viva", (f"sessão {who} está nele desde {since} "
                         f"(host {c.get('hostname')}, pid {c.get('pid')}, {where})")
@@ -1366,7 +1417,9 @@ def cmd_queue(root, name, max_items, as_json):
         return 2
 
     items = plan.get("items") or []
-    batch, stop, warnings, deferred = build_batch(items, max_items)
+    batch, stop, warnings, deferred = build_batch(
+        items, max_items,
+        reservation_state=lambda it: reservation_of(it, root))
     output = {"program": qp.queue_name_of(plan), "queue": qp.queue_name_of(plan),
              "path": str(target), "max": max_items,
              "batch": batch, "stop": stop, "deferred": deferred,
@@ -1482,7 +1535,9 @@ def cmd_status(root, name, status_filter, as_json, item_id=None, via_show=False)
     # is what `build_batch` would hand a run now, with no ceiling (owner,
     # 2026-11-02: "o cepa-until não deve perder tempo em itens que certamente
     # não irão avançar"). Derived, never stored: a stored flag goes stale.
-    ready_ids = {b["id"] for b in build_batch(items, 10 ** 6)[0]}
+    ready_ids = {b["id"] for b in build_batch(
+        items, 10 ** 6,
+        reservation_state=lambda it: reservation_of(it, root))[0]}
     lines = []
     for pos, it in enumerate(items, 1):
         owner = it.get("claimed_by") or {}
@@ -2507,7 +2562,7 @@ def cmd_start(root, name, ident, cwd=".", commit=False):
         # with a live owner it NAMES who is on the item; with a dead owner, the
         # reservation is orphaned and claiming it is right — the alternative was
         # the queue jamming forever because of a run that ended.
-        state, detail = reservation_of(it)
+        state, detail = reservation_of(it, root)
         if state != "orfa":
             print(f"{ident} JÁ está `in_progress`: {detail}. Executar por cima "
                   "refaz trabalho; a reserva é o que impede isso.",
@@ -3989,7 +4044,7 @@ def migrate_one(root, name, dry_run):
                             "movido; resolva à mão qual dos dois vale")
     for it in plan.get("items") or []:
         if isinstance(it, dict) and status_of(it) == "in_progress":
-            state, detail = reservation_of(it)
+            state, detail = reservation_of(it, root)
             if state == "viva":
                 return "recusada", (f"{name}: o item {it.get('id')} está "
                                     f"reservado por uma sessão VIVA ({detail}) "

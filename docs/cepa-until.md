@@ -106,6 +106,34 @@ the window rediscovering it. On 2026-09-23 that was 20 rounds and US$ 14.30; on 
 7 in a row in 11 minutes. Any other outcome (`done`, `dropped`, a human route) resets the
 count; an attempt with no progress belongs to the circuit breaker and leaves it alone.
 
+## O que o registro grava por tentativa (`versao_registro: 2`)
+
+O `run_start` traz `versao_registro: 2`; registros sem o campo são do formato antigo e o
+`cepa-until-digest` não os cobra. Num run novo, cada tentativa deixa:
+
+- **`session_id`** em `item_start` e `item_end`: um UUID novo por lançamento, gerado pelo
+  supervisor e passado ao `claude` com `--session-id`. É o que liga a linha do registro à
+  conversa (transcrição) que a executou.
+- **`motivo_fim`** em `item_end`, de um conjunto fechado, derivado só do que o supervisor já
+  observa. O primeiro que casar vence, nesta ordem: `folga` (o supervisor matou no limite da
+  folga), `sinal` (o processo morreu por sinal externo), `cota` (teto de uso da conta),
+  `rede` (o `claude` não alcançou a API), `contexto` (o `result` final fala de contexto
+  estourado), `hook` (o `result` final é erro e cita um hook que bloqueou), `ok` (saída 0),
+  `desconhecido` (o resto).
+- **`heartbeat`** em `<run>.estado.json`, regravado a cada `CEPA_UNTIL_HEARTBEAT` segundos
+  (padrão 60) enquanto o `claude`, o build ou uma espera (reset de cota, sonda de rede)
+  estão em andamento, com `item`, `tentativa`, `session_id` e `fase` do que está em voo. O
+  `cepa-plan` usa a idade dele para reservas de OUTRO host (onde o pid não pode ser
+  sondado): se existe um `*.estado.json` com o mesmo `host` e `arvore` da reserva, ela é
+  `viva` só se o run está `rodando` e o heartbeat tem menos de `CEPA_HEARTBEAT_ORFA`
+  segundos (padrão 900); senão é `orfa`. Sem esse arquivo vale a regra de 24h de antes.
+  No mesmo host continua valendo a sonda de pid.
+- **`item_pulado`** (`id`, `motivo: reservado`, `detalhe`): o item que a fila adiou porque
+  outra sessão viva o reservou. Uma vez por item por run.
+
+O `cepa-until-digest` imprime `sessão` e `fim` em cada rodada e, num run `versao_registro >= 2`,
+avisa quando algum `item_end` veio sem `session_id` ou `motivo_fim`.
+
 ## When it ends: the questions
 
 The end-of-run summary only counts. Right after it, when the run is attached to a terminal,
