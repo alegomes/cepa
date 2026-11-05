@@ -2567,6 +2567,98 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: feedback-triage-cria-item-de-fila
+  title: /common:feedback --triage cria item de fila (cepa plan add) para toda seção
+    nova e para episódio cuja seção já tem item done; relatório diz quantos itens
+    entraram e onde
+  why: 'Logo depois do gate-advance porque é regra do dono em 2026-11-05 (fb-20261105-5):
+    triagem que para no BACKLOG.md não produz trabalho, e hoje a triagem de oito
+    feedbacks criou cinco seções e zero itens. BACKLOG.md, seção ''A triagem de
+    feedback termina no BACKLOG.md e não cria item de fila''.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: report-style-lint-reabre-apos-pedido-novo
+  title: report-style-lint volta a aceitar pergunta fechada quando o dono fez pedido
+    novo depois do 'Safe to exit' (prompt do dono após o wrap-up reabre a sessão
+    para o lint)
+  why: 'Terceiro episódio do mesmo mecanismo depois de o item relatorio-pos-wrap-up-abre-frente-nova
+    estar done: fb-20261102-2, fb-20261104-4 e a segunda frase de fb-20261105-1.
+    A correção forçou ''For you: nothing'' em relatório que tinha comando para o
+    dono. Posição por decisão do dono em 2026-11-05 (feedbacks triados entram antes
+    das traduções). BACKLOG.md, seção ''Depois do wrap-up, o relatório seguinte
+    reabre uma frente nova'', episódio de 2026-11-05.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: write-mode-gate-libera-git-info-exclude
+  title: write-mode-gate trata escrita em .git/info/exclude (e outros caminhos de
+    preparação do checkout fora do versionamento) como permitida em qualquer modo
+  why: 'Episódio fb-20261105-1 depois de portao-modo-escrita-le-heredoc estar done:
+    em sessão discovery o gate barrou ignorar .playwright-mcp/ e o dono ficou com
+    um echo para rodar à mão. Posição por decisão do dono em 2026-11-05. BACKLOG.md,
+    seção ''O modo é prosa'', episódio de 2026-11-05.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: test-dead-supervisor-corrida-sinal
+  title: tests/test_cepa_until_dead_supervisor.py deixa de falhar numa verificação
+    diferente a cada rodada na base (corrida entre o sinal e o encerramento do filho)
+  why: 'Episódio fb-20261104-1 depois de until-sigterm-teste-instavel estar done:
+    o teste segue vermelho na base sem mudança nenhuma, cada rodada noutra verificação,
+    e ensina a ignorar vermelho na suíte que o gate de merge roda. Posição por decisão
+    do dono em 2026-11-05. BACKLOG.md, seção ''Teste instável: Ctrl+C do cepa-until'',
+    episódio de 2026-11-05.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: handoff-e-spec-gravam-pergunta-de-origem
+  title: 'Handoff e /common:spec gravam a pergunta que começou o assunto: linha
+    ''porque'' obrigatória no Próximo passo (handoff-seeds-gate recusa sem ela)
+    e seção ''Como chegamos aqui'' no esqueleto da spec'
+  why: 'feedback fb-20261104-2 (2026-11-04); BACKLOG.md, seção ''O handoff e a spec
+    carregam rótulos, e ninguém grava a pergunta que começou o assunto'' (ainda
+    não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: whereami-recapitula-decisoes-do-dono
+  title: Decisão ou lembrete do dono citado pelo agente vem com data e frase de
+    contexto na primeira menção da sessão; /common:whereami lista os lembretes do
+    dono com data
+  why: 'feedback fb-20261104-3 (2026-11-04); BACKLOG.md, seção ''O Cepa não lembra
+    o dono das decisões que o próprio dono tomou'' (ainda não priorizado: entrou
+    no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: session-registry-apaga-marca-prune-orfa
+  title: auto_clean do session-registry apaga marca .prune-on-exit cujo worktree
+    ou branch já não existe
+  why: 'feedback fb-20261105-2 (2026-11-05); BACKLOG.md, seção ''A marca .prune-on-exit
+    fica órfã quando a worktree já sumiu'' (ainda não priorizado: entrou no fim
+    da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: wrap-up-safe-to-exit-exige-clone-limpo
+  title: 'wrap-up só declara Safe to exit com git status vazio no clone principal:
+    arquivo versionado modificado entra em commit próprio, arquivo de runtime dos
+    hooks vai para exclude, e o doctor aponta versionado que hook escreve'
+  why: 'feedback fb-20261105-3 (2026-11-05); BACKLOG.md, seção ''O wrap-up declara
+    Safe to exit com o clone principal sujo, e o cepa-until recusa rodar em seguida''
+    Posição: logo depois dos outros feedbacks triados em 2026-11-05 e antes das traduções para inglês, por decisão do dono em 2026-11-05 (são de ergonomia, nenhum barra um run)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
 - id: stop-reasons-in-english
   title: Traduzir para inglês os 6 motivos de parada emitidos por cepa-plan queue
     --json (teto, fim-da-fila, bloqueado, reservado, depende-de-adiado, bloqueado-antes),
@@ -2635,49 +2727,6 @@ items:
   title: cepa plan validate resolve a raiz como write (clone principal), não a pasta
     atual
   why: 'ainda não priorizado: entrou no fim da fila'
-  status: pending
-  blocked_by: []
-  human_pending: null
-  evidence: null
-- id: handoff-e-spec-gravam-pergunta-de-origem
-  title: 'Handoff e /common:spec gravam a pergunta que começou o assunto: linha
-    ''porque'' obrigatória no Próximo passo (handoff-seeds-gate recusa sem ela)
-    e seção ''Como chegamos aqui'' no esqueleto da spec'
-  why: 'feedback fb-20261104-2 (2026-11-04); BACKLOG.md, seção ''O handoff e a spec
-    carregam rótulos, e ninguém grava a pergunta que começou o assunto'' (ainda
-    não priorizado: entrou no fim da fila)'
-  status: pending
-  blocked_by: []
-  human_pending: null
-  evidence: null
-- id: whereami-recapitula-decisoes-do-dono
-  title: Decisão ou lembrete do dono citado pelo agente vem com data e frase de
-    contexto na primeira menção da sessão; /common:whereami lista os lembretes do
-    dono com data
-  why: 'feedback fb-20261104-3 (2026-11-04); BACKLOG.md, seção ''O Cepa não lembra
-    o dono das decisões que o próprio dono tomou'' (ainda não priorizado: entrou
-    no fim da fila)'
-  status: pending
-  blocked_by: []
-  human_pending: null
-  evidence: null
-- id: session-registry-apaga-marca-prune-orfa
-  title: auto_clean do session-registry apaga marca .prune-on-exit cujo worktree
-    ou branch já não existe
-  why: 'feedback fb-20261105-2 (2026-11-05); BACKLOG.md, seção ''A marca .prune-on-exit
-    fica órfã quando a worktree já sumiu'' (ainda não priorizado: entrou no fim
-    da fila)'
-  status: pending
-  blocked_by: []
-  human_pending: null
-  evidence: null
-- id: wrap-up-safe-to-exit-exige-clone-limpo
-  title: 'wrap-up só declara Safe to exit com git status vazio no clone principal:
-    arquivo versionado modificado entra em commit próprio, arquivo de runtime dos
-    hooks vai para exclude, e o doctor aponta versionado que hook escreve'
-  why: 'feedback fb-20261105-3 (2026-11-05); BACKLOG.md, seção ''O wrap-up declara
-    Safe to exit com o clone principal sujo, e o cepa-until recusa rodar em seguida''
-    (ainda não priorizado: entrou no fim da fila)'
   status: pending
   blocked_by: []
   human_pending: null
