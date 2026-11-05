@@ -198,11 +198,34 @@ def test_old_name_fila_is_deprecated_alias(_base):
     check("...sem manter segunda cópia dos passos", "cepa-plan" not in t)
 
 
+def test_one_item_in_full(base):
+    d = git_repo(base, "um-item")
+    longo = "validar à mão no navegador. " + "detalhe " * 60 + "FIM-DO-TEXTO"
+    write_queue(d, ITEMS[:4] + [item("e-espera", blocked_by=["b-pendente"],
+                                     human_pending=longo)])
+    r = run(d, "status", "fila", "e-espera", "--repo", ".")
+    t = r.stdout
+    check("item sozinho sai com código 0", r.returncode == 0, r.stderr)
+    check("mostra a ação humana inteira, sem corte",
+          "FIM-DO-TEXTO" in t and "…" not in t, t)
+    check("mostra o porquê e a espera", "porque e-espera" in t
+          and "b-pendente" in t, t)
+    check("não lista os outros itens", "item a-feito" not in t, t)
+    r, out = status_json(d, "fila", "c-travado")
+    check("--json traz um item só, com a evidência",
+          out and out["item"]["id"] == "c-travado"
+          and out["item"]["evidence"].startswith("Condicao de fora"), r.stderr)
+    r = run(d, "status", "fila", "nao-existe", "--repo", ".")
+    check("id desconhecido sai com 2 e lista os ids",
+          r.returncode == 2 and "a-feito" in r.stderr, r.stderr)
+
+
 def main():
     with tempfile.TemporaryDirectory() as base:
         for fn in (test_lists_all_items_in_recorded_order,
                    test_text_groups_and_shows_reason_and_human_action,
                    test_filter_by_status,
+                   test_one_item_in_full,
                    test_omitted_name,
                    test_does_not_touch_the_file,
                    test_refuses_wave_plan,

@@ -1450,7 +1450,7 @@ def owner_lines(lines, queue):
     return out
 
 
-def cmd_status(root, name, status_filter, as_json):
+def cmd_status(root, name, status_filter, as_json, item_id=None):
     if not name:
         names = single_track_queues(root)
         if not names:
@@ -1503,6 +1503,19 @@ def cmd_status(root, name, status_filter, as_json):
                 for st in STATUSES}
     visible = [l for l in lines if not status_filter or l["status"] == status_filter]
 
+    if item_id is not None:
+        # One item, every field, nothing cut: the list view trims the human
+        # action and the reason with "…" (owner, 2026-11-05: "Como eu vejo
+        # detalhes de cada item?").
+        found = [l for l in lines if str(l["id"]) == item_id]
+        if not found:
+            print(f"item {item_id} não existe na fila "
+                  f"{qp.queue_name_of(plan, name)}; ids: "
+                  + ", ".join(str(l["id"]) for l in lines), file=sys.stderr)
+            return 2
+        return item_detail(qp.queue_name_of(plan, name), target,
+                           found[0], as_json)
+
     if as_json:
         print(json.dumps({"program": qp.queue_name_of(plan, name),
                           "queue": qp.queue_name_of(plan, name),
@@ -1541,6 +1554,48 @@ def cmd_status(root, name, status_filter, as_json):
                 print(f"       ação humana: {first_sentence(l['human_pending'])}")
             if st == "blocked" and blocked_reason(l):
                 print(f"       motivo: {blocked_reason(l)}")
+    return 0
+
+
+def item_detail(program, target, l, as_json):
+    """`cepa-plan status <fila> <id>`: one item with every field in full."""
+    if as_json:
+        print(json.dumps({"program": program, "queue": program,
+                          "path": str(target), "item": l},
+                         ensure_ascii=False, indent=2))
+        return 0
+    label = dict(STATUS_GROUPS).get(l["status"], l["status"])
+    c = l["claimed_by"]
+    fields = [
+        ("status", f"{l['status']} ({label})"
+                   + (" · pronto: o próximo cepa-until pega" if l["pronto"] else "")),
+        ("título", l["title"]),
+        ("por que nesta posição", l["why"]),
+        ("espera", ", ".join(map(str, l["blocked_by"])) or None),
+        ("ação humana", l["human_pending"]),
+        ("evidência", l["evidence"]),
+        ("resumo para o dono", l["owner_summary"]),
+        ("reservado", (f"sessão {c['session_id'] or '?'} na branch "
+                       f"{c['branch'] or '?'} desde {c['started_at'] or '?'}")
+                      if c else None),
+    ]
+    t = _tui.SCREEN
+    if t.enabled:
+        print(t.header(f"fila {program} · item {l['posicao']}", str(l["id"])))
+        print(t.c("cinza", f"  {target}"))
+        for key, text in fields:
+            if text in (None, ""):
+                continue
+            print()
+            print("  " + t.c("negrito", key))
+            for x in t.wrap(" ".join(str(text).split()), 4):
+                print(x)
+        return 0
+    print(f"fila {program} · item {l['posicao']} · {l['id']}")
+    for key, text in fields:
+        if text in (None, ""):
+            continue
+        print(f"\n{key}:\n  {' '.join(str(text).split())}")
     return 0
 
 
@@ -3892,6 +3947,7 @@ def main(argv=None):
             "  cepa-plan write wego --from-spec docs/spec/assinatura.md\n"
             "  cepa-plan write wego --from-epic docs/epics/x.md --cycle 2\n"
             "  cepa-plan status                 # the whole queue, by status\n"
+            "  cepa-plan status wego S3         # one item in full, nothing cut\n"
             "  cepa-plan queue wego --max 3     # what the next batch may execute\n"
             "  cepa-plan start wego WEGO-123\n"
             "  cepa-plan finish wego WEGO-123 --status done --evidence \"commit abc, build green\"\n"
@@ -3957,6 +4013,9 @@ def main(argv=None):
                               "order; read only, reserves and executes nothing")
     stt.add_argument("name", nargs="?", metavar="name",
                      help="queue name; if omitted, uses the only one that exists")
+    stt.add_argument("item", nargs="?", metavar="id",
+                     help="shows only this item, with every field and nothing "
+                          "cut (e.g. cepa-plan status wego S3)")
     stt.add_argument("--status", choices=STATUSES, dest="status_filter",
                      help="shows only the items with this status")
     stt.add_argument("--repo", default=".", metavar="DIR",
@@ -4222,7 +4281,7 @@ def main(argv=None):
     if a.cmd == "divergence":
         return cmd_divergence(root, a.name, a.board, a.backlog, a.as_json)
     if a.cmd == "status":
-        return cmd_status(root, a.name, a.status_filter, a.as_json)
+        return cmd_status(root, a.name, a.status_filter, a.as_json, a.item)
     if a.cmd == "show":
         return cmd_show(root, a.name, a.as_json)
     if a.cmd == "epics":
