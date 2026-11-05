@@ -1,0 +1,65 @@
+schema_version: 1
+card: DUR-4
+status: complete
+audited_at: '2026-11-05T00:00:00-03:00'
+audited_range: fafb7af..3b0a581
+criteria:
+- id: AC1
+  text: Os quatro comandos importam o modulo (cepa-plan, cepa-doctor, cepa-until-digest, cepa-intent importam _state E usam numa leitura real).
+  altitude: cli
+  surface: 'saida de cepa-until-digest (linha "- run:") e de cepa-intent state dentro de um run (linha "run: <id> (<estado>)"), como subprocesso'
+  demonstrated_by:
+    test: tests/test_state_deposits.py::test_digest_shows_run_liveness_line e ::test_intent_state_inside_a_run_says_if_it_is_alive (subprocessos de cepa-until-digest e cepa-intent state; MORTO / (morto)
+      / (vivo)); cepa-plan e cepa-doctor por test_cepa_until_session.py e test_doctor_warns
+    layer: subprocesso do CLI real, saida assertada
+    evidence: verified
+    run: python3 tests/test_state_deposits.py -> rc=0, 57 ok, 0 FAIL, "todos os testes passaram"
+  verdict: complete
+  gap: null
+- id: AC2
+  text: Teste falha quando aparece arquivo de estado desconhecido em .claude/ (entrada solta em disco; escritor novo em common/hooks|bin, forma barra e forma segmentos).
+  altitude: domain
+  surface: _state.unknown_entries / _state.catalogued e a varredura de escritores de common/
+  demonstrated_by:
+    test: tests/test_state_deposits.py::test_slash_form_is_scanned (sonda .claude/zzz-barra deixa --only-scan vermelho) + test_segment_form_is_scanned + test_unknown_entries (inclui handoffs/sessions estranhos)
+      + test_doctor_warns (nivel warn)
+    layer: modulo + varredura + subprocesso do doctor
+    evidence: verified
+    run: python3 tests/test_state_deposits.py -> rc=0, 57 ok, 0 FAIL, "todos os testes passaram"
+  verdict: complete
+  gap: null
+- id: AC3
+  text: O leitor usa o heartbeat; rodando com heartbeat velho, ausente ou no futuro nunca e vivo.
+  altitude: domain
+  surface: _state.run_liveness
+  demonstrated_by:
+    test: tests/test_state_deposits.py::test_liveness (velho=morto, ausente=desconhecido, futuro=desconhecido, ilegivel=desconhecido, pid morto, outro host)
+    layer: 'modulo (limiares 800s/1000s/900s futuro) + cepa-plan reservation_of (test_cepa_until_session.py: futuro cai na regra de 24h, nunca orfa)'
+    evidence: verified
+    run: test_state_deposits.py rc=0, 57 ok; test_cepa_until_session.py rc=0, 47 ok, 0 FAIL
+  verdict: complete
+  gap: null
+- id: AC4
+  text: R3, nenhum deposito de estado novo; o modulo so le.
+  altitude: domain
+  surface: common/hooks/_state.py
+  demonstrated_by:
+    test: leitura do fonte e do diff (grep de write_text/open(..,"w")/mkdir em _state.py, nenhum); git diff fafb7af..df627c1 so adiciona leitura. Os bins apenas imprimem. Nenhum teste automatizado afirma
+      isso
+    layer: inspecao de fonte
+    evidence: verified
+    run: grep -nE "write_text|write_bytes|open\(|mkdir|os\.(replace|rename)" common/hooks/_state.py -> apenas read_text
+  verdict: complete
+  gap: null
+- id: AC5
+  text: Comportamento de cepa-plan reservation_of (viva/orfa/sem-dono, regra de heartbeat de outro host, fallback 24h) preservado com testes verdes.
+  altitude: cli
+  surface: cepa-plan start/next sobre item in_progress reservado
+  demonstrated_by:
+    test: tests/test_cepa_plan_single_track.py, tests/test_cepa_until_session.py
+    layer: subprocesso do CLI real
+    evidence: verified
+    run: 'rc=0, 0 FAIL: single_track 67 ok; until_session 47 ok; cepa_intent 91; whereami_intent 66; until_digest 47; 7 test_doctor_*. Nota: heartbeat no futuro mudou (era viva por age<=limite; 96881d1
+      cai na regra de 24h), mudanca coberta por teste e alinhada ao AC3'
+  verdict: complete
+  gap: null
