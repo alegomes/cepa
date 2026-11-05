@@ -1,0 +1,50 @@
+schema_version: 2
+card: cepa-plan-status-item
+verdict: proven
+reviewed_at: 2026-11-05T00:00:00-03:00
+base_commit: fe739bc
+head_commit: 9f26034
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan:cmd_status(item_id)/item_detail/main(argparse item)", module: harness, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+scope_note: "Harness Python puro, sem Maven/PIT. Superficie externa = CLI `python3 common/bin/cepa-plan status ...` chamado por subprocess em tests/test_common_queue_status.py (nenhum double). Segunda rodada: producao identica a 695e585 (9f26034 so acrescenta testes); a primeira rodada (head 695e585) terminou UNPROVEN com 7 perturbacoes sobreviventes, hoje todas cobertas."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "Nao e projeto Maven/PIT; mecanismo universal de perturbacao usado."
+    perturbation:
+      status: pass
+      results:
+        - "Worktree descartavel (git worktree add --detach 9f26034), removida ao final. GREEN inicial: `python3 tests/test_common_queue_status.py` -> 'all green'. Cada perturbacao restaurada com `git checkout 9f26034 -- common/bin/cepa-plan`; GREEN reconfirmado ao final."
+        - "RED P1 remover ramo id inexistente: IndexError + falha 'id desconhecido sai com 2 e lista os ids'."
+        - "RED P2 listar tudo (found = lines): 8 falhas, inclusive 3 da tela decorada."
+        - "RED P3 ignorar o id: KeyError 'item'."
+        - "RED P4 remover ramo --json de item_detail: JSONDecodeError."
+        - "RED P5 truncar campo em 100 caracteres: 'mostra a acao humana inteira, sem corte'."
+        - "RED P6 main nao repassa a.item: KeyError 'item'."
+        - "RED P7 campo espera vazio: 'mostra o porque e a espera'."
+        - "RED P9 id inexistente sai com 1: 'id desconhecido sai com 2 e lista os ids'. (Lista de ids no stderr: RED na rodada 1, teste inalterado.)"
+        - "RED P10 ramo TTY (`if t.enabled:` -> `if False:`): 'tela decorada liga (campo em negrito, sem dois-pontos)'. Antes sobrevivia."
+        - "RED P11 evidencia zerada / P12 resumo zerado / P13 titulo zerado: 'mostra titulo, evidencia e resumo para o dono' (cada um isolado). Antes sobreviviam."
+        - "RED P14 campo reservado zerado: 'item reservado mostra a sessao dona'. Antes sobrevivia."
+        - "RED P15 sufixo pronto removido: 'item pronto diz que o proximo cepa-until pega'. Antes sobrevivia."
+        - "RED P16a filtro de campo vazio removido na tela: 'tela decorada esconde campo vazio'; P16b no texto: 'campo vazio nao aparece'. Antes sobreviviam."
+        - "RED P17 help= do argumento id alterado: 'status --help documenta o id'. P18 exemplo do epilogo alterado: '--help geral tem o exemplo'. Antes sem teste."
+        - "Nao perturbado: o truncamento dentro do ramo TTY (wrap), e o ramo --json de claimed_by alem do que '--json traz claimed_by' afirma. Lacuna residual menor, registrada."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "Sem coverage.py; as linhas alteradas (id repassado, not-found, json, texto, TTY, cada campo, vazios, help, epilogo) foram todas exercitadas por perturbacao que virou RED (P1-P18)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O `id` e so comparado por igualdade de string com ids de um plan.yaml local ja validado e ecoado em stderr; nenhum parsing de payload externo, sem modulo api-rest. Rodada anterior marcou skipped por cautela; id vazio/estranho cai no ramo 'nao existe' (P1 coberto)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Story, nao Bug. Verificacao equivalente: `git checkout fe739bc -- common/bin/cepa-plan` com os testes de 9f26034 -> 13 falhas (item sozinho, acao humana inteira, porque/espera, --json, id desconhecido, tela decorada x2, reservado, claimed_by, help do id, exemplo do epilogo, titulo/evidencia/resumo, pronto). RED na base; restaurado, 'all green'."
+routing_reason: "Todos os comportamentos novos do `cepa-plan status <fila> <id>` (texto, --json, tela colorida, cada campo, campos vazios, id inexistente com saida 2 e lista de ids, help e exemplo) viram RED quando quebrados isoladamente, e o conjunto de testes novo e RED na base fe739bc. Os 7 sobreviventes da rodada anterior estao fechados. Lacuna residual menor: o truncamento dentro do wrap da tela colorida nao foi perturbado. PROVEN."
