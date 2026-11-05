@@ -4954,3 +4954,24 @@ O fluxo de bug manda commitar o teste de regressão vermelho antes da correção
 ### Esboço
 
 Um commit cujo diff só adiciona ou altera arquivos de teste (nenhum arquivo de produção) passa pelo gate com o `last-build.json` em FAILURE, desde que a falha registrada seja de teste, não de compilação, e o commit seja local. O `capture-build-result` já distingue os dois casos no `kind`. Push e PR continuam exigindo verde. Teste que falta: commit só de `src/test/**` com baseline FAILURE de teste é aceito com aviso; o mesmo commit tocando `src/main/**` continua recusado.
+
+---
+
+## A triagem de feedback termina no `BACKLOG.md` e não cria item de fila
+
+**Status:** pendente · **Lar provável:** common (`common/commands/feedback.md`, passo 3 "Triage"; `common/bin/cepa-feedback triage`) · **Origem:** feedback `fb-20261105-5`, 2026-11-05
+
+### Problema
+
+O passo de triagem do `/common:feedback --triage` tem três destinos: seção nova no `BACKLOG.md`, episódio anexado a seção existente, ou "já resolvido". Nenhum dos três cria item na fila `cepa`, que é o único documento que o `cepa-until` e o `/common:drain-plan` leem. O resultado é um feedback com destino registrado e sem ninguém para executá-lo. Em 2026-11-05 a triagem de oito feedbacks produziu cinco seções e zero itens, e o dono teve de pedir a conversão em seguida. O `cepa-plan add` já existe para isso e a própria ajuda dele diz que a triagem de feedback é um dos chamadores.
+
+### Palavras do dono
+
+> Minha última mensagem deve se tornar um feedback. A triagem de feedbacks não deve apenas levá-los ao BACKLOG, mas sim transformá-los em itens de trabalho em fila espescífica. (mensagem anterior: 1. não ainda. Entendi que os feedbacks foram pro BACKLOG. Mas, de que me adianta isso? Preciso que eles se tornem itens de trabalho!)
+>
+> `fb-20261105-5`, 2026-11-05 · cepa · session/feedbacks · construction · `common:feedback`
+
+### Esboço
+
+(1) Seção nova no `BACKLOG.md` vem sempre acompanhada de `cepa plan add` na fila do repo, com o `why` citando o feedback e a seção. (2) Episódio anexado a seção cujo item da fila já está `done` abre item novo, porque o episódio prova que a correção não cobriu o caso. (3) Episódio anexado a seção com item pendente só cita o id do item. (4) O relatório da triagem termina dizendo quantos itens entraram na fila e em que posição. Aceite: depois de uma triagem, `cepa feedback list --status triado` e `cepa plan status <fila>` casam, nenhum destino sem item pendente ou feito.
+
