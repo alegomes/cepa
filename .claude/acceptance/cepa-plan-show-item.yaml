@@ -1,0 +1,34 @@
+key: cepa-plan-show-item
+status: complete
+audited_diff: 7918f80..02cd7dd
+run: "python3 tests/test_common_queue_status.py -> all green (checks ok em cada teste citado, N>0)"
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: "cepa-plan show <fila> <id>; status <fila> <id> com aviso no stderr"
+    test: "test_show_item_resolves_title_codes_in_the_epic; test_show_item_without_epic_says_so"
+    layer: subprocess CLI em repo git temporário
+    evidence: verified
+    status: complete
+  - id: AC2
+    altitude: cli
+    surface: "show <fila> <id> [--json]: códigos resolvidos no Epic de source; sem Epic; arquivo ausente"
+    test: "test_show_item_resolves_title_codes_in_the_epic; test_show_item_without_epic_says_so; test_show_item_with_missing_epic_file"
+    layer: subprocess CLI
+    evidence: verified
+    status: complete
+  - id: AC3
+    altitude: cli
+    surface: "why e evidência por linha, plain e decorada (CEPA_COR=sempre)"
+    test: "test_show_item_resolves_title_codes_in_the_epic (plain); test_show_item_on_the_terminal_screen_splits_why_and_evidence (decorada)"
+    layer: subprocess CLI
+    evidence: verified
+    status: complete
+  - id: AC4
+    altitude: cli
+    surface: "status <fila> plain e decorado; show <fila> cabeçalho"
+    test: "test_lists_all_items_in_recorded_order; test_whole_queue_on_the_terminal_screen; test_show_queue_header"
+    layer: subprocess CLI
+    evidence: verified
+    status: complete
+    note: "test_show_queue_header confere a fonte e a dica do show <id>, não a linha 'o que demonstra'; o cabeçalho segue funcionando."

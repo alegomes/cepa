@@ -1,0 +1,43 @@
+schema_version: 2
+card: cepa-plan-show-item
+verdict: proven
+reviewed_at: 2026-11-05T15:00:00-03:00
+base_commit: 7918f80
+head_commit: 957608d
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan (codes_in, RANGE_CAP, epic_of, find_code, section_range, source_refs, why_parts, evidence_parts, item_detail, cmd_show, cmd_status hint, status_on_screen)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  note: "Repositorio Python, sem Maven/PIT. Superficie externa = subprocess `python3 common/bin/cepa-plan`. Nenhum double substitui a classe alterada. Em 957608d o codigo de producao mudou (RANGE_CAP em codes_in; epic_of resolve e recusa caminho fora da raiz; source_refs/item_detail ganham outside_repo)."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline 957608d: python3 tests/test_common_queue_status.py -> rc=0, 72 ok, 0 FAIL"
+        - "RED @ base 7918f80 (arquivo de teste de 957608d): rc=1; FAIL 'show <fila> <id> sai com 0' (unrecognized arguments: C1-1)"
+        - "RED: sem RANGE_CAP (expande sempre) -> a suite trava (>25s; o teste test_show_item_hostile_inputs nao poe timeout no subprocess, entao o RED e por travamento e nao por assert)"
+        - "RED: sem checagem is_relative_to -> 1 FAIL 'source fora do repo ... nao e lido' + Traceback"
+        - "RED: vista sem aviso 'Epic fora do repo' -> 2 FAIL"
+        - "RED: outside_repo sempre False no --json -> 4 FAIL"
+        - "RED (as 19 anteriores, refeitas com o codigo novo, todas as ancoras casaram): find_code sem secao primeiro (3 FAIL); source_refs sem frase de faixa (1); faixa expandida sempre (1); codes_in sem ordenar S (4); source_refs sem section_range (3); why_parts em um paragrafo (2); evidence_parts sem split (2); sem rotulo 'mais recente primeiro' (2); cmd_status sem dica (1); cmd_show sem repassar item (2+Traceback); item_detail sem source (2+Traceback); epic_of ignora source (2+Traceback); status_on_screen apagada (2); sem mensagem 'nao aponta um Epic' (1); tela do item sem lista (2+Traceback); Epic ausente sem aviso (1); found sempre True (4); cabecalho sem fonte (1); cabecalho sem apontar show id (1)"
+        - "Total 23 perturbacoes distintas, 0 sobreviventes"
+        - "Fragilidade registrada (nao bloqueia): o teste da faixa gigante mede <5s so depois de o subprocess voltar; se o cap for removido a suite pendura em vez de falhar. Sugestao ao dev-worker: timeout=10 no subprocess desse teste."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "Sem coverage.py. Medido com sys.settrace via sitecustomize (TRACE_OUT, PYTHONPATH) no subprocesso do CLI durante `python3 tests/test_common_queue_status.py` (rc=0): 214 linhas adicionadas em common/bin/cepa-plan no diff 7918f80..957608d, 123 executaveis (via ast), 123 executadas pela suite, 0 fora. Ressalva: perturbacao RED foi aplicada por comportamento (23), nao por linha."
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: "23 entradas hostis contra `show <fila> <id>` em 957608d, todas rc 0 ou 2, sem Traceback, sem leitura fora do repo: titulo '(S3) [L1+] *.*' (texto e --json); titulo vazio; titulo None; id 'a b'; id '../'; id inexistente '../x' (rc 2); source absoluto fora do repo (texto e --json); source com '..'; symlink dentro do repo apontando para fora; source diretorio .md; source /etc/hosts.md inexistente; heading sem ponto; codigo so em negrito; faixa L6 a L1; L1 a L999; L1 a L200; L1 a L99999999 (texto e --json, 0,1s, antes >60s); L0 a L99999999999999999999; source vazio; source nulo"
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "card nao e Bug; a RED no base 7918f80 esta em l3"
+routing_reason: "As duas falhas achadas no l4 (faixa enorme travava; source fora do repo era lido) foram corrigidas em 957608d; cada correcao fica RED quando removida; as 19 perturbacoes anteriores seguem RED; 23 entradas hostis limpas; cobertura de linhas alteradas 123/123. PROVEN."

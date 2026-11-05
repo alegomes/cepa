@@ -239,6 +239,22 @@ def test_one_item_on_the_terminal_screen(base):
     check("tela decorada esconde campo vazio", "None" not in plain, plain)
 
 
+def test_whole_queue_on_the_terminal_screen(base):
+    """Guard: on 2026-11-05 a refactor of the item view deleted
+    `status_on_screen` by accident and every test stayed green."""
+    import os, re
+    d = git_repo(base, "fila-tela")
+    write_queue(d, ITEMS)
+    env = dict(os.environ, CEPA_COR="sempre", COLUMNS="80")
+    r = subprocess.run([sys.executable, str(CEPA_PLAN), "status", "fila",
+                        "--repo", "."], capture_output=True, text=True,
+                       cwd=str(d), env=env)
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", r.stdout)
+    check("tela decorada da fila inteira sai com 0", r.returncode == 0, r.stderr)
+    check("tela decorada traz placar, barra e cada grupo",
+          "▰" in plain and "pendentes" in plain and "b-pendente" in plain, plain)
+
+
 def test_reserved_item_shows_owner(base):
     d = git_repo(base, "um-item-reservado")
     write_queue(d, [item("a"), item("b")])
@@ -256,8 +272,11 @@ def test_help_documents_item(base):
     check("status --help documenta o id",
           "shows only this item" in r.stdout, r.stdout)
     r = run(base, "--help")
-    check("--help geral tem o exemplo", "cepa-plan status wego S3" in r.stdout,
+    check("--help geral tem o exemplo", "cepa plan show wego WEGO-123" in r.stdout,
           r.stdout)
+    r = run(base, "show", "--help")
+    check("show --help documenta o id e a resolução no Epic",
+          "this one item" in r.stdout and "Epic" in r.stdout, r.stdout)
 
 
 def test_one_item_shows_every_filled_field(base):
@@ -274,13 +293,205 @@ def test_one_item_shows_every_filled_field(base):
           and "espera:" not in t and "ação humana:" not in t, t)
 
 
+EPIC = """# Epic de teste
+
+## Escada de valor
+
+| Ciclo | Roteiro | Efeito em tela | Efeito em backend | O que atravessa |
+|---|---|---|---|---|
+| 1. Um | roteiro | tela | backend | Levantamentos L1 a L2 no portal (S11). Estados D1 a D3 (S9). |
+
+### S8. Antes
+
+- L1: um L1 homônimo ANTES da seção, que NÃO deve ganhar.
+
+### S9. Ferramenta
+
+- **CA-9.1** (teste) Transições D1 a D3: cada uma grava autor.
+
+### S11. Levantamentos no portal
+
+Texto da seção.
+
+- **CA-11.1** (número) L1: devoluções em 2026.
+- **CA-11.2** (número) L2: guias por mês.
+"""
+
+
+def write_epic_queue(d):
+    (d / "docs" / "epics").mkdir(parents=True)
+    (d / "docs" / "epics" / "e.md").write_text(EPIC, encoding="utf-8")
+    why = ("peça 1 de 2 do ciclo \"1. Um\" do Epic docs/epics/e.md · herdado da "
+           "ordem do texto · critério de aceite: roteiro · superfície: tela")
+    ev = ("Resposta do dono em 2026-11-04: sim. O item voltou para `pending`. "
+          "Evidência anterior: Rodada cepa-until, nenhum commit.")
+    items = [item("C1-1", title="Levantamentos L1 a L2 no portal (S11)", why=why,
+                  evidence=ev),
+             item("C1-2", title="Estados D1 a D3 (S9)")]
+    p = d / "itens.json"
+    p.write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+    r = run(d, "write", "fila", "--items", str(p), "--source",
+            "docs/epics/e.md, ciclo 1 (2 peças)", "--quando", "2026-11-05",
+            "--repo", ".")
+    assert r.returncode == 0, r.stderr
+
+
+def test_show_item_resolves_title_codes_in_the_epic(base):
+    d = git_repo(base, "show-item")
+    write_epic_queue(d)
+    r = run(d, "show", "fila", "C1-1", "--repo", ".")
+    t = r.stdout
+    check("show <fila> <id> sai com 0", r.returncode == 0, r.stderr)
+    check("mostra o Epic apontado por `source`", "docs/epics/e.md" in t, t)
+    check("resolve S11 na linha do título da seção",
+          "S11 · linha 17 · S11. Levantamentos no portal" in t, t)
+    check("expande L1 a L2 e resolve cada um dentro da seção S11, não no homônimo",
+          "L1 · linha 21 · CA-11.1 (número) L1: devoluções em 2026." in t
+          and "L2 · linha 22" in t and "homônimo" not in t, t)
+    check("a seção vem antes dos seus itens",
+          t.index("S11 · linha") < t.index("L1 · linha"), t)
+    check("o why sai em partes, uma por linha",
+          "  - peça 1 de 2" in t and "  - critério de aceite: roteiro" in t, t)
+    check("a evidência sai por rodada, mais recente primeiro",
+          "evidência (mais recente primeiro):" in t
+          and "  - Resposta do dono em 2026-11-04" in t
+          and "  - Rodada cepa-until, nenhum commit." in t
+          and "Evidência anterior:" not in t, t)
+    r = run(d, "show", "fila", "C1-2", "--repo", ".")
+    check("faixa definida como frase no Epic resolve inteira, sem expandir",
+          "D1 a D3 · linha 15 · CA-9.1" in r.stdout and "D2 ·" not in r.stdout,
+          r.stdout)
+    r = run(d, "show", "fila", "C1-1", "--json", "--repo", ".")
+    out = json.loads(r.stdout)
+    check("--json traz source.refs com código, linha e texto",
+          out["source"]["epic"] == "docs/epics/e.md"
+          and [x["code"] for x in out["source"]["refs"]] == ["S11", "L1", "L2"]
+          and out["source"]["refs"][1]["line"] == 21, out)
+    r = run(d, "show", "fila", "C9", "--repo", ".")
+    check("id desconhecido no show sai com 2", r.returncode == 2, r.stderr)
+
+
+def test_show_item_on_the_terminal_screen_splits_why_and_evidence(base):
+    import os, re
+    d = git_repo(base, "show-item-tela")
+    write_epic_queue(d)
+    env = dict(os.environ, CEPA_COR="sempre", COLUMNS="100")
+    r = subprocess.run([sys.executable, str(CEPA_PLAN), "show", "fila", "C1-1",
+                        "--repo", "."], capture_output=True, text=True,
+                       cwd=str(d), env=env)
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", r.stdout)
+    check("tela decorada do item sai com 0", r.returncode == 0, r.stderr)
+    check("tela decorada resolve os códigos no Epic",
+          "S11 · linha 17" in plain and "L1 · linha 21" in plain, plain)
+    check("tela decorada mostra o why uma parte por linha",
+          "    - peça 1 de 2" in plain and "    - critério de aceite: roteiro" in plain
+          and " · herdado" not in plain, plain)
+    check("tela decorada mostra a evidência por rodada, mais recente primeiro",
+          "evidência (mais recente primeiro)" in plain
+          and plain.index("- Resposta do dono") < plain.index("- Rodada cepa-until")
+          and "Evidência anterior:" not in plain, plain)
+
+
+def test_show_item_with_missing_epic_file(base):
+    d = git_repo(base, "show-item-epic-sumido")
+    p = d / "itens.json"
+    p.write_text(json.dumps([item("a", title="Coisa (S3)")]), encoding="utf-8")
+    r = run(d, "write", "fila", "--items", str(p), "--source",
+            "docs/epics/nao-existe.md, ciclo 1", "--quando", "2026-11-05",
+            "--repo", ".")
+    assert r.returncode == 0, r.stderr
+    r = run(d, "show", "fila", "a", "--repo", ".")
+    check("Epic citado mas ausente: sai com 0 e diz que não achou o arquivo",
+          r.returncode == 0 and "docs/epics/nao-existe.md" in r.stdout
+          and "não achei o arquivo" in r.stdout and "S3 · não achei" in r.stdout,
+          r.stdout + r.stderr)
+    r = run(d, "show", "fila", "a", "--json", "--repo", ".")
+    out = json.loads(r.stdout)
+    check("--json diz source.found=false e lista o código sem linha",
+          out["source"]["found"] is False
+          and out["source"]["refs"] == [{"code": "S3", "line": None, "text": None}],
+          out["source"])
+
+
+def test_show_item_hostile_inputs(base):
+    """proof-reviewer, 2026-11-05: `L1 a L99999999` hung the command past 60s,
+    and a `source` with an absolute path or `..` read a file outside the repo."""
+    import time
+    d = git_repo(base, "show-item-hostil")
+    (d / "docs" / "epics").mkdir(parents=True)
+    (d / "docs" / "epics" / "e.md").write_text("# E\n\n### S3. T\n", encoding="utf-8")
+    fora = Path(base) / "fora.md"
+    fora.write_text("# F\n\n### S3. SEGREDO-FORA-DO-REPO\n", encoding="utf-8")
+    p = d / "itens.json"
+    p.write_text(json.dumps([item("a", title="Levant L1 a L99999999 (S3)")]),
+                 encoding="utf-8")
+    r = run(d, "write", "fila", "--items", str(p), "--source",
+            "docs/epics/e.md, ciclo 1", "--quando", "2026-11-05", "--repo", ".")
+    assert r.returncode == 0, r.stderr
+    t0 = time.monotonic()
+    try:
+        r = subprocess.run([sys.executable, str(CEPA_PLAN), "show", "fila", "a",
+                            "--repo", "."], capture_output=True, text=True,
+                           cwd=str(d), timeout=10)
+    except subprocess.TimeoutExpired:
+        check("faixa gigante no título termina em menos de 5s e sai com 0",
+              False, "estourou 10s: o cap da faixa sumiu?")
+        r = None
+    check("faixa gigante no título termina em menos de 5s e sai com 0",
+          r is not None and r.returncode == 0 and time.monotonic() - t0 < 5
+          and "S3 · linha 3" in r.stdout and "L1 a L99999999 · não achei" in r.stdout,
+          r.stdout + r.stderr)
+    for src in (f"{fora}, ciclo 1", "../../fora.md, ciclo 1"):
+        p.write_text(json.dumps([item("a", title="Coisa (S3)")]), encoding="utf-8")
+        r = run(d, "write", "fila", "--items", str(p), "--source", src,
+                "--quando", "2026-11-05", "--repo", ".", "--on-missing", "keep")
+        assert r.returncode == 0, r.stderr
+        r = run(d, "show", "fila", "a", "--repo", ".")
+        check(f"source fora do repo ({src.split(',')[0][-12:]}) não é lido",
+              r.returncode == 0 and "SEGREDO" not in r.stdout
+              and "Epic fora do repo" in r.stdout, r.stdout + r.stderr)
+        r = run(d, "show", "fila", "a", "--json", "--repo", ".")
+        out = json.loads(r.stdout)
+        check("--json marca outside_repo e found=false",
+              out["source"]["outside_repo"] is True and out["source"]["found"] is False,
+              out["source"])
+
+
+def test_show_queue_header(base):
+    d = git_repo(base, "show-cabecalho")
+    write_epic_queue(d)
+    r = run(d, "show", "fila", "--repo", ".")
+    check("show <fila> sem id mostra a fonte e aponta o show <id>",
+          r.returncode == 0 and "fonte: docs/epics/e.md, ciclo 1" in r.stdout
+          and "cepa-plan show fila <id>" in r.stdout, r.stdout + r.stderr)
+
+
+def test_show_item_without_epic_says_so(base):
+    d = git_repo(base, "show-item-sem-epic")
+    write_queue(d, [item("a", title="Coisa (S3)")])
+    r = run(d, "show", "fila", "a", "--repo", ".")
+    check("sem Epic em `source`, diz de onde o título vem",
+          r.returncode == 0 and "não aponta um Epic" in r.stdout
+          and "teste" in r.stdout, r.stdout)
+    r = run(d, "status", "fila", "a", "--repo", ".")
+    check("status <fila> <id> segue funcionando e aponta o show",
+          r.returncode == 0 and "cepa plan show fila a" in r.stderr, r.stderr)
+
+
 def main():
     with tempfile.TemporaryDirectory() as base:
         for fn in (test_lists_all_items_in_recorded_order,
+                   test_show_item_resolves_title_codes_in_the_epic,
+                   test_show_item_without_epic_says_so,
+                   test_show_item_on_the_terminal_screen_splits_why_and_evidence,
+                   test_show_item_with_missing_epic_file,
+                   test_show_queue_header,
+                   test_show_item_hostile_inputs,
                    test_text_groups_and_shows_reason_and_human_action,
                    test_filter_by_status,
                    test_one_item_in_full,
                    test_one_item_on_the_terminal_screen,
+                   test_whole_queue_on_the_terminal_screen,
                    test_reserved_item_shows_owner,
                    test_help_documents_item,
                    test_one_item_shows_every_filled_field,
