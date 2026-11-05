@@ -2620,9 +2620,10 @@ items:
   title: 'Handoff e /common:spec gravam a pergunta que começou o assunto: linha
     ''porque'' obrigatória no Próximo passo (handoff-seeds-gate recusa sem ela)
     e seção ''Como chegamos aqui'' no esqueleto da spec'
-  why: 'feedback fb-20261104-2 (2026-11-04); BACKLOG.md, seção ''O handoff e a spec
-    carregam rótulos, e ninguém grava a pergunta que começou o assunto'' (ainda
-    não priorizado: entrou no fim da fila)'
+  why: 'feedback fb-20261104-2 (2026-11-04); BACKLOG.md, seção ''O handoff e a spec carregam rótulos,
+      e ninguém grava a pergunta que começou o assunto''. Posição: logo depois dos outros feedbacks
+      triados em 2026-11-05 e antes das traduções para inglês, por decisão do dono em 2026-11-05
+      (são de ergonomia, nenhum barra um run)'
   status: pending
   blocked_by: []
   human_pending: null
@@ -2631,9 +2632,12 @@ items:
   title: Decisão ou lembrete do dono citado pelo agente vem com data e frase de
     contexto na primeira menção da sessão; /common:whereami lista os lembretes do
     dono com data
-  why: 'feedback fb-20261104-3 (2026-11-04); BACKLOG.md, seção ''O Cepa não lembra
-    o dono das decisões que o próprio dono tomou'' (Posição: logo depois dos outros feedbacks triados em 2026-11-05 e antes das traduções para inglês, por decisão do dono em 2026-11-05 (são de ergonomia, nenhum barra um run)
-    no fim da fila)'
+  why: 'feedback fb-20261104-3 (2026-11-04); BACKLOG.md, seção ''O Cepa não lembra o dono das decisões
+      que o próprio dono tomou'' (Posição: logo depois dos outros feedbacks triados em 2026-11-05
+      e antes das traduções para inglês, por decisão do dono em 2026-11-05 (são de ergonomia,
+      nenhum barra um run) no fim da fila). Posição: logo depois dos outros feedbacks triados
+      em 2026-11-05 e antes das traduções para inglês, por decisão do dono em 2026-11-05 (são
+      de ergonomia, nenhum barra um run)'
   status: pending
   blocked_by: []
   human_pending: null
@@ -2641,9 +2645,12 @@ items:
 - id: session-registry-apaga-marca-prune-orfa
   title: auto_clean do session-registry apaga marca .prune-on-exit cujo worktree
     ou branch já não existe
-  why: 'feedback fb-20261105-2 (2026-11-05); BACKLOG.md, seção ''A marca .prune-on-exit
-    fica órfã quando a worktree já sumiu'' (Posição: logo depois dos outros feedbacks triados em 2026-11-05 e antes das traduções para inglês, por decisão do dono em 2026-11-05 (são de ergonomia, nenhum barra um run)
-    da fila)'
+  why: 'feedback fb-20261105-2 (2026-11-05); BACKLOG.md, seção ''A marca .prune-on-exit fica órfã
+      quando a worktree já sumiu'' (Posição: logo depois dos outros feedbacks triados em 2026-11-05
+      e antes das traduções para inglês, por decisão do dono em 2026-11-05 (são de ergonomia,
+      nenhum barra um run) da fila). Posição: logo depois dos outros feedbacks triados em 2026-11-05
+      e antes das traduções para inglês, por decisão do dono em 2026-11-05 (são de ergonomia,
+      nenhum barra um run)'
   status: pending
   blocked_by: []
   human_pending: null
@@ -2652,9 +2659,10 @@ items:
   title: 'wrap-up só declara Safe to exit com git status vazio no clone principal:
     arquivo versionado modificado entra em commit próprio, arquivo de runtime dos
     hooks vai para exclude, e o doctor aponta versionado que hook escreve'
-  why: 'feedback fb-20261105-3 (2026-11-05); BACKLOG.md, seção ''O wrap-up declara
-    Safe to exit com o clone principal sujo, e o cepa-until recusa rodar em seguida''
-    Posição: logo depois dos outros feedbacks triados em 2026-11-05 e antes das traduções para inglês, por decisão do dono em 2026-11-05 (são de ergonomia, nenhum barra um run)'
+  why: 'feedback fb-20261105-3 (2026-11-05); BACKLOG.md, seção ''O wrap-up declara Safe to exit com
+      o clone principal sujo, e o cepa-until recusa rodar em seguida''. Posição: logo depois dos
+      outros feedbacks triados em 2026-11-05 e antes das traduções para inglês, por decisão do
+      dono em 2026-11-05 (são de ergonomia, nenhum barra um run)'
   status: pending
   blocked_by: []
   human_pending: null
