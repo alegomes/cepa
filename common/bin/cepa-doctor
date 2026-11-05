@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-doctor — validates the harness installation against reality.
+"""cepa-doctor — valida a instalação do harness contra a realidade.
 
 Almost every harness infrastructure failure is discovered in the middle of a
 task, at the worst moment: a plugin that did not load (cards created without
@@ -1197,8 +1197,66 @@ def parse_if_stale(argv):
     return None
 
 
+HELP = """\
+uso: cepa-doctor [--fix] [--brief] [--projeto] [--if-stale H]
+
+Valida a instalação do harness contra a realidade, em 30 segundos.
+
+Quase toda falha de infraestrutura do harness aparece no meio de uma tarefa,
+na pior hora: plugin que não carregou, board-flow.yaml de outro módulo,
+baseline de build vencida, worktree órfã, handoff velho depois de um rename.
+Este comando transforma isso em meio minuto de manutenção.
+
+Checagens globais (independem do projeto):
+  - settings.json parseia e os plugins @cepa estão habilitados
+  - versão de cada plugin no repo contra o cache instalado (editou sem reinstalar)
+  - sessões abertas rodando hooks de uma versão que o cache já não tem
+  - todo hook .py do cache compila
+  - diretório de telemetria gravável
+
+Checagens do projeto (diretório atual):
+  - é um repo git (sem git os rituais degradam)
+  - board-flow.yaml: estrutura mínima do bloco defaults
+  - .claude/last-build.json: status e idade da baseline de build
+  - worktrees session/*: paradas (>14d sem commit) e diretórios órfãos
+  - worktree de agente esquecida DENTRO do repo (.claude/worktrees/)
+  - handoffs sem atualização há >30d
+  - fila single-track divergindo do BACKLOG.md
+  - runs do cepa-until esperando o dono ou com supervisor morto
+  - manifesto de ambiente (docs/env.yaml): portas ocupadas por processo de
+    OUTRO diretório e containers de `services` ausentes do docker ps
+  - versão do `twg` instalada contra a declarada no manifesto de ambiente
+
+Saída: ✓ / ⚠ / ✗ por checagem; depois, a lista do que tem correção mecânica
+e a do que precisa de você. A checagem AO VIVO do board-flow.yaml contra o
+Jira não acontece aqui (script sem MCP): /common:doctor --live delega essa
+parte ao atlassian-expert.
+
+opções:
+  --fix          aplica de uma vez as correções mecânicas (reinstalar plugins,
+                 arquivar handoff vencido, limpar worktree órfã); o que é uma
+                 decisão sua continua na lista "Precisa de você"
+  --brief        só o resumo de uma linha; sem nada a dizer, não imprime nada
+                 (o modo que o `cepa` usa ao abrir uma sessão)
+  --projeto      só as checagens do projeto, pula as globais
+  --if-stale H   só roda se o último diagnóstico neste repo tem mais de H
+                 horas; senão sai em silêncio (preflight do `cepa`)
+  -h, --help     esta ajuda
+
+exemplos:
+  cepa-doctor                    # o diagnóstico completo
+  cepa-doctor --fix              # diagnóstico + correções mecânicas
+  cepa-doctor --brief --if-stale 12
+
+saída: 0 = tudo ok · 1 = só avisos · 2 = alguma falha
+"""
+
+
 def main():
     argv = sys.argv[1:]
+    if any(a in ("-h", "--help", "help", "ajuda") for a in argv):
+        print(HELP, end="")
+        return 0
     do_fix = "--fix" in argv
     brief = "--brief" in argv
     project_only = "--projeto" in argv

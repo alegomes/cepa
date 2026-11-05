@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-until — runs the repo's queue for a TIME WINDOW, with nobody awake.
+"""cepa-until — roda a fila do repo por uma JANELA DE TEMPO, sem ninguém acordado.
 
 ## Why it exists
 
@@ -1688,9 +1688,13 @@ def cmd_land(argv):
     done, it continues from the build. Without `--yes`, it only shows the plan."""
     ap = argparse.ArgumentParser(
         prog="cepa-until aterrissar",
-        description="leva a branch da noite de um run para a branch do clone")
+        description="Leva a branch do run (until/<run>) para a branch do clone: "
+                    "merge, build completo e push. Para no conflito, nunca "
+                    "faz push com build vermelho, e rodar de novo retoma de "
+                    "onde parou. Sem --yes, só mostra o plano.")
     ap.add_argument("target", metavar="alvo", help="<fila>/<run>, como o resumo do run imprime")
-    ap.add_argument("--repo", default=".")
+    ap.add_argument("--repo", default=".", metavar="DIR",
+                    help="raiz do repositório (default: o diretório atual)")
     ap.add_argument("--yes", "--sim", dest="yes", action="store_true",
                     help="executa; sem ele, só mostra o plano")
     a = ap.parse_args(argv)
@@ -2561,13 +2565,16 @@ def cmd_decide(argv):
     o cepa-until")."""
     ap = argparse.ArgumentParser(
         prog="cepa-until decide",
-        description="pergunta, uma por vez, o que espera o dono: com <fila>, "
-                    "tudo o que a fila guarda para ele; com <fila>/<run>, "
-                    "aterrissar e cada item adiado daquele run")
+        description="Pergunta, uma por vez, o que espera o dono: com <fila>, "
+                    "tudo o que a fila guarda para ele, de qualquer run; com "
+                    "<fila>/<run>, aterrissar e cada item adiado daquele run. "
+                    "Cada pergunta é fechada, com recomendação, e a resposta "
+                    "é aplicada na hora (cepa-plan answer).")
     ap.add_argument("target", metavar="alvo",
                     help="<fila> (a fila inteira) ou <fila>/<run>, como o "
                          "resumo do run imprime")
-    ap.add_argument("--repo", default=".")
+    ap.add_argument("--repo", default=".", metavar="DIR",
+                    help="raiz do repositório (default: o diretório atual)")
     a = ap.parse_args(argv)
     if "/" not in a.target:
         if not (re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", a.target)
@@ -2617,9 +2624,13 @@ def cmd_close_dead(argv):
     `cepa-doctor` keeps pointing at the run. Without `--yes`, it only shows the plan."""
     ap = argparse.ArgumentParser(
         prog="cepa-until fecha-morto",
-        description="roda o build que faltou num run cujo supervisor morreu")
+        description="Roda o build completo que faltou num run cujo supervisor "
+                    "morreu ou foi interrompido. Verde: o run fica esperando o "
+                    "dono, pronto para o aterrissar. Vermelho: nada muda, e o "
+                    "cepa-doctor segue apontando o run. Sem --yes, só mostra o plano.")
     ap.add_argument("target", metavar="alvo", help="<fila>/<run>, como o doctor imprime")
-    ap.add_argument("--repo", default=".")
+    ap.add_argument("--repo", default=".", metavar="DIR",
+                    help="raiz do repositório (default: o diretório atual)")
     ap.add_argument("--yes", "--sim", dest="yes", action="store_true",
                     help="executa; sem ele, só mostra o plano")
     a = ap.parse_args(argv)
@@ -2990,9 +3001,14 @@ def dead_run_phrase(m):
 def cmd_pending(argv):
     """`cepa-until pendentes [--repo R] [--json]`: what `/common:next` and
     `/common:doctor` read to say that a run is waiting for the owner (C6)."""
-    ap = argparse.ArgumentParser(prog="cepa-until pendentes")
-    ap.add_argument("--repo", default=".")
-    ap.add_argument("--json", action="store_true")
+    ap = argparse.ArgumentParser(
+        prog="cepa-until pendentes",
+        description="Lista os runs que esperam o dono (branch pronta para "
+                    "aterrissar, itens em \"Fica com você\") e os runs cujo "
+                    "supervisor morreu. É o que /common:next e /common:doctor leem.")
+    ap.add_argument("--repo", default=".", metavar="DIR",
+                    help="raiz do repositório (default: o diretório atual)")
+    ap.add_argument("--json", action="store_true", help="saída em JSON, para código")
     a = ap.parse_args(argv)
     found = waiting_runs(Path(a.repo).resolve())
     dead = dead_runs(Path(a.repo).resolve())
@@ -3027,7 +3043,31 @@ def main(argv=None):
     if argv and argv[0] in ("decide", "decidir"):
         return cmd_decide(argv[1:])
     ap = argparse.ArgumentParser(
-        description="executa a fila single-track do repo por uma janela de tempo",
+        prog="cepa-until",
+        description=(
+            "Executa a fila single-track do repo por uma JANELA DE TEMPO, sem\n"
+            "ninguém acordado.\n"
+            "\n"
+            "Um item por subprocesso: a cada item dispara um `claude -p` novo\n"
+            "(/common:drain-plan <fila> --max 1), com contexto limpo, dentro da\n"
+            "worktree until/<run> que o supervisor abre no início. Estourar o\n"
+            "contexto deixa de ser falha e vira o fim normal de um subprocesso.\n"
+            "Quem reserva o item, registra o desfecho e conhece a topologia é o\n"
+            "drain-plan + cepa-plan; este arquivo é a fiação em volta: relógio,\n"
+            "disjuntor, cota da conta, build completo depois de cada item `done`\n"
+            "(vermelho = o item vira `blocked` e a branch volta) e log.\n"
+            "\n"
+            "O corte acontece entre itens, nunca no meio de um. Nada vai para main\n"
+            "nem para origin: de manhã, `cepa-until decide <fila>/<run>` pergunta\n"
+            "o que ficou para você, e `aterrissar` leva a branch para o clone.\n"
+            "\n"
+            "exemplos:\n"
+            "  cepa-until wego --for 12h\n"
+            "  cepa-until wego --until 07:00 --dry-run\n"
+            "  cepa-until wego --for 8h --no-verify     # repo sem build\n"
+            "  cepa-until pendentes\n"
+            "  cepa-until decide wego/2026-11-03-2210\n"
+            "  cepa-until aterrissar wego/2026-11-03-2210 --yes"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         # The subcommands are dispatched before this parser: without the epilog,
         # `--help` doesn't say that they exist.
@@ -3050,7 +3090,8 @@ def main(argv=None):
                         help="quanto tempo rodar (ex.: 12h, 90m)")
     window.add_argument("--until", dest="until_at", metavar="07:00",
                         help="até que horas rodar (próximo HH:MM)")
-    ap.add_argument("--repo", default=".")
+    ap.add_argument("--repo", default=".", metavar="DIR",
+                    help="raiz do repositório (default: o diretório atual)")
     ap.add_argument("--max-failures", "--max-falhas", type=int, default=DEFAULT_MAX_FAILURES,
                     dest="max_failures", metavar="MAX_FALHAS",
                     help=f"disjuntor: falhas SEGUIDAS que encerram o run "
@@ -3094,6 +3135,9 @@ def main(argv=None):
                          "da tela (o `.jsonl` sempre guarda o inteiro)")
     ap.add_argument("--dry-run", action="store_true", dest="dry",
                     help="mostra o plano do run e sai sem executar nada")
+    if not argv:
+        ap.print_help(sys.stderr)
+        return 2
     a = ap.parse_args(argv)
 
     repo = Path(a.repo).resolve()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-promptcov — coverage of annotated checkpoints in a conversational command.
+"""cepa-promptcov — cobertura dos checkpoints anotados de um comando conversacional.
 
 Born from the P1-sweep-mode card (docs/spec/planejador-de-lotes-paralelos.md):
 a command with `interaction: conversational` (e.g.
@@ -77,13 +77,40 @@ def find_covered(test_text: str, tag: str | None) -> set[str]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(prog="cepa-promptcov")
+    ap = argparse.ArgumentParser(
+        prog="cepa-promptcov",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Cobertura dos checkpoints anotados de um comando conversacional.\n"
+            "\n"
+            "Um comando conversacional (.md que um agente segue) é prosa, não código:\n"
+            "não há linha para instrumentar. Este script mede algo mais estreito e\n"
+            "honesto: dado um comando cujos blocos de comportamento estão marcados com\n"
+            "`**[tag:id]**` e um teste cujos checks trazem o mesmo `tag:id` no nome,\n"
+            "cruza os dois e aponta todo `id` que NENHUM check referencia.\n"
+            "\n"
+            "convenção:\n"
+            "  no comando:  **[sweep:full-source]** Leia a fonte INTEIRA...\n"
+            "  no teste:    check(\"[sweep:full-source] varre a fonte inteira\", ...)\n"
+            "\n"
+            "Sem nenhum [tag:id] no comando, não há o que medir, e ele diz isso\n"
+            "(nunca declara 100% por vacuidade)."),
+        epilog=(
+            "exemplos:\n"
+            "  cepa-promptcov maestro/commands/program-plan.md tests/test_program_plan_sweep.py\n"
+            "  cepa-promptcov cmd.md test.py --tag sweep --json\n"
+            "\n"
+            "saída: 0 = todo checkpoint coberto · 1 = algum descoberto\n"
+            "       2 = erro (arquivo ausente, ou nenhum checkpoint para a TAG pedida)"))
     ap.add_argument("command", metavar="comando", help="arquivo .md do comando conversacional")
     ap.add_argument("test", metavar="teste", help="arquivo de teste que deveria cobrir os checkpoints")
-    ap.add_argument("--tag", default=None,
-                     help="restringe a uma família de anotação (ex.: sweep); "
-                          "default: todas as [tag:id] encontradas")
-    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--tag", default=None, metavar="TAG",
+                    help="restringe a uma família de anotação (ex.: sweep); "
+                         "default: todas as [tag:id] encontradas")
+    ap.add_argument("--json", action="store_true", help="saída em JSON, para código")
+    if len(sys.argv) == 1:
+        ap.print_help(sys.stderr)
+        return 2
     args = ap.parse_args()
 
     cmd_path = Path(args.command)

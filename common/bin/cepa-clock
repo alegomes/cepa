@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-clock — where a session's wall clock went.
+"""cepa-clock — para onde foi o tempo de relógio de uma sessão.
 
 ## Why it exists
 
@@ -205,12 +205,39 @@ def report(r):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Where a session's wall clock went.")
-    ap.add_argument("--slug", help="directory under ~/.claude/projects (default: this repo's)")
-    ap.add_argument("--all", "--todas", dest="all_sessions", action="store_true", help="every session, not just the last")
-    ap.add_argument("--days", type=int, default=30)
-    ap.add_argument("--emit", action="store_true", help="write to the telemetry ledger")
-    ap.add_argument("--json", action="store_true", dest="as_json")
+    ap = argparse.ArgumentParser(
+        prog="cepa-clock",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Onde foi parar o relógio de uma sessão.\n"
+            "\n"
+            "Lê a transcrição que o Claude Code grava em ~/.claude/projects/<slug>/\n"
+            "(mais um arquivo por subagente) e separa o tempo da sessão em espera\n"
+            "ativa (um comando Bash parado sem trabalhar: `until ...; do sleep; done`,\n"
+            "loops de queima usados como sleep), build e outro. Intervalos de agentes\n"
+            "em paralelo são fundidos antes de somar; sem isso o mesmo minuto\n"
+            "contaria uma vez por agente.\n"
+            "\n"
+            "Os MINUTOS ABSOLUTOS são o número confiável. Numa sessão interativa o\n"
+            "relógio inclui o tempo em que ela esperou por você, e os percentuais\n"
+            "saem diluídos: só compare percentuais entre runs desatendidos."),
+        epilog=(
+            "exemplos:\n"
+            "  cepa-clock                     # a sessão mais recente deste repo\n"
+            "  cepa-clock --slug <slug>       # as sessões de outro diretório de projeto\n"
+            "  cepa-clock --all --days 7      # todas as sessões da última semana\n"
+            "  cepa-clock --emit              # também grava no ledger de telemetria\n"
+            "  cepa-clock --json              # para código (relogio_s, espera_s, build_s, outro_s)"))
+    ap.add_argument("--slug", metavar="SLUG",
+                    help="diretório em ~/.claude/projects a ler (default: o deste repo)")
+    ap.add_argument("--all", "--todas", dest="all_sessions", action="store_true",
+                    help="todas as sessões do período, não só a última")
+    ap.add_argument("--days", type=int, default=30, metavar="N",
+                    help="janela, em dias, que --all considera (default: 30)")
+    ap.add_argument("--emit", action="store_true",
+                    help="além de imprimir, grava o resultado no ledger de telemetria")
+    ap.add_argument("--json", action="store_true", dest="as_json",
+                    help="saída em JSON, para código")
     args = ap.parse_args()
 
     files = sessions(args.slug, args.all_sessions, args.days)

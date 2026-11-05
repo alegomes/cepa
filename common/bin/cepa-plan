@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-plan — the mechanical writer of the `single-track` queue (.claude/queues/<nome>/queue.yaml).
+"""cepa-plan — o escritor mecânico da fila `single-track` (.claude/queues/<nome>/queue.yaml).
 
 It exists because step 1 of the "one writer, three sources" design (BACKLOG.md,
 "Cinco portas de planejamento", approved on 2026-08-24) cannot live only in the
@@ -3866,34 +3866,72 @@ def cmd_migrate(root, name, all_queues, dry_run):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(
-        description="escreve e valida a fila single-track do harness")
-    sub = ap.add_subparsers(dest="cmd", required=True)
+        prog="cepa-plan",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Escreve e valida a fila single-track do harness.\n"
+            "\n"
+            "A fila (.claude/queues/<nome>/queue.yaml) é o documento que guarda a\n"
+            "ORDEM dos itens e o PORQUÊ de cada posição, que é o que um tracker\n"
+            "perde. Este script é o escritor mecânico: valida, resolve a raiz certa,\n"
+            "recusa colisões e grava. Quem conduz a conversa é /common:queue; quem\n"
+            "executa é /common:drain-plan e cepa-until; quem lê, /common:next e\n"
+            "/common:queue-status.\n"
+            "\n"
+            "Só conhece `mode: single-track`. Plano de ondas é outro documento, com\n"
+            "outro autor (/maestro:program-plan) e outro consumidor (/maestro:run).\n"
+            "\n"
+            "subcomandos por família:\n"
+            "  fontes (só leem, devolvem JSON)   from-spec, from-epic, from-triage\n"
+            "  escrita                            write, add, migrate, check-name, validate\n"
+            "  leitura                            queue, status, show, epics, promote, order\n"
+            "  ciclo de um item                   start, finish, answer\n"
+            "  contra o quadro Jira               reconcile, landed, divergence"),
+        epilog=(
+            "exemplos:\n"
+            "  cepa-plan write wego --from-spec docs/spec/assinatura.md\n"
+            "  cepa-plan write wego --from-epic docs/epics/x.md --cycle 2\n"
+            "  cepa-plan status                 # a fila inteira, por status\n"
+            "  cepa-plan queue wego --max 3     # o que o próximo lote pode executar\n"
+            "  cepa-plan start wego WEGO-123\n"
+            "  cepa-plan finish wego WEGO-123 --status done --evidence \"commit abc, build verde\"\n"
+            "  cepa-plan answer wego WEGO-124 --answer \"sim, fecha\"\n"
+            "  cepa-plan add wego WEGO-130 --title \"...\" --before WEGO-125 --why \"...\"\n"
+            "\n"
+            "cada subcomando tem o próprio --help (ex.: cepa-plan finish --help)."))
+    sub = ap.add_subparsers(dest="cmd", metavar="<subcomando>")
 
     mg = sub.add_parser("migrate",
                         help="move a fila de .claude/programs/<n>/plan.yaml "
                              "para .claude/queues/<n>/queue.yaml")
-    mg.add_argument("name", nargs="?", metavar="nome")
+    mg.add_argument("name", nargs="?", metavar="nome",
+                    help="nome da fila a migrar (ou --all)")
     mg.add_argument("--all", action="store_true", dest="all_queues",
                     help="todas as filas single-track do layout antigo")
     mg.add_argument("--dry-run", action="store_true", dest="dry_run",
                     help="diz o que moveria, sem mover")
-    mg.add_argument("--repo", default=".")
+    mg.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
 
-    c = sub.add_parser("check-name", help="o nome está livre para uma fila?")
-    c.add_argument("name", metavar="nome")
-    c.add_argument("--repo", default=".")
+    c = sub.add_parser("check-name",
+                       help="o nome está livre para uma fila? (saída 3 = colide "
+                            "com um plano de ondas)")
+    c.add_argument("name", metavar="nome", help="nome pretendido para a fila")
+    c.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
 
     v = sub.add_parser("validate", help="valida um plan.yaml no disco")
-    v.add_argument("plan_file", metavar="plano")
+    v.add_argument("plan_file", metavar="plano", help="caminho do queue.yaml a validar")
 
     s = sub.add_parser("from-spec",
                        help="lê uma spec do /common:spec e devolve os itens (JSON)")
-    s.add_argument("spec")
+    s.add_argument("spec", metavar="ARQUIVO",
+                   help="a especificação (docs/spec/<slug>.md), um item por `### CS-N`")
 
     e = sub.add_parser("from-epic",
                        help="extrai a fila de um ciclo de um Epic (JSON com "
                             "`demonstrates` e `items`); só lê")
-    e.add_argument("epic")
+    e.add_argument("epic", metavar="ARQUIVO", help="o Epic (docs/epics/<nome>.md)")
     e.add_argument("--cycle", "--ciclo", dest="cycle", type=int, required=True, metavar="N",
                    help="o ciclo da escada de valor que vira fila")
 
@@ -3905,12 +3943,14 @@ def main(argv=None):
     q = sub.add_parser("queue",
                        help="quais itens o lote pode executar agora, na ordem "
                             "da fila, e onde ele para")
-    q.add_argument("name", metavar="nome")
+    q.add_argument("name", metavar="nome", help="nome da fila")
     q.add_argument("--max", type=int, default=DEFAULT_MAX, dest="max_items", metavar="TETO",
                    help=f"teto de itens no lote (default {DEFAULT_MAX}: cada "
                         "item é um build inteiro com gate de aceite e de prova)")
-    q.add_argument("--repo", default=".")
-    q.add_argument("--json", action="store_true", dest="as_json")
+    q.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
+    q.add_argument("--json", action="store_true", dest="as_json",
+                help="saída em JSON, para código")
 
     stt = sub.add_parser("status",
                          help="a fila inteira agrupada por status, na ordem "
@@ -3919,47 +3959,56 @@ def main(argv=None):
                      help="nome da fila; omitido, usa a única que existir")
     stt.add_argument("--status", choices=STATUSES, dest="status_filter",
                      help="mostra só os itens com este status")
-    stt.add_argument("--repo", default=".")
-    stt.add_argument("--json", action="store_true", dest="as_json")
+    stt.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
+    stt.add_argument("--json", action="store_true", dest="as_json",
+                help="saída em JSON, para código")
 
     sh = sub.add_parser("show",
                         help="o cabeçalho da fila: fonte e o que ela "
                              "`demonstrates:` quando acaba; só lê")
-    sh.add_argument("name", metavar="nome")
-    sh.add_argument("--repo", default=".")
-    sh.add_argument("--json", action="store_true", dest="as_json")
+    sh.add_argument("name", metavar="nome", help="nome da fila")
+    sh.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
+    sh.add_argument("--json", action="store_true", dest="as_json",
+                help="saída em JSON, para código")
 
     ep = sub.add_parser("epics",
                         help="o \"onde estamos\" de cada Epic em docs/epics/, "
                              "derivado da escada e das filas de cada ciclo; só lê")
-    ep.add_argument("--repo", default=".")
-    ep.add_argument("--json", action="store_true", dest="as_json")
+    ep.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
+    ep.add_argument("--json", action="store_true", dest="as_json",
+                help="saída em JSON, para código")
     ep.add_argument("--brief", action="store_true",
                     help="uma linha por Epic (para o hook de sessão)")
 
     pr = sub.add_parser("promote",
                         help="as demandas que a fila entrega ao "
                              "/maestro:program-plan --from-plan")
-    pr.add_argument("name", metavar="nome")
-    pr.add_argument("--repo", default=".")
-    pr.add_argument("--json", action="store_true", dest="as_json")
+    pr.add_argument("name", metavar="nome", help="nome da fila")
+    pr.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
+    pr.add_argument("--json", action="store_true", dest="as_json",
+                help="saída em JSON, para código")
     pr.add_argument("--when", "--quando", dest="when", metavar="QUANDO", help="data a registrar na linha `source` do "
                                      "plano de ondas (AAAA-MM-DD)")
 
     st = sub.add_parser("start",
                         help="reserva um item do lote (status: in_progress) e "
                              "assina a reserva com a sessão dona")
-    st.add_argument("name", metavar="nome")
-    st.add_argument("id")
+    st.add_argument("name", metavar="nome", help="nome da fila")
+    st.add_argument("id", help="id do item na fila")
     st.add_argument("--commit", action="store_true",
                     help="commita a fila (só ela) no mesmo passo; sem isso a "
                          "saída diz que falta commitar")
-    st.add_argument("--repo", default=".")
+    st.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
 
     fi = sub.add_parser("finish",
                         help="registra o desfecho de um item do lote")
-    fi.add_argument("name", metavar="nome")
-    fi.add_argument("id")
+    fi.add_argument("name", metavar="nome", help="nome da fila")
+    fi.add_argument("id", help="id do item na fila")
     fi.add_argument("--status", required=True,
                     choices=("done", "blocked", "pending"),
                     help="done = fechou; blocked = travou em condição de fora; "
@@ -3996,14 +4045,15 @@ def main(argv=None):
     fi.add_argument("--commit", action="store_true",
                     help="commita a fila (só ela) no mesmo passo; sem isso a "
                          "saída diz que falta commitar")
-    fi.add_argument("--repo", default=".")
+    fi.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
 
     rs = sub.add_parser("answer", aliases=["responde"],
                         help="o DONO responde a um item adiado: `blocked` volta "
                              "para `pending` com a resposta, e a rota "
                              "`human_pending` fecha. Só num terminal")
-    rs.add_argument("name", metavar="nome")
-    rs.add_argument("id")
+    rs.add_argument("name", metavar="nome", help="nome da fila")
+    rs.add_argument("id", help="id do item adiado")
     rs.add_argument("--answer", "--resposta", dest="answer", metavar="RESPOSTA", required=True,
                     help="a resposta do dono, verbatim; o próximo run a lê "
                          "na evidência do item")
@@ -4022,12 +4072,13 @@ def main(argv=None):
     rs.add_argument("--no-commit", action="store_true", dest="no_commit",
                     help="grava a fila sem commitar (por default o `answer` "
                          "commita só a fila no mesmo passo)")
-    rs.add_argument("--repo", default=".")
+    rs.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
 
     rc = sub.add_parser("reconcile",
                         help="compara a fila com o quadro e (com --apply) "
                              "grava a reconciliação")
-    rc.add_argument("name", metavar="nome")
+    rc.add_argument("name", metavar="nome", help="nome da fila")
     rc.add_argument("--board", required=True, metavar="ARQUIVO",
                     help="JSON/YAML que o atlassian-expert produziu: lista de "
                          "{key, status}, ou {cards: [...], missing: [...]}. "
@@ -4037,8 +4088,10 @@ def main(argv=None):
     rc.add_argument("--apply", action="store_true", dest="apply_changes",
                     help="grava os status reconciliados no plano. Nunca fecha "
                          "`human_pending` e nunca anexa card novo")
-    rc.add_argument("--repo", default=".")
-    rc.add_argument("--json", action="store_true", dest="as_json")
+    rc.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
+    rc.add_argument("--json", action="store_true", dest="as_json",
+                help="saída em JSON, para código")
 
     ld = sub.add_parser("landed", aliases=["aterrissados"],
                         help="cards em revisão com prova PROVEN, aceite "
@@ -4048,15 +4101,17 @@ def main(argv=None):
     ld.add_argument("--config", help="board-flow.yaml a usar (default: o do repo)")
     ld.add_argument("--into", help="ref de integração (default: origin/HEAD, "
                                    "origin/main ou main)")
-    ld.add_argument("--repo", default=".")
-    ld.add_argument("--json", action="store_true", dest="as_json")
+    ld.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
+    ld.add_argument("--json", action="store_true", dest="as_json",
+                help="saída em JSON, para código")
 
     ad = sub.add_parser("add",
                         help="acrescenta UM item a uma fila existente, sem "
                              "reescrever os outros")
-    ad.add_argument("name", metavar="nome")
-    ad.add_argument("id")
-    ad.add_argument("--title", required=True)
+    ad.add_argument("name", metavar="nome", help="nome da fila")
+    ad.add_argument("id", help="id do item novo (chave do Jira ou id livre)")
+    ad.add_argument("--title", required=True, metavar="TÍTULO", help="título do item")
     ad.add_argument("--why", help="obrigatório com --before; sem "
                                   "--before, vira o `why` do item com a "
                                   "frase 'ainda não priorizado' anexada")
@@ -4067,34 +4122,42 @@ def main(argv=None):
     ad.add_argument("--no-commit", action="store_true", dest="no_commit",
                     help="grava a fila sem commitar (por default o `add` "
                          "commita só a fila no mesmo passo)")
-    ad.add_argument("--repo", default=".")
+    ad.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
 
     od = sub.add_parser("order", aliases=["ordena"],
                         help="ordena uma lista de chaves do Jira pela ordem "
                              "da fila")
-    od.add_argument("name", metavar="nome")
+    od.add_argument("name", metavar="nome", help="nome da fila")
     od.add_argument("--keys", required=True, metavar="K1,K2,...",
                     help="chaves na ordem do Jira; as que são item do plano "
                          "voltam na ordem da fila, as outras depois, "
                          "marcadas `fora_do_plano`")
-    od.add_argument("--repo", default=".")
-    od.add_argument("--json", action="store_true", dest="as_json")
+    od.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
+    od.add_argument("--json", action="store_true", dest="as_json",
+                help="saída em JSON, para código")
 
     dv = sub.add_parser("divergence", aliases=["divergencia"],
                         help="lista (sem corrigir) a fila × o quadro × o "
                              "BACKLOG.md")
-    dv.add_argument("name", metavar="nome")
+    dv.add_argument("name", metavar="nome", help="nome da fila")
     dv.add_argument("--board", metavar="ARQUIVO",
                     help="mesmo formato do `reconcile`. Sem ele, "
                          "cards_sem_item e itens_com_card_done saem vazios")
     dv.add_argument("--backlog", metavar="ARQUIVO",
                     help="o BACKLOG.md a varrer. Sem ele, secoes_sem_plano e "
                          "plano_inexistente saem vazios")
-    dv.add_argument("--repo", default=".")
-    dv.add_argument("--json", action="store_true", dest="as_json")
+    dv.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
+    dv.add_argument("--json", action="store_true", dest="as_json",
+                help="saída em JSON, para código")
 
-    w = sub.add_parser("write", help="grava a fila")
-    w.add_argument("name", metavar="nome")
+    w = sub.add_parser("write",
+                       help="grava a fila a partir de --items, --from-spec, "
+                            "--from-epic ou --from-triage; recusa `why` vazio, id "
+                            "duplicado, blocked_by fantasma e ciclo")
+    w.add_argument("name", metavar="nome", help="nome da fila")
     w.add_argument("--items",
                    help="arquivo JSON/YAML com a lista de itens, ou '-' para stdin")
     w.add_argument("--from-spec", metavar="ARQUIVO",
@@ -4108,9 +4171,11 @@ def main(argv=None):
                         "um por frase de \"What it crosses\"; pede --cycle")
     w.add_argument("--cycle", "--ciclo", dest="cycle", type=int, metavar="N",
                    help="o ciclo da escada de valor que vira fila (com --from-epic)")
-    w.add_argument("--source", help="de onde as demandas vieram")
+    w.add_argument("--source", metavar="TEXTO",
+                   help="de onde as demandas vieram, gravado no cabeçalho")
     w.add_argument("--when", "--quando", dest="when", metavar="QUANDO", help="data a registrar no cabeçalho (YYYY-MM-DD)")
-    w.add_argument("--repo", default=".")
+    w.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
     w.add_argument("--on-missing", choices=("refuse", "keep", "drop"),
                    default="refuse",
                    help="o que fazer com item do disco que a lista nova não cita")
@@ -4118,6 +4183,9 @@ def main(argv=None):
                    help="imprime o arquivo que seria gravado, sem gravar")
 
     a = ap.parse_args(argv)
+    if not a.cmd:
+        ap.print_help(sys.stderr)
+        return 2
     a.cmd = {"responde": "answer", "ordena": "order",
              "divergencia": "divergence"}.get(a.cmd, a.cmd)
 

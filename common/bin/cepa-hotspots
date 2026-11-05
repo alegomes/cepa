@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-hotspots — measure a repository's registry files.
+"""cepa-hotspots — mede os arquivos-registro de um repositório.
 
 Component 2 of the "parallel batch planner" (docs/spec/planejador-de-lotes-
 paralelos.md). "Registry file" (arquivo-cartório) = a file that aggregates a
@@ -142,13 +142,42 @@ def measure(repo: Path, ref: str, min_pairs: int):
 def main():
     ap = argparse.ArgumentParser(
         prog="cepa-hotspots",
-        description="Mede os arquivos-cartório de um repo refazendo fusões do histórico.")
-    ap.add_argument("repo", help="caminho do repositório git")
-    ap.add_argument("--ref", default="HEAD", help="ref cujo histórico é varrido (default: HEAD)")
-    ap.add_argument("--min-pairs", type=int, default=DEFAULT_MIN_PAIRS,
-                     help=f"mínimo de pares para medir em vez de recusar (default: {DEFAULT_MIN_PAIRS})")
-    ap.add_argument("--limit", type=int, default=None, help="devolve só os N primeiros")
-    ap.add_argument("--json", action="store_true")
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Mede os arquivos-cartório de um repo refazendo fusões do histórico.\n"
+            "\n"
+            "Arquivo-cartório é o que agrega uma contribuição de quase toda demanda,\n"
+            "então quase toda demanda escreve nele (openapi.yaml, docs/pendencias.md).\n"
+            "É o que o planejador de ondas precisa conhecer para declarar superfícies\n"
+            "disjuntas (campo `cartorios:` do plan.yaml, conferido por cepa-dor).\n"
+            "\n"
+            "Método: refaz em memória, com `git merge-tree`, cada par de merges reais\n"
+            "do histórico, sem tocar a árvore de trabalho. Só conta o par em que os\n"
+            "dois lados tocaram ao menos um arquivo em comum. Cada arquivo que sai em\n"
+            "conflito num par ganha um ponto; o ranking é esse total, decrescente.\n"
+            "Sem histórico suficiente, devolve lista vazia e diz por quê: nunca uma\n"
+            "heurística disfarçada de medição."),
+        epilog=(
+            "exemplos:\n"
+            "  cepa-hotspots ../wego-assinatura-backend\n"
+            "  cepa-hotspots . --ref origin/main --limit 10\n"
+            "  cepa-hotspots . --min-pairs 3 --json\n"
+            "\n"
+            "saída: 0 = lista produzida (mesmo vazia, por falta de conflito real)\n"
+            "       1 = histórico insuficiente (menos pares que --min-pairs)\n"
+            "       2 = erro (repo inexistente, não é git, git falhou)"))
+    ap.add_argument("repo", help="caminho do repositório git a medir")
+    ap.add_argument("--ref", default="HEAD", metavar="REF",
+                    help="ref cujo histórico é varrido (default: HEAD)")
+    ap.add_argument("--min-pairs", type=int, default=DEFAULT_MIN_PAIRS, metavar="N",
+                    help=f"mínimo de pares com arquivo em comum para medir em vez de "
+                         f"recusar (default: {DEFAULT_MIN_PAIRS})")
+    ap.add_argument("--limit", type=int, default=None, metavar="N",
+                    help="devolve só os N primeiros do ranking (default: todos)")
+    ap.add_argument("--json", action="store_true", help="saída em JSON, para código")
+    if len(sys.argv) == 1:
+        ap.print_help(sys.stderr)
+        return 2
     args = ap.parse_args()
 
     repo = Path(args.repo)

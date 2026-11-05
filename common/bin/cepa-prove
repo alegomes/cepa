@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-prove — proves the Review column for a TIME WINDOW, one card per subprocess.
+"""cepa-prove — prova a coluna Review por uma JANELA DE TEMPO, um card por subprocesso.
 
 ## Why it exists
 
@@ -315,14 +315,37 @@ def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     ap = argparse.ArgumentParser(
         prog="cepa-prove",
-        description="prova a coluna Review do Jira por uma janela de tempo, "
-                    "um card por subprocesso (/board-flow:prove-drain --max 1)")
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Prova a coluna Review do Jira por uma JANELA DE TEMPO, um card por\n"
+            "subprocesso (/board-flow:prove-drain --max 1).\n"
+            "\n"
+            "Tem a forma do cepa-until: a cada rodada dispara um `claude -p` novo, com\n"
+            "contexto limpo, até a janela fechar ou a coluna esvaziar. Não fala com\n"
+            "o Jira nem sabe o que é um card: quem reserva, prova e roteia o veredito\n"
+            "é o prove-drain + atlassian-expert. Este supervisor é a fiação em volta:\n"
+            "relógio, disjuntor, pausa de cota, log, e duas coisas só ele faz: lembrar\n"
+            "os cards já tratados (repassados como --skip) e ler o desfecho do disco\n"
+            "(docs/proof/<KEY>.yaml), não da prosa do agente.\n"
+            "\n"
+            "Cada artefato é commitado na branch ATUAL depois da rodada\n"
+            "(`proof: <KEY> <VERDICT>`); de manhã não há nada a mesclar. O corte\n"
+            "acontece entre rodadas, nunca no meio de uma."),
+        epilog=(
+            "exemplos:\n"
+            "  cepa-prove --for 3h                   # ou --until 07:00\n"
+            "  cepa-prove --for 3h --dry-run         # o plano do run, sem executar\n"
+            "  cepa-prove --for 3h --scope 'labels = squad-a'\n"
+            "  cepa-prove --for 3h --max 4           # no máximo 4 cards, mesmo sobrando tempo\n"
+            "\n"
+            "o registro do run fica em .claude/prove/<run>.jsonl, um evento por rodada e por card."))
     window = ap.add_mutually_exclusive_group(required=True)
     window.add_argument("--for", dest="duration", metavar="3h",
                         help="quanto tempo rodar (ex.: 3h, 90m)")
     window.add_argument("--until", dest="until_at", metavar="07:00",
                         help="até que horas rodar (próximo HH:MM)")
-    ap.add_argument("--repo", default=".")
+    ap.add_argument("--repo", default=".", metavar="DIR",
+                help="raiz do repositório (default: o diretório atual)")
     ap.add_argument("--max", type=int, default=0, metavar="N",
                     help="teto de cards com veredito nesta janela (default: "
                          "sem teto, só o relógio)")
@@ -352,6 +375,9 @@ def main(argv=None):
                     help="começa mesmo com a árvore suja fora de docs/proof/")
     ap.add_argument("--dry-run", action="store_true", dest="dry",
                     help="mostra o plano do run e sai sem executar nada")
+    if not argv:
+        ap.print_help(sys.stderr)
+        return 2
     a = ap.parse_args(argv)
 
     repo = Path(a.repo).resolve()
