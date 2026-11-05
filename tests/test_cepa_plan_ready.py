@@ -15,7 +15,10 @@ Against the real CLI, in a temporary git repo with three queues:
   - a dependency on a ready item IS ready, and the line names it
   - a queue with nothing ready is one line with what holds it
   - a waves plan is not a queue and does not appear
-  - a broken queue is warned on stderr BY NAME and skipped, exit stays 0
+  - a broken queue is warned on stderr BY NAME and skipped, exit stays 0;
+    every queue broken is still exit 0 (there IS a queue, it is sick)
+  - a build_batch note (dropped dependency) is a plain warning, never
+    labelled unreadable; a waves plan says nothing on stderr
   - a queue stuck only on a pending dependency says "nada pronto"
   - `adiados` names every deferred item with build_batch's reason
   - --json carries `filas`, `prontos`, `total_prontos`
@@ -106,6 +109,8 @@ def main():
         root = build(tmp)
         r = run(root, "ready", "--json")
         check("ready --json exit 0", r.returncode == 0, r.stderr)
+        check("readable queues and a waves plan: nothing on stderr",
+              r.stderr == "", r.stderr)
         data = json.loads(r.stdout)
         names = [q["queue"] for q in data["filas"]]
         check("every single-track queue listed, alphabetical",
@@ -176,7 +181,22 @@ def main():
               [q["queue"] for q in data["filas"]] == ["alpha", "beta", "delta"],
               [q["queue"] for q in data["filas"]])
         check("broken queue: warned on stderr, by name",
-              "aviso: fila gamma ilegível" in r.stderr, r.stderr)
+              "aviso: fila gamma ilegível, fora da lista:" in r.stderr, r.stderr)
+
+        # A build_batch note about a LISTED queue is not "ilegível".
+        write_queue(root, "epsilon", [
+            item("E-1", status="dropped"),
+            item("E-2", blocked_by=["E-1"]),
+        ])
+        r = run(root, "ready", "--json")
+        data = json.loads(r.stdout)
+        eps = next(q for q in data["filas"] if q["queue"] == "epsilon")
+        check("dependency on a dropped item: listed as ready, with a warning",
+              [p["id"] for p in eps["prontos"]] == ["E-2"]
+              and "aviso: fila epsilon: E-2 depende de E-1, que está `dropped`"
+              in r.stderr, r.stderr)
+        check("that warning is not labelled unreadable",
+              "epsilon ilegível" not in r.stderr, r.stderr)
 
         # Reserved by a live session: not ready. Orphan reservation: ready.
         beta_file = root / ".claude" / "queues" / "beta" / "queue.yaml"
@@ -210,6 +230,17 @@ def main():
         r = run(root, "ready")
         check("no queue at all: exit 2 and says who writes one",
               r.returncode == 2 and "/common:queue" in r.stderr, r.stderr)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = git_repo(tmp)
+        d = root / ".claude" / "queues" / "only"
+        d.mkdir(parents=True)
+        (d / "queue.yaml").write_text("items: [\n", encoding="utf-8")
+        r = run(root, "ready")
+        check("every queue unreadable: exit 0, the warning, no 'nenhuma fila'",
+              r.returncode == 0 and "aviso: fila only ilegível" in r.stderr
+              and "nenhuma fila" not in r.stderr
+              and "0 filas · 0 itens" in r.stdout, r.stderr + r.stdout)
 
     print()
     if FAILURES:

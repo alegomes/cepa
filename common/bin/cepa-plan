@@ -1575,14 +1575,19 @@ def cmd_status(root, name, status_filter, as_json, item_id=None, via_show=False)
 
 
 def ready_of_queue(root, name, target=None):
-    """(summary, warnings) of one queue for `ready`, or (None, [error]).
-    A waves plan is not a queue: (None, []) — nothing to list, nothing to say."""
+    """(summary, warnings, error) of one queue for `ready`.
+
+    `error` is set, and the rest empty, when the file cannot be read: that
+    queue is OUT of the list. `warnings` are build_batch's notes about a
+    queue that IS in the list (orphan reservation, dependency on a dropped
+    item). A waves plan is not a queue: (None, [], None) — nothing to list,
+    nothing to say."""
     target = target or queue_path(root, name)
     plan, error = read_plan(target)
     if error:
-        return None, [error]
+        return None, [], error
     if not isinstance(plan, dict) or mode_of(plan) != MODE:
-        return None, []
+        return None, [], None
     items = [it for it in (plan.get("items") or []) if isinstance(it, dict)]
     batch, _stop, warnings, deferred = build_batch(items, 10 ** 6)
     pos = {str(it.get("id")): i for i, it in enumerate(items, 1)}
@@ -1605,23 +1610,26 @@ def ready_of_queue(root, name, target=None):
                            if status_of(it) not in ("done", "dropped")),
             "esperam_dono": waiting,
             "adiados": [{"id": d["id"], "reason": d["reason"]} for d in deferred],
-            }, warnings
+            }, warnings, None
 
 
 def cmd_ready(root, as_json):
     # Walks the files, not `single_track_queues`: that helper drops an
     # unreadable queue in silence, and a queue that vanishes from this list
     # without a word is exactly what the owner must hear about.
-    queues, warned = [], 0
+    queues, unreadable = [], 0
     for name, qfile in qp.queue_files(root):
-        summary, warnings = ready_of_queue(root, name, qfile)
-        for w in warnings:
-            warned += 1
-            print(f"aviso: fila {name} ilegível, fora da lista: {w}",
+        summary, warnings, error = ready_of_queue(root, name, qfile)
+        if error:
+            unreadable += 1
+            print(f"aviso: fila {name} ilegível, fora da lista: {error}",
                   file=sys.stderr)
+            continue
+        for w in warnings:
+            print(f"aviso: fila {name}: {w}", file=sys.stderr)
         if summary is not None:
             queues.append(summary)
-    if not queues and not warned:
+    if not queues and not unreadable:
         print(f"nenhuma fila em {root / qp.NEW_DIR} — quem escreve é o "
               "/common:queue", file=sys.stderr)
         return 2
