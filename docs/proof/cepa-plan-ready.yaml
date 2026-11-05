@@ -1,0 +1,40 @@
+schema_version: 2
+card: cepa-plan-ready
+verdict: proven
+reviewed_at: 2026-11-05T20:00:00-03:00
+base_commit: 7dbed17
+head_commit: 141064e
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-plan :: ready_of_queue, cmd_ready, parser rd, dispatch"
+      module: common
+      external_observable: true
+      substituted_by_double: null   # the test runs the real CLI by subprocess; no double
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                   # Python CLI, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "run: python3 tests/test_cepa_plan_ready.py at 141064e -> 32 ok, exit 0 (green first)"
+        - "run: base 7dbed17 (common/bin/cepa-plan checked out from base, HEAD test) -> exit 1, subcommand absent (RED at base)"
+        - "run: 39 perturbations inside throwaway worktree, 38 RED: drop blocked_by filter; reverse queue walk; exit 2->0; no exit 2; exit 2 even when unreadable; exit 2 when unreadable too; fila fechada text and branch; esperam voce text; nada pronto text and branch; skip ilegivel warning; ilegivel text changed; ilegivel to stdout; unreadable listed anyway; skip build_batch warnings; build_batch warning mislabeled ilegivel; build_batch warning to stdout; warnings dropped from summary return; waves plan warned; waves mode check removed; total_prontos+1; total_prontos key renamed; posicao=0; pendentes/abertos count all; esperam_dono without blocked / without human_pending; ceiling 10**6->1; espera line removed; why dropped; header counts; adiados dropped; adiados reason dropped; dispatch removed; no-queue message without /common:queue"
+        - "run: 1 GREEN perturbation = removing the 'continue' after the unreadable-queue warning. Equivalent mutant: on error ready_of_queue returns summary None and empty warnings, so the loop appends nothing and prints nothing more either way. Not a behavior gap"
+        - "All earlier survivors (stderr warning, nada pronto line, adiados, exit-2-when-unreadable rule, waves quiet, build_batch warning label) are now RED"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool; every changed branch of ready_of_queue and cmd_ready was perturbed and killed (see l3), except the equivalent 'continue' mutant"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff adds a read-only listing; its only input is queue YAML already validated by read_plan, and no input-bearing module (api-rest) is touched"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type is not Bug. Informational: at 7dbed17 the covering test is RED (exit 1, subcommand absent)"
+routing_reason: "Every changed behavior of `cepa-plan ready` goes RED when broken against the real CLI; 38 of 39 perturbations killed, the 39th is equivalent. Test RED at base, GREEN at head. PROVEN."

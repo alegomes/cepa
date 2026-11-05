@@ -1,0 +1,22 @@
+schema_version: 1
+card: cepa-plan-ready
+status: complete
+audited_at: 2026-11-05T00:00:00-03:00
+audited_head: 141064e
+criteria:
+  - id: AC1
+    text: "Eu quero um comando cepa que liste os itens prontos para serem construídos de todas as filas disponíveis"
+    altitude: cli
+    surface: "`cepa plan ready` (launcher common/bin/cepa -> cepa-plan ready), texto e --json, em todas as filas single-track do repo"
+    demonstrated_by:
+      test: "tests/test_cepa_plan_ready.py (subprocess de `sh common/bin/cepa plan ready --json --repo <tmp>` e de cepa-plan, em repo git temporario com 5 filas)"
+      layer: "cli, incluindo o launcher `cepa`"
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_plan_ready.py   (HEAD 141064e)
+          32 linhas 'ok', 0 'FAIL' (inclui launcher exit 0 e mesmas filas alpha/beta/delta/gamma,
+          aviso em stderr por nome so para erro de leitura (aviso do build_batch nao e "ilegivel"), todas as filas ilegiveis = exit 0, linha "nada pronto", campo adiados)
+          ✓ cepa-plan ready
+        Manual: sh common/bin/cepa plan ready -> exit 0, "7 filas · 6 itens"
+    verdict: complete
+    gap: null

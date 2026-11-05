@@ -252,9 +252,13 @@ and hands the list here; `/common:drain-plan` and `cepa-until` execute it;
 |---|---|
 | Sources (read only, return JSON) | `from-spec <spec.md>`, `from-epic <epic.md> --cycle N`, `from-triage <handoff.json\|->` |
 | Writing | `write <name> (--items F \| --from-spec F \| --from-epic F --cycle N \| --from-triage F) [--source ...] [--when YYYY-MM-DD] [--on-missing refuse\|keep\|drop] [--dry-run]`, `add <name> <id> --title ... [--before ID --why ...] [--blocked-by ID,ID]`, `migrate [<name> \| --all] [--dry-run]`, `check-name <name>`, `validate <file>` |
-| Reading | `queue <name> [--max N]`, `status [<name>] [--status S]`, `show <name>`, `epics [--brief]`, `promote <name> [--when ...]`, `order <name> --keys K1,K2` |
+| Reading | `queue <name> [--max N]`, `ready`, `status [<name>] [--status S]`, `show <name>`, `epics [--brief]`, `promote <name> [--when ...]`, `order <name> --keys K1,K2` |
 | One item's cycle | `start <name> <id> [--commit]`, `finish <name> <id> --status done\|blocked\|pending --evidence ... [--human-pending ROUTE] [--question ...] [--pedido\|--pronto\|--impede\|--se-sim\|--se-nao TEXT] [--commit]`, `answer <name> <id> --answer ... [--keep \| --drop] [--force] [--author ...] [--no-commit]` |
 | Against the Jira board | `reconcile <name> --board FILE [--apply]`, `landed --board FILE [--into REF]`, `divergence <name> [--board FILE] [--backlog FILE]` |
+
+`ready` is the repo-wide view: the items a run would take now, across
+every single-track queue, each in its recorded order; `status` answers
+the same for one queue.
 
 What it refuses, by design: an empty `why`, a duplicate id, a `blocked_by`
 pointing at a ghost item, a blocking cycle, writing a queue over a waves plan
