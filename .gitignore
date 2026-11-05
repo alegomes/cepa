@@ -45,3 +45,5 @@ compass/.claude-plugin/types/
 
 # Saída bruta dos subprocessos de cada run do cepa-until (passa de 10 MB por run); o .jsonl e o .review.md ficam.
 .claude/queues/*/until/*.log
+# Estado vivo de cada run do cepa-until (pid, heartbeat, item corrente); nunca foi versionado.
+.claude/queues/*/until/*.estado.json

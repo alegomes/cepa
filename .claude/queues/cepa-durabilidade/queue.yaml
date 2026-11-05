@@ -24,9 +24,27 @@ items:
     em `item_end`, `heartbeat` em `estado.json`, órfã por idade do heartbeat, evento
     `item_pulado`; aceite: todo `item_end` de run novo traz `session_id` e `motivo_fim`,
     verificado pelo `cepa-until-digest`'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch da noite until/2026-11-05-1634: 6d9064a (implementação),
+    b819240 (correções da revisão: contexto exige falha, end_reason_of/tick nunca
+    derrubam o run, heartbeat com fuso), 0236edb (5 testes pedidos pelos gates),
+    mais o commit dos artefatos dos gates. Arquivos: common/bin/cepa-until (--session-id
+    por tentativa, session_id em item_start/item_end, motivo_fim via end_reason_of
+    com precedência folga>sinal>cota>rede>contexto>hook>ok>desconhecido, heartbeat
+    em estado.json via on_tick em wait_for_child/wait_until/wait_for_network, evento
+    item_pulado, run_start versao_registro 2), common/bin/cepa-plan (reservation_of(it,
+    root): órfã por idade do heartbeat do estado.json para reserva em outro host,
+    fallback 24h; 4 chamadores atualizados), common/bin/cepa-until-digest (mostra
+    sessão/fim e avisa item_end sem os campos em registro v2), docs/cepa-until.md,
+    tests/test_cepa_until_session.py (novo), tests/test_cepa_until_digest.py, tests/test_cepa_plan_single_track.py.
+    Gates: pair-reviewer OK-WITH-NOTES (notas aplicadas); completion-auditor COMPLETE
+    (.claude/acceptance/DUR-1.yaml); proof-reviewer PROVEN (docs/proof/DUR-1.yaml,
+    25 perturbações, todas vermelhas). Build completo: delegado ao supervisor (branch
+    da noite). Fora do escopo: folga/rede/sinal/hook só testados em end_reason_of,
+    não ponta a ponta; intervalo da sonda de rede passa a ser min(PROBE_INTERVAL,
+    HEARTBEAT_INTERVAL).'
 - id: DUR-2
   title: '`cepa-plan finish` exige worktree limpa, grava o SHA e recusa chamador
     que não é o dono do item'
@@ -35,9 +53,30 @@ items:
     aceite: teste com dois `finish` preserva a evidência do primeiro e `done` sem
     commit é recusado; fecha o item do BACKLOG ''antecessor done sem merge'' como
     superado'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch da noite until/2026-11-05-1634: 47ec0f3 (implementação:
+    finish recusa item terminal e chamador que não é o dono, grava finish_recusado
+    (últimas 5) no item, done exige árvore limpa (fila, .yaml.bak e registros em
+    until/ tolerados) e grava head_commit; --supervisor pula só as regras de terminal/dono
+    e o finish_item do cepa-until o passa; start grava session_root como claimed_by.cwd;
+    current_owner prefere a entrada que casa CLAUDE_SESSION_ID; BACKLOG item 3 de
+    ''antecessor done sem merge'' fechado como superado; reconcile não tinha lógica
+    de ancestralidade a remover; common 3.2.0->3.3.0), a92de77 (6 testes dos furos
+    da prova), mais o commit dos artefatos. Arquivos: common/bin/cepa-plan (finish_gate,
+    dirty_paths, record_refusal, cmd_finish, cmd_start, current_owner, argparse),
+    common/bin/cepa-until (finish_item), common/plan-schema.yaml, common/commands/drain-plan.md,
+    BACKLOG.md, tests/test_cepa_plan_finish_owner.py (novo), tests/test_cepa_until_decide.py,
+    test_green_without_test.py, test_validation_owed_gate.py, test_common_drain_plan.py.
+    Gates: pair-reviewer NEEDS-FIX (bug de subdiretório) corrigido, depois OK; completion-auditor
+    COMPLETE (.claude/acceptance/DUR-2.yaml); proof-reviewer UNPROVEN (5 furos)
+    -> PROVEN em a92de77 (docs/proof/DUR-2.yaml). Build completo: delegado ao supervisor
+    (branch da noite). Fora do escopo: recusa por dono diferente não é distinguida
+    nos testes do cepa-until (só no cepa-plan direto); record_refusal não teve perturbação
+    própria; reservas antigas com claimed_by.cwd=''.'' comparam de forma imprecisa
+    no caminho sem sessão registrada.'
+  head_commit: 6a355788be6ed54fd57de8c3272ff140e6f3339a
 - id: DUR-3
   title: '`cepa-until` reinstala os hooks no repo cepa após build verde do item
     que tocou hooks/ ou bin/'
@@ -45,17 +84,60 @@ items:
     que DUR-1 introduz; grava `hooks_reinstalados` no .jsonl; exceção declarada
     em docs/harness-ops.md; a prova until-avisa-hook-so-vale-apos-reinstalar.yaml
     passa a cobrir ''repo não é o cepa: avisa, não troca'''
-  status: pending
+  status: done
   blocked_by:
   - DUR-1
-  human_pending: null
+  human_pending: Aceitar ou recusar a dispensa de teste do orçamento de tempo do
+    rollback (só importa se a janela da noite acabar durante um install.sh de mais
+    de 120 s)
+  evidence: 'Commits na branch da noite until/2026-11-05-1634: ef90574 (implementação:
+    changed_hooks também casa <plugin>/bin/**; cepa_repo, plugin_cache_dir (override
+    CEPA_PLUGIN_CACHE_DIR só para testes), installed_hooks_sha (digest de conteúdo
+    de hooks/ e bin/ da versão mais nova de cada plugin no cache); run_verify com
+    label; item_start grava hooks_sha; após build verde no repo cepa com hooks/bin
+    tocados roda sh bin/install.sh --clean a partir da worktree, grava hooks_reinstalados
+    (sha_antes/sha_depois/ok), exclui os arquivos do aviso hook_so_apos_reinstalar;
+    falha -> bin/install.sh --rollback automático e reinstalacao_desfeita; rollback
+    falho -> item segue done e run termina reinstalacao-falhou; fica_com_voce reinstalar-plugin
+    com texto novo e reinstalacao-falhou; digest exclui trechos reinstall/rollback
+    das rodadas, mostra hooks <sha> por rodada e ATENÇÃO em reinstalação falha;
+    common 3.3.0->3.4.0; docs/cepa-until.md e docs/harness-ops.md), 174993f (correções
+    do pair-reviewer: reinstall_head separa hooks commitados depois da última reinstalação
+    no texto do fim; REINSTALL_MIN_SEC=120 com evento reinstalacao_adiada e max(left,120)
+    no rollback; testes do rollback falho e do digest), 4f143f7 (testes para as
+    perturbações sobreviventes P02-P11, P21, P26, P32), fafb7af (artefatos). Arquivos:
+    common/bin/cepa-until, common/bin/cepa-until-digest, common/.claude-plugin/plugin.json,
+    docs/cepa-until.md, docs/harness-ops.md, tests/test_cepa_until_hook_reinstall.py,
+    tests/test_cepa_until_digest.py. Gates: pair-reviewer NEEDS-FIX (texto do fim
+    exagerava o instalado; left quase zero no fim da janela) corrigido em 174993f;
+    completion-auditor COMPLETE (.claude/acceptance/DUR-3.yaml, 6 critérios pinados
+    ao CLI real); proof-reviewer UNPROVEN (13 sobreviventes) -> NEEDS-HUMAN em 4f143f7
+    (docs/proof/DUR-3.yaml): 10 ficaram vermelhos, P09 e P14 equivalentes, P33 (max(left,120)
+    no rollback) resíduo declarado e marcado skipped; aceitar é dispensa do dono
+    (rota humana aberta). Build completo: delegado ao supervisor (branch da noite).
+    Fora do escopo: install.sh real nunca roda nos testes (fake install.sh + CEPA_PLUGIN_CACHE_DIR);
+    o marketplace fica registrado na worktree até o bin/install.sh da manhã no clone
+    principal; duas reinstalações na mesma noite deixam no .prev só a anterior à
+    última; cepa-until aterrissar não reinstala por conta própria (follow-up possível).
+    O supervisor desta rodada é o código antigo, então DUR-3 não dispara reinstalação
+    nesta noite.'
+  head_commit: fafb7af9e14fa023c1294213ab05f85de8b65589
+  owner_question: 'Aceito a dispensa de testar o tempo reservado ao rollback? Recomendo
+    sim: caso raro, e simular exigiria um install de mais de dois minutos'
 - id: DUR-4
   title: Módulo leitor dos cinco depósitos de estado, importado por next, doctor,
     until-review e whereami
   why: item 3 de O1, decisão X3 do dono (heartbeat e leitor); último porque sem
     o heartbeat de DUR-1 responderia 'rodando' a run morto; nasce como módulo com
     teste que falha ao aparecer arquivo de estado desconhecido em .claude/
-  status: pending
+  status: in_progress
   blocked_by:
   - DUR-1
   human_pending: null
+  claimed_by:
+    session_id: a1e3cda8-34e4-4e61-a9e1-43ad5e492e38
+    pid: 70634
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-until-2026-11-05-1634
+    branch: until/2026-11-05-1634
+    started_at: '2026-11-05T23:14:59+00:00'
