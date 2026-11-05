@@ -188,6 +188,22 @@ warns right after the item, the record gains `hook_so_apos_reinstalar`, and the 
 asks for `reinstalar-plugin` under "Fica com você": it takes effect after `aterrissar` and
 `bin/install.sh`.
 
+Exception, in the cepa repo only (`.claude-plugin/marketplace.json` named `cepa` plus
+`bin/install.sh`; owner decision X4, DUR-3): when an item closes `done`, its full build is
+green, and it touched `<plugin>/hooks/**` or `<plugin>/bin/**` (both run from the cache),
+the supervisor runs `sh bin/install.sh --clean` from the night worktree. `--clean` moves the
+current cache to `<cache>.prev`, the point `bin/install.sh --rollback` returns to. The record
+gains `hooks_reinstalados` (`sha_antes`, `sha_depois`: a content digest of the installed
+`hooks/` and `bin/`, since the cache is not a git repo) and every `item_start` carries
+`hooks_sha`, the digest in force. If the install fails the supervisor runs
+`bin/install.sh --rollback` by itself and records `reinstalacao_desfeita`; the item stays
+`done` and the night goes on. If not even the rollback gives the cache back, the run ends
+with `reinstalacao-falhou`. Installing from the worktree re-points the marketplace
+registration to the worktree path: after `aterrissar`, run `bin/install.sh` from the main
+clone so it points back. Open sessions keep the old hooks in memory until restarted. Two
+reinstalls in one night keep only the previous cache in `.prev`. Without `--verify` there is
+no build, so no reinstall: only the warning above. In any other repo nothing changes.
+
 ## After the end
 
 With the run over, a final `claude -p "/common:until-review <run>"` reads the
@@ -203,6 +219,7 @@ Usage:
     cepa-until fecha-morto my-queue/<run> --yes  # closes a dead supervisor's run
 """
 
+import hashlib
 import json
 import os
 import re
@@ -1480,13 +1497,15 @@ def repair_link(repo, tree, branch):
 
 
 def changed_hooks(tree, since):
-    """Plugin hooks that the night branch changed since `since`.
+    """Plugin hooks and `bin/` files that the night branch changed since `since`.
 
     Hooks run from the plugin installed in the cache, which is a copy of the clone at the
     last install, and not from the night branch. In run 2026-09-28-1146 items
     1 and 2 fixed `no-background-build` and `bash-path-lock`, and the next
     4 rounds were still blocked by the old versions with nothing
-    in the run saying so. A hook is a file under `<plugin>/hooks/`, where `<plugin>`
+    in the run saying so. The plugin's `bin/` runs from the same cache (commands
+    reference `${CLAUDE_PLUGIN_ROOT}/bin/...`), so it counts too. A hook is a file under
+    `<plugin>/hooks/` and a tool one under `<plugin>/bin/`, where `<plugin>`
     has `.claude-plugin/plugin.json`; in a repo that is not a plugin the list
     always comes out empty."""
     if not since:
@@ -1497,11 +1516,70 @@ def changed_hooks(tree, since):
     found = []
     for line in output.splitlines():
         parts = line.strip().split("/")
-        if (len(parts) >= 3 and parts[1] == "hooks"
+        if (len(parts) >= 3 and parts[1] in ("hooks", "bin")
                 and (tree / parts[0] / ".claude-plugin" / "plugin.json")
                 .is_file()):
             found.append(line.strip())
     return found
+
+
+def cepa_repo(tree):
+    """True when `tree` is the cepa repo itself: `.claude-plugin/marketplace.json` named
+    `cepa` and a `bin/install.sh`. Only there the supervisor may reinstall the plugins."""
+    try:
+        data = json.loads((Path(tree) / ".claude-plugin" / "marketplace.json")
+                          .read_text(encoding="utf-8"))
+        return (isinstance(data, dict) and data.get("name") == "cepa"
+                and (Path(tree) / "bin" / "install.sh").is_file())
+    except (OSError, ValueError):
+        return False
+
+
+def plugin_cache_dir():
+    """Where Claude Code keeps the installed copy of the cepa plugins. The
+    `CEPA_PLUGIN_CACHE_DIR` override exists for the tests."""
+    return Path(os.environ.get("CEPA_PLUGIN_CACHE_DIR")
+                or Path.home() / ".claude/plugins/cache/cepa")
+
+
+def installed_hooks_sha():
+    """Content digest (12 hex chars) of the `hooks/` and `bin/` of the newest installed
+    version of each plugin in the cache, which is not a git repo. None when the cache
+    is missing, has no such files, or can't be read: it must not take the run down."""
+    try:
+        cache = plugin_cache_dir()
+        if not cache.is_dir():
+            return None
+
+        def version_key(d):
+            try:
+                return tuple(int(x) for x in d.name.split("."))
+            except ValueError:
+                return ()
+        digest = hashlib.sha256()
+        found = False
+        for plugin in sorted(p for p in cache.iterdir() if p.is_dir()):
+            versions = sorted((v for v in plugin.iterdir() if v.is_dir()),
+                              key=version_key)
+            if not versions:
+                continue
+            newest = versions[-1]
+            entries = []
+            for sub in ("hooks", "bin"):
+                base = newest / sub
+                if not base.is_dir():
+                    continue
+                for f in base.rglob("*"):
+                    if f.is_file() and "__pycache__" not in f.parts:
+                        entries.append((f.relative_to(newest).as_posix(), f))
+            for rel, f in sorted(entries):
+                digest.update(f"{plugin.name}/{rel}\0".encode("utf-8"))
+                digest.update(f.read_bytes())
+                digest.update(b"\0")
+                found = True
+        return digest.hexdigest()[:12] if found else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def close_empty_branch(repo, tree, branch, base):
@@ -1548,13 +1626,14 @@ def verify_command(repo, explicit, waived):
     return "", None
 
 
-def run_verify(command, tree, limit_sec, log, on_launch=None, on_tick=None):
+def run_verify(command, tree, limit_sec, log, on_launch=None, on_tick=None,
+               label="verify"):
     """Runs the full build on the night branch, with the output going to the run's `.log`.
     Returns (green, seconds, reason)."""
     start = time.monotonic()
     with open(log, "ab", buffering=0) as output:
         output.write(f"\n===== {datetime.now().isoformat(timespec='seconds')} "
-                    f"· verify · {command}\n".encode("utf-8"))
+                    f"· {label} · {command}\n".encode("utf-8"))
         try:
             proc = subprocess.Popen(command, shell=True, cwd=str(tree),
                                     stdout=output, stderr=subprocess.STDOUT,
@@ -3667,16 +3746,21 @@ def main(argv=None):
     # base is the clone's HEAD, and not the night's, so the inheritance counts: what
     # it brought is not in the installed plugin either.
     notified_hooks = []
+    # Reinstalled during the run (cepa repo): those files are in force, so no warning.
+    reinstalled_files = set()
+    reinstalls = []          # (id, files, sha_before, sha_after)
+    reinstall_failures = []  # (id, reason)
+    reinstall_broken = False
 
     def notify_hooks(origin):
         new_items = [f for f in changed_hooks(tree, clone_base)
-                 if f not in notified_hooks]
+                 if f not in notified_hooks and f not in reinstalled_files]
         if not new_items:
             return
         notified_hooks.extend(new_items)
         log_event({"evento": "hook_so_apos_reinstalar", "id": origin,
                   "arquivos": new_items})
-        step(f"{origin} mudou hook de plugin "
+        step(f"{origin} mudou hook ou bin de plugin "
               f"({', '.join(new_items)}): só passa a valer depois de aterrissar "
               "a branch da noite e rodar `bin/install.sh`. Até lá as "
               "rodadas desta noite seguem com a versão instalada")
@@ -3812,7 +3896,8 @@ def main(argv=None):
         log_event({"evento": "item_start", "id": ident, "title": item.get("title"),
                   "restante_seg": int(remaining.total_seconds()),
                   "tentativa": round_n, "twg_version": installed_twg_version(),
-                  "head": before, "session_id": session_id})
+                  "head": before, "session_id": session_id,
+                  "hooks_sha": installed_hooks_sha()})
 
         in_flight.update(id=ident, fase="item", tentativa=round_n,
                          session_id=session_id)
@@ -3924,6 +4009,50 @@ def main(argv=None):
                     unstable = True
             if green:
                 step(f"verde ({human(timedelta(seconds=verify_sec))})")
+                hook_files = (changed_hooks(tree, first[ident][0])
+                              if cepa_repo(tree) and ident in first else [])
+                if hook_files:
+                    sha_before = installed_hooks_sha()
+                    step(f"{ident} mudou hook/bin de plugin "
+                         f"({', '.join(hook_files)}): reinstalo os plugins "
+                         "(bin/install.sh --clean)")
+                    left = (deadline + slack - datetime.now()).total_seconds()
+                    in_flight["fase"] = "reinstall"
+                    inst_ok, inst_sec, inst_reason = run_verify(
+                        "sh bin/install.sh --clean", tree, left, log,
+                        on_launch=launched, on_tick=tick, label="reinstall")
+                    in_flight.pop("pid_filho", None)
+                    sha_after = installed_hooks_sha()
+                    inst_ok = inst_ok and sha_after is not None
+                    log_event({"evento": "hooks_reinstalados", "id": ident,
+                              "arquivos": hook_files, "sha_antes": sha_before,
+                              "sha_depois": sha_after, "ok": inst_ok,
+                              "segundos": int(inst_sec), "motivo": inst_reason})
+                    if inst_ok:
+                        step(f"hooks reinstalados: {sha_before} -> {sha_after}")
+                        reinstalls.append((ident, hook_files, sha_before,
+                                           sha_after))
+                        reinstalled_files.update(hook_files)
+                    else:
+                        why = inst_reason or "o cache ficou sem hooks/bin"
+                        step(f"a reinstalação falhou ({why}); rodo "
+                             "bin/install.sh --rollback")
+                        left = (deadline + slack - datetime.now()).total_seconds()
+                        rb_ok, _rb_sec, rb_reason = run_verify(
+                            "sh bin/install.sh --rollback", tree, left, log,
+                            on_launch=launched, on_tick=tick, label="rollback")
+                        in_flight.pop("pid_filho", None)
+                        restored = installed_hooks_sha()
+                        back_ok = restored == sha_before
+                        log_event({"evento": "reinstalacao_desfeita",
+                                  "id": ident, "ok": back_ok, "sha": restored,
+                                  "motivo": rb_reason or why})
+                        if back_ok:
+                            step(f"rollback devolveu o cache ({restored})")
+                            reinstall_failures.append((ident, why))
+                        else:
+                            reinstall_failures.append((ident, why))
+                            reinstall_broken = True
             else:
                 back = red_returns(ledger_dir, ident) + 1
                 since, n_before = first[ident]
@@ -4064,6 +4193,10 @@ def main(argv=None):
             outcome(ident, "done-sem-commit",
                      "`done` sem commit na branch da noite: procure o "
                      "trabalho em outra branch")
+        elif run_state == "done" and reinstall_broken:
+            outcome(ident, "entregue",
+                     "entregue, build verde; a reinstalação dos hooks falhou e "
+                     "o rollback não devolveu o cache")
         elif run_state == "done":
             outcome(ident, "entregue",
                      "entregue" + ("; build verde na 2ª vez (instável)"
@@ -4080,6 +4213,14 @@ def main(argv=None):
             outcome(ident, "em-andamento",
                      f"{n_commits} commit(s) sem fechar; a próxima tentativa "
                      "(ou o próximo run) parte daí")
+
+        if reinstall_broken:
+            end_reason = "reinstalacao-falhou"
+            end_detail = (f"a reinstalação dos hooks depois do {ident} falhou e "
+                          "`bin/install.sh --rollback` não devolveu o cache; "
+                          "rode `bin/install.sh --rollback` ou `/common:doctor` "
+                          "antes de seguir")
+            break
 
         # The red return counts as a consecutive failure (Revision 3, 4e): a
         # broken environment makes every build red, and without this each card
@@ -4380,12 +4521,28 @@ def main(argv=None):
     # Recomputed at the end, and not taken from `notified_hooks`: a warned hook
     # may have left the branch along with the red item that brought it.
     run_hooks = changed_hooks(tree, clone_base) if actions else []
-    if run_hooks:
+    if run_hooks and reinstalls:
+        last_id, _f, last_before, last_after = reinstalls[-1]
         stays.append({"id": "reinstalar-plugin", "texto": (
-            f"a branch da noite muda {len(run_hooks)} hook(s) de plugin "
+            f"a branch da noite muda {len(run_hooks)} hook(s)/bin de plugin "
+            f"({', '.join(run_hooks)}), e eles já foram instalados durante o "
+            f"run ({len(reinstalls)} reinstalação(ões); a última, depois do "
+            f"{last_id}: {last_before} -> {last_after}). Depois do `aterrissar`, "
+            "rode `bin/install.sh` a partir do clone principal, para o registro "
+            "do marketplace voltar a apontar para o clone. Sessões abertas "
+            "mantêm os hooks antigos na memória até reiniciarem. O caminho de "
+            "volta é `bin/install.sh --rollback`")})
+    elif run_hooks:
+        stays.append({"id": "reinstalar-plugin", "texto": (
+            f"a branch da noite muda {len(run_hooks)} hook(s)/bin de plugin "
             f"({', '.join(run_hooks)}), e nenhuma rodada desta noite "
             "rodou com eles: os hooks vêm do plugin instalado. Passam a valer "
             "depois do `aterrissar` e de `bin/install.sh`")})
+    for f_id, f_reason in reinstall_failures:
+        stays.append({"id": "reinstalacao-falhou", "texto": (
+            f"a reinstalação dos hooks depois do {f_id} falhou ({f_reason}). "
+            "Confira o cache com `/common:doctor`; `bin/install.sh --rollback` "
+            "devolve a versão anterior")})
     if actions:
         print("\n   " + SCREEN.c("negrito", "Ações:"))
         for i, action in enumerate(actions, 1):

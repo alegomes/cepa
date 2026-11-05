@@ -172,6 +172,26 @@ no longer needed. `sim` always means "back to the queue", so it cannot stand for
 on the owner or on another item; readiness is derived from the same rule the run uses, never
 stored.
 
+## Hook that only counts after reinstalling
+
+Hooks and plugin `bin/` run from the plugin cache, a copy of the clone at the last install, not from the night branch. By default the supervisor only warns (`hook_so_apos_reinstalar`) and charges `reinstalar-plugin` at the end.
+
+Exception, in the cepa repo only (`.claude-plugin/marketplace.json` named `cepa` plus
+`bin/install.sh`; owner decision X4, DUR-3): when an item closes `done`, its full build is
+green, and it touched `<plugin>/hooks/**` or `<plugin>/bin/**` (both run from the cache),
+the supervisor runs `sh bin/install.sh --clean` from the night worktree. `--clean` moves the
+current cache to `<cache>.prev`, the point `bin/install.sh --rollback` returns to. The record
+gains `hooks_reinstalados` (`sha_antes`, `sha_depois`: a content digest of the installed
+`hooks/` and `bin/`, since the cache is not a git repo) and every `item_start` carries
+`hooks_sha`, the digest in force. If the install fails the supervisor runs
+`bin/install.sh --rollback` by itself and records `reinstalacao_desfeita`; the item stays
+`done` and the night goes on. If not even the rollback gives the cache back, the run ends
+with `reinstalacao-falhou`. Installing from the worktree re-points the marketplace
+registration to the worktree path: after `aterrissar`, run `bin/install.sh` from the main
+clone so it points back. Open sessions keep the old hooks in memory until restarted. Two
+reinstalls in one night keep only the previous cache in `.prev`. Without `--verify` there is
+no build, so no reinstall: only the warning above. In any other repo nothing changes.
+
 ## Before you leave it running
 
 - **The tree must be clean.** It refuses a dirty working tree, because otherwise nothing

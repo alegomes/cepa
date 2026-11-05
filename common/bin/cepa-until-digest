@@ -334,7 +334,10 @@ def build_digest(ledger, result_max):
     plan_path = queue_plan_path(ledger, start.get("fila"))
     plan = plan_items(plan_path)
 
-    rounds = [s for s in log_segments(log) if " · verify · " not in s[0]
+    # `reinstall`/`rollback` are the supervisor's own `bin/install.sh` runs (DUR-3): not
+    # a round and not a build.
+    own = (" · verify · ", " · reinstall · ", " · rollback · ")
+    rounds = [s for s in log_segments(log) if not any(m in s[0] for m in own)
               and "/common:until-review" not in s[0]]
     builds = [s for s in log_segments(log) if " · verify · " in s[0]]
     starts = [e for e in events if e.get("evento") == "item_start"]
@@ -367,6 +370,9 @@ def build_digest(ledger, result_max):
         if missing:
             out.append("- ATENÇÃO: item_end sem session_id/motivo_fim: "
                        + ", ".join(missing))
+    for e in events:
+        if e.get("evento") == "hooks_reinstalados" and not e.get("ok"):
+            out.append(f"- ATENÇÃO: reinstalação de hooks falhou no item {e.get('id')}")
     out.append("")
 
     out.append("## Eventos do registro fora das rodadas")
@@ -391,7 +397,8 @@ def build_digest(ledger, result_max):
                    f"commits na branch da noite: {en.get('commits')}, "
                    f"tentativa {en.get('tentativa')}, "
                    f"sessão {en.get('session_id') or st.get('session_id')}, "
-                   f"fim `{en.get('motivo_fim')}`")
+                   f"fim `{en.get('motivo_fim')}`"
+                   + (f" · hooks {st['hooks_sha']}" if st.get("hooks_sha") else ""))
         if r:
             out.append(f"- custo US$ {cost} · {r['turns']} turnos · "
                        f"fim `{r['terminal']}`"

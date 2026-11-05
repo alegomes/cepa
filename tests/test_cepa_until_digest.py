@@ -202,6 +202,26 @@ def test_new_format_record_shows_session_and_end_reason():
         check("registro completo não avisa", "item_end sem session_id" not in out)
 
 
+def test_hooks_sha_in_the_round_line_and_failed_reinstall_is_warned():
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = build_run(tmp)
+
+        def with_hooks(events):
+            for e in events:
+                if e.get("evento") == "item_start" and e["id"] == "A1":
+                    e["hooks_sha"] = "abc123def456"
+            events.append({"evento": "hooks_reinstalados", "id": "A1",
+                           "ok": False, "sha_antes": "abc123def456",
+                           "sha_depois": None})
+        rewrite_ledger(ledger, with_hooks)
+        out = run_digest(ledger).stdout
+        check("a linha da rodada traz o sha dos hooks",
+              " · hooks abc123def456" in out, out[:1200])
+        check("reinstalação que falhou vira ATENÇÃO no cabeçalho",
+              "- ATENÇÃO: reinstalação de hooks falhou no item A1" in out,
+              out[:1200])
+
+
 def test_new_format_record_missing_fields_is_warned_and_old_is_not():
     with tempfile.TemporaryDirectory() as tmp:
         ledger = build_run(tmp)

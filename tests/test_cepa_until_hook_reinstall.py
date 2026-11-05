@@ -13,15 +13,22 @@ The cases below pin the warning:
   - the end of the run charges `bin/install.sh` in "Fica com você" and in the state;
   - `hooks/` outside a plugin (without `.claude-plugin/plugin.json`) does not warn;
   - a hook that left the branch with the red build is not charged at the end.
+
+In the cepa repo itself (`.claude-plugin/marketplace.json` named `cepa` + `bin/install.sh`)
+the supervisor reinstalls after the green build of an item that touched `<plugin>/hooks/**`
+or `<plugin>/bin/**` (DUR-3); anywhere else it keeps the warning.
 """
 
 import json
+import os
+import stat
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+DIGEST = Path(__file__).resolve().parent.parent / "common" / "bin" / "cepa-until-digest"
 from test_cepa_until import (  # noqa: E402
     FAILURES, check, fake_claude, item, ledger_of, build_repo, run_until)
 
@@ -86,7 +93,7 @@ def test_item_that_changes_plugin_hook_is_warned_at_once_and_at_the_end():
               len(ev) == 1 and ev[0]["id"] == "a1"
               and ev[0]["arquivos"] == ["meuplug/hooks/trava.py"], str(ev))
         out = p.stdout
-        i_warning = out.find("a1 mudou hook de plugin (meuplug/hooks/trava.py)")
+        i_warning = out.find("a1 mudou hook ou bin de plugin (meuplug/hooks/trava.py)")
         i_a2 = out.find("] a2 — ")
         check("a tela avisa o hook logo depois do a1, antes do a2 começar",
               0 <= i_warning < i_a2, out[-1500:])
@@ -221,7 +228,7 @@ def test_hook_of_the_item_that_ends_the_run_inside_the_loop_is_warned():
               [e["id"] for e in ev] == ["a1"], str(ev))
         before_the_end = p.stdout.split("── fim")[0]
         check("a tela avisa antes do resumo do fim",
-              "a1 mudou hook de plugin" in before_the_end, before_the_end[-1200:])
+              "a1 mudou hook ou bin de plugin" in before_the_end, before_the_end[-1200:])
 
 
 def test_warned_hook_that_left_is_not_charged_in_a_run_with_something_to_land():
@@ -245,6 +252,183 @@ def test_warned_hook_that_left_is_not_charged_in_a_run_with_something_to_land():
               and all(f["id"] != "reinstalar-plugin" for f in
                       state_of(root).get("fica_com_voce", [])),
               p.stdout[-1500:])
+
+
+FAKE_INSTALL = """#!/bin/sh
+echo "$@" >> "$FAKE_INSTALL_LOG"
+case "$1" in
+  --clean)
+    [ -n "$FAKE_INSTALL_FALHA" ] && { echo "install quebrou" >&2; exit 1; }
+    rm -rf "$CEPA_PLUGIN_CACHE_DIR.prev"
+    [ -d "$CEPA_PLUGIN_CACHE_DIR" ] && mv "$CEPA_PLUGIN_CACHE_DIR" "$CEPA_PLUGIN_CACHE_DIR.prev"
+    mkdir -p "$CEPA_PLUGIN_CACHE_DIR/meuplug/1.0.0"
+    cp -R meuplug/hooks meuplug/bin "$CEPA_PLUGIN_CACHE_DIR/meuplug/1.0.0/"
+    ;;
+  --rollback)
+    if [ -d "$CEPA_PLUGIN_CACHE_DIR.prev" ]; then
+      rm -rf "$CEPA_PLUGIN_CACHE_DIR"
+      mv "$CEPA_PLUGIN_CACHE_DIR.prev" "$CEPA_PLUGIN_CACHE_DIR"
+    fi
+    ;;
+esac
+exit 0
+"""
+
+
+def with_fake_install(root):
+    """A `bin/install.sh` that only touches the cache named by CEPA_PLUGIN_CACHE_DIR."""
+    (root / "meuplug" / "bin").mkdir(exist_ok=True)
+    (root / "meuplug" / "bin" / "ferramenta").write_text("v1\n")
+    (root / "bin").mkdir(exist_ok=True)
+    inst = root / "bin" / "install.sh"
+    inst.write_text(FAKE_INSTALL)
+    inst.chmod(inst.stat().st_mode | stat.S_IXUSR)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-qm", "install"], cwd=root, check=True)
+
+
+def as_cepa(root, cache):
+    """The test repo becomes the cepa repo: marketplace.json named `cepa`, a tracked
+    `meuplug/bin/ferramenta`, a fake `bin/install.sh`, and a cache pre-seeded with the v1
+    hook so `sha_antes` is not None. Returns the env for `run_until`."""
+    (root / ".claude-plugin").mkdir(exist_ok=True)
+    (root / ".claude-plugin" / "marketplace.json").write_text(
+        json.dumps({"name": "cepa", "plugins": []}))
+    with_fake_install(root)
+    seed = Path(cache) / "meuplug" / "1.0.0" / "hooks"
+    seed.mkdir(parents=True)
+    (seed / "trava.py").write_text("v1\n")
+    return {"CEPA_PLUGIN_CACHE_DIR": str(cache),
+            "FAKE_INSTALL_LOG": str(Path(cache).parent / "install.log")}
+
+
+def install_calls(env):
+    f = Path(env["FAKE_INSTALL_LOG"])
+    return f.read_text().split("\n")[:-1] if f.exists() else []
+
+
+def of_kind(root, kind):
+    return [e for e in ledger_of(root) if e["evento"] == kind]
+
+
+def cepa_run(tmp, items, files, extra=None, args=("--verify", VERIFY), cepa=True,
+             claude=WORKS):
+    root = with_plugin(build_repo(tmp, items))
+    cache = Path(tmp) / "cache"
+    env = as_cepa(root, cache) if cepa else {
+        "CEPA_PLUGIN_CACHE_DIR": str(cache),
+        "FAKE_INSTALL_LOG": str(Path(tmp) / "install.log")}
+    if not cepa:
+        with_fake_install(root)
+        (cache / "meuplug" / "1.0.0" / "hooks").mkdir(parents=True)
+        (cache / "meuplug" / "1.0.0" / "hooks" / "trava.py").write_text("v1\n")
+    env["FAKE_ARQUIVOS"] = files
+    env.update(extra or {})
+    binv = fake_claude(tmp, claude)
+    p, _ = run_until(root, binv, plan_of(root), ["--for", "2h", *args],
+                     extra_env=env)
+    return root, p, env
+
+
+def test_cepa_repo_reinstalls_after_green_build_of_a_hook():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, env = cepa_run(tmp, [item("a1"), item("a2")],
+                                "a1=meuplug/hooks/trava.py")
+        check("o install.sh rodou uma vez, com --clean",
+              install_calls(env) == ["--clean"], str(install_calls(env)))
+        ev = of_kind(root, "hooks_reinstalados")
+        check("um hooks_reinstalados do a1, ok, com sha antes e depois diferentes",
+              len(ev) == 1 and ev[0]["id"] == "a1" and ev[0]["ok"] is True
+              and ev[0]["sha_antes"] != ev[0]["sha_depois"]
+              and len(ev[0]["sha_antes"]) == 12 and len(ev[0]["sha_depois"]) == 12,
+              str(ev))
+        starts = {e["id"]: e for e in of_kind(root, "item_start")}
+        check("item_start do a1 traz o sha de antes e o do a2 o de depois",
+              ev and starts["a1"]["hooks_sha"] == ev[0]["sha_antes"]
+              and starts["a2"]["hooks_sha"] == ev[0]["sha_depois"], str(starts))
+        check("não avisa hook_so_apos_reinstalar", not warnings(root),
+              str(warnings(root)))
+        stays = {f["id"]: f["texto"]
+                 for f in state_of(root).get("fica_com_voce", [])}
+        check("o fim diz que já foi instalado e cobra o bin/install.sh da manhã",
+              "já foram instalados" in stays.get("reinstalar-plugin", "")
+              and "bin/install.sh" in stays.get("reinstalar-plugin", ""),
+              str(stays))
+        ledger = sorted((root / ".claude/programs/fila/until").glob("*.jsonl"))[-1]
+        d = subprocess.run([sys.executable, str(DIGEST), str(ledger)],
+                           capture_output=True, text=True)
+        check("o digest mostra o sha dos hooks por rodada",
+              f"hooks {ev[0]['sha_depois']}" in d.stdout, d.stdout[-1500:])
+
+
+def test_cepa_repo_reinstalls_when_plugin_bin_changes():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, env = cepa_run(tmp, [item("a1")], "a1=meuplug/bin/ferramenta")
+        ev = of_kind(root, "hooks_reinstalados")
+        check("mexer em <plugin>/bin/ também reinstala",
+              install_calls(env) == ["--clean"] and len(ev) == 1
+              and ev[0]["ok"] is True, str(ev))
+
+
+def test_cepa_repo_red_build_does_not_reinstall():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, env = cepa_run(tmp, [item("a1"), item("a2")],
+                                "a1=meuplug/hooks/trava.py",
+                                extra={"FAKE_QUEBRA": "a1"})
+        check("build vermelho: install.sh não roda e não há hooks_reinstalados",
+              not install_calls(env) and not of_kind(root, "hooks_reinstalados"),
+              str(install_calls(env)))
+
+
+def test_cepa_repo_without_verify_only_warns():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, env = cepa_run(tmp, [item("a1")], "a1=meuplug/hooks/trava.py",
+                                args=())
+        check("sem --verify: install.sh não roda e o aviso antigo dispara",
+              not install_calls(env) and len(warnings(root)) == 1
+              and not of_kind(root, "hooks_reinstalados"), str(warnings(root)))
+
+
+def test_repo_that_is_not_cepa_warns_and_changes_nothing():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, env = cepa_run(tmp, [item("a1")], "a1=meuplug/hooks/trava.py",
+                                cepa=False)
+        check("repo não é o cepa: install.sh não roda, nada é reinstalado",
+              not install_calls(env) and not of_kind(root, "hooks_reinstalados"),
+              str(install_calls(env)))
+        check("...avisa hook_so_apos_reinstalar", len(warnings(root)) == 1,
+              str(warnings(root)))
+        stays = {f["id"]: f["texto"]
+                 for f in state_of(root).get("fica_com_voce", [])}
+        check("...e o fim cobra com o texto de sempre",
+              "nenhuma rodada desta noite" in stays.get("reinstalar-plugin", ""),
+              str(stays))
+
+
+def test_failed_install_is_rolled_back_and_the_night_goes_on():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, env = cepa_run(tmp, [item("a1"), item("a2")],
+                                "a1=meuplug/hooks/trava.py",
+                                extra={"FAKE_INSTALL_FALHA": "1"})
+        ev = of_kind(root, "hooks_reinstalados")
+        check("hooks_reinstalados com ok falso",
+              len(ev) == 1 and ev[0]["ok"] is False, str(ev))
+        check("install.sh rodou --clean e depois --rollback",
+              install_calls(env) == ["--clean", "--rollback"],
+              str(install_calls(env)))
+        undone = of_kind(root, "reinstalacao_desfeita")
+        check("reinstalacao_desfeita ok: o cache voltou ao sha de antes",
+              len(undone) == 1 and undone[0]["ok"] is True
+              and undone[0]["sha"] == ev[0]["sha_antes"], str(undone))
+        check("o a2 ainda rodou",
+              any(e["id"] == "a2" for e in of_kind(root, "item_start")))
+        stays = [f["id"] for f in state_of(root).get("fica_com_voce", [])]
+        check("fica_com_voce traz reinstalacao-falhou", "reinstalacao-falhou" in stays,
+              str(stays))
+        end = of_kind(root, "run_end")
+        check("o run não termina por reinstalacao-falhou",
+              end and end[0]["motivo"] != "reinstalacao-falhou", str(end))
 
 
 def main():
