@@ -105,6 +105,7 @@ Limites e falhas:
 - duas reinstalações na mesma noite: o `.prev` guarda só a anterior à última,
   então o `--rollback` não volta ao estado da largada;
 - sessões abertas mantêm os hooks antigos na memória até reiniciarem.
+- com menos de 120 s de janela o supervisor não inicia o install (matá-lo no meio deixaria o cache pela metade): grava `reinstalacao_adiada` e fica só o aviso de sempre.
 
 Fora dessas condições a regra geral se mantém: o harness live só muda com o
 dono presente.

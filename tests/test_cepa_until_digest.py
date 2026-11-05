@@ -202,6 +202,21 @@ def test_new_format_record_shows_session_and_end_reason():
         check("registro completo não avisa", "item_end sem session_id" not in out)
 
 
+def test_reinstall_and_rollback_segments_are_not_rounds():
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = build_run(tmp)
+        log = ledger.with_suffix(".log")
+        text = log.read_text()
+        i = text.index("\n===== t · claude -p", 10)
+        log.write_text(text[:i]
+                       + "\n===== t · reinstall · sh bin/install.sh --clean\nok\n"
+                       + "\n===== t · rollback · sh bin/install.sh --rollback\nok\n"
+                       + text[i:])
+        out = run_digest(ledger).stdout
+        check("reinstall/rollback não desalinham o pareamento",
+              "pareamento" not in out and "RELATORIO A2" in out, out[:1200])
+
+
 def test_hooks_sha_in_the_round_line_and_failed_reinstall_is_warned():
     with tempfile.TemporaryDirectory() as tmp:
         ledger = build_run(tmp)

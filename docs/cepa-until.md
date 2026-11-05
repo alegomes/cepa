@@ -190,7 +190,7 @@ with `reinstalacao-falhou`. Installing from the worktree re-points the marketpla
 registration to the worktree path: after `aterrissar`, run `bin/install.sh` from the main
 clone so it points back. Open sessions keep the old hooks in memory until restarted. Two
 reinstalls in one night keep only the previous cache in `.prev`. Without `--verify` there is
-no build, so no reinstall: only the warning above. In any other repo nothing changes.
+no build, so no reinstall: only the warning above. With less than 120 s left in the window the supervisor does not start the install (killing it halfway would leave the cache half moved): it records `reinstalacao_adiada` and falls back to the warning. In any other repo nothing changes.
 
 ## Before you leave it running
 

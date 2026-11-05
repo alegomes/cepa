@@ -258,13 +258,18 @@ FAKE_INSTALL = """#!/bin/sh
 echo "$@" >> "$FAKE_INSTALL_LOG"
 case "$1" in
   --clean)
-    [ -n "$FAKE_INSTALL_FALHA" ] && { echo "install quebrou" >&2; exit 1; }
+    if [ -n "$FAKE_INSTALL_FALHA" ]; then
+      echo "install quebrou" >&2
+      [ -n "$FAKE_ROLLBACK_FALHA" ] && mv "$CEPA_PLUGIN_CACHE_DIR" "$CEPA_PLUGIN_CACHE_DIR.prev"
+      exit 1
+    fi
     rm -rf "$CEPA_PLUGIN_CACHE_DIR.prev"
     [ -d "$CEPA_PLUGIN_CACHE_DIR" ] && mv "$CEPA_PLUGIN_CACHE_DIR" "$CEPA_PLUGIN_CACHE_DIR.prev"
     mkdir -p "$CEPA_PLUGIN_CACHE_DIR/meuplug/1.0.0"
     cp -R meuplug/hooks meuplug/bin "$CEPA_PLUGIN_CACHE_DIR/meuplug/1.0.0/"
     ;;
   --rollback)
+    [ -n "$FAKE_ROLLBACK_FALHA" ] && exit 1
     if [ -d "$CEPA_PLUGIN_CACHE_DIR.prev" ]; then
       rm -rf "$CEPA_PLUGIN_CACHE_DIR"
       mv "$CEPA_PLUGIN_CACHE_DIR.prev" "$CEPA_PLUGIN_CACHE_DIR"
@@ -429,6 +434,80 @@ def test_failed_install_is_rolled_back_and_the_night_goes_on():
         end = of_kind(root, "run_end")
         check("o run não termina por reinstalacao-falhou",
               end and end[0]["motivo"] != "reinstalacao-falhou", str(end))
+
+
+def test_rollback_that_fails_ends_the_run_with_reinstalacao_falhou():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, env = cepa_run(tmp, [item("a1"), item("a2")],
+                                "a1=meuplug/hooks/trava.py",
+                                extra={"FAKE_INSTALL_FALHA": "1",
+                                       "FAKE_ROLLBACK_FALHA": "1"})
+        undone = of_kind(root, "reinstalacao_desfeita")
+        check("reinstalacao_desfeita com ok falso",
+              len(undone) == 1 and undone[0]["ok"] is False, str(undone))
+        end = of_kind(root, "run_end")
+        check("o run termina por reinstalacao-falhou",
+              end and end[0]["motivo"] == "reinstalacao-falhou", str(end))
+        st = state_of(root)
+        check("o a1 segue como entregue",
+              any(i["id"] == "a1" and i["desfecho"] == "entregue"
+                  for i in st.get("itens", [])), str(st.get("itens")))
+        check("o a2 não rodou",
+              [e["id"] for e in of_kind(root, "item_start")] == ["a1"])
+        check("fica_com_voce traz reinstalacao-falhou",
+              "reinstalacao-falhou" in
+              [f["id"] for f in st.get("fica_com_voce", [])])
+
+
+# a1 commits the hook and closes `done` (green build, reinstall); a2 commits
+# `meuplug/bin/ferramenta` and stays `pending` (no build, so no reinstall); its 2nd attempt
+# does nothing, and with `--max-failures 1` the breaker ends the run with a2's commit
+# still on the night branch.
+LATE = (
+    "import subprocess\n"
+    "ident = primeiro_pendente()\n"
+    "cont = os.environ['FAKE_CHAMADAS'] + '.n.' + ident\n"
+    "n = int(open(cont).read()) + 1 if os.path.exists(cont) else 1\n"
+    "open(cont, 'w').write(str(n))\n"
+    "alvo = 'meuplug/hooks/trava.py' if ident == 'a1' else 'meuplug/bin/ferramenta'\n"
+    "if ident == 'a1' or n == 1:\n"
+    "    open(alvo, 'a').write(ident + '\\n')\n"
+    "    subprocess.run(['git', 'add', '-A'], check=True)\n"
+    "    subprocess.run(['git', '-c', 'user.email=t@t', '-c', 'user.name=t',\n"
+    "                    'commit', '-qm', ident], check=True)\n"
+    "if ident == 'a1':\n"
+    "    marca(ident, status='done', evidence='ok')\n"
+    )
+
+
+def test_hook_committed_after_the_last_reinstall_is_not_charged_as_installed():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, env = cepa_run(tmp, [item("a1"), item("a2")], "", claude=LATE,
+                                args=("--verify", VERIFY, "--attempts-per-item", "3",
+                                      "--max-failures", "1"))
+        check("o a1 reinstalou",
+              [e["id"] for e in of_kind(root, "hooks_reinstalados")] == ["a1"])
+        check("o aviso de hook_so_apos_reinstalar dispara só para o arquivo do a2",
+              [(e["id"], e["arquivos"]) for e in warnings(root)]
+              == [("a2", ["meuplug/bin/ferramenta"])], str(warnings(root)))
+        stays = {f["id"]: f["texto"]
+                 for f in state_of(root).get("fica_com_voce", [])}
+        t = stays.get("reinstalar-plugin", "")
+        check("o fim lista o arquivo do a2 como ainda não instalado",
+              "Ainda NÃO instalados" in t
+              and "meuplug/bin/ferramenta; esses só passam" in t
+              and "Já instalados durante o run: meuplug/hooks/trava.py" in t, t)
+
+
+def test_no_time_left_postpones_the_reinstall():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, env = cepa_run(tmp, [item("a1")], "a1=meuplug/hooks/trava.py",
+                                extra={"CEPA_REINSTALL_MIN_SEC": "99999999"})
+        ev = of_kind(root, "reinstalacao_adiada")
+        check("reinstalacao_adiada no registro e install.sh não roda",
+              len(ev) == 1 and ev[0]["id"] == "a1" and not install_calls(env)
+              and not of_kind(root, "hooks_reinstalados"), str(ev))
+        check("cai no aviso de sempre", len(warnings(root)) == 1)
 
 
 def main():

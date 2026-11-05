@@ -202,7 +202,7 @@ with `reinstalacao-falhou`. Installing from the worktree re-points the marketpla
 registration to the worktree path: after `aterrissar`, run `bin/install.sh` from the main
 clone so it points back. Open sessions keep the old hooks in memory until restarted. Two
 reinstalls in one night keep only the previous cache in `.prev`. Without `--verify` there is
-no build, so no reinstall: only the warning above. In any other repo nothing changes.
+no build, so no reinstall: only the warning above. With less than 120 s left in the window the supervisor does not start the install (killing it halfway would leave the cache half moved): it records `reinstalacao_adiada` and falls back to the warning. In any other repo nothing changes.
 
 ## After the end
 
@@ -375,6 +375,9 @@ DEFAULT_ATTEMPTS_PER_ITEM = 2
 # the note. On the second one, the agent already had the side branch and the reason in hand and didn't
 # solve it: repeating again burns the window on the same card.
 MAX_RED_RETURNS = 2
+# Time floor for `bin/install.sh --clean`: a kill by the window after it moved the cache to
+# `.prev` would leave the harness half installed. The env override is test-only.
+REINSTALL_MIN_SEC = int(os.environ.get("CEPA_REINSTALL_MIN_SEC") or 120)
 
 # What `claude` prints when the ACCOUNT hit the usage ceiling — not the item, not
 # the queue, not the topology. Without recognizing this the supervisor reads only "exited 1 and the
@@ -3751,6 +3754,7 @@ def main(argv=None):
     reinstalls = []          # (id, files, sha_before, sha_after)
     reinstall_failures = []  # (id, reason)
     reinstall_broken = False
+    reinstall_head = None
 
     def notify_hooks(origin):
         new_items = [f for f in changed_hooks(tree, clone_base)
@@ -4011,12 +4015,20 @@ def main(argv=None):
                 step(f"verde ({human(timedelta(seconds=verify_sec))})")
                 hook_files = (changed_hooks(tree, first[ident][0])
                               if cepa_repo(tree) and ident in first else [])
+                left = (deadline + slack - datetime.now()).total_seconds()
+                if hook_files and left < REINSTALL_MIN_SEC:
+                    why = (f"sobram {int(left)}s, menos que o piso de "
+                           f"{REINSTALL_MIN_SEC}s")
+                    log_event({"evento": "reinstalacao_adiada", "id": ident,
+                              "arquivos": hook_files, "motivo": why})
+                    step(f"sem tempo para reinstalar os plugins ({why}); "
+                         "fica o aviso de sempre")
+                    hook_files = []
                 if hook_files:
                     sha_before = installed_hooks_sha()
                     step(f"{ident} mudou hook/bin de plugin "
                          f"({', '.join(hook_files)}): reinstalo os plugins "
                          "(bin/install.sh --clean)")
-                    left = (deadline + slack - datetime.now()).total_seconds()
                     in_flight["fase"] = "reinstall"
                     inst_ok, inst_sec, inst_reason = run_verify(
                         "sh bin/install.sh --clean", tree, left, log,
@@ -4033,13 +4045,15 @@ def main(argv=None):
                         reinstalls.append((ident, hook_files, sha_before,
                                            sha_after))
                         reinstalled_files.update(hook_files)
+                        reinstall_head = head_of(tree)
                     else:
                         why = inst_reason or "o cache ficou sem hooks/bin"
                         step(f"a reinstalação falhou ({why}); rodo "
                              "bin/install.sh --rollback")
                         left = (deadline + slack - datetime.now()).total_seconds()
                         rb_ok, _rb_sec, rb_reason = run_verify(
-                            "sh bin/install.sh --rollback", tree, left, log,
+                            "sh bin/install.sh --rollback", tree,
+                            max(left, REINSTALL_MIN_SEC), log,
                             on_launch=launched, on_tick=tick, label="rollback")
                         in_flight.pop("pid_filho", None)
                         restored = installed_hooks_sha()
@@ -4521,13 +4535,25 @@ def main(argv=None):
     # Recomputed at the end, and not taken from `notified_hooks`: a warned hook
     # may have left the branch along with the red item that brought it.
     run_hooks = changed_hooks(tree, clone_base) if actions else []
+    late = (changed_hooks(tree, reinstall_head)
+            if run_hooks and reinstalls and reinstall_head else [])
     if run_hooks and reinstalls:
         last_id, _f, last_before, last_after = reinstalls[-1]
+        done_files = [f for f in run_hooks if f not in late]
+        if late:
+            which = (f"({', '.join(run_hooks)}). Já instalados durante o run: "
+                     f"{', '.join(done_files) or 'nenhum'}. Ainda NÃO "
+                     f"instalados, porque entraram depois da última "
+                     f"reinstalação: {', '.join(late)}; esses só passam a valer "
+                     "depois do `aterrissar` e de `bin/install.sh`. ")
+        else:
+            which = (f"({', '.join(run_hooks)}), e eles já foram instalados "
+                     "durante o run. ")
         stays.append({"id": "reinstalar-plugin", "texto": (
             f"a branch da noite muda {len(run_hooks)} hook(s)/bin de plugin "
-            f"({', '.join(run_hooks)}), e eles já foram instalados durante o "
-            f"run ({len(reinstalls)} reinstalação(ões); a última, depois do "
-            f"{last_id}: {last_before} -> {last_after}). Depois do `aterrissar`, "
+            f"{which}"
+            f"Reinstalações: {len(reinstalls)}; a última, depois do "
+            f"{last_id}: {last_before} -> {last_after}. Depois do `aterrissar`, "
             "rode `bin/install.sh` a partir do clone principal, para o registro "
             "do marketplace voltar a apontar para o clone. Sessões abertas "
             "mantêm os hooks antigos na memória até reiniciarem. O caminho de "
