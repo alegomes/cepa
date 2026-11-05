@@ -388,7 +388,9 @@ def reservation_of(it, root=None):
                 return "viva", (f"sessão {who} está nele desde {since} "
                                 f"(host {c.get('hostname')}, {where}); o run "
                                 f"{path.name} bateu o coração há {int(age)}s")
-            if age is not None:
+            if live_state != "desconhecido" and age is not None:
+                # `desconhecido` (no readable heartbeat, or one in the future) falls
+                # through to the 24h rule: "cannot tell" never recovers a reservation.
                 return "orfa", (f"a sessão {who} que reservou em {since} não existe "
                                 f"mais: o run {path.name} (host {c.get('hostname')}) "
                                 f"está `{est.get('estado')}` e o último heartbeat "

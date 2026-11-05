@@ -292,6 +292,32 @@ def test_reservation_from_another_host_follows_the_heartbeat():
               m.reservation_of(it)[0] == "viva")
 
 
+def test_reservation_messages_carry_the_heartbeat_age_and_future_falls_through():
+    import re as _re
+    m = load_plan_module()
+    it = {"id": "a1", "status": "in_progress", "claimed_by": claimed()}
+    with tempfile.TemporaryDirectory() as tmp:
+        write_state(tmp, ago(300))
+        st, detail = m.reservation_of(it, tmp)
+        n = _re.search(r"bateu o coração há (\d+)s", detail)
+        check("viva: o detalhe traz a idade do heartbeat (~300s)",
+              st == "viva" and n and 300 <= int(n.group(1)) <= 310, detail)
+    with tempfile.TemporaryDirectory() as tmp:
+        write_state(tmp, ago(3600))
+        st, detail = m.reservation_of(it, tmp)
+        n = _re.search(r"tem (\d+)s", detail)
+        check("órfã: o detalhe traz a idade do heartbeat (~3600s)",
+              st == "orfa" and n and 3600 <= int(n.group(1)) <= 3610, detail)
+    with tempfile.TemporaryDirectory() as tmp:
+        write_state(tmp, ago(-7200))  # a heartbeat 2h in the future: clock skew
+        check("heartbeat no futuro: não recupera a reserva, cai na regra de 24h -> viva",
+              m.reservation_of(it, tmp)[0] == "viva")
+        old = {"id": "a1", "status": "in_progress", "claimed_by": claimed(
+            (datetime.now().astimezone() - timedelta(hours=30)).isoformat())}
+        check("...e com reserva de 30h cai na regra de 24h -> órfã",
+              m.reservation_of(old, tmp)[0] == "orfa")
+
+
 # ── 5. item_pulado ──────────────────────────────────────────────────────────
 
 def test_item_reserved_by_a_live_run_elsewhere_is_logged_once_as_skipped():
