@@ -244,19 +244,19 @@ show_purposes() {
 
 ask_mode() {
   if [ ! -t 0 ] || [ ! -r /dev/tty ]; then
-    printf '✗ cepa: nenhuma sessão sobe sem modo declarado.\n' >&2
+    printf '✗ cepa: no session starts without a declared mode.\n' >&2
     printf '  Use: cepa --mode <%s>\n' "$(printf '%s' "$MODES" | tr ' ' '|')" >&2
-    printf '  Veja o propósito de cada um: cepa --mode help\n' >&2
-    printf '  Ou desligue a exigência com CEPA_MODO=off\n' >&2
+    printf '  See what each one is for: cepa --mode help\n' >&2
+    printf '  Or turn the requirement off with CEPA_MODO=off\n' >&2
     return 1
   fi
   while :; do
-    printf 'Em qual modo esta sessão opera?\n' >&2
+    printf 'Which mode does this session operate in?\n' >&2
     _i=0
     for _m in $MODES; do _i=$((_i+1)); printf '  %d) %s\n' "$_i" "$_m" >&2; done
-    printf '  ?) ajuda — o propósito de cada modo\n' >&2
-    printf '  (subcomandos do cepa: cepa help)\n' >&2
-    printf 'modo? [número, nome ou ?] > ' >&2
+    printf '  ?) help: what each mode is for\n' >&2
+    printf '  (cepa subcommands: cepa help)\n' >&2
+    printf 'mode? [number, name or ?] > ' >&2
     _ans=""
     read -r _ans < /dev/tty || return 1
     # An empty Enter still means giving up; `?` shows the purposes and the menu
