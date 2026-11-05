@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-hotspots — mede os arquivos-registro de um repositório.
+"""cepa-hotspots — measure a repository's registry files.
 
 Component 2 of the "parallel batch planner" (docs/spec/planejador-de-lotes-
 paralelos.md). "Registry file" (arquivo-cartório) = a file that aggregates a
@@ -144,37 +144,37 @@ def main():
         prog="cepa-hotspots",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            "Mede os arquivos-cartório de um repo refazendo fusões do histórico.\n"
+            "Measures a repo's registry files by replaying merges from its history.\n"
             "\n"
-            "Arquivo-cartório é o que agrega uma contribuição de quase toda demanda,\n"
-            "então quase toda demanda escreve nele (openapi.yaml, docs/pendencias.md).\n"
-            "É o que o planejador de ondas precisa conhecer para declarar superfícies\n"
-            "disjuntas (campo `cartorios:` do plan.yaml, conferido por cepa-dor).\n"
+            "A registry file collects a contribution from almost every demand, so\n"
+            "almost every demand writes to it (openapi.yaml, docs/pendencias.md).\n"
+            "The wave planner needs to know these files to declare disjoint surfaces\n"
+            "(the `cartorios:` field of plan.yaml, checked by cepa-dor).\n"
             "\n"
-            "Método: refaz em memória, com `git merge-tree`, cada par de merges reais\n"
-            "do histórico, sem tocar a árvore de trabalho. Só conta o par em que os\n"
-            "dois lados tocaram ao menos um arquivo em comum. Cada arquivo que sai em\n"
-            "conflito num par ganha um ponto; o ranking é esse total, decrescente.\n"
-            "Sem histórico suficiente, devolve lista vazia e diz por quê: nunca uma\n"
-            "heurística disfarçada de medição."),
+            "Method: replays in memory, with `git merge-tree`, each pair of real\n"
+            "merges in the history, without touching the working tree. Only pairs\n"
+            "where both sides touched at least one common file count. Each file that\n"
+            "conflicts in a pair gets one point; the ranking is that total, descending.\n"
+            "Without enough history, it returns an empty list and says why: never a\n"
+            "heuristic dressed up as a measurement."),
         epilog=(
-            "exemplos:\n"
+            "examples:\n"
             "  cepa-hotspots ../wego-assinatura-backend\n"
             "  cepa-hotspots . --ref origin/main --limit 10\n"
             "  cepa-hotspots . --min-pairs 3 --json\n"
             "\n"
-            "saída: 0 = lista produzida (mesmo vazia, por falta de conflito real)\n"
-            "       1 = histórico insuficiente (menos pares que --min-pairs)\n"
-            "       2 = erro (repo inexistente, não é git, git falhou)"))
-    ap.add_argument("repo", help="caminho do repositório git a medir")
+            "exit: 0 = list produced (even empty, for lack of a real conflict)\n"
+            "      1 = not enough history (fewer pairs than --min-pairs)\n"
+            "      2 = error (repo missing, not git, git failed)"))
+    ap.add_argument("repo", help="path of the git repository to measure")
     ap.add_argument("--ref", default="HEAD", metavar="REF",
-                    help="ref cujo histórico é varrido (default: HEAD)")
+                    help="ref whose history is scanned (default: HEAD)")
     ap.add_argument("--min-pairs", type=int, default=DEFAULT_MIN_PAIRS, metavar="N",
-                    help=f"mínimo de pares com arquivo em comum para medir em vez de "
-                         f"recusar (default: {DEFAULT_MIN_PAIRS})")
+                    help=f"minimum pairs with a common file to measure instead of "
+                         f"refusing (default: {DEFAULT_MIN_PAIRS})")
     ap.add_argument("--limit", type=int, default=None, metavar="N",
-                    help="devolve só os N primeiros do ranking (default: todos)")
-    ap.add_argument("--json", action="store_true", help="saída em JSON, para código")
+                    help="returns only the first N of the ranking (default: all)")
+    ap.add_argument("--json", action="store_true", help="JSON output, for code")
     if len(sys.argv) == 1:
         ap.print_help(sys.stderr)
         return 2

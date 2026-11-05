@@ -383,14 +383,14 @@ def test_cepa_dispatches_to_sibling_scripts():
     check("`cepa prove --help` roda o cepa-prove", p.returncode == 0 and "prove-drain" in p.stdout,
           (p.stdout + p.stderr)[-300:])
     p = subprocess.run([str(CEPA), "until", "--help"], capture_output=True, text=True, timeout=60)
-    check("`cepa until --help` roda o cepa-until", p.returncode == 0 and "fila" in p.stdout,
+    check("`cepa until --help` roda o cepa-until", p.returncode == 0 and "queue" in p.stdout,
           (p.stdout + p.stderr)[-300:])
     p = subprocess.run([str(CEPA), "help"], capture_output=True, text=True, timeout=60)
     check("`cepa help` lista os subcomandos", p.returncode == 0
           and "until" in p.stdout and "prove" in p.stdout and "doctor" in p.stdout,
           (p.stdout + p.stderr)[-500:])
     check("...com a primeira linha de cada docstring",
-          "Review" in p.stdout and "JANELA DE TEMPO" in p.stdout, p.stdout[-800:])
+          "Review" in p.stdout and "TIME WINDOW" in p.stdout, p.stdout[-800:])
     # `help` lists only EXECUTABLE siblings: a copy of the launcher in a temp
     # dir (SCRIPT_DIR follows the script's location) next to one executable and
     # one non-executable `cepa-*`.
@@ -456,10 +456,10 @@ def test_cepa_help_flags_and_typos():
         p = subprocess.run([str(CEPA), flag], capture_output=True, text=True, timeout=60)
         check(f"`cepa {flag}` lista os subcomandos como `cepa help`",
               p.returncode == 0 and p.stdout == ref and "until" in p.stdout, (p.stdout + p.stderr)[-300:])
-    check("...e a seção de flags do launcher", "flags do launcher:" in ref and "--slice" in ref
+    check("...e a seção de flags do launcher", "launcher flags:" in ref and "--slice" in ref
           and "--mode" in ref and "--prompt" in ref, ref[-600:])
-    check("...e os aliases com rótulo limpo", "(alias antigo de intent)" in ref
-          and "(alias antigo de modes)" in ref and "Deprecated" not in ref, ref)
+    check("...e os aliases com rótulo limpo", "(old alias of intent)" in ref
+          and "(old alias of modes)" in ref and "Deprecated" not in ref, ref)
     # `feed` is 4 edits from `feedback`: only the prefix fast path finds it.
     for typo, near in (("untl", "until"), ("prov", "prove"), ("docto", "doctor"), ("feed", "feedback")):
         p = subprocess.run([str(CEPA), typo], capture_output=True, text=True, timeout=60)
@@ -500,7 +500,7 @@ def test_mode_menu_points_to_cepa_help():
             os.execve(str(CEPA), [str(CEPA)], env)
         out = b""
         try:
-            while b"modo? [" not in out:
+            while b"mode? [" not in out:
                 r, _, _ = select.select([fd], [], [], 30)
                 if not r:
                     break
@@ -530,7 +530,7 @@ def test_mode_menu_points_to_cepa_help():
                 pass
         text = out.decode("utf-8", "replace")
         check("o menu de modo mostra o rodapé `cepa help`",
-              "Em qual modo" in text and "subcomandos do cepa: cepa help" in text, text[-600:])
+              "Which mode does this session operate in" in text and "cepa subcommands: cepa help" in text, text[-600:])
 
 
 if __name__ == "__main__":

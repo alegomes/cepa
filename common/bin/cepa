@@ -103,10 +103,10 @@ INTENT_BIN="$SCRIPT_DIR/cepa-intent"
 # `cepa prov`) is almost never a prompt: it is refused with the nearest name,
 # instead of silently opening a session whose first message is "untl".
 show_help() {
-  echo "cepa <subcomando> [args]   — roda common/bin/cepa-<subcomando>"
-  echo "cepa [flags do launcher]   — abre uma sessão claude (como antes)"
+  echo "cepa <subcommand> [args]   — runs common/bin/cepa-<subcommand>"
+  echo "cepa [launcher flags]      — opens a claude session (as before)"
   echo ""
-  echo "subcomandos:"
+  echo "subcommands:"
   for _s in "$SCRIPT_DIR"/cepa-*; do
     [ -x "$_s" ] || continue
     _name="${_s##*/cepa-}"
@@ -116,20 +116,20 @@ show_help() {
     case "$_desc" in
       *"Deprecated alias: renamed to cepa-"*)
         _target=$(printf '%s' "$_desc" | sed -e 's/.*renamed to cepa-//' -e 's/[^a-z0-9-].*//')
-        _desc="(alias antigo de $_target)" ;;
-      *"Deprecated alias"*|*"alias"*) _desc="(alias antigo) $_desc" ;;
+        _desc="(old alias of $_target)" ;;
+      *"Deprecated alias"*|*"alias"*) _desc="(old alias) $_desc" ;;
     esac
     printf '  %-14s %s\n' "$_name" "$_desc"
   done
   echo ""
-  echo "flags do launcher:"
-  echo "  -s, --slice <nome>         força/retoma a worktree session/<nome>; sem nome, escolhe uma"
-  echo "  -m, --mode <modo>          modo da sessão (--mode help lista o propósito de cada um)"
-  echo "      --budget <escopo>      orçamento fechado, exigido pelo modo refactor"
-  echo "      --purpose, --by-when, --plan   intenção da sessão (grava .claude/session-intent)"
-  echo "      --prompt <nome|path>   acrescenta um system prompt ao padrão"
-  echo "      --prompt-substitui <nome|path>   SUBSTITUI o system prompt inteiro"
-  echo "  qualquer outro argumento vai direto ao claude (ex.: cepa --resume, cepa WEGO-123)"
+  echo "launcher flags:"
+  echo "  -s, --slice <name>         forces/resumes the session/<name> worktree; with no name, pick one"
+  echo "  -m, --mode <mode>          session mode (--mode help lists what each one is for)"
+  echo "      --budget <scope>       closed budget, required by the refactor mode"
+  echo "      --purpose, --by-when, --plan   session intent (writes .claude/session-intent)"
+  echo "      --prompt <name|path>   appends a system prompt to the default one"
+  echo "      --prompt-substitui <name|path>   REPLACES the whole system prompt"
+  echo "  any other argument goes straight to claude (e.g. cepa --resume, cepa WEGO-123)"
 }
 
 # Nearest sibling script name within 2 edits (prefix counts as 0). Prints the
@@ -237,26 +237,26 @@ show_purposes() {
   if command -v python3 >/dev/null 2>&1 && [ -f "$MODES_BIN" ]; then
     python3 "$MODES_BIN" --purposes --no-color >&2 2>/dev/null && return 0
   fi
-  printf 'modos: %s\n' "$MODES" >&2
-  printf 'o propósito de cada um está em docs/modos-de-trabalho.md\n' >&2
+  printf 'modes: %s\n' "$MODES" >&2
+  printf 'what each one is for: docs/modos-de-trabalho.md\n' >&2
   return 0
 }
 
 ask_mode() {
   if [ ! -t 0 ] || [ ! -r /dev/tty ]; then
-    printf '✗ cepa: nenhuma sessão sobe sem modo declarado.\n' >&2
+    printf '✗ cepa: no session starts without a declared mode.\n' >&2
     printf '  Use: cepa --mode <%s>\n' "$(printf '%s' "$MODES" | tr ' ' '|')" >&2
-    printf '  Veja o propósito de cada um: cepa --mode help\n' >&2
-    printf '  Ou desligue a exigência com CEPA_MODO=off\n' >&2
+    printf '  See what each one is for: cepa --mode help\n' >&2
+    printf '  Or turn the requirement off with CEPA_MODO=off\n' >&2
     return 1
   fi
   while :; do
-    printf 'Em qual modo esta sessão opera?\n' >&2
+    printf 'Which mode does this session operate in?\n' >&2
     _i=0
     for _m in $MODES; do _i=$((_i+1)); printf '  %d) %s\n' "$_i" "$_m" >&2; done
-    printf '  ?) ajuda — o propósito de cada modo\n' >&2
-    printf '  (subcomandos do cepa: cepa help)\n' >&2
-    printf 'modo? [número, nome ou ?] > ' >&2
+    printf '  ?) help: what each mode is for\n' >&2
+    printf '  (cepa subcommands: cepa help)\n' >&2
+    printf 'mode? [number, name or ?] > ' >&2
     _ans=""
     read -r _ans < /dev/tty || return 1
     # An empty Enter still means giving up; `?` shows the purposes and the menu

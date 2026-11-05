@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-modes — a tabela de modos de trabalho, para consultar no meio da sessão.
+"""cepa-modes — the table of work modes, to consult mid-session.
 
 Every session declares a mode, and the mode is a STATE that lasts until the
 exit condition is met. Whoever forgets a mode's purpose mid-work will not open
@@ -101,32 +101,32 @@ def main():
         prog="cepa-modes",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            "A tabela dos modos de trabalho e suas fronteiras.\n"
+            "The table of work modes and their boundaries.\n"
             "\n"
-            "Toda sessão declara um modo, e o modo é um ESTADO que dura até a\n"
-            "condição de saída ser satisfeita. Quem esquece o propósito do modo no\n"
-            "meio do trabalho não vai abrir docs/modos-de-trabalho.md: vai chutar.\n"
-            "Este comando é a tabela, e nada além dela. A fonte é\n"
-            "common/hooks/_modes.py, a mesma que o hook de sessão lê."),
+            "Every session declares a mode, and the mode is a STATE that lasts until\n"
+            "its exit condition is met. Whoever forgets the mode's purpose mid-work\n"
+            "will not open docs/modos-de-trabalho.md: they will guess. This command\n"
+            "is the table and nothing else. The source is common/hooks/_modes.py,\n"
+            "the same one the session hook reads."),
         epilog=(
-            "exemplos:\n"
-            "  cepa-modes                  # a tabela inteira; marca o modo desta sessão\n"
-            "  cepa-modes exploration      # um modo só: entra com, produz, fecha quando, gate\n"
-            "  cepa-modes --purposes       # uma linha por modo: para que serve\n"
-            "  cepa-modes --exit           # o veredito de saída do modo desta sessão\n"
+            "examples:\n"
+            "  cepa-modes                  # the whole table; marks this session's mode\n"
+            "  cepa-modes exploration      # one mode: enters with, produces, closes when, gate\n"
+            "  cepa-modes --purposes       # one line per mode: what it is for\n"
+            "  cepa-modes --exit           # the exit verdict of this session's mode\n"
             "  cepa-modes --json\n"
             "\n"
-            "saída com --exit: 0 = modo fechado · 1 = ainda aberto · 2 = o modo não tem\n"
-            "veredito mecânico aqui"))
-    ap.add_argument("mode", nargs="?", metavar="modo", help="só este modo (default: todos)")
+            "exit status with --exit: 0 = mode closed · 1 = still open · 2 = the mode has\n"
+            "no mechanical verdict here"))
+    ap.add_argument("mode", nargs="?", metavar="mode", help="only this mode (default: all)")
     ap.add_argument("--json", action="store_true", dest="as_json",
-                    help="saída em JSON, para código")
+                    help="JSON output, for code")
     ap.add_argument("--purposes", "--propositos", action="store_true", dest="purposes",
-                    help="uma linha por modo: para que ele serve")
+                    help="one line per mode: what it is for")
     ap.add_argument("--exit", "--saida", action="store_true", dest="exit_",
-                    help="veredito de saída do modo desta sessão (ou do modo dado), lido do disco")
+                    help="exit verdict of this session's mode (or of the given mode), read from disk")
     ap.add_argument("--no-color", "--sem-cor", action="store_true", dest="no_color",
-                    help="sem cores no terminal")
+                    help="no terminal colors")
     args = ap.parse_args()
 
     color = not args.no_color and sys.stdout.isatty()
@@ -156,13 +156,13 @@ def main():
         return 0
 
     if args.purposes:
-        print(f"{BOLD}Modos de trabalho{RESET} — para que serve cada um:")
+        print(f"{BOLD}Work modes{RESET} — what each one is for:")
         width = max(len(n) for n in target)
         for name, info in target.items():
             body = textwrap.fill(info["purpose"], width=78,
                                  initial_indent="", subsequent_indent=" " * (width + 4))
             print(f"  {YELLOW}{name:<{width}}{RESET}  {body}")
-        print(f"\n{DIM}A tabela inteira (entra com / produz / fecha quando / gate): "
+        print(f"\n{DIM}The whole table (enters with / produces / closes when / gate): "
               f"cepa-modes{RESET}")
         return 0
 

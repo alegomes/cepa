@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-tokens — quantos tokens uma sessão gastou, e com quem.
+"""cepa-tokens — how many tokens a session spent, and on whom.
 
 ## Why it exists
 
@@ -210,39 +210,39 @@ def main():
         prog="cepa-tokens",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            "Quantos tokens uma sessão gastou, e com quem.\n"
+            "How many tokens a session spent, and on whom.\n"
             "\n"
-            "Lê a mesma fonte do cepa-clock: a transcrição em ~/.claude/projects/<slug>/\n"
-            "e um arquivo por subagente, com o tipo do agente no .meta.json ao lado.\n"
-            "Cada message.id é contado uma vez, pelo `usage` da última linha dele\n"
-            "(a mesma resposta aparece em várias linhas; somar todas infla o total).\n"
+            "Reads the same source as cepa-clock: the transcript in ~/.claude/projects/<slug>/\n"
+            "plus one file per subagent, with the agent type in the .meta.json next to it.\n"
+            "Each message.id is counted once, from the `usage` of its last line\n"
+            "(the same response appears on several lines; summing all of them inflates the total).\n"
             "\n"
-            "quatro números por resposta (as chaves ficam em pt-BR no JSON e na telemetria):\n"
-            "  entrada   input_tokens (texto novo, sem cache)\n"
-            "  cache_w   cache_creation_input_tokens (texto novo gravado no cache)\n"
-            "  cache_r   cache_read_input_tokens (contexto reaproveitado, ~10% do preço)\n"
+            "four numbers per response (the keys stay in pt-BR in the JSON and telemetry):\n"
+            "  entrada   input_tokens (new text, not cached)\n"
+            "  cache_w   cache_creation_input_tokens (new text written to the cache)\n"
+            "  cache_r   cache_read_input_tokens (reused context, ~10% of the price)\n"
             "  saida     output_tokens\n"
             "\n"
-            "\"Contexto novo\" = entrada + cache_w: é o que cresce quando um arquivo\n"
-            "grande entra na conversa. Para saber O QUE entrou, conta os caracteres\n"
-            "de cada resultado de ferramenta (Read, Bash, Agent...)."),
+            "\"New context\" = entrada + cache_w: it is what grows when a large file\n"
+            "enters the conversation. To know WHAT entered, it counts the characters\n"
+            "of each tool result (Read, Bash, Agent...)."),
         epilog=(
-            "exemplos:\n"
-            "  cepa-tokens                      # a sessão mais recente deste repo\n"
-            "  cepa-tokens --file <x.jsonl>     # uma sessão específica\n"
-            "  cepa-tokens --all --days 30      # todas as sessões do período\n"
-            "  cepa-tokens --emit               # grava no ledger (evento token_usage)\n"
+            "examples:\n"
+            "  cepa-tokens                      # the most recent session of this repo\n"
+            "  cepa-tokens --file <x.jsonl>     # one specific session\n"
+            "  cepa-tokens --all --days 30      # every session in the period\n"
+            "  cepa-tokens --emit               # writes to the ledger (token_usage event)\n"
             "  cepa-tokens --json"))
-    ap.add_argument("--file", "--arquivo", dest="file", metavar="ARQUIVO",
-                    help="o .jsonl principal de uma sessão (default: a mais recente deste repo)")
+    ap.add_argument("--file", "--arquivo", dest="file", metavar="FILE",
+                    help="the main .jsonl of a session (default: the most recent of this repo)")
     ap.add_argument("--all", "--todas", dest="all_sessions", action="store_true",
-                    help="todas as sessões do período, não só a última")
+                    help="every session in the period, not just the last one")
     ap.add_argument("--days", type=int, default=30, metavar="N",
-                    help="janela, em dias, que --all considera (default: 30)")
+                    help="window, in days, that --all considers (default: 30)")
     ap.add_argument("--emit", action="store_true",
-                    help="além de imprimir, grava o resultado no ledger de telemetria")
+                    help="besides printing, writes the result to the telemetry ledger")
     ap.add_argument("--json", action="store_true", dest="as_json",
-                    help="saída em JSON, para código")
+                    help="JSON output, for code")
     args = ap.parse_args()
 
     files = [Path(args.file)] if args.file else sessions(args.all_sessions, args.days)

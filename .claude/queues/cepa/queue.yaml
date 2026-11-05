@@ -2586,3 +2586,32 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: help-in-english
+  title: 'Pousar o --help em inglês dos cepa-* (já traduzido, sem commit, na worktree
+    session/pt2en): ajustar tests/test_cepa_mode.py:662-719 e tests/test_cepa_prove.py:393,459-462,
+    rodar tests/run-all.sh, e traduzir também o menu interativo de modo do launcher
+    e as colunas entry/produces/exit/gate de common/hooks/_modes.py'
+  why: 'Decisão do dono em 2026-11-05 (itens 1 e 2): o 51d6764 escreveu o help em
+    pt-BR contra a decisão de 2026-10-22 de texto fixo do produto em inglês (ainda
+    não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: pt-names-to-english
+  title: 'Renomear para inglês os nomes de flag e subcomando que ficaram em português,
+    mantendo o nome antigo como alias: cepa-autonomy listar/classificar; cepa-until
+    aterrissar/pendentes/fecha-morto e --max-falhas, --max-travados, --tentativas-por-item,
+    --reserva-minima, --folga, --com-permissoes, --sujo-ok, --sem-verify, --sem-analise,
+    --titulo-inteiro, --sim; cepa-plan --ciclo, --quando, --pergunta, --resposta,
+    --mantem, --descarta, --forca, --autor e chaves pedido/pronto/impede/se_sim/se_nao;
+    cepa-feedback --alvo, --origem, --sem-cor, triar, --destino, --nota, --plano
+    e status aberto/triado/todos; cepa-doctor --projeto; cepa-clock/cepa-tokens
+    --todas, --arquivo; launcher --prompt-substitui'
+  why: 'Decisão do dono em 2026-11-05 (item 3): muda interface, não só texto de
+    ajuda, por isso fila separada (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by:
+  - help-in-english
+  human_pending: null
+  evidence: null

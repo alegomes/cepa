@@ -730,7 +730,7 @@ def test_agent_instructions_ask_for_the_question():
     for given_name, plain_text in (("until-review", review), ("drain-plan", drain),
                         ("cepa-plan finish --help", help_)):
         plain_text = " ".join(plain_text.replace("**", "").split())
-        # The commands were translated to English; cepa-plan's help was not.
+        # The commands and cepa-plan's help were translated to English.
         sentences = {
             "drain-plan": ("Up to 25 words", "without a branch name",
                            "the item goes back to the queue"),
@@ -738,7 +738,8 @@ def test_agent_instructions_ask_for_the_question():
             # command quotes it literally.
             "until-review": ("Up to 25 words", "no branch name",
                              "volta para a fila"),
-        }.get(given_name, ("25 palavras", "sem nome de branch", "volta para a fila"))
+        }.get(given_name, ("25 words", "no branch, class or file name",
+                           "the item returns to the queue"))
         check(f"{given_name}: pergunta de até 25 palavras",
               sentences[0] in plain_text, plain_text[-600:])
         check(f"{given_name}: sem nome de branch, classe ou arquivo",

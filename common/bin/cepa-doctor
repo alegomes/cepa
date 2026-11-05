@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-doctor — valida a instalação do harness contra a realidade.
+"""cepa-doctor — validates the harness installation against reality.
 
 Almost every harness infrastructure failure is discovered in the middle of a
 task, at the worst moment: a plugin that did not load (cards created without
@@ -1198,57 +1198,58 @@ def parse_if_stale(argv):
 
 
 HELP = """\
-uso: cepa-doctor [--fix] [--brief] [--projeto] [--if-stale H]
+usage: cepa-doctor [--fix] [--brief] [--projeto] [--if-stale H]
 
-Valida a instalação do harness contra a realidade, em 30 segundos.
+Validates the harness installation against reality, in 30 seconds.
 
-Quase toda falha de infraestrutura do harness aparece no meio de uma tarefa,
-na pior hora: plugin que não carregou, board-flow.yaml de outro módulo,
-baseline de build vencida, worktree órfã, handoff velho depois de um rename.
-Este comando transforma isso em meio minuto de manutenção.
+Almost every infrastructure failure of the harness shows up in the middle of a
+task, at the worst time: a plugin that did not load, a board-flow.yaml from
+another module, an expired build baseline, an orphan worktree, a stale handoff
+after a rename. This command turns that into half a minute of maintenance.
 
-Checagens globais (independem do projeto):
-  - settings.json parseia e os plugins @cepa estão habilitados
-  - versão de cada plugin no repo contra o cache instalado (editou sem reinstalar)
-  - sessões abertas rodando hooks de uma versão que o cache já não tem
-  - todo hook .py do cache compila
-  - diretório de telemetria gravável
+Global checks (independent of the project):
+  - settings.json parses and the @cepa plugins are enabled
+  - each plugin's version in the repo against the installed cache (edited
+    without reinstalling)
+  - open sessions running hooks from a version the cache no longer has
+  - every .py hook in the cache compiles
+  - telemetry directory is writable
 
-Checagens do projeto (diretório atual):
-  - é um repo git (sem git os rituais degradam)
-  - board-flow.yaml: estrutura mínima do bloco defaults
-  - .claude/last-build.json: status e idade da baseline de build
-  - worktrees session/*: paradas (>14d sem commit) e diretórios órfãos
-  - worktree de agente esquecida DENTRO do repo (.claude/worktrees/)
-  - handoffs sem atualização há >30d
-  - fila single-track divergindo do BACKLOG.md
-  - runs do cepa-until esperando o dono ou com supervisor morto
-  - manifesto de ambiente (docs/env.yaml): portas ocupadas por processo de
-    OUTRO diretório e containers de `services` ausentes do docker ps
-  - versão do `twg` instalada contra a declarada no manifesto de ambiente
+Project checks (current directory):
+  - it is a git repo (without git the rituals degrade)
+  - board-flow.yaml: minimal structure of the defaults block
+  - .claude/last-build.json: status and age of the build baseline
+  - session/* worktrees: stale (>14d without a commit) and orphan directories
+  - forgotten agent worktree INSIDE the repo (.claude/worktrees/)
+  - handoffs not updated for >30d
+  - single-track queue diverging from BACKLOG.md
+  - cepa-until runs waiting for the owner or with a dead supervisor
+  - environment manifest (docs/env.yaml): ports held by a process from
+    ANOTHER directory and `services` containers missing from docker ps
+  - installed `twg` version against the one declared in the environment manifest
 
-Saída: ✓ / ⚠ / ✗ por checagem; depois, a lista do que tem correção mecânica
-e a do que precisa de você. A checagem AO VIVO do board-flow.yaml contra o
-Jira não acontece aqui (script sem MCP): /common:doctor --live delega essa
-parte ao atlassian-expert.
+Output: ✓ / ⚠ / ✗ per check; then the list of what has a mechanical fix and
+the list of what needs you. The LIVE check of board-flow.yaml against Jira
+does not happen here (script without MCP): /common:doctor --live delegates
+that part to atlassian-expert.
 
-opções:
-  --fix          aplica de uma vez as correções mecânicas (reinstalar plugins,
-                 arquivar handoff vencido, limpar worktree órfã); o que é uma
-                 decisão sua continua na lista "Precisa de você"
-  --brief        só o resumo de uma linha; sem nada a dizer, não imprime nada
-                 (o modo que o `cepa` usa ao abrir uma sessão)
-  --projeto      só as checagens do projeto, pula as globais
-  --if-stale H   só roda se o último diagnóstico neste repo tem mais de H
-                 horas; senão sai em silêncio (preflight do `cepa`)
-  -h, --help     esta ajuda
+options:
+  --fix          applies all mechanical fixes at once (reinstall plugins,
+                 archive expired handoff, clean orphan worktree); what is your
+                 decision stays in the "Precisa de você" list
+  --brief        only the one-line summary; with nothing to say, prints nothing
+                 (the mode `cepa` uses when opening a session)
+  --projeto      only the project checks, skips the global ones
+  --if-stale H   only runs if the last diagnosis in this repo is older than H
+                 hours; otherwise exits silently (the `cepa` preflight)
+  -h, --help     this help
 
-exemplos:
-  cepa-doctor                    # o diagnóstico completo
-  cepa-doctor --fix              # diagnóstico + correções mecânicas
+examples:
+  cepa-doctor                    # the full diagnosis
+  cepa-doctor --fix              # diagnosis + mechanical fixes
   cepa-doctor --brief --if-stale 12
 
-saída: 0 = tudo ok · 1 = só avisos · 2 = alguma falha
+exit: 0 = all ok · 1 = warnings only · 2 = some failure
 """
 
 
