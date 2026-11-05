@@ -32,7 +32,8 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_cepa_until import (  # noqa: E402
     fake_claude, item, ledger_of, build_repo, run_until)
-from test_cepa_until_quota import load_module  # noqa: E402
+from test_cepa_until_quota import (  # noqa: E402
+    load_module, EVENT, CEILING_TEXT, MARGIN)
 
 REPO = Path(__file__).resolve().parents[1]
 CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
@@ -145,6 +146,40 @@ def test_a_raising_on_tick_does_not_break_the_wait():
           done is True and proc.returncode == 0 and len(calls) >= 1, str(calls))
 
 
+def ledger_ends(root):
+    return [e for e in ledger_of(root) if e.get("evento") == "item_end"]
+
+
+def test_quota_ceiling_ends_with_motivo_fim_cota_end_to_end():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        # Reset 5h away: outside the 2h window, so the supervisor stops instead of sleeping.
+        body = EVENT + (
+            "evento(1.0, int(time.time()) + 5 * 3600, 'rejected')\n"
+            f"resultado({CEILING_TEXT!r}, True)\n"
+            "sys.exit(1)\n")
+        binv = fake_claude(tmp, body)
+        run_until(root, binv, plan_of(root), ["--for", "2h"], extra_env=MARGIN)
+        ends = ledger_ends(root)
+        check("item_end de teto de uso grava motivo_fim `cota`",
+              len(ends) == 1 and ends[0].get("motivo_fim") == "cota", str(ends))
+
+
+def test_prompt_too_long_ends_with_motivo_fim_contexto_end_to_end():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        body = (
+            "print(json.dumps({'type': 'result', 'subtype': 'success', "
+            "'is_error': True, 'result': 'Prompt is too long'}), flush=True)\n"
+            "sys.exit(1)\n")
+        binv = fake_claude(tmp, body)
+        run_until(root, binv, plan_of(root),
+                  ["--for", "2h", "--attempts-per-item", "1"])
+        ends = ledger_ends(root)
+        check("item_end de 'Prompt is too long' grava motivo_fim `contexto`",
+              len(ends) >= 1 and ends[0].get("motivo_fim") == "contexto", str(ends))
+
+
 # ── 3. heartbeat ────────────────────────────────────────────────────────────
 
 def test_heartbeat_advances_while_the_item_runs():
@@ -169,6 +204,10 @@ def test_heartbeat_advances_while_the_item_runs():
         a, b = views
         check("heartbeat avançou durante o item", a["heartbeat"] < b["heartbeat"],
               f"{a['heartbeat']} -> {b['heartbeat']}")
+        check("heartbeat gravado com fuso (tzinfo presente)",
+              datetime.fromisoformat(b["heartbeat"]).tzinfo is not None
+              and datetime.fromisoformat(a["heartbeat"]).tzinfo is not None,
+              f"{a['heartbeat']} {b['heartbeat']}")
         check("...com estado rodando e o item em voo",
               b["estado"] == "rodando" and b.get("item") == "a1"
               and b.get("fase") == "item" and UUID.match(b.get("session_id", "")),

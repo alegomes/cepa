@@ -1,0 +1,54 @@
+schema_version: 2
+card: DUR-1
+verdict: unproven
+reviewed_at: 2026-11-05T17:35:00-03:00
+base_commit: 7dbed17
+head_commit: b819240
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - { class: "common/bin/cepa-until", module: cli-python, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-plan", module: cli-python, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until-digest", module: cli-python, external_observable: true, substituted_by_double: null }
+  note: "Python CLI, no PIT. Tests run the real scripts; only the `claude` binary (far boundary) is faked. Perturbation in throwaway worktree /tmp/proof-DUR-1 (removed). 17 perturbations run; sample, not exhaustive (24h fallback of reservation_of and the sinal/128<code<160 branch were not perturbed)."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: absent
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "baseline: python3 tests/test_cepa_until_session.py -> todos passaram (rc=0); tests/test_cepa_until_digest.py -> tudo verde (rc=0)"
+        - "1a drop --session-id in build_command -> RED (4 FALHAS: cada chamada recebeu --session-id, uuid distinto, item_start/item_end mesmo id)"
+        - "1b item_start sem session_id -> RED (item_start grava o mesmo id que o claude recebeu)"
+        - "1c item_end sem session_id -> RED (item_end grava o mesmo id)"
+        - "2a rede antes de cota -> RED (cota ganha de rede)"
+        - "2b contexto sem exigir falha -> RED (saida 0 com 'context window' na prosa -> ok)"
+        - "2c hook sem exigir falha -> RED (hook citado em resultado sem erro e saida 0 -> ok)"
+        - "2d folga trocada por sinal -> RED (killed -> folga; folga ganha de cota)"
+        - "3a on_tick nunca chamado em wait_for_child -> RED (heartbeat avancou durante o item; on_tick que levanta nao derruba a espera)"
+        - "3c excecao do on_tick propaga -> RED (RuntimeError nao tratada, rc!=0)"
+        - "4a reservation_of ignora o estado -> RED (4 falhas: heartbeat velho -> orfa, etc.)"
+        - "4b idade/estado do heartbeat ignorados -> RED (4 falhas)"
+        - "5 nunca loga item_pulado -> RED (a1 reservado em outro host: um item_pulado)"
+        - "5b item_pulado sem dedupe -> RED (rc=1)"
+        - "6a digest sem o aviso -> RED (avisa os ids de item_end sem session_id/motivo_fim)"
+        - "6d digest sem imprimir fim -> RED (rc=1)"
+        - "SURVIVED 3b: heartbeat gravado SEM offset UTC (datetime.now().isoformat em vez de .astimezone()) -> session test rc=0, nenhum teste vermelho (cepa-until:3520). Os testes de fuso exercitam so o leitor (cepa-plan), nunca o que o cepa-until escreve."
+        - "SURVIVED 6b: digest julgando registros com versao_registro >= 0 em vez de >= 2 -> digest test rc=0 (cepa-until-digest:364). Nenhum teste com registro antigo sem session_id/motivo_fim."
+        - "SURVIVED 6c: digest deixando de exigir motivo_fim (so session_id) -> digest test rc=0 (cepa-until-digest:366). Nenhum teste com item_end com session_id mas sem motivo_fim."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool run; reachability inferred from perturbation reds above"
+  l4_adversarial_input:
+    status: n/a
+    reason: "Diff opens no input from outside the operator (CLI supervisor record format and local state file); no api-rest module."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card"
+routing_reason: "14 of 17 perturbations went RED, but three changed behaviors stayed green when broken: the heartbeat's UTC offset on the writer side, the digest's rule that old records (versao_registro < 2) are not judged, and the digest's requirement of motivo_fim. UNPROVEN: deterministic, send back to add three assertions."

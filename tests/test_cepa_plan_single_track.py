@@ -443,6 +443,53 @@ def test_divergence_unreadable_refuses(base):
           r.returncode == 2, r.stdout)
 
 
+def _reserved_elsewhere(base, given_name, heartbeat_age_sec, estado):
+    """A queue with A1 `in_progress`, claimed from ANOTHER host, plus the run state
+    file of that host/worktree carrying a heartbeat `heartbeat_age_sec` old."""
+    from datetime import datetime, timedelta
+    d = git_repo(base, given_name)
+    q = write_queue(d, [item("A1"), item("A2")])
+    plan = yaml.safe_load(q.read_text())
+    for it in plan["items"]:
+        if it["id"] == "A1":
+            it["status"] = "in_progress"
+            it["claimed_by"] = {"session_id": "s-velha", "pid": 4242,
+                                 "hostname": "outra-maquina.exemplo",
+                                 "cwd": "/noite/arvore-x", "branch": "until/x",
+                                 "started_at": datetime.now().astimezone().isoformat()}
+    q.write_text(yaml.safe_dump(plan, allow_unicode=True), encoding="utf-8")
+    until = q.parent / "until"
+    until.mkdir()
+    beat = datetime.now().astimezone() - timedelta(seconds=heartbeat_age_sec)
+    (until / "r.estado.json").write_text(json.dumps({
+        "run": "r", "estado": estado, "host": "outra-maquina.exemplo",
+        "arvore": "/noite/arvore-x",
+        "heartbeat": beat.isoformat(timespec="seconds")}), encoding="utf-8")
+    return d, q
+
+
+def test_start_reclaims_reservation_whose_heartbeat_is_stale(base):
+    d, q = _reserved_elsewhere(base, "hb-velho", 3600, "rodando")
+    r = run(d, "start", "fila", "A1", "--repo", ".")
+    owner = {i["id"]: i for i in yaml.safe_load(q.read_text())["items"]}["A1"]
+    check("heartbeat de 1h: start retoma a reserva órfã (saída 0)",
+          r.returncode == 0, r.stdout + r.stderr)
+    check("...e o claimed_by foi trocado",
+          owner["claimed_by"]["session_id"] != "s-velha"
+          and owner["claimed_by"]["hostname"] != "outra-maquina.exemplo",
+          str(owner["claimed_by"]))
+
+
+def test_start_refuses_reservation_whose_run_is_alive(base):
+    d, q = _reserved_elsewhere(base, "hb-fresco", 5, "rodando")
+    r = run(d, "start", "fila", "A1", "--repo", ".")
+    owner = {i["id"]: i for i in yaml.safe_load(q.read_text())["items"]}["A1"]
+    check("heartbeat fresco e rodando: start recusa (saída 5)",
+          r.returncode == 5, r.stdout + r.stderr)
+    check("...e o claimed_by não mudou",
+          owner["claimed_by"]["session_id"] == "s-velha", str(owner["claimed_by"]))
+
+
 def main():
     with tempfile.TemporaryDirectory() as base:
         for fn in (
@@ -468,6 +515,8 @@ def main():
             test_divergence_plan_mid_line_is_not_false_positive,
             test_divergence_id_with_text_after_the_closing_backtick,
             test_divergence_unreadable_refuses,
+            test_start_reclaims_reservation_whose_heartbeat_is_stale,
+            test_start_refuses_reservation_whose_run_is_alive,
         ):
             print(f"\n{fn.__name__}")
             fn(base)

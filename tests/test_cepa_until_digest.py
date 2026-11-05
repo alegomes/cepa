@@ -222,6 +222,33 @@ def test_new_format_record_missing_fields_is_warned_and_old_is_not():
               "item_end sem session_id" not in out)
 
 
+def test_explicit_version_1_record_is_not_judged():
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = build_run(tmp)
+        rewrite_ledger(ledger, lambda ev: ev[0].update(versao_registro=1))
+        out = run_digest(ledger).stdout
+        check("versao_registro 1 explícito, sem os campos: não avisa",
+              "item_end sem" not in out, out[:600])
+
+
+def test_version_2_item_end_with_session_but_without_end_reason_is_warned():
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = build_run(tmp)
+
+        def only_session(events):
+            events[0]["versao_registro"] = 2
+            for e in events:
+                if e.get("evento") == "item_end":
+                    e["session_id"] = "sess-" + e["id"]
+                    if e["id"] == "A1":
+                        e["motivo_fim"] = "ok"
+        rewrite_ledger(ledger, only_session)
+        out = run_digest(ledger).stdout
+        check("session_id sem motivo_fim: avisa e nomeia só o item (A2)",
+              "- ATENÇÃO: item_end sem session_id/motivo_fim: A2" in out
+              and "motivo_fim: A1" not in out, out[:900])
+
+
 def test_queue_state_comes_from_the_main_clone_not_the_worktree():
     """The record lives in the tree `cepa-until` was launched from. If it is a
     linked worktree, its plan.yaml is an old copy; the real queue is that of the
