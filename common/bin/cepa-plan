@@ -1574,12 +1574,15 @@ def cmd_status(root, name, status_filter, as_json, item_id=None, via_show=False)
 
 
 
-def ready_of_queue(root, name):
-    """(summary, warnings) of one queue for `ready`, or (None, [error])."""
-    target = queue_path(root, name)
+def ready_of_queue(root, name, target=None):
+    """(summary, warnings) of one queue for `ready`, or (None, [error]).
+    A waves plan is not a queue: (None, []) — nothing to list, nothing to say."""
+    target = target or queue_path(root, name)
     plan, error = read_plan(target)
     if error:
         return None, [error]
+    if not isinstance(plan, dict) or mode_of(plan) != MODE:
+        return None, []
     items = [it for it in (plan.get("items") or []) if isinstance(it, dict)]
     batch, _stop, warnings, deferred = build_batch(items, 10 ** 6)
     pos = {str(it.get("id")): i for i, it in enumerate(items, 1)}
@@ -1606,18 +1609,22 @@ def ready_of_queue(root, name):
 
 
 def cmd_ready(root, as_json):
-    names = single_track_queues(root)
-    if not names:
+    # Walks the files, not `single_track_queues`: that helper drops an
+    # unreadable queue in silence, and a queue that vanishes from this list
+    # without a word is exactly what the owner must hear about.
+    queues, warned = [], 0
+    for name, qfile in qp.queue_files(root):
+        summary, warnings = ready_of_queue(root, name, qfile)
+        for w in warnings:
+            warned += 1
+            print(f"aviso: fila {name} ilegível, fora da lista: {w}",
+                  file=sys.stderr)
+        if summary is not None:
+            queues.append(summary)
+    if not queues and not warned:
         print(f"nenhuma fila em {root / qp.NEW_DIR} — quem escreve é o "
               "/common:queue", file=sys.stderr)
         return 2
-    queues = []
-    for name in names:
-        summary, warnings = ready_of_queue(root, name)
-        for w in warnings:
-            print(f"aviso: fila {name}: {w}", file=sys.stderr)
-        if summary is not None:
-            queues.append(summary)
     total = sum(len(q["prontos"]) for q in queues)
     if as_json:
         print(json.dumps({"root": str(root), "filas": queues,

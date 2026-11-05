@@ -15,7 +15,9 @@ Against the real CLI, in a temporary git repo with three queues:
   - a dependency on a ready item IS ready, and the line names it
   - a queue with nothing ready is one line with what holds it
   - a waves plan is not a queue and does not appear
-  - a broken queue is warned on stderr and skipped, exit stays 0
+  - a broken queue is warned on stderr BY NAME and skipped, exit stays 0
+  - a queue stuck only on a pending dependency says "nada pronto"
+  - `adiados` names every deferred item with build_batch's reason
   - --json carries `filas`, `prontos`, `total_prontos`
   - the launcher `cepa plan ready` reaches the same subcommand
   - no queue at all -> exit 2
@@ -91,6 +93,10 @@ def build(tmp):
     write_queue(root, "gamma", [
         item("G-1", human_pending="aprove o PR"),
     ])
+    write_queue(root, "delta", [
+        item("D-1", blocked_by=["D-2"]),          # waits on a pending item below
+        item("D-2"),
+    ])
     write_queue(root, "waves", [item("W-1")], mode="parallel-waves")
     return root
 
@@ -103,7 +109,7 @@ def main():
         data = json.loads(r.stdout)
         names = [q["queue"] for q in data["filas"]]
         check("every single-track queue listed, alphabetical",
-              names == ["alpha", "beta", "gamma"], names)
+              names == ["alpha", "beta", "delta", "gamma"], names)
         check("waves plan is not a queue", "waves" not in names)
         beta = next(q for q in data["filas"] if q["queue"] == "beta")
         ready_ids = [p["id"] for p in beta["prontos"]]
@@ -131,14 +137,14 @@ def main():
         check("cepa plan ready (launcher) exit 0", r.returncode == 0, r.stderr)
         via_launcher = json.loads(r.stdout)
         check("cepa plan ready lists the same queues and total",
-              [q["queue"] for q in via_launcher["filas"]] == ["alpha", "beta", "gamma"]
+              [q["queue"] for q in via_launcher["filas"]] == ["alpha", "beta", "delta", "gamma"]
               and via_launcher["total_prontos"] == 3, r.stdout[:300])
 
         r = run(root, "ready")
         check("ready (text) exit 0", r.returncode == 0, r.stderr)
         out = r.stdout
         check("text header counts queues and items",
-              "3 filas · 3 itens" in out, out.splitlines()[0])
+              "4 filas · 3 itens" in out, out.splitlines()[0])
         check("text lists the ready items with position",
               "    5. B-5 — item B-5" in out and "    6. B-6 — item B-6" in out
               and "    7. B-7 — item B-7" in out, out)
@@ -154,6 +160,11 @@ def main():
               "(cepa until decide gamma)" in out, out)
         check("beta header counts ready over pending",
               "fila beta · 3 de 5 pendentes prontos" in out, out)
+        check("queue stuck on a pending dependency says so",
+              "fila delta · 0 de 2 pendentes prontos — nada pronto: os abertos "
+              "esperam outro item ou estão reservados" in out, out)
+        check("text does not list items stuck on a pending dependency",
+              "D-1 — item" not in out and "D-2 — item" not in out, out)
 
         # A broken queue is warned and skipped, the others still show.
         (root / ".claude" / "queues" / "gamma" / "queue.yaml").write_text(
@@ -162,8 +173,10 @@ def main():
         check("broken queue: exit 0", r.returncode == 0, r.stderr)
         data = json.loads(r.stdout)
         check("broken queue: skipped, the others listed",
-              [q["queue"] for q in data["filas"]] == ["alpha", "beta"],
+              [q["queue"] for q in data["filas"]] == ["alpha", "beta", "delta"],
               [q["queue"] for q in data["filas"]])
+        check("broken queue: warned on stderr, by name",
+              "aviso: fila gamma ilegível" in r.stderr, r.stderr)
 
         # Reserved by a live session: not ready. Orphan reservation: ready.
         beta_file = root / ".claude" / "queues" / "beta" / "queue.yaml"
@@ -184,6 +197,13 @@ def main():
         check("reserved by a live session: not ready, and its dependent waits",
               [p["id"] for p in beta["prontos"]] == ["B-7"],
               [p["id"] for p in beta["prontos"]])
+        check("adiados names the deferred items with the reason",
+              beta["adiados"] == [{"id": "B-2", "reason": "human_pending"},
+                                  {"id": "B-3", "reason": "bloqueado-antes"},
+                                  {"id": "B-4", "reason": "depende-de-adiado"},
+                                  {"id": "B-5", "reason": "reservado"},
+                                  {"id": "B-6", "reason": "depende-de-adiado"}],
+              beta["adiados"])
 
     with tempfile.TemporaryDirectory() as tmp:
         root = git_repo(tmp)
