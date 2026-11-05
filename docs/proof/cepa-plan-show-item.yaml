@@ -1,0 +1,44 @@
+schema_version: 2
+card: cepa-plan-show-item
+verdict: needs-human
+reviewed_at: 2026-11-05T13:00:00-03:00
+base_commit: 7918f80
+head_commit: fcb9e77
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan (codes_in, epic_of, find_code, section_range, source_refs, why_parts, evidence_parts, item_detail, cmd_show, cmd_status hint, status_on_screen)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  note: "Repositorio Python, sem Maven/PIT. Superficie externa = subprocess `python3 common/bin/cepa-plan`. Nenhum double substitui a classe alterada. Entre fe8a3f1 e fcb9e77 so o arquivo de teste mudou (git diff --stat -- common vazio)."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline fcb9e77: python3 tests/test_common_queue_status.py -> rc=0, 67 ok, 0 FAIL"
+        - "RED @ base 7918f80 (com o arquivo de teste de fcb9e77): rc=1; FAIL 'show <fila> <id> sai com 0' (unrecognized arguments: C1-1)"
+        - "RED (refeita em fcb9e77): find_code sem busca na secao primeiro -> 3 FAIL, primeiro 'expande L1 a L2 e resolve cada um dentro da secao S11, nao no homonimo'"
+        - "RED (refeita em fcb9e77): source_refs sem section_range -> 3 FAIL, mesmo primeiro FAIL"
+        - "RED: tela decorada do item sem lista (why/evidencia numa linha) -> 2 FAIL + Traceback, primeiro 'tela decorada resolve os codigos no Epic' (falha por efeito colateral do mesmo desvio; o check de why/evidencia da tela e o 2o FAIL)"
+        - "RED: Epic ausente sem aviso 'nao achei o arquivo' -> 1 FAIL 'Epic citado mas ausente...'"
+        - "RED: Epic ausente com found=True -> 2 FAIL"
+        - "RED: cabecalho show sem linha 'fonte' -> 1 FAIL 'show <fila> sem id mostra a fonte...'"
+        - "RED: cabecalho show sem apontar 'show <fila> <id>' -> 1 FAIL"
+        - "RED (rodada anterior, sobre fe8a3f1; codigo de producao identico em fcb9e77, nao refeitas): source_refs sem frase de faixa; faixa expandida sempre; codes_in sem ordenar S primeiro; why_parts em um paragrafo; evidence_parts sem split; sem rotulo 'mais recente primeiro'; cmd_status sem dica stderr; cmd_show sem repassar item; item_detail sem source; epic_of ignora source; status_on_screen apagada; sem mensagem 'nao aponta um Epic'"
+    summary_pt: "As 2 perturbacoes que haviam sobrevivido agora ficam vermelhas; 5 novas cobrindo os testes de 02cd7dd tambem. Nenhum sobrevivente."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura configurada; alcance determinado por perturbacao (acima)"
+  l4_adversarial_input:
+    status: skipped
+    reason: ""
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "card nao e Bug; a RED no base 7918f80 do arquivo de teste esta em l3"
+routing_reason: "Todas as perturbacoes de comportamento ficam vermelhas e o teste e vermelho no base; nao ha sobrevivente. Mas cobertura (l2) ficou assumed por falta de ferramenta e o teste adversarial de entrada (l4) nao foi rodado; por regra isso impede PROVEN. Decisao sugerida ao humano: aceitar as perturbacoes como substituto de cobertura e dispensar o l4 neste card (o CLI so le um id e um .md do proprio repo)."
