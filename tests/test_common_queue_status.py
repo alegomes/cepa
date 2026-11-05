@@ -257,6 +257,20 @@ def test_help_documents_item(base):
           r.stdout)
 
 
+def test_one_item_shows_every_filled_field(base):
+    d = git_repo(base, "um-item-campos")
+    write_queue(d, [item("a", title="TITULO-A", evidence="EVID-A",
+                         owner_summary="RESUMO-A")])
+    r = run(d, "status", "fila", "a", "--repo", ".")
+    t = r.stdout
+    check("mostra título, evidência e resumo para o dono",
+          all(x in t for x in ("TITULO-A", "EVID-A", "RESUMO-A")), t)
+    check("item pronto diz que o próximo cepa-until pega",
+          "pronto: o próximo cepa-until pega" in t, t)
+    check("campo vazio não aparece", "None" not in t
+          and "espera:" not in t and "ação humana:" not in t, t)
+
+
 def main():
     with tempfile.TemporaryDirectory() as base:
         for fn in (test_lists_all_items_in_recorded_order,
@@ -266,6 +280,7 @@ def main():
                    test_one_item_on_the_terminal_screen,
                    test_reserved_item_shows_owner,
                    test_help_documents_item,
+                   test_one_item_shows_every_filled_field,
                    test_omitted_name,
                    test_does_not_touch_the_file,
                    test_refuses_wave_plan,
