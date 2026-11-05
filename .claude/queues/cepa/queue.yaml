@@ -2552,6 +2552,21 @@ items:
     wait volta a travar). Build completo: delegado ao supervisor. Fora do escopo:
     o PID 84993 continua vivo (reprodutor mantido por decisão do dono); matar é
     decisão dele.'
+- id: gate-advance-aceita-teste-vermelho-test-first
+  title: gate-advance aceita commit local só de testes com last-build.json em FAILURE
+    de teste, para o teste vermelho que o test-first manda commitar antes da correção
+  why: 'Primeiro porque força o contorno que apaga a prova de regressão: o agente
+    commita os testes só depois de verdes e o proof-reviewer depois não tem o vermelho
+    na base que cobra para bugs. Repetiu em quatro cards (WEGO-2511, 2513, 2514,
+    2515) numa só rodada (run WEGOP1/2026-11-04-2112; feedback fb-20261105-4; BACKLOG.md,
+    seção ''O gate-advance recusa o commit do teste vermelho que a regra test-first
+    manda fazer antes da correção''). Esboço na seção: diff só em arquivos de teste
+    + falha registrada kind de teste, não de compilação + commit local passa com
+    aviso; push e PR seguem exigindo verde. Posição escolhida pelo dono em 2026-11-05.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
 - id: stop-reasons-in-english
   title: Traduzir para inglês os 6 motivos de parada emitidos por cepa-plan queue
     --json (teto, fim-da-fila, bloqueado, reservado, depende-de-adiado, bloqueado-antes),
@@ -2620,6 +2635,49 @@ items:
   title: cepa plan validate resolve a raiz como write (clone principal), não a pasta
     atual
   why: 'ainda não priorizado: entrou no fim da fila'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: handoff-e-spec-gravam-pergunta-de-origem
+  title: 'Handoff e /common:spec gravam a pergunta que começou o assunto: linha
+    ''porque'' obrigatória no Próximo passo (handoff-seeds-gate recusa sem ela)
+    e seção ''Como chegamos aqui'' no esqueleto da spec'
+  why: 'feedback fb-20261104-2 (2026-11-04); BACKLOG.md, seção ''O handoff e a spec
+    carregam rótulos, e ninguém grava a pergunta que começou o assunto'' (ainda
+    não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: whereami-recapitula-decisoes-do-dono
+  title: Decisão ou lembrete do dono citado pelo agente vem com data e frase de
+    contexto na primeira menção da sessão; /common:whereami lista os lembretes do
+    dono com data
+  why: 'feedback fb-20261104-3 (2026-11-04); BACKLOG.md, seção ''O Cepa não lembra
+    o dono das decisões que o próprio dono tomou'' (ainda não priorizado: entrou
+    no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: session-registry-apaga-marca-prune-orfa
+  title: auto_clean do session-registry apaga marca .prune-on-exit cujo worktree
+    ou branch já não existe
+  why: 'feedback fb-20261105-2 (2026-11-05); BACKLOG.md, seção ''A marca .prune-on-exit
+    fica órfã quando a worktree já sumiu'' (ainda não priorizado: entrou no fim
+    da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: wrap-up-safe-to-exit-exige-clone-limpo
+  title: 'wrap-up só declara Safe to exit com git status vazio no clone principal:
+    arquivo versionado modificado entra em commit próprio, arquivo de runtime dos
+    hooks vai para exclude, e o doctor aponta versionado que hook escreve'
+  why: 'feedback fb-20261105-3 (2026-11-05); BACKLOG.md, seção ''O wrap-up declara
+    Safe to exit com o clone principal sujo, e o cepa-until recusa rodar em seguida''
+    (ainda não priorizado: entrou no fim da fila)'
   status: pending
   blocked_by: []
   human_pending: null
