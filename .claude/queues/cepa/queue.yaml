@@ -2616,3 +2616,11 @@ items:
   - help-in-english
   human_pending: null
   evidence: null
+- id: plan-validate-raiz
+  title: cepa plan validate resolve a raiz como write (clone principal), não a pasta
+    atual
+  why: 'ainda não priorizado: entrou no fim da fila'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null

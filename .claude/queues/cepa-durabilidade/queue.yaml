@@ -1,0 +1,61 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/estrategia-durabilidade.md, O1 (ordem decidida pelo dono em 2026-11-05, painel docs/reviews/2026-11-05-painel-durabilidade.md)
+# Escrito em: 2026-11-05
+
+schema_version: 2
+mode: single-track
+queue: cepa-durabilidade
+source: docs/estrategia-durabilidade.md, O1 (ordem decidida pelo dono em 2026-11-05,
+  painel docs/reviews/2026-11-05-painel-durabilidade.md)
+items:
+- id: DUR-1
+  title: '`cepa-until` grava id de sessão, motivo do fim e heartbeat por tentativa'
+  why: 'item 2 de O1 em docs/estrategia-durabilidade.md; primeiro porque é a medição
+    que decide o destino de O2 (X1) e o heartbeat que o leitor (DUR-4) precisa;
+    cabe em uma sessão; usa `claude --session-id`, `motivo_fim` de conjunto fechado
+    em `item_end`, `heartbeat` em `estado.json`, órfã por idade do heartbeat, evento
+    `item_pulado`; aceite: todo `item_end` de run novo traz `session_id` e `motivo_fim`,
+    verificado pelo `cepa-until-digest`'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: DUR-2
+  title: '`cepa-plan finish` exige worktree limpa, grava o SHA e recusa chamador
+    que não é o dono do item'
+  why: 'item 1 de O1; segundo porque fecha o defeito confirmado em disco (dois `finish`
+    sobre o mesmo item apagam a evidência do primeiro) e não depende de medição;
+    aceite: teste com dois `finish` preserva a evidência do primeiro e `done` sem
+    commit é recusado; fecha o item do BACKLOG ''antecessor done sem merge'' como
+    superado'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: DUR-3
+  title: '`cepa-until` reinstala os hooks no repo cepa após build verde do item
+    que tocou hooks/ ou bin/'
+  why: 'item 5 de O1, decisão X4; terceiro porque precisa do SHA no `item_start`
+    que DUR-1 introduz; grava `hooks_reinstalados` no .jsonl; exceção declarada
+    em docs/harness-ops.md; a prova until-avisa-hook-so-vale-apos-reinstalar.yaml
+    passa a cobrir ''repo não é o cepa: avisa, não troca'''
+  status: pending
+  blocked_by:
+  - DUR-1
+  human_pending: null
+- id: DUR-4
+  title: Módulo leitor dos cinco depósitos de estado, importado por next, doctor,
+    until-review e whereami
+  why: item 3 de O1, decisão X3 do dono (heartbeat e leitor); último porque sem
+    o heartbeat de DUR-1 responderia 'rodando' a run morto; nasce como módulo com
+    teste que falha ao aparecer arquivo de estado desconhecido em .claude/
+  status: pending
+  blocked_by:
+  - DUR-1
+  human_pending: null
