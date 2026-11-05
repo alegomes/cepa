@@ -2632,7 +2632,7 @@ items:
     contexto na primeira menção da sessão; /common:whereami lista os lembretes do
     dono com data
   why: 'feedback fb-20261104-3 (2026-11-04); BACKLOG.md, seção ''O Cepa não lembra
-    o dono das decisões que o próprio dono tomou'' (ainda não priorizado: entrou
+    o dono das decisões que o próprio dono tomou'' (Posição: logo depois dos outros feedbacks triados em 2026-11-05 e antes das traduções para inglês, por decisão do dono em 2026-11-05 (são de ergonomia, nenhum barra um run)
     no fim da fila)'
   status: pending
   blocked_by: []
@@ -2642,7 +2642,7 @@ items:
   title: auto_clean do session-registry apaga marca .prune-on-exit cujo worktree
     ou branch já não existe
   why: 'feedback fb-20261105-2 (2026-11-05); BACKLOG.md, seção ''A marca .prune-on-exit
-    fica órfã quando a worktree já sumiu'' (ainda não priorizado: entrou no fim
+    fica órfã quando a worktree já sumiu'' (Posição: logo depois dos outros feedbacks triados em 2026-11-05 e antes das traduções para inglês, por decisão do dono em 2026-11-05 (são de ergonomia, nenhum barra um run)
     da fila)'
   status: pending
   blocked_by: []
