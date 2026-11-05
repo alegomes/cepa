@@ -1,0 +1,40 @@
+key: cepa-plan-status-item
+status: complete
+commit: 9f26034
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: "cepa-plan status <fila> <id>, plain e TTY decorada (CEPA_COR=sempre)"
+    test: "test_one_item_in_full, test_one_item_on_the_terminal_screen, test_reserved_item_shows_owner, test_one_item_shows_every_filled_field"
+    layer: subprocess CLI
+    evidence: verified
+    run: "python3 tests/test_common_queue_status.py -> all green (45 checks ok)"
+    verdict: complete
+  - id: AC2
+    altitude: cli
+    surface: "status <fila> <id> --json (key item)"
+    test: "test_one_item_in_full, test_reserved_item_shows_owner (claimed_by)"
+    evidence: verified
+    run: "all green"
+    verdict: complete
+  - id: AC3
+    altitude: cli
+    surface: "id desconhecido: exit 2 + ids no stderr"
+    test: test_one_item_in_full
+    evidence: verified
+    run: "all green"
+    verdict: complete
+  - id: AC4
+    altitude: cli
+    surface: "status --help e cepa-plan --help"
+    test: test_help_documents_item
+    evidence: verified
+    run: "all green"
+    verdict: complete
+  - id: AC5
+    altitude: cli
+    surface: "lista, --status, nome omitido"
+    test: "test_lists_all_items_in_recorded_order, test_filter_by_status, test_omitted_name"
+    evidence: verified
+    run: "all green"
+    verdict: complete
