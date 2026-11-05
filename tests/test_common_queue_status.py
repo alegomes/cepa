@@ -301,6 +301,10 @@ EPIC = """# Epic de teste
 |---|---|---|---|---|
 | 1. Um | roteiro | tela | backend | Levantamentos L1 a L2 no portal (S11). Estados D1 a D3 (S9). |
 
+### S8. Antes
+
+- L1: um L1 homônimo ANTES da seção, que NÃO deve ganhar.
+
 ### S9. Ferramenta
 
 - **CA-9.1** (teste) Transições D1 a D3: cada uma grava autor.
@@ -311,10 +315,6 @@ Texto da seção.
 
 - **CA-11.1** (número) L1: devoluções em 2026.
 - **CA-11.2** (número) L2: guias por mês.
-
-### S12. Outra
-
-- L1: um L1 homônimo fora da seção, que NÃO deve ganhar.
 """
 
 
@@ -344,10 +344,10 @@ def test_show_item_resolves_title_codes_in_the_epic(base):
     check("show <fila> <id> sai com 0", r.returncode == 0, r.stderr)
     check("mostra o Epic apontado por `source`", "docs/epics/e.md" in t, t)
     check("resolve S11 na linha do título da seção",
-          "S11 · linha 13 · S11. Levantamentos no portal" in t, t)
+          "S11 · linha 17 · S11. Levantamentos no portal" in t, t)
     check("expande L1 a L2 e resolve cada um dentro da seção S11, não no homônimo",
-          "L1 · linha 17 · CA-11.1 (número) L1: devoluções em 2026." in t
-          and "L2 · linha 18" in t and "homônimo" not in t, t)
+          "L1 · linha 21 · CA-11.1 (número) L1: devoluções em 2026." in t
+          and "L2 · linha 22" in t and "homônimo" not in t, t)
     check("a seção vem antes dos seus itens",
           t.index("S11 · linha") < t.index("L1 · linha"), t)
     check("o why sai em partes, uma por linha",
@@ -359,14 +359,14 @@ def test_show_item_resolves_title_codes_in_the_epic(base):
           and "Evidência anterior:" not in t, t)
     r = run(d, "show", "fila", "C1-2", "--repo", ".")
     check("faixa definida como frase no Epic resolve inteira, sem expandir",
-          "D1 a D3 · linha 11 · CA-9.1" in r.stdout and "D2 ·" not in r.stdout,
+          "D1 a D3 · linha 15 · CA-9.1" in r.stdout and "D2 ·" not in r.stdout,
           r.stdout)
     r = run(d, "show", "fila", "C1-1", "--json", "--repo", ".")
     out = json.loads(r.stdout)
     check("--json traz source.refs com código, linha e texto",
           out["source"]["epic"] == "docs/epics/e.md"
           and [x["code"] for x in out["source"]["refs"]] == ["S11", "L1", "L2"]
-          and out["source"]["refs"][1]["line"] == 17, out)
+          and out["source"]["refs"][1]["line"] == 21, out)
     r = run(d, "show", "fila", "C9", "--repo", ".")
     check("id desconhecido no show sai com 2", r.returncode == 2, r.stderr)
 
@@ -382,7 +382,7 @@ def test_show_item_on_the_terminal_screen_splits_why_and_evidence(base):
     plain = re.sub(r"\x1b\[[0-9;]*m", "", r.stdout)
     check("tela decorada do item sai com 0", r.returncode == 0, r.stderr)
     check("tela decorada resolve os códigos no Epic",
-          "S11 · linha 13" in plain and "L1 · linha 17" in plain, plain)
+          "S11 · linha 17" in plain and "L1 · linha 21" in plain, plain)
     check("tela decorada mostra o why uma parte por linha",
           "    - peça 1 de 2" in plain and "    - critério de aceite: roteiro" in plain
           and " · herdado" not in plain, plain)
