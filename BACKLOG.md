@@ -1034,6 +1034,16 @@ Episódio novo: sessão em modo exploração, barrada pelo gate, lançou um subp
 >
 > `fb-20261023-1`, 2026-10-23 · wego-digitacao-backend · main · exploracao · modo-escrita-gate / sessão em modo exploracao
 
+### Episódio de feedback (triagem 2026-11-05)
+
+Episódio novo: o gate barrou uma escrita de preparação de ambiente (`.git/info/exclude`, que fica fora do versionamento) em sessão discovery. A pergunta a decidir é se escrita em `.git/` conta como "escrita de construção" ou como preparação do checkout, permitida em qualquer modo.
+
+> Preparar o checkout para o cepa-until em sessão discovery: o write-mode-gate barrou gravar em .git/info/exclude para ignorar .playwright-mcp/ (logs do Playwright fora do git). Falta rodar: echo '.playwright-mcp/' >> /Users/alegomes/coding/wego/wego-product/.git/info/exclude. O report-style-lint também trata pedido novo depois do wrap-up como sessão encerrada e força 'For you: nothing' mesmo quando há um comando para o usuário.
+>
+> `fb-20261105-1`, 2026-11-05 · wego-product · main · discovery · `write-mode-gate.py`
+
+A segunda frase pertence à seção "Depois do `wrap-up`, o relatório seguinte reabre uma frente nova".
+
 ## P1. Lint editorial como hook
 
 **Plano:** `melhorias-2026-07/P1-lint-editorial`
@@ -4564,6 +4574,16 @@ Episódio novo, efeito colateral da correção: o `report-style-lint` barra perg
 >
 > `fb-20261102-2`, 2026-11-02 · wego-assinatura-backend · session/WEGO-2464 · construcao
 
+### Episódio de feedback (triagem 2026-11-05)
+
+Mesmo mecanismo do episódio de 2026-11-03: o lint lê "Safe to exit" como fim da sessão e não enxerga que o dono abriu uma frente nova depois. Dois registros no mesmo dia, em dois hooks:
+
+> Depois do 'Safe to exit' do wrap-up, o usuário fez um pedido novo na mesma sessão (preparar o cepa-until). O lint barrou as perguntas fechadas do relatório desse pedido como 'pergunta-pos-wrap-up', embora fossem de uma frente nova pedida pelo usuário. Sobras: rodar cepa-until kairos-etapa-1 com --dirty-ok (checkout sujo só com handoff de outra sessão e .playwright-mcp/); conferir se C1-14 já está feito (commit eb19bc2 preencheu a ata) antes do run; C1-15 depende de login no AMHPTISS e deve travar sem alguém olhando.
+>
+> `fb-20261104-4`, 2026-11-04 · wego-product · main · discovery · `report-style-lint.py`
+
+A segunda metade de `fb-20261105-1` (abaixo, na seção do `write-mode-gate`) repete a queixa: "o report-style-lint também trata pedido novo depois do wrap-up como sessão encerrada e força 'For you: nothing' mesmo quando há um comando para o usuário". Conserto provável: um prompt do dono depois do "Safe to exit" reabre a sessão para o lint (o transcript já tem a ordem dos eventos).
+
 ## `/common:plan` aceita item de feedback sem conferir se o `BACKLOG.md` já o dá como feito
 
 **Plano:** sem item ainda (abrir na fila `cepa` quando entrar na rodada)
@@ -4826,3 +4846,111 @@ O `Measured value` do Epic fechado saiu de uma `Source` que já existia, ou algu
 **Status:** aberto · **Lar:** `common` · **Origem:** suíte completa de 2026-11-02.
 
 `tests/test_cepa_until_dead_supervisor.py` falha também em `a50e629`, sem mudança nenhuma, e cada rodada falha numa verificação diferente: numa foi "...e encerra o build", na outra "Ctrl+C encerra o `claude` do item antes de sair" (`filho_encerrado: False`). Tem cara de corrida entre o sinal e o encerramento do processo filho. Um teste que falha a cada rodada num ponto diferente ensina a ignorar vermelho na suíte.
+
+### Episódio de feedback (triagem 2026-11-05)
+
+> tests/test_cepa_until_dead_supervisor.py falha também na base, numa verificação diferente a cada rodada (item no BACKLOG).
+>
+> `fb-20261104-1`, 2026-11-04 · cepa · main · exploration · `tests/test_cepa_until_dead_supervisor.py`
+
+---
+
+## O handoff e a spec carregam rótulos, e ninguém grava a pergunta que começou o assunto
+
+**Status:** pendente · **Lar provável:** common (`common/commands/handoff.md`, seção `## Próximo passo`; `common/commands/spec.md`, esqueleto da especificação) · **Origem:** feedback `fb-20261104-2`, 2026-11-04
+
+### Problema
+
+O dono abriu uma spec gerada pelo `/common:spec` a partir do handoff da sessão anterior e não reconheceu o assunto. Spec, handoff e relatório só tinham os códigos da conversa (O2', D1 a D7, "três portas"), nenhum dos três dizia em uma frase qual era a pergunta original. O handoff grava "próximo passo" sem o porquê, e o esqueleto da spec não tem campo "como chegamos aqui". É o mesmo buraco de `fb-20261104-3` (seção seguinte), visto de outro lado: o harness guarda o que decidiu, não o que o dono estava tentando resolver.
+
+### Palavras do dono
+
+> O dono abriu docs/spec/tres-portas-spec-epic.md (aberta pelo /common:spec a partir do handoff da sessão anterior) e disse: 'não faço ideia de como viemos parar neste assunto'. A spec, o handoff e o relatório do agente carregavam só rótulos (O2', D1 a D7, 'três portas') e nenhuma frase dizendo qual era a pergunta original. Dois buracos: o handoff grava 'próximo passo' sem o porquê de uma linha, e o esqueleto do /common:spec não tem campo 'como chegamos aqui'.
+>
+> `fb-20261104-2`, 2026-11-04 · cepa · main · discovery
+
+### Esboço
+
+(1) O `## Próximo passo` do handoff ganha uma linha obrigatória "porque: <a pergunta do dono, em prosa>", e o `handoff-seeds-gate` recusa handoff sem ela. (2) O esqueleto do `/common:spec` ganha a seção "Como chegamos aqui", preenchida da primeira frase do dono ou do handoff de origem. (3) Rótulo criado na conversa (O2', D1) só aparece no arquivo acompanhado da frase que ele abrevia, regra que já existe para relatório e falta para spec e handoff.
+
+---
+
+## O Cepa não lembra o dono das decisões que o próprio dono tomou
+
+**Status:** pendente · **Lar provável:** common (`common/commands/whereami.md`, `cepa-intent`, handoff) · **Origem:** feedback `fb-20261104-3`, 2026-11-04
+
+### Problema
+
+Em 2026-10-31 o dono deixou um lembrete nas fronteiras de um ADR (revisitar o ADR 0014 e a extensão do ADR 0006, talvez marcar deprecated). Em 2026-11-04 o agente citou o lembrete como se o dono o tivesse em mente, e o dono respondeu "eu disse? nem lembrava". O harness tinha a decisão gravada e a usou como premissa, em vez de apresentá-la de novo com data e contexto antes de agir sobre ela. Irmão de `fb-20261104-2` (seção anterior): lá falta o porquê de origem, aqui falta recapitular a decisão anterior quando ela volta a importar.
+
+### Palavras do dono
+
+> Esse é um problema do Cepa: ele não me lembra de minhas decisões. (Contexto: lembrete do dono registrado em 2026-10-31 nas fronteiras, revisitar ADR 0014 e extensão do ADR 0006 e talvez passar a deprecated, foi citado pelo agente em 2026-11-04 como se o dono lembrasse; ele respondeu 'eu disse? nem lembrava'.)
+>
+> `fb-20261104-3`, 2026-11-04 · wego-product · session/1104-2335 · `whereami`
+
+### Esboço
+
+Toda decisão ou lembrete do dono citado pelo agente vem com "você decidiu isso em <data>, no contexto <uma frase>; ainda vale?" na primeira menção da sessão. O `/common:whereami` lista os lembretes do dono com data ao lado do plano. A `cepa-intent` ou o handoff passam a guardar lembretes com data e a frase de contexto, não só o texto da ação.
+
+---
+
+## A marca `.prune-on-exit` fica órfã quando a worktree já sumiu
+
+**Status:** pendente · **Lar provável:** common (`common/hooks/session-registry.py`, `do_prune_on_exit` e `auto_clean`) · **Origem:** feedback `fb-20261105-2`, 2026-11-05
+
+### Problema
+
+Uma marca `.claude/sessions/<id>.prune-on-exit` de 2026-10-29 continuou no disco depois que a worktree e o branch que ela apontava já não existiam. O caminho do SessionEnd remove worktree e branch, mas não há caminho que apague a marca quando o alvo já se foi (sessão que morreu antes do SessionEnd, ou worktree removida por fora).
+
+### Palavras do dono
+
+> Marca .claude/sessions/601b1a1d-b142-455b-a4f9-a791f30d0ddf.prune-on-exit de 2026-10-29 ficou no disco depois que a worktree wego-acessos-backend-1029-1220 e o branch session/1029-1220 sumiram; o SessionEnd não apaga a marca quando o alvo já não existe. Apagar a marca e fazer o hook limpar marca órfã.
+>
+> `fb-20261105-2`, 2026-11-05 · wego-acessos-backend · main · construction · `session-registry`
+
+### Esboço
+
+`auto_clean` no SessionStart percorre as marcas `*.prune-on-exit` e apaga as que apontam para worktree ou branch inexistentes, com uma linha no stderr dizendo qual apagou. Teste: marca com `session_worktree` inexistente desaparece no próximo início de sessão.
+
+---
+
+## O `wrap-up` declara "Safe to exit" com o clone principal sujo, e o `cepa-until` recusa rodar em seguida
+
+**Status:** pendente · **Lar provável:** common (`common/commands/wrap-up.md`, passo de merge no `<base-worktree>`; `common/bin/cepa-until`, guarda de árvore suja) · **Origem:** feedback `fb-20261105-3`, 2026-11-05
+
+### Problema
+
+O `wrap-up` da sessão `session/teste-de-credencial` terminou com "Safe to exit" enquanto o `main` do clone principal tinha `.claude/queues/WEGO/queue.yaml` modificado e sem commit. O passo de merge do `wrap-up` só para quando a sujeira do clone principal cruza os arquivos do merge, e a regra escrita diz para seguir em frente com sujeira que não cruza, porque o `main` "está quase sempre sujo com estado de runtime dos hooks". O `cepa-until`, logo depois, aplica a regra oposta: árvore suja não roda. As duas regras são coerentes isoladas e se contradizem na sequência que o dono vive todo dia: wrap-up e, em seguida, run desatendido.
+
+Relacionado: "`cepa-until` culpa a árvore suja quando quem sujou o `plan.yaml` foi um run vivo da mesma fila", que trata outro caso da mesma guarda.
+
+### Palavras do dono
+
+> só pode estar de palhaçada! TODA SESSÃO DEVE SER FINALIZADA SEM PENDÊNCIAS DE GIT, COM A WORKTREE LIMPA! (contexto: o wrap-up da sessão session/teste-de-credencial declarou 'Safe to exit' com .claude/queues/WEGO/queue.yaml modificado e sem commit no main do clone principal; cepa until --until 6:00 WEGOP1 recusou rodar por árvore suja)
+>
+> `fb-20261105-3`, 2026-11-05 · wego-acessos-backend · main · construction · `common:wrap-up`
+
+### Esboço
+
+O "Safe to exit" passa a exigir `git status --porcelain` vazio no clone principal, não só ausência de colisão com o merge. Arquivo versionado modificado (como o `queue.yaml`) entra num commit próprio do `wrap-up`; arquivo de runtime dos hooks que não deve ser versionado vai para o `.gitignore` ou `.git/info/exclude` do repo, e o `cepa-doctor` passa a apontar arquivo versionado que os hooks escrevem. Aceite: depois de um `wrap-up` com "Safe to exit", `cepa-until` na mesma máquina não recusa por árvore suja.
+
+---
+
+## O `gate-advance` recusa o commit do teste vermelho que a regra test-first manda fazer antes da correção
+
+**Status:** pendente · **Lar provável:** common (`common/hooks/gate-advance.py`, leitura do `.claude/last-build.json` no commit local) + skill `green-or-revert` / fluxo `reproduce-fix-verify` · **Origem:** feedback `fb-20261105-4`, 2026-11-05
+
+### Problema
+
+O fluxo de bug manda commitar o teste de regressão vermelho antes da correção, para provar que ele reproduz o bug. O `gate-advance` lê o `last-build.json`, vê FAILURE e recusa o commit, porque não distingue "build quebrado" de "vermelho exigido pela regra". No run `WEGOP1/2026-11-04-2112` isso aconteceu em WEGO-2511, 2513, 2514 e 2515. Em 2511 o agente contornou commitando os testes só depois de verdes, o que apaga a prova de que o teste era vermelho na base, exatamente o que o `proof-reviewer` depois pede para bugs.
+
+### Palavras do dono
+
+> o hook de commit recusa o teste vermelho que a regra (test-first) manda commitar antes da correção, porque lê .claude/last-build.json e trata o vermelho exigido como build quebrado; aconteceu em WEGO-2511, 2513, 2514 e 2515 no run WEGOP1/2026-11-04-2112 (em 2511 os testes só entraram em commit depois de verdes)
+>
+> `fb-20261105-4`, 2026-11-05 · wego-acessos-backend · main · construction · `gate-advance`
+
+### Esboço
+
+Um commit cujo diff só adiciona ou altera arquivos de teste (nenhum arquivo de produção) passa pelo gate com o `last-build.json` em FAILURE, desde que a falha registrada seja de teste, não de compilação, e o commit seja local. O `capture-build-result` já distingue os dois casos no `kind`. Push e PR continuam exigindo verde. Teste que falta: commit só de `src/test/**` com baseline FAILURE de teste é aceito com aviso; o mesmo commit tocando `src/main/**` continua recusado.
