@@ -242,6 +242,8 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _queuepath as qp  # noqa: E402  (resolver for both queue layouts)
 import _ownertext  # noqa: E402  (the human section of a blocked item)
+import _state  # noqa: E402  (the one reader of the state deposits and the run liveness rule)
+from _state import HEARTBEAT_STALE_SEC  # noqa: E402,F401  (one copy of the constant)
 
 MODE = "single-track"
 SCHEMA_VERSION = 2
@@ -319,8 +321,7 @@ def current_owner(root, cwd):
 
 
 # A reservation held from ANOTHER host is live only while the run that holds it keeps
-# writing its heartbeat: older than this many seconds, the run is presumed dead.
-HEARTBEAT_STALE_SEC = float(os.environ.get("CEPA_HEARTBEAT_ORFA", "900"))
+# writing its heartbeat; the rule (and HEARTBEAT_STALE_SEC) lives in `_state.run_liveness`.
 
 
 def run_heartbeat_of(root, claimed_by):
@@ -381,18 +382,13 @@ def reservation_of(it, root=None):
         found = run_heartbeat_of(root, c)
         if found:
             path, est = found
-            try:
-                beat = datetime.fromisoformat(str(est["heartbeat"]))
-                # Naive (older files) is the writer's local time; aware carries its offset.
-                age = (datetime.now(beat.tzinfo) - beat).total_seconds() \
-                    if beat.tzinfo else (datetime.now() - beat).total_seconds()
-            except ValueError:
-                age = None
+            live_state, _ = _state.run_liveness(est)
+            age = _state.heartbeat_age(est)
+            if live_state == "vivo":
+                return "viva", (f"sessão {who} está nele desde {since} "
+                                f"(host {c.get('hostname')}, {where}); o run "
+                                f"{path.name} bateu o coração há {int(age)}s")
             if age is not None:
-                if est.get("estado") == "rodando" and age <= HEARTBEAT_STALE_SEC:
-                    return "viva", (f"sessão {who} está nele desde {since} "
-                                    f"(host {c.get('hostname')}, {where}); o run "
-                                    f"{path.name} bateu o coração há {int(age)}s")
                 return "orfa", (f"a sessão {who} que reservou em {since} não existe "
                                 f"mais: o run {path.name} (host {c.get('hostname')}) "
                                 f"está `{est.get('estado')}` e o último heartbeat "

@@ -38,6 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
 import _clihelp  # noqa: E402
+import _state  # noqa: E402  (the run liveness rule: one copy)
 import _queuepath as qp  # noqa: E402  (the queue lives in two layouts during the transition)
 
 try:
@@ -344,6 +345,15 @@ def build_digest(ledger, result_max):
     ends = [e for e in events if e.get("evento") == "item_end"]
 
     out = [f"# Resumo do run {ledger.stem}", ""]
+    state_file = ledger.with_name(ledger.stem + ".estado.json")
+    if state_file.exists():
+        try:
+            est = json.loads(state_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            est = None
+        if isinstance(est, dict):
+            _, why = _state.run_liveness(est)
+            out.append(f"- run: {why}")
     out.append(f"- registro: `{ledger}`")
     out.append(f"- saída bruta: `{log}` "
                f"({log.stat().st_size if log.exists() else 0} bytes; este "

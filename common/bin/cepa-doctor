@@ -62,6 +62,7 @@ RESULTS = []  # (level, area, message, fix)  level: "ok" | "warn" | "fail"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
 import _clihelp  # noqa: E402
+import _state  # noqa: E402  (catalogue of the state deposits; run liveness)
 try:
     import _pluginver as PV
 except Exception:  # noqa: BLE001 — doctor degrades, never dies because of this
@@ -430,6 +431,18 @@ def check_telemetry():
 
 # ── Project checks (cwd) ─────────────────────────────────────────────
 
+def check_state_deposits(root: Path):
+    """Every entry under `.claude/` must be declared in the `_state.py` catalogue
+    (the five state deposits, or "not a deposit"). A stray one is a writer nobody declared."""
+    stray = _state.unknown_entries(root)
+    if stray:
+        warn("estado", "entradas em .claude/ que o catálogo não conhece: "
+             + ", ".join(stray) + ". O catálogo dos depósitos de estado fica em "
+             "common/hooks/_state.py; declare a entrada lá (ou apague-a se for lixo)")
+    else:
+        ok("estado", "todas as entradas de .claude/ estão no catálogo de depósitos (_state.py)")
+
+
 def check_project(cwd: Path):
     rc, out, _ = git(["rev-parse", "--show-toplevel"], cwd=str(cwd))
     if rc != 0:
@@ -437,6 +450,7 @@ def check_project(cwd: Path):
         return
     root = Path(out.strip())
     ok("projeto", f"git repo: {root}")
+    check_state_deposits(root)
 
     # board-flow.yaml — minimal structure
     bf = root / "board-flow.yaml"
