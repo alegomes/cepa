@@ -81,6 +81,18 @@ Subcommands:
       reordering the queue silently, which is what this document exists to
       prevent.
 
+  cepa-plan ready [--repo DIR] [--json]
+      The items ready to be built NOW, across EVERY single-track queue of the
+      repo, each queue in its recorded order. Reads only. "Ready" is what
+      `build_batch` would hand a run with no ceiling: `pending` with no open
+      `human_pending`, no unresolved `blocked_by`, not reserved by a live
+      session. `status` answers this for one queue and refuses to pick when
+      there are several; this is the view of the whole repo (owner,
+      2026-11-05: "os itens prontos para serem construídos de todas as filas
+      disponíveis"). A queue with nothing ready is still listed, in one line,
+      with what holds it. An unreadable queue is warned and skipped.
+      Exit 0 = shown (even with zero ready); 2 = no single-track queue.
+
   cepa-plan reconcile <nome> --board ARQUIVO [--apply] [--repo DIR] [--json]
       The queue against the board: who closed outside the plan, who vanished,
       and which cards exist on the board with no position in the queue. It used
@@ -1560,6 +1572,78 @@ def cmd_status(root, name, status_filter, as_json, item_id=None, via_show=False)
                 print(f"       motivo: {blocked_reason(l)}")
     return 0
 
+
+
+def ready_of_queue(root, name):
+    """(summary, warnings) of one queue for `ready`, or (None, [error])."""
+    target = queue_path(root, name)
+    plan, error = read_plan(target)
+    if error:
+        return None, [error]
+    items = [it for it in (plan.get("items") or []) if isinstance(it, dict)]
+    batch, _stop, warnings, deferred = build_batch(items, 10 ** 6)
+    pos = {str(it.get("id")): i for i, it in enumerate(items, 1)}
+    in_batch = {b["id"] for b in batch}
+    # Only a dependency that is ITSELF in this list is worth a line: one that
+    # is already `done` holds nothing, and build_batch never lets a pending one
+    # through.
+    ready = [{"posicao": pos.get(b["id"]), "id": b["id"], "title": b["title"],
+              "why": b["why"],
+              "blocked_by": [d for d in b["blocked_by"] if d in in_batch]}
+             for b in batch]
+    pending = [it for it in items if status_of(it) == "pending"]
+    waiting = [str(it.get("id")) for it in items
+               if status_of(it) not in ("done", "dropped")
+               and (it.get("human_pending") is not None
+                    or status_of(it) == "blocked")]
+    return {"queue": qp.queue_name_of(plan, name), "path": str(target),
+            "prontos": ready, "pendentes": len(pending),
+            "abertos": sum(1 for it in items
+                           if status_of(it) not in ("done", "dropped")),
+            "esperam_dono": waiting,
+            "adiados": [{"id": d["id"], "reason": d["reason"]} for d in deferred],
+            }, warnings
+
+
+def cmd_ready(root, as_json):
+    names = single_track_queues(root)
+    if not names:
+        print(f"nenhuma fila em {root / qp.NEW_DIR} — quem escreve é o "
+              "/common:queue", file=sys.stderr)
+        return 2
+    queues = []
+    for name in names:
+        summary, warnings = ready_of_queue(root, name)
+        for w in warnings:
+            print(f"aviso: fila {name}: {w}", file=sys.stderr)
+        if summary is not None:
+            queues.append(summary)
+    total = sum(len(q["prontos"]) for q in queues)
+    if as_json:
+        print(json.dumps({"root": str(root), "filas": queues,
+                          "total_prontos": total}, ensure_ascii=False, indent=2))
+        return 0
+    print(f"prontos para construir · {len(queues)} filas · {total} itens")
+    for q in queues:
+        ready = q["prontos"]
+        head = f"\nfila {q['queue']} · {len(ready)} de {q['pendentes']} pendentes prontos"
+        if ready:
+            print(head)
+            for l in ready:
+                print(f"  {l['posicao']:>3}. {l['id']} — {l['title']}")
+                if l["blocked_by"]:
+                    print(f"       espera: {', '.join(l['blocked_by'])} (entra "
+                          "antes neste lote)")
+            continue
+        if q["abertos"] == 0:
+            print(head + " — fila fechada: tudo concluído ou descartado")
+        elif q["esperam_dono"]:
+            print(head + f" — esperam você: {', '.join(q['esperam_dono'])}"
+                  f" (cepa until decide {q['queue']})")
+        else:
+            print(head + " — nada pronto: os abertos esperam outro item ou "
+                  "estão reservados")
+    return 0
 
 # ── one item in full: `cepa-plan show <fila> <id>` ──────────────────────────
 #
@@ -4290,6 +4374,22 @@ def main(argv=None):
     stt.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
     stt.add_argument("--json", action="store_true", dest="as_json", help=json_help)
 
+    rd = sub.add_parser(
+        "ready", help="lists the items ready to be built now, across every "
+                      "queue of the repo",
+        description=(
+            "Read only: reserves and executes nothing. Walks EVERY single-track\n"
+            "queue, each in its recorded order, and lists what a run would take\n"
+            "now: `pending`, no open human route, no unresolved dependency, not\n"
+            "reserved by a live session. A queue with nothing ready is one line\n"
+            "saying what holds it. Same rule as `queue`, with no ceiling."),
+        examples=[("cepa plan ready", "every queue, for a human"),
+                  ("cepa plan ready --json", "for code")],
+        exit_codes=[(0, "shown (even with zero ready)"),
+                    (2, f"invalid usage, {not_git}, no single-track queue")])
+    rd.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
+    rd.add_argument("--json", action="store_true", dest="as_json", help=json_help)
+
     sh = sub.add_parser(
         "show", help="shows the queue header, or one item in full with the codes "
                      "of its title resolved in the Epic",
@@ -4723,6 +4823,8 @@ def main(argv=None):
         return cmd_status(root, a.name, a.status_filter, a.as_json, a.item)
     if a.cmd == "show":
         return cmd_show(root, a.name, a.as_json, a.item)
+    if a.cmd == "ready":
+        return cmd_ready(root, a.as_json)
     if a.cmd == "epics":
         return cmd_epics(root, a.as_json, a.brief)
     if a.cmd == "queue":
