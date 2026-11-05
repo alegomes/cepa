@@ -17,6 +17,7 @@ Against the real CLI, in a temporary git repo with three queues:
   - a waves plan is not a queue and does not appear
   - a broken queue is warned on stderr and skipped, exit stays 0
   - --json carries `filas`, `prontos`, `total_prontos`
+  - the launcher `cepa plan ready` reaches the same subcommand
   - no queue at all -> exit 2
 
 Run with `python3 tests/test_cepa_plan_ready.py`.
@@ -35,6 +36,7 @@ except ImportError:
 
 REPO = Path(__file__).resolve().parent.parent
 CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA = REPO / "common" / "bin" / "cepa"
 FAILURES = []
 
 
@@ -121,6 +123,16 @@ def main():
               data["total_prontos"])
         check("every ready item carries its why",
               all(p["why"] == "porque" for p in beta["prontos"]))
+
+        # The owner asked for "um comando cepa": the launcher is the surface.
+        r = subprocess.run(["sh", str(CEPA), "plan", "ready", "--json",
+                            "--repo", str(root)],
+                           capture_output=True, text=True, cwd=str(root))
+        check("cepa plan ready (launcher) exit 0", r.returncode == 0, r.stderr)
+        via_launcher = json.loads(r.stdout)
+        check("cepa plan ready lists the same queues and total",
+              [q["queue"] for q in via_launcher["filas"]] == ["alpha", "beta", "gamma"]
+              and via_launcher["total_prontos"] == 3, r.stdout[:300])
 
         r = run(root, "ready")
         check("ready (text) exit 0", r.returncode == 0, r.stderr)
