@@ -160,7 +160,7 @@ def unknown_entries(root):
 
 # ── run liveness: the one rule ───────────────────────────────────────────
 
-def _heartbeat_age(estado, now=None):
+def _heartbeat_age(estado):
     """Seconds since the record's `heartbeat`, or None (absent / unparseable).
     A naive stamp (older files) is the writer's local time; aware carries its offset."""
     stamp = (estado or {}).get("heartbeat")
@@ -171,9 +171,9 @@ def _heartbeat_age(estado, now=None):
     except ValueError:
         return None
     if beat.tzinfo:
-        cur = now.astimezone(beat.tzinfo) if now and now.tzinfo else datetime.now(beat.tzinfo)
+        cur = datetime.now(beat.tzinfo)
     else:
-        cur = now.replace(tzinfo=None) if now else datetime.now()
+        cur = datetime.now()
     return (cur - beat).total_seconds()
 
 
@@ -189,7 +189,7 @@ def _span(sec):
     return f"{sec // 3600}h"
 
 
-def run_liveness(estado, now=None):
+def run_liveness(estado):
     """(state, detail) of a run record (the parsed `.estado.json`).
 
     state is `vivo`, `morto`, `desconhecido`, or the literal non-running estado
@@ -206,7 +206,7 @@ def run_liveness(estado, now=None):
     if same_host and "pid" in est and not wt.pid_alive(est.get("pid")):
         return "morto", (f"rodando no registro mas MORTO: o pid {est.get('pid')} "
                          "não existe mais nesta máquina")
-    age = _heartbeat_age(est, now)
+    age = _heartbeat_age(est)
     if age is None:
         return "desconhecido", ("rodando no registro, sem heartbeat legível "
                                 "(registro anterior ao heartbeat): não dá para "
@@ -237,7 +237,7 @@ def main_root(cwd):
     return wt.main_root(cwd)
 
 
-def runs(root, now=None):
+def runs(root):
     """[{path, estado, liveness: (state, detail)}] for every `*.estado.json`, both layouts."""
     found = []
     for base in (qp.LEGACY_DIR, qp.NEW_DIR):
@@ -245,13 +245,13 @@ def runs(root, now=None):
             est = _load_json(path)
             if est is not None:
                 found.append({"path": path, "estado": est,
-                              "liveness": run_liveness(est, now)})
+                              "liveness": run_liveness(est)})
     return found
 
 
-def run_of(root, run_id=None, tree=None, now=None):
+def run_of(root, run_id=None, tree=None):
     """The run record whose `run` is `run_id`, else whose `arvore` is `tree`. Or None."""
-    all_runs = runs(root, now)
+    all_runs = runs(root)
     if run_id:
         for r in all_runs:
             if r["estado"].get("run") == run_id:
@@ -301,9 +301,9 @@ def autonomous_runs(root):
     return found
 
 
-def snapshot(root, now=None):
+def snapshot(root):
     """All five deposits plus the unknown entries."""
-    return {"fila": queues(root), "run": runs(root, now),
+    return {"fila": queues(root), "run": runs(root),
             "handoff": handoffs(root), "sessao": sessions(root),
             "autonomo": autonomous_runs(root),
             "unknown": unknown_entries(root)}
