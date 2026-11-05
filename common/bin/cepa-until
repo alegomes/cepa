@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-until — roda a fila do repo por uma JANELA DE TEMPO, sem ninguém acordado.
+"""cepa-until — runs the repo's queue for a TIME WINDOW, with nobody awake.
 
 ## Why it exists
 
@@ -1688,15 +1688,15 @@ def cmd_land(argv):
     done, it continues from the build. Without `--yes`, it only shows the plan."""
     ap = argparse.ArgumentParser(
         prog="cepa-until aterrissar",
-        description="Leva a branch do run (until/<run>) para a branch do clone: "
-                    "merge, build completo e push. Para no conflito, nunca "
-                    "faz push com build vermelho, e rodar de novo retoma de "
-                    "onde parou. Sem --yes, só mostra o plano.")
-    ap.add_argument("target", metavar="alvo", help="<fila>/<run>, como o resumo do run imprime")
+        description="Brings the run branch (until/<run>) into the clone's branch: "
+                    "merge, full build and push. Stops on a conflict, never "
+                    "pushes a red build, and running again resumes where it "
+                    "stopped. Without --yes, it only shows the plan.")
+    ap.add_argument("target", metavar="target", help="<queue>/<run>, as the run summary prints it")
     ap.add_argument("--repo", default=".", metavar="DIR",
-                    help="raiz do repositório (default: o diretório atual)")
+                    help="repository root (default: the current directory)")
     ap.add_argument("--yes", "--sim", dest="yes", action="store_true",
-                    help="executa; sem ele, só mostra o plano")
+                    help="execute; without it, only show the plan")
     a = ap.parse_args(argv)
     if "/" not in a.target:
         print("cepa-until aterrissar: o alvo é <fila>/<run> (ex.: "
@@ -2565,16 +2565,16 @@ def cmd_decide(argv):
     o cepa-until")."""
     ap = argparse.ArgumentParser(
         prog="cepa-until decide",
-        description="Pergunta, uma por vez, o que espera o dono: com <fila>, "
-                    "tudo o que a fila guarda para ele, de qualquer run; com "
-                    "<fila>/<run>, aterrissar e cada item adiado daquele run. "
-                    "Cada pergunta é fechada, com recomendação, e a resposta "
-                    "é aplicada na hora (cepa-plan answer).")
-    ap.add_argument("target", metavar="alvo",
-                    help="<fila> (a fila inteira) ou <fila>/<run>, como o "
-                         "resumo do run imprime")
+        description="Asks, one at a time, what is waiting for the owner: with <queue>, "
+                    "everything the queue holds for them, from any run; with "
+                    "<queue>/<run>, landing (aterrissar) and each deferred item of that run. "
+                    "Each question is closed, with a recommendation, and the answer "
+                    "is applied right away (cepa-plan answer).")
+    ap.add_argument("target", metavar="target",
+                    help="<queue> (the whole queue) or <queue>/<run>, as the "
+                         "run summary prints it")
     ap.add_argument("--repo", default=".", metavar="DIR",
-                    help="raiz do repositório (default: o diretório atual)")
+                    help="repository root (default: the current directory)")
     a = ap.parse_args(argv)
     if "/" not in a.target:
         if not (re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", a.target)
@@ -2624,15 +2624,15 @@ def cmd_close_dead(argv):
     `cepa-doctor` keeps pointing at the run. Without `--yes`, it only shows the plan."""
     ap = argparse.ArgumentParser(
         prog="cepa-until fecha-morto",
-        description="Roda o build completo que faltou num run cujo supervisor "
-                    "morreu ou foi interrompido. Verde: o run fica esperando o "
-                    "dono, pronto para o aterrissar. Vermelho: nada muda, e o "
-                    "cepa-doctor segue apontando o run. Sem --yes, só mostra o plano.")
-    ap.add_argument("target", metavar="alvo", help="<fila>/<run>, como o doctor imprime")
+        description="Runs the missing full build of a run whose supervisor "
+                    "died or was interrupted. Green: the run waits for the "
+                    "owner, ready for aterrissar. Red: nothing changes, and "
+                    "cepa-doctor keeps pointing at the run. Without --yes, it only shows the plan.")
+    ap.add_argument("target", metavar="target", help="<queue>/<run>, as the doctor prints it")
     ap.add_argument("--repo", default=".", metavar="DIR",
-                    help="raiz do repositório (default: o diretório atual)")
+                    help="repository root (default: the current directory)")
     ap.add_argument("--yes", "--sim", dest="yes", action="store_true",
-                    help="executa; sem ele, só mostra o plano")
+                    help="execute; without it, only show the plan")
     a = ap.parse_args(argv)
 
     def refuse(text):
@@ -3003,12 +3003,12 @@ def cmd_pending(argv):
     `/common:doctor` read to say that a run is waiting for the owner (C6)."""
     ap = argparse.ArgumentParser(
         prog="cepa-until pendentes",
-        description="Lista os runs que esperam o dono (branch pronta para "
-                    "aterrissar, itens em \"Fica com você\") e os runs cujo "
-                    "supervisor morreu. É o que /common:next e /common:doctor leem.")
+        description="Lists the runs waiting for the owner (branch ready to "
+                    "land, items in \"Fica com você\") and the runs whose "
+                    "supervisor died. This is what /common:next and /common:doctor read.")
     ap.add_argument("--repo", default=".", metavar="DIR",
-                    help="raiz do repositório (default: o diretório atual)")
-    ap.add_argument("--json", action="store_true", help="saída em JSON, para código")
+                    help="repository root (default: the current directory)")
+    ap.add_argument("--json", action="store_true", help="JSON output, for code")
     a = ap.parse_args(argv)
     found = waiting_runs(Path(a.repo).resolve())
     dead = dead_runs(Path(a.repo).resolve())
@@ -3045,26 +3045,26 @@ def main(argv=None):
     ap = argparse.ArgumentParser(
         prog="cepa-until",
         description=(
-            "Executa a fila single-track do repo por uma JANELA DE TEMPO, sem\n"
-            "ninguém acordado.\n"
+            "Runs the repo's single-track queue for a TIME WINDOW, with nobody\n"
+            "awake.\n"
             "\n"
-            "Um item por subprocesso: a cada item dispara um `claude -p` novo\n"
-            "(/common:drain-plan <fila> --max 1), com contexto limpo, dentro da\n"
-            "worktree until/<run> que o supervisor abre no início. Estourar o\n"
-            "contexto deixa de ser falha e vira o fim normal de um subprocesso.\n"
-            "Quem reserva o item, registra o desfecho e conhece a topologia é o\n"
-            "drain-plan + cepa-plan; este arquivo é a fiação em volta: relógio,\n"
-            "disjuntor, cota da conta, build completo depois de cada item `done`\n"
-            "(vermelho = o item vira `blocked` e a branch volta) e log.\n"
+            "One item per subprocess: each item starts a fresh `claude -p`\n"
+            "(/common:drain-plan <queue> --max 1), with a clean context, inside the\n"
+            "until/<run> worktree the supervisor opens at the start. Running out of\n"
+            "context stops being a failure and becomes the normal end of a subprocess.\n"
+            "Reserving the item, recording the outcome and knowing the topology is\n"
+            "the job of drain-plan + cepa-plan. This file is the wiring around them:\n"
+            "clock, circuit breaker, account quota, full build after each `done` item\n"
+            "(red = the item becomes `blocked` and the branch rolls back) and log.\n"
             "\n"
-            "O corte acontece entre itens, nunca no meio de um. Nada vai para main\n"
-            "nem para origin: de manhã, `cepa-until decide <fila>/<run>` pergunta\n"
-            "o que ficou para você, e `aterrissar` leva a branch para o clone.\n"
+            "The cut happens between items, never in the middle of one. Nothing goes to\n"
+            "main or origin: in the morning, `cepa-until decide <queue>/<run>` asks\n"
+            "what was left for you, and `aterrissar` brings the branch into the clone.\n"
             "\n"
-            "exemplos:\n"
+            "examples:\n"
             "  cepa-until wego --for 12h\n"
             "  cepa-until wego --until 07:00 --dry-run\n"
-            "  cepa-until wego --for 8h --no-verify     # repo sem build\n"
+            "  cepa-until wego --for 8h --no-verify     # repo without a build\n"
             "  cepa-until pendentes\n"
             "  cepa-until decide wego/2026-11-03-2210\n"
             "  cepa-until aterrissar wego/2026-11-03-2210 --yes"),
@@ -3072,69 +3072,69 @@ def main(argv=None):
         # The subcommands are dispatched before this parser: without the epilog,
         # `--help` doesn't say that they exist.
         epilog=(
-            "subcomandos (cada um com o próprio --help):\n"
+            "subcommands (each with its own --help):\n"
             "  cepa-until pendentes [--repo R] [--json]\n"
-            "      runs esperando o dono e runs cujo supervisor morreu\n"
-            "  cepa-until aterrissar <fila>/<run> [--yes]\n"
-            "      leva a branch da noite para a branch do clone (merge,\n"
-            "      build completo e push); sem --yes só mostra o plano\n"
-            "  cepa-until fecha-morto <fila>/<run> [--yes]\n"
-            "      roda o build que faltou num run cujo supervisor morreu ou\n"
-            "      foi interrompido e o deixa pronto para o aterrissar\n"
-            "  cepa-until decide <fila>/<run>\n"
-            "      pergunta, uma por vez, o que o run deixou para você:\n"
-            "      aterrissar e cada item adiado que só você destrava"))
-    ap.add_argument("queue", metavar="fila", help="nome da fila em .claude/queues/<nome>/queue.yaml")
+            "      runs waiting for the owner and runs whose supervisor died\n"
+            "  cepa-until aterrissar <queue>/<run> [--yes]\n"
+            "      lands the run branch on the clone's branch (merge,\n"
+            "      full build and push); without --yes it only shows the plan\n"
+            "  cepa-until fecha-morto <queue>/<run> [--yes]\n"
+            "      runs the missing build of a run whose supervisor died or\n"
+            "      was interrupted and leaves it ready for aterrissar\n"
+            "  cepa-until decide <queue>/<run>\n"
+            "      asks, one at a time, what the run left for you:\n"
+            "      aterrissar and each deferred item only you can unblock"))
+    ap.add_argument("queue", metavar="queue", help="queue name in .claude/queues/<name>/queue.yaml")
     window = ap.add_mutually_exclusive_group(required=True)
     window.add_argument("--for", dest="duration", metavar="12h",
-                        help="quanto tempo rodar (ex.: 12h, 90m)")
+                        help="how long to run (e.g. 12h, 90m)")
     window.add_argument("--until", dest="until_at", metavar="07:00",
-                        help="até que horas rodar (próximo HH:MM)")
+                        help="what time to stop (next HH:MM)")
     ap.add_argument("--repo", default=".", metavar="DIR",
-                    help="raiz do repositório (default: o diretório atual)")
+                    help="repository root (default: the current directory)")
     ap.add_argument("--max-failures", "--max-falhas", type=int, default=DEFAULT_MAX_FAILURES,
-                    dest="max_failures", metavar="MAX_FALHAS",
-                    help=f"disjuntor: falhas SEGUIDAS que encerram o run "
+                    dest="max_failures", metavar="MAX_FAILURES",
+                    help=f"circuit breaker: CONSECUTIVE failures that end the run "
                          f"(default {DEFAULT_MAX_FAILURES})")
     ap.add_argument("--max-blocked", "--max-travados", type=int, default=DEFAULT_MAX_BLOCKED,
-                    dest="max_blocked", metavar="MAX_TRAVADOS",
-                    help=f"itens `blocked` SEGUIDOS que encerram o run: a fila "
-                         f"está travando por uma causa de fora, e seguir só "
-                         f"redescobre a causa (default {DEFAULT_MAX_BLOCKED})")
+                    dest="max_blocked", metavar="MAX_BLOCKED",
+                    help=f"CONSECUTIVE `blocked` items that end the run: the queue "
+                         f"is stuck on an outside cause, and going on only "
+                         f"rediscovers that cause (default {DEFAULT_MAX_BLOCKED})")
     ap.add_argument("--attempts-per-item", "--tentativas-por-item", type=int,
-                    default=DEFAULT_ATTEMPTS_PER_ITEM, dest="attempts_per_item", metavar="TENTATIVAS_ITEM",
-                    help=f"quantos subprocessos a mesma janela gasta no mesmo "
-                         f"item antes de marcá-lo `blocked` e seguir para o "
-                         f"próximo (default {DEFAULT_ATTEMPTS_PER_ITEM})")
+                    default=DEFAULT_ATTEMPTS_PER_ITEM, dest="attempts_per_item", metavar="ATTEMPTS",
+                    help=f"how many subprocesses one window spends on the same "
+                         f"item before marking it `blocked` and moving to the "
+                         f"next (default {DEFAULT_ATTEMPTS_PER_ITEM})")
     ap.add_argument("--min-reserve", "--reserva-minima", default=DEFAULT_MIN_RESERVE,
-                    dest="min_reserve", metavar="RESERVA",
-                    help=f"não começa item se sobra menos que isso "
+                    dest="min_reserve", metavar="RESERVE",
+                    help=f"does not start an item if less than this is left "
                          f"(default {DEFAULT_MIN_RESERVE})")
-    ap.add_argument("--slack", "--folga", dest="slack", metavar="FOLGA", default=DEFAULT_SLACK,
-                    help=f"quanto um item já rodando pode passar do prazo antes "
-                         f"de ser morto (default {DEFAULT_SLACK})")
+    ap.add_argument("--slack", "--folga", dest="slack", metavar="SLACK", default=DEFAULT_SLACK,
+                    help=f"how far a running item may go past the deadline before "
+                         f"it is killed (default {DEFAULT_SLACK})")
     ap.add_argument("--with-permissions", "--com-permissoes", action="store_true", dest="with_permissions",
-                    help="NÃO passa --dangerously-skip-permissions. O "
-                         "subprocesso vai travar no primeiro pedido de "
-                         "permissão — só use com alguém olhando")
+                    help="does NOT pass --dangerously-skip-permissions. The "
+                         "subprocess will hang on the first permission "
+                         "request. Use only with someone watching")
     ap.add_argument("--dirty-ok", "--sujo-ok", action="store_true", dest="dirty_ok",
-                    help="começa mesmo com a árvore suja (por default recusa: "
-                         "sem isso não dá para separar o que o run fez do que "
-                         "já estava lá)")
+                    help="start even with a dirty tree (refused by default: "
+                         "otherwise what the run did cannot be told apart from "
+                         "what was already there)")
     ap.add_argument("--verify", metavar="CMD",
-                    help="o build completo que roda na branch da noite depois "
-                         "de cada item `done` (default: pelo mvnw/gradlew da "
-                         "raiz, ou pelos scripts do package.json)")
+                    help="the full build run on the run branch after "
+                         "each `done` item (default: from the root mvnw/gradlew, "
+                         "or from the package.json scripts)")
     ap.add_argument("--no-verify", "--sem-verify", action="store_true", dest="no_verify",
-                    help="não roda build completo depois dos itens — só para "
-                         "repo sem build")
+                    help="skip the full build after items. Only for a "
+                         "repo without a build")
     ap.add_argument("--no-analysis", "--sem-analise", action="store_true", dest="no_analysis",
-                    help="não roda o /common:until-review no fim do run")
+                    help="skip /common:until-review at the end of the run")
     ap.add_argument("--full-title", "--titulo-inteiro", action="store_true", dest="full_title",
-                    help="no terminal, não corta o título do item na largura "
-                         "da tela (o `.jsonl` sempre guarda o inteiro)")
+                    help="in the terminal, do not cut the item title at the screen "
+                         "width (the `.jsonl` always keeps the full title)")
     ap.add_argument("--dry-run", action="store_true", dest="dry",
-                    help="mostra o plano do run e sai sem executar nada")
+                    help="show the run plan and exit without executing anything")
     if not argv:
         ap.print_help(sys.stderr)
         return 2

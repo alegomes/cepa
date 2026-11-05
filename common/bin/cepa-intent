@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-intent — o único escritor de `.claude/session-intent`.
+"""cepa-intent — the single writer of `.claude/session-intent`.
 
 The problem it solves: sessions drift. Two hours in, nobody (neither the owner
 nor the agent) can say precisely what was intended, which step you are on and
@@ -267,49 +267,49 @@ def main():
         prog="cepa-intent",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            "O único escritor de .claude/session-intent: a intenção da sessão.\n"
+            "The single writer of .claude/session-intent: the session intent.\n"
             "\n"
-            "Sessões derivam: duas horas depois ninguém sabe dizer o que se queria,\n"
-            "em que passo está e quando parar. A intenção (propósito, ponto de\n"
-            "parada, plano de 1 a %d passos, cursor) vive num arquivo por worktree,\n"
-            "e só este comando o escreve. Quem lê: /common:whereami, /common:next,\n"
-            "/common:recap e o hook de sessão.\n"
+            "Sessions drift: two hours in, nobody can say what was intended, which\n"
+            "step you are on and when to stop. The intent (purpose, stopping point,\n"
+            "a plan of 1 to %d steps, cursor) lives in one file per worktree, and\n"
+            "only this command writes it. Readers: /common:whereami, /common:next,\n"
+            "/common:recap and the session hook.\n"
             "\n"
-            "ações (os nomes antigos gravar/mostrar/continuar/estado/encerrar ainda valem):\n"
-            "  write      grava uma intenção nova; sobre uma existente exige --reason\n"
-            "  show       imprime a intenção atual (é o default sem ação)\n"
-            "  continue   adota nesta sessão a intenção gravada por outra sessão\n"
-            "  state      só lê: classifica (empty, normal, fulfilled, other-session)\n"
-            "  close      o que /common:wrap-up roda: telemetria de fim de sessão\n"
+            "actions (the old names gravar/mostrar/continuar/estado/encerrar still work):\n"
+            "  write      records a new intent; over an existing one it requires --reason\n"
+            "  show       prints the current intent (the default with no action)\n"
+            "  continue   adopts in this session the intent recorded by another session\n"
+            "  state      read-only: classifies it (empty, normal, fulfilled, other-session)\n"
+            "  close      what /common:wrap-up runs: end-of-session telemetry\n"
             "\n"
-            "Sem ação, --step/--purpose/--plan editam a intenção existente." % M.PLAN_MAX),
+            "With no action, --step/--purpose/--plan edit the existing intent." % M.PLAN_MAX),
         epilog=(
-            "exemplos:\n"
-            "  cepa-intent write --purpose \"...\" --by-when \"hoje\" --plan \"levantar\" \"escrever\" \"decidir\"\n"
-            "  cepa-intent --step 2             # passo 1 feito, passo 2 em andamento\n"
-            "  cepa-intent --step 4             # com plano de 3 itens: plano cumprido\n"
-            "  cepa-intent --purpose \"novo\" --reason \"o dono reformulou\"\n"
-            "  cepa-intent --plan \"a\" \"b\"      # reinicia o cursor no passo 1\n"
-            "  cepa-intent                      # mostra a intenção atual\n"
+            "examples:\n"
+            "  cepa-intent write --purpose \"...\" --by-when \"today\" --plan \"survey\" \"write\" \"decide\"\n"
+            "  cepa-intent --step 2             # step 1 done, step 2 in progress\n"
+            "  cepa-intent --step 4             # with a 3-item plan: plan fulfilled\n"
+            "  cepa-intent --purpose \"new\" --reason \"the owner rephrased it\"\n"
+            "  cepa-intent --plan \"a\" \"b\"      # resets the cursor to step 1\n"
+            "  cepa-intent                      # shows the current intent\n"
             "\n"
-            "regras: item do plano não tem ':'; com `write`, a ação vem ANTES de --plan\n"
-            "(que consome tudo até a próxima opção). Escrita atômica, cria .claude/ se faltar.\n"
+            "rules: a plan item has no ':'; with `write`, the action comes BEFORE --plan\n"
+            "(which consumes everything up to the next option). Atomic write, creates .claude/ if missing.\n"
             "\n"
-            "saída: 0 ok · 2 uso inválido ou regra do escritor recusou · 3 não há intenção\n"
-            "gravada · 4 já existe intenção e falta --reason para reescrever"))
-    ap.add_argument("action", nargs="?", choices=ACTION_NAMES, metavar="<ação>",
-                    help="write, show, continue, state ou close (default: show)")
-    ap.add_argument("--purpose", "--proposito", dest="purpose", metavar="TEXTO",
-                    help="o que esta sessão quer entregar, em uma frase")
-    ap.add_argument("--by-when", "--para-quando", dest="by_when", metavar="QUANDO",
-                    help="o ponto de parada: data, hora ou condição")
-    ap.add_argument("--plan", "--plano", nargs="+", dest="plan", metavar="PASSO",
-                    help="os passos, um argumento por passo (1 a %d, sem ':')" % M.PLAN_MAX)
+            "exit: 0 ok · 2 invalid usage or a writer rule refused · 3 no intent\n"
+            "recorded · 4 an intent exists and --reason is missing to rewrite it"))
+    ap.add_argument("action", nargs="?", choices=ACTION_NAMES, metavar="<action>",
+                    help="write, show, continue, state or close (default: show)")
+    ap.add_argument("--purpose", "--proposito", dest="purpose", metavar="TEXT",
+                    help="what this session wants to deliver, in one sentence")
+    ap.add_argument("--by-when", "--para-quando", dest="by_when", metavar="WHEN",
+                    help="the stopping point: a date, a time or a condition")
+    ap.add_argument("--plan", "--plano", nargs="+", dest="plan", metavar="STEP",
+                    help="the steps, one argument per step (1 to %d, no ':')" % M.PLAN_MAX)
     ap.add_argument("--step", "--passo", type=int, dest="step", metavar="N",
-                    help="o passo EM ANDAMENTO (1-based); M+1 = plano cumprido")
-    ap.add_argument("--reason", "--motivo", dest="reason", metavar="TEXTO",
-                    help="por que a intenção mudou; obrigatório com --purpose e ao "
-                         "reescrever com write")
+                    help="the step IN PROGRESS (1-based); M+1 = plan fulfilled")
+    ap.add_argument("--reason", "--motivo", dest="reason", metavar="TEXT",
+                    help="why the intent changed; required with --purpose and when "
+                         "rewriting with write")
     a = ap.parse_args()
     a.action = ACTIONS.get(a.action, a.action)  # the old name becomes the new one
 

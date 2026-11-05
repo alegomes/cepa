@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-until-digest — o resumo de uma rodada do `cepa-until` que cabe numa sessão.
+"""cepa-until-digest — the summary of a `cepa-until` run that fits in one session.
 
 ## Why it exists
 
@@ -471,33 +471,33 @@ def main(argv=None):
         prog="cepa-until-digest",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            "O resumo de um run do cepa-until que cabe numa sessão.\n"
+            "The summary of a cepa-until run that fits in one session.\n"
             "\n"
-            "Um run deixa dois arquivos: o registro (<run>.jsonl, alguns KB) e a\n"
-            "saída bruta de cada subprocesso (<run>.log, que passa de 10 MB e não\n"
-            "cabe em sessão nenhuma). Este script escolhe MECANICAMENTE o que ler,\n"
-            "e diz o que escolheu:\n"
-            "  - o registro inteiro (início, fim, cada item, cada build)\n"
-            "  - por rodada: o relatório final do claude, as chamadas de agente por\n"
-            "    tipo, os erros de ferramenta e o custo\n"
-            "  - por rodada, os SINAIS DE PROCESSO: worktree aberta por alguém que\n"
-            "    não o proof-reviewer, gate de build contornado com o verde de outro\n"
-            "    módulo\n"
-            "  - o fim da saída de cada build completo do supervisor\n"
-            "  - o status e a evidência ATUAIS de cada item tocado, lidos da fila\n"
+            "A run leaves two files: the record (<run>.jsonl, a few KB) and the\n"
+            "raw output of each subprocess (<run>.log, which goes past 10 MB and\n"
+            "fits in no session). This script MECHANICALLY picks what to read,\n"
+            "and says what it picked:\n"
+            "  - the whole record (start, end, each item, each build)\n"
+            "  - per round: claude's final report, agent calls by type,\n"
+            "    tool errors and cost\n"
+            "  - per round, the PROCESS SIGNALS: a worktree opened by someone other\n"
+            "    than the proof-reviewer, a build gate bypassed with another\n"
+            "    module's green\n"
+            "  - the tail of each full build the supervisor ran\n"
+            "  - the CURRENT status and evidence of each touched item, read from the queue\n"
             "\n"
-            "Quem interpreta é /common:until-review. Este script não opina."),
+            "/common:until-review interprets it. This script has no opinion."),
         epilog=(
-            "exemplos:\n"
+            "examples:\n"
             "  cepa-until-digest .claude/queues/wego/until/2026-09-23-1826.jsonl\n"
             "  cepa-until-digest <run>.jsonl --result-max 4000\n"
             "\n"
-            "saída: 0 ok · 2 o registro não existe"))
-    ap.add_argument("ledger", metavar="registro",
-                    help="o <run>.jsonl que o cepa-until gravou (o .log é lido do lado dele)")
+            "exit: 0 ok · 2 the record does not exist"))
+    ap.add_argument("ledger", metavar="ledger",
+                    help="the <run>.jsonl that cepa-until wrote (the .log next to it is read too)")
     ap.add_argument("--result-max", type=int, default=DEFAULT_RESULT_MAX, metavar="N",
-                    help=f"quantos caracteres do relatório final de cada rodada "
-                         f"entram no resumo (default: {DEFAULT_RESULT_MAX})")
+                    help=f"how many characters of each round's final report "
+                         f"go into the summary (default: {DEFAULT_RESULT_MAX})")
     argv = sys.argv[1:] if argv is None else argv
     if not argv:
         ap.print_help(sys.stderr)

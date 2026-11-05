@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-prove — prova a coluna Review por uma JANELA DE TEMPO, um card por subprocesso.
+"""cepa-prove — proves the Review column for a TIME WINDOW, one card per subprocess.
 
 ## Why it exists
 
@@ -317,64 +317,64 @@ def main(argv=None):
         prog="cepa-prove",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            "Prova a coluna Review do Jira por uma JANELA DE TEMPO, um card por\n"
-            "subprocesso (/board-flow:prove-drain --max 1).\n"
+            "Proves the Jira Review column for a TIME WINDOW, one card per\n"
+            "subprocess (/board-flow:prove-drain --max 1).\n"
             "\n"
-            "Tem a forma do cepa-until: a cada rodada dispara um `claude -p` novo, com\n"
-            "contexto limpo, até a janela fechar ou a coluna esvaziar. Não fala com\n"
-            "o Jira nem sabe o que é um card: quem reserva, prova e roteia o veredito\n"
-            "é o prove-drain + atlassian-expert. Este supervisor é a fiação em volta:\n"
-            "relógio, disjuntor, pausa de cota, log, e duas coisas só ele faz: lembrar\n"
-            "os cards já tratados (repassados como --skip) e ler o desfecho do disco\n"
-            "(docs/proof/<KEY>.yaml), não da prosa do agente.\n"
+            "Same shape as cepa-until: each round starts a fresh `claude -p`, with a\n"
+            "clean context, until the window closes or the column is empty. It does not\n"
+            "talk to Jira and does not know what a card is: prove-drain + atlassian-expert\n"
+            "reserve, prove and route the verdict. This supervisor is the wiring around\n"
+            "them: clock, circuit breaker, quota pause, log, and two things only it does:\n"
+            "remember the cards already handled (passed on as --skip) and read the outcome\n"
+            "from disk (docs/proof/<KEY>.yaml), not from the agent's prose.\n"
             "\n"
-            "Cada artefato é commitado na branch ATUAL depois da rodada\n"
-            "(`proof: <KEY> <VERDICT>`); de manhã não há nada a mesclar. O corte\n"
-            "acontece entre rodadas, nunca no meio de uma."),
+            "Each artifact is committed on the CURRENT branch after the round\n"
+            "(`proof: <KEY> <VERDICT>`), so in the morning there is nothing to merge.\n"
+            "The cut happens between rounds, never in the middle of one."),
         epilog=(
-            "exemplos:\n"
-            "  cepa-prove --for 3h                   # ou --until 07:00\n"
-            "  cepa-prove --for 3h --dry-run         # o plano do run, sem executar\n"
+            "examples:\n"
+            "  cepa-prove --for 3h                   # or --until 07:00\n"
+            "  cepa-prove --for 3h --dry-run         # the run plan, without executing\n"
             "  cepa-prove --for 3h --scope 'labels = squad-a'\n"
-            "  cepa-prove --for 3h --max 4           # no máximo 4 cards, mesmo sobrando tempo\n"
+            "  cepa-prove --for 3h --max 4           # at most 4 cards, even with time left\n"
             "\n"
-            "o registro do run fica em .claude/prove/<run>.jsonl, um evento por rodada e por card."))
+            "the run record goes to .claude/prove/<run>.jsonl, one event per round and per card."))
     window = ap.add_mutually_exclusive_group(required=True)
     window.add_argument("--for", dest="duration", metavar="3h",
-                        help="quanto tempo rodar (ex.: 3h, 90m)")
+                        help="how long to run (e.g. 3h, 90m)")
     window.add_argument("--until", dest="until_at", metavar="07:00",
-                        help="até que horas rodar (próximo HH:MM)")
+                        help="what time to stop (next HH:MM)")
     ap.add_argument("--repo", default=".", metavar="DIR",
-                help="raiz do repositório (default: o diretório atual)")
+                help="repository root (default: the current directory)")
     ap.add_argument("--max", type=int, default=0, metavar="N",
-                    help="teto de cards com veredito nesta janela (default: "
-                         "sem teto, só o relógio)")
+                    help="cap on cards with a verdict in this window (default: "
+                         "no cap, only the clock)")
     ap.add_argument("--max-failures", type=int, default=DEFAULT_MAX_FAILURES,
                     dest="max_failures", metavar="N",
-                    help=f"disjuntor: rodadas SEGUIDAS sem artefato de prova que "
-                         f"encerram o run (default {DEFAULT_MAX_FAILURES})")
+                    help=f"circuit breaker: CONSECUTIVE rounds without a proof artifact "
+                         f"that end the run (default {DEFAULT_MAX_FAILURES})")
     ap.add_argument("--min-reserve", default=DEFAULT_MIN_RESERVE, dest="min_reserve",
-                    metavar="RESERVA",
-                    help=f"não começa rodada se sobra menos que isso (default "
+                    metavar="RESERVE",
+                    help=f"does not start a round if less than this is left (default "
                          f"{DEFAULT_MIN_RESERVE})")
-    ap.add_argument("--slack", default=DEFAULT_SLACK, metavar="FOLGA",
-                    help=f"quanto uma rodada já em voo pode passar do prazo antes "
-                         f"de ser morta (default {DEFAULT_SLACK})")
+    ap.add_argument("--slack", default=DEFAULT_SLACK, metavar="SLACK",
+                    help=f"how far a running round may go past the deadline before "
+                         f"it is killed (default {DEFAULT_SLACK})")
     scope = ap.add_mutually_exclusive_group()
     scope.add_argument("--scope", metavar="JQL",
-                       help="fatia da coluna Review para este run (repassado ao "
+                       help="slice of the Review column for this run (passed on to "
                             "prove-drain)")
     scope.add_argument("--no-scope", action="store_true", dest="no_scope",
-                       help="ignora o scope configurado no board-flow.yaml")
+                       help="ignore the scope configured in board-flow.yaml")
     ap.add_argument("--with-permissions", action="store_true", dest="with_permissions",
-                    help="NÃO passa --dangerously-skip-permissions (o subprocesso "
-                         "trava no 1º pedido — só com alguém olhando)")
+                    help="does NOT pass --dangerously-skip-permissions (the subprocess "
+                         "hangs on the first request. Only with someone watching)")
     ap.add_argument("--no-commit", action="store_true", dest="no_commit",
-                    help="não commita docs/proof/<KEY>.yaml depois de cada rodada")
+                    help="do not commit docs/proof/<KEY>.yaml after each round")
     ap.add_argument("--dirty-ok", action="store_true", dest="dirty_ok",
-                    help="começa mesmo com a árvore suja fora de docs/proof/")
+                    help="start even with a dirty tree outside docs/proof/")
     ap.add_argument("--dry-run", action="store_true", dest="dry",
-                    help="mostra o plano do run e sai sem executar nada")
+                    help="show the run plan and exit without executing anything")
     if not argv:
         ap.print_help(sys.stderr)
         return 2

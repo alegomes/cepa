@@ -28,8 +28,8 @@ completion-auditor and the proof-reviewer enforce, and in refactor the
 the round by the owner's decision (it is the only one that depends on external
 infra). When it comes in, it comes in here first.
 
-The VALUES of the table (purpose/entry/produces/exit/gate prose) stay in
-pt-BR: they are shown to the user and injected into the turn, and
+The `purpose` VALUES are English (help text: `cepa --mode help`). The
+other VALUES (entry/produces/exit/gate prose) stay in pt-BR: they are shown to the user and injected into the turn, and
 `cepa-modes --json` prints them. The dict KEYS are English here; `cepa-modes
 --json` maps them back to the legacy keys (`proposito`, `entrada`, `produz`,
 `saida`, `gate`, `escrita`) because compass reads `saida` from that JSON.
@@ -41,7 +41,7 @@ import re
 # order = the order of the work cycle, not alphabetical
 MODES = {
     "exploration": {
-        "purpose": "entender uma dor que ainda não tem solução proposta, e sair com um caminho recomendado",
+        "purpose": "understand a pain that has no proposed solution yet, and leave with a recommended path",
         "entry": "uma dor em linguagem natural, SEM solução proposta — se você "
                    "já sabe a solução, não é exploração",
         "produces": "um documento de estratégia com 2+ caminhos considerados, um "
@@ -52,7 +52,7 @@ MODES = {
         "write": ["docs/**", ".claude/**", "BACKLOG.md"],
     },
     "discovery": {
-        "purpose": "virar um comportamento desejado em critério de aceite cobrável, com evidência atrás",
+        "purpose": "turn a desired behavior into an enforceable acceptance criterion, with evidence behind it",
         "entry": "um comportamento desejado, vindo da exploração ou direto",
         "produces": "oportunidade enquadrada, evidência coletada, e os critérios de "
                   "aceite escritos NA ALTITUDE em que serão cobrados",
@@ -62,7 +62,7 @@ MODES = {
         "write": ["docs/discovery/**", "docs/spec/**", "docs/epics/**", ".claude/**", "BACKLOG.md"],
     },
     "design": {
-        "purpose": "desenhar como a coisa funciona e como ela se parece, antes de existir código",
+        "purpose": "design how the thing works and how it looks, before any code exists",
         "entry": "oportunidade validada",
         "produces": "fluxos, estados, spec visual reconciliada com o design system, "
                   "protótipo compartilhável",
@@ -71,7 +71,7 @@ MODES = {
         "write": ["docs/design/**", ".claude/**", "BACKLOG.md"],
     },
     "construction": {
-        "purpose": "escrever o código que faz o teste vermelho do critério ficar verde",
+        "purpose": "write the code that turns the criterion's red test green",
         "entry": "UM TESTE VERMELHO escrito a partir do critério de aceite, antes "
                    "do código, por quem não vai implementar",
         "produces": "código + testes",
@@ -80,7 +80,7 @@ MODES = {
         "write": "tudo",
     },
     "refactor": {
-        "purpose": "reorganizar código já entregue sem mudar nada que se veja de fora",
+        "purpose": "reorganize delivered code without changing anything visible from outside",
         "entry": "ORÇAMENTO DECLARADO — a lista fechada do que será reformado e o "
                    "limite; sem orçamento a reforma nunca termina",
         "produces": "código reorganizado, comportamento externo idêntico",
@@ -90,7 +90,7 @@ MODES = {
         "write": "tudo",
     },
     "reflection": {
-        "purpose": "olhar o que já existe por uma lente escolhida e transformar cada achado em destino",
+        "purpose": "look at what already exists through a chosen lens and give each finding a destination",
         "entry": "um RECORTE e uma LENTE, ambos escolhidos de menu — reflexão sem "
                    "recorte vira leitura infinita do repo",
         "produces": "um relatório de achados classificados",
@@ -100,7 +100,7 @@ MODES = {
         "write": [".claude/reflection/**", ".claude/reflexao/**", "docs/**", "BACKLOG.md"],
     },
     "documentation": {
-        "purpose": "documentar código estável na árvore Diátaxis, com cada porquê citando sua fonte",
+        "purpose": "document stable code in the Diátaxis tree, with every why citing its source",
         "entry": "código estável, não em construção ativa",
         "produces": "a árvore Diátaxis fundamentada",
         "exit": "consistency-reviewer PASS e sua assinatura em /docs:finalize",

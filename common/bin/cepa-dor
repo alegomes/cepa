@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-dor — Definition of Ready invocável para as fatias de um plan.yaml.
+"""cepa-dor — invocable Definition of Ready for the slices of a plan.yaml.
 
 Deliberately decoupled primitive (Maestro v1 design, Component 4): the maestro
 is the first client, but /board-flow:triage and /board-flow:drain can reuse the
@@ -119,45 +119,45 @@ def main() -> int:
         prog="cepa-dor",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            "Definition of Ready das fatias de um plano de ondas (plan.yaml).\n"
+            "Definition of Ready for the slices of a wave plan (plan.yaml).\n"
             "\n"
-            "Veredito por fatia: READY ou NOT-READY, com as lacunas nomeadas. 100%\n"
-            "só leitura. Primeiro cliente: /maestro:program-plan, que itera o plano\n"
-            "com você até toda fatia sair READY.\n"
+            "Verdict per slice: READY or NOT-READY, with the gaps named. 100%\n"
+            "read-only. First client: /maestro:program-plan, which iterates the plan\n"
+            "with you until every slice comes out READY.\n"
             "\n"
-            "O que confere (cada checagem existe porque a falha já custou uma onda):\n"
-            "  - schema_version 1 ou 2 e mode parallel-waves (fila single-track é\n"
-            "    recusada, apontando para /common:queue e /common:next)\n"
-            "  - programa com 4+ demandas (piso D7)\n"
-            "  - superfície declarada DISJUNTA das outras fatias da onda nos\n"
-            "    arquivos-cartório (`cartorios:` no topo do plano, medidos por\n"
-            "    cepa-hotspots); interseção em outro arquivo é aviso, não veto\n"
-            "  - superfície fora da zona de enforcement (negação incondicional)\n"
-            "  - critério de aceite declarado; em repo .claude/no-build, um\n"
-            "    acceptance_cmd executável\n"
-            "  - forma do aceite: Given/When/Then observável, ou\n"
-            "    `acceptance_form: substrate` declarado\n"
-            "  - zero decisão estratégica em aberto (human_gate)\n"
-            "  - contexto mínimo apontado e baseline verde no ponto de fork"),
+            "What it checks (each check exists because the failure already cost a wave):\n"
+            "  - schema_version 1 or 2 and mode parallel-waves (a single-track queue\n"
+            "    is refused, pointing to /common:queue and /common:next)\n"
+            "  - program with 4+ demands (floor D7)\n"
+            "  - declared surface DISJOINT from the wave's other slices on the\n"
+            "    registry files (`cartorios:` at the top of the plan, measured by\n"
+            "    cepa-hotspots); overlap on any other file is a warning, not a veto\n"
+            "  - surface outside the enforcement zone (unconditional denial)\n"
+            "  - acceptance criterion declared; in a .claude/no-build repo, an\n"
+            "    executable acceptance_cmd\n"
+            "  - acceptance shape: observable Given/When/Then, or\n"
+            "    `acceptance_form: substrate` declared\n"
+            "  - zero open strategic decisions (human_gate)\n"
+            "  - minimal context pointed to and a green baseline at the fork point"),
         epilog=(
-            "exemplos:\n"
+            "examples:\n"
             "  cepa-dor .claude/programs/wego/plan.yaml\n"
             "  cepa-dor .claude/programs/wego/plan.yaml --wave 2 --json\n"
             "  cepa-dor plan.yaml --fork-point origin/main --enforcement-zone 'infra/**'\n"
             "\n"
-            "saída: 0 = todas READY · 1 = READY com avisos · 2 = alguma NOT-READY ou plano inválido"))
-    ap.add_argument("plan", metavar="plano", help="caminho do plan.yaml de ondas")
+            "exit: 0 = all READY · 1 = READY with warnings · 2 = some NOT-READY or invalid plan"))
+    ap.add_argument("plan", metavar="plan", help="path to the wave plan.yaml")
     ap.add_argument("--wave", type=int, default=None, metavar="N",
-                    help="id da onda a checar (default: a primeira pending)")
+                    help="id of the wave to check (default: the first pending one)")
     ap.add_argument("--fork-point", default="HEAD", metavar="REF",
-                    help="ref de onde as fatias partem; os globs de superfície são "
-                         "expandidos contra a árvore nesse ponto (default: HEAD)")
+                    help="ref the slices start from; surface globs are expanded "
+                         "against the tree at that point (default: HEAD)")
     ap.add_argument("--repo", default=".", metavar="DIR",
-                    help="raiz do repositório (default: o diretório atual)")
-    ap.add_argument("--json", action="store_true", help="saída em JSON, para código")
+                    help="repository root (default: the current directory)")
+    ap.add_argument("--json", action="store_true", help="JSON output, for code")
     ap.add_argument("--enforcement-zone", nargs="*", metavar="GLOB",
                     default=DEFAULT_ENFORCEMENT_ZONE,
-                    help="globs que nenhuma fatia pode tocar (default: "
+                    help="globs no slice may touch (default: "
                          + ", ".join(DEFAULT_ENFORCEMENT_ZONE) + ")")
     if len(sys.argv) == 1:
         ap.print_help(sys.stderr)
