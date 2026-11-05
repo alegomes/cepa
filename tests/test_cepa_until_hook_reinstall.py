@@ -258,6 +258,11 @@ FAKE_INSTALL = """#!/bin/sh
 echo "$@" >> "$FAKE_INSTALL_LOG"
 case "$1" in
   --clean)
+    if [ -n "$FAKE_INSTALL_VAZIO" ]; then
+      rm -rf "$CEPA_PLUGIN_CACHE_DIR.prev"
+      mv "$CEPA_PLUGIN_CACHE_DIR" "$CEPA_PLUGIN_CACHE_DIR.prev"
+      exit 0
+    fi
     if [ -n "$FAKE_INSTALL_FALHA" ]; then
       echo "install quebrou" >&2
       [ -n "$FAKE_ROLLBACK_FALHA" ] && mv "$CEPA_PLUGIN_CACHE_DIR" "$CEPA_PLUGIN_CACHE_DIR.prev"
@@ -304,6 +309,8 @@ def as_cepa(root, cache):
     seed = Path(cache) / "meuplug" / "1.0.0" / "hooks"
     seed.mkdir(parents=True)
     (seed / "trava.py").write_text("v1\n")
+    (seed.parent / "bin").mkdir()
+    (seed.parent / "bin" / "ferramenta").write_text("v1\n")
     return {"CEPA_PLUGIN_CACHE_DIR": str(cache),
             "FAKE_INSTALL_LOG": str(Path(cache).parent / "install.log")}
 
@@ -313,17 +320,49 @@ def install_calls(env):
     return f.read_text().split("\n")[:-1] if f.exists() else []
 
 
+def log_text(root):
+    logs = sorted((root / ".claude/programs/fila/until").glob("*.log"))
+    return logs[-1].read_text(errors="replace") if logs else ""
+
+
+def load_cepa_until():
+    """The real `common/bin/cepa-until` loaded as a module, for the direct checks."""
+    from importlib.machinery import SourceFileLoader
+    path = Path(__file__).resolve().parent.parent / "common" / "bin" / "cepa-until"
+    return SourceFileLoader("cepa_until_mod", str(path)).load_module()
+
+
+def sha_of_cache(mod, cache):
+    old = os.environ.get("CEPA_PLUGIN_CACHE_DIR")
+    os.environ["CEPA_PLUGIN_CACHE_DIR"] = str(cache)
+    try:
+        return mod.installed_hooks_sha()
+    finally:
+        if old is None:
+            del os.environ["CEPA_PLUGIN_CACHE_DIR"]
+        else:
+            os.environ["CEPA_PLUGIN_CACHE_DIR"] = old
+
+
+def put(cache, version, rel, text, plugin="meuplug"):
+    f = Path(cache) / plugin / version / rel
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(text)
+
+
 def of_kind(root, kind):
     return [e for e in ledger_of(root) if e["evento"] == kind]
 
 
 def cepa_run(tmp, items, files, extra=None, args=("--verify", VERIFY), cepa=True,
-             claude=WORKS):
+             claude=WORKS, window="2h", prepare=None):
     root = with_plugin(build_repo(tmp, items))
     cache = Path(tmp) / "cache"
     env = as_cepa(root, cache) if cepa else {
         "CEPA_PLUGIN_CACHE_DIR": str(cache),
         "FAKE_INSTALL_LOG": str(Path(tmp) / "install.log")}
+    if prepare:
+        prepare(root)
     if not cepa:
         with_fake_install(root)
         (cache / "meuplug" / "1.0.0" / "hooks").mkdir(parents=True)
@@ -331,7 +370,7 @@ def cepa_run(tmp, items, files, extra=None, args=("--verify", VERIFY), cepa=True
     env["FAKE_ARQUIVOS"] = files
     env.update(extra or {})
     binv = fake_claude(tmp, claude)
-    p, _ = run_until(root, binv, plan_of(root), ["--for", "2h", *args],
+    p, _ = run_until(root, binv, plan_of(root), ["--for", window, *args],
                      extra_env=env)
     return root, p, env
 
@@ -360,6 +399,8 @@ def test_cepa_repo_reinstalls_after_green_build_of_a_hook():
               "já foram instalados" in stays.get("reinstalar-plugin", "")
               and "bin/install.sh" in stays.get("reinstalar-plugin", ""),
               str(stays))
+        check("o .log traz o trecho com o rótulo reinstall",
+              "· reinstall · sh bin/install.sh --clean" in log_text(root))
         ledger = sorted((root / ".claude/programs/fila/until").glob("*.jsonl"))[-1]
         d = subprocess.run([sys.executable, str(DIGEST), str(ledger)],
                            capture_output=True, text=True)
@@ -422,6 +463,8 @@ def test_failed_install_is_rolled_back_and_the_night_goes_on():
         check("install.sh rodou --clean e depois --rollback",
               install_calls(env) == ["--clean", "--rollback"],
               str(install_calls(env)))
+        check("o .log traz o trecho com o rótulo rollback",
+              "· rollback · sh bin/install.sh --rollback" in log_text(root))
         undone = of_kind(root, "reinstalacao_desfeita")
         check("reinstalacao_desfeita ok: o cache voltou ao sha de antes",
               len(undone) == 1 and undone[0]["ok"] is True
@@ -445,6 +488,9 @@ def test_rollback_that_fails_ends_the_run_with_reinstalacao_falhou():
         undone = of_kind(root, "reinstalacao_desfeita")
         check("reinstalacao_desfeita com ok falso",
               len(undone) == 1 and undone[0]["ok"] is False, str(undone))
+        check("o desfecho do a1 diz que o rollback não devolveu o cache",
+              "a reinstalação dos hooks falhou e o rollback não devolveu o cache"
+              in p.stdout, p.stdout[-1500:])
         end = of_kind(root, "run_end")
         check("o run termina por reinstalacao-falhou",
               end and end[0]["motivo"] == "reinstalacao-falhou", str(end))
@@ -500,14 +546,135 @@ def test_hook_committed_after_the_last_reinstall_is_not_charged_as_installed():
 
 
 def test_no_time_left_postpones_the_reinstall():
+    """Real short window, production floor (120 s): `--for 1.5m --slack 0.01m` leaves
+    ~90 s after the build."""
     with tempfile.TemporaryDirectory() as tmp:
-        root, p, env = cepa_run(tmp, [item("a1")], "a1=meuplug/hooks/trava.py",
-                                extra={"CEPA_REINSTALL_MIN_SEC": "99999999"})
+        root, p, env = cepa_run(
+            tmp, [item("a1")], "a1=meuplug/hooks/trava.py", window="1.5m",
+            args=("--verify", VERIFY, "--min-reserve", "0.01m",
+                  "--slack", "0.01m"))
         ev = of_kind(root, "reinstalacao_adiada")
         check("reinstalacao_adiada no registro e install.sh não roda",
               len(ev) == 1 and ev[0]["id"] == "a1" and not install_calls(env)
-              and not of_kind(root, "hooks_reinstalados"), str(ev))
+              and not of_kind(root, "hooks_reinstalados"), p.stdout[-800:])
+        check("...com o piso de 120s no motivo", ev and "120s" in ev[0]["motivo"],
+              str(ev))
         check("cai no aviso de sempre", len(warnings(root)) == 1)
+
+
+def test_not_cepa_marketplace_with_other_name_warns_and_changes_nothing():
+    def prep(root):
+        (root / ".claude-plugin").mkdir(exist_ok=True)
+        (root / ".claude-plugin" / "marketplace.json").write_text(
+            json.dumps({"name": "outro", "plugins": []}))
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, env = cepa_run(tmp, [item("a1")], "a1=meuplug/hooks/trava.py",
+                                cepa=False, prepare=prep)
+        check("marketplace `outro`: install.sh não roda, nada reinstalado",
+              not install_calls(env) and not of_kind(root, "hooks_reinstalados"),
+              str(install_calls(env)))
+        check("...e avisa hook_so_apos_reinstalar", len(warnings(root)) == 1)
+
+
+def test_cepa_marketplace_without_install_script_warns_and_changes_nothing():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = with_plugin(build_repo(tmp, [item("a1")]))
+        (root / ".claude-plugin").mkdir(exist_ok=True)
+        (root / ".claude-plugin" / "marketplace.json").write_text(
+            json.dumps({"name": "cepa", "plugins": []}))
+        subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                        "commit", "-qm", "mkt"], cwd=root, check=True)
+        env = {"CEPA_PLUGIN_CACHE_DIR": str(Path(tmp) / "cache"),
+               "FAKE_INSTALL_LOG": str(Path(tmp) / "install.log"),
+               "FAKE_ARQUIVOS": "a1=meuplug/hooks/trava.py"}
+        put(Path(tmp) / "cache", "1.0.0", "hooks/trava.py", "v1\n")
+        p, _ = run_until(root, fake_claude(tmp, WORKS), plan_of(root),
+                         ["--for", "2h", "--verify", VERIFY], extra_env=env)
+        check("sem bin/install.sh: nada reinstalado", not of_kind(
+            root, "hooks_reinstalados") and not install_calls(env))
+        check("...e avisa hook_so_apos_reinstalar", len(warnings(root)) == 1,
+              p.stdout[-600:])
+
+
+def test_reinstall_changes_sha_when_only_the_content_changes():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, env = cepa_run(tmp, [item("a1")], "a1=meuplug/hooks/trava.py")
+        ev = of_kind(root, "hooks_reinstalados")
+        seed_names = sorted(
+            f.relative_to(Path(tmp) / "cache.prev").as_posix()
+            for f in (Path(tmp) / "cache.prev").rglob("*") if f.is_file())
+        after_names = sorted(
+            f.relative_to(Path(tmp) / "cache").as_posix()
+            for f in (Path(tmp) / "cache").rglob("*") if f.is_file())
+        check("antes e depois têm os mesmos nomes de arquivo",
+              seed_names == after_names, f"{seed_names} {after_names}")
+        check("só o conteúdo mudou e o sha mudou",
+              ev and ev[0]["sha_antes"] and ev[0]["sha_antes"] != ev[0]["sha_depois"],
+              str(ev))
+
+
+def test_hooks_sha_ignores_pycache_takes_newest_version_and_none_when_empty():
+    mod = load_cepa_until()
+    with tempfile.TemporaryDirectory() as tmp:
+        t = Path(tmp)
+        put(t / "a", "1.0.0", "hooks/x.py", "v1\n")
+        put(t / "b", "1.0.0", "hooks/x.py", "v1\n")
+        put(t / "b", "1.0.0", "hooks/__pycache__/x.pyc", "lixo")
+        sa, sb = sha_of_cache(mod, t / "a"), sha_of_cache(mod, t / "b")
+        check("__pycache__ não entra no sha", sa is not None and sa == sb,
+              f"{sa} {sb}")
+        check("o sha tem 12 hex", sa and len(sa) == 12)
+        # newest version: 1.2.0 wins over 1.0.0 and over 1.10 vs 1.9 ordering
+        put(t / "c", "1.0.0", "hooks/x.py", "velho\n")
+        put(t / "c", "1.2.0", "hooks/x.py", "novo\n")
+        put(t / "d", "1.2.0", "hooks/x.py", "novo\n")
+        check("só a versão mais nova conta",
+              sha_of_cache(mod, t / "c") == sha_of_cache(mod, t / "d"))
+        put(t / "e", "1.9.0", "hooks/x.py", "nove\n")
+        put(t / "e", "1.10.0", "hooks/x.py", "dez\n")
+        put(t / "f", "1.10.0", "hooks/x.py", "dez\n")
+        check("a ordem das versões é numérica (1.10 > 1.9)",
+              sha_of_cache(mod, t / "e") == sha_of_cache(mod, t / "f"))
+        (t / "vazio").mkdir()
+        check("cache vazio dá None", sha_of_cache(mod, t / "vazio") is None)
+        check("cache que não existe dá None",
+              sha_of_cache(mod, t / "nao-existe") is None)
+        put(t / "g", "1.0.0", "outra/coisa.txt", "x")
+        check("sem hooks/ nem bin/ dá None", sha_of_cache(mod, t / "g") is None)
+        put(t / "h", "1.0.0", "bin/ferramenta", "x")
+        check("bin/ também entra no sha", sha_of_cache(mod, t / "h") is not None)
+
+
+def test_item_start_hooks_sha_is_none_without_cache():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = with_plugin(build_repo(tmp, [item("a1")]))
+        env = {"CEPA_PLUGIN_CACHE_DIR": str(Path(tmp) / "nao-existe"),
+               "FAKE_ARQUIVOS": ""}
+        run_until(root, fake_claude(tmp, WORKS), plan_of(root),
+                  ["--for", "2h"], extra_env=env)
+        st = of_kind(root, "item_start")
+        check("hooks_sha é None quando o cache não existe",
+              st and all("hooks_sha" in e and e["hooks_sha"] is None for e in st),
+              str(st))
+
+
+def test_install_that_exits_zero_with_empty_cache_counts_as_failure():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, env = cepa_run(tmp, [item("a1"), item("a2")],
+                                "a1=meuplug/hooks/trava.py",
+                                extra={"FAKE_INSTALL_VAZIO": "1"})
+        ev = of_kind(root, "hooks_reinstalados")
+        check("hooks_reinstalados ok falso (cache sem hooks/bin)",
+              len(ev) == 1 and ev[0]["ok"] is False and ev[0]["sha_depois"] is None,
+              str(ev))
+        check("o rollback rodou e restaurou",
+              install_calls(env) == ["--clean", "--rollback"],
+              str(install_calls(env)))
+        undone = of_kind(root, "reinstalacao_desfeita")
+        check("reinstalacao_desfeita ok com o sha de antes",
+              len(undone) == 1 and undone[0]["ok"] is True
+              and undone[0]["sha"] == ev[0]["sha_antes"], str(undone))
 
 
 def main():
