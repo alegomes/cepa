@@ -318,6 +318,20 @@ def test_reservation_messages_carry_the_heartbeat_age_and_future_falls_through()
               m.reservation_of(old, tmp)[0] == "orfa")
 
 
+def test_unreadable_heartbeat_on_a_stopped_run_falls_through_without_raising():
+    m = load_plan_module()
+    it = {"id": "a1", "status": "in_progress", "claimed_by": claimed(
+        (datetime.now().astimezone() - timedelta(hours=1)).isoformat())}
+    with tempfile.TemporaryDirectory() as tmp:
+        write_state(tmp, "não-é-data", estado="interrompido")
+        try:
+            st = m.reservation_of(it, tmp)[0]
+        except Exception as e:  # noqa: BLE001
+            st = f"EXC {e!r}"
+        check("estado interrompido + heartbeat ilegível, reserva de 1h: regra de 24h -> viva",
+              st == "viva", st)
+
+
 # ── 5. item_pulado ──────────────────────────────────────────────────────────
 
 def test_item_reserved_by_a_live_run_elsewhere_is_logged_once_as_skipped():

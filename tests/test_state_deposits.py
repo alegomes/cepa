@@ -380,6 +380,62 @@ def test_doctor_stray_is_a_warning_not_ok():
               len(lines) == 1 and lines[0].lstrip().startswith("✓"), str(lines))
 
 
+def test_non_dict_estado_files_are_ignored():
+    with tempfile.TemporaryDirectory() as tmp:
+        u = Path(tmp) / ".claude" / "queues" / "q" / "until"
+        u.mkdir(parents=True)
+        (u / "a.estado.json").write_text("[]")
+        (u / "b.estado.json").write_text("null")
+        (u / "c.estado.json").write_text(json.dumps({"run": "c", "estado": "aterrissado"}))
+        rs = _state.runs(tmp)
+        check("`[]` e `null` não entram em runs", [r["estado"]["run"] for r in rs] == ["c"],
+              str(rs))
+        try:
+            got = _state.run_of(tmp, run_id="zzz", tree="/x")
+        except Exception as e:  # noqa: BLE001
+            got = f"EXC {e!r}"
+        check("run_of não quebra nem devolve os arquivos que não são objeto", got is None,
+              str(got))
+
+
+def test_digest_ignores_a_non_dict_estado():
+    digest = REPO / "common" / "bin" / "cepa-until-digest"
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = _digest_fixture(tmp, [])
+        r = subprocess.run([sys.executable, str(digest), str(ledger)],
+                           capture_output=True, text=True)
+        check("`.estado.json` com `[]`: sem linha `- run:` e saída 0",
+              r.returncode == 0 and "- run:" not in r.stdout, r.stdout[:200] + r.stderr[-300:])
+
+
+def test_intent_run_lookup_by_each_key_alone():
+    intent = REPO / "common" / "bin" / "cepa-intent"
+    with tempfile.TemporaryDirectory() as tmp:
+        main = Path(tmp).resolve() / "main"
+        main.mkdir()
+        _git(main, "init", "-q", ".")
+        (main / "README.md").write_text("x\n")
+        _git(main, "add", "-A")
+        _git(main, "commit", "-qm", "base")
+        wtree = Path(tmp).resolve() / "noite"
+        _git(main, "worktree", "add", "-q", "-b", "until/r", str(wtree))
+        u = main / ".claude" / "queues" / "q" / "until"
+        u.mkdir(parents=True)
+
+        def out_with(arvore, env_run):
+            (u / "r.estado.json").write_text(json.dumps(
+                {"run": "r1", "estado": "rodando", "host": _wtlib.host(),
+                 "pid": os.getpid(), "arvore": arvore, "heartbeat": beat(3)}))
+            env = {**os.environ, "CEPA_UNTIL_RUN": env_run}
+            return subprocess.run([sys.executable, str(intent), "state"], cwd=wtree,
+                                  capture_output=True, text=True, env=env).stdout
+
+        out = out_with(str(wtree), "id-que-nao-casa")
+        check("só a árvore casa (o id não): a linha `run:` aparece", "run: r1 (vivo)" in out, out)
+        out = out_with("/outra/arvore", "r1")
+        check("só o id casa (a árvore é outra): a linha `run:` aparece", "run: r1 (vivo)" in out, out)
+
+
 if "--only-scan" in sys.argv:
     test_every_writer_is_catalogued()
     sys.exit(1 if FAILURES else 0)
@@ -390,6 +446,8 @@ for t in (test_every_writer_is_catalogued, test_segment_form_is_scanned,
           test_digest_shows_run_liveness_line,
           test_intent_state_inside_a_run_says_if_it_is_alive,
           test_doctor_stray_is_a_warning_not_ok, test_liveness,
+          test_non_dict_estado_files_are_ignored, test_digest_ignores_a_non_dict_estado,
+          test_intent_run_lookup_by_each_key_alone,
           test_runs_reader, test_bins_use_the_module, test_doctor_warns):
     t()
 
