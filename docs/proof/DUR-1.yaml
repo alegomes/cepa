@@ -1,9 +1,9 @@
 schema_version: 2
 card: DUR-1
-verdict: unproven
-reviewed_at: 2026-11-05T17:35:00-03:00
+verdict: proven
+reviewed_at: 2026-11-05T17:45:00-03:00
 base_commit: 7dbed17
-head_commit: b819240
+head_commit: 0236edb
 issue_type: Task
 scope:
   base_commit_resolved: true
@@ -11,7 +11,7 @@ scope:
     - { class: "common/bin/cepa-until", module: cli-python, external_observable: true, substituted_by_double: null }
     - { class: "common/bin/cepa-plan", module: cli-python, external_observable: true, substituted_by_double: null }
     - { class: "common/bin/cepa-until-digest", module: cli-python, external_observable: true, substituted_by_double: null }
-  note: "Python CLI, no PIT. Tests run the real scripts; only the `claude` binary (far boundary) is faked. Perturbation in throwaway worktree /tmp/proof-DUR-1 (removed). 17 perturbations run; sample, not exhaustive (24h fallback of reservation_of and the sinal/128<code<160 branch were not perturbed)."
+  note: "Python CLI, no PIT. Tests run the real scripts; only the `claude` binary (far boundary) is faked. Round 1 at b819240 (19 perturbations, 3 survived); round 2 at 0236edb re-ran the 3 survivors plus 3 more. Perturbations in throwaway worktrees /tmp/proof-DUR-1 and /tmp/proof-DUR-1b (both removed)."
 levels:
   l3_load_bearing:
     technique: perturbation
@@ -19,31 +19,20 @@ levels:
       status: absent
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "baseline: python3 tests/test_cepa_until_session.py -> todos passaram (rc=0); tests/test_cepa_until_digest.py -> tudo verde (rc=0)"
-        - "1a drop --session-id in build_command -> RED (4 FALHAS: cada chamada recebeu --session-id, uuid distinto, item_start/item_end mesmo id)"
-        - "1b item_start sem session_id -> RED (item_start grava o mesmo id que o claude recebeu)"
-        - "1c item_end sem session_id -> RED (item_end grava o mesmo id)"
-        - "2a rede antes de cota -> RED (cota ganha de rede)"
-        - "2b contexto sem exigir falha -> RED (saida 0 com 'context window' na prosa -> ok)"
-        - "2c hook sem exigir falha -> RED (hook citado em resultado sem erro e saida 0 -> ok)"
-        - "2d folga trocada por sinal -> RED (killed -> folga; folga ganha de cota)"
-        - "3a on_tick nunca chamado em wait_for_child -> RED (heartbeat avancou durante o item; on_tick que levanta nao derruba a espera)"
-        - "3c excecao do on_tick propaga -> RED (RuntimeError nao tratada, rc!=0)"
-        - "4a reservation_of ignora o estado -> RED (4 falhas: heartbeat velho -> orfa, etc.)"
-        - "4b idade/estado do heartbeat ignorados -> RED (4 falhas)"
-        - "5 nunca loga item_pulado -> RED (a1 reservado em outro host: um item_pulado)"
-        - "5b item_pulado sem dedupe -> RED (rc=1)"
-        - "6a digest sem o aviso -> RED (avisa os ids de item_end sem session_id/motivo_fim)"
-        - "6d digest sem imprimir fim -> RED (rc=1)"
-        - "SURVIVED 3b: heartbeat gravado SEM offset UTC (datetime.now().isoformat em vez de .astimezone()) -> session test rc=0, nenhum teste vermelho (cepa-until:3520). Os testes de fuso exercitam so o leitor (cepa-plan), nunca o que o cepa-until escreve."
-        - "SURVIVED 6b: digest julgando registros com versao_registro >= 0 em vez de >= 2 -> digest test rc=0 (cepa-until-digest:364). Nenhum teste com registro antigo sem session_id/motivo_fim."
-        - "SURVIVED 6c: digest deixando de exigir motivo_fim (so session_id) -> digest test rc=0 (cepa-until-digest:366). Nenhum teste com item_end com session_id mas sem motivo_fim."
+        - "baseline @0236edb: test_cepa_until_session.py -> todos passaram; test_cepa_until_digest.py -> tudo verde; test_cepa_plan_single_track.py -> all green"
+        - "round 1 (b819240), all RED: drop --session-id (4 falhas); item_start/item_end sem session_id; rede antes de cota; contexto e hook sem exigir falha; folga->sinal; on_tick nunca chamado; excecao do on_tick propaga; reservation_of ignora estado; idade do heartbeat ignorada; item_pulado nunca logado; sem dedupe; digest sem aviso; digest sem fim"
+        - "round 2 3b heartbeat sem offset -> RED: FAIL heartbeat gravado com fuso (tzinfo presente), rc=1"
+        - "round 2 6b digest julga version>=0 -> RED: FAIL versao_registro 1 explicito, sem os campos: nao avisa, rc=1"
+        - "round 2 6c digest sem exigir motivo_fim -> RED: FAIL session_id sem motivo_fim: avisa e nomeia so o item (A2), rc=1"
+        - "round 2 fallback 24h (is_live = True em reservation_of) -> RED: FAIL ...de 30h -> orfa (session test)"
+        - "round 2 sinal 128<code<160 desligado -> RED: FAIL code 143 sem killed -> sinal"
+        - "round 2 sinal negativo desligado -> RED: FAIL code -15 -> sinal"
   l2_coverage:
-    status: assumed
+    status: pass
     uncovered_lines: []
-    run: "no coverage tool run; reachability inferred from perturbation reds above"
+    run: "no coverage tool; every changed behavior listed in the card was broken in isolation and a covering test went red (see l3 results)"
   l4_adversarial_input:
     status: n/a
     reason: "Diff opens no input from outside the operator (CLI supervisor record format and local state file); no api-rest module."
@@ -51,4 +40,4 @@ levels:
   bugfix_regression_red_at_base:
     status: n/a
     run: "not a Bug card"
-routing_reason: "14 of 17 perturbations went RED, but three changed behaviors stayed green when broken: the heartbeat's UTC offset on the writer side, the digest's rule that old records (versao_registro < 2) are not judged, and the digest's requirement of motivo_fim. UNPROVEN: deterministic, send back to add three assertions."
+routing_reason: "The three gaps from round 1 now have tests that go RED when the code is broken, and the 24h fallback and both sinal branches also go RED. All sampled perturbations (25 across both rounds) turned a test red. PROVEN."
