@@ -230,10 +230,13 @@ def test_one_item_on_the_terminal_screen(base):
                         "--repo", "."], capture_output=True, text=True,
                        cwd=str(d), env=env)
     plain = re.sub(r"\x1b\[[0-9;]*m", "", r.stdout)
-    check("tela decorada liga (tem cor)", "\x1b[" in r.stdout, r.stdout)
+    check("tela decorada liga (campo em negrito, sem dois-pontos)",
+          "\x1b[1mação humana\x1b[0m" in r.stdout
+          and "ação humana:" not in plain, r.stdout)
     check("tela decorada traz a ação humana inteira",
           "FIM-DO-TEXTO" in plain and "…" not in plain, plain)
     check("tela decorada não lista os outros itens", "item a" not in plain, plain)
+    check("tela decorada esconde campo vazio", "None" not in plain, plain)
 
 
 def test_reserved_item_shows_owner(base):
