@@ -1570,6 +1570,7 @@ def cmd_status(root, name, status_filter, as_json, item_id=None, via_show=False)
 # written per item would be stale for every queue that already exists.
 
 CODE_RE = re.compile(r"(?<![\w-])([A-Z]{1,2})-?(\d+(?:\.\d+)?[a-z]?)(?![\w.])")
+RANGE_CAP = 200  # members above which a range is only looked up as a phrase
 RANGE_RE = re.compile(r"(?<![\w-])([A-Z]{1,2})(\d+) a \1(\d+)(?![\w.])")
 
 
@@ -1581,7 +1582,11 @@ def codes_in(text):
     out = []
     for m in RANGE_RE.finditer(text):
         lo, hi = int(m.group(2)), int(m.group(3))
-        out.append((m.group(0), [f"{m.group(1)}{n}" for n in range(lo, hi + 1)]))
+        # A typo like "L1 a L99999999" must not expand into millions of
+        # lookups (proof-reviewer, 2026-11-05: the command hung past 60s).
+        members = ([f"{m.group(1)}{n}" for n in range(lo, hi + 1)]
+                   if hi - lo < RANGE_CAP else [])
+        out.append((m.group(0), members))
     for m in CODE_RE.finditer(text):
         out.append((m.group(1) + ("-" if "-" in m.group(0) else "") + m.group(2), []))
     seen, uniq = set(), []
@@ -1595,12 +1600,17 @@ def codes_in(text):
 
 def epic_of(root, plan):
     """(path as written in `source`, lines) — lines is None when the file
-    is not there, path is None when `source` names no .md file."""
+    is not there or lies outside the repo, path is None when `source` names
+    no .md file. A `source` with an absolute path or `..` must not turn the
+    command into a reader of arbitrary files (proof-reviewer, 2026-11-05)."""
     m = re.search(r"\S+\.md", str(plan.get("source") or ""))
     if not m:
         return None, None
     rel = m.group(0).rstrip(",;:)")
-    p = Path(rel) if Path(rel).is_absolute() else Path(root) / rel
+    base = Path(root).resolve()
+    p = (Path(rel) if Path(rel).is_absolute() else base / rel).resolve()
+    if not p.is_relative_to(base):
+        return rel, "fora"
     if not p.is_file():
         return rel, None
     return rel, p.read_text(encoding="utf-8").splitlines()
@@ -1644,8 +1654,8 @@ def source_refs(root, plan, title):
     epic, lines = epic_of(root, plan)
     refs = []
     codes = codes_in(str(title or ""))
-    if lines is None:
-        return {"epic": epic, "found": False,
+    if lines is None or lines == "fora":
+        return {"epic": epic, "found": False, "outside_repo": lines == "fora",
                 "refs": [{"code": c, "line": None, "text": None} for c, _ in codes]}
     within = (0, None)
     done = set()
@@ -1695,7 +1705,9 @@ def item_detail(program, target, l, as_json, plan=None, root=None):
     source_lines = []
     if src and src["epic"]:
         source_lines.append(src["epic"] + " (campo `source` da fila)")
-        if not src["found"]:
+        if src.get("outside_repo"):
+            source_lines.append("Epic fora do repo: não leio arquivo fora da raiz")
+        elif not src["found"]:
             source_lines.append("não achei o arquivo a partir do repo")
         for r in src["refs"]:
             if r["line"]:

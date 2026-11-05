@@ -413,6 +413,43 @@ def test_show_item_with_missing_epic_file(base):
           out["source"])
 
 
+def test_show_item_hostile_inputs(base):
+    """proof-reviewer, 2026-11-05: `L1 a L99999999` hung the command past 60s,
+    and a `source` with an absolute path or `..` read a file outside the repo."""
+    import time
+    d = git_repo(base, "show-item-hostil")
+    (d / "docs" / "epics").mkdir(parents=True)
+    (d / "docs" / "epics" / "e.md").write_text("# E\n\n### S3. T\n", encoding="utf-8")
+    fora = Path(base) / "fora.md"
+    fora.write_text("# F\n\n### S3. SEGREDO-FORA-DO-REPO\n", encoding="utf-8")
+    p = d / "itens.json"
+    p.write_text(json.dumps([item("a", title="Levant L1 a L99999999 (S3)")]),
+                 encoding="utf-8")
+    r = run(d, "write", "fila", "--items", str(p), "--source",
+            "docs/epics/e.md, ciclo 1", "--quando", "2026-11-05", "--repo", ".")
+    assert r.returncode == 0, r.stderr
+    t0 = time.monotonic()
+    r = run(d, "show", "fila", "a", "--repo", ".")
+    check("faixa gigante no título termina em menos de 5s e sai com 0",
+          r.returncode == 0 and time.monotonic() - t0 < 5
+          and "S3 · linha 3" in r.stdout and "L1 a L99999999 · não achei" in r.stdout,
+          r.stdout + r.stderr)
+    for src in (f"{fora}, ciclo 1", "../../fora.md, ciclo 1"):
+        p.write_text(json.dumps([item("a", title="Coisa (S3)")]), encoding="utf-8")
+        r = run(d, "write", "fila", "--items", str(p), "--source", src,
+                "--quando", "2026-11-05", "--repo", ".", "--on-missing", "keep")
+        assert r.returncode == 0, r.stderr
+        r = run(d, "show", "fila", "a", "--repo", ".")
+        check(f"source fora do repo ({src.split(',')[0][-12:]}) não é lido",
+              r.returncode == 0 and "SEGREDO" not in r.stdout
+              and "Epic fora do repo" in r.stdout, r.stdout + r.stderr)
+        r = run(d, "show", "fila", "a", "--json", "--repo", ".")
+        out = json.loads(r.stdout)
+        check("--json marca outside_repo e found=false",
+              out["source"]["outside_repo"] is True and out["source"]["found"] is False,
+              out["source"])
+
+
 def test_show_queue_header(base):
     d = git_repo(base, "show-cabecalho")
     write_epic_queue(d)
@@ -442,6 +479,7 @@ def main():
                    test_show_item_on_the_terminal_screen_splits_why_and_evidence,
                    test_show_item_with_missing_epic_file,
                    test_show_queue_header,
+                   test_show_item_hostile_inputs,
                    test_text_groups_and_shows_reason_and_human_action,
                    test_filter_by_status,
                    test_one_item_in_full,
