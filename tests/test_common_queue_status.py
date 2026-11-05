@@ -429,9 +429,16 @@ def test_show_item_hostile_inputs(base):
             "docs/epics/e.md, ciclo 1", "--quando", "2026-11-05", "--repo", ".")
     assert r.returncode == 0, r.stderr
     t0 = time.monotonic()
-    r = run(d, "show", "fila", "a", "--repo", ".")
+    try:
+        r = subprocess.run([sys.executable, str(CEPA_PLAN), "show", "fila", "a",
+                            "--repo", "."], capture_output=True, text=True,
+                           cwd=str(d), timeout=10)
+    except subprocess.TimeoutExpired:
+        check("faixa gigante no título termina em menos de 5s e sai com 0",
+              False, "estourou 10s: o cap da faixa sumiu?")
+        r = None
     check("faixa gigante no título termina em menos de 5s e sai com 0",
-          r.returncode == 0 and time.monotonic() - t0 < 5
+          r is not None and r.returncode == 0 and time.monotonic() - t0 < 5
           and "S3 · linha 3" in r.stdout and "L1 a L99999999 · não achei" in r.stdout,
           r.stdout + r.stderr)
     for src in (f"{fora}, ciclo 1", "../../fora.md, ciclo 1"):
