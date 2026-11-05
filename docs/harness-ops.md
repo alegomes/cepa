@@ -72,3 +72,22 @@ O `--rollback` restaura **um** passo. Não é um histórico — é a rota de sa�
 último `--clean`. O cache substituído por um rollback fica em
 `<cache>.rolledback`, então nada é destruído em silêncio, mas não conte com
 uma cadeia de desfazer.
+
+## Exceção declarada: reinstalação pelo `cepa-until` no repo cepa
+
+Decisão do dono em 2026-11-05 (X4 em
+`docs/reviews/2026-11-05-painel-durabilidade.md`). Um run desatendido do
+`cepa-until` pode trocar o harness live da máquina, e só nestas condições:
+
+- a fila é do repositório cepa (em qualquer outro repo o supervisor avisa que o
+  hook não vale até reinstalar e não troca nada);
+- o item que acabou de fechar tocou `common/hooks/**` ou `*/bin/**`;
+- o build desse item está verde.
+
+Aí o supervisor roda `install.sh`, grava `hooks_reinstalados` (SHA antes e
+depois) no `.jsonl` do run, e todo `item_start` seguinte traz o SHA dos hooks
+em vigor. A rota mínima continua valendo: Estado e Alvo ficam no
+`last-install.json` como sempre, Rollback é o `--rollback` de manhã, e a
+Validação é o `/common:doctor` no evento `hooks_reinstalados` do
+`until-review`. Fora dessas condições a regra geral se mantém: o harness live
+só muda com o dono presente.

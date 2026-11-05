@@ -27,7 +27,7 @@ O dono escreve o que quer em prosa e responde, por ciclo, "o que alguém vê fun
 
 ## Como os ciclos se cruzam com o Epic de produto
 
-Os dois Epics andam intercalados. O ciclo 1 do Contratos começa com a ferramenta de hoje e o dono fazendo à mão o que o ciclo 2 deste Epic vai automatizar; é dele que saem os números de base. O ciclo 1 deste Epic roda nas noites de `cepa-until` enquanto isso. O ciclo 2 deste Epic só começa quando houver um ciclo do Contratos medido de ponta a ponta.
+Os dois Epics andam intercalados. O ciclo 1 do Contratos começa com a ferramenta de hoje e o dono fazendo à mão o que o ciclo 2 deste Epic vai automatizar; é dele que saem os números de base. O ciclo 1 deste Epic roda nas noites de `cepa-until` enquanto isso. O ciclo 2 deste Epic só começa quando houver um ciclo do Contratos medido de ponta a ponta. O ciclo 2 também depende da fila `cepa-durabilidade` (id de sessão, motivo do fim e heartbeat por tentativa; SHA e dono no `finish`; reinstalação de hooks pelo supervisor; leitor dos depósitos de estado), que pode rodar antes do Contratos medido; decisão do dono em 2026-11-05, registro em `docs/reviews/2026-11-05-painel-durabilidade.md`.
 
 ## Decidido sem perguntar (vete aqui)
 
