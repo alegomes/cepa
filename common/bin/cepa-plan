@@ -376,7 +376,9 @@ def reservation_of(it, root=None):
             path, est = found
             try:
                 beat = datetime.fromisoformat(str(est["heartbeat"]))
-                age = (datetime.now(beat.tzinfo) - beat).total_seconds()
+                # Naive (older files) is the writer's local time; aware carries its offset.
+                age = (datetime.now(beat.tzinfo) - beat).total_seconds() \
+                    if beat.tzinfo else (datetime.now() - beat).total_seconds()
             except ValueError:
                 age = None
             if age is not None:

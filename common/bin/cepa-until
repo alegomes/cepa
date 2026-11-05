@@ -165,8 +165,8 @@ group, `claude` runs in its own session and survives, the supervisor doesn't.
     `interrompido`.
   - `run_start` says `versao_registro: 2`; `item_start`/`item_end` record the
     `session_id` given to `claude --session-id`, `item_end` the closed-set `motivo_fim`,
-    the state file a `heartbeat`, and `item_pulado` an item skipped for a live
-    reservation (see docs/cepa-until.md).
+    the state file a `heartbeat`, and `item_pulado` an item skipped for a reservation
+    held elsewhere (see docs/cepa-until.md).
   - `run_start` and the state record the supervisor's **pid and host**. The
     `cepa-until pendentes` (and through it `cepa-doctor` and
     `/common:until-review`) points at the `rodando` run whose pid died, and at the
@@ -989,9 +989,10 @@ def end_reason_of(code, killed, output):
         text = last.get("result") if isinstance(last.get("result"), str) else ""
     else:
         text = output[-OUTPUT_TAIL:]
-    if text and CONTEXT_OVERFLOW.search(text):
-        return "contexto"
     failed = code != 0 or bool(last and last.get("is_error"))
+    # Both text readings need a failure: a finished item may MENTION these in prose.
+    if failed and text and CONTEXT_OVERFLOW.search(text):
+        return "contexto"
     if failed and text and HOOK_BLOCK.search(text):
         return "hook"
     if code == 0:
@@ -3515,7 +3516,8 @@ def main(argv=None):
                  "arvore": str(tree), "prazo": deadline.isoformat(),
                  "atualizado": datetime.now().isoformat(timespec="seconds")}
         # Liveness proof for readers on other hosts (pid can't be probed there).
-        body["heartbeat"] = body["atualizado"]
+        # With the UTC offset: a reader on another host (cepa-plan) must not guess the zone.
+        body["heartbeat"] = datetime.now().astimezone().isoformat(timespec="seconds")
         body.update(rest)
         tmp = state_path.parent / (state_path.name + ".tmp")
         try:
@@ -3534,11 +3536,17 @@ def main(argv=None):
                  if k in in_flight}
         if "id" in in_flight:
             extra["item"] = in_flight["id"]
-        save_state("rodando", **extra)
+        try:
+            save_state("rodando", **extra)
+        except Exception:  # noqa: BLE001  (a heartbeat must never kill the night run)
+            pass
 
     def tick_wait():
         """Heartbeat while the supervisor itself waits (quota reset, network probe)."""
-        save_state("rodando", fase="espera")
+        try:
+            save_state("rodando", fase="espera")
+        except Exception:  # noqa: BLE001  (same: never kill the run for a heartbeat)
+            pass
 
     # What is in flight when a SIGTERM or Ctrl+C arrives: the item, the phase
     # (`item` is `claude`, `verify` is the full build) and the child's pid, which
@@ -3724,7 +3732,8 @@ def main(argv=None):
         for warning in data.get("warnings") or []:
             print(f"  aviso: {warning}")
             log_event({"evento": "aviso", "texto": warning})
-        # An item the queue skipped because ANOTHER live session holds its reservation:
+        # An item the queue skipped because a reservation is held elsewhere (live, or
+        # undecidable without an owner): every `reservado` deferral.
         # logged once per item per run, so the record says why it never started.
         for skip in data.get("deferred") or []:
             if skip.get("reason") == "reservado" and skip.get("id") not in skipped_logged:
@@ -3851,9 +3860,13 @@ def main(argv=None):
             last_reading = readings[-1]
             fresh_reading = readings[-1][0] > readings[0][0]
 
+        try:
+            end_motive = end_reason_of(code, killed, output)
+        except Exception:  # noqa: BLE001  (a classifier bug must not lose the record)
+            end_motive = "desconhecido"
         log_event({"evento": "item_end", "id": ident, "status": run_state,
                   "session_id": session_id,
-                  "motivo_fim": end_reason_of(code, killed, output),
+                  "motivo_fim": end_motive,
                   "human_pending": pending_item, "exit_code": code,
                   "timeout": killed, "segundos": int(spent),
                   "tentativa": round_n, "progresso": progress,

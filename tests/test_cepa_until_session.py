@@ -117,6 +117,9 @@ def test_end_reason_covers_the_closed_set_in_precedence_order():
           f(1, False, hook) == "hook")
     check("hook citado em resultado sem erro e saída 0 -> ok",
           f(0, False, stream(result("o hook blocked algo antes", is_error=False))) == "ok")
+    check("saída 0 com 'context window' na prosa -> ok, não contexto",
+          f(0, False, stream(result("the context window is wide enough",
+                                    is_error=False))) == "ok")
     check("code 0 -> ok", f(0, False, stream(result("pronto", is_error=False))) == "ok")
     check("code 1 sem nada reconhecível -> desconhecido",
           f(1, False, stream(result("deu ruim"))) == "desconhecido")
@@ -125,6 +128,21 @@ def test_end_reason_covers_the_closed_set_in_precedence_order():
     check("rede ganha de contexto",
           f(1, False, stream(result("Can't reach the API server; prompt is too long",
                                     terminal="api_error"))) == "rede")
+
+
+def test_a_raising_on_tick_does_not_break_the_wait():
+    m = load_module()
+    import subprocess as sp
+    m.HEARTBEAT_INTERVAL = 0.05
+    proc = sp.Popen([sys.executable, "-c", "import time; time.sleep(1.6)"])
+    calls = []
+
+    def boom():
+        calls.append(1)
+        raise RuntimeError("heartbeat quebrou")
+    done = m.wait_for_child(proc, 10, "teste", boom)
+    check("on_tick que levanta não derruba a espera do filho",
+          done is True and proc.returncode == 0 and len(calls) >= 1, str(calls))
 
 
 # ── 3. heartbeat ────────────────────────────────────────────────────────────
@@ -203,6 +221,16 @@ def test_reservation_from_another_host_follows_the_heartbeat():
         write_state(tmp, ago(5))
         check("heartbeat fresco e rodando -> viva",
               m.reservation_of(it, tmp)[0] == "viva")
+    with tempfile.TemporaryDirectory() as tmp:
+        aware = (datetime.now().astimezone() - timedelta(seconds=5)).isoformat(
+            timespec="seconds")
+        write_state(tmp, aware)
+        check("heartbeat com fuso, fresco e rodando -> viva",
+              m.reservation_of(it, tmp)[0] == "viva")
+        write_state(tmp, (datetime.now().astimezone()
+                          - timedelta(hours=1)).isoformat(timespec="seconds"))
+        check("heartbeat com fuso, velho -> órfã",
+              m.reservation_of(it, tmp)[0] == "orfa")
     with tempfile.TemporaryDirectory() as tmp:
         write_state(tmp, ago(5), estado="interrompido")
         check("heartbeat fresco mas o run não está rodando -> órfã",

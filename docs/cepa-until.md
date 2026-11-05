@@ -120,7 +120,7 @@ O `run_start` traz `versao_registro: 2`; registros sem o campo são do formato a
   `rede` (o `claude` não alcançou a API), `contexto` (o `result` final fala de contexto
   estourado), `hook` (o `result` final é erro e cita um hook que bloqueou), `ok` (saída 0),
   `desconhecido` (o resto).
-- **`heartbeat`** em `<run>.estado.json`, regravado a cada `CEPA_UNTIL_HEARTBEAT` segundos
+- **`heartbeat`** em `<run>.estado.json`, gravado com o deslocamento de fuso (ex.: `-03:00`, para quem lê de outro host) e regravado a cada `CEPA_UNTIL_HEARTBEAT` segundos
   (padrão 60) enquanto o `claude`, o build ou uma espera (reset de cota, sonda de rede)
   estão em andamento, com `item`, `tentativa`, `session_id` e `fase` do que está em voo. O
   `cepa-plan` usa a idade dele para reservas de OUTRO host (onde o pid não pode ser
@@ -129,7 +129,7 @@ O `run_start` traz `versao_registro: 2`; registros sem o campo são do formato a
   segundos (padrão 900); senão é `orfa`. Sem esse arquivo vale a regra de 24h de antes.
   No mesmo host continua valendo a sonda de pid.
 - **`item_pulado`** (`id`, `motivo: reservado`, `detalhe`): o item que a fila adiou porque
-  outra sessão viva o reservou. Uma vez por item por run.
+  uma reserva está em mãos de outro (viva, ou sem dono registrado e portanto indecidível). Uma vez por item por run.
 
 O `cepa-until-digest` imprime `sessão` e `fim` em cada rodada e, num run `versao_registro >= 2`,
 avisa quando algum `item_end` veio sem `session_id` ou `motivo_fim`.
