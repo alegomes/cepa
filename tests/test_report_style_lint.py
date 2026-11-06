@@ -685,6 +685,23 @@ r = run("Stop", after_wrap(
 check("(p) tool_result (user sem texto) não reabre → bloqueia citando wrap-up",
       "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
 
+r = run("Stop", after_wrap(
+    msg("user", "# /common:metrics\n\nTelemetry report on the harness itself ...",
+        mtype="user", meta=True),
+    user("sim"), text(GOOD)), session="s-wrap-q")
+check("(q) corpo isMeta de comando (sem prefixo Stop hook, não aceitação) não reabre → bloqueia",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+for _sfx, _txt in (("r", "sim/ok"), ("r2", "sim;ok")):
+    r = run("Stop", after_wrap(user(_txt), text(GOOD)), session="s-wrap-" + _sfx)
+    check("(%s) \"%s\" é aceitação (separador / ou ;) → não reabre, bloqueia citando wrap-up" % (_sfx, _txt),
+          "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+for _sfx, _txt in (("s", "Sim"), ("s2", "OK")):
+    r = run("Stop", after_wrap(user(_txt), text(GOOD)), session="s-wrap-" + _sfx)
+    check("(%s) \"%s\" (maiúscula) é aceitação → não reabre, bloqueia citando wrap-up" % (_sfx, _txt),
+          "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
 # ── the prose that sustains the rule says what the hook charges ────────────
 def read_rel(rel):
     return (REPO / rel).read_text(encoding="utf-8")
