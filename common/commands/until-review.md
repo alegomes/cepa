@@ -125,7 +125,8 @@ A question with no finding does not go into the report.
 
 ### 3. Report
 
-In the `plain-report` format, written in Brazilian Portuguese (pt-BR): an
+In the `plain-report` format, written in English (the owner decided on
+2026-11-06 that everything the product prints is English): an
 opening of up to 3 sentences without jargon, `**For you:**` with the count of
 decisions, `### Technical detail` and, last, `### Decisions and next steps` as
 a numbered list of closed questions, each with `I recommend yes/no`
@@ -138,14 +139,13 @@ whatever unblocks the most work comes first.
 **One list only** (C7 of `docs/estrategia-fim-do-cepa-until.md`). Comment on
 each action in `acoes` by its id, with no numbering of your own: the question about it carries the id as its label
 (`aterrissar`), states the effect with the `frase` from the state and brings
-your recommendation. The items of `fica_com_voce` appear in a "Fica com você"
-block (stays with you), with what the owner needs to do in each one.
+your recommendation. The items of `fica_com_voce` appear in a "Left with you"
+block, with what the owner needs to do in each one.
 
-Each "Fica com você" task carries **the step by step in three lines** (on
+Each "Left with you" task carries **the step by step in three lines** (on
 14/10/2026 the owner rejected a report that only named the category: *"O que,
 afinal, que eu tenho que fazer? Dê-me o passo a passo."* — "So what exactly do
-I have to do? Give me the step by step."). Keep these three labels verbatim in
-pt-BR:
+I have to do? Give me the step by step."). Keep these three labels verbatim:
 
 - `Onde:` (where) the repo or directory, and the file when there is one;
 - `Comando:` (command) in a code block, or the file to open and what to fill in;
@@ -191,7 +191,8 @@ wrote with `finish --impede`, `--pedido` and the others) is present needs no
 `se_sim` and `se_nao`, because otherwise the owner reads only the log.
 
 The string values of the block are shown to the owner and are written in
-Brazilian Portuguese (pt-BR); the example below is in English for reference:
+English, except `recomendo`, which stays `sim`/`não` because the terminal
+reads it as data (and shows it as "Recommend yes/no"):
 
 ```json cepa-decisoes
 {"aterrissar": {"recomendo": "sim", "porque": "one line"},
