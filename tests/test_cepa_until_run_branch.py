@@ -106,7 +106,7 @@ def test_subprocess_runs_on_the_night_branch_and_the_clone_stays_put():
               git(root, "rev-list", "--count", f"{start['base']}..{branch}")
               == "2", p.stdout[-600:])
         check("o resumo diz como aterrissar",
-              f"cepa-until aterrissar fila/{branch.split('/', 1)[1]}"
+              f"cepa-until land fila/{branch.split('/', 1)[1]}"
               in p.stdout, p.stdout[-600:])
 
 

@@ -1,0 +1,42 @@
+schema_version: 2
+card: plan-validate-raiz
+verdict: proven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: 1eff25d
+head_commit: 5e862a3
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - { class: "common/bin/cepa-plan (cmd_validate + validate subparser + dispatch)", module: cli, external_observable: true, substituted_by_double: null }
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN intact at 5e862a3 (fresh detached worktree): python3 tests/test_cepa_plan_validate_root.py -> 'tudo ok'"
+        - "RED existence check 'if not p.is_file()' after queue_path(root, arg) (common/bin/cepa-plan:3846) -> 'if False' at 5e862a3: 1 FAIL 'nome inexistente: a mensagem diz que a fila não existe' (the earlier survivor at dff66d7 is now killed by the new `\"não existe\" in r.stderr` assertion)"
+        - "Between dff66d7 and 5e862a3 only tests/test_cepa_plan_validate_root.py changed (+2 lines, git diff --stat), so the perturbations run at dff66d7 still apply to unchanged production code:"
+        - "GREEN at dff66d7: test_cepa_plan_validate_root 'tudo ok'; neighbours test_common_plan, test_cepa_plan_demonstrates, test_cepa_help_layout ('all green'), test_pt_names_to_english ('tudo verde')"
+        - "RED root = main_root(repo) -> Path(repo).resolve() (name resolved against the worktree, not the main clone): 6 FAIL"
+        - "RED --repo plumbing: cmd_validate(a.plan_file, a.repo) -> cmd_validate(a.plan_file): 1 FAIL '--repo apontando para a worktree'"
+        - "RED 'if root is None' -> 'if False' (no-git guard): 1 FAIL 'nome fora de um repo git' (TypeError traceback)"
+        - "RED file-wins precedence 'if not p.is_file()' -> 'if True' (always the name branch): 2 FAIL (file path outside git, relative path)"
+        - "RED error message path '({p})' -> '({arg})': 1 FAIL 'nome inexistente: citando o caminho no clone principal'"
+        - "Not perturbed (text only): docs/cepa-cli.md, docs/commands.md, help/examples text"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "every changed behavioral line was broken once and the covering test went RED (6 perturbations, 0 survivors at 5e862a3); a line that turns the test red is reached by it"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff adds one positional that is either an existing file path or a queue name looked up under .claude/queues/<name>/queue.yaml; no new value parsing beyond that, no api-rest module changed"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Task, not Bug. Feature-absent check (not a bug-regression level): tests/test_cepa_plan_validate_root.py brought to a detached worktree at 1eff25d -> 6 FAIL ('fila não existe', 'unrecognized arguments: --repo ...'); GREEN at head"
+routing_reason: "All changed behavior in cmd_validate is load-bearing: the main_root call, --repo plumbing, no-git guard, file-wins precedence, error path and the 'não existe' existence check each turn the covering test red when broken. The earlier survivor (existence check) is killed at 5e862a3 by the new stderr assertion. The test is RED at base 1eff25d. No double stands in for the changed class."

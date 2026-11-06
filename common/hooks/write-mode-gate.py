@@ -37,7 +37,7 @@ second table of modes is the disease that file treats.
 absence of enforcement: in construction the completion-auditor and the
 proof-reviewer enforce, and in refactor the `refactor-gate.py` does.
 
-Four decisions that came from damage already paid for in this repo:
+Six decisions that came from damage already paid for in this repo:
 
 1. **Bash too.** Blocking only `Write`/`Edit` lets `sed -i`, `cat >`, `tee` and
    `git mv` through — memory `bash-pathlock-bypass`, which cost a fix across 5
@@ -79,6 +79,16 @@ Four decisions that came from damage already paid for in this repo:
    never "you are outside the mode". The other two episodes (backtick and `>`
    quoted in the heredoc BODY) had already died in `_shellscan`, which masks the
    body since 2026-09-04.
+
+6. **The checkout's `.git/info/` passes in every mode.** Episode fb-20261105-1
+   (2026-11-05): in a `discovery` session the gate blocked `echo
+   '.playwright-mcp/' >> .git/info/exclude`, preparing the checkout so Playwright
+   logs stay out of git, and the owner was left with a command to run by hand.
+   The per-mode lists say what a mode PRODUCES; `.git/info/` (exclude,
+   attributes, sparse-checkout) is produced by no mode and has no execution path,
+   so `_modes.ALWAYS_WRITABLE` is consulted before the mode's list. The boundary:
+   `.git/hooks/*` and `.git/config` stay blocked (git runs code from them on the
+   next command, an indirect bypass of this gate), and `.gitignore` is versioned.
 
 What this gate does NOT reach is the "does not become a question" half: that is
 the agent's text, not a tool call, and no hook reads the wording of a reply. But
@@ -293,7 +303,8 @@ def main():
                 )
                 sys.exit(2)
             rel = relative_to(target, root)
-            if rel is None or allowed(rel, patterns):
+            if (rel is None or allowed(rel, _modes.ALWAYS_WRITABLE)
+                    or allowed(rel, patterns)):
                 continue
             produces = (_modes.MODES.get(mode) or {}).get("produces", "")
             print(

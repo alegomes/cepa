@@ -22,11 +22,22 @@ one seam earlier in the lifecycle.
 Explicit nulls are accepted on purpose. "Validation seeds: none — this is
 internal substrate" is a real answer; silence is not.
 
+Second target (2026-11-04, owner feedback fb-20261104-2): the SESSION handoff,
+`.claude/handoffs/<name>.md`. The owner opened a spec generated from the
+previous session's handoff and said "não faço ideia de como viemos parar neste
+assunto": handoff, spec and report carried only conversation labels (O2', D1)
+and no sentence saying what the original question was. So a session handoff
+that has a `## Próximo passo` section must carry a `porque:` line in it: the
+owner's original question, in prose, one line, in the owner's voice. The discovery
+fields are NOT required there. No `## Próximo passo` in the visible content
+(an Edit fragment on another section, a trivial note) -> allowed.
+
 Mechanism:
   - Fires on Write/Edit/MultiEdit whose target path looks like a discovery
     handoff: docs/discovery/<anything>/handoff.md.
   - Requires both labeled fields (English or pt-BR labels accepted).
   - Values are NOT judged beyond presence — the honest limit of a string gate.
+  - For `.claude/handoffs/<name>.md`, requires only the `porque:` line (above).
 
 Exit codes:
   0 — allowed
@@ -80,6 +91,27 @@ BARE_FIELDS = {
     for label, spellings in FIELD_LABELS.items()
 }
 
+# Session handoff (second target): only the `porque:` line of `## Próximo passo`
+# is required. SECTION_RE is the same one session-next.py uses (line 45).
+SESSION_HANDOFF_PATH_RE = re.compile(r"(?:^|/)\.claude/handoffs/[^/]+\.md$")
+NEXT_STEP_RE = re.compile(r"^##\s+Próximo passo\s*$", re.M)
+NEXT_SECTION_RE = re.compile(r"^##\s", re.M)
+PORQUE_RE = re.compile(
+    r"^[ \t]*(?:(?:\*\*|__|[-*+][ \t]+)[ \t]*)*porque[ \t]*(?:\*\*|__)?[ \t]*:"
+    r"(?:\*\*|__)?(?P<value>[^\n]*)$",
+    re.IGNORECASE | re.M,
+)
+EMPTY_VALUES = ("", "-", "n/a", "na", "tbd", "todo", "a definir", "?", "...")
+
+
+def porque_is_empty(value: str) -> bool:
+    """Same semantics as spec-readiness-gate's is_empty: a value that takes up
+    the line without saying anything (blank, `<placeholder>`, `tbd`, ...)."""
+    v = value.strip()
+    v = re.sub(r"^(\*\*|__|`)+|(\*\*|__|`)+$", "", v).strip()
+    v = v.strip("*_`").strip().rstrip(".;,").strip().lower()
+    return v.startswith("<") or v in EMPTY_VALUES
+
 GATED_TOOLS = ("Write", "Edit", "MultiEdit")
 
 
@@ -112,6 +144,45 @@ def extract_content(tool_input: dict) -> str | None:
     return None
 
 
+def next_step_body(content: str) -> str | None:
+    """The body of `## Próximo passo` up to the next `## ` heading, or None."""
+    m = NEXT_STEP_RE.search(content)
+    if not m:
+        return None
+    rest = content[m.end():]
+    nxt = NEXT_SECTION_RE.search(rest)
+    return rest[:nxt.start()] if nxt else rest
+
+
+def gate_session_handoff(content: str) -> None:
+    body = next_step_body(content)
+    if body is None:
+        sys.exit(0)
+    found = list(PORQUE_RE.finditer(body))
+    if any(not porque_is_empty(m.group("value")) for m in found):
+        sys.exit(0)
+    if found:
+        # Present but empty/placeholder: the line is there, the sentence is not.
+        head = ("[handoff-seeds-gate] BLOCKED: the `porque:` line in `## Próximo "
+                "passo` is present but EMPTY or still the template placeholder.\n"
+                "  Do not add another line; write the sentence after the colon.\n")
+    else:
+        head = ("[handoff-seeds-gate] BLOCKED: `## Próximo passo` has no "
+                "`porque:` line.\n")
+    print(
+        head +
+        "  That line is the owner's original question, the one that started the\n"
+        "  subject, in prose, on ONE line and in the owner's voice (not a conversation\n"
+        "  label such as O2' or D1). Without it the next session, and the spec it\n"
+        "  opens, cannot say how we got here (fb-20261104-2). Example:\n"
+        "    porque: o dono abriu a spec e não reconheceu o assunto; a pergunta\n"
+        "    original era \"como o handoff grava o porquê?\"\n"
+        "  Add the line and re-write; never drop the section to dodge the gate.",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+
+
 def main():
     raw = sys.stdin.read()
     try:
@@ -126,12 +197,19 @@ def main():
         sys.exit(0)
 
     tool_input = payload.get("tool_input") or {}
-    if not HANDOFF_PATH_RE.search(extract_path(tool_input).replace("\\", "/")):
+    path = extract_path(tool_input).replace("\\", "/")
+    is_discovery = bool(HANDOFF_PATH_RE.search(path))
+    is_session = bool(SESSION_HANDOFF_PATH_RE.search(path))
+    if not (is_discovery or is_session):
         sys.exit(0)
 
     content = extract_content(tool_input)
     if content is None:
         # Can't see what's being written -> can't gate. Never spuriously block.
+        sys.exit(0)
+
+    if is_session and not is_discovery:
+        gate_session_handoff(content)
         sys.exit(0)
 
     missing = [label for label, rx in REQUIRED_FIELDS.items()

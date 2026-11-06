@@ -1,0 +1,42 @@
+schema_version: 2
+card: spec-isento-do-report-style-lint
+verdict: proven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: fe0be4b
+head_commit: 3d459fb
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/hooks/report-style-lint.py (INTERVIEW_DOC: docs/epics/[^/]+\\.md -> docs/(epics|spec)/[^/]+\\.md, plus docstring)"
+      module: common/hooks
+      external_observable: true
+      substituted_by_double: null        # the tests run the real hook as a subprocess on a JSON payload + synthetic transcript; no double replaces the hook
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python harness repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline 3d459fb (throwaway worktree): test_report_style_lint.py 'all report-style tests passed'; test_epic_readiness_gate.py 'OK'"
+        - "P1 regex back to epics-only (docs/(epics)/): test_report_style_lint 1 FAIL ('entrevista escreve so docs/spec/<slug>.md -> poupada') + test_epic_readiness_gate 1 FAIL ('turno do /common:spec (docs/spec) tambem e poupado') -> RED"
+        - "P2 nested allowed ([^/]+ -> .+): test_report_style_lint FAIL 'docs/spec/sub/x.md -> nao poupada'; test_epic_readiness_gate FAIL 'controle: escrita fora de docs/epics/<nome>.md e medida' -> RED"
+        - "P3 plural allowed (docs/(epics|specs?)/): test_report_style_lint FAIL 'docs/specs/x.md (plural) -> nao poupada'; test_epic_readiness_gate FAIL 'controle: docs/specs (plural) segue medido' -> RED"
+        - "P4 interview_turn returns True unconditionally: test_report_style_lint ~70 FAIL (every measured-report case), test_epic_readiness_gate 15 controls FAIL -> RED"
+        - "base-RED: HEAD's two test files against base fe0be4b's hook: test_report_style_lint 1 FAIL ('entrevista escreve so docs/spec/<slug>.md -> poupada'), test_epic_readiness_gate 1 FAIL ('turno do /common:spec (docs/spec) tambem e poupado') -> RED"
+    run: "git worktree add --detach /tmp/proof-sp1 HEAD; one sed -i '' perturbation at a time, python3 tests/test_report_style_lint.py and python3 tests/test_epic_readiness_gate.py (grep FAIL) after each; git checkout -- . between; base via git checkout fe0be4b -- common/hooks/report-style-lint.py. Worktree removed with --force; git worktree list no longer shows it. Primary tree untouched."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; the only changed code is the one INTERVIEW_DOC regex line; its three edges (spec accepted, nested rejected, plural rejected) plus the epics side each have a named assertion that went RED under perturbation P1-P3"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the hook reads the harness's own Stop payload and session transcript; no input arrives from outside the harness. The adversarial path shapes (nested, plural, wrong extension, mydocs/ prefix, spec plus code or commit) are asserted anyway in the new test block."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Three perturbations of the regex (epics-only, nested, plural) and one of interview_turn (always True) each turn a named assertion RED in the covering tests, and HEAD's new/flipped assertions are RED against the base hook. The real hook runs as a subprocess; no double stands in for it."
+worktree_removed: true

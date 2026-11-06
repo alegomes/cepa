@@ -1,0 +1,73 @@
+key: feedback-triage-cria-item-de-fila
+status: complete
+diff: b92c55d..af633d1
+audited_head: af633d1
+note: >
+  Reauditoria no head atual (af633d1), após cherry-pick (4c45f6a, 580f8df) e correção do teste de aliases (af633d1).
+  Veredito anterior (9477523) não foi presumido: testes rodados de novo.
+criteria:
+  - id: AC1
+    text: >
+      Seção nova (destino "BACKLOG.md § ...") vem sempre com cepa plan add na fila do repo, why citando feedback e
+      seção; o bin recusa sem --queue/--item.
+    altitude: cli
+    surface: subprocess common/bin/cepa-feedback triage (rc, stderr, ledger, queue.yaml)
+    test: tests/test_cepa_feedback.py::test_triage_backlog_destination_requires_queue_or_item + test_triage_title_from_section_and_position_line
+    layer: subprocess (CLI binary)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_feedback.py -> 96 checks ok, 0 falhas, "tudo verde" (em af633d1).
+    gap: null
+  - id: AC2
+    text: Episódio em seção cujo item de fila está done (ou dropped) abre item NOVO.
+    altitude: cli
+    surface: triage --queue fila --item <id done|dropped> -> novo item no queue.yaml
+    test: test_triage_item_done_opens_a_new_item + test_triage_item_dropped_opens_a_new_item
+    layer: subprocess (CLI binary)
+    evidence: verified
+    run: python3 tests/test_cepa_feedback.py -> 96 ok, 0 falhas, "tudo verde".
+    gap: null
+  - id: AC3
+    text: Episódio em seção com item pendente só cita o id do item, sem item novo.
+    altitude: cli
+    surface: triage --queue fila --item <id pending> -> fila intocada, evento com item
+    test: test_triage_item_pending_cites_and_does_not_add
+    layer: subprocess (CLI binary)
+    evidence: verified
+    run: python3 tests/test_cepa_feedback.py -> 96 ok, 0 falhas, "tudo verde".
+    gap: null
+  - id: AC4
+    text: >
+      O relatório da triagem diz quantos itens entraram na fila e onde (bin imprime "inserido na posição P de N";
+      passo 5 de feedback.md exige a contagem).
+    altitude: cli (bin) + doc (prosa)
+    surface: stdout do triage; common/commands/feedback.md passo 5
+    test: test_triage_title_from_section_and_position_line (bin); doc conferido no diff b92c55d..af633d1
+    layer: subprocess (CLI binary) + texto de comando
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_feedback.py -> 96 ok, 0 falhas. Doc: passo 5 contém "end with how many items entered
+      the queue and at which position, quoting each 'inserido na posição P de N' line". A parte "relatório" é
+      prosa de comando (LLM), exercitada só no bin.
+    gap: null
+  - id: AC5
+    text: >
+      Após a triagem, feedback list --status triado e cepa plan status <fila> batem: nenhum destino BACKLOG sem
+      item pendente ou done.
+    altitude: cli
+    surface: list --status triado --json cruzado com fila
+    test: test_triage_ledger_and_queue_match + test_triage_backlog_with_missing_queue_is_refused
+    layer: subprocess (CLI binaries)
+    evidence: verified
+    run: python3 tests/test_cepa_feedback.py -> 96 ok, 0 falhas, "tudo verde".
+    gap: null
+  - id: AC6
+    text: >
+      Regressão: o teste de aliases pt/en (triar/triage) segue verde com a nova regra, usando --plano/--queue.
+    altitude: cli
+    surface: tests/test_cepa_until_english_aliases.py::test_feedback_triar_same_as_triage
+    test: test_feedback_triar_same_as_triage (checa que fid entrou no queue.yaml para ambos os aliases)
+    layer: subprocess (CLI binary)
+    evidence: verified
+    run: python3 tests/test_cepa_until_english_aliases.py -> 23 ok, "tudo verde" (em af633d1).
+    gap: null

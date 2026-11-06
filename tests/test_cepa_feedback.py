@@ -147,7 +147,7 @@ def test_triage_marks_and_refuses_repetition():
     with Box() as c:
         c.cli("add", "o comando pergunta três vezes a mesma coisa")
         fid = f"fb-{TODAY}-1"
-        p = c.cli("triage", fid, "--destination", "BACKLOG.md § Atrito de decisão")
+        p = c.cli("triage", fid, "--destination", "resolvido no commit Atrito de decisão")
         check("triar: rc=0", p.returncode == 0, p.stderr)
         ev = c.lines()[-1]
         check("triar: grava linha de triagem", ev["tipo"] == "triagem", ev)
@@ -248,11 +248,215 @@ def test_triage_without_plan_touches_no_queue():
             PLAN_TEXT, encoding="utf-8")
         c.cli("add", "queixa comum, sem pedir fila nenhuma desta vez")
         fid = f"fb-{TODAY}-1"
-        p = c.cli("triage", fid, "--destination", "BACKLOG.md § X")
+        p = c.cli("triage", fid, "--destination", "resolvido no commit abc123")
         check("triar sem --plano: rc=0", p.returncode == 0, p.stderr)
         queue = (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").read_text(
             encoding="utf-8")
         check("triar sem --plano: fila intocada", fid not in queue, queue)
+
+
+QUEUE_TEXT = """schema_version: 2
+mode: single-track
+queue: fila
+source: teste
+items:
+- id: sec-pendente
+  title: seção com item pendente
+  why: porque
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: sec-feita
+  title: seção com item feito
+  why: porque
+  status: done
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: sec-descartada
+  title: seção com item descartado
+  why: porque
+  status: dropped
+  blocked_by: []
+  human_pending: null
+  evidence: null
+"""
+
+
+def _queue_box(c):
+    qdir = c.repo / ".claude" / "queues" / "fila"
+    qdir.mkdir(parents=True)
+    (qdir / "queue.yaml").write_text(QUEUE_TEXT, encoding="utf-8")
+    return qdir / "queue.yaml"
+
+
+def _triages(c):
+    return [e for e in c.lines() if e.get("tipo") == "triagem"]
+
+
+def test_triage_backlog_destination_requires_queue_or_item():
+    with Box() as c:
+        c.cli("add", "queixa que iria parar numa seção sem item de fila")
+        fid = f"fb-{TODAY}-1"
+        p = c.cli("triage", fid, "--destination", "BACKLOG.md § Seção nova")
+        check("triar BACKLOG sem --queue/--item: rc=2", p.returncode == 2, p.returncode)
+        check("triar BACKLOG sem fila: recusa nomeia as duas saídas",
+              "--queue" in p.stderr and "--item" in p.stderr, p.stderr)
+        check("triar BACKLOG sem fila: nenhum evento de triagem gravado",
+              _triages(c) == [], c.lines())
+        p = c.cli("triage", fid, "--destination", "  backlog.md § minúsculo ")
+        check("triar BACKLOG (caixa baixa) também recusa", p.returncode == 2, p.returncode)
+
+
+def test_triage_item_without_queue_is_refused():
+    with Box() as c:
+        c.cli("add", "queixa anexada a item sem dizer a fila")
+        p = c.cli("triage", f"fb-{TODAY}-1", "--destination", "BACKLOG.md § X",
+                  "--item", "sec-pendente")
+        check("triar --item sem --queue: rc=2", p.returncode == 2, p.returncode)
+        check("triar --item sem --queue: sem evento", _triages(c) == [], c.lines())
+
+
+def test_triage_item_unknown_is_refused():
+    with Box() as c:
+        _queue_box(c)
+        c.cli("add", "queixa anexada a um item que não existe na fila")
+        p = c.cli("triage", f"fb-{TODAY}-1", "--destination", "BACKLOG.md § X",
+                  "--queue", "fila", "--item", "nao-existe")
+        check("triar --item inexistente: rc=2", p.returncode == 2, p.returncode)
+        check("triar --item inexistente: nomeia item e fila",
+              "nao-existe" in p.stderr and "fila" in p.stderr, p.stderr)
+        check("triar --item inexistente: sem evento", _triages(c) == [], c.lines())
+
+
+def test_triage_item_pending_cites_and_does_not_add():
+    with Box() as c:
+        qfile = _queue_box(c)
+        before = qfile.read_text(encoding="utf-8")
+        c.cli("add", "segundo episódio de uma seção que já tem item pendente")
+        fid = f"fb-{TODAY}-1"
+        p = c.cli("triage", fid, "--destination", "BACKLOG.md § Seção velha",
+                  "--queue", "fila", "--item", "sec-pendente")
+        check("triar --item pendente: rc=0", p.returncode == 0, p.stderr)
+        check("triar --item pendente: diz que cita e que não há item novo",
+              "cita o item sec-pendente" in p.stdout and "nenhum item novo" in p.stdout,
+              p.stdout)
+        check("triar --item pendente: fila intocada",
+              qfile.read_text(encoding="utf-8") == before)
+        t = _triages(c)
+        check("triar --item pendente: evento carrega o item",
+              len(t) == 1 and t[0].get("item") == "sec-pendente", t)
+
+
+def test_triage_item_done_opens_a_new_item():
+    with Box() as c:
+        qfile = _queue_box(c)
+        c.cli("add", "o caso voltou depois que a seção foi dada como feita")
+        fid = f"fb-{TODAY}-1"
+        p = c.cli("triage", fid, "--destination", "BACKLOG.md § Seção feita",
+                  "--queue", "fila", "--item", "sec-feita")
+        check("triar --item feito: rc=0", p.returncode == 0, p.stderr)
+        check("triar --item feito: avisa item novo porque estava done",
+              "sec-feita" in p.stdout and "done" in p.stdout, p.stdout)
+        q = " ".join(qfile.read_text(encoding="utf-8").split())
+        check("triar --item feito: item novo na fila com o id do feedback",
+              f"id: {fid} " in q, q)
+        check("triar --item feito: why cita o item done e o episódio",
+              "prova que sec-feita (done) não cobriu o caso" in q
+              and f"Episódio {fid}" in q, q)
+        t = _triages(c)
+        check("triar --item feito: evento carrega o item",
+              len(t) == 1 and t[0].get("item") == "sec-feita", t)
+
+
+def test_triage_item_dropped_opens_a_new_item():
+    with Box() as c:
+        qfile = _queue_box(c)
+        c.cli("add", "o caso voltou depois que a seção foi descartada da fila")
+        fid = f"fb-{TODAY}-1"
+        p = c.cli("triage", fid, "--destination", "BACKLOG.md § Seção descartada",
+                  "--queue", "fila", "--item", "sec-descartada")
+        check("triar --item descartado: rc=0", p.returncode == 0, p.stderr)
+        check("triar --item descartado: avisa item novo porque estava dropped",
+              "sec-descartada" in p.stdout and "dropped" in p.stdout, p.stdout)
+        q = " ".join(qfile.read_text(encoding="utf-8").split())
+        check("triar --item descartado: item novo na fila", f"id: {fid} " in q, q)
+        check("triar --item descartado: why cita o item dropped",
+              "prova que sec-descartada (dropped) não cobriu o caso" in q, q)
+
+
+def test_triage_item_pending_warns_ignored_flags():
+    with Box() as c:
+        _queue_box(c)
+        c.cli("add", "episódio com flags de item novo num item pendente")
+        p = c.cli("triage", f"fb-{TODAY}-1", "--destination", "BACKLOG.md § Velha",
+                  "--queue", "fila", "--item", "sec-pendente", "--title", "T")
+        check("triar --item pendente com --title: rc=0", p.returncode == 0, p.stderr)
+        check("triar --item pendente com --title: avisa que foi ignorado",
+              "--title" in p.stderr and "ignorado" in p.stderr, p.stderr)
+
+
+def test_triage_backlog_with_missing_queue_is_refused():
+    with Box() as c:
+        c.cli("add", "queixa cuja fila de destino não existe no repositório")
+        p = c.cli("triage", f"fb-{TODAY}-1", "--destination", "BACKLOG.md § Y",
+                  "--queue", "fila-fantasma")
+        check("triar BACKLOG com fila inexistente: rc=2", p.returncode == 2, p.returncode)
+        check("triar BACKLOG com fila inexistente: nomeia a fila",
+              "fila-fantasma" in p.stderr, p.stderr)
+        check("triar BACKLOG com fila inexistente: sem evento", _triages(c) == [], c.lines())
+
+
+def test_triage_ledger_and_queue_match():
+    with Box() as c:
+        qfile = _queue_box(c)
+        for i in range(3):
+            c.cli("add", f"queixa número {i} para o cruzamento ledger e fila")
+        d = "BACKLOG.md § S"
+        c.cli("triage", f"fb-{TODAY}-1", "--destination", d + "1", "--queue", "fila")
+        c.cli("triage", f"fb-{TODAY}-2", "--destination", d + "2", "--queue", "fila",
+              "--item", "sec-pendente")
+        c.cli("triage", f"fb-{TODAY}-3", "--destination", d + "3", "--queue", "fila",
+              "--item", "sec-feita")
+        lst = json.loads(c.cli("list", "--status", "triado", "--json").stdout)
+        plan = subprocess.run(
+            [sys.executable, str(BIN.parent / "cepa-plan"), "status", "fila", "--json",
+             "--repo", str(c.repo)], capture_output=True, text=True)
+        items = {it["id"]: it["status"] for it in json.loads(plan.stdout)["items"]}
+        check("cruzamento: 3 triados", len(lst) == 3, lst)
+        bad = []
+        for r in lst:
+            tg = r["triagem"]
+            if not tg["destino"].startswith("BACKLOG.md"):
+                continue
+            ok = (items.get(tg.get("item")) in ("pending", "done") if tg.get("item")
+                  else items.get(r["id"]) == "pending")
+            if not ok:
+                bad.append(r["id"])
+        check("cruzamento: todo destino BACKLOG tem item pendente ou feito", not bad, bad)
+        new = set(items) - {"sec-pendente", "sec-feita", "sec-descartada"}
+        check("cruzamento: exatamente 2 itens novos entraram",
+              new == {f"fb-{TODAY}-1", f"fb-{TODAY}-3"}, new)
+
+
+def test_triage_title_from_section_and_position_line():
+    with Box() as c:
+        qfile = _queue_box(c)
+        c.cli("add", "texto longo da queixa que não deve virar o título do item")
+        fid = f"fb-{TODAY}-1"
+        p = c.cli("triage", fid, "--destination", "BACKLOG.md § Título da seção nova",
+                  "--queue", "fila", "--id", "secao-nova")
+        check("triar BACKLOG --queue: rc=0", p.returncode == 0, p.stderr)
+        check("triar BACKLOG --queue: relata 'inserido na posição'",
+              "secao-nova inserido na posição 4 de 4" in p.stdout, p.stdout)
+        q = " ".join(qfile.read_text(encoding="utf-8").split())
+        check("triar BACKLOG --queue: --id vira o id do item", "id: secao-nova " in q, q)
+        check("triar BACKLOG --queue: título é o da seção",
+              "title: Título da seção nova" in q, q)
+        check("triar BACKLOG --queue: why cita feedback e destino",
+              f"Origem: feedback {fid} ({TODAY[:4]}-{TODAY[4:6]}-{TODAY[6:]})" in q
+              and "BACKLOG.md § Título da seção nova" in q, q)
 
 
 def test_triage_refuses_unknown_id_and_empty_destination():
@@ -270,7 +474,7 @@ def test_list_replay_of_the_ledger():
     with Box() as c:
         c.cli("add", "primeira queixa longa o suficiente para passar")
         c.cli("add", "segunda queixa longa o suficiente para passar")
-        c.cli("triage", f"fb-{TODAY}-1", "--destination", "BACKLOG.md § X")
+        c.cli("triage", f"fb-{TODAY}-1", "--destination", "resolvido em X")
         p = c.cli("list", "--json")
         open_ones = json.loads(p.stdout)
         check("list: default só os abertos", [r["id"] for r in open_ones] == [f"fb-{TODAY}-2"],
@@ -280,7 +484,7 @@ def test_list_replay_of_the_ledger():
         check("list: --todos traz os dois", len(all_) == 2, len(all_))
         triaged = [r for r in all_ if r["id"] == f"fb-{TODAY}-1"][0]
         check("list: triado carrega o destino",
-              triaged["triagem"]["destino"] == "BACKLOG.md § X", triaged.get("triagem"))
+              triaged["triagem"]["destino"] == "resolvido em X", triaged.get("triagem"))
         p = c.cli("list", "--status", "todos", "--repo", "outro-repo", "--json")
         check("list: filtro por repo", json.loads(p.stdout) == [], p.stdout)
 
@@ -388,6 +592,16 @@ def main():
                test_triage_with_plan_already_in_queue_is_not_an_error,
                test_triage_with_plan_real_error_does_not_undo_the_triage,
                test_triage_without_plan_touches_no_queue,
+               test_triage_backlog_destination_requires_queue_or_item,
+               test_triage_item_without_queue_is_refused,
+               test_triage_item_unknown_is_refused,
+               test_triage_item_pending_cites_and_does_not_add,
+               test_triage_item_done_opens_a_new_item,
+               test_triage_item_dropped_opens_a_new_item,
+               test_triage_item_pending_warns_ignored_flags,
+               test_triage_backlog_with_missing_queue_is_refused,
+               test_triage_ledger_and_queue_match,
+               test_triage_title_from_section_and_position_line,
                test_triage_refuses_unknown_id_and_empty_destination,
                test_list_replay_of_the_ledger, test_corrupted_line_does_not_bring_down_the_rest,
                test_list_with_nothing_recorded,

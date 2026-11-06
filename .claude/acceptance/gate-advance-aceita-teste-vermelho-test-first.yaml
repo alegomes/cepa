@@ -1,0 +1,52 @@
+key: gate-advance-aceita-teste-vermelho-test-first
+status: complete
+diff_range: 1e0d810..67fe2c6
+criteria:
+- id: AC1
+  altitude: event
+  surface: Hook PreToolUse/Bash (gate-advance.py) via subprocess com payload stdin, repo git temporário; git commit local só com arquivos de teste, last-build.json FAILURE de testes (Maven e pytest) passa com aviso.
+  test: 'tests/test_gate_advance_red_test_commit.py (a: exit 0 + aviso ALLOWED WITH WARNING; g: pytest com testes falhando exit 0)'
+  layer: subprocess real do hook contra repo git real
+  evidence: verified
+  run: python3 tests/test_gate_advance_red_test_commit.py -> 97 linhas 'ok', 0 FAIL, exit 0, 'todos os casos verdes' (N=97 > 0)
+  gap: ''
+- id: AC2
+  altitude: event
+  surface: Mesmo commit com arquivo de produção (src/main/**) segue recusado e a mensagem nomeia o arquivo.
+  test: 'tests/test_gate_advance_red_test_commit.py (b: exit 2; b: nomeia o arquivo de produção; n: add -A traz a produção)'
+  layer: subprocess real do hook
+  evidence: verified
+  run: python3 tests/test_gate_advance_red_test_commit.py -> 97 linhas 'ok', 0 FAIL, exit 0, 'todos os casos verdes' (N=97 > 0)
+  gap: ''
+- id: AC3
+  altitude: event
+  surface: FAILURE com tail de erro de compilação/coleta segue recusado.
+  test: 'tests/test_gate_advance_red_test_commit.py (c: exit 2 + menciona compilation; h: pytest erro de coleta exit 2)'
+  layer: subprocess real do hook
+  evidence: verified
+  run: python3 tests/test_gate_advance_red_test_commit.py -> 97 linhas 'ok', 0 FAIL, exit 0, 'todos os casos verdes' (N=97 > 0)
+  gap: ''
+- id: AC4
+  altitude: event
+  surface: Operações de compartilhamento (git push, gh pr create) nunca isentas; baselines STALE/EMPTY inalteradas.
+  test: 'tests/test_gate_advance_red_test_commit.py (d: git push exit 2; ak: commit isento encadeado com push exit 2; al: gh pr create e gh pr merge com baseline vermelho de teste exit 2; e: STALE; am: EMPTY exit 2; am2: STALE com tail vermelho exit 2)'
+  layer: subprocess real do hook
+  evidence: verified
+  run: python3 tests/test_gate_advance_red_test_commit.py -> 97 linhas 'ok', 0 FAIL, exit 0, 'todos os casos verdes' (N=97 > 0)
+  gap: ''
+- id: AC5
+  altitude: event
+  surface: Forma 'git add <testes> && git commit -m ...' em um único comando Bash (índice vazio na hora do hook), inclusive 'cd <repo> &&' e 'git -C'.
+  test: 'tests/test_gate_advance_red_test_commit.py (m: add+commit exit 0; o: add de diretório; p: cd repo && add && commit com cwd fora do repo exit 0; p2: git -C add com produção exit 2; af, ag); ao: git -C add + git -C commit de fora do repo exit 0'
+  layer: subprocess real do hook
+  evidence: verified
+  run: python3 tests/test_gate_advance_red_test_commit.py -> 97 linhas 'ok', 0 FAIL, exit 0, 'todos os casos verdes' (N=97 > 0)
+  gap: ''
+- id: AC6
+  altitude: event
+  surface: Fail-closed - -a/--include/pathspec/--amend, substituição de comando, subcomandos git não-add antes do commit, renomeação prod->teste, lista de arquivos vazia mantêm o bloqueio.
+  test: 'tests/test_gate_advance_red_test_commit.py (f/ae: -am, -o, --include, pathspec; v: --amend; ad/ad2: substituição; r/s/t: renomeação; u/w; x/x2/y/ah: git mv/rm antes; i: nada staged)'
+  layer: subprocess real do hook
+  evidence: verified
+  run: python3 tests/test_gate_advance_red_test_commit.py -> 97 linhas 'ok', 0 FAIL, exit 0, 'todos os casos verdes' (N=97 > 0)
+  gap: ''

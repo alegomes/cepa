@@ -23,12 +23,23 @@ import re
 
 # (key in owner_summary, CLI flag, label on the end-of-run screen)
 FIELDS = (
-    ("pedido", "--pedido", "Era para"),
-    ("pronto", "--pronto", "Já está pronto"),
-    ("impede", "--impede", "Parou porque"),
-    ("se_sim", "--se-sim", "Se sim"),
-    ("se_nao", "--se-nao", "Se não"),
+    ("pedido", "--asked", "Era para"),
+    ("pronto", "--ready", "Já está pronto"),
+    ("impede", "--blocker", "Parou porque"),
+    ("se_sim", "--if-yes", "Se sim"),
+    ("se_nao", "--if-no", "Se não"),
 )
+
+# The Portuguese flag each English one replaced. Still accepted by `cepa-plan
+# finish`; the keys inside `owner_summary` (column 1 above) are stored data and
+# keep their Portuguese names.
+OLD_FLAGS = {
+    "--asked": "--pedido",
+    "--ready": "--pronto",
+    "--blocker": "--impede",
+    "--if-yes": "--se-sim",
+    "--if-no": "--se-nao",
+}
 
 WORDS_PER_FIELD = 30
 

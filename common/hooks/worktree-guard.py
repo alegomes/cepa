@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Merge-safety guard for /common:worktree-merge and `cepa-until aterrissar` —
+"""Merge-safety guard for /common:worktree-merge and `cepa-until land` —
 single-owner branch rule.
 
 Given a source branch to merge into the branch currently checked out at --cwd,
@@ -58,7 +58,7 @@ def main() -> int:
 
     source = args.source.replace("refs/heads/", "")
     # Um nome solto é o slice de uma sessão; `until/<run>` é a branch da noite
-    # do `cepa-until`, que o `cepa-until aterrissar` guarda com este mesmo
+    # do `cepa-until`, que o `cepa-until land` guarda com este mesmo
     # script.
     if not source.startswith(("session/", "until/")):
         source = f"session/{source}"

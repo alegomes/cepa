@@ -147,7 +147,7 @@ Skip with no `board-flow.yaml`, with `--offline`, or when
 `/board-flow:prove` does not auto-advance).
 
 On the overnight branch the rule is "no merge, no push, no Done", so a card
-proven there stays in Review. `cepa-until aterrissar` later merges the branch
+proven there stays in Review. `cepa-until land` later merges the branch
 into main and never speaks to Jira, and nothing else moved those cards: on
 2026-11-03 eleven WEGO cards sat in Review with PROVEN proof, complete
 acceptance and code on main (fb-20261103-1). This step closes that gap at the
@@ -200,9 +200,11 @@ The stop reasons, and what each one wants from you:
 
 | `stop.reason` | what happened |
 |---|---|
-| `teto` | `--max` filled up; the named item would be the next. Run again later. |
-| `fim-da-fila` | no pending item left. Offer `/common:queue` for the next round. |
-| `bloqueado` | the item depends on something that is neither done nor in this batch. |
+| `cap` | `--max` filled up; the named item would be the next. Run again later. |
+| `end-of-queue` | no pending item left. Offer `/common:queue` for the next round. |
+| `blocked` | the item depends on something that is neither done nor in this batch. |
+
+(Transition window: the reasons used to be written in Portuguese — `teto`, `fim-da-fila`, `bloqueado`, `reservado`, `depende-de-adiado`, `bloqueado-antes`. The JSON still carries the old spelling in `reason_pt` next to `reason`, and readers accept both.)
 
 And `queue` also returns `deferred` — the **deferred** items, which don't run
 now and **don't stop the batch**. Deferring is an execution decision: the item
@@ -212,9 +214,9 @@ leaves this batch and comes back in the next `queue`, and the order recorded in
 | deferral reason | what happened |
 |---|---|
 | `human_pending` | the item has a route that **only you** close. Owner decision (2026-08-28, revisiting the one of 08-25): the route no longer blocks the flow — locking the queue until the human came back turned a batch of 3 into a batch of 1. The debt does not vanish: it is collected in the final report. |
-| `reservado` | another **live** session is on the item right now — the deferral says which session, in which tree, since when. |
-| `depende-de-adiado` | the item depends (`blocked_by`) on one that was left out. The cascade is what makes deferral work: without it, deferring B would make C stop the batch. |
-| `bloqueado-antes` | the item came out `blocked` from a previous run and the outside condition did not change. It is not re-run — it would be the same block — but since 2026-08-30 it also does not block the ones after it. Owner decision, revisiting what was inherited from `/board-flow:drain`: in an unattended window (`cepa-until`), an item stuck at the head of the queue cost the whole night. |
+| `reserved` | another **live** session is on the item right now — the deferral says which session, in which tree, since when. |
+| `depends-on-deferred` | the item depends (`blocked_by`) on one that was left out. The cascade is what makes deferral work: without it, deferring B would make C stop the batch. |
+| `blocked-before` | the item came out `blocked` from a previous run and the outside condition did not change. It is not re-run — it would be the same block — but since 2026-08-30 it also does not block the ones after it. Owner decision, revisiting what was inherited from `/board-flow:drain`: in an unattended window (`cepa-until`), an item stuck at the head of the queue cost the whole night. |
 
 A fourth situation is neither deferral nor stop: an `in_progress` whose owning
 session **no longer exists** (dead pid on the same host, or a reservation from
@@ -403,7 +405,7 @@ For each item of the batch, in order:
 
      If the build does not fit in the turn, the outcome is not silence: it is
      `finish --status blocked --evidence "build disparado e não colhido: <o
-     comando, e onde está o log>" --impede "os testes não terminaram dentro do
+     comando, e onde está o log>" --blocker "os testes não terminaram dentro do
      turno"` (build started and not collected: the command, and where the log
      is), or `--status pending` with the same evidence. An item
      with a named outcome comes back in the next window knowing where it stopped;
@@ -456,15 +458,15 @@ For each item of the batch, in order:
 
      - `--evidence` is the **agent section**. Card keys, commit hashes, gate
        verdicts, branches and file paths go here: the next run resumes from it.
-     - `--pedido`, `--pronto`, `--impede`, `--se-sim`, `--se-nao` are the
-       **human section**, in pt-BR, for a lay reader. `--impede` is mandatory
+     - `--asked`, `--ready`, `--blocker`, `--if-yes`, `--if-no` are the
+       **human section**, in pt-BR, for a lay reader. `--blocker` is mandatory
        on `blocked`; write all five whenever the item goes to the owner. Each
        one up to 30 words, with no card key, commit, branch, file, gate name or
        verdict: `cepa-plan finish` refuses them and names the field.
-       `--impede` names the real reason, not its category: "o card manda
+       `--blocker` names the real reason, not its category: "o card manda
        entregar com os casos travados marcados, mas a revisão final exige
        todos passando", never "travou por algo de fora do código".
-       `--se-sim` and `--se-nao` say what each answer does to the WORK ("o
+       `--if-yes` and `--if-no` say what each answer does to the WORK ("o
        trabalho vai para revisão com os 18 casos pendentes do defeito"), not
        to the queue.
 
@@ -474,14 +476,14 @@ For each item of the batch, in order:
      Written for a lay reader, the same item reads:
 
      ```
-     --pedido "testar a parte do sistema que controla as sessões de acesso"
-     --pronto "136 dos 154 casos estão testados e passando"
-     --impede "18 casos dependem de um defeito do sistema: ele responde em
+     --asked "testar a parte do sistema que controla as sessões de acesso"
+     --ready "136 dos 154 casos estão testados e passando"
+     --blocker "18 casos dependem de um defeito do sistema: ele responde em
                branco quando nega um acesso. O card aceita isso, a revisão
                final não"
-     --se-sim "o trabalho vai para revisão com os 18 casos marcados como
+     --if-yes "o trabalho vai para revisão com os 18 casos marcados como
                pendentes do defeito"
-     --se-nao "o trabalho espera o defeito ser corrigido"
+     --if-no "o trabalho espera o defeito ser corrigido"
      --pergunta "O card permite entregar com os 18 casos pendentes, mas a
                  revisão final não aceita. Sigo a regra do card?"
      ```
@@ -567,7 +569,7 @@ A single report, in the `plain-report` format, written in Brazilian Portuguese
 - **Where the batch stopped and what is left:** the `stop` of the next `queue` and
   how many pending items remain.
 - **What now:** `/common:next` for the next step, or this command again if the
-  stop was `teto`.
+  stop was `cap`.
 
 ## Constraints
 

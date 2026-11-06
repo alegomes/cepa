@@ -74,12 +74,12 @@ end:
   running, or the supervisor died silently (the WEGO run 2026-09-28-2003
   stopped at `item_start`, the card closed `done` by itself and the full build
   never ran). Do not guess: run
-  `python3 common/bin/cepa-until pendentes --json` and look at the `mortos`
+  `python3 common/bin/cepa-until pending --json` and look at the `mortos`
   list (dead runs), which checks the `pid` and the `host` recorded in the state
   (a run with no pid counts as dead 3h after the deadline; an `interrompido`
   run is also on the list). If the run is there, the first question of the
   report is to close it with the command in the `fechar` field
-  (`cepa-until fecha-morto <fila>/<run> --yes`): it runs the missing full build
+  (`cepa-until close-dead <fila>/<run> --yes`): it runs the missing full build
   in the night worktree and, if green, writes the `run_end` and leaves the run
   `esperando-dono` with the `aterrissar` action. The in-flight item with status
   `done` is in the queue without that build. If it is not on the list, the run
@@ -180,12 +180,12 @@ provides the wording of the question and your recommendation.
 
 Cover **all deferred items of the queue**, not only this run's: run
 `python3 common/bin/cepa-plan queue <fila> --max 1 --json --repo <raiz>` and
-take the `deferred` list. Those with reason `bloqueado-antes` and
-`human_pending` go in; `reservado` and `depende-de-adiado` are not the owner's
+take the `deferred` list. Those with reason `blocked-before` (old spelling `bloqueado-antes` is still accepted) and
+`human_pending` go in; `reserved` and `depends-on-deferred` are not the owner's
 and stay out. An item that already has a `question` (the question the agent
 recorded with `finish --question`) needs no line, unless you recommend
 something else. An item whose `owner_summary` (the human section the agent
-wrote with `finish --impede`, `--pedido` and the others) is present needs no
+wrote with `finish --blocker`, `--asked` and the others) is present needs no
 `contexto`: the terminal already shows it. An item WITHOUT `owner_summary`
 (blocked before 2026-11-01, or by the supervisor) always gets `contexto`,
 `se_sim` and `se_nao`, because otherwise the owner reads only the log.

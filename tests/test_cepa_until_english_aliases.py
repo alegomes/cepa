@@ -108,11 +108,17 @@ def test_feedback_triar_same_as_triage():
     for sub, d, n, q, t, o in (("triar", "--destino", "--nota", "--plano", "--alvo", "--origem"),
                                ("triage", "--destination", "--note", "--queue", "--target", "--origin")):
         with tf.Box() as c:
+            # A BACKLOG.md destination requires a queue item since
+            # feedback-triage-cria-item-de-fila: the alias `--plano` (== `--queue`)
+            # is what opens it, so the pt-BR form exercises the same rule.
+            queue_yaml = tf._queue_box(c)
             p = c.cli("add", "o gate X barrou", t, "write-mode-gate", o, "skill")
             check(f"feedback add {t} {o}: rc=0", p.returncode == 0, p.stderr)
             fid = c.lines()[0]["id"]
-            p = c.cli(sub, fid, d, "BACKLOG.md § X", n, "uma nota")
+            p = c.cli(sub, fid, d, "BACKLOG.md § X", n, "uma nota", q, "fila")
             check(f"feedback {sub}: rc=0", p.returncode == 0, p.stderr)
+            check(f"feedback {sub}: {q} abriu item na fila",
+                  fid in queue_yaml.read_text(encoding="utf-8"), p.stdout)
             reg = c.lines()
             ev[sub] = (reg[0]["alvo"], reg[0]["origem"], reg[-1]["tipo"],
                        reg[-1]["destino"], reg[-1]["nota"])

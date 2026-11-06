@@ -1,0 +1,77 @@
+key: handoff-e-spec-gravam-pergunta-de-origem
+status: complete
+diff: 15cbf52..f6750f9
+audited_head: f6750f9
+note: >
+  Reauditado em f6750f9. Rodado: test_handoff_seeds_gate.py (all green), test_spec_readiness_gate.py (all green) e test_wrapup_next_step.py (todos ok). f6750f9 so adiciona teste e fecha a lacuna do AC7.
+criteria:
+  - id: AC1
+    text: Handoff de sessao sem linha porque em "## Proximo passo" e recusado (exit 2) com mensagem que nomeia a linha; com porque preenchido passa.
+    altitude: event
+    surface: hook handoff-seeds-gate.py (PreToolUse stdin JSON, exit code), Write/Edit/MultiEdit
+    test: tests/test_handoff_seeds_gate.py (session handoff com/sem porque; Edit com Proximo passo sem porque; porque fora da secao nao vale)
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_handoff_seeds_gate.py -> 47 ok, all green
+    status: complete
+    gap: null
+  - id: AC2
+    text: porque vazio ou placeholder <...> tambem e recusado, com mensagem "presente mas vazio" distinta de "ausente".
+    altitude: event
+    surface: hook handoff-seeds-gate.py
+    test: tests/test_handoff_seeds_gate.py (porque vazio / so espacos / placeholder / negrito vazio; mensagem EMPTY vs has no)
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_handoff_seeds_gate.py -> 47 ok, all green
+    status: complete
+    gap: null
+  - id: AC3
+    text: Sem "## Proximo passo" visivel passa (fail-open); handoff de discovery mantem o comportamento (seeds + carry-forward, sem porque); outros caminhos intocados.
+    altitude: event
+    surface: hook handoff-seeds-gate.py
+    test: tests/test_handoff_seeds_gate.py (sem Proximo passo passa; Edit em outra secao passa; handoff de discovery nao pede porque; testes preexistentes de discovery e caminhos alheios)
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_handoff_seeds_gate.py -> 47 ok, all green
+    status: complete
+    gap: null
+  - id: AC4
+    text: common/commands/handoff.md traz a linha porque sob "## Proximo passo" e regra dizendo que e obrigatoria, em prosa, sem rotulos de conversa.
+    altitude: domain
+    surface: common/commands/handoff.md (template + Rules)
+    test: diff (handoff.md:63 linha porque no template; handoff.md:77 regra "mandatory") + comportamento do gate coberto pelo teste de AC1
+    layer: leitura do diff
+    evidence: verified
+    run: grep -n 'porque:' common/commands/handoff.md -> linhas 63 e 77; python3 tests/test_handoff_seeds_gate.py -> all green
+    status: complete
+    gap: null
+  - id: AC5
+    text: common/commands/spec.md traz "## Como chegamos aqui" antes de "## Problema" no esqueleto, e o passo 1 manda preenche-la da primeira frase do dono ou do porque do handoff.
+    altitude: domain
+    surface: common/commands/spec.md (passo 1 + formato do arquivo)
+    test: diff (spec.md:185 Como chegamos aqui, spec.md:188 Problema; texto do passo 1)
+    layer: leitura do diff
+    evidence: verified
+    run: grep -n '^## Como chegamos\|^## Problema' common/commands/spec.md -> 185, 188
+    status: complete
+    gap: null
+  - id: AC6
+    text: spec-readiness-gate recusa ready-to-build sem "## Como chegamos aqui" (ausente, vazia ou so placeholder), nomeando a secao; draft nunca bloqueia; Epic intocado.
+    altitude: event
+    surface: hook spec-readiness-gate.py (PreToolUse stdin, exit code)
+    test: tests/test_spec_readiness_gate.py::test_ready_requires_how_we_got_here
+    layer: subprocess (hook real)
+    evidence: verified
+    run: "python3 tests/test_spec_readiness_gate.py -> 54 ok, all green (ausente, placeholder, vazia bloqueiam; preenchida passa; rascunho passa). Epic: o ramo is_epic sai (exit) antes da checagem nova, lido em main(); nao rodei test_epic_readiness_gate.py por restricao do escopo."
+    status: complete
+    gap: null
+  - id: AC7
+    text: session-next.py carrega a linha porque no brief da proxima sessao (section_brief nao a remove).
+    altitude: application
+    surface: common/hooks/session-next.py (--handoff/--session-id/--root) -> brief no .next.json
+    test: tests/test_wrapup_next_step.py (bloco "a linha porque do Proximo passo vai no brief da proxima sessao")
+    layer: subprocess (session-next.py real)
+    evidence: verified
+    run: python3 tests/test_wrapup_next_step.py -> todos ok (brief traz a frase do porque literalmente; brief traz a linha e o paragrafo)
+    status: complete
+    gap: null

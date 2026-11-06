@@ -1,0 +1,53 @@
+key: wrap-up-safe-to-exit-exige-clone-limpo
+status: complete
+diff_range: b38f4c2..a1e7f71
+criteria:
+  - id: AC1
+    altitude: event
+    surface: "Hook Stop common/hooks/safe-exit-gate.py como subprocesso (stdin -> stdout JSON), registrado em plugin.json; clone principal via _wtlib.main_root."
+    test: "tests/test_safe_exit_gate.py a, b, c, d, f, j, k"
+    layer: subprocess sobre o hook real, repo git real
+    evidence: verified
+    run: "python3 tests/test_safe_exit_gate.py -> 49 checks 'ok', 'all ok' (N>0)"
+    status: complete
+  - id: AC2
+    altitude: event
+    surface: "motivo do block (stdout JSON) com 'git add -u -- <paths>' + commit; prosa do wrap-up.md L4."
+    test: "tests/test_safe_exit_gate.py a ('a: instrui add -u', 'a: nomeia queue.yaml'), k"
+    layer: subprocess sobre o hook real
+    evidence: verified
+    run: "python3 tests/test_safe_exit_gate.py -> a e k ok; all ok"
+    status: complete
+  - id: AC3
+    altitude: cli
+    surface: "safe-exit-gate.py --exclude <repo> gravando no <git-common-dir>/info/exclude, do clone principal e de worktree linkada."
+    test: "tests/test_safe_exit_gate.py g (principal, idempotente, tracked fora) e g2 (worktree linkada)"
+    layer: subprocess CLI, repo git real com worktree linkada
+    evidence: verified
+    run: "python3 tests/test_safe_exit_gate.py -> g2: exclude do clone principal recebe sessions/, last-build.json, nada escrito dentro da worktree, status da worktree vazio ok; all ok"
+    status: complete
+  - id: AC4
+    altitude: cli
+    surface: "cepa-doctor --projeto, check_tracked_runtime; .claude/expertise isento."
+    test: "tests/test_doctor_tracked_runtime.py"
+    layer: subprocess sobre o cepa-doctor real
+    evidence: verified
+    run: "python3 tests/test_doctor_tracked_runtime.py -> 5 checks ok, 'all ok'; python3 tests/test_doctor_dirty_tree.py -> 'tudo verde'"
+    status: complete
+  - id: AC5
+    altitude: event
+    surface: "hook real (stdin -> stdout) vs dirty_tree(repo, live_run_ok=True) real do common/bin/cepa-until (SourceFileLoader, sem reimplementar)."
+    test: "tests/test_safe_exit_gate.py a, b, c, f e h (.claude/ sem versão só com registro de run; arquivo novo solto; só runtime; registro+runtime; limpo após --exclude), cada um afirmando blocks(hook) == bool(until_dirty)"
+    layer: subprocess no hook + função real do cepa-until
+    evidence: verified
+    run: "python3 tests/test_safe_exit_gate.py -> 'h: ... hook e until concordam' x4 cenários, 'depois do --exclude o hook cala' e 'o until larga' ok; all ok. Divergência anterior (?? .claude/) corrigida: dirty_tree agora usa --untracked-files=all (a1e7f71)."
+    status: complete
+extras:
+  anti_loop:
+    note: "stop_hook_active=true deixa a repetição passar (teste e). Caveat conhecido, convenção do report-style-lint; não é gap."
+  never_crashes_turn:
+    note: "main() envolve on_stop em try/except e sai 0; telemetria fail-silent. Só inspeção de código para payload quebrado (sem teste dedicado)."
+  known_asymmetry:
+    note: "plan.yaml modificado só por run vivo (live_run_ok): o until ignora, o hook bloqueia. Lado mais estrito, nunca deixa passar o que o until recusa; fora da frase do dono."
+  doctor_shared_rule:
+    note: "check_dirty_tree usa _dirt.counts_as_dirt; test_doctor_dirty_tree e 'queue.yaml.bak não conta' passam."

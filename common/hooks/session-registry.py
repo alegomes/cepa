@@ -8,6 +8,8 @@ SessionStart:
   3. Warn if another LIVE session shares this exact working tree.
   4. Auto-clean session worktrees that are provably safe to drop, and remind the
      user of any that carry unmerged work (so a forgotten merge can't strand it).
+     Also delete `.prune-on-exit` markers whose worktree or branch no longer
+     exists (the session died before SessionEnd could consume them).
 
 SessionEnd:
   5. WIP-autosave — if this is a `session/*` worktree with uncommitted changes,
@@ -216,6 +218,9 @@ def on_start(session_id: str, cwd: str) -> None:
     # 4. Auto-clean safe worktrees, remind about the rest.
     try:
         cleaned = L.auto_clean(root)
+        for desc in L.clean_orphan_prune_markers(root):
+            print(f"[session-registry] removed orphan prune-on-exit marker {desc}",
+                  file=sys.stderr)
         if cleaned:
             notices.append(f"🧹 Auto-removed {len(cleaned)} finished session "
                            f"worktree(s): {', '.join(cleaned)}.")

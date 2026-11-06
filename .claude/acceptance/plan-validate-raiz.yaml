@@ -1,0 +1,35 @@
+key: plan-validate-raiz
+status: complete
+diff_range: 1eff25d..dff66d7
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      `common/bin/cepa-plan validate <nome>` executado como subprocesso a
+      partir de uma worktree ligada real (git worktree add) resolve a fila no
+      clone principal via main_root (git rev-parse --git-common-dir), como
+      write/check-name; a worktree não tem a fila.
+    test: tests/test_cepa_plan_validate_root.py::test_name_from_worktree
+    layer: cli/subprocess sobre git worktree real
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_validate_root.py -> test_name_from_worktree 4 checks ok (pré-condição sem fila na worktree; sai 0; saída cita o caminho do clone principal) -> 'tudo ok' (9 checks ok, 0 FAIL)"
+  - id: AC2
+    altitude: cli
+    surface: >
+      `validate <nome> --repo DIR` (cwd fora de qualquer repo, --repo aponta
+      para a worktree) resolve no clone principal.
+    test: tests/test_cepa_plan_validate_root.py::test_name_from_worktree (check "--repo apontando para a worktree")
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_validate_root.py -> 'ok --repo apontando para a worktree: sai 0 e cita o clone principal' -> 'tudo ok'"
+  - id: AC3
+    altitude: cli
+    surface: >
+      Forma antiga por caminho de arquivo (/tmp/queue.yaml, rascunho sem git,
+      e caminho relativo) continua funcionando; nome fora de repo git sai 2
+      com mensagem clara; nome inexistente sai 2 citando o caminho no clone
+      principal; fila inválida por nome sai 2 com a lacuna nomeada.
+    test: tests/test_cepa_plan_validate_root.py::test_file_path_without_git, test_missing_name, test_invalid_by_name
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_validate_root.py -> 5 checks ok nessas três funções -> 'tudo ok'"

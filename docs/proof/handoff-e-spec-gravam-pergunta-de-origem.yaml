@@ -1,0 +1,52 @@
+schema_version: 2
+card: handoff-e-spec-gravam-pergunta-de-origem
+verdict: proven
+reviewed_at: 2026-11-06T09:00:00-03:00
+base_commit: 15cbf52
+head_commit: f6750f9
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/hooks/handoff-seeds-gate.py (SESSION_HANDOFF_PATH_RE, NEXT_STEP_RE, PORQUE_RE, porque_is_empty, next_step_body, gate_session_handoff, is_session branch in main)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null        # tests run the real hook as a subprocess (stdin JSON -> exit code + stderr)
+    - class: "common/hooks/spec-readiness-gate.py (origin = section(content, 'como chegamos aqui') check)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/session-next.py (unchanged; brief carrying the porque line pinned by new test in test_wrapup_next_step.py)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at f6750f9 (throwaway worktree /tmp/proof-hespo): test_handoff_seeds_gate.py 47 'ok' checks, 'all green'; test_spec_readiness_gate.py 54 'ok', 'all green'; test_wrapup_next_step.py 'todos ok'"
+        - "P1 handoff-seeds-gate main: is_session branch disabled (if False:) -> 15 failures (RED), session handoff without porque no longer blocks"
+        - "P2 porque_is_empty always False -> 8 failures (RED): empty / spaces / <placeholder> / bold-empty no longer block"
+        - "P3 SESSION_HANDOFF_PATH_RE never matches -> 13 failures (RED)"
+        - "P4 next_step_body returns whole content -> 1 failure (RED): 'porque fora de ## Próximo passo não vale'"
+        - "P5 spec-readiness-gate: 'como chegamos aqui' check neutralised (origin = 'x') -> 4 failures (RED): missing section, message names it, <placeholder> section, empty section"
+        - "P6 session-next.py section_brief strips lines containing 'porque:' -> 2 FAIL in test_wrapup_next_step.py (RED): 'brief traz a frase do porque literalmente', 'brief traz a linha porque:'"
+        - "each perturbation restored with git checkout; worktree clean before removal"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every changed clause (path regex, next_step_body, porque_is_empty, session branch, spec origin check) was individually broken (P1-P5) and a test went red, so each is reached through the real hook process"
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: "real hook as subprocess, JSON on stdin: absolute '/Users/x/repo/.claude/handoffs/main.md' without porque -> BLOCKED (exit 2), with porque -> 0; '.claude/handoffs/sub/dir.md' -> 0 (not gated); porque outside '## Próximo passo' -> 2; 'porque: <placeholder>' -> 2; '**Porque:** texto' -> 0; content without heading -> 0; Edit new_string on '## Outra' -> 0; Edit new_string with '## Próximo passo' and no porque -> 2; non-.md target not gated; invalid JSON -> 0 (fail-open, 'could not parse hook payload; allowing'). All as specified."
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type Task, not a bug"
+routing_reason: "Session-handoff porque gate, spec 'Como chegamos aqui' check and the brief carrying the porque line are load-bearing at the real hook-process surface: six perturbations each turned a named test RED (15/8/13/1/4/2 failures), restored to green; adversarial inputs behave as required; no test double stands in for a changed class."

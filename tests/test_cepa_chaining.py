@@ -16,6 +16,8 @@ SessionEnd and exits.
 Contracts guarded here:
   - with the file: the stub runs a second time, cwd = repo, recorded mode =
     discovery, last argument = the brief verbatim; the file vanishes;
+  - with `comando` in the file, the initial prompt is `<comando>\\n\\n<brief>` (command
+    on line 1); absent, blank or non-string `comando`: the brief alone, no warning;
   - without the file: the stub runs only once and its exit code is that of cepa;
   - CEPA_ENCADEAR=off: only once, the file stays;
   - invalid file (missing repo): only once, the file stays, and cepa says so;
@@ -207,6 +209,27 @@ INTENT = {"purpose": "Grelhar o dono no epic contratos-e-regras",
 # The same content in the OLD .next.json format (keys in pt-BR).
 OLD_INTENT = {"proposito": INTENT["purpose"], "para_quando": INTENT["by_when"],
                    "plano": INTENT["plan"]}
+
+
+def t_command_first_line():
+    print("o comando gravado pelo wrap-up abre o prompt da sessão seguinte")
+    cmd = "/common:epic contratos-e-regras"
+    with World() as w:
+        r = w.run(nxt={"repo": str(w.b), "mode": "discovery", "comando": f"  {cmd} ", "brief": BRIEF})
+        c = w.calls()
+        check("o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
+        if len(c) == 2:
+            last = c[1]["args"][-1]
+            check("o prompt é comando + linha em branco + brief verbatim", last == cmd + "\n\n" + BRIEF, repr(last))
+            check("a primeira linha é exatamente o comando", last.split("\n")[0] == cmd, repr(last))
+    for given_name, val in (("só espaços", "   "), ("vazio", ""), ("não string", 42)):
+        with World() as w:
+            r = w.run(nxt={"repo": str(w.b), "mode": "discovery", "comando": val, "brief": BRIEF})
+            c = w.calls()
+            check(f"{given_name}: o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
+            if len(c) == 2:
+                check(f"{given_name}: o prompt é só o brief", c[1]["args"][-1:] == [BRIEF], repr(c[1]["args"]))
+            check(f"{given_name}: nenhum aviso sobre comando", "comando" not in r.stderr, r.stderr)
 
 
 def t_chains_with_intent():
@@ -495,6 +518,7 @@ def t_old_names():
 
 if __name__ == "__main__":
     t_chains()
+    t_command_first_line()
     t_chains_with_intent()
     t_old_names()
     t_invalid_intent_opens_without()

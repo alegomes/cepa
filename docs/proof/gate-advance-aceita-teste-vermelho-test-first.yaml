@@ -1,0 +1,48 @@
+schema_version: 2
+card: gate-advance-aceita-teste-vermelho-test-first
+verdict: proven
+reviewed_at: 2026-11-05T22:00:00-03:00
+base_commit: 1e0d810
+head_commit: 67fe2c6
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/hooks/gate-advance.py", module: harness, external_observable: true, substituted_by_double: null }
+    - { class: "tests/test_gate_advance_red_test_commit.py", module: harness-test, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python (hooks + testes de script); nao ha PIT. Perturbacao como mecanismo universal."
+    perturbation:
+      status: pass
+      results:
+        - "Rodada 1 em /tmp/proof-gate-advance-red (a07fce3). Base verde: `python3 tests/test_gate_advance_red_test_commit.py` -> 'todos os casos verdes'; `python3 tests/test_gate_advance_target_repo.py` -> 'todos os casos verdes'."
+        - "R1-1 saida da excecao sys.exit(0) -> pass (l.659) -> RED, exit=1 em a, g, m, o, p, af, ag, ah3, y2 e outros."
+        - "R1-2a marcadores de compilacao ignorados (`if False`) -> RED, 1 FAILURE: 'go build failed'. R1-2b failure_is_test_failure sempre True -> RED, 9 FAILURE(S): c, h, k, l, go build, cargo compile, empty state, unknown tail."
+        - "R1-3 is_test_path sempre True -> RED, 12 FAILURE(S): b, n, p2, r, s e os not is_test_path(...)."
+        - "R1-4a sem --no-renames -> RED, 2 FAILURE(S): r (git mv). R1-4b ignorar segmentos git add -> RED, 11 FAILURE(S). R1-4c trava git desconhecido/inimulavel -> `if False` -> RED, 2 FAILURE(S): x, x2. R1-4d earlier_other -> `if False` -> RED, 2 FAILURE(S): ah, ah2."
+        - "Rodada 1 deixou 5 sobreviventes em a07fce3 (VERDES quando quebrados): widen das formas -a/-i/-o separadas (sonda: `git commit -a -m x` com teste staged + producao nao staged: original exit=2, perturbado exit=0), formas longas --all/--include/--only, trava $( e crase, checagem de tier (sonda: `git commit -m x && git push origin main`: original exit=2, perturbado exit=0), STALE/EMPTY com tail de teste vermelho. O dev-worker fechou com testes aj, ak, am/am2, an em 67fe2c6; o hook ficou IDENTICO ao de a07fce3 (`git diff --stat a07fce3 67fe2c6` = so tests/test_gate_advance_red_test_commit.py, +52)."
+        - "Rodada 2 em /tmp/proof-gate-advance-red2 (67fe2c6), apenas os 5 sobreviventes. Base verde: `python3 tests/test_gate_advance_red_test_commit.py` -> 'todos os casos verdes'."
+        - "R2-1 widen das formas curtas: `widen = bool(set(t[1:]) & set(\"aio\"))` -> `widen = False` (l.467) -> RED, 2 FAILURE(S): 'aj: git commit -a -m x com teste staged, exit 2' e 'aj: ... traz a dica da forma nao inspecionada'."
+        - "R2-2 formas longas: `widen = t in (\"--all\", \"--include\", \"--only\")` -> `widen = False` (l.465) -> RED, 6 FAILURE(S): aj para --all, --include e --only (exit 2 e dica, cada um)."
+        - "R2-3 tier: `if tier == \"local\":` (l.637) -> `if True:` -> RED, 1 FAILURE: 'ak: commit isento encadeado com push, exit 2'."
+        - "R2-4 trava de substituicao: `if \"$(\" in command or \"`\" in command:` (l.427) -> `if False:` -> RED, 1 FAILURE: 'an: $(date) fora do git add, exit 2'."
+        - "R2-5 STALE/EMPTY: `if status == \"STALE\":` -> `if False:`, `elif status == \"EMPTY\":` -> `elif False:`, `elif status == \"FAILURE\":` -> `elif status in (\"FAILURE\",\"STALE\",\"EMPTY\"):` (l.615/618/630) -> RED, 2 FAILURE(S): 'am: baseline EMPTY, exit 2' e 'am2: STALE com tail de teste vermelho, exit 2'."
+        - "Ramos inalterados em 67fe2c6: `python3 tests/test_gate_advance_target_repo.py` -> 'todos os casos verdes'."
+        - "Todas as perturbacoes restauradas com `git checkout -- common/hooks/gate-advance.py`; worktrees descartaveis removidos (`git worktree list` sem proof); /tmp/probe-a removido."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; alcance determinado pela perturbacao: toda linha alterada de comportamento (excecao, marcadores, is_test_path, --no-renames, segmentos add, git inimulavel, earlier_other, widen curto e longo, trava de substituicao, tier, STALE/EMPTY) derruba o teste quando quebrada (R1-1..4d e R2-1..5 acima)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o hook le o comando Bash do payload do proprio harness e falha fechado (bloqueia) em tudo que nao sabe avaliar; as entradas adversariais encontradas na rodada 1 (`-a -m`, commit encadeado com push) viraram casos aj e ak e foram provadas na rodada 2. Nao ha modulo de entrada externa (api-rest) no diff."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: ""
+routing_reason: "Rodada 1 (a07fce3): 9 perturbacoes ficaram vermelhas e 5 sobreviveram (duas com bypass confirmado por sonda). Em 67fe2c6 o dev-worker adicionou os casos aj, ak, am, am2 e an, com o hook inalterado. Rodada 2: as 5 perturbacoes sobreviventes agora derrubam o teste, e as 9 da rodada 1 valem porque o hook e identico. Nenhum nivel assumed/skipped/gap/survived: PROVEN."

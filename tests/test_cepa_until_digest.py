@@ -118,7 +118,7 @@ def build_run(tmp, n_rounds_in_log=2, extra_round_1=()):
           {"evento": "item_start", "id": "A2", "title": "dois"},
           {"evento": "item_end", "id": "A2", "status": "blocked", "segundos": 4,
            "exit_code": 0, "commits": 0, "tentativa": 1},
-          {"evento": "run_end", "motivo": "fim-da-fila", "detalhe": "acabou",
+          {"evento": "run_end", "motivo": "end-of-queue", "detalhe": "acabou",
            "itens": 2, "entregues": 1, "travados": 1}]
     ledger = until / "r.jsonl"
     ledger.write_text("\n".join(json.dumps(e) for e in ev) + "\n")

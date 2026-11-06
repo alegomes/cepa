@@ -171,7 +171,7 @@ topology is wired.
 | `/common:return` | `[<fork-id>]` (default: top of stack) | Close a fork. In the **side** session: distills the discussion into `resolution.md`, marks `resolved`. In the **origin** session: ingests only that resolution into the main thread, marks the frame `closed` in place (LIFO pop). Picks save-vs-ingest by reading its own conversation; asks if ambiguous. "Top of stack" = top-most non-`closed` frame, which drives both the nested-unwind order and re-ingest idempotence. |
 | `/common:session` | `<routine> [routine args]` \| `--help [routine]` | Opens a session with a declared purpose and takes it end to end: gets the harness ready (`doctor --fix`), asks **all** questions at the start, runs the routine without stopping, delivers one final report and offers the wrap-up. |
 | `/common:wrap-up` | `[--discard] [commit message]` | End-of-session one-shot behind a single confirmation: commits the session worktree, writes the handoff, then lands the branch (merge + push + prune). `--discard` throws a dead-end worktree away. Reuses `worktree-merge`'s guards. |
-| `/common:doctor` | `[--live] [--no-fix] [--projeto]` | Validates the install against reality in about 30 seconds: plugins enabled and at the installed version, hooks compiling, `board-flow.yaml` structure, build baseline, stale or orphaned worktrees, overdue handoffs. `--live` also checks `board-flow.yaml` against live Jira. |
+| `/common:doctor` | `[--live] [--no-fix] [--project]` | Validates the install against reality in about 30 seconds: plugins enabled and at the installed version, hooks compiling, `board-flow.yaml` structure, build baseline, stale or orphaned worktrees, overdue handoffs. `--live` also checks `board-flow.yaml` against live Jira. |
 | `/common:metrics` | `[--days N \| --month YYYY-MM] [--repo <name>]` | Telemetry report on the harness itself, from `~/.claude/cepa-telemetry/`: sessions per repo, red-build rate, gate blocks by reason, proof verdicts, over-declared `proven` refused by the guard, and how many turns you spend before and after a routine. |
 | `/common:until-review` | `[<run>.jsonl \| latest] [--fila NOME]` | Reads a finished `cepa-until` run (the `.jsonl` record and the subprocess `.log`) and says what the owner must do next, as closed questions with a recommendation. Runs by itself at the end of every run (written to `<run>.review.md`) and by hand for an old run or one stopped by quota. Reads the mechanical digest from `cepa-until-digest`, never the whole `.log`. Ends with a `json cepa-decisoes` block (question + recommendation for landing and for every deferred item) that `cepa-until` shows when it asks the owner; the block only words the question, the actions stay a closed list. Read-only: no merge, no queue change, no Jira. |
 | `/common:modes` | `[mode-name]` | Shows the table of working modes (what each asks to enter, what it produces, what must be true to close) and marks the current session's mode. Read-only. |
@@ -321,7 +321,8 @@ Full guide: [maestro.md](maestro.md).
 Three helpers you can run by hand: `python3 common/bin/cepa-dor <plan> --wave N`
 (the intake gate — `READY`/`NOT-READY` per slice),
 `python3 maestro/bin/maestro-fork-settings <plan> <slice>` (preview a child's
-generated `settings.json`), and `python3 common/bin/cepa-plan validate <plan>`
-(the single-track queue's own checks — empty `why`, ghost `blocked_by`, blocking
+generated `settings.json`), and `python3 common/bin/cepa-plan validate <name|file>`
+(takes the queue name, resolved at the main clone even from a worktree, or a file
+path; the single-track queue's own checks — empty `why`, ghost `blocked_by`, blocking
 cycle; `check-name <nome>` answers whether a program name is free for a queue
 before you write one).

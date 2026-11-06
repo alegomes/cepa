@@ -95,9 +95,11 @@ instead of starting an item that would be cut halfway.
 
 ## When it stops
 
-At the first of: deadline reached, no runnable item in the queue (`fim-da-fila`, `bloqueado`,
-`bloqueado-antes`, as reported by `cepa-plan queue`), circuit breaker, a stuck queue, or a
-usage cap whose wait does not fit in the window.
+At the first of: deadline reached, no runnable item in the queue (`end-of-queue`, `blocked`,
+`blocked-before`, as reported by `cepa-plan queue`), circuit breaker, a stuck queue, or a
+usage cap whose wait does not fit in the window. (The queue reasons used to be Portuguese —
+`fim-da-fila`, `teto`, `bloqueado`, `reservado`, `depende-de-adiado`, `bloqueado-antes`; the old
+spelling is still accepted during the transition.)
 
 A **stuck queue** (`fila-travada`) is N items in a row that ended `blocked` (`--max-blocked`,
 default 3). `blocked` counts as progress, so the circuit breaker never sees it: the item left

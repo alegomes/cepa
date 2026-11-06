@@ -1,0 +1,40 @@
+schema_version: 2
+card: test-dead-supervisor-corrida-sinal
+verdict: proven
+reviewed_at: 2026-11-06T00:20:00-03:00
+base_commit: 2c4d085^
+head_commit: c3fe821
+issue_type: Bug
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until :: terminate_group (3 hunks: H1 initial killpg(SIGTERM) PermissionError -> fall through; H2 polling-loop PermissionError -> keep polling, break on expired grace; H3 SIGKILL fallback PermissionError -> dead)"
+      module: common/bin
+      external_observable: true          # supervisor receiving SIGINT/SIGTERM writes run_interrompido.filho_encerrado
+      substituted_by_double: null        # test imports the real script and runs real processes (helper-spawned real zombie for H2/H3)
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at c3fe821 (throwaway worktree /tmp/proof-tdscs2): python3 tests/test_cepa_until_dead_supervisor.py -> test_terminate_group_calls_an_all_zombie_group_dead: 3 ok; 'tudo verde'"
+        - "H1 reverted (deleted 'except PermissionError: pass' on the first killpg): checks 1 and 3 FAIL -> RED"
+        - "H2 reverted (deleted the PermissionError branch in the polling loop): check 3 FAIL ('zumbi nao e filho dele, EPERM ate o fim da graca') -> RED (previous pass: survived)"
+        - "H3 reverted (PermissionError removed from the SIGKILL fallback except): check 3 FAIL -> RED (previous pass: survived)"
+        - "Surface evidence (not re-run): /tmp/flaky/stress-233346 before fix 2/24 RED (red.txt present, filho_encerrado: False); /tmp/flaky/stress-234656 after fix 0 logs with FAIL (grep -l FAIL | wc -l = 0). Weak on its own (0/24 at p=2/24 has 12% chance), but pinning is done by the perturbations above"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; each of H1, H2, H3 removed individually turns at least one check RED, so each changed line is executed by a check that can fail"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff changes how a signal handler interprets the OS error from killpg; no data from outside (arguments, files, HTTP) is parsed. common/bin is not an input-bearing module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "throwaway worktree at 5da8804 (=2c4d085^) with HEAD's tests/test_cepa_until_dead_supervisor.py: 'FAIL terminate_group ... so restam zumbis' (check 1) + 'FAIL ... zumbi nao e filho dele' (check 3), check 2 ok -> 2 falhas, RED. HEAD: 0 falhas"
+routing_reason: "Regression is red at base (2 of 3 checks). Each of the three changed hunks, reverted alone at HEAD, turns a check RED (H1: checks 1+3; H2: check 3; H3: check 3). The gap from the previous pass (H2 and H3 survived) is closed by the never-reaped grandchild session leader check. Test double: none for terminate_group. Worktrees removed."

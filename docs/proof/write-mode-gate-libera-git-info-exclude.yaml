@@ -1,0 +1,45 @@
+schema_version: 2
+card: write-mode-gate-libera-git-info-exclude
+verdict: proven
+reviewed_at: 2026-11-05T21:00:00-03:00
+base_commit: 9fbe8fd
+head_commit: 23cfec862da91d84977db3ab54b180f6452d3883
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/hooks/write-mode-gate.py (main: ALWAYS_WRITABLE consulted before per-mode list)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null        # the test runs the real hook as a subprocess (stdin JSON, exit code)
+    - class: "common/hooks/_modes.py (ALWAYS_WRITABLE = ['.git/info/**'])"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at 23cfec8: test_git_dir_is_checkout_preparation_in_every_mode -> 72 'ok' checks, FAILURES: 0 (throwaway worktree /tmp/proof-wmg)"
+        - "P1 ALWAYS_WRITABLE = [] -> 30 FAIL checks (RED)"
+        - "P2 dropped 'or allowed(rel, _modes.ALWAYS_WRITABLE)' clause in write-mode-gate.py -> 30 FAIL checks (RED)"
+        - "P3 widened to ['.git/**'] -> 20 FAIL checks (RED; .git/hooks/pre-commit and .git/config no longer blocked)"
+        - "restored 'git checkout 23cfec8 -- common/hooks' -> FAILURES: 0 (GREEN)"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; the changed clause was removed (P2) and 30 checks went red, so the test reaches it through the real hook process"
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: "zz_adv.py drove the real hook (discovery mode, temp git repo, D unset): '.git/info/../hooks/pre-commit' Edit+Bash rc=2; absolute '<root>/.git/info/exclude' Edit+Bash rc=0; 'echo x >> $D/.git/info/exclude' and '${D}/...' with D unassigned rc=2; '.git/../.git/info/exclude' Edit+Bash rc=0; '.git/../common/hooks/x.py' rc=2; '.git/infox/exclude' rc=2; '.git/info' (dir itself) rc=2; '.git/hooks/pre-commit' bash rc=2. 12/12 as expected."
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "hooks reverted to 9fbe8fd (_modes.py, write-mode-gate.py) with the HEAD test function -> 30 FAIL checks (discovery: Edit/Write/bash on .git/info/* blocked: 'BLOCKED: this session operates in mode discovery'); HEAD hooks -> 0 failures"
+routing_reason: "Behavior is load-bearing at the hook-process surface: red at base (30), red under three perturbations (30/30/20), green restored; adversarial inputs behave as required (traversal out of .git/info, unresolved $D stay blocked). No test double in play."

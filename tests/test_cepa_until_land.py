@@ -212,7 +212,7 @@ def test_the_run_summary_points_to_the_command():
         p, _ = run_until(root, binv, plan_of(root), ["--for", "2h", "--verify", VERIFY])
         run_id = [e for e in ledger_of(root)
                   if e["evento"] == "run_start"][0]["branch"].split("/", 1)[1]
-        cmd = f"cepa-until aterrissar fila/{run_id}"
+        cmd = f"cepa-until land fila/{run_id}"
         check("o terminal mostra o comando", cmd in p.stdout, p.stdout[-800:])
         action = (state(root).get("acoes") or [{}])[0]
         check("...e o estado também", cmd in (action.get("comando") or ""), str(action))
@@ -237,7 +237,7 @@ def test_5_pending_lists_the_waiting_run_and_vanishes_after_landing():
         p = pending_ones(root)
         check("pendentes lista o run com o comando",
               p.returncode == 0
-              and f"cepa-until aterrissar fila/{run_id}" in p.stdout,
+              and f"cepa-until land fila/{run_id}" in p.stdout,
               p.stdout + p.stderr)
         land(root, run_id, "--yes")
         check("...e some depois de aterrissado",
@@ -265,13 +265,13 @@ def test_5_doctor_warns_of_the_run_waiting_for_the_owner():
         out = p.stdout + p.stderr
         check("o doctor avisa na área [until] com o comando",
               "[until]" in out
-              and f"cepa-until aterrissar fila/{run_id}" in out, out[-1500:])
+              and f"cepa-until land fila/{run_id}" in out, out[-1500:])
 
 
 def test_5_next_reads_the_waiting_runs():
     plain_text = NEXT.read_text(encoding="utf-8")
     check("o /common:next manda rodar o cepa-until pendentes",
-          "cepa-until pendentes" in plain_text)
+          "cepa-until pending" in plain_text)
 
 
 def test_5_short_header_without_absolute_path_and_with_cost():

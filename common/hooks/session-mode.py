@@ -40,6 +40,10 @@ from the Epic and the queues, so it cannot drift. It needs no mode (the session
 that lost the Epic's thread may have had none) and is skipped in a `cepa-until`
 run, where the intent is the queue item.
 
+A `[lembretes]` line also comes on the first turn only (and not in a `cepa-until`
+run) when `.claude/reminders` in the main clone has owner reminders: it counts
+them and gives the oldest date; the list is `/common:whereami`.
+
 Never blocks anything. With no mode and no intent, it is silent.
 """
 
@@ -63,6 +67,10 @@ try:
     from _modes import read_intent, same_session, other_session_question
 except Exception:  # noqa: BLE001
     read_intent = None
+try:
+    from _modes import read_reminders
+except Exception:  # noqa: BLE001
+    read_reminders = None
 try:
     from _modes import parse_session_mode
 except Exception:  # noqa: BLE001
@@ -276,6 +284,30 @@ def epic_lines(root, payload):
         return []
 
 
+def reminders_lines(root, payload):
+    """One `[lembretes]` line on the session's FIRST turn when the owner has
+    recorded reminders (`.claude/reminders` in the main clone), or []. The line
+    only points: the list, with dates and context, is `/common:whereami`.
+    Fail-silent."""
+    try:
+        if read_reminders is None:
+            return []
+        import _wtlib as L
+        items = read_reminders(L.main_root(root))
+        if not items:
+            return []
+        if len(first_prompts(root, payload.get("session_id"),
+                             payload.get("prompt"))) > 1:
+            return []
+        oldest = min((str(e.get("at") or "") for e in items if e.get("at")),
+                     default="data desconhecida")
+        return [f"[lembretes] {len(items)} lembrete(s) do dono gravado(s), o mais "
+                f"antigo de {oldest}. Ao citar um, diga a data e o contexto e "
+                "pergunte se ainda vale; /common:whereami lista todos."]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
@@ -315,6 +347,7 @@ def main():
 
         if not os.environ.get(ENV_WINDOW):
             blocks += epic_lines(root, payload)
+            blocks += reminders_lines(root, payload)
 
         if not blocks:
             sys.exit(0)

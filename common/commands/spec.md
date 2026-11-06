@@ -87,7 +87,10 @@ subject in kebab-case.
 
 Write the skeleton with `**Status:** draft` (the format is in step
 6). The `spec-readiness-gate` gate never bothers you while the status is
-`draft`.
+`draft`. Fill `## Como chegamos aqui` at skeleton time, from the owner's first
+sentence or from the `porque:` line of the originating handoff;
+`spec-readiness-gate` refuses `ready-to-build` while that section is missing
+or empty.
 
 ### 2. Read before asking
 
@@ -167,7 +170,7 @@ both.
 ### 6. The file format
 
 The document is written in pt-BR. Keep the headings and the `**Status:**`,
-`**Aberta em:**`, `**Fechada em:**`, `### CS-<n>:`, `**Surface:**` and
+`**Aberta em:**`, `**Fechada em:**`, `## Como chegamos aqui`, `### CS-<n>:`, `**Surface:**` and
 `**Red test:**` labels verbatim: `spec-readiness-gate` and
 `cepa-plan --from-spec` parse them (the old pt-BR `pronta-para-construir`,
 `rascunho`, `Superfície`, `Teste vermelho` still read in older specs, but you
@@ -178,6 +181,9 @@ write only the new ones). Only the placeholders below are in English.
 
 **Status:** draft
 **Aberta em:** <date>            **Fechada em:** <date or ->
+
+## Como chegamos aqui
+<a pergunta do dono que começou o assunto, em uma frase e na voz dele, com a data; copiada da primeira frase do pedido ou da linha "porque" do handoff de origem — nunca só o rótulo da conversa>
 
 ## Problema
 <what hurts today, in two or three sentences, in the owner's voice>

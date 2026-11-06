@@ -79,9 +79,12 @@ BAD = ("O portão agora falha fechado. Cada status é conferido contra o enum "
         "porque o fio condutor pedia. " * 4)
 
 
-def msg(role, content, sidechain=False, mtype="assistant"):
-    return {"type": mtype, "isSidechain": sidechain,
-            "message": {"role": role, "content": content}}
+def msg(role, content, sidechain=False, mtype="assistant", meta=False):
+    row = {"type": mtype, "isSidechain": sidechain,
+           "message": {"role": role, "content": content}}
+    if meta:
+        row["isMeta"] = True
+    return row
 
 
 def transcript(*rows) -> str:
@@ -572,6 +575,138 @@ check("(h3) pós-wrap-up com Edit, Pra você anunciando e \"Nada pendente.\" →
       "wrap-up" in reason_h3 and "item numerado nenhum" not in reason_h3
       and "pra-voce-sem-lista" not in reason_h3, repr(r.stdout[:400]))
 
+# ── a new request after "Safe to exit" reopens the session (2026-11-05) ────
+NEW_ASK = "Agora faça a triagem da coluna To Do e me pergunte o que decidir"
+EDIT = msg("assistant", [{"type": "tool_use", "name": "Edit",
+                          "input": {"file_path": "x.py"}}])
+
+
+def after_wrap(*tail):
+    return transcript(msg("user", CMD_WRAP, mtype="user"),
+                      msg("assistant", [{"type": "tool_use", "name": "Bash",
+                                         "input": {"command": "git commit -m x"}}]),
+                      text(END_WRAP), *tail)
+
+
+def user(t):
+    return msg("user", [{"type": "text", "text": t}], mtype="user")
+
+
+def report_events():
+    ev = []
+    for f in TELEM.glob("events-*.jsonl"):
+        ev += [json.loads(l) for l in f.read_text(encoding="utf-8").splitlines()
+               if l.strip()]
+    return [e for e in ev if e.get("event") == "report_style"]
+
+
+n_before = len(report_events())
+r = run("Stop", after_wrap(user(NEW_ASK), EDIT, text(GOOD)), session="s-wrap-i")
+check("(i) pedido novo após Safe to exit + Edit + relatório com pergunta → não bloqueia",
+      block_reason(r.stdout) == "" and "wrap-up" not in r.stdout,
+      repr(r.stdout[:300]))
+ev_i = report_events()[n_before:]
+check("(l) telemetria do caso (i) tem pos_wrap_up=false",
+      bool(ev_i) and all(e.get("pos_wrap_up") is False for e in ev_i), str(ev_i))
+
+cmd_next = ("<command-message>next</command-message>\n"
+            "<command-name>/common:next</command-name>")
+r = run("Stop", after_wrap(msg("user", cmd_next, mtype="user"), EDIT, text(GOOD)),
+        session="s-wrap-i2")
+check("(i2) slash command após Safe to exit reabre → não bloqueia",
+      block_reason(r.stdout) == "" and "wrap-up" not in r.stdout,
+      repr(r.stdout[:300]))
+
+# (i3)/(i3b) Pra você ANNOUNCES something + closed question in the list: the
+# only thing that could block it is the wrap-up rule.
+ANNOUNCES_Q = GOOD.replace("nada pra decidir agora; precisa reinstalar pra valer.",
+                           "uma decisão sua, lista no fim.")
+assert ANNOUNCES_Q != GOOD and "uma decisão sua" in ANNOUNCES_Q and STEPS in ANNOUNCES_Q
+r = run("Stop", after_wrap(user(NEW_ASK), EDIT, text(ANNOUNCES_Q)), session="s-wrap-i3")
+check("(i3) pedido novo após Safe to exit + Pra você anunciando + pergunta fechada → não bloqueia nada",
+      block_reason(r.stdout) == "" and "wrap-up" not in r.stdout and r.returncode == 0,
+      repr(r.stdout[:300]))
+r = run("Stop", after_wrap(user("sim"), EDIT, text(ANNOUNCES_Q)), session="s-wrap-i3b")
+check("(i3b) mesmo relatório sem pedido novo (\"sim\") → bloqueia citando wrap-up",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+r = run("Stop", after_wrap(user("1. sim"), text(GOOD)), session="s-wrap-j")
+check("(j) \"1. sim\" após Safe to exit não reabre → bloqueia citando wrap-up",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+r = run("Stop", after_wrap(user(NEW_ASK), EDIT, text("feito."),
+                           msg("user", CMD_WRAP, mtype="user"), text(END_WRAP),
+                           user("sim"), text(GOOD)), session="s-wrap-k")
+check("(k) novo wrap-up + Safe to exit depois do pedido novo → fecha de novo, bloqueia",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+r = run("Stop", after_wrap(user(NEW_ASK), EDIT, text("Safe to `exit`."),
+                           user("sim"), text(GOOD)), session="s-wrap-o")
+check("(o) Safe to exit sem novo wrap-up após pedido novo não fecha → não bloqueia citando wrap-up",
+      "wrap-up" not in r.stdout, repr(r.stdout[:300]))
+
+r = run("Stop", after_wrap(
+    msg("user", "Stop hook feedback:\n[report-style] relatório com pergunta fechada...",
+        mtype="user", meta=True),
+    user("sim"), text(GOOD)), session="s-wrap-m")
+check("(m) linha isMeta de feedback do Stop hook não reabre → bloqueia citando wrap-up",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+r = run("Stop", after_wrap(
+    msg("user", "Stop hook feedback:\n[report-style] relatório com pergunta fechada...",
+        mtype="user"),
+    user("sim"), text(GOOD)), session="s-wrap-m2")
+check("(m2) feedback do Stop hook sem isMeta (só o prefixo) não reabre → bloqueia citando wrap-up",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+r = run("Stop", after_wrap(
+    user("faça agora a triagem da coluna To Do"), EDIT, text("feito."),
+    msg("user", CMD_WRAP, mtype="user"),
+    msg("user", "# /common:wrap-up\n\nEnd-of-session one-shot ... Safe to exit ...",
+        mtype="user", meta=True),
+    text(END_WRAP), user("sim"), text(GOOD)), session="s-wrap-n")
+check("(n) corpo isMeta do comando após o wrap-up não anula o fechamento → bloqueia",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+r = run("Stop", after_wrap(
+    msg("user", CMD_WRAP, mtype="user"),
+    msg("user", "# /common:wrap-up\n\nEnd-of-session one-shot ... Safe to exit ...",
+        mtype="user", meta=True),
+    text(END_WRAP), user("sim"), text(GOOD)), session="s-wrap-n2")
+check("(n2) sessão já fechada + /wrap-up de novo: corpo isMeta não zera o invoked → bloqueia",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+r = run("Stop", after_wrap(
+    msg("assistant", [{"type": "tool_use", "id": "t1", "name": "Bash",
+                       "input": {"command": "git status"}}]),
+    msg("user", [{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}],
+        mtype="user"),
+    user("sim"), text(GOOD)), session="s-wrap-p")
+check("(p) tool_result (user sem texto) não reabre → bloqueia citando wrap-up",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+r = run("Stop", after_wrap(
+    msg("user", "# /common:metrics\n\nTelemetry report on the harness itself ...",
+        mtype="user", meta=True),
+    user("sim"), text(GOOD)), session="s-wrap-q")
+check("(q) corpo isMeta de comando (sem prefixo Stop hook, não aceitação) não reabre → bloqueia",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+for _sfx, _txt in (("r", "sim/ok"), ("r2", "sim;ok")):
+    r = run("Stop", after_wrap(user(_txt), text(GOOD)), session="s-wrap-" + _sfx)
+    check("(%s) \"%s\" é aceitação (separador / ou ;) → não reabre, bloqueia citando wrap-up" % (_sfx, _txt),
+          "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+for _sfx, _txt in (("s", "Sim"), ("s2", "OK")):
+    r = run("Stop", after_wrap(user(_txt), text(GOOD)), session="s-wrap-" + _sfx)
+    check("(%s) \"%s\" (maiúscula) é aceitação → não reabre, bloqueia citando wrap-up" % (_sfx, _txt),
+          "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+for _sfx, _txt in (("t", "sim - ok"), ("t2", "...")):
+    r = run("Stop", after_wrap(user(_txt), text(GOOD)), session="s-wrap-" + _sfx)
+    check("(%s) \"%s\" (token só de pontuação) não reabre → bloqueia citando wrap-up" % (_sfx, _txt),
+          "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
 # ── the prose that sustains the rule says what the hook charges ────────────
 def read_rel(rel):
     return (REPO / rel).read_text(encoding="utf-8")
@@ -713,6 +848,49 @@ check("mesma lista com bloco Legenda → nenhum aviso",
 warning = cycle(BATCH.replace("Recomendo sim", "assim"), changed=False)
 check("turno sem edição e sem lista de decisões → segue não medido",
       warning.strip() == "", repr(warning[:300]))
+
+# ── interview turn (epic and spec) is spared; anything else is measured ────
+INTERVIEW = ("Entendi a ideia: a pessoa quer que o verificador pare de aceitar "
+             "qualquer palavra fora da lista, e eu registrei isso no documento "
+             "como a primeira resposta da rodada. Falta decidir como tratar o "
+             "erro de digitação, porque hoje ele vira aprovação e ninguém "
+             "percebe, e também se a recusa deve parar o fluxo inteiro ou só "
+             "avisar quem escreveu a checagem, o que muda bastante o custo "
+             "para quem usa no dia a dia do projeto.\n\n"
+             "Devo recusar a palavra desconhecida e parar o fluxo? "
+             "Recomendo sim, porque um erro de digitação aprovado em silêncio "
+             "é pior que uma parada visível.")
+
+
+def interview(*actions):
+    rows = [msg("user", [{"type": "text", "text": "me entreviste"}], mtype="user")]
+    for name, inp in actions:
+        rows.append(msg("assistant", [{"type": "tool_use", "name": name, "input": inp}]))
+    rows.append(msg("assistant", [{"type": "text", "text": INTERVIEW}]))
+    r = run("Stop", transcript(*rows))
+    block = block_reason(r.stdout)
+    run("UserPromptSubmit")
+    return block
+
+
+check("MIN_WORDS: a fala da entrevista é longa o bastante para ser medida",
+      len(INTERVIEW.split()) >= 80, str(len(INTERVIEW.split())))
+check("entrevista escreve só docs/spec/<slug>.md → poupada",
+      interview(("Write", {"file_path": "docs/spec/minha-ideia.md"})).strip() == "")
+check("entrevista escreve só docs/epics/x.md → segue poupada",
+      interview(("Edit", {"file_path": "docs/epics/x.md"})).strip() == "")
+check("docs/spec/ + src/x.py → não poupada",
+      interview(("Write", {"file_path": "docs/spec/minha-ideia.md"}),
+                ("Edit", {"file_path": "src/x.py"})).strip() != "")
+check("docs/spec/ + git commit → não poupada",
+      interview(("Write", {"file_path": "docs/spec/minha-ideia.md"}),
+                ("Bash", {"command": "git commit -m x"})).strip() != "")
+check("docs/specs/x.md (plural) → não poupada",
+      interview(("Write", {"file_path": "docs/specs/x.md"})).strip() != "")
+check("docs/spec/x.yaml (extensão errada) → não poupada",
+      interview(("Write", {"file_path": "docs/spec/x.yaml"})).strip() != "")
+check("docs/spec/sub/x.md → não poupada",
+      interview(("Write", {"file_path": "docs/spec/sub/x.md"})).strip() != "")
 
 # ── corrupted entry does not take down the turn ────────────────────────────
 r = run("Stop", str(TMP / "nao-existe.jsonl"))

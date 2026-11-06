@@ -636,6 +636,46 @@ def auto_clean(root: str):
     return removed
 
 
+def clean_orphan_prune_markers(root: str):
+    """Delete `.claude/sessions/*.prune-on-exit` markers whose target is gone.
+
+    The marker is consumed only at SessionEnd of the SAME session_id, so a
+    session that died before SessionEnd (or a worktree removed from outside)
+    leaves it on disk forever. A marker is an orphan when its `session_worktree`
+    directory no longer exists or its `branch` ref no longer exists. Unreadable
+    markers are left alone (no guessing); live ones are kept for SessionEnd.
+    Returns one short description per removed marker. Never raises.
+    """
+    removed = []
+    try:
+        markers = sorted(sessions_dir(root).glob("*.prune-on-exit"))
+    except OSError:
+        return removed
+    for path in markers:
+        try:
+            data = json.loads(path.read_text())
+            wt = data.get("session_worktree") if isinstance(data, dict) else None
+            branch = data.get("branch") if isinstance(data, dict) else None
+        except (OSError, ValueError):
+            continue
+        # A relative path would resolve against the hook's cwd and could
+        # misjudge a live marker; wrap-up always records an absolute one.
+        if not wt or not branch or not os.path.isabs(wt):
+            continue
+        if not os.path.isdir(wt):
+            why = "worktree gone"
+        elif not branch_exists(root, branch):
+            why = "branch gone"
+        else:
+            continue
+        try:
+            path.unlink()
+        except OSError:
+            continue
+        removed.append(f"{path.name[:8]} → {branch} ({why})")
+    return removed
+
+
 # ── worktree seeding ──────────────────────────────────────────────────────
 
 # Onde o manifesto de ambiente pode estar, na ordem em que ganha. Desde

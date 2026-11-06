@@ -176,6 +176,14 @@ Decisão: o resumo é derivado, não escrito. Um bloco mantido à mão desvia do
 
 Aparece em dois lugares: no hook de sessão, uma linha `[epic]` só no primeiro turno (fora de run do `cepa-until`), e no passo 0 do `/common:whereami`, com o detalhe completo.
 
+### Lembretes do dono (2026-11-06)
+
+Origem: fb-20261104-3 (2026-11-04). Em 2026-10-31 o dono deixou um lembrete ("revisitar o ADR 0014 e a extensão do ADR 0006, talvez marcar deprecated"). Em 2026-11-04 o agente o citou como se o dono o tivesse em mente, e o dono respondeu "eu disse? nem lembrava". Nada no harness guardava o lembrete com data e com uma frase de contexto, nem o listava de volta.
+
+Decisão: um arquivo `.claude/reminders` na raiz do clone principal (resolvida por `_wtlib.main_root`, então todo worktree vê a mesma lista). Ele é versionado, como um fato do projeto, e usa o mesmo formato sem pyyaml do `session-intent` (chave `reminders`, lista de mapas com `at`, `text`, `context`, `session`, `branch`). Um único escritor: `cepa-intent remind "<texto>" --context "<frase>" [--at AAAA-MM-DD]`. A frase de contexto é obrigatória, porque é ela que deixa o dono reconhecer a decisão depois; sem ela o comando recusa. O comando só acrescenta, nunca reescreve entradas antigas.
+
+Leitura: `cepa-intent state` (o que o `/common:whereami` mostra) termina com o bloco `lembretes do dono (N):` em todos os estados, inclusive em run do `cepa-until`; `cepa-intent reminders` imprime só o bloco. O hook de sessão acrescenta uma linha `[lembretes]` só no primeiro turno, fora de run do `cepa-until`. Regra de primeira menção: na primeira vez da sessão em que o agente cita uma decisão ou lembrete do dono, diz a data e o contexto e pergunta se ainda vale; nunca usa uma decisão gravada como premissa que o dono se lembraria.
+
 ### Statusline (conveniência local)
 
 Linha 2 = `sed -n 's/^summary: //p' .claude/session-intent`, cortada a 80 colunas. O `summary:` já vem na ordem de corte certa: passo, nome do passo, propósito. Não repete o modo, que está na linha 1. Se o spike mostrar que duas linhas não renderizam, a linha 1 perde o segmento de tokens e ganha o passo; isso é decisão do dono.

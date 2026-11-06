@@ -1,0 +1,61 @@
+schema_version: 2
+card: whereami-recapitula-decisoes-do-dono
+verdict: proven
+reviewed_at: 2026-11-06T10:00:00-03:00
+base_commit: 99da7b2
+head_commit: 3eae025
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-intent (remind, reminders, append_reminder, show_reminders, show_state, reminders_root)"
+      module: bin
+      external_observable: true
+      substituted_by_double: null        # tests run the real cepa-intent as a subprocess in temp git repos/worktrees
+    - class: "common/hooks/_modes.py (REMINDERS_FILE, read_reminders, _INTENT_MAP_LISTS, list-of-maps rendering)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/session-mode.py (reminders_lines, first-turn only, not in cepa-until)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null        # real hook run as subprocess with JSON payload on stdin
+    - class: "common/commands/whereami.md, common/commands/handoff.md (docs pinned by test)"
+      module: commands
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python/bash repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at 3eae025 in throwaway worktree /tmp/proof-wrd-1: test_cepa_intent_reminders.py 'tudo ok' (28 ok checks); test_cepa_intent.py 'tudo ok'; test_epic_where.py 'tudo certo'; test_whereami_intent.py 'OK'; test_modes_single_source.py 'ok'; test_session_intent_contract.py 'OK'"
+        - "P1 remind no longer requires --context (if not context -> if False) -> 4 FAIL (RED): recusa exit 2, não cria arquivo, explica a frase, contexto em branco"
+        - "P2 reminders_root returns root instead of _wtlib.main_root -> 4 FAIL (RED): remind grava no clone principal, state/reminders no worktree"
+        - "P3 show_state skips reminders block in CEPA_UNTIL_RUN -> 1 FAIL (RED): 'state em run do cepa-until traz o bloco'"
+        - "P4 'reminders' removed from _INTENT_MAP_LISTS -> 4 FAIL (RED): entries not written/read back"
+        - "P5a reminders_lines always [] -> 2 FAIL (RED): hook 1o turno (normal and worktree)"
+        - "P5b reminders_lines ignores first-turn rule (emits every turn) -> 1 FAIL (RED): 'hook com 2 prompts antes: sem [lembretes]'"
+        - "P5c session-mode.py emits reminders inside CEPA_UNTIL_RUN (guard line 348 -> if True) -> 1 FAIL (RED): 'hook em run do cepa-until: sem [lembretes]'"
+        - "P6 unreadable-file refusal in append_reminder removed -> 2 FAIL (RED): recusa exit 2 citing file, bytes intactos"
+        - "P7 ' · ' replaced by ' — ' in show_reminders -> 2 FAIL (RED): state vazio / state em run termina com o bloco (owner-facing format pinned)"
+        - "P8 bad --at validation: regex check alone removed -> test stays green (equivalent mutant, strptime guard still refuses); both regex and strptime removed -> 3 FAIL (RED): '--at com formato ruim recusa'"
+        - "P9 docs: 'ainda vale' removed from whereami.md and 'cepa-intent remind' from handoff.md -> 2 FAIL (RED)"
+        - "each perturbation restored with git checkout from 3eae025 inside the throwaway worktree; worktree removed (git worktree list shows no proof-wrd entry); primary tree untouched"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every changed clause (context rule, main_root path, state block incl. until-run, map-list rendering, first-turn rule, until-run hook gate, unreadable-file refusal, output format, --at validation, doc assertions) individually broken (P1-P9) and a named test went red, so each is reached through the real processes"
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: "inputs exercised by the test I ran and shown load-bearing by P1/P6/P8: blank --context, --at '31/10/2026', hand-broken .claude/reminders (exit 2, bytes intact), remind with --step (exit 2), run from a linked worktree. All behave as specified."
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type Task, not a bug"
+routing_reason: "Owner reminders (remind/reminders/state block/first-turn hook line/docs) are load-bearing at the real CLI and hook-process surface: ten perturbations each turned a named test RED, restored to green; one (regex-only --at) is an equivalent mutant covered by the strptime guard and goes RED when both are removed. No test double stands in for a changed class. Not tested: --at with a past/future bound (no such rule specified)."

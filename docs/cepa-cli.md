@@ -27,7 +27,7 @@ starts a normal session in place.
 | `cepa -m <mode>` / `--mode <mode>` | The session's work mode. `--mode help` lists the purpose of each mode and exits. See [modos-de-trabalho.md](modos-de-trabalho.md). |
 | `cepa --budget <scope>` | The closed budget the `refactor` mode requires. |
 | `cepa --purpose "..." --by-when "..." --plan "a" "b"` | Records the session intent at launch (same fields as `cepa-intent write`). |
-| `cepa --prompt <name\|path>` | Appends a custom system prompt. `--prompt-substitui` replaces the whole default prompt; see [system-prompt-customizado.md](system-prompt-customizado.md). |
+| `cepa --prompt <name\|path>` | Appends a custom system prompt. `--prompt-replace` (older name `--prompt-substitui` still works) replaces the whole default prompt; see [system-prompt-customizado.md](system-prompt-customizado.md). |
 | anything else | Goes straight to `claude` (`cepa --resume`, `cepa WEGO-123`). |
 
 On launch the launcher runs `cepa-doctor --fix --brief --if-stale 12` as a
@@ -42,13 +42,13 @@ silent preflight: nothing is printed unless something needs you.
 | Record or advance the session's intent | `cepa intent` |
 | Write, inspect or reconcile the single-track queue | `cepa plan <subcommand>` |
 | Run the queue unattended for a time window | `cepa until <queue> --for 12h` |
-| Read what an unattended run left for you | `cepa until decide <queue>/<run>`, `cepa until pendentes` |
+| Read what an unattended run left for you | `cepa until decide <queue>/<run>`, `cepa until pending` |
 | Summarise an unattended run for a review | `cepa until-digest <run>.jsonl` |
 | Prove the Jira Review column for a time window | `cepa prove --for 3h` |
 | Complain about the harness without leaving the task | `cepa feedback add "..."` |
 | See the harness's own numbers | `cepa metrics`, `cepa metrics scorecard` |
 | See where a session's time or tokens went | `cepa clock`, `cepa tokens` |
-| Ask the autonomy file whether an action asks or does | `cepa autonomy classificar ...` |
+| Ask the autonomy file whether an action asks or does | `cepa autonomy classify ...` |
 | Gate a parallel-waves plan before forking | `cepa dor <plan.yaml>` |
 | Find a repo's registry files before planning waves | `cepa hotspots <repo>` |
 | Measure test coverage of a conversational command | `cepa promptcov <cmd.md> <test.py>` |
@@ -83,8 +83,8 @@ Queries the autonomy bands in `common/autonomy.yaml`, the file that decides
 classify an action before turning it into a question for the owner.
 
 ```
-cepa-autonomy listar [--repo DIR] [--json]
-cepa-autonomy classificar (--bash CMD | --mcp TOOL | --path P [--op OP] | --slash S | --id ID)
+cepa-autonomy list [--repo DIR] [--json]
+cepa-autonomy classify (--bash CMD | --mcp TOOL | --path P [--op OP] | --slash S | --id ID)
                           [--cond KEY=VALUE ...] [--repo DIR] [--json]
 ```
 
@@ -121,7 +121,7 @@ owner or with a dead supervisor, the environment manifest's ports and
 containers, the `twg` version.
 
 ```
-cepa-doctor [--fix] [--brief] [--projeto] [--if-stale H]
+cepa-doctor [--fix] [--brief] [--project] [--if-stale H]
 ```
 
 `--fix` applies the mechanical corrections (reinstall plugins, archive an
@@ -251,9 +251,9 @@ and hands the list here; `/common:drain-plan` and `cepa-until` execute it;
 | Family | Subcommands |
 |---|---|
 | Sources (read only, return JSON) | `from-spec <spec.md>`, `from-epic <epic.md> --cycle N`, `from-triage <handoff.json\|->` |
-| Writing | `write <name> (--items F \| --from-spec F \| --from-epic F --cycle N \| --from-triage F) [--source ...] [--when YYYY-MM-DD] [--on-missing refuse\|keep\|drop] [--dry-run]`, `add <name> <id> --title ... [--before ID --why ...] [--blocked-by ID,ID]`, `migrate [<name> \| --all] [--dry-run]`, `check-name <name>`, `validate <file>` |
+| Writing | `write <name> (--items F \| --from-spec F \| --from-epic F --cycle N \| --from-triage F) [--source ...] [--when YYYY-MM-DD] [--on-missing refuse\|keep\|drop] [--dry-run]`, `add <name> <id> --title ... [--before ID --why ...] [--blocked-by ID,ID]`, `migrate [<name> \| --all] [--dry-run]`, `check-name <name>`, `validate <name \| file> [--repo DIR]` |
 | Reading | `queue <name> [--max N]`, `ready`, `status [<name>] [--status S]`, `show <name>`, `epics [--brief]`, `promote <name> [--when ...]`, `order <name> --keys K1,K2` |
-| One item's cycle | `start <name> <id> [--commit]`, `finish <name> <id> --status done\|blocked\|pending --evidence ... [--human-pending ROUTE] [--question ...] [--pedido\|--pronto\|--impede\|--se-sim\|--se-nao TEXT] [--commit]`, `answer <name> <id> --answer ... [--keep \| --drop] [--force] [--author ...] [--no-commit]` |
+| One item's cycle | `start <name> <id> [--commit]`, `finish <name> <id> --status done\|blocked\|pending --evidence ... [--human-pending ROUTE] [--question ...] [--asked\|--ready\|--blocker\|--if-yes\|--if-no TEXT] [--commit]`, `answer <name> <id> --answer ... [--keep \| --drop] [--force] [--author ...] [--no-commit]` |
 | Against the Jira board | `reconcile <name> --board FILE [--apply]`, `landed --board FILE [--into REF]`, `divergence <name> [--board FILE] [--backlog FILE]` |
 
 `ready` is the repo-wide view: the items a run would take now, across
@@ -331,10 +331,10 @@ cepa-until <queue> (--for 12h | --until 07:00) [--repo DIR]
            [--min-reserve 45m] [--slack 60m] [--with-permissions] [--dirty-ok]
            [--verify CMD | --no-verify] [--no-analysis] [--full-title] [--dry-run]
 
-cepa-until pendentes [--repo DIR] [--json]       runs waiting for the owner, dead supervisors
+cepa-until pending [--repo DIR] [--json]       runs waiting for the owner, dead supervisors
 cepa-until decide <queue>[/<run>] [--repo DIR]   one closed question at a time, applied on the spot
-cepa-until aterrissar <queue>/<run> [--yes]      merge + full build + push to the clone's branch
-cepa-until fecha-morto <queue>/<run> [--yes]     the build a dead supervisor never ran
+cepa-until land <queue>/<run> [--yes]      merge + full build + push to the clone's branch
+cepa-until close-dead <queue>/<run> [--yes]     the build a dead supervisor never ran
 ```
 
 Full design, with the dated decisions, in [cepa-until.md](cepa-until.md).

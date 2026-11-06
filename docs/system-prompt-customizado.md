@@ -15,13 +15,13 @@ cepa --mode construction --prompt smartass
 | Flag | Vira, na chamada do `claude` | Efeito |
 |---|---|---|
 | `--prompt <nome\|caminho>` | `--append-system-prompt` | **Soma** o seu texto ao system prompt padrão do Claude Code |
-| `--prompt-substitui <nome\|caminho>` | `--system-prompt` | **Apaga** esse padrão e põe o seu no lugar |
+| `--prompt-replace <nome\|caminho>` | `--system-prompt` | **Apaga** esse padrão e põe o seu no lugar |
 
 O system prompt padrão do Claude Code não é enfeite: é ele que ensina ao modelo
 quais ferramentas existem, como os hooks se comportam e que o `CLAUDE.md` deve
 ser carregado. Trocá-lo por um texto de estilo tira essas instruções do ar, e a
 sessão passa a errar com confiança. Por isso o modo destrutivo tem nome próprio
-(`--prompt-substitui`) em vez de ser uma opção do mesmo flag: ninguém cai nele
+(`--prompt-replace`; o nome antigo `--prompt-substitui` ainda funciona) em vez de ser uma opção do mesmo flag: ninguém cai nele
 por descuido. Use-o só com um prompt escrito para se sustentar sozinho.
 
 **Na dúvida, `--prompt`.**

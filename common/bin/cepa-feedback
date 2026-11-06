@@ -28,11 +28,14 @@ Design, and the reason for each choice:
 Usage:
     cepa-feedback add "o gate X barrou o commit legítimo" --target write-mode-gate
     cepa-feedback list                     # the open ones
-    cepa-feedback list --status todos --json
-    cepa-feedback triage fb-20260826-1 --destination "BACKLOG.md § Gate de escrita"
-    cepa-feedback triage fb-20260826-1 --destination "queue WEGO" --queue WEGO --why "..."
+    cepa-feedback list --status all --json
+    cepa-feedback triage fb-20260826-1 --destination "BACKLOG.md § Gate de escrita" --queue cepa
+    cepa-feedback triage fb-20260826-2 --destination "BACKLOG.md § Gate de escrita" --queue cepa --item gate-de-escrita
+    cepa-feedback triage fb-20260826-3 --destination "resolvido no commit abc123"
 
-Exits: 0 ok · 2 invalid usage · 3 unknown id · 4 already triaged.
+Exits: 0 ok · 2 invalid usage (also: BACKLOG destination without --queue/--item,
+--item without --queue, --item not in the queue, BACKLOG destination whose
+--queue cannot be read) · 3 unknown id · 4 already triaged.
 """
 
 import argparse
@@ -135,6 +138,7 @@ def records():
             out[ev["id"]]["status"] = "triado"
             out[ev["id"]]["triagem"] = {
                 "destino": ev.get("destino"), "nota": ev.get("nota"), "ts": ev.get("ts"),
+                "item": ev.get("item"),
             }
     return out
 
@@ -209,7 +213,14 @@ def _format_record(r, color):
     return "\n".join(body)
 
 
+# `--status` takes the English words; the Portuguese ones are the old spelling.
+# What the ledger stores and prints ("aberto"/"triado") is data and stays.
+STATUS_CHOICES = ("open", "triaged", "all", "aberto", "triado", "todos")
+STATUS_ALIAS = {"open": "aberto", "triaged": "triado", "all": "todos"}
+
+
 def cmd_list(args):
+    args.status = STATUS_ALIAS.get(args.status, args.status)
     everything = list(records().values())
     everything.sort(key=lambda r: r.get("ts", ""))
     selected = [r for r in everything
@@ -239,11 +250,79 @@ def cmd_list(args):
     return 0
 
 
+def _queue_status(args):
+    """Reads the queue via `cepa-plan status --json`.
+    Returns (data_or_None, error_message_or_None)."""
+    cepa_plan = Path(__file__).resolve().parent / "cepa-plan"
+    cmd = [sys.executable, str(cepa_plan), "status", args.queue, "--json",
+           "--repo", args.repo]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if p.returncode != 0:
+            detail = (p.stderr or p.stdout).strip().splitlines()
+            return None, (f"não consegui ler a fila '{args.queue}': "
+                          f"{detail[-1] if detail else 'erro desconhecido'}")
+        return json.loads(p.stdout), None
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
+        return None, f"não consegui ler a fila '{args.queue}' ({e})"
+
+
+def _queue_item(args, data):
+    """Looks `args.item` up in the queue data. Returns (item_or_None, error_or_None)."""
+    for it in data.get("items") or []:
+        if str(it.get("id")) == args.item:
+            return it, None
+    return None, f"--item {args.item} não existe na fila {args.queue}"
+
+
+def _queue_add(args, r, destination, why):
+    """Appends a new item to the queue via `cepa-plan add`. The triage is already
+    written: a failure here only warns (never undoes the triage)."""
+    item_id = args.item_id or args.id
+    if args.title:
+        title = args.title.strip()
+    elif destination.startswith("BACKLOG.md §") and destination[len("BACKLOG.md §"):].strip():
+        title = destination[len("BACKLOG.md §"):].strip()[:100]
+    else:
+        title = r["texto"][:100]
+    cepa_plan = Path(__file__).resolve().parent / "cepa-plan"
+    cmd = [sys.executable, str(cepa_plan), "add", args.queue, item_id,
+           "--title", title, "--why", why, "--repo", args.repo]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        print(f"⚠ {item_id} não entrou na fila '{args.queue}': "
+              f"cepa-plan não rodou ({e})", file=sys.stderr)
+        return
+    if p.returncode == 0:
+        for line in p.stdout.splitlines():
+            if "inserido na posição" in line:
+                print(line)
+        print(f"✔ {item_id} também entrou na fila '{args.queue}'.")
+    elif p.returncode == 4:
+        print(f"· {item_id} já estava na fila '{args.queue}' — nada mudou lá.")
+    else:
+        detail = (p.stderr or p.stdout).strip().splitlines()
+        print(f"⚠ triagem registrada, mas {item_id} NÃO entrou na fila "
+              f"'{args.queue}': {detail[-1] if detail else 'erro desconhecido'}",
+              file=sys.stderr)
+
+
 def cmd_triage(args):
     destination = (args.destination or "").strip()
     if not destination:
         print("✗ triagem sem destino: diga onde o item foi parar "
               "(card, seção do BACKLOG.md, commit).", file=sys.stderr)
+        return 2
+    if args.item and not args.queue:
+        print("✗ --item precisa de --queue: diga em qual fila está o item.",
+              file=sys.stderr)
+        return 2
+    if destination.lower().startswith("backlog.md") and not (args.queue or args.item):
+        print("✗ destino numa seção do BACKLOG.md exige item de fila: triagem que "
+              "para no BACKLOG.md não produz trabalho. Duas saídas: "
+              "--queue <fila> para abrir um item novo, ou --item <id> (com --queue) "
+              "para citar o item que a seção já tem.", file=sys.stderr)
         return 2
     recs = records()
     r = recs.get(args.id)
@@ -254,6 +333,17 @@ def cmd_triage(args):
         previous = (r.get("triagem") or {}).get("destino")
         print(f"✗ {args.id} já foi triado → {previous}", file=sys.stderr)
         return 4
+    existing = None
+    if args.queue and (args.item or destination.lower().startswith("backlog.md")):
+        # Resolve the queue BEFORE writing the triage: a BACKLOG destination must
+        # not be recorded when its queue item cannot be created or cited (queue
+        # missing, waves plan, unreadable). An unknown item refuses the same way.
+        data, err = _queue_status(args)
+        if err is None and args.item:
+            existing, err = _queue_item(args, data)
+        if err:
+            print(f"✗ {err}", file=sys.stderr)
+            return 2
     ev = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "tipo": "triagem",
@@ -261,6 +351,8 @@ def cmd_triage(args):
         "destino": destination,
         "nota": (args.note or None),
     }
+    if args.item:
+        ev["item"] = args.item
     write_event(ev)
     if T:
         try:
@@ -269,34 +361,32 @@ def cmd_triage(args):
             pass
     print(f"✔ {args.id} → {destination}")
 
-    # A1: --queue appends the item to the single-track queue in the SAME step
-    # in which the triage closes, so the feedback does not vanish into a
-    # prose destination nobody revisits. The triage is already written above —
-    # a failure from here on means "did not enter the queue", never "the
-    # triage did not happen".
-    if args.queue:
-        title = r["texto"][:100]
-        cepa_plan = Path(__file__).resolve().parent / "cepa-plan"
-        cmd = [sys.executable, str(cepa_plan), "add", args.queue, args.id,
-               "--title", title, "--repo", args.repo]
-        if args.why:
-            cmd += ["--why", args.why]
-        try:
-            p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        except (OSError, subprocess.SubprocessError) as e:
-            print(f"⚠ {args.id} não entrou na fila '{args.queue}': "
-                  f"cepa-plan não rodou ({e})", file=sys.stderr)
-            return 0
-        if p.returncode == 0:
-            print(f"✔ {args.id} também entrou na fila '{args.queue}'.")
-        elif p.returncode == 4:
-            print(f"· {args.id} já estava na fila '{args.queue}' — nada mudou lá.")
+    # The queue step runs in the SAME step in which the triage closes, so the
+    # feedback does not vanish into a prose destination nobody revisits. The
+    # triage is already written above — a failure from here on means "did not
+    # enter the queue", never "the triage did not happen".
+    if not args.queue:
+        return 0
+    date = str(r.get("ts") or ev["ts"])[:10]
+    if existing is not None:
+        status = str(existing.get("status"))
+        if status in ("done", "dropped"):
+            why = args.why or (f"Episódio {args.id} ({date}) prova que {args.item} "
+                               f"({status}) não cobriu o caso; {destination}")
+            print(f"· {args.item} estava {status}: abrindo item novo na fila "
+                  f"'{args.queue}'.")
+            _queue_add(args, r, destination, why)
         else:
-            detail = (p.stderr or p.stdout).strip().splitlines()
-            print(f"⚠ triagem registrada, mas {args.id} NÃO entrou na fila "
-                  f"'{args.queue}': "
-                  f"{detail[-1] if detail else 'erro desconhecido'}",
-                  file=sys.stderr)
+            ignored = [f for f, v in (("--id", args.item_id), ("--title", args.title),
+                                      ("--why", args.why)) if v]
+            if ignored:
+                print(f"⚠ {', '.join(ignored)} ignorado(s): nenhum item novo foi aberto.",
+                      file=sys.stderr)
+            print(f"· {args.id} cita o item {args.item} da fila '{args.queue}' "
+                  f"({status}, posição {existing.get('posicao')}) — nenhum item novo")
+        return 0
+    why = args.why or f"Origem: feedback {args.id} ({date}); {destination}"
+    _queue_add(args, r, destination, why)
     return 0
 
 
@@ -363,12 +453,13 @@ def main(argv=None):
             "with the repo, branch, mode and target captured when each was recorded."),
         examples=[
             ("cepa feedback list", "the open ones"),
-            ("cepa feedback list --status todos --json", "everything, as JSON"),
+            ("cepa feedback list --status all --json", "everything, as JSON"),
             ("cepa feedback list --repo cepa --max 5", "the 5 most recent from one repo"),
         ],
         exit_codes=[(0, "listed (even when nothing matches)"), (2, "invalid usage")])
-    l.add_argument("--status", default="aberto", choices=("aberto", "triado", "todos"),
-                   help="which ones to list: open, triaged or all (default: aberto)")
+    l.add_argument("--status", default="open", choices=STATUS_CHOICES,
+                   help="which ones to list: open, triaged or all (default: open; "
+                        "the older aberto, triado, todos still work)")
     l.add_argument("--repo", dest="repo_name", metavar="NAME",
                    help="only the ones recorded in this repo (by name)")
     l.add_argument("--max", type=int, metavar="N", help="only the N most recent")
@@ -387,13 +478,17 @@ def main(argv=None):
             "enters a single-track queue in the same step; a failure there only warns,\n"
             "the triage stays recorded."),
         examples=[
-            ('cepa feedback triage fb-20260826-1 --destination "BACKLOG.md § Write gate"',
-             "close it"),
-            ('cepa feedback triage fb-20260826-1 --destination "WEGO queue" --queue WEGO '
-             '--why "..."', "and queue it"),
+            ('cepa feedback triage fb-20260826-1 --destination "BACKLOG.md § Write gate" '
+             '--queue cepa', "new section: close it and open the queue item"),
+            ('cepa feedback triage fb-20260826-2 --destination "BACKLOG.md § Write gate" '
+             '--queue cepa --item write-gate', "episode of a section that already has an item"),
+            ('cepa feedback triage fb-20260826-3 --destination "resolvido no commit abc123"',
+             "already solved: no queue"),
         ],
         exit_codes=[(0, "triaged (even if --queue could not add the item)"),
-                    (2, "invalid usage (missing or empty --destination)"),
+                    (2, "invalid usage (missing or empty --destination; a BACKLOG.md "
+                        "destination without --queue/--item; --item without --queue; "
+                        "--item not in the queue; a BACKLOG.md destination whose --queue cannot be read)"),
                     (3, "unknown id"),
                     (4, "already triaged")])
     t.add_argument("id", metavar="ID",
@@ -404,11 +499,19 @@ def main(argv=None):
                    help="free-form note about the triage")
     t.add_argument("--queue", "--plano", dest="queue", metavar="QUEUE",
                    help="also appends the feedback to the single-track queue QUEUE via "
-                        "`cepa plan add` (title = the first ~100 characters "
-                        "of the text); an id already in the queue is not an error, "
+                        "`cepa plan add` (title: see --title); an id already in the queue is not an error, "
                         "any other failure only warns")
-    t.add_argument("--why", metavar="TEXT", help="`--why` passed on to `cepa plan add` "
-                                                 "when --queue is used")
+    t.add_argument("--item", metavar="ID",
+                   help="the queue item the section already has (needs --queue). Pending, "
+                        "in_progress or blocked: only cited, no new item. done or dropped: "
+                        "the episode proves the fix missed the case, so a new item is opened")
+    t.add_argument("--id", dest="item_id", metavar="SLUG",
+                   help="id of the new queue item (default: the feedback id)")
+    t.add_argument("--title", metavar="TEXT",
+                   help="title of the new queue item (default: the section title after "
+                        "'BACKLOG.md §', else the first ~100 characters of the text)")
+    t.add_argument("--why", metavar="TEXT", help="`--why` of the new queue item (default: "
+                                                 "'Origem: feedback <id> (<date>); <destination>')")
     t.add_argument("--repo", default=".", metavar="DIR",
                    help="repo where the --queue queue lives (default: cwd)")
     t.set_defaults(func=cmd_triage)

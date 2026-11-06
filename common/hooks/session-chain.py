@@ -5,10 +5,14 @@ Runs AFTER the `claude` launched by `cepa` exits. If the session that just
 exited left the next step recorded in
 `<main-root>/.claude/sessions/<session_id>.next.json`:
 
-    {"repo": "/abs/path", "mode": "discovery", "brief": "<text>"}
+    {"repo": "/abs/path", "mode": "discovery", "comando": "/common:epic x", "brief": "<text>"}
 
 this script deletes the file, enters `repo` and replaces its own process with
-`cepa` again, with `--mode <mode>` and the brief as the initial prompt. If the
+`cepa` again, with `--mode <mode>` and the initial prompt. The prompt is the
+brief alone; when the file carries a non-empty `comando` (optional, a string),
+the prompt is `<comando>\n\n<brief>`, so the command is line 1 and the next
+session runs it instead of relying on the brief to cite it. A missing, empty or
+non-string `comando` never invalidates the file (old files have none). If the
 file carries `intent` ({purpose, by_when, plan}; the old `intencao` with
 proposito/para_quando/plano is also valid), `--purpose`, `--by-when` and
 `--plan` go too (cepa records the session's intent);
@@ -100,6 +104,10 @@ def main() -> int:
         nxt.unlink()
     except OSError:
         pass
+    comando = spec.get("comando")
+    prompt = brief
+    if isinstance(comando, str) and comando.strip():
+        prompt = f"{comando.strip()}\n\n{brief}"
     # The registry entry of the session that left carries `cepa`'s pid (the
     # claim is written with it), which is this process. Without SessionEnd, it
     # would look like a live session in the tree and the next opening would
@@ -113,7 +121,7 @@ def main() -> int:
     print(f"↻ cepa: próxima sessão em {repo} (modo {mode}) — CEPA_ENCADEAR=off desliga",
           file=sys.stderr)
     os.chdir(repo)
-    os.execv(cepa, [cepa, "--mode", mode, *intent_args(spec.get("intent") or spec.get("intencao"), nxt), brief])
+    os.execv(cepa, [cepa, "--mode", mode, *intent_args(spec.get("intent") or spec.get("intencao"), nxt), prompt])
     return rc  # unreachable
 
 

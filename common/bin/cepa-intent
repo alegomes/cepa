@@ -32,6 +32,8 @@ Usage:
     cepa-intent continue          # adopts, in this session, another session's intent
     cepa-intent state             # read-only: classifies and prints (whereami)
     cepa-intent close             # run by /common:wrap-up: end-of-session telemetry
+    cepa-intent remind "<text>" --context "<one sentence>" [--at YYYY-MM-DD]
+    cepa-intent reminders         # read-only: the owner's reminders, with date
 
 Rules:
   - `step` is the step IN PROGRESS (1-based). `--step N` accepts 1..M, and M+1,
@@ -72,6 +74,17 @@ Rules:
     second line, `opening:`, is the recap's ("purpose / step N of M"), absent
     in the empty and other-session states.
 
+  - `remind` (alias `lembrar`) records an owner reminder in `.claude/reminders`
+    of the MAIN clone (`_wtlib.main_root`: every worktree sees the same list; the
+    file is versioned). `--context` (one sentence: where/why the decision came
+    up) is mandatory: without it the owner cannot recognize the decision later
+    (fb-20261104-3, 2026-11-04: "eu disse? nem lembrava"). `--at` defaults to
+    today (UTC). It only appends, atomically; it records `session` (8 chars) and
+    `branch`. Telemetry: `reminder.written` (session=, no text).
+  - `reminders` (alias `lembretes`) prints only the reminders block; `state`
+    ends with the same block, in every state (the `cepa-until` run included),
+    when there is at least one reminder.
+
 Exits: 0 ok · 2 invalid usage or writer rule refused · 3 no intent recorded
 (for --step/--purpose/--plan/show) · 4 an intent already exists and --reason
 is missing to rewrite it.
@@ -79,6 +92,7 @@ is missing to rewrite it.
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -89,6 +103,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
 import _clihelp  # noqa: E402
 import _modes as M  # noqa: E402
+import _wtlib  # noqa: E402
 
 try:
     import _telemetry as T
@@ -155,6 +170,57 @@ def write_intent(root, d):
         raise
 
 
+def reminders_root(root):
+    """Where `.claude/reminders` lives: the MAIN clone, shared by every worktree."""
+    return _wtlib.main_root(root) or root
+
+
+def append_reminder(root, entry):
+    """Append one entry to `.claude/reminders` (atomic: tmp + os.replace). Existing
+    VALID entries are re-rendered unchanged; none is edited. A non-empty file
+    with zero valid entries is refused (exit 2), so junk lines are never
+    silently dropped by the rewrite."""
+    base = reminders_root(root)
+    target = Path(base) / M.REMINDERS_FILE
+    try:
+        raw = target.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        raw = ""
+    if (any(l.strip() and not l.lstrip().startswith("#") for l in raw.splitlines())
+            and not M.read_reminders(base)):
+        refuse(f"{target} não é legível (tem conteúdo, mas nenhuma entrada válida); "
+               "conserte o arquivo à mão antes de gravar um lembrete.")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    entries = M.read_reminders(base) + [entry]
+    fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=".reminders.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(M.render_intent({"reminders": entries}))
+        os.replace(tmp, target)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return target
+
+
+def show_reminders(root, empty_message=False):
+    """The owner's reminders block (oldest first); prints nothing when there are
+    none, unless `empty_message`."""
+    items = M.read_reminders(reminders_root(root))
+    if not items:
+        if empty_message:
+            print("nenhum lembrete gravado.")
+        return
+    print(f"lembretes do dono ({len(items)}):")
+    for e in items:
+        f = lambda k: " ".join(str(e.get(k) or "").split())
+        print(f"  - {f('at') or '?'} · {f('text')} (contexto: {f('context') or 'sem contexto'})")
+    print("Ao citar um deles, diga a data e o contexto e pergunte se ainda vale.")
+
+
 def emit_event(root, event, **fields):
     if T is not None:
         T.emit(event, cwd=str(root), session=current_session()[:8], **fields)
@@ -195,7 +261,13 @@ def format_age(stamp):
 
 
 def show_state(root, current):
-    """Classify the intent and print the ready-made answer. Read-only."""
+    """Classify the intent and print the ready-made answer, then the owner's
+    reminders block (every state, `cepa-until` run included). Read-only."""
+    _show_state(root, current)
+    show_reminders(root)
+
+
+def _show_state(root, current):
     plan = (current or {}).get("plan")
     if os.environ.get(RUN_ENV):
         print("state: empty")
@@ -259,7 +331,8 @@ def close_session(root, current):
 # Actions: the old (pt-BR) name -> the new one. The old name is still accepted
 # and is mapped right after parsing.
 ACTIONS = {"gravar": "write", "mostrar": "show", "continuar": "continue",
-           "estado": "state", "encerrar": "close"}
+           "estado": "state", "encerrar": "close",
+           "lembrar": "remind", "lembretes": "reminders"}
 ACTION_NAMES = tuple(ACTIONS) + tuple(ACTIONS.values())
 
 
@@ -287,6 +360,8 @@ def main():
             "  continue   adopts in this session the intent recorded by another session\n"
             "  state      read-only: classifies it (empty, normal, fulfilled, other-session)\n"
             "  close      what /common:wrap-up runs: end-of-session telemetry\n"
+            "  remind     records an owner reminder with its date and a context sentence\n"
+            "  reminders  read-only: lists the owner's reminders (state ends with them too)\n"
             "\n"
             "With no action, --step/--purpose/--plan edit the existing intent. A plan\n"
             "item has no ':'; with `write`, the action comes BEFORE --plan (which\n"
@@ -301,6 +376,9 @@ def main():
             ('cepa intent --plan "a" "b"', "new plan, cursor back to step 1"),
             ("cepa intent", "show the current intent"),
             ("cepa intent state", "classify it, read-only"),
+            ('cepa intent remind "revisitar o ADR 14" --context "spec de contratos"',
+             "record an owner reminder (today's date)"),
+            ("cepa intent reminders", "list the owner's reminders"),
         ],
         exit_codes=[
             (0, "ok (state and close always exit 0 when called without extra options)"),
@@ -310,9 +388,16 @@ def main():
         ],
         see_also=["/common:whereami: reads the intent and the cursor",
                   "common/hooks/_modes.py: format, reader and serializer of the file"])
+    ap.add_argument("--context", dest="context", metavar="SENTENCE",
+                    help="remind: ONE sentence on where/why it came up (mandatory)")
+    ap.add_argument("--at", dest="at", metavar="YYYY-MM-DD",
+                    help="remind: the date of the reminder (default: today, UTC)")
     ap.add_argument("action", nargs="?", choices=_ActionChoices(ACTIONS.values()),
                     metavar="ACTION",
-                    help="one of write, show, continue, state or close (default: show)")
+                    help="one of write, show, continue, state, close, remind or reminders "
+                         "(default: show)")
+    ap.add_argument("text", nargs="?", metavar="TEXT",
+                    help="only for remind: the reminder, in the owner's words")
     ap.add_argument("--purpose", "--proposito", dest="purpose", metavar="TEXT",
                     help="what this session wants to deliver, in one sentence")
     ap.add_argument("--by-when", "--para-quando", dest="by_when", metavar="WHEN",
@@ -341,6 +426,43 @@ def main():
         if a.step is not None or a.purpose or a.plan or a.by_when or a.reason:
             refuse("state só lê; não aceita outras opções.")
         show_state(root, current)
+        return
+
+    if a.text is not None and a.action != "remind":
+        refuse("o texto posicional só vale com `remind`.")
+    if a.action != "remind" and (a.context is not None or a.at is not None):
+        refuse("--context e --at só valem com `remind`.")
+
+    if a.action == "reminders":
+        if (a.step is not None or a.purpose or a.plan or a.by_when or a.reason):
+            refuse("reminders só lê; não aceita outras opções.")
+        show_reminders(root, empty_message=True)
+        return
+
+    if a.action == "remind":
+        if a.step is not None or a.purpose or a.plan or a.by_when or a.reason:
+            refuse("remind não aceita --step/--purpose/--plan/--by-when/--reason.")
+        text = " ".join((a.text or "").split())
+        if not text:
+            refuse("remind exige o texto do lembrete: "
+                   "`cepa-intent remind \"<texto>\" --context \"<frase>\"`.")
+        context = " ".join((a.context or "").split())
+        if not context:
+            refuse("sem a frase de contexto o dono não reconhece a decisão depois; "
+                   "diga em uma frase onde/por que ela surgiu (--context \"...\").")
+        at = (a.at or datetime.now(timezone.utc).strftime("%Y-%m-%d")).strip()
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", at):
+            refuse(f"--at {at!r} fora do formato; use YYYY-MM-DD.")
+        try:
+            datetime.strptime(at, "%Y-%m-%d")
+        except ValueError:
+            refuse(f"--at {at!r} não é uma data válida; use YYYY-MM-DD.")
+        target = append_reminder(root, {
+            "at": at, "text": text, "context": context,
+            "session": current_session()[:8], "branch": current_branch(root)})
+        emit_event(root, "reminder.written")
+        print(f"lembrete gravado ({at}): {text}")
+        print(f"arquivo: {target}")
         return
 
     if a.action == "close":

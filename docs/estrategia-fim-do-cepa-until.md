@@ -450,9 +450,9 @@ pergunta que travava o WEGO-2336 estava no meio de 600 caracteres de evidência.
 O que mudou (branch `session/until-decidir`, `tests/test_cepa_until_decidir.py`):
 
 - **Num terminal, o fim do run pergunta**, uma coisa por vez: `Aterrisso agora?` e, para
-  cada adiado que só o dono destrava (`bloqueado-antes` e `human_pending`), a pergunta
-  fechada com a recomendação. Enter deixa para depois, `q` encerra. `reservado` e
-  `depende-de-adiado` aparecem numa linha, sem pergunta.
+  cada adiado que só o dono destrava (`blocked-before` e `human_pending`; a grafia antiga `bloqueado-antes` ainda é aceita na transição), a pergunta
+  fechada com a recomendação. Enter deixa para depois, `q` encerra. `reserved` e
+  `depends-on-deferred` aparecem numa linha, sem pergunta.
 - **A resposta é aplicada na hora** pelo `cepa-plan responde`: `blocked` volta para
   `pending`, a rota `human_pending` fecha, e a resposta entra na evidência que o próximo run
   lê. O `responde` recusa sem TTY: o `claude -p` de um run não tem terminal e não fecha a

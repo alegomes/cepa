@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """cepa-autonomy — says which autonomy band an action falls into (common/autonomy.yaml).
 
-    cepa-autonomy listar [--repo .] [--json]
-    cepa-autonomy classificar (--bash CMD | --mcp TOOL | --path P [--op OP] | --slash S | --id ID) [--repo .] [--json]
+    cepa-autonomy list [--repo .] [--json]
+    cepa-autonomy classify (--bash CMD | --mcp TOOL | --path P [--op OP] | --slash S | --id ID) [--repo .] [--json]
 
 The file decides "ask or do", not the agent of the turn. This CLI is how a
 command (today /board-flow:decide, step 5b) asks the file which band an action
@@ -110,9 +110,9 @@ def main(argv=None):
             "\n"
             "Human output in pt-BR; --json for code."),
         examples=[
-            ("cepa autonomy listar", "every band and its ids"),
-            ("cepa autonomy classificar --bash 'git push --force'", "band of a shell command"),
-            ("cepa autonomy classificar --path src/Main.java --op delete",
+            ("cepa autonomy list", "every band and its ids"),
+            ("cepa autonomy classify --bash 'git push --force'", "band of a shell command"),
+            ("cepa autonomy classify --path src/Main.java --op delete",
              "band of deleting a file"),
         ],
         exit_codes=[
@@ -122,47 +122,49 @@ def main(argv=None):
         see_also=["common/autonomy.yaml: the bands themselves",
                   "/board-flow:decide: the command that asks the file before asking the owner"])
     sub = ap.add_subparsers(dest="cmd")
+    OLD_NAMES = {"list": "listar", "classify": "classificar"}  # still accepted
     summary = {
-        "listar": "lists the bands and the ids declared in autonomy.yaml",
-        "classificar": "says which band one action falls into",
+        "list": "lists the bands and the ids declared in autonomy.yaml",
+        "classify": "says which band one action falls into",
     }
     description = {
-        "listar": (
+        "list": (
             "Prints each band (executa_e_reporta, sempre_pergunta) with the ids it\n"
             "declares, their detect fields, preconditions and who moved them, then the\n"
             "default for actions not listed. Warnings from loading the file go to stderr."),
-        "classificar": (
+        "classify": (
             "Takes ONE action, described by exactly one of --bash, --mcp, --path,\n"
             "--slash or --id, and says its band: do it and report, always ask, or not\n"
             "listed (ask, and propose the id to add to common/autonomy.yaml)."),
     }
     examples = {
-        "listar": [
-            ("cepa autonomy listar", "the bands, human-readable"),
-            ("cepa autonomy listar --json", "the loaded file as JSON, for code"),
+        "list": [
+            ("cepa autonomy list", "the bands, human-readable"),
+            ("cepa autonomy list --json", "the loaded file as JSON, for code"),
         ],
-        "classificar": [
-            ("cepa autonomy classificar --bash 'git push --force'", "a shell command"),
-            ("cepa autonomy classificar --path src/Main.java --op delete", "deleting a path"),
-            ("cepa autonomy classificar --slash /board-flow:advance --cond label=infra",
+        "classify": [
+            ("cepa autonomy classify --bash 'git push --force'", "a shell command"),
+            ("cepa autonomy classify --path src/Main.java --op delete", "deleting a path"),
+            ("cepa autonomy classify --slash /board-flow:advance --cond label=infra",
              "a slash command, condition checked"),
-            ("cepa autonomy classificar --id commit-local --json", "a declared id, as JSON"),
+            ("cepa autonomy classify --id commit-local --json", "a declared id, as JSON"),
         ],
     }
     exit_codes = {
-        "listar": [(0, "the bands were listed"), (2, "invalid usage")],
-        "classificar": [(0, "the query ran, whatever the band"),
+        "list": [(0, "the bands were listed"), (2, "invalid usage")],
+        "classify": [(0, "the query ran, whatever the band"),
                         (2, "invalid usage (no action flag, two action flags, "
                             "--cond without KEY=VALUE)")],
     }
-    for name in ("listar", "classificar"):
+    for name in ("list", "classify"):
         p = sub.add_parser(name, help=summary[name], description=description[name],
-                           examples=examples[name], exit_codes=exit_codes[name])
+                           examples=examples[name], exit_codes=exit_codes[name],
+                           aliases=[OLD_NAMES[name]])
         p.add_argument("--repo", default=".", metavar="DIR",
                        help="repository whose common/autonomy.yaml is read "
                             "(default: the current directory)")
         p.add_argument("--json", action="store_true", help="JSON output, for code")
-        if name == "classificar":
+        if name == "classify":
             g = p.add_mutually_exclusive_group(required=True)
             g.add_argument("--bash", metavar="CMD",
                            help="a shell command, as it would be run")
@@ -184,7 +186,8 @@ def main(argv=None):
         ap.print_help(sys.stderr)
         return 2
     lib = _load_lib()
-    return cmd_list(args, lib) if args.cmd == "listar" else cmd_classify(args, lib)
+    cmd = {"listar": "list", "classificar": "classify"}.get(args.cmd, args.cmd)
+    return cmd_list(args, lib) if cmd == "list" else cmd_classify(args, lib)
 
 
 if __name__ == "__main__":

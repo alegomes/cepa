@@ -343,16 +343,16 @@ def test_decide_offers_to_keep_stuck():
 def test_decide_asks_and_applies_each_answer():
     m = load_module()
     deferred_ones = [
-        {"id": "W-1", "title": "medir produção", "reason": "bloqueado-antes",
+        {"id": "W-1", "title": "medir produção", "reason": "blocked-before",
          "question": None, "human_pending": None,
          "evidence": "não existe produção do wego-acessos"},
         {"id": "W-2", "title": "login real", "reason": "human_pending",
          "question": None, "human_pending": "rode o login do Bradesco",
          "evidence": None},
-        {"id": "W-3", "title": "outra", "reason": "bloqueado-antes",
+        {"id": "W-3", "title": "outra", "reason": "blocked-before",
          "question": "Largo o card?", "human_pending": None,
          "evidence": "a evidência longa"},
-        {"id": "W-4", "title": "cascata", "reason": "depende-de-adiado"},
+        {"id": "W-4", "title": "cascata", "reason": "depends-on-deferred"},
     ]
     analysis = m.analysis_decisions(
         "texto\n```json cepa-decisoes\n"
@@ -402,9 +402,9 @@ def test_decide_s_and_n_answer_the_drafted_question():
         {"id": "W-1", "title": "t" * 90, "reason": "human_pending",
          "question": "Fecho a rota como 'fica para depois'?",
          "human_pending": "rodar os 20 lotes", "evidence": "x"},
-        {"id": "W-2", "title": "flag", "reason": "bloqueado-antes",
+        {"id": "W-2", "title": "flag", "reason": "blocked-before",
          "question": "Destravo?", "human_pending": None, "evidence": "y"},
-        {"id": "W-3", "title": "sem pergunta", "reason": "bloqueado-antes",
+        {"id": "W-3", "title": "sem pergunta", "reason": "blocked-before",
          "question": None, "human_pending": None, "evidence": "sem produção"},
     ]
     analysis = {"itens": {"W-1": {"recomendo": "sim", "porque": "só após merge"}}}
@@ -671,9 +671,9 @@ def test_reserved_does_not_become_a_question():
     m = load_module()
     screen, questions = [], []
     m.decide(Path("/nao/existe"), "fila", "run1", {},
-             [{"id": "W-9", "title": "em outra sessão", "reason": "reservado"},
+             [{"id": "W-9", "title": "em outra sessão", "reason": "reserved"},
               {"id": "W-8", "title": "cascata",
-               "reason": "depende-de-adiado"}],
+               "reason": "depends-on-deferred"}],
              {}, question=lambda p_: questions.append(p_) or "",
              output=screen.append)
     plain_text = "\n".join(screen)
@@ -990,7 +990,7 @@ def test_loose_text_at_options_prompt_does_not_vanish():
                       "não sei", "s"])
     screen, answered = [], []
     m.decide(Path("/nao/existe"), "fila", "run1", {},
-             [{"id": "W-1", "title": "t", "reason": "bloqueado-antes",
+             [{"id": "W-1", "title": "t", "reason": "blocked-before",
                "question": "Ligou a flag?"}], {},
              question=lambda _p: next(answers), output=screen.append,
              answer=lambda i, t: (answered.append((i, t)), (0, "ok"))[1])
@@ -1047,14 +1047,14 @@ def test_finish_keeps_agent_and_human_sections_apart():
         p = _finish(root, "--status", "blocked", "--evidence", log)
         check("blocked sem --impede é recusado", p.returncode == 2, p.stderr)
         check("...dizendo que o dono lê a seção humana",
-              "--impede" in p.stderr and "seção humana" in p.stderr, p.stderr)
+              "--blocker" in p.stderr and "seção humana" in p.stderr, p.stderr)
         check("...e nada muda no disco",
               items_of(root)["a1"]["status"] == "pending", items_of(root)["a1"])
 
         p = _finish(root, "--status", "blocked", "--evidence", log,
                     "--impede", "o bug WEGO-2490 deixa o 403 sem corpo")
         check("código de card na seção humana é recusado",
-              p.returncode == 2 and "--impede: código de card ou de commit"
+              p.returncode == 2 and "--blocker: código de card ou de commit"
               in p.stderr, p.stderr)
         p = _finish(root, "--status", "blocked", "--evidence", log,
                     "--impede", "o sistema responde em branco",
@@ -1115,7 +1115,7 @@ def test_decide_shows_human_section_and_what_each_answer_does():
     m = load_module()
     deferred_ones = [{
         "id": "WEGO-2381", "title": "Ampliar cobertura de testes",
-        "reason": "bloqueado-antes", "human_pending": None,
+        "reason": "blocked-before", "human_pending": None,
         "question": "Entrego com os 18 casos pendentes do defeito?",
         "evidence": "completion-auditor INCOMPLETE; WEGO-2490 criado",
         "owner_summary": {
@@ -1155,7 +1155,7 @@ def test_old_blocked_item_gets_a_true_generic_reason():
     m = load_module()
     screen = []
     m.decide(Path("/nao/existe"), "fila", "run1", {},
-             [{"id": "a1", "title": "t", "reason": "bloqueado-antes",
+             [{"id": "a1", "title": "t", "reason": "blocked-before",
                "human_pending": None, "question": None, "evidence": "x"}],
              {}, question=lambda _p: "q", output=screen.append,
              answer=lambda *a, **k: (0, "ok"))

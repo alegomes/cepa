@@ -175,8 +175,10 @@ Subcommands:
       Exit 0 even with divergence — it is a report, not a failure; 2 =
       any of the input files is unreadable.
 
-  cepa-plan validate <plan.yaml>
-      The checks below, on a file that is already on disk.
+  cepa-plan validate <name | plan.yaml> [--repo DIR]
+      The checks below, on a queue already on disk: a queue NAME is resolved at
+      the main clone (even from a linked worktree); an existing file path is
+      validated as given (no git needed, so `/tmp/queue.yaml` drafts work).
       Exit 0 = valid; 2 = invalid, with the gaps named.
 
   cepa-plan write <nome> --items ARQUIVO|- | --from-spec F | --from-triage F
@@ -1201,15 +1203,44 @@ def cmd_from_triage(path, as_json=True):
 
 # ── the batch: what /common:drain-plan can execute NOW ───────────────────────
 
-# What STOPS the batch. `human_pending`, `in_progress` and `bloqueado-antes`
+# What STOPS the batch. `human_pending`, `in_progress` and `blocked-before`
 # left here: all three DEFER the item and let the following ones run.
-STOPS = ("fim-da-fila", "teto", "bloqueado")
-DEFERRALS = ("human_pending", "reservado", "depende-de-adiado",
-              "bloqueado-antes")
+STOPS = ("end-of-queue", "cap", "blocked")
+DEFERRALS = ("human_pending", "reserved", "depends-on-deferred",
+              "blocked-before")
+
+# Transition window (same method as f26a765/84fde4d): the English value is what
+# is emitted; the old Portuguese spelling is accepted by readers and still
+# carried in `reason_pt`. Drop this map once no reader or .jsonl needs the old.
+REASON_ALIASES = {
+    "fim-da-fila": "end-of-queue",
+    "teto": "cap",
+    "bloqueado": "blocked",
+    "reservado": "reserved",
+    "depende-de-adiado": "depends-on-deferred",
+    "bloqueado-antes": "blocked-before",
+}
+REASON_PT = {new: old for old, new in REASON_ALIASES.items()}
+
+
+def reason_alias(value):
+    """Old Portuguese stop/deferral reason -> the English one (unknown: as is)."""
+    return REASON_ALIASES.get(value, value)
+
+
+def reason_pt(value):
+    """The old Portuguese spelling of an English reason (unknown: as is)."""
+    return REASON_PT.get(reason_alias(value), value)
 
 
 def build_batch(items, max_items, reservation_state=reservation_of):
     """(batch, stop, warnings, deferred) — what runs now, IN QUEUE ORDER.
+
+    `stop["reason"]` and each `deferred[]["reason"]` carry the ENGLISH value
+    (end-of-queue, cap, blocked / reserved, depends-on-deferred, blocked-before,
+    human_pending). During the transition window both also carry `reason_pt`,
+    the old Portuguese spelling (fim-da-fila, teto, bloqueado, reservado,
+    depende-de-adiado, bloqueado-antes), for readers not yet updated.
 
     The order is the document's data, so this function never reorders and never
     promotes an item ahead of another. What it does, since 2026-08-28, is
@@ -1243,9 +1274,9 @@ def build_batch(items, max_items, reservation_state=reservation_of):
 
     What still STOPS:
 
-      - `bloqueado` by an item that is neither done nor in the batch — copied
+      - `blocked` by an item that is neither done nor in the batch — copied
         from `/board-flow:drain`: stuck work is not pushed.
-      - `teto` — the `--max`. Each item here is a whole build with an
+      - `cap` — the `--max`. Each item here is a whole build with an
         acceptance and proof gate.
 
     And what RECOVERS: an `in_progress` whose owning session no longer exists is
@@ -1268,13 +1299,15 @@ def build_batch(items, max_items, reservation_state=reservation_of):
     def defer(ident, it, reason, detail):
         deferred_ids.add(ident)
         deferred.append({"id": ident, "title": it.get("title"),
-                        "reason": reason, "detail": detail,
+                        "reason": reason, "reason_pt": reason_pt(reason),
+                        "detail": detail,
                         "question": it.get("owner_question"),
                         "owner_summary": it.get("owner_summary"),
                         "human_pending": it.get("human_pending"),
                         "evidence": it.get("evidence")})
 
-    batch, stop = [], {"reason": "fim-da-fila", "item": None, "detail":
+    batch, stop = [], {"reason": "end-of-queue", "reason_pt": "fim-da-fila",
+                        "item": None, "detail":
                         "a fila acabou — nenhum item pendente sobrou"}
     for it in items:
         if not isinstance(it, dict):
@@ -1290,11 +1323,11 @@ def build_batch(items, max_items, reservation_state=reservation_of):
                     f"{detail}. Tratei como executável — o `start` reivindica "
                     "a reserva antes de qualquer trabalho.")
             else:
-                defer(ident, it, "reservado", f"{ident}: {detail}")
+                defer(ident, it, "reserved", f"{ident}: {detail}")
                 continue
         if st == "blocked":
             reason = str(it.get("evidence") or "").strip()
-            defer(ident, it, "bloqueado-antes",
+            defer(ident, it, "blocked-before",
                  f"{ident} saiu `blocked` de um run anterior"
                  + (f": {reason}" if reason else " (sem motivo registrado)")
                  + ". Não re-executo — enquanto a condição de fora não mudar, "
@@ -1309,7 +1342,7 @@ def build_batch(items, max_items, reservation_state=reservation_of):
         waiting = [str(b) for b in (it.get("blocked_by") or [])
                      if str(b) in deferred_ids]
         if waiting:
-            defer(ident, it, "depende-de-adiado",
+            defer(ident, it, "depends-on-deferred",
                  f"{ident} depende de {', '.join(waiting)}, que ficou de fora "
                  "deste lote — executá-lo agora seria construir sobre o que não "
                  "fechou")
@@ -1318,7 +1351,8 @@ def build_batch(items, max_items, reservation_state=reservation_of):
                      if str(b) not in resolved
                      and str(b) not in {x["id"] for x in batch}]
         if pending_deps:
-            stop = {"reason": "bloqueado", "item": ident, "detail":
+            stop = {"reason": "blocked", "reason_pt": "bloqueado",
+                    "item": ident, "detail":
                       f"{ident} depende de {', '.join(pending_deps)}, que não "
                       "está feito nem entra neste lote"}
             break
@@ -1330,14 +1364,15 @@ def build_batch(items, max_items, reservation_state=reservation_of):
                     "está abandonada. Tratei como resolvida para o item não "
                     "ficar preso para sempre; confira se ela ainda vale.")
         if len(batch) >= max_items:
-            stop = {"reason": "teto", "item": ident, "detail":
+            stop = {"reason": "cap", "reason_pt": "teto",
+                    "item": ident, "detail":
                       f"o teto --max {max_items} foi atingido; {ident} seria o "
                       "próximo"}
             break
         batch.append({"id": ident, "title": it.get("title"), "why": it.get("why"),
                      "blocked_by": [str(b) for b in (it.get("blocked_by") or [])]})
 
-    if stop["reason"] == "fim-da-fila" and deferred:
+    if reason_alias(stop["reason"]) == "end-of-queue" and deferred:
         stop["detail"] = (
             f"a fila acabou — nenhum item executável sobrou, e {len(deferred)} "
             "ficaram adiados (cada um com o motivo, no relatório)")
@@ -1610,7 +1645,8 @@ def ready_of_queue(root, name, target=None):
             "abertos": sum(1 for it in items
                            if status_of(it) not in ("done", "dropped")),
             "esperam_dono": waiting,
-            "adiados": [{"id": d["id"], "reason": d["reason"]} for d in deferred],
+            "adiados": [{"id": d["id"], "reason": reason_alias(d["reason"])}
+                        for d in deferred],
             }, warnings, None
 
 
@@ -2801,11 +2837,11 @@ def human_section_refusal(status, owner, question):
     question are for someone who never opened the card, so they carry no
     code at all (see `_ownertext`)."""
     if status == "blocked" and not str(owner.get("impede") or "").strip():
-        return ("`blocked` sem `--impede` não fecha: o dono lê a seção humana "
+        return ("`blocked` sem `--blocker` (ou `--impede`) não fecha: o dono lê a seção humana "
                 "e não o log. Diga, em uma frase leiga, o que impede o item "
                 "de andar (ex.: \"o sistema responde em branco quando nega um "
                 "acesso, e 18 testes dependem dessa resposta\"). Junte "
-                "`--pedido` (o que era para fazer) e `--pronto` (o que já "
+                "`--asked` (o que era para fazer) e `--ready` (o que já "
                 "funciona). Códigos, commits e vereditos ficam no `--evidence`.")
     bad = []
     for key, flag, _ in _ownertext.FIELDS:
@@ -3369,7 +3405,7 @@ def reconcile(items, board, missing_keys, role_of):
 #
 # On the overnight branch the rule is "no merge, no push, no Done": the card
 # is proven there and stays in Review, which is right while the code lives
-# only on that branch. `cepa-until aterrissar` then merges it into main and
+# only on that branch. `cepa-until land` then merges it into main and
 # never speaks to Jira, so nothing moved those cards afterwards. On
 # 2026-11-03 eleven WEGO cards sat in Review with PROVEN proof, complete
 # acceptance and code on main since the landing (fb-20261103-1). This lists
@@ -3795,11 +3831,22 @@ def cmd_check_name(root, name):
     return 3
 
 
-def cmd_validate(path):
-    p = Path(path)
+def cmd_validate(arg, repo="."):
+    p = Path(arg)
     if not p.is_file():
-        print(f"{p} não existe", file=sys.stderr)
-        return 2
+        # Not a file: it is a queue name, resolved at the main clone like every
+        # other subcommand (a linked worktree's copy may be absent or stale).
+        root = main_root(repo)
+        if root is None:
+            print(f"{arg} não é um arquivo, e {repo} não é um repositório git — "
+                  "a fila mora no clone principal, e sem git não dá para "
+                  "achá-lo", file=sys.stderr)
+            return 2
+        p = queue_path(root, arg)
+        if not p.is_file():
+            print(f"{arg} não existe como arquivo, e a fila '{arg}' não existe "
+                  f"no clone principal ({p})", file=sys.stderr)
+            return 2
     plan, error = read_plan(p)
     if error:
         print(error, file=sys.stderr)
@@ -4287,12 +4334,16 @@ def main(argv=None):
             "non-empty `why`, `status` in the closed vocabulary, `blocked_by` only\n"
             "to ids of this queue and with no cycle, the `human_pending` key\n"
             "present, at least one item. The gaps come out named."),
-        examples=[("cepa plan validate .claude/queues/wego/queue.yaml", "check one queue"),
+        examples=[("cepa plan validate wego",
+                   "the queue by name, resolved at the main clone even from a worktree"),
+                  ("cepa plan validate .claude/queues/wego/queue.yaml", "check one file"),
                   ("cepa plan validate /tmp/queue.yaml", "check a draft before writing it")],
         exit_codes=[(0, "valid"),
-                    (2, "invalid usage, missing or unreadable file, invalid queue "
-                        "(gaps named)")])
-    v.add_argument("plan_file", metavar="plan", help="path of the queue.yaml to validate")
+                    (2, "invalid usage, name or file not found, unreadable file, "
+                        "invalid queue (gaps named), name given outside a git repo")])
+    v.add_argument("plan_file", metavar="name|plan",
+                   help="queue name, or path of a queue.yaml to validate")
+    v.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
     s = sub.add_parser(
         "from-spec", help="reads a /common:spec specification and returns the items (JSON)",
@@ -4506,7 +4557,7 @@ def main(argv=None):
         examples=[('cepa plan finish wego WEGO-123 --status done --evidence "commit abc, build green"',
                    "close the item"),
                   ('cepa plan finish wego WEGO-124 --status blocked --evidence "staging 502" '
-                   '--impede "the test server is down"',
+                   '--blocker "the test server is down"',
                    "stuck, with the reason in plain words"),
                   ('cepa plan finish wego WEGO-125 --status pending --evidence "split in two" --commit',
                    "back to the queue, committed")],
@@ -4547,7 +4598,8 @@ def main(argv=None):
                   "answers no",
     }
     for key, flag, _ in _ownertext.FIELDS:
-        fi.add_argument(flag, dest=f"owner_{key}", metavar="TEXT",
+        fi.add_argument(flag, _ownertext.OLD_FLAGS[flag], dest=f"owner_{key}",
+                        metavar="TEXT",
                         help=owner_help[key] + ". Up to 30 words, no card, "
                              "commit, file or verdict")
     fi.add_argument("--commit", action="store_true", help=commit_help)
@@ -4804,7 +4856,7 @@ def main(argv=None):
              "divergencia": "divergence"}.get(a.cmd, a.cmd)
 
     if a.cmd == "validate":
-        return cmd_validate(a.plan_file)
+        return cmd_validate(a.plan_file, a.repo)
     if a.cmd == "from-spec":
         return cmd_from_spec(a.spec)
     if a.cmd == "from-triage":

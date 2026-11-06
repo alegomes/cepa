@@ -587,13 +587,13 @@ def test_cepa_until_run_landing_pending_and_doctor_see_new_queue():
         p = subprocess.run([sys.executable, str(CEPA_UNTIL), "pendentes",
                             "--repo", str(root)], capture_output=True, text=True,
                            cwd=str(root), timeout=60)
-        assert f"cepa-until aterrissar fila/{run_id}" in p.stdout, p.stdout + p.stderr
+        assert f"cepa-until land fila/{run_id}" in p.stdout, p.stdout + p.stderr
 
         d = subprocess.run([sys.executable, str(DOCTOR), "--projeto"],
                            cwd=str(root), capture_output=True, text=True,
                            timeout=120, env=dict(os.environ, CEPA_DOCTOR_INSTALL="off"))
         out = d.stdout + d.stderr
-        assert "[until]" in out and f"cepa-until aterrissar fila/{run_id}" in out, out[-1500:]
+        assert "[until]" in out and f"cepa-until land fila/{run_id}" in out, out[-1500:]
 
         (root / ".claude" / "doctor-last-run").unlink(missing_ok=True)  # doctor trace
         env = dict(os.environ, CEPA_WORKTREE_HOME=str(Path(tmp) / "worktrees"))

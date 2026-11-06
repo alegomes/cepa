@@ -107,6 +107,22 @@ with World() as w:
     check("sem as linhas da intenção, nada de `intent`", "intent" not in d and "intencao" not in d, d)
     check("saída diz que vai sem intenção", "sem intenção" in out, out)
 
+PORQUE = ('o dono abriu a spec e não reconheceu o assunto; a pergunta original '
+          'era "como o handoff grava o porquê?"')
+
+print("a linha `porque:` do Próximo passo vai no brief da próxima sessão (fb-20261104-2)")
+with World() as w:
+    rc, out = w.run(handoff(line(w), brief=f"{BRIEF}\nporque: {PORQUE}"))
+    check("exit 0", rc == 0, out)
+    d = json.loads(w.nxt.read_text()) if w.nxt.exists() else {}
+    check("brief traz a frase do porque literalmente", PORQUE in (d.get("brief") or ""),
+          repr(d.get("brief")))
+    check("brief traz a linha `porque:` e o parágrafo",
+          f"porque: {PORQUE}" in d.get("brief", "") and BRIEF in d.get("brief", ""),
+          repr(d.get("brief")))
+    check("brief sem a linha **Próximo:**", "**Próximo:**" not in d.get("brief", ""),
+          repr(d.get("brief")))
+
 INTENT_LINES = ("**Intenção:** Grelhar o dono no epic contratos-e-regras\n"
                    "**Meta:** cada ciclo com roteiro em tela e em backend\n"
                    "**Plano:** abrir o epic | grelhar ciclo a ciclo\n")
@@ -217,7 +233,7 @@ with World() as w:
     got = json.loads(log.read_text()) if log.exists() else {}
     check("cepa reaberto", bool(got), p.stderr)
     check("cwd = repo", got.get("cwd") == str(w.target), got)
-    check("--mode discovery + brief, sem intenção", got.get("args") == ["--mode", "discovery", BRIEF], got)
+    check("--mode discovery + brief, sem intenção", got.get("args") == ["--mode", "discovery", "/common:epic contratos-e-regras\n\n" + BRIEF], got)
     check("arquivo consumido", not w.nxt.exists())
 
 print("com a intenção, o encadeamento passa as três flags ao cepa")
@@ -234,11 +250,12 @@ with World() as w:
     p = subprocess.run([sys.executable, str(CHAIN), "launch-1", str(fake), "0"],
                        cwd=w.root, capture_output=True, text=True)
     got = json.loads(log.read_text()) if log.exists() else {}
-    check("flags da intenção + brief", got.get("args") == [
+    check("flags da intenção + comando e brief", got.get("args") == [
         "--mode", "discovery",
         "--purpose", "Grelhar o dono no epic contratos-e-regras",
         "--by-when", "cada ciclo com roteiro em tela e em backend",
-        "--plan", "abrir o epic\ngrelhar ciclo a ciclo", BRIEF], got)
+        "--plan", "abrir o epic\ngrelhar ciclo a ciclo",
+        "/common:epic contratos-e-regras\n\n" + BRIEF], got)
 
 print("o wrap-up e o handoff conhecem a linha")
 wu = WRAPUP.read_text(encoding="utf-8")
@@ -280,7 +297,7 @@ with World() as w:
     got = json.loads(log.read_text()) if log.exists() else {}
     check("antigo: o cepa recebe --mode discovery e as flags novas", got.get("args") == [
         "--mode", "discovery", "--purpose", "p antigo", "--by-when", "q antigo",
-        "--plan", "a\nb", BRIEF], (got, p.stderr))
+        "--plan", "a\nb", "/common:epic x\n\n" + BRIEF], (got, p.stderr))
 
 print()
 if failures:

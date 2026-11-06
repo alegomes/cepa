@@ -1,0 +1,55 @@
+key: report-style-lint-reabre-apos-pedido-novo
+status: complete
+diff: 0b7ee4c..adc8a7c
+audited_head: adc8a7c
+head_commit: adc8a7c
+note: >
+  Hook real invocado como Stop com transcript. Reauditado em adc8a7c (git diff 0b7ee4c adc8a7c; 1e2a1ad..adc8a7c altera so tests/test_report_style_lint.py, +5 linhas: (t) "sim - ok" e (t2) "..." apos Safe to exit seguem barrados; hook intacto). Rodado: python3 tests/test_report_style_lint.py -> rc=0, 221 "ok", 0 falhas, "all report-style tests passed". Em 34c8789 o vocabulario decide sozinho o que e aceite: removidos limite de 6 palavras, guard `not wrap` e guard `_is_user_prompt`; texto vazio conta como aceite. Relido contra AC2/AC3/AC4: aceite nu segue no vocabulario (a, j); isMeta e prefixo "Stop hook feedback:" seguem filtrados em session_closed por `human` (m, m2, n, n2); tool_result sem texto = aceite, nao reabre (p); novo wrap-up apos reabertura re-arma invoked e fecha de novo (k, o). Slash command carrega palavras de tag fora do vocabulario, entao reabre ((i2) passa).
+criteria:
+  - id: AC1
+    text: >
+      Pedido novo do dono apos "Safe to exit" (inclui slash command) reabre a sessao: relatorio com pergunta fechada
+      na lista final e com "Pra voce" anunciando algo nao e barrado como pergunta-pos-wrap-up; telemetria pos_wrap_up=false.
+    altitude: event
+    surface: hook Stop (processo real) com transcript; saida/bloqueio e evento report_style
+    test: tests/test_report_style_lint.py (i), (i2), (i3), (i3b), (l), (o)
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_report_style_lint.py -> 221 ok, 0 falhas (inclui (i3) e (i3b))
+    gap: null
+  - id: AC2
+    text: Aceite nu ("sim", "1. sim") apos Safe to exit nao reabre; relatorio de metricas com pergunta segue barrado citando o wrap-up.
+    altitude: event
+    surface: hook Stop com transcript
+    test: tests/test_report_style_lint.py (a), (j), (r), (r2), (s), (s2), (t), (t2)
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_report_style_lint.py -> 221 ok, 0 falhas
+    gap: null
+  - id: AC3
+    text: Linhas isMeta injetadas como texto de usuario (Stop hook feedback, corpo de comando) nao reabrem.
+    altitude: event
+    surface: hook Stop com transcript contendo linhas isMeta
+    test: tests/test_report_style_lint.py (m), (m2), (n), (n2), (p), (q)
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_report_style_lint.py -> 221 ok, 0 falhas
+    gap: null
+  - id: AC4
+    text: Segundo wrap-up + "Safe to exit" apos reabertura fecha de novo.
+    altitude: event
+    surface: hook Stop com transcript
+    test: tests/test_report_style_lint.py (k), (o)
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_report_style_lint.py -> 221 ok, 0 falhas
+    gap: null
+  - id: AC5
+    text: Regra escrita em plain-report "Depois do wrap-up" e wrap-up.md sem quebrar spec checks; versao do plugin common incrementada.
+    altitude: domain
+    surface: common/skills/plain-report/SKILL.md, common/commands/wrap-up.md, common/.claude-plugin/plugin.json
+    test: tests/test_report_style_lint.py spec checks (4 "spec:") + diff (plugin.json 3.2.0 -> 3.3.0)
+    layer: unit (leitura de prosa)
+    evidence: verified
+    run: python3 tests/test_report_style_lint.py -> 4 checks "spec:" ok; git show 7928aa5 mostra os tres arquivos alterados
+    gap: null

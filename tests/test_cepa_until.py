@@ -281,7 +281,7 @@ def test_whole_queue_runs_until_empty():
               all(it["status"] == "done"
                   for it in yaml.safe_load(plan.read_text())["items"]))
         end = [e for e in ledger_of(root) if e.get("evento") == "run_end"][0]
-        check("o run termina por fim-da-fila", end["motivo"] == "fim-da-fila",
+        check("o run termina por end-of-queue", end["motivo"] == "end-of-queue",
               str(end))
         check("...e conta 3 com progresso", end["com_progresso"] == 3, str(end))
 
@@ -343,8 +343,8 @@ def test_human_pending_is_progress_and_not_failure():
         end = [e for e in ledger_of(root) if e.get("evento") == "run_end"][0]
         check("adiamento conta como progresso",
               end["com_progresso"] == 3 and end["sem_progresso"] == 0, str(end))
-        check("o run termina por fim-da-fila, não por disjuntor",
-              end["motivo"] == "fim-da-fila", str(end))
+        check("o run termina por end-of-queue, não por disjuntor",
+              end["motivo"] == "end-of-queue", str(end))
         check("a rota aberta aparece no relatório do fim",
               "valide o deploy à mão" in p.stdout, p.stdout[-400:])
 
@@ -352,7 +352,7 @@ def test_human_pending_is_progress_and_not_failure():
 def test_blocked_item_does_not_jam_the_night_behind_it():
     """Owner's decision, 2026-08-30: `blocked` DEFERS instead of stopping the batch. It was
     the last way for a single item to jam a whole window — the supervisor
-    fired once, `queue` stopped at `bloqueado-antes` and the night ended
+    fired once, `queue` stopped at `blocked-before` and the night ended
     at 23h05 with one item done."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1"), item("a2"), item("a3")])
@@ -373,8 +373,8 @@ def test_blocked_item_does_not_jam_the_night_behind_it():
         check("...e os seguintes fecharam",
               after["a2"] == "done" and after["a3"] == "done", after)
         end = [e for e in ledger_of(root) if e.get("evento") == "run_end"][0]
-        check("o run termina por fim-da-fila, não por `bloqueado-antes`",
-              end["motivo"] == "fim-da-fila", str(end))
+        check("o run termina por end-of-queue, não por `blocked-before`",
+              end["motivo"] == "end-of-queue", str(end))
         check("...e a razão do fim cita os adiados",
               "adiado" in (end.get("detalhe") or "").lower(), str(end))
         # Without these two, taking `blocked` out of the progress count went
@@ -467,7 +467,7 @@ def test_outcome_that_is_not_blocked_resets_the_sequence():
               f"disparou {len(calls)}x")
         end = [e for e in ledger_of(root) if e.get("evento") == "run_end"][0]
         check("o run termina pela fila, não por `fila-travada`",
-              end["motivo"] == "fim-da-fila", str(end))
+              end["motivo"] == "end-of-queue", str(end))
 
 
 def test_max_stuck_configurable_and_validated():
@@ -1032,7 +1032,7 @@ def test_usage_ceiling_only_stops_when_the_item_did_not_advance():
         check("os dois itens rodaram", len(calls) == 2, f"{len(calls)}x")
         end = [e for e in ledger_of(root) if e.get("evento") == "run_end"][0]
         check("...e o run terminou pela fila, não pelo teto de uso",
-              end["motivo"] == "fim-da-fila" and end["limite_de_uso"] == 0, str(end))
+              end["motivo"] == "end-of-queue" and end["limite_de_uso"] == 0, str(end))
 
 
 def test_limit_mid_long_output_does_not_stop_the_run():
@@ -1090,7 +1090,7 @@ def test_attempt_ceiling_takes_the_item_off_the_front_and_the_queue_moves():
               after["a2"]["status"] == "done", str(after["a2"]))
         end = [e for e in ledger_of(root) if e.get("evento") == "run_end"][0]
         check("...o run acaba pela fila, não pelo disjuntor",
-              end["motivo"] == "fim-da-fila" and end["esgotados"] == 1, str(end))
+              end["motivo"] == "end-of-queue" and end["esgotados"] == 1, str(end))
         check("...e o relatório cobra o item que ficou blocked",
               "taken off the front of the queue" in p.stdout and "a1" in p.stdout,
               p.stdout[-600:])

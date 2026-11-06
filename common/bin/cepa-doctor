@@ -76,6 +76,11 @@ except Exception:  # noqa: BLE001
 # `_wtlib.env_manifest_path` is the same path resolution as the worktree
 # seeding (docs/env.yaml wins over .claude/env.yaml, the legacy one) — single source.
 try:
+    import _dirt  # single definition of "dirty clone", shared with cepa-until
+except Exception:  # noqa: BLE001
+    _dirt = None
+
+try:
     import _wtlib as WT
 except Exception:  # noqa: BLE001
     WT = None
@@ -530,6 +535,7 @@ def check_project(cwd: Path):
         ok("handoffs", "sem handoffs vencidos")
 
     check_dirty_tree(root)
+    check_tracked_runtime(root)
     check_env_manifest(root)
     check_twg_version(root)
     check_plan_divergence(root)
@@ -653,8 +659,7 @@ def check_dirty_tree(root: Path):
     if dirty is None:
         return
     # the record of previous runs does not count: `cepa-until` ignores it too
-    dirty = [l for l in dirty
-            if not re.match(r"^.. \.claude/(programs|queues)/[^/]+/until/", l)]
+    dirty = [l for l in dirty if (_dirt.counts_as_dirt(l) if _dirt else l.strip())]
     if not dirty:
         ok("execucao", f"fila `{queue}` pendente e árvore limpa — "
                        f"`cepa-until {queue} --for 12h` larga sem recusa")
@@ -664,6 +669,22 @@ def check_dirty_tree(root: Path):
          f"item a executar — o `cepa-until` RECUSA largar assim (é como ele "
          f"separa o que o run fez do que já estava aqui). Commite, limpe, ou "
          f"largue com --dirty-ok. Achar isso na hora de dormir custa a janela")
+
+
+def check_tracked_runtime(root: Path):
+    """Tracked files that hooks write as machine-local runtime state: every
+    wrap-up then finds the clone dirty and `cepa-until` refuses to start.
+    No --fix: untracking is a commit the owner must see."""
+    if _dirt is None:
+        return
+    tracked = _dirt.tracked_runtime(str(root))
+    if not tracked:
+        ok("runtime", "nenhum arquivo de runtime dos hooks versionado")
+        return
+    warn("runtime",
+         f"{len(tracked)} arquivo(s) versionado(s) que os hooks escrevem: "
+         f"{tracked[:5]} — todo wrap-up vai encontrar o clone sujo; tire do "
+         f"índice (git rm --cached) e ignore-os")
 
 
 def check_env_manifest(root: Path):
@@ -911,7 +932,7 @@ def check_until_waiting(root: Path):
     if not until.is_file() or not has_plans_dir(root):
         return
     try:
-        p = subprocess.run([sys.executable, str(until), "pendentes",
+        p = subprocess.run([sys.executable, str(until), "pending",
                             "--repo", str(root), "--json"],
                            capture_output=True, text=True, timeout=60)
         data = json.loads(p.stdout) if p.returncode == 0 else {}
@@ -922,7 +943,7 @@ def check_until_waiting(root: Path):
         return
     # A `rodando` run whose supervisor died (WEGO 2026-09-28-2003): the record
     # stopped midway, and the full build of the last `done` never ran. The sentence
-    # and the command come ready-made from `pendentes`.
+    # and the command come ready-made from `pending`.
     for m in dead:
         item = ""
         if m.get("item"):
@@ -1094,7 +1115,7 @@ def pending_fixes():
 
 
 def run_checks(project_only=False):
-    """`--projeto` cuts the global checks (settings, plugins, hooks, telemetry).
+    """`--project` cuts the global checks (settings, plugins, hooks, telemetry).
 
     It exists because the doctor's verdict mixed two questions: "is this project
     healthy?" and "is this machine's installation healthy?". For whoever only wants to look at
@@ -1240,7 +1261,7 @@ def help_parser():
         examples=[
             ("cepa doctor", "the full diagnosis"),
             ("cepa doctor --fix", "diagnosis plus every mechanical fix"),
-            ("cepa doctor --projeto", "only the checks of the current project"),
+            ("cepa doctor --project", "only the checks of the current project"),
             ("cepa doctor --brief --if-stale 12", "the `cepa` preflight: silent if run <12h ago"),
         ],
         exit_codes=[
@@ -1257,7 +1278,7 @@ def help_parser():
     ap.add_argument("--brief", action="store_true",
                     help="only the one-line summary; with nothing to say, prints nothing "
                          "(the mode `cepa` uses when opening a session)")
-    ap.add_argument("--projeto", action="store_true",
+    ap.add_argument("--project", "--projeto", action="store_true",
                     help="only the project checks, skips the global ones")
     ap.add_argument("--if-stale", metavar="H", type=float,
                     help="only runs if the last diagnosis in this repo is older than H "
@@ -1272,7 +1293,7 @@ def main():
         return 0
     do_fix = "--fix" in argv
     brief = "--brief" in argv
-    project_only = "--projeto" in argv
+    project_only = "--projeto" in argv or "--project" in argv
 
     # Session-start preflight: silent and cheap when there is nothing to
     # say. Without it the wrapper would charge the whole diagnosis on every `cepa`.

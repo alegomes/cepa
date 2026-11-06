@@ -61,7 +61,9 @@ git constraints follow, and the whole command is built around them:
   run. Degrade gracefully: this becomes a plain *commit + handoff (+ push if a
   remote exists)*. Skip the merge/prune steps (but still record the next step,
   the second bullet of L7), tell the user that's what you're
-  doing, and otherwise follow the same confirm-once shape.
+  doing, and otherwise follow the same confirm-once shape. The clean-clone rule
+  of L4 still applies, to the current worktree: it IS the clone `cepa-until`
+  would run in.
 - Find this worktree's registry entry and its **integration branch**: read
   `<root>/.claude/sessions/*.json` for the entry whose `cwd`/`worktree_path`
   matches the current worktree, and take `base_branch` (+ `base_commit`). If no
@@ -77,6 +79,10 @@ git constraints follow, and the whole command is built around them:
   leave alone** (untracked `.claude/` session state, build output, caches). You
   show the first list in the plan and stage exactly it in L2 — see L2 for the
   rule. If anything is ambiguous, mark it for the user to decide at confirmation.
+- **Read the base worktree's dirt too** (once `<base-worktree>` is known, see L4):
+  `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/safe-exit-gate.py" --check <base-worktree>`.
+  Step 1 shows what the wrap-up will commit in the base (tracked changes),
+  exclude (runtime files) and ask about (untracked work).
 - **Intent telemetry (read-only, never blocks):** run
   `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intent" close`. It emits
   `intent.finished_at_last_step` when this session's intent cursor is on the
@@ -157,17 +163,29 @@ re-show the plan.
   - If `<base>` is checked out **nowhere** → it's not landable without a
     checkout. Stop and tell the user to open/`git checkout <base>` in the base
     window, then re-run. Don't force a checkout under a window you can't see.
-  - If `<base-worktree>` is dirty, check **whether the dirt intersects the
-    merge.** Compute the merge's changed-file set
+  - **The base worktree must be clean by `cepa-until`'s definition before the
+    merge.** First the intersection check: compute the merge's changed-file set
     (`git -C <base-worktree> diff --name-only <base>...session/<slice>`) and the
     base worktree's dirty paths (`git -C <base-worktree> status --porcelain`).
-    Only **stop** if the two sets intersect (the merge would touch a file with
-    uncommitted edits — a real clobber risk) or if an untracked file in the base
-    collides with one the merge adds. Don't block on unrelated dirt: a base
-    worktree on `main` is almost always "dirty" with hook-written runtime state
-    (`.claude/sessions/`, `expertise/*.yaml`, `session-log.md`) that no merge
-    touches — blocking on that makes auto-merge impossible. When you proceed past
-    non-intersecting dirt, say so in one line.
+    If the two sets intersect (the merge would touch a file with uncommitted
+    edits, a real clobber risk) or an untracked file in the base collides with
+    one the merge adds, that file is committed first, never merged over; stop if
+    that is not possible. Then run
+    `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/safe-exit-gate.py" --check <base-worktree>`:
+    - **Tracked modifications** (a `queue.yaml` that hooks or a run wrote, an
+      expertise file) go in one commit of their own in the base worktree, before
+      the merge: `git -C <base-worktree> add -u -- <paths>` + commit
+      `wrap-up: estado do harness (<n> arquivo(s))`. Owner's decision
+      fb-20261105-3: "toda sessão termina sem pendência de git".
+    - **Runtime files** (untracked hook state such as `.claude/sessions/`) go to
+      `.git/info/exclude` with
+      `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/safe-exit-gate.py" --exclude <base-worktree>`.
+    - **Genuine untracked work** is surfaced and asked about at the single
+      confirmation in step 1 (step 0 already reads the base).
+
+    The old rule "don't block on unrelated dirt" is gone: unrelated dirt did not
+    block the merge but did block the next `cepa-until` on the same clone
+    (fb-20261105-3, 2026-11-05).
 - **single-owner guard:**
   `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/worktree-guard.py" session/<slice> --cwd <base-worktree> --exclude-cwd <session-worktree>`
   — `--cwd` MUST be the base worktree (or `dest` resolves to the session branch
@@ -231,7 +249,8 @@ a one-shot marker the SessionEnd hook consumes after your final turn:
   merged into `<base>`, then runs `git -C <base-worktree> worktree remove` +
   `git branch -d session/<slice>` — after your last turn, so no hook fires from a
   dead cwd. (Backstop: if the session crashes before SessionEnd, `auto_clean` on
-  the next session start reaps the now-merged, clean, not-alive worktree anyway.)
+  the next session start reaps the now-merged, clean, not-alive worktree anyway,
+  and the same SessionStart hook deletes a marker whose worktree or branch no longer exists.)
 
 - **Record the next step, if the handoff has one.** After the marker, run:
   ```
@@ -244,7 +263,9 @@ a one-shot marker the SessionEnd hook consumes after your final turn:
   brief equal to the `## Próximo passo` paragraph and, when the handoff carries
   `**Intenção:**`, `**Meta:**` and `**Plano:**`, the next session's intent. That file is what the launcher
   `cepa` reads when you type `exit`, to open the next session in the right repo
-  and mode without you typing anything (CS-3). Without the line it writes nothing, and
+  and mode without you typing anything (CS-3); the `comando` opens the next
+  session's initial prompt as its first line, followed by a blank line and the
+  brief, so the session runs it. Without the line it writes nothing, and
   that is not an error: a handoff without `Próximo:` is still valid. The first line
   of the output goes, as is, into the L8 report. Never write the
   `.next.json` by hand: the script refuses a nonexistent repo, an unknown mode and
@@ -256,7 +277,11 @@ One block: landed `session/<slice>` → `<base>`; pushed (or local-only); handof
 at `<path>`; **the worktree + branch will be removed automatically when you
 `exit`** (or run `/common:worktree-discard <slice>` from the base window to drop
 it now); and the **Próximo passo** line — the first line `session-next.py`
-printed in L7, verbatim (`gravado` — recorded, or `não gravado` — not recorded, and why). Close with: **"Safe to `exit`."** (A slash command can't close the
+printed in L7, verbatim (`gravado` — recorded, or `não gravado` — not recorded, and why). Close with: **"Safe to `exit`."** ONLY with the base worktree clean by
+`cepa-until`'s definition (`safe-exit-gate.py --check <base-worktree>` exits 0;
+the `until/` run records and `queue.yaml.bak` do not count, `cepa-until` ignores
+them). `safe-exit-gate.py` (Stop hook) blocks the phrase otherwise and names the
+files. (A slash command can't close the
 session for you — that last keystroke is yours, but everything is already landed,
 so it's a no-op safety-wise.)
 
@@ -270,7 +295,7 @@ during the session (the default-yes "assunto lateral") goes INTO the handoff
 NOTE, the BACKLOG or `cepa-feedback add` during L3, never into a question after
 the landing. `report-style-lint.py` enforces it: after "Safe to `exit`" a closed
 question in the final list (or a `For you:` that announces something) is blocked
-(category `pergunta-pos-wrap-up`), and so is the same in any report that follows.
+(category `pergunta-pos-wrap-up`), and so is the same in any report that follows, until the owner makes a NEW request (a prompt that is not a mere "sim"/"ok" reopens the session).
 
 ---
 

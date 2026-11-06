@@ -274,7 +274,7 @@ def test_board_flow_shortcut_resolves_the_cepa_autonomy_of_common(tmp):
 
 def test_decide_reads_the_list():
     s = DECIDE.read_text(encoding="utf-8")
-    check("cepa-autonomy" in s and "classificar" in s, "decide.md consulta o cepa-autonomy classificar")
+    check("cepa-autonomy" in s and "classify" in s, "decide.md consulta o cepa-autonomy classify")
     check("### 5b." in s and s.index("### 5b.") < s.index("### 6."),
           "a consulta vem antes de agrupar e perguntar (passo 5b, antes do 6)")
     check("executa_e_reporta" in s and "sempre_pergunta" in s, "decide.md nomeia as duas faixas")

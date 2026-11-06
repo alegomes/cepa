@@ -1,0 +1,39 @@
+key: spec-isento-do-report-style-lint
+status: complete
+criteria:
+  - id: AC1
+    text: "Stop turn writing only docs/spec/<slug>.md, no commit, ending in a question, no report marker, is not blocked"
+    altitude: event
+    surface: "report-style-lint.py subprocess with Stop payload and synthetic transcript"
+    test: "tests/test_report_style_lint.py: entrevista escreve só docs/spec/<slug>.md → poupada; tests/test_epic_readiness_gate.py: turno do /common:spec (docs/spec) também é poupado"
+    layer: subprocess-hook
+    evidence: verified
+    run: "python3 tests/test_report_style_lint.py -> 'all report-style tests passed' (ok lines for the spec case); python3 tests/test_epic_readiness_gate.py -> OK"
+    status: complete
+  - id: AC2
+    text: "Exception stays bounded"
+    altitude: event
+    surface: "same hook subprocess"
+    test: "report_style_lint: docs/spec+src/x.py, docs/spec+git commit, docs/specs plural, docs/spec/x.yaml, docs/spec/sub/x.md all measured; MIN_WORDS control proves speech is long enough to be measured; epic_readiness_gate: docs/specs controle"
+    layer: subprocess-hook
+    evidence: verified
+    run: "same two commands, all ok, zero FAIL"
+    status: complete
+  - id: AC3
+    text: "Docstring no longer says /common:spec is outside the exception"
+    altitude: domain
+    surface: "common/hooks/report-style-lint.py docstring"
+    test: "diff fe0be4b..HEAD; grep for 'outside the exception' returns nothing"
+    layer: diff-inspection
+    evidence: verified
+    run: "grep -n 'outside the exception' common/hooks/report-style-lint.py -> no match"
+    status: complete
+  - id: AC4
+    text: "Old-behavior tests updated, not deleted"
+    altitude: event
+    surface: "tests/test_epic_readiness_gate.py"
+    test: "control 'turno do /common:spec segue medido' replaced by 'também é poupado' plus plural-dir control"
+    layer: diff-inspection
+    evidence: verified
+    run: "git diff fe0be4b..HEAD shows replacement, net assertions increased"
+    status: complete

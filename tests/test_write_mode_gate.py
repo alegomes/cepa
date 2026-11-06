@@ -421,6 +421,66 @@ def test_unresolvable_target_does_not_blame_the_mode():
               p.stderr[:200])
 
 
+def test_git_dir_is_checkout_preparation_in_every_mode():
+    """fb-20261105-1: `.git/info/**` is checkout preparation outside versioning.
+
+    A `discovery` session was blocked from `echo '.playwright-mcp/' >>
+    .git/info/exclude`. `.git/info/` passes in every mode; `.git/hooks/*` and
+    `.git/config` do not (git runs code from them later), nor `.gitignore`
+    (versioned) or anything that normalizes out of `.git/info/`.
+    """
+    for mode in ("discovery", "exploration", "design", "reflection",
+                 "documentation"):
+        with Repo() as r:
+            r.mode(mode)
+            p = r.edit(".git/info/exclude")
+            check(f"{mode}: Edit em .git/info/exclude passa", p.returncode == 0,
+                  p.stderr[:160])
+            p = r.call("Write", {"file_path": ".git/info/exclude"})
+            check(f"{mode}: Write em .git/info/exclude passa",
+                  p.returncode == 0, p.stderr[:160])
+            p = r.edit(".git/info/sparse-checkout")
+            check(f"{mode}: Edit em .git/info/sparse-checkout passa",
+                  p.returncode == 0, p.stderr[:160])
+            p = r.bash("echo x >> .git/info/sparse-checkout")
+            check(f"{mode}: bash em .git/info/sparse-checkout passa",
+                  p.returncode == 0, p.stderr[:160])
+            p = r.edit(".git/info/attributes")
+            check(f"{mode}: Edit em .git/info/attributes passa",
+                  p.returncode == 0, p.stderr[:160])
+            for target in (".git/hooks/pre-commit", ".git/config"):
+                p = r.edit(target)
+                check(f"{mode}: Edit em {target} bloqueia (executa código depois)",
+                      p.returncode == 2, p.stderr[:160])
+                p = r.bash(f"echo x >> {target}")
+                check(f"{mode}: bash em {target} bloqueia (executa código depois)",
+                      p.returncode == 2, p.stderr[:160])
+            for label, cmd in (
+                    ("relativo", "echo '.playwright-mcp/' >> .git/info/exclude"),
+                    ("absoluto",
+                     f"echo '.playwright-mcp/' >> {r.path}/.git/info/exclude")):
+                p = r.bash(cmd)
+                check(f"{mode}: bash {label} em .git/info/exclude passa",
+                      p.returncode == 0, p.stderr[:160])
+            p = r.edit("common/hooks/x.py")
+            check(f"{mode}: common/hooks/x.py segue bloqueado",
+                  p.returncode == 2, p.stderr[:160])
+            p = r.edit(".git/../common/hooks/x.py")
+            check(f"{mode}: .git/../common/hooks/x.py segue bloqueado",
+                  p.returncode == 2, p.stderr[:160])
+            p = r.bash("echo x >> .git/../common/hooks/x.py")
+            check(f"{mode}: bash .git/../common/hooks/x.py segue bloqueado",
+                  p.returncode == 2, p.stderr[:160])
+    with Repo() as r:
+        r.mode("discovery")
+        p = r.edit(".gitignore")
+        check("discovery: .gitignore (versionado) segue bloqueado",
+              p.returncode == 2, p.stderr[:160])
+        p = r.bash("echo '.playwright-mcp/' >> .gitignore")
+        check("discovery: bash em .gitignore segue bloqueado",
+              p.returncode == 2, p.stderr[:160])
+
+
 def main():
     print("test_write_mode_gate")
     if not GATE.exists():
@@ -439,7 +499,8 @@ def main():
                test_table_comes_from_modes_py,
                test_heredoc_body_is_not_a_target,
                test_variable_of_the_command_itself_is_expanded,
-               test_unresolvable_target_does_not_blame_the_mode):
+               test_unresolvable_target_does_not_blame_the_mode,
+               test_git_dir_is_checkout_preparation_in_every_mode):
         fn()
     if failures:
         print(f"\n{len(failures)} falha(s): {', '.join(failures)}")

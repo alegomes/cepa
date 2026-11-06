@@ -1,0 +1,47 @@
+schema_version: 2
+card: feedback-triage-cria-item-de-fila
+verdict: proven
+reviewed_at: 2026-11-05T23:59:00-03:00
+base_commit: b92c55d
+head_commit: af633d1
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-feedback (cmd_triage, _queue_status, _queue_item, _queue_add, records)", module: harness, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/feedback.md", module: harness-doc, external_observable: false, substituted_by_double: null }
+    - { class: "tests/test_cepa_feedback.py", module: harness-test, external_observable: false, substituted_by_double: null }
+    - { class: "tests/test_cepa_until_english_aliases.py", module: harness-test, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python (CLI + testes de script); nao ha PIT. Perturbacao como mecanismo universal."
+    perturbation:
+      status: pass
+      results:
+        - "Worktree descartavel /tmp/proof-fb-3 em af633d1 (removido ao final; git worktree list sem proof-fb). Base verde: `python3 tests/test_cepa_feedback.py` -> 'tudo verde' rc=0; `python3 tests/test_cepa_until_english_aliases.py` -> 'tudo verde' rc=0. Cada quebra em common/bin/cepa-feedback, testes re-executados, arquivo restaurado com git checkout antes da seguinte; apos a ultima, ambos 'tudo verde' de novo."
+        - "P1 recusa BACKLOG sem --queue/--item removida (linha 314 `if False and ...`) -> test_cepa_feedback RED, 4 FAIL."
+        - "P2 recusa --item sem --queue removida (linha 310 `if False`) -> RED, 2 FAIL."
+        - "P3 pre-checagem do item/fila removida (linha 337 `if False:`) -> RED, 5 FAIL."
+        - "P4 ramo done/dropped abre item novo removido (linha 366 `if False:`) -> RED, 5 FAIL."
+        - "P5 copia do campo item em records() removida (linha 141) -> RED, 1 FAIL."
+        - "P6 evento nao carrega o item (linha 348 `pass`) -> RED, 3 FAIL."
+        - "P7 chamada final _queue_add removida (linha 382 `pass`, item novo nunca aberto) -> test_cepa_feedback RED 11 FAIL e test_cepa_until_english_aliases RED 2 FAIL (um por forma triar/triage; o check 'abriu item na fila' acusa)."
+        - "P8 alias --plano removido de --queue (linha 492) -> test_cepa_until_english_aliases RED, 2 FAIL (test_cepa_feedback 0 FAIL, esperado: ele usa --queue). O teste de alias e load-bearing para o caminho --plano."
+        - "P1 sobre test_cepa_until_english_aliases: 0 FAIL (esperado: o teste passa --plano, nao exercita a recusa; a recusa e provada por test_cepa_feedback). 8/8 quebras derrubaram ao menos um teste, 0 sobreviventes."
+        - "Prosa feedback.md: nao executavel, sem teste que a pina; coberta pelo comportamento que descreve (P1..P7)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; alcance determinado pela perturbacao: cada ramo alterado de cmd_triage/records/_queue_add quebrado derruba o teste (8/8 RED acima)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff altera argumentos de um CLI local usado pelo proprio operador (flags --queue/--item/--destination validadas e recusadas com exit 2, sem escrever no ledger); nao abre superficie de entrada externa e nao toca modulo api-rest."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: ""
+routing_reason: "Refeita em af633d1 (nao herdada da prova em 9477523). Base verde nos dois arquivos de teste; 8 quebras em cmd_triage/records/_queue_add/alias derrubaram test_cepa_feedback e/ou test_cepa_until_english_aliases; nenhuma sobreviveu. Nenhum nivel assumed/skipped/gap/survived: PROVEN."

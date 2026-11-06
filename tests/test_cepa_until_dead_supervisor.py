@@ -23,6 +23,8 @@ What these tests pin:
 Run: python3 tests/test_cepa_until_dead_supervisor.py
 """
 
+import importlib.machinery
+import importlib.util
 import json
 import os
 import pty
@@ -248,6 +250,88 @@ def test_sigterm_on_the_full_build_ends_the_build():
               and end.get("filho_encerrado") is True, str(end))
 
 
+# `terminate_group` must not call a dead group "alive/unknown": on macOS
+# killpg(pgid, 0) gives EPERM while the group only holds exited, unreaped zombies.
+def _load_until():
+    loader = importlib.machinery.SourceFileLoader("cepa_until", str(CEPA_UNTIL))
+    spec = importlib.util.spec_from_loader("cepa_until", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+def _stat(pid):
+    return subprocess.run(["ps", "-o", "stat=", "-p", str(pid)],
+                          capture_output=True, text=True).stdout.strip()
+
+
+def test_terminate_group_calls_an_all_zombie_group_dead():
+    _until = _load_until()
+
+    _p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
+                          start_new_session=True)
+    try:
+        os.killpg(_p.pid, signal.SIGTERM)
+        _deadline = time.monotonic() + 5
+        while not _stat(_p.pid).startswith("Z") and time.monotonic() < _deadline:
+            time.sleep(0.02)
+        check("terminate_group diz que o grupo acabou quando só restam zumbis (macOS devolve EPERM)",
+              _until.terminate_group(_p.pid, 2) is True, _stat(_p.pid))
+    finally:
+        try:
+            os.killpg(_p.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        try:
+            os.waitpid(_p.pid, 0)
+        except ChildProcessError:
+            pass
+
+    _p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
+                          start_new_session=True)
+    try:
+        _r = _until.terminate_group(_p.pid, 2)
+        check("terminate_group num grupo vivo devolve True e o processo morre de fato",
+              _r is True and not alive(_p.pid), str(_r))
+    finally:
+        try:
+            os.killpg(_p.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        try:
+            os.waitpid(_p.pid, os.WNOHANG)
+        except ChildProcessError:
+            pass
+
+    # A zombie the supervisor cannot reap (it is the helper's grandchild): EPERM until the end.
+    _helper = (
+        "import subprocess, sys, time\n"
+        "g = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'],"
+        " start_new_session=True)\n"
+        "print(g.pid, flush=True)\n"
+        "time.sleep(60)\n")
+    _h = subprocess.Popen([sys.executable, "-c", _helper], stdout=subprocess.PIPE, text=True)
+    _gc = None
+    try:
+        _gc = int(_h.stdout.readline())
+        os.killpg(_gc, signal.SIGTERM)
+        _deadline = time.monotonic() + 5
+        while not _stat(_gc).startswith("Z") and time.monotonic() < _deadline:
+            time.sleep(0.02)
+        check("terminate_group diz que o grupo acabou mesmo quando o zumbi não é filho dele "
+              "(EPERM até o fim da graça)",
+              _until.terminate_group(_gc, 1) is True, _stat(_gc))
+    finally:
+        _h.kill()
+        _h.wait()
+        _h.stdout.close()
+        if _gc is not None:
+            try:
+                os.killpg(_gc, signal.SIGKILL)
+            except OSError:
+                pass
+
+
 # ── 3. pid and host ─────────────────────────────────────────────────────────
 
 def test_run_start_and_state_carry_pid_and_host():
@@ -401,14 +485,14 @@ def test_pending_and_doctor_say_to_run_close_dead():
         root, start = night_that_died(tmp)
         m = (pending_ones(root).get("mortos") or [{}])[0]
         check("pendentes traz o comando do fecha-morto",
-              m.get("fechar") == f"cepa-until fecha-morto fila/{run_of(start)}",
+              m.get("fechar") == f"cepa-until close-dead fila/{run_of(start)}",
               str(m))
         p = subprocess.run([sys.executable, str(DOCTOR), "--projeto"],
                            cwd=str(root), capture_output=True, text=True,
                            timeout=120, env=dict(os.environ,
                                                  CEPA_DOCTOR_INSTALL="off"))
         check("...e o doctor também",
-              f"cepa-until fecha-morto fila/{run_of(start)}" in p.stdout,
+              f"cepa-until close-dead fila/{run_of(start)}" in p.stdout,
               p.stdout[-1500:])
 
 
@@ -510,7 +594,7 @@ def test_help_lists_the_subcommands():
     p = subprocess.run([sys.executable, str(CEPA_UNTIL), "--help"],
                        capture_output=True, text=True, timeout=30)
     listed = p.stdout.split("subcommands:", 1)[-1].split("arguments:", 1)[0]
-    for sub in ("aterrissar", "pendentes", "fecha-morto", "decide"):
+    for sub in ("land", "pending", "close-dead", "decide"):
         check(f"--help cita o subcomando {sub}",
               p.returncode == 0 and f"\n  {sub} " in listed, p.stdout[-800:])
         for word in ("--help", "help"):
@@ -528,8 +612,8 @@ def test_help_lists_the_subcommands():
 def test_until_review_checks_the_dead_supervisor():
     plain_text = UNTIL_REVIEW.read_text(encoding="utf-8")
     check("o /common:until-review manda conferir `mortos` no pendentes",
-          "cepa-until pendentes" in plain_text and "mortos" in plain_text
-          and "interrompido" in plain_text and "fecha-morto" in plain_text)
+          "cepa-until pending" in plain_text and "mortos" in plain_text
+          and "interrompido" in plain_text and "close-dead" in plain_text)
 
 
 def main():

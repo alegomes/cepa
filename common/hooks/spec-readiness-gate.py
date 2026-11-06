@@ -42,6 +42,9 @@ Mechanism:
         placeholder.
   - Requires at least one criterion: a ready specification with zero criteria
     is the quietest case of all.
+  - Requires a filled `## Como chegamos aqui` section (2026-11-04, fb-20261104-2):
+    the owner's original question in one sentence. A spec the owner cannot
+    place ("não faço ideia de como viemos parar neste assunto") is not ready.
   - Requires that no open question (`- [ ]`) was left over.
   - The format's own template line (enumeration or <placeholder>) passes,
     otherwise the gate would stop editing the document that defines the format.
@@ -502,6 +505,13 @@ def main():
 
     problems = []
 
+    origin = section(content, "como chegamos aqui")
+    if origin is None or not has_text(origin):
+        problems.append(
+            'falta a seção "## Como chegamos aqui" — a pergunta do dono que '
+            "começou o assunto, em uma frase (fb-20261104-2)"
+        )
+
     criteria = list(criterion_blocks(content))
     if not criteria:
         problems.append(
@@ -542,6 +552,8 @@ def main():
         "[spec-readiness-gate] BLOQUEADO: a especificação se declara "
         f"`Status: {READY}` mas ainda não passa no crivo.\n"
         f"{lines}\n"
+        "  O que o crivo exige do documento: a seção \"Como chegamos aqui\" "
+        "preenchida, com a pergunta do dono que começou o assunto.\n"
         "  O que o crivo exige de CADA critério de sucesso:\n"
         "   · **Surface:** a camada mais externa que o critério nomeia — "
         f"{', '.join(SURFACES)}. Não é o assunto do critério, é onde ele é "

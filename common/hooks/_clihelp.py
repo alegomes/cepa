@@ -409,7 +409,7 @@ def launcher_help(bin_dir):
     ap.add_argument("--prompt", metavar="NAME|PATH",
                     help="appends a system prompt to Claude Code's default one; a name "
                          "is looked up in ~/.claude/cepa-prompts and <repo>/.claude/prompts")
-    ap.add_argument("--prompt-substitui", metavar="NAME|PATH",
+    ap.add_argument("--prompt-replace", metavar="NAME|PATH",
                     help="REPLACES the whole system prompt (use only with a prompt "
                          "that stands on its own)")
     text = ap.render(_screen(sys.stdout))

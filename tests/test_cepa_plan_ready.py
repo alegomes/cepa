@@ -219,10 +219,10 @@ def main():
               [p["id"] for p in beta["prontos"]])
         check("adiados names the deferred items with the reason",
               beta["adiados"] == [{"id": "B-2", "reason": "human_pending"},
-                                  {"id": "B-3", "reason": "bloqueado-antes"},
-                                  {"id": "B-4", "reason": "depende-de-adiado"},
-                                  {"id": "B-5", "reason": "reservado"},
-                                  {"id": "B-6", "reason": "depende-de-adiado"}],
+                                  {"id": "B-3", "reason": "blocked-before"},
+                                  {"id": "B-4", "reason": "depends-on-deferred"},
+                                  {"id": "B-5", "reason": "reserved"},
+                                  {"id": "B-6", "reason": "depends-on-deferred"}],
               beta["adiados"])
 
     with tempfile.TemporaryDirectory() as tmp:

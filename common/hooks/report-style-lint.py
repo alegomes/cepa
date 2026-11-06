@@ -34,18 +34,21 @@ even open the text: conversation, short questions and design discussion are
 left out, because formatting a "yes, it exists" into three blocks would be
 worse than the problem.
 
-Exception (CS-5, 2026-10-08): the INTERVIEW turn of `/common:epic`. There the
+Exception (CS-5, 2026-10-08): the INTERVIEW turn of `/common:epic` (and, since
+2026-11-06, `/common:spec`). There the
 command orders the accepted answer to be written into the document in the same
 turn, so every turn writes, and the hook treated it as a report: in the
 `/common:epic` test transcript it ordered the challenge rewritten into the
 plain-report format, and the question became a numbered item with "I recommend
 yes", which is the menu the interview forbids. The turn is spared when ALL of
-its writes were to `docs/epics/<name>.md`, there was no commit, the last
+its writes were to `docs/epics/<name>.md` (or `docs/spec/<slug>.md`), there was no commit, the last
 paragraph of the speech has a question and the speech carries no mark of the
 report (`**For you:**`, "Technical detail", "Decisions and next steps", or the
 old pt-BR labels). The closing report has those marks and ends in a numbered
-question, so it is still measured. `/common:spec` is outside the exception: its
-turn asks in rounds of up to four, and sparing it is another decision.
+question, so it is still measured. `/common:spec` is inside the exception since
+2026-11-06 (queue item `spec-isento-do-report-style-lint`, CS-5 follow-up): its
+round also writes the document (`docs/spec/<slug>.md`) every turn and ends
+asking, with a recommendation.
 
 Owner task with step by step (2026-10-15). On 2026-10-14 the owner rejected a
 report whose `Pra você:` said "close the two human routes ... and the seven
@@ -76,6 +79,16 @@ session: there the report may indeed ask the user to resolve something. The
 metrics turn only reads, so the scope rule above (turn that changed something)
 would leave the incident unmeasured; that is why, with the session closed, the
 hook reads the report even without a change and measures only this category.
+
+New request reopens the session (2026-11-05, feedbacks fb-20261102-2,
+fb-20261104-4 and fb-20261105-1). The owner made a new request after "Safe to
+exit" ("triage the To Do column", "prepare the cepa-until run") and the lint
+still blocked the closed questions of that new work's report. Now a real user
+prompt after "Safe to exit" that is not a mere acceptance ("sim", "ok",
+"1. sim", "(b)"; see `_is_acceptance`) reopens the session for the lint; a
+later wrap-up + "Safe to exit" closes it again. Slash commands reopen too.
+Rows flagged `isMeta` (the Stop-hook block message, the body a slash command or
+Skill injects) are not the owner talking and never reopen the session.
 
 Reference code without a legend (2026-10-31, feedback fb-20261031-1). The
 owner read a closing list that asked "Mantenho E2 como recomendação de P1, com a
@@ -327,26 +340,79 @@ def _user_text(row) -> str:
     return ""
 
 
-def session_closed(rows) -> bool:
-    """Was `/common:wrap-up` invoked and AFTER that said "Safe to exit"?
+ACCEPT_WORDS = frozenset((
+    "sim", "não", "nao", "ok", "okay", "pode", "podes", "vai", "bora", "yes",
+    "no", "yep", "nope", "claro", "isso", "certo", "beleza", "go", "faz",
+    "faça", "faca", "a", "b", "c"))
 
-    Only the main conversation counts (never `isSidechain`). Invocation: the
-    user line with `<command-name>/common:wrap-up</command-name>` (that is how
-    a slash command lands in the transcript) or starting with
+
+def _is_acceptance(text: str) -> bool:
+    """Is this user prompt a mere acceptance ("sim", "1. sim", "(b)")?
+
+    Every word in a small vocabulary, ignoring punctuation and bare numbers
+    ("1.", "2)"), whatever the length. Anything else -- a sentence with other
+    words -- is a new request. Empty or whitespace-only text is not a request
+    either: it counts as acceptance (fails safe, toward keeping the block).
+    A slash command is never an acceptance
+    either: its line carries tag words (`command-name`, ...) outside the
+    vocabulary.
+
+    Known limit: a real one-word request inside the vocabulary ("faz", "vai")
+    counts as acceptance and does not reopen; that fails safe, toward keeping
+    the block."""
+    t = text.strip().lower()
+    if not t:
+        return True
+    words = [w for w in re.split(r"[\s,;/]+", t) if w]
+    for w in words:
+        w = w.strip(".,;:!?()[]\"'`-")
+        if not w or w.isdigit() or w in ACCEPT_WORDS:
+            continue
+        return False
+    return True
+
+
+def session_closed(rows) -> bool:
+    """Is the session closed by wrap-up, as of the last row?
+
+    State machine over the main conversation (never `isSidechain`):
+    wrap-up invoked, then "Safe to exit" in assistant text -> closed. Invocation:
+    the user line with `<command-name>/common:wrap-up</command-name>` (that is
+    how a slash command lands in the transcript) or starting with
     `/common:wrap-up` or `/wrap-up`; or a `tool_use` of `Skill` whose
     `input.skill` ends in `wrap-up`. "Safe to exit" counts on the same line as
     the invocation or in any later assistant text, including the last report.
     Only assistant text counts: the command body, injected as a user line,
-    also quotes the phrase."""
+    also quotes the phrase.
+
+    Reopening (2026-11-05, fb-20261102-2, fb-20261104-4, fb-20261105-1): once
+    closed, a user row that is not `isMeta`, not a "Stop hook feedback:" line and
+    whose text is not an acceptance (`_is_acceptance`) is a NEW request: closed
+    and invoked go back to False. Empty text, as in a tool_result row, counts as
+    acceptance and never reopens. A later wrap-up + "Safe to exit" closes again. A bare
+    "sim"/"1. sim" accepting an offer does not reopen, nor does an `isMeta` row
+    or one starting with "Stop hook feedback:" (not the owner talking).
+    A wrap-up invocation in a closed session also resets closed/invoked, and
+    `if wrap: invoked = True` re-arms it, so a later "Safe to exit" closes
+    again. A second wrap-up that stops on a lock without saying "Safe to exit"
+    leaves the session open, so its report may ask the owner to resolve the
+    lock, same as the first wrap-up (case (c))."""
     invoked = False
+    closed = False
     for row in rows:
         if row.get("isSidechain"):
             continue
         kind = row.get("type")
         if kind == "user":
             text = _user_text(row)
-            if WRAP_UP_INVOKED.search(text) or re.match(
-                    r"\s*/(?:common:)?wrap-up\b", text):
+            wrap = bool(WRAP_UP_INVOKED.search(text) or re.match(
+                r"\s*/(?:common:)?wrap-up\b", text))
+            human = not row.get("isMeta") \
+                and not text.lstrip().startswith("Stop hook feedback:")
+            if closed and human and not _is_acceptance(text):
+                closed = False
+                invoked = False
+            if wrap:
                 invoked = True
         elif kind == "assistant":
             for block in (row.get("message") or {}).get("content") or []:
@@ -358,11 +424,11 @@ def session_closed(rows) -> bool:
                         invoked = True
                 elif (block.get("type") == "text" and invoked
                       and SAFE_TO_EXIT.search(block.get("text", ""))):
-                    return True
-    return False
+                    closed = True
+    return closed
 
 
-INTERVIEW_DOC = re.compile(r"(^|/)docs/epics/[^/]+\.md$")
+INTERVIEW_DOC = re.compile(r"(^|/)docs/(epics|spec)/[^/]+\.md$")
 
 
 def interview_turn(rows, speech: str) -> bool:

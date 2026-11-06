@@ -62,11 +62,14 @@ CRITERION_OK = """### CS-1: POST /api/v1/assinaturas sem responsável responde 4
 **Teste vermelho:** AssinaturaResourceIT#post_menorSemResponsavel_retorna422 — hoje não existe.
 """
 
+ORIGIN_BLOCK = ('## Como chegamos aqui\n'
+                'O dono perguntou em 2026-11-04: "como assinamos por um menor?"\n\n')
+
 READY_OK = f"""# Especificação: assinatura de menor
 
 **Status:** pronta-para-construir
 
-## Critérios de sucesso
+{ORIGIN_BLOCK}## Critérios de sucesso
 
 {CRITERION_OK}
 """
@@ -276,6 +279,8 @@ def test_multiedit_with_file_path_applies_in_sequence():
 
 TWO_SURFACES_OK = """# Especificação: duas superfícies
 **Status:** pronta-para-construir
+## Como chegamos aqui
+O dono perguntou em 2026-11-04: "como assinamos por um menor?"
 ## Critérios de sucesso
 ### CS-1: POST /api/v1/assinaturas sem responsável responde 422
 **Superfície:** http
@@ -318,6 +323,8 @@ def test_multiedit_replace_all_swaps_ALL_occurrences():
 
 TWO_CS_ONE_INVALID = """# Especificação: duas superfícies
 **Status:** pronta-para-construir
+## Como chegamos aqui
+O dono perguntou em 2026-11-04: "como assinamos por um menor?"
 ## Critérios de sucesso
 ### CS-1: POST /api/v1/assinaturas sem responsável responde 422
 **Superfície:** http
@@ -497,6 +504,33 @@ def test_english_and_old_names_are_valid():
     check("o formato antigo (pronta-para-construir) segue passando", rc == 0, err[:200])
     rc, err = write(READY_OK.replace("**Superfície:** http\n", ""))
     check("...e segue bloqueando", rc == 2, err[:200])
+
+
+def test_ready_requires_how_we_got_here():
+    no_section = READY_OK.replace(ORIGIN_BLOCK, "")
+    check("fixture sem a seção realmente não a tem",
+          "Como chegamos aqui" not in no_section)
+    rc, err = write(no_section)
+    check("pronta sem 'Como chegamos aqui' bloqueia", rc == 2, f"rc={rc}")
+    check("mensagem nomeia 'Como chegamos aqui'",
+          "Como chegamos aqui" in err and "fb-20261104-2" in err, err[:300])
+
+    rc, err = write(READY_OK.replace(
+        ORIGIN_BLOCK.splitlines()[1],
+        "<a pergunta do dono que começou o assunto, em uma frase>"))
+    check("seção só com o placeholder <...> bloqueia",
+          rc == 2 and "Como chegamos aqui" in err, f"rc={rc} err={err[:300]}")
+
+    rc, err = write(READY_OK.replace(ORIGIN_BLOCK.splitlines()[1], ""))
+    check("seção vazia bloqueia",
+          rc == 2 and "Como chegamos aqui" in err, f"rc={rc} err={err[:300]}")
+
+    rc, err = write(READY_EN)
+    check("pronta com a seção preenchida passa", rc == 0, err[:200])
+
+    draft = no_section.replace("pronta-para-construir", "rascunho")
+    rc, err = write(draft)
+    check("rascunho sem a seção passa", rc == 0, f"rc={rc} err={err[:200]}")
 
 
 def main():
