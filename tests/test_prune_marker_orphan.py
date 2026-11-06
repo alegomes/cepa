@@ -8,7 +8,8 @@ else ever removed it. Contract guarded here, firing the real SessionStart hook:
   - session_worktree directory gone        → marker deleted, stderr names it;
   - worktree present but branch ref gone   → marker deleted, stderr names it;
   - worktree and branch both alive         → marker kept (SessionEnd consumes it);
-  - unreadable (non-JSON) marker           → kept (we do not guess).
+  - unreadable (non-JSON) marker           → kept (we do not guess);
+  - branch alive, worktree directory gone  → deleted by the worktree clause alone.
 
 Run with `python3 tests/test_prune_marker_orphan.py`.
 """
@@ -80,6 +81,16 @@ def build(base: Path):
 
     # (d) unreadable marker
     (sdir / "dddddddd-junk.prune-on-exit").write_text("not json {{{")
+
+    # (e) branch alive (with a commit ahead, so nothing else reaps it) but the
+    # worktree directory is gone: ONLY the "worktree gone" clause can fire here.
+    wte = base / "wt-e"
+    git("worktree", "add", "-q", "-b", "session/keep", str(wte), cwd=repo)
+    (wte / "h").write_text("z\n")
+    git("add", "h", cwd=wte)
+    git("commit", "-q", "-m", "h", cwd=wte)
+    git("worktree", "remove", "--force", str(wte), cwd=repo)
+    marker(sdir, "eeeeeeee-dirgone", "session/keep", wte)
     return repo, sdir
 
 
@@ -113,6 +124,10 @@ def main():
               (sdir / "cccccccc-live.prune-on-exit").exists(), err)
         check("(d) marca ilegível: mantida",
               (sdir / "dddddddd-junk.prune-on-exit").exists(), err)
+        check("(e) branch viva, pasta sumida: marca apagada",
+              not (sdir / "eeeeeeee-dirgone.prune-on-exit").exists(), err)
+        check("(e) stderr diz 'worktree gone' para session/keep",
+              "session/keep (worktree gone)" in err, err)
 
     print()
     if failures:
