@@ -1,0 +1,13 @@
+key: tres-portas-c1-CS-4
+status: complete
+criteria:
+  - id: CS-4
+    text: "`cepa-plan decisions` lista, por arquivo, as decisões de 'Decided without asking' separadas em com e sem veredito; sem argumento varre docs/spec/ e docs/epics/ (item 3). Red test: spec (2 decisões, 1 vetada) + Epic (1 sem marcador): sai 0, imprime os dois caminhos com '1 sem veredito' e o texto das pendentes; `<spec> --json` devolve as duas linhas com veredito só na vetada; `inexistente.md` sai diferente de 0. Decididos #10 (texto por padrão, --json, grupo 'reading' da ajuda) e #7 (<n> = ordinal como decisions numera)."
+    altitude: cli
+    surface: "subprocesso `python3 common/bin/cepa-plan decisions [--repo DIR] [arquivo...] [--json]` em repo temporário, com stdout, stderr e código de saída"
+    test: "tests/test_cepa_plan_decisions.py (dirige o executável como subprocesso; cobre varredura sem argumento, '1 sem veredito' x2, texto das pendentes, linha vetada fora das pendentes, --json com verdict None/'vetada', ordinal e linha, arquivo explícito não varre os outros, ordinal contando as decididas (caso invertido: pendente é #2, não #1), arquivo sem seção (texto e json null), inexistente.md nonzero com o nome no stderr, repo vazio)"
+    layer: cli
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_decisions.py -> 26 checks 'ok', 0 FAIL, 'all ok' (N>0). Verificação manual: `python3 common/bin/cepa-plan --help` lista 'decisions' no grupo 'reading'; `cepa-plan decisions --repo .` roda no repo real e numera as 15 decisões da própria spec (#10 em linha 118)."
+    verdict: complete
+status_note: "Altitude cli provada pelo executável real. Itens do spec cobertos: #7 (ordinal conta todas as decisões do arquivo; o código numera res.pending + res.decided ordenado por linha, e o teste invertido trava isso), #10 (texto por padrão, --json, grupo reading). Observação não bloqueante: o grupo 'reading' da ajuda não é asserido pelo teste; foi conferido por mim na ajuda real, mas uma regressão ali não quebraria o teste. Sem asserção enfraquecida; sem deferral."
