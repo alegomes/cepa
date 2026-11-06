@@ -142,7 +142,7 @@ def test_red_build_takes_the_item_off_the_branch_without_losing_the_commits():
               (end.get("entregues"), end.get("travados"),
                end.get("verify_vermelho")) == (2, 1, 2), str(end))
         check("o resumo separa entregues de travados",
-              "2 entregue(s) · 1 travado(s)" in p.stdout, p.stdout[-800:])
+              "2 delivered · 1 stuck" in p.stdout, p.stdout[-800:])
 
 
 def test_done_without_commit_on_the_night_branch_is_pointed_out():
@@ -157,10 +157,10 @@ def test_done_without_commit_on_the_night_branch_is_pointed_out():
         check("o registro marca done_sem_commit",
               any(e["evento"] == "done_sem_commit" and e["id"] == "a1"
                   for e in ev), str(ev))
-        check("...e o resumo aponta", "sem commit na branch da noite" in p.stdout,
+        check("...e o resumo aponta", "with no commit on the run branch" in p.stdout,
               p.stdout[-600:])
         check("sem nenhum commit, a branch da noite some",
-              "removi" in p.stdout
+              "removed `" in p.stdout
               and not git(root, "branch", "--list", "until/*"), p.stdout[-400:])
 
 
@@ -223,7 +223,7 @@ def test_mvnw_at_root_becomes_the_default_build():
         p, _ = run_until(root, binv, plan_of(root), ["--for", "2h", "--dry-run",
                                                   "--verify", "x"])
         # explicit --verify wins; without it, the banner shows mvnw.
-        check("--verify explícito ganha do mvnw", "x depois de cada item" in
+        check("--verify explícito ganha do mvnw", "x after each done item" in
               p.stdout, p.stdout)
         env_args = ["--for", "2h", "--dry-run"]
         p = subprocess.run(
@@ -620,9 +620,9 @@ def test_4b_red_return_gives_the_item_back_to_pending_with_a_note():
         check("...como pending, com a lateral no recado",
               f"{branch}-vermelho-a1" in note, note)
         check("...o motivo e o número da volta",
-              "saiu 1" in note and "volta 1" in note, note)
+              "exited 1" in note and "return 1 of" in note, note)
         check("...e que desligar teste não conserta",
-              "desabilitar" in note.lower(), note)
+              "disabling" in note.lower(), note)
         check("o registro grava volta_vermelha",
               any(e["evento"] == "volta_vermelha" and e["id"] == "a1"
                   for e in ev), str(ev))
@@ -818,8 +818,8 @@ def test_2_run_state_running_then_waiting_owner_before_the_analysis():
                   for f in stays), str(stays))
         check("o terminal imprime a ação numerada",
               "1. aterrissar" in p.stdout, p.stdout[-900:])
-        check("...e o bloco 'Fica com você'",
-              "Fica com você" in p.stdout, p.stdout[-900:])
+        check("...e o bloco 'Left with you'",
+              "Left with you" in p.stdout, p.stdout[-900:])
         check("o resumo não sugere o /common:worktree-merge",
               "worktree-merge" not in p.stdout, p.stdout[-900:])
 
@@ -833,12 +833,12 @@ def test_2_each_item_appears_once_in_the_summary():
         p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", VERIFY],
                     extra_env={"FAKE_QUEBRA": "a2"})
-        end = p.stdout[p.stdout.find("── fim"):]
+        end = p.stdout[p.stdout.find("── ended at"):]
         for ident in ("a1", "a2", "a3"):
             check(f"{ident} aparece uma vez na lista de itens do fim",
                   end.count(f"- {ident}:") == 1, end)
         check("a linha do a2 diz volta vermelha e a lateral",
-              "vermelho-a2" in end and "volta vermelha" in end, end)
+              "vermelho-a2" in end and "red return" in end, end)
 
 
 def test_2_run_without_commit_ends_closed_without_action():
@@ -909,7 +909,7 @@ def test_1_attempt_of_the_previous_run_also_goes_to_the_side_branch():
                     ["--for", "2h", "--verify", VERIFY], extra_env=env)
         runs = run_ids(root)
         check("o run B herdou a branch do run A",
-              len(runs) == 2 and "herda" in p.stdout, p.stdout[:900])
+              len(runs) == 2 and "inherits" in p.stdout, p.stdout[:900])
         check("...e o a2 fechou verde nele",
               status(root, "a2")["status"] == "done", str(status(root, "a2")))
         night_b = git(root, "log", "--format=%s", runs[-1]).splitlines()

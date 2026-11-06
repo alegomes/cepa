@@ -147,7 +147,7 @@ def test_network_drop_waits_for_the_return_and_resumes_the_same_item():
               run_end(root)["motivo"] == "fim-da-fila"
               and run_end(root)["quedas_de_rede"] == 1, str(run_end(root)))
         check("o relatório lista a queda como não-falha",
-              "Quedas de rede (1)" in p.stdout and "SEM REDE" in p.stdout,
+              "Network drops (1)" in p.stdout and "NO NETWORK" in p.stdout,
               p.stdout[-800:])
 
 
@@ -203,7 +203,7 @@ def test_three_drops_in_a_row_stop_the_run_without_blaming_the_item():
               status(plan_of(root)) == {"a1": "pending"},
               str(status(plan_of(root))))
         check("o detalhe explica que a sonda vê rede e o claude não",
-              "3ª queda seguida" in end["detalhe"], end["detalhe"])
+              "drop 3 in a row" in end["detalhe"], end["detalhe"])
         events = [e for e in ledger_of(root) if e.get("evento") == "queda_de_rede"]
         check("run_end conta as 3 quedas, inclusive a que parou o run",
               end["quedas_de_rede"] == len(events) == 3,
@@ -230,11 +230,11 @@ def test_network_that_does_not_return_within_the_window_stops_the_run():
         check("esperou até o prazo menos a reserva, não além",
               5 <= spent <= 14, f"{spent:.1f}s")
         check("o detalhe diz até quando esperou",
-              "não voltou até" in end["detalhe"], end["detalhe"])
+              "was not back by" in end["detalhe"], end["detalhe"])
         check("run_end conta a queda da qual a rede não voltou",
               end["quedas_de_rede"] == 1, str(end))
         check("o resumo do fim lista a queda sem volta",
-              "não voltou" in p.stdout and "Quedas de rede (1)" in p.stdout,
+              "not back" in p.stdout and "Network drops (1)" in p.stdout,
               p.stdout[-600:])
 
 
@@ -259,7 +259,7 @@ def test_drop_near_the_end_of_the_window_stops_without_probing():
               and drop and drop[0]["espera"] is False,
               f"{len(calls)} chamadas · {end} · {drop}")
         check("o detalhe diz que não sobra tempo, não que esperou",
-              "não sobra tempo" in end["detalhe"], end["detalhe"])
+              "no time is left" in end["detalhe"], end["detalhe"])
         check("run_end conta a queda mesmo sem ter esperado",
               end["quedas_de_rede"] == 1, str(end))
         check("não ficou sondando", spent < 9, f"{spent:.1f}s")

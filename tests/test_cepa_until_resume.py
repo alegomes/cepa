@@ -152,7 +152,7 @@ def test_item_that_committed_without_closing_counts_as_progress():
               "· disjuntor" not in p.stdout and len(calls) == 2,
               p.stdout[-600:])
         check("a tela diz que andou sem fechar",
-              "commit(s) sem fechar" in p.stdout, p.stdout[-600:])
+              "commit(s) without closing" in p.stdout, p.stdout[-600:])
 
 
 def test_item_without_commit_and_without_outcome_remains_without_progress():
@@ -188,7 +188,7 @@ def test_resuming_the_orphan_reservation_inherits_the_previous_run_commits():
               [(h.get("branch"), h.get("itens"), h.get("commits"))
                for h in inherited] == [(OLD_BRANCH, ["a1"], 1)], str(start))
         check("...e a tela avisa", OLD_BRANCH in p.stdout
-              and "herd" in p.stdout, p.stdout[:1500])
+              and "inherit" in p.stdout, p.stdout[:1500])
         branch = start[0]["branch"] if start else "?"
         log = git(root, "log", "--format=%s", branch).splitlines()
         check("a branch nova tem o commit antigo e o novo",

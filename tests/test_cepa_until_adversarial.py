@@ -180,7 +180,7 @@ def test_claude_corrupted_midway_is_counted_failure_not_traceback():
         check("e o run encerra pelo disjuntor, com registro completo",
               end["motivo"] == "disjuntor", str(end))
         check("...e o relatório nomeia que nem deu para lançar",
-              "lançar" in p.stdout, p.stdout[-500:])
+              "launch" in p.stdout, p.stdout[-500:])
 
 
 def test_exhausted_item_that_cannot_be_blocked_ends_without_loop():
@@ -211,7 +211,7 @@ def test_exhausted_item_that_cannot_be_blocked_ends_without_loop():
               str(end))
         check("...e o motivo nomeia o item e o que falhou",
               "a1" in (end.get("detalhe") or "")
-              and "tentativas" in (end.get("detalhe") or ""), str(end))
+              and "attempts" in (end.get("detalhe") or ""), str(end))
         ev = [e for e in ledger_of(root) if e.get("evento") == "esgotado"]
         check("...o registro guarda que o bloqueio NÃO pegou",
               ev and ev[-1].get("bloqueado") is False, str(ev))

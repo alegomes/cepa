@@ -216,7 +216,7 @@ from pathlib import Path
 try:
     import yaml
 except ImportError:
-    print("cepa-until precisa de PyYAML (pip install pyyaml)", file=sys.stderr)
+    print("cepa-until needs PyYAML (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
 HERE = Path(__file__).resolve().parent
@@ -295,10 +295,10 @@ def javascript_verify(repo):
         steps.append(f"{pm} run build")
     if has_test:
         steps.append(f"{pm} test")
-    scripts_seen = " e ".join(n for n, t in (("build", has_build),
+    scripts_seen = " and ".join(n for n, t in (("build", has_build),
                                              ("test", has_test)) if t)
-    origin = (f"achei `package.json` com {scripts_seen}"
-              + (f" e `{lock}`" if lock else ", sem arquivo de lock"))
+    origin = (f"found `package.json` with {scripts_seen}"
+              + (f" and `{lock}`" if lock else ", no lock file"))
     return " && ".join(steps), origin
 
 # The end-of-run questions are asked on a terminal, but the owner is usually
@@ -516,11 +516,11 @@ def parse_duration(text, flag="--for"):
     m = _DUR.match(text.strip())
     if not m:
         raise ValueError(
-            f"{flag} {text!r} não é uma duração: use '12h' ou '90m' (a unidade "
-            "é obrigatória)")
+            f"{flag} {text!r} is not a duration: use '12h' or '90m' (the unit "
+            "is required)")
     value, unit = float(m.group(1)), m.group(2).lower()
     if value <= 0:
-        raise ValueError(f"{flag} {text!r} não é positivo")
+        raise ValueError(f"{flag} {text!r} is not positive")
     return timedelta(hours=value) if unit == "h" else timedelta(minutes=value)
 
 
@@ -530,7 +530,7 @@ def parse_until(text, now):
         hh, mm = text.strip().split(":")
         target = now.replace(hour=int(hh), minute=int(mm), second=0, microsecond=0)
     except Exception:
-        raise ValueError(f"--until {text!r} não é um horário: use 'HH:MM'")
+        raise ValueError(f"--until {text!r} is not a time of day: use 'HH:MM'")
     if target <= now:
         target += timedelta(days=1)
     return target
@@ -618,15 +618,15 @@ SCREEN = Screen()
 # What goes in front of each step of an item, judging by what the text says. Outside
 # a terminal it is always the old `→`.
 _STEPS = [
-    (r"^verde na 2ª", "↻", "amarelo"),
-    (r"^(verde|done)\b", "✓", "verde"),
-    (r"^vermelho \(", "↻", "amarelo"),
-    (r"^(VERMELHO|SEM PROGRESSO|SEM REDE|LIMITE DE USO|`done` sem|\d+ tentativa)",
+    (r"^green on the 2nd", "↻", "amarelo"),
+    (r"^(green|done)\b", "✓", "verde"),
+    (r"^red \(", "↻", "amarelo"),
+    (r"^(RED|NO PROGRESS|NO NETWORK|ACCOUNT USAGE CAP|`done` with no|\d+ attempt)",
      "✗", "vermelho"),
     (r"^(blocked|`blocked`|dropped)", "⊘", "vermelho"),
-    (r"^(sondo|espero)", "⏳", "amarelo"),
-    (r"^o item deixou arquivos", "⚠", "amarelo"),
-    (r"^build completo:", "▸", "cinza"),
+    (r"^(probing|waiting)", "⏳", "amarelo"),
+    (r"^the item left uncommitted", "⚠", "amarelo"),
+    (r"^full build:", "▸", "cinza"),
 ]
 
 
@@ -649,7 +649,7 @@ def step(text):
         if re.match(default_value, text):
             glyph, color = g, c
             break
-    if "rota humana" in text and color == "verde":
+    if "human route" in text and color == "verde":
         glyph, color = "◐", "amarelo"
     head_, _, rest = text.partition(" (")
     if rest:
@@ -700,14 +700,14 @@ def query_queue(name, repo):
              "--max", "1", "--repo", str(repo), "--json"],
             capture_output=True, text=True, timeout=60)
     except subprocess.TimeoutExpired:
-        return None, "o `cepa-plan queue` não respondeu em 60s"
+        return None, "`cepa-plan queue` did not answer within 60s"
     if p.returncode != 0:
         return None, (p.stderr or p.stdout or "").strip() or \
-            f"`cepa-plan queue` saiu {p.returncode}"
+            f"`cepa-plan queue` exited {p.returncode}"
     try:
         return json.loads(p.stdout), None
     except json.JSONDecodeError as e:
-        return None, f"o `cepa-plan queue` não devolveu JSON ({e})"
+        return None, f"`cepa-plan queue` did not return JSON ({e})"
 
 
 # How much of a blocked item's `evidence` the end-of-run summary shows. The command the
@@ -730,11 +730,11 @@ def read_item(plan_path, ident):
     try:
         plan = yaml.safe_load(Path(plan_path).read_text(encoding="utf-8"))
     except Exception as e:
-        return None, f"não consegui reler {plan_path}: {e}"
+        return None, f"could not re-read {plan_path}: {e}"
     for it in (plan or {}).get("items") or []:
         if isinstance(it, dict) and str(it.get("id")) == str(ident):
             return it, None
-    return None, f"o item {ident} sumiu do plano durante o run"
+    return None, f"item {ident} vanished from the plan during the run"
 
 
 # ── running an item ─────────────────────────────────────────────────────────
@@ -1074,16 +1074,16 @@ def block_item(name, repo, ident, attempts, side_branch=None):
     and `finish` already clears `claimed_by` — the orphan reservation doesn't hang around.
     """
     evidence = (
-        f"{attempts} tentativas seguidas do `cepa-until` na mesma janela sem "
-        "tirar o item do lugar. Isto NÃO é veredito sobre o trabalho nem "
-        "condição de fora: é o supervisor tirando o item da frente para a fila "
-        "andar. A saída do `claude` de cada tentativa está no `.log` do run; "
-        "devolva o item para `pending` quando souber o que travou.")
+        f"{attempts} consecutive `cepa-until` attempts in the same window without "
+        "moving the item. This is NOT a verdict on the work nor an outside "
+        "condition: it is the supervisor taking the item out of the way so the queue "
+        "keeps moving. The `claude` output of each attempt is in the run's `.log`; "
+        "put the item back to `pending` once you know what got it stuck.")
     if side_branch:
-        evidence += (f" Os commits das tentativas, que não passaram pelo "
-                      f"build do supervisor, estão em `{side_branch}`.")
-    impede = (f"o executor tentou {attempts} vezes seguidas e o item não "
-              "andou. Ninguém investigou o motivo ainda.")
+        evidence += (f" The attempts' commits, which did not go through the "
+                      f"supervisor's build, are in `{side_branch}`.")
+    impede = (f"the executor tried {attempts} times in a row and the item did not "
+              "move. Nobody has investigated why yet.")
     return finish_item(name, repo, ident, "blocked", evidence, impede)
 
 
@@ -1244,7 +1244,7 @@ def read_branch(repo):
     except Exception as e:
         return None, str(e)
     if p.returncode != 0:
-        return None, (p.stderr.strip() or f"`git rev-parse` saiu {p.returncode}")
+        return None, (p.stderr.strip() or f"`git rev-parse` exited {p.returncode}")
     return p.stdout.strip(), None
 
 
@@ -1333,7 +1333,7 @@ def open_run_branch(repo, run_id, inheritance=()):
     code, output = git(["worktree", "add", "-q", "-b", branch, str(tree),
                          "HEAD"], repo)
     if code != 0:
-        return None, branch, output or f"`git worktree add` saiu {code}"
+        return None, branch, output or f"`git worktree add` exited {code}"
     for h in inheritance:
         code, output = git(["merge", "--no-edit", h["branch"]], tree)
         if code != 0:
@@ -1341,12 +1341,12 @@ def open_run_branch(repo, run_id, inheritance=()):
             git(["worktree", "remove", "--force", str(tree)], repo)
             git(["branch", "-D", branch], repo)
             return None, branch, (
-                f"a branch `{h['branch']}` guarda commits de "
-                f"{', '.join(h['itens'])}, que ficou pela metade no run "
-                f"anterior, e não mescla com o HEAD do clone:\n{output[-800:]}\n"
-                f"Mescle à mão no clone (`git merge {h['branch']}`), resolva o "
-                "conflito e rode de novo. Começar sem ela faria o item "
-                "recomeçar do zero")
+                f"branch `{h['branch']}` holds commits of "
+                f"{', '.join(h['itens'])}, left half done in the previous "
+                f"run, and it does not merge with the clone's HEAD:\n{output[-800:]}\n"
+                f"Merge it by hand in the clone (`git merge {h['branch']}`), resolve the "
+                "conflict and run again. Starting without it would make the item "
+                "start over from scratch")
     return tree, branch, None
 
 
@@ -1361,37 +1361,37 @@ def repair_link(repo, tree, branch):
     HEAD without touching the files. Returns None if repaired, or the reason."""
     pointer = Path(tree) / ".git"
     if not pointer.is_file():
-        return f"`{pointer}` não existe: a worktree da noite sumiu do disco"
+        return f"`{pointer}` does not exist: the run worktree vanished from disk"
     line = pointer.read_text(encoding="utf-8", errors="replace").strip()
     if not line.startswith("gitdir:"):
-        return f"`{pointer}` não aponta para um gitdir: {line[:120]!r}"
+        return f"`{pointer}` does not point to a gitdir: {line[:120]!r}"
     admin = Path(line[len("gitdir:"):].strip())
     if not admin.is_absolute():
         admin = (Path(tree) / admin).resolve()
     code, common_dir = git(["rev-parse", "--git-common-dir"], repo)
     if code != 0:
-        return f"o clone também não responde ao git: {common_dir}"
+        return f"the clone does not answer git either: {common_dir}"
     common_dir = Path(common_dir) if Path(common_dir).is_absolute() else Path(repo) / common_dir
     home = common_dir.resolve() / "worktrees"
     if admin.parent.resolve() != home:
-        return (f"`{pointer}` aponta para `{admin}`, fora de `{home}`: "
-                "não recrio ligação em lugar que não é do clone")
+        return (f"`{pointer}` points to `{admin}`, outside `{home}`: "
+                "I will not recreate a link in a place that is not the clone's")
     if admin.exists():
-        return f"`{admin}` existe e mesmo assim o git não responde"
+        return f"`{admin}` exists and git still does not answer"
     code, output = git(["rev-parse", "--verify", "-q", f"refs/heads/{branch}"],
                         repo)
     if code != 0:
-        return f"a branch `{branch}` não existe mais no clone"
+        return f"branch `{branch}` no longer exists in the clone"
     try:
         admin.mkdir(parents=True)
         (admin / "HEAD").write_text(f"ref: refs/heads/{branch}\n")
         (admin / "commondir").write_text(f"{os.path.relpath(common_dir.resolve(), admin)}\n")
         (admin / "gitdir").write_text(f"{pointer.resolve()}\n")
     except OSError as e:
-        return f"não consegui recriar `{admin}`: {e}"
+        return f"could not recreate `{admin}`: {e}"
     code, output = git(["reset", "-q"], tree)
     if code != 0:
-        return f"recriei `{admin}`, mas `git reset` saiu {code}: {output}"
+        return f"recreated `{admin}`, but `git reset` exited {code}: {output}"
     return None
 
 
@@ -1441,7 +1441,7 @@ def stash_leftover(tree, run_id, ident):
     for line in items_list.splitlines():
         if line.endswith(tag):
             return line.split()[0], None
-    return None, "stash criado mas não encontrado pela etiqueta"
+    return None, "stash created but not found by its label"
 
 
 def verify_command(repo, explicit, waived):
@@ -1452,12 +1452,12 @@ def verify_command(repo, explicit, waived):
         return explicit, "--verify"
     if (repo / ".claude" / "no-build").exists():
         if (repo / SUITE_WITHOUT_BUILD).exists():
-            return SUITE_WITHOUT_BUILD, (f"achei `{SUITE_WITHOUT_BUILD}`; o "
-                                     "`.claude/no-build` só dispensa o build")
+            return SUITE_WITHOUT_BUILD, (f"found `{SUITE_WITHOUT_BUILD}`; "
+                                     "`.claude/no-build` only waives the build")
         return None, ".claude/no-build"
     for file_path, command in VERIFY_BY_FILE:
         if (repo / file_path).exists():
-            return command, f"achei `{file_path}` na raiz"
+            return command, f"found `{file_path}` at the root"
     js = javascript_verify(repo)
     if js:
         return js
@@ -1477,7 +1477,7 @@ def run_verify(command, tree, limit_sec, log, on_launch=None):
                                     stdin=subprocess.DEVNULL,
                                     start_new_session=True)
         except OSError as e:
-            return False, time.monotonic() - start, f"não lançou: {e}"
+            return False, time.monotonic() - start, f"did not launch: {e}"
         if on_launch:
             on_launch(proc.pid)
         if wait_for_child(proc, limit_sec, "build"):
@@ -1488,9 +1488,9 @@ def run_verify(command, tree, limit_sec, log, on_launch=None):
             except Exception:
                 pass
             proc.wait()
-            return False, time.monotonic() - start, "não terminou dentro da janela"
+            return False, time.monotonic() - start, "did not finish within the window"
     spent = time.monotonic() - start
-    return code == 0, spent, (None if code == 0 else f"saiu {code}")
+    return code == 0, spent, (None if code == 0 else f"exited {code}")
 
 
 def undo_item(repo, tree, run_id, ident, since, in_the_middle=(),
@@ -1507,16 +1507,16 @@ def undo_item(repo, tree, run_id, ident, since, in_the_middle=(),
     `done` since then (`in_the_middle`), because the reset would erase that item's
     green work."""
     if not since:
-        return None, f"não li o HEAD do começo da 1ª tentativa do {ident}"
+        return None, f"could not read the HEAD at the start of {ident}'s 1st attempt"
     if in_the_middle:
         return None, (
-            f"voltar a branch da noite para {since[:10]}, o começo da 1ª "
-            f"tentativa do {ident}, apagaria o trabalho de "
-            f"{', '.join(in_the_middle)}, que entrou depois dele")
+            f"resetting the run branch to {since[:10]}, the start of {ident}'s 1st "
+            f"attempt, would erase the work of "
+            f"{', '.join(in_the_middle)}, which came in after it")
     code, _ = git(["merge-base", "--is-ancestor", since, "HEAD"], tree)
     if code != 0:
-        return None, (f"{since[:10]}, o começo da 1ª tentativa do {ident}, "
-                      "não é ancestral do HEAD da branch da noite")
+        return None, (f"{since[:10]}, the start of {ident}'s 1st attempt, "
+                      "is not an ancestor of the run branch's HEAD")
     # The 2nd return of the same item in the same run can't overwrite the side branch of the
     # 1st: it holds commits the agent may not have used.
     side_branch = (f"until/{run_id}-{suffix}-{ident}"
@@ -1591,7 +1591,7 @@ def clean_side_branches(repo, plan_path, destination, run_branch):
                                    timeout=120)
             error = (None if p.returncode == 0 else
                     (p.stderr.decode("utf-8", "replace").strip()
-                     or f"format-patch saiu {p.returncode}"))
+                     or f"format-patch exited {p.returncode}"))
         except (OSError, subprocess.TimeoutExpired) as e:
             error = str(e)
         if error:
@@ -1636,10 +1636,10 @@ def finish_item(name, repo, ident, status, evidence, impede=None, owner=None):
             + flags,
             capture_output=True, text=True, timeout=60)
     except (subprocess.TimeoutExpired, OSError) as e:
-        return f"o `cepa-plan finish` não respondeu: {e}"
+        return f"`cepa-plan finish` did not answer: {e}"
     if p.returncode != 0:
         return (p.stderr or p.stdout or "").strip() or \
-            f"`cepa-plan finish` saiu {p.returncode}"
+            f"`cepa-plan finish` exited {p.returncode}"
     return None
 
 
@@ -1658,11 +1658,11 @@ def analyze_run(repo, tree, ledger, permissions):
                            text=True, timeout=ANALYSIS_LIMIT_SEC,
                            stdin=subprocess.DEVNULL, env=item_environment())
     except subprocess.TimeoutExpired:
-        return None, f"não terminou em {ANALYSIS_LIMIT_SEC // 60} min"
+        return None, f"did not finish within {ANALYSIS_LIMIT_SEC // 60} min"
     except OSError as e:
-        return None, f"não lançou: {e}"
+        return None, f"did not launch: {e}"
     if p.returncode != 0 or not p.stdout.strip():
-        return None, (p.stderr or "").strip()[-300:] or f"saiu {p.returncode}"
+        return None, (p.stderr or "").strip()[-300:] or f"exited {p.returncode}"
     destination.write_text(p.stdout, encoding="utf-8")
     return destination, None
 
@@ -1743,7 +1743,7 @@ def cmd_land(argv):
     ap = land_parser()
     a = ap.parse_args(argv)
     if "/" not in a.target:
-        print("cepa-until aterrissar: o alvo é <fila>/<run> (ex.: "
+        print("cepa-until aterrissar: the target is <queue>/<run> (e.g. "
               "cepa/2026-09-28-2137)", file=sys.stderr)
         return 2
     queue, run_id = a.target.split("/", 1)
@@ -1753,7 +1753,7 @@ def cmd_land(argv):
     try:
         item_states = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
-        print(f"cepa-until aterrissar: não li o estado do run em {path} "
+        print(f"cepa-until aterrissar: could not read the run state at {path} "
               f"({e})", file=sys.stderr)
         return 2
 
@@ -1770,17 +1770,17 @@ def cmd_land(argv):
         return 3
 
     if item_states.get("estado") == "aterrissado":
-        print(f"o run {run_id} já foi aterrissado "
+        print(f"run {run_id} was already landed "
               f"({(item_states.get('aterrissagem') or {}).get('quando', '?')})")
         return 0
     if item_states.get("estado") != "esperando-dono":
-        return refuse(f"o run {run_id} está `{item_states.get('estado')}`, e só se "
-                      "aterrissa um run `esperando-dono`")
+        return refuse(f"run {run_id} is `{item_states.get('estado')}`, and only a "
+                      "run in `esperando-dono` can be landed")
     action = next((x for x in item_states.get("acoes") or []
                  if x.get("id") == "aterrissar"), None)
     if not action:
-        return refuse(f"o run {run_id} não propôs `aterrissar` (a branch da "
-                      "noite ficou sem commit)")
+        return refuse(f"run {run_id} did not propose `aterrissar` (the run "
+                      "branch ended with no commit)")
     branch, destination = item_states.get("branch"), action.get("destino")
     sha, tree = action.get("sha"), action.get("arvore")
     landing_info = dict(item_states.get("aterrissagem") or {})
@@ -1792,29 +1792,29 @@ def cmd_land(argv):
 
     current = current_branch(repo)
     if current != destination:
-        return refuse(f"o clone está em `{current}`, e a ação foi proposta para "
-                      f"`{destination}`. Volte para `{destination}` e rode de novo")
+        return refuse(f"the clone is on `{current}`, and the action was proposed for "
+                      f"`{destination}`. Switch back to `{destination}` and run again")
     if not already_merged:
         code, now = git(["rev-parse", branch], repo)
         if code != 0:
-            return refuse(f"a branch da noite `{branch}` não existe mais")
+            return refuse(f"the run branch `{branch}` no longer exists")
         if now != sha:
             return refuse(
-                f"a branch da noite `{branch}` mudou desde que a ação foi "
-                f"proposta ({sha[:10]} → {now[:10]}). O que entrou depois "
-                "do fim do run não passou pelo build do supervisor; confira "
-                "e rode um novo run, ou volte a branch para o SHA proposto")
+                f"the run branch `{branch}` changed since the action was "
+                f"proposed ({sha[:10]} → {now[:10]}). What came in after the "
+                "run ended did not go through the supervisor's build; check it "
+                "and start a new run, or reset the branch to the proposed SHA")
 
-    print(f"aterrissar `{branch}` em `{destination}` ({repo})")
-    print(f"  efeito : {action.get('frase')}")
-    print(f"  build  : {item_states.get('verify') or 'nenhum (o run dispensou o build)'}")
-    print("  push   : " + ("sim, para o upstream de "
+    print(f"land `{branch}` on `{destination}` ({repo})")
+    print(f"  effect : {action.get('frase')}")
+    print(f"  build  : {item_states.get('verify') or 'none (the run waived the build)'}")
+    print("  push   : " + ("yes, to the upstream of "
                            f"`{destination}`" if has_upstream(repo) else
-                           f"não (`{destination}` não tem upstream)"))
+                           f"no (`{destination}` has no upstream)"))
     if already_merged:
-        print("  merge  : já feito; retomo do build")
+        print("  merge  : already done; resuming from the build")
     if not a.yes:
-        print(f"\nnada foi feito. Para executar: cepa-until aterrissar "
+        print(f"\nnothing was done. To execute: cepa-until aterrissar "
               f"{a.target} --yes")
         return 0
 
@@ -1827,13 +1827,13 @@ def cmd_land(argv):
                            capture_output=True, text=True, timeout=60)
         guard_output = g.stdout.strip()
     except (OSError, subprocess.TimeoutExpired) as e:
-        return refuse(f"não consegui rodar o guarda de dono único: {e}")
+        return refuse(f"could not run the single-owner guard: {e}")
     if guard_output.startswith("BLOCK"):
-        return refuse("outra sessão viva está numa das branches:\n" + guard_output)
+        return refuse("another live session is on one of the branches:\n" + guard_output)
 
     dirty_files = dirty_tree(repo)
     if dirty_files is None:
-        return refuse("não consegui ler o `git status` do clone")
+        return refuse("could not read the clone's `git status`")
     # The queue lives in the clone and the run itself updates it (`cepa-plan finish`):
     # after every run it is modified. The night branch doesn't touch it, and
     # the merge and the `reset --keep` preserve it.
@@ -1842,16 +1842,16 @@ def cmd_land(argv):
     dirty_queue = [l for l in dirty_files if l.endswith(clone_queue)]
     dirty_files = [l for l in dirty_files if l not in dirty_queue]
     if dirty_files:
-        return refuse("o clone tem mudança sem commit; um merge só leva "
-                      "histórico commitado:\n  " + "\n  ".join(dirty_files[:10]))
+        return refuse("the clone has uncommitted changes; a merge only carries "
+                      "committed history:\n  " + "\n  ".join(dirty_files[:10]))
     if tree and Path(tree).exists() and dirty_tree(tree):
-        return refuse(f"a worktree da noite ({tree}) tem mudança sem commit")
+        return refuse(f"the run worktree ({tree}) has uncommitted changes")
 
     if not already_merged:
         return_value = head_of(repo)
         landing_info.update({"retorno": return_value, "destino": destination})
         record(aterrissagem=landing_info)
-        print(f"\nponto de retorno: `{destination}` em {return_value[:10]}")
+        print(f"\nreturn point: `{destination}` at {return_value[:10]}")
         code, output = git(["merge", "--no-ff", "--no-edit", branch], repo)
         if code != 0:
             conflicts = git(["diff", "--name-only", "--diff-filter=U"],
@@ -1859,22 +1859,22 @@ def cmd_land(argv):
             if conflicts:
                 landing_info["parou"] = "conflito"
                 record(aterrissagem=landing_info)
-                print("CONFLITO no merge, nos arquivos:")
+                print("CONFLICT in the merge, in these files:")
                 for c in conflicts:
                     print(f"  {c}")
-                print("resolva, `git add`, `git commit` para concluir o merge, "
-                      f"e rode `cepa-until aterrissar {a.target} --yes` de novo: "
-                      "ele retoma do build")
+                print("resolve, `git add`, `git commit` to conclude the merge, "
+                      f"and run `cepa-until aterrissar {a.target} --yes` again: "
+                      "it resumes from the build")
                 return 4
             git(["merge", "--abort"], repo)
-            return refuse(f"o merge falhou: {output}")
+            return refuse(f"the merge failed: {output}")
     landing_info["merge"] = head_of(repo)
     landing_info.pop("parou", None)
     record(aterrissagem=landing_info)
 
     verify = item_states.get("verify")
     if verify:
-        print(f"build completo: {verify}")
+        print(f"full build: {verify}")
         log = path.parent / f"{run_id}.log"
         green, sec, reason = run_verify(verify, repo, 4 * 3600, log)
         if not green:
@@ -1885,28 +1885,28 @@ def cmd_land(argv):
             if return_value and code == 0 and first_item == return_value:
                 # `--keep`, not `--hard`: preserves the queue modified by the run.
                 git(["reset", "-q", "--keep", return_value], repo)
-                back = f"`{destination}` voltou para {return_value[:10]}"
+                back = f"`{destination}` went back to {return_value[:10]}"
             else:
-                back = (f"`{destination}` NÃO foi desfeito (o HEAD não é o merge "
-                         "deste comando); confira à mão")
+                back = (f"`{destination}` was NOT undone (HEAD is not this "
+                         "command's merge); check by hand")
             landing_info.update({"parou": "build-vermelho", "motivo": reason})
             landing_info.pop("merge", None)
             record(aterrissagem=landing_info)
-            print(f"BUILD VERMELHO depois do merge ({reason}): {back}, sem "
-                  f"push. A saída está em {log}")
+            print(f"RED BUILD after the merge ({reason}): {back}, no "
+                  f"push. The output is in {log}")
             return 5
-        print(f"  verde ({human(timedelta(seconds=sec))})")
+        print(f"  green ({human(timedelta(seconds=sec))})")
 
     if has_upstream(repo):
         code, output = git(["push"], repo, timeout=300)
         if code != 0:
             landing_info["parou"] = "push"
             record(aterrissagem=landing_info)
-            print(f"o push falhou ({output}); o merge e o build verde ficam. "
-                  f"Rode `cepa-until aterrissar {a.target} --yes` de novo")
+            print(f"push failed ({output}); the merge and the green build stay. "
+                  f"Run `cepa-until aterrissar {a.target} --yes` again")
             return 6
         landing_info["push"] = True
-        print("push feito")
+        print("pushed")
 
     if tree and Path(tree).exists():
         r = subprocess.run([sys.executable, str(WTLIB), "rescue", tree,
@@ -1916,14 +1916,14 @@ def cmd_land(argv):
         git(["worktree", "remove", tree], repo)
     code, output = git(["branch", "-d", branch], repo)
     if code != 0:
-        print(f"aviso: não apaguei `{branch}` ({output})")
+        print(f"warning: did not delete `{branch}` ({output})")
     landing_info["quando"] = datetime.now().isoformat(timespec="seconds")
     record(estado="aterrissado", aterrissagem=landing_info)
-    print(f"aterrissado: `{branch}` está em `{destination}`; worktree e branch da "
-          "noite removidas")
+    print(f"landed: `{branch}` is in `{destination}`; the run worktree and branch "
+          "were removed")
     if dirty_queue:
-        print(f"a fila ({clone_queue}) tem as marcações do run sem commit; "
-              "commite quando quiser")
+        print(f"the queue ({clone_queue}) holds the run's marks without a commit; "
+              "commit whenever you want")
     return 0
 
 
@@ -1932,12 +1932,12 @@ def land_action(repo, tree, queue, run_id, n):
     `fecha-morto` propose the same one."""
     return {
         "id": "aterrissar",
-        "frase": (f"leva os {n} commit(s) da branch da noite para a "
-                  f"`{current_branch(repo)}` do clone; só você dispara, porque "
-                  "mexe na branch principal"),
-        "comando": (f"cepa-until aterrissar {queue}/{run_id} (sem --yes só "
-                    "mostra o plano; com --yes faz merge, build completo e "
-                    "push)"),
+        "frase": (f"takes the {n} commit(s) of the run branch to the clone's "
+                  f"`{current_branch(repo)}`; only you trigger it, because "
+                  "it touches the main branch"),
+        "comando": (f"cepa-until aterrissar {queue}/{run_id} (without --yes it only "
+                    "shows the plan; with --yes it merges, runs the full build and "
+                    "pushes)"),
         "sha": head_of(tree), "destino": current_branch(repo),
         "arvore": str(tree)}
 
@@ -1960,13 +1960,13 @@ def land_action(repo, tree, queue, run_id, n):
 # de fora do código" for every blocked item, and on WEGO-2381 that was false:
 # the work was done and two rules disagreed.
 OWNER_REASON = {
-    "bloqueado-antes": "o agente marcou o item como travado",
-    "human_pending": "ficou uma tarefa que só você faz",
-    "pos-entrega": "o item foi entregue e sobrou uma tarefa que só você faz",
+    "bloqueado-antes": "the agent marked the item as stuck",
+    "human_pending": "a task only you can do was left",
+    "pos-entrega": "the item was delivered and a task only you can do was left",
 }
 NO_OWNER_REASON = {
-    "reservado": "outra sessão está nele agora",
-    "depende-de-adiado": "depende de um item adiado e anda junto com ele",
+    "reservado": "another session is on it right now",
+    "depende-de-adiado": "depends on a deferred item and moves with it",
 }
 DECISIONS_BLOCK = re.compile(r"```json cepa-decisoes\s*\n(.*?)\n```", re.S)
 
@@ -2003,8 +2003,14 @@ def indented(text, indent="       ", width=96):
 def recommendation_line(d):
     if not d or not d.get("recomendo"):
         return None
-    return f"Recomendo {d['recomendo']}" + (f": {d['porque']}"
+    return f"Recommend {_yes_no(d['recomendo'])}" + (f": {d['porque']}"
                                            if d.get("porque") else "")
+
+
+def _yes_no(v):
+    """The analysis writes `sim`/`não`; the screen says yes/no."""
+    r = str(v or "").strip().lower()
+    return {"sim": "yes", "não": "no", "nao": "no"}.get(r, str(v))
 
 
 def recommended_letter(d):
@@ -2045,9 +2051,9 @@ def answers_legend(summary):
     Review?" next to "sim = o item volta para a fila")."""
     yes = summary.get("se_sim")
     no = summary.get("se_nao")
-    return (f"sim = {yes or 'o item volta para a fila com a sua resposta'}"
-            + (". O item volta para a fila com a sua resposta" if yes else "")
-            + f"; não = {no or 'fica como está e eu só gravo o que você disser'}")
+    return (f"yes = {yes or 'the item goes back to the queue with your answer'}"
+            + (". The item goes back to the queue with your answer" if yes else "")
+            + f"; no = {no or 'it stays as it is and I only record what you say'}")
 
 
 def pending_action(item_states):
@@ -2082,8 +2088,8 @@ def read_line(prompt, output=print, wait=None):
                 return input("")
             return input(prompt)
         except UnicodeDecodeError:
-            output("       não consegui ler essa linha (algum acento chegou "
-                  "pela metade); digite de novo")
+            output("       could not read that line (an accent arrived "
+                  "half-way); type it again")
 
 
 class Panel:
@@ -2096,7 +2102,7 @@ class Panel:
     resposta`, `Quer acrescentar algo`) stay whole in a single color: it is
     by them that the pty tests know when to answer."""
 
-    LABEL_WIDTH = 14
+    LABEL_WIDTH = 15
 
     def __init__(self, screen, output):
         self.t = screen
@@ -2143,64 +2149,64 @@ class Panel:
     def nothing(self):
         if self.enabled:
             self.output("")
-            self.output(self.t.rule("nada espera por você neste run"))
+            self.output(self.t.rule("nothing is waiting on you in this run"))
         else:
-            self.output("\n── nada espera por você neste run")
+            self.output("\n── nothing is waiting on you in this run")
 
     def open_panel(self, total):
         if not self.enabled:
-            self.output(f"\n── {total} pergunta(s) para você. Uma por vez: s ou n "
-                       "basta; Enter deixa para depois, q encerra")
+            self.output(f"\n── {total} question(s) for you. One at a time: y or n "
+                       "is enough; Enter leaves it for later, q quits")
             return
         self.output("")
-        self.output(self.t.rule(f"{total} pergunta(s) para você"))
-        self.output("   " + self.t.c("cinza", "uma por vez · s ou n basta · Enter "
-                                             "deixa para depois · q encerra"))
+        self.output(self.t.rule(f"{total} question(s) for you"))
+        self.output("   " + self.t.c("cinza", "one at a time · y or n is enough · Enter "
+                                             "leaves it for later · q quits"))
 
     def close_panel(self, without_owner, applied, for_later, back):
         t = self.t
         if not self.enabled:
             if without_owner:
-                self.output(f"\n   Não dependem de você ({len(without_owner)}): "
+                self.output(f"\n   Not on you ({len(without_owner)}): "
                            + "; ".join(without_owner))
-            self.output(f"\n   Respondido agora: {len(applied)} · para depois: "
+            self.output(f"\n   Answered now: {len(applied)} · for later: "
                        f"{len(for_later)}")
             for x in applied:
                 self.output(f"     ✓ {x}")
             if for_later:
-                self.output(f"   Para voltar a estas perguntas: {back}")
+                self.output(f"   To come back to these questions: {back}")
             return
         self.output("")
-        self.output(t.rule("fecho"))
+        self.output(t.rule("closing"))
         if without_owner:
-            for l in self._wrap(f"Não dependem de você ({len(without_owner)}): "
+            for l in self._wrap(f"Not on you ({len(without_owner)}): "
                                   + "; ".join(without_owner), 3):
                 self.output(t.c("cinza", l))
-        self.output("   " + t.c("verde", f"respondido agora {len(applied)}")
+        self.output("   " + t.c("verde", f"answered now {len(applied)}")
                    + t.c("cinza", " · ")
                    + t.c("amarelo" if for_later else "cinza",
-                         f"para depois {len(for_later)}"))
+                         f"for later {len(for_later)}"))
         for x in applied:
             self.output("     " + t.c("verde", "✓ ") + x)
         if for_later:
-            self.output("   " + t.c("cinza", "para voltar a estas perguntas: ")
+            self.output("   " + t.c("cinza", "to come back to these questions: ")
                        + t.c("ciano", back))
 
     # ── aterrissar ──────────────────────────────────────────────────────
 
     def land_card(self, phrase, rec):
         if not self.enabled:
-            self.output(f"\n   Aterrissar: {phrase}")
+            self.output(f"\n   Land: {phrase}")
             if rec:
                 self.output(indented(rec, "   "))
-            return "   Aterrisso agora? [s/N/q] "
+            return "   Land now? [y/N/q] "
         self.output("")
         self._top("aterrissar")
         for l in self._wrap(phrase, 2):
             self._border(l)
         if rec:
             self.recommend(rec)
-        return self._prompt("Aterrisso agora? [s/N/q] ")
+        return self._prompt("Land now? [y/N/q] ")
 
     # ── one item ────────────────────────────────────────────────────────
 
@@ -2233,7 +2239,7 @@ class Panel:
 
     def question(self, text):
         if not self.enabled:
-            self.output(indented(f"Pergunta: {text}"))
+            self.output(indented(f"Question: {text}"))
             return
         lines = self._wrap(text, 4)
         self._border("  " + self.t.c("amarelo", "?") + " "
@@ -2261,7 +2267,7 @@ class Panel:
             self.output(indented(rec))
             return
         head_of, _, rest = rec.partition(": ")
-        color = "verde" if head_of.endswith("sim") else "amarelo"
+        color = "verde" if head_of.endswith("yes") else "amarelo"
         lines = self._wrap(rec, 4, 4)
         self._border("  " + self.t.c(color, "✦ " + lines[0][4:]))
         for l in lines[1:]:
@@ -2279,7 +2285,7 @@ class Panel:
         prompt. Outside a terminal it is the old line, whole in the prompt."""
         parts = []
         for key, lbl in chips:
-            mark = " (recomendado)" if key == recommended else ""
+            mark = " (recommended)" if key == recommended else ""
             parts.append(f"[{key}] {lbl}{mark}")
         if not self.enabled:
             return "       " + " · ".join(parts) + ": "
@@ -2315,16 +2321,16 @@ class Panel:
 
     def evidence(self, text):
         if not self.enabled:
-            self.output(indented(f"Detalhe técnico (para agentes): {text}"))
+            self.output(indented(f"Technical detail (for agents): {text}"))
             return
-        self.label("Detalhe técnico", text, short_path="Para agentes")
+        self.label("Technical detail", text, short_path="For agents")
 
     def recorded(self, msg, ok=True):
         if not self.enabled:
-            self.output(f"       → {msg}" if ok else f"       → não gravei: {msg}")
+            self.output(f"       → {msg}" if ok else f"       → not recorded: {msg}")
             return
         self._border("  " + (self.t.c("verde", f"✓ {msg}") if ok
-                            else self.t.c("vermelho", f"✗ não gravei: {msg}")))
+                            else self.t.c("vermelho", f"✗ not recorded: {msg}")))
 
 
 def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
@@ -2373,7 +2379,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             rc = land()
             (applied if rc == 0 else for_later).append(
                 "aterrissar" + ("" if rc == 0 else
-                                f" (parou com código {rc}; a saída está acima)"))
+                                f" (stopped with code {rc}; the output is above)"))
         if not is_yes(r):
             for_later.append(f"aterrissar: cepa-until aterrissar "
                                f"{queue}/{run_id} --yes")
@@ -2398,16 +2404,16 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # The human section first, in the order a person reads a story:
         # what stopped, what was asked, what is already done. The agent
         # section (the evidence, with its codes) only on `[e]`.
-        screen.label("Parou porque", summary.get("impede")
+        screen.label("Stopped because", summary.get("impede")
                      or f"{OWNER_REASON[ad['reason']]}.")
         if summary.get("pedido"):
-            screen.label("Era para", summary["pedido"])
+            screen.label("Was meant to", summary["pedido"])
         if summary.get("pronto"):
-            screen.label("Já está pronto", summary["pronto"])
+            screen.label("Already done", summary["pronto"])
         if route is not None:
-            screen.label("Tarefa que ficou para você", route, short_path="Tarefa")
+            screen.label("Task left for you", route, short_path="Task")
         if context:
-            screen.label("Contexto", context)
+            screen.label("Context", context)
         # A single question, and `sim` always means the same thing: the item
         # goes back to the queue. The old menu ([r]/[f]/[m]) had no "sim",
         # even though the question ended in "Recomendo sim" (feedback of
@@ -2419,43 +2425,43 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             screen.question(question_text)
             outside = question_breaks_rules(question_text)
             if outside:
-                screen.warning(f"(esta pergunta foi escrita fora das "
-                           f"regras: {outside}. Se ela não fizer sentido, "
-                           "[e] mostra o detalhe técnico)")
+                screen.warning(f"(this question was written outside the "
+                           f"rules: {outside}. If it makes no sense, "
+                           "[e] shows the technical detail)")
         elif route is not None and ad.get("reason") == "pos-entrega":
-            screen.question("já fez? Com sim, a tarefa fecha; o item segue "
-                          "concluído.")
+            screen.question("done already? With yes, the task closes; the item stays "
+                          "complete.")
         elif route is not None:
-            screen.question("já fez? Com sim, a tarefa fecha e o item volta "
-                          "para a fila.")
+            screen.question("done already? With yes, the task closes and the item goes "
+                          "back to the queue.")
         elif summary.get("impede"):
-            screen.question("destravo o item e devolvo para a fila?")
+            screen.question("unblock the item and send it back to the queue?")
         else:
-            screen.label("O agente parou porque",
+            screen.label("The agent stopped because",
                         summarize_reason(ad.get('evidence') or ''),
-                        short_path="Evidência")
-            screen.question("destravo o item e devolvo para a fila?")
+                        short_path="Evidence")
+            screen.question("unblock the item and send it back to the queue?")
         if instruction:
-            screen.note(f"Se sim, o próximo run recebe: {instruction}")
+            screen.note(f"If yes, the next run receives: {instruction}")
         rec = recommendation_line(d)
         if rec:
             screen.recommend(rec)
         screen.blank()
-        screen.legend("sim = a tarefa fecha; não = continua aberta; d = ela "
-                      "não vale mais e fecha sem ter sido feita"
+        screen.legend("yes = the task closes; no = it stays open; d = it no "
+                      "longer applies and closes without being done"
                       if ad.get("reason") == "pos-entrega"
-                      else answers_legend(summary) + "; d = o item sai da fila")
+                      else answers_legend(summary) + "; d = the item leaves the queue")
         show = bool(ad.get("evidence"))
         delivered = ad.get("reason") == "pos-entrega"
         # `d` exists because "sim" always means "back to the queue": on
         # 2026-11-02 the owner said sim to "descarto este pedido?" (WEGO-2463)
         # and the item went back to `pending`, for the next run to redo.
-        chips = [("s", "sim"), ("n", "não"), ("t", "escrevo a resposta"),
-                 ("d", "a tarefa não vale mais" if delivered
-                  else "descarta o item")]
+        chips = [("s", "yes"), ("n", "no"), ("t", "I write the answer"),
+                 ("d", "the task no longer applies" if delivered
+                  else "discard the item")]
         if show:
-            chips.append(("e", "detalhe técnico"))
-        chips += [("Enter", "depois"), ("q", "encerra")]
+            chips.append(("e", "technical detail"))
+        chips += [("Enter", "later"), ("q", "quit")]
         prompt = screen.menu(chips, recommended_letter(d))
         valid = {"s", "n", "t", "d", "", "q"} | ({"e"} if show else set())
         while True:
@@ -2469,8 +2475,8 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             if r not in valid:
                 # Loose text here used to go to later silently, and the answer
                 # the owner wrote vanished (decidir WEGO 2026-09-29-2059).
-                screen.key_error(f"\"{raw.strip()}\" não é uma das opções; "
-                                   "para escrever uma resposta, digite t primeiro")
+                screen.key_error(f"\"{raw.strip()}\" is not one of the options; "
+                                   "to write an answer, type t first")
                 continue
             break
         if r == "q":
@@ -2478,25 +2484,25 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         text, give_back, drop = "", False, False
         if r == "d":
             drop = True
-            base = question_text or route or "o item"
+            base = question_text or route or "the item"
             extra = str(question(screen.follow_up(
-                "Por quê, numa linha? [Enter pula] "))).strip()
+                "Why, in one line? [Enter skips] "))).strip()
             text = (("tarefa encerrada" if delivered else "descartado")
                     + f": {base}" + (f". {extra}" if extra else ""))
         elif r == "t":
-            text = str(question(screen.follow_up("Sua resposta, numa linha (o "
-                                               "próximo run lê isto): "))).strip()
+            text = str(question(screen.follow_up("Your answer, in one line (the "
+                                               "next run reads this): "))).strip()
             if text:
                 give_back = is_yes(question(screen.follow_up(
-                    "Devolvo o item para a fila com essa resposta? [s/N] ")))
+                    "Send the item back to the queue with that answer? [y/N] ")))
         elif r in ("s", "n"):
             give_back = r == "s"
-            base = question_text or route or "destravar o item"
+            base = question_text or route or "unblock the item"
             # There is always room for a comment, also on `s` with a
             # written question: the owner wanted to say something beyond yes/no and
             # the next run reads what he wrote (10/15).
             extra = str(question(screen.follow_up(
-                "Quer acrescentar algo, numa linha? [Enter pula] "))).strip()
+                "Anything to add, in one line? [Enter skips] "))).strip()
             text = (("sim" if give_back else "não") + f": {base}"
                      + (f" Instrução: {instruction}" if give_back and instruction
                         else "")
@@ -2529,7 +2535,7 @@ def pending_as_text(queue, run_id, item_states, deferred, analysis, output=print
     owner_items = [ad for ad in deferred if ad.get("reason") in OWNER_REASON]
     if not action and not owner_items:
         return
-    output(f"\n── esperam por você: {(1 if action else 0) + len(owner_items)}")
+    output(f"\n── waiting on you: {(1 if action else 0) + len(owner_items)}")
     if action:
         output(f"   - aterrissar: {action.get('frase')}")
     for ad in owner_items:
@@ -2538,7 +2544,7 @@ def pending_as_text(queue, run_id, item_states, deferred, analysis, output=print
             or summarize_reason(ad.get("evidence") or "")
         why = owner_summary_of(ad, d).get("impede") or OWNER_REASON[ad["reason"]]
         output(f"   - {ad.get('id')} ({why}): {q}")
-    output(f"   Para responder uma por uma, num terminal: cepa-until decide "
+    output(f"   To answer them one by one, in a terminal: cepa-until decide "
           f"{queue}" + (f"/{run_id}" if run_id else ""))
 
 
@@ -2570,7 +2576,7 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
     every deferred item plus the leftover tasks of the delivered ones."""
     data, error = query_queue(queue, repo)
     if error:
-        print(f"\n── não consegui listar os adiados ({error})")
+        print(f"\n── could not list the deferred items ({error})")
         deferred = []
     else:
         deferred = (data or {}).get("deferred") or []
@@ -2591,11 +2597,11 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
     try:
         decide(repo, queue, run_id, item_states, deferred, analysis, wait=wait)
     except NoAnswer:
-        print(f"\n   ninguém respondeu em {wait / 60:g} min; o run termina aqui. "
-              f"Para responder depois: cepa-until decide {queue}"
+        print(f"\n   nobody answered in {wait / 60:g} min; the run ends here. "
+              f"To answer later: cepa-until decide {queue}"
               + (f"/{run_id}" if run_id else ""))
     except (EOFError, KeyboardInterrupt):
-        print("\n   perguntas interrompidas; volte com: cepa-until decide "
+        print("\n   questions interrupted; come back with: cepa-until decide "
               f"{queue}" + (f"/{run_id}" if run_id else ""))
     return 0
 
@@ -2639,13 +2645,13 @@ def cmd_decide(argv):
     if "/" not in a.target:
         if not (re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", a.target)
                 and ".." not in a.target):
-            print(f"cepa-until decide: fila inválida {a.target!r}",
+            print(f"cepa-until decide: invalid queue {a.target!r}",
                   file=sys.stderr)
             return 2
         repo = Path(a.repo).resolve()
         _, error = query_queue(a.target, repo)
         if error:
-            print(f"cepa-until decide: não li a fila {a.target!r} ({error})",
+            print(f"cepa-until decide: could not read the queue {a.target!r} ({error})",
                   file=sys.stderr)
             return 2
         return close_with_owner(repo, a.target, None, {})
@@ -2654,8 +2660,8 @@ def cmd_decide(argv):
     # state from outside the run folder and ask about it.
     if not all(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", x) and ".." not in x
                for x in (queue, run_id)):
-        print(f"cepa-until decide: alvo inválido {a.target!r}; é <fila>/<run>, "
-              "sem barras nem `..` dentro de cada parte", file=sys.stderr)
+        print(f"cepa-until decide: invalid target {a.target!r}; it is <queue>/<run>, "
+              "with no slashes nor `..` inside each part", file=sys.stderr)
         return 2
     repo = Path(a.repo).resolve()
     folder = qp.queue_dir(repo, queue) / "until"
@@ -2663,7 +2669,7 @@ def cmd_decide(argv):
         item_states = json.loads((folder / f"{run_id}.estado.json").read_text(
             encoding="utf-8"))
     except (OSError, ValueError) as e:
-        print(f"cepa-until decide: não li o estado do run em {folder} ({e})",
+        print(f"cepa-until decide: could not read the run state in {folder} ({e})",
               file=sys.stderr)
         return 2
     review = folder / f"{run_id}.review.md"
@@ -2724,7 +2730,7 @@ def cmd_close_dead(argv):
         return 3
 
     if "/" not in a.target:
-        print("cepa-until fecha-morto: o alvo é <fila>/<run> (ex.: "
+        print("cepa-until fecha-morto: the target is <queue>/<run> (e.g. "
               "wego/2026-09-28-2003)", file=sys.stderr)
         return 2
     queue, run_id = a.target.split("/", 1)
@@ -2734,50 +2740,50 @@ def cmd_close_dead(argv):
     try:
         item_states = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
-        print(f"cepa-until fecha-morto: não li o estado do run em {path} "
+        print(f"cepa-until fecha-morto: could not read the run state at {path} "
               f"({e})", file=sys.stderr)
         return 2
     m = next((x for x in dead_runs(repo)
               if x.get("fila") == queue and x.get("run") == run_id), None)
     if not m:
         if item_states.get("estado") not in ("rodando", "interrompido"):
-            return refuse(f"o run {run_id} está `{item_states.get('estado')}`: ele "
-                          "chegou ao fim, e não há o que fechar")
+            return refuse(f"run {run_id} is `{item_states.get('estado')}`: it "
+                          "reached its end, and there is nothing to close")
         pid = item_states.get("pid")
         if pid and supervisor_alive(pid):
-            return refuse(f"o supervisor do run {run_id} está vivo (pid {pid} "
-                          f"em {item_states.get('host')}); espere o fim dele")
-        return refuse(f"não consigo dizer que o supervisor do run {run_id} "
-                      "morreu (pid de outra máquina, ou run sem pid ainda "
-                      "dentro do prazo), ou a branch da noite já entrou "
-                      "ou sumiu")
+            return refuse(f"the supervisor of run {run_id} is alive (pid {pid} "
+                          f"on {item_states.get('host')}); wait for it to finish")
+        return refuse(f"cannot tell that the supervisor of run {run_id} "
+                      "died (pid from another machine, or a run without a pid "
+                      "still within its deadline), or the run branch already "
+                      "landed or vanished")
     child = (item_states.get("item_em_voo") or {}).get("pid_filho")
     if child:
         try:
             os.killpg(int(child), 0)
-            return refuse(f"o processo filho do item em voo (pid {child}) "
-                          "ainda roda; espere ele acabar ou encerre-o")
+            return refuse(f"the child process of the item in flight (pid {child}) "
+                          "is still running; wait for it to end or kill it")
         except (ProcessLookupError, ValueError, TypeError):
             pass
         except OSError:
             pass
     tree, branch, verify = m.get("arvore"), m.get("branch"), m.get("verify")
     if not tree:
-        return refuse("o run não gravou a worktree da noite")
+        return refuse("the run did not record its worktree")
     tree = Path(tree)
     recreate = not tree.is_dir()
 
-    print(f"fechar o run {run_id} da fila {queue} ({m['como']})")
+    print(f"close run {run_id} of queue {queue} ({m['como']})")
     if m.get("item"):
-        print(f"  item em voo: {m['item']}, status `{m.get('status')}`")
+        print(f"  item in flight: {m['item']}, status `{m.get('status')}`")
     print(f"  worktree   : {tree}"
-          + (f" (sumiu; recrio a partir de `{branch}`)" if recreate else ""))
-    print(f"  build      : {verify or 'nenhum (o run dispensou o build)'}")
-    print("  verde      : grava `run_end` e deixa o run `esperando-dono` com a "
-          "ação `aterrissar`")
-    print("  vermelho   : não muda nada; o doctor segue apontando o run")
+          + (f" (gone; recreated from `{branch}`)" if recreate else ""))
+    print(f"  build      : {verify or 'none (the run skipped the build)'}")
+    print("  green      : records `run_end` and leaves the run `esperando-dono` with the "
+          "`aterrissar` action")
+    print("  red        : changes nothing; the doctor keeps pointing at the run")
     if not a.yes:
-        print(f"\nnada foi feito. Para executar: cepa-until fecha-morto "
+        print(f"\nnothing was done. To execute: cepa-until fecha-morto "
               f"{a.target} --yes")
         return 0
 
@@ -2785,12 +2791,12 @@ def cmd_close_dead(argv):
         git(["worktree", "prune"], repo)
         c, error = git(["worktree", "add", str(tree), str(branch)], repo)
         if c != 0:
-            return refuse(f"não recriei a worktree da noite: {error}")
+            return refuse(f"could not recreate the run worktree: {error}")
     dirty_files = dirty_tree(tree)
     if dirty_files:
-        return refuse("a worktree da noite tem mudança sem commit; o build "
-                      "mediria o que não vai para a branch. Commite ou guarde "
-                      "antes:\n  " + "\n  ".join(dirty_files[:10]))
+        return refuse("the run worktree has uncommitted changes; the build "
+                      "would measure what does not go to the branch. Commit or "
+                      "stash first:\n  " + "\n  ".join(dirty_files[:10]))
 
     record_path = Path(m["registro"])
 
@@ -2800,16 +2806,16 @@ def cmd_close_dead(argv):
             f.write(json.dumps(event, ensure_ascii=False) + "\n")
 
     if verify:
-        print(f"\nbuild completo: {verify}")
+        print(f"\nfull build: {verify}")
         green, sec, reason = run_verify(verify, tree, 4 * 3600,
                                          record_path.with_suffix(".log"))
         log_event({"evento": "verify", "id": m.get("item"), "verde": green,
                   "segundos": int(sec), "motivo": reason, "fechamento": True})
         if not green:
-            print(f"vermelho ({reason}). O estado não mudou; a saída está em "
+            print(f"red ({reason}). The state did not change; the output is at "
                   f"{short_path(record_path.with_suffix('.log'), repo)}")
             return 1
-        print(f"verde em {human(timedelta(seconds=int(sec)))}")
+        print(f"green in {human(timedelta(seconds=int(sec)))}")
 
     base = m.get("base")
     c, n = git(["rev-list", "--count", f"{base}..HEAD"], tree)
@@ -2817,13 +2823,13 @@ def cmd_close_dead(argv):
     reason = ("interrompido" if item_states.get("estado") == "interrompido"
               else "supervisor-morto")
     log_event({"evento": "run_end", "motivo": reason,
-              "detalhe": f"fechado pelo fecha-morto ({m['como']})",
+              "detalhe": f"closed by fecha-morto ({m['como']})",
               "fechado_por": "fecha-morto", "item_em_voo": m.get("item")})
     stays = []
     if m.get("item") and m.get("status") != "done":
         stays.append({"id": m["item"], "texto": (
-            f"ficou `{m.get('status')}` quando o supervisor morreu; o próximo "
-            "run o retoma pela reserva órfã")})
+            f"was left `{m.get('status')}` when the supervisor died; the next "
+            "run picks it up through the orphan reservation")})
     actions = [] if n == 0 else [land_action(repo, tree, queue, run_id,
                                                n if n > 0 else "?")]
     item_states.update(estado="esperando-dono" if actions or stays else "encerrado",
@@ -2835,11 +2841,11 @@ def cmd_close_dead(argv):
                    encoding="utf-8")
     os.replace(tmp, path)
     if actions:
-        print(f"o run está `esperando-dono`. Próximo passo: "
+        print(f"the run is `esperando-dono`. Next step: "
               f"{actions[0]['comando']}")
     else:
-        print(f"o run está `{item_states['estado']}` (a branch da noite não tem "
-              "commit sobre a largada)")
+        print(f"the run is `{item_states['estado']}` (the run branch has no "
+              "commit over the start)")
     return 0
 
 
@@ -2966,14 +2972,14 @@ def dead_runs(repo, now=None):
         pid = item_states.get("pid") or start.get("pid")
         owner = item_states.get("host") or start.get("host")
         if item_states.get("estado") == "interrompido":
-            how = (f"interrompido por {item_states.get('sinal') or 'um sinal'}, sem o "
-                    "fim normal")
+            how = (f"interrupted by {item_states.get('sinal') or 'a signal'}, without the "
+                    "normal end")
         elif pid:
             if owner and owner != host:
                 continue
             if supervisor_alive(pid):
                 continue
-            how = f"o supervisor (pid {pid}) não existe mais em {host}"
+            how = f"the supervisor (pid {pid}) no longer exists on {host}"
         else:
             try:
                 deadline = datetime.fromisoformat(str(start.get("prazo")))
@@ -2981,9 +2987,9 @@ def dead_runs(repo, now=None):
                 continue
             if now < deadline + MARGIN_WITHOUT_PID:
                 continue
-            how = (f"o run não grava o pid do supervisor e o prazo "
-                    f"({deadline.strftime('%d/%m %H:%M')}) passou há "
-                    f"{human(now - deadline)}")
+            how = (f"the run does not record the supervisor pid and the deadline "
+                    f"({deadline.strftime('%d/%m %H:%M')}) passed "
+                    f"{human(now - deadline)} ago")
         branch = item_states.get("branch") or start.get("branch")
         code, sha = git(["rev-parse", "--verify", "-q", str(branch)], root)
         if code != 0:
@@ -3069,17 +3075,17 @@ def dead_run_phrase(m):
     `cepa-doctor` say the same thing."""
     item = ""
     if m.get("item"):
-        item = (f"; o item em voo, {m['item']}, está `{m.get('status')}`"
-                + (" sem o build completo que o supervisor roda depois de "
-                   "cada done" if m.get("status") == "done" else ""))
-    offer = (f" — o build completo que faltou: {m['comando']}"
+        item = (f"; the item in flight, {m['item']}, is `{m.get('status')}`"
+                + (" without the full build the supervisor runs after "
+                   "each done" if m.get("status") == "done" else ""))
+    offer = (f" — the full build that is missing: {m['comando']}"
               if m.get("comando") else
-              " — o run não tinha build completo (verify dispensado)")
-    return (f"fila {m['fila']} · run {m['run']}: o supervisor morreu no meio "
-            f"do run ({m['como']}) e o registro ficou sem `run_end`{item}. "
-            f"A branch da noite `{m['branch']}` está como ele deixou"
-            + offer + f". Para rodar o build e deixar o run pronto para "
-            f"aterrissar: {m['fechar']} (sem --yes só mostra o plano)")
+              " — the run had no full build (verify skipped)")
+    return (f"queue {m['fila']} · run {m['run']}: the supervisor died in the middle "
+            f"of the run ({m['como']}) and the record has no `run_end`{item}. "
+            f"The run branch `{m['branch']}` is as it left it"
+            + offer + f". To run the build and leave the run ready to "
+            f"land: {m['fechar']} (without --yes only shows the plan)")
 
 
 def cmd_pending(argv):
@@ -3090,7 +3096,7 @@ def cmd_pending(argv):
         summary=_sub_summary("pendentes"),
         description=(
             "A run is waiting for the owner when its branch is ready to land or it\n"
-            "left items that only the owner can unblock (\"Fica com você\"). A run\n"
+            "left items that only the owner can unblock (\"Left with you\"). A run\n"
             "is dead when its supervisor died before writing the end of the run.\n"
             "Each line says which command takes the run forward.\n"
             "\n"
@@ -3120,9 +3126,9 @@ def cmd_pending(argv):
     for m in dead:
         print(dead_run_phrase(m))
     for r in found:
-        print(f"fila {r['fila']} · run {r['run']}: `{r['branch']}` espera "
-              f"aterrissagem em `{r['destino']}`"
-              + (f" ({r['fica_com_voce']} item(ns) em \"Fica com você\")"
+        print(f"queue {r['fila']} · run {r['run']}: `{r['branch']}` waits to "
+              f"land on `{r['destino']}`"
+              + (f" ({r['fica_com_voce']} item(s) in \"Left with you\")"
                  if r["fica_com_voce"] else "")
               + f" — {r['comando']}")
     return 0
@@ -3253,23 +3259,23 @@ def main(argv=None):
         return 2
 
     if a.max_failures < 1:
-        print("cepa-until: --max-failures precisa ser >= 1", file=sys.stderr)
+        print("cepa-until: --max-failures must be >= 1", file=sys.stderr)
         return 2
     if a.max_blocked < 1:
-        print("cepa-until: --max-blocked precisa ser >= 1", file=sys.stderr)
+        print("cepa-until: --max-blocked must be >= 1", file=sys.stderr)
         return 2
     if a.attempts_per_item < 1:
-        print("cepa-until: --attempts-per-item precisa ser >= 1 — com 0 o run "
-              "marcaria `blocked` todo item antes de tentar", file=sys.stderr)
+        print("cepa-until: --attempts-per-item must be >= 1 — with 0 the run "
+              "would mark every item `blocked` before trying it", file=sys.stderr)
         return 2
     if not shutil.which("claude"):
-        print("cepa-until: `claude` não está no PATH — sem ele não há o que "
-              "supervisionar", file=sys.stderr)
+        print("cepa-until: `claude` is not on the PATH — without it there is "
+              "nothing to supervise", file=sys.stderr)
         return 2
 
     data, error = query_queue(a.queue, repo)
     if error:
-        print(f"cepa-until: a fila {a.queue!r} não está executável — {error}",
+        print(f"cepa-until: queue {a.queue!r} is not executable — {error}",
               file=sys.stderr)
         return 2
 
@@ -3284,10 +3290,10 @@ def main(argv=None):
                 .strftime("%d/%m %H:%M")
         except ValueError:
             end = "?"
-        print(f"cepa-until: já há um run desta fila em andamento "
-              f"(run {alive['run']}, pid {alive['pid']}, prazo {end}). "
-              "Espere ele terminar, ou encerre-o (kill do pid) antes de "
-              "largar outro.", file=sys.stderr)
+        print(f"cepa-until: a run of this queue is already in progress "
+              f"(run {alive['run']}, pid {alive['pid']}, deadline {end}). "
+              "Wait for it to finish, or kill it (kill the pid) before "
+              "starting another.", file=sys.stderr)
         return 2
 
     dirt = dirty_tree(repo, live_run_ok=True)
@@ -3296,10 +3302,10 @@ def main(argv=None):
         # No `--dirty-ok` in the message on purpose: with it the next item runs
         # without the folder, and a broad commit turns the ghost deletion into a real
         # deletion.
-        print(f"cepa-until: {len(ghosts)} arquivo(s) commitado(s) sumiram "
-              "do disco fora do run: nenhum item do último run os tocou. "
-              "Provável sincronização (Insync, Google Drive) apagando pasta "
-              "do clone. Restaure e rode de novo:", file=sys.stderr)
+        print(f"cepa-until: {len(ghosts)} committed file(s) vanished "
+              "from disk outside the run: no item of the last run touched them. "
+              "Likely a sync tool (Insync, Google Drive) deleting a folder "
+              "of the clone. Restore and run again:", file=sys.stderr)
         print(f"    git restore -- {' '.join(restore_targets(repo, ghosts))}",
               file=sys.stderr)
         for l in ghosts[:10]:
@@ -3309,15 +3315,15 @@ def main(argv=None):
         rest = [l for l in dirt if not l.startswith(" D ")] + \
             [f" D {f}" for f in vanished_from_disk(repo) if f not in ghosts]
         if rest:
-            print(f"  E há mais {len(rest)} arquivo(s) modificado(s), que "
-                  "precisam ser commitados ou limpos:", file=sys.stderr)
+            print(f"  And there are {len(rest)} more modified file(s), which "
+                  "need to be committed or cleaned:", file=sys.stderr)
             for l in rest[:10]:
                 print(f"    {l}", file=sys.stderr)
         return 2
     if dirt and not a.dirty_ok:
-        print(f"cepa-until: a árvore tem {len(dirt)} arquivo(s) modificado(s). "
-              "Commite ou limpe antes — de manhã não dá para separar o que o run "
-              "fez do que já estava aqui. (--dirty-ok ignora este guarda.)",
+        print(f"cepa-until: the tree has {len(dirt)} modified file(s). "
+              "Commit or clean first — afterwards there is no telling what the run "
+              "did from what was already here. (--dirty-ok skips this guard.)",
               file=sys.stderr)
         for l in dirt[:10]:
             print(f"    {l}", file=sys.stderr)
@@ -3325,12 +3331,12 @@ def main(argv=None):
 
     verify, verify_origin = verify_command(repo, a.verify, a.no_verify)
     if verify == "":
-        print("cepa-until: não sei o build completo deste repo (não há `mvnw` "
-              "nem `gradlew` na raiz, nem `tests/run-all.sh`, nem `package.json` com "
-              "script `build` ou `test`). Passe `--verify '<comando>'`, ou "
-              "`--no-verify` se o repo não tem build — sem isso um card pode "
-              "fechar `done` com o build vermelho e o próximo começar em cima "
-              "dele.", file=sys.stderr)
+        print("cepa-until: unknown full build for this repo (no `mvnw` "
+              "or `gradlew` at the root, no `tests/run-all.sh`, no `package.json` with "
+              "a `build` or `test` script). Pass `--verify '<command>'`, or "
+              "`--no-verify` if the repo has no build — without it a card may "
+              "close `done` with a red build and the next one start on top "
+              "of it.", file=sys.stderr)
         return 2
 
     ledger_dir = qp.queue_dir(repo, a.queue) / "until"
@@ -3345,45 +3351,45 @@ def main(argv=None):
     t = data.get("totals") or {}
     SCREEN.full_title = a.full_title
     lbl = lambda r: SCREEN.c("cinza", r)  # noqa: E731
-    print(SCREEN.c("negrito", "cepa-until") + " · fila "
-          + SCREEN.c("ciano", str(qp.queue_name_of(data))) + f" · {repo.name} · até "
+    print(SCREEN.c("negrito", "cepa-until") + " · queue "
+          + SCREEN.c("ciano", str(qp.queue_name_of(data))) + f" · {repo.name} · until "
           + SCREEN.c("negrito", deadline.strftime('%d/%m %H:%M'))
           + f" ({human(deadline - now)})")
     if SCREEN.enabled:
-        print(lbl("  janela : ") + f"{now.strftime('%H:%M')} → "
+        print(lbl("  window : ") + f"{now.strftime('%H:%M')} → "
               f"{deadline.strftime('%H:%M')}  " + SCREEN.bar(0.0, 24))
-    print(lbl("  noite  : ") + "trabalha em " + SCREEN.c("ciano", f"`until/{run_id}`")
-          + ", numa worktree fora do clone; "
-          + SCREEN.c("ciano", f"`{current_branch(repo)}`") + " e o origin não mudam")
-    print(lbl("  build  : ") + (SCREEN.c("ciano", verify) + " depois de cada item "
-                                f"done ({verify_origin})" if verify else
-                                f"dispensado ({verify_origin})"))
-    print(lbl("  paradas: ") + f"{a.max_failures} itens seguidos sem avançar (disjuntor) · "
-          f"{a.max_blocked} itens `blocked` seguidos (fila travada) · "
-          f"{a.attempts_per_item} tentativa(s) por item")
-    print(lbl("  tempo  : ") + f"não começa item com menos de {human(reserve)}; mata "
-          f"item que passar {human(slack)} do prazo")
-    print(lbl("  permissões: ")
-          + SCREEN.c("amarelo", "PEDE (vai travar sem alguém olhando)" if a.with_permissions
-                   else "--dangerously-skip-permissions LIGADO"))
-    print(lbl("  1º item: ")
-          + SCREEN.c("negrito", nxt.get('id', '(nenhum — fila sem item executável)'))
+    print(lbl("  run    : ") + "works on " + SCREEN.c("ciano", f"`until/{run_id}`")
+          + ", in a worktree outside the clone; "
+          + SCREEN.c("ciano", f"`{current_branch(repo)}`") + " and origin do not change")
+    print(lbl("  build  : ") + (SCREEN.c("ciano", verify) + " after each done "
+                                f"item ({verify_origin})" if verify else
+                                f"skipped ({verify_origin})"))
+    print(lbl("  stops  : ") + f"{a.max_failures} consecutive items with no progress (circuit breaker) · "
+          f"{a.max_blocked} consecutive `blocked` items (stuck queue) · "
+          f"{a.attempts_per_item} attempt(s) per item")
+    print(lbl("  time   : ") + f"no item starts with less than {human(reserve)} left; kills "
+          f"an item that runs {human(slack)} past the deadline")
+    print(lbl("  permissions: ")
+          + SCREEN.c("amarelo", "ASKS (will hang with nobody watching)" if a.with_permissions
+                   else "--dangerously-skip-permissions ON"))
+    print(lbl("  1st item: ")
+          + SCREEN.c("negrito", nxt.get('id', '(none — queue has no executable item)'))
           + (SCREEN.c("cinza", SCREEN.truncate(f" — {nxt.get('title')}", slack=40))
              if nxt.get("id") else "")
-          + f" · fila: {t.get('por_status', {}).get('pending', 0)} "
-            f"pendente(s), {t.get('por_status', {}).get('done', 0)} done")
+          + f" · queue: {t.get('por_status', {}).get('pending', 0)} "
+            f"pending, {t.get('por_status', {}).get('done', 0)} done")
     inheritance = inheritance_from_previous_run(repo, a.queue, data.get("path"))
     for h in inheritance:
-        print(lbl("  herda  : ") + f"`{h['branch']}` ({h['commits']} commit(s) que o "
-              f"clone não tem) — {', '.join(h['itens'])} ficou pela metade "
-              "lá, e a branch da noite nasce com esses commits")
+        print(lbl("  inherits: ") + f"`{h['branch']}` ({h['commits']} commit(s) the "
+              f"clone does not have) — {', '.join(h['itens'])} was left half-done "
+              "there, and the run branch starts with those commits")
 
     if a.dry:
-        print("\n(--dry-run: nada foi executado)")
+        print("\n(--dry-run: nothing was executed)")
         return 0
     if not data.get("batch"):
         stop = data.get("stop") or {}
-        print(f"\nnada a fazer: {stop.get('reason')} — {stop.get('detail')}")
+        print(f"\nnothing to do: {stop.get('reason')} — {stop.get('detail')}")
         return 0
 
     # A closed terminal tab sends SIGHUP to the terminal's group. `claude`
@@ -3406,7 +3412,7 @@ def main(argv=None):
     clone_base = head_of(repo)
     tree, start_branch, error = open_run_branch(repo, run_id, inheritance)
     if error:
-        print(f"cepa-until: não consegui criar a branch da noite "
+        print(f"cepa-until: could not create the run branch "
               f"`{start_branch}`: {error}", file=sys.stderr)
         return 2
     # With inheritance, the base is HEAD AFTER the merge: what the night counts as
@@ -3438,7 +3444,7 @@ def main(argv=None):
                            + "\n", encoding="utf-8")
             os.replace(tmp, state_path)
         except OSError as e:
-            print(f"  aviso: não gravei o estado do run em {state_path}: "
+            print(f"  warning: could not write the run state at {state_path}: "
                   f"{e}")
 
     save_state("rodando")
@@ -3465,17 +3471,17 @@ def main(argv=None):
                   "id": (flight or {}).get("id"), "fase": (flight or {}).get("fase"),
                   "pid_filho": child, "filho_encerrado": terminated})
         save_state("interrompido", sinal=name, item_em_voo=flight)
-        print(f"\ncepa-until: interrompido por {name}"
-              + (f" com {flight['id']} em voo ({flight.get('fase')})" if flight else
-                 " entre itens")
-              + f". Registrei em {short_path(ledger, repo)}.", file=sys.stderr)
+        print(f"\ncepa-until: interrupted by {name}"
+              + (f" with {flight['id']} in flight ({flight.get('fase')})" if flight else
+                 " between items")
+              + f". Recorded in {short_path(ledger, repo)}.", file=sys.stderr)
         if child:
-            print(f"  o processo filho (pid {child}) "
-                  + ("foi encerrado; o próximo `queue` devolve o item como "
-                     "reserva órfã." if terminated else
-                     "NÃO morreu, e segue sem supervisor."), file=sys.stderr)
-        print(f"  para rodar o build que faltou e deixar o run pronto para "
-              f"aterrissar: cepa-until fecha-morto {a.queue}/{run_id}",
+            print(f"  the child process (pid {child}) "
+                  + ("was terminated; the next `queue` returns the item as an "
+                     "orphan reservation." if terminated else
+                     "did NOT die, and goes on without a supervisor."), file=sys.stderr)
+        print(f"  to run the missing build and leave the run ready to "
+              f"land: cepa-until fecha-morto {a.queue}/{run_id}",
               file=sys.stderr)
         raise SystemExit(128 + signum)
 
@@ -3491,13 +3497,13 @@ def main(argv=None):
         if patch:
             log_event({"evento": "lateral_apagada", "branch": side,
                       "patch": patch})
-            print(f"  lateral     : apaguei `{side}` (item fechado); cópia em "
+            print(f"  side branch : deleted `{side}` (item closed); copy at "
                   f"{Path(patch).relative_to(repo)}")
         else:
             log_event({"evento": "lateral_mantida", "branch": side,
                       "erro": side_error})
             kept_side_branches.append((side, side_error))
-            print(f"  lateral     : mantive `{side}`: não gravei a cópia "
+            print(f"  side branch : kept `{side}`: could not save the copy "
                   f"({side_error})")
     # What the night DELIVERED (done with a green build on the night branch) and what
     # stalled (`blocked`). Both count as progress for the circuit breaker —
@@ -3529,7 +3535,7 @@ def main(argv=None):
     def in_the_middle_of(ident, n_before):
         others = []
         if ident in inherited:
-            others = [f"{o} (herdado do run anterior, ainda aberto)"
+            others = [f"{o} (inherited from the previous run, still open)"
                       for o in sorted(inherited - {ident})
                       if o not in delivered]
         return delivered[n_before:] + others
@@ -3569,21 +3575,21 @@ def main(argv=None):
         notified_hooks.extend(new_items)
         log_event({"evento": "hook_so_apos_reinstalar", "id": origin,
                   "arquivos": new_items})
-        step(f"{origin} mudou hook de plugin "
-              f"({', '.join(new_items)}): só passa a valer depois de aterrissar "
-              "a branch da noite e rodar `bin/install.sh`. Até lá as "
-              "rodadas desta noite seguem com a versão instalada")
+        step(f"{origin} changed plugin hook(s) "
+              f"({', '.join(new_items)}): they only take effect after landing "
+              "the run branch and running `bin/install.sh`. Until then the "
+              "rounds of this run keep the installed version")
 
     print()
     while True:
         in_flight.clear()
-        notify_hooks(ident if items else "a herança da largada")
+        notify_hooks(ident if items else "the inheritance at the start")
         remaining = deadline - datetime.now()
         if remaining < reserve:
             end_reason = "prazo"
-            end_detail = (f"sobram {human(remaining)}, menos que a reserva "
-                           f"mínima de {human(reserve)} — começar um item "
-                           "agora seria trabalho jogado fora")
+            end_detail = (f"{human(remaining)} left, less than the minimum "
+                           f"reserve of {human(reserve)} — starting an item "
+                           "now would be wasted work")
             break
 
         branch_now, git_error = read_branch(tree)
@@ -3595,28 +3601,28 @@ def main(argv=None):
             if not repair_failure:
                 branch_now, after = read_branch(tree)
                 if after:
-                    repair_failure = f"reparei, e o git ainda diz: {after}"
+                    repair_failure = f"repaired, and git still says: {after}"
             log_event({"evento": "git_reparo", "erro": git_error,
                       "reparou": not repair_failure, "falha": repair_failure})
             if repair_failure:
                 end_reason = "git-quebrado"
                 end_detail = (
-                    f"o git parou de responder na worktree da noite `{tree}`"
-                    f" ({git_error}) e o reparo não voltou: {repair_failure}. "
-                    "Ninguém trocou de branch; o que está no disco da worktree "
-                    "continua lá")
+                    f"git stopped responding in the run worktree `{tree}`"
+                    f" ({git_error}) and the repair did not bring it back: {repair_failure}. "
+                    "Nobody switched branches; what is on the worktree's disk "
+                    "is still there")
                 break
-            print(SCREEN.stamp() + f" o git não respondia "
-                  f"na worktree da noite ({git_error}); refiz a ligação dela "
-                  "com o clone e sigo")
+            print(SCREEN.stamp() + f" git was not responding "
+                  f"in the run worktree ({git_error}); I relinked it "
+                  "to the clone and carry on")
         if branch_now != start_branch:
             end_reason = "branch-mudou"
             end_detail = (
-                f"a largada foi em `{start_branch}` e agora estamos em "
-                f"`{branch_now}` — alguém trocou de branch no meio do run. "
-                "Seguir espalharia os commits da noite por branches que "
-                "ninguém vai buscar de manhã, que é exatamente o que a decisão "
-                "de commitar por item numa branch só existe para impedir")
+                f"the run started on `{start_branch}` and we are now on "
+                f"`{branch_now}` — someone switched branches mid-run. "
+                "Going on would scatter the run's commits across branches "
+                "nobody will look for in the morning, which is exactly what the "
+                "decision to commit per item on a single branch exists to prevent")
             break
 
         data, error = query_queue(a.queue, repo)
@@ -3624,12 +3630,12 @@ def main(argv=None):
             end_reason, end_detail = "fila-ilegivel", error
             break
         for warning in data.get("warnings") or []:
-            print(f"  aviso: {warning}")
+            print(f"  warning: {warning}")
             log_event({"evento": "aviso", "texto": warning})
         if not data.get("batch"):
             stop = data.get("stop") or {}
             end_reason = stop.get("reason") or "fim-da-fila"
-            end_detail = stop.get("detail") or "a fila não tem item executável"
+            end_detail = stop.get("detail") or "the queue has no runnable item"
             break
 
         item = data["batch"][0]
@@ -3647,24 +3653,24 @@ def main(argv=None):
                 # The reset doesn't fit in the window. Waiting would mean stopping for good; the
                 # cut in the middle is recoverable (worktree + orphan reservation). Starts
                 # and warns — half an item is worth more than a stalled window.
-                print(SCREEN.stamp() + f" cota de 5h em "
-                      f"{usage:.0%} e o próximo item talvez não caiba; o reset "
-                      f"({reset.strftime('%H:%M')}) não cabe na janela (fecha "
-                      f"às {deadline.strftime('%H:%M')}) · começo assim mesmo — "
-                      "se cortar, o próximo run retoma da worktree")
+                print(SCREEN.stamp() + f" 5h quota at "
+                      f"{usage:.0%} and the next item may not fit; the reset "
+                      f"({reset.strftime('%H:%M')}) does not fit in the window (closes "
+                      f"at {deadline.strftime('%H:%M')}) · starting anyway — "
+                      "if it gets cut, the next run resumes from the worktree")
                 log_event({"evento": "cota_apertada", "uso": usage,
                           "custo_item": item_cost(starts),
                           "reset": reset.isoformat(), "id": ident})
                 tight.append((ident, usage, reset))
             else:
-                print(SCREEN.stamp() + f" cota de 5h em "
-                      f"{usage:.0%}, o próximo item não cabe · espero o reset e "
-                      f"retomo às {wake_at.strftime('%H:%M')}")
+                print(SCREEN.stamp() + f" 5h quota at "
+                      f"{usage:.0%}, the next item does not fit · waiting for the reset, "
+                      f"resuming at {wake_at.strftime('%H:%M')}")
                 log_event({"evento": "pausa_de_cota", "uso": usage,
                           "custo_item": item_cost(starts),
                           "reset": reset.isoformat(),
                           "acorda": wake_at.isoformat()})
-                waits.append(("antes do item", ident, reset))
+                waits.append(("before the item", ident, reset))
                 wait_until(wake_at)
                 last_reading, fresh_reading = None, False
                 continue
@@ -3680,16 +3686,16 @@ def main(argv=None):
                 print()
             window_total = max((deadline - now).total_seconds(), 1)
             print(SCREEN.stamp() + " " + SCREEN.c("negrito", ident)
-                  + (SCREEN.c("amarelo", f" tentativa {round_n}/{a.attempts_per_item}")
+                  + (SCREEN.c("amarelo", f" attempt {round_n}/{a.attempts_per_item}")
                      if round_n > 1 else "")
                   + SCREEN.c("cinza", f"   item {items}   ")
                   + SCREEN.bar(1 - remaining.total_seconds() / window_total)
-                  + SCREEN.c("cinza", f" {human(remaining)} restam"))
+                  + SCREEN.c("cinza", f" {human(remaining)} left"))
             print(SCREEN.c("cinza", "       " + SCREEN.truncate(str(item.get('title')), slack=8)))
         else:
             print(f"[{datetime.now().strftime('%H:%M')}] {ident} — {item.get('title')} "
-                  f"({human(remaining)} restantes"
-                  + (f", tentativa {round_n}/{a.attempts_per_item}" if round_n > 1 else "") + ")")
+                  f"({human(remaining)} left"
+                  + (f", attempt {round_n}/{a.attempts_per_item}" if round_n > 1 else "") + ")")
         before = head_of(tree)
         first.setdefault(ident, (before, len(delivered)))
         log_event({"evento": "item_start", "id": ident, "title": item.get("title"),
@@ -3709,9 +3715,9 @@ def main(argv=None):
             sha, leftover_error = stash_leftover(tree, run_id, ident)
             log_event({"evento": "sobra_guardada", "id": ident, "stash": sha,
                       "erro": leftover_error})
-            step(f"o item deixou arquivos sem commit"
-                  + (f"; guardei no stash {sha[:10]}" if sha else
-                     f" e NÃO consegui guardá-los: {leftover_error}"))
+            step(f"the item left uncommitted files"
+                  + (f"; stashed them in {sha[:10]}" if sha else
+                     f" and I could NOT stash them: {leftover_error}"))
 
         head_after = head_of(tree)
         n_commits = 0
@@ -3759,10 +3765,10 @@ def main(argv=None):
         if run_state == "done" and n_commits == 0:
             without_commit.append(ident)
             log_event({"evento": "done_sem_commit", "id": ident})
-            step("`done` sem nenhum commit na branch da noite: o "
-                  "trabalho, se houve, foi parar em outra branch")
+            step("`done` with no commit on the run branch: the "
+                  "work, if any, ended up on another branch")
         elif run_state == "done" and verify:
-            step(f"build completo: {verify}")
+            step(f"full build: {verify}")
             left = (deadline + slack - datetime.now()).total_seconds()
             in_flight["fase"] = "verify"
             green, verify_sec, verify_reason = run_verify(
@@ -3777,8 +3783,8 @@ def main(argv=None):
                 # attempt does the rest.
                 left = (deadline + slack - datetime.now()).total_seconds()
                 if left >= verify_sec:
-                    step(f"vermelho ({verify_reason}); rodo o "
-                          "build completo de novo, no mesmo código")
+                    step(f"red ({verify_reason}); running the "
+                          "full build again, on the same code")
                     green, sec2, reason2 = run_verify(verify, tree, left,
                                                        log, on_launch=launched)
                     in_flight.pop("pid_filho", None)
@@ -3786,18 +3792,18 @@ def main(argv=None):
                               "segundos": int(sec2), "motivo": reason2,
                               "repeticao": 2})
                 else:
-                    reason2 = "não coube no que sobra da janela"
+                    reason2 = "did not fit in what is left of the window"
                 if green:
                     log_event({"evento": "verify_repetido_verde", "id": ident,
                               "motivo_1": verify_reason})
                     emit_telemetry("build_instavel", repo, card=ident,
                                      run=run_id, fila=a.queue,
                                      motivo=verify_reason)
-                    step("verde na 2ª vez: build instável, "
-                          "registrado na telemetria")
+                    step("green on the 2nd try: flaky build, "
+                          "recorded in telemetry")
                     unstable = True
             if green:
-                step(f"verde ({human(timedelta(seconds=verify_sec))})")
+                step(f"green ({human(timedelta(seconds=verify_sec))})")
             else:
                 back = red_returns(ledger_dir, ident) + 1
                 since, n_before = first[ident]
@@ -3810,37 +3816,37 @@ def main(argv=None):
                     # The reset already took the attempts away; the next one starts from zero.
                     first.pop(ident, None)
                     inherited.discard(ident)
-                    evid = (f"Esta é a volta {back} de "
-                            f"{MAX_RED_RETURNS}: o item fechou `done`, "
-                            f"mas o build completo da branch da noite "
-                            f"(`{verify}`) {verify_reason}, e o 2º build "
-                            f"{reason2 or 'também ficou vermelho'}. Saída no "
-                            f"`.log` do run {run_id}. Os commits de todas as "
-                            f"tentativas estão em `{side_branch}` e a branch da "
-                            f"noite voltou para {since[:10]}. ")
+                    evid = (f"This is return {back} of "
+                            f"{MAX_RED_RETURNS}: the item closed `done`, "
+                            f"but the full build of the run branch "
+                            f"(`{verify}`) {verify_reason}, and the 2nd build "
+                            f"{reason2 or 'was red as well'}. Output in the "
+                            f"`.log` of run {run_id}. The commits of every "
+                            f"attempt are in `{side_branch}` and the run "
+                            f"branch went back to {since[:10]}. ")
                     if last:
-                        evid += ("Marquei `blocked`: o item já voltou com o "
-                                 "recado e ficou vermelho de novo. O card no "
-                                 "Jira pode ter ido para Review antes do "
-                                 "build — confira.")
+                        evid += ("Marked `blocked`: the item already came back with the "
+                                 "note and went red again. The card in "
+                                 "Jira may have moved to Review before the "
+                                 "build — check it.")
                     else:
-                        evid += ("O item voltou para `pending`: aproveite a "
-                                 "lateral (`git cherry-pick` ou `git merge` "
-                                 "dentro da tentativa) ou refaça; o build do "
-                                 "supervisor julga o resultado. Desabilitar ou "
-                                 "apagar o teste que falhou não conta como "
-                                 "conserto.")
+                        evid += ("The item went back to `pending`: reuse the "
+                                 "side branch (`git cherry-pick` or `git merge` "
+                                 "inside the attempt) or redo it; the supervisor's "
+                                 "build judges the result. Disabling or "
+                                 "deleting the failing test does not count as "
+                                 "a fix.")
                 else:
-                    evid = (f"O item fechou `done`, mas o build completo da "
-                            f"branch da noite (`{verify}`) {verify_reason}. "
-                            f"Saída no `.log` do run {run_id}. NÃO consegui "
-                            f"tirar os commits da branch da noite: "
+                    evid = (f"The item closed `done`, but the full build of the "
+                            f"run branch (`{verify}`) {verify_reason}. "
+                            f"Output in the `.log` of run {run_id}. I could NOT "
+                            f"take the commits off the run branch: "
                             f"{undo_error}")
                 finish_error = finish_item(
                     a.queue, repo, ident, new_status, evid,
-                    "o agente entregou, mas a bateria completa de testes do "
-                    "projeto falhou depois dele, e falhou de novo quando o "
-                    "item voltou para ser corrigido." if new_status == "blocked"
+                    "the agent delivered, but the project's full test suite "
+                    "failed after it, and failed again when the "
+                    "item came back to be fixed." if new_status == "blocked"
                     else None)
                 reds.append((ident, side_branch, verify_reason))
                 log_event({"evento": "verify_vermelho", "id": ident,
@@ -3851,20 +3857,20 @@ def main(argv=None):
                               "motivo": verify_reason, "motivo_2": reason2,
                               "status": new_status})
                     back_now = True
-                step(f"VERMELHO ({verify_reason}): commits "
-                      f"guardados em `{side_branch}`, item marcado `{new_status}`"
-                      + (f" (volta {back}/{MAX_RED_RETURNS})"
+                step(f"RED ({verify_reason}): commits "
+                      f"kept in `{side_branch}`, item marked `{new_status}`"
+                      + (f" (return {back}/{MAX_RED_RETURNS})"
                          if side_branch else ""))
                 run_state = new_status
                 if undo_error:
                     outcome(ident, "travado",
-                             f"build vermelho ({verify_reason}) e os commits "
-                             f"continuam na branch da noite: {undo_error}")
+                             f"red build ({verify_reason}) and the commits "
+                             f"are still on the run branch: {undo_error}")
                     end_reason = "verify-vermelho"
-                    end_detail = (f"o build ficou vermelho depois do {ident} e "
-                                   f"não consegui desfazer os commits dele "
-                                   f"({undo_error}); o próximo card começaria "
-                                   "em cima de código quebrado")
+                    end_detail = (f"the build went red after {ident} and "
+                                   f"I could not undo its commits "
+                                   f"({undo_error}); the next card would start "
+                                   "on top of broken code")
                     break
         # The build only runs after `done`: an item that the agent closes
         # `blocked` after committing left those commits on the night
@@ -3888,30 +3894,30 @@ def main(argv=None):
                     finish_error = finish_item(
                         a.queue, repo, ident, "blocked",
                         (ev + " " if ev else "") +
-                        f"[supervisor] Os commits do item, que não passaram "
-                        f"pelo build do supervisor (ele só roda depois de "
-                        f"`done`), estão em `{side_branch}`; a branch da noite "
-                        f"voltou para {since[:10]}.",
+                        f"[supervisor] The item's commits, which did not go "
+                        f"through the supervisor's build (it only runs after "
+                        f"`done`), are in `{side_branch}`; the run branch "
+                        f"went back to {since[:10]}.",
                         None if isinstance(kept, dict) and kept.get("impede")
-                        else "o agente marcou o item como travado sem explicar "
-                             "o motivo em palavras simples.",
+                        else "the agent marked the item as stuck without explaining "
+                             "the reason in plain words.",
                         kept if isinstance(kept, dict) else None)
                 log_event({"evento": "travado_separado", "id": ident,
                           "lateral": side_branch,
                           "erro": undo_error or finish_error})
                 if undo_error:
                     outcome(ident, "travado",
-                             "`blocked` com commits que continuam na branch "
-                             f"da noite sem build: {undo_error}")
+                             "`blocked` with commits still on the run "
+                             f"branch with no build: {undo_error}")
                     end_reason = "item-preso"
                     end_detail = (
-                        f"{ident} saiu `blocked` com commits que não passaram "
-                        f"pelo build, e não consegui tirá-los da branch da "
-                        f"noite ({undo_error}); o próximo card começaria em "
-                        "cima deles")
+                        f"{ident} came out `blocked` with commits that did not go "
+                        f"through the build, and I could not take them off the run "
+                        f"branch ({undo_error}); the next card would start "
+                        "on top of them")
                     break
-                step(f"`blocked` com commits: guardei em "
-                      f"`{side_branch}` e a branch da noite voltou para "
+                step(f"`blocked` with commits: kept them in "
+                      f"`{side_branch}` and the run branch went back to "
                       f"{since[:10]}")
         if run_state == "done":
             delivered.append(ident)
@@ -3927,33 +3933,33 @@ def main(argv=None):
         if back_now:
             outcome(ident, "volta-vermelha" if run_state == "pending" else
                      "travado",
-                     f"volta vermelha {back}/{MAX_RED_RETURNS} "
-                     f"({verify_reason}); commits em `{side_branch}`, "
-                     + ("voltou para `pending` com o recado"
-                        if run_state == "pending" else "marcado `blocked`"))
+                     f"red return {back}/{MAX_RED_RETURNS} "
+                     f"({verify_reason}); commits in `{side_branch}`, "
+                     + ("went back to `pending` with the note"
+                        if run_state == "pending" else "marked `blocked`"))
         elif pending_item:
             outcome(ident, "rota-humana",
-                     f"`{run_state}`, espera por você: {pending_item}")
+                     f"`{run_state}`, waiting on you: {pending_item}")
         elif run_state == "done" and ident in without_commit:
             outcome(ident, "done-sem-commit",
-                     "`done` sem commit na branch da noite: procure o "
-                     "trabalho em outra branch")
+                     "`done` with no commit on the run branch: look for the "
+                     "work on another branch")
         elif run_state == "done":
             outcome(ident, "entregue",
-                     "entregue" + ("; build verde na 2ª vez (instável)"
+                     "delivered" + ("; green build on the 2nd try (flaky)"
                                    if unstable else
-                                   ", build verde" if verify else ""))
+                                   ", green build" if verify else ""))
         elif run_state in ("blocked", "dropped"):
             reread, _ = read_item(plan_path, ident)
             ev = (reread or {}).get("evidence")
             outcome(ident, "travado" if run_state == "blocked" else "dropped",
                      f"`{run_state}`: "
                      + (summarize_reason(ev) if ev else
-                        "o item não registrou motivo na fila"))
+                        "the item recorded no reason in the queue"))
         elif n_commits > 0:
             outcome(ident, "em-andamento",
-                     f"{n_commits} commit(s) sem fechar; a próxima tentativa "
-                     "(ou o próximo run) parte daí")
+                     f"{n_commits} commit(s) without closing; the next attempt "
+                     "(or the next run) starts from there")
 
         # The red return counts as a consecutive failure (Revision 3, 4e): a
         # broken environment makes every build red, and without this each card
@@ -3965,17 +3971,17 @@ def main(argv=None):
                 consecutive_blocked.append(ident)
             if consecutive_failures >= a.max_failures:
                 end_reason = "disjuntor"
-                end_detail = (f"{consecutive_failures} itens seguidos sem fechar "
-                               "verde (o último, volta vermelha do "
-                               f"{ident}) — isso é sistêmico, não azar; "
-                               "seguir queimaria a janela no mesmo problema")
+                end_detail = (f"{consecutive_failures} items in a row failed to close "
+                               "green (the last one, a red return of "
+                               f"{ident}) — this is systemic, not bad luck; "
+                               "going on would burn the window on the same problem")
                 break
             if len(consecutive_blocked) >= a.max_blocked:
                 end_reason = "fila-travada"
                 end_detail = (
-                    f"{len(consecutive_blocked)} itens seguidos saíram `blocked` "
-                    f"({', '.join(consecutive_blocked)}); o motivo de cada um "
-                    "está no `evidence` da fila")
+                    f"{len(consecutive_blocked)} items in a row came out `blocked` "
+                    f"({', '.join(consecutive_blocked)}); the reason for each "
+                    "is in the queue's `evidence`")
                 break
             continue
 
@@ -3996,38 +4002,38 @@ def main(argv=None):
             # with `quedas_de_rede: 0`). `voltou` stays None until the network is back.
             drop = [ident, dropped_at, None]
             drops.append(drop)
-            outcome(ident, "sem-rede", "a rede caiu durante o item; não é "
-                     "falha dele, e ele continua onde estava")
-            step(f"SEM REDE: o `claude` não alcançou a API — não é "
-                  "falha do item")
+            outcome(ident, "sem-rede", "the network dropped during the item; not "
+                     "its fault, and it stays where it was")
+            step(f"NO NETWORK: `claude` could not reach the API — not "
+                  "the item's fault")
             if fits:
-                step(f"sondo {NETWORK_PROBE} até a rede voltar (no "
-                      f"máximo até {until_at.strftime('%H:%M')}) e retomo o {ident}")
+                step(f"probing {NETWORK_PROBE} until the network is back (at "
+                      f"most until {until_at.strftime('%H:%M')}), then resuming {ident}")
                 if wait_for_network(until_at):
                     returned = datetime.now()
                     drop[2] = returned
                     log_event({"evento": "rede_voltou", "id": ident,
                               "segundos": int((returned - dropped_at).total_seconds())})
-                    print(SCREEN.stamp(returned) + f" rede de volta "
-                          f"({human(returned - dropped_at)} sem)")
+                    print(SCREEN.stamp(returned) + f" network back "
+                          f"({human(returned - dropped_at)} without it)")
                     continue
                 end_reason = "sem-rede"
                 end_detail = (
-                    f"a rede caiu durante o {ident} às {dropped_at.strftime('%H:%M')} "
-                    f"e não voltou até {until_at.strftime('%H:%M')}, o último "
-                    "instante em que ainda cabia começar um item na janela. O "
-                    "item continua onde estava, sem culpa registrada")
+                    f"the network dropped during {ident} at {dropped_at.strftime('%H:%M')} "
+                    f"and was not back by {until_at.strftime('%H:%M')}, the last "
+                    "moment an item could still start within the window. The "
+                    "item stays where it was, with no blame recorded")
                 break
             end_reason = "sem-rede"
             if consecutive_drops >= MAX_CONSECUTIVE_DROPS:
-                because = (f"é a {consecutive_drops}ª queda seguida sem progresso "
-                          "entre elas — a sonda enxerga a rede, o `claude` não")
+                because = (f"this is drop {consecutive_drops} in a row with no progress "
+                          "between them — the probe sees the network, `claude` does not")
             else:
-                because = "não sobra tempo na janela para esperar a rede voltar"
+                because = "no time is left in the window to wait for the network to return"
             end_detail = (
-                f"o `claude` não alcançou a API durante o {ident} e não dá para "
-                f"esperar: {because}. O item continua onde estava, sem culpa "
-                "registrada")
+                f"`claude` could not reach the API during {ident} and waiting is "
+                f"not possible: {because}. The item stays where it was, with no blame "
+                "recorded")
             break
 
         # The ACCOUNT usage ceiling, before the circuit breaker. Without this separation the
@@ -4039,8 +4045,8 @@ def main(argv=None):
             hit, reset, reset_at = usage_limit(output)
             if hit:
                 limited.append((ident, reset))
-                outcome(ident, "limite-de-uso", "interrompido pelo teto de "
-                         "uso da conta; não é falha do item")
+                outcome(ident, "limite-de-uso", "cut off by the account "
+                         "usage cap; not the item's fault")
                 # The attempt cut by the ceiling is not the item's: gives back the turn.
                 attempts[ident] -= 1
                 consecutive_waits += 1
@@ -4052,31 +4058,31 @@ def main(argv=None):
                 log_event({"evento": "limite_de_uso", "id": ident, "reset": reset,
                           "reset_em": reset_at.isoformat() if reset_at else None,
                           "espera": fits})
-                step(f"LIMITE DE USO DA CONTA"
-                      + (f" · reseta {reset}" if reset else "")
-                      + " — não é falha do item")
+                step(f"ACCOUNT USAGE CAP"
+                      + (f" · resets {reset}" if reset else "")
+                      + " — not the item's fault")
                 if fits:
-                    step(f"espero o reset e retomo o {ident} às "
+                    step(f"waiting for the reset, resuming {ident} at "
                           f"{wake_at.strftime('%H:%M')}")
-                    waits.append(("item cortado", ident, reset_at))
+                    waits.append(("item cut off", ident, reset_at))
                     wait_until(wake_at)
                     last_reading, fresh_reading = None, False
                     continue
                 end_reason = "limite-de-uso"
                 if consecutive_waits >= MAX_CONSECUTIVE_WAITS:
-                    because = (f"é a {consecutive_waits}ª vez seguida sem progresso "
-                              "entre elas — o reset anunciado não está levantando "
-                              "o teto")
+                    because = (f"this is time {consecutive_waits} in a row with no progress "
+                              "between them — the announced reset is not lifting "
+                              "the cap")
                 elif reset_at is None:
-                    because = "o `claude` não disse quando reseta"
+                    because = "`claude` did not say when it resets"
                 else:
-                    because = (f"o reset ({reset_at.strftime('%H:%M')}) não deixa "
-                              f"a reserva mínima antes do fim da janela "
+                    because = (f"the reset ({reset_at.strftime('%H:%M')}) does not leave "
+                              f"the minimum reserve before the end of the window "
                               f"({deadline.strftime('%H:%M')})")
                 end_detail = (
-                    f"a conta bateu o teto de uso da Claude durante o {ident} e "
-                    f"não dá para esperar: {because}. O item continua onde "
-                    "estava, sem culpa registrada")
+                    f"the account hit the Claude usage cap during {ident} and "
+                    f"waiting is not possible: {because}. The item stays where "
+                    "it was, with no blame recorded")
                 break
 
         if progress:
@@ -4086,9 +4092,9 @@ def main(argv=None):
             done_items.append((ident, run_state, pending_item))
             mark = run_state
             if pending_item:
-                mark += " · rota humana em aberto"
+                mark += " · human route open"
             if run_state not in TERMINAL_STATES and not pending_item:
-                mark += f" · {n_commits} commit(s) sem fechar"
+                mark += f" · {n_commits} commit(s) without closing"
             step(f"{mark} ({human(timedelta(seconds=spent))})")
 
             if run_state == "blocked":
@@ -4098,23 +4104,23 @@ def main(argv=None):
             if len(consecutive_blocked) >= a.max_blocked:
                 end_reason = "fila-travada"
                 end_detail = (
-                    f"{len(consecutive_blocked)} itens seguidos saíram `blocked` "
-                    f"({', '.join(consecutive_blocked)}) — a fila está travando "
-                    "por uma condição de fora, não por falha dos itens. Seguir "
-                    "redescobriria a mesma causa a cada item; o motivo de cada "
-                    "um está no `evidence` da fila")
+                    f"{len(consecutive_blocked)} items in a row came out `blocked` "
+                    f"({', '.join(consecutive_blocked)}) — the queue is getting stuck "
+                    "on an outside condition, not on the items' failures. Going on "
+                    "would rediscover the same cause on every item; the reason for "
+                    "each is in the queue's `evidence`")
                 break
         else:
             consecutive_failures += 1
             failed.append((ident, run_state, code, killed))
-            reason_text = ("morto por timeout" if killed else
-                     "não consegui nem lançar o `claude`" if code == -2 else
-                     f"claude saiu {code}" if code else
-                     "o item não saiu do lugar")
+            reason_text = ("killed by timeout" if killed else
+                     "could not even launch `claude`" if code == -2 else
+                     f"claude exited {code}" if code else
+                     "the item did not move")
             outcome(ident, "sem-progresso",
-                     f"sem progresso ({reason_text}), status `{run_state}`")
-            step(f"SEM PROGRESSO: {reason_text} "
-                  f"(status ainda `{run_state}`) · {consecutive_failures}/{a.max_failures}")
+                     f"no progress ({reason_text}), status `{run_state}`")
+            step(f"NO PROGRESS: {reason_text} "
+                  f"(status still `{run_state}`) · {consecutive_failures}/{a.max_failures}")
 
             if round_n >= a.attempts_per_item:
                 # An earlier attempt may have committed without closing: those
@@ -4134,41 +4140,41 @@ def main(argv=None):
                 if undo_error:
                     end_reason = "item-preso"
                     end_detail = (
-                        f"{ident} gastou as {round_n} tentativas com commits que "
-                        f"não passaram pelo build, e não consegui tirá-los da "
-                        f"branch da noite ({undo_error}); o próximo card "
-                        "começaria em cima deles")
+                        f"{ident} used up its {round_n} attempts with commits that "
+                        f"did not go through the build, and I could not take them off the "
+                        f"run branch ({undo_error}); the next card "
+                        "would start on top of them")
                     break
                 block_error = block_item(a.queue, repo, ident, round_n, side_branch)
                 if block_error:
                     end_reason = "item-preso"
                     end_detail = (
-                        f"{ident} gastou as {round_n} tentativas e eu não consegui "
-                        f"tirá-lo da frente da fila ({block_error}). O próximo "
-                        "`queue` devolveria o mesmo item, e o run viraria um "
-                        "laço nele — parar aqui é o menor dos dois estragos")
+                        f"{ident} used up its {round_n} attempts and I could not "
+                        f"take it off the front of the queue ({block_error}). The next "
+                        "`queue` would return the same item, and the run would loop "
+                        "on it — stopping here is the lesser of the two harms")
                     log_event({"evento": "esgotado", "id": ident, "tentativas": round_n,
                               "bloqueado": False, "erro": block_error})
                     break
                 exhausted.append((ident, round_n))
                 outcome(ident, "travado",
-                         f"tirado da frente da fila (`blocked`) depois de "
-                         f"{round_n} tentativa(s) sem sair do lugar"
-                         + (f"; commits em `{side_branch}`" if side_branch else ""))
+                         f"taken off the front of the queue (`blocked`) after "
+                         f"{round_n} attempt(s) without moving"
+                         + (f"; commits in `{side_branch}`" if side_branch else ""))
                 log_event({"evento": "esgotado", "id": ident, "tentativas": round_n,
                           "bloqueado": True, "erro": None})
-                step(f"{round_n} tentativa(s) sem progresso: marquei "
-                      "`blocked` e a fila segue no próximo item")
+                step(f"{round_n} attempt(s) with no progress: marked "
+                      "`blocked` and the queue moves on to the next item")
 
             if consecutive_failures >= a.max_failures:
                 end_reason = "disjuntor"
-                end_detail = (f"{consecutive_failures} itens seguidos sem progresso — "
-                               "isso é sistêmico, não azar; seguir queimaria a "
-                               "janela no mesmo problema")
+                end_detail = (f"{consecutive_failures} items in a row with no progress — "
+                               "this is systemic, not bad luck; going on would burn the "
+                               "window on the same problem")
                 break
 
     in_flight.clear()
-    notify_hooks(ident if items else "a herança da largada")
+    notify_hooks(ident if items else "the inheritance at the start")
     log_event({"evento": "run_end", "motivo": end_reason, "detalhe": end_detail,
               "itens": items, "com_progresso": len(done_items),
               "sem_progresso": len(failed), "esgotados": len(exhausted),
@@ -4179,22 +4185,22 @@ def main(argv=None):
               "done_sem_commit": len(without_commit)})
 
     print()
-    print(SCREEN.rule(f"fim às {datetime.now().strftime('%H:%M')} · {end_reason}"))
+    print(SCREEN.rule(f"ended at {datetime.now().strftime('%H:%M')} · {end_reason}"))
     print(f"   {end_detail}")
     if SCREEN.enabled:
         window_total = max((deadline - now).total_seconds(), 1)
         window_spent = (datetime.now() - now).total_seconds() / window_total
-        print(SCREEN.c("cinza", "   janela ") + f"{now.strftime('%H:%M')} → "
+        print(SCREEN.c("cinza", "   window ") + f"{now.strftime('%H:%M')} → "
               f"{deadline.strftime('%H:%M')}  " + SCREEN.bar(window_spent, 24)
               + SCREEN.c("cinza", f"  {min(window_spent, 1):.0%}"))
     paint = lambda n, color: SCREEN.c(color, str(n)) if n else str(n)  # noqa: E731
-    print(f"   {items} tentativa(s) · {paint(len(delivered), 'verde')} entregue(s) · "
-          f"{paint(len(blocked_items), 'vermelho')} travado(s) · "
-          f"{paint(len(failed), 'vermelho')} sem progresso"
-          + (f" · {len(limited)} interrompida(s) pelo teto de uso da conta"
+    print(f"   {items} attempt(s) · {paint(len(delivered), 'verde')} delivered · "
+          f"{paint(len(blocked_items), 'vermelho')} stuck · "
+          f"{paint(len(failed), 'vermelho')} no progress"
+          + (f" · {len(limited)} cut off by the account usage cap"
              if limited else ""))
     if outcomes:
-        print("\n   " + SCREEN.c("negrito", f"Itens ({len(outcomes)}):"))
+        print("\n   " + SCREEN.c("negrito", f"Items ({len(outcomes)}):"))
         for ident, (kind, text) in outcomes.items():
             if SCREEN.enabled:
                 glyph = OUTCOME_GLYPHS.get(kind, ("·", "cinza"))
@@ -4203,76 +4209,76 @@ def main(argv=None):
             else:
                 print(f"     - {ident}: {text}")
     if limited:
-        print(f"\n   Teto de uso da conta ({len(limited)}) — não é falha "
-              "do item:")
+        print(f"\n   Account usage cap ({len(limited)}) — not the item's "
+              "fault:")
         for ident, reset in limited:
-            print(f"     - {ident}: bateu o limite"
-                  + (f", reseta {reset}" if reset else
-                     " (o `claude` não disse quando reseta)"))
+            print(f"     - {ident}: hit the limit"
+                  + (f", resets {reset}" if reset else
+                     " (`claude` did not say when it resets)"))
     if waits:
-        print(f"\n   Esperas pela cota de 5h ({len(waits)}):")
+        print(f"\n   Waits for the 5h quota ({len(waits)}):")
         for when, ident, reset in waits:
-            print(f"     - {when} ({ident}): esperei o reset das "
-                  f"{reset.strftime('%H:%M')}")
+            print(f"     - {when} ({ident}): waited for the "
+                  f"{reset.strftime('%H:%M')} reset")
     if tight:
-        print(f"\n   Começados com a cota apertada ({len(tight)}) — o reset "
-              "não cabia na janela, então segui em vez de parar:")
+        print(f"\n   Started with the quota tight ({len(tight)}) — the reset "
+              "did not fit in the window, so I went on instead of stopping:")
         for ident, usage, reset in tight:
-            print(f"     - {ident}: cota em {usage:.0%}, reset às "
+            print(f"     - {ident}: quota at {usage:.0%}, reset at "
                   f"{reset.strftime('%H:%M')}")
     if drops:
-        print(f"\n   Quedas de rede ({len(drops)}) — não é falha do item:")
+        print(f"\n   Network drops ({len(drops)}) — not the item's fault:")
         for ident, dropped_at, returned in drops:
             if returned is None:
-                print(f"     - durante o {ident}: sem rede desde as "
-                      f"{dropped_at.strftime('%H:%M')}, e ela não voltou a tempo")
+                print(f"     - during {ident}: no network since "
+                      f"{dropped_at.strftime('%H:%M')}, and it did not come back in time")
                 continue
-            print(f"     - durante o {ident}: sem rede das "
-                  f"{dropped_at.strftime('%H:%M')} às {returned.strftime('%H:%M')}, "
-                  "depois retomei o item")
+            print(f"     - during {ident}: no network from "
+                  f"{dropped_at.strftime('%H:%M')} to {returned.strftime('%H:%M')}, "
+                  "then I resumed the item")
     cost = round(sum(costs.values()), 2)
     # The list of actions is closed (R2): after Revision 3 only
     # `aterrissar` remains. What no command executes goes to "fica com você".
     actions = []
     if close_empty_branch(repo, tree, start_branch, run_base):
-        print(f"\n   branch da noite: nenhum commit — removi `{start_branch}` "
-              "e a worktree dela")
+        print(f"\n   run branch: no commits — removed `{start_branch}` "
+              "and its worktree")
     else:
         c, n = git(["rev-list", "--count", f"{run_base}..HEAD"], tree)
         n = n if c == 0 else "?"
-        print("\n   branch da noite: " + SCREEN.c("ciano", f"`{start_branch}`")
-              + f" ({n} commit(s) sobre a largada), em {short_path(tree, repo)}")
+        print("\n   run branch: " + SCREEN.c("ciano", f"`{start_branch}`")
+              + f" ({n} commit(s) over the start), at {short_path(tree, repo)}")
         actions.append(land_action(repo, tree, a.queue, run_id, n))
         for h in inheritance:
-            print(f"   ela já contém `{h['branch']}` (herdada na largada): "
-                  "mesclar a da noite leva as duas")
+            print(f"   it already contains `{h['branch']}` (inherited at the start): "
+                  "merging the run branch brings both")
     stays = [{"id": ident, "texto": text}
             for ident, (kind, text) in outcomes.items()
             if kind in ("travado", "rota-humana", "done-sem-commit")]
-    stays += [{"id": side, "texto": f"lateral não apagada, a cópia falhou: {error}"}
+    stays += [{"id": side, "texto": f"side branch not deleted, the copy failed: {error}"}
              for side, error in kept_side_branches]
     # Recomputed at the end, and not taken from `notified_hooks`: a warned hook
     # may have left the branch along with the red item that brought it.
     run_hooks = changed_hooks(tree, clone_base) if actions else []
     if run_hooks:
         stays.append({"id": "reinstalar-plugin", "texto": (
-            f"a branch da noite muda {len(run_hooks)} hook(s) de plugin "
-            f"({', '.join(run_hooks)}), e nenhuma rodada desta noite "
-            "rodou com eles: os hooks vêm do plugin instalado. Passam a valer "
-            "depois do `aterrissar` e de `bin/install.sh`")})
+            f"the run branch changes {len(run_hooks)} plugin hook(s) "
+            f"({', '.join(run_hooks)}), and no round of this run "
+            "ran with them: hooks come from the installed plugin. They take effect "
+            "after `aterrissar` and `bin/install.sh`")})
     if actions:
-        print("\n   " + SCREEN.c("negrito", "Ações:"))
+        print("\n   " + SCREEN.c("negrito", "Actions:"))
         for i, action in enumerate(actions, 1):
             print(f"     {i}. " + SCREEN.c("negrito", action['id']) + f": {action['frase']}")
-            print(f"        como: " + SCREEN.c("ciano", action['comando']))
+            print(f"        how: " + SCREEN.c("ciano", action['comando']))
     if stays:
         # The items already have a line under "Itens"; here only the name, so the same item
         # doesn't show up as two problems (A4).
         of_items = [f_["id"] for f_ in stays if f_["id"] in outcomes]
-        print("\n   " + SCREEN.c("negrito", f"Fica com você ({len(stays)}):"))
+        print("\n   " + SCREEN.c("negrito", f"Left with you ({len(stays)}):"))
         if of_items:
-            print(f"     {', '.join(of_items)} (a pergunta de cada um vem "
-                  "no fim, em \"esperam por você\")")
+            print(f"     {', '.join(of_items)} (each one's question comes "
+                  "at the end, under \"waiting on you\")")
         for f_ in stays:
             if f_["id"] not in outcomes:
                 print(f"     - {f_['id']}: {f_['texto']}")
@@ -4287,10 +4293,10 @@ def main(argv=None):
     closed[0] = True
     if costs:
         br = lambda v: f"{v:.2f}".replace(".", ",")  # noqa: E731
-        print(f"\n   custo: US$ {br(cost)} (soma do `total_cost_usd` de "
-              f"{len(costs)} rodada(s): {' + '.join(br(v) for v in costs.values())})")
-    print(SCREEN.c("cinza", f"\n   registro: {short_path(ledger, repo)}"))
-    print(SCREEN.c("cinza", f"   saída do claude: {short_path(log, repo)}"))
+        print(f"\n   cost: US$ {br(cost)} (sum of `total_cost_usd` over "
+              f"{len(costs)} round(s): {' + '.join(br(v) for v in costs.values())})")
+    print(SCREEN.c("cinza", f"\n   record: {short_path(ledger, repo)}"))
+    print(SCREEN.c("cinza", f"   claude output: {short_path(log, repo)}"))
 
     def ask_owner(review=None):
         # The summary above only counts; here each pending item becomes a question (09/30).
@@ -4306,21 +4312,21 @@ def main(argv=None):
     if a.no_analysis or items == 0:
         return ask_owner()
     if end_reason == "limite-de-uso":
-        print("   análise: não rodei (o run parou pela cota) — rode "
-              f"`/common:until-review {short_path(ledger, repo)}` quando a cota "
-              "voltar")
+        print("   analysis: not run (the run stopped on the quota) — run "
+              f"`/common:until-review {short_path(ledger, repo)}` once the quota "
+              "is back")
         log_event({"evento": "analise", "feita": False, "motivo": "cota"})
         return ask_owner()
-    print("   análise: rodando /common:until-review…")
+    print("   analysis: running /common:until-review…")
     review, review_error = analyze_run(repo, tree if tree.exists() else None,
                                       ledger, a.with_permissions)
     log_event({"evento": "analise", "feita": review is not None,
               "arquivo": str(review) if review else None, "erro": review_error})
     if review:
-        print(f"   análise: {short_path(review, repo)}")
+        print(f"   analysis: {short_path(review, repo)}")
     else:
-        print(f"   análise: falhou ({review_error}) — rode `/common:until-review "
-              f"{short_path(ledger, repo)}` à mão")
+        print(f"   analysis: failed ({review_error}) — run `/common:until-review "
+              f"{short_path(ledger, repo)}` by hand")
     return ask_owner(review)
 
 
@@ -4328,7 +4334,7 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except KeyboardInterrupt:
-        print("\ncepa-until: interrompido. O item em voo pode ter ficado "
-              "reservado — o próximo `queue` o devolve como reserva órfã.",
+        print("\ncepa-until: interrupted. The in-flight item may have stayed "
+              "reserved — the next `queue` returns it as an orphan reservation.",
               file=sys.stderr)
         sys.exit(130)

@@ -128,9 +128,9 @@ def test_decide_d_drops():
           calls[1][0] == "W-2" and calls[1][3] is True
           and calls[1][1].startswith("tarefa encerrada"), calls)
     check("o menu nomeia as duas variantes",
-          "descarta o item" in text and "a tarefa não vale mais" in text, text)
+          "discard the item" in text and "the task no longer applies" in text, text)
     check("no item entregue, sim não promete devolver à fila",
-          "o item segue concluído" in text and "d = ela não vale mais" in text,
+          "the item stays complete" in text and "d = it no longer applies" in text,
           text)
     check("o fecho do modo fila não cita run",
           "fila/" not in text, text)
@@ -151,9 +151,9 @@ def test_decide_queue_mode_as_process():
         check("...e não pergunta sobre o pendente pronto nem o done limpo",
               "- p1" not in out and "- d2" not in out, out)
         rc, out = on_tty(cmd, str(root), inputs=[
-            ("[t] escrevo a resposta", "s"), ("Quer acrescentar algo", ""),
-            ("[t] escrevo a resposta", "n"), ("Quer acrescentar algo", ""),
-            ("[t] escrevo a resposta", "s"), ("Quer acrescentar algo", "feito")])
+            ("[t] I write the answer", "s"), ("Anything to add", ""),
+            ("[t] I write the answer", "n"), ("Anything to add", ""),
+            ("[t] I write the answer", "s"), ("Anything to add", "feito")])
         its = items_of(root)
         check("no terminal, sim fecha a tarefa do concluído",
               its["d1"]["human_pending"] is None and its["d1"]["status"] == "done"

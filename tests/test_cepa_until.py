@@ -409,9 +409,9 @@ def test_end_summary_says_why_each_item_got_stuck():
         # for you"), which repeat the question or the route on purpose: there it is a
         # question, no longer one more list of the same problem. Rule A4 holds from the
         # list of items up to that block.
-        summary = p.stdout[p.stdout.find("Itens ("):]
-        summary = summary.split("── esperam por você")[0]
-        check("o resumo dos travados existe", "Itens (2)" in summary,
+        summary = p.stdout[p.stdout.find("Items ("):]
+        summary = summary.split("── waiting on you")[0]
+        check("o resumo dos travados existe", "Items (2)" in summary,
               p.stdout[-800:])
         check("o comando no FIM de uma evidence longa chega ao resumo",
               "rodar-par-head.sh" in summary, summary[:900])
@@ -483,7 +483,7 @@ def test_max_stuck_configurable_and_validated():
         check("--max-blocked 2 para no 2º", len(calls) == 2,
               f"disparou {len(calls)}x")
         check("o banner mostra o teto escolhido",
-              "2 itens `blocked` seguidos (fila travada)" in p.stdout,
+              "2 consecutive `blocked` items (stuck queue)" in p.stdout,
               p.stdout[:600])
         launch = [e for e in ledger_of(root) if e.get("evento") == "run_start"]
         check("o run_start registra o teto, para a análise da manhã",
@@ -530,7 +530,7 @@ def test_previous_run_record_is_not_dirt():
         (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
         p2, calls2 = run_until(root, binv, plan, ["--for", "2h"])
         check("o run seguinte larga mesmo com o registro do anterior",
-              "modificado(s)" not in p2.stderr and len(calls2) == 1,
+              "modified file(s)" not in p2.stderr and len(calls2) == 1,
               f"saiu {p2.returncode}, disparou {len(calls2)}x: "
               f"{p2.stderr[:300]}")
 
@@ -580,7 +580,7 @@ def test_bak_of_the_queue_rewrite_is_not_dirt():
               "?? .claude/programs/fila/plan.yaml.bak" in st, st)
         p, calls = run_until(root, binv, plan, ["--for", "2h"])
         check("o run larga mesmo com o .bak da reescrita",
-              "modificado(s)" not in p.stderr and len(calls) >= 1,
+              "modified file(s)" not in p.stderr and len(calls) >= 1,
               f"saiu {p.returncode}, disparou {len(calls)}x: "
               f"{p.stderr[:300]}")
 
@@ -641,7 +641,7 @@ def test_committed_file_that_vanished_outside_the_run_does_not_suggest_dirty_ok(
         check("deleção fantasma ainda recusa a largada",
               p.returncode == 2 and not calls, f"saiu {p.returncode}")
         check("...dizendo que o arquivo sumiu fora do run",
-              "sumiram do disco" in p.stderr and "fora do run" in p.stderr,
+              "vanished from disk" in p.stderr and "outside the run" in p.stderr,
               p.stderr[:600])
         # The whole line: the folder that vanished, and not the files one by one (which
         # also start with the folder name).
@@ -657,11 +657,11 @@ def test_committed_file_that_vanished_outside_the_run_does_not_suggest_dirty_ok(
         (root / "lixo.txt").write_text("pendura", encoding="utf-8")
         (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
         p, calls = run_until(root, binv, plan, ["--for", "2h"])
-        more = p.stderr.split("E há mais", 1)
+        more = p.stderr.split("And there are", 1)
         check("fantasma com sujeira ao lado recusa",
               p.returncode == 2 and not calls, f"saiu {p.returncode}")
         check("...e a sujeira de verdade é a única de 'há mais'",
-              len(more) == 2 and more[1].startswith(" 1 arquivo(s)")
+              len(more) == 2 and more[1].startswith(" 1 more modified file(s)")
               and "lixo.txt" in more[1] and "wego-2229" not in more[1],
               p.stderr[:800])
 
@@ -702,22 +702,22 @@ def test_change_in_file_the_last_item_touched_keeps_todays_refusal():
         check("mudança em arquivo tocado recusa",
               p.returncode == 2 and not calls, f"saiu {p.returncode}")
         check("...com a mensagem de hoje, que nomeia --dirty-ok",
-              "modificado(s)" in p.stderr and "--dirty-ok" in p.stderr,
+              "modified file(s)" in p.stderr and "--dirty-ok" in p.stderr,
               p.stderr[:600])
         check("...e não chama a deleção de arquivo tocado de fantasma",
-              "sumiram do disco" not in p.stderr, p.stderr[:600])
+              "vanished from disk" not in p.stderr, p.stderr[:600])
 
         # With a real ghost beside it, the deletion of the touched file does not
         # vanish: it goes to the "there is more" list, by the raw name.
         (root / "intocado.txt").unlink()
         (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
         p, calls = run_until(root, binv, plan, ["--for", "2h"])
-        more = p.stderr.split("E há mais", 1)
+        more = p.stderr.split("And there are", 1)
         check("fantasma ao lado de arquivo tocado vira a recusa nova",
-              "1 arquivo(s) commitado(s) sumiram" in p.stderr
+              "1 committed file(s) vanished" in p.stderr
               and "git restore -- intocado.txt\n" in p.stderr, p.stderr[:800])
         check("...e a deleção do arquivo tocado segue listada em 'há mais'",
-              len(more) == 2 and more[1].startswith(" 2 arquivo(s)")
+              len(more) == 2 and more[1].startswith(" 2 more modified file(s)")
               and " D relatório.txt" in more[1] and "tocado.txt" in more[1],
               p.stderr[:800])
 
@@ -754,7 +754,7 @@ def test_permissions_granted_by_default_and_can_be_turned_off():
               calls and "--dangerously-skip-permissions" in calls[0],
               str(calls))
         check("...e o banner diz isso em voz alta",
-              "--dangerously-skip-permissions LIGADO" in p.stdout,
+              "--dangerously-skip-permissions ON" in p.stdout,
               p.stdout[:600])
 
         root2 = build_repo(tempfile.mkdtemp(), [item("a1")])
@@ -817,9 +817,9 @@ def test_slack_and_reserve_have_the_declared_defaults():
         plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
         p, _ = run_until(root, binv, plan, ["--for", "12h", "--dry-run"])
         check("a folga default é 60min",
-              "mata item que passar 1h00 do prazo" in p.stdout, p.stdout[:800])
+              "kills an item that runs 1h00 past the deadline" in p.stdout, p.stdout[:800])
         check("a reserva mínima default é 45min",
-              "não começa item com menos de 45min" in p.stdout, p.stdout[:800])
+              "no item starts with less than 45min left" in p.stdout, p.stdout[:800])
 
 
 def test_dry_run_executes_nothing():
@@ -1014,7 +1014,7 @@ def test_account_usage_limit_stops_the_run_without_blaming_the_item():
         check("...o registro guarda o horário do reset",
               ev and ev[0].get("reset") == FAR_RESET, str(ev))
         check("...o relatório diz em voz alta que não é falha do item",
-              "não é falha do item" in p.stdout, p.stdout[-500:])
+              "not the item's fault" in p.stdout, p.stdout[-500:])
         check("...e o item continua pendente, sem culpa gravada",
               yaml.safe_load(plan.read_text())["items"][0]["status"] == "pending")
 
@@ -1082,7 +1082,7 @@ def test_attempt_ceiling_takes_the_item_off_the_front_and_the_queue_moves():
         check("...o item preso ficou `blocked`",
               after["a1"]["status"] == "blocked", str(after["a1"]))
         check("...com a evidência dizendo que foi o supervisor, não um veredito",
-              "tentativas seguidas do `cepa-until`" in (after["a1"]["evidence"] or ""),
+              "consecutive `cepa-until` attempts" in (after["a1"]["evidence"] or ""),
               str(after["a1"].get("evidence"))[:200])
         check("...a reserva órfã foi limpa junto",
               not after["a1"].get("claimed_by"), str(after["a1"]))
@@ -1092,7 +1092,7 @@ def test_attempt_ceiling_takes_the_item_off_the_front_and_the_queue_moves():
         check("...o run acaba pela fila, não pelo disjuntor",
               end["motivo"] == "fim-da-fila" and end["esgotados"] == 1, str(end))
         check("...e o relatório cobra o item que ficou blocked",
-              "tirado da frente da fila" in p.stdout and "a1" in p.stdout,
+              "taken off the front of the queue" in p.stdout and "a1" in p.stdout,
               p.stdout[-600:])
 
 
@@ -1182,7 +1182,7 @@ def test_live_run_of_the_same_queue_refuses_the_launch():
                       p.returncode == 2 and not calls,
                       f"saiu {p.returncode}: {p.stderr[:300]}")
                 check("...a mensagem diz que já há um run, com o pid",
-                      "já há um run desta fila" in p.stderr
+                      "a run of this queue is already in progress" in p.stderr
                       and f"pid {alive.pid}" in p.stderr, p.stderr[:300])
                 check("...e não oferece --dirty-ok",
                       "--dirty-ok" not in p.stderr, p.stderr[:300])
@@ -1250,16 +1250,16 @@ def test_plan_of_another_queue_dirtied_by_the_live_run_is_not_dirt():
         try:
             p, calls = tries(alive.pid, fields_o1=of_run)
             check("plan de outra fila escrito pelo run vivo não é sujeira",
-                  "modificado(s)" not in p.stderr and len(calls) == 1,
+                  "modified file(s)" not in p.stderr and len(calls) == 1,
                   f"saiu {p.returncode}: {p.stderr[:300]}")
             p, calls = tries(alive.pid, fields_o1=dict(of_run, title="x"))
             check("...mudar também o title do item ainda é sujeira",
                   p.returncode == 2 and not calls
-                  and "modificado(s)" in p.stderr, p.stderr[:300])
+                  and "modified file(s)" in p.stderr, p.stderr[:300])
             p, calls = tries(alive.pid, fields_o2=of_run)
             check("...mudar item que o run não iniciou ainda é sujeira",
                   p.returncode == 2 and not calls
-                  and "modificado(s)" in p.stderr, p.stderr[:300])
+                  and "modified file(s)" in p.stderr, p.stderr[:300])
             check("...e a lista nomeia o plano sujo",
                   "outra/plan.yaml" in p.stderr, p.stderr[:300])
         finally:
@@ -1268,7 +1268,7 @@ def test_plan_of_another_queue_dirtied_by_the_live_run_is_not_dirt():
         p, calls = tries(alive.pid, fields_o1=of_run)
         check("...com o supervisor morto o mesmo diff é sujeira",
               p.returncode == 2 and not calls
-              and "modificado(s)" in p.stderr, p.stderr[:300])
+              and "modified file(s)" in p.stderr, p.stderr[:300])
 
 
 def test_live_run_refuses_before_the_dirt_guard():
@@ -1288,10 +1288,10 @@ def test_live_run_refuses_before_the_dirt_guard():
                   p.returncode == 2 and not calls,
                   f"saiu {p.returncode}: {p.stderr[:300]}")
             check("...a mensagem é a do run vivo",
-                  "já há um run desta fila" in p.stderr, p.stderr[:300])
+                  "a run of this queue is already in progress" in p.stderr, p.stderr[:300])
             check("...e não a da árvore suja",
                   "--dirty-ok" not in p.stderr
-                  and "modificado(s)" not in p.stderr, p.stderr[:300])
+                  and "modified file(s)" not in p.stderr, p.stderr[:300])
         finally:
             alive.kill()
             alive.wait()

@@ -328,7 +328,7 @@ def test_pending_accuses_running_run_with_dead_pid():
         plain_text = subprocess.run([sys.executable, str(CEPA_UNTIL), "pendentes",
                                 "--repo", str(root)], capture_output=True,
                                text=True, timeout=60).stdout
-        check("...e o texto diz que o supervisor morreu", "morreu" in plain_text,
+        check("...e o texto diz que o supervisor morreu", "died" in plain_text,
               plain_text)
 
 
