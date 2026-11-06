@@ -173,6 +173,25 @@ def test_without_section(D):
               D.read("## Decided without asking\n\n## Next\n")))
 
 
+def test_verdict_marker_edges(D):
+    # Gaps named by proof-reviewer: the four mutants that survived.
+    r = D.read("## Decided without asking\n"
+               "- Maiúscula. · Vetada em 2026-11-06\n"
+               "- Colada. · vetada emx 2026-11-06\n"
+               "- Duas vezes. · mantida em 2026-11-06 · vetada em 2026-11-07\n")
+    by_text = {d.text.split(".")[0]: d for d in r.pending + r.decided}
+    check("`· Vetada em` (maiúscula) conta como veredito",
+          by_text["Maiúscula"].verdict == "vetada",
+          f"{by_text['Maiúscula']!r}")
+    check("`· vetada emx` não conta como veredito",
+          by_text["Colada"].verdict is None, f"{by_text['Colada']!r}")
+    check("com dois marcadores, vale o último",
+          by_text["Duas vezes"].verdict == "vetada",
+          f"{by_text['Duas vezes']!r}")
+    check("read_file em caminho inexistente devolve None",
+          D.read_file(REPO / "nao-existe" / "x.md") is None)
+
+
 def test_hook_imports_module(D):
     src = GATE.read_text(encoding="utf-8")
     check("o hook importa o módulo compartilhado",
@@ -201,6 +220,7 @@ def main():
     test_old_name_fixture(D)
     test_verdicts_split(D)
     test_without_section(D)
+    test_verdict_marker_edges(D)
     test_hook_imports_module(D)
     if FAILURES:
         print(f"\n{len(FAILURES)} falha(s)")
