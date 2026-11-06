@@ -676,6 +676,15 @@ r = run("Stop", after_wrap(
 check("(n2) sessão já fechada + /wrap-up de novo: corpo isMeta não zera o invoked → bloqueia",
       "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
 
+r = run("Stop", after_wrap(
+    msg("assistant", [{"type": "tool_use", "id": "t1", "name": "Bash",
+                       "input": {"command": "git status"}}]),
+    msg("user", [{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}],
+        mtype="user"),
+    user("sim"), text(GOOD)), session="s-wrap-p")
+check("(p) tool_result (user sem texto) não reabre → bloqueia citando wrap-up",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
 # ── the prose that sustains the rule says what the hook charges ────────────
 def read_rel(rel):
     return (REPO / rel).read_text(encoding="utf-8")

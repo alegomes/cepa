@@ -346,9 +346,11 @@ ACCEPT_WORDS = frozenset((
 def _is_acceptance(text: str) -> bool:
     """Is this user prompt a mere acceptance ("sim", "1. sim", "(b)")?
 
-    Short (at most 6 words) and every word in a small vocabulary, ignoring
-    punctuation and bare numbers ("1.", "2)"). Anything else -- a sentence with
-    other words -- is a new request. A slash command is never an acceptance
+    Every word in a small vocabulary, ignoring punctuation and bare numbers
+    ("1.", "2)"), whatever the length. Anything else -- a sentence with other
+    words -- is a new request. Empty or whitespace-only text is not a request
+    either: it counts as acceptance (fails safe, toward keeping the block).
+    A slash command is never an acceptance
     either: its line carries tag words (`command-name`, ...) outside the
     vocabulary.
 
@@ -357,10 +359,8 @@ def _is_acceptance(text: str) -> bool:
     the block."""
     t = text.strip().lower()
     if not t:
-        return False
+        return True
     words = [w for w in re.split(r"[\s,;/]+", t) if w]
-    if len(words) > 6:
-        return False
     for w in words:
         w = w.strip(".,;:!?()[]\"'`-")
         if not w or w.isdigit() or w in ACCEPT_WORDS:
@@ -383,11 +383,17 @@ def session_closed(rows) -> bool:
     also quotes the phrase.
 
     Reopening (2026-11-05, fb-20261102-2, fb-20261104-4, fb-20261105-1): once
-    closed, a real user prompt (`_is_user_prompt`, no tool_result) that is not a
-    mere acceptance (`_is_acceptance`) is a NEW request: closed and invoked go
-    back to False, and a later wrap-up + "Safe to exit" closes again. A bare
+    closed, a user row that is not `isMeta`, not a "Stop hook feedback:" line and
+    whose text is not an acceptance (`_is_acceptance`) is a NEW request: closed
+    and invoked go back to False. Empty text, as in a tool_result row, counts as
+    acceptance and never reopens. A later wrap-up + "Safe to exit" closes again. A bare
     "sim"/"1. sim" accepting an offer does not reopen, nor does an `isMeta` row
-    or one starting with "Stop hook feedback:" (not the owner talking)."""
+    or one starting with "Stop hook feedback:" (not the owner talking).
+    A wrap-up invocation in a closed session also resets closed/invoked, and
+    `if wrap: invoked = True` re-arms it, so a later "Safe to exit" closes
+    again. A second wrap-up that stops on a lock without saying "Safe to exit"
+    leaves the session open, so its report may ask the owner to resolve the
+    lock, same as the first wrap-up (case (c))."""
     invoked = False
     closed = False
     for row in rows:
@@ -400,8 +406,7 @@ def session_closed(rows) -> bool:
                 r"\s*/(?:common:)?wrap-up\b", text))
             human = not row.get("isMeta") \
                 and not text.lstrip().startswith("Stop hook feedback:")
-            if closed and human and _is_user_prompt(row) and not wrap \
-                    and not _is_acceptance(text):
+            if closed and human and not _is_acceptance(text):
                 closed = False
                 invoked = False
             if wrap:
