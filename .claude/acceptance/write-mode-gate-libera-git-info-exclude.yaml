@@ -1,0 +1,47 @@
+key: write-mode-gate-libera-git-info-exclude
+status: complete
+diff: 9fbe8fd..23cfec8
+audited_head: 23cfec8
+note: >
+  Reauditado em 23cfec8. Hook real como subprocesso. Rodado: python3 tests/test_write_mode_gate.py -> 192 linhas ok, 0 falhas, tudo verde. 23cfec8 adiciona Write em .git/info/exclude e Edit+Bash em .git/info/sparse-checkout nos 5 modos.
+criteria:
+  - id: AC1
+    text: Em qualquer modo com allow-list, escrita em .git/info/exclude passa via Edit/Write e via redirecao Bash (relativo e absoluto).
+    altitude: event
+    surface: hook write-mode-gate.py (PreToolUse stdin, exit code)
+    test: tests/test_write_mode_gate.py::test_git_dir_is_checkout_preparation_in_every_mode
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_write_mode_gate.py -> 192 ok, 0 falhas (5 modos; Edit, Write e Bash relativo/absoluto)
+    status: complete
+    gap: null
+  - id: AC2
+    text: Outros caminhos .git/info/ (attributes, sparse-checkout) passam do mesmo jeito.
+    altitude: event
+    surface: hook write-mode-gate.py
+    test: tests/test_write_mode_gate.py (attributes e sparse-checkout)
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_write_mode_gate.py -> 192 ok (attributes, sparse-checkout, Write), 0 falhas
+    status: complete
+    gap: null
+  - id: AC3
+    text: .gitignore e .git/../common/hooks/x.py seguem bloqueados; .git/hooks/* e .git/config seguem bloqueados.
+    altitude: event
+    surface: hook write-mode-gate.py
+    test: tests/test_write_mode_gate.py::test_git_dir_is_checkout_preparation_in_every_mode
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_write_mode_gate.py -> 192 ok, 0 falhas (Edit e Bash em hooks/pre-commit e config, .git/.. via Edit e Bash, .gitignore via Edit e Bash)
+    status: complete
+    gap: null
+  - id: AC4
+    text: Regra vive em _modes.py como ALWAYS_WRITABLE (nao entrada por modo) e o cabecalho do hook documenta a decisao.
+    altitude: domain
+    surface: common/hooks/_modes.py, cabecalho de common/hooks/write-mode-gate.py
+    test: diff (ALWAYS_WRITABLE = [".git/info/**"] em _modes.py:122; decisao 6 no docstring; consulta em write-mode-gate.py:306) + comportamento coberto pelo teste acima
+    layer: leitura do diff + subprocess
+    evidence: verified
+    run: grep -n ALWAYS_WRITABLE common tests -> _modes.py:122, write-mode-gate.py:89,306; python3 tests/test_write_mode_gate.py -> 0 falhas
+    status: complete
+    gap: null
