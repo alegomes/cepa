@@ -31,6 +31,9 @@ Project checks (cwd):
     wins over .claude/env.yaml) — it self-updates
     and can change between two cards of the same unattended batch. With no
     `twg_version:` declared, total silence.
+  - decisions without a verdict ("Decided without asking") in the specs
+    (docs/spec/) and Epics (docs/epics/) out of draft: ⚠ with the total, one
+    file per line with the command that opens the veto. No automatic fix.
 
 Output: ✓ / ⚠ / ✗ per check. Exit 0 = all ok, 1 = warnings only, 2 = failures.
 The LIVE check of board-flow.yaml against Jira does not happen here (script
@@ -85,6 +88,13 @@ try:
     import _wtlib as WT
 except Exception:  # noqa: BLE001
     WT = None
+
+# The reader of "Decided without asking" is the one the readiness gate and
+# `cepa-plan decisions` use: the count here is the count they see.
+try:
+    import _decisions
+except Exception:  # noqa: BLE001
+    _decisions = None
 
 
 def ok(area, msg, fix=None):
@@ -556,6 +566,74 @@ def check_project(cwd: Path):
     check_awaiting_merge(root)
     check_until_waiting(root)
     check_queue_layout(root)
+    check_decisions(root)
+
+
+# ── Decisions without a verdict (item 5 of O2', CS-5) ──────────────────────
+
+def _readiness_gate():
+    """The spec-readiness-gate module, for its `statuses` reader: the doctor
+    must call "draft" what the gate calls draft. None when it cannot load."""
+    import importlib.util
+    path = Path(__file__).resolve().parent.parent / "hooks" / "spec-readiness-gate.py"
+    try:
+        spec = importlib.util.spec_from_file_location("_spec_readiness_gate", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:  # noqa: BLE001 — a diagnostic must not break the doctor
+        return None
+
+
+DRAFT_STATUSES = ("draft", "rascunho")
+
+
+def _is_draft(gate, text: str) -> bool:
+    """`Status: draft` (or `rascunho`) is still in interview: its decisions
+    are counted by the gate when it closes, not here. The first word counts,
+    because an Epic shares the line with other fields."""
+    for s in gate.statuses(text):
+        first = re.split(r"\s*[·•]\s*|\s+\*\*|\s+__|\s+", s)[0].strip()
+        return first in DRAFT_STATUSES
+    return False
+
+
+def check_decisions(root: Path):
+    """Decisions in "Decided without asking" without a verdict, in the specs
+    and Epics that left draft. A warning, with no automatic fix: the veto is
+    the owner's, and each file comes with the command that opens it."""
+    dirs = [(root / "docs" / "spec", "spec"), (root / "docs" / "epics", "epic")]
+    if not any(d.is_dir() for d, _ in dirs):
+        return
+    gate = _readiness_gate()
+    if _decisions is None or gate is None:
+        warn("decisoes", "checagem de decisões sem veredito não rodou: "
+                         "leitor da seção \"Decided without asking\" indisponível")
+        return
+    pending = []  # (count, relative path, command)
+    for d, kind in dirs:
+        for path in sorted(d.glob("*.md")) if d.is_dir() else []:
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if _is_draft(gate, text):
+                continue
+            res = _decisions.read(text)
+            if res is None or not res.pending:
+                continue
+            cmd = (f"/common:spec --continuar {path.stem}" if kind == "spec"
+                   else f"/common:epic {path.stem}")
+            pending.append((len(res.pending), str(path.relative_to(root)), cmd))
+    total = sum(n for n, _p, _c in pending)
+    if not total:
+        ok("decisoes", "0 decisões sem veredito nas specs e Epics fora de draft")
+        return
+    noun = "decisão" if total == 1 else "decisões"
+    lines = [f"{total} {noun} sem veredito nas specs e Epics fora de draft:"]
+    for n, rel, cmd in pending:
+        lines.append(f"     {rel}: {n} — {cmd} abre o veto")
+    warn("decisoes", "\n".join(lines))
 
 
 # ── Environment (docs/env.yaml, legacy .claude/env.yaml) ───────────────────
