@@ -617,6 +617,19 @@ check("(i2) slash command após Safe to exit reabre → não bloqueia",
       block_reason(r.stdout) == "" and "wrap-up" not in r.stdout,
       repr(r.stdout[:300]))
 
+# (i3)/(i3b) Pra você ANNOUNCES something + closed question in the list: the
+# only thing that could block it is the wrap-up rule.
+ANNOUNCES_Q = GOOD.replace("nada pra decidir agora; precisa reinstalar pra valer.",
+                           "uma decisão sua, lista no fim.")
+assert ANNOUNCES_Q != GOOD and "uma decisão sua" in ANNOUNCES_Q and STEPS in ANNOUNCES_Q
+r = run("Stop", after_wrap(user(NEW_ASK), EDIT, text(ANNOUNCES_Q)), session="s-wrap-i3")
+check("(i3) pedido novo após Safe to exit + Pra você anunciando + pergunta fechada → não bloqueia nada",
+      block_reason(r.stdout) == "" and "wrap-up" not in r.stdout and r.returncode == 0,
+      repr(r.stdout[:300]))
+r = run("Stop", after_wrap(user("sim"), EDIT, text(ANNOUNCES_Q)), session="s-wrap-i3b")
+check("(i3b) mesmo relatório sem pedido novo (\"sim\") → bloqueia citando wrap-up",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
 r = run("Stop", after_wrap(user("1. sim"), text(GOOD)), session="s-wrap-j")
 check("(j) \"1. sim\" após Safe to exit não reabre → bloqueia citando wrap-up",
       "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
