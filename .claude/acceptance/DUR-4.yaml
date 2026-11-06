@@ -1,8 +1,10 @@
 schema_version: 1
 card: DUR-4
 status: complete
-audited_at: '2026-11-05T00:00:00-03:00'
-audited_range: fafb7af..3b0a581
+audited_at: '2026-11-05T22:00:00-03:00'
+audited_range: fafb7af..18d1253
+audited_head: 18d1253
+note: 'Reauditoria no head 18d1253. O retry 18d1253 so adiciona 9 linhas em tests/test_state_deposits.py (import e chamada de isolate() de tests/_isolated_telemetry.py); nenhum teste removido, enfraquecido ou desabilitado; diff de comportamento 3b0a581..18d1253 vazio (o resto sao artefatos de acceptance/proof). Reexecutado: test_state_deposits 57 ok 0 FAIL rc=0; test_cepa_until_session 47 ok 0 FAIL rc=0; test_isolated_telemetry verde.'
 criteria:
 - id: AC1
   text: Os quatro comandos importam o modulo (cepa-plan, cepa-doctor, cepa-until-digest, cepa-intent importam _state E usam numa leitura real).
