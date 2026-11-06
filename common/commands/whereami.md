@@ -1,5 +1,5 @@
 ---
-description: Answers "where are we?" at any point in the session, opening with the project's Epic altitude (cycles closed, in progress, without a queue, open owner questions, derived by cepa-plan epics): purpose, by when, the plan with the current step marked and how long the cursor has been on it. Reads the intent recorded in .claude/session-intent (written only by cepa-intent) and checks the cursor against the latest prompts in the session-log. Only proposes advancing the cursor, never advances it on its own. With no recorded intent, teaches the way; in a cepa-until run, delegates to /common:next.
+description: Answers "where are we?" at any point in the session, opening with the project's Epic altitude (cycles closed, in progress, without a queue, open owner questions, derived by cepa-plan epics): purpose, by when, the plan with the current step marked and how long the cursor has been on it. Also lists the owner's dated reminders (.claude/reminders) so no recorded decision is cited as if the owner remembered it. Reads the intent recorded in .claude/session-intent (written only by cepa-intent) and checks the cursor against the latest prompts in the session-log. Only proposes advancing the cursor, never advances it on its own. With no recorded intent, teaches the way; in a cepa-until run, delegates to /common:next.
 argument-hint: (none)
 interaction: routine
 ---
@@ -21,6 +21,11 @@ Design: `docs/estrategia-intencao-da-sessao.md` (D4 and "Estados do `whereami`")
 Read-only. **The command classifies the state, not your eye**; your only job is
 the check against the log (step 2). Never edit `.claude/session-intent` by hand:
 the only writer is `cepa-intent`.
+
+**First mention of an owner decision.** The first time in a session you cite a
+decision or reminder of the owner, say "você decidiu isso em <data>, no contexto
+<frase>; ainda vale?". Never use a recorded decision as a premise the owner is
+assumed to remember (fb-20261104-3, 2026-11-04, owner: "eu disse? nem lembrava").
 
 ## Workflow
 
@@ -65,6 +70,15 @@ rewriting the facts, according to the state:
 - **`normal`**: show the four answers (purpose, by when, plan with the `>` on the
   current step, current step with its age) and go on to step 2.
 
+### 1b. Lembretes do dono
+
+The `state` output may end with a `lembretes do dono (N):` block (date, text and
+context of each reminder the owner left, oldest first, with the line "Ao citar um
+deles, diga a data e o contexto e pergunte se ainda vale."). Show it verbatim
+beside the plan, in all four states. In a `cepa-until` run, show it along with
+the `/common:next` answer. No block, nothing to say. `cepa-intent reminders`
+prints only this block.
+
 ### 2. Check the cursor against the log (only in the `normal` state)
 
 Read the latest prompts in `.claude/session-log.md` (the ones after the
@@ -87,4 +101,6 @@ becomes in progress; `N = M+1` means the plan is done).
 - **Never advances the cursor on its own**, not even "because the step is over".
 - **Never reclassifies the state by eye**: if the output says `empty`, it is
   `empty`.
+- **Never cites an owner decision or reminder without its date and context**
+  in the session's first mention of it, and asks whether it still holds.
 - Size: short. This command is read mid-session, when attention is already spent.

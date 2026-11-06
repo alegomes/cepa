@@ -206,6 +206,14 @@ def read_session_mode(root):
 #   step          integer, 1-based: the step IN PROGRESS, not the last one done
 #   history       list of maps (`- at: ...` and indented keys below)
 #
+# A second file in the same format, `.claude/reminders` (REMINDERS_FILE), lives
+# in the MAIN clone (shared by every worktree, versioned like a project fact):
+# the owner's reminders, one map per entry (at, text, context, session, branch)
+# under the key `reminders`. `cepa-intent remind` is its only writer; it lists
+# back in `cepa-intent state`, `/common:whereami` and one hook line on the
+# first turn. Reason: fb-20261104-3 (2026-11-04), the agent cited a reminder
+# from 2026-10-31 as if the owner remembered it.
+#
 # The old keys (proposito, para_quando, plano, passo, passo_desde,
 # aberto_em, resumo, historico and, in the history, em/proposito/plano_anterior/
 # motivo_da_troca) are still READ and come back already under the new name; the
@@ -218,12 +226,13 @@ def read_session_mode(root):
 # without a colon, for example): that is `cepa-intent`'s job.
 
 INTENT_FILE = ".claude/session-intent"
+REMINDERS_FILE = ".claude/reminders"
 
 # Plan of 1 to 6 steps; more than that is a program (`plan.yaml`).
 PLAN_MAX = 6
 
 # Keys whose value is a list of maps; any other list is a list of texts.
-_INTENT_MAP_LISTS = ("history",)
+_INTENT_MAP_LISTS = ("history", "reminders")
 
 # Old keys -> new, at the top of the file and inside the history entries.
 _LEGACY_INTENT_KEYS = {
@@ -318,6 +327,18 @@ def read_intent(root):
         return None
 
 
+def read_reminders(main_root):
+    """`<main_root>/.claude/reminders` -> list of dicts (file order, oldest
+    written first); [] if missing or unreadable. Tolerant: never raises."""
+    try:
+        with open(os.path.join(str(main_root), REMINDERS_FILE), encoding="utf-8",
+                  errors="replace") as f:
+            items = parse_intent(f.read()).get("reminders")
+        return [e for e in (items or []) if isinstance(e, dict) and e.get("text")]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 # Order in which the writer emits the known keys; unknown ones (which the
 # reader preserves) go after, so a future version of the format is not erased
 # by an old `cepa-intent`.
@@ -346,7 +367,7 @@ def render_intent(data):
         v = data[k]
         if k == "step":
             out.append(f"{k}: {int(v)}")
-        elif k == "history":
+        elif k in _INTENT_MAP_LISTS:
             out.append(f"{k}:")
             for entry in v or []:
                 pairs = list(entry.items())

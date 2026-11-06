@@ -98,6 +98,13 @@ Rules:
   speaks of this one. The plan separates steps with ` | `. Without all three, the
   next session is born without an intent and records its own; the brief
   paragraph never becomes a purpose.
+- **A reminder or decision the owner left during the session is recorded with
+  `cepa-intent remind`.** When the owner says "lembra de revisitar X" or "depois
+  a gente vê se Y ainda vale", run `cepa-intent remind "<text>" --context "<one
+  sentence on where/why it came up>"`, not only in `## Decisões desta sessão`:
+  the handoff is per branch and is reaped when the branch lands, while
+  `.claude/reminders` survives in the repo and `/common:whereami` lists it with
+  its date (fb-20261104-3, 2026-11-04).
 - **Concrete over vague.** "Fix the bug" is useless; "run `bin/install.sh
   --clean` + restart so the new hooks take effect" is useful. Cite commits /
   `file:line` where it helps.
