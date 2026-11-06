@@ -1,9 +1,9 @@
 schema_version: 2
 card: pt-names-to-english
-verdict: needs-human
+verdict: proven
 reviewed_at: 2026-11-06T00:00:00-03:00
 base_commit: 078b1a2
-head_commit: 2e3ebb4
+head_commit: 0963cc3
 issue_type: Task
 scope:
   base_commit_resolved: true
@@ -22,32 +22,28 @@ levels:
       status: n/a
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "GREEN at HEAD 2e3ebb4 (worktree /tmp/proof-pt-names-a): python3 tests/test_pt_names_to_english.py -> 'tudo verde', 34 ok lines, rc 0"
-        - "RED autonomy aliases=[OLD_NAMES[name]] -> []: 3 FAIL (listar/classificar not a subcommand)"
-        - "RED autonomy dispatch map {'listar':..} -> {}: 2 FAIL (Traceback)"
-        - "RED until ('land','aterrissar') -> ('land',): 1 FAIL; -> ('aterrissar',): 1 FAIL"
-        - "RED until ('pending','pendentes') -> ('pending',): 1 FAIL"
-        - "RED until ('close-dead','fecha-morto') -> ('close-dead',): 1 FAIL"
-        - "RED plan OLD_FLAGS --se-nao renamed: 2 FAIL (unrecognized arguments: --se-nao)"
-        - "RED plan OLD_FLAGS --impede renamed: 2 FAIL (unrecognized arguments: --impede)"
-        - "RED plan OLD_FLAGS key --if-yes broken: rc 1, test crashes at queue setup (KeyError path), never reaches tudo verde; red by crash, not by a named FAIL"
-        - "RED feedback STATUS_ALIAS drop open: 3 FAIL; drop triaged: 3 FAIL; drop all: 2 FAIL"
-        - "RED doctor argv check drops --project: 1 FAIL (--project == --projeto)"
-        - "RED launcher drop --prompt-replace=* case: 2 FAIL; drop --prompt-replace) space case: 3 FAIL; drop --prompt-substitui=* old case: 1 FAIL"
-        - "SURVIVED doctor ap.add_argument('--project','--projeto') -> ('--project'): test still rc 0. main() reads sys.argv directly (line 1296 argv check, which IS load-bearing, RED above); the argparse parser only feeds --help, which short-circuits before parsing. The '--projeto' in add_argument only affects the help text, which test already checks shows --project."
-        - "NOT perturbed: hook message text in common/hooks/no-background-build.py, docs/*.md, commands/*.md (text only, no behavior)"
-        - "Neighbour suites at HEAD, each green: test_cepa_until_english_aliases (tudo verde), test_autonomy_yaml (all green), test_cepa_feedback (tudo verde), test_cepa_prompt (todos os contratos passam), test_cepa_until_dead_supervisor (tudo verde)"
+        - "GREEN intact at 0963cc3 (fresh detached worktree): python3 tests/test_pt_names_to_english.py -> 'tudo verde', rc 0, including the 3 new doctor --help cases"
+        - "RED doctor ap.add_argument('--project','--projeto') -> ('--project') at 0963cc3: 1 FAIL 'doctor --help: avisa que os nomes antigos em português ainda funcionam' (the earlier survivor is now killed)"
+        - "Between 2e3ebb4 and 0963cc3 only tests/test_pt_names_to_english.py and docs/proof, .claude/acceptance changed (git diff --stat), so the 16 perturbations run at 2e3ebb4 still apply to unchanged production code:"
+        - "RED autonomy aliases=[OLD_NAMES[name]] -> []: 3 FAIL; dispatch map {'listar':..} -> {}: 2 FAIL"
+        - "RED until ('land','aterrissar') -> ('land',): 1 FAIL, -> ('aterrissar',): 1 FAIL; ('pending','pendentes') -> ('pending',): 1 FAIL; ('close-dead','fecha-morto') -> ('close-dead',): 1 FAIL"
+        - "RED plan OLD_FLAGS --se-nao broken: 2 FAIL; --impede broken: 2 FAIL; key --if-yes broken: rc 1 (crash at queue setup, red by crash)"
+        - "RED feedback STATUS_ALIAS drop open: 3 FAIL; triaged: 3 FAIL; all: 2 FAIL"
+        - "RED doctor argv check drops --project: 1 FAIL"
+        - "RED launcher drop --prompt-replace=*: 2 FAIL; drop --prompt-replace) space case: 3 FAIL; drop --prompt-substitui=*: 1 FAIL"
+        - "Neighbour suites at 2e3ebb4 green: test_cepa_until_english_aliases, test_autonomy_yaml, test_cepa_feedback, test_cepa_prompt, test_cepa_until_dead_supervisor"
+        - "Not perturbed (text only, no behavior): hook message text in no-background-build.py, docs/*.md, commands/*.md"
   l2_coverage:
-    status: assumed
+    status: pass
     uncovered_lines: []
-    run: "no coverage tool run for this CLI; reachability judged by the 16 perturbations that each turned the covering test red"
+    run: "every changed behavioral line was broken once and the covering test went RED (17 perturbations, 0 survivors); a line that turns the test red is reached by it"
   l4_adversarial_input:
-    status: skipped
-    reason: "CLI flags and subcommands are parsed from the command line; no adversarial pass was run"
+    status: n/a
+    reason: "the diff only renames flags and subcommands (new primary name, old name kept as alias); it adds no new value parsing and opens no new input surface; no api-rest module changed"
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
     run: "issue_type Task, not Bug"
-routing_reason: "15 of the 16 renames and aliases are load-bearing: breaking each turns the covering test red. One line survived: the --projeto alias inside cepa-doctor's argparse registration, which is dead for behavior (main reads argv directly and that check is proven). L2 and L4 were not measured. Mechanically needs-human; suggested decision for the owner, not a waiver: accept the survivor as an equivalent mutant or delete the dead alias."
+routing_reason: "All 17 renames and aliases are load-bearing: breaking each turns the covering test red. The one earlier survivor (cepa-doctor argparse alias) is killed at 0963cc3 by the new --help assertions. No double stands in for any changed class."
