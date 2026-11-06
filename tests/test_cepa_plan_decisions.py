@@ -109,6 +109,25 @@ with tempfile.TemporaryDirectory() as tmp:
     check("explicit file does not scan the others",
           "b.md" not in r.stdout and r.returncode == 0, r.stdout)
 
+    # Ordinal is the position among ALL decisions of the file, not among the
+    # pending ones: with the vetada one first, the pending one is #2.
+    flipped = repo / "docs" / "spec" / "d.md"
+    flipped.write_text(
+        "# Spec\n\n## Decided without asking\n\n"
+        "- Primeiro já vetado · vetada em 2026-11-06: fora do ciclo\n"
+        "- Segundo ainda pendente\n", encoding="utf-8")
+    r = run("decisions", str(flipped))
+    check("flipped: pending shows #2", "#2 " in r.stdout and "Segundo ainda pendente" in r.stdout, r.stdout)
+    check("flipped: pending does not show #1", "#1 " not in r.stdout, r.stdout)
+    r = run("decisions", str(flipped), "--json")
+    try:
+        fdecs = json.loads(r.stdout)["files"][0]["decisions"]
+    except (ValueError, KeyError, IndexError, TypeError):
+        fdecs = []
+    check("flipped: json ordinal 2 on the pending one",
+          len(fdecs) == 2 and fdecs[0]["verdict"] == "vetada"
+          and fdecs[1]["verdict"] is None and fdecs[1]["ordinal"] == 2, str(fdecs))
+
     # File without the section: says so, does not crash.
     bare = repo / "docs" / "spec" / "c.md"
     bare.write_text(NOSECTION, encoding="utf-8")
