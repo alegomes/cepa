@@ -849,6 +849,49 @@ warning = cycle(BATCH.replace("Recomendo sim", "assim"), changed=False)
 check("turno sem edição e sem lista de decisões → segue não medido",
       warning.strip() == "", repr(warning[:300]))
 
+# ── interview turn (epic and spec) is spared; anything else is measured ────
+INTERVIEW = ("Entendi a ideia: a pessoa quer que o verificador pare de aceitar "
+             "qualquer palavra fora da lista, e eu registrei isso no documento "
+             "como a primeira resposta da rodada. Falta decidir como tratar o "
+             "erro de digitação, porque hoje ele vira aprovação e ninguém "
+             "percebe, e também se a recusa deve parar o fluxo inteiro ou só "
+             "avisar quem escreveu a checagem, o que muda bastante o custo "
+             "para quem usa no dia a dia do projeto.\n\n"
+             "Devo recusar a palavra desconhecida e parar o fluxo? "
+             "Recomendo sim, porque um erro de digitação aprovado em silêncio "
+             "é pior que uma parada visível.")
+
+
+def interview(*actions):
+    rows = [msg("user", [{"type": "text", "text": "me entreviste"}], mtype="user")]
+    for name, inp in actions:
+        rows.append(msg("assistant", [{"type": "tool_use", "name": name, "input": inp}]))
+    rows.append(msg("assistant", [{"type": "text", "text": INTERVIEW}]))
+    r = run("Stop", transcript(*rows))
+    block = block_reason(r.stdout)
+    run("UserPromptSubmit")
+    return block
+
+
+check("MIN_WORDS: a fala da entrevista é longa o bastante para ser medida",
+      len(INTERVIEW.split()) >= 80, str(len(INTERVIEW.split())))
+check("entrevista escreve só docs/spec/<slug>.md → poupada",
+      interview(("Write", {"file_path": "docs/spec/minha-ideia.md"})).strip() == "")
+check("entrevista escreve só docs/epics/x.md → segue poupada",
+      interview(("Edit", {"file_path": "docs/epics/x.md"})).strip() == "")
+check("docs/spec/ + src/x.py → não poupada",
+      interview(("Write", {"file_path": "docs/spec/minha-ideia.md"}),
+                ("Edit", {"file_path": "src/x.py"})).strip() != "")
+check("docs/spec/ + git commit → não poupada",
+      interview(("Write", {"file_path": "docs/spec/minha-ideia.md"}),
+                ("Bash", {"command": "git commit -m x"})).strip() != "")
+check("docs/specs/x.md (plural) → não poupada",
+      interview(("Write", {"file_path": "docs/specs/x.md"})).strip() != "")
+check("docs/spec/x.yaml (extensão errada) → não poupada",
+      interview(("Write", {"file_path": "docs/spec/x.yaml"})).strip() != "")
+check("docs/spec/sub/x.md → não poupada",
+      interview(("Write", {"file_path": "docs/spec/sub/x.md"})).strip() != "")
+
 # ── corrupted entry does not take down the turn ────────────────────────────
 r = run("Stop", str(TMP / "nao-existe.jsonl"))
 check("transcript ausente → rc=0", r.returncode == 0, f"rc={r.returncode}")

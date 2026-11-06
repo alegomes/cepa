@@ -34,18 +34,21 @@ even open the text: conversation, short questions and design discussion are
 left out, because formatting a "yes, it exists" into three blocks would be
 worse than the problem.
 
-Exception (CS-5, 2026-10-08): the INTERVIEW turn of `/common:epic`. There the
+Exception (CS-5, 2026-10-08): the INTERVIEW turn of `/common:epic` (and, since
+2026-11-06, `/common:spec`). There the
 command orders the accepted answer to be written into the document in the same
 turn, so every turn writes, and the hook treated it as a report: in the
 `/common:epic` test transcript it ordered the challenge rewritten into the
 plain-report format, and the question became a numbered item with "I recommend
 yes", which is the menu the interview forbids. The turn is spared when ALL of
-its writes were to `docs/epics/<name>.md`, there was no commit, the last
+its writes were to `docs/epics/<name>.md` (or `docs/spec/<slug>.md`), there was no commit, the last
 paragraph of the speech has a question and the speech carries no mark of the
 report (`**For you:**`, "Technical detail", "Decisions and next steps", or the
 old pt-BR labels). The closing report has those marks and ends in a numbered
-question, so it is still measured. `/common:spec` is outside the exception: its
-turn asks in rounds of up to four, and sparing it is another decision.
+question, so it is still measured. `/common:spec` is inside the exception since
+2026-11-06 (queue item `spec-isento-do-report-style-lint`, CS-5 follow-up): its
+round also writes the document (`docs/spec/<slug>.md`) every turn and ends
+asking, with a recommendation.
 
 Owner task with step by step (2026-10-15). On 2026-10-14 the owner rejected a
 report whose `Pra você:` said "close the two human routes ... and the seven
@@ -425,7 +428,7 @@ def session_closed(rows) -> bool:
     return closed
 
 
-INTERVIEW_DOC = re.compile(r"(^|/)docs/epics/[^/]+\.md$")
+INTERVIEW_DOC = re.compile(r"(^|/)docs/(epics|spec)/[^/]+\.md$")
 
 
 def interview_turn(rows, speech: str) -> bool:
