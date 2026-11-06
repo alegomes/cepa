@@ -1,0 +1,59 @@
+schema_version: 2
+card: tres-portas-c1-CS-6
+verdict: unproven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: 0d56590
+head_commit: 2c9d789
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan::cmd_verdict + derived_queues + _cites + _rel_to_repo + argparser entry 'verdict'"
+      module: common-bin
+      external_observable: true       # the `cepa-plan verdict` CLI is the surface; the test runs the real script as a subprocess
+      substituted_by_double: null     # tests/test_cepa_plan_verdict.py runs the real cepa-plan, real _decisions reader, real queue files on disk
+    - class: "common/hooks/_decisions.py::Decision.end + read"
+      module: common-hooks
+      external_observable: true       # reached through the same CLI (multi-line item marker position)
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "unperturbed HEAD 2c9d789 (detached worktree /tmp/proof-CS-6): test_cepa_plan_verdict.py 'all ok'; test_cepa_plan_decisions.py 'all ok'; test_decisions_reader.py 'all green'; test_doctor_decisions.py 'todos ok'"
+        - "KILLED (RED) P1 vetada without --reason no longer refused -> 8 failure(s)"
+        - "KILLED (RED) P2 'already has a verdict' check removed -> 5 failure(s)"
+        - "KILLED (RED) P4 marker without the date -> 3 failure(s)"
+        - "KILLED (RED) P5 multi-line item end ignored (Decision.end) -> 1 failure(s)"
+        - "KILLED (RED) P6 refinada no longer warns about the queue -> 1 failure(s)"
+        - "KILLED (RED) P7 mantida also warns -> 1 failure(s)"
+        - "KILLED (RED) P8 _cites reduced to substring match -> 1 failure(s)"
+        - "KILLED (RED) P11 unsorted pending+decided ordinal numbering -> 7 failure(s)"
+        - "KILLED (RED) P14 verdict dropped from --help 'writing' group -> 1 failure(s)"
+        - "KILLED (RED) P15 refinada without --text no longer refused -> 6 failure(s)"
+        - "SURVIVED (green) P3 upper bound of the ordinal check removed (`1 <= ordinal`): ordinal 9 raises IndexError, exits nonzero and the traceback happens to contain '3'; the 'no traceback' check runs only on the no-section case"
+        - "SURVIVED (green) P9 plural 'itens done' replaced by always 'item done': only the 1-done case is tested"
+        - "SURVIVED (green) P10 branch 'a fila foi derivada (0 itens done)' forced on (`if done:` -> `if True:`): the 0-done warning has no test"
+        - "SURVIVED (green) P12 single-track mode filter removed in derived_queues: no queue of another mode is in the test"
+        - "SURVIVED (green) P13 refusal of --text that already carries a marker removed: untested"
+        - "11 of 16 perturbations RED, 5 survived (P3, P9, P10, P12, P13)"
+  l2_coverage:
+    status: gap
+    uncovered_lines:
+      - "common/bin/cepa-plan cmd_verdict: refusal when --text already carries a verdict marker"
+      - "common/bin/cepa-plan cmd_verdict: 0-done warning branch ('foi derivada deste arquivo (0 itens done ...)')"
+      - "common/bin/cepa-plan derived_queues: skip of queues whose mode is not single-track"
+    run: "no coverage tool in repo; structural reading of tests/test_cepa_plan_verdict.py: the three branches above are reached by no scenario, confirmed by perturbations P10, P12, P13 staying green"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the command reads and rewrites only repo markdown/queue files named by the owner on the command line; it opens no input from outside and touches no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card; red test of the criterion: HEAD test with common/ of 0d56590 (git checkout 0d56590 -- common/) -> '21 failure(s)'; at HEAD 2c9d789 -> 'all ok'"
+routing_reason: "The criterion's own red test (CS-6) is RED at base (21 failures) and GREEN at HEAD, and the main behavior is load-bearing (11 of 16 perturbations RED). But 5 perturbations of changed lines stay green: P3 ordinal upper bound, P9 plural wording, P10 zero-done warning, P12 single-track mode filter, P13 refusal of --text carrying a marker. Surviving perturbation on a changed line at the CLI surface means not load-bearing. Computed verdict: UNPROVEN. Fix is adding assertions to tests/test_cepa_plan_verdict.py, no production change."
