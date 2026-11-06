@@ -1,9 +1,9 @@
 schema_version: 2
 card: tres-portas-c1-CS-6
-verdict: unproven
+verdict: proven
 reviewed_at: 2026-11-06T00:00:00-03:00
 base_commit: 0d56590
-head_commit: 6816ecc
+head_commit: 63780bd
 issue_type: Task
 scope:
   changed_classes:
@@ -23,30 +23,21 @@ levels:
       status: n/a
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "unperturbed HEAD 6816ecc (detached worktree /tmp/proof-CS-6b): test_cepa_plan_verdict.py 'all ok'; test_cepa_plan_decisions.py 'all ok'; test_decisions_reader.py 'all green'; test_doctor_decisions.py 'todos ok'"
-        - "previous survivors now KILLED (RED): P3 ordinal upper bound -> 2 failure(s); P9 plural -> 1 failure(s); P10 `if done:` -> `if True:` -> 1 failure(s); P12 mode filter in derived_queues (line 4127) -> 1 failure(s) 'a waves plan is not a derived queue'; P13 VERDICT_RE check on --text -> 2 failure(s)"
-        - "earlier kills re-checked, still RED: P1 vetada without --reason (8), P2 already-has-verdict (5), P6 refinada no warning (1), P7 mantida warns (1), P8 _cites substring (1), P15 refinada without --text (3)"
-        - "new lines of 6816ecc KILLED (RED): N1 CRLF read without newline='' (2), N3 ending() always LF (3), N4 `./` prefix in _cites removed (2), N6 `.\\w` lookahead -> prefix-only source counted (1), N7 lookahead removed (1), N8 refinada always adds LF (1), N10 multi-line end ignored (1), N11 unsorted ordinals (1), N15 date not today's (5)"
-        - "SURVIVED (green) N5 _cites lookbehind `(?<![\\w./-])` -> `(?<![\\w])`: `../docs/spec/a.md` (and any `x/docs/spec/a.md`) would count as citing a.md, contrary to the docstring; no test has such a source"
-        - "SURVIVED (green) N9 `body.rstrip() + marker` -> `body + marker` on vetada/mantida: trailing whitespace before the marker is untested"
-        - "SURVIVED (green) N13 `\" \".join(reason.split())` -> `reason`: reason whitespace normalization untested"
-        - "SURVIVED (green) N14 `\" \".join((text or \"\").split())` -> `text or \"\"`: --text whitespace normalization untested"
-        - "SURVIVED (green) N17 _rel_to_repo git-toplevel fallback disabled; N18 repo-relative branch disabled: each alone is redundant with the other when the repo is a git clone (probably equivalent mutants, noted, not counted)"
-        - "SURVIVED (green) N2 write newline='' removed: equivalent mutant on POSIX (macOS/Linux do not translate '\\n'), differs only on Windows; not counted"
-        - "28 perturbations run in total; survivors that change behavior: N5, N9, N13, N14"
+        - "unperturbed HEAD 63780bd (detached worktree /tmp/proof-CS-6c): test_cepa_plan_verdict.py 'all ok'; test_cepa_plan_decisions.py 'all ok'; test_decisions_reader.py 'all green'; test_doctor_decisions.py 'todos ok'"
+        - "previous survivors now KILLED (RED): N5 _cites lookbehind (?<![\\w./-]) -> (?<![\\w]) -> 1 failure(s) '../ in source is not a citation'; N9 body.rstrip() + marker -> body + marker -> 1 failure(s) 'trailing spaces dropped and --reason collapsed'; N13 reason whitespace collapse removed -> 2 failure(s); N14 --text whitespace collapse removed -> 1 failure(s) '--text collapsed to one line'"
+        - "earlier kills re-checked, still RED: P3 ordinal upper bound removed -> 2 failure(s); P12 mode filter in derived_queues removed -> 1 failure(s) 'a waves plan is not a derived queue'; N3 ending() always LF -> 3 failure(s) (CRLF / no-trailing-newline cases)"
+        - "from the previous round, not re-run (no production change since 6816ecc): N17 _rel_to_repo git-toplevel fallback and N18 repo-relative branch are mutually redundant in a git clone (probable equivalent mutants); N2 write newline='' removed is equivalent on POSIX. Not counted."
   l2_coverage:
-    status: gap
-    uncovered_lines:
-      - "common/bin/cepa-plan _cites: lookbehind rejecting a parent-dir prefix (`../docs/spec/a.md`)"
-      - "common/bin/cepa-plan cmd_verdict: `body.rstrip()` before the marker; whitespace normalization of --reason and --text"
-    run: "no coverage tool in repo; structural reading of tests/test_cepa_plan_verdict.py, confirmed by N5, N9, N13, N14 staying green"
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; the four formerly uncovered behaviors (parent-dir prefix in _cites, rstrip before marker, --reason and --text whitespace collapse) each turn RED when perturbed, so they are reached at the CLI surface"
   l4_adversarial_input:
     status: n/a
     reason: "the command reads and rewrites only repo markdown/queue files named by the owner on the command line; it opens no input from outside and touches no api-rest module"
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-    run: "not a Bug card; red test of the criterion was RED at base 0d56590 (21 failures, previous round) and is 'all ok' at HEAD 6816ecc"
-routing_reason: "All five earlier survivors (P3, P9, P10, P12, P13) are now killed and the new CRLF / final-newline / `./` production lines are load-bearing. Four behavior-changing perturbations of changed lines still stay green: N5 (a `../` or nested path wrongly counts as citing the file), N9 (trailing space before the marker), N13 and N14 (whitespace normalization of --reason and --text). Surviving perturbation on a changed line at the CLI surface: not load-bearing. Computed verdict: UNPROVEN. Fix is test-only: add to tests/test_cepa_plan_verdict.py a queue with source `../docs/spec/e.md` expected NOT to warn, a decision line with trailing spaces, and a --reason / --text with repeated inner whitespace."
+    run: "not a Bug card; the criterion test was RED at base 0d56590 (21 failures, earlier round) and is 'all ok' at HEAD 63780bd"
+routing_reason: "The four behavior-changing survivors of the previous proof (N5, N9, N13, N14) are now killed by the assertions added in 63780bd, and the sampled earlier kills (P3, P12, N3) remain RED. No production change since 6816ecc. Every behavior-changing perturbation is RED at the real CLI surface via subprocess. Computed verdict: PROVEN."
