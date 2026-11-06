@@ -640,11 +640,23 @@ r = run("Stop", after_wrap(user(NEW_ASK), EDIT, text("feito."),
 check("(k) novo wrap-up + Safe to exit depois do pedido novo → fecha de novo, bloqueia",
       "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
 
+r = run("Stop", after_wrap(user(NEW_ASK), EDIT, text("Safe to `exit`."),
+                           user("sim"), text(GOOD)), session="s-wrap-o")
+check("(o) Safe to exit sem novo wrap-up após pedido novo não fecha → não bloqueia citando wrap-up",
+      "wrap-up" not in r.stdout, repr(r.stdout[:300]))
+
 r = run("Stop", after_wrap(
     msg("user", "Stop hook feedback:\n[report-style] relatório com pergunta fechada...",
         mtype="user", meta=True),
     user("sim"), text(GOOD)), session="s-wrap-m")
 check("(m) linha isMeta de feedback do Stop hook não reabre → bloqueia citando wrap-up",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+r = run("Stop", after_wrap(
+    msg("user", "Stop hook feedback:\n[report-style] relatório com pergunta fechada...",
+        mtype="user"),
+    user("sim"), text(GOOD)), session="s-wrap-m2")
+check("(m2) feedback do Stop hook sem isMeta (só o prefixo) não reabre → bloqueia citando wrap-up",
       "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
 
 r = run("Stop", after_wrap(

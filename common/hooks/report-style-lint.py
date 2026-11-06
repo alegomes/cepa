@@ -348,13 +348,15 @@ def _is_acceptance(text: str) -> bool:
 
     Short (at most 6 words) and every word in a small vocabulary, ignoring
     punctuation and bare numbers ("1.", "2)"). Anything else -- a sentence with
-    other words, a slash command -- is a new request.
+    other words -- is a new request. A slash command is never an acceptance
+    either: its line carries tag words (`command-name`, ...) outside the
+    vocabulary.
 
     Known limit: a real one-word request inside the vocabulary ("faz", "vai")
     counts as acceptance and does not reopen; that fails safe, toward keeping
     the block."""
     t = text.strip().lower()
-    if not t or "<command-name>" in t:
+    if not t:
         return False
     words = [w for w in re.split(r"[\s,;/]+", t) if w]
     if len(words) > 6:
