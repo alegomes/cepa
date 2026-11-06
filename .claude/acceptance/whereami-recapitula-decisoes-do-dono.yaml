@@ -1,0 +1,52 @@
+key: whereami-recapitula-decisoes-do-dono
+head_commit: cfceb6f
+status: complete
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: "cepa-intent remind <text> --context <frase> [--at]"
+    test: "tests/test_cepa_intent_reminders.py (remind sem --context recusa/nao cria arquivo; remind com contexto grava)"
+    layer: subprocess CLI
+    evidence: verified
+    run: "python3 tests/test_cepa_intent_reminders.py -> 35 checks ok, 'tudo ok'"
+    verdict: complete
+  - id: AC2
+    altitude: cli
+    surface: "cepa-intent remind/state/reminders em worktree vinculado"
+    test: "tests/test_cepa_intent_reminders.py (no worktree, remind grava no clone principal; state no worktree lista os do principal)"
+    layer: subprocess CLI in linked worktree
+    evidence: verified
+    run: "python3 tests/test_cepa_intent_reminders.py -> 35 ok"
+    verdict: complete
+  - id: AC3
+    altitude: cli
+    surface: "saida de cepa-intent state + common/commands/whereami.md"
+    test: "tests/test_cepa_intent_reminders.py (state vazio/normal/fulfilled/other-session/cepa-until traz bloco; sem lembretes ausente); whereami.md secao 1b manda mostrar o bloco"
+    layer: subprocess CLI + prose
+    evidence: verified
+    run: "python3 tests/test_cepa_intent_reminders.py -> 35 ok"
+    verdict: complete
+  - id: AC4
+    altitude: domain
+    surface: "prosa de whereami.md e handoff.md"
+    test: "tests/test_cepa_intent_reminders.py (whereami.md: 'ainda vale' e fb-20261104-3; handoff.md menciona cepa-intent remind)"
+    layer: doc check
+    evidence: verified
+    run: "python3 tests/test_cepa_intent_reminders.py -> 35 ok"
+    verdict: complete
+  - id: AC5
+    altitude: event
+    surface: "stdout do hook session-mode.py"
+    test: "tests/test_cepa_intent_reminders.py (hook 1o turno com [lembretes]; 2 prompts antes sem; cepa-until sem; sem lembretes sem)"
+    layer: hook subprocess
+    evidence: verified
+    run: "python3 tests/test_cepa_intent_reminders.py -> 35 ok"
+    verdict: complete
+  - id: AC6
+    altitude: cli
+    surface: "parse/render_intent round-trip; state/close exit 0 com reminders malformado"
+    test: "tests/test_cepa_intent_reminders.py (round-trip reminders; 'arquivo malformado: state vazio/state no cepa-until/close sem intencao/state normal/close com intencao sai 0 sem traceback'); historico inalterado: test_cepa_intent.py, test_whereami_intent.py, test_session_intent*.py"
+    layer: unit + subprocess CLI
+    evidence: verified
+    run: "python3 tests/test_cepa_intent_reminders.py -> 40 checks ok, 'tudo ok' (em cfceb6f)"
+    verdict: complete
