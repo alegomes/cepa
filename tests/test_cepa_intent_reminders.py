@@ -111,6 +111,24 @@ check("arquivo quebrado à mão: remind recusa (exit 2) e cita o arquivo",
       p.returncode == 2 and "reminders" in p.stderr and "conserte" in p.stderr, p.stderr)
 check("arquivo quebrado: bytes intactos", (rb / ".claude" / "reminders").read_bytes() == junk)
 
+# --- malformed file never breaks the read-only actions -------------------------
+rm = new_repo("malformed")
+(rm / ".claude").mkdir()
+(rm / ".claude" / "reminders").write_bytes(
+    b'reminders:\n  - at: "2026-10-31\n    text: "aspas sem fechar\n'
+    b"lixo sem dois pontos\n\xff\xfe\x00\n  - \n")
+for label, args, extra in (("state vazio", ("state",), {}),
+                           ("state no cepa-until", ("state",), {"CEPA_UNTIL_RUN": "1"}),
+                           ("close sem intenção", ("close",), {})):
+    p = cepa(rm, *args, env=extra)
+    check(f"arquivo malformado: {label} sai 0 sem traceback",
+          p.returncode == 0 and "Traceback" not in p.stderr, (p.returncode, p.stderr))
+cepa(rm, "write", "--purpose", "p", "--by-when", "q", "--plan", "a", "b")
+for label, args in (("state normal", ("state",)), ("close com intenção", ("close",))):
+    p = cepa(rm, *args)
+    check(f"arquivo malformado: {label} sai 0 sem traceback",
+          p.returncode == 0 and "Traceback" not in p.stderr, (p.returncode, p.stderr))
+
 # --- read tolerance ---------------------------------------------------------
 check("read_reminders sem arquivo: []", M.read_reminders(TMP / "nao-existe") == [])
 
