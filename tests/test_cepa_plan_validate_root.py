@@ -111,6 +111,8 @@ def test_missing_name(base):
     check("nome inexistente: sai 2 citando o caminho no clone principal",
           r.returncode == 2 and str(expected) in r.stderr and "fantasma" in r.stderr,
           r.stdout + r.stderr)
+    check("nome inexistente: a mensagem diz que a fila não existe",
+          "não existe" in r.stderr, r.stderr)
 
 
 def test_invalid_by_name(base):
