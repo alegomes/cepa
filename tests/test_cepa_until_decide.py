@@ -1036,14 +1036,14 @@ def test_finish_keeps_agent_and_human_sections_apart():
         p = _finish(root, "--status", "blocked", "--evidence", log)
         check("blocked sem --impede é recusado", p.returncode == 2, p.stderr)
         check("...dizendo que o dono lê a seção humana",
-              "--impede" in p.stderr and "seção humana" in p.stderr, p.stderr)
+              "--blocker" in p.stderr and "seção humana" in p.stderr, p.stderr)
         check("...e nada muda no disco",
               items_of(root)["a1"]["status"] == "pending", items_of(root)["a1"])
 
         p = _finish(root, "--status", "blocked", "--evidence", log,
                     "--impede", "o bug WEGO-2490 deixa o 403 sem corpo")
         check("código de card na seção humana é recusado",
-              p.returncode == 2 and "--impede: código de card ou de commit"
+              p.returncode == 2 and "--blocker: código de card ou de commit"
               in p.stderr, p.stderr)
         p = _finish(root, "--status", "blocked", "--evidence", log,
                     "--impede", "o sistema responde em branco",

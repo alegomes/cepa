@@ -1,6 +1,6 @@
 ---
 description: Validates the harness installation against reality in 30 seconds — plugins enabled and at the installed version, hooks compiling, board-flow.yaml structure, build baseline (status + age), stale/orphan worktrees (including the forgotten agent worktree inside the repo, which duplicates the source code), expired handoffs and the single-track queue (queue.yaml) diverging from BACKLOG.md. With --live, also checks board-flow.yaml and the queue against live Jira via atlassian-expert. Run it at the start of the day or when something in the harness looks wrong — each check exists because the matching failure has already cost a task.
-argument-hint: [--live] [--no-fix] [--projeto]
+argument-hint: [--live] [--no-fix] [--project]
 interaction: routine
 ---
 
@@ -23,7 +23,7 @@ brings all of that forward to a moment when fixing is cheap.
    python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-doctor" --fix
    ```
 
-   `--projeto` cuts the global checks (settings, plugins, hooks, telemetry) and
+   `--project` (older name `--projeto` still works) cuts the global checks (settings, plugins, hooks, telemetry) and
    looks only at this project — useful when the question is "is this repo
    sound?" and not "is this machine sound?".
 

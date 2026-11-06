@@ -164,14 +164,14 @@ group, `claude` runs in its own session and survives, the supervisor doesn't.
     item, phase and child pid) and leave `<run>.estado.json` as
     `interrompido`.
   - `run_start` and the state record the supervisor's **pid and host**. The
-    `cepa-until pendentes` (and through it `cepa-doctor` and
+    `cepa-until pending` (and through it `cepa-doctor` and
     `/common:until-review`) points at the `rodando` run whose pid died, and at the
     `interrompido` one, with the full build that was missed.
   - **SIGTERM and Ctrl+C end the child** (the `claude` or build group):
     going on by itself, it would change the card with nobody to run the build
     afterwards. Dead, the reservation becomes orphan and the next run resumes the item.
-  - `cepa-until fecha-morto <queue>/<run> --yes` runs the missed build and,
-    if green, closes the record and leaves the run ready for `aterrissar`.
+  - `cepa-until close-dead <queue>/<run> --yes` runs the missed build and,
+    if green, closes the record and leaves the run ready for `land`.
 
 ## Hook that only counts after reinstalling
 
@@ -181,7 +181,7 @@ fixed hooks and the next 4 rounds were still blocked by the old versions,
 with nothing in the run saying so. Now, when the night branch changes a
 file under `<plugin>/hooks/` (a folder with `.claude-plugin/plugin.json`), the screen
 warns right after the item, the record gains `hook_so_apos_reinstalar`, and the end
-asks for `reinstalar-plugin` under "Fica com você": it takes effect after `aterrissar` and
+asks for `reinstalar-plugin` under "Fica com você": it takes effect after `land` and
 `bin/install.sh`.
 
 ## After the end
@@ -196,7 +196,7 @@ Usage:
     cepa-until my-queue --for 12h
     cepa-until my-queue --until 07:00
     cepa-until my-queue --for 3h --dry-run     # the run's plan, without executing
-    cepa-until fecha-morto my-queue/<run> --yes  # closes a dead supervisor's run
+    cepa-until close-dead my-queue/<run> --yes  # closes a dead supervisor's run
 """
 
 import json
@@ -1683,12 +1683,12 @@ WTLIB = HERE.parent / "hooks" / "_wtlib.py"
 
 
 SUBCOMMANDS = [
-    ("pendentes", "lists the runs waiting for the owner and the runs whose "
+    ("pending", "lists the runs waiting for the owner and the runs whose "
                   "supervisor died"),
     ("decide", "asks, one at a time, what a run or the queue left for the owner"),
-    ("aterrissar", "lands the run branch on the clone's branch: merge, full "
+    ("land", "lands the run branch on the clone's branch: merge, full "
                    "build and push"),
-    ("fecha-morto", "runs the missing full build of a run whose supervisor "
+    ("close-dead", "runs the missing full build of a run whose supervisor "
                     "died and leaves it ready to land"),
 ]
 
@@ -1699,8 +1699,8 @@ def _sub_summary(name):
 
 def land_parser():
     ap = _clihelp.Parser(
-        prog="cepa until aterrissar",
-        summary=_sub_summary("aterrissar"),
+        prog="cepa until land",
+        summary=_sub_summary("land"),
         description=(
             "Brings the run branch (until/<run>) into the branch the clone is on.\n"
             "Before touching anything it checks that the run proposed the landing,\n"
@@ -1713,8 +1713,8 @@ def land_parser():
             "build. On success it removes the run worktree and branch.\n"
             "Without --yes, it only shows the plan."),
         examples=[
-            ("cepa until aterrissar wego/2026-11-03-2210", "show the landing plan"),
-            ("cepa until aterrissar wego/2026-11-03-2210 --yes", "merge, build and push"),
+            ("cepa until land wego/2026-11-03-2210", "show the landing plan"),
+            ("cepa until land wego/2026-11-03-2210 --yes", "merge, build and push"),
         ],
         exit_codes=[
             (0, "landed, already landed, or plan shown (without --yes)"),
@@ -1725,7 +1725,7 @@ def land_parser():
             (5, "red build after the merge: clone branch rolled back, nothing pushed"),
             (6, "push failed: the merge and the green build stay; run again"),
         ],
-        see_also=["cepa until pendentes: which runs are waiting to land",
+        see_also=["cepa until pending: which runs are waiting to land",
                   "cepa until decide: the questions the run left, landing included"])
     ap.add_argument("target", metavar="QUEUE/RUN",
                     help="the run to land, as the run summary prints it")
@@ -1737,7 +1737,7 @@ def land_parser():
 
 
 def cmd_land(argv):
-    """`cepa-until aterrissar <queue>/<run> [--yes]` — step 3 of
+    """`cepa-until land <queue>/<run> [--yes]` — step 3 of
     until-fim-sem-dono.
 
     The run doesn't touch the main branch (owner's decision 3, 09/26): whoever triggers
@@ -1750,7 +1750,7 @@ def cmd_land(argv):
     ap = land_parser()
     a = ap.parse_args(argv)
     if "/" not in a.target:
-        print("cepa-until aterrissar: o alvo é <fila>/<run> (ex.: "
+        print("cepa-until land: o alvo é <fila>/<run> (ex.: "
               "cepa/2026-09-28-2137)", file=sys.stderr)
         return 2
     queue, run_id = a.target.split("/", 1)
@@ -1760,7 +1760,7 @@ def cmd_land(argv):
     try:
         item_states = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
-        print(f"cepa-until aterrissar: não li o estado do run em {path} "
+        print(f"cepa-until land: não li o estado do run em {path} "
               f"({e})", file=sys.stderr)
         return 2
 
@@ -1773,7 +1773,7 @@ def cmd_land(argv):
         os.replace(tmp, path)
 
     def refuse(text):
-        print(f"cepa-until aterrissar: {text}", file=sys.stderr)
+        print(f"cepa-until land: {text}", file=sys.stderr)
         return 3
 
     if item_states.get("estado") == "aterrissado":
@@ -1821,7 +1821,7 @@ def cmd_land(argv):
     if already_merged:
         print("  merge  : já feito; retomo do build")
     if not a.yes:
-        print(f"\nnada foi feito. Para executar: cepa-until aterrissar "
+        print(f"\nnada foi feito. Para executar: cepa-until land "
               f"{a.target} --yes")
         return 0
 
@@ -1870,7 +1870,7 @@ def cmd_land(argv):
                 for c in conflicts:
                     print(f"  {c}")
                 print("resolva, `git add`, `git commit` para concluir o merge, "
-                      f"e rode `cepa-until aterrissar {a.target} --yes` de novo: "
+                      f"e rode `cepa-until land {a.target} --yes` de novo: "
                       "ele retoma do build")
                 return 4
             git(["merge", "--abort"], repo)
@@ -1910,7 +1910,7 @@ def cmd_land(argv):
             landing_info["parou"] = "push"
             record(aterrissagem=landing_info)
             print(f"o push falhou ({output}); o merge e o build verde ficam. "
-                  f"Rode `cepa-until aterrissar {a.target} --yes` de novo")
+                  f"Rode `cepa-until land {a.target} --yes` de novo")
             return 6
         landing_info["push"] = True
         print("push feito")
@@ -1942,7 +1942,7 @@ def land_action(repo, tree, queue, run_id, n):
         "frase": (f"leva os {n} commit(s) da branch da noite para a "
                   f"`{current_branch(repo)}` do clone; só você dispara, porque "
                   "mexe na branch principal"),
-        "comando": (f"cepa-until aterrissar {queue}/{run_id} (sem --yes só "
+        "comando": (f"cepa-until land {queue}/{run_id} (sem --yes só "
                     "mostra o plano; com --yes faz merge, build completo e "
                     "push)"),
         "sha": head_of(tree), "destino": current_branch(repo),
@@ -2400,7 +2400,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 "aterrissar" + ("" if rc == 0 else
                                 f" (parou com código {rc}; a saída está acima)"))
         if not is_yes(r):
-            for_later.append(f"aterrissar: cepa-until aterrissar "
+            for_later.append(f"aterrissar: cepa-until land "
                                f"{queue}/{run_id} --yes")
         screen.end()
 
@@ -2654,7 +2654,7 @@ def cmd_decide(argv):
             (2, "invalid usage, invalid queue or run name, queue or run state "
                 "unreadable"),
         ],
-        see_also=["cepa until pendentes: which runs are waiting for you",
+        see_also=["cepa until pending: which runs are waiting for you",
                   "cepa plan answer: what applies each answer"])
     ap.add_argument("target", metavar="QUEUE[/RUN]",
                     help="the whole queue, or one run as the run summary prints it")
@@ -2697,7 +2697,7 @@ def cmd_decide(argv):
 
 
 def cmd_close_dead(argv):
-    """`cepa-until fecha-morto <queue>/<run> [--yes]` — closes the run whose
+    """`cepa-until close-dead <queue>/<run> [--yes]` — closes the run whose
     supervisor died (or was interrupted) before the end.
 
     Run WEGO 2026-09-28-2003 stopped at `item_start`: the card closed `done`
@@ -2708,8 +2708,8 @@ def cmd_close_dead(argv):
     run `esperando-dono` with the `aterrissar` action. If red, it doesn't change the state:
     `cepa-doctor` keeps pointing at the run. Without `--yes`, it only shows the plan."""
     ap = _clihelp.Parser(
-        prog="cepa until fecha-morto",
-        summary=_sub_summary("fecha-morto"),
+        prog="cepa until close-dead",
+        summary=_sub_summary("close-dead"),
         description=(
             "Closes a run whose supervisor died (or was interrupted) before the\n"
             "end: the state stayed `rodando`, with no `run_end`, and the full build\n"
@@ -2723,8 +2723,8 @@ def cmd_close_dead(argv):
             "process of the item in flight is still alive.\n"
             "Without --yes, it only shows the plan."),
         examples=[
-            ("cepa until fecha-morto wego/2026-09-28-2003", "show the closing plan"),
-            ("cepa until fecha-morto wego/2026-09-28-2003 --yes", "run the missing build"),
+            ("cepa until close-dead wego/2026-09-28-2003", "show the closing plan"),
+            ("cepa until close-dead wego/2026-09-28-2003 --yes", "run the missing build"),
         ],
         exit_codes=[
             (0, "run closed (green build), or plan shown (without --yes)"),
@@ -2734,7 +2734,7 @@ def cmd_close_dead(argv):
                 "cannot tell), or its worktree is not recorded, cannot be recreated "
                 "or is dirty"),
         ],
-        see_also=["cepa until pendentes: lists the dead runs",
+        see_also=["cepa until pending: lists the dead runs",
                   "cepa doctor: points at a dead run"])
     ap.add_argument("target", metavar="QUEUE/RUN",
                     help="the dead run, as cepa doctor prints it")
@@ -2745,11 +2745,11 @@ def cmd_close_dead(argv):
     a = ap.parse_args(argv)
 
     def refuse(text):
-        print(f"cepa-until fecha-morto: {text}", file=sys.stderr)
+        print(f"cepa-until close-dead: {text}", file=sys.stderr)
         return 3
 
     if "/" not in a.target:
-        print("cepa-until fecha-morto: o alvo é <fila>/<run> (ex.: "
+        print("cepa-until close-dead: o alvo é <fila>/<run> (ex.: "
               "wego/2026-09-28-2003)", file=sys.stderr)
         return 2
     queue, run_id = a.target.split("/", 1)
@@ -2759,7 +2759,7 @@ def cmd_close_dead(argv):
     try:
         item_states = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
-        print(f"cepa-until fecha-morto: não li o estado do run em {path} "
+        print(f"cepa-until close-dead: não li o estado do run em {path} "
               f"({e})", file=sys.stderr)
         return 2
     m = next((x for x in dead_runs(repo)
@@ -2802,7 +2802,7 @@ def cmd_close_dead(argv):
           "ação `aterrissar`")
     print("  vermelho   : não muda nada; o doctor segue apontando o run")
     if not a.yes:
-        print(f"\nnada foi feito. Para executar: cepa-until fecha-morto "
+        print(f"\nnada foi feito. Para executar: cepa-until close-dead "
               f"{a.target} --yes")
         return 0
 
@@ -2930,7 +2930,7 @@ def waiting_runs(repo):
         found.append({"fila": queue, "run": run, "branch": item_states.get("branch"),
                         "destino": destination,
                         "fica_com_voce": len(item_states.get("fica_com_voce") or []),
-                        "comando": f"cepa-until aterrissar {queue}/{run}"})
+                        "comando": f"cepa-until land {queue}/{run}"})
     return found
 
 
@@ -3040,7 +3040,7 @@ def dead_runs(repo, now=None):
                         "como": how, "item": in_flight, "status": status,
                         "arvore": tree, "verify": verify,
                         "comando": command,
-                        "fechar": f"cepa-until fecha-morto {queue}/"
+                        "fechar": f"cepa-until close-dead {queue}/"
                                   f"{item_states.get('run')}",
                         "estado_json": str(path), "registro": str(record_path),
                         "base": start.get("base")})
@@ -3108,11 +3108,11 @@ def dead_run_phrase(m):
 
 
 def cmd_pending(argv):
-    """`cepa-until pendentes [--repo R] [--json]`: what `/common:next` and
+    """`cepa-until pending [--repo R] [--json]`: what `/common:next` and
     `/common:doctor` read to say that a run is waiting for the owner (C6)."""
     ap = _clihelp.Parser(
-        prog="cepa until pendentes",
-        summary=_sub_summary("pendentes"),
+        prog="cepa until pending",
+        summary=_sub_summary("pending"),
         description=(
             "A run is waiting for the owner when its branch is ready to land or it\n"
             "left items that only the owner can unblock (\"Fica com você\"). A run\n"
@@ -3122,16 +3122,16 @@ def cmd_pending(argv):
             "This is what /common:next and /common:doctor read to say that a run is\n"
             "waiting for you."),
         examples=[
-            ("cepa until pendentes", "what is waiting for you, one line per run"),
-            ("cepa until pendentes --json", "the same, as JSON for code"),
+            ("cepa until pending", "what is waiting for you, one line per run"),
+            ("cepa until pending --json", "the same, as JSON for code"),
         ],
         exit_codes=[
             (0, "list printed (even empty)"),
             (2, "invalid usage"),
         ],
         see_also=["cepa until decide: answers what a run left for you",
-                  "cepa until aterrissar: lands a waiting run",
-                  "cepa until fecha-morto: closes a dead run"])
+                  "cepa until land: lands a waiting run",
+                  "cepa until close-dead: closes a dead run"])
     ap.add_argument("--repo", default=".", metavar="DIR",
                     help="repository root (default: the current directory)")
     ap.add_argument("--json", action="store_true", help="prints JSON, for code")
@@ -3160,11 +3160,11 @@ def has_upstream(repo):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
-    if argv and argv[0] == "aterrissar":
+    if argv and argv[0] in ("land", "aterrissar"):
         return cmd_land(argv[1:])
-    if argv and argv[0] == "pendentes":
+    if argv and argv[0] in ("pending", "pendentes"):
         return cmd_pending(argv[1:])
-    if argv and argv[0] == "fecha-morto":
+    if argv and argv[0] in ("close-dead", "fecha-morto"):
         return cmd_close_dead(argv[1:])
     if argv and argv[0] in ("decide", "decidir"):
         return cmd_decide(argv[1:])
@@ -3184,16 +3184,16 @@ def main(argv=None):
             "\n"
             "The cut happens between items, never in the middle of one. Nothing goes to\n"
             "main or origin: afterwards, `cepa until decide <queue>/<run>` asks what\n"
-            "was left for you, and `cepa until aterrissar` brings the branch into the\n"
+            "was left for you, and `cepa until land` brings the branch into the\n"
             "clone."),
         commands=SUBCOMMANDS,
         examples=[
             ("cepa until wego --for 12h", "run the wego queue for 12 hours"),
             ("cepa until wego --until 07:00 --dry-run", "the run plan, nothing executed"),
             ("cepa until wego --for 8h --no-verify", "a repo without a build"),
-            ("cepa until pendentes", "runs waiting for you"),
+            ("cepa until pending", "runs waiting for you"),
             ("cepa until decide wego/2026-11-03-2210", "answer what a run left for you"),
-            ("cepa until aterrissar wego/2026-11-03-2210 --yes", "land the run branch"),
+            ("cepa until land wego/2026-11-03-2210 --yes", "land the run branch"),
         ],
         exit_codes=[
             (0, "the run ended (deadline, empty queue, circuit breaker or quota), "
@@ -3500,7 +3500,7 @@ def main(argv=None):
                      "reserva órfã." if terminated else
                      "NÃO morreu, e segue sem supervisor."), file=sys.stderr)
         print(f"  para rodar o build que faltou e deixar o run pronto para "
-              f"aterrissar: cepa-until fecha-morto {a.queue}/{run_id}",
+              f"land: cepa-until close-dead {a.queue}/{run_id}",
               file=sys.stderr)
         raise SystemExit(128 + signum)
 
@@ -4284,7 +4284,7 @@ def main(argv=None):
             f"a branch da noite muda {len(run_hooks)} hook(s) de plugin "
             f"({', '.join(run_hooks)}), e nenhuma rodada desta noite "
             "rodou com eles: os hooks vêm do plugin instalado. Passam a valer "
-            "depois do `aterrissar` e de `bin/install.sh`")})
+            "depois do `land` e de `bin/install.sh`")})
     if actions:
         print("\n   " + SCREEN.c("negrito", "Ações:"))
         for i, action in enumerate(actions, 1):

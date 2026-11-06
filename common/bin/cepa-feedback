@@ -28,7 +28,7 @@ Design, and the reason for each choice:
 Usage:
     cepa-feedback add "o gate X barrou o commit legítimo" --target write-mode-gate
     cepa-feedback list                     # the open ones
-    cepa-feedback list --status todos --json
+    cepa-feedback list --status all --json
     cepa-feedback triage fb-20260826-1 --destination "BACKLOG.md § Gate de escrita" --queue cepa
     cepa-feedback triage fb-20260826-2 --destination "BACKLOG.md § Gate de escrita" --queue cepa --item gate-de-escrita
     cepa-feedback triage fb-20260826-3 --destination "resolvido no commit abc123"
@@ -213,7 +213,14 @@ def _format_record(r, color):
     return "\n".join(body)
 
 
+# `--status` takes the English words; the Portuguese ones are the old spelling.
+# What the ledger stores and prints ("aberto"/"triado") is data and stays.
+STATUS_CHOICES = ("open", "triaged", "all", "aberto", "triado", "todos")
+STATUS_ALIAS = {"open": "aberto", "triaged": "triado", "all": "todos"}
+
+
 def cmd_list(args):
+    args.status = STATUS_ALIAS.get(args.status, args.status)
     everything = list(records().values())
     everything.sort(key=lambda r: r.get("ts", ""))
     selected = [r for r in everything
@@ -446,12 +453,13 @@ def main(argv=None):
             "with the repo, branch, mode and target captured when each was recorded."),
         examples=[
             ("cepa feedback list", "the open ones"),
-            ("cepa feedback list --status todos --json", "everything, as JSON"),
+            ("cepa feedback list --status all --json", "everything, as JSON"),
             ("cepa feedback list --repo cepa --max 5", "the 5 most recent from one repo"),
         ],
         exit_codes=[(0, "listed (even when nothing matches)"), (2, "invalid usage")])
-    l.add_argument("--status", default="aberto", choices=("aberto", "triado", "todos"),
-                   help="which ones to list: open, triaged or all (default: aberto)")
+    l.add_argument("--status", default="open", choices=STATUS_CHOICES,
+                   help="which ones to list: open, triaged or all (default: open; "
+                        "the older aberto, triado, todos still work)")
     l.add_argument("--repo", dest="repo_name", metavar="NAME",
                    help="only the ones recorded in this repo (by name)")
     l.add_argument("--max", type=int, metavar="N", help="only the N most recent")

@@ -2835,11 +2835,11 @@ def human_section_refusal(status, owner, question):
     question are for someone who never opened the card, so they carry no
     code at all (see `_ownertext`)."""
     if status == "blocked" and not str(owner.get("impede") or "").strip():
-        return ("`blocked` sem `--impede` não fecha: o dono lê a seção humana "
+        return ("`blocked` sem `--blocker` (ou `--impede`) não fecha: o dono lê a seção humana "
                 "e não o log. Diga, em uma frase leiga, o que impede o item "
                 "de andar (ex.: \"o sistema responde em branco quando nega um "
                 "acesso, e 18 testes dependem dessa resposta\"). Junte "
-                "`--pedido` (o que era para fazer) e `--pronto` (o que já "
+                "`--asked` (o que era para fazer) e `--ready` (o que já "
                 "funciona). Códigos, commits e vereditos ficam no `--evidence`.")
     bad = []
     for key, flag, _ in _ownertext.FIELDS:
@@ -3403,7 +3403,7 @@ def reconcile(items, board, missing_keys, role_of):
 #
 # On the overnight branch the rule is "no merge, no push, no Done": the card
 # is proven there and stays in Review, which is right while the code lives
-# only on that branch. `cepa-until aterrissar` then merges it into main and
+# only on that branch. `cepa-until land` then merges it into main and
 # never speaks to Jira, so nothing moved those cards afterwards. On
 # 2026-11-03 eleven WEGO cards sat in Review with PROVEN proof, complete
 # acceptance and code on main since the landing (fb-20261103-1). This lists
@@ -4540,7 +4540,7 @@ def main(argv=None):
         examples=[('cepa plan finish wego WEGO-123 --status done --evidence "commit abc, build green"',
                    "close the item"),
                   ('cepa plan finish wego WEGO-124 --status blocked --evidence "staging 502" '
-                   '--impede "the test server is down"',
+                   '--blocker "the test server is down"',
                    "stuck, with the reason in plain words"),
                   ('cepa plan finish wego WEGO-125 --status pending --evidence "split in two" --commit',
                    "back to the queue, committed")],
@@ -4581,7 +4581,8 @@ def main(argv=None):
                   "answers no",
     }
     for key, flag, _ in _ownertext.FIELDS:
-        fi.add_argument(flag, dest=f"owner_{key}", metavar="TEXT",
+        fi.add_argument(flag, _ownertext.OLD_FLAGS[flag], dest=f"owner_{key}",
+                        metavar="TEXT",
                         help=owner_help[key] + ". Up to 30 words, no card, "
                              "commit, file or verdict")
     fi.add_argument("--commit", action="store_true", help=commit_help)

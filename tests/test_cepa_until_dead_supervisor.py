@@ -485,14 +485,14 @@ def test_pending_and_doctor_say_to_run_close_dead():
         root, start = night_that_died(tmp)
         m = (pending_ones(root).get("mortos") or [{}])[0]
         check("pendentes traz o comando do fecha-morto",
-              m.get("fechar") == f"cepa-until fecha-morto fila/{run_of(start)}",
+              m.get("fechar") == f"cepa-until close-dead fila/{run_of(start)}",
               str(m))
         p = subprocess.run([sys.executable, str(DOCTOR), "--projeto"],
                            cwd=str(root), capture_output=True, text=True,
                            timeout=120, env=dict(os.environ,
                                                  CEPA_DOCTOR_INSTALL="off"))
         check("...e o doctor também",
-              f"cepa-until fecha-morto fila/{run_of(start)}" in p.stdout,
+              f"cepa-until close-dead fila/{run_of(start)}" in p.stdout,
               p.stdout[-1500:])
 
 
@@ -594,7 +594,7 @@ def test_help_lists_the_subcommands():
     p = subprocess.run([sys.executable, str(CEPA_UNTIL), "--help"],
                        capture_output=True, text=True, timeout=30)
     listed = p.stdout.split("subcommands:", 1)[-1].split("arguments:", 1)[0]
-    for sub in ("aterrissar", "pendentes", "fecha-morto", "decide"):
+    for sub in ("land", "pending", "close-dead", "decide"):
         check(f"--help cita o subcomando {sub}",
               p.returncode == 0 and f"\n  {sub} " in listed, p.stdout[-800:])
         for word in ("--help", "help"):
@@ -612,8 +612,8 @@ def test_help_lists_the_subcommands():
 def test_until_review_checks_the_dead_supervisor():
     plain_text = UNTIL_REVIEW.read_text(encoding="utf-8")
     check("o /common:until-review manda conferir `mortos` no pendentes",
-          "cepa-until pendentes" in plain_text and "mortos" in plain_text
-          and "interrompido" in plain_text and "fecha-morto" in plain_text)
+          "cepa-until pending" in plain_text and "mortos" in plain_text
+          and "interrompido" in plain_text and "close-dead" in plain_text)
 
 
 def main():

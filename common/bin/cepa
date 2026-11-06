@@ -21,13 +21,14 @@
 #
 #   cepa --prompt smartass            # appends a custom system prompt
 #   cepa --prompt ~/prompts/x.md      # ...by path, or by name (see below)
-#   cepa --prompt-substitui base.md   # replaces the WHOLE system prompt (dangerous)
+#   cepa --prompt-replace base.md   # replaces the WHOLE system prompt (dangerous)
 #
 # Custom system prompt: `--prompt <name|path>` reads a text file and hands it
 # to claude via --append-system-prompt, i.e. it ADDS to Claude Code's default
 # system prompt (the one that teaches the tools, the hooks and CLAUDE.md).
-# `--prompt-substitui` uses --system-prompt and ERASES that default, so only use
-# it with a prompt that stands on its own. A <name> without a slash is looked up,
+# `--prompt-replace` (older name `--prompt-substitui`, still accepted) uses
+# --system-prompt and ERASES that default, so only use it with a prompt that
+# stands on its own. A <name> without a slash is looked up,
 # with and without the .md suffix, in $CEPA_PROMPTS_HOME (default
 # ~/.claude/cepa-prompts) and in <repo>/.claude/prompts. Persistent default:
 # CEPA_PROMPT=<name|path> (and CEPA_PROMPT_MODO=substitui for the destructive mode).
@@ -135,7 +136,7 @@ show_help() {
   echo "      --budget <scope>       closed budget, required by the refactor mode"
   echo "      --purpose, --by-when, --plan   session intent (writes .claude/session-intent)"
   echo "      --prompt <name|path>   appends a system prompt to the default one"
-  echo "      --prompt-substitui <name|path>   REPLACES the whole system prompt"
+  echo "      --prompt-replace <name|path>     REPLACES the whole system prompt"
   echo "  any other argument goes straight to claude (e.g. cepa --resume, cepa WEGO-123)"
 }
 
@@ -513,11 +514,11 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || { printf '✗ cepa: --prompt exige um valor\n' >&2; exit 2; }
       PROMPT_REF="$2"; PROMPT_MODE="append"; shift 2 ;;
     --prompt=*)    PROMPT_REF="${1#--prompt=}"; PROMPT_MODE="append"; shift ;;
-    --prompt-substitui)
-      [ $# -ge 2 ] || { printf '✗ cepa: --prompt-substitui exige um valor\n' >&2; exit 2; }
+    --prompt-replace|--prompt-substitui)
+      [ $# -ge 2 ] || { printf '✗ cepa: %s exige um valor\n' "$1" >&2; exit 2; }
       PROMPT_REF="$2"; PROMPT_MODE="substitui"; shift 2 ;;
-    --prompt-substitui=*)
-      PROMPT_REF="${1#--prompt-substitui=}"; PROMPT_MODE="substitui"; shift ;;
+    --prompt-replace=*|--prompt-substitui=*)
+      PROMPT_REF="${1#*=}"; PROMPT_MODE="substitui"; shift ;;
     -s|--slice)
       # A real slice name follows only if the next arg exists, is non-empty,
       # and isn't itself a flag. Otherwise `-s` means "let me pick one".

@@ -73,7 +73,7 @@ With no argument, or with `--list`:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" list --no-color
-python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" list --status todos --no-color   # with --all
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" list --status all --no-color   # with --all
 ```
 
 Pass the list on as it came, grouped by target when there are more than five
@@ -89,7 +89,7 @@ leaves it with a named destination.
    `common/.claude-plugin/plugin.json`. If it is not, stop and say in one line
    that triage runs in the harness repo (the record is global; turning it into a
    card is not).
-2. Read the open ones with `list --status aberto --json`.
+2. Read the open ones with `list --status open --json`.
 3. For each one, choose among three destinations — and **you decide**, with the
    recommendation recorded, without asking item by item (`default-yes`). A triage
    that stops in `BACKLOG.md` produces no work: the triage of 2026-11-05
@@ -127,7 +127,7 @@ leaves it with a named destination.
    and **end with how many items entered the queue and at which position**, quoting
    each "inserido na posição P de N" line the bin printed, plus how many only
    cited an existing item. Acceptance: after the triage,
-   `cepa feedback list --status triado` and `cepa plan status <fila>` match — every
+   `cepa feedback list --status triaged` and `cepa plan status <fila>` match — every
    `BACKLOG.md` destination has a pending or done item in the queue.
    For a `BACKLOG.md` destination the bin reads the queue before recording the
    triage and refuses (exit 2, nothing recorded) if it is missing or unreadable.

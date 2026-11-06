@@ -147,7 +147,7 @@ Skip with no `board-flow.yaml`, with `--offline`, or when
 `/board-flow:prove` does not auto-advance).
 
 On the overnight branch the rule is "no merge, no push, no Done", so a card
-proven there stays in Review. `cepa-until aterrissar` later merges the branch
+proven there stays in Review. `cepa-until land` later merges the branch
 into main and never speaks to Jira, and nothing else moved those cards: on
 2026-11-03 eleven WEGO cards sat in Review with PROVEN proof, complete
 acceptance and code on main (fb-20261103-1). This step closes that gap at the
@@ -405,7 +405,7 @@ For each item of the batch, in order:
 
      If the build does not fit in the turn, the outcome is not silence: it is
      `finish --status blocked --evidence "build disparado e não colhido: <o
-     comando, e onde está o log>" --impede "os testes não terminaram dentro do
+     comando, e onde está o log>" --blocker "os testes não terminaram dentro do
      turno"` (build started and not collected: the command, and where the log
      is), or `--status pending` with the same evidence. An item
      with a named outcome comes back in the next window knowing where it stopped;
@@ -458,15 +458,15 @@ For each item of the batch, in order:
 
      - `--evidence` is the **agent section**. Card keys, commit hashes, gate
        verdicts, branches and file paths go here: the next run resumes from it.
-     - `--pedido`, `--pronto`, `--impede`, `--se-sim`, `--se-nao` are the
-       **human section**, in pt-BR, for a lay reader. `--impede` is mandatory
+     - `--asked`, `--ready`, `--blocker`, `--if-yes`, `--if-no` are the
+       **human section**, in pt-BR, for a lay reader. `--blocker` is mandatory
        on `blocked`; write all five whenever the item goes to the owner. Each
        one up to 30 words, with no card key, commit, branch, file, gate name or
        verdict: `cepa-plan finish` refuses them and names the field.
-       `--impede` names the real reason, not its category: "o card manda
+       `--blocker` names the real reason, not its category: "o card manda
        entregar com os casos travados marcados, mas a revisão final exige
        todos passando", never "travou por algo de fora do código".
-       `--se-sim` and `--se-nao` say what each answer does to the WORK ("o
+       `--if-yes` and `--if-no` say what each answer does to the WORK ("o
        trabalho vai para revisão com os 18 casos pendentes do defeito"), not
        to the queue.
 
@@ -476,14 +476,14 @@ For each item of the batch, in order:
      Written for a lay reader, the same item reads:
 
      ```
-     --pedido "testar a parte do sistema que controla as sessões de acesso"
-     --pronto "136 dos 154 casos estão testados e passando"
-     --impede "18 casos dependem de um defeito do sistema: ele responde em
+     --asked "testar a parte do sistema que controla as sessões de acesso"
+     --ready "136 dos 154 casos estão testados e passando"
+     --blocker "18 casos dependem de um defeito do sistema: ele responde em
                branco quando nega um acesso. O card aceita isso, a revisão
                final não"
-     --se-sim "o trabalho vai para revisão com os 18 casos marcados como
+     --if-yes "o trabalho vai para revisão com os 18 casos marcados como
                pendentes do defeito"
-     --se-nao "o trabalho espera o defeito ser corrigido"
+     --if-no "o trabalho espera o defeito ser corrigido"
      --pergunta "O card permite entregar com os 18 casos pendentes, mas a
                  revisão final não aceita. Sigo a regra do card?"
      ```

@@ -96,7 +96,7 @@ The `nao-rodou` cards don't become questions. For them:
   action of the `executa_e_reporta` band of `common/autonomy.yaml`, and it
   becomes an information line in the report. The general consultation rule is
   step 5b; here the classification is already known
-  (`cepa-autonomy classificar --id rerodar-prove` confirms it).
+  (`cepa-autonomy classify --id rerodar-prove` confirms it).
 - For a persistent cause (a tool that isn't installed in the project), create
   **one** infra card aggregating all of them —
   never one card per stuck card. Also an
@@ -136,7 +136,7 @@ versioned file that says, per action, whether the agent **does and reports** or
 **asks**. Code reads the file, not you:
 
 ```
-python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-autonomy" classificar --mcp <tool>   # or --bash "<command>", --path <file>, --slash </command>, --id <action>
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-autonomy" classify --mcp <tool>   # or --bash "<command>", --path <file>, --slash </command>, --id <action>
 #   --cond key=value for a detect condition you've already checked (label=infra, branch_atual=main)
 ```
 
@@ -169,7 +169,7 @@ What the answer changes:
   versioned diff, never by judgment in the turn.
 
 The repo can harden the list in `.claude/autonomy.yaml` (move an action to
-`sempre_pergunta`); never loosen it. `cepa-autonomy listar` shows the merged
+`sempre_pergunta`); never loosen it. `cepa-autonomy list` shows the merged
 list and where each item came from.
 
 ### 6. Group by reason and ask ONCE per group
@@ -252,7 +252,7 @@ how many questions are left, and it only means anything next to what was cut.
   `executa_e_reporta` band of `common/autonomy.yaml` (step 5b: re-run the proof,
   aggregated infra card, comment) is done and reported, not asked.
   `--dry-run` neither asks nor executes.
-- **The band belongs to the file, not to you.** `cepa-autonomy classificar`
+- **The band belongs to the file, not to you.** `cepa-autonomy classify`
   decides whether an action is a question or information; an unlisted action is
   a question, and the question proposes the id. Promoting an action to the
   automatic band is a diff in `common/autonomy.yaml`, never a decision in the turn.
