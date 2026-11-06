@@ -104,9 +104,15 @@ Exit codes:
 """
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
+
+# The reader of "Decided without asking" is shared with `cepa-plan decisions`
+# (item 3 of O2'): one rule for what counts as a decision and as a verdict.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _decisions  # noqa: E402
 
 GATED_TOOLS = ("Write", "Edit", "MultiEdit")
 
@@ -364,7 +370,7 @@ def epic_problems(content: str):
                 "regredir enquanto os ciclos andam"
             )
 
-    if section(content, ("decided without asking", "decidido sem perguntar")) is None:
+    if section(content, _decisions.SECTION_NAMES) is None:
         problems.append(
             "falta a seção `## Decided without asking` — é onde o dono veta o "
             "que você decidiu sozinho"
@@ -468,22 +474,13 @@ def block_epic(problems, status="ready"):
     sys.exit(2)
 
 
-DECISIONS_SECTION = ("decided without asking", "decidido sem perguntar")
-
-# The verdict marker `cepa-plan verdict` writes at the end of the line.
-VERDICT_RE = re.compile(r"·\s*(?:mantida|vetada|refinada)\s+em\b", re.IGNORECASE)
-
-TOP_ITEM_RE = re.compile(r"^[-*+]\s+(?!\[[ xX]\])(.+)$", re.MULTILINE)
-
-
 def pending_decisions(content: str):
-    """The list lines of "Decided without asking" with no verdict marker, or
-    None when the section does not exist."""
-    body = section(content, DECISIONS_SECTION)
-    if body is None:
+    """The decisions of "Decided without asking" with no verdict marker, or
+    None when the section does not exist. Read by the shared module."""
+    found = _decisions.read(content)
+    if found is None:
         return None
-    return [v for v in TOP_ITEM_RE.findall(body)
-            if not is_empty(v) and not VERDICT_RE.search(v)]
+    return [d.text for d in found.pending]
 
 
 def decision_count_line(content: str) -> str:
