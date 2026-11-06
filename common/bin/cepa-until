@@ -1031,6 +1031,8 @@ def terminate_group(pid, grace):
         os.killpg(pid, signal.SIGTERM)
     except ProcessLookupError:
         return True
+    except PermissionError:
+        pass  # all-zombie group (EPERM note below): the loop reaps and confirms
     except OSError:
         return False
     end = time.monotonic() + grace
@@ -1039,10 +1041,17 @@ def terminate_group(pid, grace):
             os.waitpid(pid, os.WNOHANG)
         except ChildProcessError:
             pass
+        # macOS: killpg(pgid, 0) gives EPERM while the group only holds processes that
+        # exited and were not reaped yet (ESRCH once it dissolves). That is a dead group.
         try:
             os.killpg(pid, 0)
         except ProcessLookupError:
             return True
+        except PermissionError:
+            if time.monotonic() >= end:
+                return True
+            time.sleep(0.05)
+            continue
         except OSError:
             return False
         if time.monotonic() >= end:
@@ -1051,8 +1060,8 @@ def terminate_group(pid, grace):
     try:
         os.killpg(pid, signal.SIGKILL)
         os.waitpid(pid, 0)
-    except (ChildProcessError, ProcessLookupError):
-        pass
+    except (ChildProcessError, ProcessLookupError, PermissionError):
+        pass  # PermissionError: all-zombie group (see the EPERM note above) = dead
     except OSError:
         return False
     return True
