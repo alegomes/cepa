@@ -1162,8 +1162,12 @@ def dirty_tree(repo, live_run_ok=False):
     the `plan.yaml` that a live run of the queue itself is writing doesn't count
     (see `plan_only_from_live_run`); other callers stay strict."""
     try:
-        p = subprocess.run(["git", "status", "--porcelain"], cwd=str(repo),
-                           capture_output=True, text=True, timeout=30)
+        # `--untracked-files=all`, like `_dirt.dirt` and the doctor: a collapsed
+        # `?? .claude/` hid the run record this filter exists to ignore, so the
+        # safe-exit gate let "Safe to exit" through and this guard refused
+        # (completion-auditor gap AC5, item wrap-up-safe-to-exit-exige-clone-limpo).
+        p = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"],
+                           cwd=str(repo), capture_output=True, text=True, timeout=30)
     except Exception:
         return None
     if p.returncode != 0:

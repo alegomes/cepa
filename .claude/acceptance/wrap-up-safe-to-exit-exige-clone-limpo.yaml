@@ -1,0 +1,81 @@
+key: wrap-up-safe-to-exit-exige-clone-limpo
+status: incomplete
+diff_range: b38f4c2..98669af
+criteria:
+  - id: AC1
+    altitude: event
+    surface: >
+      Hook Stop common/hooks/safe-exit-gate.py como subprocesso (payload stdin -> stdout JSON),
+      registrado em common/.claude-plugin/plugin.json; clone principal via _wtlib.main_root.
+    test: "tests/test_safe_exit_gate.py a (sujo bloqueia), b (limpo silencioso), c (until/ e .bak não contam), d (sem a frase), f (worktree linkada, main suja), j (registro em Stop), k (prosa do wrap-up)"
+    layer: subprocess sobre o hook real, repo git real
+    evidence: verified
+    run: "python3 tests/test_safe_exit_gate.py -> 31 checks 'ok', 'all ok' (N>0)"
+    status: complete
+  - id: AC2
+    altitude: event
+    surface: motivo do block do hook (stdout JSON) e prosa do wrap-up.md L4 com 'git add -u -- <paths>' + commit antes do merge.
+    test: "tests/test_safe_exit_gate.py a ('a: nomeia queue.yaml', 'a: instrui add -u'); k"
+    layer: subprocess sobre o hook real
+    evidence: verified
+    run: "python3 tests/test_safe_exit_gate.py -> 'a: instrui add -u' ok; 'k: cita safe-exit-gate.py' ok; all ok"
+    status: complete
+  - id: AC3
+    altitude: cli
+    surface: >
+      safe-exit-gate.py --exclude <repo> / _dirt.exclude_runtime gravando em
+      <git-common-dir>/info/exclude, inclusive a partir de worktree linkada.
+    test: "tests/test_safe_exit_gate.py g (--exclude no clone principal; idempotente; tracked não vai pro exclude)"
+    layer: subprocess CLI, repo git real
+    evidence: verified
+    run: "python3 tests/test_safe_exit_gate.py -> g: sessions/ no exclude, g: status vazio, g: idempotente, g: tracked não vai pro exclude ok; all ok"
+    gap: >
+      O teste g só roda --exclude no clone principal. A parte 'funciona a partir de worktree
+      linkada' (--git-common-dir resolvendo para o .git do principal, não .git/worktrees/x)
+      não tem teste. Teste que falta: criar worktree linkada, rodar
+      'safe-exit-gate.py --exclude <worktree>' com runtime untracked nela e afirmar que o
+      info/exclude do clone PRINCIPAL recebeu o padrão e o status da worktree ficou vazio.
+    status: incomplete
+  - id: AC4
+    altitude: cli
+    surface: cepa-doctor --projeto, check_tracked_runtime (aviso [runtime]); .claude/expertise isento.
+    test: "tests/test_doctor_tracked_runtime.py (runtime versionado avisa e nomeia; sem runtime ok; expertise versionado sem aviso)"
+    layer: subprocess sobre o cepa-doctor real
+    evidence: verified
+    run: "python3 tests/test_doctor_tracked_runtime.py -> 5 checks ok, 'all ok'"
+    status: complete
+  - id: AC5
+    altitude: event
+    surface: >
+      frase do dono: após 'Safe to exit', cepa-until na mesma máquina não recusa por árvore suja.
+      Hook real (stdin -> stdout) comparado com o dirty_tree(repo, live_run_ok=True) real do
+      common/bin/cepa-until (carregado por SourceFileLoader, não reimplementado).
+    test: "tests/test_safe_exit_gate.py a, b, c, f (cada um afirma hook E until_dirty no mesmo repo)"
+    layer: subprocess no hook + função real do cepa-until
+    evidence: verified
+    run: "python3 tests/test_safe_exit_gate.py -> a/b/c/f pares hook+until ok; all ok. Reprodução manual da divergência: repo sem .claude versionado + .claude/queues/g/until/r.jsonl -> git status '?? .claude/' (dirty_tree do until conta como sujeira), _dirt.dirt(untracked_all=True) == [] (hook calaria)."
+    gap: >
+      Paridade 'exata' não vale em todos os casos. (1) O hook classifica com
+      --untracked-files=all e o cepa-until usa o status padrão; quando um diretório inteiro é
+      untracked e só contém registro do run (ex.: '?? .claude/' porque .claude nunca foi versionado),
+      o until recusa e o hook fica em silêncio (confirmado à mão). Teste que falta: repo cujo
+      único untracked é .claude/queues/<q>/until/x.jsonl, afirmando blocks(hook) == bool(until_dirty)
+      (e o código alinhar: dirt() sem untracked_all, ou until_dirty por arquivo). (2) Caminho
+      live_run_ok de plan.yaml modificado por run vivo: until o ignora, o hook bloqueia (lado
+      mais estrito, inofensivo, mas sem teste que fixe a decisão). (3) Não há par hook+until para
+      untracked não-runtime (arquivo novo solto) nem para runtime untracked (.claude/sessions/).
+    status: incomplete
+extras:
+  anti_loop:
+    note: >
+      stop_hook_active=true deixa a repetição passar (teste e). Aceito como caveat conhecido,
+      na convenção do report-style-lint: o hook bloqueia uma vez e nomeia os arquivos; se o
+      modelo reemitir a frase sem limpar, o clone segue sujo e o cepa-until recusa. Coberto por teste; não é gap.
+  never_crashes_turn:
+    note: >
+      main() envolve on_stop em try/except e sai 0 sempre; telemetria fail-silent. Teste a afirma
+      'exit 0'. Não há teste com payload quebrado/transcript inexistente (inspeção de código apenas).
+  doctor_shared_rule:
+    note: >
+      check_dirty_tree usa _dirt.counts_as_dirt; tests/test_doctor_tracked_runtime.py
+      ('queue.yaml.bak não conta') e tests/test_doctor_dirty_tree.py passam (tudo verde).

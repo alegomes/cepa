@@ -1,0 +1,65 @@
+schema_version: 2
+card: wrap-up-safe-to-exit-exige-clone-limpo
+verdict: proven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: b38f4c2
+head_commit: 98669af
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/hooks/safe-exit-gate.py (Stop hook + --check/--exclude CLI)"
+      module: common/hooks
+      external_observable: true
+      substituted_by_double: null        # tests/test_safe_exit_gate.py runs the real hook as a subprocess with a Stop payload
+    - class: "common/hooks/_dirt.py (counts_as_dirt, classify, tracked_runtime, exclude_runtime)"
+      module: common/hooks
+      external_observable: true
+      substituted_by_double: null        # exercised through the real hook process, the real cepa-until.dirty_tree and the real cepa-doctor
+    - class: "common/bin/cepa-until::dirty_tree (now delegates to _dirt.counts_as_dirt)"
+      module: common/bin
+      external_observable: true
+      substituted_by_double: null        # test loads the real common/bin/cepa-until via SourceFileLoader (no copy)
+    - class: "common/bin/cepa-doctor::check_tracked_runtime / check_dirty_tree"
+      module: common/bin
+      external_observable: true
+      substituted_by_double: null        # tests/test_doctor_tracked_runtime.py and test_doctor_dirty_tree.py run the real CLI
+    - class: "common/.claude-plugin/plugin.json (Stop registration, version 3.4.0)"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python harness repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline 98669af (throwaway worktree): tests/test_safe_exit_gate.py 29 ok / 0 FAIL; test_doctor_tracked_runtime.py 'all ok'; test_doctor_dirty_tree.py 'tudo verde'; test_cepa_until.py 'tudo verde'"
+        - "P1 safe-exit-gate.py on_stop never blocks (`if not SAFE_EXIT.search(...)` -> `if True`): 5 FAIL (a bloqueia, a nomeia queue.yaml, a instrui add -u, f bloqueia, f cita clone principal) -> RED"
+        - "P2 dirt computed on cwd instead of _wtlib.main_root(cwd): 2 FAIL (f worktree limpa/main suja bloqueia; f cita o clone principal) -> RED"
+        - "P3 _dirt.counts_as_dirt stops ignoring RUN_RECORD: test_safe_exit_gate 2 FAIL (c nao bloqueia, c until nao recusa); test_doctor_dirty_tree 2 FAIL (so o registro do run, registro + sujeira) -> RED"
+        - "P4 _dirt.exclude_runtime writes nothing (`if add:` -> `if False:`): 4 FAIL (g sessions/ no exclude, g last-build.json no exclude, g --exclude sai 0, g status vazio) -> RED"
+        - "P5 cepa-doctor check_tracked_runtime never warns (`if not tracked:` -> `if True:`): test_doctor_tracked_runtime 1 FAIL (nomeia o arquivo) -> RED"
+        - "P6 TRACKED_IS_WRONG includes .claude/expertise: test_doctor_tracked_runtime 1 FAIL (expertise versionado de proposito -> sem aviso) -> RED"
+        - "P7 plugin.json Stop registration renamed away: test_safe_exit_gate 1 FAIL (j registrado em Stop) -> RED"
+        - "P8 safe-exit-gate.py ignores stop_hook_active (`block = True`): 1 FAIL (e stop_hook_active deixa passar) -> RED"
+        - "P9 _dirt.counts_as_dirt stops ignoring QUEUE_BAK: 2 FAIL (c nao bloqueia, c until nao recusa) -> RED"
+        - "P10 _dirt.tracked_runtime filters nothing (`if is_runtime(...)` -> `if False`): test_doctor_tracked_runtime 1 FAIL (nomeia o arquivo) -> RED"
+        - "P11 parity: real cepa-until.dirty_tree stops using _dirt (`if False`): test_safe_exit_gate 2 FAIL (a until recusa tambem, f until recusa no main) -> RED, so the parity assertions bite the real cepa-until"
+    run: "git worktree add --detach /tmp/proof-safeexit 98669af; one sed perturbation at a time, python3 tests/test_<file>.py after each, git checkout -- <file> to restore; test_cepa_until.py baseline run once (tudo verde); worktree removed with --force, git worktree list shows no proof-safeexit entry"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; each changed clause (stop gate, main_root resolution, RUN_RECORD, QUEUE_BAK, exclude write, doctor warning, expertise carve-out, tracked_runtime filter, plugin registration, stop_hook_active, cepa-until delegation) individually broken (P1-P11) and a named case went red, so each is reached through the real process"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the hook reads a Stop payload from the harness itself and the local git status of the clone; no input arrives from outside the harness. Transcript parse failures and git failures fail silent (exit 0)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+parity_check: "tests/test_safe_exit_gate.py loads the real common/bin/cepa-until via importlib SourceFileLoader (CEPA_UNTIL = REPO/common/bin/cepa-until, load_until()) and calls CU.dirty_tree(repo, live_run_ok=True); the hook is run as a subprocess (sys.executable HOOK). No copy of the rule; P11 confirms the assertions go red when the real cepa-until changes."
+routing_reason: "All eleven perturbations RED at the altitude of the real process (hook subprocess, real cepa-until, real cepa-doctor). Parity is measured against the real cepa-until, not a copy. Note: test_cepa_until.py was only run at baseline (green), no perturbation targeted it; the diff in cepa-until is a 6+/13- delegation to _dirt covered by P11."
+worktree_removed: true

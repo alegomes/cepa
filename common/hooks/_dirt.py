@@ -70,8 +70,13 @@ def _git(repo, args, timeout=30):
     return p.stdout if p.returncode == 0 else None
 
 
-def dirt(repo, untracked_all=False):
-    """Porcelain lines that count as dirt; None when git fails."""
+def dirt(repo, untracked_all=True):
+    """Porcelain lines that count as dirt; None when git fails.
+
+    Untracked files are listed one by one (`--untracked-files=all`), never as a
+    collapsed directory: a collapsed `?? .claude/` hides the run record and the
+    runtime files the filters below are meant to tell apart. `cepa-until` and the
+    doctor list the same way, so the three agree on what is dirt."""
     args = ["status", "--porcelain"]
     if untracked_all:
         args.append("--untracked-files=all")
@@ -105,7 +110,7 @@ def is_runtime(path, patterns=HOOK_RUNTIME_PATTERNS):
 def classify(repo):
     """Split the dirt into tracked changes / untracked runtime / other untracked.
     Returns None when git fails."""
-    lines = dirt(repo, untracked_all=True)
+    lines = dirt(repo)
     if lines is None:
         return None
     res = {"tracked": [], "runtime": [], "untracked": []}

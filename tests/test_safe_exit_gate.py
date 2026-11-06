@@ -182,6 +182,75 @@ def test_g_exclude():
               and ".claude/last-build.json" in p.stdout, p.stdout)
 
 
+def test_g2_exclude_from_linked_worktree():
+    """`--exclude` run from a linked worktree writes the MAIN clone's info/exclude."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = make_repo(tmp)
+        wt = Path(tmp) / "wt"
+        git(root, "worktree", "add", "-q", "-b", "session/y", str(wt))
+        touch(wt, ".claude/sessions/s.json")
+        touch(wt, ".claude/last-build.json")
+        p = subprocess.run([sys.executable, str(HOOK), "--exclude", str(wt)],
+                           capture_output=True, text=True)
+        ex = (root / ".git" / "info" / "exclude").read_text()
+        check("g2: exclude do clone principal recebe sessions/", ".claude/sessions/" in ex, ex)
+        check("g2: ...e last-build.json", ".claude/last-build.json" in ex, ex)
+        check("g2: nada escrito dentro da worktree", not (wt / ".git" / "info").exists())
+        check("g2: --exclude sai 0", p.returncode == 0, p.stdout)
+        check("g2: status da worktree vazio", git(wt, "status", "--porcelain").stdout == "")
+
+
+def test_h_parity_with_cepa_until():
+    """The acceptance: the gate is silent exactly when cepa-until would start,
+    and blocks exactly when it would refuse. Scenarios beyond a..f, including
+    the one the completion-auditor found (an unversioned `.claude/` holding
+    only a run record, which a collapsed `?? .claude/` used to hide)."""
+    def scenario(label, setup, expect_dirty):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "main"
+            root.mkdir()
+            (root / "README.md").write_text("base\n", encoding="utf-8")
+            git(root, "init", "-q", "-b", "main", ".")
+            git(root, "add", "-A")
+            git(root, "commit", "-qm", "base")
+            setup(root)
+            out, _ = run_hook(tmp, root)
+            until = bool(until_dirty(root))
+            check(f"h: {label} — hook {'bloqueia' if expect_dirty else 'cala'}",
+                  blocks(out) == expect_dirty, out[-300:])
+            check(f"h: {label} — until {'recusa' if expect_dirty else 'larga'}",
+                  until == expect_dirty)
+            check(f"h: {label} — hook e until concordam", blocks(out) == until)
+            return root, tmp
+
+    scenario(".claude/ sem versão só com registro de run",
+             lambda r: touch(r, ".claude/queues/g/until/r.jsonl", "{}\n"), False)
+    scenario("arquivo novo solto", lambda r: touch(r, "novo.txt"), True)
+    scenario(".claude/ sem versão só com runtime dos hooks",
+             lambda r: touch(r, ".claude/sessions/s.json"), True)
+    scenario("registro de run + runtime dos hooks",
+             lambda r: (touch(r, ".claude/queues/g/until/r.jsonl"),
+                        touch(r, ".claude/last-build.json")), True)
+
+    # and after `--exclude`, both sides agree again on "clean"
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "main"
+        root.mkdir()
+        (root / "README.md").write_text("base\n", encoding="utf-8")
+        git(root, "init", "-q", "-b", "main", ".")
+        git(root, "add", "-A")
+        git(root, "commit", "-qm", "base")
+        touch(root, ".claude/queues/g/until/r.jsonl")
+        touch(root, ".claude/sessions/s.json")
+        out, _ = run_hook(tmp, root)
+        check("h: antes do --exclude o hook manda excluir", blocks(out) and "--exclude" in out, out[-300:])
+        subprocess.run([sys.executable, str(HOOK), "--exclude", str(root)],
+                       capture_output=True, text=True)
+        out, _ = run_hook(tmp, root)
+        check("h: depois do --exclude o hook cala", not blocks(out), out[-300:])
+        check("h: ...e o until larga", not until_dirty(root))
+
+
 def test_i_check_exit_code():
     with tempfile.TemporaryDirectory() as tmp:
         root = make_repo(tmp)
