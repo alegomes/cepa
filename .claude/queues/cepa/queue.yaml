@@ -2971,3 +2971,15 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: land-mantem-merge-no-vermelho
+  title: 'cepa-until land: build vermelho depois do merge não desfaz o merge; deixa
+    o merge no clone para conserto e o próximo land retoma do build'
+  why: 'Pedido do dono em 2026-11-06: no pouso das runs 2026-11-05-2029 e 2026-11-05-1634,
+    cada build vermelho voltou a main para antes do merge, e foi preciso refazer
+    o merge com git reset --hard no commit perdido duas vezes; os vermelhos eram
+    testes vizinhos com texto ou data antiga, não código errado (ainda não priorizado:
+    entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
