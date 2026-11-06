@@ -1,0 +1,40 @@
+key: test-dead-supervisor-corrida-sinal
+head: c3fe821
+status: complete
+criteria:
+  - id: AC1
+    text: causa raiz identificada e corrigida no código errado (sem retry, sem asserção enfraquecida ou removida)
+    altitude: domain
+    surface: terminate_group em common/bin/cepa-until (killpg devolve EPERM em grupo só de zumbis no macOS)
+    test: test_terminate_group_calls_an_all_zombie_group_dead (3 checks, o terceiro com zumbi neto que o supervisor não consegue reapar)
+    layer: função de produção carregada via SourceFileLoader, processos reais em sessão própria
+    evidence: verified
+    run: "python3 tests/test_cepa_until_dead_supervisor.py em c3fe821 -> 3x 'ok' no teste (zumbis; grupo vivo; zumbi não é filho dele, EPERM até o fim da graça) e '✓ tudo verde'. Mutação: com PermissionError removido do except do bloco SIGKILL, o terceiro check fica FAIL (os outros dois ok). Mutação break->return True no laço dá ok: é comportamento equivalente (ambos declaram morto), então esse hunk não é distinguível por teste de comportamento. Diffs 2c4d085 e c3fe821: nenhuma asserção existente alterada ou removida (só adição)"
+    status: complete
+  - id: AC2
+    text: o arquivo de teste passa de forma confiável sob carga
+    altitude: cli
+    surface: supervisor cepa-until recebendo SIGTERM/SIGINT (filho_encerrado no ledger) sob 8 CPU hogs
+    test: tests/test_cepa_until_dead_supervisor.py (arquivo inteiro; _interrupt)
+    layer: processo real (supervisor + fake claude)
+    evidence: verified
+    run: "li os logs do stress (não reexecutei após c3fe821): /tmp/flaky/stress-233346 (antes) 2/24 vermelho com 'filho_encerrado: False'; /tmp/flaky/stress-234656 (depois, em 2c4d085) 0/24 vermelho. c3fe821 só reroteia break->bloco SIGKILL no ramo EPERM, coberto pelo novo check. Arquivo inteiro rodado em c3fe821: tudo verde"
+    status: complete
+  - id: AC3
+    text: teste de regressão determinístico vermelho no pai (2c4d085^) e verde em HEAD
+    altitude: domain
+    surface: terminate_group num grupo cujos únicos membros são zumbis
+    test: test_terminate_group_calls_an_all_zombie_group_dead
+    layer: processo real, determinístico (espera o estado Z via ps antes de chamar)
+    evidence: verified
+    run: "cepa-until de 2c4d085^ extraído em /tmp/basetree, mesma função de teste executada 3x: sempre FAIL nos checks de zumbi (stat 'Z'), FAILURES com os mesmos itens; em c3fe821: 3x ok, FAILURES []. Obs: no base o check 'grupo vivo' também aparece FAIL dentro da função, efeito em cascata do zumbi anterior; isolado, o base devolve True (ver AC4)"
+    status: complete
+  - id: AC4
+    text: sem mudança de comportamento além da causa (grupo vivo continua morto e reportado True)
+    altitude: domain
+    surface: terminate_group num grupo vivo
+    test: segundo check de test_terminate_group_calls_an_all_zombie_group_dead
+    layer: processo real
+    evidence: verified
+    run: "c3fe821: 'ok terminate_group num grupo vivo devolve True e o processo morre de fato'. Script isolado (grupo vivo, grace 2): base 2c4d085^ -> True, processo morto; c3fe821 -> True, processo morto"
+    status: complete
