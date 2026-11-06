@@ -3,7 +3,7 @@ card: tres-portas-c1-CS-7
 verdict: unproven
 reviewed_at: 2026-11-06T00:00:00-03:00
 base_commit: 73076a0
-head_commit: 42fbbb0
+head_commit: bcbab90
 issue_type: Task
 scope:
   changed_classes:
@@ -25,19 +25,16 @@ levels:
     perturbation:
       status: survived
       results:
-        - "unperturbed HEAD 42fbbb0 (detached worktree): test_veto_walk_opens_existing_doc.py 'all passed'; test_spec_readiness_gate 'all green'; test_epic_readiness_gate 'OK'; test_spec_readiness_decision_count 'all green'; test_closing_repeats_decision_count 'all ok'"
-        - "RED (test prints FAIL, N = failures): spec.md: cepa-plan verdict removed N=1; 'up to four'->'up to ten' N=1; 'marker by hand' dropped N=1; 'does not block'->'blocks the walk' N=1; 'without marker'->'with a marker' N=1; 'Status does not change'->'changes' N=1; R2 warning phrase removed N=1; 'exactly as'->'roughly as' N=1; 'never renumber'->'renumber' N=1; skeleton text moved before walk N=1; interview heading moved before opening N=1; walk name removed N=2; ALL 'cepa-plan decisions' removed N=2"
-        - "RED: epic.md: 'one per turn'->'four per turn' N=1; 'marker by hand' dropped N=1; 'does not block' N=1; 'without marker' N=1; Status N=1; R2 phrase N=1; 'never renumber' N=1; 'Otherwise (the file does not exist)' moved before walk N=1; interview heading moved before opening N=1; ALL 'cepa-plan verdict' removed N=1"
-        - "SURVIVED (still all passed, 0 FAIL): spec.md S1 the call line 'run cepa-plan decisions docs/spec/<slug>.md' replaced by 'cepa-plan lista' (the test's substring 'cepa-plan decisions' is satisfied by the later sentence 'exactly as cepa-plan decisions prints it'); epic.md E1 same for 'cepa-plan decisions docs/epics/<name>.md'; epic.md E2 the record line 'cepa-plan verdict docs/epics/<name>.md <n> ...' replaced (substring satisfied by the R2 sentence 'If cepa-plan verdict prints')"
-        - "SURVIVED: spec.md S2 and epic.md E3 'Walk only the ones without' -> 'Walk all the ones' (the core rule that decided ones are not re-offered has no assertion)"
-        - "SURVIVED: spec.md S3 'the next --continuar offers it again' -> 'it is dropped'; epic.md E4 'it is offered again' -> 'it is dropped' (skipped stays pending next time has no assertion)"
-        - "SURVIVED: spec.md S4/S5 and epic.md E5 'vetada needs --reason' / 'refinada needs --text' replaced by 'needs nothing' (no assertion)"
-        - "SURVIVED: spec.md S6 '--continuar/--fechar: open with the veto walk below, and only then go to step 4/5' reduced to 'go to step 4/5' (the test finds --continuar/--fechar in the walk paragraph only, not the bullet that routes to it); epic.md E6 'Before the first gap and before the sieve' -> 'Whenever' (the before-gap ordering is asserted only against the skeleton text and the interview heading, not the gap/sieve)"
+        - "unperturbed HEAD bcbab90 (detached worktree /tmp/cs7-proof2): test_veto_walk_opens_existing_doc.py 'all passed'; test_spec_readiness_gate 'all green'; test_epic_readiness_gate 'OK'; test_spec_readiness_decision_count 'all green'; test_closing_repeats_decision_count 'all ok'"
+        - "previous 7 survivors now KILLED (RED, N = FAIL lines): S1 spec call line 'cepa-plan decisions' -> 'cepa-plan lista' N=1; E1 epic same N=2; E2 epic record line 'cepa-plan verdict' -> 'cepa-plan grava' N=1; S2/E3 'Walk only the ones without' -> 'Walk all the ones' N=1 each; S3/E4 'offers it again' -> 'it is dropped' N=1 each; S4/E5a 'vetada needs --reason' -> nothing N=1 each; S5/E5b 'refinada needs --text' -> nothing N=1 each; S6 spec --continuar/--fechar routing bullet reduced N=1 (and S6b N=1); E6 'Before the first gap and before the sieve' -> 'Whenever' N=1 (E6b N=1)"
+        - "previous perturbations re-run, still RED: spec cepa-plan verdict removed N=2; 'up to four'->'up to ten' N=1; 'does not block'->'blocks the walk' N=1; 'without marker'->'with a marker' N=1; Status changes N=1; exactly->roughly N=1; never renumber->renumber N=1; ALL 'cepa-plan decisions' removed N=3; 'Never write the marker by hand' sentence removed N=1 (spec and epic); R2 sentence ('já virou código na fila') removed N=1 (spec and epic); epic 'one per turn'->'four per turn' N=1; epic ALL 'cepa-plan verdict' removed N=2; ALL 'cepa-plan decisions' removed N=4; 'Otherwise (the file does not exist)' -> 'Always create' N=1"
+        - "NEW SURVIVORS in the lines changed in 73076a0..HEAD (test still 'all passed', 0 FAIL), rules with behavior: (a) spec/epic R2 pass-through inverted, quote kept: 'pass the warning on to the owner as it came' -> 'hide it from the owner' (test only looks for the quote 'já virou código na fila'); (b) spec/epic 'Never write ... marker by hand' inverted to 'Write the marker by hand' (the regex 'never ... by hand' is satisfied by the neighbouring 'never renumber'); (c) spec 'ask the owner for one answer per decision' dropped; (d) spec 'Record each answer in the same turn' and epic 'Record the answer in the same turn' -> 'later'; (e) spec 'On an existing file' -> 'On a new file'; (f) spec 'before resuming the interview or the sieve' -> 'after resuming...' (spec ordering asserted only against the skeleton text); (g) spec/epic 'With no decision without a verdict, say so in one line and go on' removed; (h) spec 'When creating a new file, write the skeleton' -> 'Always write the skeleton'; (i) spec 'keep it (`mantida`), veto it' offer of mantida removed (the word survives elsewhere); (j) spec/epic 'a vetoed decision becomes an open question only if the owner says so in the same turn' -> 'always'; (k) epic step-1 first sentence 'read it whole, open with the veto walk below, and then resume' -> 'read it whole and resume' (epic has no assertion on the routing sentence, unlike spec S6)"
+        - "NEW SURVIVORS, explanatory parentheticals (lower risk, listed for completeness): spec '(1-based over every decision of the section, decided ones included, so the numbers shown may skip)' removed; same in epic; spec '(the file is the source: of a derived queue)' removed; epic 'show the decision with its number' dropped; spec 'each with its number and text' dropped; 'the date and the format come from the command' dropped (spec and epic)"
+        - "harness note: scripts /tmp/cs7-harness/perturb.py and perturb2.py apply each replacement to the file in the throwaway worktree, run only tests/test_veto_walk_opens_existing_doc.py, and restore the file; 54 + 6 perturbations total, sampling not capped"
   l2_coverage:
     status: assumed
     uncovered_lines:
-      - "spec.md step 1 bullet '--continuar/--fechar ... open with the veto walk below, and only then go to step 4/5'"
-      - "walk-only-without, skipped-offered-again, vetada-needs-reason, refinada-needs-text sentences in spec.md and epic.md"
+      - "spec.md/epic.md: R2 pass-through instruction sentence, marker-by-hand prohibition (only 'never ... by hand' regex), same-turn recording, empty-walk line, mantida offer, open-question-only-if-owner-says rule, epic step-1 routing sentence"
     run: "no coverage tool for markdown; reachability judged by perturbation (see survivors)"
   l4_adversarial_input:
     status: n/a
@@ -45,5 +42,5 @@ levels:
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-    run: "not a Bug card; criterion test run at base command files (git checkout 73076a0 -- common/commands, test kept from HEAD): 24 failed, RED. HEAD: all passed"
-routing_reason: "Test is RED at base (24 failures) and 25+ perturbations of the veto-walk text go RED (four per round, one per turn, skipped does not block, no marker, never by hand, Status unchanged, R2 pass-through, number as printed, ordering before skeleton/Otherwise and before interview). But seven perturbations survive: the lines that call cepa-plan decisions (spec and epic) and cepa-plan verdict (epic) are masked by later sentences containing the same substring, and the rules 'walk only the undecided', 'skipped is offered again', 'vetada needs --reason / refinada needs --text', and the --continuar/--fechar routing bullet have no assertion. Computed verdict: UNPROVEN."
+    run: "not a Bug card; git checkout 73076a0 -- common/commands (test kept from HEAD) -> 38 FAIL lines, RED. HEAD bcbab90: all passed"
+routing_reason: "The seven survivors of the previous proof are all killed and the earlier perturbations stay RED; the test is RED at base (38 FAIL). But a wider sweep over the changed lines finds new survivors in rules with behavior: the pass-through of the 'já virou código na fila' warning and the ban on writing the marker by hand can be inverted with the test still green, as can same-turn recording, one-answer-per-decision, the empty-walk line, the open-question rule and the epic step-1 routing sentence. Computed verdict: UNPROVEN."
