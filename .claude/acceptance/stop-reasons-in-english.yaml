@@ -1,0 +1,34 @@
+key: stop-reasons-in-english
+audited_commit: 6f45fa1
+status: complete
+note: "Closes caveat_owner_decision of .claude/acceptance/interface-in-english.yaml AC5 (stop/deferral reason vocabulary left in Portuguese)."
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: "cepa-plan queue --json: stop.reason and deferred[].reason"
+    test: "tests/test_cepa_plan_reason_aliases.py::test_cepa_plan_emits_english_and_keeps_the_old_in_reason_pt (runs the real cepa-plan CLI for all 6 situations); tests/test_common_drain_plan.py (end-of-queue at line 128)"
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_reason_aliases.py -> 37 'ok' lines, 'all green'; python3 tests/test_common_drain_plan.py -> 'all green'"
+    status: complete
+  - id: AC2
+    altitude: cli
+    surface: "cepa-until decide / run_end default; compass endLabel + END_COLOR; drain-plan.md; tests keep old spelling as input"
+    test: "tests/test_cepa_plan_reason_aliases.py (decide old == new for the 3 deferral reasons; run_end alias); tests/test_cepa_until_decide.py; tests/test_cepa_queue_ready_and_decide_queue.py; compass/hooks/compass.test.tsx rotuloDoFim"
+    evidence: verified
+    run: "test_cepa_until_decide.py: 33 passed; test_cepa_queue_ready_and_decide_queue.py: 4 passed; claude plugin test compass: 102 pass, 0 fail (rotuloDoFim pass)"
+    status: complete
+    note: "register.tsx END_COLOR gained 'end-of-queue' but no test asserts the color (trivial map entry; not a gap against the stated criterion). The run_end default is covered only via the alias helper, not by an end-to-end cepa-until run."
+  - id: AC3
+    altitude: cli
+    surface: "reason_pt next to reason on stop and each deferred entry; old==new per pair"
+    test: "tests/test_cepa_plan_reason_aliases.py (reason_pt asserted for all 6 pairs; reason_alias/reason_pt for every pair in cepa-plan and cepa-until; both maps identical)"
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_reason_aliases.py -> all green"
+    status: complete
+  - id: AC4
+    altitude: cli
+    surface: "cepa-until own end reasons and human_pending unchanged"
+    test: "git show 6f45fa1 diff review; tests/test_cepa_until*.py (decide: 33 passed)"
+    evidence: verified
+    run: "diff touches only the 6 aliased values; limite-de-uso, prazo, disjuntor, interrompido, human_pending remain (grep of cepa-until/compass confirms); human_pending kept in DEFERRALS and OWNER_REASON"
+    status: complete

@@ -1,0 +1,57 @@
+schema_version: 2
+card: stop-reasons-in-english
+verdict: proven
+reviewed_at: 2026-11-06T03:00:00-03:00
+base_commit: 6ef31cb
+head_commit: 6f45fa1
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-plan (STOPS/DEFERRALS, REASON_ALIASES, reason_alias, reason_pt, build_batch emits stop/deferred reason + reason_pt)"
+      module: common/bin
+      external_observable: true
+      substituted_by_double: null        # tests load the real common/bin/cepa-plan (SourceFileLoader) and run queue --json
+    - class: "common/bin/cepa-until (mirrored REASON_ALIASES/reason_alias, OWNER_REASON/NO_OWNER_REASON by new names, normalized lookups, end_reason default end-of-queue)"
+      module: common/bin
+      external_observable: true
+      substituted_by_double: null        # test_cepa_plan_reason_aliases.py and test_cepa_until_decide.py exercise the real decide reader
+    - class: "common/bin/cepa-prove (run_end motivo cap)"
+      module: common/bin
+      external_observable: true
+      substituted_by_double: null        # tests/test_cepa_prove.py runs the real cepa-prove
+    - class: "compass/hooks/until.ts (REASONS accepts end-of-queue) and register.tsx (END_COLOR)"
+      module: compass
+      external_observable: true
+      substituted_by_double: null        # compass.test.tsx calls the real rotuloDoFim
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python/TS harness repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline 6f45fa1 (throwaway detached worktree /tmp/proof-stop-reasons-1): test_cepa_plan_reason_aliases.py 'all green'; test_common_drain_plan.py 'all green'; test_cepa_until_decide.py 'tudo verde'; test_cepa_prove.py '19 teste(s) ok'; claude plugin test compass '102 pass, 0 fail'"
+        - "P1 cepa-plan build_batch cap stop emits \"teto\" instead of \"cap\": test_cepa_plan_reason_aliases.py 1 FAIL, test_common_drain_plan.py 2 FAIL -> RED"
+        - "P2 cepa-plan drops reason_pt from the stop dicts (end-of-queue, blocked, cap): test_cepa_plan_reason_aliases.py 2 FAIL ('reason_pt carrega teto', 'reason_pt carrega bloqueado') -> RED"
+        - "P3 cepa-until REASON_ALIASES loses 'bloqueado-antes': test_cepa_plan_reason_aliases.py 3 FAIL (mesmo mapa; alias bloqueado-antes; decide old==new), test_cepa_until_decide.py 9 FAIL (old spelling as input no longer classified) -> RED"
+        - "P4 cepa-until OWNER_REASON keyed by old name 'bloqueado-antes' and lookups no longer normalized: test_cepa_plan_reason_aliases.py 1 FAIL, test_cepa_until_decide.py 8 FAIL on the new-spelling path -> RED"
+        - "P5 compass/hooks/until.ts REASONS loses the 'end-of-queue' entry: claude plugin test compass 101 pass / 1 fail ('rotuloDoFim traduz o que conhece e repete o resto') -> RED"
+        - "P6 cepa-prove end_reason back to \"teto\": test_cepa_prove.py 1 FAIL ('...run_end por `cap`'; run_end motivo teto) -> RED"
+        - "Not perturbed (cited as reached, not individually broken): register.tsx END_COLOR 'end-of-queue' entry (color only, no case asserts it) and the docs edits. Consequence is cosmetic, no routing impact."
+    run: "git worktree add --detach /tmp/proof-stop-reasons-1 6f45fa1; one sed perturbation at a time with absolute paths, python3 tests/test_<file>.py (or claude plugin test compass) after each, git -C <wt> checkout -- <file> to restore; worktree restored to clean after every perturbation, compass re-run green (102 pass / 0 fail) after P5 restore; worktree removed with --force, git worktree list shows no proof-stop-reasons entry. test_cepa_until.py (133 s) and tests/run-all.sh deliberately not run (supervisor owns the full build)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; each changed clause (emitted stop reason, emitted deferral reason, reason_pt, alias map in cepa-until, OWNER_REASON key + normalized lookup, cepa-prove run_end, compass REASONS) was individually broken and a named case went red (P1-P6). register.tsx END_COLOR is the only changed line without a red case (cosmetic color)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff renames internal reason strings between the harness's own tools (cepa-plan -> cepa-until -> compass); no input arrives from outside the harness. Unknown reason values pass through as is (alias(x) == x), covered by test_cepa_plan_reason_aliases.py."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a                          # issue type Task; optional red-at-base check done below
+    run: "optional check: at 6ef31cb common/bin/cepa-plan + cepa-until with the test from 6f45fa1: test_cepa_plan_reason_aliases.py 12 FAIL then AttributeError (module has no attribute reason_alias) -> RED at base; restored to 6f45fa1 files afterwards"
+routing_reason: "Six perturbations (P1-P6) each turned the covering test RED at the surface it claims (emitted JSON of cepa-plan, decide reader of cepa-until, run_end of cepa-prove, rotuloDoFim of compass); baselines green with N>0 tests; no test double stands in for a changed class; the new test is RED at base_commit. Only the END_COLOR color entry in register.tsx has no asserting case (cosmetic)."
+worktree_removed: true
