@@ -67,7 +67,7 @@ O desenho foi aprovado em 2026-11-04 (`docs/estrategia-tres-portas-para-spec-e-e
 3. Responda mantida, vetada (com a razão) ou refinada (com o texto novo). O agente grava com `cepa-plan verdict <arquivo> <n> <veredito>`, que põe a data do dia e o formato exato.
 4. Pode pular. A decisão pulada fica sem marcador, volta no próximo `doctor` e não trava a entrevista.
 
-**Hoje, sem a fila.** Abra o arquivo e acrescente o marcador no fim da linha, no formato acima. O `cepa-plan decisions` vai ler o que você escrever à mão.
+**Hoje, sem a fila.** Rode você mesmo `cepa-plan verdict <arquivo> <n> mantida`, `... vetada --reason "<razão>"` ou `... refinada --text "<texto novo>"`, com o `<n>` que o `cepa-plan decisions` mostra. Escrever o marcador à mão também vale: o `cepa-plan decisions` lê do mesmo jeito.
 
 **O que o veto não faz.**
 

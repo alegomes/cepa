@@ -45,6 +45,7 @@ class Decision:
     text: str               # the item, in the file's words
     line: int               # 1-based line where the item starts
     verdict: Optional[str]  # "mantida" | "vetada" | "refinada" | None
+    end: int = 0            # 1-based last line of the item (indented continuations)
 
 
 @dataclass
@@ -83,7 +84,7 @@ def read(content: str) -> Optional[Decisions]:
     if start is None:
         return None
 
-    items = []      # (line_number, [parts])
+    items = []      # (line_number, [parts], [last_line])
     current = None  # the item indented lines still continue
     for i in range(start, len(lines)):
         raw = lines[i]
@@ -91,22 +92,23 @@ def read(content: str) -> Optional[Decisions]:
             break
         m = _ITEM_RE.match(raw)
         if m:
-            current = (i + 1, [m.group(1).strip()])
+            current = (i + 1, [m.group(1).strip()], [i + 1])
             items.append(current)
         elif current is not None and raw.strip() and raw[:1].isspace():
             current[1].append(raw.strip())
+            current[2][0] = i + 1
         else:
             # A blank line or loose prose ends the current item.
             current = None
 
     out = Decisions()
-    for number, parts in items:
+    for number, parts, last in items:
         text = " ".join(parts)
         if _CHECKBOX_RE.match(text) or _is_filler(text):
             continue
         found = VERDICT_RE.findall(text)
         verdict = found[-1].lower() if found else None
-        d = Decision(text=text, line=number, verdict=verdict)
+        d = Decision(text=text, line=number, verdict=verdict, end=last[0])
         (out.decided if verdict else out.pending).append(d)
     return out
 

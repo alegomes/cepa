@@ -134,15 +134,15 @@ with tempfile.TemporaryDirectory() as tmp:
     check("vetada exits 0", r.returncode == 0, r.stderr)
     after = spec.read_text(encoding="utf-8").splitlines()
     check("line 2 ends with the marker",
-          len(after) > 6 and after[6]
+          len(after) > 7 and after[7]
           == f"- Segunda decisão vai ser vetada. · vetada em {TODAY}: fora do ciclo",
-          after[6] if len(after) > 6 else after)
-    check("line 1 unchanged", after[5] == before[5], after[5])
-    check("line 3 unchanged", after[7:9] == before[7:9], after[7:9])
+          after[7] if len(after) > 7 else after)
+    check("line 1 unchanged", after[6] == before[6], after[6])
+    check("line 3 unchanged", after[8:10] == before[8:10], after[8:10])
     check("Status unchanged", after[2] == "**Status:** draft", after[2])
     check("nothing else changed",
-          [l for i, l in enumerate(after) if i != 6]
-          == [l for i, l in enumerate(before) if i != 6])
+          [l for i, l in enumerate(after) if i != 7]
+          == [l for i, l in enumerate(before) if i != 7])
     check("warns 'já virou código na fila'", "já virou código na fila" in out, out)
     check("warning names the queue", "derivada" in out, out)
     check("warning counts '1 item done'", "1 item done" in out, out)
@@ -166,9 +166,9 @@ with tempfile.TemporaryDirectory() as tmp:
     check("mantida exits 0", r.returncode == 0, r.stderr)
     after = spec.read_text(encoding="utf-8").splitlines()
     check("multi-line item: marker on its last line",
-          after[7] == "- Terceira decisão"
-          and after[8] == f"  continua na linha de baixo. · mantida em {TODAY}",
-          after[7:9])
+          after[8] == "- Terceira decisão"
+          and after[9] == f"  continua na linha de baixo. · mantida em {TODAY}",
+          after[8:10])
     check("mantida does not warn about the queue",
           "já virou código" not in r.stdout, r.stdout)
 
@@ -186,8 +186,8 @@ with tempfile.TemporaryDirectory() as tmp:
     check("refinada exits 0", r.returncode == 0, r.stderr)
     after = spec.read_text(encoding="utf-8").splitlines()
     check("refinada swaps text and adds marker",
-          after[5] == f"- Primeira decisão, agora mais estreita. · refinada em {TODAY}",
-          after[5])
+          after[6] == f"- Primeira decisão, agora mais estreita. · refinada em {TODAY}",
+          after[6])
     check("refinada warns about the queue",
           "já virou código na fila" in r.stdout and "derivada" in r.stdout, r.stdout)
     decs = decisions(spec)
