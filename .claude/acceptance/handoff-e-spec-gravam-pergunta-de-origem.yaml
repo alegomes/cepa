@@ -1,0 +1,80 @@
+key: handoff-e-spec-gravam-pergunta-de-origem
+status: incomplete
+diff: 15cbf52..d6f9fe4
+audited_head: d6f9fe4
+note: >
+  Auditado em d6f9fe4. Hooks reais como subprocesso. Rodado: python3 tests/test_handoff_seeds_gate.py -> 47 linhas ok, all green;
+  python3 tests/test_spec_readiness_gate.py -> 54 linhas ok, all green. AC1-AC6 completos. AC7 incompleto: nenhum teste
+  fixa que session-next.py carrega a linha porque; so verifiquei rodando section_brief numa amostra (comportamento ja existente,
+  nao tocado pelo commit), o que e evidencia minha, nao teste que proteja contra regressao.
+criteria:
+  - id: AC1
+    text: Handoff de sessao sem linha porque em "## Proximo passo" e recusado (exit 2) com mensagem que nomeia a linha; com porque preenchido passa.
+    altitude: event
+    surface: hook handoff-seeds-gate.py (PreToolUse stdin JSON, exit code), Write/Edit/MultiEdit
+    test: tests/test_handoff_seeds_gate.py (session handoff com/sem porque; Edit com Proximo passo sem porque; porque fora da secao nao vale)
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_handoff_seeds_gate.py -> 47 ok, all green
+    status: complete
+    gap: null
+  - id: AC2
+    text: porque vazio ou placeholder <...> tambem e recusado, com mensagem "presente mas vazio" distinta de "ausente".
+    altitude: event
+    surface: hook handoff-seeds-gate.py
+    test: tests/test_handoff_seeds_gate.py (porque vazio / so espacos / placeholder / negrito vazio; mensagem EMPTY vs has no)
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_handoff_seeds_gate.py -> 47 ok, all green
+    status: complete
+    gap: null
+  - id: AC3
+    text: Sem "## Proximo passo" visivel passa (fail-open); handoff de discovery mantem o comportamento (seeds + carry-forward, sem porque); outros caminhos intocados.
+    altitude: event
+    surface: hook handoff-seeds-gate.py
+    test: tests/test_handoff_seeds_gate.py (sem Proximo passo passa; Edit em outra secao passa; handoff de discovery nao pede porque; testes preexistentes de discovery e caminhos alheios)
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_handoff_seeds_gate.py -> 47 ok, all green
+    status: complete
+    gap: null
+  - id: AC4
+    text: common/commands/handoff.md traz a linha porque sob "## Proximo passo" e regra dizendo que e obrigatoria, em prosa, sem rotulos de conversa.
+    altitude: domain
+    surface: common/commands/handoff.md (template + Rules)
+    test: diff (handoff.md:63 linha porque no template; handoff.md:77 regra "mandatory") + comportamento do gate coberto pelo teste de AC1
+    layer: leitura do diff
+    evidence: verified
+    run: grep -n 'porque:' common/commands/handoff.md -> linhas 63 e 77; python3 tests/test_handoff_seeds_gate.py -> all green
+    status: complete
+    gap: null
+  - id: AC5
+    text: common/commands/spec.md traz "## Como chegamos aqui" antes de "## Problema" no esqueleto, e o passo 1 manda preenche-la da primeira frase do dono ou do porque do handoff.
+    altitude: domain
+    surface: common/commands/spec.md (passo 1 + formato do arquivo)
+    test: diff (spec.md:185 Como chegamos aqui, spec.md:188 Problema; texto do passo 1)
+    layer: leitura do diff
+    evidence: verified
+    run: grep -n '^## Como chegamos\|^## Problema' common/commands/spec.md -> 185, 188
+    status: complete
+    gap: null
+  - id: AC6
+    text: spec-readiness-gate recusa ready-to-build sem "## Como chegamos aqui" (ausente, vazia ou so placeholder), nomeando a secao; draft nunca bloqueia; Epic intocado.
+    altitude: event
+    surface: hook spec-readiness-gate.py (PreToolUse stdin, exit code)
+    test: tests/test_spec_readiness_gate.py::test_ready_requires_how_we_got_here
+    layer: subprocess (hook real)
+    evidence: verified
+    run: "python3 tests/test_spec_readiness_gate.py -> 54 ok, all green (ausente, placeholder, vazia bloqueiam; preenchida passa; rascunho passa). Epic: o ramo is_epic sai (exit) antes da checagem nova, lido em main(); nao rodei test_epic_readiness_gate.py por restricao do escopo."
+    status: complete
+    gap: null
+  - id: AC7
+    text: session-next.py carrega a linha porque no brief da proxima sessao (section_brief nao a remove).
+    altitude: application
+    surface: common/hooks/session-next.py section_brief / brief da proxima sessao
+    test: nenhum (nao ha teste de session-next que contenha porque)
+    layer: nenhum
+    evidence: missing
+    run: "ad hoc: section_brief sobre nota com porque -> 'Fazer X.\\nporque: o dono perguntou Y' (linha preservada). Nao e teste versionado."
+    status: incomplete
+    gap: "Falta teste (ex.: em tests/test_session_intent_contract.py ou novo) que chame session-next.py --handoff com um handoff contendo porque: e assevere que a linha aparece no brief emitido. Hoje a promessa do commit repousa em comportamento nao fixado; uma mudanca em INTENT_RE/section_brief poderia remove-la sem teste vermelho."

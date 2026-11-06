@@ -107,6 +107,22 @@ with World() as w:
     check("sem as linhas da intenção, nada de `intent`", "intent" not in d and "intencao" not in d, d)
     check("saída diz que vai sem intenção", "sem intenção" in out, out)
 
+PORQUE = ('o dono abriu a spec e não reconheceu o assunto; a pergunta original '
+          'era "como o handoff grava o porquê?"')
+
+print("a linha `porque:` do Próximo passo vai no brief da próxima sessão (fb-20261104-2)")
+with World() as w:
+    rc, out = w.run(handoff(line(w), brief=f"{BRIEF}\nporque: {PORQUE}"))
+    check("exit 0", rc == 0, out)
+    d = json.loads(w.nxt.read_text()) if w.nxt.exists() else {}
+    check("brief traz a frase do porque literalmente", PORQUE in (d.get("brief") or ""),
+          repr(d.get("brief")))
+    check("brief traz a linha `porque:` e o parágrafo",
+          f"porque: {PORQUE}" in d.get("brief", "") and BRIEF in d.get("brief", ""),
+          repr(d.get("brief")))
+    check("brief sem a linha **Próximo:**", "**Próximo:**" not in d.get("brief", ""),
+          repr(d.get("brief")))
+
 INTENT_LINES = ("**Intenção:** Grelhar o dono no epic contratos-e-regras\n"
                    "**Meta:** cada ciclo com roteiro em tela e em backend\n"
                    "**Plano:** abrir o epic | grelhar ciclo a ciclo\n")
