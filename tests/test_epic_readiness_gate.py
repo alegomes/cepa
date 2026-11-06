@@ -397,8 +397,13 @@ def test_lint_spares_interview_turn():
     # in other clothes, and that is what grill me forbids.
     check("lint não bloqueia turno que só gravou docs/epics e termina em pergunta",
           not _lint_stop("/r/docs/epics/contratos.md"))
-    check("controle: turno do /common:spec (docs/spec) segue medido",
-          _lint_stop("/r/docs/spec/x.md"))
+    # Item spec-isento-do-report-style-lint (2026-11-06, CS-5 follow-up): the
+    # /common:spec round also writes its document every turn and ends asking,
+    # so it is spared like the epic interview. The plural directory is not.
+    check("turno do /common:spec (docs/spec) também é poupado",
+          not _lint_stop("/r/docs/spec/x.md"))
+    check("controle: docs/specs (plural) segue medido",
+          _lint_stop("/r/docs/specs/x.md"))
     # The pair review of 61b71db: the closing report ends in the numbered
     # decision list, which has `?` in the last paragraph. It is a report.
     closing = (SPEECH.replace("?", ".") + "\n\n**Pra você:** 1 decisão.\n\n"
