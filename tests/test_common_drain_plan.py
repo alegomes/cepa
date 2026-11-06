@@ -108,7 +108,7 @@ def test_batch_follows_the_queue_order_and_the_ceiling(base):
     check("monta o lote", r.returncode == 0, r.stderr)
     check("o lote sai NA ORDEM da fila, não reordenado",
           [i["id"] for i in out["batch"]] == ["A", "B"], out)
-    check("o teto para o lote", out["stop"]["reason"] == "teto", out["stop"])
+    check("o teto para o lote", out["stop"]["reason"] == "cap", out["stop"])
     check("a parada NOMEIA o item que ficou de fora",
           out["stop"]["item"] == "C", out["stop"])
     check("leva o `why` de cada posição junto",
@@ -125,7 +125,7 @@ def test_done_or_dropped_item_does_not_enter_and_does_not_stop(base):
     check("item já fechado não volta para o lote",
           [i["id"] for i in out["batch"]] == ["C"], out)
     check("a fila acabou é um desfecho nomeado",
-          out["stop"]["reason"] == "fim-da-fila", out["stop"])
+          out["stop"]["reason"] == "end-of-queue", out["stop"])
 
 
 def test_open_human_pending_DEFERS_the_item_and_the_batch_goes_on(base):
@@ -162,7 +162,7 @@ def test_deferring_an_item_defers_whoever_depends_on_it(base):
     check("quem depende do adiado é adiado junto",
           [i["id"] for i in out["batch"]] == ["A", "D"], out)
     check("e a cascata é DITA, com o nome do item que ela espera",
-          any(a["id"] == "C" and a["reason"] == "depende-de-adiado"
+          any(a["id"] == "C" and a["reason"] == "depends-on-deferred"
               and "B" in a["detail"] for a in out["deferred"]), out["deferred"])
 
 
@@ -201,13 +201,13 @@ def test_block_stops_the_batch_but_internal_dependency_does_not(base):
     # Now the blocker is OUTSIDE the batch, because of the ceiling.
     _, out = queue(d, "fila", "--max", "1")
     check("com o bloqueador fora do lote, o teto é quem para",
-          out["stop"]["reason"] == "teto", out["stop"])
+          out["stop"]["reason"] == "cap", out["stop"])
 
     d2 = git_repo(base, "bloqueio2")
     write_queue(d2, [item("A", blocked_by=["Z"]), item("Z"), item("C")])
     _, out = queue(d2)
     check("para no primeiro item bloqueado por algo que vem DEPOIS",
-          out["stop"]["reason"] == "bloqueado" and out["stop"]["item"] == "A",
+          out["stop"]["reason"] == "blocked" and out["stop"]["item"] == "A",
           out["stop"])
     check("nomeia o bloqueador", "Z" in out["stop"]["detail"], out["stop"])
     check("não pula o bloqueado para alcançar o de baixo — isso reordenaria "
@@ -236,7 +236,7 @@ def test_reservation_with_live_owner_defers_and_NAMES_who_is_on_it(base):
     check("o item de outra sessão não para o lote — adia",
           [i["id"] for i in out["batch"]] == ["B"], out)
     check("e o adiamento diz QUEM está nele",
-          any(a["id"] == "A" and a["reason"] == "reservado"
+          any(a["id"] == "A" and a["reason"] == "reserved"
               and "sessao-viva" in a["detail"] for a in out["deferred"]),
           out["deferred"])
 
@@ -415,14 +415,14 @@ def test_marking_preserves_header_and_extra_fields(base):
     deferred_ones = {a["id"]: a for a in out["deferred"]}
     check("item que saiu `blocked` de um run anterior é ADIADO, "
           "em vez de ser re-executado no mesmo travamento",
-          "A" in deferred_ones and deferred_ones["A"]["reason"] == "bloqueado-antes",
+          "A" in deferred_ones and deferred_ones["A"]["reason"] == "blocked-before",
           out["deferred"])
     check("o adiamento repete o motivo registrado no desfecho",
           "docker" in deferred_ones.get("A", {}).get("detail", ""), out["deferred"])
     check("e ele NÃO aparece no lote", "A" not in {i["id"] for i in out["batch"]},
           out["batch"])
-    check("e a parada não é mais `bloqueado-antes`",
-          out["stop"]["reason"] != "bloqueado-antes", out["stop"])
+    check("e a parada não é mais `blocked-before`",
+          out["stop"]["reason"] != "blocked-before", out["stop"])
 
 
 # ── prose contract of the command ────────────────────────────────────────────

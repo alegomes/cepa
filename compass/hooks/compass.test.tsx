@@ -716,6 +716,7 @@ test('hora completa com zero e devolve vazio para texto que não é data', async
 
 test('rotuloDoFim traduz o que conhece e repete o resto', async () => {
   expect(endLabel('fim-da-fila')).toBe('fila acabou')
+  expect(endLabel('end-of-queue')).toBe(endLabel('fim-da-fila'))
   expect(endLabel('limite-de-uso')).toBe('parou pela cota')
   expect(endLabel('prazo')).toBe('prazo chegou')
   expect(endLabel('xpto')).toBe('xpto')

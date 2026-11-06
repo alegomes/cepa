@@ -145,7 +145,8 @@ export const timeOfDay = (iso: string): string => {
 }
 
 const REASONS: Record<string, string> = {
-  'fim-da-fila': 'fila acabou',
+  'end-of-queue': 'fila acabou',
+  'fim-da-fila': 'fila acabou', // old .jsonl records still carry it
   prazo: 'prazo chegou',
   'limite-de-uso': 'parou pela cota',
   disjuntor: 'disjuntor',

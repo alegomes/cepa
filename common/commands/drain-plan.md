@@ -200,9 +200,11 @@ The stop reasons, and what each one wants from you:
 
 | `stop.reason` | what happened |
 |---|---|
-| `teto` | `--max` filled up; the named item would be the next. Run again later. |
-| `fim-da-fila` | no pending item left. Offer `/common:queue` for the next round. |
-| `bloqueado` | the item depends on something that is neither done nor in this batch. |
+| `cap` | `--max` filled up; the named item would be the next. Run again later. |
+| `end-of-queue` | no pending item left. Offer `/common:queue` for the next round. |
+| `blocked` | the item depends on something that is neither done nor in this batch. |
+
+(Transition window: the reasons used to be written in Portuguese — `teto`, `fim-da-fila`, `bloqueado`, `reservado`, `depende-de-adiado`, `bloqueado-antes`. The JSON still carries the old spelling in `reason_pt` next to `reason`, and readers accept both.)
 
 And `queue` also returns `deferred` — the **deferred** items, which don't run
 now and **don't stop the batch**. Deferring is an execution decision: the item
@@ -212,9 +214,9 @@ leaves this batch and comes back in the next `queue`, and the order recorded in
 | deferral reason | what happened |
 |---|---|
 | `human_pending` | the item has a route that **only you** close. Owner decision (2026-08-28, revisiting the one of 08-25): the route no longer blocks the flow — locking the queue until the human came back turned a batch of 3 into a batch of 1. The debt does not vanish: it is collected in the final report. |
-| `reservado` | another **live** session is on the item right now — the deferral says which session, in which tree, since when. |
-| `depende-de-adiado` | the item depends (`blocked_by`) on one that was left out. The cascade is what makes deferral work: without it, deferring B would make C stop the batch. |
-| `bloqueado-antes` | the item came out `blocked` from a previous run and the outside condition did not change. It is not re-run — it would be the same block — but since 2026-08-30 it also does not block the ones after it. Owner decision, revisiting what was inherited from `/board-flow:drain`: in an unattended window (`cepa-until`), an item stuck at the head of the queue cost the whole night. |
+| `reserved` | another **live** session is on the item right now — the deferral says which session, in which tree, since when. |
+| `depends-on-deferred` | the item depends (`blocked_by`) on one that was left out. The cascade is what makes deferral work: without it, deferring B would make C stop the batch. |
+| `blocked-before` | the item came out `blocked` from a previous run and the outside condition did not change. It is not re-run — it would be the same block — but since 2026-08-30 it also does not block the ones after it. Owner decision, revisiting what was inherited from `/board-flow:drain`: in an unattended window (`cepa-until`), an item stuck at the head of the queue cost the whole night. |
 
 A fourth situation is neither deferral nor stop: an `in_progress` whose owning
 session **no longer exists** (dead pid on the same host, or a reservation from
@@ -567,7 +569,7 @@ A single report, in the `plain-report` format, written in Brazilian Portuguese
 - **Where the batch stopped and what is left:** the `stop` of the next `queue` and
   how many pending items remain.
 - **What now:** `/common:next` for the next step, or this command again if the
-  stop was `teto`.
+  stop was `cap`.
 
 ## Constraints
 

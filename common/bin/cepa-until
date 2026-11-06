@@ -146,7 +146,7 @@ over a drop that was neither the item's nor the account's. The rule:
 ## When it stops
 
 It stops at the first of: deadline reached, queue with no executable item (the reason comes from
-`cepa-plan queue` — `fim-da-fila`, `bloqueado`, `bloqueado-antes`), circuit breaker,
+`cepa-plan queue` — `end-of-queue`, `blocked`, `blocked-before`; the old Portuguese spelling is still accepted), circuit breaker,
 or account usage ceiling whose wait doesn't fit in the window.
 An item that comes out `blocked` STOPS the batch — a `cepa-plan` rule, inherited from
 `/board-flow:drain`: re-running measures the same stall.
@@ -1966,14 +1966,32 @@ def land_action(repo, tree, queue, run_id, n):
 # section (`owner_summary.impede`). Until 2026-11-01 it said "travou por algo
 # de fora do código" for every blocked item, and on WEGO-2381 that was false:
 # the work was done and two rules disagreed.
+# Transition window (same method as f26a765/84fde4d): `cepa-plan queue` now emits
+# the English reason; the old Portuguese spelling is still accepted on input
+# (older queue output, saved `deferred` lists). Mirrors cepa-plan REASON_ALIASES.
+REASON_ALIASES = {
+    "fim-da-fila": "end-of-queue",
+    "teto": "cap",
+    "bloqueado": "blocked",
+    "reservado": "reserved",
+    "depende-de-adiado": "depends-on-deferred",
+    "bloqueado-antes": "blocked-before",
+}
+
+
+def reason_alias(value):
+    """Old Portuguese stop/deferral reason -> the English one (unknown: as is)."""
+    return REASON_ALIASES.get(value, value)
+
+
 OWNER_REASON = {
-    "bloqueado-antes": "o agente marcou o item como travado",
+    "blocked-before": "o agente marcou o item como travado",
     "human_pending": "ficou uma tarefa que só você faz",
     "pos-entrega": "o item foi entregue e sobrou uma tarefa que só você faz",
 }
 NO_OWNER_REASON = {
-    "reservado": "outra sessão está nele agora",
-    "depende-de-adiado": "depende de um item adiado e anda junto com ele",
+    "reserved": "outra sessão está nele agora",
+    "depends-on-deferred": "depende de um item adiado e anda junto com ele",
 }
 DECISIONS_BLOCK = re.compile(r"```json cepa-decisoes\s*\n(.*?)\n```", re.S)
 
@@ -2359,8 +2377,8 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     back = f"cepa-until decide {queue}" + (f"/{run_id}" if run_id else "")
     screen = Panel(SCREEN, output)
     applied, for_later = [], []
-    owner_items = [ad for ad in deferred if ad.get("reason") in OWNER_REASON]
-    without_owner = [ad for ad in deferred if ad.get("reason") in NO_OWNER_REASON]
+    owner_items = [ad for ad in deferred if reason_alias(ad.get("reason")) in OWNER_REASON]
+    without_owner = [ad for ad in deferred if reason_alias(ad.get("reason")) in NO_OWNER_REASON]
     action = pending_action(item_states)
     total = (1 if action else 0) + len(owner_items)
     if not total:
@@ -2389,7 +2407,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     for i, ad in enumerate(owner_items, 1):
         ident = str(ad.get("id"))
         if stopped:
-            for_later.append(f"{ident}: {OWNER_REASON[ad['reason']]}")
+            for_later.append(f"{ident}: {OWNER_REASON[reason_alias(ad['reason'])]}")
             continue
         d = by_item.get(ident) or {}
         route = ad.get("human_pending")
@@ -2406,7 +2424,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # what stopped, what was asked, what is already done. The agent
         # section (the evidence, with its codes) only on `[e]`.
         screen.label("Parou porque", summary.get("impede")
-                     or f"{OWNER_REASON[ad['reason']]}.")
+                     or f"{OWNER_REASON[reason_alias(ad['reason'])]}.")
         if summary.get("pedido"):
             screen.label("Era para", summary["pedido"])
         if summary.get("pronto"):
@@ -2518,10 +2536,10 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 screen.end()
                 continue
             screen.recorded(msg, ok=False)
-        for_later.append(f"{ident}: {OWNER_REASON[ad['reason']]}")
+        for_later.append(f"{ident}: {OWNER_REASON[reason_alias(ad['reason'])]}")
         screen.end()
 
-    screen.close_panel([f"{ad.get('id')} ({NO_OWNER_REASON[ad['reason']]})"
+    screen.close_panel([f"{ad.get('id')} ({NO_OWNER_REASON[reason_alias(ad['reason'])]})"
                 for ad in without_owner], applied, for_later,
                back)
     return applied, for_later
@@ -2533,7 +2551,7 @@ def pending_as_text(queue, run_id, item_states, deferred, analysis, output=print
     analysis = analysis or {}
     by_item = analysis.get("itens") or {}
     action = pending_action(item_states)
-    owner_items = [ad for ad in deferred if ad.get("reason") in OWNER_REASON]
+    owner_items = [ad for ad in deferred if reason_alias(ad.get("reason")) in OWNER_REASON]
     if not action and not owner_items:
         return
     output(f"\n── esperam por você: {(1 if action else 0) + len(owner_items)}")
@@ -2543,7 +2561,7 @@ def pending_as_text(queue, run_id, item_states, deferred, analysis, output=print
         d = by_item.get(str(ad.get("id"))) or {}
         q = ad.get("question") or d.get("pergunta") or ad.get("human_pending") \
             or summarize_reason(ad.get("evidence") or "")
-        why = owner_summary_of(ad, d).get("impede") or OWNER_REASON[ad["reason"]]
+        why = owner_summary_of(ad, d).get("impede") or OWNER_REASON[reason_alias(ad["reason"])]
         output(f"   - {ad.get('id')} ({why}): {q}")
     output(f"   Para responder uma por uma, num terminal: cepa-until decide "
           f"{queue}" + (f"/{run_id}" if run_id else ""))
@@ -3635,7 +3653,7 @@ def main(argv=None):
             log_event({"evento": "aviso", "texto": warning})
         if not data.get("batch"):
             stop = data.get("stop") or {}
-            end_reason = stop.get("reason") or "fim-da-fila"
+            end_reason = reason_alias(stop.get("reason")) or "end-of-queue"
             end_detail = stop.get("detail") or "a fila não tem item executável"
             break
 

@@ -286,7 +286,7 @@ def test_max_caps_the_cards():
         p, calls = run_prove(root, binv, tmp, ["--for", "2h", "--max", "2"])
         check("--max 2 para depois de dois vereditos", len(calls) == 2, f"{len(calls)}")
         end = [e for e in ledger_of(root) if e.get("evento") == "run_end"]
-        check("...run_end por `teto`", end and end[0]["motivo"] == "teto", json.dumps(end)[:300])
+        check("...run_end por `cap`", end and end[0]["motivo"] == "cap", json.dumps(end)[:300])
 
 
 # ── 3. the clock and the guards ──────────────────────────────────────────────

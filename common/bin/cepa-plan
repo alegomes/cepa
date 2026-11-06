@@ -1201,15 +1201,44 @@ def cmd_from_triage(path, as_json=True):
 
 # ── the batch: what /common:drain-plan can execute NOW ───────────────────────
 
-# What STOPS the batch. `human_pending`, `in_progress` and `bloqueado-antes`
+# What STOPS the batch. `human_pending`, `in_progress` and `blocked-before`
 # left here: all three DEFER the item and let the following ones run.
-STOPS = ("fim-da-fila", "teto", "bloqueado")
-DEFERRALS = ("human_pending", "reservado", "depende-de-adiado",
-              "bloqueado-antes")
+STOPS = ("end-of-queue", "cap", "blocked")
+DEFERRALS = ("human_pending", "reserved", "depends-on-deferred",
+              "blocked-before")
+
+# Transition window (same method as f26a765/84fde4d): the English value is what
+# is emitted; the old Portuguese spelling is accepted by readers and still
+# carried in `reason_pt`. Drop this map once no reader or .jsonl needs the old.
+REASON_ALIASES = {
+    "fim-da-fila": "end-of-queue",
+    "teto": "cap",
+    "bloqueado": "blocked",
+    "reservado": "reserved",
+    "depende-de-adiado": "depends-on-deferred",
+    "bloqueado-antes": "blocked-before",
+}
+REASON_PT = {new: old for old, new in REASON_ALIASES.items()}
+
+
+def reason_alias(value):
+    """Old Portuguese stop/deferral reason -> the English one (unknown: as is)."""
+    return REASON_ALIASES.get(value, value)
+
+
+def reason_pt(value):
+    """The old Portuguese spelling of an English reason (unknown: as is)."""
+    return REASON_PT.get(reason_alias(value), value)
 
 
 def build_batch(items, max_items, reservation_state=reservation_of):
     """(batch, stop, warnings, deferred) — what runs now, IN QUEUE ORDER.
+
+    `stop["reason"]` and each `deferred[]["reason"]` carry the ENGLISH value
+    (end-of-queue, cap, blocked / reserved, depends-on-deferred, blocked-before,
+    human_pending). During the transition window both also carry `reason_pt`,
+    the old Portuguese spelling (fim-da-fila, teto, bloqueado, reservado,
+    depende-de-adiado, bloqueado-antes), for readers not yet updated.
 
     The order is the document's data, so this function never reorders and never
     promotes an item ahead of another. What it does, since 2026-08-28, is
@@ -1243,9 +1272,9 @@ def build_batch(items, max_items, reservation_state=reservation_of):
 
     What still STOPS:
 
-      - `bloqueado` by an item that is neither done nor in the batch — copied
+      - `blocked` by an item that is neither done nor in the batch — copied
         from `/board-flow:drain`: stuck work is not pushed.
-      - `teto` — the `--max`. Each item here is a whole build with an
+      - `cap` — the `--max`. Each item here is a whole build with an
         acceptance and proof gate.
 
     And what RECOVERS: an `in_progress` whose owning session no longer exists is
@@ -1268,13 +1297,15 @@ def build_batch(items, max_items, reservation_state=reservation_of):
     def defer(ident, it, reason, detail):
         deferred_ids.add(ident)
         deferred.append({"id": ident, "title": it.get("title"),
-                        "reason": reason, "detail": detail,
+                        "reason": reason, "reason_pt": reason_pt(reason),
+                        "detail": detail,
                         "question": it.get("owner_question"),
                         "owner_summary": it.get("owner_summary"),
                         "human_pending": it.get("human_pending"),
                         "evidence": it.get("evidence")})
 
-    batch, stop = [], {"reason": "fim-da-fila", "item": None, "detail":
+    batch, stop = [], {"reason": "end-of-queue", "reason_pt": "fim-da-fila",
+                        "item": None, "detail":
                         "a fila acabou — nenhum item pendente sobrou"}
     for it in items:
         if not isinstance(it, dict):
@@ -1290,11 +1321,11 @@ def build_batch(items, max_items, reservation_state=reservation_of):
                     f"{detail}. Tratei como executável — o `start` reivindica "
                     "a reserva antes de qualquer trabalho.")
             else:
-                defer(ident, it, "reservado", f"{ident}: {detail}")
+                defer(ident, it, "reserved", f"{ident}: {detail}")
                 continue
         if st == "blocked":
             reason = str(it.get("evidence") or "").strip()
-            defer(ident, it, "bloqueado-antes",
+            defer(ident, it, "blocked-before",
                  f"{ident} saiu `blocked` de um run anterior"
                  + (f": {reason}" if reason else " (sem motivo registrado)")
                  + ". Não re-executo — enquanto a condição de fora não mudar, "
@@ -1309,7 +1340,7 @@ def build_batch(items, max_items, reservation_state=reservation_of):
         waiting = [str(b) for b in (it.get("blocked_by") or [])
                      if str(b) in deferred_ids]
         if waiting:
-            defer(ident, it, "depende-de-adiado",
+            defer(ident, it, "depends-on-deferred",
                  f"{ident} depende de {', '.join(waiting)}, que ficou de fora "
                  "deste lote — executá-lo agora seria construir sobre o que não "
                  "fechou")
@@ -1318,7 +1349,8 @@ def build_batch(items, max_items, reservation_state=reservation_of):
                      if str(b) not in resolved
                      and str(b) not in {x["id"] for x in batch}]
         if pending_deps:
-            stop = {"reason": "bloqueado", "item": ident, "detail":
+            stop = {"reason": "blocked", "reason_pt": "bloqueado",
+                    "item": ident, "detail":
                       f"{ident} depende de {', '.join(pending_deps)}, que não "
                       "está feito nem entra neste lote"}
             break
@@ -1330,14 +1362,15 @@ def build_batch(items, max_items, reservation_state=reservation_of):
                     "está abandonada. Tratei como resolvida para o item não "
                     "ficar preso para sempre; confira se ela ainda vale.")
         if len(batch) >= max_items:
-            stop = {"reason": "teto", "item": ident, "detail":
+            stop = {"reason": "cap", "reason_pt": "teto",
+                    "item": ident, "detail":
                       f"o teto --max {max_items} foi atingido; {ident} seria o "
                       "próximo"}
             break
         batch.append({"id": ident, "title": it.get("title"), "why": it.get("why"),
                      "blocked_by": [str(b) for b in (it.get("blocked_by") or [])]})
 
-    if stop["reason"] == "fim-da-fila" and deferred:
+    if reason_alias(stop["reason"]) == "end-of-queue" and deferred:
         stop["detail"] = (
             f"a fila acabou — nenhum item executável sobrou, e {len(deferred)} "
             "ficaram adiados (cada um com o motivo, no relatório)")
@@ -1610,7 +1643,8 @@ def ready_of_queue(root, name, target=None):
             "abertos": sum(1 for it in items
                            if status_of(it) not in ("done", "dropped")),
             "esperam_dono": waiting,
-            "adiados": [{"id": d["id"], "reason": d["reason"]} for d in deferred],
+            "adiados": [{"id": d["id"], "reason": reason_alias(d["reason"])}
+                        for d in deferred],
             }, warnings, None
 
 

@@ -123,7 +123,7 @@ def test_hit_the_ceiling_waits_for_the_reset_and_resumes_the_same_item():
               str(ev))
         end = run_end(root)
         check("...e o run acaba pela fila; só a falha real foi contada",
-              end["motivo"] == "fim-da-fila" and end["sem_progresso"] == 1
+              end["motivo"] == "end-of-queue" and end["sem_progresso"] == 1
               and end["esperas_de_cota"] == 1, str(end))
         check("...o relatório lista a espera",
               "Esperas pela cota de 5h (1)" in p.stdout, p.stdout[-600:])
@@ -193,7 +193,7 @@ def test_item_that_closes_between_cutoffs_resets_the_count():
         check("as 5 chamadas aconteceram", len(calls) == 5, f"{len(calls)}x")
         end = run_end(root)
         check("...o run acaba pela fila, não pelo teto",
-              end["motivo"] == "fim-da-fila" and end["esperas_de_cota"] == 3,
+              end["motivo"] == "end-of-queue" and end["esperas_de_cota"] == 3,
               str(end))
         check("...e os dois itens fecharam",
               status(plan_of(root)) == {"a1": "done", "a2": "done"},
@@ -297,7 +297,7 @@ def test_pause_that_does_not_fit_the_window_starts_anyway():
         check("o a3 começou assim mesmo", len(calls) == 3, f"{len(calls)}x")
         end = run_end(root)
         check("...o run terminou pela fila, com 1 item apertado",
-              end["motivo"] == "fim-da-fila" and end["cota_apertada"] == 1,
+              end["motivo"] == "end-of-queue" and end["cota_apertada"] == 1,
               str(end))
         tight = [e for e in ledger_of(root) if e.get("evento") == "cota_apertada"]
         check("...o registro nomeia o item e o uso",

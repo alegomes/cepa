@@ -542,7 +542,7 @@ def main(argv=None):
                           "trabalho jogado fora")
             break
         if a.max and len(handled) >= a.max:
-            end_reason = "teto"
+            end_reason = "cap"
             end_detail = f"{len(handled)} card(s) com veredito, o --max pedido"
             break
 

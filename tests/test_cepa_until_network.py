@@ -144,7 +144,7 @@ def test_network_drop_waits_for_the_return_and_resumes_the_same_item():
         check("...e a volta da rede",
               any(e.get("evento") == "rede_voltou" for e in ev), str(ev))
         check("o run terminou pela fila, não pelo disjuntor",
-              run_end(root)["motivo"] == "fim-da-fila"
+              run_end(root)["motivo"] == "end-of-queue"
               and run_end(root)["quedas_de_rede"] == 1, str(run_end(root)))
         check("o relatório lista a queda como não-falha",
               "Quedas de rede (1)" in p.stdout and "SEM REDE" in p.stdout,
@@ -177,7 +177,7 @@ def test_network_drop_does_not_count_toward_the_per_item_ceiling():
         end = run_end(root)
         check("só a falha real conta como sem progresso",
               end["sem_progresso"] == 1 and end["esgotados"] == 0
-              and end["motivo"] == "fim-da-fila", str(end))
+              and end["motivo"] == "end-of-queue", str(end))
 
 
 # ── 2. three drops in a row without progress stop the run ───────────────────
@@ -287,7 +287,7 @@ def test_item_that_closes_between_drops_resets_the_count():
               and status(plan_of(root)) == {"a1": "done", "a2": "done"},
               f"{len(calls)} · {status(plan_of(root))}")
         check("o run terminou pela fila",
-              run_end(root)["motivo"] == "fim-da-fila", str(run_end(root)))
+              run_end(root)["motivo"] == "end-of-queue", str(run_end(root)))
 
 
 # ── 5. the recognizer ───────────────────────────────────────────────────────

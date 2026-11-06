@@ -340,7 +340,7 @@ export const register: Register = on => {
       </Box>,
     )
 
-    const END_COLOR: Record<string, string> = { 'fim-da-fila': 'green', interrompido: 'yellow' }
+    const END_COLOR: Record<string, string> = { 'end-of-queue': 'green', 'fim-da-fila': 'green', interrompido: 'yellow' }
     const runLevel = card(
       'Run',
       r === null ? 'cepa-until' : `${r.queue} · ${runTime(r, nowMs)}`,
