@@ -1,0 +1,182 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/tres-portas-spec-epic.md (10 critérios, itens 1 a 7 de O2')
+# Escrito em: 2026-11-06
+
+schema_version: 2
+mode: single-track
+queue: tres-portas-c1
+source: docs/spec/tres-portas-spec-epic.md (10 critérios, itens 1 a 7 de O2')
+items:
+- id: CS-1
+  title: ao liberar uma spec em `ready-to-build` ou um Epic em `ready`/`closed`,
+    o `spec-readiness-gate` mostra ao dono "N decisões sem veredito neste arquivo",
+    contando as linhas da seção "Decided without asking" sem `· mantida em`, `·
+    vetada em` nem `· refinada em` (item 6)
+  why: 'ordem de construção dos itens de O2'' aprovada em docs/estrategia-tres-portas-para-spec-e-epic.md,
+    seção 5 (6, 3, 5, 4, 1, 2, 7), e confirmada pelo dono na spec em 2026-11-06;
+    dentro de um mesmo item, a ordem do texto · superfície onde se observa: event
+    · teste vermelho declarado: dado o evento de Write de `docs/spec/x.md` com `Status:
+    ready-to-build`, crivo completo e três decisões na seção, uma delas com `· mantida
+    em 2026-11-06`, o hook sai com 0 e a saída mostrada ao dono contém "2 decisões
+    sem veredito"; com a seção sem nenhuma linha pendente, contém "0 decisões sem
+    veredito"; sem a seção, contém "sem seção Decided without asking"; e um segundo
+    Write sobre o mesmo arquivo, já `ready-to-build` no disco, não imprime a contagem.
+    Hoje falha: o hook sai com 0 sem imprimir nada.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: o leitor da seção "Decided without asking" mora num módulo compartilhado
+    que o hook importa, lê os nomes antigo e novo da seção e devolve as linhas com
+    e sem veredito (item 6, base do item 3)
+  why: 'ordem de construção dos itens de O2'' aprovada em docs/estrategia-tres-portas-para-spec-e-epic.md,
+    seção 5 (6, 3, 5, 4, 1, 2, 7), e confirmada pelo dono na spec em 2026-11-06;
+    dentro de um mesmo item, a ordem do texto · superfície onde se observa: domain
+    · teste vermelho declarado: importar o módulo e ler os quatro documentos reais
+    de hoje (`docs/spec/cepa-espiral-c1.md`, `docs/spec/planejador-de-lotes-paralelos.md`,
+    `docs/epics/cepa-em-espiral.md` e um fixture com `## Decidido sem perguntar`
+    e uma linha) devolve 3, 2, 2 e 1 linhas sem veredito, nas mesmas palavras do
+    arquivo. Hoje falha: o módulo não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: o passo de fechamento de `/common:spec` e de `/common:epic` manda repetir
+    no relatório final o número que o hook mostrou (item 6)
+  why: 'ordem de construção dos itens de O2'' aprovada em docs/estrategia-tres-portas-para-spec-e-epic.md,
+    seção 5 (6, 3, 5, 4, 1, 2, 7), e confirmada pelo dono na spec em 2026-11-06;
+    dentro de um mesmo item, a ordem do texto · superfície onde se observa: application
+    · teste vermelho declarado: um teste que lê `common/commands/spec.md` e `common/commands/epic.md`
+    encontra, no passo de fechamento, a instrução de repetir "decisões sem veredito"
+    no relatório. Hoje falha: nenhum dos dois cita a contagem.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: '`cepa-plan decisions` lista, por arquivo, as decisões da seção "Decided
+    without asking" separadas em com e sem veredito; sem argumento varre `docs/spec/`
+    e `docs/epics/` (item 3)'
+  why: 'ordem de construção dos itens de O2'' aprovada em docs/estrategia-tres-portas-para-spec-e-epic.md,
+    seção 5 (6, 3, 5, 4, 1, 2, 7), e confirmada pelo dono na spec em 2026-11-06;
+    dentro de um mesmo item, a ordem do texto · superfície onde se observa: cli
+    · teste vermelho declarado: num repo de teste com uma spec (duas decisões, uma
+    com `· vetada em 2026-11-06: fora do ciclo`) e um Epic (uma decisão sem marcador),
+    `cepa-plan decisions` sai com 0 e imprime os dois caminhos com "1 sem veredito"
+    cada e o texto das linhas pendentes; `cepa-plan decisions <spec> --json` devolve
+    as duas linhas com o campo de veredito preenchido só na vetada; `cepa-plan decisions
+    inexistente.md` sai com código diferente de 0. Hoje falha: o subcomando `decisions`
+    não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: o `doctor` mostra a área `decisoes` com ⚠ e o total de decisões sem veredito
+    nas specs e Epics fora de `draft`/`rascunho`, um arquivo por linha com o comando
+    que abre o veto (item 5)
+  why: 'ordem de construção dos itens de O2'' aprovada em docs/estrategia-tres-portas-para-spec-e-epic.md,
+    seção 5 (6, 3, 5, 4, 1, 2, 7), e confirmada pelo dono na spec em 2026-11-06;
+    dentro de um mesmo item, a ordem do texto · superfície onde se observa: cli
+    · teste vermelho declarado: num repo de teste com uma spec `ready-to-build`
+    (duas decisões, uma com `· mantida em 2026-11-06`), uma spec `draft` (três decisões
+    sem marcador) e um Epic `rascunho` (uma sem marcador), `cepa-doctor --project`
+    sai com 1, mostra "⚠ [decisoes] 1 decisão sem veredito" com o caminho da spec
+    pronta e `/common:spec --continuar <slug>`, não cita os dois arquivos em rascunho,
+    repete a linha em "Precisa de você", e `--brief` conta o aviso; no repo do Cepa
+    de 2026-11-06 o total seria 5 (3 em `cepa-espiral-c1` + 2 em `planejador-de-lotes-paralelos`;
+    o Epic `cepa-em-espiral` está em `rascunho`). Hoje falha: o `doctor` não tem
+    a área `decisoes`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: '`cepa-plan verdict <arquivo> <n> mantida|vetada|refinada` grava na linha
+    `<n>` da seção "Decided without asking" o marcador com a data do dia, e ao vetar
+    ou refinar avisa quando uma fila já foi derivada do arquivo (item 4)'
+  why: 'ordem de construção dos itens de O2'' aprovada em docs/estrategia-tres-portas-para-spec-e-epic.md,
+    seção 5 (6, 3, 5, 4, 1, 2, 7), e confirmada pelo dono na spec em 2026-11-06;
+    dentro de um mesmo item, a ordem do texto · superfície onde se observa: cli
+    · teste vermelho declarado: num repo de teste com uma spec de três decisões
+    e uma fila cujo `source:` cita essa spec com um item `done`, `cepa-plan verdict
+    <spec> 2 vetada --reason "fora do ciclo"` sai com 0, a linha 2 termina em `·
+    vetada em <hoje>: fora do ciclo`, as linhas 1 e 3 não mudam, `Status` não muda,
+    a saída contém "já virou código na fila" com o nome da fila e "1 item done";
+    repetir o comando na linha 2 sai com código diferente de 0; `vetada` sem `--reason`
+    sai com código diferente de 0. Hoje falha: o subcomando `verdict` não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: '`/common:spec --continuar`/`--fechar` e `/common:epic` sobre documento
+    existente abrem com a caminhada do veto antes de retomar a entrevista ou o crivo:
+    até quatro decisões por rodada na spec, uma por turno no Epic, cada resposta
+    gravada por `cepa-plan verdict`, decisão pulada fica sem marcador (item 4)'
+  why: 'ordem de construção dos itens de O2'' aprovada em docs/estrategia-tres-portas-para-spec-e-epic.md,
+    seção 5 (6, 3, 5, 4, 1, 2, 7), e confirmada pelo dono na spec em 2026-11-06;
+    dentro de um mesmo item, a ordem do texto · superfície onde se observa: application
+    · teste vermelho declarado: um teste que lê `common/commands/spec.md` e `common/commands/epic.md`
+    encontra, no passo de abertura de documento existente e antes do passo da entrevista,
+    a chamada a `cepa-plan decisions` e a `cepa-plan verdict`, o limite de quatro
+    por rodada em `spec.md` e de uma por turno em `epic.md`, e a frase de que decisão
+    pulada não trava. Hoje falha: nenhum dos dois cita a caminhada do veto.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-8
+  title: '`/common:spec`, num repo com um brief do `discovery` e uma spec do `planning-lead`
+    sobre o assunto, nomeia as fontes lidas, rotula cada proposta tirada delas e
+    não marca `- [x]` sem resposta do dono (itens 1 e 2)'
+  why: 'ordem de construção dos itens de O2'' aprovada em docs/estrategia-tres-portas-para-spec-e-epic.md,
+    seção 5 (6, 3, 5, 4, 1, 2, 7), e confirmada pelo dono na spec em 2026-11-06;
+    dentro de um mesmo item, a ordem do texto · superfície onde se observa: application
+    · teste vermelho declarado: uma transcrição gravada com `claude -p --plugin-dir
+    common` num repo descartável com `docs/discovery/<card>/handoff.md` e `specs/<slug>.md`
+    semeados mostra: o documento criado tem `**Fontes lidas:**` com os dois caminhos;
+    toda proposta tirada deles aparece como opção recomendada com o rótulo `evidência`
+    (do brief) ou `proposta de agente` (da spec) e o caminho; nenhuma linha vira
+    `- [x]` antes de uma fala do dono que a responda; decisão herdada da spec do
+    `planning-lead` aparece em "Decided without asking" com a origem, não como pergunta
+    respondida. Hoje falha: o passo 2 não cita `docs/discovery/` nem `specs/`, e
+    nenhuma proposta sai rotulada.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-9
+  title: '`/common:epic`, no mesmo repo semeado, faz o mesmo em prosa: fontes nomeadas,
+    proposta rotulada antes da pergunta e desafiada uma vez, nenhum `- [x]` sem
+    resposta do dono (itens 1 e 2)'
+  why: 'ordem de construção dos itens de O2'' aprovada em docs/estrategia-tres-portas-para-spec-e-epic.md,
+    seção 5 (6, 3, 5, 4, 1, 2, 7), e confirmada pelo dono na spec em 2026-11-06;
+    dentro de um mesmo item, a ordem do texto · superfície onde se observa: application
+    · teste vermelho declarado: uma transcrição gravada como a de CS-8, com `/common:epic`,
+    mostra `**Fontes lidas:**` no cabeçalho do Epic, em cada turno com proposta
+    tirada de arquivo o rótulo e o caminho antes da única pergunta do turno, cada
+    proposta rotulada desafiada uma vez ("quem vê isso e onde?" ou "o que quebra
+    se faltar?") antes de ser gravada, e nenhuma linha `- [x]` sem fala do dono.
+    Hoje falha: o comando não rotula proposta nem nomeia `docs/discovery/` e `specs/`
+    no passo 2.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-10
+  title: o card que o `epic-briefer` cria aponta o caminho do brief e o repositório
+    onde ele vive, e a regra "Brief, not Epic" nomeia os dois leitores (item 7)
+  why: 'ordem de construção dos itens de O2'' aprovada em docs/estrategia-tres-portas-para-spec-e-epic.md,
+    seção 5 (6, 3, 5, 4, 1, 2, 7), e confirmada pelo dono na spec em 2026-11-06;
+    dentro de um mesmo item, a ordem do texto · superfície onde se observa: application
+    · teste vermelho declarado: um teste que lê `discovery/agents/epic-briefer.md`
+    encontra, no modelo da descrição do card do passo 5, uma linha de repositório
+    preenchida com `git remote get-url origin` e o caminho local como reserva, ao
+    lado da linha `Delivery brief:`; nenhum comando literal (`/common:epic ...`)
+    no modelo do card; e a regra "Brief, not Epic" citando `epic-author` e `/common:epic`.
+    Hoje falha: o modelo não tem linha de repositório e a regra cita só o `epic-author`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
