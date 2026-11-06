@@ -76,6 +76,11 @@ except Exception:  # noqa: BLE001
 # `_wtlib.env_manifest_path` is the same path resolution as the worktree
 # seeding (docs/env.yaml wins over .claude/env.yaml, the legacy one) — single source.
 try:
+    import _dirt  # single definition of "dirty clone", shared with cepa-until
+except Exception:  # noqa: BLE001
+    _dirt = None
+
+try:
     import _wtlib as WT
 except Exception:  # noqa: BLE001
     WT = None
@@ -530,6 +535,7 @@ def check_project(cwd: Path):
         ok("handoffs", "sem handoffs vencidos")
 
     check_dirty_tree(root)
+    check_tracked_runtime(root)
     check_env_manifest(root)
     check_twg_version(root)
     check_plan_divergence(root)
@@ -653,8 +659,7 @@ def check_dirty_tree(root: Path):
     if dirty is None:
         return
     # the record of previous runs does not count: `cepa-until` ignores it too
-    dirty = [l for l in dirty
-            if not re.match(r"^.. \.claude/(programs|queues)/[^/]+/until/", l)]
+    dirty = [l for l in dirty if (_dirt.counts_as_dirt(l) if _dirt else l.strip())]
     if not dirty:
         ok("execucao", f"fila `{queue}` pendente e árvore limpa — "
                        f"`cepa-until {queue} --for 12h` larga sem recusa")
@@ -664,6 +669,22 @@ def check_dirty_tree(root: Path):
          f"item a executar — o `cepa-until` RECUSA largar assim (é como ele "
          f"separa o que o run fez do que já estava aqui). Commite, limpe, ou "
          f"largue com --dirty-ok. Achar isso na hora de dormir custa a janela")
+
+
+def check_tracked_runtime(root: Path):
+    """Tracked files that hooks write as machine-local runtime state: every
+    wrap-up then finds the clone dirty and `cepa-until` refuses to start.
+    No --fix: untracking is a commit the owner must see."""
+    if _dirt is None:
+        return
+    tracked = _dirt.tracked_runtime(str(root))
+    if not tracked:
+        ok("runtime", "nenhum arquivo de runtime dos hooks versionado")
+        return
+    warn("runtime",
+         f"{len(tracked)} arquivo(s) versionado(s) que os hooks escrevem: "
+         f"{tracked[:5]} — todo wrap-up vai encontrar o clone sujo; tire do "
+         f"índice (git rm --cached) e ignore-os")
 
 
 def check_env_manifest(root: Path):

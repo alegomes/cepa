@@ -224,6 +224,7 @@ sys.path.insert(0, str(HERE.parent / "hooks"))
 import _queuepath as qp  # noqa: E402  (the queue lives in two layouts during the transition)
 import _ownertext  # noqa: E402  (the human section of a blocked item)
 import _clihelp  # noqa: E402
+import _dirt  # noqa: E402  (single definition of "dirty clone")
 
 CEPA_PLAN = HERE / "cepa-plan"
 CEPA_UNTIL_DIGEST = HERE / "cepa-until-digest"
@@ -1099,17 +1100,10 @@ def block_item(name, repo, ident, attempts, side_branch=None):
 
 # ── start-up guards ─────────────────────────────────────────────────────────
 
-# The run's own record (`.jsonl`, `.log`, `.review.md`) lives inside the
-# repo, in `.claude/queues/<queue>/until/` (or `.claude/programs/<queue>/until/`, the old
-# layout). It is not dirt: without this filter, the
-# first run leaves the folder untracked and the next one refuses to start
-# because of what the previous one wrote.
-RUN_RECORD = re.compile(r"^.. \.claude/(programs|queues)/[^/]+/until/")
-# For the same reason, the copy that `cepa-plan write` makes of the previous queue before
-# rewriting it: it is born untracked, and without this filter every rewrite of the
-# queue blocked the next run until someone deleted the `.bak` by hand. Only the
-# untracked (`??`): a `.bak` that was committed and then changed is a real change.
-QUEUE_BAK = re.compile(r"^\?\? \.claude/(programs/[^/]+/plan|queues/[^/]+/queue)\.yaml\.bak$")
+# What counts as dirt is defined once in hooks/_dirt.py (shared with cepa-doctor and
+# the safe-exit-gate hook); the names stay here because tests and the guard use them.
+RUN_RECORD = _dirt.RUN_RECORD
+QUEUE_BAK = _dirt.QUEUE_BAK
 
 
 # The `plan.yaml` modified on disk. Only the ` M` (uncommitted, unstaged):
@@ -1182,8 +1176,7 @@ def dirty_tree(repo, live_run_ok=False):
                                              m.group(2) or m.group(3)))
 
     return [l for l in p.stdout.splitlines()
-            if l.strip() and not RUN_RECORD.match(l)
-            and not QUEUE_BAK.match(l) and not only_the_run(l)]
+            if _dirt.counts_as_dirt(l) and not only_the_run(l)]
 
 
 def touched_by_last_run(repo, queue):
