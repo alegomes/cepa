@@ -436,6 +436,15 @@ def test_git_dir_is_checkout_preparation_in_every_mode():
             p = r.edit(".git/info/exclude")
             check(f"{mode}: Edit em .git/info/exclude passa", p.returncode == 0,
                   p.stderr[:160])
+            p = r.call("Write", {"file_path": ".git/info/exclude"})
+            check(f"{mode}: Write em .git/info/exclude passa",
+                  p.returncode == 0, p.stderr[:160])
+            p = r.edit(".git/info/sparse-checkout")
+            check(f"{mode}: Edit em .git/info/sparse-checkout passa",
+                  p.returncode == 0, p.stderr[:160])
+            p = r.bash("echo x >> .git/info/sparse-checkout")
+            check(f"{mode}: bash em .git/info/sparse-checkout passa",
+                  p.returncode == 0, p.stderr[:160])
             p = r.edit(".git/info/attributes")
             check(f"{mode}: Edit em .git/info/attributes passa",
                   p.returncode == 0, p.stderr[:160])
