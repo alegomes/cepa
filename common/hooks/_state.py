@@ -75,6 +75,7 @@ CATALOGUE = {
     "deviations.md": (None, "registro de desvios, escrito à mão e por comandos"),
     "session-log.md": (None, "/session (diário da sessão)"),
     "session-intent": (None, "cepa-intent (intenção da sessão; lida por /common:whereami)"),
+    "reminders": (None, "cepa-intent remind (lembretes do dono; lidos por /common:whereami e pelo hook de sessão)"),
     "session-mode": (None, "cepa-mode (modo da sessão)"),
     "last-build.json": (None, "cepa-build (baseline do último build)"),
     "no-build": (None, "o dono (opta por não ter baseline de build)"),

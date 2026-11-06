@@ -3853,10 +3853,10 @@ def main(argv=None):
             print(f"  warning: {warning}")
             log_event({"evento": "aviso", "texto": warning})
         # An item the queue skipped because a reservation is held elsewhere (live, or
-        # undecidable without an owner): every `reservado` deferral.
+        # undecidable without an owner): every `reserved` deferral (old name `reservado`).
         # logged once per item per run, so the record says why it never started.
         for skip in data.get("deferred") or []:
-            if skip.get("reason") == "reservado" and skip.get("id") not in skipped_logged:
+            if reason_alias(skip.get("reason")) == "reserved" and skip.get("id") not in skipped_logged:
                 skipped_logged.add(skip.get("id"))
                 log_event({"evento": "item_pulado", "id": skip.get("id"),
                           "motivo": "reservado", "detalhe": skip.get("detail")})
