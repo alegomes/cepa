@@ -128,6 +128,23 @@ with tempfile.TemporaryDirectory() as tmp:
           len(fdecs) == 2 and fdecs[0]["verdict"] == "vetada"
           and fdecs[1]["verdict"] is None and fdecs[1]["ordinal"] == 2, str(fdecs))
 
+    # Distinct counts (1 pending, 2 decided): "com veredito" must be total - pending.
+    mixed = repo / "docs" / "spec" / "e.md"
+    mixed.write_text(
+        "# Spec\n\n## Decided without asking\n\n"
+        "- Uma mantida · mantida em 2026-11-06\n"
+        "- Uma pendente\n"
+        "- Uma vetada · vetada em 2026-11-06: x\n", encoding="utf-8")
+    r = run("decisions", str(mixed))
+    check("counts line: 3 decisões, 1 sem veredito, 2 com veredito",
+          "3 decisões, 1 sem veredito, 2 com veredito" in r.stdout, r.stdout)
+
+    # --help lists `decisions` in the "reading" group.
+    h = run("--help").stdout
+    reading = h.split("  reading:", 1)[-1].split("\n  one item's cycle:", 1)[0]
+    check("--help lists decisions under reading",
+          "  reading:" in h and "decisions" in reading, h)
+
     # File without the section: says so, does not crash.
     bare = repo / "docs" / "spec" / "c.md"
     bare.write_text(NOSECTION, encoding="utf-8")
