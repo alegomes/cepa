@@ -702,6 +702,11 @@ for _sfx, _txt in (("s", "Sim"), ("s2", "OK")):
     check("(%s) \"%s\" (maiúscula) é aceitação → não reabre, bloqueia citando wrap-up" % (_sfx, _txt),
           "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
 
+for _sfx, _txt in (("t", "sim - ok"), ("t2", "...")):
+    r = run("Stop", after_wrap(user(_txt), text(GOOD)), session="s-wrap-" + _sfx)
+    check("(%s) \"%s\" (token só de pontuação) não reabre → bloqueia citando wrap-up" % (_sfx, _txt),
+          "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
 # ── the prose that sustains the rule says what the hook charges ────────────
 def read_rel(rel):
     return (REPO / rel).read_text(encoding="utf-8")
