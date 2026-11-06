@@ -130,14 +130,24 @@ items:
   why: item 3 de O1, decisão X3 do dono (heartbeat e leitor); último porque sem
     o heartbeat de DUR-1 responderia 'rodando' a run morto; nasce como módulo com
     teste que falha ao aparecer arquivo de estado desconhecido em .claude/
-  status: in_progress
+  status: done
   blocked_by:
   - DUR-1
   human_pending: null
-  claimed_by:
-    session_id: a1e3cda8-34e4-4e61-a9e1-43ad5e492e38
-    pid: 70634
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-until-2026-11-05-1634
-    branch: until/2026-11-05-1634
-    started_at: '2026-11-05T23:14:59+00:00'
+  evidence: 'Volta 2 de 2. Lateral until/2026-11-05-1634-vermelho-DUR-4 (df627c1..ff67154)
+    entrou por fast-forward na branch da noite; o build completo da volta 1 caiu
+    só em tests/test_isolated_telemetry.py (varredura estática: test_state_deposits.py
+    cita ''session-log'' pelo catálogo e executa cepa-intent/cepa-doctor/cepa-until-digest
+    sem isolar a telemetria). Conserto: 18d1253 acrescenta import e chamada de isolate()
+    de tests/_isolated_telemetry.py em tests/test_state_deposits.py (9 linhas, só
+    adições, nenhum teste desabilitado). Artefatos re-pinados em 490d089. Testes
+    rodados aqui: tests/run-all.sh com filtro state_deposits isolated_telemetry
+    cepa_until cepa_plan intent doctor = 37 arquivos, tudo verde (10min05s). Gates
+    em 18d1253: pair-reviewer OK; completion-auditor COMPLETE (.claude/acceptance/DUR-4.yaml,
+    5 critérios); proof-reviewer PROVEN (docs/proof/DUR-4.yaml, diff de common/
+    idêntico a 3b0a581, 5 perturbações refeitas em /tmp/dur4-proof5, todas vermelhas,
+    worktree removido). Build completo: delegado ao supervisor (branch da noite).
+    Implementação original: common/hooks/_state.py (leitor único dos cinco depósitos),
+    usado por cepa-plan, cepa-doctor, cepa-until-digest e cepa-intent; tests/test_state_deposits.py
+    novo.'
+  head_commit: 490d089227a2516a1ca2b53480b2fa4eeea580f7
