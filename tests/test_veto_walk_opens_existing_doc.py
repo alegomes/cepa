@@ -131,9 +131,72 @@ def test_epic():
           re.search(r"(?i)\bone\b.{0,30}\bper turn\b", body) is not None)
 
 
+def walk_paragraph(text):
+    """The veto walk paragraph, whitespace-normalized (from its bold lead to the next blank line)."""
+    m = re.search(r"\*\*The veto walk \(caminhada do veto\)\.\*\*.*?(?:\n\s*\n|\Z)", text, re.S)
+    return re.sub(r"\s+", " ", m.group(0)).strip() if m else ""
+
+
+MARKER = "`· mantida em` / `· vetada em` / `· refinada em`"
+R2 = ('If `cepa-plan verdict` prints "já virou código na fila" (the file is the `source:` of a '
+      "derived queue), pass the warning on to the owner as it came.")
+
+
+def check_sentences(label, walk, sentences):
+    check(f"{label}: walk paragraph found", walk != "")
+    for name, lit in sentences:
+        check(f"{label}: {name}", lit in walk, lit)
+
+
+def test_walk_sentences():
+    spec = walk_paragraph(SPEC.read_text(encoding="utf-8"))
+    epic = walk_paragraph(EPIC.read_text(encoding="utf-8"))
+    common = [
+        ("R2 warning is passed on to the owner, as it came", R2),
+        ("`Never write the marker by hand` is its own sentence",
+         "never renumber. Never write the " + MARKER + " marker by hand:"),
+        ("`Record ... in the same turn`", "in the same turn with `cepa-plan verdict"),
+        ("a vetoed decision becomes an open question only if the owner says so",
+         "`Status` does not change by veto; a vetoed decision becomes an open question "
+         "only if the owner says so in the same turn."),
+        ("with no decision without a verdict, say so in one line",
+         "With no decision without a verdict, say so in one line and go on."),
+    ]
+    check_sentences("spec.md", spec, common + [
+        ("asks the owner for one answer per decision",
+         "and ask the owner for one answer per decision: keep it (`mantida`), veto it "
+         "(`vetada`, with the reason) or refine it (`refinada`, with the new text)."),
+        ("applies `On an existing file`", "On an existing file (`--continuar`, `--fechar`, "
+         'or the "continue that one" answer), before resuming the interview or the sieve, '
+         "run `cepa-plan decisions docs/spec/<slug>.md`."),
+        ("offers `mantida` in the walk itself (three verdicts)",
+         "keep it (`mantida`), veto it (`vetada`, with the reason) or refine it (`refinada`"),
+    ])
+    check_sentences("epic.md", epic, common + [
+        ("offers `mantida` in the walk itself (three verdicts)",
+         "ask the owner to keep it (`mantida`), veto it (`vetada`, with the reason) or refine it "
+         "(`refinada`, with the new text)."),
+    ])
+    spec_text = re.sub(r"\s+", " ", SPEC.read_text(encoding="utf-8"))
+    check("spec.md: `When creating a new file` is its own paragraph after the walk",
+          "With no decision without a verdict, say so in one line and go on. "
+          "When creating a new file, write the skeleton with" in spec_text)
+    raw = SPEC.read_text(encoding="utf-8")
+    w = raw.find("**The veto walk (caminhada do veto).**")
+    h3 = raw.find("### 3. Interrogate")
+    sieve = raw.find("do two different answers")
+    check("spec.md: walk paragraph comes before the step 3 heading and the sieve text",
+          w != -1 and h3 != -1 and sieve != -1 and w < h3 and w < sieve, f"{w} {h3} {sieve}")
+    epic_text = re.sub(r"\s+", " ", EPIC.read_text(encoding="utf-8"))
+    check("epic.md: routing sentence opens with the veto walk and then resumes",
+          "read it whole, open with the veto walk below, and then resume from the first gap"
+          in epic_text)
+
+
 if __name__ == "__main__":
     test_spec()
     test_epic()
+    test_walk_sentences()
     if FAILURES:
         print(f"\n{len(FAILURES)} failed")
         sys.exit(1)
