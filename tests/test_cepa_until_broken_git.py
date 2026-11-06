@@ -72,6 +72,18 @@ def git(root, *args):
                           text=True).stdout.strip()
 
 
+# git's wording for a worktree whose `.git` link points nowhere changed in 2.56:
+# "not a git repository" became "gitfile does not point to a valid repository".
+# cepa-until never parses the message, it only carries it to the record, so the
+# test accepts either wording instead of pinning one git release.
+GIT_BROKEN_WORDINGS = ("not a git repository",
+                       "gitfile does not point to a valid repository")
+
+
+def broken_git_error(text):
+    return any(w in text for w in GIT_BROKEN_WORDINGS)
+
+
 def test_link_erased_and_redone_and_the_night_goes_on():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1"), item("a2")])
@@ -87,7 +99,7 @@ def test_link_erased_and_redone_and_the_night_goes_on():
         repairs = [e for e in ev if e.get("evento") == "git_reparo"]
         check("o registro diz que reparou e qual erro o git deu",
               len(repairs) == 1 and repairs[0]["reparou"]
-              and "not a git repository" in repairs[0]["erro"], str(repairs))
+              and broken_git_error(repairs[0]["erro"]), str(repairs))
         branch = [e for e in ev if e.get("evento") == "run_start"][0]["branch"]
         log = git(root, "log", "--format=%s", branch)
         check("o commit do 2º item está na branch da noite, em cima do 1º",
@@ -114,7 +126,7 @@ def test_impossible_repair_stops_as_broken_git_and_not_branch_changed():
               str(end))
         detail = end.get("detalhe") or ""
         check("o detalhe traz o erro do git e o que impediu o reparo",
-              "not a git repository" in detail and "no longer exists" in detail,
+              broken_git_error(detail) and "no longer exists" in detail,
               detail)
         check("o detalhe não acusa troca de branch",
               "`?`" not in detail and "trocou de branch no meio" not in detail,
