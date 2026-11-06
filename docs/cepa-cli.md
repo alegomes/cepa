@@ -251,7 +251,7 @@ and hands the list here; `/common:drain-plan` and `cepa-until` execute it;
 | Family | Subcommands |
 |---|---|
 | Sources (read only, return JSON) | `from-spec <spec.md>`, `from-epic <epic.md> --cycle N`, `from-triage <handoff.json\|->` |
-| Writing | `write <name> (--items F \| --from-spec F \| --from-epic F --cycle N \| --from-triage F) [--source ...] [--when YYYY-MM-DD] [--on-missing refuse\|keep\|drop] [--dry-run]`, `add <name> <id> --title ... [--before ID --why ...] [--blocked-by ID,ID]`, `migrate [<name> \| --all] [--dry-run]`, `check-name <name>`, `validate <file>` |
+| Writing | `write <name> (--items F \| --from-spec F \| --from-epic F --cycle N \| --from-triage F) [--source ...] [--when YYYY-MM-DD] [--on-missing refuse\|keep\|drop] [--dry-run]`, `add <name> <id> --title ... [--before ID --why ...] [--blocked-by ID,ID]`, `migrate [<name> \| --all] [--dry-run]`, `check-name <name>`, `validate <name \| file> [--repo DIR]` |
 | Reading | `queue <name> [--max N]`, `ready`, `status [<name>] [--status S]`, `show <name>`, `epics [--brief]`, `promote <name> [--when ...]`, `order <name> --keys K1,K2` |
 | One item's cycle | `start <name> <id> [--commit]`, `finish <name> <id> --status done\|blocked\|pending --evidence ... [--human-pending ROUTE] [--question ...] [--asked\|--ready\|--blocker\|--if-yes\|--if-no TEXT] [--commit]`, `answer <name> <id> --answer ... [--keep \| --drop] [--force] [--author ...] [--no-commit]` |
 | Against the Jira board | `reconcile <name> --board FILE [--apply]`, `landed --board FILE [--into REF]`, `divergence <name> [--board FILE] [--backlog FILE]` |

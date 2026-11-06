@@ -175,8 +175,10 @@ Subcommands:
       Exit 0 even with divergence — it is a report, not a failure; 2 =
       any of the input files is unreadable.
 
-  cepa-plan validate <plan.yaml>
-      The checks below, on a file that is already on disk.
+  cepa-plan validate <name | plan.yaml> [--repo DIR]
+      The checks below, on a queue already on disk: a queue NAME is resolved at
+      the main clone (even from a linked worktree); an existing file path is
+      validated as given (no git needed, so `/tmp/queue.yaml` drafts work).
       Exit 0 = valid; 2 = invalid, with the gaps named.
 
   cepa-plan write <nome> --items ARQUIVO|- | --from-spec F | --from-triage F
@@ -3829,11 +3831,22 @@ def cmd_check_name(root, name):
     return 3
 
 
-def cmd_validate(path):
-    p = Path(path)
+def cmd_validate(arg, repo="."):
+    p = Path(arg)
     if not p.is_file():
-        print(f"{p} não existe", file=sys.stderr)
-        return 2
+        # Not a file: it is a queue name, resolved at the main clone like every
+        # other subcommand (a linked worktree's copy may be absent or stale).
+        root = main_root(repo)
+        if root is None:
+            print(f"{arg} não é um arquivo, e {repo} não é um repositório git — "
+                  "a fila mora no clone principal, e sem git não dá para "
+                  "achá-lo", file=sys.stderr)
+            return 2
+        p = queue_path(root, arg)
+        if not p.is_file():
+            print(f"{arg} não existe como arquivo, e a fila '{arg}' não existe "
+                  f"no clone principal ({p})", file=sys.stderr)
+            return 2
     plan, error = read_plan(p)
     if error:
         print(error, file=sys.stderr)
@@ -4321,12 +4334,16 @@ def main(argv=None):
             "non-empty `why`, `status` in the closed vocabulary, `blocked_by` only\n"
             "to ids of this queue and with no cycle, the `human_pending` key\n"
             "present, at least one item. The gaps come out named."),
-        examples=[("cepa plan validate .claude/queues/wego/queue.yaml", "check one queue"),
+        examples=[("cepa plan validate wego",
+                   "the queue by name, resolved at the main clone even from a worktree"),
+                  ("cepa plan validate .claude/queues/wego/queue.yaml", "check one file"),
                   ("cepa plan validate /tmp/queue.yaml", "check a draft before writing it")],
         exit_codes=[(0, "valid"),
-                    (2, "invalid usage, missing or unreadable file, invalid queue "
-                        "(gaps named)")])
-    v.add_argument("plan_file", metavar="plan", help="path of the queue.yaml to validate")
+                    (2, "invalid usage, name or file not found, unreadable file, "
+                        "invalid queue (gaps named), name given outside a git repo")])
+    v.add_argument("plan_file", metavar="name|plan",
+                   help="queue name, or path of a queue.yaml to validate")
+    v.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
     s = sub.add_parser(
         "from-spec", help="reads a /common:spec specification and returns the items (JSON)",
@@ -4839,7 +4856,7 @@ def main(argv=None):
              "divergencia": "divergence"}.get(a.cmd, a.cmd)
 
     if a.cmd == "validate":
-        return cmd_validate(a.plan_file)
+        return cmd_validate(a.plan_file, a.repo)
     if a.cmd == "from-spec":
         return cmd_from_spec(a.spec)
     if a.cmd == "from-triage":

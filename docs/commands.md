@@ -321,7 +321,8 @@ Full guide: [maestro.md](maestro.md).
 Three helpers you can run by hand: `python3 common/bin/cepa-dor <plan> --wave N`
 (the intake gate — `READY`/`NOT-READY` per slice),
 `python3 maestro/bin/maestro-fork-settings <plan> <slice>` (preview a child's
-generated `settings.json`), and `python3 common/bin/cepa-plan validate <plan>`
-(the single-track queue's own checks — empty `why`, ghost `blocked_by`, blocking
+generated `settings.json`), and `python3 common/bin/cepa-plan validate <name|file>`
+(takes the queue name, resolved at the main clone even from a worktree, or a file
+path; the single-track queue's own checks — empty `why`, ghost `blocked_by`, blocking
 cycle; `check-name <nome>` answers whether a program name is free for a queue
 before you write one).
