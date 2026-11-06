@@ -31,6 +31,49 @@ em que vale a versão com o `head_commit` mais novo. **Lar:** `common/bin/cepa-u
 
 ---
 
+## `cepa-until land` não grava o build verde no `last-build.json`
+
+Registrado em 2026-11-06 a pedido do dono, a partir do run `until/2026-11-05-2031` do wego-acessos-backend.
+
+### Problema
+
+O `land` roda o build completo pela `run_verify` (`common/bin/cepa-until`, por volta da linha
+2053) e, se ele passar, faz o push. Mas não atualiza o `.claude/last-build.json`, o arquivo que o
+hook `gate-advance` lê antes de liberar push e commit. No caso registrado, um build interrompido
+antes do `land` tinha deixado o arquivo em FAILURE. O `land` passou (26 min) e mesmo assim o push
+seguinte da `develop` foi barrado, o que custou um segundo `./mvnw -B clean verify` completo
+(35 min) só para o arquivo voltar a SUCCESS.
+
+### Esboço de solução
+
+Com o build verde no HEAD do merge, o `land` grava o `last-build.json` com o mesmo formato que o
+hook de build usa (status, comando, HEAD, horário). Com build vermelho, grava FAILURE. **Lar:**
+`common/bin/cepa-until` (aterrissar), reaproveitando o escritor do `last-build.json` dos hooks.
+
+---
+
+## `cepa-until land` resgata os arquivos de aceite para `.claude/rescued/` e não para `.claude/acceptance/`
+
+Registrado em 2026-11-06 a pedido do dono, a partir do run `until/2026-11-05-2031` do wego-acessos-backend.
+
+### Problema
+
+Antes de remover a worktree da noite, o `land` chama `_wtlib.py rescue`, que copia os arquivos
+gitignored para `.claude/rescued/<run>/`. Os arquivos de aceite (`.claude/acceptance/<KEY>.yaml`)
+são justamente o que o `acceptance-gate` exige no clone para o card ir para Done. Parados em
+`rescued/`, eles barram o Done até alguém copiá-los à mão. No caso registrado não fez falta porque
+o prove-drain já tinha copiado o `WEGO-2417.yaml` às 01:52, e os de WEGO-2012 e WEGO-2345 já
+estavam no clone. A cópia correta dependeu de sorte, não do comando.
+
+### Esboço de solução
+
+No `land`, copiar `acceptance/<KEY>.yaml` da worktree direto para `.claude/acceptance/` do clone
+quando ali ainda não existir o arquivo do mesmo card. Quando existir, manter o do clone e deixar o
+da worktree em `rescued/`, avisando na saída. **Lar:** `common/bin/cepa-until` (aterrissar) e
+`common/hooks/_wtlib.py` (rescue).
+
+---
+
 ## Vigia da coluna In Review
 
 Registrado em 2026-11-03 a pedido do dono (fb-20261103-1).
