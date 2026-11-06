@@ -1,0 +1,42 @@
+schema_version: 2
+card: tres-portas-c1-CS-1
+verdict: proven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: b06eee5
+head_commit: 20b346a
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/hooks/spec-readiness-gate.py (decision count on passage to ready)"
+      module: common-hooks
+      external_observable: true       # hook run as subprocess, JSON on stdout
+      substituted_by_double: null     # the test runs the real hook as a subprocess with the payload on stdin
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                     # Python harness, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "unperturbed HEAD 20b346a: python3 tests/test_spec_readiness_decision_count.py -> exit 0, 'all green'"
+        - "previously SURVIVING mutant re-run: pending_decisions line 486 `if not is_empty(v) and not VERDICT_RE.search(v)` -> `if not VERDICT_RE.search(v)`: exit 1, FAIL 'linha de modelo (<...>) e n/a nao entram na conta' (count 4 instead of 2). Now RED."
+        - "Epic branch (line 579 allow_ready -> pass): exit 1, 2 FAIL: 'Epic closed mostra 2 decisoes sem veredito', 'Epic ready mostra ...' (closed now covered)"
+        - "earlier run (head f97e75c) RED: verdict regex drops/never matches, singular/plural, off by one, missing-section line, passage check inverted/always true/was_ready_on_disk, spec branch without allow_ready, systemMessage/additionalContext keys renamed, old section name dropped (17 perturbations). Valid for HEAD: git diff --stat f97e75c 20b346a -- common/hooks/spec-readiness-gate.py is empty (20b346a only touched the test)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every changed line of common/hooks/spec-readiness-gate.py was perturbed (18 perturbations across two runs, all RED), so the test reaches each through the real hook process (subprocess, payload on stdin). Re-run at HEAD 20b346a: python3 -I tests/test_spec_readiness_decision_count.py -> exit 0, 'all green'"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only adds a count printed by a hook over a spec file already accepted by the gate; it opens no new input parsing surface beyond a regex over list lines of a markdown section"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card; red-at-base for the test: detached worktree at HEAD with common/hooks/spec-readiness-gate.py checked out from b06eee5 -> python3 tests/test_spec_readiness_decision_count.py: 12 FAIL, exit 1; at HEAD exit 0"
+existing_tests_at_head:
+  - "python3 tests/test_spec_readiness_gate.py -> 'all green'"
+  - "python3 tests/test_epic_readiness_gate.py -> 'OK'"
+routing_reason: "Same shape as the settled precedent write-mode-gate-libera-git-info-exclude (Python hook, real subprocess, no double, no coverage tool in repo): reachability of each changed line is shown by perturbation. Test is red at base b06eee5 (12 FAIL), green at HEAD (exit 0), 18 perturbations RED including the previously surviving mutant (now killed) and the Epic closed/ready branch, both pre-existing suites green. Computed verdict: PROVEN."

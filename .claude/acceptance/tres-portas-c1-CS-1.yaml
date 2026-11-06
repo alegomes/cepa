@@ -1,0 +1,31 @@
+key: tres-portas-c1-CS-1
+status: complete
+criteria:
+  - id: CS-1a
+    text: "Write de docs/spec/x.md em ready-to-build: 2 pendentes / 0 pendentes / sem seção / segundo Write quieto"
+    altitude: event
+    surface: "hook spec-readiness-gate, payload PreToolUse no stdin, systemMessage no stdout, exit 0"
+    test: tests/test_spec_readiness_decision_count.py (test_passage_to_ready_shows_pending_count, test_zero_pending_prints_zero, test_without_section_says_so, test_second_write_on_ready_file_is_quiet)
+    layer: event
+    evidence: verified
+    run: "python3 tests/test_spec_readiness_decision_count.py -> 24 checks ok, 0 falhas, 'all green'; python3 tests/test_spec_readiness_gate.py -> 54 ok, 'all green' (regressão)"
+    verdict: complete
+  - id: CS-1b
+    text: "Epic em ready (titulo do criterio)"
+    altitude: event
+    surface: "hook, docs/epics/x.md Status ready"
+    test: test_epic_ready_shows_count
+    layer: event
+    evidence: verified
+    run: "mesma execução, 24 checks ok"
+    verdict: complete
+  - id: CS-1c
+    text: "Epic em closed (titulo do criterio)"
+    altitude: event
+    surface: "hook, docs/epics/x.md Status closed, com Impact preenchido"
+    test: test_epic_closed_shows_count
+    layer: event
+    evidence: verified
+    run: "mesma execução, 24 checks ok; test_epic_closed_shows_count: exit 0, systemMessage '2 decisões sem veredito', segundo Write sobre closed no disco quieto"
+    verdict: complete
+status_note: "Lacuna anterior (CS-1c) fechada pelo commit 20b346a. O teste dirige o payload via stdin com Epic closed e asserta o número e o silêncio no segundo Write; sem asserção enfraquecida. test_template_lines_do_not_count também verde."
