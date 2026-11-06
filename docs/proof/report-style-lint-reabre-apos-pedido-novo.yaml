@@ -1,0 +1,55 @@
+schema_version: 2
+card: report-style-lint-reabre-apos-pedido-novo
+verdict: proven
+reviewed_at: 2026-11-06T04:00:00-03:00
+base_commit: 0b7ee4c
+head_commit: adc8a7c
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/hooks/report-style-lint.py (ACCEPT_WORDS, _is_acceptance, session_closed)", module: harness-hook, external_observable: true, substituted_by_double: null }
+    - { class: "tests/test_report_style_lint.py", module: harness-test, external_observable: false, substituted_by_double: null }
+    - { class: "common/skills/plain-report/SKILL.md, common/commands/wrap-up.md, common/.claude-plugin/plugin.json", module: harness-doc, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python (hook + testes de script); nao ha PIT. Perturbacao como mecanismo universal."
+    perturbation:
+      status: pass
+      results:
+        - "Quinta passada, rerodada do zero em worktree descartavel /tmp/proof-rsl-e (git worktree add --detach, HEAD adc8a7c; removido ao final). Hook inalterado desde 34c8789. Base verde: `python3 tests/test_report_style_lint.py` -> 'all report-style tests passed'. Cada quebra aplicada em common/hooks/report-style-lint.py por substituicao exata de texto (contagem do padrao = 1), teste rodado, arquivo restaurado."
+        - "P1 ramo de reabertura morto (`if False and closed ...`) -> RED, 5 FAIL: (i), (l), (i2), (i3), (o)."
+        - "P2 _is_acceptance sempre False -> RED, 21 FAIL (inclui (a), (a2), (f), (h), (h3) ...)."
+        - "P3 _is_acceptance sempre True -> RED, 5 FAIL: (i), (l), (i2), (i3), (o)."
+        - "P4 guarda isMeta removida sozinha -> RED, 1 FAIL: (q)."
+        - "P5 guarda do prefixo 'Stop hook feedback:' removida sozinha -> RED, 1 FAIL: (m2)."
+        - "P6 reset `invoked = False` removido -> RED, 1 FAIL: (o)."
+        - "P6b reset `closed = False` removido -> RED, 5 FAIL: (i), (l), (i2), (i3), (o)."
+        - "P7 texto vazio vira nao-aceite -> RED, 1 FAIL: (p)."
+        - "P8 limpeza de digitos removida -> RED, 1 FAIL: (j)."
+        - "P9 limpeza de pontuacao removida -> RED, 3 FAIL: (j), (t), (t2)."
+        - "P10 separador `[\\s,;/]+` reduzido a `\\s+` -> RED, 2 FAIL: (r), (r2)."
+        - "P11 `.lower()` removido -> RED, 2 FAIL: (s), (s2)."
+        - "P12 re-armar `if wrap: invoked = True` removido -> RED, 21 FAIL."
+        - "P13 pular linhas isSidechain removido -> RED, 1 FAIL: (e)."
+        - "P14 'Safe to exit' nunca fecha -> RED, 23 FAIL."
+        - "P15 exigencia de `invoked` para 'Safe to exit' removida -> RED, 1 FAIL: (o)."
+        - "P17 `not w` removido do laco de _is_acceptance (sobrevivente real da passada anterior) -> RED, 2 FAIL: (t) 'sim - ok' e (t2) '...'. Morto pelo commit adc8a7c."
+        - "P16 filtro `if w` do re.split removido -> SOBREVIVEU (rc=0, 0 FAIL). MUTANTE EQUIVALENTE, nao e lacuna: sem o filtro, uma palavra vazia chega ao laco, `w.strip(...)` devolve '' e o `if not w ... continue` a descarta, exatamente o que o filtro fazia; a saida de _is_acceptance e identica para toda entrada (so muda se `not w` tambem sumir, que e P17, morto)."
+        - "Resumo: 18 quebras; 17 mortas (P1-P15, P17 todas RED); 1 equivalente (P16); 0 sobreviventes reais."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; alcance pela perturbacao: ramo de reabertura, aceitacao, guardas, resets, vazio, digitos, pontuacao, token so de pontuacao, separadores e caixa derrubam teste (P1-P15, P17)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff altera a decisao interna de um hook local sobre o transcript da propria sessao do operador; nao abre superficie de entrada externa e nao toca modulo api-rest."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "git checkout 0b7ee4c -- common/hooks/report-style-lint.py com tests/test_report_style_lint.py de adc8a7c -> 5 FAIL: (i), (l), (i2), (i3), (o). Restaurado o hook de adc8a7c -> 'all report-style tests passed'."
+routing_reason: "O bug e vermelho no base (5 FAIL); 17 de 18 quebras do hook morrem, incluindo P17 (token so de pontuacao), agora pego por (t)/(t2); a unica sobrevivente, P16, e equivalente (mesma saida para toda entrada) e nao e lacuna. Nenhum nivel assumed/skipped/gap: PROVEN."

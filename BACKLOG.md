@@ -4584,6 +4584,8 @@ Mesmo mecanismo do episódio de 2026-11-03: o lint lê "Safe to exit" como fim d
 
 A segunda metade de `fb-20261105-1` (abaixo, na seção do `write-mode-gate`) repete a queixa: "o report-style-lint também trata pedido novo depois do wrap-up como sessão encerrada e força 'For you: nothing' mesmo quando há um comando para o usuário". Conserto provável: um prompt do dono depois do "Safe to exit" reabre a sessão para o lint (o transcript já tem a ordem dos eventos).
 
+**Status do episódio:** feito na branch `until/2026-11-05-2029` (2026-11-05, item `report-style-lint-reabre-apos-pedido-novo`, common 3.3.0): `session_closed` virou máquina de estados; prompt do dono que não é mero aceite ("sim", "1. sim", "ok") reabre a sessão, linha injetada pelo harness (`isMeta`, "Stop hook feedback:", `tool_result`) não reabre, novo wrap-up + "Safe to exit" fecha de novo. Testes (i)..(t2) em `tests/test_report_style_lint.py`; prova PROVEN em `docs/proof/report-style-lint-reabre-apos-pedido-novo.yaml`.
+
 ## `/common:plan` aceita item de feedback sem conferir se o `BACKLOG.md` já o dá como feito
 
 **Plano:** sem item ainda (abrir na fila `cepa` quando entrar na rodada)
