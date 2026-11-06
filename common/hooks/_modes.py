@@ -109,6 +109,18 @@ MODES = {
     },
 }
 
+# Destinations that pass in EVERY mode, read by `write-mode-gate.py` before the
+# per-mode list. The `write:` lists above say what a mode PRODUCES; `.git/info/`
+# (exclude, attributes, sparse-checkout) is checkout preparation outside
+# versioning, the product of no mode, and has no execution path.
+# Episode fb-20261105-1: a `discovery` session was blocked from appending
+# `.playwright-mcp/` to `.git/info/exclude`.
+# Deliberately NOT `.git/**`: `.git/hooks/*` and `.git/config` (`core.hooksPath`,
+# aliases) make git run code on the next git command, and that code can write
+# into the repo, an indirect bypass of this very gate. `.gitignore` is
+# versioned and is not covered either.
+ALWAYS_WRITABLE = [".git/info/**"]
+
 # What `session-mode.py` injects every turn — only the exit condition.
 EXIT = {name: d["exit"] for name, d in MODES.items()}
 
