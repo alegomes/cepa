@@ -1,0 +1,49 @@
+schema_version: 2
+card: wrap-up-comando-primeira-linha
+verdict: proven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: 89184ed
+head_commit: 5ef79ec
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/hooks/session-chain.py (prompt = comando.strip() + blank line + brief when .next.json carries a non-empty string comando)"
+      module: common/hooks
+      external_observable: true
+      substituted_by_double: null        # tests/test_cepa_chaining.py runs the real hook as a subprocess; only the far boundary (the `cepa`/claude launcher) is a stub that records its argv
+    - class: "common/bin/cepa, common/commands/wrap-up.md, common/commands/handoff.md (documentation only)"
+      module: common
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python harness repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline 5ef79ec (throwaway worktree): test_cepa_chaining.py OK; test_wrapup_next_step.py 'todos ok'"
+        - "P1 separator dropped (f'{comando.strip()}{brief}'): test_cepa_chaining 2 FAIL + test_wrapup_next_step 3 FAIL -> RED"
+        - "P2 brief before comando: test_cepa_chaining 2 FAIL + test_wrapup_next_step 3 FAIL -> RED"
+        - "P3 no strip (f'{comando}\\n\\n{brief}'): test_cepa_chaining 2 FAIL (padded comando case) -> RED; test_wrapup_next_step stays green (its comandos are not padded), covered by the chaining test"
+        - "P4 non-string treated as string (comando is not None and str(comando)): test_cepa_chaining 1 FAIL line + summary (nao string 42 case) -> RED; test_wrapup_next_step green"
+        - "P5 empty comando emits a stderr warning: test_cepa_chaining 2 FAIL (so espacos, vazio: 'nenhum aviso sobre comando') -> RED; test_wrapup_next_step green"
+        - "P6 comando handling reverted (`if False:`): test_cepa_chaining 2 FAIL + test_wrapup_next_step 3 FAIL -> RED"
+        - "base-RED: at 89184ed with only tests/test_cepa_chaining.py and tests/test_wrapup_next_step.py taken from 5ef79ec: chaining 2 FAIL (prompt ordering, first line), wrapup 3 FAIL (the three updated assertions) -> RED against the old launcher"
+    run: "git worktree add --detach /tmp/proof-wucpl-7k3 5ef79ec; one sed perturbation at a time (sequential), python3 /tmp/proof-wucpl-7k3/tests/test_cepa_chaining.py and test_wrapup_next_step.py after each, git checkout -- session-chain.py to restore; base at /tmp/proof-wucpl-base (89184ed + the two test files). Both worktrees removed with --force; git worktree list shows neither. FAIL counts are grep -c FAIL on the output (the 'N FAIL' summary line is included in the count)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; the only changed code is the 4-line comando branch in session-chain.py: both sides of the branch (non-empty string; missing/empty/blank/non-string) are asserted by t_command_first_line, and perturbations P1-P6 each turned a named assertion red"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the .next.json is written by the harness's own session-next.py inside the clone's .claude/sessions; no input arrives from outside the harness. The adversarial shapes of the new field (blank, empty, non-string) are asserted anyway in t_command_first_line."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+prose_check: "caveat, not a gate: tests/test_wrapup_next_step.py 'o wrap-up e o handoff conhecem a linha' only checks that wrap-up.md cites session-next.py/--session-id and that handoff.md contains '**Próximo:** repo=' and the Intencao/Meta/Plano markers. The new sentences in wrap-up.md ('the comando opens the next session's initial prompt as its first line') and handoff.md ('the comando becomes line 1 of that session's initial prompt') and the comment in common/bin/cepa are NOT protected by any test; they could be deleted with the suite staying green."
+routing_reason: "Six perturbations of the launcher branch (separator, order, strip, type, empty-warning, full revert) each go RED in the covering test; the new and updated assertions go RED against the base launcher. The real hook runs as a subprocess with only the far-boundary launcher stubbed. Unprotected doc sentences are a caveat only."
+worktree_removed: true

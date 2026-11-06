@@ -1,0 +1,41 @@
+key: wrap-up-comando-primeira-linha
+status: complete
+diff_range: 89184ed..5ef79ec
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: "common/hooks/session-chain.py executado como subprocesso pelo common/bin/cepa real (claude stub gravando argv); prompt inicial da sessão seguinte = '<comando>\\n\\n<brief>'."
+    test: "tests/test_cepa_chaining.py t_command_first_line ('o prompt é comando + linha em branco + brief verbatim', 'a primeira linha é exatamente o comando'; comando com espaços nas pontas é aparado)"
+    layer: subprocess sobre o cepa real + session-chain.py real, argv do stub comparado por igualdade exata
+    evidence: verified
+    run: "python3 tests/test_cepa_chaining.py -> 111 checks 'ok', 'OK' (N>0); t_command_first_line: stub rodou duas vezes, prompt == cmd+'\\n\\n'+BRIEF ok"
+    status: complete
+  - id: AC2
+    altitude: cli
+    surface: "mesmo caminho do AC1, .next.json sem comando / comando vazio / só espaços / não string (42)."
+    test: "tests/test_cepa_chaining.py t_command_first_line (vazio, só espaços, não string: prompt == [BRIEF], 'nenhum aviso sobre comando' no stderr) + t_chains e demais cenários existentes (arquivo sem a chave comando encadeia, brief verbatim)"
+    layer: subprocess sobre o cepa real
+    evidence: verified
+    run: "python3 tests/test_cepa_chaining.py -> 111 checks ok, 'OK'; vazio/só espaços/não string: stub rodou duas vezes, prompt só o brief, sem aviso ok"
+    status: complete
+  - id: AC3
+    altitude: cli
+    surface: "session-next.py real escreve o .next.json a partir de '**Próximo:** repo= mode= comando=' e session-chain.py real o consome, com cepa fake gravando argv."
+    test: "tests/test_wrapup_next_step.py ('--mode discovery + brief, sem intenção' == comando\\n\\nBRIEF; 'flags da intenção + comando e brief'; caso de nomes antigos modo/intencao/comando)"
+    layer: subprocess encadeado session-next.py -> .next.json -> session-chain.py -> cepa fake; o elo wrap-up (o comando /common:wrap-up em si, prosa para o modelo) não é executável e fica de fora, coberto apenas pela asserção de que o wrap-up.md chama session-next.py
+    evidence: verified
+    run: "python3 tests/test_wrapup_next_step.py -> 'todos ok' (N>0); 'cepa reaberto', '--mode discovery + brief...', 'flags da intenção + comando e brief', 'antigo: o cepa recebe --mode discovery e as flags novas' ok"
+    status: complete
+  - id: AC4
+    altitude: domain
+    surface: "texto: cabeçalho de common/bin/cepa, docstring de common/hooks/session-chain.py, common/commands/wrap-up.md (passo 7 da seção do handoff, L263-269; a L7 literal do arquivo é o Purpose, não o passo), common/commands/handoff.md L88-93."
+    test: "inspeção do diff 5ef79ec (sem teste dedicado ao texto do comando-na-linha-1; test_wrapup_next_step só afirma que handoff.md documenta a linha Próximo e a intenção)"
+    layer: leitura do diff, texto confere com o comportamento verificado em AC1/AC2 (comando na linha 1, linha em branco, brief; ausente/vazio/não string = só o brief)
+    evidence: verified
+    run: "git show 5ef79ec -- common -> quatro docs dizem 'comando como linha 1 + linha em branco + brief' e 'ausente/vazio/não string não invalida'; coerente com session-chain.py L107-110"
+    status: complete
+extras:
+  docs_not_test_guarded:
+    note: "Sem teste que quebre se a documentação do comando-na-linha-1 regredir; verificação só por leitura. Não é gap do critério, apenas registro."
+  real_cepa_in_e2e:
+    note: "test_wrapup_next_step usa cepa fake (stub) invocado por session-chain.py; o cepa real roda nos testes de test_cepa_chaining.py. Juntos cobrem o caminho."
