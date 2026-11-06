@@ -1,0 +1,13 @@
+key: tres-portas-c1-CS-2
+status: complete
+criteria:
+  - id: CS-2
+    text: "o leitor da seção 'Decided without asking' mora num módulo compartilhado que o hook importa, lê os nomes antigo e novo da seção e devolve as linhas com e sem veredito (item 6, base do item 3)"
+    altitude: domain
+    surface: "módulo common/hooks/_decisions.py (read, read_file) importado por common/hooks/spec-readiness-gate.py"
+    test: tests/test_decisions_reader.py (test_real_documents: 3/2/2 nos três documentos reais; test_old_name_fixture: 1; test_verdicts_split; test_hook_imports_module)
+    layer: domain
+    evidence: verified
+    run: "python3 tests/test_decisions_reader.py -> 34 checks ok, 0 FAIL, 'all green' (N>0). Vizinhos: test_spec_readiness_decision_count.py, test_spec_readiness_gate.py, test_epic_readiness_gate.py -> todos verdes."
+    verdict: complete
+status_note: "Teste vermelho do spec coberto: módulo existe, lê os 3 documentos reais e o fixture com o nome antigo (3,2,2,1 sem veredito, mesmas palavras do arquivo), separa com/sem veredito, e o hook importa o módulo sem cópia própria do marcador. Sem asserção enfraquecida."
