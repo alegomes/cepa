@@ -666,32 +666,39 @@ items:
   why: o card está PARCIAL — o motor de classificação já aterrissou em maestro 0.4.3
     e o que falta é a calibragem contra as 43 escalações medidas. Depois do merge
     train porque calibrar um porteiro de ondas que não aterrissam mede a coisa errada.
-  status: blocked
+  status: pending
   blocked_by: []
-  human_pending: 'Destrava quando o C2-1 da fila cepa-espiral-c2 (cepa-until como
-    tronco, com fork de filhos e merge train extraídos do Maestro) rodar uma onda
-    real do porteiro 0.4.3. Os itens rodar-onda-* de que ele dependia foram descartados
-    em 2026-10-16. Decisão do dono em 2026-11-03: não refazer a pergunta "devolvo
-    à fila agora?" a cada run enquanto essa condição não mudar.'
-  evidence: 'Resposta do dono em 2026-10-30: não: Devolvo a calibragem do porteiro
+  human_pending: null
+  evidence: 'Resposta do dono em 2026-11-06: sim: Destrava quando o C2-1 da fila
+    cepa-espiral-c2 (cepa-until como tronco, com fork de filhos e merge train extraídos
+    do Maestro) rodar uma onda real do porteiro 0.4.3. Os itens rodar-onda-* de
+    que ele dependia foram descartados em 2026-10-16. Decisão do dono em 2026-11-03:
+    não refazer a pergunta "devolvo à fila agora?" a cada run enquanto essa condição
+    não mudar.. Rota humana fechada pelo dono: Destrava quando o C2-1 da fila cepa-espiral-c2
+    (cepa-until como tronco, com fork de filhos e merge train extraídos do Maestro)
+    rodar uma onda real do porteiro 0.4.3. Os itens rodar-onda-* de que ele dependia
+    foram descartados em 2026-10-16. Decisão do dono em 2026-11-03: não refazer
+    a pergunta "devolvo à fila agora?" a cada run enquanto essa condição não mudar..
+    O item voltou de `blocked` para `pending`. Evidência anterior: Resposta do dono
+    em 2026-10-30: não: Devolvo a calibragem do porteiro à fila agora, mesmo sem
+    nenhuma onda ter rodado?. O dono manteve o item como estava (`blocked`). Evidência
+    anterior: Resposta do dono em 2026-10-23: não: Devolvo a calibragem do porteiro
     à fila agora, mesmo sem nenhuma onda ter rodado?. O dono manteve o item como
-    estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-23: não:
+    estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-22: não:
     Devolvo a calibragem do porteiro à fila agora, mesmo sem nenhuma onda ter rodado?.
     O dono manteve o item como estava (`blocked`). Evidência anterior: Resposta
-    do dono em 2026-10-22: não: Devolvo a calibragem do porteiro à fila agora, mesmo
+    do dono em 2026-10-20: não: Devolvo a calibragem do porteiro à fila agora, mesmo
     sem nenhuma onda ter rodado?. O dono manteve o item como estava (`blocked`).
-    Evidência anterior: Resposta do dono em 2026-10-20: não: Devolvo a calibragem
-    do porteiro à fila agora, mesmo sem nenhuma onda ter rodado?. O dono manteve
-    o item como estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-17:
-    não: Devolvo a calibragem do porteiro à fila agora, antes de qualquer onda rodar?.
-    O dono manteve o item como estava (`blocked`). Evidência anterior: Resposta
-    do dono em 2026-10-15: não: Mando calibrar o porteiro agora, antes de qualquer
-    onda rodar?. O dono manteve o item como estava (`blocked`). Evidência anterior:
-    Condicao de fora nao cumprida: o BACKLOG.md (secao ''Calibrar as regras do porteiro'',
-    decisao do dono 2026-08-24) adia o que falta (liberar escrita por shell cujo
-    alvo cai dentro da superficie da slice) ate a 0.4.3 do porteiro rodar pelo menos
-    uma onda de verdade. Conferido em 2026-09-27: o unico ledger de porteiro no
-    disco (wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl,
+    Evidência anterior: Resposta do dono em 2026-10-17: não: Devolvo a calibragem
+    do porteiro à fila agora, antes de qualquer onda rodar?. O dono manteve o item
+    como estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-15:
+    não: Mando calibrar o porteiro agora, antes de qualquer onda rodar?. O dono
+    manteve o item como estava (`blocked`). Evidência anterior: Condicao de fora
+    nao cumprida: o BACKLOG.md (secao ''Calibrar as regras do porteiro'', decisao
+    do dono 2026-08-24) adia o que falta (liberar escrita por shell cujo alvo cai
+    dentro da superficie da slice) ate a 0.4.3 do porteiro rodar pelo menos uma
+    onda de verdade. Conferido em 2026-09-27: o unico ledger de porteiro no disco
+    (wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl,
     166 linhas) e de 2026-08-24 10:12, anterior ao commit 9b9846e da 0.4.3 (10:13);
     nenhuma onda rodou depois. As duas ondas da fila (rodar-onda-lotes-*) estao
     blocked por herdr fora do ar. Nada implementado, nenhum commit. Quem resolve:
