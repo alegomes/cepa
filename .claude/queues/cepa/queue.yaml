@@ -2990,3 +2990,13 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: write-mode-gate-ve-python
+  title: write-mode-gate bloqueia escrita feita por interpretador (python3/node
+    com heredoc ou -c), não só por Edit/Write/redirecionamento
+  why: 'fb-20261106-1: em modo exploration, 5 arquivos fora de docs/ e .claude/
+    foram editados por python3 heredoc sem bloqueio (ainda não priorizado: entrou
+    no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
