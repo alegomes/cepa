@@ -263,7 +263,9 @@ a one-shot marker the SessionEnd hook consumes after your final turn:
   brief equal to the `## Próximo passo` paragraph and, when the handoff carries
   `**Intenção:**`, `**Meta:**` and `**Plano:**`, the next session's intent. That file is what the launcher
   `cepa` reads when you type `exit`, to open the next session in the right repo
-  and mode without you typing anything (CS-3). Without the line it writes nothing, and
+  and mode without you typing anything (CS-3); the `comando` opens the next
+  session's initial prompt as its first line, followed by a blank line and the
+  brief, so the session runs it. Without the line it writes nothing, and
   that is not an error: a handoff without `Próximo:` is still valid. The first line
   of the output goes, as is, into the L8 report. Never write the
   `.next.json` by hand: the script refuses a nonexistent repo, an unknown mode and

@@ -41,8 +41,10 @@
 #
 # Chaining: when claude exits, if the session left the next step in
 # <main-root>/.claude/sessions/<session_id>.next.json ({"repo", "mode",
-# "brief"}), cepa deletes the file and opens the next session in `repo`, with
-# `--mode <mode>` and the brief as the initial prompt. Without the file, it exits
+# "brief", optional "comando"}), cepa deletes the file and opens the next session
+# in `repo`, with `--mode <mode>` and the initial prompt: the brief, preceded by
+# `comando` as line 1 plus a blank line when the file has one, so the next session
+# runs the command. Without the file, it exits
 # as before. Turn it off with CEPA_ENCADEAR=off. Details in common/hooks/session-chain.py.
 #
 #   cepa --purpose "<text>"     # records the text as the session purpose

@@ -233,7 +233,7 @@ with World() as w:
     got = json.loads(log.read_text()) if log.exists() else {}
     check("cepa reaberto", bool(got), p.stderr)
     check("cwd = repo", got.get("cwd") == str(w.target), got)
-    check("--mode discovery + brief, sem intenção", got.get("args") == ["--mode", "discovery", BRIEF], got)
+    check("--mode discovery + brief, sem intenção", got.get("args") == ["--mode", "discovery", "/common:epic contratos-e-regras\n\n" + BRIEF], got)
     check("arquivo consumido", not w.nxt.exists())
 
 print("com a intenção, o encadeamento passa as três flags ao cepa")
@@ -250,11 +250,12 @@ with World() as w:
     p = subprocess.run([sys.executable, str(CHAIN), "launch-1", str(fake), "0"],
                        cwd=w.root, capture_output=True, text=True)
     got = json.loads(log.read_text()) if log.exists() else {}
-    check("flags da intenção + brief", got.get("args") == [
+    check("flags da intenção + comando e brief", got.get("args") == [
         "--mode", "discovery",
         "--purpose", "Grelhar o dono no epic contratos-e-regras",
         "--by-when", "cada ciclo com roteiro em tela e em backend",
-        "--plan", "abrir o epic\ngrelhar ciclo a ciclo", BRIEF], got)
+        "--plan", "abrir o epic\ngrelhar ciclo a ciclo",
+        "/common:epic contratos-e-regras\n\n" + BRIEF], got)
 
 print("o wrap-up e o handoff conhecem a linha")
 wu = WRAPUP.read_text(encoding="utf-8")
@@ -296,7 +297,7 @@ with World() as w:
     got = json.loads(log.read_text()) if log.exists() else {}
     check("antigo: o cepa recebe --mode discovery e as flags novas", got.get("args") == [
         "--mode", "discovery", "--purpose", "p antigo", "--by-when", "q antigo",
-        "--plan", "a\nb", BRIEF], (got, p.stderr))
+        "--plan", "a\nb", "/common:epic x\n\n" + BRIEF], (got, p.stderr))
 
 print()
 if failures:

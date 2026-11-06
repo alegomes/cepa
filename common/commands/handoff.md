@@ -88,8 +88,9 @@ Rules:
   command (e.g. `**Próximo:** repo=/Users/alegomes/coding/wego/wego-product
   mode=discovery comando=/common:epic contratos-e-regras`). `/common:wrap-up`
   turns it into the `.next.json` that the `cepa` launcher reads on `exit`, and
-  the `## Próximo passo` paragraph becomes that session's brief. Without the
-  line, nothing chains.
+  the `comando` becomes line 1 of that session's initial prompt and the
+  `## Próximo passo` paragraph becomes the brief below it. Without the line,
+  nothing chains.
 - **`**Intenção:**`, `**Meta:**` and `**Plano:**` become the chained session's
   intent** (the `.claude/session-intent` that the compass panel shows). Write
   all three, or none, in the voice of the NEXT session: "Redesenhar o M2 como
