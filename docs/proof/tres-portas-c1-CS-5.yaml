@@ -1,9 +1,9 @@
 schema_version: 2
 card: tres-portas-c1-CS-5
-verdict: unproven
+verdict: proven
 reviewed_at: 2026-11-06T00:00:00-03:00
 base_commit: 805af34
-head_commit: 7022324
+head_commit: 5a52232
 issue_type: Task
 scope:
   changed_classes:
@@ -19,9 +19,9 @@ levels:
       status: n/a
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "unperturbed HEAD 7022324 (detached worktree /tmp/cs5-proof-a): python3 tests/test_doctor_decisions.py -> 'todos ok'"
+        - "unperturbed HEAD 5a52232 (detached worktree /tmp/proof-CS5): python3 tests/test_doctor_decisions.py -> 'todos ok'"
         - "KILLED (RED) 1 draft skip removed -> 5 falha(s)"
         - "KILLED (RED) 2 rascunho no longer a draft status -> 2 falha(s)"
         - "KILLED (RED) 3 spec file gets the epic command -> 1 falha(s)"
@@ -30,21 +30,21 @@ levels:
         - "KILLED (RED) 5 no docs/spec nor docs/epics: no longer silent -> 1 falha(s)"
         - "KILLED (RED) 6 plural always -> 1 falha(s); 6b singular always -> 1 falha(s)"
         - "KILLED (RED) 7 warn level turned into ok -> 5 falha(s)"
-        - "KILLED (RED) 8 check_decisions not called from check_project -> 10 falha(s)"
+        - "KILLED (RED) 8 check_decisions not called from check_project -> 11 falha(s)"
         - "KILLED (RED) 9 first word of the status replaced by the whole status -> 2 falha(s)"
-        - "KILLED (RED) 12 skip docs/spec -> 9 falha(s); 13 skip docs/epics -> 3 falha(s)"
-        - "SURVIVED 10 per-file count replaced by constant 1 (len(res.pending) -> 1) -> 'todos ok'"
-        - "SURVIVED 11 total = number of files instead of sum of per-file counts -> 'todos ok'"
-        - "cause of 10 and 11: every fixture file in tests/test_doctor_decisions.py has exactly 1 pending decision, so count-per-file and count-of-files are indistinguishable; the doctor could report a wrong total/per-file number with the suite green"
+        - "KILLED (RED) 10 per-file count replaced by constant 1 -> 2 falha(s) (survivor of c7f82ea, now killed)"
+        - "KILLED (RED) 11 total = number of files instead of sum -> 1 falha(s) (survivor of c7f82ea, now killed)"
+        - "KILLED (RED) 12 skip docs/spec -> 9 falha(s); 13 skip docs/epics -> 4 falha(s)"
+        - "15 of 15 perturbations RED, none survived"
   l2_coverage:
     status: pass
     uncovered_lines: []
-    run: "no coverage tool in repo; every branch of check_decisions is reached by the test (draft skip, rascunho, spec/epic command, zero, no dirs, plural, warn); only the per-file count value is under-asserted"
+    run: "no coverage tool in repo; every branch of check_decisions is reached by the test (draft skip, rascunho, spec/epic command, zero, no dirs, plural, warn, per-file count, total); perturbations 1-13 each turn the test RED"
   l4_adversarial_input:
     status: n/a
     reason: "the diff reads only the repo's own docs/spec and docs/epics markdown; it opens no input from outside and touches no api-rest module"
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-    run: "not a Bug card; red test of the criterion: HEAD test against cepa-doctor and doctor.md of 805af34 -> '10 falha(s)'; at HEAD 7022324 -> 'todos ok'"
-routing_reason: "Test is RED at base (10 failures) and GREEN at HEAD, and 13 of 15 perturbations turn it RED. Two survive: the per-file decision count and the total are not distinguishable because every fixture has exactly 1 pending decision. Fix: add a closed spec with 2+ pending decisions (and check the 'N' per file line and total 3+ in the message). Computed verdict: UNPROVEN."
+    run: "not a Bug card; red test of the criterion: HEAD test with common/ of 805af34 (git checkout 805af34 -- common/) -> '11 falha(s)'; at HEAD 5a52232 -> 'todos ok'"
+routing_reason: "Test is RED at base (11 failures) and GREEN at HEAD, and all 15 perturbations turn it RED, including the two (per-file count, total as sum) that survived at 7022324. Computed verdict: PROVEN."
