@@ -78,7 +78,8 @@ DRAFT_EPIC = EPIC.format(
 
 READY_EPIC = EPIC.format(
     title="fechado", status="ready",
-    items="- o Epic fechado tem uma decisão sem veredito")
+    items="- o Epic fechado tem uma decisão sem veredito\n"
+          "- e uma segunda, também sem veredito")
 
 
 def build(tmp, files):
@@ -142,8 +143,14 @@ def test_ready_epic_points_at_the_epic_command():
             "docs/epics/fechado.md": READY_EPIC,
         })
         _code, out = run_doctor(root)
-        check("spec + Epic fechados: o total soma os dois (2)",
-              "⚠ [decisoes] 2 decisões sem veredito" in out, out)
+        # The Epic has 2 pending and the spec 1: the total is the SUM of the
+        # decisions (3), not the number of files (2), and each line carries its
+        # own file's count.
+        check("spec + Epic fechados: o total soma as decisões (1 + 2 = 3)",
+              "⚠ [decisoes] 3 decisões sem veredito" in out, out)
+        check("...cada linha traz a contagem do seu arquivo",
+              "docs/spec/pronta.md: 1 " in out
+              and "docs/epics/fechado.md: 2 " in out, out)
         check("...o Epic sai com /common:epic <nome>",
               "/common:epic fechado" in out and "docs/epics/fechado.md" in out,
               out)
