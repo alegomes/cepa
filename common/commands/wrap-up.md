@@ -231,7 +231,8 @@ a one-shot marker the SessionEnd hook consumes after your final turn:
   merged into `<base>`, then runs `git -C <base-worktree> worktree remove` +
   `git branch -d session/<slice>` — after your last turn, so no hook fires from a
   dead cwd. (Backstop: if the session crashes before SessionEnd, `auto_clean` on
-  the next session start reaps the now-merged, clean, not-alive worktree anyway.)
+  the next session start reaps the now-merged, clean, not-alive worktree anyway,
+  and the same SessionStart hook deletes a marker whose worktree or branch no longer exists.)
 
 - **Record the next step, if the handoff has one.** After the marker, run:
   ```
