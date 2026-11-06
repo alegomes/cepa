@@ -91,26 +91,47 @@ leaves it with a named destination.
    card is not).
 2. Read the open ones with `list --status aberto --json`.
 3. For each one, choose among three destinations — and **you decide**, with the
-   recommendation recorded, without asking item by item (`default-yes`):
+   recommendation recorded, without asking item by item (`default-yes`). A triage
+   that stops in `BACKLOG.md` produces no work: the triage of 2026-11-05
+   (`fb-20261105-5`) turned eight feedbacks into five sections and zero queue
+   items, and the owner had to ask for the conversion afterwards. So the queue
+   item is part of the triage, and the bin enforces it:
    - **New item in `BACKLOG.md`** — the annoyance is not described in any
      existing section. Write the section in the file's format (title, `**Status:**
      pendente · **Lar provável:** <plugin> · **Origem:** feedback `<id>`,
-     `<date>`), with the owner's text quoted and the record's context.
+     `<date>`), with the owner's text quoted and the record's context. Then mark
+     it with `triage <id> --destination "BACKLOG.md § <title>" --queue <fila>
+     [--id <slug>] [--title ...]`. The `--queue` is **mandatory**: the bin refuses
+     (exit 2) a `BACKLOG.md` destination with neither `--queue` nor `--item`. It
+     opens the queue item (title = the section title, why = origin feedback + date
+     + destination) and prints the "inserido na posição" line.
    - **Attached to an existing item** — there is already a section about that
      annoyance. Add the episode there, with the id, instead of opening a rival
-     section.
+     section, and mark it with `--queue <fila> --item <id-do-item>`. The bin looks
+     the item up: if it is pending, in progress or blocked it only cites it (no new
+     item); if it is `done` or `dropped`, the episode proves the fix did not cover
+     the case, so the bin opens a NEW item whose why names the old one.
    - **Already solved** — the behavior complained about no longer exists. The
-     destination is the commit or version that solved it, and you only mark the
-     triage.
+     destination is the commit or version that solved it (not a `BACKLOG.md`
+     section), with no queue, and you only mark the triage.
 4. Mark each one:
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" triage <id> \
-     --destination "BACKLOG.md § <title>" --note "<one line, if it helps>"
+     --destination "BACKLOG.md § <title>" --queue <fila> --note "<one line, if it helps>"
    ```
-   The bin refuses an empty destination, a nonexistent id and re-triage — a
+   The bin refuses an empty destination, a nonexistent id, a `BACKLOG.md`
+   destination without `--queue`/`--item`, an unknown `--item`, and re-triage — a
    second triage would silently erase the first decision.
 5. Report in the `plain-report` format (in pt-BR): how many came in, how many
-   became a new item, how many were attached, how many were already solved.
+   became a new section, how many were attached, how many were already solved —
+   and **end with how many items entered the queue and at which position**, quoting
+   each "inserido na posição P de N" line the bin printed, plus how many only
+   cited an existing item. Acceptance: after the triage,
+   `cepa feedback list --status triado` and `cepa plan status <fila>` match — every
+   `BACKLOG.md` destination has a pending or done item in the queue.
+   That holds only if no `⚠` line appeared: when `cepa-plan add` fails (queue
+   missing, for example) the bin only warns on stderr and still exits 0, so check
+   the output for `⚠` lines and fix each one before reporting.
 
 ## Limits
 
