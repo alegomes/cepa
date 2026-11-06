@@ -1,12 +1,9 @@
 key: handoff-e-spec-gravam-pergunta-de-origem
-status: incomplete
-diff: 15cbf52..d6f9fe4
-audited_head: d6f9fe4
+status: complete
+diff: 15cbf52..f6750f9
+audited_head: f6750f9
 note: >
-  Auditado em d6f9fe4. Hooks reais como subprocesso. Rodado: python3 tests/test_handoff_seeds_gate.py -> 47 linhas ok, all green;
-  python3 tests/test_spec_readiness_gate.py -> 54 linhas ok, all green. AC1-AC6 completos. AC7 incompleto: nenhum teste
-  fixa que session-next.py carrega a linha porque; so verifiquei rodando section_brief numa amostra (comportamento ja existente,
-  nao tocado pelo commit), o que e evidencia minha, nao teste que proteja contra regressao.
+  Reauditado em f6750f9. Rodado: test_handoff_seeds_gate.py (all green), test_spec_readiness_gate.py (all green) e test_wrapup_next_step.py (todos ok). f6750f9 so adiciona teste e fecha a lacuna do AC7.
 criteria:
   - id: AC1
     text: Handoff de sessao sem linha porque em "## Proximo passo" e recusado (exit 2) com mensagem que nomeia a linha; com porque preenchido passa.
@@ -71,10 +68,10 @@ criteria:
   - id: AC7
     text: session-next.py carrega a linha porque no brief da proxima sessao (section_brief nao a remove).
     altitude: application
-    surface: common/hooks/session-next.py section_brief / brief da proxima sessao
-    test: nenhum (nao ha teste de session-next que contenha porque)
-    layer: nenhum
-    evidence: missing
-    run: "ad hoc: section_brief sobre nota com porque -> 'Fazer X.\\nporque: o dono perguntou Y' (linha preservada). Nao e teste versionado."
-    status: incomplete
-    gap: "Falta teste (ex.: em tests/test_session_intent_contract.py ou novo) que chame session-next.py --handoff com um handoff contendo porque: e assevere que a linha aparece no brief emitido. Hoje a promessa do commit repousa em comportamento nao fixado; uma mudanca em INTENT_RE/section_brief poderia remove-la sem teste vermelho."
+    surface: common/hooks/session-next.py (--handoff/--session-id/--root) -> brief no .next.json
+    test: tests/test_wrapup_next_step.py (bloco "a linha porque do Proximo passo vai no brief da proxima sessao")
+    layer: subprocess (session-next.py real)
+    evidence: verified
+    run: python3 tests/test_wrapup_next_step.py -> todos ok (brief traz a frase do porque literalmente; brief traz a linha e o paragrafo)
+    status: complete
+    gap: null
