@@ -203,13 +203,16 @@ def main():
         plan = yaml.safe_load(beta_file.read_text())
         import socket
         import os
+        from datetime import datetime, timezone
+        # started_at must be fresh: a reservation older than the 24h horizon
+        # of _wtlib.entry_is_live is an orphan, whatever the pid says.
         for it in plan["items"]:
             if it["id"] == "B-5":
                 it["status"] = "in_progress"
                 it["claimed_by"] = {"session_id": "s", "pid": os.getpid(),
                                     "hostname": socket.gethostname(),
                                     "cwd": str(root),
-                                    "started_at": "2026-11-05T10:00:00+00:00"}
+                                    "started_at": datetime.now(timezone.utc).isoformat()}
         beta_file.write_text(yaml.safe_dump(plan, allow_unicode=True))
         r = run(root, "ready", "--json")
         data = json.loads(r.stdout)
