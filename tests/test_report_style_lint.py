@@ -79,9 +79,12 @@ BAD = ("O portão agora falha fechado. Cada status é conferido contra o enum "
         "porque o fio condutor pedia. " * 4)
 
 
-def msg(role, content, sidechain=False, mtype="assistant"):
-    return {"type": mtype, "isSidechain": sidechain,
-            "message": {"role": role, "content": content}}
+def msg(role, content, sidechain=False, mtype="assistant", meta=False):
+    row = {"type": mtype, "isSidechain": sidechain,
+           "message": {"role": role, "content": content}}
+    if meta:
+        row["isMeta"] = True
+    return row
 
 
 def transcript(*rows) -> str:
@@ -571,6 +574,82 @@ check("(h3) pós-wrap-up com Edit, Pra você anunciando e \"Nada pendente.\" →
       "bloqueia citando wrap-up, sem pra-voce-sem-lista",
       "wrap-up" in reason_h3 and "item numerado nenhum" not in reason_h3
       and "pra-voce-sem-lista" not in reason_h3, repr(r.stdout[:400]))
+
+# ── a new request after "Safe to exit" reopens the session (2026-11-05) ────
+NEW_ASK = "Agora faça a triagem da coluna To Do e me pergunte o que decidir"
+EDIT = msg("assistant", [{"type": "tool_use", "name": "Edit",
+                          "input": {"file_path": "x.py"}}])
+
+
+def after_wrap(*tail):
+    return transcript(msg("user", CMD_WRAP, mtype="user"),
+                      msg("assistant", [{"type": "tool_use", "name": "Bash",
+                                         "input": {"command": "git commit -m x"}}]),
+                      text(END_WRAP), *tail)
+
+
+def user(t):
+    return msg("user", [{"type": "text", "text": t}], mtype="user")
+
+
+def report_events():
+    ev = []
+    for f in TELEM.glob("events-*.jsonl"):
+        ev += [json.loads(l) for l in f.read_text(encoding="utf-8").splitlines()
+               if l.strip()]
+    return [e for e in ev if e.get("event") == "report_style"]
+
+
+n_before = len(report_events())
+r = run("Stop", after_wrap(user(NEW_ASK), EDIT, text(GOOD)), session="s-wrap-i")
+check("(i) pedido novo após Safe to exit + Edit + relatório com pergunta → não bloqueia",
+      block_reason(r.stdout) == "" and "wrap-up" not in r.stdout,
+      repr(r.stdout[:300]))
+ev_i = report_events()[n_before:]
+check("(l) telemetria do caso (i) tem pos_wrap_up=false",
+      bool(ev_i) and all(e.get("pos_wrap_up") is False for e in ev_i), str(ev_i))
+
+cmd_next = ("<command-message>next</command-message>\n"
+            "<command-name>/common:next</command-name>")
+r = run("Stop", after_wrap(msg("user", cmd_next, mtype="user"), EDIT, text(GOOD)),
+        session="s-wrap-i2")
+check("(i2) slash command após Safe to exit reabre → não bloqueia",
+      block_reason(r.stdout) == "" and "wrap-up" not in r.stdout,
+      repr(r.stdout[:300]))
+
+r = run("Stop", after_wrap(user("1. sim"), text(GOOD)), session="s-wrap-j")
+check("(j) \"1. sim\" após Safe to exit não reabre → bloqueia citando wrap-up",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+r = run("Stop", after_wrap(user(NEW_ASK), EDIT, text("feito."),
+                           msg("user", CMD_WRAP, mtype="user"), text(END_WRAP),
+                           user("sim"), text(GOOD)), session="s-wrap-k")
+check("(k) novo wrap-up + Safe to exit depois do pedido novo → fecha de novo, bloqueia",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+r = run("Stop", after_wrap(
+    msg("user", "Stop hook feedback:\n[report-style] relatório com pergunta fechada...",
+        mtype="user", meta=True),
+    user("sim"), text(GOOD)), session="s-wrap-m")
+check("(m) linha isMeta de feedback do Stop hook não reabre → bloqueia citando wrap-up",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+r = run("Stop", after_wrap(
+    user("faça agora a triagem da coluna To Do"), EDIT, text("feito."),
+    msg("user", CMD_WRAP, mtype="user"),
+    msg("user", "# /common:wrap-up\n\nEnd-of-session one-shot ... Safe to exit ...",
+        mtype="user", meta=True),
+    text(END_WRAP), user("sim"), text(GOOD)), session="s-wrap-n")
+check("(n) corpo isMeta do comando após o wrap-up não anula o fechamento → bloqueia",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
+
+r = run("Stop", after_wrap(
+    msg("user", CMD_WRAP, mtype="user"),
+    msg("user", "# /common:wrap-up\n\nEnd-of-session one-shot ... Safe to exit ...",
+        mtype="user", meta=True),
+    text(END_WRAP), user("sim"), text(GOOD)), session="s-wrap-n2")
+check("(n2) sessão já fechada + /wrap-up de novo: corpo isMeta não zera o invoked → bloqueia",
+      "wrap-up" in block_reason(r.stdout), repr(r.stdout[:300]))
 
 # ── the prose that sustains the rule says what the hook charges ────────────
 def read_rel(rel):

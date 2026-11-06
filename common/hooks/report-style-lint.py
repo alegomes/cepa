@@ -77,6 +77,16 @@ metrics turn only reads, so the scope rule above (turn that changed something)
 would leave the incident unmeasured; that is why, with the session closed, the
 hook reads the report even without a change and measures only this category.
 
+New request reopens the session (2026-11-05, feedbacks fb-20261102-2,
+fb-20261104-4 and fb-20261105-1). The owner made a new request after "Safe to
+exit" ("triage the To Do column", "prepare the cepa-until run") and the lint
+still blocked the closed questions of that new work's report. Now a real user
+prompt after "Safe to exit" that is not a mere acceptance ("sim", "ok",
+"1. sim", "(b)"; see `_is_acceptance`) reopens the session for the lint; a
+later wrap-up + "Safe to exit" closes it again. Slash commands reopen too.
+Rows flagged `isMeta` (the Stop-hook block message, the body a slash command or
+Skill injects) are not the owner talking and never reopen the session.
+
 Reference code without a legend (2026-10-31, feedback fb-20261031-1). The
 owner read a closing list that asked "Mantenho E2 como recomendação de P1, com a
 comparação reescrita por PR8?" and said: "EU NÃO SEI! Não sei a que se referem e
@@ -327,26 +337,72 @@ def _user_text(row) -> str:
     return ""
 
 
-def session_closed(rows) -> bool:
-    """Was `/common:wrap-up` invoked and AFTER that said "Safe to exit"?
+ACCEPT_WORDS = frozenset((
+    "sim", "não", "nao", "ok", "okay", "pode", "podes", "vai", "bora", "yes",
+    "no", "yep", "nope", "claro", "isso", "certo", "beleza", "go", "faz",
+    "faça", "faca", "a", "b", "c"))
 
-    Only the main conversation counts (never `isSidechain`). Invocation: the
-    user line with `<command-name>/common:wrap-up</command-name>` (that is how
-    a slash command lands in the transcript) or starting with
+
+def _is_acceptance(text: str) -> bool:
+    """Is this user prompt a mere acceptance ("sim", "1. sim", "(b)")?
+
+    Short (at most 6 words) and every word in a small vocabulary, ignoring
+    punctuation and bare numbers ("1.", "2)"). Anything else -- a sentence with
+    other words, a slash command -- is a new request.
+
+    Known limit: a real one-word request inside the vocabulary ("faz", "vai")
+    counts as acceptance and does not reopen; that fails safe, toward keeping
+    the block."""
+    t = text.strip().lower()
+    if not t or "<command-name>" in t:
+        return False
+    words = [w for w in re.split(r"[\s,;/]+", t) if w]
+    if len(words) > 6:
+        return False
+    for w in words:
+        w = w.strip(".,;:!?()[]\"'`-")
+        if not w or w.isdigit() or w in ACCEPT_WORDS:
+            continue
+        return False
+    return True
+
+
+def session_closed(rows) -> bool:
+    """Is the session closed by wrap-up, as of the last row?
+
+    State machine over the main conversation (never `isSidechain`):
+    wrap-up invoked, then "Safe to exit" in assistant text -> closed. Invocation:
+    the user line with `<command-name>/common:wrap-up</command-name>` (that is
+    how a slash command lands in the transcript) or starting with
     `/common:wrap-up` or `/wrap-up`; or a `tool_use` of `Skill` whose
     `input.skill` ends in `wrap-up`. "Safe to exit" counts on the same line as
     the invocation or in any later assistant text, including the last report.
     Only assistant text counts: the command body, injected as a user line,
-    also quotes the phrase."""
+    also quotes the phrase.
+
+    Reopening (2026-11-05, fb-20261102-2, fb-20261104-4, fb-20261105-1): once
+    closed, a real user prompt (`_is_user_prompt`, no tool_result) that is not a
+    mere acceptance (`_is_acceptance`) is a NEW request: closed and invoked go
+    back to False, and a later wrap-up + "Safe to exit" closes again. A bare
+    "sim"/"1. sim" accepting an offer does not reopen, nor does an `isMeta` row
+    or one starting with "Stop hook feedback:" (not the owner talking)."""
     invoked = False
+    closed = False
     for row in rows:
         if row.get("isSidechain"):
             continue
         kind = row.get("type")
         if kind == "user":
             text = _user_text(row)
-            if WRAP_UP_INVOKED.search(text) or re.match(
-                    r"\s*/(?:common:)?wrap-up\b", text):
+            wrap = bool(WRAP_UP_INVOKED.search(text) or re.match(
+                r"\s*/(?:common:)?wrap-up\b", text))
+            human = not row.get("isMeta") \
+                and not text.lstrip().startswith("Stop hook feedback:")
+            if closed and human and _is_user_prompt(row) and not wrap \
+                    and not _is_acceptance(text):
+                closed = False
+                invoked = False
+            if wrap:
                 invoked = True
         elif kind == "assistant":
             for block in (row.get("message") or {}).get("content") or []:
@@ -358,8 +414,8 @@ def session_closed(rows) -> bool:
                         invoked = True
                 elif (block.get("type") == "text" and invoked
                       and SAFE_TO_EXIT.search(block.get("text", ""))):
-                    return True
-    return False
+                    closed = True
+    return closed
 
 
 INTERVIEW_DOC = re.compile(r"(^|/)docs/epics/[^/]+\.md$")

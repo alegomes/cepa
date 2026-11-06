@@ -338,6 +338,13 @@ o `For you:` diz "nada". O que sobrou é registrado (seção no BACKLOG.md, item
 de fila, `cepa-feedback add`), não oferecido. O dono, em 2026-10-16: "é nessas
 horas que eu me perco em meio à árvore de forks que vai se criando."
 
+A sessão só fica fechada enquanto o dono não pede nada novo. Se, depois do "Safe to
+exit", ele faz um pedido novo ("faça a triagem da coluna To Do", "prepare a
+rodada do cepa-until"), a sessão reabre: o relatório desse trabalho segue as
+regras normais, com pergunta fechada na lista do fim. Um "sim" ou "ok" que só
+aceita uma oferta não reabre (2026-11-05, fb-20261102-2, fb-20261104-4,
+fb-20261105-1). Um novo wrap-up com "Safe to exit" fecha de novo.
+
 ## Relação com as outras skills
 
 `conversational-response` continua valendo para a resposta que sobe a cadeia de

@@ -270,7 +270,7 @@ during the session (the default-yes "assunto lateral") goes INTO the handoff
 NOTE, the BACKLOG or `cepa-feedback add` during L3, never into a question after
 the landing. `report-style-lint.py` enforces it: after "Safe to `exit`" a closed
 question in the final list (or a `For you:` that announces something) is blocked
-(category `pergunta-pos-wrap-up`), and so is the same in any report that follows.
+(category `pergunta-pos-wrap-up`), and so is the same in any report that follows, until the owner makes a NEW request (a prompt that is not a mere "sim"/"ok" reopens the session).
 
 ---
 
