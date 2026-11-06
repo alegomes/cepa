@@ -78,12 +78,30 @@ subject in kebab-case.
 
 - With `--lista`: read the `Status` field of each `docs/spec/*.md` and return
   the table (slug · status · no. of criteria · no. of open questions). Stop.
-- With `--continuar <slug>` or `--fechar <slug>`: read the file and go to step
-  4 (continue) or 5 (close).
+- With `--continuar <slug>` or `--fechar <slug>`: read the file, open with the
+  veto walk below, and only then go to step 4 (continue) or 5 (close).
 - Without a flag: if `docs/spec/<slug>.md` already exists for a clearly
   identical subject, **do not create a second one** — say that it exists and
   ask whether to continue that one. Two specifications of the same subject
   diverging silently is worse than none.
+
+**The veto walk (caminhada do veto).** On an existing file (`--continuar`,
+`--fechar`, or the "continue that one" answer), before resuming the interview
+or the sieve, run `cepa-plan decisions docs/spec/<slug>.md`. It numbers the
+lines of "Decided without asking" and separates those with a verdict from those
+without. Walk only the ones without: show up to four per round, each with its
+number and text, and ask the owner for one answer per decision: keep it
+(`mantida`), veto it (`vetada`, with the reason) or refine it (`refinada`, with
+the new text). Record each answer in the same turn with `cepa-plan verdict
+docs/spec/<slug>.md <n> mantida|vetada|refinada` (`vetada` needs `--reason`,
+`refinada` needs `--text`). Never write the `· mantida em` / `· vetada em` /
+`· refinada em` marker by hand: the date and the format come from the command.
+`Status` does not change by veto; a vetoed decision becomes an open question
+only if the owner says so in the same turn. If `cepa-plan verdict` prints "já
+virou código na fila" (the file is the `source:` of a derived queue), pass the
+warning on to the owner as it came. A skipped decision does not block: it stays
+without marker, the walk moves on, and the next `--continuar` offers it again.
+With no decision without a verdict, say so in one line and go on.
 
 Write the skeleton with `**Status:** draft` (the format is in step
 6). The `spec-readiness-gate` gate never bothers you while the status is

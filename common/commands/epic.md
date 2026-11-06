@@ -72,9 +72,29 @@ question and none of that can be anticipated.
 
 ### 1. Open or resume the document
 
-If `docs/epics/<name>.md` exists, read it whole and resume from the first gap
-(step 3 gives the order): do not start over, and do not ask again a question
-that already has `- [x]`. If it does not exist, create it with the skeleton of
+If `docs/epics/<name>.md` exists, read it whole, open with the veto walk below,
+and then resume from the first gap (step 3 gives the order): do not start over,
+and do not ask again a question that already has `- [x]`.
+
+**The veto walk (caminhada do veto).** Before the first gap and before the
+sieve, run `cepa-plan decisions docs/epics/<name>.md`. It numbers the lines of
+"Decided without asking (veto here)" and separates those with a verdict from
+those without. Walk only the ones without, one per turn (one per turn, like the
+rest of this interview): show the decision with its number and ask the owner to
+keep it (`mantida`), veto it (`vetada`, with the reason) or refine it
+(`refinada`, with the new text). Record the answer in the same turn with
+`cepa-plan verdict docs/epics/<name>.md <n> mantida|vetada|refinada` (`vetada`
+needs `--reason`, `refinada` needs `--text`). Never write the `· mantida em` /
+`· vetada em` / `· refinada em` marker by hand: the date and the format come
+from the command. `Status` does not change by veto; a vetoed decision becomes
+an open question only if the owner says so in the same turn. If `cepa-plan
+verdict` prints "já virou código na fila" (the file is the `source:` of a
+derived queue), pass the warning on to the owner as it came. A skipped
+decision does not block: it stays without marker, the walk moves on, and the
+next time the Epic is opened it is offered again. With no decision without a
+verdict, say so in one line and go on.
+
+If it does not exist, create it with the skeleton of
 step 7 and `**Status:** draft` before the first question. The gate
 never bothers you while the status is `draft`.
 
