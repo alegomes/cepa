@@ -2563,10 +2563,39 @@ items:
     manda fazer antes da correção''). Esboço na seção: diff só em arquivos de teste
     + falha registrada kind de teste, não de compilação + commit local passa com
     aviso; push e PR seguem exigindo verde. Posição escolhida pelo dono em 2026-11-05.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits na branch da rodada until/2026-11-05-2029: a07fce3 (common/hooks/gate-advance.py:
+    funcoes failure_is_test_failure, is_test_path, commit_files e isencao em main()
+    para tier local + FAILURE de teste + arquivos so de teste; tests/test_gate_advance_red_test_commit.py),
+    67fe2c6 (testes para as perturbacoes sobreviventes e AC4), b92c55d (artefatos
+    dos gates). Correcao do esboco do BACKLOG: capture-build-result NAO distingue
+    teste de compilacao no kind (kind e a ferramenta); a classificacao e feita pelo
+    tail gravado (marcadores Maven/pytest/jest/go/cargo; compilacao vence teste;
+    stopped_by=claude-code nao e falha de teste). Lista de arquivos = indice (git
+    diff --cached --no-renames) + segmentos ''git add <paths>'' do mesmo comando
+    (inclui cd <repo> && e git -C; -A/./diretorio expandidos por git status --porcelain
+    -z com origem de renames). Fail-closed (bloqueio de hoje + dica): -a/--all/--include/--only/pathspec/--amend,
+    $( ou crase em qualquer lugar do comando, qualquer git nao-add antes do commit
+    (mv/rm/stash/checkout..., inclusive atras de FOO=1/sudo/sh -c), git add baseado
+    em status depois de mutacao da arvore (rm; git add -A), lista vazia. Push/PR/deploy,
+    STALE e EMPTY inalterados. pair-reviewer: 6 rodadas (NEEDS-FIX x5 por brechas
+    novas da mesma classe ''mutacao da arvore antes de -a'' e ''git escondido'',
+    fechadas estreitando a isencao ao formato git add <testes> && git commit -m;
+    OK-WITH-NOTES na 6a, duas notas aplicadas: cluster -qm consome o proximo token;
+    add baseado em status apos segmento nao-git -> None). Desvio do fluxo build-solo:
+    o 2o NEEDS-FIX nao virou BLOCKED porque nao havia divergencia, so achados novos
+    de poucas linhas. completion-auditor COMPLETE (.claude/acceptance/gate-advance-aceita-teste-vermelho-test-first.yaml,
+    1e0d810..67fe2c6, 97 ok/0 FAIL). proof-reviewer PROVEN (docs/proof/gate-advance-aceita-teste-vermelho-test-first.yaml,
+    14 perturbacoes em worktree descartavel, todas RED; worktree removido). Build
+    completo nao rodado aqui (fica com o supervisor); rodados tests/test_gate_advance_red_test_commit.py
+    (97 ok), tests/test_gate_advance_target_repo.py (32 ok), tests/test_capture_build_result_classify.py
+    (exit 0). Sem merge, sem push. Nota do revisor nao aplicada (modelo de ameaca
+    = agente apressado, nao hostil): mutacao da arvore fora do git seguida de git
+    commit -m simples continua invisivel ao hook, como hoje. Custo para o usuario:
+    git commit -am do teste vermelho passa a ser bloqueado com dica para usar git
+    add <teste> && git commit -m.'
 - id: feedback-triage-cria-item-de-fila
   title: /common:feedback --triage cria item de fila (cepa plan add) para toda seção
     nova e para episódio cuja seção já tem item done; relatório diz quantos itens
@@ -2575,10 +2604,27 @@ items:
     triagem que para no BACKLOG.md não produz trabalho, e hoje a triagem de oito
     feedbacks criou cinco seções e zero itens. BACKLOG.md, seção ''A triagem de
     feedback termina no BACKLOG.md e não cria item de fila''.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Volta 2 de 2 na branch until/2026-11-05-2029. Lateral vermelha reaproveitada
+    por cherry-pick (f8f8041->4c45f6a, 9477523->580f8df): mesmo diff em common/bin/cepa-feedback
+    (destino BACKLOG.md exige --queue/--item, rc 2; fila lida antes de gravar a
+    triagem; --item cita item existente; done/dropped reabre via cepa-plan add)
+    e common/commands/feedback.md passo 3/5. Causa do vermelho do build completo
+    (run-all.sh, 2x): tests/test_cepa_until_english_aliases.py caso ''feedback triar''
+    triava para ''BACKLOG.md § X'' sem --plano/--queue, o caso que o item manda
+    recusar; vizinho nao rodado na volta 1. Conserto af633d1: o teste passa a usar
+    o alias --plano/--queue com a fila de fixture e confere que o id entrou no queue.yaml
+    (regra coberta, nao contornada). Gates refeitos no head af633d1: completion-auditor
+    COMPLETE (.claude/acceptance/feedback-triage-cria-item-de-fila.yaml, 6 ACs;
+    ressalva: a contagem do relatorio final e prosa do comando, nao lida por teste),
+    proof-reviewer PROVEN (docs/proof/feedback-triage-cria-item-de-fila.yaml head_commit
+    af633d1, 8 perturbacoes todas vermelhas, worktree /tmp/proof-fb-3 removido).
+    Gates commitados em 0b7ee4c. Testes rodados aqui: test_cepa_feedback, test_cepa_until_english_aliases,
+    test_commands_english, test_commands_catalog, test_cepa_plan_single_track, todos
+    verdes. Build completo: delegado ao supervisor. Codigo esta na branch da noite;
+    sem merge, sem push.'
 - id: report-style-lint-reabre-apos-pedido-novo
   title: report-style-lint volta a aceitar pergunta fechada quando o dono fez pedido
     novo depois do 'Safe to exit' (prompt do dono após o wrap-up reabre a sessão
@@ -2589,10 +2635,28 @@ items:
     dono. Posição por decisão do dono em 2026-11-05 (feedbacks triados entram antes
     das traduções). BACKLOG.md, seção ''Depois do wrap-up, o relatório seguinte
     reabre uma frente nova'', episódio de 2026-11-05.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Branch until/2026-11-05-2029, commits 7928aa5 (hook: session_closed
+    vira máquina de estados; prompt do dono que não é mero aceite reabre a sessão;
+    isMeta/''Stop hook feedback:'' não reabrem; novo wrap-up + Safe to exit fecha
+    de novo; plain-report SKILL.md ''Depois do wrap-up'', wrap-up.md, common 3.2.0->3.3.0),
+    6098e65 (testes i3/i3b), 3864a50 (testes o/m2, guarda <command-name> redundante
+    removida), 34c8789 (limite 6 palavras, ''not wrap'' e _is_user_prompt removidos;
+    texto vazio = aceite; teste p), 1e2a1ad (testes q/r/r2/s/s2), adc8a7c (testes
+    t/t2), e o commit dos artefatos. pair-reviewer: NEEDS-FIX (isMeta reabria) ->
+    OK. completion-auditor: INCOMPLETE (faltava Pra você anunciando após pedido
+    novo) -> COMPLETE em .claude/acceptance/report-style-lint-reabre-apos-pedido-novo.yaml
+    (head adc8a7c, 221 ok). proof-reviewer: UNPROVEN x4 (sobreviventes P5/P6/P7,
+    P10-P13, P4/P10/P11, P17, cada rodada fechada por teste ou por remoção de guarda
+    redundante) -> PROVEN em docs/proof/report-style-lint-reabre-apos-pedido-novo.yaml
+    (17/18 perturbações RED, P16 mutante equivalente; regressão RED no base 0b7ee4c:
+    i, l, i2, i3, o). Só python3 tests/test_report_style_lint.py rodou aqui; build
+    completo (tests/run-all.sh) fica com o supervisor. Limite conhecido e documentado:
+    pedido real de uma palavra dentro do vocabulário de aceite (''faz'', ''vai'')
+    não reabre, erra para o lado de manter o bloqueio. Código na branch da rodada,
+    sem merge nem push.'
 - id: write-mode-gate-libera-git-info-exclude
   title: write-mode-gate trata escrita em .git/info/exclude (e outros caminhos de
     preparação do checkout fora do versionamento) como permitida em qualquer modo
@@ -2600,10 +2664,22 @@ items:
     em sessão discovery o gate barrou ignorar .playwright-mcp/ e o dono ficou com
     um echo para rodar à mão. Posição por decisão do dono em 2026-11-05. BACKLOG.md,
     seção ''O modo é prosa'', episódio de 2026-11-05.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits on until/2026-11-05-2029: 3cc2487 (hook + _modes.ALWAYS_WRITABLE=[''.git/info/**'']
+    + test), 23cfec8 (test gaps: Write tool, .git/info/sparse-checkout), 5da8804
+    (artifacts). pair-reviewer OK-WITH-NOTES; its note 1 applied: rule narrowed
+    from .git/** to .git/info/** because .git/hooks/* and .git/config let git execute
+    code on the next command (indirect bypass of the gate); .gitignore stays under
+    the mode list. completion-auditor COMPLETE (.claude/acceptance/write-mode-gate-libera-git-info-exclude.yaml,
+    head 23cfec8). proof-reviewer PROVEN (docs/proof/write-mode-gate-libera-git-info-exclude.yaml):
+    red at base 9fbe8fd, red under 3 perturbations (empty list, clause removed,
+    widened to .git/**), 12 adversarial inputs as expected. Tests run: test_write_mode_gate.py,
+    test_modes_single_source.py, test_cepa_mode.py, all green; full suite left to
+    the supervisor. Left out: worktree case where .git is a file (the real info/exclude
+    lives in the main clone, outside the session root, where the gate already does
+    not opine). Code is on the overnight branch, no merge, no push.'
 - id: test-dead-supervisor-corrida-sinal
   title: tests/test_cepa_until_dead_supervisor.py deixa de falhar numa verificação
     diferente a cada rodada na base (corrida entre o sinal e o encerramento do filho)
@@ -2612,61 +2688,141 @@ items:
     e ensina a ignorar vermelho na suíte que o gate de merge roda. Posição por decisão
     do dono em 2026-11-05. BACKLOG.md, seção ''Teste instável: Ctrl+C do cepa-until'',
     episódio de 2026-11-05.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits 2c4d085 (fix + teste de regressao), c3fe821 (terceiro check
+    + laco cai no bloco SIGKILL) e 15cbf52 (aceite + prova) na branch da noite until/2026-11-05-2029.
+    Causa medida por experimento: no macOS killpg(pgid, 0) devolve EPERM (nao ESRCH)
+    enquanto o grupo so tem processos mortos e nao colhidos (zumbis); terminate_group
+    em common/bin/cepa-until tratava qualquer OSError que nao fosse ESRCH como ''nao
+    sei'' e devolvia False, e o handler de SIGINT/SIGTERM gravava filho_encerrado:
+    False para um filho que acabara de matar. Sob carga a janela de colheita cresce
+    e o teste caia nela. Reproducao: isolado 3/3 verde; estresse (8 hogs CPU, 8
+    workers x 3) 2/24 vermelhos antes (ambos filho_encerrado: False, um em Ctrl+C,
+    outro em ''...e encerra o build''), 0/24 depois (/tmp/flaky/stress-233346 e
+    stress-234656). Fix so em terminate_group: PermissionError = grupo todo zumbi
+    (fall-through no SIGTERM inicial, laco segue sondando e cai no bloco SIGKILL
+    ao estourar a graca, PermissionError no SIGKILL = morto). Regressao: test_terminate_group_calls_an_all_zombie_group_dead
+    (3 checks: zumbi filho, grupo vivo, zumbi neto nao colhivel), vermelho na base
+    2c4d085^. Gates: pair-reviewer APPROVE (2x), completion-auditor COMPLETE (.claude/acceptance/test-dead-supervisor-corrida-sinal.yaml),
+    proof-reviewer PROVEN apos uma rodada UNPROVEN (docs/proof/test-dead-supervisor-corrida-sinal.yaml;
+    os 3 hunks ficam vermelhos quando revertidos). Vizinhos verdes: test_cepa_until,
+    _run_branch, _decide, _digest, _english_aliases, test_cepa_help_layout. Build
+    completo: delegado ao supervisor. Ressalva registrada: membro do grupo com outro
+    uid tambem daria EPERM e seria lido como morto; mesmo limite do codigo antigo,
+    agora erra para o lado otimista. Linux nao muda (killpg em grupo so de zumbis
+    devolve 0 la).'
 - id: handoff-e-spec-gravam-pergunta-de-origem
   title: 'Handoff e /common:spec gravam a pergunta que começou o assunto: linha
     ''porque'' obrigatória no Próximo passo (handoff-seeds-gate recusa sem ela)
     e seção ''Como chegamos aqui'' no esqueleto da spec'
-  why: 'feedback fb-20261104-2 (2026-11-04); BACKLOG.md, seção ''O handoff e a spec carregam rótulos,
-      e ninguém grava a pergunta que começou o assunto''. Posição: logo depois dos outros feedbacks
-      triados em 2026-11-05 e antes das traduções para inglês, por decisão do dono em 2026-11-05
-      (são de ergonomia, nenhum barra um run)'
-  status: pending
+  why: 'feedback fb-20261104-2 (2026-11-04); BACKLOG.md, seção ''O handoff e a spec
+    carregam rótulos, e ninguém grava a pergunta que começou o assunto''. Posição:
+    logo depois dos outros feedbacks triados em 2026-11-05 e antes das traduções
+    para inglês, por decisão do dono em 2026-11-05 (são de ergonomia, nenhum barra
+    um run)'
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits on until/2026-11-05-2029: d6f9fe4 (handoff-seeds-gate gates
+    .claude/handoffs/<name>.md: ''## Próximo passo'' needs a non-empty non-placeholder
+    ''porque:'' line; spec.md skeleton gains ''## Como chegamos aqui'' and spec-readiness-gate
+    refuses ready-to-build without it; handoff.md documents the mandatory line),
+    f6750f9 (test_wrapup_next_step: porque line reaches the next session''s brief),
+    plus acceptance+proof commit. pair-reviewer OK-WITH-NOTES (note 1 applied: empty/placeholder
+    porque blocks). completion-auditor COMPLETE at f6750f9 (.claude/acceptance/handoff-e-spec-gravam-pergunta-de-origem.yaml,
+    7 ACs). proof-reviewer PROVEN (docs/proof/handoff-e-spec-gravam-pergunta-de-origem.yaml;
+    6 perturbations RED, adversarial inputs as required). Tests run: test_handoff_seeds_gate.py
+    47 ok, test_spec_readiness_gate.py 54 ok, test_wrapup_next_step.py 71 ok; full
+    build left to the cepa-until supervisor. Left out: sketch item (3) of BACKLOG
+    (labels in reports/spec must come with the sentence they abbreviate) only as
+    prose rule in handoff.md, no gate for it; existing ready-to-build specs without
+    the section will be refused on their next edit.'
 - id: whereami-recapitula-decisoes-do-dono
   title: Decisão ou lembrete do dono citado pelo agente vem com data e frase de
     contexto na primeira menção da sessão; /common:whereami lista os lembretes do
     dono com data
-  why: 'feedback fb-20261104-3 (2026-11-04); BACKLOG.md, seção ''O Cepa não lembra o dono das decisões
-      que o próprio dono tomou'' (Posição: logo depois dos outros feedbacks triados em 2026-11-05
-      e antes das traduções para inglês, por decisão do dono em 2026-11-05 (são de ergonomia,
-      nenhum barra um run) no fim da fila). Posição: logo depois dos outros feedbacks triados
-      em 2026-11-05 e antes das traduções para inglês, por decisão do dono em 2026-11-05 (são
-      de ergonomia, nenhum barra um run)'
-  status: pending
+  why: 'feedback fb-20261104-3 (2026-11-04); BACKLOG.md, seção ''O Cepa não lembra
+    o dono das decisões que o próprio dono tomou'' (Posição: logo depois dos outros
+    feedbacks triados em 2026-11-05 e antes das traduções para inglês, por decisão
+    do dono em 2026-11-05 (são de ergonomia, nenhum barra um run) no fim da fila).
+    Posição: logo depois dos outros feedbacks triados em 2026-11-05 e antes das
+    traduções para inglês, por decisão do dono em 2026-11-05 (são de ergonomia,
+    nenhum barra um run)'
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits no branch until/2026-11-05-2029: 3eae025 (cepa-intent remind/reminders,
+    bloco ''lembretes do dono'' no state, linha [lembretes] no session-mode.py,
+    regra de primeira menção em whereami.md, handoff.md, docs), cfceb6f (teste AC6:
+    state/close exit 0 com .claude/reminders malformado), e o commit dos artefatos.
+    pair-reviewer OK-WITH-NOTES (2 notas aplicadas: separador '' · '' em vez de
+    travessão; recusa de arquivo ilegível). completion-auditor COMPLETE em cfceb6f
+    (.claude/acceptance/whereami-recapitula-decisoes-do-dono.yaml). proof-reviewer
+    PROVEN (docs/proof/whereami-recapitula-decisoes-do-dono.yaml, 11 perturbações
+    vermelhas, 1 mutante equivalente em --at). Build completo delegado ao supervisor
+    do cepa-until; aqui rodaram só os testes tocados e vizinhos (10 arquivos, todos
+    OK). Fora do escopo: arquivo .claude/reminders é versionado e o commit dele
+    é passo à parte de quem grava um lembrete; remind com entradas válidas misturadas
+    a linhas soltas reescreve o arquivo descartando as linhas soltas (só recusa
+    quando nenhuma entrada válida sobra).'
 - id: session-registry-apaga-marca-prune-orfa
   title: auto_clean do session-registry apaga marca .prune-on-exit cujo worktree
     ou branch já não existe
-  why: 'feedback fb-20261105-2 (2026-11-05); BACKLOG.md, seção ''A marca .prune-on-exit fica órfã
-      quando a worktree já sumiu'' (Posição: logo depois dos outros feedbacks triados em 2026-11-05
-      e antes das traduções para inglês, por decisão do dono em 2026-11-05 (são de ergonomia,
-      nenhum barra um run) da fila). Posição: logo depois dos outros feedbacks triados em 2026-11-05
-      e antes das traduções para inglês, por decisão do dono em 2026-11-05 (são de ergonomia,
-      nenhum barra um run)'
-  status: pending
+  why: 'feedback fb-20261105-2 (2026-11-05); BACKLOG.md, seção ''A marca .prune-on-exit
+    fica órfã quando a worktree já sumiu'' (Posição: logo depois dos outros feedbacks
+    triados em 2026-11-05 e antes das traduções para inglês, por decisão do dono
+    em 2026-11-05 (são de ergonomia, nenhum barra um run) da fila). Posição: logo
+    depois dos outros feedbacks triados em 2026-11-05 e antes das traduções para
+    inglês, por decisão do dono em 2026-11-05 (são de ergonomia, nenhum barra um
+    run)'
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits na branch until/2026-11-05-2029: 5019922 (clean_orphan_prune_markers
+    em common/hooks/_wtlib.py, chamado no passo 4 do SessionStart em common/hooks/session-registry.py,
+    linha no stderr por marca apagada; docs em common/commands/wrap-up.md), a4cef7a
+    + 0329686 (tests/test_prune_marker_orphan.py, casos a-g: pasta sumida, branch
+    sumida, viva mantida, ilegível mantida, pasta sumida com branch viva, caminho
+    relativo mantido, sem branch mantido), b38f4c2 (artefatos de portão). pair-reviewer
+    APPROVE. completion-auditor COMPLETE (.claude/acceptance/session-registry-apaga-marca-prune-orfa.yaml,
+    2a rodada após fechar lacuna AC1/AC5). proof-reviewer PROVEN (docs/proof/session-registry-apaga-marca-prune-orfa.yaml,
+    head 0329686, base a2a8f89, P1-P7 todas RED; 2 rodadas anteriores UNPROVEN/NEEDS-HUMAN
+    fecharam com casos e, f, g). Build completo não rodado aqui: pertence ao supervisor
+    do cepa-until. Código está na branch da rodada, sem merge nem push. Fora do
+    escopo: apagar a marca órfã concreta do wego-acessos-backend citada no feedback,
+    que some sozinha no próximo SessionStart daquele repo.'
 - id: wrap-up-safe-to-exit-exige-clone-limpo
   title: 'wrap-up só declara Safe to exit com git status vazio no clone principal:
     arquivo versionado modificado entra em commit próprio, arquivo de runtime dos
     hooks vai para exclude, e o doctor aponta versionado que hook escreve'
-  why: 'feedback fb-20261105-3 (2026-11-05); BACKLOG.md, seção ''O wrap-up declara Safe to exit com
-      o clone principal sujo, e o cepa-until recusa rodar em seguida''. Posição: logo depois dos
-      outros feedbacks triados em 2026-11-05 e antes das traduções para inglês, por decisão do
-      dono em 2026-11-05 (são de ergonomia, nenhum barra um run)'
-  status: pending
+  why: 'feedback fb-20261105-3 (2026-11-05); BACKLOG.md, seção ''O wrap-up declara
+    Safe to exit com o clone principal sujo, e o cepa-until recusa rodar em seguida''.
+    Posição: logo depois dos outros feedbacks triados em 2026-11-05 e antes das
+    traduções para inglês, por decisão do dono em 2026-11-05 (são de ergonomia,
+    nenhum barra um run)'
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits na branch until/2026-11-05-2029: 98669af (common/hooks/_dirt.py
+    definição única de sujeira; common/hooks/safe-exit-gate.py hook Stop + CLI --check/--exclude;
+    wrap-up.md passos 0/L4/L8; cepa-doctor check_tracked_runtime; plugin.json common
+    3.4.0), a1e7f71 (cepa-until dirty_tree com --untracked-files=all para paridade;
+    testes h e g2), e commit dos artefatos. pair-reviewer APPROVE (3 achados, 2
+    corrigidos: shlex.quote nos caminhos, .claude/expertise fora do aviso do doctor;
+    o 3o era escape de não-ASCII, resolvido com core.quotepath=false). completion-auditor
+    INCOMPLETE em 98669af (AC3 exclude a partir de worktree linkada sem teste; AC5
+    .claude/ colapsado dividia hook e cepa-until) → COMPLETE em a1e7f71 (.claude/acceptance/wrap-up-safe-to-exit-exige-clone-limpo.yaml).
+    proof-reviewer PROVEN em 98669af e a1e7f71 (docs/proof/wrap-up-safe-to-exit-exige-clone-limpo.yaml,
+    14 perturbações vermelhas). Testes: tests/test_safe_exit_gate.py (49 checks),
+    tests/test_doctor_tracked_runtime.py, test_doctor_dirty_tree, test_cepa_until,
+    test_cepa_until_adversarial, test_queue_rename, test_wrapup_next_step, test_report_style_lint
+    verdes. Build completo (tests/run-all.sh) delegado ao supervisor. Fora do escopo:
+    inventário de hooks em README não existe (nada a acrescentar); caveat conhecido:
+    stop_hook_active deixa a 2a tentativa passar (mesma convenção do report-style-lint);
+    plan.yaml de run vivo o cepa-until ignora e o hook bloqueia (lado mais estrito).
+    Código fica na branch da rodada; sem merge, sem push.'
 - id: stop-reasons-in-english
   title: Traduzir para inglês os 6 motivos de parada emitidos por cepa-plan queue
     --json (teto, fim-da-fila, bloqueado, reservado, depende-de-adiado, bloqueado-antes),
@@ -2675,10 +2831,23 @@ items:
   why: 'Sobra do interface-in-english, que fechou com esses motivos ainda em português
     (common/bin/cepa-plan:1192). Dono aprovou em 2026-11-03 depois de o run 2026-10-23-2130
     recomendar sim. (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits 6f45fa1 (translation) and 89184ed (gate artifacts) on until/2026-11-05-2029.
+    teto->cap, fim-da-fila->end-of-queue, bloqueado->blocked, reservado->reserved,
+    depende-de-adiado->depends-on-deferred, bloqueado-antes->blocked-before; cepa-plan
+    emits the new value plus reason_pt with the old one; cepa-until (OWNER_REASON/NO_OWNER_REASON,
+    run_end default), cepa-prove (cap), compass (until.ts REASONS, register.tsx
+    END_COLOR) accept old and new; docs drain-plan.md, until-review.md, docs/cepa-until.md,
+    docs/estrategia-fim-do-cepa-until.md. New tests/test_cepa_plan_reason_aliases.py
+    (37 ok) proves emitted values, reason_pt, old==new on decide and identical alias
+    maps. pair-reviewer OK-WITH-NOTES; completion-auditor COMPLETE (.claude/acceptance/stop-reasons-in-english.yaml);
+    proof-reviewer PROVEN with 6 perturbations RED (docs/proof/stop-reasons-in-english.yaml).
+    Left out on purpose: cepa-until''s own end reasons (prazo, disjuntor, ...) and
+    human_pending; END_COLOR for end-of-queue has no test (cosmetic). Closes the
+    AC5 caveat_owner_decision of interface-in-english. Full build left to the cepa-until
+    supervisor; code is on the overnight branch, no merge, no push.'
 - id: wrap-up-comando-primeira-linha
   title: O launcher da sessão encadeada põe o campo comando, gravado pelo /common:wrap-up,
     como primeira linha do prompt inicial da sessão seguinte
@@ -2686,10 +2855,27 @@ items:
     do agente: sim, porque hoje o comando é gravado e ignorado, e a sessão seguinte
     só o executa se o parágrafo Próximo passo o citar. Dono aprovou virar item em
     2026-11-03. (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits 5ef79ec (feat: common/hooks/session-chain.py monta o prompt
+    inicial da sessao encadeada como <comando>\n\n<brief> quando o .next.json traz
+    comando string nao vazia; sem comando, vazio ou nao-string, prompt = brief sozinho,
+    sem erro nem aviso; validacao de repo/mode/brief inalterada; docs em common/bin/cepa
+    (cabecalho), wrap-up.md L7, handoff.md) e fe0be4b (aceite+prova). Testes: tests/test_cepa_chaining.py
+    novo t_command_first_line (comando -> ultimo arg = comando\n\nBRIEF, linha 1
+    = comando; ''   '', '''', 42 -> BRIEF sozinho, sem aviso); tests/test_wrapup_next_step.py
+    3 assercoes passaram a esperar comando+brief (ponta a ponta session-next.py
+    real -> session-chain.py real). Ambos verdes no HEAD, vermelhos na base 89184ed
+    (2 e 3 FAIL). pair-reviewer OK-WITH-NOTES (2 notas de formatacao, aplicadas);
+    completion-auditor COMPLETE (.claude/acceptance/wrap-up-comando-primeira-linha.yaml,
+    AC1-AC4); proof-reviewer PROVEN (docs/proof/wrap-up-comando-primeira-linha.yaml,
+    6 de 6 perturbacoes vermelhas, base-RED confirmado; worktrees /tmp/proof-wucpl-*
+    abertas e removidas pelo proof-reviewer). Ressalvas: as frases novas de doc
+    (wrap-up.md, handoff.md, comentario do cepa) nao tem teste que as proteja, so
+    leitura; comando com quebra de linha no meio nao tratado (session-next.py grava
+    em uma linha). Build completo fica com o supervisor. Codigo na branch da noite
+    until/2026-11-05-2029, sem merge nem push.'
 - id: spec-isento-do-report-style-lint
   title: Estender ao /common:spec a exceção do report-style-lint que poupa o turno
     de entrevista do /common:epic
@@ -2697,10 +2883,22 @@ items:
     do agente: sim, porque a entrevista do spec também grava no arquivo a cada turno,
     e o lint a obriga ao formato de relatório com pergunta numerada. Dono aprovou
     virar item em 2026-11-03. (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Volta 2 de 2 (volta 1 ficou vermelha no build completo). Causa do vermelho:
+    tests/test_epic_readiness_gate.py mantinha o controle ''turno do /common:spec
+    (docs/spec) segue medido''. Reaproveitei a lateral until/2026-11-05-2029-vermelho-spec-isento-do-report-style-lint
+    via git cherry-pick 7500433 -> d9dc9cd (INTERVIEW_DOC docs/(epics|spec)/[^/]+\.md
+    + docstring + 8 checks em tests/test_report_style_lint.py). Conserto: 3d459fb
+    inverte o controle (docs/spec poupado) e adiciona controle docs/specs (plural)
+    segue medido. Portoes: pair-reviewer APPROVE; completion-auditor COMPLETE (.claude/acceptance/spec-isento-do-report-style-lint.yaml);
+    proof-reviewer PROVEN (docs/proof/spec-isento-do-report-style-lint.yaml; RED
+    na base fe0be4b, 4 perturbacoes RED, worktree descartavel removido). Artefatos
+    em 078b1a2. Rodados so test_report_style_lint, test_epic_readiness_gate e 4
+    vizinhos (epic_where, session_routine_guard, write_mode_gate, write_lock_rename),
+    todos verdes; build completo fica com o supervisor. Codigo na branch da noite
+    until/2026-11-05-2029; sem merge, sem push.'
 - id: help-in-english
   title: 'Pousar o --help em inglês dos cepa-* (já traduzido, sem commit, na worktree
     session/pt2en): ajustar tests/test_cepa_mode.py:662-719 e tests/test_cepa_prove.py:393,459-462,
@@ -2726,15 +2924,49 @@ items:
     --todas, --arquivo; launcher --prompt-substitui'
   why: 'Decisão do dono em 2026-11-05 (item 3): muda interface, não só texto de
     ajuda, por isso fila separada (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by:
   - help-in-english
   human_pending: null
-  evidence: null
+  evidence: 'Commits 2e3ebb4 (renames), 0963cc3 (doctor --help assertion), 1eff25d
+    (gate artifacts) on until/2026-11-05-2029. English primary names, old names
+    as aliases: cepa-autonomy list/classify; cepa-until land/pending/close-dead;
+    cepa-plan finish --asked/--ready/--blocker/--if-yes/--if-no (via _ownertext.OLD_FLAGS);
+    cepa-feedback list --status open/triaged/all; cepa-doctor --project; cepa --prompt-replace.
+    The other flags of the item were already aliased by interface-in-english and
+    verified at the CLI. Deliberately unchanged (data, not interface): owner_summary
+    YAML keys pedido/pronto/impede/se_sim/se_nao, run-state action id aterrissar,
+    fechado_por fecha-morto, ledger status values aberto/triado. Help, command .md
+    and no-background-build hook messages teach the English names. Test tests/test_pt_names_to_english.py
+    (34 cases). pair-reviewer OK-WITH-NOTES (notes applied); completion-auditor
+    COMPLETE (.claude/acceptance/pt-names-to-english.yaml); proof-reviewer PROVEN
+    (docs/proof/pt-names-to-english.yaml, 17 mutants all killed). Filtered suite:
+    28 test files green via tests/run-all.sh; full build left to the cepa-until
+    supervisor.'
 - id: plan-validate-raiz
   title: cepa plan validate resolve a raiz como write (clone principal), não a pasta
     atual
   why: 'ainda não priorizado: entrou no fim da fila'
+  status: done
+  blocked_by: []
+  human_pending: null
+  evidence: 'Commits on until/2026-11-05-2029: dff66d7 (cepa-plan validate takes
+    a queue name resolved at the main clone via main_root+queue_path, --repo added,
+    file path kept and works without git; docs/commands.md and docs/cepa-cli.md
+    updated; new tests/test_cepa_plan_validate_root.py), 5e862a3 (test asserts the
+    ''não existe'' wording, killing the proof survivor), gate artifacts committed
+    after. pair-reviewer OK-WITH-NOTES (notes not fixes: file-over-name precedence,
+    --repo ignored with a file path). completion-auditor COMPLETE (.claude/acceptance/plan-validate-raiz.yaml).
+    proof-reviewer PROVEN at 5e862a3 (docs/proof/plan-validate-raiz.yaml): 6 perturbations
+    RED, test RED at base 1eff25d. Full suite left to the cepa-until supervisor;
+    touched + neighbour tests green. Code is on the overnight branch, no merge/push.'
+- id: run-all-timeout-por-arquivo
+  title: tests/run-all.sh aplica timeout por arquivo e marca o arquivo como falha
+    ao estourar, em vez de a suíte ficar presa num teste travado
+  why: 'Decisão do dono em 2026-11-06 (item 2): um teste de pty com âncora errada
+    segurou a suíte por 3h em 2026-11-05 e por 10h em 2026-11-06, sem nenhum sinal;
+    o on_tty já mata o filho ao estourar (4ae3a3f), mas o runner continua sem teto
+    para qualquer outro travamento (ainda não priorizado: entrou no fim da fila)'
   status: pending
   blocked_by: []
   human_pending: null
