@@ -88,6 +88,21 @@ def check_numbers(label, body):
           "exactly as `cepa-plan decisions` prints it" in body and "never renumber" in body)
 
 
+def check_pins(label, body, doc):
+    check(f"{label}: the call line runs `cepa-plan decisions {doc}`",
+          f"run `cepa-plan decisions {doc}`" in body)
+    check(f"{label}: the record line is `cepa-plan verdict {doc} <n> mantida|vetada|refinada`",
+          f"`cepa-plan verdict {doc} <n> mantida|vetada|refinada`" in body)
+    check(f"{label}: walks only the decisions without a verdict",
+          "Walk only the ones without" in body)
+    check(f"{label}: a skipped decision is offered again next time",
+          re.search(r"(?i)\bit is offered again\b|\boffers it again\b", body) is not None)
+    check(f"{label}: `vetada` needs `--reason`",
+          re.search(r"`vetada`\s+needs\s+`--reason`", body) is not None)
+    check(f"{label}: `refinada` needs `--text`",
+          re.search(r"`refinada`\s+needs\s+`--text`", body) is not None)
+
+
 def test_spec():
     text = SPEC.read_text(encoding="utf-8")
     body = check_common("spec.md", text, "1. Locate or open", "3. Interrogate")
@@ -95,6 +110,11 @@ def test_spec():
           re.search(r"(?i)up to four\b.{0,60}\bper round", body) is not None)
     check_numbers("spec.md", body)
     check_order("spec.md", SPEC, "The veto walk (caminhada do veto).", "write the skeleton with")
+    check_pins("spec.md", body, "docs/spec/<slug>.md")
+    check("spec.md: --continuar/--fechar bullet routes through the walk first",
+          re.search(r"`--continuar <slug>` or `--fechar <slug>`: read the file, open with the "
+                    r"veto walk below, and only then go to step 4 \(continue\) or 5 \(close\)", body)
+          is not None)
     check("spec.md: covers --continuar and --fechar",
           "--continuar" in body and "--fechar" in body)
 
@@ -104,6 +124,9 @@ def test_epic():
     body = check_common("epic.md", text, "1. Open or resume", "3. Ask")
     check_numbers("epic.md", body)
     check_order("epic.md", EPIC, "The veto walk (caminhada do veto).", "Otherwise (the file does not exist)")
+    check_pins("epic.md", body, "docs/epics/<name>.md")
+    check("epic.md: walk comes before the first gap and before the sieve",
+          "Before the first gap and before the sieve, run `cepa-plan decisions" in body)
     check("epic.md: limit of one per turn",
           re.search(r"(?i)\bone\b.{0,30}\bper turn\b", body) is not None)
 
