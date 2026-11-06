@@ -38,6 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
 import _clihelp  # noqa: E402
+import _state  # noqa: E402  (the run liveness rule: one copy)
 import _queuepath as qp  # noqa: E402  (the queue lives in two layouts during the transition)
 
 try:
@@ -334,13 +335,25 @@ def build_digest(ledger, result_max):
     plan_path = queue_plan_path(ledger, start.get("fila"))
     plan = plan_items(plan_path)
 
-    rounds = [s for s in log_segments(log) if " · verify · " not in s[0]
+    # `reinstall`/`rollback` are the supervisor's own `bin/install.sh` runs (DUR-3): not
+    # a round and not a build.
+    own = (" · verify · ", " · reinstall · ", " · rollback · ")
+    rounds = [s for s in log_segments(log) if not any(m in s[0] for m in own)
               and "/common:until-review" not in s[0]]
     builds = [s for s in log_segments(log) if " · verify · " in s[0]]
     starts = [e for e in events if e.get("evento") == "item_start"]
     ends = [e for e in events if e.get("evento") == "item_end"]
 
     out = [f"# Resumo do run {ledger.stem}", ""]
+    state_file = ledger.with_name(ledger.stem + ".estado.json")
+    if state_file.exists():
+        try:
+            est = json.loads(state_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            est = None
+        if isinstance(est, dict):
+            _, why = _state.run_liveness(est)
+            out.append(f"- run: {why}")
     out.append(f"- registro: `{ledger}`")
     out.append(f"- saída bruta: `{log}` "
                f"({log.stat().st_size if log.exists() else 0} bytes; este "
@@ -358,6 +371,18 @@ def build_digest(ledger, result_max):
         out.append(f"- ATENÇÃO: {len(starts)} item_start no registro e "
                    f"{len(rounds)} rodadas no `.log` — o pareamento abaixo "
                    "pode estar deslocado")
+    # Acceptance of the new record format: every `item_end` of a `versao_registro >= 2`
+    # run carries the session id and the end reason. Old records are not judged.
+    version = start.get("versao_registro")
+    if isinstance(version, int) and version >= 2:
+        missing = [str(e.get("id")) for e in ends
+                   if not e.get("session_id") or not e.get("motivo_fim")]
+        if missing:
+            out.append("- ATENÇÃO: item_end sem session_id/motivo_fim: "
+                       + ", ".join(missing))
+    for e in events:
+        if e.get("evento") == "hooks_reinstalados" and not e.get("ok"):
+            out.append(f"- ATENÇÃO: reinstalação de hooks falhou no item {e.get('id')}")
     out.append("")
 
     out.append("## Eventos do registro fora das rodadas")
@@ -380,7 +405,10 @@ def build_digest(ledger, result_max):
         out.append(f"- desfecho no registro: status `{en.get('status')}`, "
                    f"{en.get('segundos')} s, exit {en.get('exit_code')}, "
                    f"commits na branch da noite: {en.get('commits')}, "
-                   f"tentativa {en.get('tentativa')}")
+                   f"tentativa {en.get('tentativa')}, "
+                   f"sessão {en.get('session_id') or st.get('session_id')}, "
+                   f"fim `{en.get('motivo_fim')}`"
+                   + (f" · hooks {st['hooks_sha']}" if st.get("hooks_sha") else ""))
         if r:
             out.append(f"- custo US$ {cost} · {r['turns']} turnos · "
                        f"fim `{r['terminal']}`"

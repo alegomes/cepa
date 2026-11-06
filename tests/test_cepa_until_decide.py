@@ -847,7 +847,7 @@ def test_question_leaves_when_the_item_moves_again_and_reservation_vanishes_in_a
         root = build_repo(tmp, [stuck, other_one])
         subprocess.run(
             [sys.executable, str(CEPA_PLAN), "finish", "fila", "a1",
-             "--status", "pending", "--evidence", "destravou",
+             "--status", "pending", "--evidence", "destravou", "--supervisor",
              "--repo", str(root)], capture_output=True, text=True, check=True)
         check("finish pending sem --pergunta tira a pergunta velha",
               "owner_question" not in items_of(root)["a1"], items_of(root)["a1"])
@@ -1103,7 +1103,9 @@ def test_finish_keeps_agent_and_human_sections_apart():
         check("o status mostra o motivo leigo, não a 1ª frase do log",
               "o sistema responde em branco" in st.stdout
               and "Matriz 154" not in st.stdout, st.stdout)
-        p = _finish(root, "--status", "pending", "--evidence", "voltou")
+        # DUR-2: the item is already `blocked`; reopening it is the supervisor's act.
+        p = _finish(root, "--status", "pending", "--evidence", "voltou",
+                    "--supervisor")
         check("pending limpa a seção humana, que era do travamento",
               "owner_summary" not in items_of(root)["a1"], items_of(root)["a1"])
 
@@ -1177,6 +1179,22 @@ def test_supervisor_block_writes_a_lay_reason():
         check("...com o motivo leigo na seção humana",
               (it.get("owner_summary") or {}).get("impede", "").startswith(
                   "the executor tried 3 times in a row"), it)
+
+
+def test_finish_item_reopens_an_item_the_agent_closed_done():
+    """DUR-2: `cepa-plan finish` refuses a second finish on a terminal item;
+    the supervisor's `finish_item` must pass `--supervisor` (red full build puts
+    the agent's `done` back to `pending`)."""
+    m = load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        done = item("a1", status="done")
+        done["evidence"] = "o agente fechou"
+        root = build_repo(tmp, [done])
+        err = m.finish_item("fila", root, "a1", "pending", "build vermelho")
+        check("finish_item reabre item done (devolve None)", err is None, err)
+        it = items_of(root)["a1"]
+        check("...o status virou pending e a evidence foi trocada",
+              it["status"] == "pending" and it["evidence"] == "build vermelho", it)
 
 
 def main():

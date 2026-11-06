@@ -3576,6 +3576,8 @@ reavaliar O3), o estado em 24/09:
 
 **Plano:** `cepa/cepa-until-blocked-como-progresso`
 
+**Status (2026-11-05):** o item 3 (o `queue` desconfiar de `done` sem merge) está FECHADO como superado pelo DUR-2: `cepa-plan finish --status done` agora recusa árvore suja e grava `head_commit` no item, então todo `done` nomeia o commit em que fechou. O `start` não confere ancestralidade, de propósito (branch da noite). O `reconcile()` não tinha lógica de ancestralidade, então não havia o que remover dele.
+
 **Status:** item 1 FEITO em 2026-09-26 (common 2.25.0, branch da noite `until/2026-09-26-1809`): `--max-travados` (default 3) encerra o run com motivo `fila-travada` depois de N `blocked` seguidos, sem contar como falha do item. Entrou porque os runs mostraram sequências de `blocked` por outras causas além do antecessor sem merge (7 seguidas em 2026-09-15). Continuam de fora: o item 2 (parar já no 2º pela mesma causa, opcional) e o item 3 (`queue` desconfiar de `done` sem merge), que conflita com a branch da noite, onde o antecessor `done` sem merge é justamente o caso válido.
 
 Antes: PARCIAL em 2026-09-24 (common 2.19.0, merge `1cddede`). A causa das 20 rodadas

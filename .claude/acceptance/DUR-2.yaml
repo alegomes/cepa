@@ -1,0 +1,102 @@
+schema_version: 1
+card: DUR-2
+status: complete
+audited_at: '2026-11-05T00:00:00-03:00'
+audited_range: a131d09..47ec0f3
+criteria:
+- id: AC1
+  text: finish --status done exige worktree limpa e grava head_commit (HEAD naquele instante).
+  altitude: cli
+  surface: python3 common/bin/cepa-plan finish <fila> <id> --status done (subprocesso em repo git temporario)
+  demonstrated_by:
+    test: tests/test_cepa_plan_finish_owner.py::test_done_with_clean_tree_records_head (+ test_done_with_untracked_file_is_refused, test_done_outside_git_is_refused, test_blocked_with_dirty_tree_is_accepted)
+    layer: subprocesso do CLI real; compara it.head_commit com git rev-parse HEAD
+    evidence: verified
+    run: 'python3 tests/test_cepa_plan_finish_owner.py -> rc=0, 40 ok, 0 FAIL, "todos passaram"'
+  verdict: complete
+  gap: null
+- id: AC2
+  text: finish recusa quando claimed_by.session_id nao e o chamador.
+  altitude: cli
+  surface: cepa-plan finish com CLAUDE_SESSION_ID diferente do dono registrado
+  demonstrated_by:
+    test: tests/test_cepa_plan_finish_owner.py::test_other_caller_is_refused_and_supervisor_passes (+ test_unregistered_caller_compares_host_and_tree, test_owner_can_finish_from_a_subdirectory)
+    layer: subprocesso do CLI real; exit 2, mensagem nomeia o dono, item segue in_progress com dono s1
+    evidence: verified
+    run: 'python3 tests/test_cepa_plan_finish_owner.py -> rc=0, 40 ok, 0 FAIL'
+  verdict: complete
+  gap: null
+- id: AC3
+  text: finish recusa item ja terminal (done/blocked/dropped) e registra a recusa em finish_recusado no item.
+  altitude: cli
+  surface: segundo cepa-plan finish no mesmo item; campo finish_recusado do queue.yaml
+  demonstrated_by:
+    test: tests/test_cepa_plan_finish_owner.py::test_two_finishes_keep_the_first_evidence (+ test_refusals_keep_only_the_last_five)
+    layer: subprocesso do CLI real; exit 2, entrada com quando/quem/status_pedido/motivo, status e evidence intactos
+    evidence: verified
+    run: 'python3 tests/test_cepa_plan_finish_owner.py -> rc=0, 40 ok, 0 FAIL'
+  verdict: complete
+  gap: null
+- id: AC4
+  text: start nao recusa por ancestralidade (nada acrescentado ali).
+  altitude: cli
+  surface: cmd_start de common/bin/cepa-plan
+  demonstrated_by:
+    test: 'criterio negativo, sem teste proprio: git diff a131d09..47ec0f3 em cmd_start so troca o cwd gravado em claimed_by (session_root(cwd)); nenhum merge-base/is-ancestor entra em start. O start roda em todos os 40 checks de test_cepa_plan_finish_owner.py sobre repos sem ancestral.'
+    layer: leitura do diff + start exercitado por subprocesso
+    evidence: verified
+    run: 'git diff a131d09..47ec0f3 -- common/bin/cepa-plan (hunk de cmd_start: 1 linha); python3 tests/test_cepa_plan_finish_owner.py -> rc=0'
+  verdict: complete
+  gap: null
+- id: AC5
+  text: Teste - dois finish no mesmo item deixam a evidencia do primeiro intacta.
+  altitude: cli
+  surface: dois cepa-plan finish seguidos
+  demonstrated_by:
+    test: tests/test_cepa_plan_finish_owner.py::test_two_finishes_keep_the_first_evidence
+    layer: subprocesso do CLI real; evidence == "primeira evidencia\nsegunda linha" apos o segundo finish recusado
+    evidence: verified
+    run: 'python3 tests/test_cepa_plan_finish_owner.py -> rc=0, 40 ok, 0 FAIL ("a evidence do primeiro continua igual")'
+  verdict: complete
+  gap: null
+- id: AC6
+  text: Teste - done sem commit (arvore suja) e recusado.
+  altitude: cli
+  surface: cepa-plan finish --status done com arquivo modificado nao commitado
+  demonstrated_by:
+    test: tests/test_cepa_plan_finish_owner.py::test_done_with_modified_file_is_refused (+ test_done_with_untracked_file_is_refused)
+    layer: subprocesso do CLI real; exit 2, recusa lista o arquivo, item segue in_progress, sem evidence nem head_commit
+    evidence: verified
+    run: 'python3 tests/test_cepa_plan_finish_owner.py -> rc=0, 40 ok, 0 FAIL'
+  verdict: complete
+  gap: null
+- id: AC7
+  text: Item do BACKLOG "antecessor done sem merge" fechado como superado; reconcile nao tinha logica de ancestralidade.
+  altitude: domain
+  surface: BACKLOG.md (secao do plano cepa/cepa-until-blocked-como-progresso) e funcao reconcile de cepa-plan
+  demonstrated_by:
+    test: 'verificacao documental, sem teste: o diff de BACKLOG.md acrescenta "Status (2026-11-05): o item 3 ... FECHADO como superado pelo DUR-2" e diz que o reconcile nao tinha ancestralidade. grep em common/bin/cepa-plan: o unico merge-base --is-ancestor esta em landed_proof (linha 3524, outra funcionalidade); reconcile (3386) e cmd_reconcile nao tem logica git de ancestralidade.'
+    layer: leitura do diff + grep
+    evidence: verified
+    run: 'git diff a131d09..47ec0f3 -- BACKLOG.md; grep -n "merge-base|is-ancestor" common/bin/cepa-plan -> so linha 3524 (landed)'
+  verdict: complete
+  gap: null
+- id: AC8
+  text: cepa-until, re-finisher legitimo apos o finish do agente, segue funcionando via --supervisor passado por finish_item.
+  altitude: cli
+  surface: processo common/bin/cepa-until de ponta a ponta -> finish_item -> subprocesso cepa-plan finish --supervisor
+  demonstrated_by:
+    test: tests/test_cepa_until_run_branch.py::test_4b_red_return_gives_the_item_back_to_pending_with_a_note, ::test_4d_second_red_return_becomes_blocked, ::test_red_build_takes_the_item_off_the_branch_without_losing_the_commits; tests/test_cepa_until.py (tentativas esgotadas, item vira blocked); tests/test_cepa_until_decide.py::test_supervisor_block_writes_a_lay_reason; flag no CLI direto em test_cepa_plan_finish_owner.py::test_other_caller_is_refused_and_supervisor_passes e ::test_supervisor_reopens_a_done_item
+    layer: 'cepa-until real com claude falso. O agente falso grava status done direto no YAML (nao chama cepa-plan finish), logo o item chega terminal ao finish_item; build vermelho -> finish_item pending/blocked precisa do --supervisor para passar a recusa de item terminal. A recusa por dono diferente via cepa-until nao e discriminada (mesma arvore, sessao nao registrada passa por host+arvore), so no CLI direto.'
+    evidence: verified
+    run: 'python3 tests/test_cepa_until_run_branch.py -> rc=0, 116 ok, "tudo verde"; python3 tests/test_cepa_until.py -> rc=0, "tudo verde"; python3 tests/test_cepa_until_decide.py -> "tudo verde"'
+  verdict: complete
+  gap: null
+other_runs:
+- python3 tests/test_cepa_until_decide.py -> tudo verde
+- python3 tests/test_green_without_test.py -> all verde-sem-teste tests passed
+- python3 tests/test_validation_owed_gate.py -> all green
+- python3 tests/test_common_drain_plan.py -> all green
+caveats:
+- 'AC8 nao foi provado por mutacao: nao removi --supervisor de finish_item para ver o teste cair (auditor nao edita fonte). A inferencia de que 4b/4d dependem da flag vem de o agente falso deixar o item done.'
+- 'docs/proof/DUR-2.yaml aparece untracked na worktree (nao e fonte nem teste).'

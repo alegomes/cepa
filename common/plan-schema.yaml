@@ -84,6 +84,24 @@ items:                          # ORDEM DA LISTA = ordem de execução. É o dad
                                 # idade). Dono vivo => o lote ADIA o item e diz
                                 # quem está nele; dono morto => reserva órfã,
                                 # recuperada automaticamente com aviso.
+    head_commit: 0a1b2c3d4e5f   # SHA completo do HEAD da árvore no instante do
+                                # `finish --status done` (DUR-2, 2026-11-05).
+                                # `done` exige árvore limpa, então este commit
+                                # contém o que fechou o item. O `start` não
+                                # confere ancestralidade (a branch da noite
+                                # nunca é ancestral do clone até o dono mergear).
+                                # Sai se o item reabrir (`blocked`/`pending`).
+    finish_recusado:            # recusas de `finish` (últimas 5), gravadas no item
+      - quando: "2026-11-05T10:10:00+00:00"
+        quem: {session_id: abc123, hostname: macbook, pid: 12345}
+        status_pedido: done
+        motivo: "item já está `done`"
+                                # Motivos: item já terminal (um 2º finish apagaria
+                                # a evidência do 1º), item reservado por outra
+                                # sessão, árvore suja ou sem git no `done`.
+                                # Uma recusa nunca muda status, evidence ou dono.
+                                # `--supervisor` (só o cepa-until) pula as duas
+                                # primeiras.
     blocked_by: []              # ids de outros items; um item bloqueado não é
                                 # "o próximo" mesmo estando no topo da fila
     human_pending: |            # o que sobrou PRA VOCÊ depois do card fechar.

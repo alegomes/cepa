@@ -1,0 +1,71 @@
+schema_version: 1
+card: DUR-1
+status: complete
+audited_at: '2026-11-05T00:00:00-03:00'
+criteria:
+- id: AC1
+  text: O supervisor gera um session id por tentativa, passa ao claude -p com --session-id, e item_start e item_end gravam.
+  altitude: cli
+  surface: processo cepa-until de ponta a ponta com claude falso no PATH
+  demonstrated_by:
+    test: tests/test_cepa_until_session.py::test_session_id_goes_to_claude_and_to_the_record
+    layer: processo do supervisor + claude falso que registra argv; compara uuids do argv com item_start/item_end do .jsonl
+    evidence: verified
+    run: python3 tests/test_cepa_until_session.py -> 'ok cada chamada recebeu --session-id', 'ok item_start grava o mesmo id que o claude recebeu', 'ok item_end grava o mesmo id', 'todos passaram' (2 chamadas, 2 uuids distintos)
+  verdict: complete
+  gap: null
+- id: AC2
+  text: item_end traz motivo_fim do conjunto fechado ok, contexto, cota, rede, folga, sinal, hook, desconhecido, derivado de exit code, timeout, rate_limit_event e trecho do log.
+  altitude: cli
+  surface: campo motivo_fim do item_end no .jsonl de um run real do supervisor
+  demonstrated_by:
+    test: tests/test_cepa_until_session.py::test_quota_ceiling_ends_with_motivo_fim_cota_end_to_end e ::test_prompt_too_long_ends_with_motivo_fim_contexto_end_to_end (+ test_end_reason_covers_the_closed_set_in_precedence_order e o `ok` do teste de AC1)
+    layer: 'supervisor real com claude falso: rate_limit_event rejected + saída 1 -> item_end.motivo_fim ''cota''; result de erro ''Prompt is too long'' -> ''contexto''; `ok` ponta a ponta; os 8 valores e a precedência em unidade'
+    evidence: verified
+    run: 'python3 tests/test_cepa_until_session.py (HEAD 0236edb) -> exit 0, 42 ok, 0 FAIL: ''ok item_end de teto de uso grava motivo_fim `cota`'', ''ok item_end de \''Prompt is too long\'' grava motivo_fim `contexto`'', ''todos passaram''. Folga, rede, sinal e hook seguem só em unidade (end_reason_of); a fiação é a mesma linha do item_end já provada em três valores.'
+  verdict: complete
+  gap: null
+- id: AC3
+  text: <run>.estado.json carrega heartbeat renovado a cada N segundos enquanto o supervisor espera.
+  altitude: cli
+  surface: arquivo .estado.json lido durante a execução do supervisor
+  demonstrated_by:
+    test: tests/test_cepa_until_session.py::test_heartbeat_advances_while_the_item_runs (+ test_a_raising_on_tick_does_not_break_the_wait)
+    layer: supervisor real com CEPA_UNTIL_HEARTBEAT=1; o claude falso lê o estado duas vezes com 3,3 s entre elas e o heartbeat avançou, estado rodando, item e session_id presentes
+    evidence: verified
+    run: python3 tests/test_cepa_until_session.py -> 'ok heartbeat avançou durante o item', 'ok ...com estado rodando e o item em voo', 'todos passaram'. A espera de cota/rede (tick_wait) não tem teste próprio; o critério fala da espera do filho, que está coberta.
+  verdict: complete
+  gap: null
+- id: AC4
+  text: A regra de órfã para reserva com pid em outro host usa a idade do heartbeat (fallback para 24h quando nenhum estado casa).
+  altitude: cli
+  surface: cepa-plan (start/queue/status/migrate) decidindo viva/órfã de uma reserva de outro host
+  demonstrated_by:
+    test: tests/test_cepa_plan_single_track.py::test_start_reclaims_reservation_whose_heartbeat_is_stale e ::test_start_refuses_reservation_whose_run_is_alive (+ unidade test_reservation_from_another_host_follows_the_heartbeat)
+    layer: subprocesso real `cepa-plan start fila A1` com reserva de host alheio e <run>.estado.json de heartbeat velho (1h) ou fresco (5s)
+    evidence: verified
+    run: 'python3 tests/test_cepa_plan_single_track.py (HEAD 0236edb) -> exit 0, 67 ok, 0 FAIL: ''ok heartbeat de 1h: start retoma a reserva órfã (saída 0)'', ''ok heartbeat fresco e rodando: start recusa (saída 5)'' (claimed_by trocado / inalterado conforme o caso); python3 tests/test_cepa_until_session.py -> ''todos passaram''. A regra de 24h sem arquivo de estado está na unidade.'
+  verdict: complete
+  gap: null
+- id: AC5
+  text: start/queue que pula item porque a reserva está em outro lugar grava evento item_pulado.
+  altitude: cli
+  surface: linha item_pulado no .jsonl do supervisor quando a fila devolve deferred reason=reservado
+  demonstrated_by:
+    test: tests/test_cepa_until_session.py::test_item_reserved_by_a_live_run_elsewhere_is_logged_once_as_skipped
+    layer: supervisor real + cepa-plan real como subprocesso; a1 reservado por outro host com heartbeat fresco, a2 roda; afirma um único item_pulado (id, motivo reservado, detalhe com o host) e item_start só de a2
+    evidence: verified
+    run: 'python3 tests/test_cepa_until_session.py -> ''ok a1 reservado em outro host: um item_pulado'', ''ok ...com o detalhe que o cepa-plan devolveu'', ''ok ...e o a2 rodou normalmente'', ''todos passaram''. O evento é gravado pelo supervisor ao ler deferred da fila; cmd_start não grava nada, e o critério é atendido pelo caminho da fila.'
+  verdict: complete
+  gap: null
+- id: AC6
+  text: Todo item_end de run novo (versao_registro >= 2) traz session_id e motivo_fim, e cepa-until-digest verifica (mostra os campos; avisa quando faltam).
+  altitude: cli
+  surface: item_end do .jsonl de um run novo e a saída do processo cepa-until-digest
+  demonstrated_by:
+    test: tests/test_cepa_until_session.py (item_end com session_id+motivo_fim, run_start versao_registro 2) + tests/test_cepa_until_digest.py::test_new_format_record_shows_session_and_end_reason e ::test_new_format_record_missing_fields_is_warned_and_old_is_not
+    layer: supervisor real para a gravação; processo cepa-until-digest sobre registro sintético para mostrar/avisar (registro antigo não avisa)
+    evidence: verified
+    run: 'python3 tests/test_cepa_until_digest.py -> ''ok mostra a sessão e o motivo do fim de cada rodada'', ''ok registro completo não avisa'', ''ok avisa os ids de item_end sem session_id/motivo_fim'', ''ok registro antigo ... não avisa'', ''✓ tudo verde''; pytest dos dois arquivos: 18 passed in 10.20s; re-auditoria em 0236edb: python3 tests/test_cepa_until_digest.py -> exit 0, 44 ok, ''✓ tudo verde'' (inclui versao_registro 1 explícito sem aviso e session_id sem motivo_fim avisado)'
+  verdict: complete
+  gap: null

@@ -1,0 +1,50 @@
+schema_version: 2
+card: DUR-3
+verdict: needs-human
+reviewed_at: 2026-11-05T20:30:00-03:00
+base_commit: 6a35578
+head_commit: 4f143f7
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - { class: "common/bin/cepa-until", module: cli-python, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until-digest", module: cli-python, external_observable: true, substituted_by_double: null }
+  note: "Python CLI, no PIT. Tests run the real CLI as a subprocess; doubles are only a fake `claude` and a fake bin/install.sh (not changed classes). Round 1 at 174993f (40 perturbations, 27 RED, 13 survived: UNPROVEN). Round 2 at 4f143f7 (tests-only commit) re-applied the 13 survivors plus 3 spot-checks. Perturbations by one-line text replacement (perl s///) in throwaway detached worktree /tmp/proof-dur3 (removed). Full suite not run by design."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: absent
+      results: []
+    perturbation:
+      status: skipped
+      results:
+        - "baseline @4f143f7, green: test_cepa_until_hook_reinstall.py 'tudo verde' (41s), test_cepa_until_digest.py 'tudo verde'"
+        - "round 1 @174993f: 27 RED (P01 P04 P05 P12 P13 P15 P16 P17 P18 P19 P20 P22 P23 P24 P25 P27 P29 P30 P31 P34 and digest D1-D7), 13 survived; see git history of this file"
+        - "round 2 RED now (were survivors): P02 cepa_repo name check -> 'marketplace `outro`: install.sh não roda, nada reinstalado' + 'avisa hook_so_apos_reinstalar'"
+        - "P03 cepa_repo install.sh check -> 'sem bin/install.sh: nada reinstalado'"
+        - "P06 digest ignores file content -> 'só o conteúdo mudou e o sha mudou'"
+        - "P07 __pycache__ not excluded -> '__pycache__ não entra no sha'"
+        - "P08 oldest version instead of newest -> 'só a versão mais nova conta' and 'a ordem das versões é numérica (1.10 > 1.9)'"
+        - "P10 empty cache returns digest instead of None -> 'cache vazio dá None' and 'sem hooks/ nem bin/ dá None'"
+        - "P11 label forced to verify -> 'o .log traz o trecho com o rótulo reinstall' and '...rollback'"
+        - "P21 sha_after None no longer a failure -> 'hooks_reinstalados ok falso (cache sem hooks/bin)' and 'o rollback rodou e restaurou'"
+        - "P26 failed-rollback outcome text disabled -> 'o desfecho do a1 diz que o rollback não devolveu o cache'"
+        - "P32 REINSTALL_MIN_SEC default 120 -> 0 -> 'reinstalacao_adiada no registro e install.sh não roda' and '...com o piso de 120s no motivo'"
+        - "round 2 spot-checks still RED: P13 (gate removed -> 'sem bin/install.sh' and 'marketplace outro' fail), P17 (--clean dropped -> 'o install.sh rodou uma vez, com --clean'), P24 (back_ok always True -> 'reinstalacao_desfeita com ok falso')"
+        - "P09 (missing-cache guard `if not cache.is_dir()` disabled) GREEN: equivalent mutant. Without the guard, cache.iterdir() on a missing dir raises and the surrounding `except Exception` returns None, the same result; no test can tell them apart"
+        - "P14 (`ident in first` dropped) GREEN: equivalent mutant. first.setdefault(ident, ...) runs at cepa-until:3897 before any code reaching line 4017, and line 4072 already indexes first[ident] unguarded"
+        - "P33 (rollback budget max(left, REINSTALL_MIN_SEC) -> left) status skipped, declared residual: only matters if the window ends while install.sh --rollback is running for more than 120 s; no test can afford a 120 s+ install. Reviewer agrees the reasoning is sound, but this is a waiver and waivers are the human's, so it is not encoded as pass"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool for the Python CLI; reachability inferred from the perturbations"
+  l4_adversarial_input:
+    status: n/a
+    reason: "Diff opens no input from outside the operator: a local CLI supervisor reading its own queue, git state and a local plugin cache; no api-rest module."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type Task"
+routing_reason: "At 4f143f7 every perturbation that can be told apart from the original goes RED: P02 P03 P06 P07 P08 P10 P11 P21 P26 P32 were closed by the new tests; P09 and P14 are equivalent mutants (reasoned above). The only open item is P33, the rollback time budget, which no test can cover without a 120 s+ install; I agree it is not testable, but accepting it is a waiver the human makes. NEEDS-HUMAN, recommendation: accept the residual."

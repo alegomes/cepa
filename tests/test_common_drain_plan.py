@@ -55,7 +55,19 @@ def git_repo(base, given_name):
     d = Path(base) / given_name
     d.mkdir(parents=True)
     subprocess.run(["git", "-C", str(d), "init", "-q"], check=True)
+    # DUR-2: `finish --status done` needs a clean tree and a HEAD to record.
+    subprocess.run(["git", "-C", str(d), "-c", "user.email=t@t", "-c", "user.name=t",
+                    "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty",
+                    "-m", "init"], check=True)
     return d
+
+
+def commit_all(d):
+    """DUR-2: `done` needs a clean tree, so fixtures commit what they created."""
+    subprocess.run(["git", "-C", str(d), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(d), "-c", "user.email=t@t", "-c", "user.name=t",
+                    "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty",
+                    "-m", "fixture"], check=True)
 
 
 def now_iso():
@@ -83,6 +95,7 @@ def write_queue(d, item_list, given_name="fila"):
     r = run(d, "write", given_name, "--items", str(p), "--source", "teste",
             "--quando", "2026-08-25", "--repo", ".")
     assert r.returncode == 0, r.stderr
+    p.unlink()  # DUR-2: a leftover untracked fixture would make the tree dirty
     return d / ".claude" / "queues" / given_name / "queue.yaml"
 
 
@@ -916,11 +929,13 @@ def test_finish_done_requires_the_validation_lead_verdict(base):
 
     (val / "B.yaml").write_text("key: B\nverdict: READY-WITH-CAVEATS\n",
                                 encoding="utf-8")
+    commit_all(d)
     r = run(d, "finish", "fila", "B", "--status", "done",
             "--evidence", "commit def", "--repo", ".")
     check("READY-WITH-CAVEATS fecha done", r.returncode == 0, r.stderr)
     (val / "C.yaml").write_text("key: C\nverdict: READY-TO-SHIP\n",
                                 encoding="utf-8")
+    commit_all(d)
     r = run(d, "finish", "fila", "C", "--status", "done",
             "--evidence", "commit ghi", "--repo", ".")
     check("READY-TO-SHIP fecha done", r.returncode == 0, r.stderr)
@@ -928,6 +943,7 @@ def test_finish_done_requires_the_validation_lead_verdict(base):
     d2 = git_repo(base, "validacao-solo")
     write_queue(d2, [item("A")])
     (d2 / ".claude" / "topology").write_text("build-solo\n", encoding="utf-8")
+    commit_all(d2)
     r = run(d2, "finish", "fila", "A", "--status", "done",
             "--evidence", "commit abc", "--repo", ".")
     check("build-solo (sem validation-lead) não exige o arquivo",
@@ -942,6 +958,7 @@ def test_finish_done_requires_the_validation_lead_verdict(base):
     legacy.mkdir(parents=True)
     (legacy / "A.yaml").write_text("key: A\nverdict: READY-TO-SHIP\n",
                                    encoding="utf-8")
+    commit_all(d3)
     r = run(d3, "finish", "fila", "A", "--status", "done",
             "--evidence", "commit abc", "--repo", ".")
     check("veredito no caminho antigo .claude/validation/ ainda fecha done",

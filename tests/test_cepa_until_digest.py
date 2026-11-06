@@ -179,6 +179,111 @@ def test_pairing_that_does_not_close_is_warned():
               "ATENÇÃO: 2 item_start" in p.stdout, p.stdout[:800])
 
 
+def rewrite_ledger(ledger, change):
+    events = [json.loads(l) for l in ledger.read_text().splitlines() if l.strip()]
+    change(events)
+    ledger.write_text("\n".join(json.dumps(e) for e in events) + "\n")
+
+
+def test_new_format_record_shows_session_and_end_reason():
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = build_run(tmp)
+
+        def new_format(events):
+            events[0]["versao_registro"] = 2
+            for e in events:
+                if e.get("evento") == "item_end":
+                    e["session_id"] = "sess-" + e["id"]
+                    e["motivo_fim"] = "ok"
+        rewrite_ledger(ledger, new_format)
+        out = run_digest(ledger).stdout
+        check("mostra a sessão e o motivo do fim de cada rodada",
+              "sessão sess-A1, fim `ok`" in out and "sessão sess-A2" in out, out[:900])
+        check("registro completo não avisa", "item_end sem session_id" not in out)
+
+
+def test_reinstall_and_rollback_segments_are_not_rounds():
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = build_run(tmp)
+        log = ledger.with_suffix(".log")
+        text = log.read_text()
+        i = text.index("\n===== t · claude -p", 10)
+        log.write_text(text[:i]
+                       + "\n===== t · reinstall · sh bin/install.sh --clean\nok\n"
+                       + "\n===== t · rollback · sh bin/install.sh --rollback\nok\n"
+                       + text[i:])
+        out = run_digest(ledger).stdout
+        check("reinstall/rollback não desalinham o pareamento",
+              "pareamento" not in out and "RELATORIO A2" in out, out[:1200])
+
+
+def test_hooks_sha_in_the_round_line_and_failed_reinstall_is_warned():
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = build_run(tmp)
+
+        def with_hooks(events):
+            for e in events:
+                if e.get("evento") == "item_start" and e["id"] == "A1":
+                    e["hooks_sha"] = "abc123def456"
+            events.append({"evento": "hooks_reinstalados", "id": "A1",
+                           "ok": False, "sha_antes": "abc123def456",
+                           "sha_depois": None})
+        rewrite_ledger(ledger, with_hooks)
+        out = run_digest(ledger).stdout
+        check("a linha da rodada traz o sha dos hooks",
+              " · hooks abc123def456" in out, out[:1200])
+        check("reinstalação que falhou vira ATENÇÃO no cabeçalho",
+              "- ATENÇÃO: reinstalação de hooks falhou no item A1" in out,
+              out[:1200])
+
+
+def test_new_format_record_missing_fields_is_warned_and_old_is_not():
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = build_run(tmp)
+
+        def half(events):
+            events[0]["versao_registro"] = 2
+            for e in events:
+                if e.get("evento") == "item_end" and e["id"] == "A1":
+                    e["session_id"] = "sess-A1"
+                    e["motivo_fim"] = "ok"
+        rewrite_ledger(ledger, half)
+        out = run_digest(ledger).stdout
+        check("avisa os ids de item_end sem session_id/motivo_fim",
+              "- ATENÇÃO: item_end sem session_id/motivo_fim: A2" in out, out[:900])
+    with tempfile.TemporaryDirectory() as tmp:
+        out = run_digest(build_run(tmp)).stdout
+        check("registro antigo (sem versao_registro) não avisa",
+              "item_end sem session_id" not in out)
+
+
+def test_explicit_version_1_record_is_not_judged():
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = build_run(tmp)
+        rewrite_ledger(ledger, lambda ev: ev[0].update(versao_registro=1))
+        out = run_digest(ledger).stdout
+        check("versao_registro 1 explícito, sem os campos: não avisa",
+              "item_end sem" not in out, out[:600])
+
+
+def test_version_2_item_end_with_session_but_without_end_reason_is_warned():
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = build_run(tmp)
+
+        def only_session(events):
+            events[0]["versao_registro"] = 2
+            for e in events:
+                if e.get("evento") == "item_end":
+                    e["session_id"] = "sess-" + e["id"]
+                    if e["id"] == "A1":
+                        e["motivo_fim"] = "ok"
+        rewrite_ledger(ledger, only_session)
+        out = run_digest(ledger).stdout
+        check("session_id sem motivo_fim: avisa e nomeia só o item (A2)",
+              "- ATENÇÃO: item_end sem session_id/motivo_fim: A2" in out
+              and "motivo_fim: A1" not in out, out[:900])
+
+
 def test_queue_state_comes_from_the_main_clone_not_the_worktree():
     """The record lives in the tree `cepa-until` was launched from. If it is a
     linked worktree, its plan.yaml is an old copy; the real queue is that of the

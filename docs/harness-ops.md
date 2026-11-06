@@ -81,13 +81,31 @@ Decisão do dono em 2026-11-05 (X4 em
 
 - a fila é do repositório cepa (em qualquer outro repo o supervisor avisa que o
   hook não vale até reinstalar e não troca nada);
-- o item que acabou de fechar tocou `common/hooks/**` ou `*/bin/**`;
+- o item que acabou de fechar tocou `<plugin>/hooks/**` ou `<plugin>/bin/**`
+  (os dois rodam do cache do plugin);
 - o build desse item está verde.
 
-Aí o supervisor roda `install.sh`, grava `hooks_reinstalados` (SHA antes e
-depois) no `.jsonl` do run, e todo `item_start` seguinte traz o SHA dos hooks
-em vigor. A rota mínima continua valendo: Estado e Alvo ficam no
-`last-install.json` como sempre, Rollback é o `--rollback` de manhã, e a
-Validação é o `/common:doctor` no evento `hooks_reinstalados` do
-`until-review`. Fora dessas condições a regra geral se mantém: o harness live
-só muda com o dono presente.
+Aí o supervisor roda `sh bin/install.sh --clean` a partir da worktree da noite
+(o `--clean` guarda o cache atual em `<cache>.prev`, o ponto de volta do
+`--rollback`), grava `hooks_reinstalados` (SHA antes e depois, um digest do
+conteúdo de `hooks/` e `bin/` instalados) no `.jsonl` do run, e todo
+`item_start` traz o SHA dos hooks em vigor. A rota mínima continua valendo:
+Estado e Alvo ficam no `last-install.json` como sempre, Rollback é o
+`--rollback` de manhã, e a Validação é o `/common:doctor` no evento
+`hooks_reinstalados` do `until-review`.
+
+Limites e falhas:
+
+- se o install falha, o supervisor roda `bin/install.sh --rollback` sozinho e
+  grava `reinstalacao_desfeita`; o item continua `done` e a noite segue. Se nem
+  o rollback devolve o cache, o run termina com `reinstalacao-falhou`;
+- instalar a partir da worktree aponta o marketplace `cepa` para o caminho da
+  worktree até o `bin/install.sh` da manhã, rodado no clone principal depois do
+  `aterrissar`, que o aponta de volta;
+- duas reinstalações na mesma noite: o `.prev` guarda só a anterior à última,
+  então o `--rollback` não volta ao estado da largada;
+- sessões abertas mantêm os hooks antigos na memória até reiniciarem.
+- com menos de 120 s de janela o supervisor não inicia o install (matá-lo no meio deixaria o cache pela metade): grava `reinstalacao_adiada` e fica só o aviso de sempre.
+
+Fora dessas condições a regra geral se mantém: o harness live só muda com o
+dono presente.

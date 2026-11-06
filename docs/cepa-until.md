@@ -108,6 +108,34 @@ the window rediscovering it. On 2026-09-23 that was 20 rounds and US$ 14.30; on 
 7 in a row in 11 minutes. Any other outcome (`done`, `dropped`, a human route) resets the
 count; an attempt with no progress belongs to the circuit breaker and leaves it alone.
 
+## O que o registro grava por tentativa (`versao_registro: 2`)
+
+O `run_start` traz `versao_registro: 2`; registros sem o campo são do formato antigo e o
+`cepa-until-digest` não os cobra. Num run novo, cada tentativa deixa:
+
+- **`session_id`** em `item_start` e `item_end`: um UUID novo por lançamento, gerado pelo
+  supervisor e passado ao `claude` com `--session-id`. É o que liga a linha do registro à
+  conversa (transcrição) que a executou.
+- **`motivo_fim`** em `item_end`, de um conjunto fechado, derivado só do que o supervisor já
+  observa. O primeiro que casar vence, nesta ordem: `folga` (o supervisor matou no limite da
+  folga), `sinal` (o processo morreu por sinal externo), `cota` (teto de uso da conta),
+  `rede` (o `claude` não alcançou a API), `contexto` (o `result` final fala de contexto
+  estourado), `hook` (o `result` final é erro e cita um hook que bloqueou), `ok` (saída 0),
+  `desconhecido` (o resto).
+- **`heartbeat`** em `<run>.estado.json`, gravado com o deslocamento de fuso (ex.: `-03:00`, para quem lê de outro host) e regravado a cada `CEPA_UNTIL_HEARTBEAT` segundos
+  (padrão 60) enquanto o `claude`, o build ou uma espera (reset de cota, sonda de rede)
+  estão em andamento, com `item`, `tentativa`, `session_id` e `fase` do que está em voo. O
+  `cepa-plan` usa a idade dele para reservas de OUTRO host (onde o pid não pode ser
+  sondado): se existe um `*.estado.json` com o mesmo `host` e `arvore` da reserva, ela é
+  `viva` só se o run está `rodando` e o heartbeat tem menos de `CEPA_HEARTBEAT_ORFA`
+  segundos (padrão 900); senão é `orfa`. Sem esse arquivo vale a regra de 24h de antes.
+  No mesmo host continua valendo a sonda de pid.
+- **`item_pulado`** (`id`, `motivo: reservado`, `detalhe`): o item que a fila adiou porque
+  uma reserva está em mãos de outro (viva, ou sem dono registrado e portanto indecidível). Uma vez por item por run.
+
+O `cepa-until-digest` imprime `sessão` e `fim` em cada rodada e, num run `versao_registro >= 2`,
+avisa quando algum `item_end` veio sem `session_id` ou `motivo_fim`.
+
 ## When it ends: the questions
 
 The end-of-run summary only counts. Right after it, when the run is attached to a terminal,
@@ -145,6 +173,30 @@ no longer needed. `sim` always means "back to the queue", so it cannot stand for
 `cepa-plan status` says which `pending` items are ready (the next run takes them) and which wait
 on the owner or on another item; readiness is derived from the same rule the run uses, never
 stored.
+
+## Hook that only counts after reinstalling
+
+Hooks and plugin `bin/` run from the plugin cache, a copy of the clone at the last install, not from the night branch. By default the supervisor only warns (`hook_so_apos_reinstalar`) and charges `reinstalar-plugin` at the end.
+
+Exception, in the cepa repo only (`.claude-plugin/marketplace.json` named `cepa` plus
+`bin/install.sh`; owner decision X4, DUR-3): when an item closes `done`, its full build is
+green, and it touched `<plugin>/hooks/**` or `<plugin>/bin/**` (both run from the cache),
+the supervisor runs `sh bin/install.sh --clean` from the night worktree. `--clean` moves the
+current cache to `<cache>.prev`, the point `bin/install.sh --rollback` returns to. The record
+gains `hooks_reinstalados` (`sha_antes`, `sha_depois`: a content digest of the installed
+`hooks/` and `bin/`, since the cache is not a git repo) and every `item_start` carries
+`hooks_sha`, the digest in force. If the install fails the supervisor runs
+`bin/install.sh --rollback` by itself and records `reinstalacao_desfeita`; the item stays
+`done` and the night goes on. If not even the rollback gives the cache back, the run ends
+with `reinstalacao-falhou`. Installing from the worktree re-points the marketplace
+registration to the worktree path: after `aterrissar`, run `bin/install.sh` from the main
+clone so it points back. Open sessions keep the old hooks in memory until restarted. Two
+reinstalls in one night keep only the previous cache in `.prev`. Without `--verify` there is
+no build, so no reinstall: only the warning above. With less than 120 s left in the window the supervisor does not start the install (killing it halfway would leave the cache half moved): it records `reinstalacao_adiada` and falls back to the warning. In any other repo nothing changes.
+
+## Quem lê o estado: `_state.py` (DUR-4)
+
+O estado vive em cinco depósitos, e só neles: a fila (`queue.yaml`, ou `plan.yaml` no layout legado), o registro do run (`until/<run>.jsonl` e `<run>.estado.json`), o handoff por branch, as sessões vivas (`.claude/sessions/`) e o estado do modo autônomo (`docs/autonomous/<run>/state.yaml`). O módulo `common/hooks/_state.py` é o leitor único deles (só lê, nunca cria depósito) e traz o catálogo de tudo o que existe em `.claude/`. `next` (via `cepa-plan`), `doctor` (`cepa-doctor`), `until-review` (`cepa-until-digest`) e `whereami` (`cepa-intent`) importam o módulo. O `cepa-doctor` avisa na área `estado` quando aparece em `.claude/` uma entrada que o catálogo não conhece, e `tests/test_state_deposits.py` fica vermelho se alguém escrever em `.claude/<nome>` sem declarar o nome. A regra de vida de um run é uma só (`run_liveness`): `rodando` só conta como vivo com heartbeat recente (até `CEPA_HEARTBEAT_ORFA` segundos, padrão 900) e, na mesma máquina, com o pid respondendo; heartbeat velho é `morto`, e um registro `rodando` sem heartbeat (anterior ao DUR-1) é `desconhecido`, nunca `vivo`. O `cepa until pendentes` ainda tem a sua própria classificação de "mortos" (pid e prazo) e não usa essa regra.
 
 ## Before you leave it running
 

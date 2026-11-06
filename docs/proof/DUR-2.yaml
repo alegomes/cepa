@@ -1,0 +1,43 @@
+schema_version: 2
+card: DUR-2
+verdict: proven
+reviewed_at: 2026-11-05T18:50:00-03:00
+base_commit: a131d09
+head_commit: a92de77
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - { class: "common/bin/cepa-plan", module: cli-python, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until", module: cli-python, external_observable: true, substituted_by_double: null }
+  note: "Python CLI, no PIT. Tests run the real CLI via subprocess in temp git repos; no double replaces a changed piece. Round 1 at 47ec0f3 (5 survived), round 2 at a92de77 re-ran those plus all others. Perturbations by sed in throwaway worktree /tmp/proof-DUR-2 (removed). run-all.sh not run by design."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: absent
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline @a92de77, all green: test_cepa_plan_finish_owner.py (todos passaram), test_cepa_until_decide.py (tudo verde), test_green_without_test.py (all verde-sem-teste tests passed), test_validation_owed_gate.py (all green), test_common_drain_plan.py (all green), test_cepa_plan_write_commits.py (all green)"
+        - "round 1 (47ec0f3), RED: terminal check removed -> test_two_finishes_keep_the_first_evidence (Traceback); terminal check without supervisor bypass -> test_supervisor_reopens_a_done_item (3 FAIL); record_refusal skipped -> FAIL 'a recusa ficou registrada'; dirty_paths returns [] -> 10 FAIL; head_commit not written -> 'grava head_commit'; head_commit not dropped on reopen -> 'head_commit antigo sai quando o item reabre'; owner check removed -> test_other_caller_is_refused_and_supervisor_passes; supervisor not bypassing owner check -> 'com --supervisor: aceito'; .yaml.bak tolerance removed -> 3 FAIL in test_done_with_clean_tree_records_head"
+        - "round 2 (a92de77) gap 1, --supervisor removed from cepa-until finish_item argv (cepa-until:1720) -> RED test_cepa_until_decide.py::test_finish_item_reopens_an_item_the_agent_closed_done: 'FAIL finish_item reabre item done' and '...o status virou pending e a evidence foi trocada' (2 falhas)"
+        - "round 2 gap 2, <queue dir>/until/ tolerance removed (cepa-plan:2848 startswith -> False) -> RED test_run_records_under_until_do_not_dirty_the_tree: 'FAIL done com run.log e .estado.json não rastreados em until/: aceito' (1 falha)"
+        - "round 2 gap 3, CLAUDE_SESSION_ID preference removed (cepa-plan:309 sort -> pass) -> RED test_live_stranger_with_smaller_uuid_does_not_refuse_the_owner: 'FAIL pré-condição: o dono gravado é o da env, não o estranho' (1 falha)"
+        - "round 2 gap 4a, finish_gate caller uses Path(repo).resolve() instead of session_root(repo) (cepa-plan:2865) -> RED test_unregistered_owner_can_finish_from_a_subdirectory: 'FAIL sem sessão, start na raiz e finish a partir de sub/: aceito' (1 falha)"
+        - "round 2 gap 4b, cmd_start stores cwd instead of session_root(cwd) (cepa-plan:2594) -> RED test_start_from_a_subdirectory_stores_the_tree_root ('FAIL start a partir de sub/ grava a raiz da árvore em claimed_by.cwd') and test_unregistered_owner_can_finish_from_a_subdirectory (2 falhas)"
+        - "round 2 gap 5, supervisor bypasses clean-tree rule (cepa-plan:2879 `if status == done and not supervisor`) -> RED test_supervisor_does_not_bypass_the_clean_tree_rule: 'FAIL --supervisor com done e arquivo rastreado modificado: recusado' and 'sem head_commit e o item segue in_progress' (2 falhas)"
+        - "not re-run in round 2: the record_refusal / dirty_paths / head_commit / owner-check perturbations of round 1 (tests unchanged for them in a92de77; baseline still green). record_refusal.caller line (cepa-plan:2897) not perturbed separately: its Path(repo).resolve() variant was blocked by the path lock in one combined call and only the finish_gate line (2865) was perturbed, which is what the subdirectory test needs to catch."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool for the Python CLI; every changed behavior listed in the card was broken in isolation and a covering test went red (see l3 results)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "Diff opens no input from outside the operator: a local CLI (cepa-plan finish) reading its own queue file and git status; no api-rest module."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type Task"
+routing_reason: "The five gaps from round 1 now have tests that go RED when the code is broken (plus the cmd_start cwd perturbation). All earlier perturbations stay RED and the six test files are green at a92de77. PROVEN."

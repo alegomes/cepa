@@ -89,6 +89,11 @@ def test_done_refused_marks_and_stop_blocks_until_closed():
         check("outra sessão não é bloqueada", stop(home, "S2") is None)
         check("stop_hook_active não bloqueia de novo", stop(home, "S1", active=True) is None)
         write_verdict(root, "a1")
+        # DUR-2: `done` needs a clean tree; the verdict and topology are committed.
+        subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(root), "-c", "user.email=t@t",
+                        "-c", "user.name=t", "-c", "commit.gpgsign=false",
+                        "commit", "-q", "-m", "verdict"], check=True)
         r = stop(home, "S1")
         check("com veredito no disco, manda fechar com done",
               r and "--status done" in r["reason"] and "já está" in r["reason"], r)

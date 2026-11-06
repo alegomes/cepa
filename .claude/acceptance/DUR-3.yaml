@@ -1,0 +1,78 @@
+schema_version: 1
+card: DUR-3
+status: complete
+audited_at: '2026-11-05T00:00:00-03:00'
+audited_range: 6a35578..174993f
+criteria:
+- id: AC1
+  text: Repo cepa + item done com build verde que tocou <plugin>/hooks/** ou <plugin>/bin/** -> supervisor roda bin/install.sh --clean depois do build.
+  altitude: cli
+  surface: common/bin/cepa-until real (subprocesso) com claude falso, install.sh falso e repo temporario com marketplace.json "cepa"
+  demonstrated_by:
+    test: tests/test_cepa_until_hook_reinstall.py::test_cepa_repo_reinstalls_after_green_build_of_a_hook (+ test_cepa_repo_reinstalls_when_plugin_bin_changes)
+    layer: subprocesso do CLI real; install_calls == ["--clean"] (uma vez) para hooks/ e para bin/
+    evidence: verified
+    run: 'python3 tests/test_cepa_until_hook_reinstall.py -> rc=0, 46 ok, 0 FAIL, "tudo verde" (15 testes)'
+  verdict: complete
+  gap: null
+- id: AC2
+  text: O .jsonl ganha hooks_reinstalados com SHA antes e depois.
+  altitude: cli
+  surface: registro .jsonl do run (evento hooks_reinstalados) e sua leitura pelo cepa-until-digest
+  demonstrated_by:
+    test: test_cepa_repo_reinstalls_after_green_build_of_a_hook (evento com id, ok, sha_antes != sha_depois, 12 hex; digest mostra "hooks <sha>") + tests/test_cepa_until_digest.py::test_hooks_sha_in_the_round_line_and_failed_reinstall_is_warned
+    layer: subprocesso do CLI real le o .jsonl; digest rodado como subprocesso
+    evidence: verified
+    run: 'python3 tests/test_cepa_until_digest.py -> rc=0, 47 ok, 0 FAIL, "tudo verde" (16 testes)'
+  verdict: complete
+  gap: null
+- id: AC3
+  text: Todo item_start carrega hooks_sha.
+  altitude: cli
+  surface: evento item_start do .jsonl
+  demonstrated_by:
+    test: test_cepa_repo_reinstalls_after_green_build_of_a_hook (item_start do a1 == sha_antes, do a2 == sha_depois)
+    layer: subprocesso do CLI real; leitura do .jsonl
+    evidence: verified
+    run: 'python3 tests/test_cepa_until_hook_reinstall.py -> rc=0, 46 ok'
+  verdict: complete
+  gap: null
+- id: AC4
+  text: Repo que nao e o cepa -> avisa hook_so_apos_reinstalar e nao troca nada.
+  altitude: cli
+  surface: cepa-until real em repo temporario sem marketplace cepa
+  demonstrated_by:
+    test: test_repo_that_is_not_cepa_warns_and_changes_nothing
+    layer: subprocesso do CLI real; install.sh nao roda, sem hooks_reinstalados, 1 aviso, fim cobra o texto antigo
+    evidence: verified
+    run: 'python3 tests/test_cepa_until_hook_reinstall.py -> rc=0, 46 ok'
+  verdict: complete
+  gap: null
+- id: AC5
+  text: Excecao declarada em docs/harness-ops.md e mecanismo descrito em docs/cepa-until.md.
+  altitude: domain
+  surface: docs/harness-ops.md secao "Excecao declarada"; docs/cepa-until.md; plugin.json 3.4.0
+  demonstrated_by:
+    test: 'verificacao documental, sem teste: leitura/grep. harness-ops.md linhas 76-101 (condicoes, --clean, hooks_reinstalados, rollback, reinstalacao-falhou); cepa-until.md ~184-193 (hooks_reinstalados, reinstalacao_desfeita, reinstalacao_adiada, 120 s); plugin.json version 3.4.0'
+    layer: leitura de arquivo (criterio e documental, esse e o seu altitude)
+    evidence: verified
+    run: 'grep -n "Exceção declarada" docs/harness-ops.md; grep -n "hooks_reinstalados|reinstalacao" docs/cepa-until.md; grep version common/.claude-plugin/plugin.json'
+  verdict: complete
+  gap: null
+- id: AC6
+  text: Build vermelho ou sem --verify nao reinstala; falha de install -> --rollback + reinstalacao_desfeita; rollback que falha encerra com reinstalacao-falhou; janela curta (REINSTALL_MIN_SEC) -> reinstalacao_adiada sem install.
+  altitude: cli
+  surface: cepa-until real com install.sh falso (FAKE_INSTALL_FALHA, FAKE_ROLLBACK_FALHA, CEPA_REINSTALL_MIN_SEC)
+  demonstrated_by:
+    test: test_cepa_repo_red_build_does_not_reinstall; test_cepa_repo_without_verify_only_warns; test_failed_install_is_rolled_back_and_the_night_goes_on (calls == [--clean, --rollback], sha restaurado == sha_antes, a2 roda); test_rollback_that_fails_ends_the_run_with_reinstalacao_falhou (run_end motivo, a2 nao roda, a1 entregue); test_no_time_left_postpones_the_reinstall
+    layer: subprocesso do CLI real; contagem e argumentos das chamadas do install.sh falso + eventos do .jsonl
+    evidence: verified
+    run: 'python3 tests/test_cepa_until_hook_reinstall.py -> rc=0, 46 ok, 0 FAIL'
+  verdict: complete
+  gap: null
+other_runs:
+- 'python3 tests/test_cepa_until_digest.py -> rc=0, 47 ok, "tudo verde"'
+caveats:
+- 'O install.sh e o cache sao falsos (CEPA_PLUGIN_CACHE_DIR): nenhum teste roda o bin/install.sh real, e isso e a fronteira declarada do harness de teste, nao uma lacuna do criterio.'
+- 'AC3: o item_start fora do repo cepa nao tem assercao de hooks_sha; o codigo o grava sempre (installed_hooks_sha() em item_start, cepa-until:3904), entao a cobertura e pelo run do repo cepa.'
+- 'Nao fiz mutacao no fonte (auditor nao edita).'

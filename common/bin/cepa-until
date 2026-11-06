@@ -163,6 +163,10 @@ group, `claude` runs in its own session and survives, the supervisor doesn't.
   - **SIGTERM and Ctrl+C** record `run_interrompido` in the `.jsonl` (signal, in-flight
     item, phase and child pid) and leave `<run>.estado.json` as
     `interrompido`.
+  - `run_start` says `versao_registro: 2`; `item_start`/`item_end` record the
+    `session_id` given to `claude --session-id`, `item_end` the closed-set `motivo_fim`,
+    the state file a `heartbeat`, and `item_pulado` an item skipped for a reservation
+    held elsewhere (see docs/cepa-until.md).
   - `run_start` and the state record the supervisor's **pid and host**. The
     `cepa-until pending` (and through it `cepa-doctor` and
     `/common:until-review`) points at the `rodando` run whose pid died, and at the
@@ -184,6 +188,22 @@ warns right after the item, the record gains `hook_so_apos_reinstalar`, and the 
 asks for `reinstalar-plugin` under "Fica com você": it takes effect after `land` and
 `bin/install.sh`.
 
+Exception, in the cepa repo only (`.claude-plugin/marketplace.json` named `cepa` plus
+`bin/install.sh`; owner decision X4, DUR-3): when an item closes `done`, its full build is
+green, and it touched `<plugin>/hooks/**` or `<plugin>/bin/**` (both run from the cache),
+the supervisor runs `sh bin/install.sh --clean` from the night worktree. `--clean` moves the
+current cache to `<cache>.prev`, the point `bin/install.sh --rollback` returns to. The record
+gains `hooks_reinstalados` (`sha_antes`, `sha_depois`: a content digest of the installed
+`hooks/` and `bin/`, since the cache is not a git repo) and every `item_start` carries
+`hooks_sha`, the digest in force. If the install fails the supervisor runs
+`bin/install.sh --rollback` by itself and records `reinstalacao_desfeita`; the item stays
+`done` and the night goes on. If not even the rollback gives the cache back, the run ends
+with `reinstalacao-falhou`. Installing from the worktree re-points the marketplace
+registration to the worktree path: after `aterrissar`, run `bin/install.sh` from the main
+clone so it points back. Open sessions keep the old hooks in memory until restarted. Two
+reinstalls in one night keep only the previous cache in `.prev`. Without `--verify` there is
+no build, so no reinstall: only the warning above. With less than 120 s left in the window the supervisor does not start the install (killing it halfway would leave the cache half moved): it records `reinstalacao_adiada` and falls back to the warning. In any other repo nothing changes.
+
 ## After the end
 
 With the run over, a final `claude -p "/common:until-review <run>"` reads the
@@ -199,6 +219,7 @@ Usage:
     cepa-until close-dead my-queue/<run> --yes  # closes a dead supervisor's run
 """
 
+import hashlib
 import json
 import os
 import re
@@ -210,6 +231,7 @@ import select
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -354,6 +376,9 @@ DEFAULT_ATTEMPTS_PER_ITEM = 2
 # the note. On the second one, the agent already had the side branch and the reason in hand and didn't
 # solve it: repeating again burns the window on the same card.
 MAX_RED_RETURNS = 2
+# Time floor for `bin/install.sh --clean`: a kill by the window after it moved the cache to
+# `.prev` would leave the harness half installed. The env override is test-only.
+REINSTALL_MIN_SEC = int(os.environ.get("CEPA_REINSTALL_MIN_SEC") or 120)
 
 # What `claude` prints when the ACCOUNT hit the usage ceiling — not the item, not
 # the queue, not the topology. Without recognizing this the supervisor reads only "exited 1 and the
@@ -443,6 +468,23 @@ NO_NETWORK = re.compile(
     r"|\b(?:ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|EHOSTUNREACH"
     r"|ENETUNREACH)\b"
     r"|\bfetch failed\b", re.I)
+
+# What `claude` writes in the final `result` when the conversation outgrew the model's
+# context window. Only read on the final `result` (or the output tail), for `motivo_fim`.
+CONTEXT_OVERFLOW = re.compile(
+    r"prompt is too long|context window|context limit"
+    r"|exceeds? the (?:maximum )?context", re.I)
+
+# A hook (Stop, PreToolUse...) refusing to let the attempt go on, as the final `result`
+# words it. Only counts together with `is_error` (or a non-zero exit).
+HOOK_BLOCK = re.compile(
+    r"\bhook\b.{0,80}\b(?:blocked|bloqueou|bloqueado|recusou|denied)"
+    r"|\bStop hook\b", re.I | re.S)
+
+# Seconds between two heartbeats written to the run's `estado.json` while a child (or a
+# quota/network wait) is running. `cepa-plan` reads the age of it to tell a dead run on
+# another host from a live one.
+HEARTBEAT_INTERVAL = float(os.environ.get("CEPA_UNTIL_HEARTBEAT", "60"))
 
 # Where the supervisor knocks to find out whether the network is back (host:port, TCP), and how
 # often. The API is the right target: it is what `claude` needs to reach.
@@ -658,15 +700,23 @@ def step(text):
     print("       " + SCREEN.c(color, f"{glyph} {head_}") + rest)
 
 
-def wait_for_child(proc, limit_sec, label):
+def wait_for_child(proc, limit_sec, label, on_tick=None):
     """Waits for the subprocess up to `limit_sec`. Returns True if it finished, False
     if it overran. On a terminal, redraws every 30s a line with the elapsed
-    time: without it the supervisor goes mute for up to an hour inside the item."""
+    time: without it the supervisor goes mute for up to an hour inside the item.
+    `on_tick` runs every HEARTBEAT_INTERVAL seconds (the run's heartbeat)."""
     start = time.monotonic()
     limit = max(limit_sec, 1)
     last_item = -LIVE_LINE_INTERVAL
+    last_tick = start
     while True:
         spent = time.monotonic() - start
+        if on_tick and time.monotonic() - last_tick >= HEARTBEAT_INTERVAL:
+            last_tick = time.monotonic()
+            try:
+                on_tick()
+            except Exception:  # noqa: BLE001  (a heartbeat must never kill the child's wait)
+                pass
         if SCREEN.enabled and spent - last_item >= LIVE_LINE_INTERVAL:
             last_item = spent
             sys.stdout.write(
@@ -740,7 +790,7 @@ def read_item(plan_path, ident):
 
 # ── running an item ─────────────────────────────────────────────────────────
 
-def build_command(name, branch, permissions):
+def build_command(name, branch, permissions, session_id=None):
     # stream-json is what carries the `rate_limit_event` with the quota usage. `--verbose`
     # is required by `claude` itself for that format with `-p`.
     # `--na-branch` tells drain-plan that the tree it wakes up in IS the
@@ -750,6 +800,10 @@ def build_command(name, branch, permissions):
         request += f" --na-branch {branch}"
     cmd = ["claude", "-p", request,
            "--output-format", "stream-json", "--verbose"]
+    if session_id:
+        # The supervisor owns the id: it is what `item_start`/`item_end` record and what
+        # a resume would need. Fresh per launch (claude refuses a reused one).
+        cmd += ["--session-id", session_id]
     if not permissions:
         cmd.append("--dangerously-skip-permissions")
     return cmd
@@ -897,14 +951,17 @@ def quota_pause(reading, fresh, cost, now):
     return reset if projected > 1.0 else None
 
 
-def wait_until(when):
+def wait_until(when, on_tick=None):
     """Sleeps until `when` by the wall clock, in short steps: `time.sleep`
-    doesn't advance while the machine is suspended, the clock does."""
+    doesn't advance while the machine is suspended, the clock does.
+    `on_tick` runs once per step (at most every 60s): the heartbeat of the wait."""
     while True:
         missing = (when - datetime.now()).total_seconds()
         if missing <= 0:
             return
-        time.sleep(min(missing, 60))
+        if on_tick:
+            on_tick()
+        time.sleep(min(missing, 60, max(HEARTBEAT_INTERVAL, 0.05)))
 
 
 def network_drop(output):
@@ -921,6 +978,49 @@ def network_drop(output):
     return bool(NO_NETWORK.search(text))
 
 
+def end_reason_of(code, killed, output):
+    """Why ONE attempt ended, from what the supervisor already observes. One of the
+    closed set `ok`, `contexto`, `cota`, `rede`, `folga`, `sinal`, `hook`,
+    `desconhecido`. First match wins, in this order:
+
+      1. `folga`   — `killed`: the supervisor killed it at the slack limit.
+      2. `sinal`   — the process died by an external signal (negative return code other
+                     than the -2 of a failed spawn, or 128 < code < 160 without `killed`).
+      3. `cota`    — `usage_limit(output)` hit (rejected `rate_limit_event` first).
+      4. `rede`    — `network_drop(output)`.
+      5. `contexto`— the final `result` (or the output tail) matches CONTEXT_OVERFLOW.
+      6. `hook`    — the final `result` is an error (or exit != 0) and HOOK_BLOCK matches.
+      7. `ok`      — exit code 0.
+      8. `desconhecido` — anything else.
+    """
+    if killed:
+        return "folga"
+    if isinstance(code, int) and (
+            (code < 0 and code != -2) or 128 < code < 160):
+        return "sinal"
+    output = output or ""
+    if usage_limit(output)[0]:
+        return "cota"
+    if network_drop(output):
+        return "rede"
+    results = list(_json_objects(output, "result"))
+    last = results[-1] if results else None
+    text = ""
+    if last is not None:
+        text = last.get("result") if isinstance(last.get("result"), str) else ""
+    else:
+        text = output[-OUTPUT_TAIL:]
+    failed = code != 0 or bool(last and last.get("is_error"))
+    # Both text readings need a failure: a finished item may MENTION these in prose.
+    if failed and text and CONTEXT_OVERFLOW.search(text):
+        return "contexto"
+    if failed and text and HOOK_BLOCK.search(text):
+        return "hook"
+    if code == 0:
+        return "ok"
+    return "desconhecido"
+
+
 def network_reachable(target=None, timeout=5):
     """Opens a TCP connection to `host:port` and closes it. False on any error:
     DNS, refusal, timeout."""
@@ -932,11 +1032,15 @@ def network_reachable(target=None, timeout=5):
         return False
 
 
-def wait_for_network(until_at, probe=network_reachable, interval=None):
+def wait_for_network(until_at, probe=network_reachable, interval=None, on_tick=None):
     """Probes until the network is back or until `until_at` (wall clock). Returns True
-    if it came back."""
+    if it came back. `on_tick` runs before each probe (the heartbeat of the wait)."""
     step = PROBE_INTERVAL if interval is None else interval
+    if on_tick:
+        step = min(step, max(HEARTBEAT_INTERVAL, 0.05))
     while True:
+        if on_tick:
+            on_tick()
         if probe():
             return True
         missing = (until_at - datetime.now()).total_seconds()
@@ -973,13 +1077,13 @@ def installed_twg_version():
 
 
 def run_item(name, tree, branch, permissions, limit_sec, log,
-                 on_launch=None):
+                 on_launch=None, session_id=None, on_tick=None):
     """Launches ONE subprocess, with `tree` (the night worktree) as cwd.
     Returns (code, killed_by_timeout, seconds, this_attempt_output).
     `on_launch` receives the child's pid: it is what `run_interrompido` says
     was left running."""
     repo = tree
-    cmd = build_command(name, branch, permissions)
+    cmd = build_command(name, branch, permissions, session_id)
     start = time.monotonic()
     try:
         mark = os.path.getsize(log)
@@ -1005,7 +1109,7 @@ def run_item(name, tree, branch, permissions, limit_sec, log,
             return -2, False, time.monotonic() - start, ""
         if on_launch:
             on_launch(proc.pid)
-        if wait_for_child(proc, limit_sec, "claude"):
+        if wait_for_child(proc, limit_sec, "claude", on_tick):
             code = proc.returncode
             killed = False
         else:
@@ -1403,13 +1507,15 @@ def repair_link(repo, tree, branch):
 
 
 def changed_hooks(tree, since):
-    """Plugin hooks that the night branch changed since `since`.
+    """Plugin hooks and `bin/` files that the night branch changed since `since`.
 
     Hooks run from the plugin installed in the cache, which is a copy of the clone at the
     last install, and not from the night branch. In run 2026-09-28-1146 items
     1 and 2 fixed `no-background-build` and `bash-path-lock`, and the next
     4 rounds were still blocked by the old versions with nothing
-    in the run saying so. A hook is a file under `<plugin>/hooks/`, where `<plugin>`
+    in the run saying so. The plugin's `bin/` runs from the same cache (commands
+    reference `${CLAUDE_PLUGIN_ROOT}/bin/...`), so it counts too. A hook is a file under
+    `<plugin>/hooks/` and a tool one under `<plugin>/bin/`, where `<plugin>`
     has `.claude-plugin/plugin.json`; in a repo that is not a plugin the list
     always comes out empty."""
     if not since:
@@ -1420,11 +1526,70 @@ def changed_hooks(tree, since):
     found = []
     for line in output.splitlines():
         parts = line.strip().split("/")
-        if (len(parts) >= 3 and parts[1] == "hooks"
+        if (len(parts) >= 3 and parts[1] in ("hooks", "bin")
                 and (tree / parts[0] / ".claude-plugin" / "plugin.json")
                 .is_file()):
             found.append(line.strip())
     return found
+
+
+def cepa_repo(tree):
+    """True when `tree` is the cepa repo itself: `.claude-plugin/marketplace.json` named
+    `cepa` and a `bin/install.sh`. Only there the supervisor may reinstall the plugins."""
+    try:
+        data = json.loads((Path(tree) / ".claude-plugin" / "marketplace.json")
+                          .read_text(encoding="utf-8"))
+        return (isinstance(data, dict) and data.get("name") == "cepa"
+                and (Path(tree) / "bin" / "install.sh").is_file())
+    except (OSError, ValueError):
+        return False
+
+
+def plugin_cache_dir():
+    """Where Claude Code keeps the installed copy of the cepa plugins. The
+    `CEPA_PLUGIN_CACHE_DIR` override exists for the tests."""
+    return Path(os.environ.get("CEPA_PLUGIN_CACHE_DIR")
+                or Path.home() / ".claude/plugins/cache/cepa")
+
+
+def installed_hooks_sha():
+    """Content digest (12 hex chars) of the `hooks/` and `bin/` of the newest installed
+    version of each plugin in the cache, which is not a git repo. None when the cache
+    is missing, has no such files, or can't be read: it must not take the run down."""
+    try:
+        cache = plugin_cache_dir()
+        if not cache.is_dir():
+            return None
+
+        def version_key(d):
+            try:
+                return tuple(int(x) for x in d.name.split("."))
+            except ValueError:
+                return ()
+        digest = hashlib.sha256()
+        found = False
+        for plugin in sorted(p for p in cache.iterdir() if p.is_dir()):
+            versions = sorted((v for v in plugin.iterdir() if v.is_dir()),
+                              key=version_key)
+            if not versions:
+                continue
+            newest = versions[-1]
+            entries = []
+            for sub in ("hooks", "bin"):
+                base = newest / sub
+                if not base.is_dir():
+                    continue
+                for f in base.rglob("*"):
+                    if f.is_file() and "__pycache__" not in f.parts:
+                        entries.append((f.relative_to(newest).as_posix(), f))
+            for rel, f in sorted(entries):
+                digest.update(f"{plugin.name}/{rel}\0".encode("utf-8"))
+                digest.update(f.read_bytes())
+                digest.update(b"\0")
+                found = True
+        return digest.hexdigest()[:12] if found else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def close_empty_branch(repo, tree, branch, base):
@@ -1471,13 +1636,14 @@ def verify_command(repo, explicit, waived):
     return "", None
 
 
-def run_verify(command, tree, limit_sec, log, on_launch=None):
+def run_verify(command, tree, limit_sec, log, on_launch=None, on_tick=None,
+               label="verify"):
     """Runs the full build on the night branch, with the output going to the run's `.log`.
     Returns (green, seconds, reason)."""
     start = time.monotonic()
     with open(log, "ab", buffering=0) as output:
         output.write(f"\n===== {datetime.now().isoformat(timespec='seconds')} "
-                    f"· verify · {command}\n".encode("utf-8"))
+                    f"· {label} · {command}\n".encode("utf-8"))
         try:
             proc = subprocess.Popen(command, shell=True, cwd=str(tree),
                                     stdout=output, stderr=subprocess.STDOUT,
@@ -1487,7 +1653,7 @@ def run_verify(command, tree, limit_sec, log, on_launch=None):
             return False, time.monotonic() - start, f"did not launch: {e}"
         if on_launch:
             on_launch(proc.pid)
-        if wait_for_child(proc, limit_sec, "build"):
+        if wait_for_child(proc, limit_sec, "build", on_tick):
             code = proc.returncode
         else:
             try:
@@ -1639,7 +1805,8 @@ def finish_item(name, repo, ident, status, evidence, impede=None, owner=None):
     try:
         p = subprocess.run(
             [sys.executable, str(CEPA_PLAN), "finish", name, str(ident),
-             "--status", status, "--evidence", evidence, "--repo", str(repo)]
+             "--status", status, "--evidence", evidence, "--repo", str(repo),
+             "--supervisor"]  # DUR-2: the supervisor re-marks what the agent closed
             + flags,
             capture_output=True, text=True, timeout=60)
     except (subprocess.TimeoutExpired, OSError) as e:
@@ -3449,7 +3616,7 @@ def main(argv=None):
               "arvore": str(tree), "base": run_base,
               "herdou": inheritance,
               "branch_do_clone": current_branch(repo), "verify": verify,
-              "pid": pid, "host": host})
+              "pid": pid, "host": host, "versao_registro": 2})
     # The run state, next to the `.jsonl` (C6): `rodando` now, and at the end
     # `esperando-dono` (there is an action or pending item) or `encerrado`. It is written BEFORE
     # the model analysis, which may fail on the quota (C7); `/common:until-review`
@@ -3462,6 +3629,9 @@ def main(argv=None):
                  "verify": verify, "pid": pid, "host": host,
                  "arvore": str(tree), "prazo": deadline.isoformat(),
                  "atualizado": datetime.now().isoformat(timespec="seconds")}
+        # Liveness proof for readers on other hosts (pid can't be probed there).
+        # With the UTC offset: a reader on another host (cepa-plan) must not guess the zone.
+        body["heartbeat"] = datetime.now().astimezone().isoformat(timespec="seconds")
         body.update(rest)
         tmp = state_path.parent / (state_path.name + ".tmp")
         try:
@@ -3473,6 +3643,24 @@ def main(argv=None):
                   f"{e}")
 
     save_state("rodando")
+
+    def tick():
+        """Re-saves the state as `rodando` with the in-flight item and a fresh heartbeat."""
+        extra = {k: in_flight[k] for k in ("tentativa", "session_id", "fase")
+                 if k in in_flight}
+        if "id" in in_flight:
+            extra["item"] = in_flight["id"]
+        try:
+            save_state("rodando", **extra)
+        except Exception:  # noqa: BLE001  (a heartbeat must never kill the night run)
+            pass
+
+    def tick_wait():
+        """Heartbeat while the supervisor itself waits (quota reset, network probe)."""
+        try:
+            save_state("rodando", fase="espera")
+        except Exception:  # noqa: BLE001  (same: never kill the run for a heartbeat)
+            pass
 
     # What is in flight when a SIGTERM or Ctrl+C arrives: the item, the phase
     # (`item` is `claude`, `verify` is the full build) and the child's pid, which
@@ -3549,6 +3737,7 @@ def main(argv=None):
     # items had already been delivered by then: it is up to that HEAD that the red returns
     # the night branch, and only if nobody closed `done` in the middle (C4).
     first = {}
+    skipped_logged = set()
     # Inherited item (left half-done in the previous run): its 1st attempt
     # started there, and the return point is the clone before the inheritance merge. The
     # other inherited items still open enter the "in the middle": the return would take
@@ -3591,16 +3780,22 @@ def main(argv=None):
     # base is the clone's HEAD, and not the night's, so the inheritance counts: what
     # it brought is not in the installed plugin either.
     notified_hooks = []
+    # Reinstalled during the run (cepa repo): those files are in force, so no warning.
+    reinstalled_files = set()
+    reinstalls = []          # (id, files, sha_before, sha_after)
+    reinstall_failures = []  # (id, reason)
+    reinstall_broken = False
+    reinstall_head = None
 
     def notify_hooks(origin):
         new_items = [f for f in changed_hooks(tree, clone_base)
-                 if f not in notified_hooks]
+                 if f not in notified_hooks and f not in reinstalled_files]
         if not new_items:
             return
         notified_hooks.extend(new_items)
         log_event({"evento": "hook_so_apos_reinstalar", "id": origin,
                   "arquivos": new_items})
-        step(f"{origin} changed plugin hook(s) "
+        step(f"{origin} changed plugin hook(s) or bin "
               f"({', '.join(new_items)}): they only take effect after landing "
               "the run branch and running `bin/install.sh`. Until then the "
               "rounds of this run keep the installed version")
@@ -3657,6 +3852,14 @@ def main(argv=None):
         for warning in data.get("warnings") or []:
             print(f"  warning: {warning}")
             log_event({"evento": "aviso", "texto": warning})
+        # An item the queue skipped because a reservation is held elsewhere (live, or
+        # undecidable without an owner): every `reservado` deferral.
+        # logged once per item per run, so the record says why it never started.
+        for skip in data.get("deferred") or []:
+            if skip.get("reason") == "reservado" and skip.get("id") not in skipped_logged:
+                skipped_logged.add(skip.get("id"))
+                log_event({"evento": "item_pulado", "id": skip.get("id"),
+                          "motivo": "reservado", "detalhe": skip.get("detail")})
         if not data.get("batch"):
             stop = data.get("stop") or {}
             end_reason = reason_alias(stop.get("reason")) or "end-of-queue"
@@ -3696,7 +3899,7 @@ def main(argv=None):
                           "reset": reset.isoformat(),
                           "acorda": wake_at.isoformat()})
                 waits.append(("before the item", ident, reset))
-                wait_until(wake_at)
+                wait_until(wake_at, on_tick=tick_wait)
                 last_reading, fresh_reading = None, False
                 continue
 
@@ -3723,16 +3926,21 @@ def main(argv=None):
                   + (f", attempt {round_n}/{a.attempts_per_item}" if round_n > 1 else "") + ")")
         before = head_of(tree)
         first.setdefault(ident, (before, len(delivered)))
+        # Fresh per launch: `claude --session-id` refuses a reused one.
+        session_id = str(uuid.uuid4())
         log_event({"evento": "item_start", "id": ident, "title": item.get("title"),
                   "restante_seg": int(remaining.total_seconds()),
                   "tentativa": round_n, "twg_version": installed_twg_version(),
-                  "head": before})
+                  "head": before, "session_id": session_id,
+                  "hooks_sha": installed_hooks_sha()})
 
-        in_flight.update(id=ident, fase="item", tentativa=round_n)
+        in_flight.update(id=ident, fase="item", tentativa=round_n,
+                         session_id=session_id)
+        tick()
         limit = (remaining + slack).total_seconds()
         code, killed, spent, output = run_item(
             a.queue, tree, start_branch, a.with_permissions, limit, log,
-            on_launch=launched)
+            on_launch=launched, session_id=session_id, on_tick=tick)
         in_flight.pop("pid_filho", None)
 
         # Uncommitted leftovers don't carry over to the next item.
@@ -3773,7 +3981,13 @@ def main(argv=None):
             last_reading = readings[-1]
             fresh_reading = readings[-1][0] > readings[0][0]
 
+        try:
+            end_motive = end_reason_of(code, killed, output)
+        except Exception:  # noqa: BLE001  (a classifier bug must not lose the record)
+            end_motive = "desconhecido"
         log_event({"evento": "item_end", "id": ident, "status": run_state,
+                  "session_id": session_id,
+                  "motivo_fim": end_motive,
                   "human_pending": pending_item, "exit_code": code,
                   "timeout": killed, "segundos": int(spent),
                   "tentativa": round_n, "progresso": progress,
@@ -3797,7 +4011,7 @@ def main(argv=None):
             left = (deadline + slack - datetime.now()).total_seconds()
             in_flight["fase"] = "verify"
             green, verify_sec, verify_reason = run_verify(
-                verify, tree, left, log, on_launch=launched)
+                verify, tree, left, log, on_launch=launched, on_tick=tick)
             in_flight.pop("pid_filho", None)
             log_event({"evento": "verify", "id": ident, "verde": green,
                       "segundos": int(verify_sec), "motivo": verify_reason})
@@ -3811,7 +4025,8 @@ def main(argv=None):
                     step(f"red ({verify_reason}); running the "
                           "full build again, on the same code")
                     green, sec2, reason2 = run_verify(verify, tree, left,
-                                                       log, on_launch=launched)
+                                                       log, on_launch=launched,
+                                                       on_tick=tick)
                     in_flight.pop("pid_filho", None)
                     log_event({"evento": "verify", "id": ident, "verde": green,
                               "segundos": int(sec2), "motivo": reason2,
@@ -3829,6 +4044,60 @@ def main(argv=None):
                     unstable = True
             if green:
                 step(f"green ({human(timedelta(seconds=verify_sec))})")
+                hook_files = (changed_hooks(tree, first[ident][0])
+                              if cepa_repo(tree) and ident in first else [])
+                left = (deadline + slack - datetime.now()).total_seconds()
+                if hook_files and left < REINSTALL_MIN_SEC:
+                    why = (f"{int(left)}s left, under the floor of "
+                           f"{REINSTALL_MIN_SEC}s")
+                    log_event({"evento": "reinstalacao_adiada", "id": ident,
+                              "arquivos": hook_files, "motivo": why})
+                    step(f"no time to reinstall the plugins ({why}); "
+                         "the usual warning stays")
+                    hook_files = []
+                if hook_files:
+                    sha_before = installed_hooks_sha()
+                    step(f"{ident} changed plugin hook(s) or bin "
+                         f"({', '.join(hook_files)}): reinstalling the plugins "
+                         "(bin/install.sh --clean)")
+                    in_flight["fase"] = "reinstall"
+                    inst_ok, inst_sec, inst_reason = run_verify(
+                        "sh bin/install.sh --clean", tree, left, log,
+                        on_launch=launched, on_tick=tick, label="reinstall")
+                    in_flight.pop("pid_filho", None)
+                    sha_after = installed_hooks_sha()
+                    inst_ok = inst_ok and sha_after is not None
+                    log_event({"evento": "hooks_reinstalados", "id": ident,
+                              "arquivos": hook_files, "sha_antes": sha_before,
+                              "sha_depois": sha_after, "ok": inst_ok,
+                              "segundos": int(inst_sec), "motivo": inst_reason})
+                    if inst_ok:
+                        step(f"hooks reinstalled: {sha_before} -> {sha_after}")
+                        reinstalls.append((ident, hook_files, sha_before,
+                                           sha_after))
+                        reinstalled_files.update(hook_files)
+                        reinstall_head = head_of(tree)
+                    else:
+                        why = inst_reason or "the cache was left without hooks/bin"
+                        step(f"the reinstall failed ({why}); running "
+                             "bin/install.sh --rollback")
+                        left = (deadline + slack - datetime.now()).total_seconds()
+                        rb_ok, _rb_sec, rb_reason = run_verify(
+                            "sh bin/install.sh --rollback", tree,
+                            max(left, REINSTALL_MIN_SEC), log,
+                            on_launch=launched, on_tick=tick, label="rollback")
+                        in_flight.pop("pid_filho", None)
+                        restored = installed_hooks_sha()
+                        back_ok = restored == sha_before
+                        log_event({"evento": "reinstalacao_desfeita",
+                                  "id": ident, "ok": back_ok, "sha": restored,
+                                  "motivo": rb_reason or why})
+                        if back_ok:
+                            step(f"rollback restored the cache ({restored})")
+                            reinstall_failures.append((ident, why))
+                        else:
+                            reinstall_failures.append((ident, why))
+                            reinstall_broken = True
             else:
                 back = red_returns(ledger_dir, ident) + 1
                 since, n_before = first[ident]
@@ -3969,6 +4238,10 @@ def main(argv=None):
             outcome(ident, "done-sem-commit",
                      "`done` with no commit on the run branch: look for the "
                      "work on another branch")
+        elif run_state == "done" and reinstall_broken:
+            outcome(ident, "entregue",
+                     "delivered, green build; the hook reinstall failed and "
+                     "the rollback did not restore the cache")
         elif run_state == "done":
             outcome(ident, "entregue",
                      "delivered" + ("; green build on the 2nd try (flaky)"
@@ -3985,6 +4258,14 @@ def main(argv=None):
             outcome(ident, "em-andamento",
                      f"{n_commits} commit(s) without closing; the next attempt "
                      "(or the next run) starts from there")
+
+        if reinstall_broken:
+            end_reason = "reinstalacao-falhou"
+            end_detail = (f"the hook reinstall after {ident} failed and "
+                          "`bin/install.sh --rollback` did not restore the cache; "
+                          "run `bin/install.sh --rollback` or `/common:doctor` "
+                          "before going on")
+            break
 
         # The red return counts as a consecutive failure (Revision 3, 4e): a
         # broken environment makes every build red, and without this each card
@@ -4034,7 +4315,7 @@ def main(argv=None):
             if fits:
                 step(f"probing {NETWORK_PROBE} until the network is back (at "
                       f"most until {until_at.strftime('%H:%M')}), then resuming {ident}")
-                if wait_for_network(until_at):
+                if wait_for_network(until_at, on_tick=tick_wait):
                     returned = datetime.now()
                     drop[2] = returned
                     log_event({"evento": "rede_voltou", "id": ident,
@@ -4090,7 +4371,7 @@ def main(argv=None):
                     step(f"waiting for the reset, resuming {ident} at "
                           f"{wake_at.strftime('%H:%M')}")
                     waits.append(("item cut off", ident, reset_at))
-                    wait_until(wake_at)
+                    wait_until(wake_at, on_tick=tick_wait)
                     last_reading, fresh_reading = None, False
                     continue
                 end_reason = "limite-de-uso"
@@ -4285,12 +4566,40 @@ def main(argv=None):
     # Recomputed at the end, and not taken from `notified_hooks`: a warned hook
     # may have left the branch along with the red item that brought it.
     run_hooks = changed_hooks(tree, clone_base) if actions else []
-    if run_hooks:
+    late = (changed_hooks(tree, reinstall_head)
+            if run_hooks and reinstalls and reinstall_head else [])
+    if run_hooks and reinstalls:
+        last_id, _f, last_before, last_after = reinstalls[-1]
+        done_files = [f for f in run_hooks if f not in late]
+        if late:
+            which = (f"({', '.join(run_hooks)}). Already installed during the run: "
+                     f"{', '.join(done_files) or 'none'}. NOT yet "
+                     f"installed, because they came in after the last "
+                     f"reinstall: {', '.join(late)}; those only take effect "
+                     "after `land` and `bin/install.sh`. ")
+        else:
+            which = (f"({', '.join(run_hooks)}), and they were already installed "
+                     "during the run. ")
         stays.append({"id": "reinstalar-plugin", "texto": (
-            f"the run branch changes {len(run_hooks)} plugin hook(s) "
+            f"the run branch changes {len(run_hooks)} plugin hook(s)/bin "
+            f"{which}"
+            f"Reinstalls: {len(reinstalls)}; the last one, after "
+            f"{last_id}: {last_before} -> {last_after}. After `land`, "
+            "run `bin/install.sh` from the main clone, so the marketplace "
+            "registry points back at the clone. Open sessions keep the old "
+            "hooks in memory until they restart. The way back is "
+            "`bin/install.sh --rollback`")})
+    elif run_hooks:
+        stays.append({"id": "reinstalar-plugin", "texto": (
+            f"the run branch changes {len(run_hooks)} plugin hook(s)/bin "
             f"({', '.join(run_hooks)}), and no round of this run "
             "ran with them: hooks come from the installed plugin. They take effect "
             "after `land` and `bin/install.sh`")})
+    for f_id, f_reason in reinstall_failures:
+        stays.append({"id": "reinstalacao-falhou", "texto": (
+            f"the hook reinstall after {f_id} failed ({f_reason}). "
+            "Check the cache with `/common:doctor`; `bin/install.sh --rollback` "
+            "restores the previous version")})
     if actions:
         print("\n   " + SCREEN.c("negrito", "Actions:"))
         for i, action in enumerate(actions, 1):

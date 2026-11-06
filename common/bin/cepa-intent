@@ -104,6 +104,7 @@ import _tui  # noqa: E402
 import _clihelp  # noqa: E402
 import _modes as M  # noqa: E402
 import _wtlib  # noqa: E402
+import _state  # noqa: E402  (which run this is and whether it is alive)
 
 try:
     import _telemetry as T
@@ -260,6 +261,19 @@ def format_age(stamp):
     return f"{mins} min" if mins < 60 else f"{mins // 60}h{mins % 60:02d}"
 
 
+def run_liveness_line(root):
+    """One line from `_state`: which cepa-until run this is and whether it is alive."""
+    try:
+        # The run records live in the MAIN clone, while a run executes in its own worktree.
+        r = _state.run_of(_state.main_root(root), run_id=os.environ.get(RUN_ENV),
+                          tree=os.getcwd())
+    except Exception:  # noqa: BLE001  (a reading failure must not break whereami)
+        return None
+    if not r:
+        return None
+    return f"run: {r['estado'].get('run')} ({r['liveness'][0]}): {r['liveness'][1]}"
+
+
 def show_state(root, current):
     """Classify the intent and print the ready-made answer, then the owner's
     reminders block (every state, `cepa-until` run included). Read-only."""
@@ -272,6 +286,9 @@ def _show_state(root, current):
     if os.environ.get(RUN_ENV):
         print("state: empty")
         print("delegate: /common:next")
+        line = run_liveness_line(root)
+        if line:
+            print(line)
         print("Rodada do cepa-until: a intenção é o item do plan.yaml; "
               "rode /common:next.")
         return
