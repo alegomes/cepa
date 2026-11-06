@@ -232,6 +232,30 @@ def test_epic_ready_shows_count():
           rc == 0 and "sem veredito" not in out, f"stdout={out[:200]!r}")
 
 
+def test_epic_closed_shows_count():
+    d = Path(tempfile.mkdtemp())
+    (d / "docs" / "epics").mkdir(parents=True)
+    path = d / "docs" / "epics" / "x.md"
+    impact = "## Impact\n**Measured value:** 0 · **Measured on:** 2026-11-06\n\n"
+    closed = EPIC.format(status="closed", decisions=impact + DECISIONS_3)
+    rc, out, err = run(write_payload(path, closed))
+    check("Epic closed completo sai com 0", rc == 0, f"rc={rc} err={err[:300]}")
+    check("Epic closed mostra '2 decisões sem veredito'",
+          "2 decisões sem veredito" in shown(out), f"stdout={out[:300]!r}")
+    path.write_text(closed, encoding="utf-8")
+    rc, out, _ = run(write_payload(path, closed + "\n"))
+    check("Epic já closed no disco: segundo Write quieto",
+          rc == 0 and "sem veredito" not in out, f"stdout={out[:200]!r}")
+
+
+def test_template_lines_do_not_count():
+    path = tmp_spec_path()
+    with_template = DECISIONS_3 + "- <decisão que você tomou sozinho>\n- n/a\n"
+    rc, out, _ = run(write_payload(path, spec(decisions=with_template)))
+    check("linha de modelo (<...>) e 'n/a' não entram na conta",
+          "2 decisões sem veredito" in shown(out), f"stdout={out[:300]!r}")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
