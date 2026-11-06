@@ -34,7 +34,8 @@ Usage:
     cepa-feedback triage fb-20260826-3 --destination "resolvido no commit abc123"
 
 Exits: 0 ok · 2 invalid usage (also: BACKLOG destination without --queue/--item,
---item without --queue, --item not in the queue) · 3 unknown id · 4 already triaged.
+--item without --queue, --item not in the queue, BACKLOG destination whose
+--queue cannot be read) · 3 unknown id · 4 already triaged.
 """
 
 import argparse
@@ -137,6 +138,7 @@ def records():
             out[ev["id"]]["status"] = "triado"
             out[ev["id"]]["triagem"] = {
                 "destino": ev.get("destino"), "nota": ev.get("nota"), "ts": ev.get("ts"),
+                "item": ev.get("item"),
             }
     return out
 
@@ -241,9 +243,9 @@ def cmd_list(args):
     return 0
 
 
-def _queue_item(args):
-    """Looks `args.item` up in the queue via `cepa-plan status --json`.
-    Returns (item_dict_or_None, error_message_or_None)."""
+def _queue_status(args):
+    """Reads the queue via `cepa-plan status --json`.
+    Returns (data_or_None, error_message_or_None)."""
     cepa_plan = Path(__file__).resolve().parent / "cepa-plan"
     cmd = [sys.executable, str(cepa_plan), "status", args.queue, "--json",
            "--repo", args.repo]
@@ -253,9 +255,13 @@ def _queue_item(args):
             detail = (p.stderr or p.stdout).strip().splitlines()
             return None, (f"não consegui ler a fila '{args.queue}': "
                           f"{detail[-1] if detail else 'erro desconhecido'}")
-        data = json.loads(p.stdout)
+        return json.loads(p.stdout), None
     except (OSError, subprocess.SubprocessError, ValueError) as e:
         return None, f"não consegui ler a fila '{args.queue}' ({e})"
+
+
+def _queue_item(args, data):
+    """Looks `args.item` up in the queue data. Returns (item_or_None, error_or_None)."""
     for it in data.get("items") or []:
         if str(it.get("id")) == args.item:
             return it, None
@@ -321,10 +327,13 @@ def cmd_triage(args):
         print(f"✗ {args.id} já foi triado → {previous}", file=sys.stderr)
         return 4
     existing = None
-    if args.item:
-        # Look the item up BEFORE writing the triage: an unknown item refuses
-        # without leaving a ledger line behind.
-        existing, err = _queue_item(args)
+    if args.queue and (args.item or destination.lower().startswith("backlog.md")):
+        # Resolve the queue BEFORE writing the triage: a BACKLOG destination must
+        # not be recorded when its queue item cannot be created or cited (queue
+        # missing, waves plan, unreadable). An unknown item refuses the same way.
+        data, err = _queue_status(args)
+        if err is None and args.item:
+            existing, err = _queue_item(args, data)
         if err:
             print(f"✗ {err}", file=sys.stderr)
             return 2
@@ -471,7 +480,7 @@ def main(argv=None):
         exit_codes=[(0, "triaged (even if --queue could not add the item)"),
                     (2, "invalid usage (missing or empty --destination; a BACKLOG.md "
                         "destination without --queue/--item; --item without --queue; "
-                        "--item not in the queue)"),
+                        "--item not in the queue; a BACKLOG.md destination whose --queue cannot be read)"),
                     (3, "unknown id"),
                     (4, "already triaged")])
     t.add_argument("id", metavar="ID",

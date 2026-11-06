@@ -129,9 +129,12 @@ leaves it with a named destination.
    cited an existing item. Acceptance: after the triage,
    `cepa feedback list --status triado` and `cepa plan status <fila>` match — every
    `BACKLOG.md` destination has a pending or done item in the queue.
-   That holds only if no `⚠` line appeared: when `cepa-plan add` fails (queue
-   missing, for example) the bin only warns on stderr and still exits 0, so check
-   the output for `⚠` lines and fix each one before reporting.
+   For a `BACKLOG.md` destination the bin reads the queue before recording the
+   triage and refuses (exit 2, nothing recorded) if it is missing or unreadable.
+   The only residual failure is `cepa-plan add` failing after the queue was found:
+   the bin then warns with `⚠` on stderr and still exits 0, so check the output for
+   `⚠` lines and fix each one before reporting; the acceptance holds only when
+   none appeared.
 
 ## Limits
 

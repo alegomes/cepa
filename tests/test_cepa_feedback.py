@@ -397,6 +397,49 @@ def test_triage_item_pending_warns_ignored_flags():
               "--title" in p.stderr and "ignorado" in p.stderr, p.stderr)
 
 
+def test_triage_backlog_with_missing_queue_is_refused():
+    with Box() as c:
+        c.cli("add", "queixa cuja fila de destino não existe no repositório")
+        p = c.cli("triage", f"fb-{TODAY}-1", "--destination", "BACKLOG.md § Y",
+                  "--queue", "fila-fantasma")
+        check("triar BACKLOG com fila inexistente: rc=2", p.returncode == 2, p.returncode)
+        check("triar BACKLOG com fila inexistente: nomeia a fila",
+              "fila-fantasma" in p.stderr, p.stderr)
+        check("triar BACKLOG com fila inexistente: sem evento", _triages(c) == [], c.lines())
+
+
+def test_triage_ledger_and_queue_match():
+    with Box() as c:
+        qfile = _queue_box(c)
+        for i in range(3):
+            c.cli("add", f"queixa número {i} para o cruzamento ledger e fila")
+        d = "BACKLOG.md § S"
+        c.cli("triage", f"fb-{TODAY}-1", "--destination", d + "1", "--queue", "fila")
+        c.cli("triage", f"fb-{TODAY}-2", "--destination", d + "2", "--queue", "fila",
+              "--item", "sec-pendente")
+        c.cli("triage", f"fb-{TODAY}-3", "--destination", d + "3", "--queue", "fila",
+              "--item", "sec-feita")
+        lst = json.loads(c.cli("list", "--status", "triado", "--json").stdout)
+        plan = subprocess.run(
+            [sys.executable, str(BIN.parent / "cepa-plan"), "status", "fila", "--json",
+             "--repo", str(c.repo)], capture_output=True, text=True)
+        items = {it["id"]: it["status"] for it in json.loads(plan.stdout)["items"]}
+        check("cruzamento: 3 triados", len(lst) == 3, lst)
+        bad = []
+        for r in lst:
+            tg = r["triagem"]
+            if not tg["destino"].startswith("BACKLOG.md"):
+                continue
+            ok = (items.get(tg.get("item")) in ("pending", "done") if tg.get("item")
+                  else items.get(r["id"]) == "pending")
+            if not ok:
+                bad.append(r["id"])
+        check("cruzamento: todo destino BACKLOG tem item pendente ou feito", not bad, bad)
+        new = set(items) - {"sec-pendente", "sec-feita", "sec-descartada"}
+        check("cruzamento: exatamente 2 itens novos entraram",
+              new == {f"fb-{TODAY}-1", f"fb-{TODAY}-3"}, new)
+
+
 def test_triage_title_from_section_and_position_line():
     with Box() as c:
         qfile = _queue_box(c)
@@ -556,6 +599,8 @@ def main():
                test_triage_item_done_opens_a_new_item,
                test_triage_item_dropped_opens_a_new_item,
                test_triage_item_pending_warns_ignored_flags,
+               test_triage_backlog_with_missing_queue_is_refused,
+               test_triage_ledger_and_queue_match,
                test_triage_title_from_section_and_position_line,
                test_triage_refuses_unknown_id_and_empty_destination,
                test_list_replay_of_the_ledger, test_corrupted_line_does_not_bring_down_the_rest,
