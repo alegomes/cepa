@@ -1,0 +1,54 @@
+schema_version: 2
+card: tres-portas-c1-CS-3
+verdict: proven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: 6f96292
+head_commit: d3da3cd
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/commands/spec.md (### 5 closing step: paragraph telling the agent to repeat the hook count in the final report)"
+      module: common-commands
+      external_observable: true       # the command text is the surface; the criterion is proven by reading it
+      substituted_by_double: null     # the test reads the real command files, no fake in between
+    - class: "common/commands/epic.md (### 5 paragraph and ### 6 sentence, same instruction)"
+      module: common-commands
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                     # markdown and Python harness, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "unperturbed HEAD d3da3cd (detached worktree /tmp/proof-cs3): python3 -I tests/test_closing_repeats_decision_count.py -> 'all ok'; tests/test_commands_english.py -> 'tudo ok'"
+        - "RED at base: command texts of 6f96292 checked out over HEAD tests -> 9 failure(s) (spec step 5 x4, epic step 5 x4, epic step 6 x1)"
+        - "KILLED (RED) 1 delete the paragraph in spec.md step 5 -> 4 failure(s)"
+        - "KILLED (RED) 2 delete the paragraph in epic.md step 5 -> 4 failure(s)"
+        - "KILLED (RED) 3 delete the sentence in epic.md step 6 -> 1 failure(s)"
+        - "KILLED (RED) 4 drop the zero case ('write \"0 decisões sem veredito\"') in spec.md -> 1 failure(s) 'covers the zero case'"
+        - "KILLED (RED) 5 same in epic.md step 5 -> 1 failure(s)"
+        - "KILLED (RED) 6 drop the no-section case ('sem seção Decided without asking') in spec.md -> 1 failure(s)"
+        - "KILLED (RED) 7 same in epic.md step 5 -> 1 failure(s)"
+        - "KILLED (RED) 8 move the spec.md paragraph to the end of step 4 -> 4 failure(s) (section reader is scoped to the closing step)"
+        - "KILLED (RED) 9 move the epic.md step 5 paragraph to the end of step 4 -> 4 failure(s)"
+        - "not perturbed: the 'repeat ... final report' wording alone is covered only inside deletions 1-3; no isolated rewording mutant was run"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every added text block (3 hunks in 2 files) has at least one perturbation that turns the test RED: 9 of 9 RED"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff adds instruction text to two command markdown files; it parses nothing coming from outside"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card; the red test of the criterion is tests/test_closing_repeats_decision_count.py: 9 failure(s) against the 6f96292 command texts, 'all ok' at HEAD d3da3cd"
+existing_tests_at_head:
+  - "python3 -I tests/test_closing_repeats_decision_count.py -> 'all ok'"
+  - "python3 -I tests/test_commands_english.py -> 'tudo ok'"
+routing_reason: "The test is RED against the base command texts and GREEN at HEAD. Each added block (spec step 5, epic step 5, epic step 6), the zero case, the no-section case and the placement inside the closing step were each broken in a throwaway worktree and turned the test RED (9 of 9). The English-only check stays green. Computed verdict: PROVEN."

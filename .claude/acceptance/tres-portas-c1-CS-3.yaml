@@ -1,0 +1,13 @@
+key: tres-portas-c1-CS-3
+status: complete
+criteria:
+  - id: CS-3
+    text: "o passo de fechamento de /common:spec e de /common:epic manda repetir no relatório final o número que o hook mostrou (item 6)"
+    altitude: application
+    surface: "texto dos comandos common/commands/spec.md (passo 5) e common/commands/epic.md (passos 5 e 6), lido por tests/test_closing_repeats_decision_count.py; a contagem mecânica fica em CS-1 (decision_count_line no spec-readiness-gate)"
+    test: tests/test_closing_repeats_decision_count.py (lê cada passo de fechamento isolado; exige 'decisões sem veredito', 'repeat ... final report', caso zero '0 decisões sem veredito' e 'sem seção Decided without asking'; epic passo 6 (closed) também)
+    layer: application
+    evidence: verified
+    run: "python3 tests/test_closing_repeats_decision_count.py -> 12 checks ok, 0 FAIL, 'all ok' (N>0). Vizinhos: tests/test_commands_english.py -> 'tudo ok'; tests/test_spec_readiness_decision_count.py -> 'all green'."
+    verdict: complete
+status_note: "Altitude application, como o spec declara: prova por leitura do texto do comando, não por transcrição (decisão do spec). O texto novo está dentro do passo '5. Close by the sieve' de spec.md e epic.md e no passo 6 do epic (closed), e o teste lê só o corpo de cada passo (com teste do próprio leitor de seção). Decisão do dono coberta: com zero pendente imprime '0 decisões sem veredito', não silêncio; o caso sem seção também. Sem asserção enfraquecida. Observação menor, não bloqueante: o hook usa singular ('1 decisão sem veredito') e o comando cita só o plural 'N decisões sem veredito' com 'mesmas palavras'; o teste não cobre o singular."
