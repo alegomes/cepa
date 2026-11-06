@@ -1,0 +1,14 @@
+key: tres-portas-c1-CS-7
+status: complete
+head_audited: 42fbbb0
+criteria:
+  - id: CS-7
+    text: "`/common:spec --continuar`/`--fechar` e `/common:epic` sobre um documento existente abrem com a caminhada do veto antes de retomar a entrevista ou o crivo: até quatro decisões por rodada na spec, uma por turno no Epic, cada resposta gravada por `cepa-plan verdict`, decisão pulada fica sem marcador (item 4). Red test: um teste que lê common/commands/spec.md e common/commands/epic.md e acha, no passo que abre o documento existente e antes do passo da entrevista, a chamada a `cepa-plan decisions` e `cepa-plan verdict`, o limite de quatro por rodada no spec.md, uma por turno no epic.md, e a frase de que decisão pulada não trava."
+    altitude: application
+    surface: "texto dos comandos common/commands/spec.md (passo '1. Locate or open') e common/commands/epic.md (passo '1. Open or resume'), que é o que o agente executa; a prova declarada é por leitura do texto, como o CS-3. Os subcomandos chamados (`decisions`, `verdict`) têm prova própria em cli (CS-3/CS-6)."
+    test: "tests/test_veto_walk_opens_existing_doc.py (test_spec, test_epic). Lê somente o passo de abertura, que precisa vir antes do passo da entrevista; exige: caminhada do veto nomeada, chamadas a `cepa-plan decisions` e `cepa-plan verdict`, três vereditos, nunca gravar marcador à mão, pulada não trava e fica sem marcador, Status não muda, repasse do aviso 'já virou código na fila', numeração exata do `decisions` sem renumerar, parágrafo da caminhada antes de 'write the skeleton with' (spec) e de 'Otherwise (the file does not exist)' (epic), 'up to four per round' e --continuar/--fechar no spec.md, 'one per turn' no epic.md."
+    layer: application
+    evidence: verified
+    run: "HEAD 42fbbb0. python3 tests/test_veto_walk_opens_existing_doc.py -> 31 linhas 'ok', 0 FAIL, 'all passed' (N>0); python3 -m pytest tests/test_veto_walk_opens_existing_doc.py -q -> 2 passed. Diff de produção lido: spec.md e epic.md contêm o parágrafo da caminhada, coerente com as decisões do item 4 (spec ~l.95-120) e com a estratégia (~l.113)."
+    verdict: complete
+status_note: "Auditoria no HEAD 42fbbb0 (diff 73076a0..HEAD: 12c0821 red, 2fdb55e feat, 42fbbb0 fix). Altitude application declarada na spec; o artefato executado pelo agente é o texto do comando e o teste o lê na ordem certa. Limite honesto: prova por leitura de texto, não demonstra o comportamento do modelo numa sessão; a spec aceita isso (padrão do CS-3). Sem deferral."
