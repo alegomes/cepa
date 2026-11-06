@@ -22,6 +22,15 @@ import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
+# This test runs `cepa-intent`, `cepa-doctor` and `cepa-until-digest` for real,
+# and cites the `session-log` deposit; without this the events would fall in
+# ~/.claude/cepa-telemetry/ and enter the /common:metrics report as if they were
+# real use (tests/test_isolated_telemetry.py went red on 2026-11-05 for exactly
+# this file). See tests/_isolated_telemetry.py.
+from _isolated_telemetry import isolate
+
+isolate()
+
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "common" / "hooks"))
 import _state  # noqa: E402
