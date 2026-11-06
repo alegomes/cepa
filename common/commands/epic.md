@@ -208,6 +208,14 @@ saying nothing leaves the owner thinking he was served. Other than that, when
 the last gap closes, the sieve passes and you write `ready` in the same turn,
 without waiting for the owner to ask.
 
+When it lets the file through, the hook shows the owner how many lines of
+the "Decided without asking" section still carry no verdict (`· mantida em`,
+`· vetada em`, `· refinada em`): "N decisões sem veredito neste arquivo".
+**Repeat that number in the final report** of the session, with the same
+words, so the owner reads it where they read the rest. Zero is a number too:
+write "0 decisões sem veredito", never leave the line out. A file with no such
+section gets the hook's "sem seção Decided without asking" repeated instead.
+
 On closing, tell the owner the file path and the next step: `/common:queue
 <name>-c1 --from-epic docs/epics/<name>.md --cycle 1` derives the queue of the
 first cycle.
@@ -224,7 +232,9 @@ Target) and **Measured on:** (the date and how it was read). Only then write
 `closed`. An Epic whose metric did not move still closes: the Impact says so
 in one sentence, and that sentence is the reason this section exists.
 
-The gate refuses `closed` without the two Impact fields.
+The gate refuses `closed` without the two Impact fields. Passing to `closed`
+is the second time the hook counts the "decisões sem veredito"; repeat that
+count in the final report too, as in step 5.
 
 ### 7. The file format
 

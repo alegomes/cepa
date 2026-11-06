@@ -161,6 +161,14 @@ The `spec-readiness-gate` hook blocks writing `Status: ready-to-build`
 while any of them is missing. If it blocks, **the right response is to go back
 to asking**, never to soften the field until it passes.
 
+When it lets the file through, the hook shows the owner how many lines of
+the "Decided without asking" section still carry no verdict (`· mantida em`,
+`· vetada em`, `· refinada em`): "N decisões sem veredito neste arquivo".
+**Repeat that number in the final report** of the session, with the same
+words, so the owner reads it where they read the rest. Zero is a number too:
+write "0 decisões sem veredito", never leave the line out. A file with no such
+section gets the hook's "sem seção Decided without asking" repeated instead.
+
 The field is called **Surface** and not *Altitude* on purpose: `Altitude`
 is already a field of the decision block, with another closed vocabulary
 (`strategic`/`tactical`/`implementation`) and its own gate on write. Two
