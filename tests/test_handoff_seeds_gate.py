@@ -81,6 +81,26 @@ Carry-forward notes we gathered: the emissao column is text.
 """
 
 
+SESSION_PATH = ".claude/handoffs/session-1104-2335.md"
+
+SESSION_OK = """\
+## Onde estamos
+Gate novo.
+
+## Próximo passo
+Implementar o gate.
+porque: o dono abriu a spec e não reconheceu o assunto; a pergunta original era "como o handoff grava o porquê?"
+**Próximo:** repo=/x mode=build comando=/common:spec foo
+
+## Threads abertas
+- nada
+"""
+
+SESSION_NO_PORQUE = SESSION_OK.replace(
+    'porque: o dono abriu a spec e não reconheceu o assunto; a pergunta original era "como o handoff grava o porquê?"\n',
+    "")
+
+
 def run_hook(tool_name, tool_input):
     payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
     return subprocess.run(
@@ -177,6 +197,66 @@ def main():
         {"new_string": "## Carry-forward notes\n- quirk"},
     ]})
     check("MultiEdit soma os fragmentos", r.returncode == 0, r.stderr)
+
+    # ── session handoff: the `porque:` line of `## Próximo passo` ──────────
+    r = write(SESSION_PATH, SESSION_OK)
+    check("session handoff com porque passa", r.returncode == 0, r.stderr)
+
+    r = write(SESSION_PATH, SESSION_NO_PORQUE)
+    check("session handoff sem porque bloqueia", r.returncode == 2, r.stdout)
+    check("bloqueio do session handoff nomeia porque",
+          "porque" in r.stderr and "Próximo passo" in r.stderr, r.stderr)
+
+    r = write(SESSION_PATH, SESSION_OK.replace(
+        "porque:", "**Porque:**"))
+    check("forma **Porque:** em negrito passa", r.returncode == 0, r.stderr)
+
+    r = write(SESSION_PATH, SESSION_OK.replace("porque:", "- Porque:"))
+    check("forma de lista '- Porque:' passa", r.returncode == 0, r.stderr)
+
+    r = write(SESSION_PATH, "## Onde estamos\nNota curta, sem próximo passo.\n")
+    check("session handoff sem '## Próximo passo' passa", r.returncode == 0, r.stderr)
+
+    r = write(SESSION_PATH, SESSION_OK)
+    check("session handoff não exige Validation seeds/Carry-forward",
+          r.returncode == 0 and "Validation seeds" not in r.stderr, r.stderr)
+
+    # porque in ANOTHER section does not satisfy the Próximo passo section
+    r = write(SESSION_PATH, SESSION_NO_PORQUE + "\n## Cuidados\nporque: algo\n")
+    check("porque fora de '## Próximo passo' não vale", r.returncode == 2, r.stderr)
+
+    for label, val in (("vazio", ""), ("só espaços", "   "),
+                       ("placeholder <...>", " <a pergunta do dono que começou o assunto>"),
+                       ("negrito vazio", "**")):
+        line = "**Porque:**" + val if label == "negrito vazio" else "porque:" + val
+        r = write(SESSION_PATH, SESSION_NO_PORQUE.replace(
+            "Implementar o gate.\n", "Implementar o gate.\n" + line + "\n"))
+        check(f"porque {label} bloqueia", r.returncode == 2, r.stderr)
+        check(f"porque {label}: mensagem diz presente-mas-vazio, não ausente",
+              "EMPTY" in r.stderr and "has no `porque:` line" not in r.stderr,
+              r.stderr)
+    r = write(SESSION_PATH, SESSION_NO_PORQUE)
+    check("porque ausente: mensagem diz ausente",
+          "has no `porque:` line" in r.stderr and "EMPTY" not in r.stderr,
+          r.stderr)
+    r = write(SESSION_PATH, SESSION_NO_PORQUE.replace(
+        "Implementar o gate.\n", "Implementar o gate.\nporque: texto real\n"))
+    check("porque: texto real passa", r.returncode == 0, r.stderr)
+    r = write(SESSION_PATH, SESSION_NO_PORQUE.replace(
+        "Implementar o gate.\n", "Implementar o gate.\n**Porque:** texto real\n"))
+    check("**Porque:** texto real passa", r.returncode == 0, r.stderr)
+
+    r = write(PATH, COMPLETE)
+    check("handoff de discovery não pede porque", r.returncode == 0, r.stderr)
+
+    r = run_hook("Edit", {"file_path": SESSION_PATH,
+                          "new_string": SESSION_NO_PORQUE})
+    check("Edit com '## Próximo passo' sem porque bloqueia",
+          r.returncode == 2, r.stdout)
+
+    r = run_hook("Edit", {"file_path": SESSION_PATH,
+                          "new_string": "## Threads abertas\n- algo novo\n"})
+    check("Edit em outra seção passa", r.returncode == 0, r.stderr)
 
     print()
     if FAILURES:

@@ -60,6 +60,7 @@ below literally (`session-next.py` parses `## Próximo passo`, `**Próximo:**`,
 
 ## Próximo passo
 <the SINGLE most important thing to do next — concrete, actionable>
+porque: <a pergunta do dono que começou o assunto, em UMA frase e na voz dele — não o rótulo da conversa>
 **Próximo:** repo=<absolute path> mode=<mode> comando=<command and arguments>   ← optional
 **Intenção:** <purpose of the next session, in its voice>   ← optional, with Meta and Plano
 **Meta:** <when the next session may stop>
@@ -73,6 +74,15 @@ below literally (`session-next.py` parses `## Próximo passo`, `**Próximo:**`,
 ```
 
 Rules:
+- **The `porque:` line in `## Próximo passo` is mandatory.** It is the owner's
+  original question, in one sentence and in the owner's voice, written in prose with no
+  conversation labels (O2', D1) unless the label comes with the sentence it
+  abbreviates. The `handoff-seeds-gate` hook refuses a handoff whose
+  `## Próximo passo` lacks it (or leaves it empty or as the `<...>`
+  placeholder: write the sentence), and `session-next.py` carries the line into the
+  next session's brief, so that session (and the spec it opens) knows the
+  origin. Reason: fb-20261104-2 (2026-11-04), the owner opened a spec and did
+  not recognize the subject.
 - **The `**Próximo:**` line is optional and is what chains the next session.**
   Write it only when the next step is a new session with a known repo, mode and
   command (e.g. `**Próximo:** repo=/Users/alegomes/coding/wego/wego-product
