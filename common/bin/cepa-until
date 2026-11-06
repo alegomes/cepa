@@ -1042,14 +1042,15 @@ def terminate_group(pid, grace):
         except ChildProcessError:
             pass
         # macOS: killpg(pgid, 0) gives EPERM while the group only holds processes that
-        # exited and were not reaped yet (ESRCH once it dissolves). That is a dead group.
+        # exited and were not reaped yet (ESRCH once it dissolves). The loop keeps polling
+        # while the group is all-zombie; the SIGKILL block below is what declares it dead.
         try:
             os.killpg(pid, 0)
         except ProcessLookupError:
             return True
         except PermissionError:
             if time.monotonic() >= end:
-                return True
+                break
             time.sleep(0.05)
             continue
         except OSError:

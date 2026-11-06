@@ -303,6 +303,34 @@ def test_terminate_group_calls_an_all_zombie_group_dead():
         except ChildProcessError:
             pass
 
+    # A zombie the supervisor cannot reap (it is the helper's grandchild): EPERM until the end.
+    _helper = (
+        "import subprocess, sys, time\n"
+        "g = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'],"
+        " start_new_session=True)\n"
+        "print(g.pid, flush=True)\n"
+        "time.sleep(60)\n")
+    _h = subprocess.Popen([sys.executable, "-c", _helper], stdout=subprocess.PIPE, text=True)
+    _gc = None
+    try:
+        _gc = int(_h.stdout.readline())
+        os.killpg(_gc, signal.SIGTERM)
+        _deadline = time.monotonic() + 5
+        while not _stat(_gc).startswith("Z") and time.monotonic() < _deadline:
+            time.sleep(0.02)
+        check("terminate_group diz que o grupo acabou mesmo quando o zumbi não é filho dele "
+              "(EPERM até o fim da graça)",
+              _until.terminate_group(_gc, 1) is True, _stat(_gc))
+    finally:
+        _h.kill()
+        _h.wait()
+        _h.stdout.close()
+        if _gc is not None:
+            try:
+                os.killpg(_gc, signal.SIGKILL)
+            except OSError:
+                pass
+
 
 # ── 3. pid and host ─────────────────────────────────────────────────────────
 
