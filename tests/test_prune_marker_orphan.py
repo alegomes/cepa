@@ -9,7 +9,8 @@ else ever removed it. Contract guarded here, firing the real SessionStart hook:
   - worktree present but branch ref gone   → marker deleted, stderr names it;
   - worktree and branch both alive         → marker kept (SessionEnd consumes it);
   - unreadable (non-JSON) marker           → kept (we do not guess);
-  - branch alive, worktree directory gone  → deleted by the worktree clause alone.
+  - branch alive, worktree directory gone  → deleted by the worktree clause alone;
+  - relative session_worktree, or no branch → kept (incomplete marker, no guessing).
 
 Run with `python3 tests/test_prune_marker_orphan.py`.
 """
@@ -91,6 +92,14 @@ def build(base: Path):
     git("commit", "-q", "-m", "h", cwd=wte)
     git("worktree", "remove", "--force", str(wte), cwd=repo)
     marker(sdir, "eeeeeeee-dirgone", "session/keep", wte)
+
+    # (f) relative session_worktree: judged against nobody's cwd — kept
+    (sdir / "ffffffff-relativo.prune-on-exit").write_text(json.dumps({
+        "branch": "session/x", "session_worktree": "wt-relativa", "discard": False}))
+
+    # (g) marker without `branch`: incomplete, not ours to guess — kept
+    (sdir / "gggggggg-sem-branch.prune-on-exit").write_text(json.dumps({
+        "session_worktree": str(base / "wt-nao-existe"), "discard": False}))
     return repo, sdir
 
 
@@ -128,6 +137,10 @@ def main():
               not (sdir / "eeeeeeee-dirgone.prune-on-exit").exists(), err)
         check("(e) stderr diz 'worktree gone' para session/keep",
               "session/keep (worktree gone)" in err, err)
+        check("(f) caminho relativo: marca mantida",
+              (sdir / "ffffffff-relativo.prune-on-exit").exists(), err)
+        check("(g) marca sem branch: mantida",
+              (sdir / "gggggggg-sem-branch.prune-on-exit").exists(), err)
 
     print()
     if failures:
