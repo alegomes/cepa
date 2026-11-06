@@ -197,7 +197,8 @@ with tempfile.TemporaryDirectory() as tmp:
     # Out of range ordinal, unknown verdict, missing file, no section.
     r = run("verdict", str(spec), "9", "mantida", "--repo", str(repo))
     check("ordinal out of range exits nonzero", r.returncode != 0, r.stdout)
-    check("ordinal out of range says how many", "3" in r.stderr, r.stderr)
+    check("ordinal out of range says how many", "a seção tem 3" in r.stderr, r.stderr)
+    check("ordinal out of range is a clean refusal", "Traceback" not in r.stderr, r.stderr)
     r = run("verdict", str(spec), "0", "mantida", "--repo", str(repo))
     check("ordinal 0 exits nonzero", r.returncode != 0, r.stdout)
     r = run("verdict", str(spec), "1", "aprovada", "--repo", str(repo))
@@ -233,6 +234,63 @@ with tempfile.TemporaryDirectory() as tmp:
     r = run("verdict", str(spec3), "2", "vetada", "--reason", "x", "--repo", str(repo))
     check("prefix-only source is not a citation",
           r.returncode == 0 and "já virou código" not in r.stdout, r.stdout)
+
+    # refinada --text carrying a verdict marker: refused, file untouched.
+    spec4 = repo / "docs" / "spec" / "e.md"
+    spec4.write_text(SPEC, encoding="utf-8")
+    snap = spec4.read_text(encoding="utf-8")
+    r = run("verdict", str(spec4), "1", "refinada", "--text",
+            "x · vetada em 2026-01-01", "--repo", str(repo))
+    check("refinada --text with a marker exits nonzero", r.returncode != 0, r.stdout)
+    check("refinada --text with a marker leaves the file",
+          spec4.read_text(encoding="utf-8") == snap)
+
+    # Warning wording: plural, zero done, and a waves plan citing the file is
+    # not a queue.
+    (qdir / "queue.yaml").write_text(
+        QUEUE.replace("docs/spec/a.md", "docs/spec/e.md")
+             .replace("    status: pending\n", "    status: done\n    evidence: commit x\n"),
+        encoding="utf-8")
+    (odir / "queue.yaml").write_text(
+        OTHER_QUEUE.replace("docs/spec/zzz.md", "./docs/spec/e.md")
+                   .replace("status: done\n    evidence: commit def\n", "status: pending\n"),
+        encoding="utf-8")
+    wdir = repo / ".claude" / "queues" / "ondas"
+    wdir.mkdir(parents=True)
+    (wdir / "queue.yaml").write_text(
+        "mode: parallel-waves\nqueue: ondas\nsource: docs/spec/e.md\nwaves: []\n",
+        encoding="utf-8")
+    r = run("verdict", str(spec4), "2", "vetada", "--reason", "x", "--repo", str(repo))
+    out = r.stdout
+    check("plural: '2 itens done'", "fila derivada: 2 itens done de 2" in out, out)
+    check("zero done is not 'já virou código'",
+          "já virou código na fila outra" not in out
+          and "a fila outra foi derivada deste arquivo (0 itens done de 1)" in out, out)
+    check("./ prefix in source counts as citing", "outra" in out, out)
+    check("a waves plan is not a derived queue", "ondas" not in out, out)
+
+    # CRLF file stays CRLF byte for byte; refinada on the last line without a
+    # trailing newline does not add one.
+    crlf = repo / "docs" / "spec" / "f.md"
+    crlf.write_bytes(SPEC.replace("\n", "\r\n").encode("utf-8"))
+    raw_before = crlf.read_bytes()
+    r = run("verdict", str(crlf), "1", "mantida", "--repo", str(repo))
+    raw_after = crlf.read_bytes()
+    check("CRLF: exits 0", r.returncode == 0, r.stderr)
+    check("CRLF: every line still ends in CRLF",
+          raw_after.count(b"\r\n") == raw_before.count(b"\r\n")
+          and raw_after.replace(b"\r\n", b"").count(b"\n") == 0, repr(raw_after[:200]))
+    check("CRLF: only decision 1 changed",
+          [l for l in raw_after.split(b"\r\n") if l not in raw_before.split(b"\r\n")]
+          == [f"- Primeira decisão fica como está. · mantida em {TODAY}".encode("utf-8")],
+          repr(raw_after))
+    tail = repo / "docs" / "spec" / "g.md"
+    tail.write_text("# Spec\n\n## Decided without asking\n\n- Única decisão", encoding="utf-8")
+    r = run("verdict", str(tail), "1", "refinada", "--text", "Única, refeita", "--repo", str(repo))
+    check("no trailing newline: refinada keeps it absent",
+          r.returncode == 0 and tail.read_bytes().endswith(
+              f"- Única, refeita · refinada em {TODAY}".encode("utf-8")),
+          repr(tail.read_bytes()))
 
     # --help lists verdict under writing.
     h = run("--help").stdout

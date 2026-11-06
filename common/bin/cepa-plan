@@ -4110,10 +4110,10 @@ def cmd_decisions(repo, files, as_json):
 
 def _cites(source, rel):
     """True when the queue's free-text `source:` names `rel` as a whole path:
-    `docs/spec/a.md (3 critérios)` cites docs/spec/a.md, `docs/spec/xa.md` and
-    `docs/spec/a.md.bak` do not."""
+    `docs/spec/a.md (3 critérios)` and `./docs/spec/a.md` cite docs/spec/a.md;
+    `docs/spec/xa.md`, `../docs/spec/a.md` and `docs/spec/a.md.bak` do not."""
     text = source if isinstance(source, str) else json.dumps(source, ensure_ascii=False)
-    pat = r"(?<![\w./-])" + re.escape(rel) + r"(?![\w/-]|\.\w)"
+    pat = r"(?<![\w./-])(?:\./)?" + re.escape(rel) + r"(?![\w/-]|\.\w)"
     return re.search(pat, text) is not None
 
 
@@ -4184,7 +4184,9 @@ def cmd_verdict(repo, file, ordinal, verdict, reason, text, today=None):
         print(f"{file} não existe como arquivo", file=sys.stderr)
         return 2
 
-    raw = path.read_text(encoding="utf-8")
+    # newline="" on both ends: a CRLF file stays CRLF, byte for byte.
+    with open(path, encoding="utf-8", newline="") as fh:
+        raw = fh.read()
     res = _decisions.read(raw)
     if res is None:
         print(f"{file}: sem a seção \"Decided without asking\"", file=sys.stderr)
@@ -4214,7 +4216,7 @@ def cmd_verdict(repo, file, ordinal, verdict, reason, text, today=None):
     if verdict == "refinada":
         head = lines[first]
         bullet = re.match(r"^([-*+]\s+)", head).group(1)
-        new = [bullet + text + marker + (ending(lines[last]) or "\n")]
+        new = [bullet + text + marker + ending(lines[last])]
         lines[first:last + 1] = new
         shown = new[0].rstrip("\r\n")
     else:
@@ -4223,7 +4225,8 @@ def cmd_verdict(repo, file, ordinal, verdict, reason, text, today=None):
         shown = lines[last].rstrip("\r\n")
 
     tmp = path.with_name(path.name + ".verdict-tmp")
-    tmp.write_text("".join(lines), encoding="utf-8")
+    with open(tmp, "w", encoding="utf-8", newline="") as fh:
+        fh.write("".join(lines))
     os.replace(tmp, path)
 
     print(f"{file}: decisão #{ordinal} (linha {d.line}) {verdict}.")
