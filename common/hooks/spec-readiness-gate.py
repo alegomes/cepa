@@ -84,6 +84,20 @@ Epic screen (`/common:epic`, CS-5 of cycle 1 of the spiral Cepa Epic):
     pronta` in it is not gated, only `ready-to-build` (or the old
     `pronta-para-construir`).
 
+Decision count on the passage (CS-1 of docs/spec/tres-portas-spec-epic.md,
+item 6 of O2'):
+  - When the screen lets a spec through to `ready-to-build` or an Epic to
+    `ready`/`closed`, the hook tells the owner how many lines of the "Decided
+    without asking" section (or the old "Decidido sem perguntar") carry no
+    verdict: no `· mantida em`, `· vetada em` nor `· refinada em`. Zero prints
+    as "0"; a spec without the section prints "sem seção Decided without
+    asking" (the section stays optional in a spec). Only this file is counted;
+    the repo total belongs to the doctor.
+  - Only on the PASSAGE: if the file on disk is already ready, a later edit
+    stays quiet. The text goes out as JSON on stdout, in `systemMessage` (what
+    the owner sees) and in `additionalContext` (so the agent repeats it in the
+    final report).
+
 Exit codes:
   0 -- allowed
   2 -- blocked (stderr reaches the agent, which fixes it on its own)
@@ -454,6 +468,77 @@ def block_epic(problems, status="ready"):
     sys.exit(2)
 
 
+DECISIONS_SECTION = ("decided without asking", "decidido sem perguntar")
+
+# The verdict marker `cepa-plan verdict` writes at the end of the line.
+VERDICT_RE = re.compile(r"·\s*(?:mantida|vetada|refinada)\s+em\b", re.IGNORECASE)
+
+TOP_ITEM_RE = re.compile(r"^[-*+]\s+(?!\[[ xX]\])(.+)$", re.MULTILINE)
+
+
+def pending_decisions(content: str):
+    """The list lines of "Decided without asking" with no verdict marker, or
+    None when the section does not exist."""
+    body = section(content, DECISIONS_SECTION)
+    if body is None:
+        return None
+    return [v for v in TOP_ITEM_RE.findall(body)
+            if not is_empty(v) and not VERDICT_RE.search(v)]
+
+
+def decision_count_line(content: str) -> str:
+    pending = pending_decisions(content)
+    if pending is None:
+        return ("[spec-readiness-gate] liberado: sem seção Decided without "
+                "asking neste arquivo.")
+    n = len(pending)
+    noun = "decisão" if n == 1 else "decisões"
+    return (f"[spec-readiness-gate] liberado: {n} {noun} sem veredito neste "
+            "arquivo (seção \"Decided without asking\"). Repita esse número "
+            "no relatório final.")
+
+
+def statuses(content: str):
+    status = [clean(v).lower() for v in STATUS_RE.findall(content)]
+    status = [s for s in status if not s.startswith("<")]
+    # The template line "draft | ready-to-build" teaches the format.
+    return [s for s in status if "|" not in s]
+
+
+def ready_claim(content: str, file_path):
+    """The word with which the document claims to be ready, or None."""
+    status = statuses(content)
+    if is_epic(content, file_path):
+        # The Epic Status often shares the line with other fields
+        # (`**Status:** pronta · **Opened on:** ...`): the first word counts.
+        first_words = [re.split(r"\s*[·•]\s*|\s+\*\*|\s+__", s)[0].strip()
+                       for s in status]
+        return next((s for s in first_words if s in EPIC_READY), None)
+    return next((s for s in status if s in SPEC_READY), None)
+
+
+def was_ready_on_disk(file_path) -> bool:
+    if not isinstance(file_path, str) or not file_path:
+        return False
+    try:
+        before = Path(file_path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return ready_claim(before, file_path) is not None
+
+
+def allow_ready(content: str, file_path):
+    """The screen passed: on the passage to ready, show the decision count."""
+    if not was_ready_on_disk(file_path):
+        line = decision_count_line(content)
+        print(json.dumps({
+            "systemMessage": line,
+            "hookSpecificOutput": {"hookEventName": "PreToolUse",
+                                   "additionalContext": line},
+        }, ensure_ascii=False))
+    sys.exit(0)
+
+
 def main():
     raw = sys.stdin.read()
     try:
@@ -480,28 +565,19 @@ def main():
         if content is None:
             sys.exit(0)          # without seeing the content, nothing is blocked
 
-    status = [clean(v).lower() for v in STATUS_RE.findall(content)]
-    status = [s for s in status if not s.startswith("<")]
-    # The template line "draft | ready-to-build" teaches the format.
-    status = [s for s in status if "|" not in s]
+    claimed = ready_claim(content, file_path)
+    if claimed is None:
+        sys.exit(0)          # a draft runs free; only the claim is gated
 
     if is_epic(content, file_path):
-        # The Epic Status often shares the line with other fields
-        # (`**Status:** pronta · **Opened on:** ...`): the first word counts.
-        first_words = [re.split(r"\s*[·•]\s*|\s+\*\*|\s+__", s)[0].strip()
-                     for s in status]
-        if not any(s in EPIC_READY for s in first_words):
-            sys.exit(0)      # a draft runs free
-        claimed = next(s for s in first_words if s in EPIC_READY)
         problems = epic_problems(content)
         if claimed in EPIC_OUTCOME:
             problems += outcome_problems(content, claimed == EPIC_CLOSED)
         if problems:
             block_epic(problems, claimed)
+        if claimed in EPIC_OUTCOME:
+            allow_ready(content, file_path)
         sys.exit(0)
-
-    if not any(s in SPEC_READY for s in status):
-        sys.exit(0)          # a draft runs free; only the claim is gated
 
     problems = []
 
@@ -545,7 +621,7 @@ def main():
         problems.append(f"... e mais {len(open_questions) - 5} pergunta(s) em aberto")
 
     if not problems:
-        sys.exit(0)
+        allow_ready(content, file_path)
 
     lines = "\n".join(f"   · {p}" for p in problems)
     print(
