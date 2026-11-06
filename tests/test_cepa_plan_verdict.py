@@ -292,6 +292,27 @@ with tempfile.TemporaryDirectory() as tmp:
               f"- Única, refeita · refinada em {TODAY}".encode("utf-8")),
           repr(tail.read_bytes()))
 
+    # `../docs/spec/h.md` is another file, not a citation; trailing spaces
+    # before the marker and repeated spaces in --reason / --text collapse.
+    spec5 = repo / "docs" / "spec" / "h.md"
+    spec5.write_text("# Spec\n\n## Decided without asking\n\n"
+                     "- Com espaço no fim   \n- Segunda\n- Terceira\n", encoding="utf-8")
+    (qdir / "queue.yaml").write_text(
+        QUEUE.replace("docs/spec/a.md", "../docs/spec/h.md"), encoding="utf-8")
+    (odir / "queue.yaml").write_text(OTHER_QUEUE, encoding="utf-8")
+    r = run("verdict", str(spec5), "1", "vetada", "--reason", "fora   do\n ciclo",
+            "--repo", str(repo))
+    lines = spec5.read_text(encoding="utf-8").splitlines()
+    check("../ in source is not a citation",
+          r.returncode == 0 and "já virou código" not in r.stdout, r.stdout)
+    check("trailing spaces dropped and --reason collapsed",
+          lines[4] == f"- Com espaço no fim · vetada em {TODAY}: fora do ciclo", lines[4])
+    r = run("verdict", str(spec5), "2", "refinada", "--text", "  Segunda   bem\n  nova  ",
+            "--repo", str(repo))
+    lines = spec5.read_text(encoding="utf-8").splitlines()
+    check("--text collapsed to one line",
+          r.returncode == 0 and lines[5] == f"- Segunda bem nova · refinada em {TODAY}", lines[5])
+
     # --help lists verdict under writing.
     h = run("--help").stdout
     writing = h.split("  writing:", 1)[-1].split("\n  reading:", 1)[0]
