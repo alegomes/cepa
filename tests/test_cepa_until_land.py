@@ -127,7 +127,7 @@ def test_red_build_after_the_merge_goes_back_to_return_without_push():
         check("o estado continua esperando-dono",
               state(root).get("estado") == "esperando-dono", str(state(root)))
         check("a saída diz que o build ficou vermelho",
-              "vermelho" in p.stdout.lower(), p.stdout)
+              "red build" in p.stdout.lower(), p.stdout)
         check("...e o desfazer preserva a fila que o run marcou no clone",
               "status: done" in plan_of(root).read_text(),
               plan_of(root).read_text()[:300])
@@ -189,7 +189,7 @@ def test_night_branch_that_changed_after_the_proposal_refuses():
         check("recusa quando a branch da noite andou depois da proposta",
               p.returncode != 0 and git(root, "rev-parse", "HEAD") == before,
               p.stdout + p.stderr)
-        check("...e diz o que mudou", "mudou" in p.stdout + p.stderr,
+        check("...e diz o que mudou", "changed since" in p.stdout + p.stderr,
               p.stdout + p.stderr)
 
 
@@ -311,7 +311,7 @@ def test_5_cost_counts_once_per_session_not_per_result_block():
                     ["--for", "2h", "--verify", VERIFY])
         check("o custo soma uma vez por sessão, sem os blocos repetidos",
               "US$ 50,25" in p.stdout and "28,47 + 21,78" in p.stdout
-              and "2 rodada(s)" in p.stdout, p.stdout[-900:])
+              and "2 round(s)" in p.stdout, p.stdout[-900:])
         check("...e o estado também",
               state(root).get("custo_usd") == 50.25, str(state(root)))
 

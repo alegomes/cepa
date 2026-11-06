@@ -10,7 +10,7 @@ not from the night branch. No round was lost, but nothing in the run said so.
 The cases below pin the warning:
   - the item that commits `<plugin>/hooks/...` gets a line on the screen, before the
     next item starts, and a `hook_so_apos_reinstalar` event in the record;
-  - the end of the run charges `bin/install.sh` in "Fica com você" and in the state;
+  - the end of the run charges `bin/install.sh` in "Left with you" and in the state;
   - `hooks/` outside a plugin (without `.claude-plugin/plugin.json`) does not warn;
   - a hook that left the branch with the red build is not charged at the end.
 """
@@ -86,7 +86,7 @@ def test_item_that_changes_plugin_hook_is_warned_at_once_and_at_the_end():
               len(ev) == 1 and ev[0]["id"] == "a1"
               and ev[0]["arquivos"] == ["meuplug/hooks/trava.py"], str(ev))
         out = p.stdout
-        i_warning = out.find("a1 mudou hook de plugin (meuplug/hooks/trava.py)")
+        i_warning = out.find("a1 changed plugin hook(s) (meuplug/hooks/trava.py)")
         i_a2 = out.find("] a2 — ")
         check("a tela avisa o hook logo depois do a1, antes do a2 começar",
               0 <= i_warning < i_a2, out[-1500:])
@@ -98,8 +98,8 @@ def test_item_that_changes_plugin_hook_is_warned_at_once_and_at_the_end():
               "reinstalar-plugin" in stays
               and "meuplug/hooks/trava.py" in stays["reinstalar-plugin"],
               str(stays))
-        check("o resumo do fim traz a reinstalação em Fica com você",
-              "- reinstalar-plugin:" in out.split("── fim")[-1], out[-1200:])
+        check("o resumo do fim traz a reinstalação em Left with you",
+              "- reinstalar-plugin:" in out.split("── ended at")[-1], out[-1200:])
 
 
 def test_hooks_outside_plugin_does_not_warn():
@@ -219,9 +219,9 @@ def test_hook_of_the_item_that_ends_the_run_inside_the_loop_is_warned():
         ev = warnings(root)
         check("o registro ganha hook_so_apos_reinstalar do a1",
               [e["id"] for e in ev] == ["a1"], str(ev))
-        before_the_end = p.stdout.split("── fim")[0]
+        before_the_end = p.stdout.split("── ended at")[0]
         check("a tela avisa antes do resumo do fim",
-              "a1 mudou hook de plugin" in before_the_end, before_the_end[-1200:])
+              "a1 changed plugin hook(s)" in before_the_end, before_the_end[-1200:])
 
 
 def test_warned_hook_that_left_is_not_charged_in_a_run_with_something_to_land():
@@ -239,7 +239,7 @@ def test_warned_hook_that_left_is_not_charged_in_a_run_with_something_to_land():
         check("o hook da 1ª tentativa do a1 foi avisado",
               [e["id"] for e in warnings(root)] == ["a1"], str(warnings(root)))
         check("há o que aterrissar (o a0 ficou na branch)",
-              "aterrissar" in p.stdout.split("── fim")[-1], p.stdout[-1200:])
+              "aterrissar" in p.stdout.split("── ended at")[-1], p.stdout[-1200:])
         check("o fim não cobra o hook que saiu",
               "reinstalar-plugin" not in p.stdout
               and all(f["id"] != "reinstalar-plugin" for f in

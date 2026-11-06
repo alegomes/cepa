@@ -529,7 +529,7 @@ def test_cepa_until_dry_run_new_queue_header_and_ledger_dir():
                            cwd=str(root), timeout=120)
         assert r.returncode == 0, r.stdout + r.stderr
         first_line = r.stdout.splitlines()[0]
-        assert "fila fila" in first_line.replace("\x1b[36m", "").replace("\x1b[0m", ""), \
+        assert "queue fila" in first_line.replace("\x1b[36m", "").replace("\x1b[0m", ""), \
             first_line
         assert (root / ".claude" / "queues" / "fila" / "until").is_dir()
         assert not (root / ".claude" / "programs").exists()

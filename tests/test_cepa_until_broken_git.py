@@ -114,7 +114,7 @@ def test_impossible_repair_stops_as_broken_git_and_not_branch_changed():
               str(end))
         detail = end.get("detalhe") or ""
         check("o detalhe traz o erro do git e o que impediu o reparo",
-              "not a git repository" in detail and "não existe mais" in detail,
+              "not a git repository" in detail and "no longer exists" in detail,
               detail)
         check("o detalhe não acusa troca de branch",
               "`?`" not in detail and "trocou de branch no meio" not in detail,
@@ -152,7 +152,7 @@ def test_repair_does_not_write_outside_the_clone_worktrees_folder():
         (tree / ".git").write_text(f"gitdir: {outside}\n")
         failure = cu.repair_link(root, tree, "until/x")
         check("recusa ligação fora de .git/worktrees",
-              failure is not None and "fora de" in failure, str(failure))
+              failure is not None and "outside" in failure, str(failure))
         check("e não cria nada lá", not outside.parent.exists())
 
 

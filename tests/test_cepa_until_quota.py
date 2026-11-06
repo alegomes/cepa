@@ -126,7 +126,7 @@ def test_hit_the_ceiling_waits_for_the_reset_and_resumes_the_same_item():
               end["motivo"] == "fim-da-fila" and end["sem_progresso"] == 1
               and end["esperas_de_cota"] == 1, str(end))
         check("...o relatório lista a espera",
-              "Esperas pela cota de 5h (1)" in p.stdout, p.stdout[-600:])
+              "Waits for the 5h quota (1)" in p.stdout, p.stdout[-600:])
 
 
 def test_reset_outside_the_window_stops_instead_of_waiting():
@@ -144,7 +144,7 @@ def test_reset_outside_the_window_stops_instead_of_waiting():
         check("...parou com motivo limite-de-uso",
               end["motivo"] == "limite-de-uso", str(end))
         check("...dizendo que o reset não cabe na janela",
-              "não deixa a reserva mínima" in (end.get("detalhe") or ""),
+              "does not leave the minimum reserve" in (end.get("detalhe") or ""),
               end.get("detalhe"))
         check("...e o item segue pendente",
               status(plan_of(root))["a1"] == "pending")
@@ -166,7 +166,7 @@ def test_three_cutoffs_in_a_row_end_the_run():
         end = run_end(root)
         check("...com o motivo dizendo que o reset não levanta o teto",
               end["motivo"] == "limite-de-uso"
-              and "não está levantando" in (end.get("detalhe") or ""), str(end))
+              and "is not lifting" in (end.get("detalhe") or ""), str(end))
         check("...e o item NÃO foi bloqueado pelo teto de tentativas",
               status(plan_of(root))["a1"] == "pending",
               str(status(plan_of(root))))
@@ -304,8 +304,8 @@ def test_pause_that_does_not_fit_the_window_starts_anyway():
               len(tight) == 1 and tight[0]["id"] == "a3"
               and tight[0]["uso"] == 0.8, str(tight))
         check("...a tela avisou antes e listou no fim",
-              "começo assim mesmo" in p.stdout
-              and "Começados com a cota apertada (1)" in p.stdout,
+              "starting anyway" in p.stdout
+              and "Started with the quota tight (1)" in p.stdout,
               p.stdout[-600:])
         check("...e o a3 fechou", status(plan_of(root))["a3"] == "done")
 

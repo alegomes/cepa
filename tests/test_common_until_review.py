@@ -43,10 +43,10 @@ def main():
           ".estado.json" in f and "by its id" in clean)
     check("não numera as ações por conta própria",
           "with no numbering of your own" in clean)
-    check("repete o bloco 'fica com você'", "fica com você" in clean)
+    check("repete o bloco 'fica com você'", "left with you" in clean)
     check("tarefa do dono traz 'Done when'", "done when" in clean)
-    j = clean.find("fica com você")
-    check("'Fica com você' manda escrever o cepa-plan answer colável",
+    j = clean.find("left with you")
+    check("'Left with you' manda escrever o cepa-plan answer colável",
           "cepa-plan answer" in clean[j:j + 2500], clean[j:j + 200])
     check("fecha com perguntas fechadas com recomendação",
           "closed questions" in clean and "i recommend yes/no" in clean)

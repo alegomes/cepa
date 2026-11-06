@@ -29,6 +29,7 @@ import os
 import pty
 import re
 import select
+import signal
 import subprocess
 import sys
 import tempfile
@@ -112,37 +113,37 @@ def test_decide_on_terminal_draws_one_card_per_question():
     plain_text = ANSI.sub("", raw)
     check("tem cor", "\x1b[" in raw)
     check("régua de abertura com a contagem",
-          "── 3 pergunta(s) para você ─" in plain_text, plain_text)
+          "── 3 question(s) for you ─" in plain_text, plain_text)
     check("cartão de aterrissar com a recomendação marcada",
-          "┌─ aterrissar ─" in plain_text and "│  ✦ Recomendo sim: build verde"
+          "┌─ aterrissar ─" in plain_text and "│  ✦ Recommend yes: build verde"
           in plain_text, plain_text)
     check("um cartão por item, com i/n e id na régua",
           "┌─ 1/2 · W-1 ─" in plain_text and "┌─ 2/2 · W-2 ─" in plain_text, plain_text)
     check("rótulos numa coluna, com o curto no lugar do longo",
-          "│  Parou porque   o agente marcou" in plain_text
-          and "│  Contexto       dois clientes" in plain_text
-          and "│  Tarefa         rotacionar no cofre" in plain_text, plain_text)
+          "│  Stopped because the agent marked" in plain_text
+          and "│  Context         dois clientes" in plain_text
+          and "│  Task            rotacionar no cofre" in plain_text, plain_text)
     check("a pergunta marcada e a instrução embaixo dela",
           "│  ? Mantenho o reenvio?" in plain_text
-          and "│    Se sim, o próximo run recebe: cancelar e recriar" in plain_text,
+          and "│    If yes, the next run receives: cancelar e recriar" in plain_text,
           plain_text)
-    check("recomendação do item com ✦", "│  ✦ Recomendo não: duplica" in plain_text,
+    check("recomendação do item com ✦", "│  ✦ Recommend no: duplica" in plain_text,
           plain_text)
     check("menu em chips dentro do cartão, com a recomendada marcada",
-          "│  [s] sim · [n] não (recomendado) · [t] escrevo a resposta · "
-          "[d] descarta o item" in plain_text
-          and "[e] detalhe técnico" in plain_text, plain_text)
+          "│  [s] yes · [n] no (recommended) · [t] I write the answer · "
+          "[d] discard the item" in plain_text
+          and "[e] technical detail" in plain_text, plain_text)
     check("o prompt fica dentro do cartão e o cartão fecha",
           ANSI.sub("", prompts[1]) == "│  ▸ " and plain_text.count("└─") == 3,
           (prompts, plain_text))
     check("o gravado aparece com ✓ no cartão", "│  ✓ W-1 voltou" in plain_text,
           plain_text)
     check("fecho com placar e o comando de volta",
-          "── fecho ─" in plain_text and "respondido agora 2" in plain_text
-          and "para depois 1" in plain_text
+          "── closing ─" in plain_text and "answered now 2" in plain_text
+          and "for later 1" in plain_text
           and "cepa-until decide fila/run1" in plain_text, plain_text)
-    triggers = ("Aterrisso agora? [s/N/q] ", "[t] escrevo a resposta",
-                "Quer acrescentar algo, numa linha? [Enter pula] ")
+    triggers = ("Land now? [y/N/q] ", "[t] I write the answer",
+                "Anything to add, in one line? [Enter skips] ")
     all_ = raw + "\n".join(prompts)
     check("as frases que o pty responde ficam inteiras, sem cor no meio",
           all(g in all_ for g in triggers), all_)
@@ -186,6 +187,16 @@ def on_tty(cmd, cwd, inputs=(), env=None, timeout=120):
             if isinstance(reply, str):
                 reply = reply.encode()
             os.write(fd, reply + b"\n")
+    # Past the wait, the child may still sit at a prompt nobody answered (an
+    # anchor in `inputs` that the screen never showed): kill it, or waitpid
+    # blocks forever and the suite hangs instead of failing (2026-11-06: 10h).
+    if time.time() >= end:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+        out_text += f"\n<on_tty: no answer within {timeout}s; still waiting: " \
+                    f"{[t for t, _ in queue]}>"
     _, st = os.waitpid(pid, 0)
     return os.waitstatus_to_exitcode(st), out_text
 
@@ -320,8 +331,8 @@ def test_decide_offers_to_keep_stuck():
         question=question_text, output=screen.append,
         answer=lambda i, t, keep=False: (
             answered.append((i, t, keep)), (0, f"{i} ok"))[1])
-    check("as opções oferecem [n] não e [t] escrevo",
-          all("[n] não" in p_ and "[t] escrevo" in p_
+    check("as opções oferecem [n] no e [t] escrevo",
+          all("[n] no" in p_ and "[t] I write" in p_
               for p_ in questions if "[Enter]" in p_), questions)
     check("[t] + N no 'devolvo?' chama o responde com keep=True",
           answered == [("W-1", "mantenha", True),
@@ -362,7 +373,7 @@ def test_decide_asks_and_applies_each_answer():
     plain_text = "\n".join(screen)
     check("pergunta aterrissar e aterrissa com s", landed == [1], plain_text)
     check("...mostrando a recomendação da análise",
-          "Recomendo sim: build verde" in plain_text, plain_text)
+          "Recommend yes: build verde" in plain_text, plain_text)
     check("a pergunta da análise aparece no lugar da evidência",
           "Movo para o checklist?" in plain_text, plain_text)
     check("a resposta digitada vai para o `responde`",
@@ -375,7 +386,7 @@ def test_decide_asks_and_applies_each_answer():
           any(x.startswith("W-3") for x in after)
           and any(x.startswith("W-2") for x in after), after)
     check("cascata não vira pergunta, só aparece como não sendo do dono",
-          "W-4 (depende de um item adiado" in plain_text, plain_text)
+          "W-4 (depends on a deferred item" in plain_text, plain_text)
     check("o fecho diz como voltar",
           "cepa-until decide fila/run1" in plain_text, plain_text)
     check("aplicados listam aterrissar e W-1",
@@ -412,25 +423,25 @@ def test_decide_s_and_n_answer_the_drafted_question():
     check("o título sai inteiro (cortado em 60, o dono respondia a uma "
           "pergunta que via pela metade; 15/10)", "t" * 90 in plain_text, plain_text)
     check("a recomendação marca a letra no menu",
-          any("[s] sim (recomendado)" in p_ for p_ in questions), questions)
+          any("[s] yes (recommended)" in p_ for p_ in questions), questions)
     check("a legenda diz o que sim e não fazem",
-          "sim = o item volta para a fila" in plain_text, plain_text)
+          "yes = the item goes back to the queue" in plain_text, plain_text)
     check("sem pergunta redigida, o terminal faz a padrão",
-          "destravo o item e devolvo para a fila?" in plain_text
-          and "O agente parou porque: sem produção" in plain_text, plain_text)
+          "unblock the item and send it back to the queue?" in plain_text
+          and "The agent stopped because: sem produção" in plain_text, plain_text)
     check("sim/n/s viram respostas gravadas, com a pergunta dentro",
           answered == [
               ("W-1", "sim: Fecho a rota como 'fica para depois'?", False),
               ("W-2", "não: Destravo?. por enquanto não", True),
-              ("W-3", "sim: destravar o item. ligue a flag", False)],
+              ("W-3", "sim: unblock the item. ligue a flag", False)],
           answered)
     check("os três contam como respondidos", len(applied) == 3, applied)
     menus = [p_ for p_ in questions if "[Enter]" in p_]
     check("o menu completo, com evidência: s, n, t, e, Enter, q",
-          menus and all("[s] sim" in p_ and "[n] não" in p_
-                        and "[t] escrevo a resposta" in p_
-                        and "[e] detalhe técnico" in p_
-                        and "[Enter] depois" in p_ and "[q] encerra" in p_
+          menus and all("[s] yes" in p_ and "[n] no" in p_
+                        and "[t] I write the answer" in p_
+                        and "[e] technical detail" in p_
+                        and "[Enter] later" in p_ and "[q] quit" in p_
                         for p_ in menus), menus)
     check("...e sem as teclas antigas [r]/[f]/[m]",
           not any(k in p_ for p_ in menus for k in ("[r]", "[f]", "[m]")),
@@ -444,8 +455,8 @@ def test_decide_s_and_n_answer_the_drafted_question():
              question=lambda _p: next(resp2), output=screen2.append)
     text2 = "\n".join(screen2)
     check("rota humana sem pergunta: mostra a tarefa e pergunta 'já fez?'",
-          "Tarefa que ficou para você: valide o login real" in text2
-          and "Pergunta: já fez?" in text2, text2)
+          "Task left for you: valide o login real" in text2
+          and "Question: done already?" in text2, text2)
     check("...e sem evidência o menu não oferece [e]",
           not any("[e]" in p_ for p_ in screen2), screen2)
 
@@ -492,23 +503,23 @@ def test_decide_shows_context_instruction_and_warns_question_outside_the_rules()
     check("o bloco tem Parou porque / Tarefa / Contexto / Pergunta / "
           "Se sim / Recomendo, nesta ordem",
           [block_s5.find(r) for r in (
-              "Parou porque: ficou uma tarefa que só você faz",
-              "Tarefa que ficou para você: rodar os 20 lotes",
-              "Contexto: O código está pronto numa branch lateral",
-              "Pergunta: Deixo a rodada dos 20 lotes",
-              "Se sim, o próximo run recebe: retomar de until/",
-              "Recomendo sim: a rodada só é possível")]
+              "Stopped because: a task only you can do was left",
+              "Task left for you: rodar os 20 lotes",
+              "Context: O código está pronto numa branch lateral",
+              "Question: Deixo a rodada dos 20 lotes",
+              "If yes, the next run receives: retomar de until/",
+              "Recommend yes: a rodada só é possível")]
           == sorted(i for i in (block_s5.find(r) for r in (
-              "Parou porque:", "Tarefa que ficou", "Contexto:",
-              "Pergunta:", "Se sim,", "Recomendo sim")))
+              "Stopped because:", "Task left for you", "Context:",
+              "Question:", "If yes,", "Recommend yes")))
           and all(r in block_s5 for r in (
-              "Parou porque:", "Tarefa que ficou", "Contexto:",
-              "Pergunta:", "Se sim,", "Recomendo sim")), block_s5)
+              "Stopped because:", "Task left for you", "Context:",
+              "Question:", "If yes,", "Recommend yes")), block_s5)
     check("linha em branco antes da pergunta e antes da legenda do menu",
-          "\n\n       Pergunta:" in block_s5
-          and "\n\n       sim = o item volta" in block_s5, block_s5)
+          "\n\n       Question:" in block_s5
+          and "\n\n       yes = the item goes back" in block_s5, block_s5)
     check("a pergunta dentro das regras não ganha aviso",
-          "fora das regras" not in block_s5, block_s5)
+          "outside the rules" not in block_s5, block_s5)
     check("o sim grava a pergunta E a instrução, para o próximo run",
           answered[0] == ("S5", "sim: Deixo a rodada dos 20 lotes para "
                              "depois do merge e devolvo o item à fila? "
@@ -517,8 +528,8 @@ def test_decide_shows_context_instruction_and_warns_question_outside_the_rules()
                              "PipelineTest", False), answered)
     block_s6 = " ".join(plain_text.split("━━ [2/2] S6")[1].split())
     check("a pergunta longa com branch e classe é mostrada E avisada",
-          "Pergunta: Fecho a rota humana B.14" in block_s6
-          and "fora das regras: 37 palavras, o limite é 25; nome de branch, "
+          "Question: Fecho a rota humana B.14" in block_s6
+          and "outside the rules: 37 palavras, o limite é 25; nome de branch, "
               "classe de teste ou arquivo" in block_s6, block_s6)
     check("pergunta_fora_das_regras: None dentro das regras",
           m.question_breaks_rules("Fecho o card como 'medir depois'?")
@@ -550,7 +561,7 @@ def test_run_without_terminal_lists_the_pending_and_the_command():
         binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
         p, _ = run_until(root, binv, plan_of(root), ["--for", "2h"])
         check("o fim lista o que espera o dono",
-              "esperam por você" in p.stdout, p.stdout[-1500:])
+              "waiting on you" in p.stdout, p.stdout[-1500:])
         check("...com a pergunta do item, não a evidência",
               "Fecho o card como medir depois do go-live?" in p.stdout,
               p.stdout[-1500:])
@@ -570,9 +581,9 @@ def test_run_on_terminal_ends_asking_and_applies():
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"], str(root),
-            inputs=[("[t] escrevo a resposta", "t"),
-                      ("Sua resposta", "vira item do checklist"),
-                      ("Devolvo o item para a fila", "s")], env=env)
+            inputs=[("[t] I write the answer", "t"),
+                      ("Your answer", "vira item do checklist"),
+                      ("Send the item back to the queue", "s")], env=env)
         check("o run sai 0", rc == 0, out[-1500:])
         check("pergunta o item travado com a pergunta gravada",
               "Fecho o card como medir depois do go-live?" in out, out[-1500:])
@@ -644,10 +655,10 @@ def test_run_on_terminal_asks_to_land_and_lands_with_s():
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--verify", VERIFY, "--no-analysis"], str(root),
-            inputs=[("Aterrisso agora?", "s")],
+            inputs=[("Land now?", "s")],
             env=env_do_run(tmp, root, binv), timeout=240)
         check("o run sai 0", rc == 0, out[-1500:])
-        check("o fim pergunta se aterrissa", "Aterrisso agora?" in out,
+        check("o fim pergunta se aterrissa", "Land now?" in out,
               out[-1500:])
         log = git(root, "log", "--format=%s", "HEAD").splitlines()
         check("com s, o commit do item chega à main", "a1" in log, str(log))
@@ -668,7 +679,7 @@ def test_reserved_does_not_become_a_question():
     plain_text = "\n".join(screen)
     check("nenhuma pergunta é feita", questions == [], questions)
     check("...e o fecho diz que nada espera por você",
-          "nada espera por você" in plain_text, plain_text)
+          "nothing is waiting on you" in plain_text, plain_text)
 
 
 def test_decidir_as_process_with_and_without_terminal():
@@ -697,9 +708,9 @@ def test_decidir_as_process_with_and_without_terminal():
         check("...sem mexer na fila",
               items_of(root)["a1"]["status"] == "blocked")
         rc, out = on_tty(cmd, str(root), inputs=[
-            ("[t] escrevo a resposta", "t"), ("Sua resposta", "vira checklist"),
-            ("Devolvo o item para a fila", "s"),
-            ("[t] escrevo a resposta", "s"), ("Quer acrescentar algo", "login ok")])
+            ("[t] I write the answer", "t"), ("Your answer", "vira checklist"),
+            ("Send the item back to the queue", "s"),
+            ("[t] I write the answer", "s"), ("Anything to add", "login ok")])
         a1, a2 = items_of(root)["a1"], items_of(root)["a2"]
         check("no terminal, decidir aplica o blocked",
               rc == 0 and a1["status"] == "pending"
@@ -773,9 +784,9 @@ def test_end_with_analysis_asks_with_the_block_wording():
             "evidence='evidência crua longa')\n")
         binv = fake_claude(tmp, body)
         p, _ = run_until(root, binv, plan_of(root), ["--for", "2h", "--com-analise"])
-        end = p.stdout.split("── esperam por você")[-1]
+        end = p.stdout.split("── waiting on you")[-1]
         check("com análise, o fim lista o que espera o dono",
-              "── esperam por você" in p.stdout, p.stdout[-1200:])
+              "── waiting on you" in p.stdout, p.stdout[-1200:])
         check("...com a pergunta redigida pela análise",
               "Movo a medição para o checklist?" in end, end)
 
@@ -797,7 +808,7 @@ def test_end_stopped_by_quota_also_asks():
         end = [e for e in ledger_of(root) if e["evento"] == "run_end"][0]
         check("o run parou pela cota", end["motivo"] == "limite-de-uso", str(end))
         check("...e mesmo assim termina perguntando",
-              "── esperam por você" in p.stdout
+              "── waiting on you" in p.stdout
               and "Fecho o card?" in p.stdout, p.stdout[-1200:])
 
 
@@ -816,7 +827,7 @@ def test_list_without_terminal_filters_what_is_not_the_owners():
           plain_text)
     check("...e a rota humana verbatim", "rode o login real" in plain_text, plain_text)
     check("...contando 2, sem reservado nem cascata",
-          "esperam por você: 2" in plain_text and "W-2" not in plain_text
+          "waiting on you: 2" in plain_text and "W-2" not in plain_text
           and "W-3" not in plain_text, plain_text)
 
 
@@ -882,7 +893,7 @@ def test_hostile_input_does_not_corrupt_the_queue_nor_leave_the_folder():
                                 stdin=subprocess.DEVNULL, timeout=60)
             check(f"alvo {target!r} recusa com 2, sem traceback",
                   p_.returncode == 2 and "Traceback" not in p_.stderr
-                  and "esperam por você" not in p_.stdout,
+                  and "waiting on you" not in p_.stdout,
                   p_.stdout + p_.stderr)
 
 
@@ -921,8 +932,8 @@ def test_decidir_s_and_n_on_terminal_reach_the_plan():
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
                "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), inputs=[
-            ("[t] escrevo a resposta", "n"), ("Quer acrescentar algo", ""),
-            ("[t] escrevo a resposta", "s"), ("Quer acrescentar algo", "vi ok")])
+            ("[t] I write the answer", "n"), ("Anything to add", ""),
+            ("[t] I write the answer", "s"), ("Anything to add", "vi ok")])
         a1, a2 = items_of(root)["a1"], items_of(root)["a2"]
         check("n no terminal: o blocked continua blocked",
               rc == 0 and a1["status"] == "blocked", (rc, a1, out[-1200:]))
@@ -933,8 +944,8 @@ def test_decidir_s_and_n_on_terminal_reach_the_plan():
         check("...com 'sim: <rota>. <acréscimo>' na evidência",
               "sim: valide o login real. vi ok" in a2["evidence"], a2)
         rc, out = on_tty(cmd, str(root), inputs=[
-            ("[t] escrevo a resposta", "s"),
-            ("Quer acrescentar algo", "mas só depois do deploy")])
+            ("[t] I write the answer", "s"),
+            ("Anything to add", "mas só depois do deploy")])
         a1 = items_of(root)["a1"]
         check("s no blocked com pergunta: volta para pending, com o comentário",
               rc == 0 and a1["status"] == "pending"
@@ -956,13 +967,13 @@ def test_invalid_byte_on_terminal_does_not_crash_decide():
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), inputs=[
-                ("[t] escrevo a resposta", b"n\xcb\xc3\xa3o"),
-                ("digite de novo", "t"),
-                ("Sua resposta", "vira checklist"),
-                ("Devolvo o item para a fila", "s")])
+                ("[t] I write the answer", b"n\xcb\xc3\xa3o"),
+                ("could not read that line", "t"),
+                ("Your answer", "vira checklist"),
+                ("Send the item back to the queue", "s")])
         check("sem traceback", "Traceback" not in out, out[-1500:])
         check("...avisa que não leu e pede de novo",
-              "digite de novo" in out, out[-1500:])
+              "could not read that line" in out, out[-1500:])
         a1 = items_of(root)["a1"]
         check("...e a resposta seguinte ainda é aplicada",
               rc == 0 and a1["status"] == "pending"
@@ -985,7 +996,7 @@ def test_loose_text_at_options_prompt_does_not_vanish():
              answer=lambda i, t: (answered.append((i, t)), (0, "ok"))[1])
     plain_text = "\n".join(screen)
     check("avisa que o texto não é uma opção",
-          "não é uma das opções" in plain_text, plain_text)
+          "is not one of the options" in plain_text, plain_text)
     check("...e a resposta dada depois do r é gravada",
           answered == [("W-1", "não sei")], answered)
 
@@ -1003,12 +1014,12 @@ def test_loose_text_on_terminal_warns_and_still_writes():
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), inputs=[
-                ("[t] escrevo a resposta", "eu não faço ideia"),
-                ("digite t primeiro", "t"),
-                ("Sua resposta", "não sei ainda"),
-                ("Devolvo o item para a fila", "s")])
+                ("[t] I write the answer", "eu não faço ideia"),
+                ("type t first", "t"),
+                ("Your answer", "não sei ainda"),
+                ("Send the item back to the queue", "s")])
         check("avisa que o texto solto não é opção",
-              "não é uma das opções" in out and "digite t primeiro" in out,
+              "is not one of the options" in out and "type t first" in out,
               out[-1500:])
         a1 = items_of(root)["a1"]
         check("...e a resposta dada depois do r chega ao plano",
@@ -1100,7 +1111,7 @@ def test_finish_keeps_agent_and_human_sections_apart():
 def test_decide_shows_human_section_and_what_each_answer_does():
     """The screen opens with the human section (why it stopped, what was
     asked, what is ready), and the menu legend says what sim and não do to
-    the WORK. The codes only show on [e], under "Detalhe técnico"."""
+    the WORK. The codes only show on [e], under "Technical detail"."""
     m = load_module()
     deferred_ones = [{
         "id": "WEGO-2381", "title": "Ampliar cobertura de testes",
@@ -1121,21 +1132,21 @@ def test_decide_shows_human_section_and_what_each_answer_does():
     text = "\n".join(screen)
     flat = " ".join(text.split())
     order = [flat.find(x) for x in (
-        "Parou porque: o sistema responde em branco",
-        "Era para: testar a parte",
-        "Já está pronto: 136 de 154",
-        "Pergunta: Entrego com os 18 casos",
-        "sim = o trabalho vai para revisão. O item volta para a fila",
-        "não = o trabalho espera o defeito ser corrigido")]
+        "Stopped because: o sistema responde em branco",
+        "Was meant to: testar a parte",
+        "Already done: 136 de 154",
+        "Question: Entrego com os 18 casos",
+        "yes = o trabalho vai para revisão. The item goes back to the queue",
+        "no = o trabalho espera o defeito ser corrigido")]
     check("motivo, pedido, pronto, pergunta e legenda, nesta ordem",
           -1 not in order and order == sorted(order), text)
     check("a etiqueta genérica some quando há motivo leigo",
-          "o agente marcou o item como travado" not in text
+          "the agent marked the item as stuck" not in text
           and "travou por algo de fora do código" not in text, text)
-    before_e = text.split("Detalhe técnico")[0]
+    before_e = text.split("Technical detail")[0]
     check("os códigos só aparecem no detalhe técnico, no [e]",
           "WEGO-2490" not in before_e
-          and "Detalhe técnico (para agentes): completion-auditor" in text, text)
+          and "Technical detail (for agents): completion-auditor" in text, text)
 
 
 def test_old_blocked_item_gets_a_true_generic_reason():
@@ -1150,7 +1161,7 @@ def test_old_blocked_item_gets_a_true_generic_reason():
              answer=lambda *a, **k: (0, "ok"))
     text = "\n".join(screen)
     check("item antigo mostra o motivo genérico verdadeiro",
-          "Parou porque: o agente marcou o item como travado." in text
+          "Stopped because: the agent marked the item as stuck." in text
           and "fora do código" not in text, text)
 
 
@@ -1165,7 +1176,7 @@ def test_supervisor_block_writes_a_lay_reason():
         check("block_item fecha blocked sob a regra nova", err is None, err)
         check("...com o motivo leigo na seção humana",
               (it.get("owner_summary") or {}).get("impede", "").startswith(
-                  "o executor tentou 3 vezes seguidas"), it)
+                  "the executor tried 3 times in a row"), it)
 
 
 def main():
