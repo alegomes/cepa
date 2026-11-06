@@ -1,0 +1,42 @@
+schema_version: 2
+card: feedback-triage-cria-item-de-fila
+verdict: proven
+reviewed_at: 2026-11-05T23:45:00-03:00
+base_commit: b92c55d
+head_commit: 9477523
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-feedback (cmd_triage, _queue_status, _queue_item, _queue_add, records)", module: harness, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/feedback.md", module: harness-doc, external_observable: false, substituted_by_double: null }
+    - { class: "tests/test_cepa_feedback.py", module: harness-test, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python (CLI + testes de script); nao ha PIT. Perturbacao como mecanismo universal."
+    perturbation:
+      status: pass
+      results:
+        - "Rodada 2 em worktree descartavel /tmp/proof-fb-2 (9477523, removido ao final). Base verde: `python3 tests/test_cepa_feedback.py` -> 'tudo verde', rc=0. Cada quebra aplicada sobre common/bin/cepa-feedback, teste re-executado, arquivo restaurado com `git checkout --` antes da seguinte."
+        - "N1 pre-checagem do item removida (`if err:` -> `if False:` apos `_queue_item(args, data)`) -> RED rc=1, 5 FAIL ('triar --item inexistente: rc=2 0', 'nomeia item e fila', 'sem evento')."
+        - "N1b caminho aviso-apenas para fila ilegivel em destino BACKLOG sem --item (`if err and not args.item: err = None` apos `_queue_status`) -> RED rc=1, 2 FAIL ('triar BACKLOG com fila inexistente: rc=2 0', 'sem evento'). Corresponde ao teste test_triage_backlog_with_missing_queue_is_refused."
+        - "N2 write_event movido para antes da pre-checagem da fila -> RED rc=1, 5 FAIL ('triar com erro real do add: evento de triagem GRAVADO no ledger', 'triar --item inexistente: sem evento', 'triar --item pendente: evento carrega o item')."
+        - "N3 copia do campo `item` removida em records() (`\"item\": ev.get(\"item\"),`) -> RED rc=1, 1 FAIL ('cruzamento: todo destino BACKLOG tem item pendente ou feito'). Corresponde a test_triage_ledger_and_queue_match."
+        - "Subconjunto das 13 da rodada 1 (f8f8041), reaplicado em 9477523: a (recusa BACKLOG sem --queue/--item) RED 4 FAIL; b (--item sem --queue) RED 2 FAIL; d (pendente so cita) RED 4 FAIL; e (done/dropped abre item novo) RED 5 FAIL; e2 (why cita id antigo) RED 2 FAIL; f (titulo da secao) RED 1 FAIL; g (why 'Origem: feedback') RED 1 FAIL; h (relay 'inserido na posicao') RED 1 FAIL; i (aviso de flags ignoradas) RED 1 FAIL; j3 (write_event antes da recusa --item sem --queue) RED 20 FAIL; j2 (write_event antes da recusa BACKLOG) RED 28 FAIL. c (--item fora da fila) coberto por N1. j1 substituido por N2 (a antiga ancora mudou de lugar)."
+        - "Rodada 1 em /tmp/proof-fb-1 (f8f8041): 13 quebras, 13 RED (a..j com variantes e2, j1..j3); as linhas de a, b, d..i, j2, j3 permanecem identicas em 9477523 e voltaram RED na rodada 2. Total: 4 novas + 11 reaplicadas, 15/15 RED, 0 sobreviventes. Worktrees removidos (`git worktree list` sem proof-fb)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; alcance determinado pela perturbacao: cada ramo alterado de cmd_triage/_queue_status/records (N1, N1b, N2, N3, a..j) derruba o teste quando quebrado (15/15 RED acima)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff altera argumentos de um CLI local usado pelo proprio operador (flags --queue/--item/--destination validadas e recusadas com exit 2, sem escrever no ledger, provado em a, b, N1, N1b); nao abre superficie de entrada externa e nao toca modulo api-rest."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: ""
+routing_reason: "Em 9477523, as 3 novas quebras (pre-checagem da fila removida, write_event antes da pre-checagem, copia do campo item removida) e o subconjunto das 13 anteriores derrubaram tests/test_cepa_feedback.py; base verde ('tudo verde', rc=0). Nenhum nivel assumed/skipped/gap/survived: PROVEN."
