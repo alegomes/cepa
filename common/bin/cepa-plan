@@ -257,6 +257,7 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _queuepath as qp  # noqa: E402  (resolver for both queue layouts)
 import _ownertext  # noqa: E402  (the human section of a blocked item)
+import _decisions  # noqa: E402  (the one reader of "Decided without asking")
 import _state  # noqa: E402  (the one reader of the state deposits and the run liveness rule)
 from _state import HEARTBEAT_STALE_SEC  # noqa: E402,F401  (one copy of the constant)
 
@@ -4055,6 +4056,58 @@ def cmd_validate(arg, repo="."):
     return 0
 
 
+def cmd_decisions(repo, files, as_json):
+    """Lists, per file, the decisions of "Decided without asking" with and
+    without a verdict. The reader is the one the readiness hook uses
+    (`_decisions`), so the count here is the count the gate sees. Reads files
+    only: no git needed."""
+    base = Path(repo)
+    if files:
+        paths = [Path(f) for f in files]
+        missing = [str(p) for p in paths if not p.is_file()]
+        if missing:
+            for m in missing:
+                print(f"{m} não existe como arquivo", file=sys.stderr)
+            return 2
+        shown = [(p, str(p)) for p in paths]
+    else:
+        found = []
+        for sub in ("spec", "epics"):
+            d = base / "docs" / sub
+            if d.is_dir():
+                found += sorted(d.glob("*.md"))
+        shown = [(p, str(p.relative_to(base))) for p in found]
+
+    reports = []
+    for path, label in shown:
+        res = _decisions.read_file(path)
+        if res is None:
+            reports.append({"path": label, "decisions": None})
+            continue
+        every = sorted(res.pending + res.decided, key=lambda d: d.line)
+        reports.append({"path": label, "decisions": [
+            {"ordinal": i, "line": d.line, "text": d.text, "verdict": d.verdict}
+            for i, d in enumerate(every, 1)]})
+
+    if as_json:
+        print(json.dumps({"files": reports}, ensure_ascii=False, indent=2))
+        return 0
+    if not reports:
+        print("Nenhuma spec em docs/spec/ nem Epic em docs/epics/.")
+        return 0
+    for r in reports:
+        decs = r["decisions"]
+        if decs is None:
+            print(f"{r['path']}: sem a seção \"Decided without asking\"")
+            continue
+        pending = [d for d in decs if not d["verdict"]]
+        print(f"{r['path']}: {len(decs)} decisões, {len(pending)} sem veredito, "
+              f"{len(decs) - len(pending)} com veredito")
+        for d in pending:
+            print(f"  #{d['ordinal']} (linha {d['line']}): {d['text']}")
+    return 0
+
+
 def cmd_write(root, a):
     if a.from_triage:
         handoff, error = read_handoff(a.from_triage)
@@ -4454,7 +4507,7 @@ def main(argv=None):
         groups=[
             ("sources (read only, return JSON)", ["from-spec", "from-epic", "from-triage"]),
             ("writing", ["write", "add", "migrate", "check-name", "validate"]),
-            ("reading", ["queue", "status", "show", "epics", "promote", "order"]),
+            ("reading", ["queue", "status", "show", "epics", "decisions", "promote", "order"]),
             ("one item's cycle", ["start", "finish", "answer"]),
             ("against the Jira board", ["reconcile", "landed", "divergence"]),
         ],
@@ -4688,6 +4741,26 @@ def main(argv=None):
     ep.add_argument("--json", action="store_true", dest="as_json", help=json_help)
     ep.add_argument("--brief", action="store_true",
                     help="one line per Epic (for the session hook)")
+
+    dc = sub.add_parser(
+        "decisions",
+        help="lists the \"Decided without asking\" decisions of specs and Epics",
+        description=(
+            "Read only. Per file, the decisions of the \"Decided without asking\"\n"
+            "section, split into with and without a verdict (`· mantida em`,\n"
+            "`· vetada em`, `· refinada em`). Without a file, scans docs/spec/*.md\n"
+            "and docs/epics/*.md of --repo. Each pending decision shows its ordinal\n"
+            "(1-based, counting every decision of the section in file order) and\n"
+            "its line. Same reader as the spec-readiness-gate hook."),
+        examples=[("cepa plan decisions", "every spec and Epic of the repo"),
+                  ("cepa plan decisions docs/spec/assinatura.md", "one file"),
+                  ("cepa plan decisions docs/spec/assinatura.md --json", "for code")],
+        exit_codes=[(0, "shown (even with no file, or a file without the section)"),
+                    (2, "invalid usage, a given file does not exist")])
+    dc.add_argument("files", nargs="*", metavar="file",
+                    help="spec or Epic to read (default: scan docs/spec and docs/epics)")
+    dc.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
+    dc.add_argument("--json", action="store_true", dest="as_json", help=json_help)
 
     pr = sub.add_parser(
         "promote", help="lists the demands the queue hands to /maestro:program-plan --from-plan",
@@ -5065,6 +5138,8 @@ def main(argv=None):
 
     if a.cmd == "validate":
         return cmd_validate(a.plan_file, a.repo)
+    if a.cmd == "decisions":
+        return cmd_decisions(a.repo, a.files, a.as_json)
     if a.cmd == "from-spec":
         return cmd_from_spec(a.spec)
     if a.cmd == "from-triage":
