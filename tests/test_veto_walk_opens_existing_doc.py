@@ -76,11 +76,25 @@ def check_common(label, text, open_prefix, interview_prefix):
     return body
 
 
+def check_order(label, path, walk, later):
+    text = re.sub(r"\s+", " ", path.read_text(encoding="utf-8"))
+    i, j = text.find(walk), text.find(later)
+    check(f"{label}: walk paragraph comes before {later!r}",
+          i != -1 and j != -1 and i < j, f"{i} {j}")
+
+
+def check_numbers(label, body):
+    check(f"{label}: use the number as `cepa-plan decisions` prints it, never renumber",
+          "exactly as `cepa-plan decisions` prints it" in body and "never renumber" in body)
+
+
 def test_spec():
     text = SPEC.read_text(encoding="utf-8")
     body = check_common("spec.md", text, "1. Locate or open", "3. Interrogate")
     check("spec.md: limit of four per round",
           re.search(r"(?i)up to four\b.{0,60}\bper round", body) is not None)
+    check_numbers("spec.md", body)
+    check_order("spec.md", SPEC, "The veto walk (caminhada do veto).", "write the skeleton with")
     check("spec.md: covers --continuar and --fechar",
           "--continuar" in body and "--fechar" in body)
 
@@ -88,6 +102,8 @@ def test_spec():
 def test_epic():
     text = EPIC.read_text(encoding="utf-8")
     body = check_common("epic.md", text, "1. Open or resume", "3. Ask")
+    check_numbers("epic.md", body)
+    check_order("epic.md", EPIC, "The veto walk (caminhada do veto).", "Otherwise (the file does not exist)")
     check("epic.md: limit of one per turn",
           re.search(r"(?i)\bone\b.{0,30}\bper turn\b", body) is not None)
 

@@ -94,7 +94,9 @@ number and text, and ask the owner for one answer per decision: keep it
 (`mantida`), veto it (`vetada`, with the reason) or refine it (`refinada`, with
 the new text). Record each answer in the same turn with `cepa-plan verdict
 docs/spec/<slug>.md <n> mantida|vetada|refinada` (`vetada` needs `--reason`,
-`refinada` needs `--text`). Never write the `· mantida em` / `· vetada em` /
+`refinada` needs `--text`). Use the number exactly as `cepa-plan decisions` prints it (1-based over every
+decision of the section, decided ones included, so the numbers shown may skip):
+never renumber. Never write the `· mantida em` / `· vetada em` /
 `· refinada em` marker by hand: the date and the format come from the command.
 `Status` does not change by veto; a vetoed decision becomes an open question
 only if the owner says so in the same turn. If `cepa-plan verdict` prints "já
@@ -103,7 +105,7 @@ warning on to the owner as it came. A skipped decision does not block: it stays
 without marker, the walk moves on, and the next `--continuar` offers it again.
 With no decision without a verdict, say so in one line and go on.
 
-Write the skeleton with `**Status:** draft` (the format is in step
+When creating a new file, write the skeleton with `**Status:** draft` (the format is in step
 6). The `spec-readiness-gate` gate never bothers you while the status is
 `draft`. Fill `## Como chegamos aqui` at skeleton time, from the owner's first
 sentence or from the `porque:` line of the originating handoff;
