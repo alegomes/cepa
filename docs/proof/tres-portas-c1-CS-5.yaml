@@ -1,0 +1,50 @@
+schema_version: 2
+card: tres-portas-c1-CS-5
+verdict: unproven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: 805af34
+head_commit: 7022324
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-doctor::check_decisions + _is_draft + _readiness_gate (new), call in check_project"
+      module: common-bin
+      external_observable: true       # the `cepa-doctor --project` CLI is the surface; the test runs the real script as a subprocess
+      substituted_by_double: null     # tests/test_doctor_decisions.py runs the real cepa-doctor, real _decisions reader and real spec-readiness-gate
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "unperturbed HEAD 7022324 (detached worktree /tmp/cs5-proof-a): python3 tests/test_doctor_decisions.py -> 'todos ok'"
+        - "KILLED (RED) 1 draft skip removed -> 5 falha(s)"
+        - "KILLED (RED) 2 rascunho no longer a draft status -> 2 falha(s)"
+        - "KILLED (RED) 3 spec file gets the epic command -> 1 falha(s)"
+        - "KILLED (RED) 3b epic file gets the spec command -> 1 falha(s)"
+        - "KILLED (RED) 4 zero decisions reported as warn instead of ok -> 2 falha(s)"
+        - "KILLED (RED) 5 no docs/spec nor docs/epics: no longer silent -> 1 falha(s)"
+        - "KILLED (RED) 6 plural always -> 1 falha(s); 6b singular always -> 1 falha(s)"
+        - "KILLED (RED) 7 warn level turned into ok -> 5 falha(s)"
+        - "KILLED (RED) 8 check_decisions not called from check_project -> 10 falha(s)"
+        - "KILLED (RED) 9 first word of the status replaced by the whole status -> 2 falha(s)"
+        - "KILLED (RED) 12 skip docs/spec -> 9 falha(s); 13 skip docs/epics -> 3 falha(s)"
+        - "SURVIVED 10 per-file count replaced by constant 1 (len(res.pending) -> 1) -> 'todos ok'"
+        - "SURVIVED 11 total = number of files instead of sum of per-file counts -> 'todos ok'"
+        - "cause of 10 and 11: every fixture file in tests/test_doctor_decisions.py has exactly 1 pending decision, so count-per-file and count-of-files are indistinguishable; the doctor could report a wrong total/per-file number with the suite green"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every branch of check_decisions is reached by the test (draft skip, rascunho, spec/epic command, zero, no dirs, plural, warn); only the per-file count value is under-asserted"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff reads only the repo's own docs/spec and docs/epics markdown; it opens no input from outside and touches no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card; red test of the criterion: HEAD test against cepa-doctor and doctor.md of 805af34 -> '10 falha(s)'; at HEAD 7022324 -> 'todos ok'"
+routing_reason: "Test is RED at base (10 failures) and GREEN at HEAD, and 13 of 15 perturbations turn it RED. Two survive: the per-file decision count and the total are not distinguishable because every fixture has exactly 1 pending decision. Fix: add a closed spec with 2+ pending decisions (and check the 'N' per file line and total 3+ in the message). Computed verdict: UNPROVEN."
