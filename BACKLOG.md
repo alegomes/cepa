@@ -5,6 +5,32 @@ e onde provavelmente mora. Sem ordem de prioridade fixa.
 
 ---
 
+## `cepa-until land` refaz a checagem de conflito antes do merge
+
+Registrado em 2026-11-06 a pedido do dono, a partir do run `until/2026-11-05-2031` do wego-acessos-backend.
+
+### Problema
+
+A análise do fim do run (`<run>.review.md`) confere uma vez, com `git merge-tree`, que a
+branch da noite entra sem conflito e recomenda `aterrissar`. Entre essa análise e o
+`cepa-until land`, outra sessão pode gravar na branch de destino. No caso registrado, a
+análise rodou às 22:51 de 05/11 e o prove-drain gravou `docs/proof/WEGO-2417.yaml` na `main`
+às 01:54 de 06/11 (commit `1164b4f6`). A branch da noite tinha criado o mesmo arquivo, então
+o `land` das 06:12 bateu num conflito "both added", gravou `parou: conflito` e deixou a árvore
+principal com 28 arquivos preparados e 1 em conflito, sem avisar antes que a recomendação
+estava velha.
+
+### Esboço de solução
+
+No `land`, antes do `git merge`, rodar `git merge-tree --write-tree HEAD <branch>`. Se houver
+conflito, recusar sem tocar a árvore e listar os arquivos e os commits da branch de destino
+posteriores à análise (`git log <analise>..HEAD -- <arquivo>`), para o dono escolher o lado
+antes do merge. Um caso particular comum: um arquivo `docs/proof/<KEY>.yaml` nos dois lados,
+em que vale a versão com o `head_commit` mais novo. **Lar:** `common/bin/cepa-until`
+(função de aterrissar, por volta da linha 1846).
+
+---
+
 ## Vigia da coluna In Review
 
 Registrado em 2026-11-03 a pedido do dono (fb-20261103-1).
