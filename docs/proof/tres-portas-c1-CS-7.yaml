@@ -1,0 +1,49 @@
+schema_version: 2
+card: tres-portas-c1-CS-7
+verdict: unproven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: 73076a0
+head_commit: 42fbbb0
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/commands/spec.md (step 1 'Locate or open': veto walk paragraph)"
+      module: common-commands
+      external_observable: true       # the command markdown is the surface; the test reads the real file
+      substituted_by_double: null
+    - class: "common/commands/epic.md (step 1 'Open or resume': veto walk paragraph)"
+      module: common-commands
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "unperturbed HEAD 42fbbb0 (detached worktree): test_veto_walk_opens_existing_doc.py 'all passed'; test_spec_readiness_gate 'all green'; test_epic_readiness_gate 'OK'; test_spec_readiness_decision_count 'all green'; test_closing_repeats_decision_count 'all ok'"
+        - "RED (test prints FAIL, N = failures): spec.md: cepa-plan verdict removed N=1; 'up to four'->'up to ten' N=1; 'marker by hand' dropped N=1; 'does not block'->'blocks the walk' N=1; 'without marker'->'with a marker' N=1; 'Status does not change'->'changes' N=1; R2 warning phrase removed N=1; 'exactly as'->'roughly as' N=1; 'never renumber'->'renumber' N=1; skeleton text moved before walk N=1; interview heading moved before opening N=1; walk name removed N=2; ALL 'cepa-plan decisions' removed N=2"
+        - "RED: epic.md: 'one per turn'->'four per turn' N=1; 'marker by hand' dropped N=1; 'does not block' N=1; 'without marker' N=1; Status N=1; R2 phrase N=1; 'never renumber' N=1; 'Otherwise (the file does not exist)' moved before walk N=1; interview heading moved before opening N=1; ALL 'cepa-plan verdict' removed N=1"
+        - "SURVIVED (still all passed, 0 FAIL): spec.md S1 the call line 'run cepa-plan decisions docs/spec/<slug>.md' replaced by 'cepa-plan lista' (the test's substring 'cepa-plan decisions' is satisfied by the later sentence 'exactly as cepa-plan decisions prints it'); epic.md E1 same for 'cepa-plan decisions docs/epics/<name>.md'; epic.md E2 the record line 'cepa-plan verdict docs/epics/<name>.md <n> ...' replaced (substring satisfied by the R2 sentence 'If cepa-plan verdict prints')"
+        - "SURVIVED: spec.md S2 and epic.md E3 'Walk only the ones without' -> 'Walk all the ones' (the core rule that decided ones are not re-offered has no assertion)"
+        - "SURVIVED: spec.md S3 'the next --continuar offers it again' -> 'it is dropped'; epic.md E4 'it is offered again' -> 'it is dropped' (skipped stays pending next time has no assertion)"
+        - "SURVIVED: spec.md S4/S5 and epic.md E5 'vetada needs --reason' / 'refinada needs --text' replaced by 'needs nothing' (no assertion)"
+        - "SURVIVED: spec.md S6 '--continuar/--fechar: open with the veto walk below, and only then go to step 4/5' reduced to 'go to step 4/5' (the test finds --continuar/--fechar in the walk paragraph only, not the bullet that routes to it); epic.md E6 'Before the first gap and before the sieve' -> 'Whenever' (the before-gap ordering is asserted only against the skeleton text and the interview heading, not the gap/sieve)"
+  l2_coverage:
+    status: assumed
+    uncovered_lines:
+      - "spec.md step 1 bullet '--continuar/--fechar ... open with the veto walk below, and only then go to step 4/5'"
+      - "walk-only-without, skipped-offered-again, vetada-needs-reason, refinada-needs-text sentences in spec.md and epic.md"
+    run: "no coverage tool for markdown; reachability judged by perturbation (see survivors)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff changes only command markdown and a test that reads it; it parses nothing from outside and touches no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card; criterion test run at base command files (git checkout 73076a0 -- common/commands, test kept from HEAD): 24 failed, RED. HEAD: all passed"
+routing_reason: "Test is RED at base (24 failures) and 25+ perturbations of the veto-walk text go RED (four per round, one per turn, skipped does not block, no marker, never by hand, Status unchanged, R2 pass-through, number as printed, ordering before skeleton/Otherwise and before interview). But seven perturbations survive: the lines that call cepa-plan decisions (spec and epic) and cepa-plan verdict (epic) are masked by later sentences containing the same substring, and the rules 'walk only the undecided', 'skipped is offered again', 'vetada needs --reason / refinada needs --text', and the --continuar/--fechar routing bullet have no assertion. Computed verdict: UNPROVEN."
