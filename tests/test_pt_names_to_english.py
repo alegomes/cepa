@@ -184,9 +184,19 @@ def test_doctor_project_flag():
           "unrecognized" not in res[1][2] and res[1][0] in (0, 1, 2), res)
     # Without the flag the global checks run too: the output would differ, so
     # a flag that is silently ignored would not pass the line above by luck.
-    helptext = subprocess.run([sys.executable, str(BIN / "cepa-doctor"), "--help"],
-                              capture_output=True, text=True, timeout=60).stdout
-    check("doctor: a ajuda mostra --project", "--project" in helptext, helptext)
+    # main() reads sys.argv directly, so the parser only feeds --help: this is
+    # the case that makes `add_argument("--project", "--projeto")` load-bearing.
+    # The "Older Portuguese names" note is emitted only when an option has
+    # more than one long name.
+    with tempfile.TemporaryDirectory() as tmp:
+        p = subprocess.run([sys.executable, str(BIN / "cepa-doctor"), "--help"],
+                           capture_output=True, text=True, timeout=60,
+                           env=dict(os.environ, HOME=tmp))
+    check("doctor --help: rc=0", p.returncode == 0, p.stderr)
+    check("doctor --help: mostra --project nas opções", "--project" in p.stdout, p.stdout)
+    check("doctor --help: avisa que os nomes antigos em português ainda funcionam",
+          "Older Portuguese names of subcommands and flags still work." in p.stdout,
+          p.stdout[-300:])
 
 
 def test_launcher_prompt_replace():

@@ -1,0 +1,21 @@
+schema_version: 1
+card: pt-names-to-english
+status: complete
+audited_at: 2026-11-06T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "Rename to English the flag and subcommand names that stayed in Portuguese (cepa-autonomy, cepa-until, cepa-plan, cepa-feedback, cepa-doctor, cepa-clock/cepa-tokens, launcher), keeping the old name as an alias."
+    altitude: cli
+    surface: "argparse/launcher parsers of cepa-autonomy, cepa-until, cepa-plan, cepa-feedback, cepa-doctor, cepa-clock, cepa-tokens, cepa (old and new names invoked as subprocess)"
+    demonstrated_by:
+      test: "tests/test_pt_names_to_english.py (autonomy list/classify, until land/pending/close-dead, plan finish --asked/--ready/--blocker/--if-yes/--if-no, feedback --status open/triaged/all, doctor --project, launcher --prompt-replace) + tests/test_cepa_until_english_aliases.py (earlier item, remaining flags)"
+      layer: "CLI subprocess: each new name compared with the old one (same output/plan), old kept accepted, help shows new name"
+      evidence: verified
+      run: |
+        python3 tests/test_pt_names_to_english.py -> 34 lines "ok", "tudo verde", rc=0
+        python3 tests/test_cepa_until_english_aliases.py -> "tudo verde"
+        python3 tests/test_cepa_until_land.py -> "tudo verde"; tests/test_autonomy_yaml.py -> "all green"; tests/test_queue_rename.py -> ok
+        grep confirms dual-name add_argument in the CLIs: --cycle/--ciclo, --when/--quando, --answer/--resposta, --keep/--mantem, --drop/--descarta, --force/--forca, --author/--autor, --question/--pergunta (cepa-plan); --max-failures/--max-falhas, --max-blocked/--max-travados, --attempts-per-item, --min-reserve, --slack/--folga, --with-permissions, --dirty-ok, --no-verify, --no-analysis, --full-title, --yes/--sim (cepa-until); --target/--alvo, --origin/--origem, --no-color, triage/triar, --destination/--destino, --note/--nota, --queue/--plano (cepa-feedback); --all/--todas, --file/--arquivo (cepa-tokens, cepa-clock).
+    verdict: complete
+    gap: null
+    notes: "Interpretation (declared by the orchestrator, verified in code): keys pedido/pronto/impede/se_sim/se_nao were read as the finish FLAGS; the YAML keys stored in queue.yaml stay Portuguese as data (test asserts owner_summary keeps the usual keys). If the human meant the stored keys to be renamed, that is not done. Not run: full suite (supervisor's job)."

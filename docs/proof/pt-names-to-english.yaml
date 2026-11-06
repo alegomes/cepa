@@ -1,0 +1,53 @@
+schema_version: 2
+card: pt-names-to-english
+verdict: needs-human
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: 078b1a2
+head_commit: 2e3ebb4
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - { class: "common/bin/cepa-autonomy", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-plan + common/hooks/_ownertext.py", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-feedback", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-doctor", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/no-background-build.py (message text only)", module: hooks, external_observable: false, substituted_by_double: null }
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "GREEN at HEAD 2e3ebb4 (worktree /tmp/proof-pt-names-a): python3 tests/test_pt_names_to_english.py -> 'tudo verde', 34 ok lines, rc 0"
+        - "RED autonomy aliases=[OLD_NAMES[name]] -> []: 3 FAIL (listar/classificar not a subcommand)"
+        - "RED autonomy dispatch map {'listar':..} -> {}: 2 FAIL (Traceback)"
+        - "RED until ('land','aterrissar') -> ('land',): 1 FAIL; -> ('aterrissar',): 1 FAIL"
+        - "RED until ('pending','pendentes') -> ('pending',): 1 FAIL"
+        - "RED until ('close-dead','fecha-morto') -> ('close-dead',): 1 FAIL"
+        - "RED plan OLD_FLAGS --se-nao renamed: 2 FAIL (unrecognized arguments: --se-nao)"
+        - "RED plan OLD_FLAGS --impede renamed: 2 FAIL (unrecognized arguments: --impede)"
+        - "RED plan OLD_FLAGS key --if-yes broken: rc 1, test crashes at queue setup (KeyError path), never reaches tudo verde; red by crash, not by a named FAIL"
+        - "RED feedback STATUS_ALIAS drop open: 3 FAIL; drop triaged: 3 FAIL; drop all: 2 FAIL"
+        - "RED doctor argv check drops --project: 1 FAIL (--project == --projeto)"
+        - "RED launcher drop --prompt-replace=* case: 2 FAIL; drop --prompt-replace) space case: 3 FAIL; drop --prompt-substitui=* old case: 1 FAIL"
+        - "SURVIVED doctor ap.add_argument('--project','--projeto') -> ('--project'): test still rc 0. main() reads sys.argv directly (line 1296 argv check, which IS load-bearing, RED above); the argparse parser only feeds --help, which short-circuits before parsing. The '--projeto' in add_argument only affects the help text, which test already checks shows --project."
+        - "NOT perturbed: hook message text in common/hooks/no-background-build.py, docs/*.md, commands/*.md (text only, no behavior)"
+        - "Neighbour suites at HEAD, each green: test_cepa_until_english_aliases (tudo verde), test_autonomy_yaml (all green), test_cepa_feedback (tudo verde), test_cepa_prompt (todos os contratos passam), test_cepa_until_dead_supervisor (tudo verde)"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool run for this CLI; reachability judged by the 16 perturbations that each turned the covering test red"
+  l4_adversarial_input:
+    status: skipped
+    reason: "CLI flags and subcommands are parsed from the command line; no adversarial pass was run"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Task, not Bug"
+routing_reason: "15 of the 16 renames and aliases are load-bearing: breaking each turns the covering test red. One line survived: the --projeto alias inside cepa-doctor's argparse registration, which is dead for behavior (main reads argv directly and that check is proven). L2 and L4 were not measured. Mechanically needs-human; suggested decision for the owner, not a waiver: accept the survivor as an equivalent mutant or delete the dead alias."
