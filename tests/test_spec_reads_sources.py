@@ -188,6 +188,10 @@ def main():
           "- [x]" in s4 and re.search(r"owner", s4) is not None
           and re.search(r"only after|never .{0,40}- \[x\]|nothing becomes", s4, re.I)
           is not None)
+    line_p = para(step_paragraphs(text, "4. "), "A line turns")
+    check("step 4 'A line turns' paragraph: only after an owner utterance",
+          "only after an owner utterance in the conversation that answers it"
+          in line_p, repr(line_p[:120]))
     check("step 4: files are recommendation, never an answer",
           re.search(r"recommendation, never an answer", s4) is not None)
     check("step 4: no hook enforces it",
@@ -199,6 +203,13 @@ def main():
           "Decided without asking" in scope
           and "proposta de agente, specs/" in scope
           and "Vete aqui se discordar" in scope)
+    dec_p = para(step_paragraphs(text, "3. "), "The test for whether something")
+    i_rec = dec_p.find('record the decision in the "Decided without asking" section')
+    i_inh = dec_p.find("A decision inherited from the `planning-lead` spec")
+    i_there = dec_p.find("goes there with its origin, never as an answered `- [x]` question")
+    check("inherited decision: 'there' resolves to Decided without asking, with its origin",
+          0 <= i_rec < i_inh < i_there, f"positions {i_rec},{i_inh},{i_there}")
+    check("inherited decision: 'with its origin'", "with its origin" in dec_p)
     check("inherited decision is never an answered [x]",
           re.search(r"never as an answered", scope, re.I) is not None)
 
