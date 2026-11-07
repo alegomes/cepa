@@ -178,8 +178,9 @@ def main():
     check("prose form: Recomendo X (`evidência`, path)",
           re.search(r"Recomendo X \(`evidência`, docs/discovery/", flat) is not None)
     check("a file answering does not close the question",
-          re.search(r"does not close|not close the question|still asked", flat, re.I)
-          is not None)
+          "A file that answers a question does not close it" in flat
+          and "the question is still asked, with the file's answer as the recommendation"
+          in flat)
 
     # Step 4: no [x] without owner answer
     s4 = step4 or ""
@@ -190,8 +191,8 @@ def main():
           is not None)
     line_p = para(step_paragraphs(text, "4. "), "A line turns")
     check("step 4 'A line turns' paragraph: only after an owner utterance",
-          "only after an owner utterance in the conversation that answers it"
-          in line_p, repr(line_p[:120]))
+          "A line turns `- [x]` only after an owner utterance in the conversation "
+          "that answers it" in line_p, repr(line_p[:120]))
     check("step 4: files are recommendation, never an answer",
           re.search(r"recommendation, never an answer", s4) is not None)
     check("step 4: no hook enforces it",
@@ -224,6 +225,14 @@ def main():
     cons = text.split("## Constraints", 1)[-1]
     check("constraint mirrors labels and no [x] without owner answer",
           "`evidência`" in cons and "- [x]" in cons)
+    cons_b = next((norm(b) for b in cons.split("\n- **")
+                   if b.startswith("Proposals from files are labeled")
+                   or b.startswith("**Proposals from files are labeled")), "")
+    check("constraint bullet: nothing becomes [x] without an owner utterance",
+          "Proposals from files are labeled, answers come from the owner." in
+          norm("- **" + cons_b if not cons_b.startswith("**") else cons_b)
+          and "nothing becomes `- [x]` without an owner utterance" in cons_b,
+          repr(cons_b[:160]))
 
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILED")
