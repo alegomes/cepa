@@ -170,6 +170,8 @@ def main():
     check("step 4: a labeled proposal is never written down without the challenge",
           "a labeled proposal is never written down without having gone through "
           "the challenge" in acc)
+    check("step 4: the file agreeing with the owner is not the challenge",
+          "The file agreeing with the owner is not the challenge." in acc)
     i_one = next((i for i, p in enumerate(p4) if p.startswith("When the owner answers")), -1)
     i_acc = next((i for i, p in enumerate(p4) if p.startswith("A proposal the owner accepts")), -1)
     check("step 4: accepted-proposal rule follows 'When the owner answers'",
