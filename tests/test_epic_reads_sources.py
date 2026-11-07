@@ -130,6 +130,15 @@ def main():
     check("labels paragraph: a file that answers a gap does not close it",
           "A file that answers a gap does not close it: the question is still asked, "
           "with the file's answer as the proposal" in lab)
+    check("labels paragraph: the rule holds in every turn, the challenge turn included",
+          "The rule holds in every turn, the challenge turn of step 4 included: any "
+          "proposal or argument drawn from one of these files names the label and the path"
+          in lab)
+    check("labels paragraph: even when the file was already cited earlier",
+          "even when the file was already cited in an earlier turn" in lab)
+    check("labels paragraph: what a file settles goes to Decided without asking, labeled",
+          "is never announced as \"não vou perguntar o que eles já respondem\"" in lab
+          and "as a line of \"Decided without asking\" with the label and the path" in lab)
     check("labels paragraph: the answer is challenged once like any other",
           "challenged once like any other (step 4)" in lab)
 

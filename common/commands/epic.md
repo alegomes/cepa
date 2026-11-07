@@ -195,9 +195,16 @@ Example (the actual turn is in pt-BR): "Minha proposta (`evidência`,
 docs/discovery/<card>/handoff.md) é que o aviso saia 7 dias antes, porque 14
 de 20 entrevistados disseram que é o tempo de marcar a consulta. Quantos dias
 antes do vencimento o aviso deve sair?" The label goes in the prose, never as
-a list of options and never in a ladder cell. A file that answers a gap does
+a list of options and never in a ladder cell. The rule holds in every turn,
+the challenge turn of step 4 included: any proposal or argument drawn from one
+of these files names the label and the path, even when the file was already
+cited in an earlier turn. A file that answers a gap does
 not close it: the question is still asked, with the file's answer as the
 proposal, and the owner's answer is challenged once like any other (step 4).
+What a file settles that you adopt without asking is never announced as "não
+vou perguntar o que eles já respondem": it is written, in the same turn, as a
+line of "Decided without asking" with the label and the path, where the owner
+can veto it.
 
 The test for whether something becomes a question is still the skill's: **do
 two different answers here change what will be built or how it will be
