@@ -1,0 +1,50 @@
+schema_version: 2
+card: tres-portas-c1-CS-8
+verdict: unproven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: 1002c0a
+head_commit: e37a986
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/commands/spec.md (step 2 sources + labels, step 3 inherited decision, step 4 no [x] without owner, step 6 Fontes lidas header, Constraints)"
+      module: common-commands
+      external_observable: true       # the command markdown is the surface; the test reads the real file
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "unperturbed HEAD e37a986 (detached worktree /tmp/cs8-proof): tests/test_spec_reads_sources.py 'all ok'; tests/test_veto_walk_opens_existing_doc.py 'all passed'; tests/test_spec_readiness_gate.py 'all green'"
+        - "27 single-sentence perturbations of common/commands/spec.md, each running the 3 tests; 17 RED (all in test_spec_reads_sources.py), 10 survived (all 3 tests stayed green). Neighbor tests never went red on any perturbation."
+        - "SURVIVED P1: path `docs/discovery/<card>/handoff.md` in the first source bullet replaced by `x` -> spec_reads_sources green"
+        - "SURVIVED P7: label `evidência` removed from step-2 sentence 'Every proposal ... label ...' -> green (the label also appears in the prose form and in Constraints; test only asks presence anywhere)"
+        - "SURVIVED P8: label `proposta de agente` removed from same sentence -> green (same redundancy)"
+        - "SURVIVED P9: 'The proposal becomes the RECOMMENDED option' changed to 'an alternative option' -> green (test regex matches 'recommended option' in the neighboring sentence)"
+        - "SURVIVED P10: 'in AskUserQuestion, the recommended option's description carries the label and the path' removed -> green"
+        - "SURVIVED P19: the `**Fontes lidas:**` line removed from the step-6 template skeleton -> green (the test searches the first occurrence in step 6, which is the verbatim-labels list before the template, so the position check is vacuous for the template)"
+        - "SURVIVED P22: 'Write the paths you actually read, and that informed the specification' reduced to 'Write the paths' -> green"
+        - "SURVIVED P23: 'Three sources are named, and you look for each by path' replaced by 'Sources:' -> green"
+        - "SURVIVED P24: planning-lead spec described as 'taken by the owner' instead of 'by an agent, not by the owner' -> green"
+        - "SURVIVED P25: 'It carries the audit, so it is evidence' dropped -> green; also P26: 'updated when another file is read' dropped -> green"
+        - "KILLED (RED): drop specs/ path, drop docs/epics, drop 'written by epic-briefer', drop 'once', criterion-suffix ban removed, prose form 'Recomendo X (evidência, docs/discovery/...)' altered, 'file answer does not close the question' flipped, inherited decision as answered [x], origin format 'proposta de agente, specs/<slug>.md' removed, 'Vete aqui' removed, owner-utterance rule removed or weakened, 'recommendation, never an answer' removed, 'no hook' sentence removed, Fontes lidas removed from verbatim list, Constraints bullet removed"
+        - "behavioral surface evidence (not re-recorded): docs/proof/tres-portas-c1-CS-8-transcricao.md with raw jsonl in docs/proof/evidence/CS-8-transcricao/ (before 1002c0a vs after 40b70df); recorded, not re-run, so it is read, not produced by this gate; it does not substitute for the text test when perturbing"
+  l2_coverage:
+    status: gap
+    uncovered_lines:
+      - "common/commands/spec.md step 2: handoff.md path in the bullet; label names in the 'Every proposal' sentence; RECOMMENDED-option sentence and AskUserQuestion description sentence; 'Write the paths you actually read'; step-6 template Fontes lidas line; planning-lead 'not by the owner'"
+    run: "no coverage tool for markdown; the lines above turn no test RED when changed (see perturbation survivors), so no test at the text altitude reaches them specifically"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff changes only command markdown, a test that reads it and proof transcripts; it parses nothing from outside and touches no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card; git checkout 1002c0a -- common/commands (test kept from HEAD) -> 22 FAIL lines, RED. HEAD e37a986: 'all ok'"
+routing_reason: "Test is RED at base (22 FAIL) and green at HEAD, and 17 of 27 perturbations are caught. But 10 behavior-bearing sentences of the CS-8 criterion survive: the recommended-option rule (P9, P10), the two labels in the sentence that mandates them (P7, P8), the template line for Fontes lidas (P19), the brief path (P1), reading-by-path and paths-actually-read (P22, P23) and the agent-not-owner origin of the planning-lead spec (P24). Computed verdict: UNPROVEN. Closing it needs test_spec_reads_sources.py to pin each of these sentences (e.g. require the template line `**Fontes lidas:**` inside the fenced skeleton, the labels and 'RECOMMENDED option' inside the step-2 paragraph, and the handoff.md bullet)."
