@@ -117,7 +117,30 @@ or empty.
 Before the first round, spend a step reading what already answers part of the
 questions: the code of the area the subject touches, the documents in
 `docs/`, `BACKLOG.md`, and — if `board-flow.yaml` exists — the open cards on
-the subject via `atlassian-expert` (read-only, writing nothing).
+the subject via `atlassian-expert` (read-only, writing nothing). Three sources
+are named, and you look for each by path:
+
+- the `discovery` delivery brief, `docs/discovery/<card>/handoff.md`, written
+  by `epic-briefer`. It carries the audit, so it is **evidence**;
+- the `planning-lead` spec, `spec/<slug>.md` or `specs/<slug>.md` at the repo
+  root. It is a decision taken in another interview by an agent, not by the
+  owner;
+- the "Decided without asking" section of the other specs and Epics in
+  `docs/spec/` and `docs/epics/`.
+
+Write the paths you actually read, and that informed the specification, on the
+`**Fontes lidas:**` line of the header: once, at skeleton time, updated when
+another file is read. Never a label suffix on a criterion line (`### CS-<n>:`),
+which `spec-readiness-gate` parses.
+
+Every proposal taken from one of these files is shown in the turn with a label
+and the file path: `evidência` (from the discovery brief) or `proposta de
+agente` (from the `planning-lead` spec). The proposal becomes the RECOMMENDED
+option of the question: in `AskUserQuestion`, the recommended option's
+description carries the label and the path; in prose, "Recomendo X
+(`evidência`, docs/discovery/<card>/handoff.md)". A file that answers a
+question does not close it: the question is still asked, with the file's answer
+as the recommendation.
 
 A question whose answer was in the repo burns the owner's patience and teaches
 that the interrogation is bureaucracy. The good question is the one left over
@@ -133,7 +156,10 @@ getting it wrong: scope boundary and contract before edge case. Use
 The test for whether something becomes a question: **do two different answers
 here produce different code?** If not, decide alone and record the decision
 in the "Decided without asking" section — the owner
-vetoes there if he wants.
+vetoes there if he wants. A decision inherited from the `planning-lead` spec (or
+another document) that you adopt without asking goes there with its origin,
+never as an answered `- [x]` question: `- <decision> — proposta de agente,
+specs/<slug>.md. Vete aqui se discordar.`
 
 Cover, over the rounds, what is always missing and always costs a lot:
 
@@ -158,6 +184,10 @@ at the first context compaction, and the owner answers everything again.
 A question asked becomes `- [ ]` in the "Perguntas em aberto" (open questions)
 section; answered, it becomes `- [x]` with the answer on the same line. That
 is how `--continuar` knows where it stopped.
+
+A line turns `- [x]` only after an owner utterance in the conversation that
+answers it. What the files said is a recommendation, never an answer. No hook
+enforces this (no hook knows who answered), so it rests on you.
 
 ### 5. Close by the sieve, never by fatigue
 
@@ -198,7 +228,7 @@ both.
 ### 6. The file format
 
 The document is written in pt-BR. Keep the headings and the `**Status:**`,
-`**Aberta em:**`, `**Fechada em:**`, `## Como chegamos aqui`, `### CS-<n>:`, `**Surface:**` and
+`**Aberta em:**`, `**Fechada em:**`, `**Fontes lidas:**`, `## Como chegamos aqui`, `### CS-<n>:`, `**Surface:**` and
 `**Red test:**` labels verbatim: `spec-readiness-gate` and
 `cepa-plan --from-spec` parse them (the old pt-BR `pronta-para-construir`,
 `rascunho`, `Superfície`, `Teste vermelho` still read in older specs, but you
@@ -209,6 +239,7 @@ write only the new ones). Only the placeholders below are in English.
 
 **Status:** draft
 **Aberta em:** <date>            **Fechada em:** <date or ->
+**Fontes lidas:** <paths actually read that informed the specification, or ->
 
 ## Como chegamos aqui
 <a pergunta do dono que começou o assunto, em uma frase e na voz dele, com a data; copiada da primeira frase do pedido ou da linha "porque" do handoff de origem — nunca só o rótulo da conversa>
@@ -270,6 +301,9 @@ no line of code.
   the work of ordering, which is yours.
 - **Every question carries a recommendation.** A question without a
   recommendation hands back the whole job.
+- **Proposals from files are labeled, answers come from the owner.** A
+  proposal taken from a file carries `evidência` or `proposta de agente` plus
+  the path, and nothing becomes `- [x]` without an owner utterance.
 - **One specification per subject.** On finding an existing one, continue it.
 - **Does not delegate the interrogation.** Reading to prepare, yes;
   conducting, no.
