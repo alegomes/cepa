@@ -76,6 +76,10 @@ def main():
           "/common:epic" not in tpl, repr(tpl))
     check("card template has no slash command at all",
           not re.search(r"(^|\s)/[a-z-]+:[a-z-]+", tpl), repr(tpl))
+    check("step 5: run it in the repo where the brief was written",
+          "in the repo where you wrote the brief" in s5n)
+    check("step 5: fallback is git rev-parse --show-toplevel",
+          "`git rev-parse --show-toplevel`" in s5n)
     check("step 5 says no literal command goes on the card",
           "no literal command" in s5n)
     check("step 5 leaves the Epic slug to the interview",
@@ -98,6 +102,12 @@ def main():
           "`/common:epic`" in rule and "file" in rule, repr(rule[:300]))
     check("rule says both readers",
           "two readers" in rule, repr(rule[:300]))
+    check("rule names docs/epics/<slug>.md as /common:epic's output",
+          "`docs/epics/<slug>.md`" in rule, repr(rule[:300]))
+    link = next((norm(b) for b in text.split("\n- ")
+                 if b.startswith("**Link, don't clone")), "")
+    check("Link, don't clone rule links the repository where the brief lives",
+          "the repository where the brief lives" in link, repr(link[:200]))
     check("rule still forbids bypassing the boundary",
           "Don't bypass that boundary" in rule)
 

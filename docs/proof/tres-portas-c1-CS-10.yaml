@@ -1,0 +1,39 @@
+schema_version: 2
+card: tres-portas-c1-CS-10
+verdict: proven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: a1c8de7
+head_commit: b794dc7
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "discovery/agents/epic-briefer.md (rule 'Brief, not Epic' names two readers, rule 'Link, don't clone' + workflow step 5 add the repository, step 5 card template Repository: line, fill instruction via git remote get-url origin with local-path fallback, no literal command because the slug is chosen in the interview)"
+      module: discovery-agents
+      external_observable: true       # the agent markdown is the surface; the test reads the real file
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "unperturbed HEAD b794dc7: python3 tests/test_epic_briefer_card.py -> 18 ok lines, 'all ok' (N=18 > 0)"
+        - "base a1c8de7 epic-briefer.md with the HEAD test (EPIC_BRIEFER_MD=<git show a1c8de7:...>) -> 11 FAIL lines, RED"
+        - "27 sentence-level perturbations of text added in a1c8de7..HEAD, on copies in throwaway detached worktree /tmp/cs10-wt (removed), each run as EPIC_BRIEFER_MD=<copy> python3 tests/test_epic_briefer_card.py; 16 RED, 10 SURVIVED, 1 not applicable (T2 pattern did not match, not counted). RED: rule 'two readers' (R1), epic-author name (R2), 'on its own board' (R3), /common:epic as reader (R4), 'from the file' (R5), workflow step 5 repository (W1) and brief path (W2), Repository: line removed (T1), placeholder remote URL (T3), placeholder local-path fallback (T4), label renamed (T5), fill command git remote get-url origin (S1), 'only when there is no remote' (S3), 'no literal command' (S7), 'chosen in the interview' (S8), literal /common:epic added to template (X1), Delivery brief path changed (D1)."
+        - "SURVIVED, secondary detail (suggested pins, non-blocking): R6 handoff path inside the Brief-not-Epic rule; R7 'during its interview'; R8 'docs/epics/<slug>.md' as where /common:epic writes; R9 'You never write either Epic yourself.'; L1 'and the repository where the brief lives' in the Link-don't-clone rule (the template line and workflow step 5 that carry the same requirement are pinned); S2 'in the repo where you wrote the brief'; S4 '`git rev-parse --show-toplevel`' as the fallback command; S5 'absolute local path'; S6 rationale 'a reader on another machine...'; S9 'naming a command on the card would pick it in advance'. Each restates, elaborates or justifies a requirement whose rule-bearing core is pinned and RED when altered."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool for markdown; coverage by perturbation: every requirement of the CS-10 criterion (Repository line next to Delivery brief, filled from git remote get-url origin, local path only without remote, no literal command, two readers named) turns tests/test_epic_briefer_card.py RED when altered (16 of 26 applicable perturbations RED; survivors are elaborations)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff changes only agent markdown and a test that reads it; it parses nothing from outside and touches no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card; base a1c8de7 epic-briefer.md with the HEAD test -> 11 FAIL, HEAD -> all ok (18 ok)"
+routing_reason: "Every requirement of the CS-10 criterion in discovery/agents/epic-briefer.md turns the covering test RED when altered: base RED (11 FAIL), HEAD green (18 ok), 16 of 26 applicable perturbations RED. The 10 survivors are elaborations (fallback command, run location, rationale, where /common:epic writes, a duplicate in the Link-don't-clone rule), classified secondary like the CS-9 survivor. Computed verdict: PROVEN. Suggested non-blocking pins: L1 (repository in the Link rule), S4 (rev-parse fallback), S2 (run in the repo where the brief was written), R8 (docs/epics/<slug>.md)."
