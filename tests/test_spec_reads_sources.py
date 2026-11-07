@@ -110,6 +110,17 @@ def main():
     bullet_pl = bullets.split("- the `planning-lead`", 1)[-1].split("- the \"Decided", 1)[0]
     check("step 2 intro: three sources named, looked up by path",
           "Three sources are named, and you look for each by path" in intro)
+    bullet_pl_full = "- the `planning-lead`" + bullet_pl
+    bullet_dec = "Decided" + bullets.split("- the \"Decided", 1)[1] if "- the \"Decided" in bullets else ""
+    check("step 2 planning-lead bullet: names planning-lead",
+          "- the `planning-lead` spec," in bullet_pl_full and "`planning-lead`" in bullet_pl_full)
+    check("step 2 planning-lead bullet: both spec/<slug>.md and specs/<slug>.md",
+          "`spec/<slug>.md`" in bullet_pl and "`specs/<slug>.md`" in bullet_pl)
+    check("step 2 planning-lead bullet: at the repo root",
+          "at the repo root" in bullet_pl)
+    check("step 2 third bullet: Decided without asking in docs/spec/ and docs/epics/",
+          "Decided without asking" in bullet_dec
+          and "`docs/spec/`" in bullet_dec and "`docs/epics/`" in bullet_dec)
     check("step 2 brief bullet: path docs/discovery/<card>/handoff.md",
           "`docs/discovery/<card>/handoff.md`" in bullet_brief)
     check("step 2 brief bullet: carries the audit, so it is **evidence**",
@@ -141,6 +152,16 @@ def main():
     check("template has Fontes lidas between Aberta em and Como chegamos aqui",
           0 <= i_aberta < i_fontes < i_como,
           f"positions {i_aberta},{i_fontes},{i_como}")
+
+    # Step 6: the verbatim-labels sentence lists Fontes lidas
+    verbatim_p = para(step_paragraphs(text, "6. "), "The document is written in pt-BR")
+    vm = re.search(r"Keep the headings and the (.*?) labels verbatim", verbatim_p)
+    check("step 6 verbatim-labels sentence lists **Fontes lidas:**",
+          vm is not None and "`**Fontes lidas:**`" in vm.group(1),
+          "sentence not found" if vm is None else "")
+    fline = next((l for l in tpl.split("\n") if l.startswith("**Fontes lidas:**")), "")
+    check("template Fontes lidas line: placeholder says paths actually read",
+          "paths actually read" in fline, repr(fline))
 
     # Fontes lidas rule: once, header, paths actually read
     check("Fontes lidas rule: once, in the header",
