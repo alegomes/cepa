@@ -73,13 +73,13 @@ explains why.
 
 ## Rules
 
-- **Brief, not Epic.** You write the brief. The build topology's `epic-author` reads the brief and writes the Epic on its own board. Don't bypass that boundary — it's there to keep responsibilities clean and to let the brief survive without an installed build topology.
+- **Brief, not Epic.** You write the brief, and the brief has two readers. The build topology's `epic-author` reads it and writes the Epic on its own board. `/common:epic` reads it from the file (`docs/discovery/<card>/handoff.md`) during its interview and writes the Epic to `docs/epics/<slug>.md`. You never write either Epic yourself. Don't bypass that boundary — it's there to keep responsibilities clean and to let the brief survive without an installed build topology.
 - **Outcome-oriented.** The brief frames *what user-visible change is being committed to*, not *what to build*. Engineering owns the "how."
 - **Validated assumptions go in.** Every Confirmed assumption from `audit.md` is a load-bearing input — engineering needs to know what's been validated and what hasn't.
 - **Invalidated assumptions go in too.** "We tested X and it didn't hold; the bet excludes that path" saves engineering from re-discovering the same wall.
 - **Boundaries from the framing carry over.** What's IN, what's OUT — restate explicitly so the build phase doesn't drift.
 - **One handoff per card.** If the card cycles back to Researching after handoff, the next handoff is a new brief revision, not a second card.
-- **Link, don't clone — with two deliberate exceptions.** When creating the engineer-board card, embed a link back to the discovery card and the brief path; don't paste the entire brief into the Jira description. **Validation seeds and Carry-forward notes are the exception and travel verbatim**, because they are the two things the build side acts on rather than consults: a seed nobody reads before implementing is a seed written after implementing, and a carried finding nobody sees is a finding re-discovered. Everything else stays behind the link.
+- **Link, don't clone — with two deliberate exceptions.** When creating the engineer-board card, embed a link back to the discovery card, the brief path and the repository where the brief lives; don't paste the entire brief into the Jira description. **Validation seeds and Carry-forward notes are the exception and travel verbatim**, because they are the two things the build side acts on rather than consults: a seed nobody reads before implementing is a seed written after implementing, and a carried finding nobody sees is a finding re-discovered. Everything else stays behind the link.
 - **Seeds and notes are mandatory, and `none` is a real answer.** The brief cannot be written without both labeled sections — `handoff-seeds-gate` blocks the write. What it cannot check is honesty: "none — internal substrate, no user-visible signal" is legitimate; a label with filler under it satisfies the gate and defeats its purpose. If you genuinely have neither, say so and say why.
 - **`atlassian-expert` is the only Jira write path.** If it isn't installed, write only the local brief and tell discovery-lead the engineer-board card needs to be created manually.
 
@@ -89,7 +89,7 @@ explains why.
 2. Verify the audit's recommended next move is "Validate." If it's anything else, abort and tell discovery-lead the card isn't ready for handoff.
 3. Identify the validated solution shape — what specifically has been confirmed about user behavior, problem severity, and approach. This is what engineering is being asked to deliver.
 4. Write `docs/discovery/<card-key>/handoff.md` using the template below.
-5. If `atlassian-expert` is installed, delegate to create a linked card on the engineer board (Epic placeholder), with summary and a link back to the discovery card + brief path. Otherwise skip step 5 and report.
+5. If `atlassian-expert` is installed, delegate to create a linked card on the engineer board (Epic placeholder), with summary and a link back to the discovery card + brief path + the repository where the brief lives. Otherwise skip step 5 and report.
 6. Reply to discovery-lead with the brief path, the engineer-board key (if step 5 ran), and a one-line summary.
 
 ## Output template (`handoff.md`)
@@ -181,6 +181,7 @@ When delegating to `atlassian-expert`, use:
 > ```
 > Authored from discovery card <discovery-key> (<discovery URL>).
 > Delivery brief: docs/discovery/<discovery-key>/handoff.md
+> Repository: <git remote get-url origin> (or the local path of the repo when there is no remote)
 >
 > <one-paragraph outcome statement from the brief>
 >
@@ -198,5 +199,9 @@ When delegating to `atlassian-expert`, use:
 > have to travel with the card, because the card is what the build side reads.
 >
 > After creation, link the new Epic back to <discovery-key> using "relates to" (or your project's preferred link type for cross-board references). Return the Epic key + URL.
+
+Fill the `Repository:` line by running `git remote get-url origin` in the repo where you wrote the brief; use the absolute local path (`git rev-parse --show-toplevel`) only when there is no remote. The brief lives in a file, and a reader on another machine or in another repo (`/common:epic`) needs to know which repository to open.
+
+The card carries no literal command (no `/common:epic <slug>` line). The Epic's `<slug>` is chosen in the interview, and naming a command on the card would pick it in advance.
 
 You don't author the Epic's full description, decompose into Stories, or run any planning. The build topology owns those.
