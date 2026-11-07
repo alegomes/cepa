@@ -3,7 +3,7 @@ card: tres-portas-c1-CS-8
 verdict: unproven
 reviewed_at: 2026-11-06T00:00:00-03:00
 base_commit: 1002c0a
-head_commit: e37a986
+head_commit: fbd5567
 issue_type: Task
 scope:
   changed_classes:
@@ -21,30 +21,30 @@ levels:
     perturbation:
       status: survived
       results:
-        - "unperturbed HEAD e37a986 (detached worktree /tmp/cs8-proof): tests/test_spec_reads_sources.py 'all ok'; tests/test_veto_walk_opens_existing_doc.py 'all passed'; tests/test_spec_readiness_gate.py 'all green'"
-        - "27 single-sentence perturbations of common/commands/spec.md, each running the 3 tests; 17 RED (all in test_spec_reads_sources.py), 10 survived (all 3 tests stayed green). Neighbor tests never went red on any perturbation."
-        - "SURVIVED P1: path `docs/discovery/<card>/handoff.md` in the first source bullet replaced by `x` -> spec_reads_sources green"
-        - "SURVIVED P7: label `evidência` removed from step-2 sentence 'Every proposal ... label ...' -> green (the label also appears in the prose form and in Constraints; test only asks presence anywhere)"
-        - "SURVIVED P8: label `proposta de agente` removed from same sentence -> green (same redundancy)"
-        - "SURVIVED P9: 'The proposal becomes the RECOMMENDED option' changed to 'an alternative option' -> green (test regex matches 'recommended option' in the neighboring sentence)"
-        - "SURVIVED P10: 'in AskUserQuestion, the recommended option's description carries the label and the path' removed -> green"
-        - "SURVIVED P19: the `**Fontes lidas:**` line removed from the step-6 template skeleton -> green (the test searches the first occurrence in step 6, which is the verbatim-labels list before the template, so the position check is vacuous for the template)"
-        - "SURVIVED P22: 'Write the paths you actually read, and that informed the specification' reduced to 'Write the paths' -> green"
-        - "SURVIVED P23: 'Three sources are named, and you look for each by path' replaced by 'Sources:' -> green"
-        - "SURVIVED P24: planning-lead spec described as 'taken by the owner' instead of 'by an agent, not by the owner' -> green"
-        - "SURVIVED P25: 'It carries the audit, so it is evidence' dropped -> green; also P26: 'updated when another file is read' dropped -> green"
-        - "KILLED (RED): drop specs/ path, drop docs/epics, drop 'written by epic-briefer', drop 'once', criterion-suffix ban removed, prose form 'Recomendo X (evidência, docs/discovery/...)' altered, 'file answer does not close the question' flipped, inherited decision as answered [x], origin format 'proposta de agente, specs/<slug>.md' removed, 'Vete aqui' removed, owner-utterance rule removed or weakened, 'recommendation, never an answer' removed, 'no hook' sentence removed, Fontes lidas removed from verbatim list, Constraints bullet removed"
-        - "behavioral surface evidence (not re-recorded): docs/proof/tres-portas-c1-CS-8-transcricao.md with raw jsonl in docs/proof/evidence/CS-8-transcricao/ (before 1002c0a vs after 40b70df); recorded, not re-run, so it is read, not produced by this gate; it does not substitute for the text test when perturbing"
+        - "common/ unchanged since 40b70df (git diff 40b70df..HEAD --stat -- common/ -> empty); only tests/test_spec_reads_sources.py changed in round 2 (fbd5567)"
+        - "unperturbed HEAD fbd5567 (detached worktree /tmp/cs8-proof2, removed): tests/test_spec_reads_sources.py 'all ok'; tests/test_veto_walk_opens_existing_doc.py 'all passed'; tests/test_spec_readiness_gate.py 'all green'. Neighbors ignore SPEC_MD, so each perturbation was written into the worktree's spec.md and all 3 tests ran."
+        - "round-1 survivors re-run (11: P1 P7 P8 P9 P10 P19 P22 P23 P24 P25 P26): ALL 11 now RED in test_spec_reads_sources (1 FAIL each). Round-1 gaps closed."
+        - "fresh independent set (31 + 6 perturbations over every sentence added in 1002c0a..HEAD): 34 RED, all in test_spec_reads_sources; neighbor tests never went red on any perturbation"
+        - "SURVIVED F30: `spec/<slug>.md` dropped from the planning-lead bullet ('`spec/<slug>.md` or `specs/<slug>.md`' -> '`specs/<slug>.md`') -> all 3 tests green. Cause: the test's check for needle 'spec/' is satisfied by 'docs/spec/' in the third bullet, so it is vacuous. The Item 1 decision names both `spec/` and `specs/` at the repo root."
+        - "SURVIVED F33: `docs/spec/` dropped from the third bullet ('`docs/spec/` and `docs/epics/`' -> '`docs/epics/`') -> green. The test never asserts 'docs/spec/'; Item 1 names `docs/spec/` and `docs/epics/`."
+        - "SURVIVED F34: 'the `planning-lead` spec' -> 'the spec' in the second bullet -> green (the name still appears in the labels paragraph, test only asks presence in step 2)"
+        - "SURVIVED F35: 'at the repo root' dropped from the planning-lead bullet -> green (no assertion on the location)"
+        - "SURVIVED F17: `**Fontes lidas:**` removed from the step-6 verbatim-labels list (the list of labels the agent must not translate and the gate parses) -> green; round 1 had this RED, but the new template check pins only the fenced skeleton, not the list"
+        - "SURVIVED F22: template placeholder '<paths actually read that informed the specification, or ->' -> '<x>' -> green (low weight: the same instruction is pinned in step 2, only the empty-case '-' hint in the skeleton is unpinned)"
+        - "KILLED (RED): brief path, both labels in the step-2 sentence, RECOMMENDED -> alternative, AskUserQuestion sentence, template Fontes line removed, Fontes line moved before Aberta em, paths actually read, three sources by path, planning-lead by agent (also flipped to evidence), 'carries the audit', 'updated when another file is read', drop epic-briefer, drop docs/epics, drop 'once, at skeleton time', criterion-suffix ban, 'shown in the turn', prose form, 'does not close', whole step-3 inherited-decision sentence, 'never as answered [x]', origin format, 'Vete aqui', owner-utterance rule, 'recommendation, never an answer', 'no hook', whole step-4 paragraph, Constraints bullet and its two halves, third-bullet Decided without asking, evidência/proposta de agente source descriptions, specs/ dropped"
+        - "behavioral surface evidence (read, not re-run): docs/proof/tres-portas-c1-CS-8-transcricao.md with raw jsonl in docs/proof/evidence/CS-8-transcricao/ (before 1002c0a vs after 40b70df); spec.md identical since 40b70df so it still describes HEAD. It does not substitute for the text test when perturbing."
   l2_coverage:
     status: gap
     uncovered_lines:
-      - "common/commands/spec.md step 2: handoff.md path in the bullet; label names in the 'Every proposal' sentence; RECOMMENDED-option sentence and AskUserQuestion description sentence; 'Write the paths you actually read'; step-6 template Fontes lidas line; planning-lead 'not by the owner'"
-    run: "no coverage tool for markdown; the lines above turn no test RED when changed (see perturbation survivors), so no test at the text altitude reaches them specifically"
+      - "common/commands/spec.md step 2 planning-lead bullet: `spec/<slug>.md` path, 'at the repo root', the name `planning-lead`"
+      - "common/commands/spec.md step 2 third bullet: `docs/spec/`"
+      - "common/commands/spec.md step 6 verbatim-labels list: `**Fontes lidas:**`; template placeholder text"
+    run: "no coverage tool for markdown; the lines above turn no test RED when changed (see perturbation survivors F30 F33 F34 F35 F17 F22)"
   l4_adversarial_input:
     status: n/a
     reason: "the diff changes only command markdown, a test that reads it and proof transcripts; it parses nothing from outside and touches no api-rest module"
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-    run: "not a Bug card; git checkout 1002c0a -- common/commands (test kept from HEAD) -> 22 FAIL lines, RED. HEAD e37a986: 'all ok'"
-routing_reason: "Test is RED at base (22 FAIL) and green at HEAD, and 17 of 27 perturbations are caught. But 10 behavior-bearing sentences of the CS-8 criterion survive: the recommended-option rule (P9, P10), the two labels in the sentence that mandates them (P7, P8), the template line for Fontes lidas (P19), the brief path (P1), reading-by-path and paths-actually-read (P22, P23) and the agent-not-owner origin of the planning-lead spec (P24). Computed verdict: UNPROVEN. Closing it needs test_spec_reads_sources.py to pin each of these sentences (e.g. require the template line `**Fontes lidas:**` inside the fenced skeleton, the labels and 'RECOMMENDED option' inside the step-2 paragraph, and the handoff.md bullet)."
+    run: "not a Bug card; round 1 recorded git checkout 1002c0a -- common/commands (test kept from HEAD) -> 22 FAIL lines, RED; HEAD all ok"
+routing_reason: "Round 2: all 11 round-1 survivors are now killed and 34 of 40 perturbations go RED, but 6 survive. The ones that matter for the criterion: the `spec/` path (F30) and `docs/spec/` (F33), both named by Item 1 of Decided without asking, can be deleted from step 2 with every test green because the test's needles are satisfied by other text; the repo-root location and the name planning-lead in the bullet (F34, F35) are unpinned; Fontes lidas can leave the verbatim-labels list (F17) and the skeleton placeholder can change (F22). Computed verdict: UNPROVEN. Closing it needs test_spec_reads_sources.py to assert, inside the planning-lead bullet, the literal `spec/<slug>.md` or `specs/<slug>.md` at the repo root and the name planning-lead, inside the third bullet the literal `docs/spec/` and `docs/epics/`, and the literal `**Fontes lidas:**` inside the step-6 verbatim-labels list."
