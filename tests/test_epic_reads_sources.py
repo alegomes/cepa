@@ -84,7 +84,7 @@ def main():
     b_brief = bullets.split("- the `planning-lead`", 1)[0]
     b_pl = bullets.split("- the `planning-lead`", 1)[-1].split("- the \"Decided", 1)[0] \
         if "- the `planning-lead`" in bullets else ""
-    b_dec = bullets.split("- the \"Decided", 1)[1] if "- the \"Decided" in bullets else ""
+    b_dec = ("Decided" + bullets.split("- the \"Decided", 1)[1]) if "- the \"Decided" in bullets else ""
     check("brief bullet: path docs/discovery/<card>/handoff.md, by epic-briefer",
           "`docs/discovery/<card>/handoff.md`" in b_brief and "`epic-briefer`" in b_brief)
     check("brief bullet: carries the audit, so it is **evidence**",
