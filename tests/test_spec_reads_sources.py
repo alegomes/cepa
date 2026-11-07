@@ -14,14 +14,16 @@ Proof by reading the command text common/commands/spec.md:
 - the criterion line (`### CS-<n>:`) carries no label.
 
 Run: python3 tests/test_spec_reads_sources.py
+(SPEC_MD=<path> points it at another copy of spec.md; used for perturbation checks.)
 """
 
+import os
 import re
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SPEC = REPO / "common" / "commands" / "spec.md"
+SPEC = Path(os.environ.get("SPEC_MD") or REPO / "common" / "commands" / "spec.md")
 
 FAILURES = []
 
@@ -51,6 +53,33 @@ def section(text, heading_prefix):
     return re.sub(r"\s+", " ", "\n".join(lines[start + 1:end]))
 
 
+def norm(s):
+    return re.sub(r"\s+", " ", s)
+
+
+def step_paragraphs(text, heading_prefix):
+    """Blank-line separated blocks of one `### ` step, whitespace-flattened."""
+    lines = text.split("\n")
+    start = next((i for i, l in enumerate(lines)
+                  if l.startswith("### ") and l[4:].startswith(heading_prefix)), None)
+    if start is None:
+        return []
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        if lines[j].startswith("### ") or lines[j].startswith("## "):
+            end = j
+            break
+    blocks = "\n".join(lines[start + 1:end]).split("\n\n")
+    return [norm(b).strip() for b in blocks if b.strip()]
+
+
+def para(paras, starts):
+    for p in paras:
+        if p.startswith(starts):
+            return p
+    return ""
+
+
 def main():
     text = SPEC.read_text()
     flat = re.sub(r"\s+", " ", text)
@@ -71,9 +100,41 @@ def main():
     check("step 2 names epic-briefer and planning-lead",
           "epic-briefer" in s2 and "planning-lead" in s2)
 
+    # Step 2, scoped to its paragraphs
+    paras2 = step_paragraphs(text, "2. ")
+    intro = para(paras2, "Before the first round")
+    bullets = para(paras2, "- the `discovery` delivery brief")
+    fontes_p = para(paras2, "Write the paths")
+    labels_p = para(paras2, "Every proposal taken from one of these files")
+    bullet_brief = bullets.split("- the `planning-lead`", 1)[0]
+    bullet_pl = bullets.split("- the `planning-lead`", 1)[-1].split("- the \"Decided", 1)[0]
+    check("step 2 intro: three sources named, looked up by path",
+          "Three sources are named, and you look for each by path" in intro)
+    check("step 2 brief bullet: path docs/discovery/<card>/handoff.md",
+          "`docs/discovery/<card>/handoff.md`" in bullet_brief)
+    check("step 2 brief bullet: carries the audit, so it is **evidence**",
+          "It carries the audit, so it is **evidence**" in bullet_brief)
+    check("step 2 planning-lead bullet: decision taken by an agent, not by the owner",
+          "taken in another interview by an agent, not by the owner" in bullet_pl)
+    check("step 2 Fontes paragraph: paths actually read, that informed the specification",
+          "paths you actually read, and that informed the specification" in fontes_p)
+    check("step 2 Fontes paragraph: updated when another file is read",
+          "updated when another file is read" in fontes_p)
+    check("step 2 labels paragraph: evidência and proposta de agente",
+          "with a label and the file path: `evidência` (from the discovery brief)"
+          in labels_p
+          and "or `proposta de agente` (from the `planning-lead` spec)" in labels_p)
+    check("step 2 labels paragraph: proposal becomes the RECOMMENDED option",
+          "The proposal becomes the RECOMMENDED option" in labels_p)
+    check("step 2 labels paragraph: AskUserQuestion description carries label and path",
+          "in `AskUserQuestion`, the recommended option's description carries "
+          "the label and the path" in labels_p)
+
     # Template header
     check("step 6 exists", step6_raw is not None)
-    tpl = step6_raw or ""
+    fence = re.search(r"```markdown\n(.*?)\n```", step6_raw or "", re.S)
+    check("step 6 has the fenced markdown template", fence is not None)
+    tpl = fence.group(1) if fence else ""
     i_aberta = tpl.find("**Aberta em:**")
     i_fontes = tpl.find("**Fontes lidas:**")
     i_como = tpl.find("## Como chegamos aqui", i_aberta if i_aberta >= 0 else 0)
