@@ -1403,15 +1403,23 @@ def test_herdr_is_not_called_unless_all_three_vars_are_set():
 
 
 def test_a_broken_or_slow_herdr_does_not_change_the_run():
-    for label, body in (("lento (3 s) e exit 1", "time.sleep(3); sys.exit(1)"),
+    for label, body in (("lento (30 s) e exit 1", "time.sleep(30); sys.exit(1)"),
                         ("exit 1", "sys.exit(1)")):
         with tempfile.TemporaryDirectory() as tmp:
+            t0 = time.time()
             p, argvs, log, statuses = herdr_scenario(tmp, herdr_body=body)
+            took = time.time() - t0
             check(f"herdr {label}: a run termina normal com os dois itens done",
                   p.returncode == 0 and statuses == ["done", "done"],
                   f"{p.returncode} {statuses} {p.stderr[-200:]}")
             check(f"herdr {label}: os dois relatórios foram tentados", len(argvs) == 2,
                   str(argvs))
+            # Bound: 2 reports x 1 s timeout = 2 s, plus the normal run of this queue
+            # (about 2 s measured) = about 4 s; 20 s leaves 5x headroom for a loaded
+            # machine and is still far below 2 x 30 s = 60 s, which is what a run
+            # with no timeout (or a 30 s one) would take.
+            check(f"herdr {label}: o timeout de 1 s limita a duração da run (< 20 s)",
+                  took < 20, f"{took:.1f}s")
 
 
 def main():
