@@ -66,6 +66,17 @@ brings all of that forward to a moment when fixing is cheap.
    `/maestro:resume <programa>`, which goes straight to the merge train. Also
    report only.
 
+   The `decisoes` area (when it shows up) counts the decisions of the
+   "Decided without asking" section that have no verdict yet (`· mantida em`,
+   `· vetada em`, `· refinada em`), in the specs of `docs/spec/` and the Epics
+   of `docs/epics/` that left `draft` (`rascunho` counts as `draft`: its
+   decisions are counted by the readiness gate when it closes). It is a ⚠ with
+   the total and one file per line, each with the command that opens the veto:
+   `/common:spec --continuar <slug>` for a spec, `/common:epic <nome>` for an
+   Epic. With zero pending it is a ✓ with the zero; a repo with neither
+   directory does not show it. Report only: the veto is the owner's, and no
+   `--fix` touches it.
+
 3. **If `--live` was passed** and there is a `board-flow.yaml` in the project:
    delegate to `board-flow:atlassian-expert` (if the board-flow plugin is
    installed):

@@ -1,0 +1,55 @@
+schema_version: 2
+card: tres-portas-c1-CS-4
+verdict: proven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: 842e9a8
+head_commit: cf5f362
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan::cmd_decisions (new) + subparser 'decisions' + dispatch + help group"
+      module: common-bin
+      external_observable: true       # the CLI subcommand is the surface; the test runs the real script as a subprocess
+      substituted_by_double: null     # tests/test_cepa_plan_decisions.py runs the real cepa-plan and the real _decisions reader, no fake
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                     # Python CLI harness, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "unperturbed HEAD cf5f362 (detached worktree /tmp/proof-cs4): python3 -I tests/test_cepa_plan_decisions.py -> 'all ok'; python3 -I tests/test_decisions_reader.py -> 'all green'"
+        - "KILLED (RED) 1 list only res.pending -> 5 failure(s) (measured at 52418eb; cf5f362 changed only the test file, +17 lines)"
+        - "KILLED (RED) 2 json verdict always filled -> 7 failure(s) (at 52418eb)"
+        - "KILLED (RED) 3 scan only docs/spec -> 3 failure(s) (at 52418eb)"
+        - "KILLED (RED) 4 scan only docs/epics -> 4 failure(s) (at 52418eb)"
+        - "KILLED (RED) 5 ordinal starts at 0 -> 5 failure(s) (at 52418eb)"
+        - "KILLED (RED) 6 json line = 0 -> 1 failure(s) (at 52418eb)"
+        - "KILLED (RED) 7 treat every decision as pending -> 4 failure(s) (at 52418eb)"
+        - "KILLED (RED) 8 missing file returns 0 instead of 2 -> 1 failure(s) 'missing file exits nonzero' (at 52418eb)"
+        - "KILLED (RED) 9 'com veredito' printed as len(pending) -> at cf5f362: 1 failure(s) 'counts line: 3 decisões, 1 sem veredito, 2 com veredito' (survived at 52418eb)"
+        - "KILLED (RED) 10 drop 'decisions' from the 'reading' help group -> at cf5f362: 1 failure(s) '--help lists decisions under reading'"
+        - "not perturbed again at cf5f362: mutants 1-8 were run at 52418eb; the only diff 52418eb..cf5f362 is test-only (tests/test_cepa_plan_decisions.py, +17), so cepa-plan is byte-identical and the kills carry over"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every behaviour branch of cmd_decisions (explicit file, missing file, scan spec, scan epics, no section, json, pending listing, with-verdict count, empty repo) is reached and asserted; 10 of 10 mutants RED"
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card; red test of the criterion: HEAD cf5f362 test against cepa-plan of 842e9a8 -> '20 failure(s)' (scan, ordinals, json, no-section, missing-file message, empty repo, counts line); at HEAD cf5f362 -> 'all ok'. Note: 'missing file exits nonzero' passes at base only because argparse rejects the unknown subcommand; 'names it' is the check that is RED."
+existing_tests_at_head:
+  - "python3 -I tests/test_cepa_plan_decisions.py -> 'all ok'"
+  - "python3 -I tests/test_decisions_reader.py -> 'all green'"
+adversarial_pass:
+  - "non-UTF8 file (bytes ff fe 00) -> exit 0, no traceback, bad byte shown as replacement char, decision listed"
+  - "directory as argument (dir.md/) -> exit 2, message 'não existe como arquivo', no traceback"
+  - "section with 200000 decisions -> 200000 listed, 0.53s, no failure"
+  - "path with a space, --json -> valid JSON, path preserved"
+routing_reason: "The test is RED against the base cepa-plan (20 failures) and GREEN at HEAD cf5f362. All 10 mutants of the new subcommand turn it RED, including the 'com veredito' count that survived before the strengthening commit and the help-group entry. A short adversarial pass (non-UTF8 file, directory, huge section, path with a space) found no crash and no wrong exit code. Computed verdict: PROVEN."

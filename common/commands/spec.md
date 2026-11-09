@@ -78,14 +78,34 @@ subject in kebab-case.
 
 - With `--lista`: read the `Status` field of each `docs/spec/*.md` and return
   the table (slug · status · no. of criteria · no. of open questions). Stop.
-- With `--continuar <slug>` or `--fechar <slug>`: read the file and go to step
-  4 (continue) or 5 (close).
+- With `--continuar <slug>` or `--fechar <slug>`: read the file, open with the
+  veto walk below, and only then go to step 4 (continue) or 5 (close).
 - Without a flag: if `docs/spec/<slug>.md` already exists for a clearly
   identical subject, **do not create a second one** — say that it exists and
   ask whether to continue that one. Two specifications of the same subject
   diverging silently is worse than none.
 
-Write the skeleton with `**Status:** draft` (the format is in step
+**The veto walk (caminhada do veto).** On an existing file (`--continuar`,
+`--fechar`, or the "continue that one" answer), before resuming the interview
+or the sieve, run `cepa-plan decisions docs/spec/<slug>.md`. It numbers the
+lines of "Decided without asking" and separates those with a verdict from those
+without. Walk only the ones without: show up to four per round, each with its
+number and text, and ask the owner for one answer per decision: keep it
+(`mantida`), veto it (`vetada`, with the reason) or refine it (`refinada`, with
+the new text). Record each answer in the same turn with `cepa-plan verdict
+docs/spec/<slug>.md <n> mantida|vetada|refinada` (`vetada` needs `--reason`,
+`refinada` needs `--text`). Use the number exactly as `cepa-plan decisions` prints it (1-based over every
+decision of the section, decided ones included, so the numbers shown may skip):
+never renumber. Never write the `· mantida em` / `· vetada em` /
+`· refinada em` marker by hand: the date and the format come from the command.
+`Status` does not change by veto; a vetoed decision becomes an open question
+only if the owner says so in the same turn. If `cepa-plan verdict` prints "já
+virou código na fila" (the file is the `source:` of a derived queue), pass the
+warning on to the owner as it came. A skipped decision does not block: it stays
+without marker, the walk moves on, and the next `--continuar` offers it again.
+With no decision without a verdict, say so in one line and go on.
+
+When creating a new file, write the skeleton with `**Status:** draft` (the format is in step
 6). The `spec-readiness-gate` gate never bothers you while the status is
 `draft`. Fill `## Como chegamos aqui` at skeleton time, from the owner's first
 sentence or from the `porque:` line of the originating handoff;
@@ -97,7 +117,30 @@ or empty.
 Before the first round, spend a step reading what already answers part of the
 questions: the code of the area the subject touches, the documents in
 `docs/`, `BACKLOG.md`, and — if `board-flow.yaml` exists — the open cards on
-the subject via `atlassian-expert` (read-only, writing nothing).
+the subject via `atlassian-expert` (read-only, writing nothing). Three sources
+are named, and you look for each by path:
+
+- the `discovery` delivery brief, `docs/discovery/<card>/handoff.md`, written
+  by `epic-briefer`. It carries the audit, so it is **evidence**;
+- the `planning-lead` spec, `spec/<slug>.md` or `specs/<slug>.md` at the repo
+  root. It is a decision taken in another interview by an agent, not by the
+  owner;
+- the "Decided without asking" section of the other specs and Epics in
+  `docs/spec/` and `docs/epics/`.
+
+Write the paths you actually read, and that informed the specification, on the
+`**Fontes lidas:**` line of the header: once, at skeleton time, updated when
+another file is read. Never a label suffix on a criterion line (`### CS-<n>:`),
+which `spec-readiness-gate` parses.
+
+Every proposal taken from one of these files is shown in the turn with a label
+and the file path: `evidência` (from the discovery brief) or `proposta de
+agente` (from the `planning-lead` spec). The proposal becomes the RECOMMENDED
+option of the question: in `AskUserQuestion`, the recommended option's
+description carries the label and the path; in prose, "Recomendo X
+(`evidência`, docs/discovery/<card>/handoff.md)". A file that answers a
+question does not close it: the question is still asked, with the file's answer
+as the recommendation.
 
 A question whose answer was in the repo burns the owner's patience and teaches
 that the interrogation is bureaucracy. The good question is the one left over
@@ -113,7 +156,10 @@ getting it wrong: scope boundary and contract before edge case. Use
 The test for whether something becomes a question: **do two different answers
 here produce different code?** If not, decide alone and record the decision
 in the "Decided without asking" section — the owner
-vetoes there if he wants.
+vetoes there if he wants. A decision inherited from the `planning-lead` spec (or
+another document) that you adopt without asking goes there with its origin,
+never as an answered `- [x]` question: `- <decision> — proposta de agente,
+specs/<slug>.md. Vete aqui se discordar.`
 
 Cover, over the rounds, what is always missing and always costs a lot:
 
@@ -139,6 +185,10 @@ A question asked becomes `- [ ]` in the "Perguntas em aberto" (open questions)
 section; answered, it becomes `- [x]` with the answer on the same line. That
 is how `--continuar` knows where it stopped.
 
+A line turns `- [x]` only after an owner utterance in the conversation that
+answers it. What the files said is a recommendation, never an answer. No hook
+enforces this (no hook knows who answered), so it rests on you.
+
 ### 5. Close by the sieve, never by fatigue
 
 The specification becomes `**Status:** ready-to-build`
@@ -161,6 +211,14 @@ The `spec-readiness-gate` hook blocks writing `Status: ready-to-build`
 while any of them is missing. If it blocks, **the right response is to go back
 to asking**, never to soften the field until it passes.
 
+When it lets the file through, the hook shows the owner how many lines of
+the "Decided without asking" section still carry no verdict (`· mantida em`,
+`· vetada em`, `· refinada em`): "N decisões sem veredito neste arquivo".
+**Repeat that number in the final report** of the session, with the same
+words, so the owner reads it where they read the rest. Zero is a number too:
+write "0 decisões sem veredito", never leave the line out. A file with no such
+section gets the hook's "sem seção Decided without asking" repeated instead.
+
 The field is called **Surface** and not *Altitude* on purpose: `Altitude`
 is already a field of the decision block, with another closed vocabulary
 (`strategic`/`tactical`/`implementation`) and its own gate on write. Two
@@ -170,7 +228,7 @@ both.
 ### 6. The file format
 
 The document is written in pt-BR. Keep the headings and the `**Status:**`,
-`**Aberta em:**`, `**Fechada em:**`, `## Como chegamos aqui`, `### CS-<n>:`, `**Surface:**` and
+`**Aberta em:**`, `**Fechada em:**`, `**Fontes lidas:**`, `## Como chegamos aqui`, `### CS-<n>:`, `**Surface:**` and
 `**Red test:**` labels verbatim: `spec-readiness-gate` and
 `cepa-plan --from-spec` parse them (the old pt-BR `pronta-para-construir`,
 `rascunho`, `Superfície`, `Teste vermelho` still read in older specs, but you
@@ -181,6 +239,7 @@ write only the new ones). Only the placeholders below are in English.
 
 **Status:** draft
 **Aberta em:** <date>            **Fechada em:** <date or ->
+**Fontes lidas:** <paths actually read that informed the specification, or ->
 
 ## Como chegamos aqui
 <a pergunta do dono que começou o assunto, em uma frase e na voz dele, com a data; copiada da primeira frase do pedido ou da linha "porque" do handoff de origem — nunca só o rótulo da conversa>
@@ -242,6 +301,9 @@ no line of code.
   the work of ordering, which is yours.
 - **Every question carries a recommendation.** A question without a
   recommendation hands back the whole job.
+- **Proposals from files are labeled, answers come from the owner.** A
+  proposal taken from a file carries `evidência` or `proposta de agente` plus
+  the path, and nothing becomes `- [x]` without an owner utterance.
 - **One specification per subject.** On finding an existing one, continue it.
 - **Does not delegate the interrogation.** Reading to prepare, yes;
   conducting, no.

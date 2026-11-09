@@ -1,0 +1,14 @@
+key: tres-portas-c1-CS-10
+status: complete
+head_audited: b794dc7
+criteria:
+  - id: CS-10
+    text: "um teste que lê `discovery/agents/epic-briefer.md` encontra, no modelo da descrição do card do passo 5, uma linha de repositório preenchida com `git remote get-url origin` e o caminho local como reserva, ao lado da linha `Delivery brief:`; nenhum comando literal (`/common:epic ...`) no modelo do card; e a regra 'Brief, not Epic' citando `epic-author` e `/common:epic`. Hoje falha: o modelo não tem linha de repositório e a regra cita só o `epic-author`."
+    altitude: application
+    surface: "texto do agente discovery/agents/epic-briefer.md (modelo da descrição do card na seção 'Engineer-board card delegation (step 5)' e regra 'Brief, not Epic'); a spec (Decided without asking, item 7) diz que a prova é a leitura do texto, porque o plugin discovery não roda no Cepa (R4)."
+    test: "tests/test_epic_briefer_card.py"
+    layer: application
+    evidence: verified
+    run: "HEAD b794dc7. python3 tests/test_epic_briefer_card.py -> exit 0, 18 linhas 'ok', 0 FAIL, 'all ok' (N>0). Vermelho real: o mesmo teste contra a versão anterior do agente (git show 3b2593d^:discovery/agents/epic-briefer.md via EPIC_BRIEFER_MD) dá 11 FAIL. Diff do agente confere com o teste: linha 'Repository: <git remote get-url origin> (or the local path of the repo when there is no remote)' logo abaixo de 'Delivery brief:' no modelo; parágrafo diz para preencher com `git remote get-url origin` e usar o caminho local só sem remote; 'The card carries no literal command'; regra 'Brief, not Epic' cita `epic-author` (board) e `/common:epic` (file, docs/discovery/<card>/handoff.md) como dois leitores."
+    verdict: complete
+status_note: "Ressalvas: (1) a prova é por leitura de texto, como a spec manda para o item 7; não há sessão gravada de que o modelo realmente preenche a linha com o remote; (2) o teste checa frases do texto (ex.: 'only when there is no remote') e é sensível a reescrita, não a comportamento. Sem deferral."

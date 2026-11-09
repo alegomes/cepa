@@ -1,0 +1,45 @@
+schema_version: 2
+card: tres-portas-c1-CS-7
+verdict: proven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: 73076a0
+head_commit: b60e59c
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/commands/spec.md (step 1 'Locate or open': veto walk paragraph)"
+      module: common-commands
+      external_observable: true       # the command markdown is the surface; the test reads the real file
+      substituted_by_double: null
+    - class: "common/commands/epic.md (step 1 'Open or resume': veto walk paragraph)"
+      module: common-commands
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "unperturbed HEAD b60e59c (detached worktree /tmp/cs7-proof3): test_veto_walk_opens_existing_doc.py 'all passed'; test_spec_readiness_gate 'all green'; test_epic_readiness_gate 'OK'; test_spec_readiness_decision_count 'all green'; test_closing_repeats_decision_count 'all ok'"
+        - "all perturbations re-run (56 in perturb.py + 6 in perturb2.py = 62): perturb.py 49 RED + 7 survived (N14-N20 below), perturb2.py 6 of 6 RED (N=1 or 2 FAIL lines each)"
+        - "the 11 survivors of the previous proof (a)-(k) are now KILLED (RED): R2 pass-on removed N=2 (spec and epic) and inverted keeping the quote N=1; 'Never write the marker by hand' removed N=2 and inverted N=2; one answer per decision, same turn -> later (spec and epic), 'On an existing file' -> 'On a new file', 'before' -> 'after resuming', empty-walk line removed (spec and epic), 'Always write the skeleton', mantida offer removed, open-question-only-if-owner-says -> always (spec and epic), epic step-1 routing sentence reduced: all RED"
+        - "EXPLANATORY survivors (text that restates, does not command; same treatment as CS-6/CS-3 non-behavioral text), test still 'all passed': N14 spec '(1-based over every decision ...)' removed; N15 same in epic; N16 epic 'show the decision with its number' dropped; N17 spec 'each with its number and text' dropped; N18/N19 'the date and the format come from the command' dropped (epic, spec). They do not change what the command does."
+        - "PRE-EXISTING survivor, not a changed behavior: N20 epic 'and do not ask again a question that already has `- [x]`' removed. git diff 73076a0..HEAD shows the rule is the same sentence of base (epic.md base line 76) only re-wrapped; it is outside the card's change. Recorded for completeness, not counted."
+        - "harness: scripts copied into the throwaway worktree (.proofh/perturb.py, perturb2.py), each replaces text in the worktree file, runs only tests/test_veto_walk_opens_existing_doc.py and restores; no sampling cap"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool for markdown; every behavior-bearing changed rule (R2 pass-on, marker ban, same-turn record, one answer per decision, walk order, empty-walk line, mantida offer, open-question rule, epic routing) turns the test RED when inverted, so each is reached by the test"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff changes only command markdown and a test that reads it; it parses nothing from outside and touches no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card; git checkout 73076a0 -- common/commands (test kept from HEAD) -> 57 FAIL lines, RED. HEAD b60e59c: 'all passed'"
+routing_reason: "Every behavior-bearing perturbation of the lines changed in 73076a0..HEAD is RED, including the 11 survivors of the previous proof, and the test is RED at base (57 FAIL). The only survivors are explanatory text (numbering note, 'number and text', 'date and format come from the command') and one pre-existing rule re-wrapped but unchanged in meaning (epic 'do not ask again'). Computed verdict: PROVEN."

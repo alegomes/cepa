@@ -257,6 +257,7 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _queuepath as qp  # noqa: E402  (resolver for both queue layouts)
 import _ownertext  # noqa: E402  (the human section of a blocked item)
+import _decisions  # noqa: E402  (the one reader of "Decided without asking")
 import _state  # noqa: E402  (the one reader of the state deposits and the run liveness rule)
 from _state import HEARTBEAT_STALE_SEC  # noqa: E402,F401  (one copy of the constant)
 
@@ -4055,6 +4056,195 @@ def cmd_validate(arg, repo="."):
     return 0
 
 
+def cmd_decisions(repo, files, as_json):
+    """Lists, per file, the decisions of "Decided without asking" with and
+    without a verdict. The reader is the one the readiness hook uses
+    (`_decisions`), so the count here is the count the gate sees. Reads files
+    only: no git needed."""
+    base = Path(repo)
+    if files:
+        paths = [Path(f) for f in files]
+        missing = [str(p) for p in paths if not p.is_file()]
+        if missing:
+            for m in missing:
+                print(f"{m} não existe como arquivo", file=sys.stderr)
+            return 2
+        shown = [(p, str(p)) for p in paths]
+    else:
+        found = []
+        for sub in ("spec", "epics"):
+            d = base / "docs" / sub
+            if d.is_dir():
+                found += sorted(d.glob("*.md"))
+        shown = [(p, str(p.relative_to(base))) for p in found]
+
+    reports = []
+    for path, label in shown:
+        res = _decisions.read_file(path)
+        if res is None:
+            reports.append({"path": label, "decisions": None})
+            continue
+        every = sorted(res.pending + res.decided, key=lambda d: d.line)
+        reports.append({"path": label, "decisions": [
+            {"ordinal": i, "line": d.line, "text": d.text, "verdict": d.verdict}
+            for i, d in enumerate(every, 1)]})
+
+    if as_json:
+        print(json.dumps({"files": reports}, ensure_ascii=False, indent=2))
+        return 0
+    if not reports:
+        print("Nenhuma spec em docs/spec/ nem Epic em docs/epics/.")
+        return 0
+    for r in reports:
+        decs = r["decisions"]
+        if decs is None:
+            print(f"{r['path']}: sem a seção \"Decided without asking\"")
+            continue
+        pending = [d for d in decs if not d["verdict"]]
+        print(f"{r['path']}: {len(decs)} decisões, {len(pending)} sem veredito, "
+              f"{len(decs) - len(pending)} com veredito")
+        for d in pending:
+            print(f"  #{d['ordinal']} (linha {d['line']}): {d['text']}")
+    return 0
+
+
+def _cites(source, rel):
+    """True when the queue's free-text `source:` names `rel` as a whole path:
+    `docs/spec/a.md (3 critérios)` and `./docs/spec/a.md` cite docs/spec/a.md;
+    `docs/spec/xa.md`, `../docs/spec/a.md` and `docs/spec/a.md.bak` do not."""
+    text = source if isinstance(source, str) else json.dumps(source, ensure_ascii=False)
+    pat = r"(?<![\w./-])(?:\./)?" + re.escape(rel) + r"(?![\w/-]|\.\w)"
+    return re.search(pat, text) is not None
+
+
+def derived_queues(repo, rel):
+    """[(queue, done, total)] of the single-track queues whose `source:` cites
+    `rel`. The queues live in the main clone, as everywhere in this script."""
+    root = main_root(repo) or Path(repo)
+    out = []
+    for name, qfile in qp.queue_files(root):
+        plan, error = read_plan(qfile)
+        if error or not isinstance(plan, dict) or mode_of(plan) != MODE:
+            continue
+        if not _cites(plan.get("source") or "", rel):
+            continue
+        items = [it for it in plan.get("items") or [] if isinstance(it, dict)]
+        done = sum(1 for it in items if status_of(it) == "done")
+        out.append((qp.queue_name_of(plan, name) or name, done, len(items)))
+    return out
+
+
+def _rel_to_repo(path, repo):
+    """`path` as the queues cite it: relative to the repo root."""
+    full = path.resolve()
+    for base in (Path(repo).resolve(), ):
+        try:
+            return full.relative_to(base).as_posix()
+        except ValueError:
+            pass
+    r = subprocess.run(["git", "-C", str(full.parent), "rev-parse", "--show-toplevel"],
+                       capture_output=True, text=True)
+    if r.returncode == 0:
+        try:
+            return full.relative_to(Path(r.stdout.strip()).resolve()).as_posix()
+        except ValueError:
+            pass
+    return path.as_posix()
+
+
+def cmd_verdict(repo, file, ordinal, verdict, reason, text, today=None):
+    """Writes the owner's verdict on decision `ordinal` of the "Decided
+    without asking" section of `file`, numbered as `cepa-plan decisions`
+    numbers it. The marker is the one `_decisions` reads: `· mantida em
+    <date>`, `· vetada em <date>: <reason>`, `· refinada em <date>`. Only that
+    item changes; `Status` and every other line stay byte for byte.
+
+    The veto is a record (O2'): it undoes nothing. What it does do, on vetada
+    or refinada, is say when a queue was already derived from the file, so the
+    owner knows code may already stand on the decision just changed.
+
+    Exit 0 written; 1 refused (no section, ordinal out of range, item already
+    has a verdict); 2 invalid usage (missing file, --reason or --text)."""
+    path = Path(file)
+    if verdict == "vetada" and not (reason or "").strip():
+        print("vetada exige --reason: o motivo do veto é o que fica registrado "
+              "na linha.", file=sys.stderr)
+        return 2
+    if verdict == "refinada":
+        text = " ".join((text or "").split())
+        if not text:
+            print("refinada exige --text com o novo texto da decisão.",
+                  file=sys.stderr)
+            return 2
+        if _decisions.VERDICT_RE.search(text):
+            print("--text já traz um marcador de veredito; passe só o texto da "
+                  "decisão.", file=sys.stderr)
+            return 2
+    if not path.is_file():
+        print(f"{file} não existe como arquivo", file=sys.stderr)
+        return 2
+
+    # newline="" on both ends: a CRLF file stays CRLF, byte for byte.
+    with open(path, encoding="utf-8", newline="") as fh:
+        raw = fh.read()
+    res = _decisions.read(raw)
+    if res is None:
+        print(f"{file}: sem a seção \"Decided without asking\"", file=sys.stderr)
+        return 1
+    every = sorted(res.pending + res.decided, key=lambda d: d.line)
+    if not 1 <= ordinal <= len(every):
+        print(f"{file}: não há decisão #{ordinal}; a seção tem {len(every)} "
+              f"(veja `cepa plan decisions {file}`)", file=sys.stderr)
+        return 1
+    d = every[ordinal - 1]
+    if d.verdict:
+        print(f"{file}: a decisão #{ordinal} (linha {d.line}) já tem veredito "
+              f"({d.verdict}); um veredito não se reescreve.", file=sys.stderr)
+        return 1
+
+    day = today or datetime.now().date().isoformat()
+    marker = f" · {verdict} em {day}"
+    if (reason or "").strip():
+        marker += ": " + " ".join(reason.split())
+
+    lines = raw.splitlines(keepends=True)
+    first, last = d.line - 1, (d.end or d.line) - 1
+
+    def ending(line):
+        return line[len(line.rstrip("\r\n")):]
+
+    if verdict == "refinada":
+        head = lines[first]
+        bullet = re.match(r"^([-*+]\s+)", head).group(1)
+        new = [bullet + text + marker + ending(lines[last])]
+        lines[first:last + 1] = new
+        shown = new[0].rstrip("\r\n")
+    else:
+        body = lines[last].rstrip("\r\n")
+        lines[last] = body.rstrip() + marker + ending(lines[last])
+        shown = lines[last].rstrip("\r\n")
+
+    tmp = path.with_name(path.name + ".verdict-tmp")
+    with open(tmp, "w", encoding="utf-8", newline="") as fh:
+        fh.write("".join(lines))
+    os.replace(tmp, path)
+
+    print(f"{file}: decisão #{ordinal} (linha {d.line}) {verdict}.")
+    print(f"  {shown.strip()}")
+    if verdict in ("vetada", "refinada"):
+        for q, done, total in derived_queues(repo, _rel_to_repo(path, repo)):
+            if done:
+                word = "item done" if done == 1 else "itens done"
+                print(f"Atenção: isto já virou código na fila {q}: {done} {word} "
+                      f"de {total}. O veto é registro e não desfaz nada; se o "
+                      f"código precisar mudar, isso é item novo na fila.")
+            else:
+                print(f"Atenção: a fila {q} foi derivada deste arquivo "
+                      f"(0 itens done de {total}); revise os itens pendentes "
+                      f"antes de rodá-la.")
+    return 0
+
+
 def cmd_write(root, a):
     if a.from_triage:
         handoff, error = read_handoff(a.from_triage)
@@ -4453,8 +4643,8 @@ def main(argv=None):
             "(/maestro:run)."),
         groups=[
             ("sources (read only, return JSON)", ["from-spec", "from-epic", "from-triage"]),
-            ("writing", ["write", "add", "migrate", "check-name", "validate"]),
-            ("reading", ["queue", "status", "show", "epics", "promote", "order"]),
+            ("writing", ["write", "add", "verdict", "migrate", "check-name", "validate"]),
+            ("reading", ["queue", "status", "show", "epics", "decisions", "promote", "order"]),
             ("one item's cycle", ["start", "finish", "answer"]),
             ("against the Jira board", ["reconcile", "landed", "divergence"]),
         ],
@@ -4688,6 +4878,56 @@ def main(argv=None):
     ep.add_argument("--json", action="store_true", dest="as_json", help=json_help)
     ep.add_argument("--brief", action="store_true",
                     help="one line per Epic (for the session hook)")
+
+    dc = sub.add_parser(
+        "decisions",
+        help="lists the \"Decided without asking\" decisions of specs and Epics",
+        description=(
+            "Read only. Per file, the decisions of the \"Decided without asking\"\n"
+            "section, split into with and without a verdict (`· mantida em`,\n"
+            "`· vetada em`, `· refinada em`). Without a file, scans docs/spec/*.md\n"
+            "and docs/epics/*.md of --repo. Each pending decision shows its ordinal\n"
+            "(1-based, counting every decision of the section in file order) and\n"
+            "its line. Same reader as the spec-readiness-gate hook."),
+        examples=[("cepa plan decisions", "every spec and Epic of the repo"),
+                  ("cepa plan decisions docs/spec/assinatura.md", "one file"),
+                  ("cepa plan decisions docs/spec/assinatura.md --json", "for code")],
+        exit_codes=[(0, "shown (even with no file, or a file without the section)"),
+                    (2, "invalid usage, a given file does not exist")])
+    dc.add_argument("files", nargs="*", metavar="file",
+                    help="spec or Epic to read (default: scan docs/spec and docs/epics)")
+    dc.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
+    dc.add_argument("--json", action="store_true", dest="as_json", help=json_help)
+
+    vd = sub.add_parser(
+        "verdict",
+        help="writes the owner's verdict on one \"Decided without asking\" decision",
+        description=(
+            "Writes, at the end of decision <n> of the \"Decided without asking\"\n"
+            "section (numbered as `cepa plan decisions` numbers it), the marker with\n"
+            "today's date: `· mantida em <date>`, `· vetada em <date>: <reason>` or\n"
+            "`· refinada em <date>`. vetada requires --reason; refinada requires\n"
+            "--text and swaps the decision's text before the marker. A decision that\n"
+            "already has a verdict is refused. Status and the other lines do not\n"
+            "change. On vetada or refinada, warns when a queue in .claude/queues/\n"
+            "cites the file in its `source:`, with the queue name and how many of its\n"
+            "items are done: the veto is a record and undoes nothing."),
+        examples=[("cepa plan verdict docs/spec/assinatura.md 2 mantida", "keep it"),
+                  ('cepa plan verdict docs/spec/assinatura.md 2 vetada --reason "fora do ciclo"',
+                   "veto it"),
+                  ('cepa plan verdict docs/spec/assinatura.md 3 refinada --text "<novo texto>"',
+                   "rewrite it")],
+        exit_codes=[(0, "the marker was written"),
+                    (1, "refused: no section, no decision <n>, or it already has a verdict"),
+                    (2, "invalid usage: missing file, --reason or --text")])
+    vd.add_argument("file", help="spec or Epic")
+    vd.add_argument("ordinal", type=int, metavar="n",
+                    help="the decision's number, as `cepa plan decisions` shows it")
+    vd.add_argument("verdict", choices=["mantida", "vetada", "refinada"])
+    vd.add_argument("--reason", default=None, help="why (required for vetada)")
+    vd.add_argument("--text", default=None,
+                    help="the decision's new text (required for refinada)")
+    vd.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
     pr = sub.add_parser(
         "promote", help="lists the demands the queue hands to /maestro:program-plan --from-plan",
@@ -5065,6 +5305,10 @@ def main(argv=None):
 
     if a.cmd == "validate":
         return cmd_validate(a.plan_file, a.repo)
+    if a.cmd == "decisions":
+        return cmd_decisions(a.repo, a.files, a.as_json)
+    if a.cmd == "verdict":
+        return cmd_verdict(a.repo, a.file, a.ordinal, a.verdict, a.reason, a.text)
     if a.cmd == "from-spec":
         return cmd_from_spec(a.spec)
     if a.cmd == "from-triage":

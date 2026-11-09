@@ -1,0 +1,40 @@
+schema_version: 2
+card: tres-portas-c1-CS-9
+verdict: proven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: c320db8
+head_commit: f7c9ce5
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/commands/epic.md (step 2 three named sources + Fontes lidas rule, step 3 label/path before the only question + challenge turn + Decided without asking with origin, step 4 accepted proposal challenged once + no [x] without owner utterance, step 7 template Fontes lidas line + verbatim labels, Constraints bullet)"
+      module: common-commands
+      external_observable: true       # the command markdown is the surface; the test reads the real file
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "unperturbed HEAD f7c9ce5: python3 tests/test_epic_reads_sources.py -> 40 ok lines, 'all ok' (N=40 checks > 0)"
+        - "base c320db8 epic.md with the HEAD test (EPIC_MD=<git show c320db8:common/commands/epic.md>) -> 38 FAIL lines, RED"
+        - "40 sentence-level perturbations of text added in c320db8..HEAD, on copies in throwaway worktree /tmp/cs9-wt (removed), each run as EPIC_MD=<copy> python3 tests/test_epic_reads_sources.py; 39 RED, 1 SURVIVED. RED: step 2 (S2a 'Three sources', S2b brief path, S2c 'evidence', S2d spec/ + specs/, S2e 'at the repo root', S2f 'by an agent, not by the owner', S2g/S2h docs/spec/ and docs/epics/ halves, S2i Decided-without-asking source), Fontes lidas rule (F1 paths actually read, F2 once at skeleton time, F3 updated, F4 no label suffix on ladder cell/heading), step 3 (L1 label and path, L2 before the only question, L3 labels swapped, L4 prose example path, L5 prose not menu/ladder cell, L6 file does not close the gap, L7 challenge turn included, L8 even if already cited, L9 'never announced as não vou perguntar', L10 Decided without asking with label and path, L11 challenged once like any other, D1 goes there with origin not [x], D2 model line proposta de agente/Vete aqui, D3 inherited from planning-lead), step 4 (A1 accepted proposal challenged once, A2 never written without challenge, X1 [x] only after owner utterance, X2 file is a proposal never an answer, X3 no hook), step 7 (T1 template line removed, T2 line merged into Status, V1 verbatim label), Constraints (C1 heading, C2 before the question, C3 challenged once, C4 no [x] without owner utterance)."
+        - "SURVIVED, EXPLANATORY: A3 ('The file agreeing with the owner is not the challenge.' -> 'is the challenge.'). The rule it clarifies, that an accepted labeled proposal is challenged once and never written down without the challenge, is pinned by A1 and A2 (RED); A3 is a clarification of that rule, not an independent one. Suggested hardening: pin that sentence too."
+        - "behavioral surface evidence (read, not re-run, as instructed): docs/proof/tres-portas-c1-CS-9-transcricao.md with raw jsonl in docs/proof/evidence/CS-9-transcricao/ (antes on c320db8, depois on cfe614f). common/ is unchanged between cfe614f and HEAD (only proof files were added), so it describes HEAD. It does not substitute for the text test when perturbing."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool for markdown; coverage determined by perturbation: every rule-bearing span added in c320db8..HEAD turns tests/test_epic_reads_sources.py RED when changed (39 of 40 perturbations RED; the one survivor is a clarification of a pinned rule)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff changes only command markdown, a test that reads it and proof transcripts; it parses nothing from outside and touches no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card; base c320db8 epic.md with the HEAD test -> 38 FAIL, HEAD -> all ok"
+routing_reason: "Every rule-bearing sentence of the CS-9 criterion in common/commands/epic.md (named sources, Fontes lidas line, label and path before the only question including the challenge turn, accepted labeled proposal challenged once, inherited/file-settled decisions to Decided without asking with origin, no - [x] without owner utterance) turns the covering test RED when altered: 39 of 40 perturbations RED, base RED (38 FAIL), HEAD green (40 ok). The sole survivor (A3) clarifies a rule already pinned by A1/A2 and is classified explanatory. Computed verdict: PROVEN. Suggested non-blocking hardening: pin the 'file agreeing with the owner is not the challenge' sentence."

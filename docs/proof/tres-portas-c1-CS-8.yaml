@@ -1,0 +1,42 @@
+schema_version: 2
+card: tres-portas-c1-CS-8
+verdict: proven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: 1002c0a
+head_commit: 4ba9cdd
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/commands/spec.md (step 2 sources + labels, step 3 inherited decision, step 4 no [x] without owner, step 6 Fontes lidas header, Constraints)"
+      module: common-commands
+      external_observable: true       # the command markdown is the surface; the test reads the real file
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "common/ unchanged since 40b70df (git diff 40b70df..HEAD --stat -- common/ -> empty); round 5 changed only tests/test_spec_reads_sources.py (4ba9cdd: pins the - [x] marker in step 4, the Constraints bullet sentence, and both halves of 'a file does not close the question')"
+        - "unperturbed HEAD 4ba9cdd (detached worktree /tmp/cs8-proof5, removed): tests/test_spec_reads_sources.py 'all ok' (includes new check 'constraint bullet: nothing becomes [x] without an owner utterance'); tests/test_veto_walk_opens_existing_doc.py 'all passed'; tests/test_spec_readiness_gate.py 'all green'. Perturbed copies run only against test_spec_reads_sources.py via SPEC_MD=<copy path> (neighbors ignore SPEC_MD)."
+        - "round-4 blocking survivors now RED: G36e ('A line turns `- [x]` only after' -> '`- [ ]`') RED; G36e2 ('only' -> 'often') RED; C-b3 ('and nothing becomes `- [x]` without an owner utterance' -> 'and may become `- [x]`') RED; C-b5 ('without an owner utterance.' -> 'with an agent utterance.') RED; Cb6 ('without' kept, marker `- [x]` -> `- [ ]` in the Constraints bullet) RED; Cb10 (dropping 'without an owner utterance') RED."
+        - "round 1-3 blocking survivors re-run, all RED: G36 (owner -> agent), G36f (drop 'only'), G36g ('in the conversation that answers it' -> 'somewhere'), G36h, G36i; G63 ('goes there with its origin' -> 'goes in Perguntas em aberto'), G63b, G63h ('Vete aqui se discordar' -> 'Aceite'), G63i ('goes there' -> 'is asked'), G63j ('never as' -> 'always as'); F-close / F-close2 / F-close3 (both halves of 'a file does not close the question' now pinned individually); sources S1a-c, S2a/S2a2/S2a3 ('spec/' and 'specs/' and 'at the repo root'), S2b/S2b2 ('by an agent, not by the owner'), S2c (planning-lead name), S3a/S3b/S3c (Decided-without-asking sources, docs/spec/ and docs/epics/ halves), H1/S4/S5 ('look for each by path'), X1 ('Three sources'), F1 (paths actually read), F2b (once, at skeleton time), F3 (criterion-suffix ban), L1/L1b (labels swapped), L2 (RECOMMENDED option), L3/L3b (AskUserQuestion carries label and path), L4 (prose form with label and path), L5, L6, R1 ('recommendation, never an answer'), V1/V6 (Fontes lidas removed from the verbatim-labels list), V3/V4/V5 (template line), D-line parts."
+        - "fresh independent pass: 70 sentence/phrase-level perturbations over text added in 1002c0a..HEAD (steps 2, 3, 4, 6, Constraints; single-line sed substitutions on a copy restored with git checkout between runs, each checked to have changed the file); every rule-bearing sentence of the CS-8 criterion and of Item 1/Item 2 ('Decided without asking' with origin, not an answered question) goes RED, except the survivors below, all classified EXPLANATORY."
+        - "SURVIVED, EXPLANATORY (no rule of the criterion is lost; the rule stays pinned elsewhere): (a) Constraints bullet first clause, a mirror of step 2: Cb8 (drop 'proposta de agente'), Cb9 (path -> date), Cb13 ('carries' -> 'may carry'), Cb14 (drop 'the path'), Cb15, Cb16 ('carries' -> 'ignores'). Reason: the same obligations (both labels, path, RECOMMENDED option, AskUserQuestion and prose forms) are individually pinned in step 2 where they are executed (L1, L3, L4, L5, L6 RED); the Constraints bullet only restates them as a summary, and its central rule (no `- [x]` without owner utterance) is now pinned in the bullet itself (Cb3/Cb5/Cb6/Cb10 RED). (b) R2 ('No hook enforces this' -> 'A hook enforces this') and R3 (', so it rests on you'): meta-rationale about enforcement; 'no hook' is still checked as a phrase and the rule (owner utterance only) is pinned by G36*. (c) F3b (reason 'which `spec-readiness-gate` parses'): rationale for the criterion-suffix ban, the ban itself is pinned (F3 RED). (d) V7 (placeholder hint text after **Fontes lidas:**): the label and its position in the template are pinned (V3-V5 RED). (e) X2 ('read-only, writing nothing') is pre-existing text, outside 1002c0a..HEAD additions. (f) rounds 1-4 explanatory list unchanged: G63e, S3-without, N-nohook, N-rests, S2-gate, C-bullet heading, N09, N17, N25/26, N28, N29, N37, N41/42, N44/45, G53, G61, N49/G54, G55, G57, G62."
+        - "behavioral surface evidence (read, not re-run): docs/proof/tres-portas-c1-CS-8-transcricao.md with raw jsonl in docs/proof/evidence/CS-8-transcricao/ (antes-t1/t2, depois-t1/t2/t3), recorded on 40b70df; common/ identical since 40b70df so it still describes HEAD. It does not substitute for the text test when perturbing."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool for markdown; coverage determined by perturbation: every rule-bearing span added in 1002c0a..HEAD turns test_spec_reads_sources.py RED when changed (see perturbation results); the only spans that do not are classified explanatory/mirror above"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff changes only command markdown, a test that reads it and proof transcripts; it parses nothing from outside and touches no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card; round 1 recorded git checkout 1002c0a -- common/commands (test kept from HEAD) -> 22 FAIL lines, RED; HEAD all ok"
+routing_reason: "Round 5: the three round-4 blocking survivors (G36e, C-b3, C-b5) are now killed, as are all blocking survivors of rounds 1-3. The fresh pass over every rule-bearing sentence added to common/commands/spec.md leaves only explanatory survivors: mainly the Constraints bullet's label/path clause, a summary of step 2 whose obligations are each pinned in step 2. Unperturbed HEAD: test_spec_reads_sources all ok, neighbors green, common/ unchanged since the recorded transcript at 40b70df. Computed verdict: PROVEN. Suggested (non-blocking) hardening for the owner: pin the Constraints bullet's first clause too, so the summary cannot drift from step 2."

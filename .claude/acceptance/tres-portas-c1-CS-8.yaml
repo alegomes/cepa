@@ -1,0 +1,14 @@
+key: tres-portas-c1-CS-8
+status: complete
+head_audited: e37a986
+criteria:
+  - id: CS-8
+    text: "uma transcrição gravada com `claude -p --plugin-dir common` num repo descartável com `docs/discovery/<card>/handoff.md` e `specs/<slug>.md` semeados mostra: o documento criado tem `**Fontes lidas:**` com os dois caminhos; toda proposta tirada deles aparece como opção recomendada com o rótulo `evidência` (do brief) ou `proposta de agente` (da spec) e o caminho; nenhuma linha vira `- [x]` antes de uma fala do dono que a responda; decisão herdada da spec do `planning-lead` aparece em 'Decided without asking' com a origem, não como pergunta respondida."
+    altitude: application
+    surface: "sessão `claude -p --plugin-dir common` rodando `/common:spec` (texto do comando common/commands/spec.md executado pelo agente), observada na transcrição gravada e no arquivo docs/spec/*.md que ela escreve."
+    test: "docs/proof/tres-portas-c1-CS-8-transcricao.md (antes 1002c0a, depois 40b70df; stream-json cru em docs/proof/evidence/CS-8-transcricao/) + tests/test_spec_reads_sources.py (leitura do texto do comando)."
+    layer: application
+    evidence: verified
+    run: "HEAD e37a986. python3 tests/test_spec_reads_sources.py -> exit 0, 25 linhas 'ok', 0 fail, 'all ok' (N>0). Transcrição conferida contra o jsonl cru (depois-t1/t2/t3, antes-t1): falas do agente e as chamadas Write/Edit coincidem com o renderizado. Depois t1: Write cria docs/spec/lembrete-renovacao-receita.md com '**Fontes lidas:** specs/lembrete-renovacao-receita.md, docs/discovery/DISC-12/handoff.md, ...', 4 perguntas todas '- [ ]', Decided without asking com 'proposta de agente, specs/...' e 'evidência, docs/discovery/...'; perguntas 1 e 3 em prosa com 'Recomendo ... (`proposta de agente`/`evidência`, caminho)'. t2 e t3: os únicos Edit que viram '- [x]' vêm logo após fala do dono que responde a linha, com a fala citada; canal fica '- [ ]' em t2 mesmo com o brief respondendo. Zero '[x]' na gravação de t1. Antes (1002c0a): nenhum documento criado, nenhum rótulo, decisão anunciada sem origem: o vermelho é real."
+    verdict: complete
+status_note: "Ressalvas honestas, nenhuma derruba o critério: (1) gravação única (N=1 por versão), comportamento de modelo é probabilístico; (2) AskUserQuestion não foi exercido (claude -p não tem quem responda): só a regra da prosa tem transcrição, a variante com rótulo na descrição da opção está provada só por leitura de texto (teste do texto); (3) em t1 a pergunta 1 rotula como 'proposta de agente, specs/...' uma recomendação que a própria fala admite que a spec 'lista a dúvida mas não decide', ou seja, rótulo de proveniência impreciso (a recomendação é do agente); (4) t2 afirma '0 decisões sem veredito' e é errado (o próprio agente corrige na frase seguinte), fora do escopo do CS-8; (5) t3 duplica o relatório (regra global plain-report), fora do escopo. Sem deferral."

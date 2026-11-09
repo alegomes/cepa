@@ -72,9 +72,31 @@ question and none of that can be anticipated.
 
 ### 1. Open or resume the document
 
-If `docs/epics/<name>.md` exists, read it whole and resume from the first gap
-(step 3 gives the order): do not start over, and do not ask again a question
-that already has `- [x]`. If it does not exist, create it with the skeleton of
+If `docs/epics/<name>.md` exists, read it whole, open with the veto walk below,
+and then resume from the first gap (step 3 gives the order): do not start over,
+and do not ask again a question that already has `- [x]`.
+
+**The veto walk (caminhada do veto).** Before the first gap and before the
+sieve, run `cepa-plan decisions docs/epics/<name>.md`. It numbers the lines of
+"Decided without asking (veto here)" and separates those with a verdict from
+those without. Walk only the ones without, one per turn, like the
+rest of this interview: show the decision with its number and ask the owner to
+keep it (`mantida`), veto it (`vetada`, with the reason) or refine it
+(`refinada`, with the new text). Record the answer in the same turn with
+`cepa-plan verdict docs/epics/<name>.md <n> mantida|vetada|refinada` (`vetada`
+needs `--reason`, `refinada` needs `--text`). Use the number exactly as `cepa-plan decisions` prints it (1-based over every
+decision of the section, decided ones included, so the numbers shown may skip):
+never renumber. Never write the `· mantida em` /
+`· vetada em` / `· refinada em` marker by hand: the date and the format come
+from the command. `Status` does not change by veto; a vetoed decision becomes
+an open question only if the owner says so in the same turn. If `cepa-plan
+verdict` prints "já virou código na fila" (the file is the `source:` of a
+derived queue), pass the warning on to the owner as it came. A skipped
+decision does not block: it stays without marker, the walk moves on, and the
+next time the Epic is opened it is offered again. With no decision without a
+verdict, say so in one line and go on.
+
+Otherwise (the file does not exist), create it with the skeleton of
 step 7 and `**Status:** draft` before the first question. The gate
 never bothers you while the status is `draft`.
 
@@ -82,9 +104,24 @@ never bothers you while the status is `draft`.
 
 Before the first question, read what already answers part of them: `docs/`
 (the strategy, the specifications, the ADRs), `BACKLOG.md`, the other
-`docs/epics/*.md`, and the code of the area the intent names. The good question
-is the one left over after reading. A question whose answer was in the repo
-teaches the owner that the interview is bureaucracy.
+`docs/epics/*.md`, and the code of the area the intent names. Three sources
+are named, and you look for each by path:
+
+- the `discovery` delivery brief, `docs/discovery/<card>/handoff.md`, written
+  by `epic-briefer`. It carries the audit, so it is **evidence**;
+- the `planning-lead` spec, `spec/<slug>.md` or `specs/<slug>.md` at the repo
+  root. It is a decision taken in another interview by an agent, not by the
+  owner;
+- the "Decided without asking" section of the other specs and Epics in
+  `docs/spec/` and `docs/epics/`.
+
+Write the paths you actually read, and that informed the Epic, on the
+`**Fontes lidas:**` line of the header: once, at skeleton time, updated when
+another file is read. Never a label suffix on a ladder cell or a heading,
+which `spec-readiness-gate` and `cepa-plan --from-epic` parse.
+
+The good question is the one left over after reading. A question whose answer
+was in the repo teaches the owner that the interview is bureaucracy.
 
 ### 3. Ask, one per turn, in order of the cost of getting it wrong
 
@@ -151,9 +188,30 @@ the first screen he already uses. Where should he see the answers?" The owner
 corrects faster than he writes from scratch, and the proposal shows what the
 agent understood.
 
+**A proposal taken from one of these files carries its label and its path**,
+in the proposal sentence, before the turn's only question: `evidência` (from
+the discovery brief) or `proposta de agente` (from the `planning-lead` spec).
+Example (the actual turn is in pt-BR): "Minha proposta (`evidência`,
+docs/discovery/<card>/handoff.md) é que o aviso saia 7 dias antes, porque 14
+de 20 entrevistados disseram que é o tempo de marcar a consulta. Quantos dias
+antes do vencimento o aviso deve sair?" The label goes in the prose, never as
+a list of options and never in a ladder cell. The rule holds in every turn,
+the challenge turn of step 4 included: any proposal or argument drawn from one
+of these files names the label and the path, even when the file was already
+cited in an earlier turn. A file that answers a gap does
+not close it: the question is still asked, with the file's answer as the
+proposal, and the owner's answer is challenged once like any other (step 4).
+What a file settles that you adopt without asking is never announced as "não
+vou perguntar o que eles já respondem": it is written, in the same turn, as a
+line of "Decided without asking" with the label and the path, where the owner
+can veto it.
+
 The test for whether something becomes a question is still the skill's: **do
 two different answers here change what will be built or how it will be
-demonstrated?** If not, decide and record it in "Decided without asking".
+demonstrated?** If not, decide and record it in "Decided without asking". A
+decision inherited from the `planning-lead` spec (or another document) that
+you adopt without asking goes there with its origin, never as an answered
+`- [x]` question: `- <decision> — proposta de agente, specs/<slug>.md. Vete aqui se discordar.`
 
 ### 4. Challenge once, accept, write down in the same turn
 
@@ -166,6 +224,11 @@ model challenges (asked in pt-BR, as written):
 - "o que quebra se faltar?" (what breaks if it is missing?) — for invariant,
   cycle and cross-cutting piece: if nothing breaks, it is not an invariant, and
   maybe the cycle does not need to exist.
+
+A proposal the owner accepts ("sim", "ok, como o brief diz") is an answer like
+any other, and is challenged once too: a labeled proposal is never written
+down without having gone through the challenge. The file agreeing with the
+owner is not the challenge.
 
 In the challenge turn, record the question as `- [ ]` in "Perguntas em aberto"
 (open questions), with the owner's provisional answer on the same line. The
@@ -181,6 +244,10 @@ aberto" as `- [x]` with the accepted answer. Only then ask the next question.
 An answer that exists only in the conversation is lost at the first context
 compaction, and the owner answers everything again. That is what "in the
 same turn" means throughout this command.
+
+A line turns `- [x]` only after an owner utterance in the conversation that
+answers it. What the files said is a proposal, never an answer. No hook
+enforces this (no hook knows who answered), so it rests on you.
 
 ### 5. Close by the sieve, never by fatigue
 
@@ -208,6 +275,14 @@ saying nothing leaves the owner thinking he was served. Other than that, when
 the last gap closes, the sieve passes and you write `ready` in the same turn,
 without waiting for the owner to ask.
 
+When it lets the file through, the hook shows the owner how many lines of
+the "Decided without asking" section still carry no verdict (`· mantida em`,
+`· vetada em`, `· refinada em`): "N decisões sem veredito neste arquivo".
+**Repeat that number in the final report** of the session, with the same
+words, so the owner reads it where they read the rest. Zero is a number too:
+write "0 decisões sem veredito", never leave the line out. A file with no such
+section gets the hook's "sem seção Decided without asking" repeated instead.
+
 On closing, tell the owner the file path and the next step: `/common:queue
 <name>-c1 --from-epic docs/epics/<name>.md --cycle 1` derives the queue of the
 first cycle.
@@ -224,13 +299,15 @@ Target) and **Measured on:** (the date and how it was read). Only then write
 `closed`. An Epic whose metric did not move still closes: the Impact says so
 in one sentence, and that sentence is the reason this section exists.
 
-The gate refuses `closed` without the two Impact fields.
+The gate refuses `closed` without the two Impact fields. Passing to `closed`
+is the second time the hook counts the "decisões sem veredito"; repeat that
+count in the final report too, as in step 5.
 
 ### 7. The file format
 
 The document is written in pt-BR. Keep the `## Value ladder`, `## Invariants`, `## Decided without asking`,
 `## Who it is for`, `## Outcome metric`, `## Out of scope` and `## Impact`
-headings, the `**Status:**` label and the ladder column names verbatim:
+headings, the `**Status:**` and `**Fontes lidas:**` labels and the ladder column names verbatim:
 `spec-readiness-gate` and `cepa-plan --from-epic` parse them (they also still
 read the old pt-BR names `pronta`, `rascunho`, `Escada de valor`,
 `Invariantes`, `Decidido sem perguntar`, `Roteiro`, `Efeito em tela`, `Efeito em
@@ -241,6 +318,7 @@ Only the placeholders below are in English.
 # Epic: <subject>
 
 **Status:** draft · **Aberto em:** <date> · **Origem:** <where the request came from>
+**Fontes lidas:** <paths actually read that informed the Epic, or ->
 
 ## Intenção
 
@@ -300,6 +378,10 @@ in short sentences ending in a period, one per piece, because `/common:queue`'s
   options, never `AskUserQuestion`, never the `plain-report` format in the
   middle of the interview.
 - **Each answer is challenged exactly once** before being accepted.
+- **Proposals from files are labeled, answers come from the owner.** A
+  proposal taken from a file carries `evidência` or `proposta de agente` plus
+  the path, before the turn's question, is challenged once like any answer,
+  and nothing becomes `- [x]` without an owner utterance.
 - **The accepted answer is written down in the same turn**, before the next
   question.
 - **Never declares `ready` or `closed` what the sieve refuses.** If the gate blocks, go

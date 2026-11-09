@@ -1,0 +1,51 @@
+schema_version: 2
+card: tres-portas-c1-CS-2
+verdict: proven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: af97fec
+head_commit: 725ca33
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/hooks/_decisions.py (shared reader of the Decided without asking section)"
+      module: common-hooks
+      external_observable: true       # imported directly and, through the hook, run as subprocess
+      substituted_by_double: null     # tests import the real module and run the real hook; no fake in between
+    - class: "common/hooks/spec-readiness-gate.py (pending_decisions delegates to the module; SECTION_NAMES shared)"
+      module: common-hooks
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                     # Python harness, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "unperturbed HEAD 725ca33 (detached worktree /tmp/proof-cs2b): test_decisions_reader 'all green'; test_spec_readiness_decision_count 'all green'; test_spec_readiness_gate 'all green'; test_epic_readiness_gate 'OK'"
+        - "production code byte-identical to 77145d9: git diff --stat 77145d9 725ca33 -> tests/test_decisions_reader.py only (20 insertions)"
+        - "KILLED (RED), carried from the 77145d9 run (production unchanged): 20 perturbations (section names, title equality, verdict words, checkbox/filler filters, indented continuation, stop-at-next-heading, line number, pending/decided swap, item text, hook delegation, hook section check, None for missing section)"
+        - "KILLED (RED) re-run at 725ca33: 1 VERDICT_RE without re.IGNORECASE -> FAIL '`· Vetada em` (maiúscula) conta como veredito', 1 falha(s)"
+        - "KILLED (RED): 2 VERDICT_RE without trailing \\b -> FAIL '`· vetada emx` não conta como veredito', 1 falha(s)"
+        - "KILLED (RED): 3 found[-1] -> found[0] -> FAIL 'com dois marcadores, vale o último', 1 falha(s)"
+        - "KILLED (RED): 4 read_file except OSError -> except KeyError -> FileNotFoundError raised on nonexistent path (test fails by traceback)"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; reachability shown by perturbation: 24 perturbations, 24 RED (20 carried + 4 re-run at 725ca33)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff moves a regex-over-markdown reader out of the hook into a module; it opens no new input surface (same section text the gate already parsed)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card; the red test of the criterion (module does not exist at base af97fec) is tests/test_decisions_reader.py, which fails at base by import of a missing file and is green at HEAD"
+existing_tests_at_head:
+  - "python3 -I tests/test_decisions_reader.py -> 'all green'"
+  - "python3 -I tests/test_spec_readiness_decision_count.py -> 'all green'"
+  - "python3 -I tests/test_spec_readiness_gate.py -> 'all green'"
+  - "python3 -I tests/test_epic_readiness_gate.py -> 'OK'"
+routing_reason: "The four mutants that survived at 77145d9 (case-insensitive verdict, word boundary after 'em', last-marker-wins, None on unreadable file) are now killed by test_verdict_marker_edges (commit 725ca33, tests only). Production code unchanged, so the 20 earlier kills hold. 24 of 24 perturbations RED, unperturbed suites green. Computed verdict: PROVEN."

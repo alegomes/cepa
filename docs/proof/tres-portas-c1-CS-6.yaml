@@ -1,0 +1,43 @@
+schema_version: 2
+card: tres-portas-c1-CS-6
+verdict: proven
+reviewed_at: 2026-11-06T00:00:00-03:00
+base_commit: 0d56590
+head_commit: 63780bd
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan::cmd_verdict + derived_queues + _cites + _rel_to_repo + argparser entry 'verdict'"
+      module: common-bin
+      external_observable: true       # the `cepa-plan verdict` CLI is the surface; the test runs the real script as a subprocess
+      substituted_by_double: null     # tests/test_cepa_plan_verdict.py runs the real cepa-plan, real _decisions reader, real queue files on disk
+    - class: "common/hooks/_decisions.py::Decision.end + read"
+      module: common-hooks
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "unperturbed HEAD 63780bd (detached worktree /tmp/proof-CS-6c): test_cepa_plan_verdict.py 'all ok'; test_cepa_plan_decisions.py 'all ok'; test_decisions_reader.py 'all green'; test_doctor_decisions.py 'todos ok'"
+        - "previous survivors now KILLED (RED): N5 _cites lookbehind (?<![\\w./-]) -> (?<![\\w]) -> 1 failure(s) '../ in source is not a citation'; N9 body.rstrip() + marker -> body + marker -> 1 failure(s) 'trailing spaces dropped and --reason collapsed'; N13 reason whitespace collapse removed -> 2 failure(s); N14 --text whitespace collapse removed -> 1 failure(s) '--text collapsed to one line'"
+        - "earlier kills re-checked, still RED: P3 ordinal upper bound removed -> 2 failure(s); P12 mode filter in derived_queues removed -> 1 failure(s) 'a waves plan is not a derived queue'; N3 ending() always LF -> 3 failure(s) (CRLF / no-trailing-newline cases)"
+        - "from the previous round, not re-run (no production change since 6816ecc): N17 _rel_to_repo git-toplevel fallback and N18 repo-relative branch are mutually redundant in a git clone (probable equivalent mutants); N2 write newline='' removed is equivalent on POSIX. Not counted."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; the four formerly uncovered behaviors (parent-dir prefix in _cites, rstrip before marker, --reason and --text whitespace collapse) each turn RED when perturbed, so they are reached at the CLI surface"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the command reads and rewrites only repo markdown/queue files named by the owner on the command line; it opens no input from outside and touches no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card; the criterion test was RED at base 0d56590 (21 failures, earlier round) and is 'all ok' at HEAD 63780bd"
+routing_reason: "The four behavior-changing survivors of the previous proof (N5, N9, N13, N14) are now killed by the assertions added in 63780bd, and the sampled earlier kills (P3, P12, N3) remain RED. No production change since 6816ecc. Every behavior-changing perturbation is RED at the real CLI surface via subprocess. Computed verdict: PROVEN."
