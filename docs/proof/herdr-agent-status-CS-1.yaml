@@ -1,0 +1,45 @@
+schema_version: 2
+card: herdr-agent-status-CS-1
+verdict: proven
+reviewed_at: 2026-11-09T22:00:00-03:00
+base_commit: 9655dda
+head_commit: 3fd7f1f
+issue_type: Story
+scope:
+  topology: build-solo (Python harness, not Quarkus; PIT not applicable, perturbation used)
+  criterion: "CS-1 of docs/spec/herdr-agent-status.md (gate and timeout bounds also from the spec's failure-tolerance item)"
+  covering_test: "tests/test_cepa_until.py: test_herdr_receives_one_working_report_per_item, test_herdr_is_not_called_unless_all_three_vars_are_set, test_a_broken_or_slow_herdr_does_not_change_the_run"
+  changed_classes:
+    - class: "common/bin/cepa-until :: herdr_report (+ call in main loop); unchanged between 33309fb and 3fd7f1f (git diff 53e402c 3fd7f1f -- common is empty)"
+      module: common
+      external_observable: true
+      substituted_by_double: null   # real cepa-until runs; only herdr (far boundary) and claude are fakes
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline green at 3fd7f1f: the 3 herdr tests, 20 checks ok, 0 failures"
+        - "round 1 (old test) KILLED 14: gate inverted, --state, --source, --agent, pane id, --seq flag, message i / n / queue / ident, --seq constant, --seq decreasing, call removed, call duplicated"
+        - "round 2 (53e402c) KILLED: drop HERDR_ENV condition; drop `not pane`; rename --message to --msg; narrow herdr_report's except Exception to ZeroDivisionError (an earlier 'survived' for this one hit the heartbeat's except by mistake and was retargeted)"
+        - "round 3 (3fd7f1f) KILLED: remove `timeout=HERDR_TIMEOUT_SEC` (red: 'o timeout de 1 s limita a duração da run (< 20 s)', run took 62.5 s)"
+        - "round 3 KILLED: HERDR_TIMEOUT_SEC = 1 -> 30 (same check red, 62.2 s)"
+        - "EQUIVALENT (judged, not a gap): drop `not binary`. With HERDR_BIN_PATH unset/empty, subprocess.run([None or '', ...]) raises inside the try and is swallowed, so nothing is called either way; no observable difference to kill"
+        - "EQUIVALENT (judged, not a gap): max(time.time_ns(), last+1) -> time.time_ns(). Differs only when two reports fall in the same clock tick, which the test cannot produce deterministically"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every behavioral line of herdr_report and its call site was perturbed (round 1: 14, round 2: 4, round 3: 2 perturbations, all RED), so the herdr tests reach each through the real cepa-until process (subprocess, only herdr and claude faked at the far boundary). The two equivalent mutants sit on lines already reached: the `not binary` condition shares the gate line killed by the HERDR_ENV and not-pane perturbations, and the max() line is killed by the seq-constant and seq-decreasing perturbations. Re-run at HEAD 3fd7f1f: 3 herdr tests, 20 checks ok, 0 failures"
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff adds an outbound subprocess call gated by three env vars; it parses no input from outside and touches no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is not Bug"
+routing_reason: "Same shape as the settled precedent write-mode-gate-libera-git-info-exclude and tres-portas-c1-CS-1 (Python harness, real subprocess, no double on the changed code, no coverage tool in repo): reachability of each changed line is shown by perturbation. Every behavioral line (env gate, argv, message, seq, per-item call, failures ignored, 1 s timeout) turns the herdr tests red when broken; two mutants judged equivalent with reasons. Computed verdict: PROVEN."
