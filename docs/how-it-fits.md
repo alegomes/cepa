@@ -3,7 +3,9 @@
 One page, five pictures. Each of the other documents explains one part of Cepa in depth;
 this one shows how the parts connect, from the terminal you type in to the model that
 answers, and from an item in the queue to a proven merge. Read it first if you have never
-seen Cepa run, or when you need to explain it to someone else.
+seen Cepa run, or when you need to explain it to someone else. For the order in which you
+type the commands, from an idea to a finished Epic, see
+[workflow.md](workflow.md).
 
 ## Vocabulary
 

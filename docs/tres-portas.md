@@ -8,16 +8,16 @@ Antes de você abrir uma entrevista com `/common:spec` (que transforma uma ideia
 
 As duas primeiras portas alimentam uma entrevista nova. A terceira é o que sobra de uma entrevista antiga e precisa da sua resposta.
 
-## O que já existe e o que chega com a fila `tres-portas-c1`
+## O que cada porta faz
 
-O desenho foi aprovado em 2026-11-04 (`docs/estrategia-tres-portas-para-spec-e-epic.md`, caminho O2'). A especificação foi fechada em 2026-11-06 (`docs/spec/tres-portas-spec-epic.md`). A construção está na fila `tres-portas-c1` (`.claude/queues/tres-portas-c1/queue.yaml`), que ainda não rodou. Até ela rodar, use o modo "hoje" de cada porta.
+| Porta | O que acontece |
+|---|---|
+| Brief do `discovery` | o comando procura em `docs/discovery/` sozinho e rotula cada proposta como `evidência` |
+| Spec do `planning-lead` | o comando procura em `spec/` e `specs/` sozinho e rotula cada proposta como `proposta de agente` |
+| Decisões sem veredito | o `doctor` avisa, o fechamento conta, o comando abre a revisão e `cepa-plan verdict` grava |
+| Card do `discovery` no Jira | aponta o caminho do brief e o repositório onde ele vive |
 
-| Porta | Hoje | Depois da fila (critério que entrega) |
-|---|---|---|
-| Brief do `discovery` | você cita o caminho na primeira frase do pedido | o comando procura `docs/discovery/` sozinho e rotula cada proposta como `evidência` (CS-8, CS-9) |
-| Spec do `planning-lead` | você cita o caminho na primeira frase do pedido | o comando procura `spec/` e `specs/` sozinho e rotula cada proposta como `proposta de agente` (CS-8, CS-9) |
-| Decisões sem veredito | você abre o arquivo e edita a linha à mão | o `doctor` avisa, o fechamento conta, o comando abre a revisão e `cepa-plan verdict` grava (CS-1 a CS-7) |
-| Card do `discovery` no Jira | aponta só o caminho do brief | aponta o caminho e o repositório onde o brief vive (CS-10) |
+Para ver onde estas portas entram no trabalho inteiro, leia [workflow.md](workflow.md).
 
 ## Porta 1: o brief do `discovery`
 
@@ -26,7 +26,7 @@ O desenho foi aprovado em 2026-11-04 (`docs/estrategia-tres-portas-para-spec-e-e
 **Como usar.**
 
 1. Abra a entrevista no repositório onde o brief vive. O card do Jira diz qual é.
-2. Hoje, cite o brief no pedido: `/common:spec "<a ideia> · leia docs/discovery/WEGO-123/handoff.md antes de perguntar"`. Depois da fila, basta a ideia: o comando encontra o brief pelo assunto.
+2. Rode `/common:spec "<a ideia>"`. O comando encontra o brief em `docs/discovery/`. Se quiser garantir qual brief ele lê, cite o caminho na ideia.
 3. O agente lê o brief e transforma o que ele já responde em proposta. Cada proposta chega como a opção recomendada da pergunta, com o rótulo `evidência` e o caminho do arquivo.
 4. Responda mesmo assim. O brief foi validado com usuário, então a proposta costuma estar certa, mas é você quem decide o escopo.
 
@@ -40,7 +40,7 @@ O desenho foi aprovado em 2026-11-04 (`docs/estrategia-tres-portas-para-spec-e-e
 
 **Como usar.**
 
-1. Hoje, cite a spec no pedido: `/common:spec "<a ideia> · leia specs/<slug>.md antes de perguntar"`. Depois da fila, o comando procura em `spec/` e `specs/` sozinho.
+1. Rode `/common:spec "<a ideia>"`. O comando procura em `spec/` e `specs/` sozinho. Se quiser garantir qual spec ele lê, cite o caminho na ideia.
 2. Cada proposta tirada dela chega com o rótulo `proposta de agente`. O rótulo é diferente do da porta 1 de propósito: o `planning-lead` não falou com usuário nenhum, ele imaginou. Trate como palpite de colega, não como evidência.
 3. O que a spec decidiu sem você não vira pergunta respondida. Entra na seção `## Decided without asking` do documento novo, com a origem anotada, para você vetar.
 
@@ -54,20 +54,20 @@ O desenho foi aprovado em 2026-11-04 (`docs/estrategia-tres-portas-para-spec-e-e
 - `· vetada em <data>: <razão>`: você discorda;
 - `· refinada em <data>`: você trocou o texto da decisão.
 
-**Onde você vê a pendência (depois da fila).**
+**Onde você vê a pendência.**
 
-- No `/common:doctor`: a área `decisoes` aparece como aviso ⚠, com um arquivo por linha e o comando que abre a revisão. Conta só specs e Epics fechados, porque um documento em `draft` ainda está em entrevista. Em 2026-11-06 seriam 5: 3 em `docs/spec/cepa-espiral-c1.md` + 2 em `docs/spec/planejador-de-lotes-paralelos.md` = 5.
+- No `/common:doctor`: a área `decisoes` aparece como aviso ⚠, com um arquivo por linha e o comando que abre a revisão. Conta só specs e Epics fechados, porque um documento em `draft` ainda está em entrevista.
 - No fechamento de uma spec ou Epic: ao passar de `draft` para pronto, o hook mostra "N decisões sem veredito neste arquivo". Mostra o zero também, e mostra "sem seção Decided without asking" quando a seção não existe.
 - Em qualquer momento: `cepa-plan decisions` lista tudo de `docs/spec/` e `docs/epics/`. `cepa-plan decisions <arquivo>` lista um arquivo só.
 
-**Como dar o veredito (depois da fila).**
+**Como dar o veredito.**
 
 1. Reabra o documento: `/common:spec --continuar <slug>` para spec, `/common:epic <nome>` para Epic.
 2. Antes de retomar qualquer outra coisa, o comando mostra as decisões sem veredito. Na spec são até quatro por rodada. No Epic é uma por turno, em prosa.
 3. Responda mantida, vetada (com a razão) ou refinada (com o texto novo). O agente grava com `cepa-plan verdict <arquivo> <n> <veredito>`, que põe a data do dia e o formato exato.
 4. Pode pular. A decisão pulada fica sem marcador, volta no próximo `doctor` e não trava a entrevista.
 
-**Hoje, sem a fila.** Rode você mesmo `cepa-plan verdict <arquivo> <n> mantida`, `... vetada --reason "<razão>"` ou `... refinada --text "<texto novo>"`, com o `<n>` que o `cepa-plan decisions` mostra. Escrever o marcador à mão também vale: o `cepa-plan decisions` lê do mesmo jeito.
+**Sem abrir a entrevista.** Rode você mesmo `cepa-plan verdict <arquivo> <n> mantida`, `... vetada --reason "<razão>"` ou `... refinada --text "<texto novo>"`, com o `<n>` que o `cepa-plan decisions` mostra. Escrever o marcador à mão também vale: o `cepa-plan decisions` lê do mesmo jeito.
 
 **O que o veto não faz.**
 
