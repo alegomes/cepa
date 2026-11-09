@@ -1340,29 +1340,78 @@ def test_dirty_tree_stays_strict_for_the_other_callers():
             alive.wait()
 
 
+def herdr_scenario(tmp, herdr_body="", env=None):
+    """Run the two-item queue under a fake `herdr` (python; appends argv as JSON to a
+    log, then runs `herdr_body`). Returns (process, argv list per report, log path,
+    plan statuses)."""
+    root = build_repo(tmp, [item("a1"), item("a2")])
+    binv = fake_claude(tmp, "i = primeiro_pendente()\n"
+                            "if i: marca(i, status='done', evidence='ok')")
+    herdr = Path(tmp) / "herdr"
+    log = Path(tmp) / "herdr.log"
+    herdr.write_text(f"#!{sys.executable}\n"
+                     "import sys, json, time\n"
+                     f"open({str(log)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                     + herdr_body + "\n")
+    herdr.chmod(0o755)
+    plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+    full = {"HERDR_ENV": "1", "HERDR_PANE_ID": "w9:p9", "HERDR_BIN_PATH": str(herdr)}
+    for k, v in (env or {}).items():
+        if v is None:
+            full.pop(k, None)
+        else:
+            full[k] = v
+    # The suite's own environment may carry real herdr vars: scrub, then apply `full`.
+    for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
+        os.environ.pop(k, None)
+    p, calls = run_until(root, binv, plan, ["--for", "2h"], extra_env=full)
+    argvs = ([json.loads(l) for l in log.read_text().splitlines()]
+             if log.exists() else [])
+    statuses = [i["status"] for i in yaml.safe_load(plan.read_text())["items"]]
+    return p, argvs, log, statuses
+
+
 def test_herdr_receives_one_working_report_per_item():
     """CS-1 of docs/spec/herdr-agent-status.md: inside herdr the window reports
     `working` as agent `cepa-until`, one report per item, with the position."""
     with tempfile.TemporaryDirectory() as tmp:
-        root = build_repo(tmp, [item("a1"), item("a2")])
-        binv = fake_claude(tmp, "i = primeiro_pendente()\n"
-                                "if i: marca(i, status='done', evidence='ok')")
-        herdr = Path(tmp) / "herdr"
-        log = Path(tmp) / "herdr.log"
-        herdr.write_text(f"#!/bin/sh\necho \"$@\" >> {log}\n")
-        herdr.chmod(0o755)
-        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
-        p, calls = run_until(root, binv, plan, ["--for", "2h"], extra_env={
-            "HERDR_ENV": "1", "HERDR_PANE_ID": "w9:p9", "HERDR_BIN_PATH": str(herdr)})
-        lines = log.read_text().splitlines() if log.exists() else []
-        head = "pane report-agent w9:p9 --source cepa-until --agent cepa-until --state working"
-        check("herdr: dois relatórios working", len(lines) == 2
-              and all(l.startswith(head) for l in lines), str(lines) + p.stderr[-200:])
-        if len(lines) == 2:
-            check("herdr: 1/2 com o primeiro id e a fila", "fila: item 1/2 a1" in lines[0], lines[0])
-            check("herdr: 2/2 com o segundo id", "fila: item 2/2 a2" in lines[1], lines[1])
-            seqs = [int(l.rsplit("--seq ", 1)[1]) for l in lines]
+        p, argvs, log, _ = herdr_scenario(tmp)
+        head = ["pane", "report-agent", "w9:p9", "--source", "cepa-until",
+                "--agent", "cepa-until", "--state", "working"]
+        check("herdr: dois relatórios working", len(argvs) == 2
+              and all(a[:len(head)] == head for a in argvs), str(argvs) + p.stderr[-200:])
+        if len(argvs) == 2:
+            for a, msg in zip(argvs, ("fila: item 1/2 a1", "fila: item 2/2 a2")):
+                check(f"herdr: --message e '{msg}' são tokens vizinhos",
+                      a[len(head):len(head) + 2] == ["--message", msg], str(a))
+            seqs = [int(a[a.index("--seq") + 1]) for a in argvs]
             check("herdr: --seq estritamente crescente", seqs[0] < seqs[1], str(seqs))
+
+
+def test_herdr_is_not_called_unless_all_three_vars_are_set():
+    for label, env in (("HERDR_ENV diferente de 1", {"HERDR_ENV": "0"}),
+                       ("sem HERDR_ENV", {"HERDR_ENV": None}),
+                       ("sem HERDR_PANE_ID", {"HERDR_PANE_ID": None}),
+                       ("HERDR_PANE_ID vazio", {"HERDR_PANE_ID": ""}),
+                       ("sem HERDR_BIN_PATH", {"HERDR_BIN_PATH": None})):
+        with tempfile.TemporaryDirectory() as tmp:
+            p, argvs, log, statuses = herdr_scenario(tmp, env=env)
+            check(f"herdr ({label}): nada chamado", not log.exists(), str(argvs))
+            check(f"herdr ({label}): a run termina normal com os dois itens done",
+                  p.returncode == 0 and statuses == ["done", "done"],
+                  f"{p.returncode} {statuses} {p.stderr[-200:]}")
+
+
+def test_a_broken_or_slow_herdr_does_not_change_the_run():
+    for label, body in (("lento (3 s) e exit 1", "time.sleep(3); sys.exit(1)"),
+                        ("exit 1", "sys.exit(1)")):
+        with tempfile.TemporaryDirectory() as tmp:
+            p, argvs, log, statuses = herdr_scenario(tmp, herdr_body=body)
+            check(f"herdr {label}: a run termina normal com os dois itens done",
+                  p.returncode == 0 and statuses == ["done", "done"],
+                  f"{p.returncode} {statuses} {p.stderr[-200:]}")
+            check(f"herdr {label}: os dois relatórios foram tentados", len(argvs) == 2,
+                  str(argvs))
 
 
 def main():
