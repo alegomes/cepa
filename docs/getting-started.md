@@ -158,6 +158,8 @@ See [`autonomous-mode.md`](autonomous-mode.md) for the full lifecycle.
 
 ## What's next
 
+- Want the order of the whole workflow, from idea to delivery?
+  [`workflow.md`](workflow.md).
 - Hit a wall? [`troubleshooting.md`](troubleshooting.md).
 - Want to know which command to use when? [`commands.md`](commands.md).
 - Editing a spec and want the tests to follow?
