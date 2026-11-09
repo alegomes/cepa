@@ -6,7 +6,7 @@
 **Sources read:** `common/bin/cepa-until` · `common/bin/cepa-prove` · `tests/test_cepa_until.py` · `tests/test_cepa_prove.py` · `~/.claude/hooks/herdr-agent-state.sh` (herdr's Claude integration, v7) · herdr 0.9.5 docs "Add Herdr support to your agent" and "CLI reference" · `BACKLOG.md` (spike 2026-07-11, gap "`agent_status` stays `unknown` for headless children")
 
 ## Como chegamos aqui (how we got here)
-On 2026-11-09 the owner asked: "O herdr não identifica quando o cepa está rodando sem uma sessão interativa do Claude. [...] É possível?" The session proved it is, in a throwaway herdr tab, and the owner approved: criteria per state, label `cepa-until` / `cepa-prove` with the current item in the message, no resume command. The heading keeps the Portuguese name because `spec-readiness-gate` only accepts that one.
+On 2026-11-09 the owner asked: "O herdr não identifica quando o cepa está rodando sem uma sessão interativa do Claude. [...] É possível?" The session proved it is, in a throwaway herdr tab, and the owner approved: criteria per state, label `cepa-until` / `cepa-prove` with the current item in the message, no resume command that relaunches the run. After the restart probes the owner approved (same day) `cepa until pending` as the resume command instead. The heading keeps the Portuguese name because `spec-readiness-gate` only accepts that one.
 
 ## Problem
 herdr recognizes an agent by its process or by reading its screen. `cepa-until` and `cepa-prove` are Python supervisors that run `claude -p` (no TUI), and herdr's Claude hook only reports the session id, never the state. The pane stays `unknown`, so a window that runs for hours looks idle in the sidebar and in `herdr agent list`.
@@ -19,9 +19,11 @@ herdr recognizes an agent by its process or by reading its screen. `cepa-until` 
 ## Scope
 ### In
 - `cepa-until` (the window, not its subcommands) and `cepa-prove` report `working` while they run, with the current item in `--message`, and release the pane on every exit path.
+- `cepa-until` reports `cepa until pending --repo <repo>` as its resume command, so a herdr restart brings the pane back on the interrupted run instead of relaunching it.
 - Reports only when `HERDR_ENV=1`, `HERDR_PANE_ID` and `HERDR_BIN_PATH` are set. A failing or slow herdr never slows or changes the run.
 ### Out
-- The resume command (`-- <argv>` on `report-agent`). Owner decision 2026-11-09: relaunching an unattended run by itself after a herdr restart could reprocess the queue unseen. Alternative proposed to the owner, not built here: see "Risks and what stayed out".
+- A resume command that relaunches the run. Owner decision 2026-11-09: relaunching an unattended run by itself after a herdr restart could reprocess the queue unseen.
+- A resume command for `cepa-prove`: it has no `pending` view, and its rounds leave nothing to close (each proof artifact is committed after its round).
 - Reporting from `cepa until pending|decide|land|close-dead`: they are short and interactive.
 - An end-of-run herdr notification.
 
@@ -47,6 +49,10 @@ herdr recognizes an agent by its process or by reading its screen. `cepa-until` 
 **Surface:** cli
 **Red test:** (a) the CS-1 run without `HERDR_ENV` creates no log file and its ledger matches the CS-1 ledger event by event, ignoring times; (b) the CS-1 run with a fake herdr that sleeps 30 s and exits 1 finishes in less than 2 s more than (a) per report, with the same exit code and ledger; (c) `cepa until pending` with `HERDR_ENV=1` creates no log file. Today (a) and (c) pass by absence and (b) passes because nothing is called; the test goes red against any implementation that calls herdr without a timeout or from a subcommand, which is what it guards.
 
+### CS-6: every `cepa-until` report carries `cepa until pending --repo <absolute repo path>` as herdr's resume command, and never the command that started the run
+**Surface:** cli
+**Red test:** in the CS-1 harness, every `pane report-agent` line in the fake herdr log ends in `-- cepa until pending --repo <the test repo's absolute path>`, and no line contains `--for`, `--until` or the queue name after `--`; with a repo path that contains an apostrophe (which herdr rejects as `invalid_resume_argv`), the reports carry no `--` part and still report `working`. Today it fails: the log is empty.
+
 ## Open questions
 None.
 
@@ -59,6 +65,6 @@ None.
 
 ## Risks and what stayed out
 - **R1. herdr changes the report contract.** The probe ran on 0.9.5. `report-agent` is a documented, public API for third-party agents, so the risk is low; CS-1 to CS-4 catch a break only against the fake, not the real herdr.
-- **Proposed alternative to the resume command (not built, needs owner approval).** Report `cepa until pending --repo <absolute repo path>` as the resume command, instead of the command that started the run. After a herdr restart the pane comes back showing the interrupted run and the one command that closes it (`cepa until close-dead <queue>/<run>`). It is an existing, read-only command: it never starts an item.
+- **Resume command (approved by the owner 2026-11-09, CS-6).** Report `cepa until pending --repo <absolute repo path>` as the resume command, instead of the command that started the run. After a herdr restart the pane comes back showing the interrupted run and the one command that closes it (`cepa until close-dead <queue>/<run>`). It is an existing, read-only command: it never starts an item.
 - **A1 (risky assumption, tested 2026-11-09, FALSE): the supervisor survives a herdr server restart.** Test: a script that copies `cepa-until`'s signal handling (ignores SIGHUP, records SIGTERM/SIGINT and exits, keeps a child in its own session) ran in a pane of a separate session, `herdr --session cepa-test`; then `herdr session stop cepa-test`. herdr sent SIGTERM and the supervisor exited 0.6 s later (`SIGNAL SIGTERM -> exit` in its log). The real `cepa-until` would record `run_interrompido` and kill its `claude` child. So after a restart the run is always interrupted, and a watcher that follows a live run (the first idea, `cepa until watch`) has nothing to follow; `cepa until pending` covers the only case that happens.
 - **A2 (tested 2026-11-09, TRUE): herdr runs the resume command of a process that died by SIGTERM during the stop.** Same harness, with `report-agent ... -- touch <file>`: after `herdr --session cepa-test server` started again, the file existed. It held in three rounds, including one where the SIGTERM handler called `pane release-agent` first: that call failed with `server_unavailable: server is shutting down`, so the release CS-3 asks for does not erase the resume command in the restart case, and on a normal exit the release does clear it, as intended.
