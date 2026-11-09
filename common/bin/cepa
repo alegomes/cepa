@@ -617,11 +617,17 @@ preflight
 
 [ -f "$LAUNCH_PY" ] || launch_here "$@"
 
-# Already inside a session worktree → nothing to isolate.
+# Already inside a session worktree → nothing to isolate, unless -s asked for a
+# specific one. The branch name alone proves nothing: the main tree can sit on a
+# session/* branch too, and a second session opened there would share its files.
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
-case "$BRANCH" in
-  session/*) launch_here "$@" ;;
-esac
+GIT_DIR_ABS=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null || echo "")
+GIT_COMMON_ABS=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "")
+if [ -z "$SLICE" ] && [ "$PICK" = "0" ] && [ "$GIT_DIR_ABS" != "$GIT_COMMON_ABS" ]; then
+  case "$BRANCH" in
+    session/*) launch_here "$@" ;;
+  esac
+fi
 
 # `cepa -s` with no name → pick a recent worktree to resume. Cancel or an empty
 # list aborts cleanly (launch nothing) rather than starting a surprise session.
@@ -632,8 +638,14 @@ if [ "$PICK" = "1" ]; then
 fi
 
 # Decide (atomic, under lock). On any failure, fall back to launching in place.
-RESULT=$(CLAUDE_WT_ROOT="$ROOT" CLAUDE_WT_SLICE="$SLICE" python3 "$LAUNCH_PY") \
-  || launch_here "$@"
+# An explicit -s never falls back: opening elsewhere is what it exists to prevent.
+RESULT=$(CLAUDE_WT_ROOT="$ROOT" CLAUDE_WT_SLICE="$SLICE" python3 "$LAUNCH_PY") || {
+  if [ -n "$SLICE" ]; then
+    printf '✗ cepa: could not open the worktree session/%s; no session started\n' "$SLICE" >&2
+    exit 1
+  fi
+  launch_here "$@"
+}
 
 DIR=$(printf '%s' "$RESULT" | cut -f1)
 CLAIM=$(printf '%s' "$RESULT" | cut -f2)

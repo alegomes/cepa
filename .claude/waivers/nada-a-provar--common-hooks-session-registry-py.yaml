@@ -1,0 +1,9 @@
+motivo: nada-a-provar
+escopo: common/hooks/session-registry.py
+razao: 'Cobertura de linha (L2) dispensada no item slice-guard: a prova por perturbação
+  quebrou as 14 linhas alteradas e todas ficaram vermelhas em tests/test_cepa_slice_isolation.py;
+  o repo não tem ferramenta de cobertura para shell nem para os hooks em Python.'
+autor: alegomes
+criado_em: '2026-11-09'
+revisit_trigger: quando o repo ganhar ferramenta de cobertura para shell ou para os
+  hooks em Python

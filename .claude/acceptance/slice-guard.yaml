@@ -1,0 +1,58 @@
+key: slice-guard
+status: complete
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: real common/bin/cepa, main tree on session/other, `-s pt2en`
+    test: tests/test_cepa_slice_isolation.py::t_slice_from_main_tree_on_session_branch
+    layer: subprocess of real launcher (stub claude binary records cwd+branch)
+    evidence: verified
+    run: "python3 tests/test_cepa_slice_isolation.py -> 'ok -s opens its worktree from a main tree on session/*' (11 checks ok, 0 failures)"
+    verdict: complete
+  - id: AC2
+    altitude: cli
+    surface: real cepa run from a linked worktree with -s another
+    test: t_slice_from_linked_worktree
+    evidence: verified
+    run: "same command; 'ok -s from a linked worktree opens the named one'"
+    verdict: complete
+  - id: AC3
+    altitude: cli
+    surface: real cepa, no -s, main tree on session/* with live occupant
+    test: t_occupied_main_tree_on_session_branch_isolates
+    evidence: verified
+    run: "same command; ok"
+    verdict: complete
+  - id: AC4
+    altitude: cli
+    surface: real cepa, no -s, free main tree and linked worktree
+    test: t_free_main_tree_runs_in_place, t_linked_worktree_without_slice_stays
+    evidence: verified
+    run: "same command; both ok"
+    verdict: complete
+  - id: AC5
+    altitude: cli
+    surface: real cepa -s other (branch already checked out in main tree)
+    test: t_slice_failure_aborts
+    evidence: verified
+    run: "same command; ok x2 (nothing launched; rc!=0; stderr 'could not open the worktree session/<name>')"
+    verdict: complete
+    note: assertion `"other" in stderr` is weak (git's own message also matches); the cepa message was confirmed in the manual picker probe output.
+  - id: AC6
+    altitude: event
+    surface: real session-registry.py process, SessionStart on stdin
+    test: t_registry_flag_follows_real_worktree
+    evidence: verified
+    run: "same command; ok x2 (main False, linked True)"
+    verdict: complete
+  - id: AC7
+    altitude: event
+    surface: real session-registry.py process, SessionEnd on stdin
+    test: t_autosave_only_in_linked_worktree
+    evidence: verified
+    run: "same command; ok x2 (main HEAD unchanged and file uncommitted; linked commits WIP)"
+    verdict: complete
+neighbours: "16 related test files (cepa_chaining, cepa_mode, cepa_help_layout, cepa_until_session, session_*, worktree_*, stale_session, ghost_worktrees, doctor_internal_worktree, baseline_worktree_poisoning) all rc=0"
+extra_finding:
+  picker_from_linked_worktree: "behaves correctly (manual probe with fake fzf, stub claude): resumes session/target in its worktree. NOT covered by the suite."
+  gap: "no test for `cepa -s` (PICK=1) from a linked worktree; suggested follow-up: fake fzf on PATH test. Cosmetic: banner says 'Another session is live in <linked wt>' when resuming from a linked worktree."

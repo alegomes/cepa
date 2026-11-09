@@ -142,7 +142,7 @@ def on_start(session_id: str, cwd: str) -> None:
             "cwd": str(cwd),
             "started_at": L.now_iso(),
             "branch": branch,
-            "is_session_worktree": branch.startswith("session/"),
+            "is_session_worktree": branch.startswith("session/") and L.is_linked_worktree(cwd),
         }
     entry["session_id"] = session_id
     entry["last_seen"] = L.now_iso()
@@ -416,8 +416,8 @@ def on_end(session_id: str, cwd: str) -> None:
     # 5. WIP-autosave — ONLY in a session worktree, ONLY if dirty, and NEVER when
     #    this worktree is being discarded (committing work we're about to throw
     #    away is pointless and would mark a clean branch as ahead of base).
-    if branch.startswith("session/") and not (spec and spec.get("discard")) \
-            and L.is_dirty(cwd):
+    if branch.startswith("session/") and L.is_linked_worktree(cwd) \
+            and not (spec and spec.get("discard")) and L.is_dirty(cwd):
         L.git(["add", "-A"], cwd=cwd)
         rc, _, err = L.git(
             ["commit", "-m", f"WIP: session autosave ({session_id[:8]})",
