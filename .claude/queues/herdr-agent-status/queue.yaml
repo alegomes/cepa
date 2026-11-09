@@ -1,0 +1,101 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/herdr-agent-status.md (6 critérios de sucesso)
+# Escrito em: 2026-11-09
+
+schema_version: 2
+mode: single-track
+queue: herdr-agent-status
+source: docs/spec/herdr-agent-status.md (6 critérios de sucesso)
+items:
+- id: CS-1
+  title: while the `cepa-until` window runs inside herdr, the pane reports `working`
+    as agent `cepa-until`, with a message naming the queue, the item position and
+    its id, and a new report for each item
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: a test
+    in the shape of `tests/test_cepa_until.py` sets `HERDR_ENV=1`, `HERDR_PANE_ID=w9:p9`
+    and `HERDR_BIN_PATH` to a fake `herdr` that appends its argv to a file; a queue
+    `q` with two items and a fake `claude` that marks each done. After the run,
+    the file holds `pane report-agent w9:p9 --source cepa-until --agent cepa-until
+    --state working` with a `--message` containing `q`, `1/2` and the first id,
+    then the same with `2/2` and the second id, every `--seq` strictly greater than
+    the previous one. Today it fails: the file is never created.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: during a 5h quota pause, `cepa-until` keeps `working` and the message says
+    it is paused and until when
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: same
+    harness, with the fake `claude` producing the quota reading that `quota_pause`
+    turns into a wait; the fake herdr log holds a `--state working` report whose
+    `--message` contains "paused" and the resume time as `HH:MM`, before the next
+    item''s report. Today it fails: no report.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: '`cepa-until` releases the pane on every exit: end of queue, end of window,
+    circuit breaker, a `blocked` item stopping the batch, SIGTERM and Ctrl+C'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: same
+    harness, one run per exit path (end of queue; `--for 1s`; three red items with
+    `--max-failures 3`; one item the fake marks `blocked`; SIGTERM sent to the supervisor
+    mid-item; SIGINT sent mid-item). In each, the last line of the fake herdr log
+    is `pane release-agent w9:p9 --source cepa-until --agent cepa-until` with a
+    `--seq` greater than every earlier one. Today it fails: the log is empty.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: '`cepa-prove` reports `working` as agent `cepa-prove` with the round number
+    and the cards already handled, and releases the pane on every exit'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: a test
+    in the shape of `tests/test_cepa_prove.py` with the same fake herdr and the
+    fake `claude` proving `WEGO-1` then `WEGO-2`: the log holds `--source cepa-prove
+    --agent cepa-prove --state working` reports whose messages contain `round 1`
+    and then `round 2` with `WEGO-1`, and the last line is `pane release-agent`;
+    a second run killed with SIGTERM mid-round also ends in `pane release-agent`.
+    Today it fails: the log is empty.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: outside herdr nothing is called, and a broken herdr changes neither the
+    duration nor the result of a run
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: (a) the
+    CS-1 run without `HERDR_ENV` creates no log file and its ledger matches the
+    CS-1 ledger event by event, ignoring times; (b) the CS-1 run with a fake herdr
+    that sleeps 30 s and exits 1 finishes in less than 2 s more than (a) per report,
+    with the same exit code and ledger; (c) `cepa until pending` with `HERDR_ENV=1`
+    creates no log file. Today (a) and (c) pass by absence and (b) passes because
+    nothing is called; the test goes red against any implementation that calls herdr
+    without a timeout or from a subcommand, which is what it guards.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: every `cepa-until` report carries `cepa until pending --repo <absolute
+    repo path>` as herdr's resume command, and never the command that started the
+    run
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: in the
+    CS-1 harness, every `pane report-agent` line in the fake herdr log ends in `--
+    cepa until pending --repo <the test repo''s absolute path>`, and no line contains
+    `--for`, `--until` or the queue name after `--`; with a repo path that contains
+    an apostrophe (which herdr rejects as `invalid_resume_argv`), the reports carry
+    no `--` part and still report `working`. Today it fails: the log is empty.'
+  status: pending
+  blocked_by: []
+  human_pending: null
