@@ -105,7 +105,7 @@ MODES = {
         "produces": "the grounded Diátaxis tree",
         "exit": "consistency-reviewer PASS and its signature in /docs:finalize",
         "gate": "exists and works (docs topology); the write-mode-gate blocks writes outside docs/**",
-        "write": ["docs/**", ".claude/**", "BACKLOG.md"],
+        "write": ["docs/**", ".claude/**", "BACKLOG.md", "README.md"],
     },
 }
 

@@ -100,7 +100,7 @@ ALLOWED = {
     "design": ["docs/design/fluxos.md", ".claude/x", "BACKLOG.md"],
     "reflection": [".claude/reflection/r.md", "docs/qualquer.md", "BACKLOG.md"],
     "documentation": ["docs/tutorial/primeiro-dia.md", "docs/reference/api.md",
-                     ".claude/x", "BACKLOG.md"],
+                     ".claude/x", "BACKLOG.md", "README.md"],
 }
 BLOCKED = {
     "exploration": ["common/hooks/novo.py", "common/commands/x.md",
@@ -110,7 +110,7 @@ BLOCKED = {
     "design": ["docs/how-to/x.md", "common/hooks/novo.py"],
     "reflection": ["common/hooks/novo.py", "tests/test_x.py"],
     "documentation": ["common/hooks/novo.py", "tests/test_x.py",
-                     "common/commands/x.md"],
+                     "common/commands/x.md", "common/README.md"],
 }
 
 

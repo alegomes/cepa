@@ -320,7 +320,7 @@ DESTINOS por modo — o que aquele modo produz — declarada em
 | `discovery` | `docs/discovery/**`, `docs/spec/**`, `docs/epics/**`, `.claude/**`, `BACKLOG.md` |
 | `design` | `docs/design/**`, `.claude/**`, `BACKLOG.md` |
 | `reflection` | `.claude/reflexao/**`, `docs/**`, `BACKLOG.md` |
-| `documentation` | `docs/**`, `.claude/**`, `BACKLOG.md` |
+| `documentation` | `docs/**`, `.claude/**`, `BACKLOG.md`, `README.md` |
 | `construction` | tudo — quem cobra são o `completion-auditor` e o `proof-reviewer` |
 | `refactor` | tudo menos teste externo — quem cobra é o `reforma-gate` |
 

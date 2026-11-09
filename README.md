@@ -53,7 +53,7 @@ does the work.
 |---|---|---|---|
 | **Epic** | A package of work worth a demonstration. Lists the invariants that must never regress and a ladder of cycles. Written by `/common:epic`. | `docs/epics/<name>.md` | Months |
 | **cycle** | One rung of the ladder. Closes when its demonstration script runs on screen and in the backend. `/common:queue --from-epic --cycle N` turns it into a queue. | A section of the Epic | Weeks, many sessions |
-| **queue** | The ordered list of items for one slice of work, with the reason each item sits where it sits. Written only by `/common:queue`. Read by `/common:next`, `/common:queue-status`, `/common:drain-plan` and `cepa-until`. | `.claude/programs/<name>/plan.yaml` | Until its last item closes |
+| **queue** | The ordered list of items for one slice of work, with the reason each item sits where it sits. Written only by `/common:queue`. Read by `/common:next`, `/common:queue-status`, `/common:drain-plan` and `cepa-until`. | `.claude/queues/<name>/queue.yaml` | Until its last item closes |
 | **item** | One line of a queue: `id`, `title`, `why`, `status`, `blocked_by`, `human_pending`, `evidence`. In a repo with Jira its mirror on the board is a **card**. The board keeps the status. The queue keeps the order and the why. | Inside the queue | Hours to days |
 
 The session has two attributes:
@@ -115,11 +115,14 @@ mechanical yet. [docs/modos-de-trabalho.md](docs/modos-de-trabalho.md) says whic
 ## A week with Cepa
 
 The commands below are the ones you would actually type, in the order the work happens.
+The full path from idea to delivery is in [docs/workflow.md](docs/workflow.md).
 
 **1. Turn an idea into something buildable.** Open a discovery session and run
 `/common:spec`. It interviews you in rounds and writes every answer into a versioned
 markdown file. It declares the spec ready only when each success criterion names the surface
-where it can be observed (HTTP, CLI, UI) and a failing test for it. It writes no code.
+where it can be observed (HTTP, CLI, UI) and a failing test for it. It writes no code. For
+work that spans several queues, run `/common:epic` instead: it writes an Epic with a ladder
+of demonstrable cycles, and each cycle becomes a queue.
 
 **2. Or start from the backlog you already have.** `/board-flow:triage` reads every card in
 a column, searches the code and git history for evidence, and sorts the cards: already
@@ -462,6 +465,7 @@ Book-writing and git-history analysis live in the separate **cepa-labs** marketp
 |---|---|
 | **[docs/getting-started.md](docs/getting-started.md)** | Install, pick a topology, run your first command. |
 | **[docs/how-it-fits.md](docs/how-it-fits.md)** | How the pieces connect, in five diagrams: layers, a session inside, a card's path, the night, the two terminals. |
+| **[docs/workflow.md](docs/workflow.md)** | The path from idea to delivery, step by step. |
 | **[docs/topologies.md](docs/topologies.md)** | Choosing between the build teams and composing the rest. |
 | **[docs/commands.md](docs/commands.md)** | Every command: first by what you are trying to do, then the full reference by plugin. |
 | **[docs/modos-de-trabalho.md](docs/modos-de-trabalho.md)** | The working modes: what each one asks to enter, produces, and needs to close. (Portuguese.) |
