@@ -1340,6 +1340,31 @@ def test_dirty_tree_stays_strict_for_the_other_callers():
             alive.wait()
 
 
+def test_herdr_receives_one_working_report_per_item():
+    """CS-1 of docs/spec/herdr-agent-status.md: inside herdr the window reports
+    `working` as agent `cepa-until`, one report per item, with the position."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, "i = primeiro_pendente()\n"
+                                "if i: marca(i, status='done', evidence='ok')")
+        herdr = Path(tmp) / "herdr"
+        log = Path(tmp) / "herdr.log"
+        herdr.write_text(f"#!/bin/sh\necho \"$@\" >> {log}\n")
+        herdr.chmod(0o755)
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, calls = run_until(root, binv, plan, ["--for", "2h"], extra_env={
+            "HERDR_ENV": "1", "HERDR_PANE_ID": "w9:p9", "HERDR_BIN_PATH": str(herdr)})
+        lines = log.read_text().splitlines() if log.exists() else []
+        head = "pane report-agent w9:p9 --source cepa-until --agent cepa-until --state working"
+        check("herdr: dois relatórios working", len(lines) == 2
+              and all(l.startswith(head) for l in lines), str(lines) + p.stderr[-200:])
+        if len(lines) == 2:
+            check("herdr: 1/2 com o primeiro id e a fila", "fila: item 1/2 a1" in lines[0], lines[0])
+            check("herdr: 2/2 com o segundo id", "fila: item 2/2 a2" in lines[1], lines[1])
+            seqs = [int(l.rsplit("--seq ", 1)[1]) for l in lines]
+            check("herdr: --seq estritamente crescente", seqs[0] < seqs[1], str(seqs))
+
+
 def main():
     print("cepa-until — supervisor de janela de tempo\n")
     for given_name, fn in sorted(globals().items()):

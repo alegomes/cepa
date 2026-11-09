@@ -1076,6 +1076,34 @@ def installed_twg_version():
     return m.group(0) if m else None
 
 
+HERDR_TIMEOUT_SEC = 1
+_herdr_last_seq = 0
+
+
+def herdr_report(message):
+    """Tell herdr (the terminal multiplexer) this pane is a `cepa-until` agent that is
+    `working`, with `message` as its status line. Only the main run calls it, never
+    the subcommands. Does nothing outside herdr (`HERDR_ENV=1`, `HERDR_PANE_ID` and
+    `HERDR_BIN_PATH` must all be set). The call is a subprocess with a 1 s timeout
+    and every failure is ignored: a missing or slow herdr never changes the run.
+    `--seq` is `time.time_ns()`, forced strictly increasing within the process."""
+    global _herdr_last_seq
+    env = os.environ
+    pane, binary = env.get("HERDR_PANE_ID"), env.get("HERDR_BIN_PATH")
+    if env.get("HERDR_ENV") != "1" or not pane or not binary:
+        return
+    _herdr_last_seq = max(time.time_ns(), _herdr_last_seq + 1)
+    try:
+        subprocess.run([binary, "pane", "report-agent", pane,
+                        "--source", "cepa-until", "--agent", "cepa-until",
+                        "--state", "working", "--message", message,
+                        "--seq", str(_herdr_last_seq)],
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=HERDR_TIMEOUT_SEC)
+    except Exception:  # noqa: BLE001 — timeout, missing binary, anything
+        pass
+
+
 def run_item(name, tree, branch, permissions, limit_sec, log,
                  on_launch=None, session_id=None, on_tick=None):
     """Launches ONE subprocess, with `tree` (the night worktree) as cwd.
@@ -3934,6 +3962,13 @@ def main(argv=None):
                   "head": before, "session_id": session_id,
                   "hooks_sha": installed_hooks_sha()})
 
+        # herdr label: "<queue>: item <i>/<n> <id>". i = distinct items this run has
+        # started (a retry of the same item keeps its i); n = i - 1 + the queue's
+        # `pending` count as just read (that count includes this item), so n grows
+        # if the queue grows and is only an estimate of what is left.
+        pos = len(attempts)
+        pending_now = ((data.get("totals") or {}).get("por_status") or {}).get("pending") or 0
+        herdr_report(f"{a.queue}: item {pos}/{max(pos - 1 + pending_now, pos)} {ident}")
         in_flight.update(id=ident, fase="item", tentativa=round_n,
                          session_id=session_id)
         tick()
