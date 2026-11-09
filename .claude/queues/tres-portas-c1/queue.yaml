@@ -30,9 +30,28 @@ items:
     veredito"; sem a seção, contém "sem seção Decided without asking"; e um segundo
     Write sobre o mesmo arquivo, já `ready-to-build` no disco, não imprime a contagem.
     Hoje falha: o hook sai com 0 sem imprimir nada.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Retorno 1 de 2 resolvido. O vermelho do build completo era só tests/test_cepa_until_broken_git.py
+    (2 asserções), que falha também em b06eee5 sem o CS-1: o git 2.56 mudou a frase
+    do erro de worktree com link quebrado de ''not a git repository'' para ''gitfile
+    does not point to a valid repository''; cepa-until não interpreta a frase. Commit
+    5a5e272 faz as duas asserções aceitarem as duas redações (nenhuma asserção removida;
+    o teste segue exigindo erro do git no registro e ''no longer exists'' no detalhe).
+    Depois, cherry-pick limpo dos 4 commits do branch until/2026-11-06-1804-vermelho-CS-1:
+    7e6c92a (era 9319da9, teste vermelho), 36e60d9 (era f97e75c, spec-readiness-gate
+    imprime ''N decisões sem veredito''), 63cdba3 (era 20b346a, cobertura Epic closed
+    e linhas de template), af97fec (era bf1d523, proof+acceptance). git diff do
+    branch lateral contra HEAD: só o arquivo do teste do git, ou seja, código e
+    testes do CS-1 byte-idênticos ao que foi provado. Gates: completion-auditor
+    COMPLETE (.claude/acceptance/tres-portas-c1-CS-1.yaml) e proof-reviewer PROVEN
+    (docs/proof/tres-portas-c1-CS-1.yaml, head_commit 20b346a = 63cdba3 aqui), não
+    re-executados porque o conteúdo é idêntico. Testes locais verdes: test_cepa_until_broken_git,
+    test_spec_readiness_decision_count, test_spec_readiness_gate, test_epic_readiness_gate.
+    Build completo fica com o supervisor. Código no branch da noite until/2026-11-06-1804,
+    sem merge nem push.'
+  head_commit: af97fec196d984d7cadff366729581e53d30e078
 - id: CS-2
   title: o leitor da seção "Decided without asking" mora num módulo compartilhado
     que o hook importa, lê os nomes antigo e novo da seção e devolve as linhas com
@@ -45,9 +64,29 @@ items:
     `docs/epics/cepa-em-espiral.md` e um fixture com `## Decidido sem perguntar`
     e uma linha) devolve 3, 2, 2 e 1 linhas sem veredito, nas mesmas palavras do
     arquivo. Hoje falha: o módulo não existe.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits no branch da noite until/2026-11-06-1804 (sem merge nem push):
+    5540338 teste vermelho tests/test_decisions_reader.py (falhava: módulo não existia);
+    77145d9 novo common/hooks/_decisions.py (read/read_file -> Decisions.pending/decided,
+    cada Decision com text nas palavras do arquivo, line 1-based e verdict mantida/vetada/refinada;
+    lê ''## Decided without asking'' e ''## Decidido sem perguntar''; junta linhas
+    indentadas de item multi-linha) e spec-readiness-gate.py passa a importar _decisions
+    (pending_decisions delega; VERDICT_RE/TOP_ITEM_RE/DECISIONS_SECTION do hook
+    removidos; epic_problems usa _decisions.SECTION_NAMES); 725ca33 testes das 4
+    bordas que o proof-reviewer achou sobrevivendo (IGNORECASE, \b, último marcador
+    vale, read_file ilegível -> None); 6f96292 artefatos. Contagem real: cepa-espiral-c1=3,
+    planejador-de-lotes-paralelos=2, epics/cepa-em-espiral=2, fixture nome antigo=1.
+    Gates: pair-reviewer APPROVE; completion-auditor COMPLETE (.claude/acceptance/tres-portas-c1-CS-2.yaml);
+    proof-reviewer UNPROVEN em 77145d9 (4 mutantes vivos) e PROVEN em 725ca33, 24/24
+    perturbações RED (docs/proof/tres-portas-c1-CS-2.yaml). Testes locais verdes:
+    test_decisions_reader, test_spec_readiness_decision_count, test_spec_readiness_gate,
+    test_epic_readiness_gate, test_decision_altitude_gate. Build completo fica com
+    o supervisor. Mudança de comportamento observável: item multi-linha com veredito
+    na linha de continuação agora conta como decidido (antes pendente). Fora do
+    escopo: cepa-plan decisions (item 3, CS seguinte) ainda não usa o módulo.'
+  head_commit: 6f96292c18167c9cb9720e18d75a731715be7049
 - id: CS-3
   title: o passo de fechamento de `/common:spec` e de `/common:epic` manda repetir
     no relatório final o número que o hook mostrou (item 6)
@@ -57,9 +96,24 @@ items:
     · teste vermelho declarado: um teste que lê `common/commands/spec.md` e `common/commands/epic.md`
     encontra, no passo de fechamento, a instrução de repetir "decisões sem veredito"
     no relatório. Hoje falha: nenhum dos dois cita a contagem.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits no branch da noite until/2026-11-06-1804 (sem merge nem push):
+    6d466a1 teste vermelho tests/test_closing_repeats_decision_count.py (9 falhas
+    na base 6f96292); d3da3cd parágrafo no passo de fechamento de common/commands/spec.md
+    (### 5) e common/commands/epic.md (### 5 ready e ### 6 closed) mandando repetir
+    no relatório final o ''N decisões sem veredito neste arquivo'' do spec-readiness-gate,
+    com o caso ''0 decisões sem veredito'' e o caso ''sem seção Decided without
+    asking''; commit final com artefatos. Gates: completion-auditor COMPLETE (.claude/acceptance/tres-portas-c1-CS-3.yaml),
+    proof-reviewer PROVEN (docs/proof/tres-portas-c1-CS-3.yaml, head_commit d3da3cd;
+    9 de 9 perturbações vermelhas). Testes locais verdes: test_closing_repeats_decision_count,
+    test_commands_english, test_commands_catalog, test_spec_readiness_decision_count,
+    test_spec_readiness_gate, test_epic_readiness_gate, test_session_routine_guard.
+    Build completo fica com o supervisor. Fora: o texto cita só o plural ''N decisões'';
+    a forma singular ''1 decisão'' do hook não tem teste próprio (o texto manda
+    usar as mesmas palavras do hook).'
+  head_commit: 842e9a8cbe1eb5c5ea840701784536d79dca660b
 - id: CS-4
   title: '`cepa-plan decisions` lista, por arquivo, as decisões da seção "Decided
     without asking" separadas em com e sem veredito; sem argumento varre `docs/spec/`
@@ -74,9 +128,19 @@ items:
     as duas linhas com o campo de veredito preenchido só na vetada; `cepa-plan decisions
     inexistente.md` sai com código diferente de 0. Hoje falha: o subcomando `decisions`
     não existe.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 6db1c5e (red test), 3fc04eb (cepa-plan decisions reusing common/hooks/_decisions.py),
+    52418eb + cf5f362 (test pins ordinal counting decided items, ''com veredito''
+    count, help reading group), 805af34 (gates). pair-reviewer OK-WITH-NOTES (notes
+    applied); completion-auditor COMPLETE (.claude/acceptance/tres-portas-c1-CS-4.yaml);
+    proof-reviewer PROVEN at cf5f362 (docs/proof/tres-portas-c1-CS-4.yaml, 10/10
+    mutants red, RED at base 842e9a8 with 20 failures, L4 clean). Tests run: tests/test_cepa_plan_decisions.py,
+    tests/test_decisions_reader.py, test_common_queue_status.py, test_board_flow_cepa_plan_shim.py;
+    full build left to the cepa-until supervisor. Code is on the overnight branch
+    until/2026-11-06-1804. Left out: doctor area (CS-5), verdict subcommand (CS-6).'
+  head_commit: 805af34eddce43e0d059cfd415b0ebf2fcc4901e
 - id: CS-5
   title: o `doctor` mostra a área `decisoes` com ⚠ e o total de decisões sem veredito
     nas specs e Epics fora de `draft`/`rascunho`, um arquivo por linha com o comando
@@ -93,9 +157,25 @@ items:
     de 2026-11-06 o total seria 5 (3 em `cepa-espiral-c1` + 2 em `planejador-de-lotes-paralelos`;
     o Epic `cepa-em-espiral` está em `rascunho`). Hoje falha: o `doctor` não tem
     a área `decisoes`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Code on the overnight branch until/2026-11-06-1804 (no merge, no push).
+    Commits: e697764 red test tests/test_doctor_decisions.py; 7022324 cepa-doctor
+    check_decisions (area decisoes, reuses _decisions.read and spec-readiness-gate
+    statuses(); draft/rascunho skipped; one file per line with /common:spec --continuar
+    <slug> or /common:epic <nome>; zero -> ok; no docs/spec nor docs/epics -> silent;
+    no --fix) + common/commands/doctor.md; 5a52232 test pins per-file count and
+    total as sum. Gates: pair-reviewer APPROVE; completion-auditor COMPLETE (.claude/acceptance/CS-5.yaml,
+    2fad57f); proof-reviewer PROVEN at 5a52232 (docs/proof/tres-portas-c1-CS-5.yaml,
+    0d56590; 15/15 perturbations RED, RED at base; first pass UNPROVEN with 2 survivors,
+    fixed by 5a52232). Tests run: tests/test_doctor_*.py and neighbors, all green;
+    full build left to the supervisor. Left out: on this repo the doctor now reports
+    19 pending (3 cepa-espiral-c1 + 2 planejador-de-lotes-paralelos + 14 tres-portas-spec-epic),
+    not the 5 the spec text predicted, because tres-portas-spec-epic became ready-to-build
+    after that sentence was written; spec text not edited. A file with no Status
+    line counts as out of draft.'
+  head_commit: 0d565902e0cee135e042b271c254f2b4a74e2fb7
 - id: CS-6
   title: '`cepa-plan verdict <arquivo> <n> mantida|vetada|refinada` grava na linha
     `<n>` da seção "Decided without asking" o marcador com a data do dia, e ao vetar
@@ -110,9 +190,24 @@ items:
     a saída contém "já virou código na fila" com o nome da fila e "1 item done";
     repetir o comando na linha 2 sai com código diferente de 0; `vetada` sem `--reason`
     sai com código diferente de 0. Hoje falha: o subcomando `verdict` não existe.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'cepa-plan verdict <arquivo> <n> mantida|vetada|refinada implementado
+    em common/bin/cepa-plan (cmd_verdict, derived_queues, _cites, _rel_to_repo;
+    grupo writing da ajuda) + campo end em common/hooks/_decisions.py + parágrafo
+    ''Hoje, sem a fila'' de docs/tres-portas.md. Commits: 6f24b8c (red test, 21
+    falhas na base), 2c9d789 (implementação), 6816ecc (CRLF e newline final preservados,
+    ./ aceito; achados do pair-reviewer), 63780bd (asserções que a prova pediu).
+    Gates: pair-reviewer REJECT (CRLF) -> APPROVE em 6816ecc; completion-auditor
+    COMPLETE em 6860e0e (.claude/acceptance/tres-portas-c1-CS-6.yaml, 73076a0);
+    proof-reviewer UNPROVEN, UNPROVEN, PROVEN em 63780bd (docs/proof/tres-portas-c1-CS-6.yaml,
+    6860e0e). Testes vizinhos verdes: test_cepa_plan_verdict, test_cepa_plan_decisions,
+    test_decisions_reader, test_doctor_decisions, test_cepa_help_layout, test_spec_readiness_gate,
+    test_epic_readiness_gate, test_cepa_plan_single_track. Build completo fica com
+    o supervisor. Código na branch noturna until/2026-11-06-1804. Fora: CS-7 (a
+    caminhada do veto nos comandos spec/epic) é o próximo item.'
+  head_commit: 73076a0e631545293304d191709522bc7d7a019b
 - id: CS-7
   title: '`/common:spec --continuar`/`--fechar` e `/common:epic` sobre documento
     existente abrem com a caminhada do veto antes de retomar a entrevista ou o crivo:
@@ -126,9 +221,29 @@ items:
     a chamada a `cepa-plan decisions` e a `cepa-plan verdict`, o limite de quatro
     por rodada em `spec.md` e de uma por turno em `epic.md`, e a frase de que decisão
     pulada não trava. Hoje falha: nenhum dos dois cita a caminhada do veto.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits no branch da noite until/2026-11-06-1804 (sem merge nem push):
+    12c0821 teste vermelho tests/test_veto_walk_opens_existing_doc.py (24 falhas
+    na base 73076a0); 2fdb55e common/commands/spec.md e epic.md abrem documento
+    existente com a caminhada do veto no passo 1, antes da entrevista e do crivo:
+    cepa-plan decisions <doc>, ate quatro por rodada na spec e uma por turno no
+    Epic, cada resposta por cepa-plan verdict <doc> <n> mantida|vetada|refinada
+    (--reason/--text), so linhas sem marcador entram, pulada fica sem marcador e
+    nao trava, Status nao muda, aviso R2 do verdict repassado ao dono, numero exatamente
+    como decisions imprime; 42fbbb0 ajustes de redacao do pair-reviewer (OK-WITH-NOTES);
+    bcbab90 e b60e59c reforcam o teste com os sobreviventes que o proof-reviewer
+    achou em duas rodadas UNPROVEN (67c7623, b93622e), comandos inalterados desde
+    42fbbb0. Gates: completion-auditor COMPLETE (.claude/acceptance/tres-portas-c1-CS-7.yaml,
+    3677675, auditado em 42fbbb0; depois so o teste mudou); proof-reviewer PROVEN
+    na 3a rodada (docs/proof/tres-portas-c1-CS-7.yaml, 1002c0a, head_commit b60e59c,
+    62 perturbacoes, 7 sobreviventes explicativos ou pre-existentes: regra do epic
+    ''nao perguntar de novo o que ja tem - [x]'' existia em 73076a0 e segue sem
+    teste, fora do escopo). Testes locais verdes: test_veto_walk_opens_existing_doc,
+    test_spec_readiness_gate, test_epic_readiness_gate, test_spec_readiness_decision_count,
+    test_closing_repeats_decision_count. Build completo fica com o supervisor.'
+  head_commit: 1002c0ac193da39529b8b9e24bcf045a9b6f6dba
 - id: CS-8
   title: '`/common:spec`, num repo com um brief do `discovery` e uma spec do `planning-lead`
     sobre o assunto, nomeia as fontes lidas, rotula cada proposta tirada delas e
@@ -145,9 +260,37 @@ items:
     `planning-lead` aparece em "Decided without asking" com a origem, não como pergunta
     respondida. Hoje falha: o passo 2 não cita `docs/discovery/` nem `specs/`, e
     nenhuma proposta sai rotulada.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits no branch da noite until/2026-11-06-1804 (sem merge nem push):
+    30cceb6 teste vermelho tests/test_spec_reads_sources.py (21 falhas na base 1002c0a);
+    40b70df common/commands/spec.md: passo 2 nomeia as tres fontes por caminho (docs/discovery/<card>/handoff.md
+    do epic-briefer = evidencia; spec/<slug>.md ou specs/<slug>.md do planning-lead
+    = decisao de agente; Decided without asking de docs/spec/ e docs/epics/), linha
+    **Fontes lidas:** no cabecalho uma vez (e no modelo do passo 6), proposta tirada
+    de arquivo vira opcao recomendada com rotulo evidência/proposta de agente e
+    o caminho, arquivo que responde nao fecha a pergunta, - [x] so depois de fala
+    do dono (passo 4 e Constraints), decisao herdada vai para Decided without asking
+    com a origem; epic.md intocado (CS-9). e37a986 transcricao gravada docs/proof/tres-portas-c1-CS-8-transcricao.md
+    (claude -p --plugin-dir common, sonnet, repo semeado com brief DISC-12 e specs/lembrete-renovacao-receita.md;
+    antes em 1002c0a: nenhum documento, nenhum rotulo, specs/ tomado por segunda
+    spec; depois em 40b70df: Fontes lidas com os dois caminhos, rotulos com caminho
+    nas recomendacoes, - [x] so apos fala do dono, heranca do planning-lead em Decided
+    without asking com origem; US$ 1.25; jsonl cru em docs/proof/evidence/CS-8-transcricao/).
+    Ressalvas na transcricao: AskUserQuestion nao exercido no -p (so prosa), turnos
+    2-3 em formato de relatorio pela regra global plain-report, uma gravacao por
+    versao. fbd5567 a524e07 4f548d2 4ba9cdd reforcam o teste com sobreviventes de
+    quatro rodadas UNPROVEN (98bfaf3 3215ca7 883bd7b 2435046); spec.md inalterado
+    desde 40b70df. Gates: pair-reviewer OK-WITH-NOTES; completion-auditor COMPLETE
+    (.claude/acceptance/tres-portas-c1-CS-8.yaml, 846715a, auditado em e37a986;
+    depois so o teste mudou); proof-reviewer PROVEN na 5a rodada (docs/proof/tres-portas-c1-CS-8.yaml,
+    c320db8, head_commit 4ba9cdd, ~70 perturbacoes, sobreviventes so explicativos).
+    Fora: sugestao do proof-reviewer de pinar tambem a primeira metade do bullet
+    de Constraints (redundante com o passo 2). Testes locais verdes: test_spec_reads_sources,
+    test_veto_walk_opens_existing_doc, test_spec_readiness_gate, test_epic_readiness_gate,
+    test_spec_readiness_decision_count. Build completo fica com o supervisor.'
+  head_commit: c320db8d75a5c025d3cd82bad60f409aedc6b851
 - id: CS-9
   title: '`/common:epic`, no mesmo repo semeado, faz o mesmo em prosa: fontes nomeadas,
     proposta rotulada antes da pergunta e desafiada uma vez, nenhum `- [x]` sem
@@ -162,9 +305,49 @@ items:
     se faltar?") antes de ser gravada, e nenhuma linha `- [x]` sem fala do dono.
     Hoje falha: o comando não rotula proposta nem nomeia `docs/discovery/` e `specs/`
     no passo 2.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits no branch da noite until/2026-11-06-1804 (sem merge nem push):
+    c67de88 teste vermelho tests/test_epic_reads_sources.py (34 falhas na base c320db8);
+    1562fc9 common/commands/epic.md: passo 2 nomeia as tres fontes por caminho (docs/discovery/<card>/handoff.md
+    do epic-briefer = evidencia; spec/<slug>.md ou specs/<slug>.md do planning-lead
+    = decisao de agente; Decided without asking de docs/spec/ e docs/epics/), linha
+    **Fontes lidas:** propria abaixo de **Status:** no modelo do passo 7 e na frase
+    de rotulos verbatim; passo 3: proposta tirada de arquivo leva rotulo evidência/proposta
+    de agente e caminho na frase da proposta, antes da unica pergunta, em prosa
+    (sem menu nem AskUserQuestion); arquivo que responde nao fecha a lacuna; decisao
+    herdada vai para Decided without asking com a origem; passo 4: proposta aceita
+    e desafiada uma vez como qualquer resposta, - [x] so depois de fala do dono;
+    Constraints espelha. cfe614f: a regra do rotulo vale tambem no turno do desafio,
+    e o que o arquivo resolve sem pergunta vai para Decided without asking com rotulo
+    e caminho em vez de ''nao vou perguntar'' (os dois apareceram na gravacao intermediaria
+    de 1562fc9). f7c9ce5 transcricao docs/proof/tres-portas-c1-CS-9-transcricao.md
+    (claude -p --plugin-dir common, sonnet, mesmo seed do CS-8, 4 turnos por versao,
+    CEPA_UNTIL_RUN/CEPA_PROMPT fora do ambiente; antes c320db8: sem Fontes lidas,
+    propostas do brief sem rotulo; depois cfe614f: Fontes lidas com os 4 caminhos,
+    turnos 1-3 com ''Minha proposta (evidência, docs/discovery/DISC-12/handoff.md)''
+    antes da unica pergunta, desafio unico antes de gravar, unico - [x] apos fala
+    do dono; US$ 2.33 = 0.956 antes + 0.929 depois + 0.442 intermediaria; jsonl
+    cru em docs/proof/evidence/CS-9-transcricao/). Ressalvas na transcricao: ''-
+    [x] so com fala do dono'' ja valia antes nesta gravacao (a diferenca medida
+    e Fontes lidas + rotulos); Decided without asking nao exercida pelo roteiro;
+    desafios sem a frase modelo literal; uma gravacao por versao. a1c8de7 fixa no
+    teste a frase sobrevivente A3 do proof-reviewer (vermelho conferido por perturbacao)
+    e grava os artefatos. Gates: pair-reviewer OK-WITH-NOTES (nota estetica: quebra
+    de linha irregular no passo 3 de epic.md, nao corrigida); completion-auditor
+    COMPLETE (.claude/acceptance/tres-portas-c1-CS-9.yaml, auditado em f7c9ce5);
+    proof-reviewer PROVEN (docs/proof/tres-portas-c1-CS-9.yaml, 39 de 40 perturbacoes
+    vermelhas, a sobrevivente fixada depois em a1c8de7; epic.md inalterado desde
+    cfe614f). Testes locais verdes: test_epic_reads_sources, test_spec_reads_sources,
+    test_epic_readiness_gate, test_veto_walk_opens_existing_doc, test_commands_english,
+    test_commands_catalog, test_closing_repeats_decision_count, test_cepa_plan_from_epic,
+    test_epic_where, test_cepa_plan_decisions, test_cepa_plan_verdict, test_common_plan,
+    test_decisions_reader, test_doctor_decisions, test_spec_readiness_decision_count,
+    test_common_queue_status, test_report_style_lint, test_wrapup_next_step. Build
+    completo fica com o supervisor. Executado direto pelo orquestrador (sem pair-dev)
+    por ser mudanca de texto de comando; decisao registrada aqui.'
+  head_commit: a1c8de7e8c7df0acfb2235142614a5e363ac8a35
 - id: CS-10
   title: o card que o `epic-briefer` cria aponta o caminho do brief e o repositório
     onde ele vive, e a regra "Brief, not Epic" nomeia os dois leitores (item 7)
@@ -177,6 +360,19 @@ items:
     lado da linha `Delivery brief:`; nenhum comando literal (`/common:epic ...`)
     no modelo do card; e a regra "Brief, not Epic" citando `epic-author` e `/common:epic`.
     Hoje falha: o modelo não tem linha de repositório e a regra cita só o `epic-author`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 3b2593d (teste vermelho, 11 FAIL na base), b794dc7 (discovery/agents/epic-briefer.md:
+    linha Repository: ao lado de Delivery brief: no modelo do card do passo 5, preenchida
+    com git remote get-url origin e caminho local só sem remote; sem comando literal
+    no card, slug escolhido na entrevista; regra Brief, not Epic nomeia epic-author
+    no board e /common:epic no arquivo), d4a61b3 (4 pins sugeridos pelo proof-reviewer
+    + artefatos). pair-reviewer APPROVE; completion-auditor COMPLETE (.claude/acceptance/tres-portas-c1-CS-10.yaml);
+    proof-reviewer PROVEN (docs/proof/tres-portas-c1-CS-10.yaml, head b794dc7, 16/26
+    perturbações RED, 10 sobreviventes acessórias, 4 delas fixadas depois em d4a61b3
+    e conferidas RED). Testes rodados: tests/test_epic_briefer_card.py (22 ok),
+    test_epic_reads_sources.py e test_spec_reads_sources.py verdes; suíte completa
+    fica com o supervisor. Código no branch noturno until/2026-11-06-1804. Prova
+    por leitura do texto (discovery não roda no Cepa, R4), sem transcrição.'
+  head_commit: d4a61b3498f904d8e3af57cd26921c120c0f46a6
