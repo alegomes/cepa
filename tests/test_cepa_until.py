@@ -1739,7 +1739,7 @@ def _until_module():
 
 class _FakeTty:
     def __init__(self, fail=False):
-        self.fail, self.written = fail, ""
+        self.fail, self.written, self.flushed = fail, "", ""
 
     def isatty(self):
         return True
@@ -1752,6 +1752,7 @@ class _FakeTty:
     def flush(self):
         if self.fail:
             raise OSError("terminal gone")
+        self.flushed = self.written   # what has really reached the terminal
 
 
 def _report_on_fake_tty(mod, tty, message, agent):
@@ -1773,13 +1774,20 @@ def test_hc_message_is_one_line_capped_at_200_utf8_and_names_the_agent():
     import base64
     mod = _until_module()
     tty = _FakeTty()
-    _report_on_fake_tty(mod, tty, "fila  é:\n\titem " + "ã" * 300, "cepa-prove")
-    flat = ("fila é: item " + "ã" * 300)[:200]
+    # `???>>>` makes standard base64 produce `/` and `+` (the url-safe alphabet differs).
+    _report_on_fake_tty(mod, tty, "fila  é:\n\titem ???>>> " + "ã" * 300, "cepa-prove")
+    flat = ("fila é: item ???>>> " + "ã" * 300)[:200]
     wanted = ("\033]7501;state=working:app=cepa-prove:msg="
               + base64.b64encode(flat.encode("utf-8")).decode() + "\033\\"
               + "\033]7501;state=clear\033\\")
     check("hc: mensagem numa linha só, cortada em 200 caracteres, utf-8, com o agente dado",
           tty.written == wanted, repr(tty.written[:160]))
+    std = base64.b64encode(flat.encode("utf-8")).decode()
+    check("hc: a mensagem de teste distingue o base64 padrão do url-safe",
+          ("/" in std or "+" in std)
+          and std != base64.urlsafe_b64encode(flat.encode("utf-8")).decode(), std[:40])
+    check("hc: cada sequência é descarregada no terminal na hora (flush)",
+          tty.flushed == wanted, repr(tty.flushed[-60:]))
     check("hc: o corte é em exatamente 200 caracteres", len(flat) == 200
           and base64.b64encode(flat.encode("utf-8")).decode() in tty.written
           and base64.b64encode((flat + "ã").encode("utf-8")).decode() not in tty.written)
