@@ -853,6 +853,36 @@ EMPTY_CELL = ("", "—", "–", "-", "nenhum", "nenhuma", "n/d", "nd")
 
 RE_SECTION = re.compile(r"^##\s+(.+?)\s*$", re.M)
 
+# What the Epic says beyond the pieces (2026-11-10, after the cycle-1 queue of
+# wego-product `leitura-de-guias-fase-0-kairos.md` needed 16 items beyond its
+# 15 pieces). Three rules that had no owner:
+#   - `[espera: <condition>]` inside a piece is a precondition only a human
+#     closes (a test by hand, a document). The item is born with it in
+#     `human_pending`, so the batch defers it instead of building on a guess;
+#   - a criterion the piece cites by id (`CA-9.4`) goes into the item's `why`
+#     with its text, and a criterion no piece cites is a warning: the queue
+#     reads only "What it crosses", so it would get no item;
+#   - the last item of every cycle is the script itself, blocked by all the
+#     pieces. The pieces are written per component; without this item nobody
+#     owns the junction between them and the cycle "closes" piece by piece.
+RE_WAIT = re.compile(r"\s*\[\s*espera\s*:\s*([^\]]*)\]", re.I)
+RE_EPIC_CRITERION = re.compile(
+    r"^\s*[-*+]\s+(?:\*\*|__)(CA-\d+(?:\.\d+)*[A-Za-z]?)(?:\*\*|__)\s*(.*)$",
+    re.M)
+RE_CRITERION_ID = re.compile(r"CA-\d+(?:\.\d+)*[A-Za-z]?")
+OUT_OF_LADDER = "fora da escada"
+SCRIPT_ITEM_TITLE = ("O roteiro do ciclo roda de ponta a ponta, com as peças "
+                     "ligadas entre si")
+
+
+def script_item_id(cycle):
+    return f"C{cycle}-R"
+
+
+def shorten(text, limit=240):
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
+
 
 def row_cells(line):
     """The cells of a table row. `\\|` is an escaped bar inside the
@@ -870,13 +900,18 @@ def sentences_of(cell):
     the end, outside backticks. /common:epic writes the column in short
     sentences ending in a period; the Epic written by hand before it separates
     the pieces with `;`. It does not split inside backticks, otherwise
-    `docs/epics/x.md` would become two."""
-    sentences, current, in_backtick = [], [], False
+    `docs/epics/x.md` would become two, nor inside square brackets, where the
+    `[espera: ...]` marker lives."""
+    sentences, current, in_backtick, depth = [], [], False, 0
     for i, ch in enumerate(cell):
         if ch == "`":
             in_backtick = not in_backtick
-        if ch in ".;" and not in_backtick and (i + 1 == len(cell)
-                                            or cell[i + 1].isspace()):
+        elif not in_backtick and ch == "[":
+            depth += 1      # `[espera: ...]` may carry a period of its own
+        elif not in_backtick and ch == "]" and depth:
+            depth -= 1
+        if (ch in ".;" and not in_backtick and not depth
+                and (i + 1 == len(cell) or cell[i + 1].isspace())):
             sentences.append("".join(current))
             current = []
             continue
@@ -923,7 +958,12 @@ def items_from_epic(text, cycle, path):
     The acceptance criterion of each item is the cycle's script, because that
     is what the Epic declares as acceptance ("o roteiro de demonstração de cada
     ciclo"); the surface comes from the effect columns. No piece gets an
-    acceptance criterion of its own invented here: the Epic did not write one.
+    acceptance criterion of its own invented here: what the Epic wrote (the
+    `CA-` criteria the piece cites) is carried, nothing else.
+
+    The script is charged whole in a last item, `C<N>-R`, blocked by every
+    piece; a piece with `[espera: ...]` is born with the condition in
+    `human_pending` (see the note above RE_WAIT).
     """
     warnings = []
     m = re.search(r"^\*\*Status:\*\*\s*([^\s·*]+)", text, re.M)
@@ -991,21 +1031,75 @@ def items_from_epic(text, cycle, path):
                       "\"Effect in backend\" — cada item nasce com a superfície "
                       "\"não declarada\"")
 
+    criteria = {cid: body for cid, body in RE_EPIC_CRITERION.findall(text)}
+    crosses_all = "\n".join(
+        cells[idx["o que atravessa"]] for cells in rows
+        if idx["o que atravessa"] < len(cells))
+    cited_anywhere = set(RE_CRITERION_ID.findall(crosses_all))
+    orphans = [cid for cid, body in criteria.items()
+               if cid not in cited_anywhere and OUT_OF_LADDER not in body.lower()]
+    if orphans:
+        shown = ", ".join(orphans[:8]) + (
+            f" e mais {len(orphans) - 8}" if len(orphans) > 8 else "")
+        warnings.append(
+            f"{len(orphans)} critério(s) do Epic sem peça em \"What it "
+            f"crosses\" de nenhum ciclo ({shown}) — a fila lê só essa coluna, "
+            "então nenhum item os entrega; cite o id na peça ou marque `fora "
+            "da escada` na linha do critério, pelo /common:epic")
+    # Only the new status words: the old `pronta`/`rascunho` Epic predates the
+    # walk, the same line the gate draws.
+    if status in ("ready", "closed", "draft") and not any(
+            sec.group(1).strip().lower().startswith(
+                ("script walk", "passos do roteiro"))
+            for sec in RE_SECTION.finditer(text)):
+        warnings.append(
+            "o Epic não tem `## Script walk` — nada conferiu que as peças "
+            "somam o roteiro nem que existe peça para a chamada entre dois "
+            "repositórios; quem pergunta é o /common:epic")
+
+    script_id = script_item_id(cycle)
     items = []
     for k, sentence in enumerate(sentences, 1):
+        waits = [" ".join(w.split()) for w in RE_WAIT.findall(sentence)]
+        title = " ".join(RE_WAIT.sub("", sentence).split())
+        why = [
+            f"peça {k} de {len(sentences)} do ciclo \"{label}\" do Epic "
+            f"{path}",
+            INHERITED_EPIC,
+            f"critério de aceite: o roteiro do ciclo — {script}",
+            f"superfície onde se observa: {surface}",
+            f"a peça sozinha não cumpre o roteiro: ele é cobrado inteiro no "
+            f"item {script_id}"]
+        cited = [c for c in dict.fromkeys(RE_CRITERION_ID.findall(sentence))
+                 if c in criteria]
+        if cited:
+            why.append("critérios do Epic que esta peça entrega: " + "; ".join(
+                f"{c}: {shorten(criteria[c])}" for c in cited))
         items.append({
             "id": f"C{cycle}-{k}",
-            "title": sentence,
-            "why": " · ".join((
-                f"peça {k} de {len(sentences)} do ciclo \"{label}\" do Epic "
-                f"{path}",
-                INHERITED_EPIC,
-                f"critério de aceite: o roteiro do ciclo — {script}",
-                f"superfície onde se observa: {surface}")),
+            "title": title,
+            "why": " · ".join(why),
             "status": "pending",
             "blocked_by": [],
-            "human_pending": None,
+            "human_pending": "; ".join(w for w in waits if w) or None,
         })
+    items.append({
+        "id": script_id,
+        "title": SCRIPT_ITEM_TITLE,
+        "why": " · ".join((
+            f"demonstração do ciclo \"{label}\" do Epic {path}",
+            "último da fila e bloqueado por todas as peças: as peças foram "
+            "escritas por componente e este é o único item que cobra a "
+            "ligação entre elas",
+            f"critério de aceite: o roteiro do ciclo, executado de ponta a "
+            f"ponta sobre dado real e não peça a peça — {script}",
+            f"superfície onde se observa: {surface}",
+            "o que o roteiro pedir e nenhuma peça entregar vira item novo "
+            "antes deste, com o motivo")),
+        "status": "pending",
+        "blocked_by": [i["id"] for i in items],
+        "human_pending": None,
+    })
     return script, items, warnings, None
 
 
@@ -1022,8 +1116,9 @@ def read_epic(path, cycle):
     if error:
         print(error, file=sys.stderr)
         return None
-    source = (f"{path}, ciclo {cycle} ({len(items)} peças de \"O que "
-             "atravessa\"; ordem herdada do texto)")
+    source = (f"{path}, ciclo {cycle} ({len(items) - 1} peças de \"O que "
+             "atravessa\"; ordem herdada do texto; mais o roteiro do ciclo "
+             f"como item final, {script_item_id(cycle)})")
     return demonstrates, items, source
 
 

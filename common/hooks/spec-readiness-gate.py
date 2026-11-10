@@ -76,6 +76,25 @@ Epic screen (`/common:epic`, CS-5 of cycle 1 of the spiral Cepa Epic):
     The old `pronta` keeps the earlier screen, so an Epic already closed
     before this rule (wego-product `leitura-de-guias-fase-0-kairos.md`) is not
     blocked on its next unrelated edit.
+  - Coverage screen (2026-11-10, owner's five "sim" after the cycle-1 queue of
+    wego-product `leitura-de-guias-fase-0-kairos.md` needed 16 items beyond its
+    15 pieces): the pieces of a cycle were written per component and nothing
+    checked that they add up to the script. On the PASSAGE to `ready` or
+    `closed` (the file on disk is not ready yet), the Epic must also have:
+      * `## Script walk`, a table with the columns Cycle, Step, Piece and
+        Where: at least one row per cycle of the ladder, every cell filled,
+        and each Piece copied from a sentence of that cycle's "What it
+        crosses" (the step names the piece that delivers it);
+      * when the walk of one cycle names two or more places in Where, at least
+        one row of that cycle whose Where has `→` (`repo-a → repo-b`): the
+        piece that is the call between them. Without it each side is built
+        and proven alone and nobody owns the junction;
+      * when the Epic lists acceptance criteria (`- **CA-1.2** ...`), each one
+        is cited by id in a "What it crosses" cell or says `fora da escada`
+        on its own line. `/common:queue --from-epic` reads only that column,
+        so a criterion living only in the Stories gets no item.
+    Only on the passage, so an Epic already `ready` before this rule is not
+    blocked on its next unrelated edit; the old `pronta` is not asked for it.
   - `Status: closed` is the claim that the Epic is over: it passes the whole
     `ready` screen plus `## Impact` filling **Measured value:** and
     **Measured on:**. Delivered is not the same as helped; closed requires
@@ -385,6 +404,163 @@ def epic_problems(content: str):
     return problems
 
 
+# ── Coverage screen: the pieces add up to the script (see the docstring) ─────
+
+WALK_COLUMNS = (
+    (("cycle", "ciclo"), "Cycle"),
+    (("step", "passo"), "Step"),
+    (("piece", "peça", "peca"), "Piece"),
+    (("where", "onde"), "Where"),
+)
+CROSSES_KEYS = ("what it crosses", "what crosses", "o que atravessa")
+WAIT_RE = re.compile(r"\[\s*espera\s*:[^\]]*\]", re.IGNORECASE)
+CRITERION_RE = re.compile(
+    r"^\s*[-*+]\s+(?:\*\*|__)(CA-\d+(?:\.\d+)*[A-Za-z]?)(?:\*\*|__)(.*)$",
+    re.MULTILINE)
+OUT_OF_LADDER = "fora da escada"
+
+
+def table_rows(body: str):
+    """(header cells in lowercase, data rows as lists of cells) of the first
+    table in a section body."""
+    lines = [l for l in body.splitlines() if l.strip().startswith("|")]
+    if not lines:
+        return [], []
+    return ([c.lower() for c in cells(lines[0])],
+            [cells(l) for l in lines[1:] if not re.fullmatch(r"[\s|:\-]*", l)])
+
+
+def cycle_number(label: str):
+    m = re.match(r"\D*?(\d+)", label or "")
+    return int(m.group(1)) if m else None
+
+
+def piece_key(text: str) -> str:
+    """A piece as the walk and the ladder must agree on it: without the
+    `[espera: ...]` marker, the final period and the case."""
+    return " ".join(WAIT_RE.sub("", text).split()).rstrip(".;").strip().lower()
+
+
+def pieces_of(cell: str):
+    """One piece per sentence of "What it crosses": split at `.` or `;`
+    followed by a space or the end, outside backticks and square brackets, the
+    same rule as `cepa-plan from-epic`."""
+    out, current, tick, depth = [], [], False, 0
+    for i, ch in enumerate(cell):
+        if ch == "`":
+            tick = not tick
+        elif not tick and ch == "[":
+            depth += 1
+        elif not tick and ch == "]" and depth:
+            depth -= 1
+        if (ch in ".;" and not tick and not depth
+                and (i + 1 == len(cell) or cell[i + 1].isspace())):
+            out.append("".join(current))
+            current = []
+            continue
+        current.append(ch)
+    out.append("".join(current))
+    return [piece_key(p) for p in out if p.strip()]
+
+
+def ladder_pieces(content: str):
+    """{cycle number: (cycle label, [piece keys])} from the ladder, and the
+    text of every "What it crosses" cell joined (where a criterion is cited)."""
+    ladder = section(content, ("value ladder", "escada de valor"))
+    if ladder is None:
+        return {}, ""
+    header, rows = table_rows(ladder)
+    pos = [i for i, c in enumerate(header) if c.startswith(CROSSES_KEYS)]
+    if not pos:
+        return {}, ""
+    by_cycle, joined = {}, []
+    for row in rows:
+        n = cycle_number(row[0] if row else "")
+        cell = row[pos[0]] if pos[0] < len(row) else ""
+        joined.append(cell)
+        if n is not None:
+            by_cycle[n] = (clean(row[0]), pieces_of(cell.replace("\\|", "|")))
+    return by_cycle, "\n".join(joined)
+
+
+def coverage_problems(content: str):
+    problems = []
+    by_cycle, crosses_text = ladder_pieces(content)
+
+    walk = section(content, ("script walk", "passos do roteiro"))
+    if by_cycle and walk is None:
+        problems.append(
+            "falta a seção `## Script walk` — a tabela (Cycle, Step, Piece, "
+            "Where) em que cada passo do roteiro nomeia a peça de \"What it "
+            "crosses\" que o entrega; sem ela nada confere que as peças somam "
+            "o roteiro")
+    elif by_cycle:
+        header, rows = table_rows(walk)
+        idx = {}
+        for keys, name in WALK_COLUMNS:
+            pos = [i for i, c in enumerate(header) if c.startswith(keys)]
+            if pos:
+                idx[name] = pos[0]
+            else:
+                problems.append(f'Script walk: falta a coluna "{name}"')
+        if len(idx) == len(WALK_COLUMNS):
+            def cell(row, name):
+                i = idx[name]
+                v = row[i] if i < len(row) else ""
+                return "" if is_empty(v) or clean(v).lower() in EPIC_EMPTY else v
+
+            seen = {}
+            for row in rows:
+                n = cycle_number(cell(row, "Cycle"))
+                if n is None or n not in by_cycle:
+                    problems.append(
+                        "Script walk: linha sem ciclo da escada na coluna "
+                        f'"Cycle": "{clean(cell(row, "Cycle"))}"')
+                    continue
+                label, pieces = by_cycle[n]
+                step = clean(cell(row, "Step"))
+                for name in ("Step", "Piece", "Where"):
+                    if not cell(row, name):
+                        problems.append(
+                            f'Script walk, ciclo "{label}": linha sem "{name}"'
+                            + (f' (passo "{step}")' if step and name != "Step"
+                               else ""))
+                piece = cell(row, "Piece")
+                if piece and piece_key(piece.replace("\\|", "|")) not in pieces:
+                    problems.append(
+                        f'Script walk, ciclo "{label}": o passo "{step}" nomeia '
+                        f'a peça "{clean(piece)}", que não é uma frase de "What '
+                        "it crosses\" desse ciclo — escreva a peça na escada "
+                        "ou copie a frase dela")
+                seen.setdefault(n, []).append(clean(cell(row, "Where")))
+            for n, (label, _) in sorted(by_cycle.items()):
+                places = seen.get(n)
+                if not places:
+                    problems.append(
+                        f'Script walk: o ciclo "{label}" não tem nenhum passo — '
+                        "cada ciclo precisa de pelo menos uma linha")
+                    continue
+                single = {p.lower() for p in places if p and "→" not in p}
+                if len(single) > 1 and not any("→" in p for p in places):
+                    problems.append(
+                        f'Script walk, ciclo "{label}": os passos moram em '
+                        f"{len(single)} lugares ({', '.join(sorted(single))}) e "
+                        "nenhuma linha é a chamada entre eles — falta a peça da "
+                        "junção, com `lugar-a → lugar-b` em \"Where\"")
+
+    missing = [cid for cid, rest in CRITERION_RE.findall(content)
+               if OUT_OF_LADDER not in rest.lower()
+               and not re.search(rf"{re.escape(cid)}(?![\d.]*\d)", crosses_text)]
+    for cid in missing[:8]:
+        problems.append(
+            f"{cid}: nenhuma peça de \"What it crosses\" cita este critério — "
+            "cite o id na peça que o entrega ou escreva `fora da escada` na "
+            "linha dele, com o porquê")
+    if len(missing) > 8:
+        problems.append(f"... e mais {len(missing) - 8} critério(s) sem peça")
+    return problems
+
+
 def field_value(body: str, names):
     """The value of `**<name>:** value` inside a section body, or None. The
     fields may share a line, separated by `·` (the format puts Baseline, Target
@@ -467,6 +643,11 @@ def block_epic(problems, status="ready"):
         "asking\" e nenhuma pergunta em aberto. Em `ready` e `closed`, também "
         "\"Who it is for\", \"Out of scope\" e \"Outcome metric\" (Baseline, "
         "Target, Source); em `closed`, \"Impact\" (Measured value, Measured on).\n"
+        "  Na passagem para `ready` ou `closed`, também `## Script walk` "
+        "(Cycle, Step, Piece, Where): cada passo do roteiro nomeia a peça de "
+        "\"What it crosses\" que o entrega, com uma peça `lugar-a → lugar-b` "
+        "quando o ciclo atravessa dois lugares; e cada critério `CA-` citado "
+        "por uma peça ou marcado `fora da escada`.\n"
         "  Enquanto faltar qualquer um, o Status correto é `draft` — e a "
         "resposta certa é voltar a perguntar ao dono, não relaxar o campo.",
         file=sys.stderr,
@@ -570,6 +751,10 @@ def main():
         problems = epic_problems(content)
         if claimed in EPIC_OUTCOME:
             problems += outcome_problems(content, claimed == EPIC_CLOSED)
+            # Only on the passage: an Epic already ready on disk predates the
+            # coverage screen and is not blocked on an unrelated edit.
+            if not was_ready_on_disk(file_path):
+                problems += coverage_problems(content)
         if problems:
             block_epic(problems, claimed)
         if claimed in EPIC_OUTCOME:

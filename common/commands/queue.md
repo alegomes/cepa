@@ -220,8 +220,26 @@ rules that previously had no owner:
   from, that the order was inherited from the text (nobody prioritized the
   pieces among themselves), the **acceptance criterion** (the cycle's script)
   and the **surface where it is observed** (the "Effect on screen" and "Effect in
-  backend" columns). No piece gets an invented criterion of its own: the Epic
-  did not write one;
+  backend" columns). No piece gets an invented criterion of its own: what the
+  Epic wrote is carried, nothing else. When the sentence cites a `CA-` id of
+  the Epic, the text of that criterion goes into the `why`;
+- **the last item of the cycle is the script itself**, `C<N>-R`, blocked by
+  every piece. The pieces are written per component and each one closes
+  against its own tests; this item is the only one whose acceptance is the
+  script run end to end over real data, with the pieces wired to each other.
+  It does not close on the sum of green pieces. What the script asks for and
+  no piece delivers becomes a new item before it, with the reason; never
+  close `C<N>-R` with a waiver for a step that did not run;
+- **`[espera: <condition>]` inside a sentence leaves the title** and becomes
+  the item's `human_pending`: a precondition only the owner closes (a test by
+  hand, a document). The batch defers the item, and `C<N>-R` with it, until
+  the owner closes it. Do not clear it yourself;
+- **a `CA-` criterion of the Epic that no cycle's "What it crosses" cites is a
+  warning**, by id: the queue reads only that column, so no item would
+  deliver it. So is **an Epic without `## Script walk`**: nothing checked that
+  the pieces add up to the script. In both cases ask the same closed
+  question as for the draft, close the gap through `/common:epic` first or
+  write the queue anyway, and recommend closing first;
 - **an Epic without the effect columns is not refused**, and that is said:
   each item is born with the surface "não declarada" (not declared) and a
   warning. Recommend that the owner fill in the cycle through `/common:epic`
