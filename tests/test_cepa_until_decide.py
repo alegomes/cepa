@@ -1205,18 +1205,20 @@ def _launch_events(root):
     return out
 
 
-def _launch_on_tty(answers, wait="600"):
-    """Queue with only A, which has an open `human_pending`; real `cepa-until` on a
-    pty (drained continuously by `on_tty`, or the supervisor blocks in `print`)."""
+def _launch_on_tty(answers, wait="600", items=None, extra=(), timeout=90):
+    """Queue with only A (unless `items`), which has an open `human_pending`; real
+    `cepa-until` on a pty (drained continuously by `on_tty`, or the supervisor blocks in
+    `print`). `extra` are added arguments (e.g. `--dry-run`)."""
     with tempfile.TemporaryDirectory() as tmp:
-        root = build_repo(tmp, [item("a1", human_pending="provision the Keycloak role")])
+        root = build_repo(tmp, items if items is not None else
+                          [item("a1", human_pending="provision the Keycloak role")])
         binv = fake_claude(tmp, "pass")
         env = env_do_run(tmp, root, binv)
         env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
-             "--for", "2h", "--no-verify", "--no-analysis"], str(root),
-            inputs=answers, env=env, timeout=90)
+             "--for", "2h", "--no-verify", "--no-analysis", *extra], str(root),
+            inputs=answers, env=env, timeout=timeout)
         return rc, out, _launch_events(root), items_of(root)
 
 
@@ -1281,6 +1283,133 @@ def test_launch_without_terminal_keeps_ending_with_no_item_start():
         check("no terminal: no item_start", not any(
             "item_start" in json.dumps(e) for e in _launch_events(root)))
         check("no terminal: the agent was not called", not calls, str(calls))
+
+
+def test_launch_dry_run_on_terminal_does_not_ask():
+    """CS-2: `--dry-run` shows the header and exits; the launch question is not asked."""
+    rc, out, events, items = _launch_on_tty([], wait="2", extra=("--dry-run",))
+    check("dry-run exits 0", rc == 0, out[-1500:])
+    check("dry-run: no question panel", "question(s) for you" not in out
+          and "[t] I write the answer" not in out, out[-1500:])
+    check("dry-run: says nothing was executed", "nothing was executed" in out, out[-1500:])
+    check("dry-run: a1 keeps its open route", items["a1"].get("human_pending"), str(items))
+
+
+def test_launch_asks_only_owner_items_not_those_deferred_for_another_reason():
+    """CS-2: a3 depends on a2 (deferred, as in the CS-1 header test), reason `depends-on-deferred`: not a question
+    and not handed to `decide` (which would list it under "Not on you")."""
+    a3 = item("a3")
+    a3["blocked_by"] = ["a2"]
+    a3["title"] = "item a3 dependent"
+    rc, out, events, items = _launch_on_tty(
+        [("[t] I write the answer", "n"), ("Anything to add", "")], wait="5",
+        items=[item("a1"), item("a2", human_pending="provision the Keycloak role"), a3])
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("the panel says 1 question", "1 question(s) for you" in out, out[-1500:])
+    check("a3 is not asked as a question", "item a3 dependent" not in out, out[-1500:])
+    check("a3 is not handed to decide (no 'Not on you' line)", "Not on you" not in out,
+          out[-1500:])
+    check("only one route was asked", out.count("I write the answer") <= 2, out[-1500:])
+
+
+def test_launch_does_not_ask_about_delivered_items():
+    """CS-2: a `done` item with an open `human_pending` is not part of the launch
+    panel (`delivered_leftovers` is not added): total 1, its route text absent."""
+    done = item("d1", status="done", human_pending="delivered leftover route text")
+    rc, out, events, items = _launch_on_tty(
+        [("[t] I write the answer", "n")], wait="5",
+        items=[done, item("a1", human_pending="provision the Keycloak role")])
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("the panel says 1 question", "1 question(s) for you" in out, out[-1500:])
+    check("the open item was asked", "provision the Keycloak role" in out, out[-1500:])
+    check("the delivered item's route is absent", "delivered leftover route text" not in out,
+          out[-1500:])
+
+
+def test_launch_asks_every_owner_item_not_only_the_first():
+    """CS-2: the read is uncapped: 2 owner-route items behind 2 runnable ones, 2 questions,
+    "y" to both."""
+    rc, out, events, _ = _launch_on_tty(
+        [("[t] I write the answer", "y"), ("Anything to add", ""),
+         ("[t] I write the answer", "y"), ("Anything to add", "")], wait="2",
+        # p1 and p2 run: a read capped at `--max 1` stops at the cap (p2 is next)
+        # and never reaches a1 and a2, which only the uncapped read sees.
+        items=[item("p1"), item("p2"),
+               item("a1", human_pending="first route text"),
+               item("a2", human_pending="second route text")])
+    check("the panel says 2 questions", "2 question(s) for you" in out, out[-1500:])
+    check("both routes were asked", "first route text" in out and "second route text" in out,
+          out[-1500:])
+    check("both answers were taken (nothing left waiting at a prompt)",
+          "no answer within" not in out and "2/2 · a2" in out, out[-1500:])
+    check("the run exits 0", rc == 0, out[-1500:])
+
+
+def test_launch_interrupt_at_the_question_prints_one_line_and_carries_on():
+    for name, byte in (("Ctrl-C", "\x03"), ("EOF", "\x04")):
+        rc, out, events, items = _launch_on_tty([("[t] I write the answer", byte)])
+        check(f"{name}: exits 0", rc == 0, out[-1500:])
+        check(f"{name}: prints the interrupted line", "questions interrupted" in out,
+              out[-1500:])
+        check(f"{name}: no traceback", "Traceback" not in out, out[-1500:])
+        check(f"{name}: no item_start", not any(
+            "item_start" in json.dumps(e) for e in events), str(events))
+
+
+def test_launch_guard_needs_both_stdin_and_stdout_on_a_terminal():
+    """CS-2: stdin on a pty with stdout on a pipe, and stdin DEVNULL with stdout on a
+    pty: the panel does not appear in either."""
+    markers = ("question(s) for you", "[t] I write the answer", "questions interrupted",
+               "nobody answered")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1", human_pending="provision the Keycloak role")])
+        binv = fake_claude(tmp, "pass")
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        cmd = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+               "--for", "2h", "--no-verify", "--no-analysis"]
+        # a) stdin = pty, stdout = pipe
+        master, slave = pty.openpty()
+        try:
+            p = subprocess.run(cmd, stdin=slave, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, text=True, env=env,
+                               timeout=60, cwd=str(root))
+            out = p.stdout
+        except subprocess.TimeoutExpired as e:
+            out = f"<timeout> {e.stdout}"
+        finally:
+            os.close(master)
+            os.close(slave)
+        check("stdin tty, stdout pipe: no panel", not any(m in out for m in markers)
+              and "nothing to do" in out, out[-1500:])
+        # b) stdin = DEVNULL, stdout = pty
+        master, slave = pty.openpty()
+        chunks = b""
+        proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=slave,
+                                stderr=slave, env=env, cwd=str(root))
+        os.close(slave)
+        end = time.time() + 60
+        try:
+            while time.time() < end:
+                r, _, _ = select.select([master], [], [], 0.5)
+                if r:
+                    try:
+                        d = os.read(master, 4096)
+                    except OSError:
+                        break
+                    if not d:
+                        break
+                    chunks += d
+                elif proc.poll() is not None:
+                    break
+            if proc.poll() is None:
+                proc.kill()
+            proc.wait()
+        finally:
+            os.close(master)
+        out = chunks.decode(errors="replace")
+        check("stdin devnull, stdout tty: no panel", not any(m in out for m in markers)
+              and "nothing to do" in out, out[-1500:])
 
 
 def main():
