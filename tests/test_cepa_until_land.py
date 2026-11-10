@@ -106,7 +106,12 @@ def test_land_builds_pushes_and_cleans():
               str(state_dict))
 
 
-def test_red_build_after_the_merge_goes_back_to_return_without_push():
+def test_red_build_after_the_merge_keeps_the_merge_without_push():
+    """Owner's request (2026-11-06): in the landings of runs 2026-11-05-2029 and
+    2026-11-05-1634 each red build rolled `main` back to before the merge, and
+    the owner redid the merge with `git reset --hard` on the lost commit, twice.
+    The red was a neighbouring test, not the run's code: the merge stays in
+    the clone for the fix, and nothing is pushed."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
         remote = with_origin(root)
@@ -116,21 +121,52 @@ def test_red_build_after_the_merge_goes_back_to_return_without_push():
         git(root, "push", "-q")
         return_ = git(root, "rev-parse", "HEAD")
         p = land(root, run_id, "--yes")
-        check("sai com erro", p.returncode != 0, p.stdout)
-        check("a main volta ao ponto de retorno",
-              git(root, "rev-parse", "HEAD") == return_)
+        check("sai com 5", p.returncode == 5, p.stdout + p.stderr)
+        parents = git(root, "rev-list", "--parents", "-1", "HEAD").split()
+        check("a main fica no merge (não volta ao ponto de retorno)",
+              len(parents) == 3 and parents[1] == return_
+              and git(root, "rev-parse", branch) == parents[2], str(parents))
         check("...o origin não recebe nada",
               subprocess.run(["git", "--git-dir", str(remote), "rev-parse",
                               "HEAD"], capture_output=True,
                              text=True).stdout.strip() == return_)
         check("a branch da noite continua", git(root, "branch", "--list", branch))
-        check("o estado continua esperando-dono",
-              state(root).get("estado") == "esperando-dono", str(state(root)))
-        check("a saída diz que o build ficou vermelho",
-              "red build" in p.stdout.lower(), p.stdout)
-        check("...e o desfazer preserva a fila que o run marcou no clone",
+        st = state(root)
+        check("o estado continua esperando-dono, parado no build vermelho",
+              st.get("estado") == "esperando-dono"
+              and (st.get("aterrissagem") or {}).get("parou") == "build-vermelho"
+              and (st.get("aterrissagem") or {}).get("retorno") == return_,
+              str(st))
+        check("a saída diz que o build ficou vermelho e que o merge ficou",
+              "red build" in p.stdout.lower() and "merge stays" in p.stdout,
+              p.stdout)
+        check("...e diz como desistir pelo ponto de retorno",
+              f"git reset --keep {return_[:10]}" in p.stdout, p.stdout)
+        check("...e preserva a fila que o run marcou no clone",
               "status: done" in plan_of(root).read_text(),
               plan_of(root).read_text()[:300])
+        pend = pending_ones(root).stdout
+        check("pendentes ainda lista o run, dizendo que espera o conserto",
+              run_id in pend and "red build" in pend, pend)
+
+        # The owner fixes on top of the merge and runs again.
+        git(root, "rm", "-q", "quebra.txt")
+        git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
+            "conserto do vizinho")
+        p = land(root, run_id, "--yes")
+        check("rodar de novo retoma do build e aterrissa",
+              p.returncode == 0 and state(root).get("estado") == "aterrissado",
+              p.stdout + p.stderr)
+        check("...sem refazer o merge",
+              git(root, "log", "-1", "--format=%s") == "conserto do vizinho"
+              and "already done" in p.stdout,
+              git(root, "log", "-3", "--format=%s") + p.stdout)
+        check("...e o push leva merge + conserto ao origin",
+              subprocess.run(["git", "--git-dir", str(remote), "rev-parse",
+                              "HEAD"], capture_output=True,
+                             text=True).stdout.strip()
+              == git(root, "rev-parse", "HEAD"))
+        check("...e o run sai de pendentes", run_id not in pending_ones(root).stdout)
 
 
 def test_conflict_stops_and_running_again_resumes():

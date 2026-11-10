@@ -1948,10 +1948,12 @@ def land_parser():
             "that no other live session holds either branch, that both trees are\n"
             "clean and that the run branch did not move after the proposal.\n"
             "\n"
-            "It stops on a merge conflict, never pushes a red build (a red build\n"
-            "rolls the clone's branch back to where it was), and running it again\n"
-            "resumes where it stopped: with the merge done, it goes on from the\n"
-            "build. On success it removes the run worktree and branch.\n"
+            "It stops on a merge conflict and never pushes a red build. A red build\n"
+            "after the merge KEEPS the merge in the clone, for you to fix on top of\n"
+            "it (the red is usually a neighbouring test, not the run's code), and\n"
+            "running it again resumes where it stopped: with the merge done, it goes\n"
+            "on from the build. To give up instead, `git reset --keep` to the return\n"
+            "point it prints. On success it removes the run worktree and branch.\n"
             "Without --yes, it only shows the plan."),
         examples=[
             ("cepa until land wego/2026-11-03-2210", "show the landing plan"),
@@ -1963,7 +1965,8 @@ def land_parser():
             (3, "refused: run not waiting for landing, wrong branch, dirty tree, "
                 "another live session, branch moved or gone, merge failed"),
             (4, "merge conflict: resolve, commit and run again"),
-            (5, "red build after the merge: clone branch rolled back, nothing pushed"),
+            (5, "red build after the merge: the merge stays in the clone for the fix, "
+                "nothing pushed; run again after committing the fix"),
             (6, "push failed: the merge and the green build stay; run again"),
         ],
         see_also=["cepa until pending: which runs are waiting to land",
@@ -2126,22 +2129,24 @@ def cmd_land(argv):
         log = path.parent / f"{run_id}.log"
         green, sec, reason = run_verify(verify, repo, 4 * 3600, log)
         if not green:
+            # The merge stays (owner's request, 2026-11-06): in the landings of
+            # runs 2026-11-05-2029 and 2026-11-05-1634 the red was a neighbouring
+            # test with an old text or date, and rolling `main` back made the
+            # owner redo the merge with `git reset --hard` on the lost commit,
+            # twice. The fix goes on top of the merge, and running again resumes
+            # from the build (`already_merged`). Nothing is pushed while red.
             return_value = landing_info.get("retorno")
-            # Only undoes what this command did: HEAD has to be its merge,
-            # with the return point as 1st parent.
-            code, first_item = git(["rev-parse", "HEAD^1"], repo)
-            if return_value and code == 0 and first_item == return_value:
-                # `--keep`, not `--hard`: preserves the queue modified by the run.
-                git(["reset", "-q", "--keep", return_value], repo)
-                back = f"`{destination}` went back to {return_value[:10]}"
-            else:
-                back = (f"`{destination}` was NOT undone (HEAD is not this "
-                         "command's merge); check by hand")
             landing_info.update({"parou": "build-vermelho", "motivo": reason})
-            landing_info.pop("merge", None)
             record(aterrissagem=landing_info)
-            print(f"RED BUILD after the merge ({reason}): {back}, no "
-                  f"push. The output is in {log}")
+            print(f"RED BUILD after the merge ({reason}); nothing was pushed. "
+                  f"The output is in {log}")
+            print(f"the merge stays in `{destination}` "
+                  f"({landing_info['merge'][:10]}) for the fix: commit the fix "
+                  f"on top of it and run `cepa-until land {a.target} --yes` "
+                  "again, it resumes from the build")
+            if return_value:
+                print(f"to give up the landing instead: git reset --keep "
+                      f"{return_value[:10]} (the return point)")
             return 5
         print(f"  green ({human(timedelta(seconds=sec))})")
 
@@ -3171,12 +3176,16 @@ def waiting_runs(repo):
             continue
         destination = action.get("destino") or current_branch(root)
         code, _ = git(["merge-base", "--is-ancestor", sha, destination], root)
-        if code == 0:
+        # A merge left by `land` on a red build is in the destination but has
+        # not landed: it waits for the fix and for `land` again.
+        red = (item_states.get("aterrissagem") or {}).get("parou") == "build-vermelho"
+        if code == 0 and not red:
             continue
         queue, run = item_states.get("fila"), item_states.get("run")
         found.append({"fila": queue, "run": run, "branch": item_states.get("branch"),
                         "destino": destination,
                         "fica_com_voce": len(item_states.get("fica_com_voce") or []),
+                        "build_vermelho": red and code == 0,
                         "comando": f"cepa-until land {queue}/{run}"})
     return found
 
@@ -3392,6 +3401,11 @@ def cmd_pending(argv):
     for m in dead:
         print(dead_run_phrase(m))
     for r in found:
+        if r.get("build_vermelho"):
+            print(f"queue {r['fila']} · run {r['run']}: `{r['branch']}` is "
+                  f"merged in `{r['destino']}` with a red build, not pushed; "
+                  f"commit the fix and run again — {r['comando']} --yes")
+            continue
         print(f"queue {r['fila']} · run {r['run']}: `{r['branch']}` waits to "
               f"land on `{r['destino']}`"
               + (f" ({r['fica_com_voce']} item(s) in \"Left with you\")"
