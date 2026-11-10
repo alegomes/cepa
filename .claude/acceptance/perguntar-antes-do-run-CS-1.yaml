@@ -1,0 +1,17 @@
+key: perguntar-antes-do-run-CS-1
+status: complete
+criteria:
+  - id: CS-1
+    text: "a largada mostra quantos itens rodam e quantos esperam o dono, antes do primeiro item"
+    altitude: cli
+    surface: "cepa-until <queue> --dry-run stdout (run header, line '1st item:')"
+    test: "tests/test_cepa_until.py::test_header_says_how_many_items_run_and_how_many_wait_for_the_owner"
+    layer: "real subprocess of common/bin/cepa-until with real cepa-plan; fake claude; queue 2 pending + 1 open human_pending (last)"
+    evidence: verified
+    run: "cd tests && python3 -c 'import test_cepa_until as t; t.test_header_says_how_many_items_run_and_how_many_wait_for_the_owner(); t.test_header_says_unavailable_when_the_uncapped_queue_read_fails(); print(t.FAILURES)' -> 8 ok lines (incl. 'start: 2 run, 1 wait for the owner', header <= 7 lines, nothing fired), FAILURES []"
+    status: complete
+    extra: "failure path covered by test_header_says_unavailable_when_the_uncapped_queue_read_fails (ok x4)"
+    notes:
+      - "Spec text says '--dry'; the flag is '--dry-run' (argparse accepts the '--dry' prefix; the test uses the full name)."
+      - "Count stops at the first unmet blocked_by outside the batch (cepa-plan stop=blocked); documented in code, not a gap against the declared scenario."
+gap: []

@@ -1,0 +1,54 @@
+schema_version: 2
+card: perguntar-antes-do-run-CS-1
+verdict: proven               # proven | unproven | needs-human
+reviewed_at: 2026-11-10T19:30:00-03:00
+base_commit: 532ec3b90a
+head_commit: 2a7f364
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: query_queue + _main (header forecast)"
+      module: common
+      external_observable: true     # printed header of the cli (surface: cli)
+      substituted_by_double: null   # tests run the real cepa-until --dry-run as a subprocess; only the `claude` binary is faked (far boundary), cepa-plan is the real one
+    - class: "tests/test_cepa_until_dead_supervisor.py (test-only pty drain)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway worktree at 2a7f364; cd tests && python3 _cs1run.py (3 CS-1 tests). head unperturbed: all ok, FAILURES 0. Each perturbation below applied with sed to common/bin/cepa-until, test run, file restored with git checkout."
+      results:
+        - "diff 970b638..2a7f364 = tests/test_cepa_until.py only (+28 lines); no product line changed"
+        - "P1 uncapped read back to max_items=1 -> RED (3 FAIL; '1 run, 0 wait')"
+        - "P2 filter inverted (!= human_pending) -> RED (1 FAIL; '2 run, 0 wait')"
+        - "P3 runs counted from capped `data` instead of `whole` -> RED (1 FAIL; '1 run, 1 wait')"
+        - "P4 unavailable branch prints '0 run, 0 wait (queue read failed...)' -> RED (2 FAIL)"
+        - "P5 `--max` hardcoded to 1 (max_items not forwarded) -> RED (1 FAIL)"
+        - "P6 forecast dropped from the line -> RED (3 FAIL)"
+        - "P7 waits counted over every deferred entry (reason filter removed) -> RED (1 FAIL, the new test: '1 run, 2 wait'). Survived at 970b638; now killed."
+        - "P10 runs + 1 -> RED (2 FAIL)"
+        - "P12 run/wait swapped -> RED (1 FAIL)"
+        - "P14 waits = sum(2 ...) -> RED (2 FAIL)"
+        - "P8 `if whole:` -> `if whole is not None:` -> GREEN, classified EQUIVALENT: query_queue returns json.loads of cepa-plan output on success, which always carries batch/deferred/path keys (the same `data` is read via data.get('path')), so an empty-dict success is unreachable; the guards differ only on `{}`. Reported, not counted as a survival."
+        - "base 532ec3b product with head tests -> RED: test 1 FAIL (no forecast on the line); test 2 TypeError query_queue() got an unexpected keyword argument 'max_items'"
+        - "tests/test_queue_rename.py at head: all ok"
+        - "tests/test_cepa_until_dead_supervisor.py at head (~80s): 'o item entrou em voo' ok, no FAIL lines. Pty drain is a test-only harness change; shown necessary in first pass (without it that check is red at head)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; L2 answered by perturbation instead: each changed executable line of the product (query_queue --max, whole read, runs, waits filter, forecast, unavailable branch, line concatenation) was perturbed and turned a CS-1 test RED (P1-P7, P10, P12, P14), so none is uncovered at the cli altitude. Docstring and comment lines are not executable."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only adds text to the header the cli prints and a --max value built internally; it parses no input from outside, and no changed class is in an input-bearing module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "All behavior-changing perturbations of the forecast go RED at 2a7f364, including P7 (waits counting every deferred item), now killed by test_header_wait_count_ignores_items_deferred_for_another_reason. The CS-1 tests are RED at base. One guard variant (`is not None`) is an equivalent mutant."
