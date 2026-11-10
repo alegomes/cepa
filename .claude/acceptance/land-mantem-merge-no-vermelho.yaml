@@ -1,0 +1,58 @@
+schema_version: 1
+card: land-mantem-merge-no-vermelho
+status: complete
+audited_at: 2026-11-10T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "cepa-until land: build vermelho depois do merge não desfaz o merge; deixa o merge no clone para conserto (derivado do título)"
+    altitude: cli
+    surface: "cepa-until land <run> --yes (subprocess): exit 5, HEAD do clone continua sendo o merge"
+    demonstrated_by:
+      test: "tests/test_cepa_until_land.py::test_red_build_after_the_merge_keeps_the_merge_without_push"
+      layer: "subprocess do cepa-until land; checa exit 5, HEAD com 2 pais (1o = ponto de retorno, 2o = branch da noite), estado parou=build-vermelho, saída informa o merge e o reset --keep para desistir, fila preservada"
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_until_land.py   (commit c0fee3a)
+          todos os 'ok', zero FAIL, "tudo verde"; bloco do teste: 9 checagens ok antes do conserto
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "nada é empurrado enquanto o build está vermelho (derivado)"
+    altitude: cli
+    surface: "origin (git rev-parse HEAD no bare remote) após land vermelho"
+    demonstrated_by:
+      test: "tests/test_cepa_until_land.py::test_red_build_after_the_merge_keeps_the_merge_without_push"
+      layer: "subprocess; compara HEAD do origin bare com o ponto de retorno"
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_until_land.py   (commit c0fee3a)
+          ok  ...o origin não recebe nada
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "o próximo land --yes retoma do build sem refazer o merge e empurra merge + conserto"
+    altitude: cli
+    surface: "segunda chamada de cepa-until land <run> --yes após commit do conserto"
+    demonstrated_by:
+      test: "tests/test_cepa_until_land.py::test_red_build_after_the_merge_keeps_the_merge_without_push (segunda metade)"
+      layer: "subprocess; exit 0, estado aterrissado, último commit é o conserto, saída 'already done', origin HEAD == clone HEAD"
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_until_land.py   (commit c0fee3a)
+          ok  rodar de novo retoma do build e aterrissa / ...sem refazer o merge / ...e o push leva merge + conserto ao origin
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: "o run continua visível como pendente enquanto vermelho e sai de pendentes ao aterrissar (derivado)"
+    altitude: cli
+    surface: "cepa-until pending (subprocess)"
+    demonstrated_by:
+      test: "tests/test_cepa_until_land.py::test_red_build_after_the_merge_keeps_the_merge_without_push (pending_ones)"
+      layer: "subprocess de cepa-until pending antes e depois do conserto"
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_until_land.py   (commit c0fee3a)
+          ok  pendentes ainda lista o run, dizendo que espera o conserto
+          ok  ...e o run sai de pendentes
+    verdict: complete
+    gap: null

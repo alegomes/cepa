@@ -1,0 +1,38 @@
+schema_version: 2
+card: land-mantem-merge-no-vermelho
+verdict: proven
+reviewed_at: 2026-11-10T12:30:00-03:00
+base_commit: 8087097
+head_commit: c0fee3a
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until (cmd_land, waiting_runs, cmd_pending, land_parser)", module: harness-cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "unperturbed c0fee3a: python3 tests/test_cepa_until_land.py -> 47 ok, 'tudo verde'"
+        - "P1 reinstate reset --keep to return point before 'return 5' (cepa-until:2150) -> rc=1 RED: 3 falhas (main fica no merge; pendentes lista o run; sem refazer o merge)"
+        - "P2 waiting_runs drops the 'not red' exception (if code == 0 and not red -> if code == 0) -> rc=1 RED: 1 falha (pendentes ainda lista o run)"
+        - "P3 pending drops the build_vermelho hint branch (if r.get('build_vermelho') -> if False) -> rc=1 RED: 1 falha (pendentes dizendo que espera o conserto)"
+        - "P4 drop the 'git reset --keep <return point>' hint (if return_value -> if False, :2147) -> rc=1 RED: 1 falha (diz como desistir pelo ponto de retorno)"
+        - "the real tests run a real git clone + origin + red verify command (no double of cepa-until)"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "every changed branch (red-build return, waiting_runs red flag, pending hint, give-up hint) turned RED by its own perturbation, so each is reached by the test. Structural, no coverage tool. The help-text edit (land_parser) was not perturbed; it is documentation, not behavior."
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff changes what a CLI prints and whether it resets a local branch after a failed build; it parses no external input and no api-rest module is touched"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "base 8087097 cepa-until + test from c0fee3a: python3 tests/test_cepa_until_land.py -> rc=1 RED, 5 falhas (main fica no merge; saida diz build vermelho e merge ficou; como desistir; pendentes lista o run; sem refazer o merge); HEAD c0fee3a -> 47 ok, 'tudo verde'"
+routing_reason: "Comportamento novo pedido pelo dono (build vermelho apos o merge mantem o merge, nada vai ao origin, rodar de novo retoma do build). Teste RED no base, verde no HEAD, e as quatro perturbacoes (voltar o reset, esconder o run vermelho de pendentes, tirar a dica de pendentes, tirar a dica de desistir) ficaram RED. Worktree descartavel removido; arvore primaria intocada."
