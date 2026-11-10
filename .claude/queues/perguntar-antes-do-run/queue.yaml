@@ -1,0 +1,162 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/perguntar-antes-do-run.md (13 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-10
+
+schema_version: 2
+mode: single-track
+queue: perguntar-antes-do-run
+source: docs/spec/perguntar-antes-do-run.md (13 critérios de sucesso; ordem herdada
+  do texto)
+items:
+- id: CS-1
+  title: a largada mostra quantos itens rodam e quantos esperam o dono, antes do
+    primeiro item
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: numa
+    fila com 2 itens `pending` e 1 item com `human_pending` aberto, `cepa-until
+    <fila> --dry` imprime uma linha com "2" itens que rodam e "1" que espera o dono;
+    hoje o cabeçalho só traz "1st item" e a contagem de `pending` e `done`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: num terminal, a rota de um item aberto vira pergunta antes do primeiro
+    item, e o "sim" faz o item rodar no mesmo run
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: numa
+    fila só com o item A, que tem `human_pending` aberto, a largada com a resposta
+    "y" injetada grava `item_start` de A no `<run>.jsonl`; hoje o run acaba em `end-of-queue`
+    sem `item_start` e a pergunta só aparece no fim.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: rota em item já entregue não entra no painel da largada
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: numa
+    fila com um item `done` que tem `human_pending` aberto e um item `pending`,
+    a saída da largada não traz a pergunta do item entregue antes do primeiro `item_start`;
+    hoje não há painel na largada para comparar, então o teste falha por não achar
+    o painel.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: rota que o dono já respondeu "não" aparece numa linha resumida, não como
+    pergunta
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: numa
+    fila com duas rotas cuja última resposta do dono foi "não" em 2026-11-02, a
+    largada imprime uma linha com "2" e "02/11" e não pede resposta para elas, e
+    `cepa-until decide <fila>` ainda pergunta as duas; hoje a largada não imprime
+    a linha.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: pré-condição que a leitura prévia acha adia o item sem gastar o run nele
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com um
+    leitor falso que devolve `pre-condicao` para o item X, e sem resposta do dono,
+    o `<run>.jsonl` traz o evento `leitura_previa` com X, não traz `item_start`
+    de X, e o `queue.yaml` passa a ter a rota aberta em X; hoje X recebe `item_start`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: preferência que a leitura prévia acha roda com o padrão do agente quando
+    o dono não responde, e com a resposta dele quando responde
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com um
+    leitor falso que devolve `preferencia` com padrão "P" para o item Y: sem resposta,
+    o prompt entregue ao agente de Y contém "P" e o resumo do fim do run lista a
+    escolha; com a resposta "R" injetada no painel, o prompt contém "R"; hoje o
+    prompt não contém nenhum dos dois.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: a leitura prévia para no teto e o item não lido roda como hoje
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com o
+    teto reduzido a 1 segundo por variável de ambiente e um leitor falso que demora
+    5 segundos, a largada segue depois do teto, o evento `leitura_previa` marca
+    o item como não lido e o item recebe `item_start`; hoje não existe leitura nem
+    evento.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-8
+  title: as perguntas que a fila já tem aparecem antes de a leitura prévia acabar,
+    e as da leitura entram no fim da mesma lista
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com um
+    leitor falso que demora 2 segundos e uma fila com uma rota aberta, a saída mostra
+    a pergunta da rota antes da pergunta que veio da leitura, e o total do painel
+    soma as duas; hoje não há painel na largada.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-9
+  title: uma opção na linha de comando pula a leitura e o painel, e sem terminal
+    a leitura roda sem painel
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com a
+    opção, o `<run>.jsonl` não traz `leitura_previa` e a saída não pede resposta,
+    mas traz a linha do CS-1; sem terminal e sem a opção, o `<run>.jsonl` traz `leitura_previa`,
+    a saída lista as perguntas como texto e nada espera entrada; hoje a opção é
+    recusada como argumento desconhecido.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-10
+  title: depois do painel, se nenhum item roda, o run não começa
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: numa
+    fila só com rotas respondidas "não", a largada termina dizendo que nenhum item
+    roda e não cria o worktree `until/<run>`; hoje o run começa e acaba em `end-of-queue`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-11
+  title: escolha de comportamento já commitada é gravada sem abrir rota e aparece
+    no relatório do run com o commit
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: `cepa-plan
+    finish <fila> <id> done --decision "lote pula credencial inativa" --commit <hash>`
+    deixa `human_pending` nulo e grava a escolha em `decisions`; o resumo do fim
+    do run a lista com o commit; `cepa-until decide <fila>` não pergunta sobre ela;
+    hoje `--decision` é recusado como argumento desconhecido.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-12
+  title: o agente do item recebe a regra do corte
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: o prompt
+    que o `cepa-until` entrega ao agente de um item contém a instrução de usar `--decision`
+    para escolha de comportamento já commitada e de manter `--human-pending` para
+    dispensa de prova, card para Done e tarefa fora do repositório; hoje o prompt
+    não menciona `--decision`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-13
+  title: a largada grava a medição no registro do run
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: depois
+    de uma largada com 1 rota respondida, 1 rota resumida e 1 achado da leitura,
+    o `<run>.jsonl` traz um evento `largada` com os campos itens que rodam, itens
+    que esperam, perguntas mostradas, perguntas respondidas, rotas resumidas, itens
+    lidos, achados por tipo e segundos gastos; hoje o evento não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
