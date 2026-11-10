@@ -1460,14 +1460,17 @@ def check_released_last(label, log):
     return lines
 
 
-def release_run(label, items, claude_body, args):
+def release_run(label, items, claude_body, args, only_release=False):
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, items)
         binv = fake_claude(tmp, claude_body)
         plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
         env, log = herdr_release_env(tmp)
         p, calls = run_until(root, binv, plan, args, extra_env=env)
-        check_released_last(label, log)
+        lines = check_released_last(label, log)
+        if only_release:
+            check(f"herdr ({label}): o log tem só a liberação (nenhum item começou)",
+                  len(lines) == 1, str(lines))
         return p, calls
 
 
@@ -1482,7 +1485,8 @@ def test_herdr_pane_is_released_at_the_end_of_the_window():
     release_run("fim da janela", [item("a1"), item("a2")],
                 "time.sleep(2)\n"
                 "i = primeiro_pendente()\n"
-                "if i: marca(i, status='done', evidence='ok')", ["--for", "0.02m"])
+                "if i: marca(i, status='done', evidence='ok')", ["--for", "0.02m"],
+                only_release=True)
 
 
 def test_herdr_pane_is_released_by_the_circuit_breaker():
