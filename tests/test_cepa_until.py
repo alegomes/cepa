@@ -857,6 +857,34 @@ def test_header_says_how_many_items_run_and_how_many_wait_for_the_owner():
         check("...e nada foi disparado", not calls, str(calls))
 
 
+def test_header_wait_count_ignores_items_deferred_for_another_reason():
+    """CS-1: only an open `human_pending` counts as "waiting for the owner". An item
+    that `cepa-plan queue` defers for another reason (here `depends-on-deferred`:
+    a3 is blocked by a2, which is itself deferred) is in neither number."""
+    with tempfile.TemporaryDirectory() as tmp:
+        a3 = item("a3")
+        a3["blocked_by"] = ["a2"]
+        root = build_repo(tmp, [item("a1"),
+                                item("a2", human_pending="provisionar o papel no Keycloak"),
+                                a3])
+        binv = fake_claude(tmp, "pass")
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        q = subprocess.run([sys.executable, str(REPO / "common" / "bin" / "cepa-plan"), "queue", "fila", "--max",
+                            "1000000", "--repo", str(root), "--json"],
+                           capture_output=True, text=True)
+        deferred = json.loads(q.stdout).get("deferred") or []
+        check("a3 is deferred with reason depends-on-deferred",
+              {d.get("id"): d.get("reason") for d in deferred}.get("a3")
+              == "depends-on-deferred", q.stdout[:800])
+        p, calls = run_until(root, binv, plan, ["--for", "2h", "--dry-run"])
+        lines = [l for l in p.stdout.splitlines() if "1st item:" in l]
+        check("the start has one '1st item:' line", len(lines) == 1, p.stdout[:800])
+        line = lines[0] if lines else ""
+        check("...with 1 item that runs and 1 that waits for the owner (a3 in neither)",
+              "start: 1 run, 1 wait for the owner" in line, line)
+        check("...and nothing was launched", not calls, str(calls))
+
+
 def test_header_says_unavailable_when_the_uncapped_queue_read_fails():
     """CS-1: if the second (uncapped) read of the queue fails, the `start` line says
     `unavailable` with the error, and carries no count (the capped `--max 1` read
