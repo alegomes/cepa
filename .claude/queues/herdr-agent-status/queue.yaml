@@ -28,9 +28,21 @@ items:
     --state working` with a `--message` containing `q`, `1/2` and the first id,
     then the same with `2/2` and the second id, every `--seq` strictly greater than
     the previous one. Today it fails: the file is never created.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 33309fb (herdr_report in common/bin/cepa-until + call before
+    each run_item), 53e402c and 3fd7f1f (tests: gate per env var, --message token,
+    slow/broken herdr, 1 s timeout bound), df508a0 (artifacts). pair-reviewer OK-WITH-NOTES
+    (no fixes). tests/test_cepa_until.py green (2m43s). completion-auditor COMPLETE
+    (.claude/acceptance/herdr-agent-status-CS-1.yaml). proof-reviewer PROVEN at
+    3fd7f1f (docs/proof/herdr-agent-status-CS-1.yaml; 20 perturbations red, 2 equivalents;
+    L2 pass by perturbation per tres-portas-c1-CS-1 precedent). Message is ''<queue>:
+    item i/n id'', i = distinct items started, n = i-1+pending (estimate, grows
+    if the queue grows). Out: CS-2..CS-6 (release on exit, quota message, cepa-prove,
+    resume argv). Code is on the overnight branch until/2026-11-09-2014; full build
+    belongs to the supervisor.'
+  head_commit: df508a07ab7d7ab4146f0ebffe580230e925a82b
 - id: CS-2
   title: during a 5h quota pause, `cepa-until` keeps `working` and the message says
     it is paused and until when
@@ -40,9 +52,22 @@ items:
     turns into a wait; the fake herdr log holds a `--state working` report whose
     `--message` contains "paused" and the resume time as `HH:MM`, before the next
     item''s report. Today it fails: no report.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits f395cf7 (herdr_report before both 5h quota waits in common/bin/cepa-until:
+    the before-item quota_pause wait and the wait after an item cut by the usage
+    cap; message ''<queue>: paused for 5h quota until HH:MM'' with the resume time
+    = reset + margin, state stays working), 4347cdc (tests pin send-before-resume
+    and resume-vs-reset HH:MM with a 60 s margin), d32532f (artifacts). Tests: tests/test_cepa_until_quota.py::test_herdr_keeps_working_and_says_until_when_during_the_pause_before_an_item
+    and ::..._after_hitting_the_ceiling; quota file green (2m01s); tests/test_cepa_until.py
+    green (2m39s). pair-reviewer OK. completion-auditor COMPLETE (.claude/acceptance/herdr-agent-status-CS-2.yaml).
+    proof-reviewer UNPROVEN at f395cf7 (2 survivors: call after wait_until, reset
+    instead of resume), tests strengthened, then PROVEN at 4347cdc (docs/proof/herdr-agent-status-CS-2.yaml;
+    10 perturbations red, 5 per call site). One report per pause, not renewed during
+    a long wait (out of CS-2). Out: CS-3..CS-6. Code is on the overnight branch
+    until/2026-11-09-2014; full build belongs to the supervisor.'
+  head_commit: d32532f5b839dc81b19760cb9300472b29797c37
 - id: CS-3
   title: '`cepa-until` releases the pane on every exit: end of queue, end of window,
     circuit breaker, a `blocked` item stopping the batch, SIGTERM and Ctrl+C'
@@ -53,9 +78,27 @@ items:
     mid-item; SIGINT sent mid-item). In each, the last line of the fake herdr log
     is `pane release-agent w9:p9 --source cepa-until --agent cepa-until` with a
     `--seq` greater than every earlier one. Today it fails: the log is empty.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 6c85676 (tests: one run per exit path, last herdr log line
+    must be release-agent with the greatest --seq), 223284e (herdr_release + _herdr_call
+    in common/bin/cepa-until; main() is a try/finally over _main and releases once
+    _herdr_armed, set right after the SIGTERM/SIGINT handlers; SIGTERM/SIGINT ignored
+    during the <=1 s release), d3762ef (test: second signal during the release;
+    end-of-window log holds only the release), 00ef9dc (artifacts). Tests: tests/test_cepa_until.py
+    green, tests/test_cepa_until_dead_supervisor.py green; tests/test_cepa_until_quota.py
+    green at 223284e (herdr_messages drops the final release line). pair-reviewer
+    OK-WITH-NOTES (no fixes). completion-auditor COMPLETE (.claude/acceptance/herdr-agent-status-CS-3.yaml).
+    proof-reviewer UNPROVEN at 223284e (survivor: SIG_IGN guard), test added, then
+    PROVEN at d3762ef (docs/proof/herdr-agent-status-CS-3.yaml; 7 perturbations,
+    all red). Deviation: --for 1s is refused by the parser (h/m only), test uses
+    --for 0.02m. Release runs in main()''s finally, so after ask_owner(): during
+    the end-of-run owner prompt the pane still shows working. Early refusals (bad
+    args, dry-run, nothing to do, dirty tree) do not release (nothing was reported).
+    Out: CS-4..CS-6. Code is on the overnight branch until/2026-11-09-2014; full
+    build belongs to the supervisor.'
+  head_commit: 00ef9dcd0119c8ef36005991314580a3edc18972
 - id: CS-4
   title: '`cepa-prove` reports `working` as agent `cepa-prove` with the round number
     and the cards already handled, and releases the pane on every exit'
@@ -67,9 +110,21 @@ items:
     and then `round 2` with `WEGO-1`, and the last line is `pane release-agent`;
     a second run killed with SIGTERM mid-round also ends in `pane release-agent`.
     Today it fails: the log is empty.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-09-2014: aadfe5d (red test, 10 FAIL at base),
+    778bda6 (feat: cepa-prove reports working per round ''round N · handled K: <last
+    5 keys>'' as agent cepa-prove; main() try/finally releases the pane once armed;
+    cepa-until herdr helpers take agent param, default cepa-until), d5912cc (test
+    pinning count and last-five cut, closes proof survivors P6-P8), cda2686 (artifacts).
+    Gates: pair-reviewer APPROVE; completion-auditor COMPLETE (.claude/acceptance/herdr-agent-status-CS-4.yaml);
+    proof-reviewer PROVEN at d5912cc (docs/proof/herdr-agent-status-CS-4.yaml),
+    first pass UNPROVEN at 778bda6 fixed by d5912cc. Tests run: tests/test_cepa_prove.py
+    25 ok; tests/test_cepa_until.py, test_cepa_until_quota.py, test_cepa_until_dead_supervisor.py
+    green. Full build delegated to the supervisor. Left out: no herdr report during
+    cepa-prove quota pauses (not in CS-4). Code is on the overnight branch.'
+  head_commit: cda268654adbf50998a50bc44d06bb16913dadab
 - id: CS-5
   title: outside herdr nothing is called, and a broken herdr changes neither the
     duration nor the result of a run
@@ -82,9 +137,23 @@ items:
     creates no log file. Today (a) and (c) pass by absence and (b) passes because
     nothing is called; the test goes red against any implementation that calls herdr
     without a timeout or from a subcommand, which is what it guards.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 95ae081 (tests/test_cepa_until.py: test_herdr_outside_or_broken_leaves_the_run_and_its_ledger_unchanged
+    covers (a) no herdr log without HERDR_ENV + ledger equal event by event to the
+    herdr run, volatile keys dropped, and (b) herdr sleeping 30 s + exit 1: same
+    exit code and ledger, 3 calls, < baseline + 2 s per call; test_herdr_is_not_called_from_a_subcommand
+    covers (c) cepa until pending with HERDR_ENV=1 exits 0 and writes no herdr log),
+    d2c7092 (acceptance artifact). Test-only: common/bin/cepa-until unchanged, behavior
+    existed since CS-1/CS-3. pair-reviewer OK-WITH-NOTES (no fixes). tests/test_cepa_until.py
+    green (2m55s). RED by perturbation, verified by orchestrator: gate without the
+    HERDR_ENV check -> (a) red; _herdr_armed = True at top of _main -> (c) red;
+    reported by pair-dev: HERDR_TIMEOUT_SEC=30 -> (b) red (2.0 s vs 91.9 s). completion-auditor
+    COMPLETE (.claude/acceptance/herdr-agent-status-CS-5.yaml). proof-reviewer not
+    run: no behavior changed. Out: CS-6 (resume argv). Code is on the overnight
+    branch until/2026-11-09-2014; full build belongs to the supervisor.'
+  head_commit: d2c709270f90ad772e604e61162f744130d3bdce
 - id: CS-6
   title: every `cepa-until` report carries `cepa until pending --repo <absolute
     repo path>` as herdr's resume command, and never the command that started the
@@ -96,6 +165,21 @@ items:
     `--for`, `--until` or the queue name after `--`; with a repo path that contains
     an apostrophe (which herdr rejects as `invalid_resume_argv`), the reports carry
     no `--` part and still report `working`. Today it fails: the log is empty.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits ef2f68f (herdr_resume_argv in common/bin/cepa-until: every
+    report-agent of the cepa-until window ends in ''-- cepa until pending --repo
+    <main clone, resolved>'', set in _main after arming; omitted when the path holds
+    an apostrophe; release-agent and cepa-prove send none), 3a92493 (test: run from
+    a linked worktree reports the main clone), 1bf61dc (artifacts). Tests: tests/test_cepa_until.py
+    full file green (3m03s) at ef2f68f, all 11 herdr tests green at 3a92493; tests/test_cepa_prove.py
+    green (25), asserts no ''--''. pair-reviewer OK-WITH-NOTES (one fix applied:
+    main_root instead of the worktree path, since the run worktree is removed after
+    land). completion-auditor COMPLETE (.claude/acceptance/herdr-agent-status-CS-6.yaml).
+    proof-reviewer UNPROVEN at ef2f68f (P4 main_root->repo survived), PROVEN at
+    3a92493 after the worktree test (docs/proof/herdr-agent-status-CS-6.yaml; P1-P8,P10
+    red, P9 equivalent). Out: other characters herdr may reject besides the apostrophe
+    (spec names only that one). Code is on the overnight branch until/2026-11-09-2014;
+    full build belongs to the supervisor.'
+  head_commit: 1bf61dceacf744083e4cf257f9e9d92466d7e2d0
