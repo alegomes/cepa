@@ -400,7 +400,11 @@ def herdr_env(tmp):
 def herdr_messages(log):
     """[(state-head ok, message, seq, epoch sent)] per report, in order."""
     out = []
-    for line in (log.read_text().splitlines() if log.exists() else []):
+    lines = log.read_text().splitlines() if log.exists() else []
+    # CS-3: the run ends with one `release-agent` line; it is not a report.
+    if lines and json.loads(lines[-1])["argv"][1] == "release-agent":
+        lines = lines[:-1]
+    for line in lines:
         e = json.loads(line)
         a = e["argv"]
         msg = a[a.index("--message") + 1] if "--message" in a else None
