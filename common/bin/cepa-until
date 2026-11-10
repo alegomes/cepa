@@ -219,6 +219,7 @@ Usage:
     cepa-until close-dead my-queue/<run> --yes  # closes a dead supervisor's run
 """
 
+import base64
 import hashlib
 import json
 import os
@@ -1119,6 +1120,33 @@ def _herdr_call(args, agent="cepa-until"):
         pass
 
 
+HC_MSG_MAX = 200
+
+
+def _hc_b64(text):
+    """`text` as herdr-core wants a 7501 field: one line, capped, base64 of UTF-8."""
+    flat = " ".join(str(text).split())[:HC_MSG_MAX]
+    return base64.b64encode(flat.encode("utf-8")).decode("ascii")
+
+
+def _hc_status(payload):
+    """Status for the Herdr desktop app, whose terminals belong to herdr-core (`hc`),
+    not to the `herdr` multiplexer: there is no `HERDR_ENV` there and no CLI to call.
+    herdr-core reads the program's status from an OSC 7501 escape sequence written to
+    the terminal (`ESC ] 7501 ; state=working:app=<name>:msg=<base64> ESC \\`, and
+    `state=clear` to drop it). Written only inside such a terminal (`HC_TERMINAL_ID`)
+    and only when stdout IS that terminal: a piped or captured run stays byte-clean.
+    Every failure is ignored, like the herdr call."""
+    if not os.environ.get("HC_TERMINAL_ID"):
+        return
+    try:
+        if sys.stdout.isatty():
+            sys.stdout.write(f"\033]7501;{payload}\033\\")
+            sys.stdout.flush()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def herdr_report(message, agent="cepa-until"):
     """Tell herdr (the terminal multiplexer) this pane is a `cepa-until` agent that is
     `working`, with `message` as its status line. Only the main run calls it, never
@@ -1127,6 +1155,7 @@ def herdr_report(message, agent="cepa-until"):
     and every failure is ignored: a missing or slow herdr never changes the run.
     `--seq` is `time.time_ns()`, forced strictly increasing within the process."""
     _herdr_call(["report-agent", "--state", "working", "--message", message], agent)
+    _hc_status(f"state=working:app={agent}:msg={_hc_b64(message)}")
 
 
 _herdr_armed = False
@@ -1145,6 +1174,7 @@ def herdr_release(agent="cepa-until"):
             pass
     try:
         _herdr_call(["release-agent"], agent)
+        _hc_status("state=clear")
     finally:
         for sig, handler in saved.items():
             signal.signal(sig, handler)

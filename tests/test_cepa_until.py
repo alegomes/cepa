@@ -1642,6 +1642,90 @@ def test_herdr_pane_is_released_when_a_blocked_item_stops_the_batch():
     check("herdr (blocked): parou no primeiro blocked (1 chamada)", len(calls) == 1,
           f"{len(calls)} {p.stderr[-200:]}")
 
+# ── herdr desktop app (herdr-core): status by OSC 7501 on the terminal ───────
+
+def hc_scenario(tmp, hc_id="t9", tty=True):
+    """Run the two-item queue as the Herdr desktop app runs it: `HC_TERMINAL_ID` set,
+    no `HERDR_*`, stdout a real terminal (a pty) unless `tty=False`. Returns
+    (exit code, everything written to stdout as text, plan statuses)."""
+    import base64  # noqa: F401  (used by the callers through hc_seq)
+    import pty
+    root = build_repo(tmp, [item("a1"), item("a2")])
+    binv = fake_claude(tmp, "i = primeiro_pendente()\n"
+                            "if i: marca(i, status='done', evidence='ok')")
+    plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+    env = dict(os.environ)
+    for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH", "HC_TERMINAL_ID"):
+        env.pop(k, None)
+    if hc_id:
+        env["HC_TERMINAL_ID"] = hc_id
+    env["PATH"] = f"{binv}:{env['PATH']}"
+    env["FAKE_PLANO"] = str(plan)
+    env["CEPA_WORKTREE_HOME"] = str(Path(root).parent / "worktrees")
+    env["FAKE_CHAMADAS"] = str(Path(root).parent / "chamadas.jsonl")
+    argv = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+            "--for", "2h", "--no-verify", "--no-analysis"]
+    if not tty:
+        r = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=120)
+        out, code = r.stdout, r.returncode
+    else:
+        master, slave = pty.openpty()
+        proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=slave,
+                                stderr=subprocess.DEVNULL, env=env)
+        os.close(slave)
+        chunks = []
+        while True:
+            try:
+                data = os.read(master, 65536)
+            except OSError:      # the last writer closed the pty
+                break
+            if not data:
+                break
+            chunks.append(data)
+        os.close(master)
+        code = proc.wait(timeout=120)
+        out = b"".join(chunks).decode("utf-8", "replace")
+    statuses = [i["status"] for i in yaml.safe_load(plan.read_text())["items"]]
+    return code, out, statuses
+
+
+def hc_seq(payload):
+    return f"\033]7501;{payload}\033\\"
+
+
+def hc_working(message):
+    import base64
+    return hc_seq("state=working:app=cepa-until:msg="
+                  + base64.b64encode(message.encode()).decode())
+
+
+def test_hc_terminal_gets_one_working_status_per_item_and_a_clear_at_the_end():
+    """In the Herdr desktop app there is no `HERDR_ENV`: the terminal belongs to
+    herdr-core, which reads the status from OSC 7501 written to the terminal."""
+    with tempfile.TemporaryDirectory() as tmp:
+        code, out, statuses = hc_scenario(tmp)
+        check("hc: a run termina normal com os dois itens done",
+              code == 0 and statuses == ["done", "done"], f"{code} {statuses}")
+        first, second = hc_working("fila: item 1/2 a1"), hc_working("fila: item 2/2 a2")
+        clear = hc_seq("state=clear")
+        check("hc: working do item 1 escrito no terminal", first in out, repr(out[-400:]))
+        check("hc: working do item 2 vem depois do item 1",
+              first in out and second in out and out.index(first) < out.index(second))
+        check("hc: a última sequência 7501 é o clear, depois dos dois itens",
+              out.count("\033]7501;") == 3 and out.rfind("\033]7501;") == out.find(clear),
+              str(out.count("\033]7501;")))
+
+
+def test_hc_status_is_not_written_outside_an_hc_terminal_or_into_a_pipe():
+    with tempfile.TemporaryDirectory() as tmp:
+        code, out, statuses = hc_scenario(tmp, hc_id=None)
+        check("hc (sem HC_TERMINAL_ID): nenhuma sequência 7501",
+              "]7501;" not in out and statuses == ["done", "done"], repr(out[-200:]))
+    with tempfile.TemporaryDirectory() as tmp:
+        code, out, statuses = hc_scenario(tmp, tty=False)
+        check("hc (stdout não é terminal): nenhuma sequência 7501",
+              "]7501;" not in out and statuses == ["done", "done"], repr(out[-200:]))
+
 
 def main():
     print("cepa-until — supervisor de janela de tempo\n")
