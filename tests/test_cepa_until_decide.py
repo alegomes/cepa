@@ -1371,6 +1371,91 @@ def test_launch_cs3_panel_before_the_first_item_leaves_the_delivered_route_out()
           "delivered leftover route text" not in before, before[-1500:])
 
 
+def _answered(day, answer="não: Fecho o card?", old=""):
+    """Evidence as `cepa-plan answer --keep` leaves it: the answer prepended."""
+    return (f"Resposta do dono em {day}: {answer}. O dono manteve o item como estava "
+            f"(`pending`, rota humana aberta). Evidência anterior: {old or 'x'}")
+
+
+def _no_routes(day="2026-11-02"):
+    a1 = item("a1", human_pending="first route text")
+    a2 = item("a2", human_pending="second route text")
+    a1["evidence"] = a2["evidence"] = _answered(day)
+    return [a1, a2]
+
+
+def test_last_owner_no_reads_only_the_first_answer():
+    m = load_module()
+    check("não at the start gives the date",
+          m.last_owner_no(_answered("2026-11-02")) == "2026-11-02")
+    check("nao without accent and upper case count",
+          m.last_owner_no("Resposta do dono em 2026-11-03: NAO: x") == "2026-11-03")
+    check("a later sim wins over the older não",
+          m.last_owner_no(_answered("2026-11-05", "sim: ok",
+                                    old=_answered("2026-11-02"))) is None)
+    check("free text is not a não",
+          m.last_owner_no(_answered("2026-11-05", "nada a ver")) is None)
+    check("empty and None", m.last_owner_no("") is None and m.last_owner_no(None) is None)
+
+
+def test_launch_cs4_answered_no_routes_become_one_line_not_questions():
+    """CS-4 declared scenario: two routes whose last answer was "não" on 2026-11-02."""
+    rc, out, events, _ = _launch_on_tty([], wait="2", items=_no_routes() + [item("a3")])
+    before = _before_first_item(out)
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("the first item's line is in the output", before is not None, out[-2000:])
+    line = [l for l in (before or "").splitlines() if "already answered" in l]
+    check("one summary line with the count and the date",
+          len(line) == 1 and "2 route(s)" in line[0] and "02/11" in line[0], before)
+    check("neither route is asked",
+          "[t] I write the answer" not in (before or "")
+          and "question(s) for you" not in (before or "")
+          and "first route text" not in (before or ""), (before or "")[-1500:])
+
+
+def test_launch_cs4_decide_on_the_queue_still_asks_both():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, _no_routes())
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), inputs=[
+            ("[t] I write the answer", "n"), ("Anything to add", ""),
+            ("[t] I write the answer", "n"), ("Anything to add", "")])
+        check("decide exits 0", rc == 0, out[-1500:])
+        check("decide says 2 questions", "2 question(s) for you" in out, out[-1500:])
+        check("both routes are asked",
+              "first route text" in out and "second route text" in out, out[-1500:])
+
+
+def test_launch_cs4_mixed_asks_only_the_unanswered_route():
+    no = item("a1", human_pending="first route text")
+    no["evidence"] = _answered("2026-11-02")
+    rc, out, events, _ = _launch_on_tty(
+        [("[t] I write the answer", "n"), ("Anything to add", "")], wait="5",
+        items=[no, item("a2", human_pending="second route text"), item("a3")])
+    before = _before_first_item(out) or ""
+    line = [l for l in before.splitlines() if "already answered" in l]
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("the line says 1 and 02/11",
+          len(line) == 1 and "1 route(s)" in line[0] and "02/11" in line[0], before)
+    check("the panel asks only the other one",
+          "1 question(s) for you" in before and "second route text" in before
+          and "first route text" not in before, before[-1500:])
+
+
+def test_launch_cs4_latest_answer_wins_over_an_older_no():
+    a1 = item("a1", human_pending="first route text")
+    a1["evidence"] = _answered("2026-11-05", "sim: Fecho o card?",
+                               old=_answered("2026-11-02"))
+    rc, out, events, _ = _launch_on_tty(
+        [("[t] I write the answer", "n"), ("Anything to add", "")], wait="5",
+        items=[a1, item("a2")])
+    before = _before_first_item(out) or ""
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("no summary line", "already answered" not in before, before)
+    check("the route is asked", "1 question(s) for you" in before
+          and "first route text" in before, before[-1500:])
+
+
 def test_launch_asks_every_owner_item_not_only_the_first():
     """CS-2: the read is uncapped: 2 owner-route items behind 2 runnable ones, 2 questions,
     "y" to both."""

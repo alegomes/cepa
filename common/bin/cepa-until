@@ -2887,16 +2887,46 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
     return 0
 
 
+_OWNER_NO = re.compile(r"Resposta do dono em (\d{4})-(\d{2})-(\d{2}): n(?:ão|ao)\b",
+                       re.I)
+
+
+def last_owner_no(evidence):
+    """The date (`YYYY-MM-DD`) of the owner's LAST answer when it was "não", else None.
+    `cepa-plan answer` prepends each answer to the evidence, so the last one is the
+    text's start: a later "sim" or free text, or an older "não" further down, does
+    not count."""
+    m = _OWNER_NO.match((evidence or "").lstrip())
+    return f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else None
+
+
 def ask_at_launch(repo, queue, data):
     """The launch panel (CS-2). Shows `decide` for the owner-reason items still open
     in the queue (an uncapped read; `delivered_leftovers` is deliberately not added:
     a task left on a delivered item holds nothing back) and returns the queue read
     again, so the item answered "yes" is in the batch. With no such item, prints
     nothing. No answer within the wait, EOF or Ctrl-C: one line, and the run carries
-    on with the `data` it had. A failed read at either end keeps the old `data`."""
+    on with the `data` it had. A failed read at either end keeps the old `data`.
+    CS-4: a route whose last owner answer was "no" is not asked here; one line gives
+    their count and the most recent date, and `cepa-until decide <queue>` still asks."""
     whole, _ = query_queue(queue, repo, max_items=10 ** 6)
     deferred = [ad for ad in (whole or {}).get("deferred") or []
                 if reason_alias(ad.get("reason")) in OWNER_REASON]
+    answered_no = []
+    to_ask = []
+    for ad in deferred:
+        date = last_owner_no(ad.get("evidence"))
+        if date:
+            answered_no.append(date)
+        else:
+            to_ask.append(ad)
+    if answered_no:
+        latest = max(answered_no)
+        latest = f"{latest[8:10]}/{latest[5:7]}"
+        print(f"\n── {len(answered_no)} route(s) you already answered \"no\" "
+              f"(last on {latest}): not asked again here; to revisit them: "
+              f"cepa-until decide {queue}")
+    deferred = to_ask
     if not deferred:
         return data
     try:
