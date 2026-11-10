@@ -28,11 +28,23 @@
 # os arquivos que ficariam sem rodar e o comando que instala. Se um dia você
 # quiser mesmo rodar só a primeira família, diga isso em voz alta com
 # SKIP_PYTEST=1 — e o resumo final registra o que ficou de fora.
+#
+# ## Por que cada arquivo tem teto de tempo
+#
+# Um teste de pty com âncora errada fica esperando uma saída que nunca vem. Em
+# 05/11/2026 isso prendeu a suíte por 3h e em 06/11/2026 por 10h, sem nenhum
+# sinal de que estava travada. Agora cada arquivo roda sob um teto
+# (CEPA_TEST_TIMEOUT, em segundos, padrão 900). Ao estourar, o grupo de
+# processos do arquivo é morto (os filhos do pty junto), o arquivo conta como
+# falha marcada [TIMEOUT] no resumo, e a suíte segue para o próximo. O teto é
+# aplicado por tests/_run_with_timeout.py porque o macOS não tem `timeout` GNU.
 
 set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 2
 PYTHON="${PYTHON:-python3}"
+TETO="${CEPA_TEST_TIMEOUT:-900}"
+LIMITADOR="tests/_run_with_timeout.py"   # relativo à raiz, já depois do cd
 
 # ── telemetria da suíte não entra no seu ledger ───────────────────────────
 # Os hooks gravam eventos em ~/.claude/cepa-telemetry/, e esta suíte executa os
@@ -81,16 +93,21 @@ fi
 
 # ── roda ──────────────────────────────────────────────────────────────────
 falhas=() ; rodados=0
+TIMEOUT_RC=124   # convenção do GNU timeout, devolvida por _run_with_timeout.py
 
 echo
 echo "── família script (${#scripts[@]}) ──"
 # `${arr[@]+...}` é o guarda de array vazio: o bash 3.2 que vem no macOS trata
 # "${arr[@]}" de um array vazio como variável não-definida sob `set -u` e aborta.
 for t in ${scripts[@]+"${scripts[@]}"}; do
-  saida=$("$PYTHON" "$t" 2>&1) ; rc=$?
+  saida=$("$PYTHON" "$LIMITADOR" "$TETO" "$PYTHON" "$t" 2>&1) ; rc=$?
   rodados=$((rodados + 1))
   if [ "$rc" -eq 0 ]; then
     printf '  ok    %s\n' "$t"
+  elif [ "$rc" -eq "$TIMEOUT_RC" ]; then
+    falhas+=("$t  [TIMEOUT ${TETO}s]")
+    printf 'TIMEOUT %s  (passou de %ss e foi morto)\n' "$t" "$TETO"
+    printf '%s\n' "$saida" | tail -5 | sed 's/^/          /'
   else
     falhas+=("$t")
     printf 'FALHA   %s  (saída %d)\n' "$t" "$rc"
@@ -103,10 +120,21 @@ if [ "${#pytests[@]}" -gt 0 ]; then
   if [ "$tem_pytest" -eq 1 ]; then
     echo
     echo "── família pytest (${#pytests[@]}) ──"
-    saida=$("$PYTHON" -m pytest "${pytests[@]}" -q 2>&1) ; rc=$?
-    rodados=$((rodados + ${#pytests[@]}))
-    printf '%s\n' "$saida" | tail -3 | sed 's/^/  /'
-    [ "$rc" -ne 0 ] && falhas+=("${pytests[@]}")
+    # Um pytest por arquivo (não uma chamada só): o teto vale por arquivo, e
+    # assim o resumo nomeia exatamente qual travou em vez de acusar todos.
+    for t in "${pytests[@]}"; do
+      saida=$("$PYTHON" "$LIMITADOR" "$TETO" "$PYTHON" -m pytest "$t" -q 2>&1) ; rc=$?
+      rodados=$((rodados + 1))
+      echo "  $t"
+      if [ "$rc" -eq "$TIMEOUT_RC" ]; then
+        falhas+=("$t  [TIMEOUT ${TETO}s]")
+        printf 'TIMEOUT %s  (passou de %ss e foi morto)\n' "$t" "$TETO"
+        printf '%s\n' "$saida" | tail -5 | sed 's/^/          /'
+      else
+        printf '%s\n' "$saida" | tail -3 | sed 's/^/    /'
+        [ "$rc" -ne 0 ] && falhas+=("$t")
+      fi
+    done
   else
     pulados_pytest=${#pytests[@]}
   fi
