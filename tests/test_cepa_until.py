@@ -1657,7 +1657,7 @@ def hc_scenario(tmp, hc_id="t9", tty=True):
     env = dict(os.environ)
     for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH", "HC_TERMINAL_ID"):
         env.pop(k, None)
-    if hc_id:
+    if hc_id is not None:      # "" is a real case: the variable set and empty
         env["HC_TERMINAL_ID"] = hc_id
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(plan)
@@ -1720,6 +1720,10 @@ def test_hc_status_is_not_written_outside_an_hc_terminal_or_into_a_pipe():
     with tempfile.TemporaryDirectory() as tmp:
         code, out, statuses = hc_scenario(tmp, hc_id=None)
         check("hc (sem HC_TERMINAL_ID): nenhuma sequência 7501",
+              "]7501;" not in out and statuses == ["done", "done"], repr(out[-200:]))
+    with tempfile.TemporaryDirectory() as tmp:
+        code, out, statuses = hc_scenario(tmp, hc_id="")
+        check("hc (HC_TERMINAL_ID vazio): nenhuma sequência 7501",
               "]7501;" not in out and statuses == ["done", "done"], repr(out[-200:]))
     with tempfile.TemporaryDirectory() as tmp:
         code, out, statuses = hc_scenario(tmp, tty=False)
