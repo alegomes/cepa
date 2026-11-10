@@ -1,0 +1,14 @@
+key: herdr-agent-status-CS-2
+status: complete
+criteria:
+  - id: AC1
+    text: "during a 5h quota pause, cepa-until keeps working and the message says it is paused and until when"
+    altitude: cli
+    surface: "common/bin/cepa-until run as a subprocess with HERDR_ENV=1, HERDR_PANE_ID, HERDR_BIN_PATH pointing at a fake herdr that logs argv; fake claude produces the quota readings that quota_pause / the usage-cap wait turn into a wait"
+    test: "tests/test_cepa_until_quota.py::test_herdr_keeps_working_and_says_until_when_during_the_pause_before_an_item (pause before the item) and ::test_herdr_keeps_working_and_says_until_when_after_hitting_the_ceiling (usage-cap wait, same item resumed)"
+    layer: cli (subprocess, fake herdr and fake claude)
+    evidence: verified
+    run: "python3 tests/test_cepa_until_quota.py -> 14 'ok herdr' checks (7 per test: all reports --state working as cepa-until; exactly one 'paused' report; message holds the ledger's resume HH:MM; it sits after 'fila: item 2/3 a2' and before 'fila: item 3/3 a3' (resp. between the two 'item 1/1 a1' reports); --seq strictly increasing), 0 FAIL, final line 'tudo verde'."
+    status: complete
+    gap: ""
+note: "Decided items honoured: English message ('fila: paused for 5h quota until HH:MM'), state stays working, not blocked. Diff adds herdr_report at both 5h waits in common/bin/cepa-until (quota_pause before item; item cut off by the ceiling). Caveats: the HH:MM is compared with the ledger's acorda / reset_em+margin, not hard-coded; the post-pause assertions sit under 'if pause:' / 'if cut ...' guards, but the preceding unguarded-in-effect check ('houve a pausa' / 'houve a espera') ran ok, so they were not skipped. Pytest does not fail on check(); the script run is the real evidence. Not independently mutation-proven (did not remove the herdr_report calls)."
