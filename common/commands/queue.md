@@ -244,9 +244,16 @@ rules that previously had no owner:
   each item is born with the surface "não declarada" (not declared) and a
   warning. Recommend that the owner fill in the cycle through `/common:epic`
   before draining the queue;
-- **an Epic in `draft` (old `rascunho`), or with a `- [ ]` question, is a warning**,
-  as with the spec. Ask the same closed question: close the Epic first or
-  write the queue anyway. Recommend closing first;
+- **an Epic in `draft` (old `rascunho`), or with a `- [ ]` question, is a
+  refusal of `write`**, with exit 2 (`from-epic`, which only reads, still
+  warns). Ask the owner the closed question, naming the status and the number
+  of open questions: close the Epic first or write the queue anyway. Recommend
+  closing first. Only on the owner's explicit "write anyway" repeat with
+  `--allow-draft`, which records the override in the queue's `source`. Never
+  pass `--allow-draft` on your own, and never filter the `aviso:` and
+  `recusa:` lines out of the output: on 2026-11-04 a queue written from a
+  draft with 9 open questions, with the warnings filtered, needed 16 items
+  over its 15;
 - **a cycle that does not exist, has no script or has an empty "What it
   crosses" is a refusal**, with exit 2 and the reason. Do not fill the gap on
   your own.
