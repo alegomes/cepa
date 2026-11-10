@@ -310,9 +310,43 @@ def live_run(repo):
     return None
 
 
+# ── herdr ─────────────────────────────────────────────────────────────────────
+# herdr (the terminal multiplexer) only sees an agent that reports itself, and a
+# round is a `claude -p` with no TUI: without these calls the pane stays `unknown`
+# for the whole window (docs/spec/herdr-agent-status.md, CS-4). Gate, 1 s timeout
+# and ignored failures are cepa-until's (`U.herdr_report`).
+
+HERDR_AGENT = "cepa-prove"
+HERDR_KEYS_SHOWN = 5
+_herdr_armed = False
+
+
+def herdr_round_message(round_no, handled):
+    """`round 2 · handled 1: WEGO-1`; past HERDR_KEYS_SHOWN keys only the last ones,
+    so the sidebar line stays short."""
+    msg = f"round {round_no}"
+    if handled:
+        keys = handled[-HERDR_KEYS_SHOWN:]
+        more = "…, " if len(handled) > len(keys) else ""
+        msg += f" · handled {len(handled)}: {more}{', '.join(keys)}"
+    return msg
+
+
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main(argv=None):
+    """Runs the command; once the run is armed (past the refusals and the dry run,
+    signal handlers installed) every way out, return, SystemExit from a signal or
+    exception, releases the herdr pane."""
+    try:
+        return _main(argv)
+    finally:
+        if _herdr_armed:
+            U.herdr_release(HERDR_AGENT)
+
+
+def _main(argv=None):
+    global _herdr_armed
     argv = sys.argv[1:] if argv is None else argv
     ap = _clihelp.Parser(
         prog="cepa prove",
@@ -527,6 +561,7 @@ def main(argv=None):
 
     signal.signal(signal.SIGTERM, interrupt)
     signal.signal(signal.SIGINT, interrupt)
+    _herdr_armed = True
 
     def launched(child_pid):
         in_flight["pid_filho"] = child_pid
@@ -574,6 +609,7 @@ def main(argv=None):
         log_event({"evento": "rodada_start", "rodada": rounds, "skip": list(handled),
                    "restante_seg": int(remaining.total_seconds())})
         in_flight.update(rodada=rounds)
+        U.herdr_report(herdr_round_message(rounds, handled), HERDR_AGENT)
         limit = (remaining + slack).total_seconds()
         code, killed, spent, output = run_round(repo, cmd, limit, log, on_launch=launched)
         in_flight.pop("pid_filho", None)

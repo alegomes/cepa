@@ -56,7 +56,7 @@ def check(name, cond, detail=""):
 
 # ── scenario ────────────────────────────────────────────────────────────────
 
-def build_repo(tmp, item_list):
+def build_repo(tmp, item_list, name="repo"):
     """Git repo with a `queue` named `fila` and the requested items.
 
     The repo stays in `<tmp>/repo`, and NOT in the tmp root, because the fake `claude` and
@@ -64,7 +64,7 @@ def build_repo(tmp, item_list):
     the launch guard would refuse the run — which was exactly the first failure mode
     of these tests.
     """
-    root = Path(tmp) / "repo"
+    root = Path(tmp) / name
     root.mkdir(parents=True, exist_ok=True)
     d = root / ".claude" / "programs" / "fila"
     d.mkdir(parents=True)
@@ -126,7 +126,7 @@ def fake_claude(tmp, body):
     return binv
 
 
-def run_until(root, binv, plan, args, timeout=120, extra_env=None):
+def run_until(root, binv, plan, args, timeout=120, extra_env=None, repo_arg=None):
     """By default the run goes out `--sem-verify --sem-analise`: the test repos have no
     build, and the end analysis would be one more call to the fake `claude` in
     every test. Whoever tests the two passes `--verify`/`--com-analise`
@@ -146,7 +146,7 @@ def run_until(root, binv, plan, args, timeout=120, extra_env=None):
         args.remove("--com-analise")
     elif "--no-analysis" not in args:
         args.append("--no-analysis")
-    p = subprocess.run([sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root)]
+    p = subprocess.run([sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(repo_arg or root)]
                        + args, capture_output=True, text=True, env=env,
                        timeout=timeout)
     lines = []
@@ -1338,6 +1338,309 @@ def test_dirty_tree_stays_strict_for_the_other_callers():
         finally:
             alive.kill()
             alive.wait()
+
+
+def herdr_scenario(tmp, herdr_body="", env=None, repo_name="repo", from_worktree=False):
+    """Run the two-item queue under a fake `herdr` (python; appends argv as JSON to a
+    log, then runs `herdr_body`). Returns (process, argv list per report, log path,
+    plan statuses)."""
+    root = build_repo(tmp, [item("a1"), item("a2")], repo_name)
+    binv = fake_claude(tmp, "i = primeiro_pendente()\n"
+                            "if i: marca(i, status='done', evidence='ok')")
+    herdr = Path(tmp) / "herdr"
+    log = Path(tmp) / "herdr.log"
+    herdr.write_text(f"#!{sys.executable}\n"
+                     "import sys, json, time\n"
+                     f"open({str(log)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                     + herdr_body + "\n")
+    herdr.chmod(0o755)
+    plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+    full = {"HERDR_ENV": "1", "HERDR_PANE_ID": "w9:p9", "HERDR_BIN_PATH": str(herdr)}
+    for k, v in (env or {}).items():
+        if v is None:
+            full.pop(k, None)
+        else:
+            full[k] = v
+    # The suite's own environment may carry real herdr vars: scrub, then apply `full`.
+    for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
+        os.environ.pop(k, None)
+    repo_arg = None
+    if from_worktree:   # run `--repo <linked worktree of root>`, outside the repo
+        repo_arg = Path(tmp) / "linked"
+        subprocess.run(["git", "worktree", "add", "-q", "-b", "wt", str(repo_arg)],
+                       cwd=root, check=True)
+    p, calls = run_until(root, binv, plan, ["--for", "2h"], extra_env=full,
+                         repo_arg=repo_arg)
+    argvs = ([json.loads(l) for l in log.read_text().splitlines()]
+             if log.exists() else [])
+    statuses = [i["status"] for i in yaml.safe_load(plan.read_text())["items"]]
+    return p, argvs, log, statuses
+
+
+def test_herdr_receives_one_working_report_per_item():
+    """CS-1 of docs/spec/herdr-agent-status.md: inside herdr the window reports
+    `working` as agent `cepa-until`, one report per item, with the position."""
+    with tempfile.TemporaryDirectory() as tmp:
+        p, argvs, log, _ = herdr_scenario(tmp)
+        head = ["pane", "report-agent", "w9:p9", "--source", "cepa-until",
+                "--agent", "cepa-until", "--state", "working"]
+        # CS-3 adds the final release as the last line; the working reports are the rest.
+        argvs = [a for a in argvs if a[:2] != ["pane", "release-agent"]]
+        check("herdr: dois relatórios working", len(argvs) == 2
+              and all(a[:len(head)] == head for a in argvs), str(argvs) + p.stderr[-200:])
+        if len(argvs) == 2:
+            for a, msg in zip(argvs, ("fila: item 1/2 a1", "fila: item 2/2 a2")):
+                check(f"herdr: --message e '{msg}' são tokens vizinhos",
+                      a[len(head):len(head) + 2] == ["--message", msg], str(a))
+            seqs = [int(a[a.index("--seq") + 1]) for a in argvs]
+            check("herdr: --seq estritamente crescente", seqs[0] < seqs[1], str(seqs))
+
+
+def test_herdr_is_not_called_unless_all_three_vars_are_set():
+    for label, env in (("HERDR_ENV diferente de 1", {"HERDR_ENV": "0"}),
+                       ("sem HERDR_ENV", {"HERDR_ENV": None}),
+                       ("sem HERDR_PANE_ID", {"HERDR_PANE_ID": None}),
+                       ("HERDR_PANE_ID vazio", {"HERDR_PANE_ID": ""}),
+                       ("sem HERDR_BIN_PATH", {"HERDR_BIN_PATH": None})):
+        with tempfile.TemporaryDirectory() as tmp:
+            p, argvs, log, statuses = herdr_scenario(tmp, env=env)
+            check(f"herdr ({label}): nada chamado", not log.exists(), str(argvs))
+            check(f"herdr ({label}): a run termina normal com os dois itens done",
+                  p.returncode == 0 and statuses == ["done", "done"],
+                  f"{p.returncode} {statuses} {p.stderr[-200:]}")
+
+
+def test_a_broken_or_slow_herdr_does_not_change_the_run():
+    for label, body in (("lento (30 s) e exit 1", "time.sleep(30); sys.exit(1)"),
+                        ("exit 1", "sys.exit(1)")):
+        with tempfile.TemporaryDirectory() as tmp:
+            t0 = time.time()
+            p, argvs, log, statuses = herdr_scenario(tmp, herdr_body=body)
+            took = time.time() - t0
+            check(f"herdr {label}: a run termina normal com os dois itens done",
+                  p.returncode == 0 and statuses == ["done", "done"],
+                  f"{p.returncode} {statuses} {p.stderr[-200:]}")
+            reports = [a for a in argvs if a[1] == "report-agent"]
+            check(f"herdr {label}: os dois relatórios foram tentados e a liberação "
+                  "também, por último", len(reports) == 2 and len(argvs) == 3
+                  and argvs[-1][1] == "release-agent", str(argvs))
+            # Bound: 2 reports + 1 release x 1 s timeout = 3 s, plus the normal run of
+            # this queue (about 2 s measured) = about 5 s; 20 s leaves 4x headroom for
+            # a loaded machine and is still far below 3 x 30 s = 90 s, which is what a
+            # run with no timeout (or a 30 s one) would take.
+            check(f"herdr {label}: o timeout de 1 s limita a duração da run (< 20 s)",
+                  took < 20, f"{took:.1f}s")
+
+
+# ── herdr: reports carry `cepa until pending --repo <path>` as resume command (CS-6) ──
+
+def test_herdr_reports_carry_the_pending_command_as_resume_argv():
+    """CS-6 of docs/spec/herdr-agent-status.md: each report-agent ends in
+    `-- cepa until pending --repo <absolute repo path>`; never the launch command."""
+    with tempfile.TemporaryDirectory() as tmp:
+        p, argvs, log, _ = herdr_scenario(tmp)
+        root = str((Path(tmp) / "repo").resolve())
+        reports = [a for a in argvs if a[1] == "report-agent"]
+        releases = [a for a in argvs if a[1] == "release-agent"]
+        check("herdr resume: dois relatórios", len(reports) == 2, str(argvs) + p.stderr[-200:])
+        tail = ["--", "cepa", "until", "pending", "--repo", root]
+        for a in reports:
+            check("herdr resume: o relatório termina em `-- cepa until pending --repo <raiz>`",
+                  a[-len(tail):] == tail and a.count("--") == 1, str(a))
+            after = a[a.index("--") + 1:] if "--" in a else []
+            check("herdr resume: depois de `--` não há --for, --until nem o nome da fila",
+                  not any(t in ("--for", "--until", "fila") or "fila" in t for t in after),
+                  str(after))
+            check("herdr resume: o --seq vem antes de `--`",
+                  "--seq" in a and "--" in a and a.index("--seq") < a.index("--"), str(a))
+        check("herdr resume: a liberação não leva `--`",
+              len(releases) == 1 and "--" not in releases[0], str(releases))
+
+
+def test_herdr_resume_argv_is_omitted_when_the_repo_path_has_an_apostrophe():
+    """herdr rejects such an argv (`invalid_resume_argv`): no `--` part at all, and the
+    report still says `working`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        p, argvs, log, _ = herdr_scenario(tmp, repo_name="o'repo")
+        reports = [a for a in argvs if a[1] == "report-agent"]
+        check("herdr resume (apóstrofo): dois relatórios foram feitos", len(reports) == 2,
+              str(argvs) + p.stderr[-200:])
+        for a in reports:
+            check("herdr resume (apóstrofo): sem `--` e ainda `--state working`",
+                  "--" not in a and a[a.index("--state") + 1] == "working", str(a))
+
+
+def test_herdr_resume_argv_names_the_main_clone_when_run_from_a_linked_worktree():
+    """CS-6: the worktree of a run is removed after `land`, so the resume command must
+    point at the main clone, never at the worktree the run was started from."""
+    with tempfile.TemporaryDirectory() as tmp:
+        p, argvs, log, _ = herdr_scenario(tmp, from_worktree=True)
+        main = str((Path(tmp) / "repo").resolve())
+        linked = str((Path(tmp) / "linked").resolve())
+        reports = [a for a in argvs if a[1] == "report-agent"]
+        check("herdr worktree: dois relatórios", len(reports) == 2,
+              str(argvs) + p.stderr[-300:])
+        tail = ["--", "cepa", "until", "pending", "--repo", main]
+        for a in reports:
+            check("herdr worktree: termina em `--repo <clone principal>`",
+                  a[-len(tail):] == tail, str(a))
+            check("herdr worktree: o caminho do worktree não aparece depois de `--`",
+                  "--" in a and not any(linked in t for t in a[a.index("--"):]), str(a))
+
+
+# ── herdr: outside herdr nothing is called; a broken herdr changes nothing (CS-5) ──
+
+# Ledger keys that differ between two runs of the same queue (clock, per-run ids,
+# tmp-repo commit hashes); everything else must match event by event.
+VOLATILE_LEDGER_KEYS = frozenset({
+    "quando", "prazo", "restante_seg", "segundos", "session_id", "pid", "host",
+    "branch", "arvore", "base", "head"})
+
+
+def normalized_ledger(root):
+    return [{k: v for k, v in ev.items() if k not in VOLATILE_LEDGER_KEYS}
+            for ev in ledger_of(root)]
+
+
+def timed_herdr_scenario(herdr_body="", env=None):
+    """herdr_scenario in its own tmp dir; returns (process, argvs, log existed,
+    normalized ledger, wall seconds). The log path dies with the tmp dir, so only
+    whether it existed is returned."""
+    with tempfile.TemporaryDirectory() as tmp:
+        t0 = time.time()
+        p, argvs, log, _ = herdr_scenario(tmp, herdr_body=herdr_body, env=env)
+        took = time.time() - t0
+        return p, argvs, log.exists(), normalized_ledger(Path(tmp) / "repo"), took
+
+
+def test_herdr_outside_or_broken_leaves_the_run_and_its_ledger_unchanged():
+    """CS-5 (a) and (b) of docs/spec/herdr-agent-status.md."""
+    # (a) outside herdr: no log; the ledger is the one of the run under a working herdr.
+    pb, argvb, logb, ledger_base, took_base = timed_herdr_scenario(env={"HERDR_ENV": None})
+    check("herdr (a): sem HERDR_ENV nenhum log foi criado", not logb, str(argvb))
+    check("herdr (a): a run base termina com exit 0 e ledger não vazio",
+          pb.returncode == 0 and len(ledger_base) > 0, f"{pb.returncode} {pb.stderr[-200:]}")
+    pw, argvw, _, ledger_w, _ = timed_herdr_scenario()
+    check("herdr (a): com herdr funcionando, mesmo exit code e ledger evento a evento",
+          pw.returncode == pb.returncode and ledger_w == ledger_base,
+          f"{pw.returncode} vs {pb.returncode}\n{ledger_w}\n{ledger_base}")
+    # (b) herdr that sleeps 30 s and exits 1.
+    ps, args_s, _, ledger_s, took_slow = timed_herdr_scenario(
+        herdr_body="time.sleep(30); sys.exit(1)")
+    n_calls = len(args_s)
+    check("herdr (b): foram 3 chamadas (2 relatórios + 1 liberação), senão o limite é vazio",
+          n_calls == 3, str(args_s))
+    check("herdr (b): mesmo exit code e ledger do baseline",
+          ps.returncode == pb.returncode and ledger_s == ledger_base,
+          f"{ps.returncode} vs {pb.returncode}\n{ledger_s}\n{ledger_base}")
+    # Bound: each call may cost at most its 1 s timeout, so the slow run takes at most
+    # 3 calls x 1 s = 3 s more than the baseline; the spec allows < 2 s per call
+    # (3 x 2 = 6 s of slack, 3 s of it headroom for jitter). A run with no timeout (or
+    # a 30 s one) would add 3 x 30 = 90 s.
+    check("herdr (b): a run lenta leva menos de 2 s a mais por chamada que o baseline",
+          took_slow < took_base + 2 * n_calls,
+          f"base={took_base:.1f}s lenta={took_slow:.1f}s chamadas={n_calls}")
+
+
+def test_herdr_is_not_called_from_a_subcommand():
+    """CS-5 (c): `cepa until pending` with HERDR_ENV=1 creates no herdr log."""
+    with tempfile.TemporaryDirectory() as tmp:
+        p, argvs, log, statuses = herdr_scenario(tmp)
+        check("herdr (c): a run de preparação chamou o herdr (log existe)",
+              log.exists() and p.returncode == 0, p.stderr[-200:])
+        log.unlink()
+        env = dict(os.environ)
+        for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
+            env.pop(k, None)
+        env.update({"HERDR_ENV": "1", "HERDR_PANE_ID": "w9:p9",
+                    "HERDR_BIN_PATH": str(Path(tmp) / "herdr")})
+        env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
+        q = subprocess.run([sys.executable, str(CEPA_UNTIL), "pending",
+                            "--repo", str(Path(tmp) / "repo")],
+                           capture_output=True, text=True, env=env, timeout=60)
+        check("herdr (c): `pending` sai com 0", q.returncode == 0,
+              f"{q.returncode} {q.stderr[-200:]}")
+        check("herdr (c): `pending` não chamou o herdr (nenhum log)", not log.exists(),
+              log.read_text() if log.exists() else "")
+
+
+# ── herdr: the pane is released on every exit (CS-3) ────────────────────────
+
+def herdr_release_env(tmp):
+    """A fake `herdr` that appends argv as JSON lines to a log. Returns (env, log)."""
+    herdr = Path(tmp) / "herdr"
+    log = Path(tmp) / "herdr.log"
+    herdr.write_text(f"#!{sys.executable}\n"
+                     "import sys, json\n"
+                     f"open({str(log)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
+    herdr.chmod(0o755)
+    for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
+        os.environ.pop(k, None)
+    return ({"HERDR_ENV": "1", "HERDR_PANE_ID": "w9:p9", "HERDR_BIN_PATH": str(herdr)},
+            log)
+
+
+def check_released_last(label, log):
+    """CS-3: the last log line is the release, with a --seq above every earlier one."""
+    lines = ([json.loads(l) for l in log.read_text().splitlines()]
+             if log.exists() else [])
+    head = ["pane", "release-agent", "w9:p9", "--source", "cepa-until",
+            "--agent", "cepa-until", "--seq"]
+    ok = bool(lines) and lines[-1][:len(head)] == head and len(lines[-1]) == len(head) + 1
+    check(f"herdr ({label}): a última linha é a liberação do painel", ok,
+          str(lines[-3:]))
+    if ok:
+        seqs = [int(a[a.index("--seq") + 1]) for a in lines]
+        check(f"herdr ({label}): --seq da liberação maior que todos os anteriores",
+              seqs[-1] > max(seqs[:-1], default=0), str(seqs))
+        check(f"herdr ({label}): uma única liberação",
+              sum(a[1] == "release-agent" for a in lines) == 1, str(lines))
+    return lines
+
+
+def release_run(label, items, claude_body, args, only_release=False):
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, items)
+        binv = fake_claude(tmp, claude_body)
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        env, log = herdr_release_env(tmp)
+        p, calls = run_until(root, binv, plan, args, extra_env=env)
+        lines = check_released_last(label, log)
+        if only_release:
+            check(f"herdr ({label}): o log tem só a liberação (nenhum item começou)",
+                  len(lines) == 1, str(lines))
+        return p, calls
+
+
+def test_herdr_pane_is_released_at_the_end_of_the_queue():
+    release_run("fim da fila", [item("a1")],
+                "i = primeiro_pendente()\n"
+                "if i: marca(i, status='done', evidence='ok')", ["--for", "2h"])
+
+
+def test_herdr_pane_is_released_at_the_end_of_the_window():
+    # parse_duration takes only h/m: 0.02m = 1.2 s, the "--for 1s" of the spec.
+    release_run("fim da janela", [item("a1"), item("a2")],
+                "time.sleep(2)\n"
+                "i = primeiro_pendente()\n"
+                "if i: marca(i, status='done', evidence='ok')", ["--for", "0.02m"],
+                only_release=True)
+
+
+def test_herdr_pane_is_released_by_the_circuit_breaker():
+    p, calls = release_run("disjuntor", [item(f"a{n}") for n in range(1, 5)],
+                           "pass", ["--for", "2h", "--max-failures", "3"])
+    check("herdr (disjuntor): o disjuntor realmente disparou (3 chamadas)",
+          len(calls) == 3, f"{len(calls)} {p.stderr[-200:]}")
+
+
+def test_herdr_pane_is_released_when_a_blocked_item_stops_the_batch():
+    p, calls = release_run(
+        "blocked", [item("a1"), item("a2")],
+        "marca(primeiro_pendente(), status='blocked', evidence='API fora')",
+        ["--for", "2h", "--max-blocked", "1"])
+    check("herdr (blocked): parou no primeiro blocked (1 chamada)", len(calls) == 1,
+          f"{len(calls)} {p.stderr[-200:]}")
 
 
 def main():

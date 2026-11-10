@@ -1,0 +1,47 @@
+schema_version: 2
+card: herdr-agent-status-CS-2
+verdict: proven
+reviewed_at: 2026-11-09T22:00:00-03:00
+base_commit: df508a0
+head_commit: 4347cdc
+issue_type: Story
+scope:
+  topology: build-solo (Python harness, not Quarkus; PIT not applicable, perturbation used)
+  criterion: "CS-2 of docs/spec/herdr-agent-status.md: during a 5h quota pause cepa-until keeps reporting `working` and the message says it is paused and until when (HH:MM resume time), before the next item's report"
+  covering_test: "tests/test_cepa_until_quota.py: test_herdr_keeps_working_and_says_until_when_during_the_pause_before_an_item, test_herdr_keeps_working_and_says_until_when_after_hitting_the_ceiling"
+  changed_classes:
+    - class: "common/bin/cepa-until :: main() herdr_report call before wait_until (before-item quota_pause), line 3932; behavior unchanged since f395cf7, 4347cdc only strengthened the tests"
+      module: common
+      external_observable: true
+      substituted_by_double: null   # real cepa-until runs as a subprocess; only herdr and claude are fakes at the far boundary
+    - class: "common/bin/cepa-until :: main() herdr_report call before wait_until (item cut by usage ceiling), line 4413"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline green at 4347cdc in throwaway worktree /tmp/proof-cs2c: the 2 CS-2 tests, 9 + 8 checks ok, DONE failures: []"
+        - "site A (before item), 5 of 5 KILLED: remove call -> FAIL 'um relatório de pausa'; 'paused'->'running' -> same FAIL; %H:%M->%H%M -> FAIL 'a pausa diz até quando' (got '...until 2143'); call moved after wait_until -> FAIL 'a pausa sai durante a espera, antes da retomada' (enviada 1794271506.1, retomada 1794271506.0); wake_at->reset -> FAIL 'a pausa diz até quando' (got 21:45, expected 21:46)"
+        - "site B (ceiling), 5 of 5 KILLED: remove call -> FAIL 'um relatório de pausa'; 'paused'->'running' -> same FAIL; %H:%M->%H%M -> FAIL 'a pausa diz até quando' (got '...until 2150'); call moved after wait_until -> FAIL 'a pausa sai durante a espera, antes da retomada' (enviada 1794271910.0, retomada 1794271910.0); wake_at->reset_at -> FAIL 'a pausa diz até quando' (got 21:52, expected 21:53)"
+        - "the two survivors of the previous round at f395cf7 (call after wait_until; reset instead of wake_at) are now RED at both sites, closed by 4347cdc (send-time log in the fake herdr, 60 s margin)"
+        - "caveat, not a gap: in the moved-after-wait perturbation the sent/resume timestamps differ by 0.0 to 0.1 s, so that check is sharp only because the test compares strictly; it is red in both runs"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; both changed call sites are reached by the two covering tests through the real cepa-until process: removing either call turns exactly its test red (python3 run_cs2.py in the worktree calling the 2 herdr tests: A:remove and B:remove each FAIL 'um relatório de pausa')"
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff adds an outbound herdr_report message built from queue name and a local datetime; it parses no input from outside and touches no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is not Bug"
+routing_reason: "Same shape as the settled precedent herdr-agent-status-CS-1 (Python harness, real subprocess, no double on the changed code, no coverage tool in repo). All 10 perturbations (5 per call site: call removed, wording, time format, call after the wait, reset instead of resume time) turn the CS-2 tests red, including the two that survived at f395cf7. Computed verdict: PROVEN."

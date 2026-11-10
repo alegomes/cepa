@@ -1,0 +1,46 @@
+schema_version: 2
+card: slice-guard
+verdict: needs-human
+reviewed_at: 2026-11-09T22:00:00-03:00
+base_commit: 91f237e
+head_commit: 91f237e (diff uncommitted)
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/_wtlib.py", module: common, external_observable: false, substituted_by_double: null }
+    - { class: "common/hooks/session-registry.py", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "shell/python repo, PIT not applicable"
+    perturbation:
+      status: pass
+      results:
+        - "baseline (diff applied in detached worktree): python3 tests/test_cepa_slice_isolation.py -> 13 ok, 'all ok'"
+        - "RED  drop PICK=0 clause (cepa:626) -> FAIL '-s with no name from a linked worktree runs the picker' (was survivor in round 1)"
+        - "RED  drop abort printf (cepa:644) -> FAIL '-s failure exits non-zero with cepa's own message' (was survivor in round 1)"
+        - "RED  drop len(dirs)==2 guard (_wtlib.py:166) -> Traceback in is_linked_worktree outside repo test (was survivor in round 1)"
+        - "RED  drop '-z SLICE' clause -> FAIL '-s from a linked worktree opens the named one'"
+        - "RED  drop git-dir != common-dir clause -> FAIL 'occupied main tree on session/* isolates the new session'"
+        - "RED  abort branch disabled (if false) -> FAIL 'opens nothing' + exit/message"
+        - "RED  exit 1 -> exit 0 -> FAIL '-s failure exits non-zero'"
+        - "RED  is_linked_worktree always True -> FAIL outside-repo, registry, autosave"
+        - "RED  registry on_start call site reverted -> FAIL registry flag test"
+        - "RED  registry on_end call site reverted -> FAIL autosave main-tree test"
+        - "round 1 also: git-dir clause inverted, is_linked always False, drop 'not' -> RED"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for shell; not measured. Perturbation shows each changed line is load-bearing, but line coverage itself was not produced"
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff changes session isolation decisions in a CLI wrapper and hooks; no HTTP or parsed external input surface, no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Every changed behaviour line, including the 3 round-1 survivors, goes RED when broken. Only L2 (line coverage) is assumed because the repo has no coverage tool for shell; that structurally blocks PROVEN, so NEEDS-HUMAN with a suggested waiver."

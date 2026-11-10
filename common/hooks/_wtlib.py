@@ -155,6 +155,17 @@ def session_root(cwd) -> str:
     return root or os.path.abspath(str(cwd))
 
 
+def is_linked_worktree(cwd) -> bool:
+    """True in a worktree added with `git worktree add`, false in the main tree.
+
+    A `session/*` branch name proves nothing: the main tree can sit on one.
+    """
+    rc, out, _ = git(["rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir"],
+                     cwd=cwd)
+    dirs = out.splitlines() if rc == 0 else []
+    return len(dirs) == 2 and not same_path(dirs[0], dirs[1])
+
+
 def current_branch(cwd) -> str:
     rc, out, _ = git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
     return out if rc == 0 else ""

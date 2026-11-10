@@ -1,0 +1,15 @@
+key: herdr-agent-status-CS-6
+head: 3a92493
+status: complete
+criteria:
+  - id: AC1
+    text: "every `cepa-until` report carries `cepa until pending --repo <absolute repo path>` as herdr's resume command, never the command that started the run; in the CS-1 harness every `pane report-agent` line ends in `-- cepa until pending --repo <the test repo's absolute path>`, no line contains `--for`, `--until` or the queue name after `--`; with an apostrophe in the repo path the reports carry no `--` part and still report `working`"
+    altitude: cli
+    surface: "common/bin/cepa-until run as a subprocess over a tmp git repo, with a fake herdr (HERDR_BIN_PATH) that logs each argv; assertions on the logged `pane report-agent` argv"
+    test: "tests/test_cepa_until.py::test_herdr_reports_carry_the_pending_command_as_resume_argv (2 reports, each ends in ['--','cepa','until','pending','--repo',<resolved repo>], exactly one `--`, nothing after `--` is --for/--until/the queue name, --seq before `--`, the release-agent has no `--`) and ::test_herdr_resume_argv_is_omitted_when_the_repo_path_has_an_apostrophe (repo dir `o'repo`: 2 reports, no `--`, `--state working`); ::test_herdr_resume_argv_names_the_main_clone_when_run_from_a_linked_worktree (cepa-until run with `--repo <linked worktree>`: 2 reports, each ends in `--repo <main clone>`, the worktree path appears nowhere after `--`); plus tests/test_cepa_prove.py::test_herdr_reports_each_round_with_the_cards_handled_and_releases_at_the_end now pins that cepa-prove sends no `--`"
+    layer: cli (subprocess, fake herdr)
+    evidence: verified
+    run: "cd tests && python3 -I -c 'import sys; sys.path.insert(0,\".\"); import test_cepa_until as t, test_cepa_prove as p; t.test_herdr_reports_carry_the_pending_command_as_resume_argv(); t.test_herdr_resume_argv_is_omitted_when_the_repo_path_has_an_apostrophe(); print(t.FAILURES); p.test_herdr_reports_each_round_with_the_cards_handled_and_releases_at_the_end()' -> added worktree test: 5 'ok' lines; 11 'ok' lines for the two other until tests, FAILURES [], 10 'ok' lines for the prove test, no failing check, ~6 s. Run by the auditor, foreground, only these four tests (head 3a92493; common/bin/cepa-until unchanged since ef2f68f) (no full suite)."
+    status: complete
+    gap: ""
+note: "Implementation reports str(main_root(repo).resolve()), the MAIN clone. In the plain-clone test that equals the repo (literal criterion). In a linked worktree it is the main clone by design (the worktree is removed after land), and commit 3a92493 now pins that with a test, which the auditor ran green, so the earlier untested-worktree caveat is closed. Caveats: (1) check() does not fail pytest, so the import/script run is the real evidence. (2) Perturbations were not reproduced by the auditor. (3) The apostrophe test uses a plain clone, so it exercises the omission via the same function."

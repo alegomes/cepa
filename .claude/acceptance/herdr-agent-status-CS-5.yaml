@@ -1,0 +1,14 @@
+key: herdr-agent-status-CS-5
+status: complete
+criteria:
+  - id: AC1
+    text: "outside herdr nothing is called, and a broken herdr changes neither the duration nor the result of a run"
+    altitude: cli
+    surface: "common/bin/cepa-until run as a subprocess (python3 cepa-until) over a tmp repo, with a fake herdr (HERDR_BIN_PATH) that logs argv; (a) without HERDR_ENV, (b) fake herdr that sleeps 30 s and exits 1, (c) the `pending` subcommand with HERDR_ENV=1"
+    test: "tests/test_cepa_until.py::test_herdr_outside_or_broken_leaves_the_run_and_its_ledger_unchanged ((a) no log without HERDR_ENV, ledger equal event by event to the working-herdr run with times, per-run ids and tmp commit hashes dropped, rc equal; (b) slow/failing herdr: 3 calls, same rc and ledger, wall time < baseline + 2 s x 3 calls) and ::test_herdr_is_not_called_from_a_subcommand ((c) preparation run proves the fake herdr is reachable, then `cepa-until pending --repo` with HERDR_ENV=1 exits 0 and creates no log)"
+    layer: cli (subprocess, fake herdr)
+    evidence: verified
+    run: "cd tests && python3 -I -c 'import test_cepa_until as t; t.test_herdr_is_not_called_from_a_subcommand(); t.test_herdr_outside_or_broken_leaves_the_run_and_its_ledger_unchanged()' -> 9 'ok' lines (3 for (c), 6 for (a)/(b)), no failing check, 11.5 s total. Run by the auditor, foreground, only these two tests (no full suite, per the overnight rule)."
+    status: complete
+    gap: ""
+note: "Test-only commit 95ae081; the behavior already existed (_herdr_call gate on HERDR_ENV/HERDR_PANE_ID/HERDR_BIN_PATH with HERDR_TIMEOUT_SEC=1; main releases only when _herdr_armed). Guard tests, so no red-first. Orchestrator reported perturbations red: gate without the HERDR_ENV check -> (a) red; _herdr_armed=True at top of _main -> (c) red; HERDR_TIMEOUT_SEC=30 -> (b) red (2.0 s vs 91.9 s); the auditor did not reproduce the perturbations. Caveats: (1) the spec says 'the CS-1 run' ledger; the test compares to the working-herdr run of the same scenario, which is the CS-1 run. (2) Ledger comparison drops volatile keys (quando, prazo, restante_seg, segundos, session_id, pid, host, branch, arvore, base, head); a regression confined to those keys would not be caught. (3) The time bound is baseline + 2 s per call (6 s slack for 3 calls), looser than a literal reading of 'less than 2 s more', but still far under the 90 s a 30 s timeout adds. (4) check() does not fail pytest, so the script/import run is the real evidence."

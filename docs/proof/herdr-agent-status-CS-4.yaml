@@ -1,0 +1,63 @@
+schema_version: 2
+card: herdr-agent-status-CS-4
+verdict: proven
+reviewed_at: 2026-11-10T00:30:00-03:00
+base_commit: 00ef9dc
+head_commit: d5912cc
+issue_type: Story
+scope:
+  topology: build-solo (Python harness, not Quarkus; PIT not applicable, perturbation used)
+  criterion: "CS-4 of docs/spec/herdr-agent-status.md (cli): `cepa-prove` reports `working` as agent `cepa-prove` with the round number and the handled cards, and releases the pane on every exit"
+  covering_tests: "tests/test_cepa_prove.py: test_herdr_reports_each_round_with_the_cards_handled_and_releases_at_the_end / _pane_is_released_by_the_circuit_breaker_and_the_cap / _pane_is_released_when_the_window_is_smaller_than_the_reserve / _pane_is_released_on_sigterm_and_ctrl_c_mid_round / _is_not_called_by_refused_starts_dry_run_or_outside_herdr / test_herdr_message_counts_the_handled_cards_and_shows_only_the_last_five (added in d5912cc); for the cepa-until default agent: test_herdr_* in tests/test_cepa_until.py"
+  changed_classes:
+    - class: "common/bin/cepa-prove :: main() try/finally over _main(), line 337-345"
+      module: common
+      external_observable: true
+      substituted_by_double: null   # real cepa-prove runs as a subprocess; only herdr and claude are fakes at the far boundary
+    - class: "common/bin/cepa-prove :: _herdr_armed = True after the signal handlers, line 564"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-prove :: U.herdr_report(herdr_round_message(...), HERDR_AGENT) per round, line 612"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-prove :: herdr_round_message, lines 323-332 (round number, handled count, last-5 cap)"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until :: _herdr_call / herdr_report / herdr_release `agent` parameter, lines 1083-1129"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline green at d5912cc in throwaway worktree /tmp/proof-cs4c (removed afterwards): python3 tests/test_cepa_prove.py -> '25 teste(s) ok', 111 ok lines, 0 FAIL, exit 0. Production code unchanged since 778bda6 (git diff 778bda6 d5912cc touches only tests/test_cepa_prove.py, +19 lines)"
+        - "KILLED P6 (drops `handled N: ` from the message, prove line 331), re-run at d5912cc: exit 1, 2 FAIL ('a 2ª diz `handled 1: WEGO-1`' got 'round 2 · WEGO-1'; 'a 8ª conta 7 e mostra só os 5 últimos'). Earlier survivor now load-bearing"
+        - "KILLED P7 (HERDR_KEYS_SHOWN 5 -> 50, prove line 320), re-run: exit 1, 1 FAIL ('a 8ª conta 7 e mostra só os 5 últimos', got all 7 keys). Earlier survivor now load-bearing"
+        - "KILLED P8 (handled[:N] instead of handled[-N:], prove line 329), re-run: exit 1, 1 FAIL ('a 8ª conta 7 e mostra só os 5 últimos', got WEGO-1..5). Earlier survivor now load-bearing"
+        - "KILLED P1 spot-check (no release in the finally, prove line 345), re-run at d5912cc: exit 1, 7 FAIL"
+        - "KILLED P3 spot-check (no per-round report, prove line 612), re-run at d5912cc: exit 1, 4 FAIL"
+        - "KILLED, previous pass at 778bda6 (production code identical, not re-run): P2 (_herdr_armed = False, 7 FAIL); P4 (report without the cepa-prove agent, 1 FAIL); P5 (release without the cepa-prove agent, 6 FAIL); P9 (cepa-until _herdr_call hardcodes --source cepa-until, 7 FAIL); P10 (hardcodes --agent cepa-until, 7 FAIL); P11 (herdr_report default agent 'x', 1 FAIL in test_cepa_until); P12 (herdr_release default agent 'x', 5 FAIL in test_cepa_until); P14 (release on normal return only, not in the finally, 2 FAIL: SIGTERM and SIGINT mid-round)"
+        - "EQUIVALENT P13 (default agent of cepa-until _herdr_call, line 1083, set to 'x'): 0 FAIL, but every caller passes agent explicitly, so the default is unreachable. Not counted as a gap"
+        - "RED AT BASE (previous pass): with common/bin/cepa-prove and common/bin/cepa-until reverted to 00ef9dc and the HEAD tests, python3 tests/test_cepa_prove.py exit 1 with 10 FAIL; restored, exit 0"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every changed line is reached through the real cepa-prove process; lines 320, 329, 331 are now constrained by the 7-card test (P6-P8 RED)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff adds an outbound herdr call built from operator env vars (HERDR_PANE_ID, HERDR_BIN_PATH) and a message made of the round number and card keys the run already holds; it parses no input from outside and touches no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is not Bug (red-at-base of the new tests shown under l3: 10 FAIL at 00ef9dc code)"
+routing_reason: "The three survivors of the previous pass (P6 count, P7 cap, P8 last-five cut) are killed by test_herdr_message_counts_the_handled_cards_and_shows_only_the_last_five; P1 and P3 spot-checks still RED; earlier kills P2, P4, P5, P9-P12, P14 carried from 778bda6 (same production code). No survivors, no skipped level. Computed verdict: PROVEN."

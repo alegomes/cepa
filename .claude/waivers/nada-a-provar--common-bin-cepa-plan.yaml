@@ -1,0 +1,10 @@
+motivo: nada-a-provar
+escopo: common/bin/cepa-plan
+razao: 'L2 (cobertura) e L4 (entradas hostis) dispensadas no item cepa-plan-status-codigo-e-sem-epic:
+  a prova por perturbação quebrou 46 linhas alteradas e todas ficaram vermelhas em
+  tests/test_cepa_plan_status_code_and_epic.py; o repo não tem ferramenta de cobertura
+  para Python, e o comando só lê o git e a fila no terminal de quem o roda.'
+autor: alegomes
+criado_em: '2026-11-10'
+revisit_trigger: quando o repo ganhar ferramenta de cobertura para Python ou o cepa-plan
+  passar a rodar fora do terminal do dono
