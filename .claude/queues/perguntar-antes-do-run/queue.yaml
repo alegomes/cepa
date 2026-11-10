@@ -24,9 +24,23 @@ items:
     fila com 2 itens `pending` e 1 item com `human_pending` aberto, `cepa-until
     <fila> --dry` imprime uma linha com "2" itens que rodam e "1" que espera o dono;
     hoje o cabeçalho só traz "1st item" e a contagem de `pending` e `done`.'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  evidence: 'This is return 1 of 2: the item closed `done`, but the full build of
+    the run branch (`tests/run-all.sh`) exited 1, and the 2nd build exited 1. Output
+    in the `.log` of run 2026-11-10-1650. The commits of every attempt are in `until/2026-11-10-1650-vermelho-CS-1`
+    and the run branch went back to 532ec3b90a. The item went back to `pending`:
+    reuse the side branch (`git cherry-pick` or `git merge` inside the attempt)
+    or redo it; the supervisor''s build judges the result. Disabling or deleting
+    the failing test does not count as a fix.'
+  claimed_by:
+    session_id: 1380e317-5cb2-4f82-ac0b-9e70c9dfe599
+    pid: 98063
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-until-2026-11-10-1650
+    branch: until/2026-11-10-1650
+    started_at: '2026-11-10T20:56:13+00:00'
 - id: CS-2
   title: num terminal, a rota de um item aberto vira pergunta antes do primeiro
     item, e o "sim" faz o item rodar no mesmo run
