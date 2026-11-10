@@ -1727,6 +1727,74 @@ def test_hc_status_is_not_written_outside_an_hc_terminal_or_into_a_pipe():
               "]7501;" not in out and statuses == ["done", "done"], repr(out[-200:]))
 
 
+def _until_module():
+    """`cepa-until` loaded as a module, the way `cepa-prove` loads it."""
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader("cepa_until_under_test", str(CEPA_UNTIL))
+    mod = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+    loader.exec_module(mod)
+    return mod
+
+
+class _FakeTty:
+    def __init__(self, fail=False):
+        self.fail, self.written = fail, ""
+
+    def isatty(self):
+        return True
+
+    def write(self, text):
+        if self.fail:
+            raise OSError("terminal gone")
+        self.written += text
+
+    def flush(self):
+        if self.fail:
+            raise OSError("terminal gone")
+
+
+def _report_on_fake_tty(mod, tty, message, agent):
+    saved_out, saved_env = mod.sys.stdout, dict(os.environ)
+    for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
+        os.environ.pop(k, None)
+    os.environ["HC_TERMINAL_ID"] = "t9"
+    mod.sys.stdout = tty
+    try:
+        mod.herdr_report(message, agent)
+        mod.herdr_release(agent)
+    finally:
+        mod.sys.stdout = saved_out
+        os.environ.clear()
+        os.environ.update(saved_env)
+
+
+def test_hc_message_is_one_line_capped_at_200_utf8_and_names_the_agent():
+    import base64
+    mod = _until_module()
+    tty = _FakeTty()
+    _report_on_fake_tty(mod, tty, "fila  é:\n\titem " + "ã" * 300, "cepa-prove")
+    flat = ("fila é: item " + "ã" * 300)[:200]
+    wanted = ("\033]7501;state=working:app=cepa-prove:msg="
+              + base64.b64encode(flat.encode("utf-8")).decode() + "\033\\"
+              + "\033]7501;state=clear\033\\")
+    check("hc: mensagem numa linha só, cortada em 200 caracteres, utf-8, com o agente dado",
+          tty.written == wanted, repr(tty.written[:160]))
+    check("hc: o corte é em exatamente 200 caracteres", len(flat) == 200
+          and base64.b64encode(flat.encode("utf-8")).decode() in tty.written
+          and base64.b64encode((flat + "ã").encode("utf-8")).decode() not in tty.written)
+
+
+def test_hc_terminal_that_fails_to_write_does_not_break_the_report():
+    mod = _until_module()
+    try:
+        _report_on_fake_tty(mod, _FakeTty(fail=True), "fila: item 1/2 a1", "cepa-until")
+        raised = None
+    except Exception as e:  # noqa: BLE001
+        raised = e
+    check("hc: erro de escrita no terminal não propaga", raised is None, repr(raised))
+
+
 def main():
     print("cepa-until — supervisor de janela de tempo\n")
     for given_name, fn in sorted(globals().items()):
