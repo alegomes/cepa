@@ -1,0 +1,19 @@
+schema_version: 1
+card: run-all-timeout-por-arquivo
+status: complete
+audited_at: 2026-11-10T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "tests/run-all.sh aplica timeout por arquivo e marca o arquivo como falha ao estourar, em vez de a suíte ficar presa num teste travado."
+    altitude: cli
+    surface: "tests/run-all.sh (exit code e resumo [TIMEOUT Ns]) para as famílias script e pytest"
+    demonstrated_by:
+      test: "tests/test_run_all_timeout.py (cópia de run-all.sh em árvore temporária; fixtures que travam nas duas famílias + fixtures verdes)"
+      layer: "subprocess do run-all.sh; verifica fim rápido, exit != 0, linha [TIMEOUT 2s] no resumo, arquivo seguinte roda, sem filho órfão"
+      evidence: verified
+      run: |
+        python3 tests/test_run_all_timeout.py   (commit b49fd15)
+          19 checagens ok, 0 FAIL: 8 da família pytest (sem SKIP_PYTEST), 3 de SIGTERM, 8 da família script
+          tudo verde
+    verdict: complete
+    gap: null
