@@ -713,6 +713,78 @@ def test_herdr_message_counts_the_handled_cards_and_shows_only_the_last_five():
                              "WEGO-6, WEGO-7", msgs[7])
 
 
+# ── Herdr desktop app (herdr-core): status by OSC 7501 on the terminal ───────
+# The desktop app's terminals set `HC_TERMINAL_ID` and no `HERDR_*`; herdr-core reads
+# the status from an OSC 7501 sequence the program writes to its terminal.
+
+def run_prove_on_hc(root, binv, tmp, args, hc_id="t9", tty=True):
+    """`cepa-prove` as the desktop app runs it. Returns (exit code, stdout text)."""
+    import pty
+    env = dict(os.environ)
+    for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH", "HC_TERMINAL_ID"):
+        env.pop(k, None)
+    if hc_id:
+        env["HC_TERMINAL_ID"] = hc_id
+    env["PATH"] = f"{binv}:{env['PATH']}"
+    env["FAKE_TMP"] = str(tmp)
+    env["CEPA_UNTIL_GRACA_SIGTERM"] = "2"
+    argv = [sys.executable, str(CEPA_PROVE), "--repo", str(root)] + list(args)
+    if not tty:
+        r = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=120)
+        return r.returncode, r.stdout
+    master, slave = pty.openpty()
+    proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=slave,
+                            stderr=subprocess.DEVNULL, env=env)
+    os.close(slave)
+    chunks = []
+    while True:
+        try:
+            data = os.read(master, 65536)
+        except OSError:      # the last writer closed the pty
+            break
+        if not data:
+            break
+        chunks.append(data)
+    os.close(master)
+    return proc.wait(timeout=120), b"".join(chunks).decode("utf-8", "replace")
+
+
+def hc_prove_working(message):
+    import base64
+    return ("\033]7501;state=working:app=cepa-prove:msg="
+            + base64.b64encode(message.encode("utf-8")).decode() + "\033\\")
+
+
+def test_hc_terminal_shows_cepa_prove_working_per_round_and_is_cleared_at_the_end():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp)
+        binv = fake_claude(tmp, [("proof", "WEGO-1", "proven"),
+                                 ("proof", "WEGO-2", "needs-human")])
+        code, out = run_prove_on_hc(root, binv, tmp, ["--for", "2h"])
+        check("hc: o run termina 0", code == 0, out[-300:])
+        wanted = [hc_prove_working("round 1"),
+                  hc_prove_working("round 2 · handled 1: WEGO-1"),
+                  hc_prove_working("round 3 · handled 2: WEGO-1, WEGO-2")]
+        pos = [out.find(w) for w in wanted]
+        check("hc: um working por rodada, como cepa-prove, na ordem",
+              all(x >= 0 for x in pos) and pos == sorted(pos), str(pos))
+        clear = "\033]7501;state=clear\033\\"
+        check("hc: a última sequência 7501 é o clear, depois das três rodadas",
+              out.count("\033]7501;") == 4 and out.rfind("\033]7501;") == out.find(clear),
+              str(out.count("\033]7501;")))
+
+
+def test_hc_status_is_not_written_by_cepa_prove_outside_hc_or_into_a_pipe():
+    for label, kw in (("sem HC_TERMINAL_ID", {"hc_id": None}),
+                      ("stdout não é terminal", {"tty": False})):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = build_repo(tmp)
+            binv = fake_claude(tmp, [("proof", "WEGO-1", "proven")])
+            code, out = run_prove_on_hc(root, binv, tmp, ["--for", "2h"], **kw)
+            check(f"hc ({label}): o run termina 0 e nenhuma sequência 7501",
+                  code == 0 and "]7501;" not in out, repr(out[-200:]))
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:
