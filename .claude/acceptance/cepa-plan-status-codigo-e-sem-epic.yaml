@@ -1,0 +1,35 @@
+key: cepa-plan-status-codigo-e-sem-epic
+status: complete
+diff: 8f8acdd..working-tree (uncommitted)
+criteria:
+  - id: AC1
+    text: >
+      `cepa-plan status` confere no git se o código citado no item está no
+      main e mostra "código fora do main" (C1-17 digitacao, C1-18 faturamento).
+    altitude: cli
+    surface: cepa-plan status <fila> (texto e --json), cepa-plan show
+    test: tests/test_cepa_plan_status_code_and_epic.py
+    layer: cli (subprocess em repo git temporário)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_plan_status_code_and_epic.py -> "tudo verde"
+      (11 checks ok na seção de código). Além disso, cepa-plan status
+      kairos-etapa-1 --repo wego-faturamento-backend mostra para C1-18
+      "código fora do main: session/C1-18 (+24 commits),
+      until/2026-11-09-2017-travado-C1-18 (+19 commits)"; em
+      wego-digitacao-backend C1-17 não é acusado (fora: []).
+    gap: null
+  - id: AC2
+    text: >
+      `cepa-plan add` marca o item "sem Epic" e o `status` o conta à parte,
+      não como pronto para o agente.
+    altitude: cli
+    surface: cepa-plan add + cepa-plan status (texto e --json)
+    test: tests/test_cepa_plan_status_code_and_epic.py
+    layer: cli
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_plan_status_code_and_epic.py -> "tudo verde"
+      (8 checks ok na seção "item sem Epic"). Nos repos reais o resumo diz
+      "0 de 3 pendentes prontos para o agente / 3 sem Epic à parte". Reauditado após correção: suíte com 41 checks ok, "tudo verde"; JSON dos pendentes do faturamento traz pronto:false, pegavel:true; texto, tela (CEPA_COR=sempre) e show/status <id> dizem "pegável: não conta como pronto..." e nenhuma linha "pronto:".
+    gap: null

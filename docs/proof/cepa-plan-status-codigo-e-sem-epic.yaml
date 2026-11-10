@@ -1,0 +1,37 @@
+schema_version: 2
+card: cepa-plan-status-codigo-e-sem-epic
+verdict: needs-human
+reviewed_at: 2026-11-10T11:00:00-03:00
+base_commit: 8f8acdd
+head_commit: "working tree (uncommitted diff on 8f8acdd), round 4 (code and test unchanged since round 4)"
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan (code_location, _unmerged, _id_in, main_branch, local_branches, code_line, sem_epic, pegavel, owner_lines, cmd_status, item_detail, status_on_screen, cmd_add)", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "Python repo; PIT does not apply"
+    perturbation:
+      status: pass
+      results:
+        - "run: baseline in a throwaway worktree (8f8acdd + diff + test): python3 tests/test_cepa_plan_status_code_and_epic.py -> 'tudo verde'; tests/test_common_plan.py -> 'all green'; tests/test_cepa_plan_ready.py -> 'cepa-plan ready'."
+        - "run: 46 single-line perturbations (sed on the copy, test rerun after each); every one gives >=1 FAIL, including the round-3 survivor (`*([limit] if limit else [])` -> `*[]`, 1 FAIL via branch 'duas' / C17)."
+        - "Equivalent, not counted: is-ancestor shortcut alone (the `cherry full~1` check gives the same answer)."
+        - "Not isolated: the cherry->rev-list fallback in _unmerged (sed hit every `if rc != 0:` line at once)."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for Python scripts; reachability by test judged from the perturbations"
+  l4_adversarial_input:
+    status: skipped
+    reason: "branch names, commit text and queue YAML read from the repo; adversarial inputs not generated"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card"
+routing_reason: "Prova de carga completa (46 quebras, todas vermelhas). L2 'assumed' e L4 'skipped' mantem o veredito mecanico em NEEDS-HUMAN: o schema nao tem campo de dispensa e eu nao a aplico. O dono dispensou os dois em 2026-11-10 ('1. sim'); a dispensa esta em .claude/waivers/nada-a-provar--common-bin-cepa-plan.yaml (motivo nada-a-provar, autor alegomes, revisit_trigger gravado), que confere com o escopo e as razoes. Quem consome o gate aplica essa dispensa; o artefato nao vira proven."

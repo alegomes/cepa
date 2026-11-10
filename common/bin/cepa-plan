@@ -1529,6 +1529,109 @@ def single_track_queues(root):
     return names
 
 
+# ── where the item's code is, asked to git ───────────────────────────────────
+#
+# `evidence` is prose written once and it goes stale (owner, 2026-11-10,
+# fb-20261110-1): C1-17 of wego-digitacao-backend said "sem merge" after the
+# merge, and C1-18 of wego-faturamento-backend had 19 commits on a branch the
+# committed queue never named. So `status` asks git where the code cited by
+# the item is, instead of repeating the text.
+
+SHA_RE = re.compile(r"(?<![0-9A-Za-z])(?=[0-9a-f]*[0-9])[0-9a-f]{7,40}(?![0-9A-Za-z])")
+
+
+def main_branch(root):
+    """The ref `status` calls main: the local main (what is merged here),
+    else master, else the remote's."""
+    for ref in ("main", "master", "origin/HEAD", "origin/main"):
+        rc, out, _ = _git(root, "rev-parse", "--verify", "--quiet", ref + "^{commit}")
+        if rc == 0 and out.strip():
+            return ref
+    return None
+
+
+def local_branches(root):
+    rc, out, _ = _git(root, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+    return out.split() if rc == 0 else []
+
+
+def _id_in(ident, text):
+    return bool(ident) and re.search(
+        rf"(?<![A-Za-z0-9]){re.escape(ident)}(?![A-Za-z0-9])", text, re.I) is not None
+
+
+def _unmerged(root, ref, head, limit=None):
+    """How many commits of `head` (after `limit`) have no equivalent change in
+    `ref`. `git cherry` and not `rev-list`: a cherry-pick into main (C1-12 of
+    wego-faturamento-backend) is in main under another hash."""
+    rc, out, _ = _git(root, "cherry", ref, head, *([limit] if limit else []))
+    if rc != 0:
+        rc, out, _ = _git(root, "rev-list", "--count", f"{ref}..{head}")
+        return int(out.strip()) if rc == 0 and out.strip().isdigit() else 0
+    return sum(1 for line in out.splitlines() if line.startswith("+"))
+
+
+def code_location(root, it, ref, branches):
+    """{"ref", "fora", "no_main"} for the commits and branches the item points
+    at, or None when it points at nothing that exists in this repo.
+
+    Cited: a commit in `evidence`, `owner_summary` or `head_commit`; a branch
+    named in that text, the reservation's branch, or a local branch whose name
+    carries the item id as a whole token (the C1-18 branch the queue never
+    named). A branch counts as outside main when it has commits main lacks."""
+    text = " ".join(str(it.get(k) or "") for k in ("evidence", "owner_summary"))
+    ident = str(it.get("id") or "")
+    claimed = (it.get("claimed_by") or {}).get("branch")
+    base = ref.split("/")[-1]
+    cited = [b for b in branches
+             if b not in (ref, base, "main", "master")
+             and (b == claimed or _id_in(ident, b)
+                  or re.search(rf"(?<![\w/.-]){re.escape(b)}(?![\w/-])", text))]
+    fora, no_main, off_branches = [], [], []
+    for b in cited:
+        n = _unmerged(root, ref, b)
+        if n:
+            fora.append(f"{b} (+{n} commit{'s' if n > 1 else ''})")
+            off_branches.append(b)
+        else:
+            no_main.append(b)
+    seen = set()
+    for sha in (SHA_RE.findall(text)
+                + ([str(it["head_commit"])] if it.get("head_commit") else [])):
+        rc, out, _ = _git(root, "rev-parse", "--verify", "--quiet", sha + "^{commit}")
+        full = out.strip()
+        if rc != 0 or not full or full in seen:
+            continue
+        seen.add(full)
+        if (_git(root, "merge-base", "--is-ancestor", full, ref)[0] == 0
+                or not _unmerged(root, ref, full, full + "~1")):
+            no_main.append(sha[:12])
+        elif not any(_git(root, "merge-base", "--is-ancestor", full, b)[0] == 0
+                     for b in off_branches):
+            fora.append(sha[:12])
+    if not fora and not no_main:
+        return None
+    return {"ref": ref, "fora": fora, "no_main": no_main}
+
+
+def code_line(codigo):
+    """The status line, or None: only what is outside main is news."""
+    if not codigo or not codigo["fora"]:
+        return None
+    return f"código fora do {codigo['ref']}: " + ", ".join(codigo["fora"])
+
+
+def sem_epic(it):
+    """The item entered by `cepa-plan add`, so its domain decisions never went
+    through /common:epic (owner, 2026-11-10: C1-17 and C1-18). Older items
+    carry no flag; the phrase `add` writes into `why` gives them away."""
+    return it.get("sem_epic") is True or NOT_PRIORITIZED_PHRASE in str(it.get("why") or "")
+
+
+SEM_EPIC_LINE = "sem Epic: entrou por cepa-plan add, as decisões de domínio não passaram pelo /common:epic"
+PEGAVEL_LINE = "pegável: não conta como pronto, mas o próximo cepa-until pega mesmo sem Epic"
+
+
 def first_sentence(text, limit=160):
     t = " ".join(str(text or "").split())
     if len(t) <= limit:
@@ -1543,10 +1646,16 @@ def owner_lines(lines, queue):
     ones carrying a leftover task, and gave no way to answer them."""
     pending = [l for l in lines if l["status"] == "pending"]
     ready = [l for l in pending if l["pronto"]]
+    loose = [l for l in pending if l["sem_epic"]]
     out = [f"{len(ready)} de {len(pending)} pendentes prontos para o agente"
            + (": " + ", ".join(str(l["id"]) for l in ready) if ready else "")
-           + ("; os outros esperam você ou outro item" if len(ready) < len(pending)
-              else "")]
+           + ("; os outros esperam você ou outro item"
+              if len(ready) + len(loose) < len(pending) else "")]
+    if loose:
+        out.append(f"{len(loose)} sem Epic à parte: "
+                   + ", ".join(str(l["id"]) for l in loose)
+                   + " (entraram por cepa-plan add; o cepa-until pega os prontos, "
+                   "mas as decisões de domínio não passaram pelo /common:epic)")
     holding = [l for l in lines if l["status"] not in ("done", "dropped")
                and (l["human_pending"] is not None or l["status"] == "blocked")]
     leftover = [l for l in lines if l["status"] == "done"
@@ -1594,11 +1703,19 @@ def cmd_status(root, name, status_filter, as_json, item_id=None, via_show=False)
     ready_ids = {b["id"] for b in build_batch(
         items, 10 ** 6,
         reservation_state=lambda it: reservation_of(it, root))[0]}
+    ref = main_branch(root)
+    branches = local_branches(root) if ref else []
     lines = []
     for pos, it in enumerate(items, 1):
         owner = it.get("claimed_by") or {}
         lines.append({
-            "pronto": str(it.get("id")) in ready_ids,
+            # `pronto` leaves out the items with no Epic (owner, 2026-11-10);
+            # `pegavel` is still what build_batch hands a run, Epic or not.
+            "pronto": str(it.get("id")) in ready_ids and not sem_epic(it),
+            "pegavel": str(it.get("id")) in ready_ids,
+            "sem_epic": sem_epic(it),
+            "codigo": (code_location(root, it, ref, branches)
+                       if ref and status_of(it) != "dropped" else None),
             "posicao": pos, "id": it.get("id"), "title": it.get("title"),
             "status": status_of(it), "why": it.get("why"),
             "blocked_by": it.get("blocked_by") or [],
@@ -1635,7 +1752,10 @@ def cmd_status(root, name, status_filter, as_json, item_id=None, via_show=False)
         print(json.dumps({"program": qp.queue_name_of(plan, name),
                           "queue": qp.queue_name_of(plan, name),
                           "path": str(target), "total": len(lines),
-                          "por_status": counts, "prontos": len(ready_ids),
+                          "por_status": counts,
+                          "prontos": sum(1 for l in lines if l["pronto"]),
+                          "sem_epic": [l["id"] for l in lines if l["sem_epic"]
+                                       and l["status"] == "pending"],
                           "filtro": status_filter,
                           "items": visible}, ensure_ascii=False, indent=2))
         return 0
@@ -1655,8 +1775,14 @@ def cmd_status(root, name, status_filter, as_json, item_id=None, via_show=False)
         print(f"\n{grp_label} ({len(group)})")
         for l in group:
             print(f"  {l['posicao']:>3}. {l['id']} — {l['title']}")
+            if code_line(l["codigo"]):
+                print(f"       {code_line(l['codigo'])}")
             if st in ("done", "dropped"):
                 continue
+            if l["sem_epic"]:
+                print(f"       {SEM_EPIC_LINE}")
+            if l["pegavel"] and not l["pronto"]:
+                print(f"       {PEGAVEL_LINE}")
             if l["claimed_by"]:
                 c = l["claimed_by"]
                 print(f"       reservado: sessão {c['session_id'] or '?'}"
@@ -1919,12 +2045,17 @@ def item_detail(program, target, l, as_json, plan=None, root=None):
     ev = evidence_parts(l["evidence"])
     fields = [
         ("status", [f"{l['status']} ({label})"
-                    + (" · pronto: o próximo cepa-until pega" if l["pronto"] else "")]),
+                    + (" · pronto: o próximo cepa-until pega" if l["pronto"]
+                       else " · " + PEGAVEL_LINE if l.get("pegavel") else "")]),
         ("título", [l["title"]]),
         ("fonte", source_lines),
         ("por que nesta posição", why_parts(l["why"])),
         ("espera", [", ".join(map(str, l["blocked_by"]))] if l["blocked_by"] else []),
         ("ação humana", [l["human_pending"]] if l["human_pending"] else []),
+        ("código", ([code_line(l["codigo"])] if code_line(l.get("codigo"))
+                    else [f"no {l['codigo']['ref']}: " + ", ".join(l["codigo"]["no_main"])]
+                    if l.get("codigo") else [])),
+        ("sem Epic", [SEM_EPIC_LINE.split(": ", 1)[1]] if l.get("sem_epic") else []),
         ("evidência" + (" (mais recente primeiro)" if len(ev) > 1 else ""), ev),
         ("resumo para o dono", [l["owner_summary"]] if l["owner_summary"] else []),
         ("reservado", [f"sessão {c['session_id'] or '?'} na branch "
@@ -2016,6 +2147,9 @@ def status_on_screen(program, target, lines, counts, visible):
                 title = t.cut(" ".join(str(l["title"] or "").split()),
                                  max(w - 9 - col_width, 10))
                 print(num + t.c(color, ident) + "  " + t.c("cinza", title))
+                if code_line(l["codigo"]):
+                    for x in t.wrap("↳ " + code_line(l["codigo"]), 7, 9):
+                        print(t.c("vermelho", x))
                 continue
             if i:
                 print()
@@ -2025,6 +2159,13 @@ def status_on_screen(program, target, lines, counts, visible):
             details = []
             if l["pronto"]:
                 details.append(("pronto", "o próximo cepa-until pega", "verde"))
+            if l["sem_epic"]:
+                details.append(("sem Epic", SEM_EPIC_LINE.split(": ", 1)[1], "amarelo"))
+            if l["pegavel"] and not l["pronto"]:
+                details.append(("pegável", PEGAVEL_LINE.split(": ", 1)[1], "amarelo"))
+            if code_line(l["codigo"]):
+                details.append(("código", code_line(l["codigo"]).split("código ", 1)[1],
+                                "vermelho"))
             if l["claimed_by"]:
                 c = l["claimed_by"]
                 details.append(("reservado", f"sessão {c['session_id'] or '?'}"
@@ -3419,7 +3560,8 @@ def cmd_add(root, name, ident, a):
 
     new = normalize({"id": ident, "title": a.title, "why": why,
                       "status": "pending", "blocked_by": blockers,
-                      "human_pending": None, "evidence": None})
+                      "human_pending": None, "evidence": None,
+                      "sem_epic": True})
     new_items = list(items)
     new_items.insert(pos, new)
 
