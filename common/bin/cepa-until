@@ -1078,6 +1078,21 @@ def installed_twg_version():
 
 HERDR_TIMEOUT_SEC = 1
 _herdr_last_seq = 0
+# argv herdr runs to resume this pane (`cepa until pending --repo <path>`), set by the
+# main run only; `cepa-prove` loads this module and never sets it, so it sends none.
+_herdr_resume_argv = None
+
+
+def herdr_resume_argv(repo):
+    """`cepa until pending --repo <absolute main clone path>`, or None when herdr would refuse it:
+    herdr rejects a resume argv holding an apostrophe (`invalid_resume_argv`), and a
+    refused report would lose the `working` state, so the argv is left out instead."""
+    # The MAIN clone, not a linked worktree: the worktree of a run is removed after
+    # `land`, and `pending --repo <removed dir>` would silently list nothing.
+    path = str(Path(main_root(repo)).resolve())
+    if "'" in path:
+        return None
+    return ["cepa", "until", "pending", "--repo", path]
 
 
 def _herdr_call(args, agent="cepa-until"):
@@ -1091,10 +1106,13 @@ def _herdr_call(args, agent="cepa-until"):
     if env.get("HERDR_ENV") != "1" or not pane or not binary:
         return
     _herdr_last_seq = max(time.time_ns(), _herdr_last_seq + 1)
+    # Only `report-agent` carries the resume argv (after `--seq`, behind a `--`).
+    resume = (["--", *_herdr_resume_argv]
+              if _herdr_resume_argv and args[0] == "report-agent" else [])
     try:
         subprocess.run([binary, "pane", args[0], pane, "--source", agent,
                         "--agent", agent, *args[1:],
-                        "--seq", str(_herdr_last_seq)],
+                        "--seq", str(_herdr_last_seq), *resume],
                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL, timeout=HERDR_TIMEOUT_SEC)
     except Exception:  # noqa: BLE001 — timeout, missing binary, anything
@@ -3399,7 +3417,7 @@ def main(argv=None):
 
 
 def _main(argv=None):
-    global _herdr_armed
+    global _herdr_armed, _herdr_resume_argv
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] in ("land", "aterrissar"):
         return cmd_land(argv[1:])
@@ -3769,6 +3787,7 @@ def _main(argv=None):
     signal.signal(signal.SIGTERM, interrupt)
     signal.signal(signal.SIGINT, interrupt)
     _herdr_armed = True
+    _herdr_resume_argv = herdr_resume_argv(repo)
 
     def launched(child_pid):
         in_flight["pid_filho"] = child_pid

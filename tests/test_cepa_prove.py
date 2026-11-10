@@ -603,6 +603,8 @@ def test_herdr_reports_each_round_with_the_cards_handled_and_releases_at_the_end
                   msgs[2])
             check("herdr: a 1ª rodada não cita card nenhum",
                   "WEGO" not in msgs[0], msgs[0])
+        check("herdr: cepa-prove não manda comando de retomada (nenhum `--`)",
+              all("--" not in a for a in lines), str(lines))
         check_prove_released_last("fim da Review", lines)
 
 

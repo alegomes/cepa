@@ -56,7 +56,7 @@ def check(name, cond, detail=""):
 
 # ── scenario ────────────────────────────────────────────────────────────────
 
-def build_repo(tmp, item_list):
+def build_repo(tmp, item_list, name="repo"):
     """Git repo with a `queue` named `fila` and the requested items.
 
     The repo stays in `<tmp>/repo`, and NOT in the tmp root, because the fake `claude` and
@@ -64,7 +64,7 @@ def build_repo(tmp, item_list):
     the launch guard would refuse the run — which was exactly the first failure mode
     of these tests.
     """
-    root = Path(tmp) / "repo"
+    root = Path(tmp) / name
     root.mkdir(parents=True, exist_ok=True)
     d = root / ".claude" / "programs" / "fila"
     d.mkdir(parents=True)
@@ -1340,11 +1340,11 @@ def test_dirty_tree_stays_strict_for_the_other_callers():
             alive.wait()
 
 
-def herdr_scenario(tmp, herdr_body="", env=None):
+def herdr_scenario(tmp, herdr_body="", env=None, repo_name="repo"):
     """Run the two-item queue under a fake `herdr` (python; appends argv as JSON to a
     log, then runs `herdr_body`). Returns (process, argv list per report, log path,
     plan statuses)."""
-    root = build_repo(tmp, [item("a1"), item("a2")])
+    root = build_repo(tmp, [item("a1"), item("a2")], repo_name)
     binv = fake_claude(tmp, "i = primeiro_pendente()\n"
                             "if i: marca(i, status='done', evidence='ok')")
     herdr = Path(tmp) / "herdr"
@@ -1424,6 +1424,44 @@ def test_a_broken_or_slow_herdr_does_not_change_the_run():
             # run with no timeout (or a 30 s one) would take.
             check(f"herdr {label}: o timeout de 1 s limita a duração da run (< 20 s)",
                   took < 20, f"{took:.1f}s")
+
+
+# ── herdr: reports carry `cepa until pending --repo <path>` as resume command (CS-6) ──
+
+def test_herdr_reports_carry_the_pending_command_as_resume_argv():
+    """CS-6 of docs/spec/herdr-agent-status.md: each report-agent ends in
+    `-- cepa until pending --repo <absolute repo path>`; never the launch command."""
+    with tempfile.TemporaryDirectory() as tmp:
+        p, argvs, log, _ = herdr_scenario(tmp)
+        root = str((Path(tmp) / "repo").resolve())
+        reports = [a for a in argvs if a[1] == "report-agent"]
+        releases = [a for a in argvs if a[1] == "release-agent"]
+        check("herdr resume: dois relatórios", len(reports) == 2, str(argvs) + p.stderr[-200:])
+        tail = ["--", "cepa", "until", "pending", "--repo", root]
+        for a in reports:
+            check("herdr resume: o relatório termina em `-- cepa until pending --repo <raiz>`",
+                  a[-len(tail):] == tail and a.count("--") == 1, str(a))
+            after = a[a.index("--") + 1:] if "--" in a else []
+            check("herdr resume: depois de `--` não há --for, --until nem o nome da fila",
+                  not any(t in ("--for", "--until", "fila") or "fila" in t for t in after),
+                  str(after))
+            check("herdr resume: o --seq vem antes de `--`",
+                  "--seq" in a and "--" in a and a.index("--seq") < a.index("--"), str(a))
+        check("herdr resume: a liberação não leva `--`",
+              len(releases) == 1 and "--" not in releases[0], str(releases))
+
+
+def test_herdr_resume_argv_is_omitted_when_the_repo_path_has_an_apostrophe():
+    """herdr rejects such an argv (`invalid_resume_argv`): no `--` part at all, and the
+    report still says `working`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        p, argvs, log, _ = herdr_scenario(tmp, repo_name="o'repo")
+        reports = [a for a in argvs if a[1] == "report-agent"]
+        check("herdr resume (apóstrofo): dois relatórios foram feitos", len(reports) == 2,
+              str(argvs) + p.stderr[-200:])
+        for a in reports:
+            check("herdr resume (apóstrofo): sem `--` e ainda `--state working`",
+                  "--" not in a and a[a.index("--state") + 1] == "working", str(a))
 
 
 # ── herdr: outside herdr nothing is called; a broken herdr changes nothing (CS-5) ──
