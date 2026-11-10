@@ -950,6 +950,28 @@ def ladder_rows(text):
     return idx, rows, None
 
 
+def epic_unready(text):
+    """(status, open questions): the status when the Epic did not pass the
+    /common:epic screen (None when it did) and how many `- [ ]` questions are
+    still open. `from-epic` warns of both; `write --from-epic` refuses them
+    (see cmd_write)."""
+    m = re.search(r"^\*\*Status:\*\*\s*([^\s·*]+)", text, re.M)
+    status = m.group(1) if m else "None"
+    if status in ("ready", "closed", "pronta", "ready-to-build",
+                  "pronta-para-construir"):
+        status = None
+    return status, len(re.findall(r"^-\s+\[ \]", text, re.M))
+
+
+def unready_phrase(status, open_items):
+    parts = []
+    if status is not None:
+        parts.append(f"o Epic está com `Status: {status}`")
+    if open_items:
+        parts.append(f"{open_items} pergunta(s) em aberto")
+    return " e ".join(parts)
+
+
 def items_from_epic(text, cycle, path):
     """(demonstrates, items, warnings, error). One item per sentence of "O que
     atravessa" of the requested cycle, in text order; the cycle's script becomes
@@ -966,14 +988,13 @@ def items_from_epic(text, cycle, path):
     `human_pending` (see the note above RE_WAIT).
     """
     warnings = []
+    unready_status, open_items = epic_unready(text)
     m = re.search(r"^\*\*Status:\*\*\s*([^\s·*]+)", text, re.M)
     status = m.group(1) if m else None
-    if status not in ("ready", "closed", "pronta", "ready-to-build",
-                      "pronta-para-construir"):
+    if unready_status is not None:
         warnings.append(f"o Epic está com `Status: {status}` — só `ready` passou "
                       "pelo crivo do /common:epic (todo ciclo com roteiro e "
                       "efeito observável em tela e em backend)")
-    open_items = len(re.findall(r"^-\s+\[ \]", text, re.M))
     if open_items:
         warnings.append(f"{open_items} pergunta(s) ainda em aberto no Epic")
 
@@ -4514,6 +4535,22 @@ def cmd_write(root, a):
         if read_result is None:
             return 2
         epic_demonstrates, items, epic_source = read_result
+        # A draft Epic used to be only a warning. On 2026-11-04 a queue was
+        # written from one with 9 open questions, the warnings were filtered
+        # out of the output and the owner approved without seeing them: 16
+        # items had to be added over 15. A warning can be filtered; a refusal
+        # cannot, and the override stays written in the queue's `source`.
+        unready = unready_phrase(*epic_unready(
+            Path(a.from_epic).read_text(encoding="utf-8")))
+        if unready and not a.allow_draft:
+            print(f"recusa: {unready} — a fila de um ciclo só sai de um Epic "
+                  "`ready` e sem pergunta em aberto. Feche o Epic pelo "
+                  "/common:epic, ou, se o dono decidir escrever a fila assim "
+                  "mesmo, repita com --allow-draft (fica registrado na origem "
+                  "da fila). Nada foi gravado.", file=sys.stderr)
+            return 2
+        if unready:
+            epic_source += f"; escrita com --allow-draft: {unready}"
         error = None
     else:
         items, error = load_items(a.items)
@@ -5504,7 +5541,8 @@ def main(argv=None):
                    "the order of a triage")],
         exit_codes=[(0, "written (or printed, with --dry-run)"),
                     (2, f"invalid usage (no item source, --from-epic without --cycle), "
-                        f"{not_git}, invalid items"),
+                        f"{not_git}, invalid items, --from-epic of an Epic that is "
+                        "not `ready` or has an open question without --allow-draft"),
                     (3, "name collision: a waves plan, or an unreadable file on disk"),
                     (4, "the file on disk has items the new list does not mention "
                         "(see --on-missing)")])
@@ -5522,6 +5560,11 @@ def main(argv=None):
                         "one per sentence of \"What it crosses\"; needs --cycle")
     w.add_argument("--cycle", "--ciclo", dest="cycle", type=int, metavar="N",
                    help="the value-ladder cycle that becomes the queue (with --from-epic)")
+    w.add_argument("--allow-draft", action="store_true",
+                   help="with --from-epic: write even though the Epic is not "
+                        "`ready` or has an open `- [ ]` question (refused "
+                        "otherwise); the override is recorded in the header's "
+                        "`source`. Only on the owner's explicit decision")
     w.add_argument("--source", metavar="TEXT",
                    help="where the demands came from, recorded in the header")
     w.add_argument("--when", "--quando", dest="when", metavar="DATE",

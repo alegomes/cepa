@@ -117,8 +117,9 @@ def plan_of(d, given_name):
 def test_real_epic_cycle_2(base):
     d = git_repo(base, "real")
     r = run(d, "write", "cepa-espiral-c2", "--from-epic", str(EPIC_REAL),
-            "--ciclo", "2", "--dry-run", "--repo", ".")
-    check("dry-run sobre o Epic real sai 0", r.returncode == 0, r.stderr)
+            "--ciclo", "2", "--dry-run", "--repo", ".", "--allow-draft")
+    check("dry-run sobre o Epic real (rascunho, com --allow-draft) sai 0",
+          r.returncode == 0, r.stderr)
     if r.returncode != 0:
         return
     plan = yaml_body(r.stdout)
@@ -342,6 +343,52 @@ def test_wait_criteria_and_orphans(base):
               q.stdout + q.stderr)
 
 
+def test_write_refuses_draft_epic(base):
+    """2026-11-10: on 2026-11-04 a queue was written from a `draft` Epic with 9
+    open questions; the two warnings were piped through `grep -v '^aviso'` and
+    the owner never saw them. A warning can be filtered; a refusal cannot."""
+    print("\n[write --from-epic recusa Epic em rascunho ou com pergunta aberta]")
+    d = git_repo(base, "rascunho-recusa")
+    draft = d / "rascunho.md"
+    draft.write_text(EPIC_EN.replace("**Status:** ready", "**Status:** draft"),
+                     encoding="utf-8")
+    for extra in ((), ("--dry-run",)):
+        r = run(d, "write", "fx", "--from-epic", str(draft), "--cycle", "1",
+                *extra)
+        check(f"Epic em draft: recusa com exit 2 {extra}",
+              r.returncode == 2 and "recusa" in r.stderr
+              and "Status: draft" in r.stderr and "--allow-draft" in r.stderr,
+              f"{r.returncode} {r.stderr}")
+    check("nada foi gravado", not plan_of(d, "fx").exists())
+    r = run(d, "from-epic", str(draft), "--cycle", "1")
+    check("a leitura (`from-epic`) continua só avisando", r.returncode == 0)
+
+    open_q = d / "pergunta.md"
+    open_q.write_text(EPIC_EN + "\n## Open questions\n\n- [ ] Quem opera?\n",
+                      encoding="utf-8")
+    r = run(d, "write", "fx", "--from-epic", str(open_q), "--cycle", "1")
+    check("Epic ready com pergunta em aberto: recusa",
+          r.returncode == 2 and "1 pergunta(s)" in r.stderr, r.stderr)
+
+    r = run(d, "write", "fx", "--from-epic", str(draft), "--cycle", "1",
+            "--allow-draft")
+    check("--allow-draft grava", r.returncode == 0, r.stderr)
+    if r.returncode == 0:
+        plan = yaml.safe_load(plan_of(d, "fx").read_text(encoding="utf-8"))
+        check("e a origem da fila registra o rascunho e a opção",
+              "--allow-draft" in plan["source"]
+              and "Status: draft" in plan["source"], plan["source"])
+    ready = d / "pronto.md"
+    ready.write_text(EPIC_EN, encoding="utf-8")
+    r = run(d, "write", "fy", "--from-epic", str(ready), "--cycle", "1")
+    check("Epic ready sem pergunta: grava sem a opção", r.returncode == 0,
+          r.stderr)
+    if r.returncode == 0:
+        plan = yaml.safe_load(plan_of(d, "fy").read_text(encoding="utf-8"))
+        check("e a origem não fala em rascunho",
+              "--allow-draft" not in plan["source"], plan["source"])
+
+
 def test_writes_and_rewrites(base):
     d = git_repo(base, "grava")
     ep = d / "epic.md"
@@ -497,6 +544,7 @@ def main():
         test_epic_command_format(base)
         test_new_and_old_epic_names(base)
         test_wait_criteria_and_orphans(base)
+        test_write_refuses_draft_epic(base)
         test_writes_and_rewrites(base)
         test_from_epic_over_queue_with_old_key(base)
         test_refusals(base)
