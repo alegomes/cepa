@@ -1,0 +1,16 @@
+key: perguntar-antes-do-run-CS-2
+status: complete
+criteria:
+  - id: CS-2
+    text: "num terminal, a rota de um item aberto vira pergunta antes do primeiro item, e o \"sim\" faz o item rodar no mesmo run"
+    altitude: cli
+    surface: "cepa-until <queue> on a pty (stdin+stdout terminal): launch panel before the first item; run ledger <run>.jsonl"
+    test: "tests/test_cepa_until_decide.py::test_launch_on_terminal_asks_and_yes_runs_the_item_in_the_same_run"
+    layer: "real subprocess of common/bin/cepa-until on a pty (on_tty), fake claude; queue with only a1 carrying an open human_pending; 'y' injected; asserts item_start of a1 in the run .jsonl (red test of the spec)"
+    evidence: verified
+    run: "cd tests && python3 -c 'import test_cepa_until_decide as t; <the 4 test_launch_* functions>; print(t.FAILURES)' -> 'ok the run exits 0', 'ok the question shows up at the launch', 'ok item_start of a1 is recorded' (+ 'n'/Enter keep no item_start, no-answer carries on after the wait, no-terminal keeps ending with no item_start: all ok), FAILURES []"
+    status: complete
+    extra: "guards covered: n/Enter -> no item_start and the route stays open; no answer in CEPA_UNTIL_ESPERA_RESPOSTA -> one line, run exits 0; stdin DEVNULL -> panel never appears, as before"
+    notes:
+      - "Outermost layer changed and exercised: _main in common/bin/cepa-until calls ask_at_launch under the isatty guard."
+gap: []

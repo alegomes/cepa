@@ -1,0 +1,54 @@
+schema_version: 2
+card: perguntar-antes-do-run-CS-2
+verdict: proven               # proven | unproven | needs-human
+reviewed_at: 2026-11-10T22:40:00-03:00
+base_commit: b1c711f
+head_commit: 34b37c8
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: ask_at_launch + _main (call guarded by isatty, after --dry-run, before 'nothing to do')"
+      module: common
+      external_observable: true     # what the cli prints and records (item_start in <run>.jsonl) on a terminal
+      substituted_by_double: null   # tests run the real cepa-until as a subprocess on a pty (on_tty), real cepa-plan; only the `claude` binary is faked (far boundary)
+    - class: "tests/test_cepa_until_decide.py (test-only, 34b37c8)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway worktree at 34b37c8 (/tmp/proof-cs2b-7q3, removed at the end); the test_launch_* functions run via python3 in tests/ (10 functions). Unperturbed: FAILURES []. Each perturbation applied by an assert-applied string replace on common/bin/cepa-until (a replace that did not match exactly once printed NOT APPLIED and was fixed before counting), test run, file restored with git checkout. git diff cd35a06..34b37c8 touches tests/test_cepa_until_decide.py only: product code is the same as in the first pass."
+      results:
+        - "KILLED P10 ask under --dry-run (call placed before `if a.dry`) -> RED (1 FAIL: 'dry-run: no question panel'). Survived at cd35a06."
+        - "KILLED P4 OWNER_REASON filter dropped (`if True`) -> RED (1 FAIL: 'a3 is not handed to decide (no Not on you line)'). Survived at cd35a06."
+        - "KILLED P13 decide() handed every deferred entry instead of the filtered list -> RED (same 1 FAIL). Survived at cd35a06."
+        - "KILLED P6 delivered_leftovers(queue, repo) added to the list -> RED (1 FAIL: 'the panel says 1 question'). Survived at cd35a06. (A first attempt of mine used a wrong key and was GREEN; discarded as a bad perturbation, redone against the real function.)"
+        - "KILLED P12 read capped at max_items=1 -> RED (2 FAIL: 'the panel says 2 questions', 'both answers were taken'). Survived at cd35a06."
+        - "KILLED P8 EOFError/KeyboardInterrupt not caught (clause replaced on the ask_at_launch occurrence) -> RED (5 FAIL: 'Ctrl-C: exits 0', 'Ctrl-C: prints the interrupted line', 'EOF: exits 0', 'EOF: prints the interrupted line', 'EOF: no traceback'). Survived at cd35a06."
+        - "KILLED P8b EOF/Ctrl-C caught but the 'questions interrupted' line removed -> RED (2 FAIL: 'Ctrl-C: prints the interrupted line', 'EOF: prints the interrupted line'). Survived at cd35a06."
+        - "KILLED P2b guard on stdin.isatty() only -> RED (1 FAIL: 'stdin tty, stdout pipe: no panel'). Survived at cd35a06."
+        - "KILLED P2c guard on stdout.isatty() only -> RED (1 FAIL: 'stdin devnull, stdout tty: no panel'). Survived at cd35a06."
+        - "RE-CHECK P1 call removed -> RED (many FAIL: 'the panel says 2 questions', 'the panel says 1 question', 'the open item was asked', 'Ctrl-C: prints the interrupted line', ...). No regression."
+        - "RE-CHECK P3 no re-read of the queue (return data) -> RED (1 FAIL: 'item_start of a1 is recorded'). No regression."
+        - "RE-CHECK P9 call moved after the 'nothing to do' return -> RED (7+ FAIL). No regression."
+        - "EQUIVALENT P3b `return fresh or data` instead of `data if error or not fresh else fresh`: query_queue returns (None, err) on every failure and a parsed JSON on success; the two expressions differ only on a successful empty JSON, which cepa-plan queue never emits. Same classification as in the first pass; not counted."
+        - "BASE b1c711f cepa-until with the head tests -> RED, 12 FAIL ('the panel says 2 questions', 'both answers were taken', 'the panel says 1 question' x2, 'the open item was asked', 'Ctrl-C: prints the interrupted line', 'EOF: prints the interrupted line', 'the question shows up at the launch', 'item_start of a1 is recorded', \"answer 'n': the question was asked\", \"answer '': the question was asked\", 'it says nobody answered, in one line'). The dry-run, no-terminal and filter-exclusion tests pass at base because base never asks; they are guards against the new call, proved by P10, P2b/P2c and P4."
+        - "Not re-run this pass (killed in the first pass on unchanged product code, with the tests that kill them unchanged): P2 `if True` guard, P5 inverted filter, P7/P7b NoAnswer handling, P11 wait=None. Sampled, not re-applied; stated so no cap is silent."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; L2 answered by perturbation instead: every executable line of ask_at_launch and its call in _main (read, OWNER_REASON filter, early return, decide call, NoAnswer and EOF/Ctrl-C branches, re-read, guard, placement vs --dry-run and vs 'nothing to do') was perturbed at least once and turned a test_launch_* RED (P1, P3, P4, P6, P8, P8b, P9, P10, P12, P13, P2b, P2c, plus P2/P5/P7/P11 from the first pass). The 'return data' on an empty list is hit by the no-terminal and delivered-only paths."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff adds a call to the existing `decide` panel and a filter over queue entries; the panel's key handling (what the owner types) is the pre-existing `decide` function, unchanged by this diff, and the only new inputs are the queue entries read from cepa-plan (internal) and the tty state. The EOF and Ctrl-C paths the diff does add are pinned by tests (P8, P8b). No changed class is in an input-bearing module (api-rest)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "All nine perturbations that survived at cd35a06 (ask under --dry-run, owner-reason filter, delivered_leftovers, uncapped read, EOF/Ctrl-C unhandled and silent, stdin-only and stdout-only guard) now go RED at 34b37c8 after the test-only commit; the three already-RED perturbations re-run (call removed, no re-read, call after 'nothing to do') stay RED, and the base product with the head tests is RED (12 FAIL). One equivalent mutant (`fresh or data`) reported, not counted. Product code is unchanged since cd35a06."
