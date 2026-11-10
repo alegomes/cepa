@@ -83,7 +83,62 @@ def test_sigterm_kills_child_group():
             check("sigterm: child group is gone", not orphan, f"pid={pid}")
 
 
+PYHANG = '''import pytest, subprocess, sys, time
+from pathlib import Path
+
+
+def test_hang():
+    child = subprocess.Popen(["sleep", "300"])
+    Path(__file__).with_name("pychild.pid").write_text(str(child.pid))
+    time.sleep(300)
+'''
+PYPASS = "import pytest\n\n\ndef test_ok():\n    assert True\n"
+
+
+def test_pytest_family_timeout():
+    # pytest ausente é erro, não skip: falha alto em vez de pular
+    has = subprocess.run([sys.executable, "-m", "pytest", "--version"],
+                         capture_output=True).returncode == 0
+    check("pytest family: pytest is installed", has)
+    if not has:
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        tests = Path(tmp) / "tests"
+        tests.mkdir()
+        for f in ("run-all.sh", "_run_with_timeout.py"):
+            shutil.copy(HERE / f, tests / f)
+        (tests / "test_aaa_pyhang.py").write_text(PYHANG)
+        (tests / "test_zzz_pypass.py").write_text(PYPASS)
+        env = dict(os.environ, CEPA_TEST_TIMEOUT="2")
+        env.pop("SKIP_PYTEST", None)
+        t0 = time.time()
+        try:
+            r = subprocess.run(["bash", str(tests / "run-all.sh")], env=env,
+                               capture_output=True, text=True, timeout=60)
+            out, rc = r.stdout + r.stderr, r.returncode
+        except subprocess.TimeoutExpired:
+            out, rc = "", None
+        took = time.time() - t0
+        check("pytest family: run ends quickly", rc is not None and took < 30, f"took={took:.1f}s")
+        check("pytest family: exit is non-zero", rc not in (0, None), f"rc={rc}")
+        check("pytest family: hanging file listed [TIMEOUT 2s]",
+              "- tests/test_aaa_pyhang.py  [TIMEOUT 2s]" in out, out)
+        check("pytest family: passing file ran", "1 passed" in out, out)
+        check("pytest family: passing file not a failure",
+              "- tests/test_zzz_pypass.py" not in out, out)
+        pidf = tests / "pychild.pid"
+        check("pytest family: hang fixture spawned a child", pidf.exists())
+        if pidf.exists():
+            pid = int(pidf.read_text())
+            time.sleep(0.3)
+            orphan = alive(pid)
+            if orphan:
+                os.kill(pid, 9)
+            check("pytest family: no orphan child survives", not orphan, f"pid={pid}")
+
+
 def main():
+    test_pytest_family_timeout()
     test_sigterm_kills_child_group()
     with tempfile.TemporaryDirectory() as tmp:
         tests = Path(tmp) / "tests"
