@@ -5,6 +5,44 @@ e onde provavelmente mora. Sem ordem de prioridade fixa.
 
 ---
 
+## A limpeza automática apaga o worktree de uma conversa que ainda vai ser retomada
+
+Registrado em 2026-11-10 a pedido do dono, a partir do feedback `fb-20261110-4`.
+
+### Problema
+
+A sessão `56e8cebe` (branch `session/mkt-mode`) foi aberta em 07/11, ficou parada e foi
+retomada em 10/11. Nesse meio tempo, o worktree `cepa-worktrees/cepa-mkt-mode` e a branch
+sumiram sem aviso, e o primeiro comando da conversa retomada falhou com "Working directory
+was deleted". A limpeza que fez isso é o `auto_clean` (`common/hooks/_wtlib.py:631`), que roda
+na abertura de qualquer sessão do repo e apaga o worktree que não tem mudanças, não tem
+commits e cuja sessão parece morta. Esta sessão pareceu morta por dois motivos:
+
+- o `last_seen` do registro só é atualizado na abertura (`session-registry.py:148`) e perde a
+  validade em 24 horas (`STALE_HOURS`);
+- o app Claude reiniciou em 09/11 às 17:22 e matou o processo registrado, e a conversa
+  retomada não passa de novo pela abertura que registra a sessão.
+
+Junto com o worktree foi a intenção da sessão: `.claude/session-intent` está na lista que a
+limpeza não copia para `.claude/rescued/` (`_wtlib.py:485`). E não dá para saber qual sessão
+fez a remoção, porque o evento `worktree_remove_allow` da telemetria não guarda caminho nem
+branch. Entre 09/11 20:44 e 10/11 11:34 houve 17 aberturas de sessão no cepa.
+
+### Esboço de solução
+
+Três partes, decididas pelo dono em 2026-11-10:
+
+1. Atualizar `last_seen` a cada turno (no hook de prompt), não só na abertura. Aumentar as 24
+   horas só empurraria o problema para conversas paradas por mais tempo.
+2. Quando uma conversa retomada não encontra mais o worktree dela, avisar no primeiro turno o
+   que sumiu e onde está o que foi resgatado.
+3. A telemetria de remoção passa a gravar a branch, o caminho e a sessão que removeu.
+
+**Lar:** `common/hooks/_wtlib.py` (`auto_clean`, `entry_is_live`) e
+`common/hooks/session-registry.py`.
+
+---
+
 ## `cepa-until land` refaz a checagem de conflito antes do merge
 
 Registrado em 2026-11-06 a pedido do dono, a partir do run `until/2026-11-05-2031` do wego-acessos-backend.
