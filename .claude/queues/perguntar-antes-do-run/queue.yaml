@@ -24,23 +24,30 @@ items:
     fila com 2 itens `pending` e 1 item com `human_pending` aberto, `cepa-until
     <fila> --dry` imprime uma linha com "2" itens que rodam e "1" que espera o dono;
     hoje o cabeçalho só traz "1st item" e a contagem de `pending` e `done`.'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: 'This is return 1 of 2: the item closed `done`, but the full build of
-    the run branch (`tests/run-all.sh`) exited 1, and the 2nd build exited 1. Output
-    in the `.log` of run 2026-11-10-1650. The commits of every attempt are in `until/2026-11-10-1650-vermelho-CS-1`
-    and the run branch went back to 532ec3b90a. The item went back to `pending`:
-    reuse the side branch (`git cherry-pick` or `git merge` inside the attempt)
-    or redo it; the supervisor''s build judges the result. Disabling or deleting
-    the failing test does not count as a fix.'
-  claimed_by:
-    session_id: 1380e317-5cb2-4f82-ac0b-9e70c9dfe599
-    pid: 98063
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-until-2026-11-10-1650
-    branch: until/2026-11-10-1650
-    started_at: '2026-11-10T20:56:13+00:00'
+  evidence: 'Return 1 of 2 resolved. Commits on until/2026-11-10-1650 over 532ec3b:
+    5b5558d (cherry-pick of bf6274b from until/2026-11-10-1650-vermelho-CS-1), 970b638
+    (count moved to the end of the ''1st item:'' header line; SIGHUP test drains
+    the pty master), 2a7f364 (test: wait count ignores items deferred for another
+    reason), plus the gates commit. Cause of the red build, reproduced: (1) the
+    separate ''start'' line made the header 8 lines, over the 7-line ceiling of
+    tests/test_cepa_until_land.py; (2) tests/test_cepa_until_dead_supervisor.py
+    SIGHUP test gave the supervisor a pty nobody read (~1009 bytes held on macOS,
+    header reached ~1212), so it blocked in print before item_start. Gates: pair-reviewer
+    OK-WITH-NOTES (one fix, applied: drain thread stopped and joined before close);
+    completion-auditor COMPLETE (.claude/acceptance/perguntar-antes-do-run-CS-1.yaml,
+    audited at 970b638; 2a7f364 only adds a test); proof-reviewer UNPROVEN at 970b638
+    (one surviving perturbation) then PROVEN at 2a7f364 (10 perturbations RED, red
+    at base; docs/proof/perguntar-antes-do-run-CS-1.yaml; L2 recorded pass from
+    perturbation, repo has no coverage tool). Tests run here: the 46 tests/test_*.py
+    files that mention cepa-until, one by one, all exit 0; tests/test_cepa_until.py
+    rerun whole at 2a7f364, 0 FAIL. Full build (tests/run-all.sh) NOT run here:
+    delegated to the supervisor. Code is on the run branch, no merge, no push. Known
+    limit, documented in the code comment: the count stops at the first item with
+    an unmet blocked_by outside the batch.'
+  head_commit: b1c711f42e8efb6c3ffdb2837fcdbeff37478691
 - id: CS-2
   title: num terminal, a rota de um item aberto vira pergunta antes do primeiro
     item, e o "sim" faz o item rodar no mesmo run
@@ -49,9 +56,16 @@ items:
     fila só com o item A, que tem `human_pending` aberto, a largada com a resposta
     "y" injetada grava `item_start` de A no `<run>.jsonl`; hoje o run acaba em `end-of-queue`
     sem `item_start` e a pergunta só aparece no fim.'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  claimed_by:
+    session_id: 5443c02b-5cff-42b8-ab34-38c212fb9267
+    pid: 73664
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-until-2026-11-10-1650
+    branch: until/2026-11-10-1650
+    started_at: '2026-11-10T22:10:29+00:00'
 - id: CS-3
   title: rota em item já entregue não entra no painel da largada
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
