@@ -692,6 +692,25 @@ def test_herdr_pane_is_released_on_sigterm_and_ctrl_c_mid_round():
             check_prove_released_last(f"{sig.name} no meio da rodada", lines)
 
 
+def test_herdr_message_counts_the_handled_cards_and_shows_only_the_last_five():
+    """With 7 cards handled the sidebar line keeps the count and the 5 most recent
+    keys, with a `…` for the ones it dropped."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp)
+        binv = fake_claude(tmp, [("proof", f"WEGO-{n}", "needs-human") for n in range(1, 8)])
+        env, log = herdr_env(tmp)
+        p, calls = run_prove(root, binv, tmp, ["--for", "2h"], extra_env=env)
+        reports = [a for a in herdr_lines(log) if a[1] == "report-agent"]
+        msgs = [a[a.index("--message") + 1] for a in reports]
+        check("herdr (7 cards): oito rodadas relatadas", len(msgs) == 8, str(msgs))
+        if len(msgs) == 8:
+            check("herdr (7 cards): a 2ª diz `handled 1: WEGO-1`",
+                  msgs[1] == "round 2 · handled 1: WEGO-1", msgs[1])
+            check("herdr (7 cards): a 8ª conta 7 e mostra só os 5 últimos",
+                  msgs[7] == "round 8 · handled 7: …, WEGO-3, WEGO-4, WEGO-5, "
+                             "WEGO-6, WEGO-7", msgs[7])
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:
