@@ -549,8 +549,8 @@ def test_cepa_until_header_shows_queue_name_with_only_queue():
         to_new_layout(root)
         real = cu.query_queue
 
-        def only_queue(name, repo):
-            data, error = real(name, repo)
+        def only_queue(name, repo, max_items=1):
+            data, error = real(name, repo, max_items=max_items)
             data.pop("program", None)
             data["queue"] = "NOME-GRAVADO"
             return data, error

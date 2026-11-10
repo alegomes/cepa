@@ -835,6 +835,59 @@ def test_dry_run_executes_nothing():
                   for it in yaml.safe_load(plan.read_text())["items"]))
 
 
+def test_header_says_how_many_items_run_and_how_many_wait_for_the_owner():
+    """CS-1 (spec perguntar-antes-do-run): the run start counts, before the first
+    item, the items that run and the ones that wait for the owner. 2 `pending` +
+    1 with an open `human_pending` (placed LAST, after the point where a `--max 1`
+    ceiling would have stopped the count)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2"),
+                                item("a3", human_pending="provisionar o papel no Keycloak")])
+        binv = fake_claude(tmp, "pass")
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, calls = run_until(root, binv, plan, ["--for", "2h", "--dry-run"])
+        lines = [l for l in p.stdout.splitlines() if l.lstrip().startswith("start  :")]
+        check("a largada tem uma linha 'start'", len(lines) == 1, p.stdout[:800])
+        line = lines[0] if lines else ""
+        check("...com 2 itens que rodam", "2 item(s) run" in line, line)
+        check("...e 1 que espera o dono", "1 wait(s) for the owner" in line, line)
+        check("...e nada foi disparado", not calls, str(calls))
+
+
+def test_header_says_unavailable_when_the_uncapped_queue_read_fails():
+    """CS-1: if the second (uncapped) read of the queue fails, the `start` line says
+    `unavailable` with the error, and carries no count (the capped `--max 1` read
+    would give a wrong number). The run is not aborted for it."""
+    import contextlib
+    import importlib.machinery
+    import importlib.util
+    import io
+    loader = importlib.machinery.SourceFileLoader("cepa_until_cs1", str(CEPA_UNTIL))
+    spec = importlib.util.spec_from_loader("cepa_until_cs1", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        real = mod.query_queue
+
+        def flaky(name, repo, max_items=1):
+            if max_items > 1:
+                return None, "boom: cepa-plan fell over"
+            return real(name, repo, max_items=max_items)
+        mod.query_queue = flaky
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = mod.main(["fila", "--repo", str(root), "--for", "1h", "--dry-run",
+                           "--sem-verify", "--sem-analise"])
+        lines = [l for l in out.getvalue().splitlines() if l.lstrip().startswith("start  :")]
+        check("dry-run was not aborted", rc == 0, out.getvalue()[:800])
+        check("there is one 'start' line", len(lines) == 1, out.getvalue()[:800])
+        line = lines[0] if lines else ""
+        check("...saying unavailable with the error",
+              "unavailable (queue read failed: boom: cepa-plan fell over)" in line, line)
+        check("...and with no count", "item(s)" not in line and "wait(s)" not in line, line)
+
+
 def test_item_that_exceeds_the_slack_is_killed_with_the_whole_group():
     """The slack (60min by default) only exists because something makes it count: the
     kill of the process GROUP. The group, and not only `claude`, because what

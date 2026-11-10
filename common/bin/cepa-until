@@ -743,12 +743,12 @@ LIVE_LINE_INTERVAL = float(os.environ.get("CEPA_UNTIL_LINHA_VIVA", "30"))
 
 # ── reading the queue ───────────────────────────────────────────────────────
 
-def query_queue(name, repo):
-    """`cepa-plan queue --max 1 --json`. Returns (data, error)."""
+def query_queue(name, repo, max_items=1):
+    """`cepa-plan queue --max <max_items> --json` (1 by default). Returns (data, error)."""
     try:
         p = subprocess.run(
             [sys.executable, str(CEPA_PLAN), "queue", name,
-             "--max", "1", "--repo", str(repo), "--json"],
+             "--max", str(max_items), "--repo", str(repo), "--json"],
             capture_output=True, text=True, timeout=60)
     except subprocess.TimeoutExpired:
         return None, "`cepa-plan queue` did not answer within 60s"
@@ -3670,6 +3670,22 @@ def _main(argv=None):
              if nxt.get("id") else "")
           + f" · queue: {t.get('por_status', {}).get('pending', 0)} "
             f"pending, {t.get('por_status', {}).get('done', 0)} done")
+    # Forecast (CS-1): `data` is capped at `--max 1`, so the count comes from a
+    # second, uncapped read of the same queue. Even uncapped it is not the whole
+    # queue: `cepa-plan queue` stops walking at the first item whose `blocked_by`
+    # is unmet and outside the batch (`stop = blocked`), so the items after it are
+    # in neither `batch` nor `deferred`. The count is what runs / waits for the
+    # owner now, up to that first unmet dependency. If the read fails, say so
+    # instead of printing the number of the capped read (which would be wrong).
+    whole, whole_err = query_queue(a.queue, repo, max_items=10 ** 6)
+    if whole:
+        runs = len(whole.get("batch") or [])
+        waits = sum(1 for ad in whole.get("deferred") or []
+                    if ad.get("reason") == "human_pending")
+        print(lbl("  start  : ") + f"{runs} item(s) run, {waits} wait(s) for the owner "
+              "(open `human_pending`)")
+    else:
+        print(lbl("  start  : ") + f"unavailable (queue read failed: {whole_err})")
     inheritance = inheritance_from_previous_run(repo, a.queue, data.get("path"))
     for h in inheritance:
         print(lbl("  inherits: ") + f"`{h['branch']}` ({h['commits']} commit(s) the "
