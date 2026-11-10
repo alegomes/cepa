@@ -1,0 +1,79 @@
+key: write-mode-gate-ve-python
+status: complete
+diff: f8ec435..fd22d0b
+audited_head: fd22d0b
+note: >
+  Reauditado em fd22d0b. Hook real como subprocesso. Rodado em primeiro plano:
+  python3 tests/test_write_mode_gate.py -> 230 linhas ok, 0 falhas, tudo verde.
+  fd22d0b cobre refactor com interpretador e shutil.move (as duas pontas sao escrita).
+criteria:
+  - id: AC1
+    text: python3 -c / python3 heredoc (python3 - <<'PY', python3 <<EOF) que escreve caminho legivel fora da allow-list do modo -> barrado (exit 2) com a mensagem de fora do modo nomeando o caminho.
+    altitude: event
+    surface: hook write-mode-gate.py (PreToolUse Bash, exit code + stderr)
+    test: tests/test_write_mode_gate.py::test_interpreter_write_outside_mode_blocks e test_interpreter_block_names_the_script_target
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_write_mode_gate.py -> 230 ok, 0 falhas (python3 -c, python3 - <<'PY', python3 <<EOF, loop sobre caminhos literais, caminho absoluto na raiz; returncode 2, "outside what that mode", alvo common/hooks/_modes.py no stderr)
+    status: complete
+    gap: null
+  - id: AC2
+    text: node -e / node heredoc: mesmo comportamento do AC1.
+    altitude: event
+    surface: hook write-mode-gate.py (PreToolUse Bash)
+    test: tests/test_write_mode_gate.py::test_interpreter_write_outside_mode_blocks (casos node -e e node <<'JS')
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_write_mode_gate.py -> 230 ok, 0 falhas (node -e writeFileSync e node heredoc appendFileSync barrados com exit 2)
+    status: complete
+    gap: null
+  - id: AC3
+    text: Escrita dentro do modo via script passa, e sem WARNING quando todo alvo conhecido foi lido.
+    altitude: event
+    surface: hook write-mode-gate.py
+    test: tests/test_write_mode_gate.py::test_interpreter_write_inside_mode_passes
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_write_mode_gate.py -> 230 ok, 0 falhas (python heredoc, python -c e node -e dentro de docs/.claude/BACKLOG.md: exit 0 e sem WARNING)
+    status: complete
+    gap: null
+  - id: AC4
+    text: Script que so LE fora do modo passa; em copia a origem conta como leitura e o destino como escrita.
+    altitude: event
+    surface: hook write-mode-gate.py
+    test: tests/test_write_mode_gate.py::test_interpreter_reading_outside_mode_passes e test_interpreter_reads_which_argument_writes
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_write_mode_gate.py -> 230 ok, 0 falhas (leitura fora passa; shutil.copy de fora para docs passa; shutil.copy de docs para fora barra com exit 2)
+    status: complete
+    gap: null
+  - id: AC5
+    text: Alvo ilegivel (caminho computado) mantem o WARNING antigo e nao barra.
+    altitude: event
+    surface: hook write-mode-gate.py
+    test: tests/test_write_mode_gate.py::test_interpreter_unreadable_target_still_warns
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_write_mode_gate.py -> 230 ok, 0 falhas (open(sys.argv[1],'w'): exit 0 e WARNING no stderr)
+    status: complete
+    gap: null
+  - id: AC6
+    text: Modos construction e refactor ficam mudos para script de interpretador; escrita fora da raiz (/tmp) passa.
+    altitude: event
+    surface: hook write-mode-gate.py (Bash com interpretador em construction, refactor e fora da raiz)
+    test: tests/test_write_mode_gate.py::test_interpreter_in_construction_is_silent (loop construction e refactor) e test_interpreter_write_outside_root_passes
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_write_mode_gate.py -> 230 ok, 0 falhas ("construction: script livre", "refactor: script livre" com exit 0 e stderr vazio; /tmp passa)
+    status: complete
+    gap: null
+  - id: AC7
+    text: python3 tool.py <<EOF (dados no stdin de um arquivo de script) nao e lido como programa.
+    altitude: event
+    surface: hook write-mode-gate.py
+    test: tests/test_write_mode_gate.py::test_heredoc_to_a_script_file_is_data
+    layer: subprocess (hook real)
+    evidence: verified
+    run: python3 tests/test_write_mode_gate.py -> 230 ok, 0 falhas (stdin de script nao vira programa: exit 0)
+    status: complete
+    gap: null
