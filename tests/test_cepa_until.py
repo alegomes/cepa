@@ -1378,6 +1378,8 @@ def test_herdr_receives_one_working_report_per_item():
         p, argvs, log, _ = herdr_scenario(tmp)
         head = ["pane", "report-agent", "w9:p9", "--source", "cepa-until",
                 "--agent", "cepa-until", "--state", "working"]
+        # CS-3 adds the final release as the last line; the working reports are the rest.
+        argvs = [a for a in argvs if a[:2] != ["pane", "release-agent"]]
         check("herdr: dois relatórios working", len(argvs) == 2
               and all(a[:len(head)] == head for a in argvs), str(argvs) + p.stderr[-200:])
         if len(argvs) == 2:
@@ -1412,14 +1414,91 @@ def test_a_broken_or_slow_herdr_does_not_change_the_run():
             check(f"herdr {label}: a run termina normal com os dois itens done",
                   p.returncode == 0 and statuses == ["done", "done"],
                   f"{p.returncode} {statuses} {p.stderr[-200:]}")
-            check(f"herdr {label}: os dois relatórios foram tentados", len(argvs) == 2,
-                  str(argvs))
-            # Bound: 2 reports x 1 s timeout = 2 s, plus the normal run of this queue
-            # (about 2 s measured) = about 4 s; 20 s leaves 5x headroom for a loaded
-            # machine and is still far below 2 x 30 s = 60 s, which is what a run
-            # with no timeout (or a 30 s one) would take.
+            reports = [a for a in argvs if a[1] == "report-agent"]
+            check(f"herdr {label}: os dois relatórios foram tentados e a liberação "
+                  "também, por último", len(reports) == 2 and len(argvs) == 3
+                  and argvs[-1][1] == "release-agent", str(argvs))
+            # Bound: 2 reports + 1 release x 1 s timeout = 3 s, plus the normal run of
+            # this queue (about 2 s measured) = about 5 s; 20 s leaves 4x headroom for
+            # a loaded machine and is still far below 3 x 30 s = 90 s, which is what a
+            # run with no timeout (or a 30 s one) would take.
             check(f"herdr {label}: o timeout de 1 s limita a duração da run (< 20 s)",
                   took < 20, f"{took:.1f}s")
+
+
+# ── herdr: the pane is released on every exit (CS-3) ────────────────────────
+
+def herdr_release_env(tmp):
+    """A fake `herdr` that appends argv as JSON lines to a log. Returns (env, log)."""
+    herdr = Path(tmp) / "herdr"
+    log = Path(tmp) / "herdr.log"
+    herdr.write_text(f"#!{sys.executable}\n"
+                     "import sys, json\n"
+                     f"open({str(log)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
+    herdr.chmod(0o755)
+    for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
+        os.environ.pop(k, None)
+    return ({"HERDR_ENV": "1", "HERDR_PANE_ID": "w9:p9", "HERDR_BIN_PATH": str(herdr)},
+            log)
+
+
+def check_released_last(label, log):
+    """CS-3: the last log line is the release, with a --seq above every earlier one."""
+    lines = ([json.loads(l) for l in log.read_text().splitlines()]
+             if log.exists() else [])
+    head = ["pane", "release-agent", "w9:p9", "--source", "cepa-until",
+            "--agent", "cepa-until", "--seq"]
+    ok = bool(lines) and lines[-1][:len(head)] == head and len(lines[-1]) == len(head) + 1
+    check(f"herdr ({label}): a última linha é a liberação do painel", ok,
+          str(lines[-3:]))
+    if ok:
+        seqs = [int(a[a.index("--seq") + 1]) for a in lines]
+        check(f"herdr ({label}): --seq da liberação maior que todos os anteriores",
+              seqs[-1] > max(seqs[:-1], default=0), str(seqs))
+        check(f"herdr ({label}): uma única liberação",
+              sum(a[1] == "release-agent" for a in lines) == 1, str(lines))
+    return lines
+
+
+def release_run(label, items, claude_body, args):
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, items)
+        binv = fake_claude(tmp, claude_body)
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        env, log = herdr_release_env(tmp)
+        p, calls = run_until(root, binv, plan, args, extra_env=env)
+        check_released_last(label, log)
+        return p, calls
+
+
+def test_herdr_pane_is_released_at_the_end_of_the_queue():
+    release_run("fim da fila", [item("a1")],
+                "i = primeiro_pendente()\n"
+                "if i: marca(i, status='done', evidence='ok')", ["--for", "2h"])
+
+
+def test_herdr_pane_is_released_at_the_end_of_the_window():
+    # parse_duration takes only h/m: 0.02m = 1.2 s, the "--for 1s" of the spec.
+    release_run("fim da janela", [item("a1"), item("a2")],
+                "time.sleep(2)\n"
+                "i = primeiro_pendente()\n"
+                "if i: marca(i, status='done', evidence='ok')", ["--for", "0.02m"])
+
+
+def test_herdr_pane_is_released_by_the_circuit_breaker():
+    p, calls = release_run("disjuntor", [item(f"a{n}") for n in range(1, 5)],
+                           "pass", ["--for", "2h", "--max-failures", "3"])
+    check("herdr (disjuntor): o disjuntor realmente disparou (3 chamadas)",
+          len(calls) == 3, f"{len(calls)} {p.stderr[-200:]}")
+
+
+def test_herdr_pane_is_released_when_a_blocked_item_stops_the_batch():
+    p, calls = release_run(
+        "blocked", [item("a1"), item("a2")],
+        "marca(primeiro_pendente(), status='blocked', evidence='API fora')",
+        ["--for", "2h", "--max-blocked", "1"])
+    check("herdr (blocked): parou no primeiro blocked (1 chamada)", len(calls) == 1,
+          f"{len(calls)} {p.stderr[-200:]}")
 
 
 def main():
