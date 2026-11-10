@@ -377,33 +377,45 @@ HERDR_HEAD = ["pane", "report-agent", "w9:p9", "--source", "cepa-until",
               "--agent", "cepa-until", "--state", "working"]
 
 
+# A margin of 60 s, not MARGIN's 1 s: with 1 s the reset and the resume time share
+# the same HH:MM (except across a minute turn), and a message showing the reset
+# instead of the resume time would pass. 60 s always moves the minute.
+HERDR_MARGIN = 60
+
+
 def herdr_env(tmp):
-    """A fake `herdr` that appends its argv as JSON to a log. Returns (env, log)."""
+    """A fake `herdr` that appends {"t": when, "argv": argv} as JSON to a log.
+    Returns (env, log)."""
     herdr = Path(tmp) / "herdr"
     log = Path(tmp) / "herdr.log"
     herdr.write_text(f"#!{sys.executable}\n"
-                     "import sys, json\n"
-                     f"open({str(log)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
+                     "import sys, json, time\n"
+                     f"open({str(log)!r}, 'a').write(json.dumps("
+                     "{'t': time.time(), 'argv': sys.argv[1:]}) + '\\n')\n")
     herdr.chmod(0o755)
-    return ({**MARGIN, "HERDR_ENV": "1", "HERDR_PANE_ID": "w9:p9",
-             "HERDR_BIN_PATH": str(herdr)}, log)
+    return ({"CEPA_UNTIL_MARGEM_RESET": str(HERDR_MARGIN), "HERDR_ENV": "1",
+             "HERDR_PANE_ID": "w9:p9", "HERDR_BIN_PATH": str(herdr)}, log)
 
 
 def herdr_messages(log):
-    """[(state-head ok, message, seq)] per report, in order."""
+    """[(state-head ok, message, seq, epoch sent)] per report, in order."""
     out = []
     for line in (log.read_text().splitlines() if log.exists() else []):
-        a = json.loads(line)
+        e = json.loads(line)
+        a = e["argv"]
         msg = a[a.index("--message") + 1] if "--message" in a else None
         seq = int(a[a.index("--seq") + 1]) if "--seq" in a else None
-        out.append((a[:len(HERDR_HEAD)] == HERDR_HEAD, msg, seq))
+        out.append((a[:len(HERDR_HEAD)] == HERDR_HEAD, msg, seq, e["t"]))
     return out
 
 
-def check_pause_report(label, reports, before, paused_hhmm, after):
-    msgs = [m for _, m, _ in reports]
+def check_pause_report(label, reports, before, wake_ts, after):
+    """`wake_ts` is the resume epoch the supervisor recorded: the pause message must
+    carry its HH:MM and be sent BEFORE it, i.e. during the wait, not after."""
+    paused_hhmm = datetime.fromtimestamp(wake_ts).strftime("%H:%M")
+    msgs = [r[1] for r in reports]
     check(f"herdr ({label}): todo relatório é `working` como cepa-until",
-          reports and all(ok for ok, _, _ in reports), str(reports))
+          reports and all(r[0] for r in reports), str(reports))
     pauses = [i for i, m in enumerate(msgs) if m and "paused" in m]
     check(f"herdr ({label}): um relatório de pausa", len(pauses) == 1, str(msgs))
     if len(pauses) != 1:
@@ -415,7 +427,10 @@ def check_pause_report(label, reports, before, paused_hhmm, after):
           i >= 1 and msgs[i - 1] == before, str(msgs))
     check(f"herdr ({label}): ...e antes do relatório de {after!r}",
           i + 1 < len(msgs) and msgs[i + 1] == after, str(msgs))
-    seqs = [s for _, _, s in reports]
+    sent = reports[i][3]
+    check(f"herdr ({label}): a pausa sai durante a espera, antes da retomada",
+          sent < wake_ts - 1, f"enviada {sent:.1f}, retomada {wake_ts:.1f}")
+    seqs = [r[2] for r in reports]
     check(f"herdr ({label}): --seq estritamente crescente",
           all(x < y for x, y in zip(seqs, seqs[1:])), str(seqs))
 
@@ -442,9 +457,12 @@ def test_herdr_keeps_working_and_says_until_when_during_the_pause_before_an_item
         pause = [e for e in ledger_of(root) if e["evento"] == "pausa_de_cota"]
         check("herdr (antes do item): houve a pausa", len(pause) == 1, str(pause))
         if pause:
-            hhmm = datetime.fromisoformat(pause[0]["acorda"]).strftime("%H:%M")
+            wake = datetime.fromisoformat(pause[0]["acorda"]).timestamp()
+            check("herdr (antes do item): retomada = reset + margem",
+                  abs(wake - datetime.fromisoformat(pause[0]["reset"]).timestamp()
+                      - HERDR_MARGIN) < 1, str(pause))
             check_pause_report("antes do item", herdr_messages(log),
-                               "fila: item 2/3 a2", hhmm, "fila: item 3/3 a3")
+                               "fila: item 2/3 a2", wake, "fila: item 3/3 a3")
 
 
 def test_herdr_keeps_working_and_says_until_when_after_hitting_the_ceiling():
@@ -453,9 +471,12 @@ def test_herdr_keeps_working_and_says_until_when_after_hitting_the_ceiling():
     with the resume time, between the cut attempt's report and the retry's."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
+        # The announced reset is 55 s in the PAST: with the 60 s margin the resume is
+        # 5 s ahead, so the test waits 5 s instead of 62 and the reset and resume
+        # HH:MM still differ. The supervisor only requires the resume to be ahead.
         body = EVENT + (
             "if N == 1:\n"
-            "    evento(1.0, int(time.time()) + 2, 'rejected')\n"
+            f"    evento(1.0, int(time.time()) - {HERDR_MARGIN - 5}, 'rejected')\n"
             f"    resultado({CEILING_TEXT!r}, True)\n"
             "    sys.exit(1)\n"
             "evento(0.02, int(time.time()) + 18000)\n"
@@ -468,10 +489,9 @@ def test_herdr_keeps_working_and_says_until_when_after_hitting_the_ceiling():
               str(cut))
         if cut and cut[0].get("reset_em"):
             wake = (datetime.fromisoformat(cut[0]["reset_em"]).timestamp()
-                    + float(MARGIN["CEPA_UNTIL_MARGEM_RESET"]))
-            hhmm = datetime.fromtimestamp(wake).strftime("%H:%M")
+                    + HERDR_MARGIN)
             check_pause_report("teto", herdr_messages(log),
-                               "fila: item 1/1 a1", hhmm, "fila: item 1/1 a1")
+                               "fila: item 1/1 a1", wake, "fila: item 1/1 a1")
 
 
 def main():
