@@ -3664,12 +3664,6 @@ def _main(argv=None):
     print(lbl("  permissions: ")
           + SCREEN.c("amarelo", "ASKS (will hang with nobody watching)" if a.with_permissions
                    else "--dangerously-skip-permissions ON"))
-    print(lbl("  1st item: ")
-          + SCREEN.c("negrito", nxt.get('id', '(none — queue has no executable item)'))
-          + (SCREEN.c("cinza", SCREEN.truncate(f" — {nxt.get('title')}", slack=40))
-             if nxt.get("id") else "")
-          + f" · queue: {t.get('por_status', {}).get('pending', 0)} "
-            f"pending, {t.get('por_status', {}).get('done', 0)} done")
     # Forecast (CS-1): `data` is capped at `--max 1`, so the count comes from a
     # second, uncapped read of the same queue. Even uncapped it is not the whole
     # queue: `cepa-plan queue` stops walking at the first item whose `blocked_by`
@@ -3677,15 +3671,23 @@ def _main(argv=None):
     # in neither `batch` nor `deferred`. The count is what runs / waits for the
     # owner now, up to that first unmet dependency. If the read fails, say so
     # instead of printing the number of the capped read (which would be wrong).
+    # It rides on the `1st item:` line, not on a line of its own: the header has
+    # a 7-line ceiling (A6) and a taller header blocked the supervisor on a pty.
     whole, whole_err = query_queue(a.queue, repo, max_items=10 ** 6)
     if whole:
         runs = len(whole.get("batch") or [])
         waits = sum(1 for ad in whole.get("deferred") or []
                     if ad.get("reason") == "human_pending")
-        print(lbl("  start  : ") + f"{runs} item(s) run, {waits} wait(s) for the owner "
-              "(open `human_pending`)")
+        forecast = f" · start: {runs} run, {waits} wait for the owner"
     else:
-        print(lbl("  start  : ") + f"unavailable (queue read failed: {whole_err})")
+        forecast = f" · start: unavailable (queue read failed: {whole_err})"
+    print(lbl("  1st item: ")
+          + SCREEN.c("negrito", nxt.get('id', '(none — queue has no executable item)'))
+          + (SCREEN.c("cinza", SCREEN.truncate(f" — {nxt.get('title')}", slack=40))
+             if nxt.get("id") else "")
+          + f" · queue: {t.get('por_status', {}).get('pending', 0)} "
+            f"pending, {t.get('por_status', {}).get('done', 0)} done"
+          + forecast)
     inheritance = inheritance_from_previous_run(repo, a.queue, data.get("path"))
     for h in inheritance:
         print(lbl("  inherits: ") + f"`{h['branch']}` ({h['commits']} commit(s) the "

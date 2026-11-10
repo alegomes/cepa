@@ -846,11 +846,14 @@ def test_header_says_how_many_items_run_and_how_many_wait_for_the_owner():
         binv = fake_claude(tmp, "pass")
         plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
         p, calls = run_until(root, binv, plan, ["--for", "2h", "--dry-run"])
-        lines = [l for l in p.stdout.splitlines() if l.lstrip().startswith("start  :")]
-        check("a largada tem uma linha 'start'", len(lines) == 1, p.stdout[:800])
+        lines = [l for l in p.stdout.splitlines() if "1st item:" in l]
+        check("a largada tem uma linha '1st item:'", len(lines) == 1, p.stdout[:800])
         line = lines[0] if lines else ""
-        check("...com 2 itens que rodam", "2 item(s) run" in line, line)
-        check("...e 1 que espera o dono", "1 wait(s) for the owner" in line, line)
+        check("...com 2 itens que rodam e 1 que espera o dono",
+              "start: 2 run, 1 wait for the owner" in line, line)
+        header = p.stdout.split("\n\n")[0].splitlines()
+        check("...e o cabecalho segue com no maximo 7 linhas", len(header) <= 7,
+              str(len(header)) + "\n" + p.stdout[:800])
         check("...e nada foi disparado", not calls, str(calls))
 
 
@@ -879,13 +882,13 @@ def test_header_says_unavailable_when_the_uncapped_queue_read_fails():
         with contextlib.redirect_stdout(out):
             rc = mod.main(["fila", "--repo", str(root), "--for", "1h", "--dry-run",
                            "--sem-verify", "--sem-analise"])
-        lines = [l for l in out.getvalue().splitlines() if l.lstrip().startswith("start  :")]
+        lines = [l for l in out.getvalue().splitlines() if "1st item:" in l]
         check("dry-run was not aborted", rc == 0, out.getvalue()[:800])
-        check("there is one 'start' line", len(lines) == 1, out.getvalue()[:800])
+        check("there is one '1st item:' line", len(lines) == 1, out.getvalue()[:800])
         line = lines[0] if lines else ""
         check("...saying unavailable with the error",
-              "unavailable (queue read failed: boom: cepa-plan fell over)" in line, line)
-        check("...and with no count", "item(s)" not in line and "wait(s)" not in line, line)
+              "start: unavailable (queue read failed: boom: cepa-plan fell over)" in line, line)
+        check("...and with no count", " run, " not in line, line)
 
 
 def test_item_that_exceeds_the_slack_is_killed_with_the_whole_group():
