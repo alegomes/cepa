@@ -1,0 +1,60 @@
+schema_version: 2
+card: herdr-desktop-osc-7501
+verdict: proven
+reviewed_at: 2026-11-10T22:00:00-03:00
+base_commit: 532ec3b
+head_commit: fd6412f
+issue_type: Bug
+scope:
+  topology: build-solo (Python harness, not Quarkus; PIT not applicable, perturbation used)
+  criterion: "inside a Herdr desktop-app terminal (HC_TERMINAL_ID set, no HERDR_ENV, stdout a tty) cepa-until and cepa-prove write OSC 7501 `state=working:app=<agent>:msg=<base64 utf-8, whitespace-collapsed, capped at 200>` on every herdr_report and `state=clear` on herdr_release; nothing without HC_TERMINAL_ID or when stdout is not a tty; every failure swallowed"
+  covering_tests: "tests/test_cepa_until.py: test_hc_terminal_gets_one_working_status_per_item_and_a_clear_at_the_end, test_hc_status_is_not_written_outside_an_hc_terminal_or_into_a_pipe (real subprocess on a pty; now also HC_TERMINAL_ID=''), test_hc_message_is_one_line_capped_at_200_utf8_and_names_the_agent, test_hc_terminal_that_fails_to_write_does_not_break_the_report; tests/test_cepa_prove.py: test_hc_terminal_shows_cepa_prove_working_per_round_and_is_cleared_at_the_end, test_hc_status_is_not_written_by_cepa_prove_outside_hc_or_into_a_pipe (real cepa-prove subprocess on a pty)"
+  changed_classes:
+    - class: "common/bin/cepa-until :: _hc_b64, HC_MSG_MAX (cap, whitespace collapse, base64 utf-8)"
+      module: common
+      external_observable: true
+      substituted_by_double: null   # real code runs; module-level test only fakes the tty object (stdout) at the far boundary
+    - class: "common/bin/cepa-until :: _hc_status (HC_TERMINAL_ID gate, isatty gate, write/flush, try/except)"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until :: herdr_report / herdr_release (one _hc_status call each, app=<agent>)"
+      module: common
+      external_observable: true
+      substituted_by_double: null   # cepa-prove path run by a real cepa-prove subprocess on a pty
+  base_commit_resolved: true
+  note: "fd6412f changes only tests/test_cepa_until.py (hc_scenario: `if hc_id is not None`; new HC_TERMINAL_ID='' case). common/ is byte-identical to 3e0b451 (git diff --quiet 3e0b451 fd6412f -- common exits 0). Perturbations ran on throwaway copies of a detached worktree of fd6412f (removed afterwards), CEPA_UNTIL / CEPA_PROVE pointed at the perturbed copy, only test_hc_* called, each anchor required to occur exactly once (P17 and P3 anchors were widened after the script aborted on a non-unique match)."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline green at fd6412f: all test_hc_* of tests/test_cepa_until.py and tests/test_cepa_prove.py -> FAILCOUNT until=0 prove=0"
+        - "N7 (previous survivor) `if not os.environ.get(\"HC_TERMINAL_ID\")` -> `if \"HC_TERMINAL_ID\" not in os.environ`: now RED, 1 FAIL ('hc (HC_TERMINAL_ID vazio): nenhuma sequência 7501'), until=1 prove=0"
+        - "P17 `sys.stdout.flush()` removed from _hc_status: RED, until=1 prove=0 ('cada sequência é descarregada ... (flush)')"
+        - "P24 base64.b64encode -> urlsafe_b64encode: RED, until=3 prove=0 (exact message, flush check, 200-cut check)"
+        - "P1 cap removed ([:HC_MSG_MAX] -> [:100000]): RED, until=2 prove=0"
+        - "P3 whitespace collapse removed (str(text)[:HC_MSG_MAX]): RED, until=3 prove=0"
+        - "P6 isatty gate -> True: RED, until=1 prove=1"
+        - "P7 HC_TERMINAL_ID gate -> False (never returns): RED, until=2 prove=1"
+        - "P8 working call removed from herdr_report: RED, until=6 prove=2"
+        - "P9 clear call removed from herdr_release: RED, until=3 prove=1"
+        - "Q3 cepa-prove herdr_report call removed: RED, until=0 prove=2"
+        - "carried from debc10a review, not re-run at this head (_hc_b64/_hc_status/herdr_* are byte-identical, only tests changed in a way that adds a case): P2, P4, P5, P10, P13, P14, P15, P18, P19, P21, N1, N3, N6, N8, Q4 all RED then. fd6412f only adds an assertion and widens `hc_scenario` (`if hc_id` -> `if hc_id is not None`, which differs only for hc_id='')"
+      note_on_altitude: "module-level tests fake only sys.stdout (far boundary); lifecycle and gates are proven on real pty subprocesses for both programs"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every changed line of _hc_b64/_hc_status/herdr_report/herdr_release and the cepa-prove call site turned at least one test RED when broken (list above), including the empty-string HC_TERMINAL_ID gate (N7)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff writes an outbound escape sequence from the operator's own queue messages; it parses no input from outside and touches no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "detached worktree of 532ec3b with tests/ checked out from fd6412f (git checkout fd6412f -- tests), common/ at base: test_hc_* -> FAILCOUNT until=6 prove=2 (message/cap/flush, working item 1, working item 2, clear after two items, working per round, clear after three rounds); at fd6412f the same runner -> FAILCOUNT until=0 prove=0"
+routing_reason: "The last survivor N7 (empty-string HC_TERMINAL_ID treated as set) is now RED thanks to the new pty case in fd6412f. Re-confirmed RED at this head: flush removed, URL-safe base64, cap, whitespace collapse, isatty gate, HC_TERMINAL_ID gate, working and clear calls, cepa-prove call. Regression-at-base RED (6+2 FAIL), green at head. No survivor, no skipped or assumed level. PROVEN."

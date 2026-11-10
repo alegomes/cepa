@@ -1,0 +1,55 @@
+key: herdr-desktop-osc-7501
+head: 86e6eff
+status: complete
+criteria:
+  - id: AC1
+    text: "inside an hc terminal (HC_TERMINAL_ID set, stdout a terminal), a run of a two-item queue writes one OSC 7501 `state=working:app=cepa-until:msg=<base64 of '<queue>: item i/n <id>'>` per item, in item order"
+    altitude: cli
+    surface: "common/bin/cepa-until run as a subprocess over a tmp git repo, stdout a pty, HC_TERMINAL_ID set, no HERDR_*; assertions on the bytes read from the pty master"
+    test: "tests/test_cepa_until.py::test_hc_terminal_gets_one_working_status_per_item_and_a_clear_at_the_end (exact sequences for 'fila: item 1/2 a1' and 'fila: item 2/2 a2' present, item 1 index < item 2 index, run exits 0 with both items done)"
+    layer: cli (subprocess, pty)
+    evidence: verified
+    run: "cd tests && python3 -I -c 'import sys; sys.path.insert(0,\".\"); import test_cepa_until as t; t.test_hc_terminal_gets_one_working_status_per_item_and_a_clear_at_the_end(); t.test_hc_status_is_not_written_outside_an_hc_terminal_or_into_a_pipe(); print(t.FAILURES)' -> 6 'ok' lines (4 + 2), FAILURES [], ~6.5 s. Auditor, foreground, only these two tests."
+    status: complete
+    gap: ""
+  - id: AC2
+    text: "on exit the last OSC 7501 sequence written is `state=clear`, after every working report"
+    altitude: cli
+    surface: "same pty subprocess; byte order in the pty output"
+    test: "same test: exactly 3 `ESC ]7501;` sequences and the last one (rfind) is the `state=clear` one"
+    layer: cli (subprocess, pty)
+    evidence: verified
+    run: "same run as AC1 ('hc: a última sequência 7501 é o clear, depois dos dois itens' ok)"
+    status: complete
+    gap: ""
+  - id: AC3
+    text: "without HC_TERMINAL_ID nothing with `]7501;` is written; with HC_TERMINAL_ID but stdout a pipe nothing with `]7501;` is written to stdout"
+    altitude: cli
+    surface: "same subprocess: (a) pty without HC_TERMINAL_ID, (b) subprocess.run capture_output with HC_TERMINAL_ID"
+    test: "tests/test_cepa_until.py::test_hc_status_is_not_written_outside_an_hc_terminal_or_into_a_pipe (both cases: no `]7501;` in stdout, both items done)"
+    layer: cli (subprocess, pty and pipe)
+    evidence: verified
+    run: "same run as AC1 (2 'ok' lines for the two cases)"
+    status: complete
+    gap: ""
+  - id: AC4
+    text: "`cepa-prove` gets the same behavior as agent `cepa-prove` (it calls U.herdr_report / U.herdr_release from cepa-until)"
+    altitude: cli
+    surface: "common/bin/cepa-prove run as a subprocess in a pty with HC_TERMINAL_ID set (no HERDR_*), fake claude, 3 rounds; bytes read from the pty master"
+    test: "tests/test_cepa_prove.py::test_hc_terminal_shows_cepa_prove_working_per_round_and_is_cleared_at_the_end (exact base64 sequences app=cepa-prove for 'round 1', 'round 2 · handled 1: WEGO-1', 'round 3 · handled 2: WEGO-1, WEGO-2' in order; exactly 4 7501 sequences, last is state=clear; exit 0) and test_hc_status_is_not_written_by_cepa_prove_outside_hc_or_into_a_pipe (no HC_TERMINAL_ID, and pipe: no ]7501;, exit 0)"
+    layer: cli (subprocess, pty and pipe)
+    evidence: verified
+    run: "cd tests && python3 -I -c 'import test_cepa_prove as p; call the two tests; print(p.FAILURES)' -> 3 + 2 ok lines, FAILURES []. Foreground, only these tests."
+    status: complete
+    gap: ""
+  - id: AC5
+    text: "the pre-existing herdr CLI path (HERDR_ENV=1 + HERDR_PANE_ID + HERDR_BIN_PATH) is unchanged"
+    altitude: cli
+    surface: "cepa-until and cepa-prove as subprocesses with a fake herdr (HERDR_BIN_PATH) logging argv"
+    test: "all 11 pre-existing test_herdr_* in tests/test_cepa_until.py and all 6 in tests/test_cepa_prove.py, unmodified by the diff (diff only adds tests)"
+    layer: cli (subprocess, fake herdr)
+    evidence: verified
+    run: "cd tests && python3 -I -c 'import sys; sys.path.insert(0,\".\"); import test_cepa_until as t, test_cepa_prove as p; [call every test_herdr* in both]; print(\"ran\", n, t.FAILURES, p.FAILURES)' -> ran 17, FAILURES [] [] (auditor, foreground). Diff of _herdr_call: none; herdr_report/herdr_release only gained one trailing _hc_status line each."
+    status: complete
+    gap: ""
+note: "Re-audit at 86e6eff (tests-only since 3e0b451; common/bin/cepa-until unchanged; diff 532ec3b..86e6eff has 254 insertions, 0 deletions, so pre-existing tests are untouched). Also verified by running: test_hc_message_is_one_line_capped_at_200_utf8_and_names_the_agent (unit, fake tty: flattening, 200 cap, utf-8, agent name) and test_hc_terminal_that_fails_to_write_does_not_break_the_report; both ok, FAILURES []. Caveats: (1) check() does not fail pytest, so the import run with FAILURES [] is the evidence. (2) pty tests read stdout only; stderr is DEVNULL. (3) Untested and outside the criteria: hc clear on cepa-until quota-pause/signal/circuit-breaker exits and on cepa-prove abnormal exits; simultaneous HERDR_ENV + HC_TERMINAL_ID. (4) AC5 carried from the earlier audit (17 test_herdr_* ran green, FAILURES []): source unchanged and no existing test line modified; not re-run."
