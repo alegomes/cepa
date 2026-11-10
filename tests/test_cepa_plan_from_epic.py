@@ -47,6 +47,8 @@ WALKTHROUGH_C2 = (
     "sozinhas, em worktrees filhas com o modo de cada estágio. Um needs-human "
     "em item com dependentes parou o ciclo em `aguardando-dono` e a pergunta "
     "está no terminal.")
+SCRIPT_ITEM = ("O roteiro do ciclo roda de ponta a ponta, com as peças "
+               "ligadas entre si")
 PIECES_C2 = [
     "`cepa-until` como tronco + fork de filhos e merge train extraídos do "
     "Maestro como biblioteca",
@@ -124,12 +126,21 @@ def test_real_epic_cycle_2(base):
           plan.get("demonstrates") == WALKTHROUGH_C2, repr(plan.get("demonstrates")))
     items = plan.get("items") or []
     check("um item por frase de \"O que atravessa\", na ordem do texto",
-          [i.get("title") for i in items] == PIECES_C2,
+          [i.get("title") for i in items] == PIECES_C2 + [SCRIPT_ITEM],
           repr([i.get("title") for i in items]))
-    check("ids estáveis por posição: C2-1, C2-2",
-          [i.get("id") for i in items] == ["C2-1", "C2-2"],
+    check("ids estáveis por posição: C2-1, C2-2, e o roteiro como C2-R",
+          [i.get("id") for i in items] == ["C2-1", "C2-2", "C2-R"],
           repr([i.get("id") for i in items]))
-    for i in items:
+    last = items[-1] if items else {}
+    check("o item final é o roteiro do ciclo, bloqueado por todas as peças",
+          last.get("blocked_by") == ["C2-1", "C2-2"]
+          and last.get("status") == "pending"
+          and f"executado de ponta a ponta sobre dado real e não peça a peça — "
+              f"{WALKTHROUGH_C2}" in (last.get("why") or ""), repr(last))
+    for i in items[:-1]:
+        check(f"{i.get('id')}: `why` diz que o roteiro é cobrado no C2-R",
+              "ele é cobrado inteiro no item C2-R" in (i.get("why") or ""),
+              i.get("why") or "")
         why = i.get("why") or ""
         check(f"{i.get('id')}: `why` traz o critério de aceite (o roteiro)",
               f"critério de aceite: o roteiro do ciclo — {WALKTHROUGH_C2}" in why,
@@ -172,7 +183,7 @@ def test_epic_command_format(base):
           "não partem",
           titles == ["O leitor de PDF extrai o texto",
                       "O classificador lê `docs/regras.md` e marca `art. 5` na cláusula a | b",
-                      "A tela mostra as 3 respostas"], repr(titles))
+                      "A tela mostra as 3 respostas", SCRIPT_ITEM], repr(titles))
     sup = ("superfície onde se observa: tela: a lista de respostas na tela de "
            "upload; backend: registro `contrato_lido` no banco")
     check("a superfície sai de \"Efeito em tela\" e \"Efeito em backend\"",
@@ -183,7 +194,7 @@ def test_epic_command_format(base):
     r2 = run(d, "from-epic", "docs/epics/fixture.md", "--ciclo", "2")
     t2 = [i["title"] for i in json.loads(r2.stdout)["items"]] if r2.returncode == 0 else r2.stderr
     check("outro ciclo, outra fila: só as peças do ciclo 2",
-          t2 == ["O comparador de versões 2.0"], repr(t2))
+          t2 == ["O comparador de versões 2.0", SCRIPT_ITEM], repr(t2))
 
 
 EPIC_EN = (EPIC_NEW
@@ -195,7 +206,31 @@ EPIC_EN = (EPIC_NEW
                     "| Cycle | Script (what the owner sees) | Effect on screen "
                     "| Effect in backend | What it crosses | When |")
            .replace("## Decidido sem perguntar (vete aqui)",
-                    "## Decided without asking (veto here)"))
+                    "## Decided without asking (veto here)")
+           + """
+## Script walk
+
+| Cycle | Step | Piece | Where |
+|---|---|---|---|
+| 1 | O operador carrega o PDF | O leitor de PDF extrai o texto | leitor |
+| 2 | O operador vê a diferença | O comparador de versões 2.0 | leitor |
+""")
+
+# What the Epic says beyond the pieces: a precondition only a human closes, the
+# criteria a piece cites, a criterion no piece cites.
+EPIC_COVERAGE = (EPIC_EN
+                 .replace("O leitor de PDF extrai o texto.",
+                          "O leitor de PDF extrai o texto (CA-1.1, CA-1.10) "
+                          "[espera: teste à mão de importação. Sem ele a "
+                          "versão é chute].")
+                 .replace("## Decided without asking (veto here)", """## Stories
+
+- **CA-1.1** (teste) O texto sai na ordem das páginas.
+- **CA-1.10** (backend) O texto fica fora do git.
+- **CA-2.1** (documento) Contrato assinado.
+- **CA-2.2** (documento) Autorização por escrito. Fora da escada: obrigação paralela.
+
+## Decided without asking (veto here)"""))
 
 
 def test_new_and_old_epic_names(base):
@@ -250,6 +285,61 @@ def test_new_and_old_epic_names(base):
     check("Status: closed não vira aviso de Epic não pronto",
           r.returncode == 0 and "Status: closed" not in r.stderr
           and "só `ready`" not in r.stderr, r.stderr)
+
+
+def test_wait_criteria_and_orphans(base):
+    d = git_repo(base, "cobertura")
+    (d / "epic.md").write_text(EPIC_COVERAGE, encoding="utf-8")
+    r = run(d, "from-epic", "epic.md", "--cycle", "1")
+    check("from-epic sai 0 com marcador de espera e critérios", r.returncode == 0,
+          r.stderr)
+    if r.returncode != 0:
+        return
+    items = json.loads(r.stdout)["items"]
+    first = items[0]
+    check("`[espera: ...]` sai do título, mesmo com ponto dentro",
+          first["title"] == "O leitor de PDF extrai o texto (CA-1.1, CA-1.10)",
+          repr([i["title"] for i in items]))
+    check("...e vira `human_pending` da peça, que o lote adia",
+          first["human_pending"] == "teste à mão de importação. Sem ele a "
+          "versão é chute", repr(first["human_pending"]))
+    check("peça sem marcador nasce sem rota humana",
+          all(i["human_pending"] is None for i in items[1:]), repr(items[1:]))
+    check("o `why` da peça traz o texto de cada critério que ela cita",
+          "critérios do Epic que esta peça entrega: CA-1.1: (teste) O texto "
+          "sai na ordem das páginas.; CA-1.10: (backend) O texto fica fora do "
+          "git." in first["why"], first["why"])
+    check("peça que não cita critério não ganha critério inventado",
+          "critérios do Epic" not in items[1]["why"], items[1]["why"])
+    check("critério que nenhuma peça cita vira aviso pelo id; o marcado `fora "
+          "da escada` não",
+          "1 critério(s) do Epic sem peça" in r.stderr and "(CA-2.1)" in r.stderr
+          and "CA-2.2" not in r.stderr, r.stderr)
+    no_walk = d / "sem-walk.md"
+    no_walk.write_text(EPIC_COVERAGE.split("## Script walk")[0], encoding="utf-8")
+    r = run(d, "from-epic", str(no_walk), "--cycle", "1")
+    check("Epic `ready` sem `## Script walk` vira aviso, e a fila sai",
+          r.returncode == 0 and "não tem `## Script walk`" in r.stderr, r.stderr)
+    w = run(d, "write", "fx-cob", "--from-epic", "epic.md", "--cycle", "1",
+            "--when", "2026-11-10", "--repo", ".")
+    check("write grava a fila com o item do roteiro e a rota humana",
+          w.returncode == 0, w.stderr)
+    if w.returncode == 0:
+        plan = yaml.safe_load(plan_of(d, "fx-cob").read_text(encoding="utf-8"))
+        ids = [i["id"] for i in plan["items"]]
+        check("a fila gravada termina em C1-R, bloqueado pelas peças",
+              ids[-1] == "C1-R"
+              and plan["items"][-1]["blocked_by"] == ids[:-1], repr(ids))
+        check("a linha `source` conta as peças e nomeia o item do roteiro",
+              "3 peças" in str(plan.get("source"))
+              and "C1-R" in str(plan.get("source")), repr(plan.get("source")))
+        q = run(d, "queue", "fx-cob", "--repo", ".", "--json")
+        lot = json.loads(q.stdout) if q.returncode == 0 else {}
+        check("o lote não executa a peça que espera o humano, nem o roteiro",
+              [i["id"] for i in lot.get("batch") or []] == ["C1-2", "C1-3"]
+              and {(i["id"], i["reason"]) for i in lot.get("deferred") or []}
+              == {("C1-1", "human_pending"), ("C1-R", "depends-on-deferred")},
+              q.stdout + q.stderr)
 
 
 def test_writes_and_rewrites(base):
@@ -390,7 +480,7 @@ def test_warnings_and_refusals_of_malformed_epic(base):
     r = run(d, "from-epic", str(last), "--ciclo", "1")
     t = [i["title"] for i in json.loads(r.stdout)["items"]] if r.returncode == 0 else r.stderr
     check("`\\|` no fim da última célula é texto, não divisor",
-          t == ["A peça a |"], repr(t))
+          t == ["A peça a |", SCRIPT_ITEM], repr(t))
 
 
 def test_prose_contract():
@@ -406,6 +496,7 @@ def main():
         test_real_epic_cycle_2(base)
         test_epic_command_format(base)
         test_new_and_old_epic_names(base)
+        test_wait_criteria_and_orphans(base)
         test_writes_and_rewrites(base)
         test_from_epic_over_queue_with_old_key(base)
         test_refusals(base)

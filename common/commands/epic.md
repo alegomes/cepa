@@ -154,7 +154,31 @@ The order of the gaps:
    event that proves it really happened, not only on screen), **What it
    crosses** (the pieces that change, one sentence per
    piece) and **When**.
-7. **Open questions** that the conversation itself raised.
+7. **The script walk** — after the ladder, cycle by cycle, walk the script
+   one step at a time and ask of each step **which piece of "What it crosses"
+   delivers it and where that piece lives** (the repository or the service).
+   A step no piece delivers is a missing piece: write the piece in the ladder
+   first, then the row. When two consecutive steps live in different places,
+   ask **who calls whom**, and write that call as a piece of its own, with
+   `place-a → place-b` in Where. The pieces come out per component (the
+   reader, the states, the XML) and the script crosses all of them: the call
+   between two of them is the piece nobody writes, each side is then built
+   and proven alone, and the cycle "closes" piece by piece without ever
+   running. It goes in `## Script walk`.
+8. **What each piece waits for** — read the **When** cell again: every
+   precondition in it (a test done by hand, a document, an answer from the
+   client) belongs to a piece. Ask which one, and write `[espera: <the
+   condition>]` at the end of that piece's sentence. `/common:queue` turns it
+   into the item's `human_pending`, and the batch defers the item until the
+   owner closes it. A precondition that stays only in When is prose: the
+   piece gets built on a guess before the test happens.
+9. **The criteria, when the Epic has them** — an Epic that lists acceptance
+   criteria by id (`- **CA-1.2** ...`, under Stories) has two structures, and
+   the queue reads only the ladder. For each criterion, ask which piece
+   delivers it and cite the id inside that piece's sentence ("XML de uma guia
+   (CA-9.4)."). A criterion no cycle delivers says so on its own line:
+   `Fora da escada: <why>`.
+10. **Open questions** that the conversation itself raised.
 
 Each turn has exactly **one question**, written in **prose**, ending with `?`,
 and it is the only `?` of the turn: "this, and also that?" is two.
@@ -260,6 +284,13 @@ The Epic becomes `**Status:** ready` when, and only when:
   acceptable; missing, no);
 - `## Who it is for` has text, `## Out of scope` has at least one item and
   `## Outcome metric` fills **Baseline:**, **Target:** and **Source:**;
+- `## Script walk` has at least one row for each cycle of the ladder, every
+  row fills **Step**, **Piece** and **Where**, and each **Piece** is a
+  sentence of that cycle's "What it crosses", copied as written;
+- a cycle whose walk names two or more places in **Where** has at least one
+  row with `place-a → place-b`: the piece that is the call between them;
+- every `CA-` criterion the Epic lists is cited by id in a "What it crosses"
+  cell, or says `fora da escada` on its own line;
 - no `- [ ]` is left in "Perguntas em aberto".
 
 The `spec-readiness-gate` hook applies this sieve to every file in
@@ -346,6 +377,12 @@ Only the placeholders below are in English.
 |---|---|---|---|---|---|
 | 1. <name> | <what the owner sees working> | <where, on screen> | <record, endpoint or event> | <one sentence per piece that changes.> | <when> |
 
+## Script walk
+
+| Cycle | Step | Piece | Where |
+|---|---|---|---|
+| 1 | <one step of the script> | <the sentence of "What it crosses" that delivers it> | <repository or service; `a → b` when the piece is the call between two> |
+
 ## Decided without asking (veto here)
 
 - <decision> — <why>.
@@ -370,7 +407,14 @@ metric`, `Out of scope`) and their field labels are parsed by the gate, so keep
 them verbatim too. An Epic marked with the old `pronta` keeps the earlier
 sieve and is not asked for them. The "What it crosses" column is written
 in short sentences ending in a period, one per piece, because `/common:queue`'s
-`--from-epic` turns each sentence into an item of that cycle's queue.
+`--from-epic` turns each sentence into an item of that cycle's queue. Inside
+a sentence, `[espera: <condition>]` becomes the item's `human_pending` and a
+`CA-` id brings that criterion's text into the item's `why`. The `## Script
+walk` heading and its four column names are parsed by the gate too. The three
+coverage rules (walk, junction, criteria) are charged on the passage to
+`ready` or `closed`: an Epic that was already `ready` before 2026-11-10 is
+not blocked on its next edit, and `/common:queue --from-epic` warns about it
+instead.
 
 ## Constraints
 

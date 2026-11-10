@@ -607,7 +607,14 @@ OUT = """## Out of scope
 
 - Contratos em papel sem digitalização — o extrator só lê PDF.
 """
-OUTCOME_EN = WHO + "\n" + METRIC + "\n" + OUT
+WALK = """## Script walk
+
+| Cycle | Step | Piece | Where |
+|---|---|---|---|
+| 1 | O operador carrega o PDF e vê as 3 respostas | upload → extrator → tela | contratos-backend |
+| 2 | O operador aprova a regra e a conta sai glosada | regra → motor → conta | contratos-backend |
+"""
+OUTCOME_EN = WHO + "\n" + METRIC + "\n" + OUT + "\n" + WALK
 IMPACT = """## Impact
 
 **Measured value:** 14 min por conta · **Measured on:** 2026-12-01, pela mesma rota da Source
@@ -717,6 +724,109 @@ def test_command_teaches_outcome_and_impact():
               "**Measured value:**", "**Measured on:**"):
         check(f"/common:epic ensina {h}", h in text)
     check("/common:epic aceita closed", "draft | ready | closed" in text)
+
+
+# ── Coverage screen (2026-11-10): the pieces add up to the script ────────────
+LADDER_TWO_PLACES = LADDER_EN.replace(
+    "| upload → extrator → tela |",
+    "| O leitor extrai o texto. A ferramenta guarda o lote [espera: teste à mão "
+    "de importação. Sem ele a versão é chute]. A ferramenta chama o leitor "
+    "(CA-1.1). |")
+WALK_TWO_PLACES = """## Script walk
+
+| Cycle | Step | Piece | Where |
+|---|---|---|---|
+| 1 | O operador carrega o PDF | A ferramenta guarda o lote | ferramenta-backend |
+| 1 | e vê as 3 respostas | O leitor extrai o texto. | leitor-backend |
+| 2 | O operador aprova a regra | regra → motor → conta | ferramenta-backend |
+"""
+JUNCTION = ("| 1 | o PDF chega ao leitor | A ferramenta chama o leitor (CA-1.1) "
+            "| ferramenta-backend → leitor-backend |\n")
+STORIES = """## Stories
+
+- **CA-1.1** (teste) A ferramenta dispara a leitura.
+- **CA-1.10** (documento) Ata assinada.
+"""
+
+
+def two_places(walk=WALK_TWO_PLACES + JUNCTION, stories="", **kw):
+    return epic_en(ladder=LADDER_TWO_PLACES,
+                   outcome=WHO + "\n" + METRIC + "\n" + OUT + "\n" + walk
+                   + "\n" + stories, **kw)
+
+
+def test_ready_without_script_walk_blocks():
+    rc, err = write(epic_en(outcome=WHO + "\n" + METRIC + "\n" + OUT))
+    check("ready sem `## Script walk` bloqueia, nomeando a seção",
+          rc == 2 and "## Script walk" in err, err)
+    rc, err = write(epic(status="pronta"))
+    check("a palavra antiga `pronta` não é cobrada do Script walk", rc == 0, err)
+
+
+def test_walk_needs_every_cycle_and_every_cell():
+    only_one = WALK.replace(
+        "| 2 | O operador aprova a regra e a conta sai glosada | regra → motor "
+        "→ conta | contratos-backend |\n", "")
+    rc, err = write(epic_en(outcome=WHO + METRIC + OUT + only_one))
+    check("ciclo da escada sem passo no Script walk bloqueia, nomeando o ciclo",
+          rc == 2 and 'o ciclo "2. Regrar" não tem nenhum passo' in err, err)
+    no_where = WALK.replace("| upload → extrator → tela | contratos-backend |",
+                            "| upload → extrator → tela |  |")
+    rc, err = write(epic_en(outcome=WHO + METRIC + OUT + no_where))
+    check("passo sem Where bloqueia", rc == 2 and 'linha sem "Where"' in err, err)
+
+
+def test_walk_piece_must_be_a_sentence_of_the_ladder():
+    invented = WALK.replace("| upload → extrator → tela |", "| a ponte entre os dois |")
+    rc, err = write(epic_en(outcome=WHO + METRIC + OUT + invented))
+    check("passo que nomeia peça fora de \"What it crosses\" bloqueia",
+          rc == 2 and 'a peça "a ponte entre os dois"' in err, err)
+
+
+def test_two_places_need_the_junction_piece():
+    rc, err = write(two_places(walk=WALK_TWO_PLACES))
+    check("ciclo em dois lugares sem a peça da junção bloqueia",
+          rc == 2 and "falta a peça da junção" in err
+          and "ferramenta-backend, leitor-backend" in err, err)
+    rc, err = write(two_places())
+    check("com a linha `lugar-a → lugar-b`, passa; ponto final, `[espera: ...]` "
+          "com ponto dentro e maiúsculas não impedem a peça de casar",
+          rc == 0, err)
+
+
+def test_every_criterion_cited_by_a_piece_or_out_of_ladder():
+    rc, err = write(two_places(stories=STORIES))
+    check("critério `CA-` que nenhuma peça cita bloqueia, pelo id",
+          rc == 2 and "CA-1.10: nenhuma peça" in err, err)
+    check("...e CA-1.1, citado na peça, não é confundido com CA-1.10",
+          "CA-1.1: nenhuma peça" not in err, err)
+    out = STORIES.replace("Ata assinada.", "Ata assinada. Fora da escada: "
+                          "obrigação paralela.")
+    rc, err = write(two_places(stories=out))
+    check("critério marcado `fora da escada` passa", rc == 0, err)
+
+
+def test_coverage_screen_only_on_the_passage():
+    with tempfile.TemporaryDirectory() as d:
+        f = Path(d) / "docs" / "epics" / "antigo.md"
+        f.parent.mkdir(parents=True)
+        before = epic_en(outcome=WHO + "\n" + METRIC + "\n" + OUT)
+        f.write_text(before, encoding="utf-8")
+        rc, err = write(before + "\n- nota nova\n", str(f))
+        check("Epic já `ready` no disco, sem Script walk, aceita edição que "
+              "não é a passagem", rc == 0, err)
+        f.write_text(before.replace("**Status:** ready", "**Status:** draft"),
+                     encoding="utf-8")
+        rc, err = write(before, str(f))
+        check("o mesmo Epic saindo de `draft` para `ready` é cobrado",
+              rc == 2 and "## Script walk" in err, err)
+
+
+def test_command_teaches_script_walk():
+    text = CMD.read_text()
+    for h in ("## Script walk", "| Cycle | Step | Piece | Where |",
+              "fora da escada", "[espera:"):
+        check(f"/common:epic ensina {h}", h in text)
 
 
 def main():
