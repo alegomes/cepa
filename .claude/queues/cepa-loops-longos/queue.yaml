@@ -1,0 +1,28 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/estrategia-loops-longos.md, ordem aprovada pelo dono em 2026-11-10 (painel docs/reviews/2026-11-10-painel-loops-longos.md)
+# Escrito em: 2026-11-10
+
+schema_version: 2
+mode: single-track
+queue: cepa-loops-longos
+source: docs/estrategia-loops-longos.md, ordem aprovada pelo dono em 2026-11-10
+  (painel docs/reviews/2026-11-10-painel-loops-longos.md)
+items:
+- id: LL-1
+  title: '`cepa-until`: a resposta dada no painel de fim de run faz o mesmo run
+    continuar quando ainda há janela'
+  why: 'Único ganho confirmado pela medição de 2026-11-10 (docs/estrategia-loops-longos.md
+    seção 4.1): em 5 de 37 runs o dono respondeu antes do prazo, 4 relançando à
+    mão (3h11 de intervalo somado) e 1 sem relançar (11,1h de janela sobrando).
+    Sem processo dormindo e sem canal de aviso, decisões X1 a X4 do painel docs/reviews/2026-11-10-painel-loops-longos.md.'
+  status: pending
+  blocked_by: []
+  human_pending: null

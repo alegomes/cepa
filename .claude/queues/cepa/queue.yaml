@@ -666,44 +666,30 @@ items:
   why: o card está PARCIAL — o motor de classificação já aterrissou em maestro 0.4.3
     e o que falta é a calibragem contra as 43 escalações medidas. Depois do merge
     train porque calibrar um porteiro de ondas que não aterrissam mede a coisa errada.
-  status: pending
+  status: blocked
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-11-06: sim: Destrava quando o C2-1 da fila
-    cepa-espiral-c2 (cepa-until como tronco, com fork de filhos e merge train extraídos
-    do Maestro) rodar uma onda real do porteiro 0.4.3. Os itens rodar-onda-* de
-    que ele dependia foram descartados em 2026-10-16. Decisão do dono em 2026-11-03:
-    não refazer a pergunta "devolvo à fila agora?" a cada run enquanto essa condição
-    não mudar.. Rota humana fechada pelo dono: Destrava quando o C2-1 da fila cepa-espiral-c2
-    (cepa-until como tronco, com fork de filhos e merge train extraídos do Maestro)
-    rodar uma onda real do porteiro 0.4.3. Os itens rodar-onda-* de que ele dependia
-    foram descartados em 2026-10-16. Decisão do dono em 2026-11-03: não refazer
-    a pergunta "devolvo à fila agora?" a cada run enquanto essa condição não mudar..
-    O item voltou de `blocked` para `pending`. Evidência anterior: Resposta do dono
-    em 2026-10-30: não: Devolvo a calibragem do porteiro à fila agora, mesmo sem
-    nenhuma onda ter rodado?. O dono manteve o item como estava (`blocked`). Evidência
-    anterior: Resposta do dono em 2026-10-23: não: Devolvo a calibragem do porteiro
-    à fila agora, mesmo sem nenhuma onda ter rodado?. O dono manteve o item como
-    estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-22: não:
-    Devolvo a calibragem do porteiro à fila agora, mesmo sem nenhuma onda ter rodado?.
-    O dono manteve o item como estava (`blocked`). Evidência anterior: Resposta
-    do dono em 2026-10-20: não: Devolvo a calibragem do porteiro à fila agora, mesmo
-    sem nenhuma onda ter rodado?. O dono manteve o item como estava (`blocked`).
-    Evidência anterior: Resposta do dono em 2026-10-17: não: Devolvo a calibragem
-    do porteiro à fila agora, antes de qualquer onda rodar?. O dono manteve o item
-    como estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-15:
-    não: Mando calibrar o porteiro agora, antes de qualquer onda rodar?. O dono
-    manteve o item como estava (`blocked`). Evidência anterior: Condicao de fora
-    nao cumprida: o BACKLOG.md (secao ''Calibrar as regras do porteiro'', decisao
-    do dono 2026-08-24) adia o que falta (liberar escrita por shell cujo alvo cai
-    dentro da superficie da slice) ate a 0.4.3 do porteiro rodar pelo menos uma
-    onda de verdade. Conferido em 2026-09-27: o unico ledger de porteiro no disco
-    (wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl,
-    166 linhas) e de 2026-08-24 10:12, anterior ao commit 9b9846e da 0.4.3 (10:13);
-    nenhuma onda rodou depois. As duas ondas da fila (rodar-onda-lotes-*) estao
-    blocked por herdr fora do ar. Nada implementado, nenhum commit. Quem resolve:
-    o dono, rodando uma onda acompanhada com herdr de pe (destrava rodar-onda-*)
-    e depois devolvendo este item para pending.'
+  evidence: 'Conferido em 2026-11-10 (run until/2026-11-10-1135): a condição da
+    resposta do dono de 2026-11-06 não se cumpriu. C2-1 da fila cepa-espiral-c2
+    segue ''pending'' (sem evidence). Nenhum ledger de porteiro novo: o único ledger
+    real continua wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl
+    de 2026-08-24 10:12 (anterior à 0.4.3); as demais cópias são o fixture tests/fixtures/gatekeeper-shadow-wego-paralelo/decisions.jsonl
+    (182226 bytes, idêntico ao da main). Nada implementado, nenhum commit. Causa
+    do item ter voltado ao lote: o ''sim: destrava quando...'' do cepa-plan answer
+    devolve a pending na hora, sem guardar a condição; blocked_by entre filas não
+    existe (só ids da mesma fila). Quem resolve: o dono, quando C2-1 rodar uma onda
+    real do porteiro 0.4.3.'
+  owner_question: 'O tronco do ciclo 2 ainda não rodou onda nenhuma. Devolvo a calibragem
+    à fila mesmo assim? Recomendo não: nada mudou desde 06/11'
+  owner_summary:
+    pedido: ajustar as regras do porteiro que decide o que cada agente paralelo
+      pode fazer, usando as 43 escalações medidas
+    pronto: o motor do porteiro já existe; falta só a calibragem
+    impede: 'a condição que você pôs em 06/11 ainda não aconteceu: o tronco do ciclo
+      2 não rodou nenhuma onda real do porteiro novo'
+    se_sim: a calibragem roda contra as medições antigas, de antes da versão nova
+      do porteiro
+    se_nao: a calibragem segue parada até o tronco do ciclo 2 rodar uma onda
 - id: maestro-run-nao-diz-a-aba
   title: O /maestro:run forka as filhas sem dizer em que aba, e o herdr resolve
     pelo foco
@@ -2974,10 +2960,26 @@ items:
     segurou a suíte por 3h em 2026-11-05 e por 10h em 2026-11-06, sem nenhum sinal;
     o on_tty já mata o filho ao estourar (4ae3a3f), mas o runner continua sem teto
     para qualquer outro travamento (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits on until/2026-11-10-1135: d9359f6 (tests/run-all.sh runs each
+    test file under tests/_run_with_timeout.py: own process group, SIGKILL to the
+    group past CEPA_TEST_TIMEOUT, default 900s; file counted as failure tagged [TIMEOUT
+    Ns] and suite moves on; SIGTERM/SIGHUP kill the group, exit 128+sig; pytest
+    family now one pytest per file; new tests/test_run_all_timeout.py), b49fd15
+    (pytest-family timeout case, closing the gap both gates found), 8087097 (gate
+    artifacts). Default raised 300->900 after pair-reviewer timed tests/test_cepa_until.py
+    at 194s idle. pair-reviewer OK-WITH-NOTES, notes applied (900s default, repo-relative
+    limiter path, SIGTERM/SIGHUP handling, pytest timeout tail). completion-auditor
+    COMPLETE (.claude/acceptance/run-all-timeout-por-arquivo.yaml) after a first
+    INCOMPLETE. proof-reviewer PROVEN at b49fd15 (docs/proof/run-all-timeout-por-arquivo.yaml):
+    P1-P7 and P10 RED, test RED at base aac6aff. Summary format change: timeout
+    entries carry suffix ''  [TIMEOUT Ns]''. Not covered: a grandchild that calls
+    setsid itself escapes killpg. Full suite left to the cepa-until supervisor;
+    tests/test_run_all_timeout.py (19 ok) and run-all.sh run_all waivers green.
+    Code is on the overnight branch, no merge/push.'
+  head_commit: 8087097732841ccb5475c0266577552f294f69bb
 - id: land-mantem-merge-no-vermelho
   title: 'cepa-until land: build vermelho depois do merge não desfaz o merge; deixa
     o merge no clone para conserto e o próximo land retoma do build'
@@ -2986,10 +2988,23 @@ items:
     o merge com git reset --hard no commit perdido duas vezes; os vermelhos eram
     testes vizinhos com texto ou data antiga, não código errado (ainda não priorizado:
     entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits c0fee3a (fix: cmd_land no red build não faz mais reset --keep
+    ao ponto de retorno; grava aterrissagem.parou=build-vermelho mantendo merge;
+    imprime como consertar e como desistir com git reset --keep <retorno>; waiting_runs
+    mantém o run listado quando merge está no destino com build vermelho; pending
+    imprime ''merged ... with a red build, not pushed'') e f8ec435 (gates). Teste
+    test_red_build_after_the_merge_keeps_the_merge_without_push em tests/test_cepa_until_land.py:
+    verde no HEAD (47 ok), vermelho no código base (5 falhas). completion-auditor
+    COMPLETE (.claude/acceptance/land-mantem-merge-no-vermelho.yaml, 4 critérios).
+    proof-reviewer PROVEN (docs/proof/land-mantem-merge-no-vermelho.yaml; perturbações
+    P1-P4 todas RED). Vizinhos verdes: test_cepa_until_decide, _dead_supervisor,
+    _english_aliases. Código está na branch da noite until/2026-11-10-1135; build
+    completo fica com o supervisor. Fora do escopo: docs/estrategia-fim-do-cepa-until.md
+    C3 continua correto (fala de ponto de retorno e retomar), não editado.'
+  head_commit: f8ec43506aee412acd49ebff5c44c6fc9524f70f
 - id: write-mode-gate-ve-python
   title: write-mode-gate bloqueia escrita feita por interpretador (python3/node
     com heredoc ou -c), não só por Edit/Write/redirecionamento
@@ -2999,7 +3014,13 @@ items:
   status: pending
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'This is return 1 of 2: the item closed `done`, but the full build of
+    the run branch (`tests/run-all.sh`) exited 1, and the 2nd build exited 1. Output
+    in the `.log` of run 2026-11-10-1135. The commits of every attempt are in `until/2026-11-10-1135-vermelho-write-mode-gate-ve-python`
+    and the run branch went back to f8ec43506a. The item went back to `pending`:
+    reuse the side branch (`git cherry-pick` or `git merge` inside the attempt)
+    or redo it; the supervisor''s build judges the result. Disabling or deleting
+    the failing test does not count as a fix.'
 - id: worktree-retomada-nao-some
   title: limpeza automática não apaga worktree de conversa retomável
   why: 'decidido pelo dono em 2026-11-10: last_seen por turno, aviso na retomada,
