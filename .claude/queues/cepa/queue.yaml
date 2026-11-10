@@ -3000,3 +3000,12 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: worktree-retomada-nao-some
+  title: limpeza automática não apaga worktree de conversa retomável
+  why: 'decidido pelo dono em 2026-11-10: last_seen por turno, aviso na retomada,
+    telemetria com branch (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
