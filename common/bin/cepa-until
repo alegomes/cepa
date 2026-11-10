@@ -3927,6 +3927,10 @@ def main(argv=None):
                           "reset": reset.isoformat(),
                           "acorda": wake_at.isoformat()})
                 waits.append(("before the item", ident, reset))
+                # A pause stays `working`: herdr's `blocked` means "needs you", and
+                # this needs nothing from the owner (spec herdr-agent-status, CS-2).
+                herdr_report(f"{a.queue}: paused for 5h quota until "
+                             f"{wake_at.strftime('%H:%M')}")
                 wait_until(wake_at, on_tick=tick_wait)
                 last_reading, fresh_reading = None, False
                 continue
@@ -4406,6 +4410,8 @@ def main(argv=None):
                     step(f"waiting for the reset, resuming {ident} at "
                           f"{wake_at.strftime('%H:%M')}")
                     waits.append(("item cut off", ident, reset_at))
+                    herdr_report(f"{a.queue}: paused for 5h quota until "
+                                 f"{wake_at.strftime('%H:%M')}")
                     wait_until(wake_at, on_tick=tick_wait)
                     last_reading, fresh_reading = None, False
                     continue

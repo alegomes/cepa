@@ -371,6 +371,109 @@ def test_item_cost_only_compares_the_same_window():
     check("uma leitura só: sem custo", m.item_cost([(0.5, 1)]) is None)
 
 
+# ── herdr: the pane keeps `working` during a quota pause (CS-2) ─────────────
+
+HERDR_HEAD = ["pane", "report-agent", "w9:p9", "--source", "cepa-until",
+              "--agent", "cepa-until", "--state", "working"]
+
+
+def herdr_env(tmp):
+    """A fake `herdr` that appends its argv as JSON to a log. Returns (env, log)."""
+    herdr = Path(tmp) / "herdr"
+    log = Path(tmp) / "herdr.log"
+    herdr.write_text(f"#!{sys.executable}\n"
+                     "import sys, json\n"
+                     f"open({str(log)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
+    herdr.chmod(0o755)
+    return ({**MARGIN, "HERDR_ENV": "1", "HERDR_PANE_ID": "w9:p9",
+             "HERDR_BIN_PATH": str(herdr)}, log)
+
+
+def herdr_messages(log):
+    """[(state-head ok, message, seq)] per report, in order."""
+    out = []
+    for line in (log.read_text().splitlines() if log.exists() else []):
+        a = json.loads(line)
+        msg = a[a.index("--message") + 1] if "--message" in a else None
+        seq = int(a[a.index("--seq") + 1]) if "--seq" in a else None
+        out.append((a[:len(HERDR_HEAD)] == HERDR_HEAD, msg, seq))
+    return out
+
+
+def check_pause_report(label, reports, before, paused_hhmm, after):
+    msgs = [m for _, m, _ in reports]
+    check(f"herdr ({label}): todo relatório é `working` como cepa-until",
+          reports and all(ok for ok, _, _ in reports), str(reports))
+    pauses = [i for i, m in enumerate(msgs) if m and "paused" in m]
+    check(f"herdr ({label}): um relatório de pausa", len(pauses) == 1, str(msgs))
+    if len(pauses) != 1:
+        return
+    i = pauses[0]
+    check(f"herdr ({label}): a pausa diz até quando ({paused_hhmm})",
+          paused_hhmm in msgs[i], msgs[i])
+    check(f"herdr ({label}): a pausa vem depois do relatório de {before!r}",
+          i >= 1 and msgs[i - 1] == before, str(msgs))
+    check(f"herdr ({label}): ...e antes do relatório de {after!r}",
+          i + 1 < len(msgs) and msgs[i + 1] == after, str(msgs))
+    seqs = [s for _, _, s in reports]
+    check(f"herdr ({label}): --seq estritamente crescente",
+          all(x < y for x, y in zip(seqs, seqs[1:])), str(seqs))
+
+
+def test_herdr_keeps_working_and_says_until_when_during_the_pause_before_an_item():
+    """CS-2 of docs/spec/herdr-agent-status.md, the pause `quota_pause` decides
+    before a3 (same quota readings as test_pause_before_the_item_the_quota_cannot_hold):
+    herdr gets a `working` report saying it is paused and the resume time, between
+    a2's report and a3's."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2"), item("a3")])
+        reset_guard = Path(tmp) / "reset"
+        body = EVENT + (
+            f"G = {str(reset_guard)!r}\n"
+            "if N == 1: open(G, 'w').write(str(int(time.time()) + 10))\n"
+            "R = int(open(G).read())\n"
+            "if N == 1: evento(0.5, R)\n"
+            "elif N == 2: evento(0.75, R)\n"
+            "else: evento(0.05, R + 18000)\n"
+            "marca(primeiro_pendente(), status='done')\n")
+        binv = fake_claude(tmp, body)
+        env, log = herdr_env(tmp)
+        p, calls = run_until(root, binv, plan_of(root), ["--for", "2h"], extra_env=env)
+        pause = [e for e in ledger_of(root) if e["evento"] == "pausa_de_cota"]
+        check("herdr (antes do item): houve a pausa", len(pause) == 1, str(pause))
+        if pause:
+            hhmm = datetime.fromisoformat(pause[0]["acorda"]).strftime("%H:%M")
+            check_pause_report("antes do item", herdr_messages(log),
+                               "fila: item 2/3 a2", hhmm, "fila: item 3/3 a3")
+
+
+def test_herdr_keeps_working_and_says_until_when_after_hitting_the_ceiling():
+    """CS-2, the other 5h quota pause: the item was cut by the usage ceiling and the
+    supervisor waits for the reset to resume the SAME item. herdr gets the pause,
+    with the resume time, between the cut attempt's report and the retry's."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        body = EVENT + (
+            "if N == 1:\n"
+            "    evento(1.0, int(time.time()) + 2, 'rejected')\n"
+            f"    resultado({CEILING_TEXT!r}, True)\n"
+            "    sys.exit(1)\n"
+            "evento(0.02, int(time.time()) + 18000)\n"
+            "marca(primeiro_pendente(), status='done')\n")
+        binv = fake_claude(tmp, body)
+        env, log = herdr_env(tmp)
+        p, calls = run_until(root, binv, plan_of(root), ["--for", "2h"], extra_env=env)
+        cut = [e for e in ledger_of(root) if e["evento"] == "limite_de_uso"]
+        check("herdr (teto): houve a espera", cut and cut[0].get("espera") is True,
+              str(cut))
+        if cut and cut[0].get("reset_em"):
+            wake = (datetime.fromisoformat(cut[0]["reset_em"]).timestamp()
+                    + float(MARGIN["CEPA_UNTIL_MARGEM_RESET"]))
+            hhmm = datetime.fromtimestamp(wake).strftime("%H:%M")
+            check_pause_report("teto", herdr_messages(log),
+                               "fila: item 1/1 a1", hhmm, "fila: item 1/1 a1")
+
+
 def main():
     print("cepa-until — cota de 5h da conta\n")
     for given_name, fn in sorted(globals().items()):
