@@ -1,0 +1,14 @@
+key: herdr-agent-status-CS-4
+status: complete
+criteria:
+  - id: AC1
+    text: "`cepa-prove` reports `working` as agent `cepa-prove` with the round number and the cards already handled, and releases the pane on every exit."
+    altitude: cli
+    surface: "common/bin/cepa-prove run as a subprocess with HERDR_ENV=1, HERDR_PANE_ID=w9:p9, HERDR_BIN_PATH pointing at a fake herdr that logs argv as JSON lines; fake claude proves WEGO-1 then WEGO-2; signals sent to the real process for the interrupt paths"
+    test: "tests/test_cepa_prove.py::test_herdr_reports_each_round_with_the_cards_handled_and_releases_at_the_end (3 reports: round 1 without cards, round 2 with WEGO-1, round 3 with WEGO-1 and WEGO-2, release last); ::test_herdr_pane_is_released_by_the_circuit_breaker_and_the_cap; ::test_herdr_pane_is_released_when_the_window_is_smaller_than_the_reserve; ::test_herdr_pane_is_released_on_sigterm_and_ctrl_c_mid_round (SIGTERM and SIGINT mid-round, exit 128+sig, round 1 reported, release last, one release, --seq increasing); ::test_herdr_is_not_called_by_refused_starts_dry_run_or_outside_herdr (negative)"
+    layer: cli (subprocess, fake herdr and fake claude; real signals)
+    evidence: verified
+    run: "python3 tests/test_cepa_prove.py -> rc=0, '✓ 24 teste(s) ok', 108 'ok' lines, no failing check; all 5 test_herdr_* functions ran and each of their checks printed ok. Run by the auditor in this turn, foreground."
+    status: complete
+    gap: ""
+note: "Red test committed first (aadfe5d), implementation in 778bda6. The spec's red test says 'round 1 then round 2 with WEGO-1': the test asserts exactly that and more (round 3). Implementation: main() wraps _main() in try/finally and releases once armed (after refusals, dry run and signal handlers); reuses cepa-until's herdr_report/herdr_release with an agent parameter (cepa-until's default behaviour unchanged). Message format 'round N · handled K: keys', capped at the last 5 keys. Caveats: the script's check() does not fail pytest, so the script run is the real evidence; not mutation-proven (release call not removed to confirm red); the 5-key cap is not tested; I did not rerun test_cepa_until*.py for the shared-helper change (CS-3 audit covers it at 223284e, signature change is backwards compatible by default args)."
