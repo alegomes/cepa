@@ -5,6 +5,25 @@ e onde provavelmente mora. Sem ordem de prioridade fixa.
 
 ---
 
+## Descoberta: perguntar antes do run e perguntar menos em ação reversível
+
+Registrado em 2026-11-10 a pedido do dono, como tema da próxima sessão em modo descoberta
+(`cepa --mode discovery`). Fonte: seção 4.1 de `docs/estrategia-loops-longos.md`.
+
+### Problema
+
+Em 32 de 37 runs do `cepa-until` que pararam com a fila vazia e itens adiados, o dono não
+respondeu nenhuma pergunta antes do prazo do run. A janela que sobrou nesses runs não volta
+com espera nem com aviso: o que a perde é a pergunta existir durante a janela.
+
+### Esboço de solução
+
+Investigar duas alavancas: fazer no início do run as perguntas que um item vai precisar
+(o padrão do `/common:session`) e cortar a pergunta fechada sobre ação reversível, que o
+agente pode executar e registrar. **Lar:** a definir na descoberta.
+
+---
+
 ## A limpeza automática apaga o worktree de uma conversa que ainda vai ser retomada
 
 Registrado em 2026-11-10 a pedido do dono, a partir do feedback `fb-20261110-4`.
