@@ -669,7 +669,10 @@ items:
   status: blocked
   blocked_by: []
   human_pending: null
-  evidence: 'Conferido em 2026-11-10 (run until/2026-11-10-1135): a condição da
+  evidence: 'Resposta do dono em 2026-11-10: não: O tronco do ciclo 2 ainda não
+    rodou onda nenhuma. Devolvo a calibragem à fila mesmo assim? Recomendo não:
+    nada mudou desde 06/11. O dono manteve o item como estava (`blocked`). Evidência
+    anterior: Conferido em 2026-11-10 (run until/2026-11-10-1135): a condição da
     resposta do dono de 2026-11-06 não se cumpriu. C2-1 da fila cepa-espiral-c2
     segue ''pending'' (sem evidence). Nenhum ledger de porteiro novo: o único ledger
     real continua wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl
