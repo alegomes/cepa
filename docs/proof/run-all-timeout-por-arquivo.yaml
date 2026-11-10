@@ -1,0 +1,37 @@
+schema_version: 2
+card: run-all-timeout-por-arquivo
+verdict: proven
+reviewed_at: 2026-11-10T00:00:00-03:00
+base_commit: aac6affedc04e5d83233148711efa7c1775c0c67
+head_commit: b49fd15
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "tests/run-all.sh", module: harness-cli, external_observable: true, substituted_by_double: null }
+    - { class: "tests/_run_with_timeout.py", module: harness-cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "round 1 (head d9359f6): P1 killpg->proc.kill() on expiry RED; P2 SIGTERM handler removed RED; P3 exit 128+sig->1 RED; P4 handler killpg removed RED; P5 TIMEOUT_RC 124->1 RED; P6 [TIMEOUT Ns] tag dropped RED; P7 ceiling ignores CEPA_TEST_TIMEOUT RED"
+        - "round 1 P10 pytest family without limiter: SURVIVED at d9359f6 (test had SKIP_PYTEST=1)"
+        - "round 2 (head b49fd15, only tests/test_run_all_timeout.py changed vs d9359f6, +pytest-family case): unperturbed -> 19 ok, 'tudo verde' rc=0 (pytest 9.1.1 installed)"
+        - "round 2 P10 sed 's|\"$LIMITADOR\" \"$TETO\" \"$PYTHON\" -m pytest|-m pytest|' on tests/run-all.sh -> rc=1, RED: 5 falhas (pytest family: run ends quickly, exit is non-zero, hanging file listed [TIMEOUT 2s], passing file ran, no orphan child survives)"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "pytest-family loop now exercised by test_pytest_family_timeout (SKIP_PYTEST unset, fixtures with 'import pytest'); P10 turning RED shows the branch is reached. Structural, no coverage tool."
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff touches only a test-runner script, its wrapper and their test; no parser of external input and no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "base aac6aff + test from b49fd15: python3 tests/test_run_all_timeout.py -> FileNotFoundError tests/_run_with_timeout.py, rc=1 (RED); HEAD b49fd15 -> 19 ok, 'tudo verde' rc=0"
+routing_reason: "Todas as perturbacoes ficaram RED, inclusive a P10 (familia pytest sem limitador) que sobrevivia no d9359f6 e agora e pega pelo caso novo do b49fd15. Teste RED no base, verde no HEAD."
