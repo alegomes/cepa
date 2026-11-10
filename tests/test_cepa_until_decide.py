@@ -1197,6 +1197,92 @@ def test_finish_item_reopens_an_item_the_agent_closed_done():
               it["status"] == "pending" and it["evidence"] == "build vermelho", it)
 
 
+def _launch_events(root):
+    """item_start/ids of every run ledger the queue has."""
+    out = []
+    for f in sorted((root / ".claude" / "programs" / "fila" / "until").glob("*.jsonl")):
+        out += [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+    return out
+
+
+def _launch_on_tty(answers, wait="600"):
+    """Queue with only A, which has an open `human_pending`; real `cepa-until` on a
+    pty (drained continuously by `on_tty`, or the supervisor blocks in `print`)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1", human_pending="provision the Keycloak role")])
+        binv = fake_claude(tmp, "pass")
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"], str(root),
+            inputs=answers, env=env, timeout=90)
+        return rc, out, _launch_events(root), items_of(root)
+
+
+def test_launch_on_terminal_asks_and_yes_runs_the_item_in_the_same_run():
+    """CS-2 (spec perguntar-antes-do-run): the route of an open item is asked BEFORE
+    the first item and "y" makes the item run in this very run."""
+    rc, out, events, _ = _launch_on_tty(
+        [("[t] I write the answer", "y"), ("Anything to add", "")], wait="2")
+    starts = [e for e in events if e.get("evento") == "item_start"]
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("the question shows up at the launch", "provision the Keycloak role" in out, out[:1500])
+    check("item_start of a1 is recorded", any(e.get("id") == "a1" for e in starts), str(events) + out[-1500:])
+
+
+def test_launch_on_terminal_no_or_enter_leaves_the_item_without_item_start():
+    for reply in ("n", ""):
+        trig = [("[t] I write the answer", reply)] + (
+            [("Anything to add", "")] if reply else [])
+        rc, out, events, items = _launch_on_tty(trig)
+        check(f"answer {reply!r}: no item_start", not any(
+            "item_start" in json.dumps(e) for e in events), str(events) + out[-1000:])
+        check(f"answer {reply!r}: run exits 0", rc == 0, out[-1000:])
+        check(f"answer {reply!r}: the question was asked", "[t] I write the answer" in out,
+              out[-1000:])
+        check(f"answer {reply!r}: a1 keeps its open route",
+              items["a1"].get("human_pending"), str(items["a1"]))
+
+
+def test_launch_on_terminal_without_answer_carries_on_after_the_wait():
+    """Nobody reads the terminal: the launch panel must not hang; one line, then the run
+    goes on as today (a1 stays deferred, so no item_start, and the process exits)."""
+    rc, out, events, _ = _launch_on_tty([], wait="2")
+    check("the run exits 0 instead of hanging", rc == 0, out[-1500:])
+    check("it says nobody answered, in one line", "nobody answered" in out, out[-1500:])
+    check("no item_start", not any("item_start" in json.dumps(e) for e in events), str(events))
+
+
+def test_launch_without_terminal_keeps_ending_with_no_item_start():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1", human_pending="provision the Keycloak role")])
+        binv = fake_claude(tmp, "pass")
+        # stdin explicitly NOT a terminal (DEVNULL), so the test never depends on
+        # the runner's stdin and pins the isatty guard in front of ask_at_launch.
+        env = dict(os.environ)
+        env["PATH"] = f"{binv}:{env['PATH']}"
+        env["FAKE_PLANO"] = str(plan_of(root))
+        env.setdefault("CEPA_WORKTREE_HOME", str(Path(root).parent / "worktrees"))
+        calls_f = Path(root).parent / "chamadas.jsonl"
+        env["FAKE_CHAMADAS"] = str(calls_f)
+        p = subprocess.run(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"],
+            capture_output=True, text=True, env=env, timeout=120,
+            stdin=subprocess.DEVNULL)
+        calls = ([json.loads(l) for l in calls_f.read_text().splitlines() if l.strip()]
+                 if calls_f.exists() else [])
+        check("no terminal: nothing to do, as today",
+              "nothing to do" in p.stdout, p.stdout[-1000:])
+        check("no terminal: the launch panel did not appear", not any(
+            m in p.stdout for m in ("[t] I write the answer", "question(s) for you",
+                                    "questions interrupted")), p.stdout[-1000:])
+        check("no terminal: no item_start", not any(
+            "item_start" in json.dumps(e) for e in _launch_events(root)))
+        check("no terminal: the agent was not called", not calls, str(calls))
+
+
 def main():
     print("cepa-until decidir — o fim do run pergunta\n")
     for given_name, fn in sorted(globals().items()):

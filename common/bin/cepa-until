@@ -204,6 +204,16 @@ clone so it points back. Open sessions keep the old hooks in memory until restar
 reinstalls in one night keep only the previous cache in `.prev`. Without `--verify` there is
 no build, so no reinstall: only the warning above. With less than 120 s left in the window the supervisor does not start the install (killing it halfway would leave the cache half moved): it records `reinstalacao_adiada` and falls back to the warning. In any other repo nothing changes.
 
+## The launch asks
+
+On a terminal (stdin and stdout), before the first item, the launch shows the same
+panel `decide` shows at the end for what the queue already holds for the owner
+(open `human_pending`, `blocked-before`): "yes" sends the item back to the queue and it
+runs in THIS run. Nothing extra is printed when nothing waits for the owner. The panel
+waits `CEPA_UNTIL_ESPERA_RESPOSTA` seconds (600 by default); with no answer, or on
+Ctrl-C / EOF, one line says so and the run goes on as if the item were not answered.
+`--dry-run` and runs without a terminal never ask: they list, as before.
+
 ## After the end
 
 With the run over, a final `claude -p "/common:until-review <run>"` reads the
@@ -2877,6 +2887,30 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
     return 0
 
 
+def ask_at_launch(repo, queue, data):
+    """The launch panel (CS-2). Shows `decide` for the owner-reason items still open
+    in the queue (an uncapped read; `delivered_leftovers` is deliberately not added:
+    a task left on a delivered item holds nothing back) and returns the queue read
+    again, so the item answered "yes" is in the batch. With no such item, prints
+    nothing. No answer within the wait, EOF or Ctrl-C: one line, and the run carries
+    on with the `data` it had. A failed read at either end keeps the old `data`."""
+    whole, _ = query_queue(queue, repo, max_items=10 ** 6)
+    deferred = [ad for ad in (whole or {}).get("deferred") or []
+                if reason_alias(ad.get("reason")) in OWNER_REASON]
+    if not deferred:
+        return data
+    try:
+        decide(repo, queue, None, {}, deferred, {}, wait=ANSWER_WAIT_SEC)
+    except NoAnswer:
+        print(f"\n   nobody answered in {ANSWER_WAIT_SEC / 60:g} min; the run goes on "
+              f"without. To answer later: cepa-until decide {queue}")
+    except (EOFError, KeyboardInterrupt):
+        print("\n   questions interrupted; the run goes on without. "
+              f"To answer later: cepa-until decide {queue}")
+    fresh, error = query_queue(queue, repo)
+    return data if error or not fresh else fresh
+
+
 def cmd_decide(argv):
     """`cepa-until decide <queue>/<run>`: the end-of-run questions, again,
     for when the owner wasn't there or left some for later.
@@ -3455,6 +3489,9 @@ def _main(argv=None):
             "them: clock, circuit breaker, account quota, full build after each `done`\n"
             "item (red = the item becomes `blocked` and the branch rolls back) and log.\n"
             "\n"
+            "On a terminal, the launch first asks about the tasks the queue holds for you;\n"
+            "a \"yes\" makes that item run in the same run.\n"
+            "\n"
             "The cut happens between items, never in the middle of one. Nothing goes to\n"
             "main or origin: afterwards, `cepa until decide <queue>/<run>` asks what\n"
             "was left for you, and `cepa until land` brings the branch into the\n"
@@ -3697,6 +3734,11 @@ def _main(argv=None):
     if a.dry:
         print("\n(--dry-run: nothing was executed)")
         return 0
+    # CS-2: on a terminal, what waits for the owner is asked HERE, before the first
+    # item, and a "yes" puts the item in the batch of this very run. Without a
+    # terminal nothing changes (the end-of-run listing stays as it was).
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        data = ask_at_launch(repo, a.queue, data)
     if not data.get("batch"):
         stop = data.get("stop") or {}
         print(f"\nnothing to do: {stop.get('reason')} — {stop.get('detail')}")
