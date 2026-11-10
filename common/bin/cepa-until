@@ -1080,10 +1080,11 @@ HERDR_TIMEOUT_SEC = 1
 _herdr_last_seq = 0
 
 
-def _herdr_call(args):
+def _herdr_call(args, agent="cepa-until"):
     """Runs `herdr pane <args> --seq N` when inside herdr; every failure is ignored.
     Gate, 1 s timeout and `--seq` (forced strictly increasing) are shared by the
-    reports and the release."""
+    reports and the release. `agent` is both `--source` and `--agent`: `cepa-prove`
+    loads this file as a module and reports as itself."""
     global _herdr_last_seq
     env = os.environ
     pane, binary = env.get("HERDR_PANE_ID"), env.get("HERDR_BIN_PATH")
@@ -1091,8 +1092,8 @@ def _herdr_call(args):
         return
     _herdr_last_seq = max(time.time_ns(), _herdr_last_seq + 1)
     try:
-        subprocess.run([binary, "pane", args[0], pane, "--source", "cepa-until",
-                        "--agent", "cepa-until", *args[1:],
+        subprocess.run([binary, "pane", args[0], pane, "--source", agent,
+                        "--agent", agent, *args[1:],
                         "--seq", str(_herdr_last_seq)],
                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL, timeout=HERDR_TIMEOUT_SEC)
@@ -1100,20 +1101,20 @@ def _herdr_call(args):
         pass
 
 
-def herdr_report(message):
+def herdr_report(message, agent="cepa-until"):
     """Tell herdr (the terminal multiplexer) this pane is a `cepa-until` agent that is
     `working`, with `message` as its status line. Only the main run calls it, never
     the subcommands. Does nothing outside herdr (`HERDR_ENV=1`, `HERDR_PANE_ID` and
     `HERDR_BIN_PATH` must all be set). The call is a subprocess with a 1 s timeout
     and every failure is ignored: a missing or slow herdr never changes the run.
     `--seq` is `time.time_ns()`, forced strictly increasing within the process."""
-    _herdr_call(["report-agent", "--state", "working", "--message", message])
+    _herdr_call(["report-agent", "--state", "working", "--message", message], agent)
 
 
 _herdr_armed = False
 
 
-def herdr_release():
+def herdr_release(agent="cepa-until"):
     """Gives the pane back to herdr (`release-agent`), so it stops showing a
     `cepa-until` agent once the run is over. Same gate, timeout and ignored
     failures as `herdr_report` (herdr may itself be shutting down). SIGTERM and
@@ -1125,7 +1126,7 @@ def herdr_release():
         except Exception:  # noqa: BLE001
             pass
     try:
-        _herdr_call(["release-agent"])
+        _herdr_call(["release-agent"], agent)
     finally:
         for sig, handler in saved.items():
             signal.signal(sig, handler)
