@@ -126,7 +126,7 @@ def fake_claude(tmp, body):
     return binv
 
 
-def run_until(root, binv, plan, args, timeout=120, extra_env=None):
+def run_until(root, binv, plan, args, timeout=120, extra_env=None, repo_arg=None):
     """By default the run goes out `--sem-verify --sem-analise`: the test repos have no
     build, and the end analysis would be one more call to the fake `claude` in
     every test. Whoever tests the two passes `--verify`/`--com-analise`
@@ -146,7 +146,7 @@ def run_until(root, binv, plan, args, timeout=120, extra_env=None):
         args.remove("--com-analise")
     elif "--no-analysis" not in args:
         args.append("--no-analysis")
-    p = subprocess.run([sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root)]
+    p = subprocess.run([sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(repo_arg or root)]
                        + args, capture_output=True, text=True, env=env,
                        timeout=timeout)
     lines = []
@@ -1340,7 +1340,7 @@ def test_dirty_tree_stays_strict_for_the_other_callers():
             alive.wait()
 
 
-def herdr_scenario(tmp, herdr_body="", env=None, repo_name="repo"):
+def herdr_scenario(tmp, herdr_body="", env=None, repo_name="repo", from_worktree=False):
     """Run the two-item queue under a fake `herdr` (python; appends argv as JSON to a
     log, then runs `herdr_body`). Returns (process, argv list per report, log path,
     plan statuses)."""
@@ -1364,7 +1364,13 @@ def herdr_scenario(tmp, herdr_body="", env=None, repo_name="repo"):
     # The suite's own environment may carry real herdr vars: scrub, then apply `full`.
     for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
         os.environ.pop(k, None)
-    p, calls = run_until(root, binv, plan, ["--for", "2h"], extra_env=full)
+    repo_arg = None
+    if from_worktree:   # run `--repo <linked worktree of root>`, outside the repo
+        repo_arg = Path(tmp) / "linked"
+        subprocess.run(["git", "worktree", "add", "-q", "-b", "wt", str(repo_arg)],
+                       cwd=root, check=True)
+    p, calls = run_until(root, binv, plan, ["--for", "2h"], extra_env=full,
+                         repo_arg=repo_arg)
     argvs = ([json.loads(l) for l in log.read_text().splitlines()]
              if log.exists() else [])
     statuses = [i["status"] for i in yaml.safe_load(plan.read_text())["items"]]
@@ -1462,6 +1468,24 @@ def test_herdr_resume_argv_is_omitted_when_the_repo_path_has_an_apostrophe():
         for a in reports:
             check("herdr resume (apóstrofo): sem `--` e ainda `--state working`",
                   "--" not in a and a[a.index("--state") + 1] == "working", str(a))
+
+
+def test_herdr_resume_argv_names_the_main_clone_when_run_from_a_linked_worktree():
+    """CS-6: the worktree of a run is removed after `land`, so the resume command must
+    point at the main clone, never at the worktree the run was started from."""
+    with tempfile.TemporaryDirectory() as tmp:
+        p, argvs, log, _ = herdr_scenario(tmp, from_worktree=True)
+        main = str((Path(tmp) / "repo").resolve())
+        linked = str((Path(tmp) / "linked").resolve())
+        reports = [a for a in argvs if a[1] == "report-agent"]
+        check("herdr worktree: dois relatórios", len(reports) == 2,
+              str(argvs) + p.stderr[-300:])
+        tail = ["--", "cepa", "until", "pending", "--repo", main]
+        for a in reports:
+            check("herdr worktree: termina em `--repo <clone principal>`",
+                  a[-len(tail):] == tail, str(a))
+            check("herdr worktree: o caminho do worktree não aparece depois de `--`",
+                  "--" in a and not any(linked in t for t in a[a.index("--"):]), str(a))
 
 
 # ── herdr: outside herdr nothing is called; a broken herdr changes nothing (CS-5) ──
