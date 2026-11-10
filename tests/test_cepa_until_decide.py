@@ -1326,6 +1326,51 @@ def test_launch_does_not_ask_about_delivered_items():
           out[-1500:])
 
 
+def _before_first_item(out):
+    """The launch output up to the line of the first item (`<id>   item 1`), ANSI
+    stripped; that line is printed right where the ledger records `item_start`."""
+    plain = ANSI.sub("", out)
+    cut = re.search(r"^\[\d\d:\d\d\] \S+.*? {3}item 1 ", plain, re.M)
+    return plain[:cut.start()] if cut else None
+
+
+def test_launch_cs3_delivered_route_is_not_asked_before_the_first_item():
+    """CS-3 (spec perguntar-antes-do-run), the declared scenario: a `done` item with
+    an open `human_pending` and a `pending` item. The pending item starts, and the
+    delivered item's route is not in the launch output before its `item_start`."""
+    done = item("d1", status="done", human_pending="delivered leftover route text")
+    rc, out, events, _ = _launch_on_tty([], wait="2", items=[done, item("a2")])
+    starts = [e.get("id") for e in events if e.get("evento") == "item_start"]
+    before = _before_first_item(out)
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("the pending item starts", starts[:1] == ["a2"], str(events))
+    check("the first item's line is in the output", before is not None, out[-2000:])
+    check("the delivered route is absent before the first item",
+          "delivered leftover route text" not in (before or ""), (before or "")[-1500:])
+    check("no launch panel for a delivered route alone",
+          "question(s) for you" not in (before or ""), (before or "")[-1500:])
+
+
+def test_launch_cs3_panel_before_the_first_item_leaves_the_delivered_route_out():
+    """CS-3 with a panel to compare: next to the delivered route, an open item with a
+    route. The panel comes before the first `item_start`, asks the open route only,
+    and the delivered one never shows up before the pending item starts."""
+    done = item("d1", status="done", human_pending="delivered leftover route text")
+    rc, out, events, _ = _launch_on_tty(
+        [("[t] I write the answer", "n"), ("Anything to add", "")], wait="5",
+        items=[done, item("a1", human_pending="provision the Keycloak role"), item("a2")])
+    starts = [e.get("id") for e in events if e.get("evento") == "item_start"]
+    before = _before_first_item(out) or ""
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("the pending item starts", starts[:1] == ["a2"], str(events))
+    check("the launch panel is before the first item, with 1 question",
+          "1 question(s) for you" in before, before[-1500:])
+    check("the open route is asked before the first item",
+          "provision the Keycloak role" in before, before[-1500:])
+    check("the delivered route is absent before the first item",
+          "delivered leftover route text" not in before, before[-1500:])
+
+
 def test_launch_asks_every_owner_item_not_only_the_first():
     """CS-2: the read is uncapped: 2 owner-route items behind 2 runnable ones, 2 questions,
     "y" to both."""
