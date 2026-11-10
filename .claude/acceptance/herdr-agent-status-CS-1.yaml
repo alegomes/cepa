@@ -1,0 +1,14 @@
+key: herdr-agent-status-CS-1
+status: complete
+criteria:
+  - id: AC1
+    text: "while the cepa-until window runs inside herdr, the pane reports working as agent cepa-until, with a message naming the queue, the item position and its id, and a new report for each item"
+    altitude: cli
+    surface: "common/bin/cepa-until run as a subprocess with HERDR_ENV=1, HERDR_PANE_ID, HERDR_BIN_PATH pointing at a fake herdr that logs argv"
+    test: "tests/test_cepa_until.py::test_herdr_receives_one_working_report_per_item"
+    layer: cli (subprocess, fake herdr and fake claude)
+    evidence: verified
+    run: "python3 tests/test_cepa_until.py -> 4 'ok herdr:' checks (2 working reports, 1/2 a1 + 2/2 a2 with queue 'fila', --seq strictly increasing), 0 FAIL, final line 'tudo verde'. Also pytest -k ... -> '1 passed' (N=1; note pytest does not fail on check() since it only records FAILURES, so the script run is the real evidence)."
+    status: complete
+    gap: ""
+note: "Constraints read in the diff: no call unless HERDR_ENV=1 and pane and binary set (CS-5); subprocess.run timeout=1s with except Exception: pass (CS-5, decided 5); seq = time_ns forced strictly increasing (decided 4); message in English (decided 1); call only in main loop, not in subcommands. Caveat for later items: test checks head/message/seq only; CS-5 (a)(b)(c) and CS-6 are not in scope. Test is not an independent mutation-proof (pytest passes regardless of check results)."

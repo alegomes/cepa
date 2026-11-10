@@ -1,0 +1,58 @@
+schema_version: 2
+card: herdr-agent-status-CS-3
+verdict: proven
+reviewed_at: 2026-11-09T23:30:00-03:00
+base_commit: d32532f
+head_commit: d3762ef
+issue_type: Story
+scope:
+  topology: build-solo (Python harness, not Quarkus; PIT not applicable, perturbation used)
+  criterion: "CS-3 of docs/spec/herdr-agent-status.md: cepa-until releases the herdr pane (`pane release-agent w9:p9 --source cepa-until --agent cepa-until --seq N`, N above every earlier seq) on every exit of the main run: end of queue, end of window, circuit breaker, blocked item stopping the batch, SIGTERM and SIGINT mid-item"
+  covering_tests: "tests/test_cepa_until.py: test_herdr_pane_is_released_at_the_end_of_the_queue / _at_the_end_of_the_window / _by_the_circuit_breaker / _when_a_blocked_item_stops_the_batch; tests/test_cepa_until_dead_supervisor.py: test_herdr_pane_is_released_on_sigterm_and_on_ctrl_c, test_a_second_signal_during_the_herdr_release_does_not_cut_it"
+  changed_classes:
+    - class: "common/bin/cepa-until :: main() try/finally wrapper over _main(), line 3389-3398"
+      module: common
+      external_observable: true
+      substituted_by_double: null   # real cepa-until runs as a subprocess; only herdr and claude are fakes at the far boundary
+    - class: "common/bin/cepa-until :: _herdr_armed = True after the signal handlers, line 3770"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until :: _herdr_call (shared gate, timeout, seq), line 1083"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until :: herdr_release (release-agent call; ignores SIGTERM/SIGINT around it), line 1116"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline green at d3762ef in throwaway worktree /tmp/proof-cs3b (removed afterwards): test_cepa_until_dead_supervisor FAILURES [] with the new second-signal test all 'ok'; the 4 test_cepa_until tests report 0 new failures. Each perturbation applied to common/bin/cepa-until, the 6 covering tests re-run, file restored with git checkout"
+        - "KILLED P1 (no release in the finally, line 3397): new failures per test = queue 1, window 2, breaker 1, blocked 1, sigterm/sigint 2, second-signal 4"
+        - "KILLED P2 (_herdr_armed = False, line 3770): queue 1, window 2, breaker 1, blocked 1, signals 2, second-signal 4"
+        - "KILLED P3 (constant seq `_herdr_last_seq = 1`, line 1092): queue 1, window 0, breaker 1, blocked 1, signals 2, second-signal 2. Window stays green because that run emits no earlier report; the other paths cover it (weak there, not a gap)"
+        - "KILLED P4 (wrong verb report-release, line 1128): queue 1, window 1, breaker 1, blocked 1, signals 2, second-signal 4"
+        - "KILLED P5 (release only on normal return, not in a finally): the 4 non-signal paths stay green as expected; sigterm/sigint 2 new failures, second-signal 4. Proves the try/finally carries the signal exits"
+        - "KILLED P6 (herdr_release no longer ignores signals: `signal.signal(sig, signal.SIG_IGN)` -> `signal.signal(sig, signal.getsignal(sig))`, line 1124): the 5 older tests stay green, test_a_second_signal_during_the_herdr_release_does_not_cut_it goes 3 new failures ('a última linha é a liberação do painel' red for SIGTERM and SIGINT, and 'o processo ainda sai com 143' got 130). Survivor of the previous pass is now load-bearing"
+        - "KILLED P7 (release called twice, line 3397): queue 1, window 2, breaker 1, blocked 1, signals 2, second-signal 2 ('uma única liberação')"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every changed line is reached through the real cepa-until process and constrained by a perturbation that turns a covering test red (P1-P7, including the SIG_IGN line via P6)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff adds an outbound herdr release call built from env vars the operator sets (HERDR_PANE_ID, HERDR_BIN_PATH) and a time-based seq; it parses no input from outside and touches no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is not Bug"
+routing_reason: "All seven perturbations (wrapper, arming, seq, verb, finally vs normal return, signal immunity during the call, single release) turn the covering tests red at d3762ef. The earlier survivor P6 is killed by the new second-signal test. Computed verdict: PROVEN."

@@ -39,7 +39,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_cepa_until import (  # noqa: E402
-    CEPA_UNTIL, FAILURES, check, fake_claude, item, ledger_of, build_repo, run_until)
+    CEPA_UNTIL, FAILURES, check, fake_claude, item, ledger_of, build_repo, run_until,
+    herdr_release_env, check_released_last)
 from test_cepa_until_run_branch import (  # noqa: E402
     WORKS, VERIFY, plan_of)
 
@@ -82,7 +83,7 @@ def in_flight_item(root):
         return False
 
 
-def launches(root, binv, plan, args, **popen):
+def launches(root, binv, plan, args, extra_env=None, **popen):
     """Starts `cepa-until` in the background (the `runs` of test_cepa_until
     waits for the end, and here the test needs to send the signal in the middle)."""
     env = dict(os.environ)
@@ -90,6 +91,7 @@ def launches(root, binv, plan, args, **popen):
     env["FAKE_PLANO"] = str(plan)
     env["FAKE_CHAMADAS"] = str(root.parent / "chamadas.jsonl")
     env["CEPA_WORKTREE_HOME"] = str(root.parent / "worktrees")
+    env.update(extra_env or {})
     return subprocess.Popen(
         [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root)] + args
         + ["--no-analysis"], env=env, stdin=subprocess.DEVNULL, **popen)
@@ -149,12 +151,15 @@ def alive(pid):
     return bool(ps) and not ps.startswith("Z")
 
 
-def _interrupt(sig):
+def _interrupt(sig, herdr=False):
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
         binv = fake_claude(tmp, WAITS_AND_WORKS)
+        if herdr:
+            env, log = herdr_release_env(tmp)
         proc = launches(root, binv, plan_of(root),
                      ["--for", "2h", "--verify", VERIFY],
+                     extra_env=env if herdr else None,
                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                      text=True)
         try:
@@ -181,8 +186,63 @@ def _interrupt(sig):
             # Releases the fake `claude`, which runs in its own session and survives.
             (Path(tmp) / "segue").write_text("")
             time.sleep(1.5)
+        if herdr:
+            check_released_last(f"sinal {sig.name} no meio do item", log)
         return (proc.returncode, output, ledger_of(root), state(root),
                 live_child)
+
+
+def test_herdr_pane_is_released_on_sigterm_and_on_ctrl_c():
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        _interrupt(sig, herdr=True)
+
+
+def test_a_second_signal_during_the_herdr_release_does_not_cut_it():
+    """The release is a <= 1 s subprocess call. Without the guard that ignores
+    SIGTERM/SIGINT around it, a second signal makes the interrupt handler raise
+    SystemExit inside `subprocess.run`, which kills the fake herdr before it logs.
+    The fake herdr touches a marker when the release starts, sleeps 0.7 s (under
+    the 1 s timeout), and only then logs its argv."""
+    for second in (signal.SIGTERM, signal.SIGINT):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = build_repo(tmp, [item("a1")])
+            binv = fake_claude(tmp, WAITS_AND_WORKS)
+            herdr, log = Path(tmp) / "herdr", Path(tmp) / "herdr.log"
+            marker = Path(tmp) / "release.started"
+            herdr.write_text(
+                f"#!{sys.executable}\n"
+                "import sys, json, time\n"
+                "if sys.argv[2] == 'release-agent':\n"
+                f"    open({str(marker)!r}, 'w').write('x')\n"
+                "    time.sleep(0.7)\n"
+                f"open({str(log)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
+            herdr.chmod(0o755)
+            for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
+                os.environ.pop(k, None)
+            env = {"HERDR_ENV": "1", "HERDR_PANE_ID": "w9:p9",
+                   "HERDR_BIN_PATH": str(herdr)}
+            proc = launches(root, binv, plan_of(root),
+                            ["--for", "2h", "--verify", VERIFY], extra_env=env,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            try:
+                file = Path(tmp) / "segue.pid"
+                check("o `claude` do item foi lançado e registrado",
+                      waiting(lambda: file.exists() and file.read_text().strip()),
+                      str(ledger_of(root)))
+                os.kill(proc.pid, signal.SIGTERM)
+                check("a liberação começou", waiting(marker.exists, 30))
+                os.kill(proc.pid, second)
+                try:
+                    proc.communicate(timeout=30)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.communicate()
+            finally:
+                (Path(tmp) / "segue").write_text("")
+                time.sleep(1.5)
+            check_released_last(f"2º sinal {second.name} durante a liberação", log)
+            check(f"2º sinal {second.name}: o processo ainda sai com 143 (o 1º sinal)",
+                  proc.returncode == 143, str(proc.returncode))
 
 
 def test_sigterm_writes_interrupted_run_with_the_in_flight_item():

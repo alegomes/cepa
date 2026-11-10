@@ -56,7 +56,8 @@ def build_repo(tmp):
 
 def fake_claude(tmp, rounds):
     """`rounds` is a list; round i does rounds[i]: ("proof", KEY, verdict),
-    ("text", "..."), or ("nothing",). Past the list: ("text", "Nothing in Review")."""
+    ("text", "..."), ("nothing",), or ("wait",) (writes `round.pid`, then waits up
+    to 60 s for a `go` file). Past the list: ("text", "Nothing in Review")."""
     binv = Path(tmp) / "bin"
     binv.mkdir(exist_ok=True)
     (Path(tmp) / "rounds.json").write_text(json.dumps(rounds))
@@ -79,14 +80,24 @@ def fake_claude(tmp, rounds):
         "    text = 'Proved from Review: ' + r[1] + ' ' + r[2]\n"
         "elif r[0] == 'text':\n"
         "    text = r[1]\n"
+        "elif r[0] == 'wait':\n"
+        "    import time\n"
+        "    open(os.path.join(tmp, 'round.pid'), 'w').write(str(os.getpid()))\n"
+        "    for _ in range(600):\n"
+        "        if os.path.exists(os.path.join(tmp, 'go')):\n"
+        "            break\n"
+        "        time.sleep(0.1)\n"
         "print(json.dumps({'type': 'result', 'result': text, 'session_id': 's' + str(n), 'total_cost_usd': 1.5}))\n",
         encoding="utf-8")
     script.chmod(0o755)
     return binv
 
 
-def run_prove(root, binv, tmp, args, timeout=120, path=None):
+def run_prove(root, binv, tmp, args, timeout=120, path=None, extra_env=None):
     env = dict(os.environ)
+    for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
+        env.pop(k, None)    # the suite may itself run inside herdr
+    env.update(extra_env or {})
     env["PATH"] = path if path is not None else f"{binv}:{env['PATH']}"
     env["FAKE_TMP"] = str(tmp)
     env["CEPA_UNTIL_GRACA_SIGTERM"] = "2"
@@ -531,6 +542,175 @@ def test_mode_menu_points_to_cepa_help():
         text = out.decode("utf-8", "replace")
         check("o menu de modo mostra o rodapé `cepa help`",
               "Which mode does this session operate in" in text and "cepa subcommands: cepa help" in text, text[-600:])
+
+
+# ── herdr: the pane shows `cepa-prove working` and is released (CS-4) ─────────
+# docs/spec/herdr-agent-status.md CS-4: herdr (the terminal multiplexer) only sees
+# an agent that reports itself, and `cepa-prove` runs `claude -p` with no TUI.
+
+def herdr_env(tmp):
+    """A fake `herdr` that appends its argv as one JSON line to a log."""
+    herdr = Path(tmp) / "herdr"
+    log = Path(tmp) / "herdr.log"
+    herdr.write_text(f"#!{sys.executable}\n"
+                     "import sys, json\n"
+                     f"open({str(log)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
+    herdr.chmod(0o755)
+    return ({"HERDR_ENV": "1", "HERDR_PANE_ID": "w9:p9", "HERDR_BIN_PATH": str(herdr)},
+            log)
+
+
+def herdr_lines(log):
+    return ([json.loads(l) for l in log.read_text().splitlines()]
+            if log.exists() else [])
+
+
+def check_prove_released_last(label, lines):
+    head = ["pane", "release-agent", "w9:p9", "--source", "cepa-prove",
+            "--agent", "cepa-prove", "--seq"]
+    ok = bool(lines) and lines[-1][:len(head)] == head and len(lines[-1]) == len(head) + 1
+    check(f"herdr ({label}): a última linha é a liberação do painel como cepa-prove",
+          ok, str(lines[-3:]))
+    if ok:
+        seqs = [int(a[a.index("--seq") + 1]) for a in lines]
+        check(f"herdr ({label}): --seq estritamente crescente até a liberação",
+              all(x < y for x, y in zip(seqs, seqs[1:])), str(seqs))
+        check(f"herdr ({label}): uma única liberação",
+              sum(a[1] == "release-agent" for a in lines) == 1, str(lines))
+
+
+def test_herdr_reports_each_round_with_the_cards_handled_and_releases_at_the_end():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp)
+        binv = fake_claude(tmp, [("proof", "WEGO-1", "proven"),
+                                 ("proof", "WEGO-2", "needs-human")])
+        env, log = herdr_env(tmp)
+        p, calls = run_prove(root, binv, tmp, ["--for", "2h"], extra_env=env)
+        check("herdr: o run termina 0 com as três rodadas", p.returncode == 0
+              and len(calls) == 3, p.stderr[-300:])
+        lines = herdr_lines(log)
+        head = ["pane", "report-agent", "w9:p9", "--source", "cepa-prove",
+                "--agent", "cepa-prove", "--state", "working", "--message"]
+        reports = [a for a in lines if a[:len(head)] == head]
+        msgs = [a[len(head)] for a in reports]
+        check("herdr: um relatório working por rodada", len(reports) == 3, str(lines))
+        if len(msgs) == 3:
+            check("herdr: a 1ª mensagem diz `round 1`", "round 1" in msgs[0], msgs[0])
+            check("herdr: a 2ª diz `round 2` e o card já tratado WEGO-1",
+                  "round 2" in msgs[1] and "WEGO-1" in msgs[1], msgs[1])
+            check("herdr: a 3ª diz `round 3` com WEGO-1 e WEGO-2",
+                  "round 3" in msgs[2] and "WEGO-1" in msgs[2] and "WEGO-2" in msgs[2],
+                  msgs[2])
+            check("herdr: a 1ª rodada não cita card nenhum",
+                  "WEGO" not in msgs[0], msgs[0])
+        check("herdr: cepa-prove não manda comando de retomada (nenhum `--`)",
+              all("--" not in a for a in lines), str(lines))
+        check_prove_released_last("fim da Review", lines)
+
+
+def test_herdr_pane_is_released_by_the_circuit_breaker_and_the_cap():
+    for label, rounds, args in (
+            ("disjuntor", [("nothing",)] * 3, ["--for", "2h", "--max-failures", "3"]),
+            ("--max", [("proof", "WEGO-1", "proven"), ("proof", "WEGO-2", "proven")],
+             ["--for", "2h", "--max", "1"])):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = build_repo(tmp)
+            binv = fake_claude(tmp, rounds)
+            env, log = herdr_env(tmp)
+            p, calls = run_prove(root, binv, tmp, args, extra_env=env)
+            check(f"herdr ({label}): o run termina 0", p.returncode == 0, p.stderr[-300:])
+            check_prove_released_last(label, herdr_lines(log))
+
+
+def test_herdr_pane_is_released_when_the_window_is_smaller_than_the_reserve():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp)
+        binv = fake_claude(tmp, [])
+        env, log = herdr_env(tmp)
+        p, calls = run_prove(root, binv, tmp, ["--for", "10m"], extra_env=env)
+        lines = herdr_lines(log)
+        check("herdr (prazo): nenhuma rodada, então só a liberação",
+              not calls and len(lines) == 1, str(lines))
+        check_prove_released_last("prazo", lines)
+
+
+def test_herdr_is_not_called_by_refused_starts_dry_run_or_outside_herdr():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp)
+        binv = fake_claude(tmp, [])
+        env, log = herdr_env(tmp)
+        run_prove(root, binv, tmp, ["--for", "2h", "--dry-run"], extra_env=env)
+        check("herdr (--dry-run): nada chamado", not log.exists(), str(herdr_lines(log)))
+        (root / "sujo.txt").write_text("x")
+        p, _ = run_prove(root, binv, tmp, ["--for", "2h"], extra_env=env)
+        check("herdr (árvore suja recusada): nada chamado",
+              p.returncode == 2 and not log.exists(), str(herdr_lines(log)))
+        (root / "sujo.txt").unlink()
+        p, calls = run_prove(root, binv, tmp, ["--for", "2h"],
+                             extra_env={k: v for k, v in env.items() if k != "HERDR_ENV"})
+        check("herdr (sem HERDR_ENV): nada chamado e o run segue",
+              not log.exists() and p.returncode == 0 and len(calls) == 1,
+              str(herdr_lines(log)))
+
+
+def test_herdr_pane_is_released_on_sigterm_and_ctrl_c_mid_round():
+    import signal
+    import time
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = build_repo(tmp)
+            binv = fake_claude(tmp, [("wait",)])
+            env, log = herdr_env(tmp)
+            full = dict(os.environ)
+            for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
+                full.pop(k, None)
+            full.update(env, PATH=f"{binv}:{os.environ['PATH']}", FAKE_TMP=str(tmp),
+                        CEPA_UNTIL_GRACA_SIGTERM="2")
+            proc = subprocess.Popen([sys.executable, str(CEPA_PROVE), "--repo", str(root),
+                                     "--for", "2h"], env=full, stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, text=True)
+            pid_file = Path(tmp) / "round.pid"
+            try:
+                for _ in range(300):
+                    if pid_file.exists() and pid_file.read_text().strip():
+                        break
+                    time.sleep(0.1)
+                check(f"herdr ({sig.name}): a rodada começou", pid_file.exists())
+                os.kill(proc.pid, sig)
+                try:
+                    proc.communicate(timeout=30)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.communicate()
+            finally:
+                (Path(tmp) / "go").write_text("")
+                time.sleep(0.5)
+            check(f"herdr ({sig.name}): sai com 128 + sinal",
+                  proc.returncode == 128 + sig, str(proc.returncode))
+            lines = herdr_lines(log)
+            check(f"herdr ({sig.name}): a rodada interrompida foi relatada como round 1",
+                  any(a[1] == "report-agent" and "round 1" in " ".join(a) for a in lines),
+                  str(lines))
+            check_prove_released_last(f"{sig.name} no meio da rodada", lines)
+
+
+def test_herdr_message_counts_the_handled_cards_and_shows_only_the_last_five():
+    """With 7 cards handled the sidebar line keeps the count and the 5 most recent
+    keys, with a `…` for the ones it dropped."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp)
+        binv = fake_claude(tmp, [("proof", f"WEGO-{n}", "needs-human") for n in range(1, 8)])
+        env, log = herdr_env(tmp)
+        p, calls = run_prove(root, binv, tmp, ["--for", "2h"], extra_env=env)
+        reports = [a for a in herdr_lines(log) if a[1] == "report-agent"]
+        msgs = [a[a.index("--message") + 1] for a in reports]
+        check("herdr (7 cards): oito rodadas relatadas", len(msgs) == 8, str(msgs))
+        if len(msgs) == 8:
+            check("herdr (7 cards): a 2ª diz `handled 1: WEGO-1`",
+                  msgs[1] == "round 2 · handled 1: WEGO-1", msgs[1])
+            check("herdr (7 cards): a 8ª conta 7 e mostra só os 5 últimos",
+                  msgs[7] == "round 8 · handled 7: …, WEGO-3, WEGO-4, WEGO-5, "
+                             "WEGO-6, WEGO-7", msgs[7])
 
 
 if __name__ == "__main__":

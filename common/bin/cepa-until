@@ -1076,6 +1076,80 @@ def installed_twg_version():
     return m.group(0) if m else None
 
 
+HERDR_TIMEOUT_SEC = 1
+_herdr_last_seq = 0
+# argv herdr runs to resume this pane (`cepa until pending --repo <path>`), set by the
+# main run only; `cepa-prove` loads this module and never sets it, so it sends none.
+_herdr_resume_argv = None
+
+
+def herdr_resume_argv(repo):
+    """`cepa until pending --repo <absolute main clone path>`, or None when herdr would refuse it:
+    herdr rejects a resume argv holding an apostrophe (`invalid_resume_argv`), and a
+    refused report would lose the `working` state, so the argv is left out instead."""
+    # The MAIN clone, not a linked worktree: the worktree of a run is removed after
+    # `land`, and `pending --repo <removed dir>` would silently list nothing.
+    path = str(Path(main_root(repo)).resolve())
+    if "'" in path:
+        return None
+    return ["cepa", "until", "pending", "--repo", path]
+
+
+def _herdr_call(args, agent="cepa-until"):
+    """Runs `herdr pane <args> --seq N` when inside herdr; every failure is ignored.
+    Gate, 1 s timeout and `--seq` (forced strictly increasing) are shared by the
+    reports and the release. `agent` is both `--source` and `--agent`: `cepa-prove`
+    loads this file as a module and reports as itself."""
+    global _herdr_last_seq
+    env = os.environ
+    pane, binary = env.get("HERDR_PANE_ID"), env.get("HERDR_BIN_PATH")
+    if env.get("HERDR_ENV") != "1" or not pane or not binary:
+        return
+    _herdr_last_seq = max(time.time_ns(), _herdr_last_seq + 1)
+    # Only `report-agent` carries the resume argv (after `--seq`, behind a `--`).
+    resume = (["--", *_herdr_resume_argv]
+              if _herdr_resume_argv and args[0] == "report-agent" else [])
+    try:
+        subprocess.run([binary, "pane", args[0], pane, "--source", agent,
+                        "--agent", agent, *args[1:],
+                        "--seq", str(_herdr_last_seq), *resume],
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=HERDR_TIMEOUT_SEC)
+    except Exception:  # noqa: BLE001 — timeout, missing binary, anything
+        pass
+
+
+def herdr_report(message, agent="cepa-until"):
+    """Tell herdr (the terminal multiplexer) this pane is a `cepa-until` agent that is
+    `working`, with `message` as its status line. Only the main run calls it, never
+    the subcommands. Does nothing outside herdr (`HERDR_ENV=1`, `HERDR_PANE_ID` and
+    `HERDR_BIN_PATH` must all be set). The call is a subprocess with a 1 s timeout
+    and every failure is ignored: a missing or slow herdr never changes the run.
+    `--seq` is `time.time_ns()`, forced strictly increasing within the process."""
+    _herdr_call(["report-agent", "--state", "working", "--message", message], agent)
+
+
+_herdr_armed = False
+
+
+def herdr_release(agent="cepa-until"):
+    """Gives the pane back to herdr (`release-agent`), so it stops showing a
+    `cepa-until` agent once the run is over. Same gate, timeout and ignored
+    failures as `herdr_report` (herdr may itself be shutting down). SIGTERM and
+    SIGINT are ignored for the (at most 1 s) call so a second signal cannot cut it."""
+    saved = {}
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            saved[sig] = signal.signal(sig, signal.SIG_IGN)
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        _herdr_call(["release-agent"], agent)
+    finally:
+        for sig, handler in saved.items():
+            signal.signal(sig, handler)
+
+
 def run_item(name, tree, branch, permissions, limit_sec, log,
                  on_launch=None, session_id=None, on_tick=None):
     """Launches ONE subprocess, with `tree` (the night worktree) as cwd.
@@ -3332,6 +3406,18 @@ def has_upstream(repo):
 
 
 def main(argv=None):
+    """Runs the command; once the main run is armed (past preflight, signal handlers
+    installed) every way out, return or exception, releases the herdr pane. The
+    subcommands never arm it, so they never call herdr."""
+    try:
+        return _main(argv)
+    finally:
+        if _herdr_armed:
+            herdr_release()
+
+
+def _main(argv=None):
+    global _herdr_armed, _herdr_resume_argv
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] in ("land", "aterrissar"):
         return cmd_land(argv[1:])
@@ -3700,6 +3786,8 @@ def main(argv=None):
 
     signal.signal(signal.SIGTERM, interrupt)
     signal.signal(signal.SIGINT, interrupt)
+    _herdr_armed = True
+    _herdr_resume_argv = herdr_resume_argv(repo)
 
     def launched(child_pid):
         in_flight["pid_filho"] = child_pid
@@ -3899,6 +3987,10 @@ def main(argv=None):
                           "reset": reset.isoformat(),
                           "acorda": wake_at.isoformat()})
                 waits.append(("before the item", ident, reset))
+                # A pause stays `working`: herdr's `blocked` means "needs you", and
+                # this needs nothing from the owner (spec herdr-agent-status, CS-2).
+                herdr_report(f"{a.queue}: paused for 5h quota until "
+                             f"{wake_at.strftime('%H:%M')}")
                 wait_until(wake_at, on_tick=tick_wait)
                 last_reading, fresh_reading = None, False
                 continue
@@ -3934,6 +4026,13 @@ def main(argv=None):
                   "head": before, "session_id": session_id,
                   "hooks_sha": installed_hooks_sha()})
 
+        # herdr label: "<queue>: item <i>/<n> <id>". i = distinct items this run has
+        # started (a retry of the same item keeps its i); n = i - 1 + the queue's
+        # `pending` count as just read (that count includes this item), so n grows
+        # if the queue grows and is only an estimate of what is left.
+        pos = len(attempts)
+        pending_now = ((data.get("totals") or {}).get("por_status") or {}).get("pending") or 0
+        herdr_report(f"{a.queue}: item {pos}/{max(pos - 1 + pending_now, pos)} {ident}")
         in_flight.update(id=ident, fase="item", tentativa=round_n,
                          session_id=session_id)
         tick()
@@ -4371,6 +4470,8 @@ def main(argv=None):
                     step(f"waiting for the reset, resuming {ident} at "
                           f"{wake_at.strftime('%H:%M')}")
                     waits.append(("item cut off", ident, reset_at))
+                    herdr_report(f"{a.queue}: paused for 5h quota until "
+                                 f"{wake_at.strftime('%H:%M')}")
                     wait_until(wake_at, on_tick=tick_wait)
                     last_reading, fresh_reading = None, False
                     continue

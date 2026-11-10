@@ -1,0 +1,14 @@
+key: herdr-agent-status-CS-3
+status: complete
+criteria:
+  - id: AC1
+    text: "`cepa-until` releases the pane on every exit: end of queue, end of window, circuit breaker, a `blocked` item stopping the batch, SIGTERM and Ctrl+C."
+    altitude: cli
+    surface: "common/bin/cepa-until run as a subprocess with HERDR_ENV=1, HERDR_PANE_ID=w9:p9, HERDR_BIN_PATH pointing at a fake herdr that logs argv as JSON lines; fake claude drives each exit path; the last log line must be `pane release-agent w9:p9 --source cepa-until --agent cepa-until --seq N` with N above every earlier --seq, and exactly one release"
+    test: "tests/test_cepa_until.py::test_herdr_pane_is_released_at_the_end_of_the_queue, ::..._at_the_end_of_the_window (--for 0.02m), ::..._by_the_circuit_breaker (--max-failures 3), ::..._when_a_blocked_item_stops_the_batch (--max-blocked 1); tests/test_cepa_until_dead_supervisor.py::test_herdr_pane_is_released_on_sigterm_and_on_ctrl_c (SIGTERM then SIGINT sent to the supervisor mid-item)"
+    layer: cli (subprocess, fake herdr and fake claude; signals sent to the real supervisor process)
+    evidence: verified
+    run: "python3 tests/test_cepa_until.py -> for each of the 4 exit paths 'ok a última linha é a liberação do painel', 'ok --seq da liberação maior que todos os anteriores', 'ok uma única liberação' (+ breaker fired with 3 calls; blocked stopped after 1 call), final line '✓ tudo verde'. python3 tests/test_cepa_until_dead_supervisor.py -> same 3 checks for 'sinal SIGTERM no meio do item' and 'sinal SIGINT no meio do item', final line '✓ tudo verde'. Run by the auditor in this turn, foreground."
+    status: complete
+    gap: ""
+note: "Six exit paths, six runs: all covered. The spec's `--for 1s` is not accepted by parse_duration (h/m only); `--for 0.02m` (1.2 s) is the same window mechanism at the same cli surface, with a 2-item queue and a fake claude that sleeps 2 s so the window closes with a2 still pending (so it is not the end-of-queue path). Caveat: that test does not assert the stop reason is 'window' (only the release); the pending second item makes it the only plausible exit. Implementation: main() wraps _main() in try/finally and releases once armed (after preflight and signal handlers); subcommands never arm it. Old tests that counted herdr lines were adjusted to filter or expect the trailing release (not weakened: the broken/slow herdr test now asserts 2 reports plus the release last, still under 20 s). Not mutation-proven (the release call was not removed to confirm red). Pytest does not fail on check(); the script run is the real evidence."
