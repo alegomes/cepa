@@ -108,19 +108,19 @@ O run do `cepa-until` (o supervisor que executa a fila sem o dono presente) acab
 - [x] Q10. Enquanto a leitura prévia roda, o painel das rotas que a fila já tem aparece ao mesmo tempo, ou só depois que a leitura acaba? — Painel já, leitura ao fundo: as perguntas que a fila já tem aparecem na hora e as da leitura entram no fim da mesma lista (dono, 2026-11-10).
 
 ## Decided without asking
-- O arquivo se chama `perguntar-antes-do-run`, o slug que o dono passou — as duas alavancas ficam numa especificação só, confirmado pela Q1. Vete aqui se discordar.
-- "Item que impede outro de rodar" (resposta à Q2) foi lido como rota em item ainda aberto; rota em item já entregue fica fora do painel da largada (CS-3) — das 41 rotas de hoje, 24 estão em item entregue e não seguram nenhum item. Vete aqui se discordar.
-- Os textos novos na tela saem em inglês — a interface do `cepa-until` já foi traduzida ("questions for you"). Vete aqui se discordar.
-- A pré-condição achada pela leitura vira rota gravada no `queue.yaml` pelo `cepa-plan`, não uma anotação só do run — assim o próximo run a mostra no painel sem depender de ler de novo. Vete aqui se discordar.
-- A leitura prévia não guarda resultado entre runs — token vence e ambiente muda; o custo em tokens é medido pelo CS-13 antes de pensar em guardar. Vete aqui se discordar.
-- O leitor é um agente só de leitura que devolve um formato fechado (`pre-condicao`, `preferencia` ou nada) — sem escrita no repositório, e o formato fechado é o que deixa o teste usar um leitor falso. Vete aqui se discordar.
-- O teto de 5 minutos e o modelo do leitor são configuráveis por variável de ambiente, com o modelo do run como padrão — o teste do CS-7 precisa de teto curto. Vete aqui se discordar.
-- Os 5 minutos contam dentro da janela do run — a janela começa na largada, como hoje. Vete aqui se discordar.
-- A leitura lê os itens na ordem da fila; o que não couber no teto roda como hoje — a ordem da fila é do dono. Vete aqui se discordar.
-- Com zero itens executáveis depois do painel, o run não começa (CS-10) — começar para acabar em seguida só gera um registro vazio. Vete aqui se discordar.
-- A linha "decidi por você" traz o commit e não ganha comando de veto — desfazer é um `git revert`, resposta à Q7. Vete aqui se discordar.
-- O corte é regra no prompt do item mais a opção `--decision`; nenhum código tenta adivinhar pelo texto se uma rota era confirmação reversível — texto livre não dá para classificar por regra sem errar. Vete aqui se discordar.
-- A medição grava o evento e não fixa meta numérica — a base de comparação é 31% de itens travados (60 de 196) e 32 de 37 runs sem resposta. Vete aqui se discordar.
+- O arquivo se chama `perguntar-antes-do-run`, o slug que o dono passou — as duas alavancas ficam numa especificação só, confirmado pela Q1. Vete aqui se discordar. · mantida em 2026-11-10
+- "Item que impede outro de rodar" (resposta à Q2) foi lido como rota em item ainda aberto; rota em item já entregue fica fora do painel da largada (CS-3) — das 41 rotas de hoje, 24 estão em item entregue e não seguram nenhum item. Vete aqui se discordar. · mantida em 2026-11-10
+- Os textos novos na tela saem em inglês — a interface do `cepa-until` já foi traduzida ("questions for you"). Vete aqui se discordar. · mantida em 2026-11-10
+- A pré-condição achada pela leitura vira rota gravada no `queue.yaml` pelo `cepa-plan`, não uma anotação só do run — assim o próximo run a mostra no painel sem depender de ler de novo. Vete aqui se discordar. · mantida em 2026-11-10
+- A leitura prévia não guarda resultado entre runs — token vence e ambiente muda; o custo em tokens é medido pelo CS-13 antes de pensar em guardar. Vete aqui se discordar. · mantida em 2026-11-10
+- O leitor é um agente só de leitura que devolve um formato fechado (`pre-condicao`, `preferencia` ou nada) — sem escrita no repositório, e o formato fechado é o que deixa o teste usar um leitor falso. Vete aqui se discordar. · mantida em 2026-11-10
+- O teto de 5 minutos e o modelo do leitor são configuráveis por variável de ambiente, com o modelo do run como padrão — o teste do CS-7 precisa de teto curto. Vete aqui se discordar. · mantida em 2026-11-10
+- Os 5 minutos contam dentro da janela do run — a janela começa na largada, como hoje. Vete aqui se discordar. · mantida em 2026-11-10
+- A leitura lê os itens na ordem da fila; o que não couber no teto roda como hoje — a ordem da fila é do dono. Vete aqui se discordar. · mantida em 2026-11-10
+- Com zero itens executáveis depois do painel, o run não começa (CS-10) — começar para acabar em seguida só gera um registro vazio. Vete aqui se discordar. · mantida em 2026-11-10
+- A linha "decidi por você" traz o commit e não ganha comando de veto — desfazer é um `git revert`, resposta à Q7. Vete aqui se discordar. · mantida em 2026-11-10
+- O corte é regra no prompt do item mais a opção `--decision`; nenhum código tenta adivinhar pelo texto se uma rota era confirmação reversível — texto livre não dá para classificar por regra sem errar. Vete aqui se discordar. · mantida em 2026-11-10
+- A medição grava o evento e não fixa meta numérica — a base de comparação é 31% de itens travados (60 de 196) e 32 de 37 runs sem resposta. Vete aqui se discordar. · mantida em 2026-11-10
 
 ## Riscos e o que ficou de fora desta especificação
 - L1 é teto, não medida exata: o `run_end` não grava o motivo de cada adiamento.
