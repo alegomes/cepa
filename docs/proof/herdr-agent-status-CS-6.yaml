@@ -1,0 +1,53 @@
+schema_version: 2
+card: herdr-agent-status-CS-6
+verdict: proven
+reviewed_at: 2026-11-10T09:30:00-03:00
+base_commit: d2c7092
+head_commit: 3a92493
+issue_type: Story
+scope:
+  topology: build-solo (Python harness, not Quarkus; PIT not applicable, perturbation used)
+  criterion: "CS-6 of docs/spec/herdr-agent-status.md: every cepa-until `pane report-agent` ends in `-- cepa until pending --repo <absolute repo path>` (main clone root resolved), never the launching command; apostrophe in the path -> no `--` part and still `working`; release-agent and cepa-prove send no `--`"
+  covering_tests: "tests/test_cepa_until.py: test_herdr_reports_carry_the_pending_command_as_resume_argv, test_herdr_resume_argv_is_omitted_when_the_repo_path_has_an_apostrophe, test_herdr_resume_argv_names_the_main_clone_when_run_from_a_linked_worktree (added in 3a92493); tests/test_cepa_prove.py: the `--` assertion in test_herdr_reports_each_round_with_the_cards_handled_and_releases_at_the_end"
+  changed_classes:
+    - class: "common/bin/cepa-until :: herdr_resume_argv(repo), main_root(repo) resolution (lines ~1086-1096)"
+      module: common
+      external_observable: true
+      substituted_by_double: null   # real cepa-until runs as a subprocess; only herdr and claude are fakes at the far boundary
+    - class: "common/bin/cepa-until :: _herdr_call resume tail, only for report-agent, after --seq (lines ~1109-1115)"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until :: _main() sets _herdr_resume_argv after the signal handlers (line ~3790)"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "git diff ef2f68f 3a92493 touches only tests/test_cepa_until.py (+28/-4); common/bin/cepa-until is identical, so the earlier perturbation results hold for it"
+        - "baseline green at 3a92493 in throwaway detached worktree /tmp/proof-cs6 (removed afterwards): the 4 herdr test functions called via importlib, 26 ok lines, FAILURES: [], exit 0"
+        - "KILLED P4 (main-clone resolution removed: `Path(main_root(repo)).resolve()` -> `Path(repo).resolve()`), re-run at 3a92493: exit 1, 4 FAIL, all in the new linked-worktree test ('termina em `--repo <clone principal>`' and 'o caminho do worktree não aparece depois de `--`', for both reports). Earlier survivor now load-bearing"
+        - "KILLED re-run at 3a92493: P1 (resume tail not appended) exit 1; P3 (apostrophe guard `if False`) exit 1; P5 (release-agent also gets `--`) exit 1; P7 (`pending` -> `list`) exit 1"
+        - "KILLED previous pass at ef2f68f (code identical, not re-run): P2 (resume argv = launching command, 5 FAIL); P6 (_herdr_resume_argv never set, 5 FAIL); P8 (tail before --seq, 5 FAIL); P10 (--repo '.', 3 FAIL)"
+        - "EQUIVALENT P9 (drop `.resolve()` around main_root(repo)), re-run: exit 0, 0 FAIL. main_root already returns an absolute path from `git rev-parse --path-format=absolute --git-common-dir`, so the extra resolve() is redundant. Not counted as a gap"
+    note: "cepa-prove side: the `--` assertion in the cepa-prove herdr test passes at baseline; cepa-prove never sets the resume argv, and P5 is caught by the cepa-until test"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every changed line is reached through the real cepa-until process, including the linked-worktree branch of main_root (P4 RED at 3a92493)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff adds an outbound herdr argv built from the operator's own repo path; it parses no input from outside and touches no api-rest module (the apostrophe case is covered by a test, P3 killed)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is not Bug"
+routing_reason: "The one survivor of the first pass (P4, main-clone resolution) is killed by test_herdr_resume_argv_names_the_main_clone_when_run_from_a_linked_worktree; P1, P3, P5, P7 re-confirmed RED, P2, P6, P8, P10 carried from ef2f68f (production code identical). Only P9 survives and it is equivalent. No skipped level. Computed verdict: PROVEN."
