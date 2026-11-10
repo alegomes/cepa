@@ -577,11 +577,12 @@ def test_interpreter_unreadable_target_still_warns():
 
 
 def test_interpreter_in_construction_is_silent():
-    with Repo() as r:
-        r.mode("construction")
-        p = r.bash(INTERP_WRITES_OUTSIDE[0])
-        check("construction: script livre", p.returncode == 0 and not p.stderr.strip(),
-              p.stderr[:160])
+    for mode in ("construction", "refactor"):
+        with Repo() as r:
+            r.mode(mode)
+            p = r.bash(INTERP_WRITES_OUTSIDE[0])
+            check(f"{mode}: script livre", p.returncode == 0 and not p.stderr.strip(),
+                  p.stderr[:160])
 
 
 def test_interpreter_reads_which_argument_writes():
@@ -594,6 +595,13 @@ def test_interpreter_reads_which_argument_writes():
         bad = r.bash("python3 - <<'PY'\nimport shutil\n"
                      "shutil.copy('docs/a.md', 'common/hooks/a.md')\nPY")
         check("copiar PARA fora barra", bad.returncode == 2, bad.stderr[:200])
+        # `move` deletes its source: both ends are writes
+        for src, dst in (("docs/a.md", "common/hooks/a.md"),
+                         ("common/hooks/a.md", "docs/a.md")):
+            mv = r.bash(f"python3 -c \"import shutil; shutil.move('{src}','{dst}')\"")
+            check(f"mover {src} -> {dst} barra", mv.returncode == 2, mv.stderr[:200])
+        mv_ok = r.bash("python3 -c \"import shutil; shutil.move('docs/a.md','docs/b.md')\"")
+        check("mover dentro de docs passa", mv_ok.returncode == 0, mv_ok.stderr[:200])
         env = r.bash("CEPA_X=1 python3 -c \"open('tests/t.py','w').write('x')\"")
         check("prefixo de variável não esconde o -c", env.returncode == 2,
               env.stderr[:200])
