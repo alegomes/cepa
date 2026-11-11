@@ -1710,24 +1710,73 @@ def hc_working(message):
                   + base64.b64encode(message.encode()).decode())
 
 
-def test_hc_terminal_gets_one_working_status_per_item_and_a_clear_at_the_end():
+def test_hc_terminal_gets_one_working_status_per_item_and_a_done_at_the_end():
     """In the Herdr desktop app there is no `HERDR_ENV`: the terminal belongs to
-    herdr-core, which reads the status from OSC 7501 written to the terminal."""
+    herdr-core, which reads the status from OSC 7501 written to the terminal. A run
+    that ends normally says `done`, so the Agents panel moves it to Done."""
+    import base64
     with tempfile.TemporaryDirectory() as tmp:
         code, out, statuses = hc_scenario(tmp)
         check("hc: a run termina normal com os dois itens done",
               code == 0 and statuses == ["done", "done"], f"{code} {statuses}")
         first, second = hc_working("fila: item 1/2 a1"), hc_working("fila: item 2/2 a2")
-        clear = hc_seq("state=clear")
+        done = hc_seq("state=done:app=cepa-until:msg="
+                      + base64.b64encode(b"fila: finished").decode())
         check("hc: working do item 1 escrito no terminal", first in out, repr(out[-400:]))
         check("hc: working do item 2 vem depois do item 1",
               first in out and second in out and out.index(first) < out.index(second))
         titles = re.findall(r"\033\]2;([^\033]*)\033\\", out)
-        check("hc: o título do terminal é o item em curso e volta vazio no fim",
-              titles == ["fila: item 1/2 a1", "fila: item 2/2 a2", ""], repr(titles))
-        check("hc: a última sequência 7501 é o clear, depois dos dois itens",
-              out.count("\033]7501;") == 3 and out.rfind("\033]7501;") == out.find(clear),
-              str(out.count("\033]7501;")))
+        check("hc: o título do terminal é o item em curso e termina em `fila: finished`",
+              titles == ["fila: item 1/2 a1", "fila: item 2/2 a2", "fila: finished"], repr(titles))
+        check("hc: a última sequência 7501 é o done, depois dos dois itens",
+              out.count("\033]7501;") == 3 and out.rfind("\033]7501;") == out.find(done),
+              repr(out[out.rfind("\033]7501;"):][:120]))
+        check("hc: nenhum clear numa run que terminou normal", "state=clear" not in out)
+
+
+def _read_line_on_fake_tty(mod, armed, answer="1"):
+    """Runs `read_line` with stdout a fake terminal and stdin holding `answer`;
+    returns (what it returned, what reached the terminal)."""
+    import io
+    saved = (mod.sys.stdout, mod.sys.stdin, dict(os.environ), mod._herdr_armed, mod._hc_label)
+    os.environ["HC_TERMINAL_ID"] = "t9"
+    tty = _FakeTty()
+    mod.sys.stdout, mod.sys.stdin = tty, io.StringIO(answer + "\n")
+    mod._herdr_armed, mod._hc_label = armed, "fila"
+    try:
+        got = mod.read_line("   > ")
+    finally:
+        mod.sys.stdout, mod.sys.stdin = saved[0], saved[1]
+        os.environ.clear()
+        os.environ.update(saved[2])
+        mod._herdr_armed, mod._hc_label = saved[3], saved[4]
+    return got, tty.written
+
+
+def test_hc_waiting_for_the_owner_reports_blocked_question_before_the_prompt():
+    """The panel's question waits at the keyboard: herdr-core gets
+    `state=blocked:kind=question`, which the Agents panel shows as "Needs you"."""
+    import base64
+    mod = _until_module()
+    got, written = _read_line_on_fake_tty(mod, armed=True)
+    blocked = hc_seq("state=blocked:kind=question:app=cepa-until:msg="
+                     + base64.b64encode(b"fila: waiting for your answer").decode())
+    check("hc blocked: a resposta digitada volta intacta", got == "1", repr(got))
+    check("hc blocked: o blocked com kind=question é escrito no terminal",
+          blocked in written, repr(written[:200]))
+    check("hc blocked: o título diz que a fila espera resposta",
+          "\033]2;fila: waiting for your answer\033\\" in written, repr(written[:200]))
+    check("hc blocked: o blocked sai antes do prompt",
+          blocked in written and written.index(blocked) < written.find("   > "), repr(written))
+
+
+def test_hc_blocked_is_not_reported_outside_the_armed_run():
+    """`cepa-until decide` and the other subcommands never arm the run: the owner is
+    already at the keyboard and nothing is listed in the Agents panel."""
+    mod = _until_module()
+    got, written = _read_line_on_fake_tty(mod, armed=False)
+    check("hc blocked (subcomando): nenhuma sequência 7501 nem título",
+          got == "1" and "]7501;" not in written and "\033]2;" not in written, repr(written))
 
 
 def test_hc_status_is_not_written_outside_an_hc_terminal_or_into_a_pipe():

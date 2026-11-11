@@ -1180,11 +1180,32 @@ def herdr_report(message, agent="cepa-until"):
 _herdr_armed = False
 
 
-def herdr_release(agent="cepa-until"):
+# The queue name of the armed run, the prefix of the `blocked` and `done` messages.
+_hc_label = None
+
+
+def herdr_blocked():
+    """Tells the Herdr desktop app the run waits for the owner's answer: OSC 7501
+    `state=blocked:kind=question`, which its Agents panel shows as "Needs you"
+    (2026-11-11: the panel kept the run in Working while the panel's question
+    waited at the keyboard). Only from the armed main run, never from the
+    subcommands (`decide` has the owner at the keyboard already). The next
+    `herdr_report` puts it back to `working`."""
+    if not _herdr_armed:
+        return
+    message = f"{_hc_label}: waiting for your answer" if _hc_label else "waiting for your answer"
+    _hc_title(message)
+    _hc_status(f"state=blocked:kind=question:app=cepa-until:msg={_hc_b64(message)}")
+
+
+def herdr_release(agent="cepa-until", done=False):
     """Gives the pane back to herdr (`release-agent`), so it stops showing a
     `cepa-until` agent once the run is over. Same gate, timeout and ignored
     failures as `herdr_report` (herdr may itself be shutting down). SIGTERM and
-    SIGINT are ignored for the (at most 1 s) call so a second signal cannot cut it."""
+    SIGINT are ignored for the (at most 1 s) call so a second signal cannot cut it.
+    With `done` (the run returned instead of dying on an exception or signal), the
+    Herdr desktop app gets OSC 7501 `state=done` and the title `<queue>: finished`,
+    so its Agents panel moves the row to Done; otherwise `state=clear` drops it."""
     saved = {}
     for sig in (signal.SIGTERM, signal.SIGINT):
         try:
@@ -1193,8 +1214,13 @@ def herdr_release(agent="cepa-until"):
             pass
     try:
         _herdr_call(["release-agent"], agent)
-        _hc_status("state=clear")
-        _hc_title("")
+        if done:
+            message = f"{_hc_label}: finished" if _hc_label else "finished"
+            _hc_status(f"state=done:app={agent}:msg={_hc_b64(message)}")
+            _hc_title(message)
+        else:
+            _hc_status("state=clear")
+            _hc_title("")
     finally:
         for sig, handler in saved.items():
             signal.signal(sig, handler)
@@ -2401,6 +2427,7 @@ def read_line(prompt, output=print, wait=None):
     half-erased arrives as a stray byte (`n\\xcb\\xc3\\xa3o`) and
     `input()` blows up with UnicodeDecodeError; the line was already consumed, so
     just ask again (decidir WEGO 2026-09-29-2059)."""
+    herdr_blocked()
     while True:
         try:
             if wait is not None:
@@ -3504,15 +3531,18 @@ def main(argv=None):
     """Runs the command; once the main run is armed (past preflight, signal handlers
     installed) every way out, return or exception, releases the herdr pane. The
     subcommands never arm it, so they never call herdr."""
+    returned = False
     try:
-        return _main(argv)
+        code = _main(argv)
+        returned = True
+        return code
     finally:
         if _herdr_armed:
-            herdr_release()
+            herdr_release(done=returned)
 
 
 def _main(argv=None):
-    global _herdr_armed, _herdr_resume_argv
+    global _herdr_armed, _herdr_resume_argv, _hc_label
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] in ("land", "aterrissar"):
         return cmd_land(argv[1:])
@@ -3889,6 +3919,7 @@ def _main(argv=None):
     signal.signal(signal.SIGINT, interrupt)
     _herdr_armed = True
     _herdr_resume_argv = herdr_resume_argv(repo)
+    _hc_label = a.queue
 
     def launched(child_pid):
         in_flight["pid_filho"] = child_pid
