@@ -19,6 +19,7 @@ Review". That measures the supervisor's decisions and nothing else:
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -769,6 +770,10 @@ def test_hc_terminal_shows_cepa_prove_working_per_round_and_is_cleared_at_the_en
         check("hc: um working por rodada, como cepa-prove, na ordem",
               all(x >= 0 for x in pos) and pos == sorted(pos), str(pos))
         clear = "\033]7501;state=clear\033\\"
+        titles = re.findall(r"\033\]2;([^\033]*)\033\\", out)
+        check("hc: o título do terminal é a rodada em curso e volta vazio no fim",
+              titles == ["round 1", "round 2 · handled 1: WEGO-1",
+                         "round 3 · handled 2: WEGO-1, WEGO-2", ""], repr(titles))
         check("hc: a última sequência 7501 é o clear, depois das três rodadas",
               out.count("\033]7501;") == 4 and out.rfind("\033]7501;") == out.find(clear),
               str(out.count("\033]7501;")))
@@ -782,7 +787,8 @@ def test_hc_status_is_not_written_by_cepa_prove_outside_hc_or_into_a_pipe():
             binv = fake_claude(tmp, [("proof", "WEGO-1", "proven")])
             code, out = run_prove_on_hc(root, binv, tmp, ["--for", "2h"], **kw)
             check(f"hc ({label}): o run termina 0 e nenhuma sequência 7501",
-                  code == 0 and "]7501;" not in out, repr(out[-200:]))
+                  code == 0 and "]7501;" not in out and "\033]2;" not in out,
+                  repr(out[-200:]))
 
 
 if __name__ == "__main__":

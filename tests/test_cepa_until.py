@@ -26,6 +26,7 @@ a calendar night, and only the first real run tells.
 
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -1252,6 +1253,16 @@ def test_plan_of_another_queue_dirtied_by_the_live_run_is_not_dirt():
             check("plan de outra fila escrito pelo run vivo não é sujeira",
                   "modified file(s)" not in p.stderr and len(calls) == 1,
                   f"saiu {p.returncode}: {p.stderr[:300]}")
+            delivered = {"status": "done", "evidence": "feito",
+                         "head_commit": "3fa35a76676c058324ed763ae7e44b0a5da88dec"}
+            p, calls = tries(alive.pid, fields_o1=delivered)
+            check("...nem o head_commit do item que o run vivo entregou",
+                  "modified file(s)" not in p.stderr and len(calls) == 1,
+                  f"saiu {p.returncode}: {p.stderr[:300]}")
+            p, calls = tries(alive.pid, fields_o2=delivered)
+            check("...head_commit em item que o run não iniciou ainda é sujeira",
+                  p.returncode == 2 and not calls
+                  and "modified file(s)" in p.stderr, p.stderr[:300])
             p, calls = tries(alive.pid, fields_o1=dict(of_run, title="x"))
             check("...mudar também o title do item ainda é sujeira",
                   p.returncode == 2 and not calls
@@ -1711,6 +1722,9 @@ def test_hc_terminal_gets_one_working_status_per_item_and_a_clear_at_the_end():
         check("hc: working do item 1 escrito no terminal", first in out, repr(out[-400:]))
         check("hc: working do item 2 vem depois do item 1",
               first in out and second in out and out.index(first) < out.index(second))
+        titles = re.findall(r"\033\]2;([^\033]*)\033\\", out)
+        check("hc: o título do terminal é o item em curso e volta vazio no fim",
+              titles == ["fila: item 1/2 a1", "fila: item 2/2 a2", ""], repr(titles))
         check("hc: a última sequência 7501 é o clear, depois dos dois itens",
               out.count("\033]7501;") == 3 and out.rfind("\033]7501;") == out.find(clear),
               str(out.count("\033]7501;")))
@@ -1719,16 +1733,16 @@ def test_hc_terminal_gets_one_working_status_per_item_and_a_clear_at_the_end():
 def test_hc_status_is_not_written_outside_an_hc_terminal_or_into_a_pipe():
     with tempfile.TemporaryDirectory() as tmp:
         code, out, statuses = hc_scenario(tmp, hc_id=None)
-        check("hc (sem HC_TERMINAL_ID): nenhuma sequência 7501",
-              "]7501;" not in out and statuses == ["done", "done"], repr(out[-200:]))
+        check("hc (sem HC_TERMINAL_ID): nenhuma sequência 7501 nem título",
+              "]7501;" not in out and "\033]2;" not in out and statuses == ["done", "done"], repr(out[-200:]))
     with tempfile.TemporaryDirectory() as tmp:
         code, out, statuses = hc_scenario(tmp, hc_id="")
-        check("hc (HC_TERMINAL_ID vazio): nenhuma sequência 7501",
-              "]7501;" not in out and statuses == ["done", "done"], repr(out[-200:]))
+        check("hc (HC_TERMINAL_ID vazio): nenhuma sequência 7501 nem título",
+              "]7501;" not in out and "\033]2;" not in out and statuses == ["done", "done"], repr(out[-200:]))
     with tempfile.TemporaryDirectory() as tmp:
         code, out, statuses = hc_scenario(tmp, tty=False)
-        check("hc (stdout não é terminal): nenhuma sequência 7501",
-              "]7501;" not in out and statuses == ["done", "done"], repr(out[-200:]))
+        check("hc (stdout não é terminal): nenhuma sequência 7501 nem título",
+              "]7501;" not in out and "\033]2;" not in out and statuses == ["done", "done"], repr(out[-200:]))
 
 
 def _until_module():
@@ -1781,9 +1795,11 @@ def test_hc_message_is_one_line_capped_at_200_utf8_and_names_the_agent():
     # `???>>>` makes standard base64 produce `/` and `+` (the url-safe alphabet differs).
     _report_on_fake_tty(mod, tty, "fila  é:\n\titem ???>>> " + "ã" * 300, "cepa-prove")
     flat = ("fila é: item ???>>> " + "ã" * 300)[:200]
-    wanted = ("\033]7501;state=working:app=cepa-prove:msg="
+    wanted = ("\033]2;" + flat + "\033\\"
+              + "\033]7501;state=working:app=cepa-prove:msg="
               + base64.b64encode(flat.encode("utf-8")).decode() + "\033\\"
-              + "\033]7501;state=clear\033\\")
+              + "\033]7501;state=clear\033\\"
+              + "\033]2;\033\\")
     check("hc: mensagem numa linha só, cortada em 200 caracteres, utf-8, com o agente dado",
           tty.written == wanted, repr(tty.written[:160]))
     std = base64.b64encode(flat.encode("utf-8")).decode()
@@ -1795,6 +1811,15 @@ def test_hc_message_is_one_line_capped_at_200_utf8_and_names_the_agent():
     check("hc: o corte é em exatamente 200 caracteres", len(flat) == 200
           and base64.b64encode(flat.encode("utf-8")).decode() in tty.written
           and base64.b64encode((flat + "ã").encode("utf-8")).decode() not in tty.written)
+
+
+def test_hc_title_drops_control_characters_that_would_end_the_sequence():
+    mod = _until_module()
+    tty = _FakeTty()
+    _report_on_fake_tty(mod, tty, "fila: \033]2;x\007 item 1/2 a1", "cepa-until")
+    check("hc: o título sai sem ESC nem BEL do texto",
+          tty.written.startswith("\033]2;fila: ]2;x item 1/2 a1\033\\"),
+          repr(tty.written[:60]))
 
 
 def test_hc_terminal_that_fails_to_write_does_not_break_the_report():

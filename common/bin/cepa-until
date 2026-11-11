@@ -1123,10 +1123,14 @@ def _herdr_call(args, agent="cepa-until"):
 HC_MSG_MAX = 200
 
 
+def _hc_flat(text):
+    """`text` on one line, capped."""
+    return " ".join(str(text).split())[:HC_MSG_MAX]
+
+
 def _hc_b64(text):
     """`text` as herdr-core wants a 7501 field: one line, capped, base64 of UTF-8."""
-    flat = " ".join(str(text).split())[:HC_MSG_MAX]
-    return base64.b64encode(flat.encode("utf-8")).decode("ascii")
+    return base64.b64encode(_hc_flat(text).encode("utf-8")).decode("ascii")
 
 
 def _hc_status(payload):
@@ -1137,11 +1141,25 @@ def _hc_status(payload):
     `state=clear` to drop it). Written only inside such a terminal (`HC_TERMINAL_ID`)
     and only when stdout IS that terminal: a piped or captured run stays byte-clean.
     Every failure is ignored, like the herdr call."""
+    _hc_write(f"\033]7501;{payload}\033\\")
+
+
+def _hc_title(text):
+    """The terminal title (OSC 2), in the same terminals and under the same rules as
+    `_hc_status`. The Agents panel of the Herdr desktop app draws the terminal's
+    title beside the space name and never draws the 7501 `msg`: with the status alone
+    the row read `cepa · t1c` (2026-11-10). An empty title hands it back to the shell.
+    Control characters are dropped: an ESC or BEL in the text would end the sequence."""
+    flat = "".join(ch for ch in _hc_flat(text) if ch.isprintable())
+    _hc_write(f"\033]2;{flat}\033\\")
+
+
+def _hc_write(seq):
     if not os.environ.get("HC_TERMINAL_ID"):
         return
     try:
         if sys.stdout.isatty():
-            sys.stdout.write(f"\033]7501;{payload}\033\\")
+            sys.stdout.write(seq)
             sys.stdout.flush()
     except Exception:  # noqa: BLE001
         pass
@@ -1155,6 +1173,7 @@ def herdr_report(message, agent="cepa-until"):
     and every failure is ignored: a missing or slow herdr never changes the run.
     `--seq` is `time.time_ns()`, forced strictly increasing within the process."""
     _herdr_call(["report-agent", "--state", "working", "--message", message], agent)
+    _hc_title(message)
     _hc_status(f"state=working:app={agent}:msg={_hc_b64(message)}")
 
 
@@ -1175,6 +1194,7 @@ def herdr_release(agent="cepa-until"):
     try:
         _herdr_call(["release-agent"], agent)
         _hc_status("state=clear")
+        _hc_title("")
     finally:
         for sig, handler in saved.items():
             signal.signal(sig, handler)
@@ -1319,7 +1339,9 @@ QUEUE_BAK = _dirt.QUEUE_BAK
 PLAN_MODIFIED = re.compile(
     r"^ M (\.claude/(?:programs/([^/]+)/plan|queues/([^/]+)/queue)\.yaml)$")
 # The fields that `cepa-plan start/finish` of a live run writes on the item.
-RUN_FIELDS = ("status", "claimed_by", "evidence")
+# `head_commit` is the commit a `done` item closed on: without it here, the first
+# delivered item of a live run made its own queue file dirt again (2026-11-10).
+RUN_FIELDS = ("status", "claimed_by", "evidence", "head_commit")
 
 
 def plan_only_from_live_run(repo, path, queue):
