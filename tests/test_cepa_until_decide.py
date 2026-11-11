@@ -570,6 +570,10 @@ def test_run_without_terminal_lists_the_pending_and_the_command():
 
 
 def test_run_on_terminal_ends_asking_and_applies():
+    # `--no-resume-on-answer`: this case is about the END panel applying the
+    # answer. With the switch on (default since LL-1) the yes puts a1 back into
+    # the same run, and the fake blocks it again; that path is pinned in
+    # tests/test_cepa_until_resume_on_answer.py.
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1"), item("a2")])
         binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
@@ -580,7 +584,8 @@ def test_run_on_terminal_ends_asking_and_applies():
         env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
-             "--for", "2h", "--no-verify", "--no-analysis"], str(root),
+             "--for", "2h", "--no-verify", "--no-analysis",
+             "--no-resume-on-answer"], str(root),
             inputs=[("[t] I write the answer", "t"),
                       ("Your answer", "vira item do checklist"),
                       ("Send the item back to the queue", "s")], env=env)

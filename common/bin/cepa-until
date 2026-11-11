@@ -2869,8 +2869,28 @@ def delivered_leftovers(queue, repo):
             for l in items if l.get("human_pending") is not None]
 
 
+def owner_questions(deferred, asked=()):
+    """The deferred items only the owner unblocks and that this run has not
+    asked about yet. `reserved` and `depends-on-deferred` are nobody's question."""
+    asked = {str(x) for x in asked}
+    return [ad for ad in deferred or []
+            if reason_alias(ad.get("reason")) in OWNER_REASON
+            and str(ad.get("id")) not in asked]
+
+
+def ask_mid_run(stop_reason, remaining, reserve, interactive, disabled, questions):
+    """Whether the run asks the owner BEFORE closing, so that a yes puts the item
+    back into this same run (LL-1, docs/estrategia-loops-longos.md section 4.1).
+    Only when the queue ran dry (not on a dependency stop), at a terminal (the
+    panel needs one, and `cepa-plan answer` refuses without it), with the window
+    still holding the minimum reserve and at least one owner question left."""
+    return (not disabled and interactive
+            and reason_alias(stop_reason) == "end-of-queue"
+            and remaining >= reserve and bool(questions))
+
+
 def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=None,
-                     wait=None):
+                     wait=None, already_asked=()):
     """The closing of the run and of `cepa-until decide`: queries the queue again (its
     state now, not the launch one) and asks, or lists without a terminal.
     Without `run_id` (`cepa-until decide <fila>`), it goes over the whole queue:
@@ -2883,6 +2903,15 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
         deferred = (data or {}).get("deferred") or []
     if not run_id:
         deferred = deferred + delivered_leftovers(queue, repo)
+    # Asked mid-run already (the panel before closing, LL-1): asking the same
+    # question twice in one run is the ping-pong the panel exists to avoid.
+    asked = {str(x) for x in already_asked}
+    if asked:
+        repeated = [str(ad.get("id")) for ad in deferred if str(ad.get("id")) in asked]
+        deferred = [ad for ad in deferred if str(ad.get("id")) not in asked]
+        if repeated:
+            print(f"\n   already asked in this run: {', '.join(repeated)}. To answer "
+                  f"again: cepa-until decide {queue}" + (f"/{run_id}" if run_id else ""))
     analysis = {}
     if review:
         try:
@@ -3558,6 +3587,12 @@ def _main(argv=None):
                          "repo without a build")
     ap.add_argument("--no-analysis", "--sem-analise", action="store_true", dest="no_analysis",
                     help="skips /common:until-review at the end of the run")
+    ap.add_argument("--no-resume-on-answer", "--sem-retomar-na-resposta",
+                    action="store_true", dest="no_resume_on_answer",
+                    help="when the queue runs dry with items waiting on you, does "
+                         "NOT ask before closing; the questions come only at the "
+                         "end and a yes waits for the next run (the behavior "
+                         "before 2026-11-10)")
     ap.add_argument("--full-title", "--titulo-inteiro", action="store_true", dest="full_title",
                     help="does not cut the item title at the terminal "
                          "width (the `.jsonl` always keeps the full title)")
@@ -3932,6 +3967,11 @@ def _main(argv=None):
               "the run branch and running `bin/install.sh`. Until then the "
               "rounds of this run keep the installed version")
 
+    # LL-1: the panel before closing. Who was already asked in this run, whether
+    # a panel went unanswered (then nobody is at the keyboard: no second wait),
+    # and whether there is a terminal to ask at.
+    asked_mid_run, mid_run_silent = set(), False
+    interactive_run = sys.stdin.isatty() and sys.stdout.isatty()
     print()
     while True:
         in_flight.clear()
@@ -3994,7 +4034,45 @@ def _main(argv=None):
                           "motivo": "reservado", "detalhe": skip.get("detail")})
         if not data.get("batch"):
             stop = data.get("stop") or {}
-            end_reason = reason_alias(stop.get("reason")) or "end-of-queue"
+            stop_now = reason_alias(stop.get("reason")) or "end-of-queue"
+            # LL-1: the owner answers minutes after the end, at this terminal
+            # (4 of 5 answers before the deadline were relaunched by hand,
+            # 3h11 of gaps). Asking here, before the closing, lets a yes
+            # put the item back into THIS run instead of a new one.
+            questions = owner_questions(data.get("deferred"), asked_mid_run)
+            if not mid_run_silent and ask_mid_run(
+                    stop_now, deadline - datetime.now(), reserve, interactive_run,
+                    a.no_resume_on_answer, questions):
+                asked_mid_run.update(str(ad.get("id")) for ad in questions)
+                save_state("rodando", fase="aguardando-dono")
+                log_event({"evento": "painel_antes_de_fechar",
+                          "itens": [ad.get("id") for ad in questions]})
+                step(f"the queue ran dry with {len(questions)} item(s) waiting on "
+                     f"you and {human(deadline - datetime.now())} of window left: "
+                     "a yes puts the item back into this same run")
+                applied = []
+                try:
+                    applied, _later = decide(repo, a.queue, run_id, {}, questions,
+                                             {}, wait=ANSWER_WAIT_SEC)
+                except NoAnswer:
+                    mid_run_silent = True
+                    print(f"\n   nobody answered in {ANSWER_WAIT_SEC / 60:g} min; "
+                          "the run closes")
+                except EOFError:
+                    mid_run_silent = True
+                after, after_error = query_queue(a.queue, repo)
+                if not after_error and (after or {}).get("batch"):
+                    nxt = after["batch"][0].get("id")
+                    log_event({"evento": "retomada_pelo_dono", "respondidos": applied,
+                              "proximo": nxt,
+                              "janela_restante_min": round(
+                                  (deadline - datetime.now()).total_seconds() / 60)})
+                    step(f"answered: the run goes on with {nxt}")
+                    continue
+                if not after_error:
+                    stop = (after or {}).get("stop") or stop
+                    stop_now = reason_alias(stop.get("reason")) or stop_now
+            end_reason = stop_now
             end_detail = stop.get("detail") or "the queue has no runnable item"
             break
 
@@ -4784,7 +4862,7 @@ def _main(argv=None):
         except (OSError, ValueError):
             item_states = {}
         return close_with_owner(repo, a.queue, run_id, item_states, review,
-                               wait=ANSWER_WAIT_SEC)
+                               wait=ANSWER_WAIT_SEC, already_asked=asked_mid_run)
 
     # The analysis spends quota: stopping on the quota and then analyzing hits the
     # same ceiling. In those cases, and with nothing executed, it is left for by hand.

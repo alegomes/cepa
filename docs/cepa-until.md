@@ -158,6 +158,19 @@ next run reads it. `m` records the answer and keeps the item as it was (still `b
 route still open), for answers like "keep it blocked". Enter leaves an item for later; `q`
 stops asking.
 
+**An answer can resume the same run (LL-1, 2026-11-10).** When the queue runs dry
+(`end-of-queue`) with items waiting on the owner, the run is attached to a terminal and the
+window still holds `--min-reserve`, the questions about those items come BEFORE the closing,
+not after it. A yes that makes an item runnable puts it back into this same run: same branch,
+same record (event `retomada_pelo_dono`), one `run_start` and one `run_end`. A no, Enter or
+silence closes the run as before, and an item asked there is not asked again at the end (the
+landing question still comes at the end, after the analysis). While the panel waits, the
+state carries `fase: aguardando-dono`. Why: of 37 queue-empty runs measured, the owner answered
+before the deadline in 5, always minutes after the end and at this terminal; 4 were relaunched
+by hand (3h11 of gaps) and 1 was not (11.1h of window left) (`docs/estrategia-loops-longos.md`
+section 4.1). No process sleeps waiting and no notice is sent: the panel already runs in the
+supervisor's own process. `--no-resume-on-answer` turns it off.
+
 `responde` refuses without a terminal: a `claude -p` subprocess has no TTY, so an agent cannot
 close a human route in the owner's place. It also refuses a text that does not answer the
 question (a "não entendi", a question back), showing the route's question, and it commits the

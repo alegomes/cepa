@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""cepa-until — an answer given in the owner panel resumes the SAME run (LL-1).
+
+Measurement of 2026-11-10 (docs/estrategia-loops-longos.md, section 4.1): in 5
+of 37 queue-empty runs the owner answered before the deadline. In 4 of them he
+relaunched by hand (gaps of 8 min, 7 min, 48 min and 2h08, 3h11 in total) and
+in the fifth he did not relaunch, with 11.1h of window left. The answers came
+minutes after the end, at the terminal, through the end-of-run question panel,
+which already runs inside the supervisor's own process.
+
+What these cases pin:
+
+  - in a terminal, when the queue runs dry with an item waiting on the owner
+    and the window still holds `--min-reserve`, the run asks BEFORE closing,
+    and a `yes` puts the item back into this same run: one `run_start`, one
+    `run_end`, the item `done` in the third round;
+  - an item already asked in this run is not asked again at the end;
+  - `--no-resume-on-answer` keeps the old behavior (the answer applies, the
+    run ends);
+  - the decision of asking mid-run is a pure function, tested apart: no
+    terminal, no window, a stop reason other than `end-of-queue`, or no owner
+    question left means no mid-run panel.
+
+Run with `python3 tests/test_cepa_until_resume_on_answer.py`.
+"""
+
+import sys
+import tempfile
+from datetime import timedelta
+from pathlib import Path
+
+import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_cepa_until import (  # noqa: E402
+    CEPA_UNTIL, FAILURES, check, fake_claude, item, ledger_of, build_repo)
+from test_cepa_until_decide import (  # noqa: E402
+    env_do_run, load_module, on_tty, plan_of)
+
+# a1 blocks with a question on its first attempt; once the owner's answer is in
+# its evidence, it closes. a2 always closes.
+BLOCKS_THEN_CLOSES = (
+    "ident = primeiro_pendente()\n"
+    "if ident == 'a1':\n"
+    "    ev = ''\n"
+    "    for it in carrega()['items']:\n"
+    "        if it['id'] == 'a1':\n"
+    "            ev = it.get('evidence') or ''\n"
+    "    if 'sim:' in ev:\n"
+    "        marca(ident, status='done')\n"
+    "    else:\n"
+    "        marca(ident, status='blocked', evidence='não há produção',\n"
+    "              owner_question='Fecho o card como medir depois do go-live?')\n"
+    "elif ident:\n"
+    "    marca(ident, status='done')\n")
+
+QUESTION = "Fecho o card como medir depois do go-live?"
+
+
+def items_of(root):
+    return {it["id"]: it for it in
+            yaml.safe_load(plan_of(root).read_text())["items"]}
+
+
+def run_on_tty(tmp, root, extra=(), inputs=()):
+    binv = fake_claude(tmp, BLOCKS_THEN_CLOSES)
+    return on_tty(
+        [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+         "--for", "2h", "--no-verify", "--no-analysis", *extra], str(root),
+        inputs=list(inputs), env=env_do_run(tmp, root, binv), timeout=180)
+
+
+def test_yes_in_the_panel_resumes_the_same_run():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        rc, out = run_on_tty(tmp, root, inputs=[
+            ("[s] yes", "s"), ("Anything to add", "")])
+        check("o run sai 0", rc == 0, out[-2000:])
+        a1 = items_of(root)["a1"]
+        check("a resposta devolve o item e o mesmo run o fecha",
+              a1["status"] == "done", a1)
+        events = ledger_of(root)
+        kinds = [e.get("evento") for e in events]
+        check("um só run: um run_start e um run_end",
+              kinds.count("run_start") == 1 and kinds.count("run_end") == 1,
+              kinds)
+        resumed = [e for e in events if e.get("evento") == "retomada_pelo_dono"]
+        check("o registro marca a retomada com o item que volta",
+              len(resumed) == 1 and resumed[0].get("proximo") == "a1", resumed)
+        starts = [e.get("id") for e in events if e.get("evento") == "item_start"]
+        check("a1 roda de novo depois de a2", starts[-1:] == ["a1"], starts)
+        check("a pergunta aparece uma vez só (o fim não repete)",
+              out.count(QUESTION) == 1, out.count(QUESTION))
+        end = [e for e in events if e.get("evento") == "run_end"][0]
+        check("o run termina pela fila vazia, sem nada adiado",
+              end.get("motivo") in ("end-of-queue", "fim-da-fila"), end)
+
+
+def test_no_does_not_resume_and_is_not_asked_again():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        rc, out = run_on_tty(tmp, root, inputs=[
+            ("[s] yes", "n"), ("Anything to add", "")])
+        check("o run sai 0", rc == 0, out[-2000:])
+        kinds = [e.get("evento") for e in ledger_of(root)]
+        check("sem retomada", "retomada_pelo_dono" not in kinds, kinds)
+        check("a1 continua travado", items_of(root)["a1"]["status"] == "blocked",
+              items_of(root)["a1"])
+        check("a pergunta aparece uma vez só", out.count(QUESTION) == 1,
+              out.count(QUESTION))
+
+
+def test_switch_off_keeps_the_old_end():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        rc, out = run_on_tty(tmp, root, extra=["--no-resume-on-answer"], inputs=[
+            ("[s] yes", "s"), ("Anything to add", "")])
+        check("o run sai 0", rc == 0, out[-2000:])
+        kinds = [e.get("evento") for e in ledger_of(root)]
+        check("sem retomada com a chave desligada",
+              "retomada_pelo_dono" not in kinds, kinds)
+        check("a resposta vale, o item volta para a fila e espera o próximo run",
+              items_of(root)["a1"]["status"] == "pending", items_of(root)["a1"])
+
+
+def test_when_to_ask_mid_run():
+    m = load_module()
+    q = [{"id": "a1", "reason": "blocked-before"}]
+    hour, reserve = timedelta(hours=1), timedelta(minutes=45)
+    check("fila vazia + terminal + janela + pergunta: pergunta",
+          m.ask_mid_run("end-of-queue", hour, reserve, True, False, q))
+    check("nome antigo do motivo também vale",
+          m.ask_mid_run("fim-da-fila", hour, reserve, True, False, q))
+    check("sem terminal: não pergunta no meio",
+          not m.ask_mid_run("end-of-queue", hour, reserve, False, False, q))
+    check("chave desligada: não pergunta",
+          not m.ask_mid_run("end-of-queue", hour, reserve, True, True, q))
+    check("janela menor que a reserva: não pergunta",
+          not m.ask_mid_run("end-of-queue", timedelta(minutes=30), reserve,
+                            True, False, q))
+    check("parada por dependência: não pergunta",
+          not m.ask_mid_run("blocked", hour, reserve, True, False, q))
+    check("sem pergunta do dono: não pergunta",
+          not m.ask_mid_run("end-of-queue", hour, reserve, True, False, []))
+    deferred = [{"id": "a1", "reason": "blocked-before"},
+                {"id": "a2", "reason": "human_pending"},
+                {"id": "a3", "reason": "depends-on-deferred"},
+                {"id": "a4", "reason": "reserved"}]
+    picked = [d["id"] for d in m.owner_questions(deferred, asked={"a2"})]
+    check("só as do dono, e ainda não perguntadas neste run",
+          picked == ["a1"], picked)
+
+
+def main():
+    print("cepa-until — a resposta no painel retoma o mesmo run\n")
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            print(f"{name}:")
+            fn()
+    print()
+    if FAILURES:
+        print(f"✗ {len(FAILURES)} falha(s): {', '.join(FAILURES)}")
+        return 1
+    print("✓ tudo verde")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
