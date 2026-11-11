@@ -2656,12 +2656,16 @@ class Panel:
 
 def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
            output=print, answer=None, land=None, wait=None, first=1, of=None,
-           opened=False, note=None, close=True):
+           opened=False, note=None, close=True, progress=None):
     """Goes through what only the owner unblocks and applies each answer. Returns
     (applied, for_later), as text, for the closing.
     CS-8 (the launch panel in two parts): `first`/`of` number the questions inside a
     longer list, `opened` skips the opening (the list is already on screen), `note`
-    is a line under the opening and `close=False` leaves the closing to the caller."""
+    is a line under the opening and `close=False` leaves the closing to the caller.
+    CS-13: `progress` (a dict) counts as it goes, so a panel cut by the wait, EOF or
+    Ctrl-C still has the right numbers: `asked` (owner questions that reached the
+    screen) and `answered` (answers recorded in the queue)."""
+    progress = {} if progress is None else progress
     if question is None:
         def question(prompt):
             return read_line(prompt, output, wait)
@@ -2729,6 +2733,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # (feedback of 10/15, decidir WEGO 2026-10-15-1128).
         summary = owner_summary_of(ad, d)
         screen.item(i + first - 1, of or len(owner_items), ident, ad.get("title") or "")
+        progress["asked"] = progress.get("asked", 0) + 1
         # The human section first, in the order a person reads a story:
         # what stopped, what was asked, what is already done. The agent
         # section (the evidence, with its codes) only on `[e]`.
@@ -2841,6 +2846,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                        else answer(ident, text, keep=True))
             if rc == 0:
                 applied.append(f"{ident}: {msg}")
+                progress["answered"] = progress.get("answered", 0) + 1
                 screen.recorded(msg)
                 screen.end()
                 continue
@@ -3336,7 +3342,7 @@ def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False):
                         "of this list")
     try:
         applied, for_later = decide(repo, queue, None, {}, deferred, {},
-                                    wait=ANSWER_WAIT_SEC, **part)
+                                    wait=ANSWER_WAIT_SEC, progress=tally, **part)
         if tally is not None:
             tally["cut"] = False
             tally.setdefault("applied", []).extend(applied)
@@ -4332,8 +4338,8 @@ def _main(argv=None):
     found = {kind: sum(1 for r in rows or [] if r.get("tipo") == kind)
              for kind in READER_KINDS}
     log_event({"evento": "largada", "rodam": runs, "esperam": waits,
-               "perguntas_mostradas": tally.get("shown", 0) + tally.get("prefs_shown", 0),
-               "perguntas_respondidas": len(tally.get("applied", []))
+               "perguntas_mostradas": tally.get("asked", 0) + tally.get("prefs_shown", 0),
+               "perguntas_respondidas": tally.get("answered", 0)
                + sum(1 for p in preferences.values() if p.get("fonte") == "dono"),
                "rotas_resumidas": tally.get("summarized", 0),
                "itens_lidos": sum(1 for r in rows or [] if r.get("lido")),
