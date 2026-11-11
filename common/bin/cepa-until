@@ -800,7 +800,7 @@ def read_item(plan_path, ident):
 
 # ── running an item ─────────────────────────────────────────────────────────
 
-def build_command(name, branch, permissions, session_id=None):
+def build_command(name, branch, permissions, session_id=None, note=""):
     # stream-json is what carries the `rate_limit_event` with the quota usage. `--verbose`
     # is required by `claude` itself for that format with `-p`.
     # `--na-branch` tells drain-plan that the tree it wakes up in IS the
@@ -808,6 +808,9 @@ def build_command(name, branch, permissions, session_id=None):
     request = f"/common:drain-plan {name} --max 1"
     if branch:
         request += f" --na-branch {branch}"
+    if note:
+        # CS-6: the pre-read's preference, after the arguments, in its own paragraph.
+        request += "\n\n" + note
     cmd = ["claude", "-p", request,
            "--output-format", "stream-json", "--verbose"]
     if session_id:
@@ -1161,13 +1164,13 @@ def herdr_release(agent="cepa-until"):
 
 
 def run_item(name, tree, branch, permissions, limit_sec, log,
-                 on_launch=None, session_id=None, on_tick=None):
+                 on_launch=None, session_id=None, on_tick=None, note=""):
     """Launches ONE subprocess, with `tree` (the night worktree) as cwd.
     Returns (code, killed_by_timeout, seconds, this_attempt_output).
     `on_launch` receives the child's pid: it is what `run_interrompido` says
     was left running."""
     repo = tree
-    cmd = build_command(name, branch, permissions, session_id)
+    cmd = build_command(name, branch, permissions, session_id, note)
     start = time.monotonic()
     try:
         mark = os.path.getsize(log)
@@ -2906,13 +2909,17 @@ and the relevant parts of the repository (Read, Glob and Grep only; change nothi
 Decide whether the item has a PRE-CONDITION: something OUTSIDE the code that must \
 exist before the item can be done (a credential or token, an environment or \
 service, an answer from a person or a third party). If the code and the repository \
-are enough, there is none.
+are enough, there is none. If there is no pre-condition, decide whether the item \
+has a PREFERENCE: a choice the owner might care about where you have a reasonable \
+default that is easy to undo later (a format, a name, an order on screen).
 
 Answer with ONLY one JSON object, no prose, no code fence:
-{{"tipo": "pre-condicao" or null, "texto": "<one plain sentence, in Brazilian \
-Portuguese, no codes or file names, saying what is missing>", "pergunta": "<one \
-closed yes/no question, in Brazilian Portuguese, the owner can answer>"}}
-Use {{"tipo": null}} when nothing is missing.
+{{"tipo": "pre-condicao" or "preferencia" or null, "texto": "<one plain sentence, \
+in Brazilian Portuguese, no codes or file names, saying what is missing or what the \
+choice is>", "pergunta": "<one closed yes/no question, in Brazilian Portuguese, the \
+owner can answer>", "padrao": "<only for preferencia: the choice you would make, in \
+a few words of Brazilian Portuguese>"}}
+Use {{"tipo": null}} when nothing is missing and there is no choice worth asking.
 
 Item:
 {item}
@@ -2963,8 +2970,63 @@ def parse_finding(text):
     found = {"tipo": body["tipo"], "texto": texto,
              "pergunta": " ".join(str(body.get("pergunta") or "").split())}
     if body["tipo"] == "preferencia":
-        found["padrao"] = body.get("padrao")
+        # CS-6: a preference with no default has nothing to run with.
+        padrao = " ".join(str(body.get("padrao") or "").split())
+        if not padrao:
+            return None
+        found["padrao"] = padrao
     return found
+
+
+def ask_preferences(prefs, wait=None, question=None):
+    """CS-6, on a terminal at the launch: each preference the pre-read found, as one
+    closed question with the agent's default. A line typed is the owner's answer
+    (`escolha` becomes it, `fonte` "dono"); Enter keeps the default. No answer within
+    the wait, EOF or Ctrl-C: one line, and every preference not answered yet keeps the
+    default (`fonte` stays "padrao"). `prefs` is changed in place."""
+    if not prefs:
+        return
+    if question is None:
+        def question(prompt):
+            return read_line(prompt, print, wait)
+    print(f"\n── {len(prefs)} choice(s) the pre-read found: answer to decide, "
+          "Enter keeps the agent's default")
+    for i, (ident, pref) in enumerate(prefs.items(), 1):
+        print(f"\n   {i}/{len(prefs)} · {ident}: {pref['texto']}")
+        if pref.get("pergunta"):
+            print(f"   {pref['pergunta']}")
+        print(f"   If nobody answers, the agent goes with: {pref['padrao']}")
+        try:
+            raw = question("   ▸ Your choice, in one line [Enter keeps the default]: ")
+        except NoAnswer:
+            print(f"\n   nobody answered in {(wait or 0) / 60:g} min; the remaining "
+                  "choice(s) run with the agent's default")
+            return
+        except (EOFError, KeyboardInterrupt):
+            print("\n   choices interrupted; the remaining ones run with the agent's "
+                  "default")
+            return
+        text = " ".join(str(raw or "").split())
+        if text:
+            pref.update(escolha=text, fonte="dono")
+
+
+def preference_note(ident, pref):
+    """CS-6: the paragraph added to the request of the item's agent, or "" without a
+    preference. The supervisor and drain-plan read the same queue head, but the note
+    still names the item, so a drain that reserved another one ignores it."""
+    if not pref:
+        return ""
+    # The note rides in drain-plan's arguments: a free-text "--offline" or "--max 9"
+    # typed by the owner (or written by the reader) must not read as one of its flags.
+    def flat(text):
+        return re.sub(r"(?<!\S)-+", "", " ".join(str(text or "").split()))
+    pref = dict(pref, texto=flat(pref.get("texto")), escolha=flat(pref.get("escolha")))
+    who = ("the owner's answer at the launch" if pref.get("fonte") == "dono"
+           else "the agent's reversible default; the owner did not answer")
+    return (f"Launch pre-read, about item {ident}: {pref['texto']} "
+            f"Go with: {pref['escolha']} ({who}). This applies only if the item you "
+            f"reserve is {ident}; say in the evidence that you followed it.")
 
 
 # Readers still running, so Ctrl-C / SIGTERM during the wait can kill their process
@@ -3976,6 +4038,7 @@ def _main(argv=None):
     # panel, so a route it opens shows in the panel like any other. `whole` is the
     # uncapped read of the forecast above, in queue order.
     pre_read_event = None
+    preferences = {}  # CS-6: id -> {texto, pergunta, padrao, escolha, fonte}
     if whole and whole.get("batch") and reader_command({}) is not None:
         to_read = [{k: it.get(k) for k in ("id", "title", "why", "blocked_by")}
                    for it in whole["batch"]]
@@ -3993,6 +4056,12 @@ def _main(argv=None):
                 if row["erro"]:
                     print(f"   pre-read: could not open the route of {row['id']} "
                           f"({row['erro'].splitlines()[0][:160]}); it runs as usual")
+        for row in rows:
+            if row["tipo"] == "preferencia":
+                preferences[str(row["id"])] = {
+                    "texto": row["texto"], "pergunta": row.get("pergunta"),
+                    "padrao": row["padrao"], "escolha": row["padrao"],
+                    "fonte": "padrao"}
         read_ok = sum(1 for r in rows if not r["erro"] or r["tipo"])
         print(f"   pre-read: {read_ok} of {len(rows)} read, {opened} deferred for a "
               "missing pre-condition")
@@ -4010,6 +4079,12 @@ def _main(argv=None):
     # terminal nothing changes (the end-of-run listing stays as it was).
     if sys.stdin.isatty() and sys.stdout.isatty():
         data = ask_at_launch(repo, a.queue, data)
+        ask_preferences(preferences, wait=ANSWER_WAIT_SEC)
+    if pre_read_event:
+        for row in pre_read_event["itens"]:
+            pref = preferences.get(str(row.get("id")))
+            if pref:
+                row.update(escolha=pref["escolha"], fonte=pref["fonte"])
     if not data.get("batch"):
         stop = data.get("stop") or {}
         print(f"\nnothing to do: {stop.get('reason')} — {stop.get('detail')}")
@@ -4211,6 +4286,7 @@ def _main(argv=None):
     drops, consecutive_drops = [], 0
     # Items started with a tight quota and the reset outside the window.
     tight = []
+    followed = {}  # CS-6: id -> the preference handed to its agent, for the summary
     # Plugin hooks that the night branch changed and that the screen has already warned about. The
     # base is the clone's HEAD, and not the night's, so the inheritance counts: what
     # it brought is not in the installed plugin either.
@@ -4367,11 +4443,18 @@ def _main(argv=None):
         first.setdefault(ident, (before, len(delivered)))
         # Fresh per launch: `claude --session-id` refuses a reused one.
         session_id = str(uuid.uuid4())
-        log_event({"evento": "item_start", "id": ident, "title": item.get("title"),
-                  "restante_seg": int(remaining.total_seconds()),
-                  "tentativa": round_n, "twg_version": installed_twg_version(),
-                  "head": before, "session_id": session_id,
-                  "hooks_sha": installed_hooks_sha()})
+        pref = preferences.get(str(ident))
+        note = preference_note(ident, pref)
+        start_event = {"evento": "item_start", "id": ident, "title": item.get("title"),
+                       "restante_seg": int(remaining.total_seconds()),
+                       "tentativa": round_n, "twg_version": installed_twg_version(),
+                       "head": before, "session_id": session_id,
+                       "hooks_sha": installed_hooks_sha()}
+        if pref:
+            start_event["preferencia"] = {"escolha": pref["escolha"],
+                                          "fonte": pref["fonte"]}
+            followed[str(ident)] = pref
+        log_event(start_event)
 
         # herdr label: "<queue>: item <i>/<n> <id>". i = distinct items this run has
         # started (a retry of the same item keeps its i); n = i - 1 + the queue's
@@ -4386,7 +4469,7 @@ def _main(argv=None):
         limit = (remaining + slack).total_seconds()
         code, killed, spent, output = run_item(
             a.queue, tree, start_branch, a.with_permissions, limit, log,
-            on_launch=launched, session_id=session_id, on_tick=tick)
+            on_launch=launched, session_id=session_id, on_tick=tick, note=note)
         in_flight.pop("pid_filho", None)
 
         # Uncommitted leftovers don't carry over to the next item.
@@ -4980,6 +5063,13 @@ def _main(argv=None):
         for ident, usage, reset in tight:
             print(f"     - {ident}: quota at {usage:.0%}, reset at "
                   f"{reset.strftime('%H:%M')}")
+    if followed:
+        print(f"\n   Choices the pre-read found ({len(followed)}) — the agent was told "
+              "to follow them:")
+        for ident, pref in followed.items():
+            who = ("your answer at the launch" if pref["fonte"] == "dono"
+                   else "the agent's default, nobody answered")
+            print(f"     - {ident}: {pref['escolha']} ({who}) · {pref['texto']}")
     if drops:
         print(f"\n   Network drops ({len(drops)}) — not the item's fault:")
         for ident, dropped_at, returned in drops:

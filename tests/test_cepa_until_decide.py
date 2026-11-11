@@ -1602,6 +1602,10 @@ def _fake_reader(tmp, mode):
         "    print(json.dumps({'tipo': 'preferencia', 'padrao': 'usar o formato curto',\n"
         "        'texto': 'Há duas formas de mostrar a data.',\n"
         "        'pergunta': 'Posso usar o formato curto?'}))\n"
+        "elif mode == 'prefnodefault':\n"
+        "    print(json.dumps({'tipo': 'preferencia', 'padrao': '  ',\n"
+        "        'texto': 'Há duas formas de mostrar a data.',\n"
+        "        'pergunta': 'Posso usar o formato curto?'}))\n"
         "elif mode == 'emptytext':\n"
         "    print(json.dumps({'tipo': 'pre-condicao', 'texto': '  ',\n"
         "        'pergunta': 'Você já providenciou o token de acesso?'}))\n"
@@ -1824,6 +1828,136 @@ def test_pre_read_cs5_ceiling_kills_a_slow_reader_and_the_item_runs():
         check("cs5 ceiling: the launch did not wait for the slow reader",
               time.time() - t0 < 40, f"{time.time() - t0:.0f}s")
         check("cs5 ceiling: x1 runs as today", "x1" in _started(events), p.stdout[-1500:])
+
+
+
+# ── CS-6: a preference runs with the agent's default, or with the owner's answer ──
+
+def _requests(tmp):
+    """The `-p` request of each fake `claude` call, in order (one per item attempt)."""
+    f = Path(tmp) / "chamadas.jsonl"
+    calls = [json.loads(l) for l in f.read_text().splitlines() if l.strip()] \
+        if f.exists() else []
+    return [c[c.index("-p") + 1] if "-p" in c else "" for c in calls]
+
+
+def _pref_launch(mode="pref", tty_inputs=None, wait="5"):
+    """Queue x1, y1 with the fake reader. `tty_inputs` None = no terminal; a list =
+    on a pty with those answers. Returns (out, events, requests_by_item)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("x1"), item("y1")])
+        binv = fake_claude(tmp, "pass")
+        script, _ = _fake_reader(tmp, mode)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(script)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+        cmd = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+               "--for", "2h", "--no-verify", "--no-analysis"]
+        if tty_inputs is None:
+            p = subprocess.run(cmd, capture_output=True, text=True, env=env,
+                               timeout=120, stdin=subprocess.DEVNULL)
+            out = p.stdout + p.stderr
+        else:
+            _, out = on_tty(cmd, str(root), inputs=tty_inputs, env=env, timeout=90)
+        events = _launch_events(root)
+        started = _started(events)
+        reqs = _requests(tmp)
+        return ANSI.sub("", out), events, dict(zip(started, reqs))
+
+
+def test_pre_read_cs6_without_answer_the_prompt_carries_the_default_and_the_summary_lists_it():
+    out, events, reqs = _pref_launch()
+    check("cs6 default: x1 and y1 ran", set(reqs) == {"x1", "y1"}, str(reqs) + out[-800:])
+    check("cs6 default: x1's prompt carries the default",
+          "usar o formato curto" in reqs.get("x1", ""), str(reqs))
+    check("cs6 default: the prompt says it was the agent's default",
+          "the owner did not answer" in reqs.get("x1", ""), str(reqs))
+    check("cs6 default: the prompt still starts with the drain-plan request",
+          reqs.get("x1", "").startswith("/common:drain-plan fila --max 1"), str(reqs))
+    check("cs6 default: y1's prompt has no note", "pre-read" not in reqs.get("y1", "x"),
+          str(reqs))
+    tail = out[out.find("ended at"):]
+    check("cs6 default: the end summary lists the choice",
+          "Choices the pre-read found (1)" in tail
+          and "x1: usar o formato curto (the agent's default" in tail, tail[-1500:])
+    start = [e for e in events if e.get("evento") == "item_start" and e.get("id") == "x1"]
+    check("cs6 default: item_start of x1 records the choice and its source",
+          start and start[0].get("preferencia") == {"escolha": "usar o formato curto",
+                                                    "fonte": "padrao"}, str(start))
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    row = {r["id"]: r for r in (reads[0]["itens"] if reads else [])}.get("x1", {})
+    check("cs6 default: leitura_previa records escolha and fonte",
+          row.get("escolha") == "usar o formato curto" and row.get("fonte") == "padrao",
+          str(row))
+
+
+def test_pre_read_cs6_answer_typed_in_the_launch_panel_goes_into_the_prompt():
+    out, events, reqs = _pref_launch(
+        tty_inputs=[("Your choice, in one line", "mostrar a data por extenso")])
+    check("cs6 answer: the panel showed the question and the default",
+          "Posso usar o formato curto?" in out
+          and "the agent goes with: usar o formato curto" in out, out[-1500:])
+    check("cs6 answer: x1's prompt carries the owner's answer",
+          "mostrar a data por extenso" in reqs.get("x1", ""), str(reqs) + out[-800:])
+    check("cs6 answer: and not the default as the choice",
+          "Go with: usar o formato curto" not in reqs.get("x1", ""), str(reqs))
+    check("cs6 answer: the prompt says it was the owner's answer",
+          "the owner's answer at the launch" in reqs.get("x1", ""), str(reqs))
+    tail = out[out.find("ended at"):]
+    check("cs6 answer: the summary says it was the owner's answer",
+          "x1: mostrar a data por extenso (your answer at the launch)" in tail,
+          tail[-1500:])
+    start = [e for e in events if e.get("evento") == "item_start" and e.get("id") == "x1"]
+    check("cs6 answer: item_start records fonte dono",
+          start and (start[0].get("preferencia") or {}).get("fonte") == "dono", str(start))
+
+
+def test_pre_read_cs6_enter_or_silence_in_the_panel_keeps_the_default():
+    for label, inputs in (("enter", [("Your choice, in one line", "")]),
+                          ("silence", [])):
+        out, events, reqs = _pref_launch(tty_inputs=inputs, wait="2")
+        check(f"cs6 {label}: x1 ran with the default",
+              "Go with: usar o formato curto" in reqs.get("x1", ""), str(reqs) + out[-800:])
+        check(f"cs6 {label}: y1 ran too", "y1" in reqs, str(reqs))
+        if label == "silence":
+            check("cs6 silence: one line says nobody answered",
+                  "the remaining choice(s) run with the agent's default" in out,
+                  out[-1500:])
+
+
+def test_pre_read_cs6_preference_without_default_is_no_finding():
+    out, events, reqs = _pref_launch(mode="prefnodefault")
+    check("cs6 no default: x1 ran", "x1" in reqs, str(reqs) + out[-800:])
+    check("cs6 no default: no note in x1's prompt", "pre-read" not in reqs.get("x1", "x"),
+          str(reqs))
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    check("cs6 no default: the event says no finding",
+          reads and all(r["tipo"] is None for r in reads[0]["itens"]), str(reads))
+    check("cs6 no default: the summary has no choices block",
+          "Choices the pre-read found" not in out, out[-800:])
+
+
+def test_pre_read_cs6_note_and_command_units():
+    mod = load_module()
+    check("cs6 unit: no preference, no note", mod.preference_note("x1", None) == "")
+    plain = mod.build_command("fila", "until/b", False)
+    check("cs6 unit: without a note the request is unchanged",
+          plain[2] == "/common:drain-plan fila --max 1 --na-branch until/b", str(plain))
+    pref = {"texto": "T.", "padrao": "P", "escolha": "R", "fonte": "dono"}
+    with_note = mod.build_command("fila", "until/b", False, note=mod.preference_note("x1", pref))
+    check("cs6 unit: the note follows the request in its own paragraph",
+          with_note[2].startswith("/common:drain-plan fila --max 1 --na-branch until/b\n\n")
+          and "Go with: R" in with_note[2] and "item you reserve is x1" in with_note[2],
+          str(with_note))
+    sneaky = dict(pref, escolha="--offline --max 9 usar a-b")
+    note = mod.preference_note("x1", sneaky)
+    check("cs6 unit: no flag-looking word survives in the note",
+          not re.search(r"(?<!\S)--?\w", note) and "usar a-b" in note, note)
+    parsed = mod.parse_finding('{"tipo": "preferencia", "texto": "t", "padrao": " a  b "}')
+    check("cs6 unit: the default is normalised", parsed and parsed["padrao"] == "a b",
+          str(parsed))
+    check("cs6 unit: the reader prompt asks for a preference with a default",
+          "preferencia" in mod.READER_PROMPT and '"padrao"' in mod.READER_PROMPT)
 
 
 def main():
