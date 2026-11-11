@@ -153,6 +153,9 @@ def on_start(session_id: str, cwd: str) -> None:
     entry.setdefault("start_commit", L.current_commit(cwd))  # baseline for "commits this session"
     entry.pop("claim", None)
     L.write_entry(root, session_id, entry)
+    # worktree -> main root, so a resume after the directory is deleted can
+    # still find this registry (see _wtlib.index_register).
+    L.index_register(str(cwd), root)
 
     # 1b. Chaining: `cepa` only knows the CEPA_LAUNCH_ID it generated. Noting
     #     here the session_id born from that launch is what lets the launcher,
@@ -217,7 +220,7 @@ def on_start(session_id: str, cwd: str) -> None:
 
     # 4. Auto-clean safe worktrees, remind about the rest.
     try:
-        cleaned = L.auto_clean(root)
+        cleaned = L.auto_clean(root, by_session=session_id)
         for desc in L.clean_orphan_prune_markers(root):
             print(f"[session-registry] removed orphan prune-on-exit marker {desc}",
                   file=sys.stderr)

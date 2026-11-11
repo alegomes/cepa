@@ -63,6 +63,7 @@ class World:
         self.log = t / "stub.log"
         self.home = t / "worktrees"
         self.telemetry = t / "telemetry"
+        self.tmp_home = t / "home"
         return self
 
     def __exit__(self, *a):
@@ -71,7 +72,9 @@ class World:
     def cepa(self, *args, cwd=None, extra_env=None):
         env = {**os.environ, "CLAUDE_WT_CLAUDE_BIN": str(self.stub), "CEPA_PREFLIGHT": "off",
                "CEPA_ENCADEAR": "off", "CEPA_WORKTREE_HOME": str(self.home),
-               "CEPA_TELEMETRY_DIR": str(self.telemetry), "STUB_LOG": str(self.log), **(extra_env or {})}
+               "CEPA_TELEMETRY_DIR": str(self.telemetry), "STUB_LOG": str(self.log),
+               # the launcher and registry write ~/.claude/cepa-wt-index/: keep it out of the real home
+               "HOME": str(self.tmp_home), **(extra_env or {})}
         return subprocess.run([str(CEPA), "--mode", "construction", *args],
                               cwd=cwd or self.repo, env=env, capture_output=True, text=True,
                               timeout=60, stdin=subprocess.DEVNULL)
@@ -95,7 +98,8 @@ class World:
         return path
 
     def hook(self, event, cwd, sid="s1"):
-        return subprocess.run([sys.executable, str(REGISTRY)], cwd=cwd, env=GIT_ENV, text=True,
+        return subprocess.run([sys.executable, str(REGISTRY)], cwd=cwd, text=True,
+                              env={**GIT_ENV, "HOME": str(self.tmp_home)},
                               input=json.dumps({"session_id": sid, "cwd": str(cwd),
                                                 "hook_event_name": event}),
                               capture_output=True, timeout=60)

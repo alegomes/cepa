@@ -76,7 +76,10 @@ if state.exists():
 state.write_text("1")
 sid = os.environ.get("STUB_SID", "sess-1")
 def hook(event):
+    # HOME in a temp dir: the registry writes ~/.claude/cepa-wt-index/ and must not
+    # leave test worktrees in the real home.
     subprocess.run([sys.executable, os.environ["STUB_REGISTRY"]],
+                   env={**os.environ, "HOME": os.environ["STUB_FAKE_HOME"]},
                    input=json.dumps({"session_id": sid, "cwd": os.getcwd(),
                                      "hook_event_name": event}),
                    text=True, capture_output=True)
@@ -153,6 +156,7 @@ class World:
              "STUB_LOG": str(self.log),
              "STUB_STATE": str(self.state),
              "STUB_REGISTRY": str(REGISTRY),
+             "STUB_FAKE_HOME": str(self.telemetry.parent / "home"),
              "STUB_SESSIONS": str(self.sessions)}
         if nxt is not None:
             e["STUB_NEXT"] = nxt if isinstance(nxt, str) else json.dumps(nxt)
