@@ -105,6 +105,34 @@ def test_launch_measure_cs13_without_terminal_records_no_panel():
           and ev.get("achados") == {"pre-condicao": 0, "preferencia": 1}, str(ev))
 
 
+def test_launch_measure_cs13_panel_cut_after_the_first_answer():
+    """The common case (32 of 37 runs with no answer): three routes, the owner answers
+    the first and then is gone. Only the two questions that reached the screen count as
+    shown, and the answer given before the cut still counts (pair review finding)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item(f"r{i}", human_pending=f"route number {i}")
+                                for i in (1, 2, 3)] + [item("y1")])
+        binv = fake_claude(tmp, "pass")
+        env = env_do_run(tmp, root, binv)  # pre-read off
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "3"
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"], str(root), env=env,
+            timeout=120, inputs=[("[t] I write the answer", "y"), ("Anything to add", "")])
+        events = _launch_events(root)
+    ev = _the_event("cs13 cut", rc, out, events)
+    if not ev:
+        return
+    check("cs13 cut: the panel really was cut by the wait", "nobody answered" in out,
+          out[-1500:])
+    check("cs13 cut: 2 questions shown (r1 answered, r2 unanswered; r3 never shown)",
+          ev.get("perguntas_mostradas") == 2, str(ev))
+    check("cs13 cut: the answer given before the cut counts",
+          ev.get("perguntas_respondidas") == 1, str(ev))
+    check("cs13 cut: forecast 1 runs, 3 wait",
+          ev.get("rodam") == 1 and ev.get("esperam") == 3, str(ev))
+
+
 def main():
     print("cepa-until — a largada grava a medição no registro do run (CS-13)\n")
     for given_name, fn in sorted(globals().items()):
