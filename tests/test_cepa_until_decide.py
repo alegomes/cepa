@@ -1880,6 +1880,8 @@ def test_pre_read_cs6_without_answer_the_prompt_carries_the_default_and_the_summ
     check("cs6 default: the end summary lists the choice",
           "Choices the pre-read found (1)" in tail
           and "x1: usar o formato curto (the agent's default" in tail, tail[-1500:])
+    check("cs6 default: the summary line carries what the choice was about",
+          "Há duas formas de mostrar a data." in tail, tail[-1500:])
     start = [e for e in events if e.get("evento") == "item_start" and e.get("id") == "x1"]
     check("cs6 default: item_start of x1 records the choice and its source",
           start and start[0].get("preferencia") == {"escolha": "usar o formato curto",
