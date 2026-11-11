@@ -2053,6 +2053,148 @@ def test_pre_read_cs6_note_and_command_units():
           "preferencia" in mod.READER_PROMPT and '"padrao"' in mod.READER_PROMPT)
 
 
+# ── CS-8: the queue's questions come before the pre-read ends; its own go at the end ──
+
+def _slow_reader(tmp, mode="pre", delay=2):
+    """The CS-5 fake reader behind a `delay`-second sleep; it also writes, when it
+    returns, a line to `leitor-fim.txt`, so the test knows the reading was not over
+    yet when the queue's question was on the screen."""
+    script, log = _fake_reader(tmp, mode)
+    done = Path(tmp) / "leitor-fim.txt"
+    slow = Path(tmp) / "leitor-lento.py"
+    slow.write_text(
+        f"#!{sys.executable}\n"
+        "import subprocess, sys, time\n"
+        f"time.sleep({delay})\n"
+        f"p = subprocess.run([{str(script)!r}], input=sys.stdin.read(), text=True,\n"
+        "                   capture_output=True)\n"
+        "sys.stdout.write(p.stdout)\n"
+        f"open({str(done)!r}, 'a').write('fim\\n')\n")
+    slow.chmod(0o755)
+    return slow, done
+
+
+def _cs8_launch(items, mode="pre", inputs=None, wait="5", delay=2):
+    """Real launch on a pty with the slow fake reader. Returns (out, events, items,
+    reader_done_when_the_first_question_was_answered)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, items)
+        binv = fake_claude(tmp, "pass")
+        reader, done = _slow_reader(tmp, mode, delay)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(reader)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+        seen = {}
+
+        def first_answer():
+            # Read at the moment the first question is answered: the reader must
+            # still be sleeping (the queue's panel did not wait for it).
+            seen["reader_done"] = done.exists()
+            return b""
+        replies = inputs if inputs is not None else [
+            ("[t] I write the answer", first_answer),
+            ("[t] I write the answer", b"")]
+        rc, out = on_tty_calls(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"], str(root),
+            inputs=replies, env=env, timeout=90)
+        return ANSI.sub("", out), _launch_events(root), items_of(root), seen
+
+
+def on_tty_calls(cmd, cwd, inputs=(), env=None, timeout=120):
+    """`on_tty` where a reply may be a function, called when its trigger shows."""
+    wrapped = []
+    for trigger, reply in inputs:
+        wrapped.append((trigger, reply))
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.chdir(cwd)
+        os.execve(cmd[0], cmd, env or dict(os.environ))
+    out_text, queue, end = "", list(wrapped), time.time() + timeout
+    while time.time() < end:
+        r, _, _ = select.select([fd], [], [], 0.5)
+        if r:
+            try:
+                datum = os.read(fd, 4096)
+            except OSError:
+                break
+            if not datum:
+                break
+            out_text += datum.decode(errors="replace")
+        while queue and queue[0][0] in out_text:
+            trigger, reply = queue.pop(0)
+            out_text = out_text.replace(trigger, f"<{trigger}>", 1)
+            if callable(reply):
+                reply = reply()
+            if isinstance(reply, str):
+                reply = reply.encode()
+            os.write(fd, reply + b"\n")
+    if time.time() >= end:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+        out_text += f"\n<on_tty: no answer within {timeout}s>"
+    _, st = os.waitpid(pid, 0)
+    return os.waitstatus_to_exitcode(st), out_text
+
+
+def test_launch_cs8_queue_route_comes_before_the_pre_read_question_and_the_total_sums_both():
+    """CS-8 declared scenario: a reader that takes 2 seconds and a queue with one open
+    route. The route's question is on the screen before the reading ends, the
+    pre-read's question comes after it in the same list, and the total sums both."""
+    out, events, items, seen = _cs8_launch(
+        [item("r1", human_pending="provision the Keycloak role"), item("x1"),
+         item("y1")])
+    route = out.find("provision the Keycloak role")
+    found = out.find("Falta o token de acesso")
+    check("cs8: the queue's route is asked", route >= 0, out[-2500:])
+    check("cs8: the pre-read's question is asked", found >= 0, out[-2500:])
+    check("cs8: the route comes before the pre-read's question",
+          0 <= route < found, out[-2500:])
+    check("cs8: the route was on the screen before the reading ended",
+          seen.get("reader_done") is False, str(seen))
+    check("cs8: the panel says the pre-read is still reading",
+          "the pre-read is still reading" in out[:route if route >= 0 else None],
+          out[:2500])
+    check("cs8: the pre-read's question is numbered after the queue's (2/2)",
+          "[2/2] x1" in out or "2/2 · x1" in out, out[-2500:])
+    check("cs8: the panel total sums both (2 question(s) in total)",
+          "2 question(s) in total" in out, out[-2500:])
+    check("cs8: the list closes once",
+          out.count("Answered now:") + out.count("answered now ") == 1, out[-2500:])
+    check("cs8: y1 still runs", "y1" in _started(events), out[-1500:])
+    check("cs8: x1 is deferred by its open route",
+          "x1" not in _started(events) and "token" in str(items["x1"].get("human_pending")),
+          str(items["x1"]))
+
+
+def test_launch_cs8_without_queue_routes_the_pre_read_opens_the_panel_itself():
+    """No route in the queue: the pre-read's question opens a normal panel (1/1)."""
+    out, events, items, _ = _cs8_launch(
+        [item("x1"), item("y1")], inputs=[("[t] I write the answer", "")])
+    check("cs8 alone: one question for you", "1 question(s) for you" in out, out[-2500:])
+    check("cs8 alone: not announced as still reading",
+          "the pre-read is still reading" not in out, out[-2500:])
+    check("cs8 alone: numbered 1/1", "[1/1] x1" in out or "1/1 · x1" in out, out[-2500:])
+
+
+def test_launch_cs8_preference_counts_in_the_total_after_the_queue_route():
+    """A preference found by the pre-read comes after the queue's route and counts in
+    the total; Enter keeps the default and the item runs."""
+    out, events, items, _ = _cs8_launch(
+        [item("r1", human_pending="provision the Keycloak role"), item("x1")],
+        mode="pref", inputs=[("[t] I write the answer", ""),
+                             ("Your choice, in one line", "")])
+    route = out.find("provision the Keycloak role")
+    pref = out.find("Posso usar o formato curto?")
+    check("cs8 pref: the route comes before the preference", 0 <= route < pref,
+          out[-2500:])
+    check("cs8 pref: the total sums both", "2 question(s) in total" in out, out[-2500:])
+    check("cs8 pref: the preference is numbered 2/2", "2/2 · x1" in out, out[-2500:])
+    check("cs8 pref: x1 runs", "x1" in _started(events), out[-1500:])
+
+
 def main():
     print("cepa-until decidir — o fim do run pergunta\n")
     for given_name, fn in sorted(globals().items()):
