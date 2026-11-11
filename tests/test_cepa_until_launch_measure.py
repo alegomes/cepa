@@ -30,11 +30,11 @@ def _queue():
     return [r1, n1, item("x1"), item("y1")]
 
 
-def _launch(tty):
+def _launch(tty, mode="pref", pref_answer=""):
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, _queue())
         binv = fake_claude(tmp, "pass")
-        reader, _ = _fake_reader(tmp, "pref")  # x1 -> one preference, y1 -> nothing
+        reader, _ = _fake_reader(tmp, mode)  # "pref": x1 -> one preference, y1 -> nothing
         env = env_do_run(tmp, root, binv)
         env["CEPA_UNTIL_LEITOR"] = str(reader)
         env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "5"
@@ -45,7 +45,7 @@ def _launch(tty):
             # not answered by the owner).
             rc, out = on_tty(cmd, str(root), env=env, timeout=120, inputs=[
                 ("[t] I write the answer", "y"), ("Anything to add", ""),
-                ("Your choice, in one line", "")])
+                ("Your choice, in one line", pref_answer)])
         else:
             p = subprocess.run(cmd, capture_output=True, text=True, env=env,
                                timeout=120, stdin=subprocess.DEVNULL)
@@ -67,8 +67,9 @@ def _the_event(label, rc, out, events):
           < (names.index("item_start") if "item_start" in names else len(names)),
           str(names))
     check(f"{label}: it carries every field", all(k in ev for k in FIELDS), str(ev))
-    check(f"{label}: seconds spent is a non-negative number",
-          isinstance(ev.get("segundos"), (int, float)) and ev["segundos"] >= 0, str(ev))
+    # The launch queries the queue in subprocesses, so it always takes > 0.1 s.
+    check(f"{label}: seconds spent is a positive number",
+          isinstance(ev.get("segundos"), (int, float)) and ev["segundos"] > 0, str(ev))
     return ev
 
 
@@ -131,6 +132,71 @@ def test_launch_measure_cs13_panel_cut_after_the_first_answer():
           ev.get("perguntas_respondidas") == 1, str(ev))
     check("cs13 cut: forecast 1 runs, 3 wait",
           ev.get("rodam") == 1 and ev.get("esperam") == 3, str(ev))
+
+
+def test_launch_measure_cs13_typed_preference_counts_as_answered():
+    """A preference the owner answers by typing counts, next to the route answered."""
+    ev = _the_event("cs13 typed", *_launch(tty=True, pref_answer="usar o formato longo"))
+    check("cs13 typed: 2 questions answered (r1's route and x1's preference)",
+          ev.get("perguntas_respondidas") == 2, str(ev))
+
+
+def test_launch_measure_cs13_an_unread_item_is_not_counted_as_read():
+    """The reader fails on x1 (exit 3): x1 is not read, y1 is."""
+    ev = _the_event("cs13 unread", *_launch(tty=False, mode="fail"))
+    check("cs13 unread: 1 item read (y1), x1 left out",
+          ev.get("itens_lidos") == 1, str(ev))
+    check("cs13 unread: no finding",
+          ev.get("achados") == {"pre-condicao": 0, "preferencia": 0}, str(ev))
+
+
+def test_launch_measure_cs13_preferences_cut_return_how_many_were_shown():
+    """In process: `ask_preferences` cut on the second question (the wait, Ctrl-C) says
+    one question reached the screen; with no cut it says all of them."""
+    import contextlib, io
+    m = base.load_module()
+    def prefs():
+        return {i: {"texto": f"t{i}", "pergunta": f"p{i}?", "padrao": "d",
+                    "escolha": "d", "fonte": "padrao"} for i in ("x1", "x2", "x3")}
+    for name, exc in (("the wait", m.NoAnswer), ("Ctrl-C", KeyboardInterrupt),
+                      ("EOF", EOFError)):
+        calls = []
+        def question(prompt, exc=exc, calls=calls):
+            calls.append(prompt)
+            if len(calls) == 2:
+                raise exc()
+            return ""
+        with contextlib.redirect_stdout(io.StringIO()):
+            got = m.ask_preferences(prefs(), question=question)
+        check(f"cs13 prefs cut by {name}: 2 shown (the 2nd was on screen when cut)",
+              got == 2, str(got))
+    with contextlib.redirect_stdout(io.StringIO()):
+        got = m.ask_preferences(prefs(), question=lambda p: "")
+    check("cs13 prefs not cut: 3 shown", got == 3, str(got))
+    with contextlib.redirect_stdout(io.StringIO()):
+        got = m.ask_preferences({}, question=lambda p: "")
+    check("cs13 prefs none: 0 shown", got == 0, str(got))
+
+
+def test_launch_measure_cs13_summarized_count_survives_the_pre_read_part():
+    """In process: the second panel call (`only=`, the routes the pre-read opened) does
+    not overwrite the count of routes summarized by the first call."""
+    import contextlib, io
+    m = base.load_module()
+    deferred = [{"id": f"n{i}", "reason": "human_pending", "human_pending": "r",
+                 "evidence": _answered("2026-11-02")} for i in (1, 2)]
+    deferred.append({"id": "x1", "reason": "human_pending", "human_pending": "token"})
+    m.query_queue = lambda *a, **k: ({"deferred": deferred}, None)
+    m.decide = lambda *a, **k: ([], [])
+    tally = {}
+    with contextlib.redirect_stdout(io.StringIO()):
+        m.ask_at_launch(Path("/nao/existe"), "fila", {"batch": []}, tally=tally)
+        first = tally.get("summarized")
+        m.ask_at_launch(Path("/nao/existe"), "fila", {"batch": []}, only={"x1"},
+                        tally=tally)
+    check("cs13 summarized: the first call counts 2", first == 2, str(tally))
+    check("cs13 summarized: the only= call keeps 2", tally.get("summarized") == 2,
+          str(tally))
 
 
 def main():
