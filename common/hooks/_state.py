@@ -106,6 +106,7 @@ CATALOGUE = {
     "projects": (None, "memória por projeto do Claude Code (home)"),
     "cepa-report-style": (None, "report-style-lint.py (medições do formato do relatório, em ~/.claude)"),
     "cepa-telemetry": (None, "telemetria do cepa (home)"),
+    "cepa-wt-index": (None, "_wtlib.index_register (índice worktree -> clone principal, em ~/.claude; lido por session-heartbeat)"),
     "ops": (None, "operações do instalador"),
     ".DS_Store": (None, "macOS"),
 }
