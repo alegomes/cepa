@@ -1832,11 +1832,11 @@ def test_pre_read_cs5_ceiling_kills_a_slow_reader_and_the_item_runs():
 
 # ── CS-7: the pre-read stops at the ceiling and the unread item runs as today ──
 
-def _cs7_launch(items, reader, ceiling="1"):
+def _cs7_launch(items, reader, ceiling="1", body="pass"):
     """Real launch with `reader` as CEPA_UNTIL_LEITOR; returns (out, events)."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, items)
-        binv = fake_claude(tmp, "pass")
+        binv = fake_claude(tmp, body)
         env = env_do_run(tmp, root, binv)
         env["CEPA_UNTIL_LEITOR"] = reader(tmp) if callable(reader) else reader
         env["CEPA_UNTIL_TETO_LEITURA"] = ceiling
@@ -1901,6 +1901,24 @@ def test_pre_read_cs7_failing_reader_is_falha_not_teto():
     check("cs7 falha: not in nao_lidos, lidos 0",
           ev.get("nao_lidos") == [] and ev.get("lidos") == 0, str(ev))
     check("cs7 falha: x1 runs", "x1" in _started(events), out[-1500:])
+
+
+def test_pre_read_cs7_items_waiting_for_a_free_reader_past_the_ceiling_are_teto():
+    ids = [f"w{n}" for n in range(1, 10)]  # 9 items > 8 reader workers
+    out, events = _cs7_launch(
+        [item(i) for i in ids], f"{sys.executable} -c 'import time; time.sleep(5)'",
+        body="marca(primeiro_pendente(), status='done')")  # each item really finishes
+    ev = (_cs7_reads(events) or [{}])[0]
+    rows = {r.get("id"): r for r in ev.get("itens", [])}
+    check("cs7 waiting: all 9 rows are teto and not read",
+          len(rows) == 9 and all(r.get("lido") is False and r.get("nao_lido") == "teto"
+                                 for r in rows.values()), str(rows))
+    check("cs7 waiting: all 9 in nao_lidos, lidos 0",
+          sorted(ev.get("nao_lidos", [])) == sorted(ids) and ev.get("lidos") == 0, str(ev))
+    check("cs7 waiting: the 9th row, never launched, is teto",
+          rows.get("w9", {}).get("nao_lido") == "teto", str(rows.get("w9")))
+    check("cs7 waiting: the 9th item gets item_start", "w9" in _started(events),
+          out[-1500:])
 
 
 
