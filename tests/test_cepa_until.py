@@ -1908,8 +1908,8 @@ def test_hc_a_run_that_dies_lands_in_needs_you_and_ctrl_c_drops_the_row():
 
 
 def test_hc_blocked_is_not_reported_outside_the_armed_run():
-    """`cepa-until decide` and the other subcommands never arm the run: the owner is
-    already at the keyboard and nothing is listed in the Agents panel."""
+    """A prompt read outside the armed run and outside `cepa-until decide` (which sets
+    `_hc_asking`, test_cepa_until_decide.py) reports nothing to the Agents panel."""
     mod = _until_module()
     got, written = _read_line_on_fake_tty(mod, armed=False)
     check("hc blocked (subcomando): nenhuma sequência 7501 nem título",

@@ -1221,19 +1221,37 @@ _herdr_armed = False
 # The queue name of the armed run, the prefix of the `blocked` and `done` messages.
 _hc_label = None
 
+# True while `cepa-until decide` asks at a terminal: its questions report to the
+# Herdr desktop app like the armed run's, without arming (no `herdr` call, no
+# `done` at the exit).
+_hc_asking = False
+
 
 def herdr_blocked():
     """Tells the Herdr desktop app the run waits for the owner's answer: OSC 7501
     `state=blocked:kind=question`, which its Agents panel shows as "Needs you"
     (2026-11-11: the panel kept the run in Working while the panel's question
-    waited at the keyboard). Only from the armed main run, never from the
-    subcommands (`decide` has the owner at the keyboard already). The next
-    `herdr_report` puts it back to `working`."""
-    if not _herdr_armed:
+    waited at the keyboard). From the armed main run, where the next
+    `herdr_report` puts it back to `working`, and from `cepa-until decide`
+    (`_hc_asking`), where `hc_answered` does: the owner may have left the question
+    waiting in another tab, and the row read `<queue>: finished` under Idle
+    (2026-11-11). The other subcommands never report."""
+    if not (_herdr_armed or _hc_asking):
         return
     message = f"{_hc_label}: waiting for your answer" if _hc_label else "waiting for your answer"
     _hc_title(message)
     _hc_status(f"state=blocked:kind=question:app=cepa-until:msg={_hc_b64(message)}")
+
+
+def hc_answered():
+    """`cepa-until decide` only: the owner typed, so the Herdr desktop app goes back
+    to `working` while the answer is applied (a landing runs the full build). The
+    next question reports `blocked` again."""
+    if not _hc_asking:
+        return
+    message = f"{_hc_label}: applying your answer" if _hc_label else "applying your answer"
+    _hc_title(message)
+    _hc_status(f"state=working:app=cepa-until:msg={_hc_b64(message)}")
 
 
 def herdr_release(agent="cepa-until", done=False, failure=None):
@@ -2475,6 +2493,12 @@ def read_line(prompt, output=print, wait=None):
     `input()` blows up with UnicodeDecodeError; the line was already consumed, so
     just ask again (decidir WEGO 2026-09-29-2059)."""
     herdr_blocked()
+    line = _read_line(prompt, output, wait)
+    hc_answered()
+    return line
+
+
+def _read_line(prompt, output, wait):
     while True:
         try:
             if wait is not None:
@@ -3526,7 +3550,8 @@ def cmd_decide(argv):
             print(f"cepa-until decide: could not read the queue {a.target!r} ({error})",
                   file=sys.stderr)
             return 2
-        return close_with_owner(repo, a.target, None, {})
+        return _decide_reporting(a.target, lambda: close_with_owner(
+            repo, a.target, None, {}))
     queue, run_id = a.target.split("/", 1)
     # Queue and run names are a single segment: `queue/../../x` would read a
     # state from outside the run folder and ask about it.
@@ -3545,8 +3570,26 @@ def cmd_decide(argv):
               file=sys.stderr)
         return 2
     review = folder / f"{run_id}.review.md"
-    return close_with_owner(repo, queue, run_id, item_states,
-                            review if review.exists() else None)
+    return _decide_reporting(queue, lambda: close_with_owner(
+        repo, queue, run_id, item_states, review if review.exists() else None))
+
+
+def _decide_reporting(queue, ask):
+    """Runs `ask` (the questions of `cepa-until decide`) reporting to the Herdr
+    desktop app: "Needs you" while a question waits, `working` while an answer is
+    applied, and the status and the title dropped at the exit, whatever the way
+    out. Only when the questions are really asked (stdin and stdout a terminal):
+    listing them as text reports nothing and clears nothing."""
+    global _hc_asking, _hc_label
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return ask()
+    _hc_asking, _hc_label = True, queue
+    try:
+        return ask()
+    finally:
+        _hc_asking = False
+        _hc_status("state=clear")
+        _hc_title("")
 
 
 def cmd_close_dead(argv):
@@ -4023,7 +4066,8 @@ def has_upstream(repo):
 def main(argv=None):
     """Runs the command; once the main run is armed (past preflight, signal handlers
     installed) every way out, return or exception, releases the herdr pane. The
-    subcommands never arm it, so they never call herdr."""
+    subcommands never arm it, so they never call herdr; `decide` writes its own
+    status for the Herdr desktop app (`_decide_reporting`)."""
     returned, failure = False, None
     try:
         code = _main(argv)
