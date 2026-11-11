@@ -1,0 +1,179 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/modos-opinativos.md (12 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-11
+
+schema_version: 2
+mode: single-track
+queue: modos-opinativos
+source: docs/spec/modos-opinativos.md (12 critérios de sucesso; ordem herdada do
+  texto)
+items:
+- id: CS-1
+  title: '`cepa-modes --menu <modo>` imprime o menu do modo, numerado, com frase
+    leiga e comando por ação, lido do campo `actions` de `_modes.py`'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: rodar
+    `cepa-modes --menu discovery` num repo sem `board-flow.yaml` e com o plugin
+    discovery instalado e exigir saída com código 0 contendo, nesta ordem, "1) Detail
+    an idea until it becomes a build-ready specification" com `/common:spec`, e
+    as linhas de `/common:spec --continuar`, `/common:epic`, `/discovery:capture`
+    e `/common:queue`. Hoje falha porque `cepa-modes` recusa a flag `--menu` com
+    código 2.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: ação cujo requisito o repo não cumpre some do menu, e o menu mostra no
+    máximo as 5 primeiras que passam
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: rodar
+    `cepa-modes --menu construction` em dois repos descartáveis. No primeiro, sem
+    `board-flow.yaml` e com `.claude/topology` igual a `build-solo`, exigir que
+    a saída não contenha `/board-flow:` e contenha `/build-solo:reproduce-fix-verify`,
+    `/build-solo:plan-build-validate` e "Write the red test of the criterion (no
+    command yet)". No segundo, com `board-flow.yaml`, exigir exatamente 5 ações
+    numeradas, com `/board-flow:execute` entre elas, com a ação "Fix a bug" mostrando
+    `/board-flow:capture Bug:` seguido de `/board-flow:fix`, e sem `/board-flow:prove-drain`.
+    Hoje falha porque a flag `--menu` não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: '`cepa --mode <modo>` sem prompt inicial abre a sessão com um prompt de
+    abertura que carrega o menu, e com prompt inicial não manda nada a mais'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: em `tests/test_cepa_mode.py`,
+    com o `claude` falso que grava os argumentos recebidos, rodar `cepa --mode discovery`
+    sem argumentos e exigir que o `claude` falso receba um argumento de prompt contendo
+    o marcador `[menu do modo]` e a linha `/common:spec`. Rodar em seguida `cepa
+    --mode discovery "arruma o teste X"` e exigir que os argumentos sejam só os
+    do dono. Hoje a primeira asserção falha: o `claude` falso não recebe prompt
+    nenhum.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: modo com lista vazia abre como hoje, sem prompt de abertura
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: em `tests/test_cepa_mode.py`,
+    exigir que `cepa-modes --menu design` saia com código 0 e saída vazia, e que
+    `cepa --mode design` sem argumentos não entregue prompt ao `claude` falso. Hoje
+    a primeira asserção falha porque `--menu` devolve código 2.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: 'no turno de abertura, o hook do modo instrui o agente a mostrar o menu
+    traduzido para a língua do dono, sem mudar a ordem, a numeração nem os comandos,
+    e a tratar a resposta seguinte: número ou comando dispara a ação, ação com argumento
+    recebe antes uma pergunta de uma linha, ação sem comando é conduzida em conversa,
+    texto livre é pedido normal'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: em `tests/test_cepa_mode.py`,
+    entregar ao hook `session-mode.py` um payload de `UserPromptSubmit` cujo prompt
+    é o prompt de abertura do modo discovery e exigir que o `additionalContext`
+    contenha a regra de exibição (traduzir as frases, manter ordem, numeração e
+    comandos), a pergunta de argumento da ação 1 ("What is the idea?") e a regra
+    do texto livre. Entregar também o prompt de abertura do modo construction num
+    repo com `board-flow.yaml` e exigir a regra da ação "Fix a bug": se a resposta
+    for a chave de um card, rodar só `/board-flow:fix`, e se for uma descrição,
+    rodar `/board-flow:capture Bug:` e depois `/board-flow:fix` na chave criada.
+    Hoje falha: o hook devolve só as linhas `[modo]` e `[intenção]`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: o prompt de abertura não conta como prompt do dono na linha `[intenção]`
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: em `tests/test_cepa_mode.py`,
+    com `.claude/session-log.md` contendo o prompt de abertura seguido de "quero
+    especificar X", rodar o hook sem intenção gravada e exigir que a lista "Primeiros
+    prompts" contenha "quero especificar X" e não contenha `[menu do modo]`. Hoje
+    falha: o hook lista todo prompt do log.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: a telemetria grava `mode_menu.shown` quando o menu é mostrado e `mode_menu.chosen`
+    quando a resposta seguinte é um número do menu ou um comando do menu, os dois
+    com o modo
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: event · teste vermelho declarado: com
+    `CEPA_TELEMETRY_DIR` apontando para um diretório descartável, entregar ao hook
+    `session-mode.py` o prompt de abertura do modo discovery e depois o prompt "1",
+    e exigir no arquivo de eventos uma linha `mode_menu.shown` com `mode: discovery`
+    e uma linha `mode_menu.chosen` com `mode: discovery`, `action: 1` e `command:
+    /common:spec`. Entregar depois "quero outra coisa" e exigir que nenhum `mode_menu.chosen`
+    novo apareça. Hoje falha: nenhum dos dois eventos existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-8
+  title: '`/common:metrics` mostra a conta de uso do menu por modo'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: rodar
+    `cepa-metrics` sobre um arquivo de eventos descartável com 4 `mode_menu.shown`
+    e 1 `mode_menu.chosen` do modo discovery e exigir na saída a linha do modo discovery
+    com "1 ÷ 4 = 25%". Hoje falha: o relatório não tem seção do menu.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-9
+  title: '`/common:modes` mostra o menu do modo da sessão, depois da tabela'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    descartável com `.claude/session-mode` em `mode: exploration`, rodar `cepa-modes`
+    sem argumentos (o que `/common:modes` executa) e exigir que a saída termine
+    com o menu de exploration, incluindo "Write the strategy document with 2 or
+    more paths (no command yet)" e `/common:advisors`. Hoje falha: a saída termina
+    na tabela.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-10
+  title: todo comando citado num menu existe no repo do Cepa, e todo requisito usa
+    um dos três tipos fechados
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: domain · teste vermelho declarado: em
+    `tests/test_modes_single_source.py`, percorrer `MODES[*]["actions"]` e exigir
+    que cada comando (o `command` único ou cada um da sequência) no formato `/<plugin>:<nome>`
+    tenha o arquivo `<plugin>/commands/<nome>.md`, que cada requisito seja `file:`,
+    `topology:` ou `plugin:`, que toda ação tenha frase leiga, e que construction,
+    discovery e exploration tenham de 3 a 8 ações e os outros 4 modos tenham lista
+    vazia. Hoje falha com `KeyError: ''actions''`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-11
+  title: '`docs/modos-de-trabalho.md` descreve o menu sem desfazer a distinção entre
+    modo e rotina'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: domain · teste vermelho declarado: em
+    `tests/test_modes_single_source.py`, ler `docs/modos-de-trabalho.md` e exigir
+    que a seção "Modo não é Rotina" ainda contenha a frase "Uma sessão = um modo
+    obrigatório + no máximo uma rotina" e contenha um parágrafo que cite o campo
+    `actions` e o comando `cepa-modes --menu`. Hoje falha: o documento não cita
+    nenhum dos dois.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-12
+  title: '`/common:modes --exit` é um argumento declarado do comando e chega ao
+    `cepa-modes` como veio'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: domain · teste vermelho declarado: em
+    `tests/test_modes_single_source.py`, ler `common/commands/modes.md` e exigir
+    que a linha `argument-hint:` do cabeçalho contenha `--exit` e que o passo que
+    roda `cepa-modes` continue repassando `$ARGUMENTS`. Hoje falha: o `argument-hint`
+    declara só `[mode-name]`.'
+  status: pending
+  blocked_by: []
+  human_pending: null

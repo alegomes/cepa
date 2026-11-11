@@ -1,0 +1,6 @@
+reminders:
+  - at: "2026-11-11"
+    text: "Reconsiderar o menu de ações dos modos documentation, design, refactor e reflection, hoje com lista vazia"
+    context: "pedido ao manter a decisão 13 de docs/spec/modos-opinativos.md; reabrir quando o /common:metrics tiver a conta de uso do menu nos 3 modos preenchidos"
+    session: "0885580d"
+    branch: "main"
