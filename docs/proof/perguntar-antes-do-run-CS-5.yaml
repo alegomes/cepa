@@ -1,0 +1,55 @@
+schema_version: 2
+card: perguntar-antes-do-run-CS-5
+verdict: proven               # proven | unproven | needs-human
+reviewed_at: 2026-11-10T22:10:00-03:00
+base_commit: 9d10994
+head_commit: 20384b1
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: reader_command, parse_finding, read_one, pre_read, current_item, open_precondition_route (new) and the pre-read wiring in _main before ask_at_launch (event leitura_previa logged after run_start)"
+      module: common
+      external_observable: true     # the route in queue.yaml, the absence of item_start and the leitura_previa event are visible in the run .jsonl and queue.yaml
+      substituted_by_double: null   # tests run the real cepa-until as a subprocess, real cepa-plan; only the reader (CEPA_UNTIL_LEITOR, the declared plug) and the `claude` binary are faked (far boundary)
+    - class: "tests/test_cepa_until_decide.py (thirteen test_pre_read_cs5_* functions, plus CEPA_UNTIL_LEITOR=off in three existing env builders)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway detached worktree at 20384b1 (/tmp/proof-cs5, removed at the end). Runner imports tests/test_cepa_until_decide.py and runs the 13 test_pre_read_cs5_* functions. Unperturbed: whole file `python3 tests/test_cepa_until_decide.py` rc 0, 287 ok, 0 FAIL, 'tudo verde'. Each perturbation is a unique-match string replace (count asserted == 1) on common/bin/cepa-until, restored in a finally. Product code unchanged between b08c0d7 and 20384b1 (only the test file changed)."
+      results:
+        - "KILLED P1 route never opened: RED (cs5 refused, route/no-item_start checks)."
+        - "KILLED P2 previous evidence not carried: RED, 'the old text is still inside evidence'."
+        - "KILLED P3 owner_summary not carried: RED."
+        - "KILLED P4 retry without --question removed: RED, three 'long question' checks."
+        - "KILLED P5 --status pending -> blocked: RED, incl. 'empty batch: says nothing to do'."
+        - "KILLED P6 leitura_previa event not logged: RED."
+        - "KILLED P7 `data = fresh or data` -> pass (was SURVIVED at b08c0d7): RED, 'empty batch: says nothing to do', 'empty batch: no run was started'."
+        - "KILLED P8 `tipo == 'pre-condicao'` -> `is not None` (was SURVIVED): RED, 'pref: x1 runs', 'pref: no route on x1', 'pref: the event records the preference, route not opened'."
+        - "KILLED P9 empty-texto guard removed (was SURVIVED): RED, 'empty text: the event has tipo null'."
+        - "KILLED P10 `off` no longer disables: RED, 'off: no leitura_previa event'."
+        - "KILLED P11 reader timeout removed: RED, 'the launch did not wait for the slow reader'."
+        - "KILLED P12 `rota_aberta` forced True (was SURVIVED): RED, 'refused: the event says rota_aberta false with an erro'."
+        - "KILLED P13 question not passed: RED, 'the question is recorded'."
+        - "KILLED P16 whole pre-read block disabled: RED."
+        - "KILLED P17 --supervisor removed (was SURVIVED): RED, 'orphan: the route opened', 'orphan: x1 has no item_start'."
+        - "BASE 9d10994 (common/bin/cepa-until reverted, tests from HEAD): rc 1, the spec red scenario is RED ('no item_start of x1', 'queue.yaml has the open route on x1', 'one leitura_previa event' fail; x1 gets item_start)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; the lines that were unconstrained at b08c0d7 (panel re-query, preferencia branch, empty texto, refusal error path, --supervisor) are now killed (P7, P8, P9, P12, P17)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the pre-read parses JSON printed by a local read-only reader and hands the text to cepa-plan, which keeps its own validation; it opens no input surface from outside the run (no HTTP, no user-facing parse). No changed class is in an input-bearing module (api-rest)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "All fifteen perturbations of the changed lines turn the cli tests RED at 20384b1, unperturbed is green (287 ok, 0 FAIL), and the spec red scenario is RED at base 9d10994. The five survivors of b08c0d7 (P7, P8, P9, P12, P17) are closed by the tests added in 20384b1. Note on P7: the effect killed is the batch emptying (no run), not the panel text itself, since the panel re-reads the queue; accepted as the observable effect. PROVEN."

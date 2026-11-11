@@ -1,0 +1,19 @@
+key: perguntar-antes-do-run-CS-5
+status: complete
+criteria:
+  - id: CS-5
+    text: "pré-condição que a leitura prévia acha adia o item sem gastar o run nele"
+    altitude: cli
+    surface: "cepa-until <queue> (launch, no terminal) with a fake reader plugged through CEPA_UNTIL_LEITOR; observed in <run>.jsonl (leitura_previa, item_start) and queue.yaml (open route)"
+    test: "tests/test_cepa_until_decide.py::test_pre_read_cs5_precondition_defers_the_item_without_spending_the_run_on_it (+ _route_keeps_the_previous_evidence_and_summary, _question_refused_by_cepa_plan_still_opens_the_route, _no_finding_garbage_or_failure_runs_the_item_as_today, _dry_run_does_not_read, _off_disables_it, _ceiling_kills_a_slow_reader_and_the_item_runs)"
+    layer: "real subprocess of common/bin/cepa-until (stdin DEVNULL), fake claude, fake reader script returning pre-condicao for x1 only; asserts one leitura_previa event listing x1 and y1 (x1 tipo pre-condicao, rota_aberta true), no item_start of x1, y1 still item_start, queue.yaml x1 human_pending + owner_question, status stays pending, leitura_previa right after run_start"
+    evidence: verified
+    run: "cd /Users/alegomes/cepa-worktrees/cepa-until-2026-11-10-1650 && python3 tests/test_cepa_until_decide.py -> rc=0, '✓ tudo verde', all 'cs5 ...' checks 'ok' (whole file, not run-all.sh; N>0: 7 test_pre_read_cs5_* functions, ~35 ok checks)"
+    status: complete
+    extra: "Product change in b08c0d7 (reader_command/parse_finding/pre_read/open_precondition_route + hook in _main before the panel). Spec lines checked: closed format (pre-condicao|preferencia|nothing) and env-configurable command/ceiling/model are implemented as decided; route is written by cepa-plan finish --human-pending, not by writing queue.yaml directly. Red-at-base (no reader, X gets item_start) not re-run by the auditor; evident from the diff since nothing read items before."
+    notes:
+      - "Outermost layer is the real CLI launch plus its two artifacts (jsonl and queue.yaml); exercised, not mocked."
+      - "Q6 (pre-condition defers; preference runs) : only the pre-condition half is in CS-5; preference handling is CS-6, out of scope."
+      - "Q9 'with a terminal' and 'command-line option skips': the CS-5 test runs without a terminal only; the pty path and the skip flag belong to CS-9/CS-8-style cards, out of scope here. The pre-read code path is the same with or without a pty."
+      - "Q5 ceiling (CS-7) has a smoke test here but is not claimed as CS-5 evidence."
+gap: []

@@ -1,0 +1,50 @@
+schema_version: 2
+card: perguntar-antes-do-run-CS-4
+verdict: proven               # proven | unproven | needs-human
+reviewed_at: 2026-11-10T23:20:00-03:00
+base_commit: e6204f3
+head_commit: 2e2b4d4
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: last_owner_no + _OWNER_NO (new) and the split in ask_at_launch (answered_no / to_ask, one summary line with count and dd/mm of the latest date)"
+      module: common
+      external_observable: true     # the summary line and the absence of the question are printed on the pty before the first item_start; `decide <queue>` still asks
+      substituted_by_double: null   # tests run the real cepa-until as a subprocess on a pty (_launch_on_tty / on_tty), real cepa-plan; only the `claude` binary is faked (far boundary)
+    - class: "tests/test_cepa_until_decide.py (test_last_owner_no_reads_only_the_first_answer, test_last_owner_no_tolerates_leading_whitespace, five test_launch_cs4_* functions)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway detached worktree at 2e2b4d4 (/tmp/proof-cs4b, removed at the end). The CS-4 test functions (every test_* whose name contains cs4 or last_owner_no, 7 functions) run through a small runner in tests/ that imports tests/test_cepa_until_decide.py. Unperturbed: 'FAILURES []', rc 0. Each perturbation rewrites common/bin/cepa-until from a unique-match string replace (asserted count == 1) and restores it in a finally. No product code changed since f8cf226."
+      results:
+        - "KILLED P1 start anchor `.match` -> `.search`: RED, 'a later sim wins over the older não', 'no summary line', 'the route is asked'."
+        - "KILLED P2 any answer counts as não (`n(?:ão|ao)\\b` -> `\\w+`): RED, 'a later sim wins...', 'free text is not a não', 'no summary line', 'the route is asked'."
+        - "KILLED P3 `max(answered_no)` -> `min(answered_no)` (was SURVIVED at f8cf226): RED, new multi-date scenarios '(2026-11-02, 2026-11-09): one line with 2 and 09/11', '(2026-11-09, 2026-11-02): ...', '(2026-12-30, 2027-01-02): one line with 2 and 02/01'."
+        - "KILLED P4 date format dd/mm -> mm/dd: RED, 'one summary line with the count and the date', 'the line says 1 and 02/11', and the three multi-date checks."
+        - "KILLED P5 count fixed at 1: RED, 'one summary line with the count and the date' and the three multi-date checks."
+        - "KILLED P6 skip removed (`deferred = to_ask` -> `pass`): RED, 'neither route is asked', 'the panel asks only the other one', and the three multi-date 'nothing asked' checks."
+        - "KILLED P7 answered-no routes also appended to to_ask: RED, same checks as P6."
+        - "KILLED P8 re.I removed: RED, 'nao without accent and upper case count'."
+        - "KILLED P9 `.lstrip()` removed from `last_owner_no` (was SURVIVED at f8cf226): RED, 'leading spaces and a newline before the answer still count'."
+        - "KILLED P10 summary line not printed: RED, 'one summary line with the count and the date', 'the line says 1 and 02/11', and the three multi-date checks."
+        - "BASE e6204f3 (from the earlier run, product code unchanged since): the declared red scenarios are RED at base; test_launch_cs4_decide_on_the_queue_still_asks_both and test_launch_cs4_latest_answer_wins_over_an_older_no are GREEN at base by design (they guard behavior that must not change)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; every changed line is reached by the CS-4 pty scenarios, and the two lines that were indistinguishable at f8cf226 (max vs min, lstrip) are now killed (P3, P9)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the change reads evidence text already stored by cepa-plan and prints a summary line; it opens no new input surface (nothing from outside is parsed beyond a stored string with a fixed-shape regex). No changed class is in an input-bearing module (api-rest)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "All ten perturbations (anchor, não match, newest date, date format, count, skipping, filtering to_ask, case, leading whitespace, printing) turn the CS-4 tests RED at the cli surface, unperturbed is green, and the declared red scenarios are RED at base e6204f3. The two survivors of f8cf226 (max vs min, lstrip) are closed by the tests added in 2e2b4d4. PROVEN."

@@ -1,0 +1,17 @@
+key: perguntar-antes-do-run-CS-7
+status: complete
+criteria:
+  - id: CS-7
+    text: "a leitura prévia para no teto e o item não lido roda como hoje"
+    altitude: cli
+    surface: "cepa-until <queue> (launch) with CEPA_UNTIL_TETO_LEITURA=1 and a fake reader (CEPA_UNTIL_LEITOR) sleeping 5 s; observed in <run>.jsonl (leitura_previa: itens[].lido/nao_lido, lidos, nao_lidos, segundos; item_start) and on stdout"
+    test: "tests/test_cepa_until_decide.py::test_pre_read_cs7_ceiling_marks_the_item_as_not_read_and_it_runs (+ _mixed_queue_only_the_slow_item_is_unread, _failing_reader_is_falha_not_teto)"
+    layer: "real subprocess of common/bin/cepa-until, fake claude, fake slow reader, stdin DEVNULL; asserts one leitura_previa event with segundos < 5, x1 lido False / nao_lido 'teto', nao_lidos ['x1'], lidos 0, x1 receives item_start, screen says 'not read within the 1s ceiling: x1'; mixed queue: x1 read, y1 unread by ceiling, both run (queue order); failing reader is 'falha', not 'teto'"
+    evidence: verified
+    run: "cd /Users/alegomes/cepa-worktrees/cepa-until-2026-11-10-1650 && python3 -c \"import sys; sys.path.insert(0,'tests'); import test_cepa_until_decide as t; [f() for n,f in sorted(vars(t).items()) if n.startswith('test_pre_read_cs7')]; print('FAIL', t.FAILURES)\" -> 13 'ok' checks (N>0) across 3 test functions, 'FAIL []', ~9 s; foreground, run-all.sh not run"
+    status: complete
+    extra: "Product change in da38706 (lido/nao_lido per item, nao_lidos on the event, screen line, READ_CEILING_ERROR marker). The env var CEPA_UNTIL_TETO_LEITURA already existed at base. Red-at-base not re-run; evident from the diff since before this commit the event carried no lido/nao_lido/nao_lidos."
+    notes:
+      - "Outermost layer is the real CLI launch plus the event log; exercised, not mocked."
+      - "Out of scope by spec ordering: panel/question order (CS-8), skip option and no-terminal listing (CS-9), largada event (CS-13)."
+gap: []

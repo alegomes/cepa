@@ -199,7 +199,7 @@ def test_repo_without_known_build_does_not_start_without_saying_which():
                                  / "bin" / "cepa-until"),
              "fila", "--repo", str(root), "--for", "2h", "--no-analysis"],
             capture_output=True, text=True, timeout=60,
-            env={**env, "FAKE_PLANO": str(plan_of(root)),
+            env={**env, "FAKE_PLANO": str(plan_of(root)), "CEPA_UNTIL_LEITOR": "off",
                  "FAKE_CHAMADAS": str(Path(tmp) / "chamadas.jsonl"),
                  "CEPA_WORKTREE_HOME": str(Path(tmp) / "worktrees")})
         check("sem mvnw/gradlew e sem flag, recusa", p.returncode == 2,
@@ -232,7 +232,7 @@ def test_mvnw_at_root_becomes_the_default_build():
              "fila", "--repo", str(root), *env_args],
             capture_output=True, text=True, timeout=60,
             env=dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
-                     FAKE_PLANO="x", FAKE_CHAMADAS=str(Path(tmp) / "c.jsonl")))
+                     FAKE_PLANO="x", CEPA_UNTIL_LEITOR="off", FAKE_CHAMADAS=str(Path(tmp) / "c.jsonl")))
         check("sem --verify, o banner mostra ./mvnw -B clean verify",
               "./mvnw -B clean verify" in p.stdout, p.stdout + p.stderr)
 
@@ -245,7 +245,7 @@ def _run_without_verify_flag(tmp, root, binv):
          "fila", "--repo", str(root), "--for", "2h", "--no-analysis"],
         capture_output=True, text=True, timeout=120,
         env=dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
-                 FAKE_PLANO=str(plan_of(root)),
+                 FAKE_PLANO=str(plan_of(root)), CEPA_UNTIL_LEITOR="off",
                  FAKE_CHAMADAS=str(Path(tmp) / "chamadas.jsonl"),
                  CEPA_WORKTREE_HOME=str(Path(tmp) / "worktrees"),
                  # away from the real ledger of /common:metrics
@@ -975,7 +975,7 @@ def _banner_with(tmp, files):
          "fila", "--repo", str(root), "--for", "2h", "--dry-run"],
         capture_output=True, text=True, timeout=60,
         env=dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
-                 FAKE_PLANO="x", FAKE_CHAMADAS=str(Path(tmp) / "c.jsonl"),
+                 FAKE_PLANO="x", CEPA_UNTIL_LEITOR="off", FAKE_CHAMADAS=str(Path(tmp) / "c.jsonl"),
                  CEPA_WORKTREE_HOME=str(Path(tmp) / "worktrees"),
                  CEPA_TELEMETRY_DIR=str(Path(tmp) / "telemetria")))
 

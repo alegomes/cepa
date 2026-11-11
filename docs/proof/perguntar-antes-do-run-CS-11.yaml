@@ -1,0 +1,61 @@
+schema_version: 2
+card: perguntar-antes-do-run-CS-11
+verdict: proven                 # proven | unproven | needs-human
+reviewed_at: 2026-11-11T05:00:00-03:00
+base_commit: e414c3f
+head_commit: 11d2e47            # behavior change is 2a68188; cce2abb added the acceptance artifact; 11d2e47 adds the test that kills P12
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-plan :: resolve_decisions, cmd_finish (decisions kept/deduped/stored, refusal exit 2, output line), argparse --decision/--decision-commit"
+      module: common
+      external_observable: true     # real cepa-plan subprocess: exit code, stderr, plan.yaml
+      substituted_by_double: null
+    - class: "common/bin/cepa-until :: item_decisions, _main (collect decisions recorded in this run, ancestry filter, 'Decided for you' summary)"
+      module: common
+      external_observable: true     # real cepa-until subprocess; only the `claude` binary is faked (far boundary)
+      substituted_by_double: null
+    - class: "tests/test_cepa_plan_finish_decision.py"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway detached worktree at 11d2e47 (/tmp/cs11-proof2, removed at the end). Unperturbed: `python3 tests/test_cepa_plan_finish_decision.py` -> 'tudo verde', exit code 0. Each perturbation = sed replace on one line, run the script, require exit code 1, `git checkout -- common/bin`. The script aggregates failures and only exits non-zero as a script (under pytest it cannot go red), so RED/GREEN is the script exit code. 17 perturbations rerun (P1-P17 of the previous pass, P12 included), all rc=1."
+      results:
+        - "KILLED P1 `--decision-commit` without `--decision` refusal dropped (`if sha:` -> `if False:`): rc=1."
+        - "KILLED P2 empty text check dropped: rc=1."
+        - "KILLED P3 nonexistent commit check dropped: rc=1."
+        - "KILLED P4 commit-not-on-branch check dropped: rc=1."
+        - "KILLED P5 default commit HEAD -> HEAD~1: rc=1."
+        - "KILLED P6 dedupe of repeated decision dropped: rc=1."
+        - "KILLED P7 whitespace flattening replaced by strip: rc=1."
+        - "KILLED P8 decisions never stored in the item: rc=1."
+        - "KILLED P9 decisions refusal exit code 2 -> 1: rc=1."
+        - "KILLED P10 stored commit shortened instead of full sha: rc=1."
+        - "KILLED P11 'sem rota para o dono' output line changed: rc=1."
+        - "KILLED P12 cepa-until `if dec not in known_decisions and (ident, dec) not in decided` -> `if (ident, dec) not in decided`: rc=1, 2 failures ('o resumo do fim lista a decisão com o commit' and the new 'o resumo não lista a decisão antiga de um item que rodou neste run'). Previously survived at cce2abb; killed by the test added in 11d2e47."
+        - "KILLED P13 end-of-run ancestry filter (commit still on the run branch) dropped: rc=1."
+        - "KILLED P14 'Decided for you' summary section removed (`if decided:` -> `if False:`): rc=1."
+        - "KILLED P15 summary line without the commit: rc=1."
+        - "KILLED P16 decisions never collected in the loop: rc=1."
+        - "KILLED P17 item_decisions returns nothing: rc=1."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; the previously uncovered branch (`dec not in known_decisions`) is now reached by item a3 in the new test and P12 on it goes RED (rc=1, 2 failures)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the change adds optional CLI flags to cepa-plan finish and a summary section; the strings come from the agent of the same run and are only flattened and stored. No changed class is in an input-bearing module (api-rest)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug; stated criterion 'at e414c3f --decision is an unknown argument' is satisfied by construction (flag added in 2a68188)."
+routing_reason: "At 11d2e47 every one of the 17 perturbations of the changed behavior goes RED against the real cepa-plan and cepa-until processes (baseline exit 0). P12, the survivor of the previous pass, is now killed by the test where item a3 runs carrying a decision recorded before the run and the summary must not list it. PROVEN."

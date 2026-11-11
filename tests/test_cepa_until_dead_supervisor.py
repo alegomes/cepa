@@ -28,11 +28,13 @@ import importlib.util
 import json
 import os
 import pty
+import select
 import signal
 import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -89,6 +91,7 @@ def launches(root, binv, plan, args, extra_env=None, **popen):
     env = dict(os.environ)
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(plan)
+    env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
     env["FAKE_CHAMADAS"] = str(root.parent / "chamadas.jsonl")
     env["CEPA_WORKTREE_HOME"] = str(root.parent / "worktrees")
     env.update(extra_env or {})
@@ -106,6 +109,32 @@ def test_sighup_with_closed_terminal_does_not_kill_the_supervisor():
         root = build_repo(tmp, [item("a1")])
         binv = fake_claude(tmp, WAITS_AND_WORKS)
         master, slave = pty.openpty()
+
+        # A real terminal is read while it is open. A pty holds only ~1 KB
+        # unread (macOS), and header growth blocked the supervisor in `print`
+        # before `item_start` (2026-11-10). Drain until the test closes the
+        # master, right after the SIGHUP: the terminal is still gone. The
+        # thread is stopped and joined before each close because on macOS a
+        # close during a blocked read hangs, and a read after it could hit a
+        # reused fd number.
+        stop = threading.Event()
+
+        def drain(fd):
+            while not stop.is_set():
+                try:
+                    if not select.select([fd], [], [], 0.1)[0]:
+                        continue
+                    if not os.read(fd, 4096):
+                        return
+                except (OSError, ValueError):
+                    return
+        t = threading.Thread(target=drain, args=(master,), daemon=True)
+        t.start()
+
+        def close_master():
+            stop.set()
+            t.join(timeout=5)
+            os.close(master)
         proc = launches(root, binv, plan_of(root),
                      ["--for", "2h", "--verify", VERIFY],
                      stdout=slave, stderr=slave, start_new_session=True)
@@ -115,7 +144,7 @@ def test_sighup_with_closed_terminal_does_not_kill_the_supervisor():
                   waiting(lambda: in_flight_item(root)), str(ledger_of(root)))
             os.kill(proc.pid, signal.SIGHUP)
             time.sleep(0.5)
-            os.close(master)
+            close_master()
             master = None
             (Path(tmp) / "segue").write_text("")
             try:
@@ -125,7 +154,7 @@ def test_sighup_with_closed_terminal_does_not_kill_the_supervisor():
                 code = "não terminou"
         finally:
             if master is not None:
-                os.close(master)
+                close_master()
             (Path(tmp) / "segue").write_text("")
         ev = [e["evento"] for e in ledger_of(root)]
         check("o supervisor sobrevive ao SIGHUP e sai 0", code == 0,

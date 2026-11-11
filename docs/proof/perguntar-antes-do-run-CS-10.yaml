@@ -1,0 +1,45 @@
+schema_version: 2
+card: perguntar-antes-do-run-CS-10
+verdict: proven                 # proven | unproven | needs-human
+reviewed_at: 2026-11-11T03:40:00-03:00
+base_commit: 4b1692a
+head_commit: 61fb95d
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: _main, block `if not data.get(\"batch\")` (message names the run and says no item runs; 'N item(s) wait for you: cepa-until decide <queue>' line filtered by reason_alias(...) in OWNER_REASON)"
+      module: common
+      external_observable: true     # the real cepa-until subprocess on a pty: stdout, exit code, git branches/worktrees, run ledger
+      substituted_by_double: null   # only the `claude` binary is faked (far boundary); the code under test runs for real
+    - class: "tests/test_cepa_until_decide.py (_cs10_check and four test_launch_cs10_* functions)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway detached worktree at 61fb95d (/tmp/cs10-proof, removed at the end). Runner calls the four test_launch_cs10_* functions (N>0) and prints t.FAILURES. Unperturbed 61fb95d: 'RAN 4 FAIL []'. Each perturbation applied by exact string replace on common/bin/cepa-until, run, then restored."
+      results:
+        - "KILLED P1 the early `return 0` dropped (the run starts): RED, 'no ledger events' in all 4 tests."
+        - "KILLED P2 message reverted to the old 'nothing to do: <reason>': RED, 'says no item runs and the run does not start' in all 4 tests."
+        - "KILLED P3 `until/{run_id}` replaced by the literal `<run_id>`: RED, 'the message names this run's branch' in all 4 tests."
+        - "KILLED P4 wait-for-you line removed: RED, 'wait-for-you line with count' in answered-no (2), panel-n (1) and cascade (1)."
+        - "KILLED P5 owner filter dropped (`if True`): RED, 'cs10 cascade: wait-for-you line with count 1' (the depends-on-deferred item b1 was being counted). Previously survived at e16d105; closed by test_launch_cs10_wait_count_leaves_out_items_deferred_for_another_reason."
+        - "KILLED P6 count hard-coded to 1: RED, 'cs10 answered no: wait-for-you line with count 2'."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; structural reading plus perturbation: every added line, including the filter's rejecting branch (cascade test), is reached by a cs10 test and P1-P6 on them go RED."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the change only prints a message and a count when no item runs; it parses nothing coming from outside the run. No changed class is in an input-bearing module (api-rest)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Unperturbed 61fb95d is green (4 tests) and all six perturbations of the changed behavior (early return, message, real run name, wait-for-you line, owner filter, count) go RED against the real cepa-until process. The earlier surviving filter mutant is now killed by the cascade test. PROVEN."

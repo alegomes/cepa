@@ -1,0 +1,17 @@
+key: perguntar-antes-do-run-CS-3
+status: complete
+criteria:
+  - id: CS-3
+    text: "numa fila com um item `done` que tem `human_pending` aberto e um item `pending`, a saída da largada não traz a pergunta do item entregue antes do primeiro `item_start`"
+    altitude: cli
+    surface: "cepa-until <queue> on a pty: launch output up to the first item's line (where the ledger records item_start); run ledger <run>.jsonl"
+    test: "tests/test_cepa_until_decide.py::test_launch_cs3_delivered_route_is_not_asked_before_the_first_item (+ test_launch_cs3_panel_before_the_first_item_leaves_the_delivered_route_out, with an open-route item so a panel exists to compare)"
+    layer: "real subprocess of common/bin/cepa-until on a pty (_launch_on_tty), fake claude; queue d1 done+human_pending, a2 pending; asserts item_start of a2 first, delivered text absent from the output before the first item line, no 'question(s) for you' panel; second test: panel shows only the open route (1 question) and never the delivered one"
+    evidence: verified
+    run: "cd /Users/alegomes/cepa-worktrees/cepa-until-2026-11-10-1650 && python3 tests/test_cepa_until_decide.py -> rc=0, '✓ tudo verde', both test_launch_cs3_* blocks present with all checks 'ok' (whole file, not run-all.sh)"
+    status: complete
+    extra: "Product code unchanged in 63939f5; behavior comes from ask_at_launch (cd35a06), which does not add delivered_leftovers (common/bin/cepa-until). Red-at-base: no launch panel exists at 3fa35a7's parent b1c711f for the second test per commit message; not re-run by the auditor (base red not re-verified)."
+    notes:
+      - "Outermost layer is the launch output on a pty; exercised, not mocked."
+      - "Decided-without-asking line about CS-3 (delivered routes stay out of the panel) matches the asserted behavior."
+gap: []

@@ -1,0 +1,20 @@
+key: perguntar-antes-do-run-CS-11
+status: complete
+criteria:
+  - id: CS-11
+    text: "`cepa-plan finish <fila> <id> done --decision \"lote pula credencial inativa\" --commit <hash>` deixa `human_pending` nulo e grava a escolha em `decisions`; o resumo do fim do run a lista com o commit; `cepa-until decide <fila>` não pergunta sobre ela; hoje `--decision` é recusado como argumento desconhecido. (+ Estado e migração: chave opcional `decisions`, fila antiga sem a chave segue válida; + decisão: a linha 'decidi por você' traz o commit e não ganha comando de veto)"
+    altitude: cli
+    surface: "cepa-plan finish --decision (real subprocess), cepa-until end-of-run summary stdout, cepa-until decide <fila>"
+    test: "tests/test_cepa_plan_finish_decision.py (5 tests): test_decision_is_recorded_without_opening_a_route, test_decision_commit_defaults_to_head_and_flag_repeats, test_decision_refusals_leave_the_item_untouched, test_old_queue_without_decisions_still_valid, test_run_summary_lists_the_decision_with_its_commit_and_decide_skips_it"
+    layer: "real subprocess of common/bin/cepa-plan in a real git repo; the end-to-end case runs real common/bin/cepa-until with a fake claude that calls the real cepa-plan, then runs real `cepa-until decide`."
+    evidence: verified
+    run: "cd /Users/alegomes/cepa-worktrees/cepa-until-2026-11-10-1650 && python3 -m pytest tests/test_cepa_plan_finish_decision.py -v -> 5 passed in 4.97s (N=5 > 0)"
+    status: complete
+    deviation: "Flag is `--decision-commit <hash>` (default HEAD), not `--commit <hash>`; status is `--status done`. Reason verified in the diff: `finish --commit` already exists as a boolean that commits the queue file, so reusing it would break existing callers. Intent of the criterion is met: the commit is recorded, validated (must exist and be an ancestor of HEAD, refusals leave the item untouched), and shown in the summary. Only the literal spelling differs; flagged for the human."
+    notes:
+      - "human_pending stays null and `decisions` == [{texto, commit(full sha)}] asserted on the plan file."
+      - "Summary line 'Decided for you (1) ... a1: <texto> · commit <sha10>' asserted on real cepa-until stdout; a decision whose commit is off the run branch and a decision from a previous run are asserted NOT listed."
+      - "Old queue: an item without `decisions` stays without the key after finish; an old done item with decisions from a past run is handled. Schema documented in common/plan-schema.yaml."
+      - "'No veto command' decision: the summary says undoing is a `git revert`; no new subcommand in the diff."
+      - "Weak spot (not a gap): the `decide` assertion is mostly satisfied because the item is done with null human_pending; it would not catch a decide that asks about done items with `decisions` only if decide never looked at done items. The human_pending==null assertion is what carries the guarantee. Mutation testing not run by the auditor."
+gap: []

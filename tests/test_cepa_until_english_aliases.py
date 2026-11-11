@@ -64,7 +64,7 @@ def test_until_old_and_new_flags_give_the_same_plan():
             for pair in pairs:
                 args += [pair[side]] + list(pair[2:])
             env = dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
-                       FAKE_PLANO=str(plan), FAKE_CHAMADAS=str(Path(tmp) / "c.jsonl"),
+                       FAKE_PLANO=str(plan), CEPA_UNTIL_LEITOR="off", FAKE_CHAMADAS=str(Path(tmp) / "c.jsonl"),
                        CEPA_WORKTREE_HOME=str(Path(tmp) / "worktrees"))
             p = subprocess.run([sys.executable, str(tu.CEPA_UNTIL), "fila", "--repo",
                                 str(root)] + args, capture_output=True, text=True,

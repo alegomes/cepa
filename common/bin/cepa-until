@@ -204,6 +204,20 @@ clone so it points back. Open sessions keep the old hooks in memory until restar
 reinstalls in one night keep only the previous cache in `.prev`. Without `--verify` there is
 no build, so no reinstall: only the warning above. With less than 120 s left in the window the supervisor does not start the install (killing it halfway would leave the cache half moved): it records `reinstalacao_adiada` and falls back to the warning. In any other repo nothing changes.
 
+## The launch asks
+
+On a terminal (stdin and stdout), before the first item, the launch shows the same
+panel `decide` shows at the end for what the queue already holds for the owner
+(open `human_pending`, `blocked-before`): "yes" sends the item back to the queue and it
+runs in THIS run. Nothing extra is printed when nothing waits for the owner. The panel
+waits `CEPA_UNTIL_ESPERA_RESPOSTA` seconds (600 by default); with no answer, or on
+Ctrl-C / EOF, one line says so and the run goes on as if the item were not answered.
+`--dry-run` and runs without a terminal never ask: they list, as before.
+Without a terminal the pre-read still runs (a missing pre-condition defers the item)
+and its findings are printed as text, with nothing waiting for input.
+`--no-pre-read` skips both the pre-read and the launch panel: the forecast line
+stays, nothing is read and nothing is asked.
+
 ## After the end
 
 With the run over, a final `claude -p "/common:until-review <run>"` reads the
@@ -231,6 +245,7 @@ import socket
 import select
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -744,12 +759,12 @@ LIVE_LINE_INTERVAL = float(os.environ.get("CEPA_UNTIL_LINHA_VIVA", "30"))
 
 # ── reading the queue ───────────────────────────────────────────────────────
 
-def query_queue(name, repo):
-    """`cepa-plan queue --max 1 --json`. Returns (data, error)."""
+def query_queue(name, repo, max_items=1):
+    """`cepa-plan queue --max <max_items> --json` (1 by default). Returns (data, error)."""
     try:
         p = subprocess.run(
             [sys.executable, str(CEPA_PLAN), "queue", name,
-             "--max", "1", "--repo", str(repo), "--json"],
+             "--max", str(max_items), "--repo", str(repo), "--json"],
             capture_output=True, text=True, timeout=60)
     except subprocess.TimeoutExpired:
         return None, "`cepa-plan queue` did not answer within 60s"
@@ -776,6 +791,13 @@ def summarize_reason(text):
     return f"{text[:half]} [...] {text[-half:]}"
 
 
+def item_decisions(item):
+    """CS-11: the item's `decisions` ({texto, commit}) that are well formed."""
+    return [{"texto": str(d["texto"]), "commit": str(d["commit"])}
+            for d in ((item or {}).get("decisions") or [])
+            if isinstance(d, dict) and d.get("texto") and d.get("commit")]
+
+
 def read_item(plan_path, ident):
     """The item's current status on disk. The truth about the outcome is the PLAN, not the
     subprocess exit code — synchronize on the verifiable effect."""
@@ -791,7 +813,19 @@ def read_item(plan_path, ident):
 
 # ── running an item ─────────────────────────────────────────────────────────
 
-def build_command(name, branch, permissions, session_id=None):
+# CS-12: the cut the owner made (spec perguntar-antes-do-run, Q7). Every item's agent gets
+# it, because the route it would open is decided at its `finish`, not by the supervisor.
+# The flags are named as `cepa-plan finish`'s, so drain-plan never reads them as its own.
+CUT_RULE = (
+    "Closing rule for this item: a behavior choice you already committed on this branch "
+    "is not a question for the owner. Record it with `cepa-plan finish ... --decision "
+    "\"<the choice, in plain words>\" --decision-commit <sha>` (default HEAD), and it shows "
+    "up in the run summary with the commit. Keep `cepa-plan finish ... --human-pending` "
+    "for what only the owner closes: a proof waiver, moving a card to Done, and any task "
+    "outside the repository (credentials, a real environment, a conversation).")
+
+
+def build_command(name, branch, permissions, session_id=None, note=""):
     # stream-json is what carries the `rate_limit_event` with the quota usage. `--verbose`
     # is required by `claude` itself for that format with `-p`.
     # `--na-branch` tells drain-plan that the tree it wakes up in IS the
@@ -799,6 +833,10 @@ def build_command(name, branch, permissions, session_id=None):
     request = f"/common:drain-plan {name} --max 1"
     if branch:
         request += f" --na-branch {branch}"
+    request += "\n\n" + CUT_RULE
+    if note:
+        # CS-6: the pre-read's preference, after the arguments, in its own paragraph.
+        request += "\n\n" + note
     cmd = ["claude", "-p", request,
            "--output-format", "stream-json", "--verbose"]
     if session_id:
@@ -1236,13 +1274,13 @@ def herdr_release(agent="cepa-until", done=False, failure=None):
 
 
 def run_item(name, tree, branch, permissions, limit_sec, log,
-                 on_launch=None, session_id=None, on_tick=None):
+                 on_launch=None, session_id=None, on_tick=None, note=""):
     """Launches ONE subprocess, with `tree` (the night worktree) as cwd.
     Returns (code, killed_by_timeout, seconds, this_attempt_output).
     `on_launch` receives the child's pid: it is what `run_interrompido` says
     was left running."""
     repo = tree
-    cmd = build_command(name, branch, permissions, session_id)
+    cmd = build_command(name, branch, permissions, session_id, note)
     start = time.monotonic()
     try:
         mark = os.path.getsize(log)
@@ -2522,6 +2560,18 @@ class Panel:
         self.output("   " + self.t.c("cinza", "one at a time · y or n is enough · Enter "
                                              "leaves it for later · q quits"))
 
+    def panel_note(self, text):
+        """A line under the opening (CS-8: "the pre-read is still reading")."""
+        self.output("   " + (self.t.c("cinza", text) if self.enabled else text))
+
+    def continue_panel(self, text):
+        """A rule inside a list already open (CS-8: the pre-read's part)."""
+        if not self.enabled:
+            self.output(f"\n── {text}")
+            return
+        self.output("")
+        self.output(self.t.rule(text))
+
     def close_panel(self, without_owner, applied, for_later, back):
         t = self.t
         if not self.enabled:
@@ -2693,9 +2743,17 @@ class Panel:
 
 
 def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
-           output=print, answer=None, land=None, wait=None):
+           output=print, answer=None, land=None, wait=None, first=1, of=None,
+           opened=False, note=None, close=True, progress=None):
     """Goes through what only the owner unblocks and applies each answer. Returns
-    (applied, for_later), as text, for the closing."""
+    (applied, for_later), as text, for the closing.
+    CS-8 (the launch panel in two parts): `first`/`of` number the questions inside a
+    longer list, `opened` skips the opening (the list is already on screen), `note`
+    is a line under the opening and `close=False` leaves the closing to the caller.
+    CS-13: `progress` (a dict) counts as it goes, so a panel cut by the wait, EOF or
+    Ctrl-C still has the right numbers: `asked` (owner questions that reached the
+    screen) and `answered` (answers recorded in the queue)."""
+    progress = {} if progress is None else progress
     if question is None:
         def question(prompt):
             return read_line(prompt, output, wait)
@@ -2725,7 +2783,10 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         screen.nothing()
         return applied, for_later
 
-    screen.open_panel(total)
+    if not opened:
+        screen.open_panel(of or total)
+        if note:
+            screen.panel_note(note)
     stopped = False
 
     if action:
@@ -2759,7 +2820,8 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # characters the owner answered a question he saw only half of
         # (feedback of 10/15, decidir WEGO 2026-10-15-1128).
         summary = owner_summary_of(ad, d)
-        screen.item(i, len(owner_items), ident, ad.get("title") or "")
+        screen.item(i + first - 1, of or len(owner_items), ident, ad.get("title") or "")
+        progress["asked"] = progress.get("asked", 0) + 1
         # The human section first, in the order a person reads a story:
         # what stopped, what was asked, what is already done. The agent
         # section (the evidence, with its codes) only on `[e]`.
@@ -2872,6 +2934,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                        else answer(ident, text, keep=True))
             if rc == 0:
                 applied.append(f"{ident}: {msg}")
+                progress["answered"] = progress.get("answered", 0) + 1
                 screen.recorded(msg)
                 screen.end()
                 continue
@@ -2879,9 +2942,10 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         for_later.append(f"{ident}: {OWNER_REASON[reason_alias(ad['reason'])]}")
         screen.end()
 
-    screen.close_panel([f"{ad.get('id')} ({NO_OWNER_REASON[reason_alias(ad['reason'])]})"
-                for ad in without_owner], applied, for_later,
-               back)
+    if close:
+        screen.close_panel([f"{ad.get('id')} "
+                            f"({NO_OWNER_REASON[reason_alias(ad['reason'])]})"
+                            for ad in without_owner], applied, for_later, back)
     return applied, for_later
 
 
@@ -2992,6 +3056,426 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
         print("\n   questions interrupted; come back with: cepa-until decide "
               f"{queue}" + (f"/{run_id}" if run_id else ""))
     return 0
+
+
+# ── the pre-read (CS-5) ─────────────────────────────────────────────────────
+#
+# At the launch a read-only agent reads each executable item and answers a closed
+# JSON: a missing pre-condition (something outside the code that must exist before
+# the item can be done: a credential, an environment, an external answer), a
+# preference (CS-6, only recorded here), or nothing. The closed format is what lets
+# a test plug a fake reader through CEPA_UNTIL_LEITOR.
+READER_CEILING_SEC = float(os.environ.get("CEPA_UNTIL_TETO_LEITURA", "300"))
+# `claude` readers in parallel: all the queue's items at once would be a burst on the
+# quota; the ones that do not start within the ceiling run as today.
+READER_WORKERS = 8
+READER_KINDS = ("pre-condicao", "preferencia")
+
+READER_PROMPT = """You are a READ-ONLY pre-reader for an unattended run that will \
+execute the work item below in this repository with nobody to ask. Read the item \
+and the relevant parts of the repository (Read, Glob and Grep only; change nothing). \
+Decide whether the item has a PRE-CONDITION: something OUTSIDE the code that must \
+exist before the item can be done (a credential or token, an environment or \
+service, an answer from a person or a third party). If the code and the repository \
+are enough, there is none. If there is no pre-condition, decide whether the item \
+has a PREFERENCE: a choice the owner might care about where you have a reasonable \
+default that is easy to undo later (a format, a name, an order on screen).
+
+Answer with ONLY one JSON object, no prose, no code fence:
+{{"tipo": "pre-condicao" or "preferencia" or null, "texto": "<one plain sentence, \
+in Brazilian Portuguese, no codes or file names, saying what is missing or what the \
+choice is>", "pergunta": "<one closed yes/no question, in Brazilian Portuguese, the \
+owner can answer>", "padrao": "<only for preferencia: the choice you would make, in \
+a few words of Brazilian Portuguese>"}}
+Use {{"tipo": null}} when nothing is missing and there is no choice worth asking.
+
+Item:
+{item}
+"""
+
+
+def reader_command(item):
+    """(argv, stdin_text) of the reader of ONE item, or None when the pre-read is off.
+    `CEPA_UNTIL_LEITOR` replaces the command (shlex-split; it gets the item as JSON on
+    stdin); `off` disables the pre-read. The default is a `claude -p` limited to the
+    read-only tools, with the item inside the prompt (stdin stays closed)."""
+    override = os.environ.get("CEPA_UNTIL_LEITOR")
+    payload = json.dumps(item, ensure_ascii=False)
+    if override is not None:
+        if override.strip().lower() == "off":
+            return None
+        return shlex.split(override), payload
+    cmd = ["claude", "-p", READER_PROMPT.format(item=payload),
+           "--output-format", "text",
+           "--tools", "Read,Glob,Grep", "--allowedTools", "Read,Glob,Grep",
+           # no MCP server: its tools are not covered by `--tools`
+           "--strict-mcp-config"]
+    model = os.environ.get("CEPA_UNTIL_MODELO_LEITOR")
+    if model:
+        cmd += ["--model", model]
+    return cmd, None
+
+
+def parse_finding(text):
+    """The closed JSON the reader printed, as {tipo, texto, pergunta[, padrao]}, or
+    None when there is no finding (null type, text that is not that JSON, a type
+    outside the closed set, or a finding with nothing written in `texto`)."""
+    text = (text or "").strip()
+    try:
+        body = json.loads(text)
+    except ValueError:
+        # Models wrap the object in a fence or a sentence despite the instruction.
+        start, end = text.find("{"), text.rfind("}")
+        try:
+            body = json.loads(text[start:end + 1]) if 0 <= start < end else None
+        except ValueError:
+            return None
+    if not isinstance(body, dict) or body.get("tipo") not in READER_KINDS:
+        return None
+    texto = " ".join(str(body.get("texto") or "").split())
+    if not texto:
+        return None
+    found = {"tipo": body["tipo"], "texto": texto,
+             "pergunta": " ".join(str(body.get("pergunta") or "").split())}
+    if body["tipo"] == "preferencia":
+        # CS-6: a preference with no default has nothing to run with.
+        padrao = " ".join(str(body.get("padrao") or "").split())
+        if not padrao:
+            return None
+        found["padrao"] = padrao
+    return found
+
+
+def pre_read_as_text(queue, rows, prefs, output=print):
+    """CS-9, without a terminal: what the pre-read found, as text, with no prompt.
+    A pre-condition whose route opened is deferred and answered later with `decide`;
+    a preference runs with the agent's default. Prints nothing with no finding."""
+    deferred = [r for r in rows if r.get("tipo") == "pre-condicao" and r.get("rota_aberta")]
+    if not deferred and not prefs:
+        return
+    output(f"\n── the pre-read's questions ({len(deferred) + len(prefs)}), "
+           "listed without asking: no terminal")
+    for r in deferred:
+        output(f"   - {r['id']} (deferred, missing pre-condition): "
+               f"{r.get('pergunta') or r.get('texto')}")
+    for ident, pref in prefs.items():
+        output(f"   - {ident} (runs with the agent's default: {pref['padrao']}): "
+               f"{pref.get('pergunta') or pref['texto']}")
+    if deferred:
+        output(f"   To answer the deferred ones, in a terminal: cepa-until decide {queue}")
+
+
+def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
+    """CS-6, on a terminal at the launch: each preference the pre-read found, as one
+    closed question with the agent's default. A line typed is the owner's answer
+    (`escolha` becomes it, `fonte` "dono"); Enter keeps the default. No answer within
+    the wait, EOF or Ctrl-C: one line, and every preference not answered yet keeps the
+    default (`fonte` stays "padrao"). `prefs` is changed in place. Returns how many
+    questions reached the screen (CS-13)."""
+    if not prefs:
+        return 0
+    if question is None:
+        def question(prompt):
+            return read_line(prompt, print, wait)
+    shown = 0
+    print(f"\n── {len(prefs)} choice(s) the pre-read found: answer to decide, "
+          "Enter keeps the agent's default")
+    for i, (ident, pref) in enumerate(prefs.items(), first):
+        print(f"\n   {i}/{of or len(prefs)} · {ident}: {pref['texto']}")
+        if pref.get("pergunta"):
+            print(f"   {pref['pergunta']}")
+        print(f"   If nobody answers, the agent goes with: {pref['padrao']}")
+        shown += 1
+        try:
+            raw = question("   ▸ Your choice, in one line [Enter keeps the default]: ")
+        except NoAnswer:
+            print(f"\n   nobody answered in {(wait or 0) / 60:g} min; the remaining "
+                  "choice(s) run with the agent's default")
+            return shown
+        except (EOFError, KeyboardInterrupt):
+            print("\n   choices interrupted; the remaining ones run with the agent's "
+                  "default")
+            return shown
+        text = " ".join(str(raw or "").split())
+        if text:
+            pref.update(escolha=text, fonte="dono")
+    return shown
+
+
+def preference_note(ident, pref):
+    """CS-6: the paragraph added to the request of the item's agent, or "" without a
+    preference. The supervisor and drain-plan read the same queue head, but the note
+    still names the item, so a drain that reserved another one ignores it."""
+    if not pref:
+        return ""
+    # The note rides in drain-plan's arguments: a free-text "--offline" or "--max 9"
+    # typed by the owner (or written by the reader) must not read as one of its flags.
+    def flat(text):
+        return re.sub(r"(?<!\S)-+", "", " ".join(str(text or "").split()))
+    pref = dict(pref, texto=flat(pref.get("texto")), escolha=flat(pref.get("escolha")))
+    who = ("the owner's answer at the launch" if pref.get("fonte") == "dono"
+           else "the agent's reversible default; the owner did not answer")
+    return (f"Launch pre-read, about item {ident}: {pref['texto']} "
+            f"Go with: {pref['escolha']} ({who}). This applies only if the item you "
+            f"reserve is {ident}; say in the evidence that you followed it.")
+
+
+# Readers still running, so Ctrl-C / SIGTERM during the wait can kill their process
+# groups instead of leaving orphan `claude` processes behind.
+_LIVE_READERS = set()
+
+
+def _kill_group(proc):
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except OSError:
+        pass
+
+
+READ_CEILING_ERROR = "not read within the ceiling"  # stable marker (CS-7)
+READ_STOPPED_ERROR = "launch interrupted before the reader started"
+# CS-8: the pre-read runs behind the launch panel. Set when the launch is interrupted,
+# so a reader still waiting for a free worker does not start after the others died.
+_READ_STOP = threading.Event()
+
+
+def read_one(repo, item, deadline):
+    """Runs the reader of one item; returns (finding_or_None, error_or_None). Anything
+    that goes wrong (no command, non-zero exit, past the shared deadline) is "no
+    finding": the item then runs as it does today."""
+    built = reader_command(item)
+    if built is None:
+        return None, None
+    cmd, stdin_text = built
+    if _READ_STOP.is_set():
+        return None, READ_STOPPED_ERROR
+    left = deadline - time.monotonic()
+    if left <= 0:
+        return None, READ_CEILING_ERROR
+    try:
+        proc = subprocess.Popen(
+            cmd, cwd=str(repo), env=item_environment(), text=True,
+            stdin=subprocess.PIPE if stdin_text is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            start_new_session=True)  # its own group: the ceiling kills the children too
+    except OSError as e:
+        return None, f"reader did not launch: {e}"
+    _LIVE_READERS.add(proc)
+    try:
+        out, _ = proc.communicate(stdin_text, timeout=max(left, 0.05))
+    except subprocess.TimeoutExpired:
+        _kill_group(proc)
+        proc.communicate()
+        return None, READ_CEILING_ERROR
+    finally:
+        _LIVE_READERS.discard(proc)
+    if proc.returncode != 0:
+        return None, f"reader exited {proc.returncode}"
+    return parse_finding(out), None
+
+
+def pre_read(repo, items, ceiling=None):
+    """Reads `items` (dicts with id/title/why) in parallel, in queue order, all
+    together bounded by `ceiling` seconds. Returns one dict per item:
+    {id, tipo, texto, pergunta, erro[, padrao]} (`tipo` None = no finding)."""
+    from concurrent.futures import ThreadPoolExecutor
+    deadline = time.monotonic() + (READER_CEILING_SEC if ceiling is None else ceiling)
+
+    def one(item):
+        try:
+            finding, error = read_one(repo, item, deadline)
+        except Exception as e:  # noqa: BLE001  (a reader must never stop the launch)
+            finding, error = None, f"reader failed: {e}"
+        row = {"id": item.get("id"), "tipo": None, "texto": None,
+               "pergunta": None, "erro": error,
+               # CS-7: read = the reader ran to completion, exit 0, within the ceiling.
+               # Set before the call site overwrites `erro` with a route-opening error.
+               "lido": error is None,
+               "nao_lido": (None if error is None else
+                            "teto" if error == READ_CEILING_ERROR else "falha")}
+        row.update(finding or {})
+        return row
+
+    pool = ThreadPoolExecutor(max_workers=min(READER_WORKERS, max(len(items), 1)))
+    try:
+        return list(pool.map(one, items))
+    finally:
+        # On Ctrl-C / SIGTERM the readers still alive die with their children, and the
+        # waiting threads return at once instead of holding the interpreter open.
+        for proc in list(_LIVE_READERS):
+            _kill_group(proc)
+        pool.shutdown(wait=True, cancel_futures=True)
+
+
+class BackgroundRead:
+    """CS-8: `pre_read` on a thread, so the launch panel can ask what the queue already
+    holds while the readers run. `result()` waits for the rows; Ctrl-C (or any error)
+    during the wait kills the readers and stops the ones not started yet."""
+
+    def __init__(self, repo, items, ceiling=None):
+        self.rows, self.error = None, None
+        self.thread = threading.Thread(target=self._run, args=(repo, items, ceiling),
+                                       name="pre-read", daemon=True)
+        self.thread.start()
+
+    def _run(self, repo, items, ceiling):
+        try:
+            self.rows = pre_read(repo, items, ceiling)
+        except BaseException as e:  # noqa: BLE001  (reported by result())
+            self.error = e
+
+    def stop(self):
+        _READ_STOP.set()
+        for proc in list(_LIVE_READERS):
+            _kill_group(proc)
+
+    def result(self):
+        try:
+            while self.thread.is_alive():
+                self.thread.join(0.2)
+        except BaseException:
+            self.stop()
+            raise
+        if self.error is not None:
+            raise self.error
+        return self.rows
+
+
+def current_item(queue, repo, ident):
+    """The item as `cepa-plan show <queue> <id> --json` has it (evidence, owner_summary),
+    or {} when it cannot be read."""
+    try:
+        p = subprocess.run(
+            [sys.executable, str(CEPA_PLAN), "show", queue, str(ident), "--json",
+             "--repo", str(repo)], capture_output=True, text=True, timeout=60)
+        return json.loads(p.stdout).get("item") or {} if p.returncode == 0 else {}
+    except (subprocess.TimeoutExpired, OSError, ValueError, AttributeError):
+        return {}
+
+
+def open_precondition_route(queue, repo, row):
+    """Opens the owner's route for a pre-condition the pre-read found, through
+    `cepa-plan finish --status pending --human-pending` (the item stays `pending`, so
+    the queue defers it as `human_pending` until the owner answers). `--supervisor`
+    because nobody reserved the item. Never writes queue.yaml: `cepa-plan` keeps its
+    own validation of the human text. `finish` REPLACES `evidence` and drops
+    `owner_summary` on a `pending`, so both are read first and carried over (a red
+    build leaves the side branch and commits in that evidence). If `finish` refuses,
+    it is tried once more without the question, the part that most often fails the
+    plain-text validation. Returns None or the error as text."""
+    previous = current_item(queue, repo, row["id"])
+    evidence = ("Pre-read at launch found a missing pre-condition: "
+                f"{row['texto']}")
+    if str(previous.get("evidence") or "").strip():
+        evidence += "\n" + str(previous["evidence"])
+    cmd = [sys.executable, str(CEPA_PLAN), "finish", queue, str(row["id"]),
+           "--status", "pending", "--human-pending", row["texto"],
+           "--evidence", evidence, "--repo", str(repo), "--supervisor"]
+    summary = previous.get("owner_summary")
+    if isinstance(summary, dict):
+        for key, flag, _ in _ownertext.FIELDS:
+            if str(summary.get(key) or "").strip():
+                cmd += [flag, str(summary[key])]
+    # The outer session did not build this item: with its id in the environment,
+    # `finish --status pending` would flag THAT session as owing a validation.
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")}
+    attempts = [cmd + ["--question", row["pergunta"]]] if row.get("pergunta") else []
+    attempts.append(cmd)
+    error = None
+    for attempt in attempts:
+        try:
+            p = subprocess.run(attempt, capture_output=True, text=True, timeout=60,
+                               env=env)
+        except (subprocess.TimeoutExpired, OSError) as e:
+            return f"`cepa-plan finish` did not answer: {e}"
+        if p.returncode == 0:
+            return None
+        error = (p.stderr or p.stdout or "").strip() or \
+            f"`cepa-plan finish` exited {p.returncode}"
+    return error
+
+
+_OWNER_NO = re.compile(r"Resposta do dono em (\d{4})-(\d{2})-(\d{2}): n(?:ão|ao)\b",
+                       re.I)
+
+
+def last_owner_no(evidence):
+    """The date (`YYYY-MM-DD`) of the owner's LAST answer when it was "não", else None.
+    `cepa-plan answer` prepends each answer to the evidence, so the last one is the
+    text's start: a later "sim" or free text, or an older "não" further down, does
+    not count."""
+    m = _OWNER_NO.match((evidence or "").lstrip())
+    return f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else None
+
+
+def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False):
+    """The launch panel (CS-2). Shows `decide` for the owner-reason items still open
+    in the queue (an uncapped read; `delivered_leftovers` is deliberately not added:
+    a task left on a delivered item holds nothing back) and returns the queue read
+    again, so the item answered "yes" is in the batch. With no such item, prints
+    nothing. No answer within the wait, EOF or Ctrl-C: one line, and the run carries
+    on with the `data` it had. A failed read at either end keeps the old `data`.
+    CS-4: a route whose last owner answer was "no" is not asked here; one line gives
+    their count and the most recent date, and `cepa-until decide <queue>` still asks.
+    CS-8: the panel can come in two parts of one list. `tally` (a dict, filled here)
+    turns the closing off and keeps the count, the answers and the numbering across
+    calls; `reading` adds the line that says the pre-read is still running; `only`
+    (ids) restricts the call to the routes the pre-read opened, with no CS-4 line."""
+    whole, _ = query_queue(queue, repo, max_items=10 ** 6)
+    deferred = [ad for ad in (whole or {}).get("deferred") or []
+                if reason_alias(ad.get("reason")) in OWNER_REASON
+                and (only is None or str(ad.get("id")) in only)]
+    answered_no = []
+    to_ask = []
+    for ad in deferred:
+        # A route the pre-read has just opened is a new question, even when the
+        # evidence it carried over starts with an old "não": it is always asked, so
+        # the total and the numbering announced for it hold (CS-8).
+        date = None if only is not None else last_owner_no(ad.get("evidence"))
+        if date:
+            answered_no.append(date)
+        else:
+            to_ask.append(ad)
+    if tally is not None and only is None:
+        tally["summarized"] = len(answered_no)  # CS-13
+    if answered_no and only is None:
+        latest = max(answered_no)
+        latest = f"{latest[8:10]}/{latest[5:7]}"
+        print(f"\n── {len(answered_no)} route(s) you already answered \"no\" "
+              f"(last on {latest}): not asked again here; to revisit them: "
+              f"cepa-until decide {queue}")
+    deferred = to_ask
+    if not deferred:
+        return data
+    part = {}
+    if tally is not None:
+        shown = tally.get("shown", 0)
+        part = dict(first=shown + 1, of=tally.get("of"), opened=bool(shown),
+                    close=False)
+        tally["shown"] = shown + len(deferred)
+    if reading:
+        part["note"] = ("the pre-read is still reading; its questions come at the end "
+                        "of this list")
+    try:
+        applied, for_later = decide(repo, queue, None, {}, deferred, {},
+                                    wait=ANSWER_WAIT_SEC, progress=tally, **part)
+        if tally is not None:
+            tally["cut"] = False
+            tally.setdefault("applied", []).extend(applied)
+            tally.setdefault("for_later", []).extend(for_later)
+    except NoAnswer:
+        if tally is not None:
+            tally["cut"] = True  # the line below is the closing; no second one
+        print(f"\n   nobody answered in {ANSWER_WAIT_SEC / 60:g} min; the run goes on "
+              f"without. To answer later: cepa-until decide {queue}")
+    except (EOFError, KeyboardInterrupt):
+        if tally is not None:
+            tally["cut"] = True
+        print("\n   questions interrupted; the run goes on without. "
+              f"To answer later: cepa-until decide {queue}")
+    fresh, error = query_queue(queue, repo)
+    return data if error or not fresh else fresh
 
 
 def cmd_decide(argv):
@@ -3590,6 +4074,10 @@ def _main(argv=None):
             "them: clock, circuit breaker, account quota, full build after each `done`\n"
             "item (red = the item becomes `blocked` and the branch rolls back) and log.\n"
             "\n"
+            "On a terminal, the launch first asks about the tasks the queue holds for you;\n"
+            "a \"yes\" makes that item run in the same run. --no-pre-read skips that\n"
+            "panel and the read-only pre-read of each item.\n"
+            "\n"
             "The cut happens between items, never in the middle of one. Nothing goes to\n"
             "main or origin: afterwards, `cepa until decide <queue>/<run>` asks what\n"
             "was left for you, and `cepa until land` brings the branch into the\n"
@@ -3674,6 +4162,10 @@ def _main(argv=None):
                          "width (the `.jsonl` always keeps the full title)")
     ap.add_argument("--dry-run", action="store_true", dest="dry",
                     help="shows the run plan and exits without executing anything")
+    ap.add_argument("--no-pre-read", "--sem-leitura", action="store_true",
+                    dest="no_pre_read",
+                    help="skips the launch pre-read and the launch panel; the "
+                         "forecast line stays (CS-9)")
     if not argv:
         ap.print_help(sys.stderr)
         return 2
@@ -3681,6 +4173,7 @@ def _main(argv=None):
 
     repo = Path(a.repo).resolve()
     now = datetime.now()
+    launch_clock = time.monotonic()  # CS-13: the launch's seconds, up to `run_start`
 
     try:
         deadline = (now + parse_duration(a.duration)) if a.duration \
@@ -3805,12 +4298,31 @@ def _main(argv=None):
     print(lbl("  permissions: ")
           + SCREEN.c("amarelo", "ASKS (will hang with nobody watching)" if a.with_permissions
                    else "--dangerously-skip-permissions ON"))
+    # Forecast (CS-1): `data` is capped at `--max 1`, so the count comes from a
+    # second, uncapped read of the same queue. Even uncapped it is not the whole
+    # queue: `cepa-plan queue` stops walking at the first item whose `blocked_by`
+    # is unmet and outside the batch (`stop = blocked`), so the items after it are
+    # in neither `batch` nor `deferred`. The count is what runs / waits for the
+    # owner now, up to that first unmet dependency. If the read fails, say so
+    # instead of printing the number of the capped read (which would be wrong).
+    # It rides on the `1st item:` line, not on a line of its own: the header has
+    # a 7-line ceiling (A6) and a taller header blocked the supervisor on a pty.
+    whole, whole_err = query_queue(a.queue, repo, max_items=10 ** 6)
+    runs = waits = None
+    if whole:
+        runs = len(whole.get("batch") or [])
+        waits = sum(1 for ad in whole.get("deferred") or []
+                    if ad.get("reason") == "human_pending")
+        forecast = f" · start: {runs} run, {waits} wait for the owner"
+    else:
+        forecast = f" · start: unavailable (queue read failed: {whole_err})"
     print(lbl("  1st item: ")
           + SCREEN.c("negrito", nxt.get('id', '(none — queue has no executable item)'))
           + (SCREEN.c("cinza", SCREEN.truncate(f" — {nxt.get('title')}", slack=40))
              if nxt.get("id") else "")
           + f" · queue: {t.get('por_status', {}).get('pending', 0)} "
-            f"pending, {t.get('por_status', {}).get('done', 0)} done")
+            f"pending, {t.get('por_status', {}).get('done', 0)} done"
+          + forecast)
     inheritance = inheritance_from_previous_run(repo, a.queue, data.get("path"))
     for h in inheritance:
         print(lbl("  inherits: ") + f"`{h['branch']}` ({h['commits']} commit(s) the "
@@ -3820,9 +4332,111 @@ def _main(argv=None):
     if a.dry:
         print("\n(--dry-run: nothing was executed)")
         return 0
+    # CS-5: the pre-read runs with or without a terminal (spec Q9) and BEFORE the
+    # panel, so a route it opens shows in the panel like any other. `whole` is the
+    # uncapped read of the forecast above, in queue order.
+    pre_read_event = None
+    preferences = {}  # CS-6: id -> {texto, pergunta, padrao, escolha, fonte}
+    # CS-9 (spec Q9): `--no-pre-read` skips both the pre-read and the panel, so the
+    # run behaves as if it had no terminal and no reader; the forecast is above.
+    on_terminal = (sys.stdin.isatty() and sys.stdout.isatty()) and not a.no_pre_read
+    rows, opened_ids, reading, tally = None, set(), None, {}
+    if (whole and whole.get("batch") and not a.no_pre_read
+            and reader_command({}) is not None):
+        to_read = [{k: it.get(k) for k in ("id", "title", "why", "blocked_by")}
+                   for it in whole["batch"]]
+        print(f"\n── pre-read: {len(to_read)} item(s), read-only, "
+              f"up to {READER_CEILING_SEC / 60:g} min")
+        started = time.monotonic()
+        if on_terminal:
+            # CS-8 (spec Q10): the readers run behind the panel, so what the queue
+            # already holds is asked now and their questions come at the end.
+            reading = BackgroundRead(repo, to_read)
+        else:
+            rows = pre_read(repo, to_read)
+    # CS-2: on a terminal, what waits for the owner is asked HERE, before the first
+    # item, and a "yes" puts the item in the batch of this very run. Without a
+    # terminal nothing changes (the end-of-run listing stays as it was).
+    if on_terminal:
+        data = ask_at_launch(repo, a.queue, data, tally=tally,
+                             reading=reading is not None)
+        if reading is not None:
+            rows = reading.result()
+    if rows is not None:
+        opened = 0
+        for row in rows:
+            row["rota_aberta"] = False
+            if row["tipo"] == "pre-condicao":
+                row["erro"] = open_precondition_route(a.queue, repo, row)
+                row["rota_aberta"] = row["erro"] is None
+                opened += row["rota_aberta"]
+                if row["rota_aberta"]:
+                    opened_ids.add(str(row["id"]))
+                if row["erro"]:
+                    print(f"   pre-read: could not open the route of {row['id']} "
+                          f"({row['erro'].splitlines()[0][:160]}); it runs as usual")
+        for row in rows:
+            if row["tipo"] == "preferencia":
+                preferences[str(row["id"])] = {
+                    "texto": row["texto"], "pergunta": row.get("pergunta"),
+                    "padrao": row["padrao"], "escolha": row["padrao"],
+                    "fonte": "padrao"}
+        read_ok = sum(1 for r in rows if r["lido"])
+        not_read = [str(r["id"]) for r in rows if r["nao_lido"] == "teto"]
+        print(f"\n   pre-read: {read_ok} of {len(rows)} read, {opened} deferred for a "
+              "missing pre-condition")
+        if not_read:
+            print(f"   pre-read: not read within the {READER_CEILING_SEC:g}s ceiling: "
+                  f"{', '.join(not_read)} — they run as usual")
+        pre_read_event = {"evento": "leitura_previa",
+                          "itens": [{k: r.get(k) for k in
+                                     ("id", "tipo", "texto", "pergunta", "padrao",
+                                      "rota_aberta", "erro", "lido", "nao_lido")}
+                                    for r in rows],
+                          "lidos": read_ok,
+                          "nao_lidos": not_read,
+                          "segundos": round(time.monotonic() - started, 1)}
+        if opened:
+            fresh, _ = query_queue(a.queue, repo)
+            data = fresh or data
+        if not on_terminal:
+            pre_read_as_text(a.queue, rows, preferences)
+    if on_terminal:
+        # CS-8: the pre-read's questions at the end of the same list, numbered after
+        # the queue's, with the total that sums both parts.
+        from_queue = tally.get("shown", 0)
+        added = len(opened_ids) + len(preferences)
+        if from_queue and added:
+            tally["of"] = from_queue + added
+            Panel(SCREEN, print).continue_panel(
+                f"the pre-read added {added} question(s) at the end of this list: "
+                f"{from_queue + added} question(s) in total")
+        elif added:
+            tally["of"] = added
+        if opened_ids:
+            data = ask_at_launch(repo, a.queue, data, only=opened_ids, tally=tally)
+        tally["prefs_shown"] = ask_preferences(
+            preferences, wait=ANSWER_WAIT_SEC,
+            first=from_queue + len(opened_ids) + 1, of=tally.get("of"))
+        if tally.get("shown", 0) and not tally.get("cut"):
+            Panel(SCREEN, print).close_panel(
+                [], tally.get("applied", []), tally.get("for_later", []),
+                f"cepa-until decide {a.queue}")
+    if pre_read_event:
+        for row in pre_read_event["itens"]:
+            pref = preferences.get(str(row.get("id")))
+            if pref:
+                row.update(escolha=pref["escolha"], fonte=pref["fonte"])
     if not data.get("batch"):
+        # CS-10: after the panel, if no item runs the run does not start: this return
+        # comes before `open_run_branch`, so no `until/<run_id>` branch or worktree exists.
         stop = data.get("stop") or {}
-        print(f"\nnothing to do: {stop.get('reason')} — {stop.get('detail')}")
+        print(f"\nnothing to do: no item runs, so the run does not start (no `until/{run_id}` "
+              f"branch or worktree is created). {stop.get('reason')} — {stop.get('detail')}")
+        waiting = [ad for ad in (data.get("deferred") or [])
+                   if reason_alias(ad.get("reason")) in OWNER_REASON]
+        if waiting:
+            print(f"{len(waiting)} item(s) wait for you: cepa-until decide {a.queue}")
         return 0
 
     # A closed terminal tab sends SIGHUP to the terminal's group. `claude`
@@ -3858,6 +4472,20 @@ def _main(argv=None):
               "herdou": inheritance,
               "branch_do_clone": current_branch(repo), "verify": verify,
               "pid": pid, "host": host, "versao_registro": 2})
+    if pre_read_event:
+        log_event(pre_read_event)
+    # CS-13: the launch's measurement. No numeric goal (spec): the event is what lets a
+    # later run be compared with the 31% of items that got stuck in the middle.
+    found = {kind: sum(1 for r in rows or [] if r.get("tipo") == kind)
+             for kind in READER_KINDS}
+    log_event({"evento": "largada", "rodam": runs, "esperam": waits,
+               "perguntas_mostradas": tally.get("asked", 0) + tally.get("prefs_shown", 0),
+               "perguntas_respondidas": tally.get("answered", 0)
+               + sum(1 for p in preferences.values() if p.get("fonte") == "dono"),
+               "rotas_resumidas": tally.get("summarized", 0),
+               "itens_lidos": sum(1 for r in rows or [] if r.get("lido")),
+               "achados": found,
+               "segundos": round(time.monotonic() - launch_clock, 1)})
     # The run state, next to the `.jsonl` (C6): `rodando` now, and at the end
     # `esperando-dono` (there is an action or pending item) or `encerrado`. It is written BEFORE
     # the model analysis, which may fail on the quota (C7); `/common:until-review`
@@ -4020,6 +4648,8 @@ def _main(argv=None):
     drops, consecutive_drops = [], 0
     # Items started with a tight quota and the reset outside the window.
     tight = []
+    followed = {}  # CS-6: id -> the preference handed to its agent, for the summary
+    decided = []   # CS-11: (id, {texto, commit}) recorded with `finish --decision`
     # Plugin hooks that the night branch changed and that the screen has already warned about. The
     # base is the clone's HEAD, and not the night's, so the inheritance counts: what
     # it brought is not in the installed plugin either.
@@ -4218,13 +4848,23 @@ def _main(argv=None):
                   + (f", attempt {round_n}/{a.attempts_per_item}" if round_n > 1 else "") + ")")
         before = head_of(tree)
         first.setdefault(ident, (before, len(delivered)))
+        # CS-11: the item's `decisions` before the round, so the summary lists
+        # only the ones this run recorded.
+        known_decisions = item_decisions(read_item(plan_path, ident)[0])
         # Fresh per launch: `claude --session-id` refuses a reused one.
         session_id = str(uuid.uuid4())
-        log_event({"evento": "item_start", "id": ident, "title": item.get("title"),
-                  "restante_seg": int(remaining.total_seconds()),
-                  "tentativa": round_n, "twg_version": installed_twg_version(),
-                  "head": before, "session_id": session_id,
-                  "hooks_sha": installed_hooks_sha()})
+        pref = preferences.get(str(ident))
+        note = preference_note(ident, pref)
+        start_event = {"evento": "item_start", "id": ident, "title": item.get("title"),
+                       "restante_seg": int(remaining.total_seconds()),
+                       "tentativa": round_n, "twg_version": installed_twg_version(),
+                       "head": before, "session_id": session_id,
+                       "hooks_sha": installed_hooks_sha()}
+        if pref:
+            start_event["preferencia"] = {"escolha": pref["escolha"],
+                                          "fonte": pref["fonte"]}
+            followed[str(ident)] = pref
+        log_event(start_event)
 
         # herdr label: "<queue>: item <i>/<n> <id>". i = distinct items this run has
         # started (a retry of the same item keeps its i); n = i - 1 + the queue's
@@ -4239,7 +4879,7 @@ def _main(argv=None):
         limit = (remaining + slack).total_seconds()
         code, killed, spent, output = run_item(
             a.queue, tree, start_branch, a.with_permissions, limit, log,
-            on_launch=launched, session_id=session_id, on_tick=tick)
+            on_launch=launched, session_id=session_id, on_tick=tick, note=note)
         in_flight.pop("pid_filho", None)
 
         # Uncommitted leftovers don't carry over to the next item.
@@ -4284,6 +4924,9 @@ def _main(argv=None):
             end_motive = end_reason_of(code, killed, output)
         except Exception:  # noqa: BLE001  (a classifier bug must not lose the record)
             end_motive = "desconhecido"
+        for dec in item_decisions(after):
+            if dec not in known_decisions and (ident, dec) not in decided:
+                decided.append((ident, dec))
         log_event({"evento": "item_end", "id": ident, "status": run_state,
                   "session_id": session_id,
                   "motivo_fim": end_motive,
@@ -4833,6 +5476,22 @@ def _main(argv=None):
         for ident, usage, reset in tight:
             print(f"     - {ident}: quota at {usage:.0%}, reset at "
                   f"{reset.strftime('%H:%M')}")
+    if followed:
+        print(f"\n   Choices the pre-read found ({len(followed)}) — the agent was told "
+              "to follow them:")
+        for ident, pref in followed.items():
+            who = ("your answer at the launch" if pref["fonte"] == "dono"
+                   else "the agent's default, nobody answered")
+            print(f"     - {ident}: {pref['escolha']} ({who}) · {pref['texto']}")
+    # CS-11: only the choices whose commit is still on the run branch; a red
+    # build takes the item's commits off, and with them the choice.
+    decided = [(i, d) for i, d in decided
+               if git(["merge-base", "--is-ancestor", d["commit"], "HEAD"], tree)[0] == 0]
+    if decided:
+        print(f"\n   Decided for you ({len(decided)}) — already committed on the run "
+              "branch, nobody was asked; undoing one is a `git revert`:")
+        for ident, dec in decided:
+            print(f"     - {ident}: {dec['texto']} · commit {dec['commit'][:10]}")
     if drops:
         print(f"\n   Network drops ({len(drops)}) — not the item's fault:")
         for ident, dropped_at, returned in drops:

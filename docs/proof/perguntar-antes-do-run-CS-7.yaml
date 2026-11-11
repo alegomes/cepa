@@ -1,0 +1,53 @@
+schema_version: 2
+card: perguntar-antes-do-run-CS-7
+verdict: proven                 # proven | unproven | needs-human
+reviewed_at: 2026-11-11T01:05:00-03:00
+base_commit: be455c9
+head_commit: af4784a
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: READ_CEILING_ERROR (new), read_one (two return sites), pre_read row lido/nao_lido, call site read_ok / not_read, 'not read within the Ns ceiling' screen line, leitura_previa event nao_lidos and row lido/nao_lido"
+      module: common
+      external_observable: true     # the real cepa-until subprocess, its stdout and the run .jsonl
+      substituted_by_double: null   # only the reader (CEPA_UNTIL_LEITOR, the declared plug) and the `claude` binary are faked (far boundary)
+    - class: "tests/test_cepa_until_decide.py (four test_pre_read_cs7_* functions)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway detached worktrees at af4784a (/tmp/proof-cs7) and be455c9 (/tmp/proof-cs7-base), both removed at the end. Runner executes the four test_pre_read_cs7_* functions and prints the failure list. Unperturbed af4784a: FAIL []. Each perturbation applied with sed on common/bin/cepa-until, run, then git checkout of the file."
+      results:
+        - "KILLED P1 lido always True: RED."
+        - "KILLED P2 lido always False: RED (cs7 mixed: x1 read; lidos 1)."
+        - "KILLED P3 teto label becomes falha: RED."
+        - "KILLED P4 non-ceiling error labelled teto: RED (cs7 falha: 2 checks)."
+        - "KILLED P5 read item gets nao_lido falha: RED (cs7 mixed: x1 read)."
+        - "KILLED P6 read_ok counts every row: RED."
+        - "KILLED P7 not_read filters falha instead of teto: RED."
+        - "KILLED P8 screen line dropped: RED (cs7 ceiling: the screen says it was not read)."
+        - "KILLED P9 event nao_lidos always empty: RED (ceiling, mixed and waiting)."
+        - "KILLED P10 lido/nao_lido dropped from event rows: RED."
+        - "KILLED P11 read_one TimeoutExpired return no longer uses READ_CEILING_ERROR: RED."
+        - "KILLED P12 read_one `left <= 0` return (common/bin/cepa-until:3057) no longer uses READ_CEILING_ERROR: RED at af4784a (FAIL ['cs7 waiting: all 9 rows are teto and not read', 'cs7 waiting: all 9 in nao_lidos, lidos 0', 'cs7 waiting: the 9th row, never launched, is teto']). It survived at da38706."
+        - "KILLED P13 screen line hardcodes the ceiling value: RED (cs7 ceiling: the screen says it was not read)."
+        - "BASE be455c9 (common/bin/cepa-until at base, cs7 tests from HEAD): 11 cs7 checks RED (ceiling x3, mixed x3, falha x2, waiting x3)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; the left<=0 branch (cepa-until:3057) is now reached by test_pre_read_cs7_items_waiting_for_a_free_reader_past_the_ceiling_are_teto and perturbation P12 turns it RED."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the pre-read only labels whether a local read-only reader finished within a ceiling; it parses nothing coming from outside the run (no HTTP, no user-facing parse). No changed class is in an input-bearing module (api-rest)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "All thirteen perturbations of the changed behavior turn the CS-7 tests RED at af4784a, including P12 (the branch for items still waiting for a free reader after the ceiling), which survived at da38706 and is now covered by the new test. Unperturbed is green; tests are red at base be455c9. PROVEN."

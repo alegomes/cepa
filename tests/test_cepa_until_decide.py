@@ -580,6 +580,7 @@ def test_run_on_terminal_ends_asking_and_applies():
         env = dict(os.environ)
         env["PATH"] = f"{binv}:{env['PATH']}"
         env["FAKE_PLANO"] = str(plan_of(root))
+        env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
         env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
         env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
         rc, out = on_tty(
@@ -644,6 +645,7 @@ def env_do_run(tmp, root, binv):
     env = dict(os.environ)
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(plan_of(root))
+    env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
     env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
     env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
     return env
@@ -1200,6 +1202,1282 @@ def test_finish_item_reopens_an_item_the_agent_closed_done():
         it = items_of(root)["a1"]
         check("...o status virou pending e a evidence foi trocada",
               it["status"] == "pending" and it["evidence"] == "build vermelho", it)
+
+
+def _launch_events(root):
+    """item_start/ids of every run ledger the queue has."""
+    out = []
+    for f in sorted((root / ".claude" / "programs" / "fila" / "until").glob("*.jsonl")):
+        out += [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+    return out
+
+
+def _launch_on_tty(answers, wait="600", items=None, extra=(), timeout=90):
+    """Queue with only A (unless `items`), which has an open `human_pending`; real
+    `cepa-until` on a pty (drained continuously by `on_tty`, or the supervisor blocks in
+    `print`). `extra` are added arguments (e.g. `--dry-run`)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, items if items is not None else
+                          [item("a1", human_pending="provision the Keycloak role")])
+        binv = fake_claude(tmp, "pass")
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis", *extra], str(root),
+            inputs=answers, env=env, timeout=timeout)
+        return rc, out, _launch_events(root), items_of(root)
+
+
+def test_launch_on_terminal_asks_and_yes_runs_the_item_in_the_same_run():
+    """CS-2 (spec perguntar-antes-do-run): the route of an open item is asked BEFORE
+    the first item and "y" makes the item run in this very run."""
+    rc, out, events, _ = _launch_on_tty(
+        [("[t] I write the answer", "y"), ("Anything to add", "")], wait="2")
+    starts = [e for e in events if e.get("evento") == "item_start"]
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("the question shows up at the launch", "provision the Keycloak role" in out, out[:1500])
+    check("item_start of a1 is recorded", any(e.get("id") == "a1" for e in starts), str(events) + out[-1500:])
+
+
+def test_launch_on_terminal_no_or_enter_leaves_the_item_without_item_start():
+    for reply in ("n", ""):
+        trig = [("[t] I write the answer", reply)] + (
+            [("Anything to add", "")] if reply else [])
+        rc, out, events, items = _launch_on_tty(trig)
+        check(f"answer {reply!r}: no item_start", not any(
+            "item_start" in json.dumps(e) for e in events), str(events) + out[-1000:])
+        check(f"answer {reply!r}: run exits 0", rc == 0, out[-1000:])
+        check(f"answer {reply!r}: the question was asked", "[t] I write the answer" in out,
+              out[-1000:])
+        check(f"answer {reply!r}: a1 keeps its open route",
+              items["a1"].get("human_pending"), str(items["a1"]))
+
+
+def test_launch_on_terminal_without_answer_carries_on_after_the_wait():
+    """Nobody reads the terminal: the launch panel must not hang; one line, then the run
+    goes on as today (a1 stays deferred, so no item_start, and the process exits)."""
+    rc, out, events, _ = _launch_on_tty([], wait="2")
+    check("the run exits 0 instead of hanging", rc == 0, out[-1500:])
+    check("it says nobody answered, in one line", "nobody answered" in out, out[-1500:])
+    check("no item_start", not any("item_start" in json.dumps(e) for e in events), str(events))
+
+
+def test_launch_without_terminal_keeps_ending_with_no_item_start():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1", human_pending="provision the Keycloak role")])
+        binv = fake_claude(tmp, "pass")
+        # stdin explicitly NOT a terminal (DEVNULL), so the test never depends on
+        # the runner's stdin and pins the isatty guard in front of ask_at_launch.
+        env = dict(os.environ)
+        env["PATH"] = f"{binv}:{env['PATH']}"
+        env["FAKE_PLANO"] = str(plan_of(root))
+        env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
+        env.setdefault("CEPA_WORKTREE_HOME", str(Path(root).parent / "worktrees"))
+        calls_f = Path(root).parent / "chamadas.jsonl"
+        env["FAKE_CHAMADAS"] = str(calls_f)
+        p = subprocess.run(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"],
+            capture_output=True, text=True, env=env, timeout=120,
+            stdin=subprocess.DEVNULL)
+        calls = ([json.loads(l) for l in calls_f.read_text().splitlines() if l.strip()]
+                 if calls_f.exists() else [])
+        check("no terminal: nothing to do, as today",
+              "nothing to do" in p.stdout, p.stdout[-1000:])
+        check("no terminal: the launch panel did not appear", not any(
+            m in p.stdout for m in ("[t] I write the answer", "question(s) for you",
+                                    "questions interrupted")), p.stdout[-1000:])
+        check("no terminal: no item_start", not any(
+            "item_start" in json.dumps(e) for e in _launch_events(root)))
+        check("no terminal: the agent was not called", not calls, str(calls))
+
+
+def test_launch_dry_run_on_terminal_does_not_ask():
+    """CS-2: `--dry-run` shows the header and exits; the launch question is not asked."""
+    rc, out, events, items = _launch_on_tty([], wait="2", extra=("--dry-run",))
+    check("dry-run exits 0", rc == 0, out[-1500:])
+    check("dry-run: no question panel", "question(s) for you" not in out
+          and "[t] I write the answer" not in out, out[-1500:])
+    check("dry-run: says nothing was executed", "nothing was executed" in out, out[-1500:])
+    check("dry-run: a1 keeps its open route", items["a1"].get("human_pending"), str(items))
+
+
+def test_launch_asks_only_owner_items_not_those_deferred_for_another_reason():
+    """CS-2: a3 depends on a2 (deferred, as in the CS-1 header test), reason `depends-on-deferred`: not a question
+    and not handed to `decide` (which would list it under "Not on you")."""
+    a3 = item("a3")
+    a3["blocked_by"] = ["a2"]
+    a3["title"] = "item a3 dependent"
+    rc, out, events, items = _launch_on_tty(
+        [("[t] I write the answer", "n"), ("Anything to add", "")], wait="5",
+        items=[item("a1"), item("a2", human_pending="provision the Keycloak role"), a3])
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("the panel says 1 question", "1 question(s) for you" in out, out[-1500:])
+    check("a3 is not asked as a question", "item a3 dependent" not in out, out[-1500:])
+    check("a3 is not handed to decide (no 'Not on you' line)", "Not on you" not in out,
+          out[-1500:])
+    check("only one route was asked", out.count("I write the answer") <= 2, out[-1500:])
+
+
+def test_launch_does_not_ask_about_delivered_items():
+    """CS-2: a `done` item with an open `human_pending` is not part of the launch
+    panel (`delivered_leftovers` is not added): total 1, its route text absent."""
+    done = item("d1", status="done", human_pending="delivered leftover route text")
+    rc, out, events, items = _launch_on_tty(
+        [("[t] I write the answer", "n")], wait="5",
+        items=[done, item("a1", human_pending="provision the Keycloak role")])
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("the panel says 1 question", "1 question(s) for you" in out, out[-1500:])
+    check("the open item was asked", "provision the Keycloak role" in out, out[-1500:])
+    check("the delivered item's route is absent", "delivered leftover route text" not in out,
+          out[-1500:])
+
+
+def _before_first_item(out):
+    """The launch output up to the line of the first item (`<id>   item 1`), ANSI
+    stripped; that line is printed right where the ledger records `item_start`."""
+    plain = ANSI.sub("", out)
+    cut = re.search(r"^\[\d\d:\d\d\] \S+.*? {3}item 1 ", plain, re.M)
+    return plain[:cut.start()] if cut else None
+
+
+def test_launch_cs3_delivered_route_is_not_asked_before_the_first_item():
+    """CS-3 (spec perguntar-antes-do-run), the declared scenario: a `done` item with
+    an open `human_pending` and a `pending` item. The pending item starts, and the
+    delivered item's route is not in the launch output before its `item_start`."""
+    done = item("d1", status="done", human_pending="delivered leftover route text")
+    rc, out, events, _ = _launch_on_tty([], wait="2", items=[done, item("a2")])
+    starts = [e.get("id") for e in events if e.get("evento") == "item_start"]
+    before = _before_first_item(out)
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("the pending item starts", starts[:1] == ["a2"], str(events))
+    check("the first item's line is in the output", before is not None, out[-2000:])
+    check("the delivered route is absent before the first item",
+          "delivered leftover route text" not in (before or ""), (before or "")[-1500:])
+    check("no launch panel for a delivered route alone",
+          "question(s) for you" not in (before or ""), (before or "")[-1500:])
+
+
+def test_launch_cs3_panel_before_the_first_item_leaves_the_delivered_route_out():
+    """CS-3 with a panel to compare: next to the delivered route, an open item with a
+    route. The panel comes before the first `item_start`, asks the open route only,
+    and the delivered one never shows up before the pending item starts."""
+    done = item("d1", status="done", human_pending="delivered leftover route text")
+    rc, out, events, _ = _launch_on_tty(
+        [("[t] I write the answer", "n"), ("Anything to add", "")], wait="5",
+        items=[done, item("a1", human_pending="provision the Keycloak role"), item("a2")])
+    starts = [e.get("id") for e in events if e.get("evento") == "item_start"]
+    before = _before_first_item(out) or ""
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("the pending item starts", starts[:1] == ["a2"], str(events))
+    check("the launch panel is before the first item, with 1 question",
+          "1 question(s) for you" in before, before[-1500:])
+    check("the open route is asked before the first item",
+          "provision the Keycloak role" in before, before[-1500:])
+    check("the delivered route is absent before the first item",
+          "delivered leftover route text" not in before, before[-1500:])
+
+
+def _answered(day, answer="não: Fecho o card?", old=""):
+    """Evidence as `cepa-plan answer --keep` leaves it: the answer prepended."""
+    return (f"Resposta do dono em {day}: {answer}. O dono manteve o item como estava "
+            f"(`pending`, rota humana aberta). Evidência anterior: {old or 'x'}")
+
+
+def _no_routes(day="2026-11-02"):
+    a1 = item("a1", human_pending="first route text")
+    a2 = item("a2", human_pending="second route text")
+    a1["evidence"] = a2["evidence"] = _answered(day)
+    return [a1, a2]
+
+
+def test_last_owner_no_reads_only_the_first_answer():
+    m = load_module()
+    check("não at the start gives the date",
+          m.last_owner_no(_answered("2026-11-02")) == "2026-11-02")
+    check("nao without accent and upper case count",
+          m.last_owner_no("Resposta do dono em 2026-11-03: NAO: x") == "2026-11-03")
+    check("a later sim wins over the older não",
+          m.last_owner_no(_answered("2026-11-05", "sim: ok",
+                                    old=_answered("2026-11-02"))) is None)
+    check("free text is not a não",
+          m.last_owner_no(_answered("2026-11-05", "nada a ver")) is None)
+    check("empty and None", m.last_owner_no("") is None and m.last_owner_no(None) is None)
+
+
+def test_last_owner_no_tolerates_leading_whitespace():
+    m = load_module()
+    check("leading spaces and a newline before the answer still count",
+          m.last_owner_no("  \n" + _answered("2026-11-02")) == "2026-11-02")
+
+
+def test_launch_cs4_summary_line_shows_the_most_recent_of_several_dates():
+    """Two routes answered "não" on different days: the line names the latest (09/11),
+    not the oldest, and with the year turning the ISO comparison still picks the latest."""
+    import contextlib, io
+    m = load_module()
+    for days, expected in ((("2026-11-02", "2026-11-09"), "09/11"),
+                           (("2026-11-09", "2026-11-02"), "09/11"),
+                           (("2026-12-30", "2027-01-02"), "02/01")):
+        deferred = [{"id": f"a{i}", "reason": "human_pending",
+                     "human_pending": f"route {i}", "evidence": _answered(d)}
+                    for i, d in enumerate(days, 1)]
+        m.query_queue = lambda *a, **k: ({"deferred": deferred}, None)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            got = m.ask_at_launch(Path("/nao/existe"), "fila", {"batch": []})
+        out = buf.getvalue()
+        line = [l for l in out.splitlines() if "already answered" in l]
+        check(f"{days}: one line with 2 and {expected}",
+              len(line) == 1 and "2 route(s)" in line[0]
+              and f"last on {expected}" in line[0], out)
+        check(f"{days}: nothing asked, data returned as is",
+              got == {"batch": []} and "question(s) for you" not in out, out)
+
+
+def test_launch_cs4_answered_no_routes_become_one_line_not_questions():
+    """CS-4 declared scenario: two routes whose last answer was "não" on 2026-11-02."""
+    rc, out, events, _ = _launch_on_tty([], wait="2", items=_no_routes() + [item("a3")])
+    before = _before_first_item(out)
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("the first item's line is in the output", before is not None, out[-2000:])
+    line = [l for l in (before or "").splitlines() if "already answered" in l]
+    check("one summary line with the count and the date",
+          len(line) == 1 and "2 route(s)" in line[0] and "02/11" in line[0], before)
+    check("neither route is asked",
+          "[t] I write the answer" not in (before or "")
+          and "question(s) for you" not in (before or "")
+          and "first route text" not in (before or ""), (before or "")[-1500:])
+
+
+def _cs10_check(label, items, answers, count):
+    """CS-10: no item runs after the panel, so the run does not start: no branch, no
+    worktree, no ledger; the output says so and points at `decide`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, items)
+        binv = fake_claude(tmp, "pass")
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"], str(root),
+            inputs=answers, env=env, timeout=90)
+        branches = subprocess.run(["git", "-C", str(root), "branch", "--list", "until/*"],
+                                  capture_output=True, text=True).stdout.strip()
+        wts = subprocess.run(["git", "-C", str(root), "worktree", "list"],
+                             capture_output=True, text=True).stdout.strip().splitlines()
+        check(f"{label}: exits 0", rc == 0, out[-1500:])
+        check(f"{label}: says no item runs and the run does not start",
+              "nothing to do: no item runs, so the run does not start" in out, out[-1500:])
+        check(f"{label}: the message names this run's branch, not a placeholder",
+              re.search(r"no `until/\d{4}-\d{2}-\d{2}-\d{4}` branch", out) is not None
+              and "<run_id>" not in out, out[-1500:])
+        check(f"{label}: no until/* branch", branches == "", branches)
+        check(f"{label}: worktree list has only the clone", len(wts) == 1, str(wts))
+        check(f"{label}: no ledger events", _launch_events(root) == [], out[-800:])
+        if count:
+            check(f"{label}: wait-for-you line with count {count}",
+                  f"{count} item(s) wait for you: cepa-until decide fila" in out,
+                  out[-1500:])
+        else:
+            check(f"{label}: nothing waits for the owner, so no wait-for-you line",
+                  "wait for you" not in out, out[-1500:])
+
+
+def test_launch_cs10_only_answered_no_routes_the_run_does_not_start():
+    _cs10_check("cs10 answered no", _no_routes(), [], 2)
+
+
+def test_launch_cs10_queue_with_only_done_items_has_no_wait_for_you_line():
+    _cs10_check("cs10 all done", [item("d1", status="done")], [], 0)
+
+
+def test_launch_cs10_wait_count_leaves_out_items_deferred_for_another_reason():
+    # b1 depends on a1 (deferred for the owner), so b1 is deferred as
+    # depends-on-deferred: it does not wait for the owner and is not counted.
+    a1 = _no_routes()[0]
+    b1 = item("b1")
+    b1["blocked_by"] = ["a1"]
+    _cs10_check("cs10 cascade", [a1, b1], [], 1)
+
+
+def test_launch_cs10_route_answered_no_in_the_panel_the_run_does_not_start():
+    _cs10_check("cs10 panel n", [item("a1", human_pending="provision the Keycloak role")],
+                [("[t] I write the answer", "n")], 1)
+
+
+def test_launch_cs4_decide_on_the_queue_still_asks_both():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, _no_routes())
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), inputs=[
+            ("[t] I write the answer", "n"), ("Anything to add", ""),
+            ("[t] I write the answer", "n"), ("Anything to add", "")])
+        check("decide exits 0", rc == 0, out[-1500:])
+        check("decide says 2 questions", "2 question(s) for you" in out, out[-1500:])
+        check("both routes are asked",
+              "first route text" in out and "second route text" in out, out[-1500:])
+
+
+def test_launch_cs4_mixed_asks_only_the_unanswered_route():
+    no = item("a1", human_pending="first route text")
+    no["evidence"] = _answered("2026-11-02")
+    rc, out, events, _ = _launch_on_tty(
+        [("[t] I write the answer", "n"), ("Anything to add", "")], wait="5",
+        items=[no, item("a2", human_pending="second route text"), item("a3")])
+    before = _before_first_item(out) or ""
+    line = [l for l in before.splitlines() if "already answered" in l]
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("the line says 1 and 02/11",
+          len(line) == 1 and "1 route(s)" in line[0] and "02/11" in line[0], before)
+    check("the panel asks only the other one",
+          "1 question(s) for you" in before and "second route text" in before
+          and "first route text" not in before, before[-1500:])
+
+
+def test_launch_cs4_latest_answer_wins_over_an_older_no():
+    a1 = item("a1", human_pending="first route text")
+    a1["evidence"] = _answered("2026-11-05", "sim: Fecho o card?",
+                               old=_answered("2026-11-02"))
+    rc, out, events, _ = _launch_on_tty(
+        [("[t] I write the answer", "n"), ("Anything to add", "")], wait="5",
+        items=[a1, item("a2")])
+    before = _before_first_item(out) or ""
+    check("the run exits 0", rc == 0, out[-1500:])
+    check("no summary line", "already answered" not in before, before)
+    check("the route is asked", "1 question(s) for you" in before
+          and "first route text" in before, before[-1500:])
+
+
+def test_launch_asks_every_owner_item_not_only_the_first():
+    """CS-2: the read is uncapped: 2 owner-route items behind 2 runnable ones, 2 questions,
+    "y" to both."""
+    rc, out, events, _ = _launch_on_tty(
+        [("[t] I write the answer", "y"), ("Anything to add", ""),
+         ("[t] I write the answer", "y"), ("Anything to add", "")], wait="2",
+        # p1 and p2 run: a read capped at `--max 1` stops at the cap (p2 is next)
+        # and never reaches a1 and a2, which only the uncapped read sees.
+        items=[item("p1"), item("p2"),
+               item("a1", human_pending="first route text"),
+               item("a2", human_pending="second route text")])
+    check("the panel says 2 questions", "2 question(s) for you" in out, out[-1500:])
+    check("both routes were asked", "first route text" in out and "second route text" in out,
+          out[-1500:])
+    check("both answers were taken (nothing left waiting at a prompt)",
+          "no answer within" not in out and "2/2 · a2" in out, out[-1500:])
+    check("the run exits 0", rc == 0, out[-1500:])
+
+
+def test_launch_interrupt_at_the_question_prints_one_line_and_carries_on():
+    for name, byte in (("Ctrl-C", "\x03"), ("EOF", "\x04")):
+        rc, out, events, items = _launch_on_tty([("[t] I write the answer", byte)])
+        check(f"{name}: exits 0", rc == 0, out[-1500:])
+        check(f"{name}: prints the interrupted line", "questions interrupted" in out,
+              out[-1500:])
+        check(f"{name}: no traceback", "Traceback" not in out, out[-1500:])
+        check(f"{name}: no item_start", not any(
+            "item_start" in json.dumps(e) for e in events), str(events))
+
+
+def test_launch_guard_needs_both_stdin_and_stdout_on_a_terminal():
+    """CS-2: stdin on a pty with stdout on a pipe, and stdin DEVNULL with stdout on a
+    pty: the panel does not appear in either."""
+    markers = ("question(s) for you", "[t] I write the answer", "questions interrupted",
+               "nobody answered")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1", human_pending="provision the Keycloak role")])
+        binv = fake_claude(tmp, "pass")
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        cmd = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+               "--for", "2h", "--no-verify", "--no-analysis"]
+        # a) stdin = pty, stdout = pipe
+        master, slave = pty.openpty()
+        try:
+            p = subprocess.run(cmd, stdin=slave, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, text=True, env=env,
+                               timeout=60, cwd=str(root))
+            out = p.stdout
+        except subprocess.TimeoutExpired as e:
+            out = f"<timeout> {e.stdout}"
+        finally:
+            os.close(master)
+            os.close(slave)
+        check("stdin tty, stdout pipe: no panel", not any(m in out for m in markers)
+              and "nothing to do" in out, out[-1500:])
+        # b) stdin = DEVNULL, stdout = pty
+        master, slave = pty.openpty()
+        chunks = b""
+        proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=slave,
+                                stderr=slave, env=env, cwd=str(root))
+        os.close(slave)
+        end = time.time() + 60
+        try:
+            while time.time() < end:
+                r, _, _ = select.select([master], [], [], 0.5)
+                if r:
+                    try:
+                        d = os.read(master, 4096)
+                    except OSError:
+                        break
+                    if not d:
+                        break
+                    chunks += d
+                elif proc.poll() is not None:
+                    break
+            if proc.poll() is None:
+                proc.kill()
+            proc.wait()
+        finally:
+            os.close(master)
+        out = chunks.decode(errors="replace")
+        check("stdin devnull, stdout tty: no panel", not any(m in out for m in markers)
+              and "nothing to do" in out, out[-1500:])
+
+
+# ── CS-5: the pre-read defers an item with a missing pre-condition ──────────
+
+def _fake_reader(tmp, mode):
+    """A fake reader script (the closed JSON on stdout) and the file where it records
+    the ids it was asked about. `mode` is what it prints for item x1."""
+    script = Path(tmp) / "leitor.py"
+    log = Path(tmp) / "leitor-chamadas.txt"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys\n"
+        "it = json.load(sys.stdin)\n"
+        f"open({str(log)!r}, 'a').write(it['id'] + '\\n')\n"
+        f"mode = {mode!r}\n"
+        "if it['id'] != 'x1' or mode == 'null':\n"
+        "    print(json.dumps({'tipo': None}))\n"
+        "elif mode == 'pre':\n"
+        "    print(json.dumps({'tipo': 'pre-condicao',\n"
+        "        'texto': 'Falta o token de acesso do ambiente de homologação.',\n"
+        "        'pergunta': 'Você já providenciou o token de acesso?'}))\n"
+        "elif mode == 'longq':\n"
+        "    print(json.dumps({'tipo': 'pre-condicao',\n"
+        "        'texto': 'Falta o token de acesso do ambiente de homologação.',\n"
+        "        'pergunta': ' '.join(['Você já providenciou o token de acesso']*10) + '?'}))\n"
+        "elif mode == 'pref':\n"
+        "    print(json.dumps({'tipo': 'preferencia', 'padrao': 'usar o formato curto',\n"
+        "        'texto': 'Há duas formas de mostrar a data.',\n"
+        "        'pergunta': 'Posso usar o formato curto?'}))\n"
+        "elif mode == 'prefnodefault':\n"
+        "    print(json.dumps({'tipo': 'preferencia', 'padrao': '  ',\n"
+        "        'texto': 'Há duas formas de mostrar a data.',\n"
+        "        'pergunta': 'Posso usar o formato curto?'}))\n"
+        "elif mode == 'emptytext':\n"
+        "    print(json.dumps({'tipo': 'pre-condicao', 'texto': '  ',\n"
+        "        'pergunta': 'Você já providenciou o token de acesso?'}))\n"
+        "elif mode == 'garbage':\n"
+        "    print('this is not json')\n"
+        "elif mode == 'fail':\n"
+        "    sys.exit(3)\n")
+    script.chmod(0o755)
+    return script, log
+
+
+def _pre_read_launch(mode, leitor=None, extra=(), x_item=None):
+    """No terminal (stdin DEVNULL): queue with x1 and y1, the fake reader plugged
+    through CEPA_UNTIL_LEITOR (or `leitor` as given). Returns (stdout, events, items,
+    reader_calls)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [x_item or item("x1"), item("y1")])
+        binv = fake_claude(tmp, "pass")
+        script, log = _fake_reader(tmp, mode)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = leitor if leitor is not None else str(script)
+        p = subprocess.run(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis", *extra],
+            capture_output=True, text=True, env=env, timeout=120,
+            stdin=subprocess.DEVNULL)
+        calls = log.read_text().split() if log.exists() else []
+        return p.stdout + p.stderr, _launch_events(root), items_of(root), calls
+
+
+def _started(events):
+    return [e.get("item") or e.get("id") for e in events if e.get("evento") == "item_start"]
+
+
+def test_pre_read_cs5_precondition_defers_the_item_without_spending_the_run_on_it():
+    out, events, items, calls = _pre_read_launch("pre")
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    check("cs5: one leitura_previa event", len(reads) == 1, out[-1500:])
+    rows = {r["id"]: r for r in (reads[0]["itens"] if reads else [])}
+    check("cs5: the event lists every item read", set(rows) == {"x1", "y1"}, str(rows))
+    check("cs5: x1 is the pre-condition, y1 has no finding",
+          rows.get("x1", {}).get("tipo") == "pre-condicao"
+          and rows.get("y1", {}).get("tipo") is None, str(rows))
+    check("cs5: the route was opened", rows.get("x1", {}).get("rota_aberta") is True
+          and not rows["x1"].get("erro"), str(rows))
+    check("cs5: no item_start of x1", "x1" not in _started(events), str(events))
+    check("cs5: y1 still runs", "y1" in _started(events), str(events))
+    check("cs5: queue.yaml has the open route on x1",
+          "token" in str(items["x1"].get("human_pending")), str(items["x1"]))
+    check("cs5: x1 stays pending (not blocked, not done)",
+          items["x1"].get("status") == "pending", str(items["x1"]))
+    check("cs5: the question is recorded", "token" in str(items["x1"].get("owner_question")),
+          str(items["x1"]))
+    check("cs5: leitura_previa comes right after run_start",
+          [e.get("evento") for e in events][:2] == ["run_start", "leitura_previa"],
+          str([e.get("evento") for e in events]))
+
+
+def test_pre_read_cs5_route_keeps_the_previous_evidence_and_summary():
+    old = "Red build: work left on branch side/x1 (commits abc123, def456)."
+    x = dict(item("x1"), evidence=old, owner_summary={"impede": "o build ficou vermelho"})
+    out, events, items, calls = _pre_read_launch("pre", x_item=x)
+    check("cs5 evidence: the route opened", items["x1"].get("human_pending"), str(items["x1"]))
+    check("cs5 evidence: the old text is still inside evidence",
+          old in str(items["x1"].get("evidence")), str(items["x1"]))
+    check("cs5 evidence: the finding comes first",
+          str(items["x1"].get("evidence")).startswith("Pre-read at launch"),
+          str(items["x1"]))
+    check("cs5 evidence: owner_summary carried over",
+          (items["x1"].get("owner_summary") or {}).get("impede") == "o build ficou vermelho",
+          str(items["x1"]))
+    check("cs5 evidence: x1 has no item_start", "x1" not in _started(events), out[-800:])
+
+
+def test_pre_read_cs5_question_refused_by_cepa_plan_still_opens_the_route():
+    out, events, items, calls = _pre_read_launch("longq")
+    check("cs5 long question: the route opened without the question",
+          "token" in str(items["x1"].get("human_pending")), str(items["x1"]))
+    check("cs5 long question: x1 has no item_start", "x1" not in _started(events), out[-800:])
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    check("cs5 long question: event says rota_aberta without error",
+          reads and reads[0]["itens"][0]["rota_aberta"] is True
+          and not reads[0]["itens"][0]["erro"], str(reads))
+
+
+def test_pre_read_cs5_preference_does_not_open_a_route_and_the_item_runs():
+    out, events, items, calls = _pre_read_launch("pref")
+    check("cs5 pref: x1 runs", "x1" in _started(events), out[-800:])
+    check("cs5 pref: no route on x1", not items["x1"].get("human_pending"), str(items["x1"]))
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    row = {r["id"]: r for r in (reads[0]["itens"] if reads else [])}.get("x1", {})
+    check("cs5 pref: the event records the preference, route not opened",
+          row.get("tipo") == "preferencia" and row.get("rota_aberta") is False
+          and row.get("padrao") == "usar o formato curto", str(row))
+
+
+def test_pre_read_cs5_precondition_with_empty_text_is_no_finding():
+    out, events, items, calls = _pre_read_launch("emptytext")
+    check("cs5 empty text: x1 runs", "x1" in _started(events), out[-800:])
+    check("cs5 empty text: no route on x1", not items["x1"].get("human_pending"),
+          str(items["x1"]))
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    check("cs5 empty text: the event has tipo null",
+          reads and all(r["tipo"] is None for r in reads[0]["itens"]), str(reads))
+
+
+def test_pre_read_cs5_cepa_plan_refusing_both_attempts_runs_the_item_with_the_error():
+    # The previous owner_summary is carried over to `finish` and fails its plain-text
+    # validation (file name and commit code), with or without the question.
+    x = dict(item("x1"), owner_summary={"impede": "quebrou em src/Foo.java no commit 3f9a2c1"})
+    out, events, items, calls = _pre_read_launch("pre", x_item=x)
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    row = {r["id"]: r for r in (reads[0]["itens"] if reads else [])}.get("x1", {})
+    check("cs5 refused: the event says rota_aberta false with an erro",
+          row.get("tipo") == "pre-condicao" and row.get("rota_aberta") is False
+          and row.get("erro"), str(row))
+    check("cs5 refused: no route on x1", not items["x1"].get("human_pending"), str(items["x1"]))
+    check("cs5 refused: x1 runs as today", "x1" in _started(events), out[-800:])
+    check("cs5 refused: one line says the route could not be opened",
+          "could not open the route of x1" in out, out[-800:])
+
+
+def test_pre_read_cs5_orphan_reservation_needs_the_supervisor_flag():
+    # `cepa-plan queue` returns an `in_progress` item with an orphan reservation as
+    # executable; without `--supervisor`, `finish` refuses a claim that is not the
+    # caller's (finish_gate), so the route would never open.
+    x = dict(item("x1", status="in_progress"),
+             claimed_by={"session_id": "morta", "pid": 1, "hostname": "outra-maquina",
+                         "cwd": "/nao/existe", "branch": "until/old",
+                         "started_at": "2026-01-01T00:00:00+00:00"})
+    out, events, items, calls = _pre_read_launch("pre", x_item=x)
+    check("cs5 orphan: the route opened", "token" in str(items["x1"].get("human_pending")),
+          str(items["x1"]))
+    check("cs5 orphan: x1 has no item_start", "x1" not in _started(events), out[-800:])
+
+
+def test_pre_read_cs5_route_opened_by_the_pre_read_shows_in_the_launch_panel():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("x1"), item("y1")])
+        binv = fake_claude(tmp, "pass")
+        script, log = _fake_reader(tmp, "pre")
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(script)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"], str(root),
+            inputs=[], env=env, timeout=90)
+    panel = out.find("Falta o token de acesso")
+    first = out.find("item_start")
+    check("cs5 panel: the pre-read route text is in the launch panel",
+          panel >= 0 and "question(s) for you" in out, out[-1500:])
+    check("cs5 panel: it appears before the first item runs",
+          panel >= 0 and (first < 0 or panel < first)
+          and out.find("1st item") < panel, out[-1500:])
+
+
+def test_pre_read_cs5_nothing_left_after_the_pre_read_means_no_run():
+    # The queue is read again after a route is opened: with only x1 and its route
+    # open, the batch is empty, so the run does not start (no run_start, no ledger).
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("x1")])
+        binv = fake_claude(tmp, "pass")
+        script, log = _fake_reader(tmp, "pre")
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(script)
+        p = subprocess.run(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"],
+            capture_output=True, text=True, env=env, timeout=120,
+            stdin=subprocess.DEVNULL)
+        events = _launch_events(root)
+        check("cs5 empty batch: says nothing to do", "nothing to do" in p.stdout,
+              p.stdout[-800:])
+        check("cs5 empty batch: no run was started", not events, str(events))
+        check("cs5 empty batch: the route is open", items_of(root)["x1"].get("human_pending"),
+              str(items_of(root)["x1"]))
+
+
+def test_pre_read_cs5_no_finding_garbage_or_failure_runs_the_item_as_today():
+    for mode in ("null", "garbage", "fail"):
+        out, events, items, calls = _pre_read_launch(mode)
+        check(f"cs5 {mode}: x1 runs", "x1" in _started(events), out[-1500:])
+        check(f"cs5 {mode}: no route on x1", not items["x1"].get("human_pending"),
+              str(items["x1"]))
+        reads = [e for e in events if e.get("evento") == "leitura_previa"]
+        check(f"cs5 {mode}: the event says no finding",
+              len(reads) == 1 and all(r["tipo"] is None for r in reads[0]["itens"]),
+              str(reads))
+
+
+def test_pre_read_cs5_dry_run_does_not_read():
+    out, events, items, calls = _pre_read_launch("pre", extra=("--dry-run",))
+    check("cs5 dry-run: the reader was not called", not calls, str(calls))
+    check("cs5 dry-run: x1 keeps no route", not items["x1"].get("human_pending"),
+          str(items["x1"]))
+
+
+def test_pre_read_cs5_off_disables_it():
+    out, events, items, calls = _pre_read_launch("pre", leitor="off")
+    check("cs5 off: no leitura_previa event", not any(
+        e.get("evento") == "leitura_previa" for e in events), out[-1500:])
+    check("cs5 off: x1 runs", "x1" in _started(events), out[-1500:])
+
+
+def test_pre_read_cs5_ceiling_kills_a_slow_reader_and_the_item_runs():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("x1")])
+        binv = fake_claude(tmp, "pass")
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = f"{sys.executable} -c 'import time; time.sleep(60)'"
+        env["CEPA_UNTIL_TETO_LEITURA"] = "1"
+        t0 = time.time()
+        p = subprocess.run(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"],
+            capture_output=True, text=True, env=env, timeout=120,
+            stdin=subprocess.DEVNULL)
+        events = _launch_events(root)
+        check("cs5 ceiling: the launch did not wait for the slow reader",
+              time.time() - t0 < 40, f"{time.time() - t0:.0f}s")
+        check("cs5 ceiling: x1 runs as today", "x1" in _started(events), p.stdout[-1500:])
+
+
+# ── CS-7: the pre-read stops at the ceiling and the unread item runs as today ──
+
+def _cs7_launch(items, reader, ceiling="1", body="pass"):
+    """Real launch with `reader` as CEPA_UNTIL_LEITOR; returns (out, events)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, items)
+        binv = fake_claude(tmp, body)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = reader(tmp) if callable(reader) else reader
+        env["CEPA_UNTIL_TETO_LEITURA"] = ceiling
+        p = subprocess.run(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"],
+            capture_output=True, text=True, env=env, timeout=120,
+            stdin=subprocess.DEVNULL)
+        return p.stdout + p.stderr, _launch_events(root)
+
+
+def _cs7_reads(events):
+    return [e for e in events if e.get("evento") == "leitura_previa"]
+
+
+def test_pre_read_cs7_ceiling_marks_the_item_as_not_read_and_it_runs():
+    out, events = _cs7_launch(
+        [item("x1")], f"{sys.executable} -c 'import time; time.sleep(5)'")
+    reads = _cs7_reads(events)
+    ev = reads[0] if reads else {}
+    row = next((r for r in ev.get("itens", []) if r.get("id") == "x1"), {})
+    check("cs7 ceiling: one leitura_previa event", len(reads) == 1, str(reads))
+    check("cs7 ceiling: the launch did not wait the reader's 5 s",
+          ev.get("segundos", 99) < 5, str(ev.get("segundos")))
+    check("cs7 ceiling: x1 is marked not read (teto)",
+          row.get("lido") is False and row.get("nao_lido") == "teto", str(row))
+    check("cs7 ceiling: listed in nao_lidos, lidos is 0",
+          ev.get("nao_lidos") == ["x1"] and ev.get("lidos") == 0, str(ev))
+    check("cs7 ceiling: x1 gets item_start", "x1" in _started(events), out[-1500:])
+    check("cs7 ceiling: the screen says it was not read",
+          "not read within the 1s ceiling: x1" in out, out[-1500:])
+
+
+def test_pre_read_cs7_mixed_queue_only_the_slow_item_is_unread():
+    def reader(tmp):
+        script = Path(tmp) / "leitor_misto.py"
+        script.write_text(
+            "import sys, time\n"
+            "if 'y1' in sys.stdin.read() + ' '.join(sys.argv):\n"
+            "    time.sleep(5)\n"
+            "print('null')\n")
+        return f"{sys.executable} {script}"
+    out, events = _cs7_launch([item("x1"), item("y1")], reader)
+    ev = (_cs7_reads(events) or [{}])[0]
+    rows = {r.get("id"): r for r in ev.get("itens", [])}
+    check("cs7 mixed: x1 read", rows.get("x1", {}).get("lido") is True
+          and rows["x1"].get("nao_lido") is None, str(rows))
+    check("cs7 mixed: y1 not read (teto)", rows.get("y1", {}).get("lido") is False
+          and rows["y1"].get("nao_lido") == "teto", str(rows))
+    check("cs7 mixed: lidos 1, nao_lidos [y1]",
+          ev.get("lidos") == 1 and ev.get("nao_lidos") == ["y1"], str(ev))
+    check("cs7 mixed: both run", {"x1", "y1"} <= set(_started(events)), out[-1500:])
+
+
+def test_pre_read_cs7_failing_reader_is_falha_not_teto():
+    out, events = _cs7_launch(
+        [item("x1")], f"{sys.executable} -c 'import sys; sys.exit(3)'")
+    ev = (_cs7_reads(events) or [{}])[0]
+    row = next((r for r in ev.get("itens", []) if r.get("id") == "x1"), {})
+    check("cs7 falha: lido False, nao_lido falha",
+          row.get("lido") is False and row.get("nao_lido") == "falha", str(row))
+    check("cs7 falha: not in nao_lidos, lidos 0",
+          ev.get("nao_lidos") == [] and ev.get("lidos") == 0, str(ev))
+    check("cs7 falha: x1 runs", "x1" in _started(events), out[-1500:])
+
+
+def test_pre_read_cs7_items_waiting_for_a_free_reader_past_the_ceiling_are_teto():
+    ids = [f"w{n}" for n in range(1, 10)]  # 9 items > 8 reader workers
+    out, events = _cs7_launch(
+        [item(i) for i in ids], f"{sys.executable} -c 'import time; time.sleep(5)'",
+        body="marca(primeiro_pendente(), status='done')")  # each item really finishes
+    ev = (_cs7_reads(events) or [{}])[0]
+    rows = {r.get("id"): r for r in ev.get("itens", [])}
+    check("cs7 waiting: all 9 rows are teto and not read",
+          len(rows) == 9 and all(r.get("lido") is False and r.get("nao_lido") == "teto"
+                                 for r in rows.values()), str(rows))
+    check("cs7 waiting: all 9 in nao_lidos, lidos 0",
+          sorted(ev.get("nao_lidos", [])) == sorted(ids) and ev.get("lidos") == 0, str(ev))
+    check("cs7 waiting: the 9th row, never launched, is teto",
+          rows.get("w9", {}).get("nao_lido") == "teto", str(rows.get("w9")))
+    check("cs7 waiting: the 9th item gets item_start", "w9" in _started(events),
+          out[-1500:])
+
+
+
+# ── CS-6: a preference runs with the agent's default, or with the owner's answer ──
+
+def _requests(tmp):
+    """The `-p` request of each fake `claude` call, in order (one per item attempt)."""
+    f = Path(tmp) / "chamadas.jsonl"
+    calls = [json.loads(l) for l in f.read_text().splitlines() if l.strip()] \
+        if f.exists() else []
+    return [c[c.index("-p") + 1] if "-p" in c else "" for c in calls]
+
+
+def _pref_launch(mode="pref", tty_inputs=None, wait="5"):
+    """Queue x1, y1 with the fake reader. `tty_inputs` None = no terminal; a list =
+    on a pty with those answers. Returns (out, events, requests_by_item)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("x1"), item("y1")])
+        binv = fake_claude(tmp, "pass")
+        script, _ = _fake_reader(tmp, mode)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(script)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+        cmd = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+               "--for", "2h", "--no-verify", "--no-analysis"]
+        if tty_inputs is None:
+            p = subprocess.run(cmd, capture_output=True, text=True, env=env,
+                               timeout=120, stdin=subprocess.DEVNULL)
+            out = p.stdout + p.stderr
+        else:
+            _, out = on_tty(cmd, str(root), inputs=tty_inputs, env=env, timeout=90)
+        events = _launch_events(root)
+        started = _started(events)
+        reqs = _requests(tmp)
+        return ANSI.sub("", out), events, dict(zip(started, reqs))
+
+
+def test_pre_read_cs6_without_answer_the_prompt_carries_the_default_and_the_summary_lists_it():
+    out, events, reqs = _pref_launch()
+    check("cs6 default: x1 and y1 ran", set(reqs) == {"x1", "y1"}, str(reqs) + out[-800:])
+    check("cs6 default: x1's prompt carries the default",
+          "usar o formato curto" in reqs.get("x1", ""), str(reqs))
+    check("cs6 default: the prompt says it was the agent's default",
+          "the owner did not answer" in reqs.get("x1", ""), str(reqs))
+    check("cs6 default: the prompt still starts with the drain-plan request",
+          reqs.get("x1", "").startswith("/common:drain-plan fila --max 1"), str(reqs))
+    check("cs6 default: y1's prompt has no note", "pre-read" not in reqs.get("y1", "x"),
+          str(reqs))
+    tail = out[out.find("ended at"):]
+    check("cs6 default: the end summary lists the choice",
+          "Choices the pre-read found (1)" in tail
+          and "x1: usar o formato curto (the agent's default" in tail, tail[-1500:])
+    check("cs6 default: the summary line carries what the choice was about",
+          "Há duas formas de mostrar a data." in tail, tail[-1500:])
+    start = [e for e in events if e.get("evento") == "item_start" and e.get("id") == "x1"]
+    check("cs6 default: item_start of x1 records the choice and its source",
+          start and start[0].get("preferencia") == {"escolha": "usar o formato curto",
+                                                    "fonte": "padrao"}, str(start))
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    row = {r["id"]: r for r in (reads[0]["itens"] if reads else [])}.get("x1", {})
+    check("cs6 default: leitura_previa records escolha and fonte",
+          row.get("escolha") == "usar o formato curto" and row.get("fonte") == "padrao",
+          str(row))
+
+
+def test_pre_read_cs6_answer_typed_in_the_launch_panel_goes_into_the_prompt():
+    out, events, reqs = _pref_launch(
+        tty_inputs=[("Your choice, in one line", "mostrar a data por extenso")])
+    check("cs6 answer: the panel showed the question and the default",
+          "Posso usar o formato curto?" in out
+          and "the agent goes with: usar o formato curto" in out, out[-1500:])
+    check("cs6 answer: x1's prompt carries the owner's answer",
+          "mostrar a data por extenso" in reqs.get("x1", ""), str(reqs) + out[-800:])
+    check("cs6 answer: and not the default as the choice",
+          "Go with: usar o formato curto" not in reqs.get("x1", ""), str(reqs))
+    check("cs6 answer: the prompt says it was the owner's answer",
+          "the owner's answer at the launch" in reqs.get("x1", ""), str(reqs))
+    tail = out[out.find("ended at"):]
+    check("cs6 answer: the summary says it was the owner's answer",
+          "x1: mostrar a data por extenso (your answer at the launch)" in tail,
+          tail[-1500:])
+    start = [e for e in events if e.get("evento") == "item_start" and e.get("id") == "x1"]
+    check("cs6 answer: item_start records fonte dono",
+          start and (start[0].get("preferencia") or {}).get("fonte") == "dono", str(start))
+
+
+def test_pre_read_cs6_enter_or_silence_in_the_panel_keeps_the_default():
+    for label, inputs in (("enter", [("Your choice, in one line", "")]),
+                          ("silence", [])):
+        out, events, reqs = _pref_launch(tty_inputs=inputs, wait="2")
+        check(f"cs6 {label}: x1 ran with the default",
+              "Go with: usar o formato curto" in reqs.get("x1", ""), str(reqs) + out[-800:])
+        check(f"cs6 {label}: y1 ran too", "y1" in reqs, str(reqs))
+        if label == "silence":
+            check("cs6 silence: one line says nobody answered",
+                  "the remaining choice(s) run with the agent's default" in out,
+                  out[-1500:])
+
+
+def test_pre_read_cs6_preference_without_default_is_no_finding():
+    out, events, reqs = _pref_launch(mode="prefnodefault")
+    check("cs6 no default: x1 ran", "x1" in reqs, str(reqs) + out[-800:])
+    check("cs6 no default: no note in x1's prompt", "pre-read" not in reqs.get("x1", "x"),
+          str(reqs))
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    check("cs6 no default: the event says no finding",
+          reads and all(r["tipo"] is None for r in reads[0]["itens"]), str(reads))
+    check("cs6 no default: the summary has no choices block",
+          "Choices the pre-read found" not in out, out[-800:])
+
+
+def test_pre_read_cs6_note_and_command_units():
+    mod = load_module()
+    check("cs6 unit: no preference, no note", mod.preference_note("x1", None) == "")
+    plain = mod.build_command("fila", "until/b", False)
+    check("cs6 unit: without a note the request carries no pre-read paragraph",
+          plain[2].startswith("/common:drain-plan fila --max 1 --na-branch until/b")
+          and "Go with:" not in plain[2], str(plain))
+    pref = {"texto": "T.", "padrao": "P", "escolha": "R", "fonte": "dono"}
+    with_note = mod.build_command("fila", "until/b", False, note=mod.preference_note("x1", pref))
+    check("cs6 unit: the note follows the request in its own paragraph",
+          with_note[2].startswith("/common:drain-plan fila --max 1 --na-branch until/b\n\n")
+          and "Go with: R" in with_note[2] and "item you reserve is x1" in with_note[2],
+          str(with_note))
+    sneaky = dict(pref, escolha="--offline --max 9 usar a-b")
+    note = mod.preference_note("x1", sneaky)
+    check("cs6 unit: no flag-looking word survives in the note",
+          not re.search(r"(?<!\S)--?\w", note) and "usar a-b" in note, note)
+    parsed = mod.parse_finding('{"tipo": "preferencia", "texto": "t", "padrao": " a  b "}')
+    check("cs6 unit: the default is normalised", parsed and parsed["padrao"] == "a b",
+          str(parsed))
+    check("cs6 unit: the reader prompt asks for a preference with a default",
+          "preferencia" in mod.READER_PROMPT and '"padrao"' in mod.READER_PROMPT)
+
+
+# ── CS-8: the queue's questions come before the pre-read ends; its own go at the end ──
+
+def _slow_reader(tmp, mode="pre", delay=2):
+    """The CS-5 fake reader behind a `delay`-second sleep; it also writes, when it
+    returns, a line to `leitor-fim.txt`, so the test knows the reading was not over
+    yet when the queue's question was on the screen."""
+    script, log = _fake_reader(tmp, mode)
+    done = Path(tmp) / "leitor-fim.txt"
+    slow = Path(tmp) / "leitor-lento.py"
+    slow.write_text(
+        f"#!{sys.executable}\n"
+        "import subprocess, sys, time\n"
+        f"time.sleep({delay})\n"
+        f"p = subprocess.run([{str(script)!r}], input=sys.stdin.read(), text=True,\n"
+        "                   capture_output=True)\n"
+        "sys.stdout.write(p.stdout)\n"
+        f"open({str(done)!r}, 'a').write('fim\\n')\n")
+    slow.chmod(0o755)
+    return slow, done
+
+
+def _cs8_launch(items, mode="pre", inputs=None, wait="5", delay=2):
+    """Real launch on a pty with the slow fake reader. Returns (out, events, items,
+    reader_done_when_the_first_question_was_answered)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, items)
+        binv = fake_claude(tmp, "pass")
+        reader, done = _slow_reader(tmp, mode, delay)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(reader)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+        seen = {}
+
+        def first_answer():
+            # Read at the moment the first question is answered: the reader must
+            # still be sleeping (the queue's panel did not wait for it).
+            seen["reader_done"] = done.exists()
+            return b""
+        replies = inputs if inputs is not None else [
+            ("[t] I write the answer", first_answer),
+            ("[t] I write the answer", b"")]
+        rc, out = on_tty_calls(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"], str(root),
+            inputs=replies, env=env, timeout=90)
+        return ANSI.sub("", out), _launch_events(root), items_of(root), seen
+
+
+def on_tty_calls(cmd, cwd, inputs=(), env=None, timeout=120):
+    """`on_tty` where a reply may be a function, called when its trigger shows."""
+    wrapped = []
+    for trigger, reply in inputs:
+        wrapped.append((trigger, reply))
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.chdir(cwd)
+        os.execve(cmd[0], cmd, env or dict(os.environ))
+    out_text, queue, end = "", list(wrapped), time.time() + timeout
+    while time.time() < end:
+        r, _, _ = select.select([fd], [], [], 0.5)
+        if r:
+            try:
+                datum = os.read(fd, 4096)
+            except OSError:
+                break
+            if not datum:
+                break
+            out_text += datum.decode(errors="replace")
+        while queue and queue[0][0] in out_text:
+            trigger, reply = queue.pop(0)
+            out_text = out_text.replace(trigger, f"<{trigger}>", 1)
+            if callable(reply):
+                reply = reply()
+            if isinstance(reply, str):
+                reply = reply.encode()
+            os.write(fd, reply + b"\n")
+    if time.time() >= end:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+        out_text += f"\n<on_tty: no answer within {timeout}s>"
+    _, st = os.waitpid(pid, 0)
+    return os.waitstatus_to_exitcode(st), out_text
+
+
+def test_launch_cs8_queue_route_comes_before_the_pre_read_question_and_the_total_sums_both():
+    """CS-8 declared scenario: a reader that takes 2 seconds and a queue with one open
+    route. The route's question is on the screen before the reading ends, the
+    pre-read's question comes after it in the same list, and the total sums both."""
+    out, events, items, seen = _cs8_launch(
+        [item("r1", human_pending="provision the Keycloak role"), item("x1"),
+         item("y1")])
+    route = out.find("provision the Keycloak role")
+    found = out.find("Falta o token de acesso")
+    check("cs8: the queue's route is asked", route >= 0, out[-2500:])
+    check("cs8: the pre-read's question is asked", found >= 0, out[-2500:])
+    check("cs8: the route comes before the pre-read's question",
+          0 <= route < found, out[-2500:])
+    check("cs8: the route was on the screen before the reading ended",
+          seen.get("reader_done") is False, str(seen))
+    check("cs8: the panel says the pre-read is still reading",
+          "the pre-read is still reading" in out[:route if route >= 0 else None],
+          out[:2500])
+    check("cs8: the pre-read's question is numbered after the queue's (2/2)",
+          "[2/2] x1" in out or "2/2 · x1" in out, out[-2500:])
+    check("cs8: the panel total sums both (2 question(s) in total)",
+          "2 question(s) in total" in out, out[-2500:])
+    check("cs8: the list opens once (one header before 2/2 · x1)",
+          out[:out.find("2/2 · x1")].count("question(s) for you") == 1
+          and out[:out.find("── closing")].count("question(s) for you") == 1,
+          out[-2500:])
+    check("cs8: the list closes once",
+          out.count("Answered now:") + out.count("answered now ") == 1, out[-2500:])
+    check("cs8: y1 still runs", "y1" in _started(events), out[-1500:])
+    check("cs8: x1 is deferred by its open route",
+          "x1" not in _started(events) and "token" in str(items["x1"].get("human_pending")),
+          str(items["x1"]))
+
+
+def test_launch_cs8_without_queue_routes_the_pre_read_opens_the_panel_itself():
+    """No route in the queue: the pre-read's question opens a normal panel (1/1)."""
+    out, events, items, _ = _cs8_launch(
+        [item("x1"), item("y1")], inputs=[("[t] I write the answer", "")])
+    check("cs8 alone: one question for you", "1 question(s) for you" in out, out[-2500:])
+    check("cs8 alone: not announced as still reading",
+          "the pre-read is still reading" not in out, out[-2500:])
+    check("cs8 alone: numbered 1/1", "[1/1] x1" in out or "1/1 · x1" in out, out[-2500:])
+
+
+def test_launch_cs8_preference_counts_in_the_total_after_the_queue_route():
+    """A preference found by the pre-read comes after the queue's route and counts in
+    the total; Enter keeps the default and the item runs."""
+    out, events, items, _ = _cs8_launch(
+        [item("r1", human_pending="provision the Keycloak role"), item("x1")],
+        mode="pref", inputs=[("[t] I write the answer", ""),
+                             ("Your choice, in one line", "")])
+    route = out.find("provision the Keycloak role")
+    pref = out.find("Posso usar o formato curto?")
+    check("cs8 pref: the route comes before the preference", 0 <= route < pref,
+          out[-2500:])
+    check("cs8 pref: the total sums both", "2 question(s) in total" in out, out[-2500:])
+    check("cs8 pref: the preference is numbered 2/2", "2/2 · x1" in out, out[-2500:])
+    check("cs8 pref: x1 runs", "x1" in _started(events), out[-1500:])
+
+
+def test_launch_cs8_route_just_opened_is_asked_even_over_an_old_no():
+    """A route the pre-read opened on an item whose evidence starts with an old "não"
+    is still asked: it is counted in the total, so it must be shown."""
+    import contextlib, io
+    m = load_module()
+    deferred = [{"id": "x1", "reason": "human_pending", "human_pending": "token",
+                 "evidence": _answered("2026-11-02")}]
+    m.query_queue = lambda *a, **k: ({"deferred": deferred}, None)
+    asked = []
+    m.decide = lambda *a, **k: (asked.append([d["id"] for d in a[4]]), ([], []))[1]
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        m.ask_at_launch(Path("/nao/existe"), "fila", {"batch": []}, only={"x1"},
+                        tally={"shown": 1, "of": 2})
+    check("cs8 old no: the just-opened route is asked", asked == [["x1"]], str(asked))
+    check("cs8 old no: no CS-4 summary line in the pre-read part",
+          "already answered" not in buf.getvalue(), buf.getvalue())
+
+
+def test_launch_cs8_empty_queue_route_and_preference_from_the_pre_read_share_one_count():
+    """No route in the queue; the pre-read opens a route on x1 and finds a preference
+    on y1: one header with 2, numbered 1/2 (the route) and 2/2 (the preference)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("x1"), item("y1")])
+        binv = fake_claude(tmp, "pass")
+        reader = Path(tmp) / "leitor-misto.py"
+        reader.write_text(
+            f"#!{sys.executable}\n"
+            "import json, sys\n"
+            "it = json.load(sys.stdin)\n"
+            "if it['id'] == 'x1':\n"
+            "    print(json.dumps({'tipo': 'pre-condicao',\n"
+            "        'texto': 'Falta o token de acesso do ambiente de homologação.',\n"
+            "        'pergunta': 'Você já providenciou o token de acesso?'}))\n"
+            "else:\n"
+            "    print(json.dumps({'tipo': 'preferencia', 'padrao': 'usar o formato curto',\n"
+            "        'texto': 'Há duas formas de mostrar a data.',\n"
+            "        'pergunta': 'Posso usar o formato curto?'}))\n")
+        reader.chmod(0o755)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(reader)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "5"
+        _, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"], str(root),
+            inputs=[("[t] I write the answer", ""), ("Your choice, in one line", "")],
+            env=env, timeout=90)
+        out = ANSI.sub("", out)
+    launch = out[:out.find("── closing")]
+    check("cs8 mixed: one header with the sum", "2 question(s) for you" in launch
+          and launch.count("question(s) for you") == 1, launch[-2500:])
+    check("cs8 mixed: the route is 1/2", "1/2 · x1" in out, out[-2500:])
+    check("cs8 mixed: the preference is 2/2", "2/2 · y1" in out, out[-2500:])
+
+
+
+# ── CS-9: an option skips the pre-read and the panel; no terminal reads without one ──
+
+def _mixed_reader(tmp):
+    """Fake reader: x1 has a missing pre-condition, y1 a preference, the rest nothing.
+    Records each id it was asked about."""
+    script = Path(tmp) / "leitor-misto.py"
+    log = Path(tmp) / "leitor-chamadas.txt"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys\n"
+        "it = json.load(sys.stdin)\n"
+        f"open({str(log)!r}, 'a').write(it['id'] + '\\n')\n"
+        "if it['id'] == 'x1':\n"
+        "    print(json.dumps({'tipo': 'pre-condicao',\n"
+        "        'texto': 'Falta o token de acesso do ambiente de homologação.',\n"
+        "        'pergunta': 'Você já providenciou o token de acesso?'}))\n"
+        "elif it['id'] == 'y1':\n"
+        "    print(json.dumps({'tipo': 'preferencia', 'padrao': 'usar o formato curto',\n"
+        "        'texto': 'Há duas formas de mostrar a data.',\n"
+        "        'pergunta': 'Posso usar o formato curto?'}))\n"
+        "else:\n"
+        "    print(json.dumps({'tipo': None}))\n")
+    script.chmod(0o755)
+    return script, log
+
+
+def _cs9_items():
+    return [item("r1", human_pending="provision the Keycloak role"), item("x1"),
+            item("y1")]
+
+
+def test_launch_cs9_option_on_terminal_skips_the_pre_read_and_the_panel():
+    """CS-9 declared scenario, first half: with the option, the ledger has no
+    `leitura_previa`, nothing is asked at the launch, and the CS-1 line is there."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, _cs9_items())
+        binv = fake_claude(tmp, "pass")
+        reader, log = _mixed_reader(tmp)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(reader)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis", "--no-pre-read"],
+            str(root), inputs=[], env=env, timeout=90)
+        events = _launch_events(root)
+        calls = log.read_text().split() if log.exists() else []
+        launch = _before_first_item(out)
+    plain = ANSI.sub("", out)
+    check("cs9 option: the option is accepted (exit 0)", rc == 0, plain[-1500:])
+    check("cs9 option: no leitura_previa in the ledger",
+          not any(e.get("evento") == "leitura_previa" for e in events),
+          str([e.get("evento") for e in events]))
+    check("cs9 option: the reader was not called", not calls, str(calls))
+    check("cs9 option: the launch reaches the first item", launch is not None,
+          plain[-2500:])
+    check("cs9 option: nothing is asked before the first item",
+          launch is not None and not any(m in launch for m in (
+              "[t] I write the answer", "question(s) for you", "Your choice",
+              "pre-read")), (launch or plain)[-2500:])
+    check("cs9 option: the CS-1 forecast line is there",
+          "start: 2 run, 1 wait for the owner" in plain, plain[:2500])
+    check("cs9 option: x1 and y1 run as today", {"x1", "y1"} <= set(_started(events)),
+          str(_started(events)))
+
+
+def test_launch_cs9_option_has_a_portuguese_alias_and_is_in_the_help():
+    p = subprocess.run([sys.executable, str(CEPA_UNTIL), "--help"],
+                       capture_output=True, text=True, timeout=60)
+    check("cs9 help: --no-pre-read is documented", "--no-pre-read" in p.stdout,
+          p.stdout[-2000:])
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, _cs9_items())
+        binv = fake_claude(tmp, "pass")
+        reader, log = _mixed_reader(tmp)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(reader)
+        q = subprocess.run(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis", "--sem-leitura"],
+            capture_output=True, text=True, env=env, timeout=120,
+            stdin=subprocess.DEVNULL)
+        events = _launch_events(root)
+        check("cs9 alias: --sem-leitura accepted", q.returncode == 0, q.stderr[-800:])
+        check("cs9 alias: no terminal + option: no leitura_previa, reader not called",
+              not any(e.get("evento") == "leitura_previa" for e in events)
+              and not log.exists(), str(events))
+        check("cs9 alias: x1 runs (nothing deferred it)", "x1" in _started(events),
+              str(_started(events)))
+
+
+def test_launch_cs9_without_terminal_reads_and_lists_the_questions_as_text():
+    """CS-9 declared scenario, second half: no terminal and no option. stdin is a pipe
+    whose write end stays open the whole run, so any read of input would hang until
+    the timeout instead of getting EOF."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, _cs9_items())
+        binv = fake_claude(tmp, "pass")
+        reader, log = _mixed_reader(tmp)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(reader)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "600"
+        rfd, wfd = os.pipe()
+        try:
+            proc = subprocess.Popen(
+                [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+                 "--for", "2h", "--no-verify", "--no-analysis"],
+                stdin=rfd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, env=env)
+            os.close(rfd)
+            try:
+                out, _ = proc.communicate(timeout=120)
+                hung = False
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                out, _ = proc.communicate()
+                hung = True
+        finally:
+            os.close(wfd)
+        events = _launch_events(root)
+        items = items_of(root)
+    check("cs9 no terminal: the run ends without waiting for input",
+          not hung and proc.returncode == 0, out[-1500:])
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    check("cs9 no terminal: leitura_previa is in the ledger", len(reads) == 1,
+          str([e.get("evento") for e in events]))
+    check("cs9 no terminal: the pre-read's questions are listed as text",
+          "the pre-read's questions (2)" in out
+          and "Você já providenciou o token de acesso?" in out
+          and "Posso usar o formato curto?" in out, out[-2500:])
+    check("cs9 no terminal: the preference line names the default",
+          "runs with the agent's default: usar o formato curto" in out, out[-2500:])
+    check("cs9 no terminal: the listing says where to answer",
+          "cepa-until decide fila" in out, out[-2500:])
+    check("cs9 no terminal: no panel prompt",
+          not any(m in out for m in ("[t] I write the answer", "question(s) for you",
+                                     "Your choice", "nobody answered in")), out[-2500:])
+    check("cs9 no terminal: x1 deferred by the route, y1 runs",
+          "x1" not in _started(events) and "y1" in _started(events)
+          and "token" in str(items["x1"].get("human_pending")), str(_started(events)))
+
+
+def test_pre_read_as_text_unit():
+    m = load_module()
+    lines = []
+    m.pre_read_as_text("fila", [{"id": "a", "tipo": None, "rota_aberta": False}], {},
+                       output=lines.append)
+    check("cs9 unit: no finding prints nothing", lines == [], str(lines))
+    lines = []
+    m.pre_read_as_text("fila", [{"id": "a", "tipo": "pre-condicao", "rota_aberta": False,
+                                 "texto": "t", "pergunta": "q?"}], {},
+                       output=lines.append)
+    check("cs9 unit: a route that failed to open is not listed as deferred",
+          lines == [], str(lines))
+    lines = []
+    m.pre_read_as_text("fila", [], {"b": {"texto": "t", "pergunta": None, "padrao": "P"}},
+                       output=lines.append)
+    joined = "\n".join(lines)
+    check("cs9 unit: a preference alone is listed, without the decide line",
+          "b (runs with the agent's default: P): t" in joined
+          and "cepa-until decide" not in joined, joined)
 
 
 def main():

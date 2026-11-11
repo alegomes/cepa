@@ -1,0 +1,16 @@
+key: perguntar-antes-do-run-CS-9
+status: complete
+criteria:
+  - id: CS-9
+    text: "uma opção na linha de comando pula a leitura e o painel, e sem terminal a leitura roda sem painel"
+    altitude: cli
+    surface: "cepa-until <queue> (launch) with --no-pre-read on a pty, and with no terminal (stdin a pipe held open) without the option; observed on the output and in the run's <run>.jsonl"
+    test: "tests/test_cepa_until_decide.py::test_launch_cs9_option_on_terminal_skips_the_pre_read_and_the_panel, test_launch_cs9_without_terminal_reads_and_lists_the_questions_as_text (+ test_launch_cs9_option_has_a_portuguese_alias_and_is_in_the_help, test_pre_read_as_text_unit)"
+    layer: "real subprocess of common/bin/cepa-until, fake claude, fake reader. Option on pty: exit 0, no leitura_previa, reader never called, nothing asked, CS-1 line present, x1 and y1 run. No terminal: stdin pipe whose write end stays open (a read would hang), exit 0, leitura_previa in ledger, questions listed as text with default and 'cepa-until decide' hint, no panel prompt, x1 deferred by route, y1 runs. Alias --sem-leitura and --help covered. Unit test is supporting."
+    evidence: verified
+    run: "cd /Users/alegomes/cepa-worktrees/cepa-until-2026-11-10-1650 && python3 -c (import test_cepa_until_decide; call the 4 functions with 'cs9' in name or test_pre_read_as_text_unit) -> 24 'ok' checks (N>0), 'FAIL []'; foreground; run-all.sh not run"
+    status: complete
+    extra: "Product change in 7d19591 (--no-pre-read/--sem-leitura, pre_read_as_text). Red-at-base not re-run; evident from the diff since the base had no such option (argparse refused it)."
+    notes:
+      - "Outermost layer is the real CLI; exercised, not mocked."
+gap: []

@@ -1,0 +1,60 @@
+schema_version: 2
+card: perguntar-antes-do-run-CS-6
+verdict: proven                 # proven | unproven | needs-human
+reviewed_at: 2026-11-11T00:20:00-03:00
+base_commit: 7efdca2
+head_commit: 53bdfe7
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: READER_PROMPT, parse_finding, ask_preferences (new), preference_note (new), build_command/run_item `note`, item_start `preferencia`, leitura_previa rows escolha/fonte, end-of-run block 'Choices the pre-read found'"
+      module: common
+      external_observable: true     # the prompt handed to `claude`, the run .jsonl events and the end-of-run summary are visible outputs
+      substituted_by_double: null   # tests run the real cepa-until as a subprocess; only the reader (CEPA_UNTIL_LEITOR, the declared plug) and the `claude` binary are faked (far boundary)
+    - class: "tests/test_cepa_until_decide.py (five test_pre_read_cs6_* functions, fake reader modes prefnodefault)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway detached worktree at 53bdfe7 (/tmp/proof-cs6c, removed at the end). Runner executes the test_pre_read_cs6_* functions (python3 p13run.py [P13]). Unperturbed: FAIL []. P13 re-applied: FAIL ['cs6 default: the summary line carries what the choice was about']. P1-P12, P14, P16-P20 carried from the run at 03e3602 (tests only gained a check; code unchanged since)."
+      results:
+        - "KILLED P1 request += note removed: RED (7 checks)."
+        - "KILLED P2 parse_finding keeps a preference without padrao: RED (no default: no finding, event, summary)."
+        - "KILLED P3 ask_preferences returns at once: RED (7 checks)."
+        - "KILLED P4 owner's typed answer not applied: RED (5 checks)."
+        - "KILLED P5 flag-stripping removed in preference_note: RED (unit: no flag-looking word survives)."
+        - "KILLED P6 default fonte 'padrao' -> 'dono': RED (4 checks)."
+        - "KILLED P7 item_start preferencia not logged: RED (2 checks)."
+        - "KILLED P8 leitura_previa row not updated with escolha/fonte: RED."
+        - "KILLED P9 followed[] not filled (summary block): RED (2 checks)."
+        - "KILLED P10 note not passed to run_item: RED (6 checks)."
+        - "KILLED P11 ask_preferences not called at the launch panel: RED (7 checks)."
+        - "KILLED P12 preferences never collected from rows: RED (13 checks)."
+        - "KILLED P13 end-of-run summary line loses its ' · <texto>' tail: RED at 53bdfe7 (FAIL ['cs6 default: the summary line carries what the choice was about'])."
+        - "KILLED P14 NoAnswer sets the answer instead of keeping the default: RED (silence: x1 ran with the default)."
+        - "NOT TESTABLE P15 READER_PROMPT sentence 'and there is no choice worth asking' removed: GREEN. Wording for the reader model, not pinnable by a deterministic test; non-blocking, reported for completeness."
+        - "KILLED P16 note always says 'owner's answer': RED."
+        - "KILLED P17 note carries padrao instead of escolha: RED (4 checks)."
+        - "KILLED P18 build_command note branch disabled: RED (7 checks)."
+        - "KILLED P19 READER_PROMPT no longer names padrao: RED."
+        - "KILLED P20 escolha initialised empty: RED (6 checks)."
+        - "BASE 7efdca2 (common/bin/cepa-until reverted, tests from HEAD): rc 1, AttributeError: module 'cepa_until' has no attribute 'preference_note' (the unit test crashes the run); the orchestrator also saw 15 checks fail at base."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; the summary line's ' · {texto}' tail is now asserted (53bdfe7) and perturbation P13 turns it RED: FAIL ['cs6 default: the summary line carries what the choice was about']."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the pre-read parses JSON printed by a local read-only reader and a line typed by the owner at their own terminal, then hands it to the item's agent; it opens no input surface from outside the run (no HTTP, no user-facing parse). No changed class is in an input-bearing module (api-rest)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Nineteen of twenty perturbations of the changed behavior turn the CS-6 tests RED (P13 re-confirmed RED at 53bdfe7 after the test gained the summary-description check); unperturbed is green; tests are red at base 7efdca2. The only non-killed one, P15, is prompt wording for the reader model that no deterministic test can pin, non-blocking. PROVEN."

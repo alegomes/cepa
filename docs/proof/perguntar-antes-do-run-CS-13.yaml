@@ -1,0 +1,48 @@
+schema_version: 2
+card: perguntar-antes-do-run-CS-13
+verdict: proven                 # proven | unproven | needs-human
+reviewed_at: 2026-11-11T08:00:00-03:00
+base_commit: cf79352
+head_commit: 6fcec7b
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: _main (`largada` event), ask_preferences (returns how many it showed), ask_at_launch (tally['summarized']), decide (progress asked/answered)"
+      module: common
+      external_observable: true     # the test runs the real cepa-until as a subprocess / on a pty and reads the <run>.jsonl; only the `claude` binary is faked (far boundary)
+      substituted_by_double: null
+    - class: "tests/test_cepa_until_launch_measure.py"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway detached worktree /tmp/cs13-proof-1 at 6fcec7b (removed at the end). Unperturbed: `python3 tests/test_cepa_until_launch_measure.py` -> 'tudo verde' (all cs13 checks ok, N>0). Each perturbation = one exact-string replacement (count==1 asserted) in common/bin/cepa-until via /tmp/cs13-tools/perturb.py, run the test, restore with `git checkout HEAD -- common/bin/cepa-until`. Result: 24 of 24 exit 1 (KILLED), 0 survivors, 0 skipped."
+      results:
+        - "KILLED P1..P6, P8, P9, P11, P14..P19, P22, P23 (as in the previous run)."
+        - "KILLED P7 respondidas without owner-typed preferences: 'cs13 typed: 2 questions answered (r1 route and x1 preference)'."
+        - "KILLED P10 itens_lidos counts all rows: 'cs13 unread: 1 item read (y1), x1 left out'."
+        - "KILLED P12 achados counts every row for every kind (pattern fixed): cs13 unread / tty / no tty findings checks."
+        - "KILLED P13 segundos=0.0: 'seconds spent is a positive number' in 5 cases."
+        - "KILLED P20 ask_preferences NoAnswer return 0: 'cs13 prefs cut by the wait: 2 shown'."
+        - "KILLED P21 ask_preferences EOF return 0: 'prefs cut by Ctrl-C' and 'prefs cut by EOF: 2 shown'."
+        - "KILLED P24 summarized recorded also with only=: 'cs13 summarized: the only= call keeps 2'."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; every changed line is reached by the tty, cut, typed, unread, summarized and no-tty cases (all 24 perturbations go RED, so each perturbed line is reached and asserted)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the change only writes a measurement event to the run's own ledger from counters the supervisor keeps; nothing new is parsed from outside. No changed class is in an input-bearing module (api-rest)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug; red at base is shown anyway: worktree at cf79352 with tests/test_cepa_until_launch_measure.py from 6fcec7b -> '15 falha(s)' (e.g. 'exactly one `largada` event in the ledger'), non-green."
+routing_reason: "Event absent at base (red, 15 failures); at head the test is green and all 24 perturbations of the changed lines go RED at the external surface (real cepa-until on subprocess/pty plus the .jsonl ledger). The 6 earlier survivors (P7, P10, P13, P20, P21, P24) are now killed and P12 ran and was killed. PROVEN."

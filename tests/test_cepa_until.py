@@ -137,6 +137,7 @@ def run_until(root, binv, plan, args, timeout=120, extra_env=None, repo_arg=None
     env.update(extra_env or {})
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(plan)
+    env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
     env.setdefault("CEPA_WORKTREE_HOME", str(Path(root).parent / "worktrees"))
     calls = Path(root).parent / "chamadas.jsonl"
     env["FAKE_CHAMADAS"] = str(calls)
@@ -731,6 +732,7 @@ def test_missing_queue_refuses_before_firing():
         env = dict(os.environ)
         env["PATH"] = f"{binv}:{env['PATH']}"
         env["FAKE_PLANO"] = str(plan)
+        env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
         env["FAKE_CHAMADAS"] = str(root.parent / "chamadas.jsonl")
         p = subprocess.run([sys.executable, str(CEPA_UNTIL), "nao-existe",
                             "--repo", str(root), "--for", "2h"],
@@ -834,6 +836,90 @@ def test_dry_run_executes_nothing():
         check("...e a fila fica intacta",
               all(it["status"] == "pending"
                   for it in yaml.safe_load(plan.read_text())["items"]))
+
+
+def test_header_says_how_many_items_run_and_how_many_wait_for_the_owner():
+    """CS-1 (spec perguntar-antes-do-run): the run start counts, before the first
+    item, the items that run and the ones that wait for the owner. 2 `pending` +
+    1 with an open `human_pending` (placed LAST, after the point where a `--max 1`
+    ceiling would have stopped the count)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2"),
+                                item("a3", human_pending="provisionar o papel no Keycloak")])
+        binv = fake_claude(tmp, "pass")
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, calls = run_until(root, binv, plan, ["--for", "2h", "--dry-run"])
+        lines = [l for l in p.stdout.splitlines() if "1st item:" in l]
+        check("a largada tem uma linha '1st item:'", len(lines) == 1, p.stdout[:800])
+        line = lines[0] if lines else ""
+        check("...com 2 itens que rodam e 1 que espera o dono",
+              "start: 2 run, 1 wait for the owner" in line, line)
+        header = p.stdout.split("\n\n")[0].splitlines()
+        check("...e o cabecalho segue com no maximo 7 linhas", len(header) <= 7,
+              str(len(header)) + "\n" + p.stdout[:800])
+        check("...e nada foi disparado", not calls, str(calls))
+
+
+def test_header_wait_count_ignores_items_deferred_for_another_reason():
+    """CS-1: only an open `human_pending` counts as "waiting for the owner". An item
+    that `cepa-plan queue` defers for another reason (here `depends-on-deferred`:
+    a3 is blocked by a2, which is itself deferred) is in neither number."""
+    with tempfile.TemporaryDirectory() as tmp:
+        a3 = item("a3")
+        a3["blocked_by"] = ["a2"]
+        root = build_repo(tmp, [item("a1"),
+                                item("a2", human_pending="provisionar o papel no Keycloak"),
+                                a3])
+        binv = fake_claude(tmp, "pass")
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        q = subprocess.run([sys.executable, str(REPO / "common" / "bin" / "cepa-plan"), "queue", "fila", "--max",
+                            "1000000", "--repo", str(root), "--json"],
+                           capture_output=True, text=True)
+        deferred = json.loads(q.stdout).get("deferred") or []
+        check("a3 is deferred with reason depends-on-deferred",
+              {d.get("id"): d.get("reason") for d in deferred}.get("a3")
+              == "depends-on-deferred", q.stdout[:800])
+        p, calls = run_until(root, binv, plan, ["--for", "2h", "--dry-run"])
+        lines = [l for l in p.stdout.splitlines() if "1st item:" in l]
+        check("the start has one '1st item:' line", len(lines) == 1, p.stdout[:800])
+        line = lines[0] if lines else ""
+        check("...with 1 item that runs and 1 that waits for the owner (a3 in neither)",
+              "start: 1 run, 1 wait for the owner" in line, line)
+        check("...and nothing was launched", not calls, str(calls))
+
+
+def test_header_says_unavailable_when_the_uncapped_queue_read_fails():
+    """CS-1: if the second (uncapped) read of the queue fails, the `start` line says
+    `unavailable` with the error, and carries no count (the capped `--max 1` read
+    would give a wrong number). The run is not aborted for it."""
+    import contextlib
+    import importlib.machinery
+    import importlib.util
+    import io
+    loader = importlib.machinery.SourceFileLoader("cepa_until_cs1", str(CEPA_UNTIL))
+    spec = importlib.util.spec_from_loader("cepa_until_cs1", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        real = mod.query_queue
+
+        def flaky(name, repo, max_items=1):
+            if max_items > 1:
+                return None, "boom: cepa-plan fell over"
+            return real(name, repo, max_items=max_items)
+        mod.query_queue = flaky
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = mod.main(["fila", "--repo", str(root), "--for", "1h", "--dry-run",
+                           "--sem-verify", "--sem-analise"])
+        lines = [l for l in out.getvalue().splitlines() if "1st item:" in l]
+        check("dry-run was not aborted", rc == 0, out.getvalue()[:800])
+        check("there is one '1st item:' line", len(lines) == 1, out.getvalue()[:800])
+        line = lines[0] if lines else ""
+        check("...saying unavailable with the error",
+              "start: unavailable (queue read failed: boom: cepa-plan fell over)" in line, line)
+        check("...and with no count", " run, " not in line, line)
 
 
 def test_item_that_exceeds_the_slack_is_killed_with_the_whole_group():

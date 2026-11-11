@@ -1,0 +1,49 @@
+schema_version: 2
+card: perguntar-antes-do-run-CS-12
+verdict: proven                 # proven | unproven | needs-human
+reviewed_at: 2026-11-11T06:00:00-03:00
+base_commit: b2ef68f
+head_commit: c0be1e4            # behavior change is 6f1b8a9; c0be1e4 adds the tests that kill P2 and P8
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: CUT_RULE, build_command (rule appended to the -p prompt of every item's agent)"
+      module: common
+      external_observable: true     # the test also runs the real cepa-until and inspects the prompt each item's agent receives; only the `claude` binary is faked (far boundary)
+      substituted_by_double: null
+    - class: "tests/test_cepa_until_cut_rule.py"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway detached worktree at c0be1e4 (/tmp/cs12-proof3, removed at the end). Unperturbed: `python3 tests/test_cepa_until_cut_rule.py` -> 'tudo verde', exit 0. Base: `git checkout b2ef68f -- common/bin/cepa-until` -> exit 1 (red at base). Each perturbation = one sed on common/bin/cepa-until, run the script, require exit 1, restore with `git checkout c0be1e4 -- common/bin/cepa-until`; the diff of each was checked non-empty (and P8/P9 printed) so none was a no-op. Re-ran the full set P1-P9, all exit 1."
+      results:
+        - "KILLED P1 append line dropped (`request += CUT_RULE` -> `pass`): exit 1."
+        - "KILLED P2 `--decision \"` -> `--XX \"` leaving only `--decision-commit` (survivor of f287935): exit 1."
+        - "KILLED P3 `--human-pending` -> `--XX` in the rule: exit 1."
+        - "KILLED P4 `already committed` -> `XX` (2 occurrences replaced by the sed): exit 1."
+        - "KILLED P5 `a proof waiver` -> `XX`: exit 1."
+        - "KILLED P6 `to Done` -> `XX`: exit 1."
+        - "KILLED P7 `outside the repository` -> `XX`: exit 1."
+        - "KILLED P8 rule appended only inside `if branch:` (survivor of f287935): exit 1."
+        - "KILLED P9 rule placed before the drain-plan call (`request = CUT_RULE + ... + request`): exit 1."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; the changed lines (CUT_RULE, the append in build_command) are reached by the unit cases and by the run case ('cs12 run: every item's prompt carries the cut rule'), and each perturbation of them goes RED."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the change appends a constant string to the prompt the supervisor sends to its own agent; nothing parsed from outside. No changed class is in an input-bearing module (api-rest)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug; red at base is shown anyway: at b2ef68f the test exits 1."
+routing_reason: "At c0be1e4 all 9 perturbations of the changed behavior go RED (baseline exit 0, base b2ef68f exit 1). P2 and P8, the survivors of the previous pass at f287935, are now killed. PROVEN."

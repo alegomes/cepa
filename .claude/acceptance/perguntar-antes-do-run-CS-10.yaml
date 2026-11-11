@@ -1,0 +1,17 @@
+key: perguntar-antes-do-run-CS-10
+status: complete
+criteria:
+  - id: CS-10
+    text: "depois do painel, se nenhum item roda, o run não começa (red test: numa fila só com rotas respondidas 'não', a largada termina dizendo que nenhum item roda e não cria o worktree until/<run>)"
+    altitude: cli
+    surface: "cepa-until <queue> (launch) on a pty; observed on the output, on `git branch --list 'until/*'`, on `git worktree list` and on the run's ledger (<run>.jsonl)"
+    test: "tests/test_cepa_until_decide.py::test_launch_cs10_only_answered_no_routes_the_run_does_not_start, test_launch_cs10_route_answered_no_in_the_panel_the_run_does_not_start, test_launch_cs10_queue_with_only_done_items_has_no_wait_for_you_line (helper _cs10_check)"
+    layer: "real subprocess of common/bin/cepa-until on a pseudo-terminal, fake claude, real git repo. Cases: queue with only routes answered 'no' before (count 2), a route answered 'n' in the panel (count 1), queue with only done items (no wait line). Each checks exit 0, message 'nothing to do: no item runs, so the run does not start' naming the real run id (no <run_id> placeholder), no until/* branch, worktree list has only the clone, no ledger events, and the 'N item(s) wait for you: cepa-until decide fila' line (absent when nothing waits)."
+    evidence: verified
+    run: "cd /Users/alegomes/cepa-worktrees/cepa-until-2026-11-10-1650 && python3 -c \"import sys; sys.path.insert(0,'tests'); import test_cepa_until_decide as t; [getattr(t,n)() for n in dir(t) if n.startswith('test_launch_cs10')]\" -> 21 'ok' checks (N>0), no FAIL; foreground; run-all.sh not run"
+    status: complete
+    extra: "Honest note: the early return before open_run_branch (common/bin/cepa-until ~line 4254) predates this item; the spec's 'hoje o run começa e acaba em end-of-queue' was stale (reproduction before any change already showed no branch/worktree/ledger). What this item changed (64adab2, 4812f32) is the message and the 'wait for you' pointer; the message assertions are the ones that were red at base. The no-branch/no-worktree/no-ledger assertions are regression guards, green at base too. Red-at-base not re-run by the auditor; inferred from the diff (old message lacked the text)."
+    notes:
+      - "Outermost layer is the real CLI; exercised, not mocked."
+      - "Altitude cli is met: the criterion's observable (launch output and absence of the worktree) is checked on the real binary."
+gap: []

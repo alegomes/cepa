@@ -1,0 +1,42 @@
+schema_version: 2
+card: perguntar-antes-do-run-CS-3
+verdict: proven               # proven | unproven | needs-human
+reviewed_at: 2026-11-10T22:55:00-03:00
+base_commit: 3fa35a7
+head_commit: 63939f5
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: ask_at_launch (behavior from CS-2, cd35a06; the panel reads only owner-reason deferred items and deliberately does not add delivered_leftovers)"
+      module: common
+      external_observable: true     # what the cli prints before the first item_start on a terminal
+      substituted_by_double: null   # tests run the real cepa-until as a subprocess on a pty (_launch_on_tty), real cepa-plan; only the `claude` binary is faked (far boundary)
+    - class: "tests/test_cepa_until_decide.py (test-only, 3fa35a7..63939f5: _before_first_item, two test_launch_cs3_* functions)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway worktree at 63939f5 (/tmp/proof-cs3, removed at the end); the two CS-3 functions run via python3 in tests/ through a tiny runner that imports tests/test_cepa_until_decide.py and reads FAILURES. Unperturbed: 'FAILURES []', 12 checks ok across the 2 functions (~12 s). Each perturbation applied with git apply of a patch written by me, checked, then file restored with git checkout."
+      results:
+        - "KILLED P1 `deferred = deferred + delivered_leftovers(queue, repo)` added in ask_at_launch -> RED, 4 FAIL: 'the delivered route is absent before the first item' (x2), 'no launch panel for a delivered route alone', 'the launch panel is before the first item, with 1 question'. The output showed '1 question(s) for you' asking item d1 before the first item."
+        - "BASE b1c711f (pre-panel) cepa-until with the head tests -> test_launch_cs3_panel_before_the_first_item_leaves_the_delivered_route_out RED, 2 FAIL ('the launch panel is before the first item, with 1 question', 'the open route is asked before the first item'), as the spec declares ('fails for not finding the panel'). test_launch_cs3_delivered_route_is_not_asked_before_the_first_item is GREEN at base (no panel exists, so nothing leaks): it is a guard against the leak, proved load-bearing by P1, not a regression test of CS-2."
+        - "Not run: p2.patch (delivered_leftovers prepended instead of appended) is the same mutation with a different order; not applied, stated so no cap is silent. A perturbation of the OWNER_REASON filter does not apply to this criterion: delivered items never come through `deferred`, they only come through delivered_leftovers."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; the criterion's one behavior (the list ask_at_launch hands to decide has no delivered entry) is the line perturbed in P1 and turned the CS-3 tests RED."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff is test-only; it adds no code that parses anything coming from outside. No changed class is in an input-bearing module (api-rest)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Adding delivered_leftovers to the launch panel turns both CS-3 tests RED (4 FAIL), so the rule 'a delivered route stays out of the panel' is held by the tests at the cli surface. The panel variant is RED at the pre-panel base b1c711f (2 FAIL), as the spec declares; the delivered-only variant is green at base because nothing is asked there, and it works as a guard. The tests run the real cepa-until on a pty with only the `claude` binary faked."
