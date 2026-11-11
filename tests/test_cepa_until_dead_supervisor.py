@@ -91,6 +91,7 @@ def launches(root, binv, plan, args, extra_env=None, **popen):
     env = dict(os.environ)
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(plan)
+    env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
     env["FAKE_CHAMADAS"] = str(root.parent / "chamadas.jsonl")
     env["CEPA_WORKTREE_HOME"] = str(root.parent / "worktrees")
     env.update(extra_env or {})

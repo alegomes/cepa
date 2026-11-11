@@ -136,6 +136,7 @@ def run_until(root, binv, plan, args, timeout=120, extra_env=None, repo_arg=None
     env.update(extra_env or {})
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(plan)
+    env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
     env.setdefault("CEPA_WORKTREE_HOME", str(Path(root).parent / "worktrees"))
     calls = Path(root).parent / "chamadas.jsonl"
     env["FAKE_CHAMADAS"] = str(calls)
@@ -730,6 +731,7 @@ def test_missing_queue_refuses_before_firing():
         env = dict(os.environ)
         env["PATH"] = f"{binv}:{env['PATH']}"
         env["FAKE_PLANO"] = str(plan)
+        env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
         env["FAKE_CHAMADAS"] = str(root.parent / "chamadas.jsonl")
         p = subprocess.run([sys.executable, str(CEPA_UNTIL), "nao-existe",
                             "--repo", str(root), "--for", "2h"],

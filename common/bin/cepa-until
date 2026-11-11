@@ -2887,6 +2887,214 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
     return 0
 
 
+# ── the pre-read (CS-5) ─────────────────────────────────────────────────────
+#
+# At the launch a read-only agent reads each executable item and answers a closed
+# JSON: a missing pre-condition (something outside the code that must exist before
+# the item can be done: a credential, an environment, an external answer), a
+# preference (CS-6, only recorded here), or nothing. The closed format is what lets
+# a test plug a fake reader through CEPA_UNTIL_LEITOR.
+READER_CEILING_SEC = float(os.environ.get("CEPA_UNTIL_TETO_LEITURA", "300"))
+# `claude` readers in parallel: all the queue's items at once would be a burst on the
+# quota; the ones that do not start within the ceiling run as today.
+READER_WORKERS = 8
+READER_KINDS = ("pre-condicao", "preferencia")
+
+READER_PROMPT = """You are a READ-ONLY pre-reader for an unattended run that will \
+execute the work item below in this repository with nobody to ask. Read the item \
+and the relevant parts of the repository (Read, Glob and Grep only; change nothing). \
+Decide whether the item has a PRE-CONDITION: something OUTSIDE the code that must \
+exist before the item can be done (a credential or token, an environment or \
+service, an answer from a person or a third party). If the code and the repository \
+are enough, there is none.
+
+Answer with ONLY one JSON object, no prose, no code fence:
+{{"tipo": "pre-condicao" or null, "texto": "<one plain sentence, in Brazilian \
+Portuguese, no codes or file names, saying what is missing>", "pergunta": "<one \
+closed yes/no question, in Brazilian Portuguese, the owner can answer>"}}
+Use {{"tipo": null}} when nothing is missing.
+
+Item:
+{item}
+"""
+
+
+def reader_command(item):
+    """(argv, stdin_text) of the reader of ONE item, or None when the pre-read is off.
+    `CEPA_UNTIL_LEITOR` replaces the command (shlex-split; it gets the item as JSON on
+    stdin); `off` disables the pre-read. The default is a `claude -p` limited to the
+    read-only tools, with the item inside the prompt (stdin stays closed)."""
+    override = os.environ.get("CEPA_UNTIL_LEITOR")
+    payload = json.dumps(item, ensure_ascii=False)
+    if override is not None:
+        if override.strip().lower() == "off":
+            return None
+        return shlex.split(override), payload
+    cmd = ["claude", "-p", READER_PROMPT.format(item=payload),
+           "--output-format", "text",
+           "--tools", "Read,Glob,Grep", "--allowedTools", "Read,Glob,Grep",
+           # no MCP server: its tools are not covered by `--tools`
+           "--strict-mcp-config"]
+    model = os.environ.get("CEPA_UNTIL_MODELO_LEITOR")
+    if model:
+        cmd += ["--model", model]
+    return cmd, None
+
+
+def parse_finding(text):
+    """The closed JSON the reader printed, as {tipo, texto, pergunta[, padrao]}, or
+    None when there is no finding (null type, text that is not that JSON, a type
+    outside the closed set, or a finding with nothing written in `texto`)."""
+    text = (text or "").strip()
+    try:
+        body = json.loads(text)
+    except ValueError:
+        # Models wrap the object in a fence or a sentence despite the instruction.
+        start, end = text.find("{"), text.rfind("}")
+        try:
+            body = json.loads(text[start:end + 1]) if 0 <= start < end else None
+        except ValueError:
+            return None
+    if not isinstance(body, dict) or body.get("tipo") not in READER_KINDS:
+        return None
+    texto = " ".join(str(body.get("texto") or "").split())
+    if not texto:
+        return None
+    found = {"tipo": body["tipo"], "texto": texto,
+             "pergunta": " ".join(str(body.get("pergunta") or "").split())}
+    if body["tipo"] == "preferencia":
+        found["padrao"] = body.get("padrao")
+    return found
+
+
+# Readers still running, so Ctrl-C / SIGTERM during the wait can kill their process
+# groups instead of leaving orphan `claude` processes behind.
+_LIVE_READERS = set()
+
+
+def _kill_group(proc):
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except OSError:
+        pass
+
+
+def read_one(repo, item, deadline):
+    """Runs the reader of one item; returns (finding_or_None, error_or_None). Anything
+    that goes wrong (no command, non-zero exit, past the shared deadline) is "no
+    finding": the item then runs as it does today."""
+    built = reader_command(item)
+    if built is None:
+        return None, None
+    cmd, stdin_text = built
+    left = deadline - time.monotonic()
+    if left <= 0:
+        return None, "not read within the ceiling"
+    try:
+        proc = subprocess.Popen(
+            cmd, cwd=str(repo), env=item_environment(), text=True,
+            stdin=subprocess.PIPE if stdin_text is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            start_new_session=True)  # its own group: the ceiling kills the children too
+    except OSError as e:
+        return None, f"reader did not launch: {e}"
+    _LIVE_READERS.add(proc)
+    try:
+        out, _ = proc.communicate(stdin_text, timeout=max(left, 0.05))
+    except subprocess.TimeoutExpired:
+        _kill_group(proc)
+        proc.communicate()
+        return None, "not read within the ceiling"
+    finally:
+        _LIVE_READERS.discard(proc)
+    if proc.returncode != 0:
+        return None, f"reader exited {proc.returncode}"
+    return parse_finding(out), None
+
+
+def pre_read(repo, items, ceiling=None):
+    """Reads `items` (dicts with id/title/why) in parallel, in queue order, all
+    together bounded by `ceiling` seconds. Returns one dict per item:
+    {id, tipo, texto, pergunta, erro[, padrao]} (`tipo` None = no finding)."""
+    from concurrent.futures import ThreadPoolExecutor
+    deadline = time.monotonic() + (READER_CEILING_SEC if ceiling is None else ceiling)
+
+    def one(item):
+        try:
+            finding, error = read_one(repo, item, deadline)
+        except Exception as e:  # noqa: BLE001  (a reader must never stop the launch)
+            finding, error = None, f"reader failed: {e}"
+        row = {"id": item.get("id"), "tipo": None, "texto": None,
+               "pergunta": None, "erro": error}
+        row.update(finding or {})
+        return row
+
+    pool = ThreadPoolExecutor(max_workers=min(READER_WORKERS, max(len(items), 1)))
+    try:
+        return list(pool.map(one, items))
+    finally:
+        # On Ctrl-C / SIGTERM the readers still alive die with their children, and the
+        # waiting threads return at once instead of holding the interpreter open.
+        for proc in list(_LIVE_READERS):
+            _kill_group(proc)
+        pool.shutdown(wait=True, cancel_futures=True)
+
+
+def current_item(queue, repo, ident):
+    """The item as `cepa-plan show <queue> <id> --json` has it (evidence, owner_summary),
+    or {} when it cannot be read."""
+    try:
+        p = subprocess.run(
+            [sys.executable, str(CEPA_PLAN), "show", queue, str(ident), "--json",
+             "--repo", str(repo)], capture_output=True, text=True, timeout=60)
+        return json.loads(p.stdout).get("item") or {} if p.returncode == 0 else {}
+    except (subprocess.TimeoutExpired, OSError, ValueError, AttributeError):
+        return {}
+
+
+def open_precondition_route(queue, repo, row):
+    """Opens the owner's route for a pre-condition the pre-read found, through
+    `cepa-plan finish --status pending --human-pending` (the item stays `pending`, so
+    the queue defers it as `human_pending` until the owner answers). `--supervisor`
+    because nobody reserved the item. Never writes queue.yaml: `cepa-plan` keeps its
+    own validation of the human text. `finish` REPLACES `evidence` and drops
+    `owner_summary` on a `pending`, so both are read first and carried over (a red
+    build leaves the side branch and commits in that evidence). If `finish` refuses,
+    it is tried once more without the question, the part that most often fails the
+    plain-text validation. Returns None or the error as text."""
+    previous = current_item(queue, repo, row["id"])
+    evidence = ("Pre-read at launch found a missing pre-condition: "
+                f"{row['texto']}")
+    if str(previous.get("evidence") or "").strip():
+        evidence += "\n" + str(previous["evidence"])
+    cmd = [sys.executable, str(CEPA_PLAN), "finish", queue, str(row["id"]),
+           "--status", "pending", "--human-pending", row["texto"],
+           "--evidence", evidence, "--repo", str(repo), "--supervisor"]
+    summary = previous.get("owner_summary")
+    if isinstance(summary, dict):
+        for key, flag, _ in _ownertext.FIELDS:
+            if str(summary.get(key) or "").strip():
+                cmd += [flag, str(summary[key])]
+    # The outer session did not build this item: with its id in the environment,
+    # `finish --status pending` would flag THAT session as owing a validation.
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")}
+    attempts = [cmd + ["--question", row["pergunta"]]] if row.get("pergunta") else []
+    attempts.append(cmd)
+    error = None
+    for attempt in attempts:
+        try:
+            p = subprocess.run(attempt, capture_output=True, text=True, timeout=60,
+                               env=env)
+        except (subprocess.TimeoutExpired, OSError) as e:
+            return f"`cepa-plan finish` did not answer: {e}"
+        if p.returncode == 0:
+            return None
+        error = (p.stderr or p.stdout or "").strip() or \
+            f"`cepa-plan finish` exited {p.returncode}"
+    return error
+
+
 _OWNER_NO = re.compile(r"Resposta do dono em (\d{4})-(\d{2})-(\d{2}): n(?:ão|ao)\b",
                        re.I)
 
@@ -3764,6 +3972,39 @@ def _main(argv=None):
     if a.dry:
         print("\n(--dry-run: nothing was executed)")
         return 0
+    # CS-5: the pre-read runs with or without a terminal (spec Q9) and BEFORE the
+    # panel, so a route it opens shows in the panel like any other. `whole` is the
+    # uncapped read of the forecast above, in queue order.
+    pre_read_event = None
+    if whole and whole.get("batch") and reader_command({}) is not None:
+        to_read = [{k: it.get(k) for k in ("id", "title", "why", "blocked_by")}
+                   for it in whole["batch"]]
+        print(f"\n── pre-read: {len(to_read)} item(s), read-only, "
+              f"up to {READER_CEILING_SEC / 60:g} min")
+        started = time.monotonic()
+        rows = pre_read(repo, to_read)
+        opened = 0
+        for row in rows:
+            row["rota_aberta"] = False
+            if row["tipo"] == "pre-condicao":
+                row["erro"] = open_precondition_route(a.queue, repo, row)
+                row["rota_aberta"] = row["erro"] is None
+                opened += row["rota_aberta"]
+                if row["erro"]:
+                    print(f"   pre-read: could not open the route of {row['id']} "
+                          f"({row['erro'].splitlines()[0][:160]}); it runs as usual")
+        read_ok = sum(1 for r in rows if not r["erro"] or r["tipo"])
+        print(f"   pre-read: {read_ok} of {len(rows)} read, {opened} deferred for a "
+              "missing pre-condition")
+        pre_read_event = {"evento": "leitura_previa",
+                          "itens": [{k: r.get(k) for k in
+                                     ("id", "tipo", "texto", "pergunta", "padrao",
+                                      "rota_aberta", "erro")} for r in rows],
+                          "lidos": read_ok,
+                          "segundos": round(time.monotonic() - started, 1)}
+        if opened:
+            fresh, _ = query_queue(a.queue, repo)
+            data = fresh or data
     # CS-2: on a terminal, what waits for the owner is asked HERE, before the first
     # item, and a "yes" puts the item in the batch of this very run. Without a
     # terminal nothing changes (the end-of-run listing stays as it was).
@@ -3807,6 +4048,8 @@ def _main(argv=None):
               "herdou": inheritance,
               "branch_do_clone": current_branch(repo), "verify": verify,
               "pid": pid, "host": host, "versao_registro": 2})
+    if pre_read_event:
+        log_event(pre_read_event)
     # The run state, next to the `.jsonl` (C6): `rodando` now, and at the end
     # `esperando-dono` (there is an action or pending item) or `encerrado`. It is written BEFORE
     # the model analysis, which may fail on the quota (C7); `/common:until-review`

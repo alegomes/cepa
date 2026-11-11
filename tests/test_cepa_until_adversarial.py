@@ -105,6 +105,7 @@ def test_hostile_queue_name_does_not_become_a_command():
         env = dict(os.environ)
         env["PATH"] = f"{binv}:{env['PATH']}"
         env["FAKE_PLANO"] = str(plan)
+        env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
         env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
         p = subprocess.run(
             [sys.executable,

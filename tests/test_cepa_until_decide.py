@@ -576,6 +576,7 @@ def test_run_on_terminal_ends_asking_and_applies():
         env = dict(os.environ)
         env["PATH"] = f"{binv}:{env['PATH']}"
         env["FAKE_PLANO"] = str(plan_of(root))
+        env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
         env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
         env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
         rc, out = on_tty(
@@ -639,6 +640,7 @@ def env_do_run(tmp, root, binv):
     env = dict(os.environ)
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(plan_of(root))
+    env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
     env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
     env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
     return env
@@ -1265,6 +1267,7 @@ def test_launch_without_terminal_keeps_ending_with_no_item_start():
         env = dict(os.environ)
         env["PATH"] = f"{binv}:{env['PATH']}"
         env["FAKE_PLANO"] = str(plan_of(root))
+        env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
         env.setdefault("CEPA_WORKTREE_HOME", str(Path(root).parent / "worktrees"))
         calls_f = Path(root).parent / "chamadas.jsonl"
         env["FAKE_CHAMADAS"] = str(calls_f)
@@ -1570,6 +1573,156 @@ def test_launch_guard_needs_both_stdin_and_stdout_on_a_terminal():
         out = chunks.decode(errors="replace")
         check("stdin devnull, stdout tty: no panel", not any(m in out for m in markers)
               and "nothing to do" in out, out[-1500:])
+
+
+# ── CS-5: the pre-read defers an item with a missing pre-condition ──────────
+
+def _fake_reader(tmp, mode):
+    """A fake reader script (the closed JSON on stdout) and the file where it records
+    the ids it was asked about. `mode` is what it prints for item x1."""
+    script = Path(tmp) / "leitor.py"
+    log = Path(tmp) / "leitor-chamadas.txt"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys\n"
+        "it = json.load(sys.stdin)\n"
+        f"open({str(log)!r}, 'a').write(it['id'] + '\\n')\n"
+        f"mode = {mode!r}\n"
+        "if it['id'] != 'x1' or mode == 'null':\n"
+        "    print(json.dumps({'tipo': None}))\n"
+        "elif mode == 'pre':\n"
+        "    print(json.dumps({'tipo': 'pre-condicao',\n"
+        "        'texto': 'Falta o token de acesso do ambiente de homologação.',\n"
+        "        'pergunta': 'Você já providenciou o token de acesso?'}))\n"
+        "elif mode == 'longq':\n"
+        "    print(json.dumps({'tipo': 'pre-condicao',\n"
+        "        'texto': 'Falta o token de acesso do ambiente de homologação.',\n"
+        "        'pergunta': ' '.join(['Você já providenciou o token de acesso']*10) + '?'}))\n"
+        "elif mode == 'garbage':\n"
+        "    print('this is not json')\n"
+        "elif mode == 'fail':\n"
+        "    sys.exit(3)\n")
+    script.chmod(0o755)
+    return script, log
+
+
+def _pre_read_launch(mode, leitor=None, extra=(), x_item=None):
+    """No terminal (stdin DEVNULL): queue with x1 and y1, the fake reader plugged
+    through CEPA_UNTIL_LEITOR (or `leitor` as given). Returns (stdout, events, items,
+    reader_calls)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [x_item or item("x1"), item("y1")])
+        binv = fake_claude(tmp, "pass")
+        script, log = _fake_reader(tmp, mode)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = leitor if leitor is not None else str(script)
+        p = subprocess.run(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis", *extra],
+            capture_output=True, text=True, env=env, timeout=120,
+            stdin=subprocess.DEVNULL)
+        calls = log.read_text().split() if log.exists() else []
+        return p.stdout + p.stderr, _launch_events(root), items_of(root), calls
+
+
+def _started(events):
+    return [e.get("item") or e.get("id") for e in events if e.get("evento") == "item_start"]
+
+
+def test_pre_read_cs5_precondition_defers_the_item_without_spending_the_run_on_it():
+    out, events, items, calls = _pre_read_launch("pre")
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    check("cs5: one leitura_previa event", len(reads) == 1, out[-1500:])
+    rows = {r["id"]: r for r in (reads[0]["itens"] if reads else [])}
+    check("cs5: the event lists every item read", set(rows) == {"x1", "y1"}, str(rows))
+    check("cs5: x1 is the pre-condition, y1 has no finding",
+          rows.get("x1", {}).get("tipo") == "pre-condicao"
+          and rows.get("y1", {}).get("tipo") is None, str(rows))
+    check("cs5: the route was opened", rows.get("x1", {}).get("rota_aberta") is True
+          and not rows["x1"].get("erro"), str(rows))
+    check("cs5: no item_start of x1", "x1" not in _started(events), str(events))
+    check("cs5: y1 still runs", "y1" in _started(events), str(events))
+    check("cs5: queue.yaml has the open route on x1",
+          "token" in str(items["x1"].get("human_pending")), str(items["x1"]))
+    check("cs5: x1 stays pending (not blocked, not done)",
+          items["x1"].get("status") == "pending", str(items["x1"]))
+    check("cs5: the question is recorded", "token" in str(items["x1"].get("owner_question")),
+          str(items["x1"]))
+    check("cs5: leitura_previa comes right after run_start",
+          [e.get("evento") for e in events][:2] == ["run_start", "leitura_previa"],
+          str([e.get("evento") for e in events]))
+
+
+def test_pre_read_cs5_route_keeps_the_previous_evidence_and_summary():
+    old = "Red build: work left on branch side/x1 (commits abc123, def456)."
+    x = dict(item("x1"), evidence=old, owner_summary={"impede": "o build ficou vermelho"})
+    out, events, items, calls = _pre_read_launch("pre", x_item=x)
+    check("cs5 evidence: the route opened", items["x1"].get("human_pending"), str(items["x1"]))
+    check("cs5 evidence: the old text is still inside evidence",
+          old in str(items["x1"].get("evidence")), str(items["x1"]))
+    check("cs5 evidence: the finding comes first",
+          str(items["x1"].get("evidence")).startswith("Pre-read at launch"),
+          str(items["x1"]))
+    check("cs5 evidence: owner_summary carried over",
+          (items["x1"].get("owner_summary") or {}).get("impede") == "o build ficou vermelho",
+          str(items["x1"]))
+    check("cs5 evidence: x1 has no item_start", "x1" not in _started(events), out[-800:])
+
+
+def test_pre_read_cs5_question_refused_by_cepa_plan_still_opens_the_route():
+    out, events, items, calls = _pre_read_launch("longq")
+    check("cs5 long question: the route opened without the question",
+          "token" in str(items["x1"].get("human_pending")), str(items["x1"]))
+    check("cs5 long question: x1 has no item_start", "x1" not in _started(events), out[-800:])
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    check("cs5 long question: event says rota_aberta without error",
+          reads and reads[0]["itens"][0]["rota_aberta"] is True
+          and not reads[0]["itens"][0]["erro"], str(reads))
+
+
+def test_pre_read_cs5_no_finding_garbage_or_failure_runs_the_item_as_today():
+    for mode in ("null", "garbage", "fail"):
+        out, events, items, calls = _pre_read_launch(mode)
+        check(f"cs5 {mode}: x1 runs", "x1" in _started(events), out[-1500:])
+        check(f"cs5 {mode}: no route on x1", not items["x1"].get("human_pending"),
+              str(items["x1"]))
+        reads = [e for e in events if e.get("evento") == "leitura_previa"]
+        check(f"cs5 {mode}: the event says no finding",
+              len(reads) == 1 and all(r["tipo"] is None for r in reads[0]["itens"]),
+              str(reads))
+
+
+def test_pre_read_cs5_dry_run_does_not_read():
+    out, events, items, calls = _pre_read_launch("pre", extra=("--dry-run",))
+    check("cs5 dry-run: the reader was not called", not calls, str(calls))
+    check("cs5 dry-run: x1 keeps no route", not items["x1"].get("human_pending"),
+          str(items["x1"]))
+
+
+def test_pre_read_cs5_off_disables_it():
+    out, events, items, calls = _pre_read_launch("pre", leitor="off")
+    check("cs5 off: no leitura_previa event", not any(
+        e.get("evento") == "leitura_previa" for e in events), out[-1500:])
+    check("cs5 off: x1 runs", "x1" in _started(events), out[-1500:])
+
+
+def test_pre_read_cs5_ceiling_kills_a_slow_reader_and_the_item_runs():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("x1")])
+        binv = fake_claude(tmp, "pass")
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = f"{sys.executable} -c 'import time; time.sleep(60)'"
+        env["CEPA_UNTIL_TETO_LEITURA"] = "1"
+        t0 = time.time()
+        p = subprocess.run(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"],
+            capture_output=True, text=True, env=env, timeout=120,
+            stdin=subprocess.DEVNULL)
+        events = _launch_events(root)
+        check("cs5 ceiling: the launch did not wait for the slow reader",
+              time.time() - t0 < 40, f"{time.time() - t0:.0f}s")
+        check("cs5 ceiling: x1 runs as today", "x1" in _started(events), p.stdout[-1500:])
 
 
 def main():
