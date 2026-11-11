@@ -669,7 +669,10 @@ items:
   status: blocked
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-11-10: não: O tronco do ciclo 2 ainda não
+  evidence: 'Resposta do dono em 2026-11-11: não: O tronco do ciclo 2 ainda não
+    rodou onda nenhuma. Devolvo a calibragem à fila mesmo assim? Recomendo não:
+    nada mudou desde 06/11. O dono manteve o item como estava (`blocked`). Evidência
+    anterior: Resposta do dono em 2026-11-10: não: O tronco do ciclo 2 ainda não
     rodou onda nenhuma. Devolvo a calibragem à fila mesmo assim? Recomendo não:
     nada mudou desde 06/11. O dono manteve o item como estava (`blocked`). Evidência
     anterior: Conferido em 2026-11-10 (run until/2026-11-10-1135): a condição da
@@ -3014,22 +3017,40 @@ items:
   why: 'fb-20261106-1: em modo exploration, 5 arquivos fora de docs/ e .claude/
     foram editados por python3 heredoc sem bloqueio (ainda não priorizado: entrou
     no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: 'This is return 1 of 2: the item closed `done`, but the full build of
-    the run branch (`tests/run-all.sh`) exited 1, and the 2nd build exited 1. Output
-    in the `.log` of run 2026-11-10-1135. The commits of every attempt are in `until/2026-11-10-1135-vermelho-write-mode-gate-ve-python`
-    and the run branch went back to f8ec43506a. The item went back to `pending`:
-    reuse the side branch (`git cherry-pick` or `git merge` inside the attempt)
-    or redo it; the supervisor''s build judges the result. Disabling or deleting
-    the failing test does not count as a fix.'
+  evidence: 'Retorno 1 de 2 resolvido. Cherry-pick de until/2026-11-10-1135-vermelho-write-mode-gate-ve-python
+    (b94a4c3,fd22d0b,5c3c5db -> 96b769b,d29863f,31f9ecb) na branch until/2026-11-10-2056.
+    Causa do vermelho anterior: tests/test_safe_exit_gate.py test_j fixava version
+    == 3.5.0 e o item sobe common para 3.5.1; corrigido em 2c6e2f1 para version
+    >= 3.5.0 (o teste segue vermelho se a release do gate sumir; nada desligado).
+    Gates: acceptance COMPLETE (.claude/acceptance/write-mode-gate-ve-python.yaml,
+    auditado em fd22d0b) e proof PROVEN (docs/proof/write-mode-gate-ve-python.yaml,
+    head fd22d0b) valem para o mesmo código: common/hooks/write-mode-gate.py e tests/test_write_mode_gate.py
+    não mudaram entre f8ec435 e a30fc85 (git diff vazio). Testes rodados aqui: test_write_mode_gate,
+    test_safe_exit_gate e 18 vizinhos que citam plugin.json/write-mode-gate, todos
+    exit 0. Build completo fica com o supervisor. Código na branch do run, sem merge
+    nem push.'
+  head_commit: 2c6e2f1346f9bed83fdb592159dba106762822bb
 - id: worktree-retomada-nao-some
   title: limpeza automática não apaga worktree de conversa retomável
   why: 'decidido pelo dono em 2026-11-10: last_seen por turno, aviso na retomada,
     telemetria com branch (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Retorno 1 de 2: commits da tentativa anterior reaproveitados por cherry-pick
+    do ramo until/2026-11-10-2056-vermelho-worktree-retomada-nao-some (c7cb151->4f112aa
+    fix, a798360->21b4b65 test). Causa do vermelho do build completo: tests/test_state_deposits.py,
+    ~/.claude/cepa-wt-index (escrito por _wtlib.index_register) fora do CATALOGUE;
+    corrigido em 40a3884 (common/hooks/_state.py). Gates: completion-auditor COMPLETE
+    (.claude/acceptance/worktree-retomada-nao-some.yaml), proof-reviewer PROVEN
+    (docs/proof/worktree-retomada-nao-some.yaml, head_commit 40a3884, 6 perturbações
+    vermelhas incl. a linha do catálogo) — commit 546d078. Testes vizinhos verdes:
+    test_session_heartbeat, test_state_deposits, test_worktree_remove_guard, test_cepa_chaining,
+    test_cepa_slice_isolation, test_cepa_until_run_branch e mais 31 que importam
+    _wtlib/_state. Build completo fica com o supervisor. Código no ramo do run until/2026-11-10-2056,
+    sem merge nem push. Topologia build-solo: sem validation-lead.'
   sem_epic: true
+  head_commit: 546d078c425850115f49586096e0deacffca034c
