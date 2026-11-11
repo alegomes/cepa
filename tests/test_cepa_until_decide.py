@@ -1465,6 +1465,9 @@ def _cs10_check(label, items, answers, count):
         check(f"{label}: exits 0", rc == 0, out[-1500:])
         check(f"{label}: says no item runs and the run does not start",
               "nothing to do: no item runs, so the run does not start" in out, out[-1500:])
+        check(f"{label}: the message names this run's branch, not a placeholder",
+              re.search(r"no `until/\d{4}-\d{2}-\d{2}-\d{4}` branch", out) is not None
+              and "<run_id>" not in out, out[-1500:])
         check(f"{label}: no until/* branch", branches == "", branches)
         check(f"{label}: worktree list has only the clone", len(wts) == 1, str(wts))
         check(f"{label}: no ledger events", _launch_events(root) == [], out[-800:])
