@@ -1830,6 +1830,79 @@ def test_pre_read_cs5_ceiling_kills_a_slow_reader_and_the_item_runs():
         check("cs5 ceiling: x1 runs as today", "x1" in _started(events), p.stdout[-1500:])
 
 
+# ── CS-7: the pre-read stops at the ceiling and the unread item runs as today ──
+
+def _cs7_launch(items, reader, ceiling="1"):
+    """Real launch with `reader` as CEPA_UNTIL_LEITOR; returns (out, events)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, items)
+        binv = fake_claude(tmp, "pass")
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = reader(tmp) if callable(reader) else reader
+        env["CEPA_UNTIL_TETO_LEITURA"] = ceiling
+        p = subprocess.run(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"],
+            capture_output=True, text=True, env=env, timeout=120,
+            stdin=subprocess.DEVNULL)
+        return p.stdout + p.stderr, _launch_events(root)
+
+
+def _cs7_reads(events):
+    return [e for e in events if e.get("evento") == "leitura_previa"]
+
+
+def test_pre_read_cs7_ceiling_marks_the_item_as_not_read_and_it_runs():
+    out, events = _cs7_launch(
+        [item("x1")], f"{sys.executable} -c 'import time; time.sleep(5)'")
+    reads = _cs7_reads(events)
+    ev = reads[0] if reads else {}
+    row = next((r for r in ev.get("itens", []) if r.get("id") == "x1"), {})
+    check("cs7 ceiling: one leitura_previa event", len(reads) == 1, str(reads))
+    check("cs7 ceiling: the launch did not wait the reader's 5 s",
+          ev.get("segundos", 99) < 5, str(ev.get("segundos")))
+    check("cs7 ceiling: x1 is marked not read (teto)",
+          row.get("lido") is False and row.get("nao_lido") == "teto", str(row))
+    check("cs7 ceiling: listed in nao_lidos, lidos is 0",
+          ev.get("nao_lidos") == ["x1"] and ev.get("lidos") == 0, str(ev))
+    check("cs7 ceiling: x1 gets item_start", "x1" in _started(events), out[-1500:])
+    check("cs7 ceiling: the screen says it was not read",
+          "not read within the 1s ceiling: x1" in out, out[-1500:])
+
+
+def test_pre_read_cs7_mixed_queue_only_the_slow_item_is_unread():
+    def reader(tmp):
+        script = Path(tmp) / "leitor_misto.py"
+        script.write_text(
+            "import sys, time\n"
+            "if 'y1' in sys.stdin.read() + ' '.join(sys.argv):\n"
+            "    time.sleep(5)\n"
+            "print('null')\n")
+        return f"{sys.executable} {script}"
+    out, events = _cs7_launch([item("x1"), item("y1")], reader)
+    ev = (_cs7_reads(events) or [{}])[0]
+    rows = {r.get("id"): r for r in ev.get("itens", [])}
+    check("cs7 mixed: x1 read", rows.get("x1", {}).get("lido") is True
+          and rows["x1"].get("nao_lido") is None, str(rows))
+    check("cs7 mixed: y1 not read (teto)", rows.get("y1", {}).get("lido") is False
+          and rows["y1"].get("nao_lido") == "teto", str(rows))
+    check("cs7 mixed: lidos 1, nao_lidos [y1]",
+          ev.get("lidos") == 1 and ev.get("nao_lidos") == ["y1"], str(ev))
+    check("cs7 mixed: both run", {"x1", "y1"} <= set(_started(events)), out[-1500:])
+
+
+def test_pre_read_cs7_failing_reader_is_falha_not_teto():
+    out, events = _cs7_launch(
+        [item("x1")], f"{sys.executable} -c 'import sys; sys.exit(3)'")
+    ev = (_cs7_reads(events) or [{}])[0]
+    row = next((r for r in ev.get("itens", []) if r.get("id") == "x1"), {})
+    check("cs7 falha: lido False, nao_lido falha",
+          row.get("lido") is False and row.get("nao_lido") == "falha", str(row))
+    check("cs7 falha: not in nao_lidos, lidos 0",
+          ev.get("nao_lidos") == [] and ev.get("lidos") == 0, str(ev))
+    check("cs7 falha: x1 runs", "x1" in _started(events), out[-1500:])
+
+
 
 # ── CS-6: a preference runs with the agent's default, or with the owner's answer ──
 

@@ -3041,6 +3041,9 @@ def _kill_group(proc):
         pass
 
 
+READ_CEILING_ERROR = "not read within the ceiling"  # stable marker (CS-7)
+
+
 def read_one(repo, item, deadline):
     """Runs the reader of one item; returns (finding_or_None, error_or_None). Anything
     that goes wrong (no command, non-zero exit, past the shared deadline) is "no
@@ -3051,7 +3054,7 @@ def read_one(repo, item, deadline):
     cmd, stdin_text = built
     left = deadline - time.monotonic()
     if left <= 0:
-        return None, "not read within the ceiling"
+        return None, READ_CEILING_ERROR
     try:
         proc = subprocess.Popen(
             cmd, cwd=str(repo), env=item_environment(), text=True,
@@ -3066,7 +3069,7 @@ def read_one(repo, item, deadline):
     except subprocess.TimeoutExpired:
         _kill_group(proc)
         proc.communicate()
-        return None, "not read within the ceiling"
+        return None, READ_CEILING_ERROR
     finally:
         _LIVE_READERS.discard(proc)
     if proc.returncode != 0:
@@ -3087,7 +3090,12 @@ def pre_read(repo, items, ceiling=None):
         except Exception as e:  # noqa: BLE001  (a reader must never stop the launch)
             finding, error = None, f"reader failed: {e}"
         row = {"id": item.get("id"), "tipo": None, "texto": None,
-               "pergunta": None, "erro": error}
+               "pergunta": None, "erro": error,
+               # CS-7: read = the reader ran to completion, exit 0, within the ceiling.
+               # Set before the call site overwrites `erro` with a route-opening error.
+               "lido": error is None,
+               "nao_lido": (None if error is None else
+                            "teto" if error == READ_CEILING_ERROR else "falha")}
         row.update(finding or {})
         return row
 
@@ -4062,14 +4070,20 @@ def _main(argv=None):
                     "texto": row["texto"], "pergunta": row.get("pergunta"),
                     "padrao": row["padrao"], "escolha": row["padrao"],
                     "fonte": "padrao"}
-        read_ok = sum(1 for r in rows if not r["erro"] or r["tipo"])
+        read_ok = sum(1 for r in rows if r["lido"])
+        not_read = [str(r["id"]) for r in rows if r["nao_lido"] == "teto"]
         print(f"   pre-read: {read_ok} of {len(rows)} read, {opened} deferred for a "
               "missing pre-condition")
+        if not_read:
+            print(f"   pre-read: not read within the {READER_CEILING_SEC:g}s ceiling: "
+                  f"{', '.join(not_read)} — they run as usual")
         pre_read_event = {"evento": "leitura_previa",
                           "itens": [{k: r.get(k) for k in
                                      ("id", "tipo", "texto", "pergunta", "padrao",
-                                      "rota_aberta", "erro")} for r in rows],
+                                      "rota_aberta", "erro", "lido", "nao_lido")}
+                                    for r in rows],
                           "lidos": read_ok,
+                          "nao_lidos": not_read,
                           "segundos": round(time.monotonic() - started, 1)}
         if opened:
             fresh, _ = query_queue(a.queue, repo)
