@@ -1598,6 +1598,13 @@ def _fake_reader(tmp, mode):
         "    print(json.dumps({'tipo': 'pre-condicao',\n"
         "        'texto': 'Falta o token de acesso do ambiente de homologação.',\n"
         "        'pergunta': ' '.join(['Você já providenciou o token de acesso']*10) + '?'}))\n"
+        "elif mode == 'pref':\n"
+        "    print(json.dumps({'tipo': 'preferencia', 'padrao': 'usar o formato curto',\n"
+        "        'texto': 'Há duas formas de mostrar a data.',\n"
+        "        'pergunta': 'Posso usar o formato curto?'}))\n"
+        "elif mode == 'emptytext':\n"
+        "    print(json.dumps({'tipo': 'pre-condicao', 'texto': '  ',\n"
+        "        'pergunta': 'Você já providenciou o token de acesso?'}))\n"
         "elif mode == 'garbage':\n"
         "    print('this is not json')\n"
         "elif mode == 'fail':\n"
@@ -1678,6 +1685,100 @@ def test_pre_read_cs5_question_refused_by_cepa_plan_still_opens_the_route():
     check("cs5 long question: event says rota_aberta without error",
           reads and reads[0]["itens"][0]["rota_aberta"] is True
           and not reads[0]["itens"][0]["erro"], str(reads))
+
+
+def test_pre_read_cs5_preference_does_not_open_a_route_and_the_item_runs():
+    out, events, items, calls = _pre_read_launch("pref")
+    check("cs5 pref: x1 runs", "x1" in _started(events), out[-800:])
+    check("cs5 pref: no route on x1", not items["x1"].get("human_pending"), str(items["x1"]))
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    row = {r["id"]: r for r in (reads[0]["itens"] if reads else [])}.get("x1", {})
+    check("cs5 pref: the event records the preference, route not opened",
+          row.get("tipo") == "preferencia" and row.get("rota_aberta") is False
+          and row.get("padrao") == "usar o formato curto", str(row))
+
+
+def test_pre_read_cs5_precondition_with_empty_text_is_no_finding():
+    out, events, items, calls = _pre_read_launch("emptytext")
+    check("cs5 empty text: x1 runs", "x1" in _started(events), out[-800:])
+    check("cs5 empty text: no route on x1", not items["x1"].get("human_pending"),
+          str(items["x1"]))
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    check("cs5 empty text: the event has tipo null",
+          reads and all(r["tipo"] is None for r in reads[0]["itens"]), str(reads))
+
+
+def test_pre_read_cs5_cepa_plan_refusing_both_attempts_runs_the_item_with_the_error():
+    # The previous owner_summary is carried over to `finish` and fails its plain-text
+    # validation (file name and commit code), with or without the question.
+    x = dict(item("x1"), owner_summary={"impede": "quebrou em src/Foo.java no commit 3f9a2c1"})
+    out, events, items, calls = _pre_read_launch("pre", x_item=x)
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    row = {r["id"]: r for r in (reads[0]["itens"] if reads else [])}.get("x1", {})
+    check("cs5 refused: the event says rota_aberta false with an erro",
+          row.get("tipo") == "pre-condicao" and row.get("rota_aberta") is False
+          and row.get("erro"), str(row))
+    check("cs5 refused: no route on x1", not items["x1"].get("human_pending"), str(items["x1"]))
+    check("cs5 refused: x1 runs as today", "x1" in _started(events), out[-800:])
+    check("cs5 refused: one line says the route could not be opened",
+          "could not open the route of x1" in out, out[-800:])
+
+
+def test_pre_read_cs5_orphan_reservation_needs_the_supervisor_flag():
+    # `cepa-plan queue` returns an `in_progress` item with an orphan reservation as
+    # executable; without `--supervisor`, `finish` refuses a claim that is not the
+    # caller's (finish_gate), so the route would never open.
+    x = dict(item("x1", status="in_progress"),
+             claimed_by={"session_id": "morta", "pid": 1, "hostname": "outra-maquina",
+                         "cwd": "/nao/existe", "branch": "until/old",
+                         "started_at": "2026-01-01T00:00:00+00:00"})
+    out, events, items, calls = _pre_read_launch("pre", x_item=x)
+    check("cs5 orphan: the route opened", "token" in str(items["x1"].get("human_pending")),
+          str(items["x1"]))
+    check("cs5 orphan: x1 has no item_start", "x1" not in _started(events), out[-800:])
+
+
+def test_pre_read_cs5_route_opened_by_the_pre_read_shows_in_the_launch_panel():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("x1"), item("y1")])
+        binv = fake_claude(tmp, "pass")
+        script, log = _fake_reader(tmp, "pre")
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(script)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"], str(root),
+            inputs=[], env=env, timeout=90)
+    panel = out.find("Falta o token de acesso")
+    first = out.find("item_start")
+    check("cs5 panel: the pre-read route text is in the launch panel",
+          panel >= 0 and "question(s) for you" in out, out[-1500:])
+    check("cs5 panel: it appears before the first item runs",
+          panel >= 0 and (first < 0 or panel < first)
+          and out.find("1st item") < panel, out[-1500:])
+
+
+def test_pre_read_cs5_nothing_left_after_the_pre_read_means_no_run():
+    # The queue is read again after a route is opened: with only x1 and its route
+    # open, the batch is empty, so the run does not start (no run_start, no ledger).
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("x1")])
+        binv = fake_claude(tmp, "pass")
+        script, log = _fake_reader(tmp, "pre")
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(script)
+        p = subprocess.run(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"],
+            capture_output=True, text=True, env=env, timeout=120,
+            stdin=subprocess.DEVNULL)
+        events = _launch_events(root)
+        check("cs5 empty batch: says nothing to do", "nothing to do" in p.stdout,
+              p.stdout[-800:])
+        check("cs5 empty batch: no run was started", not events, str(events))
+        check("cs5 empty batch: the route is open", items_of(root)["x1"].get("human_pending"),
+              str(items_of(root)["x1"]))
 
 
 def test_pre_read_cs5_no_finding_garbage_or_failure_runs_the_item_as_today():
