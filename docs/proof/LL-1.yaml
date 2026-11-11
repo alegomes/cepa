@@ -1,0 +1,53 @@
+schema_version: 2
+card: LL-1
+verdict: proven
+reviewed_at: 2026-11-10T22:30:00-03:00
+base_commit: a30fc8550bc8d71b98a9c707fe873c1278a4a134
+head_commit: 55d7b54
+issue_type: Feature
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until: owner_questions, ask_mid_run (helpers puros)", module: "common-bin", external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until: close_with_owner(already_asked=..., interactive=...)", module: "common-bin", external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until: _main (painel antes de fechar, retomada_pelo_dono, mid_run_silent, flag --no-resume-on-answer)", module: "common-bin", external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo Python (CLI cepa-until), sem Maven nem PIT. Superficie externa = o CLI
+    rodado num pty por tests/test_cepa_until_resume_on_answer.py. O unico
+    duble e o `claude` falso no PATH (fronteira distante: o worker de IA); o
+    cepa-until e o cepa-plan rodam de verdade, entao nenhuma classe alterada e
+    substituida. Tecnica: perturbacao em worktree descartavel --detach
+    (/tmp/ll1-proof3 em 55d7b54, removida ao final), nunca na arvore principal.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline em 55d7b54 (worktree): test_cepa_until_resume_on_answer.py 'tudo verde' (8 casos); test_cepa_until_decide.py 'tudo verde'"
+        - "RED P-A: ramo NoAnswer `mid_run_silent = True` -> False (L4058): 2 falhas (diz que ninguem respondeu uma vez so; o fim nao pergunta de novo)"
+        - "RED P-B: ramo EOFError `mid_run_silent = True` -> False (L4062): 1 falha (o fim lista em vez de perguntar)"
+        - "RED P-C: `except NoAnswer` -> `except KeyError` (L4057): 3 falhas (run sai 0; mensagem; fim)"
+        - "RED P-D: `except EOFError` -> `except KeyError` (L4061): 2 falhas (run sai 0; diz que a entrada fechou)"
+        - "RED P-E: save_state fase aguardando-dono removido (L4047): 1 falha (durante a espera o estado diz aguardando-dono)"
+        - "RED P-F: log_event painel_antes_de_fechar neutralizado (L4048): 1 falha (o registro marca o painel com o item perguntado)"
+        - "RED P-G: `interactive=False if mid_run_silent else None` -> `interactive=None` (L4869): 3 falhas"
+        - "RED amostra: continue -> break apos a retomada (L4072): 3 falhas; reserva da janela `remaining >= reserve` -> True em ask_mid_run (L2889): 1 falha (janela menor que a reserva: nao pergunta)"
+        - "amostragem: dos 13 pontos que ja davam RED na rodada fd411d5, re-perturbei 2 (continue->break, reserva da janela); os demais nao foram re-rodados nesta rodada (codigo inalterado neles entre fd411d5 e 55d7b54 exceto a guarda morta removida)"
+        - "os 6 sobreviventes anteriores (2x mid_run_silent, 2x except, save_state, log_event) e a linha nova interactive: todos agora RED"
+        - "worktree removida (git worktree remove --force); arvore principal intocada"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; as linhas antes sem cobertura (ramos NoAnswer/EOFError, mid_run_silent, fase aguardando-dono, painel_antes_de_fechar) foram cada uma quebrada e deram RED (P-A..P-G), o que prova que sao alcancadas pelo teste pty"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff nao adiciona leitura de entrada externa: a resposta do dono continua sendo lida por decide(), que nao foi alterado entre a30fc85 e 55d7b54 (hunks so em ask_mid_run/owner_questions, close_with_owner, a flag booleana e o loop de _main); nenhum modulo de entrada (api-rest) tocado"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "card de funcionalidade, nao Bug"
+routing_reason: "Todas as 7 linhas que sobreviveram na rodada anterior (caminho 'ninguem respondeu': NoAnswer, EOFError, mid_run_silent, fase aguardando-dono, evento painel_antes_de_fechar) mais a linha nova interactive=False agora ficam vermelhas quando quebradas, e 2 amostras dos 13 pontos antigos tambem. Caminho principal (resposta sim retoma o mesmo run) segue provado. PROVEN."
