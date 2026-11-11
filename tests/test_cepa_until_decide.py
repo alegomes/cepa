@@ -1488,6 +1488,15 @@ def test_launch_cs10_queue_with_only_done_items_has_no_wait_for_you_line():
     _cs10_check("cs10 all done", [item("d1", status="done")], [], 0)
 
 
+def test_launch_cs10_wait_count_leaves_out_items_deferred_for_another_reason():
+    # b1 depends on a1 (deferred for the owner), so b1 is deferred as
+    # depends-on-deferred: it does not wait for the owner and is not counted.
+    a1 = _no_routes()[0]
+    b1 = item("b1")
+    b1["blocked_by"] = ["a1"]
+    _cs10_check("cs10 cascade", [a1, b1], [], 1)
+
+
 def test_launch_cs10_route_answered_no_in_the_panel_the_run_does_not_start():
     _cs10_check("cs10 panel n", [item("a1", human_pending="provision the Keycloak role")],
                 [("[t] I write the answer", "n")], 1)
