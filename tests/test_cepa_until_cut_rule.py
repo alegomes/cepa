@@ -21,7 +21,8 @@ from test_cepa_until_decide import check, load_module, _pref_launch  # noqa: E40
 
 def _has_cut_rule(request):
     low = request.lower()
-    return ("--decision" in request and "--human-pending" in request
+    # `--decision` itself, not only inside `--decision-commit` (proof survivor P2).
+    return (re.search(r"--decision(?!-)", request) and "--human-pending" in request
             and "already committed" in low and "proof waiver" in low
             and "done" in low and "outside the repository" in low)
 
@@ -35,6 +36,10 @@ def test_cut_rule_cs12_every_item_request_carries_it():
           _has_cut_rule(plain), plain)
     check("cs12 unit: the rule names the finish flags, not drain-plan's",
           "cepa-plan finish" in plain, plain)
+    bare = mod.build_command("fila", "", False)[2]
+    check("cs12 unit: without a run branch the request still carries the rule",
+          bare.startswith("/common:drain-plan fila --max 1\n\n") and _has_cut_rule(bare),
+          bare)
     pref = {"texto": "T.", "padrao": "P", "escolha": "R", "fonte": "padrao"}
     noted = mod.build_command("fila", "until/b", False,
                               note=mod.preference_note("x1", pref))[2]
