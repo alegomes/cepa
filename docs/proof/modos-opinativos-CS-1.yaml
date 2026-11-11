@@ -1,0 +1,57 @@
+schema_version: 2
+card: modos-opinativos-CS-1
+verdict: proven
+reviewed_at: 2026-11-11T21:40:00-03:00
+base_commit: 3bdbf8d0b9bd541fa0dd153f763821a9c9b22f62
+head_commit: 6541c0e
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-modes (--menu: need_met, menu_actions, render_menu, installed_plugins, MENU_MAX; --json _JSON_KEYS.get(k, k))"
+      module: bin
+      external_observable: true
+      substituted_by_double: null        # tests/test_cepa_mode.py runs the real CLI as a subprocess; only HOME is faked (plugin install state). need_met is also imported and called directly by test_need_met_unknown_type_is_not_met (real code, no double)
+    - class: "common/hooks/_modes.py (new `actions` field of the 7 modes)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at 6541c0e: python3 tests/test_cepa_mode.py -> 'tudo verde'; python3 tests/test_modes_single_source.py -> 'ok — 7 modos ...' (throwaway worktrees /tmp/proof-cs1 at d0015a8 and /tmp/proof-cs1b at 6541c0e, both removed)"
+        - "RED-at-base: cepa-modes and _modes.py from 3bdbf8d + tests from 6541c0e -> 11 FAIL checks (first three: '--menu discovery rc 0' with 'unrecognized arguments: --menu', 'menu has the lines in order', '--menu design: rc 0 and empty'; construction cases also red). 'unknown mode rc 2' is green at base only because argparse also exits 2 on an unknown flag; it is load-bearing by P9."
+        - "P1 cap 'MENU_MAX = 5' -> 50 -> 2 FAIL (RED at 6541c0e: 'exactly 5 numbered actions', 'prove-drain cut by the cap'); GREEN at d0015a8, closed by the new construction test"
+        - "P2 dedupe 'if a[label] in seen:' -> 'if False:' -> 2 FAIL (RED at 6541c0e: \"'Fix a bug' appears exactly once\", 'later variant of the same label dropped'); GREEN at d0015a8"
+        - "P3 topology '.strip() == value' -> '!= value' -> 3 FAIL (RED at 6541c0e: build-solo fix variant, build-solo build variant, build-hex variants hidden); GREEN at d0015a8"
+        - "P4 file: 'os.path.exists(...)' -> 'True' -> 3 FAIL (RED at 6541c0e: 'no /board-flow: line', build-solo fix variant, red-test action); GREEN at d0015a8"
+        - "P6 unknown need type 'return False' -> 'return True' -> 1 FAIL (RED at 6541c0e: 'unknown type bogus:x is not met', direct call to need_met); GREEN at d0015a8"
+        - "P14 sequence join ', then ' -> ' | ' -> 1 FAIL (RED at 6541c0e: \"sequence joined by ', then '\"); GREEN at d0015a8"
+        - "P5 plugin 'return value in plugins' -> 'return True' -> 1 FAIL (RED, measured at d0015a8; the head only adds tests)"
+        - "P7 numbering enumerate(...,1) -> (...,0) -> 1 FAIL (RED, measured at d0015a8)"
+        - "P8 filter 'all(need_met' -> 'any(need_met' -> 2 FAIL (RED, measured at d0015a8)"
+        - "P9 unknown mode 'return 2' -> 'return 0' -> 1 FAIL (RED, measured at d0015a8)"
+        - "P10 render rc 'return render_menu(name)' -> 'render_menu(name); return 1' -> 2 FAIL (RED, measured at d0015a8)"
+        - "P11 installed_plugins filter 'enabled and not missing' -> 'True' -> 1 FAIL (RED, measured at d0015a8)"
+        - "P12 _modes.py discovery command '/common:epic' -> '/common:epik' -> 1 FAIL (RED, measured at d0015a8)"
+        - "P13 --json '_JSON_KEYS.get(k, k)' -> '_JSON_KEYS[k]' -> test_cepa_mode.py stays green but test_modes_single_source.py goes RED (KeyError: 'actions'); load-bearing through the other covering file (measured at d0015a8; the head touches neither file)"
+        - "P5..P13 were not re-run at 6541c0e: the head only adds tests to tests/test_cepa_mode.py, so the d0015a8 reds stand; P1-P4, P6 and P14 (the six survivors of the first round) were re-run independently at 6541c0e and all went RED"
+        - "each perturbation restored with git checkout; worktrees removed, primary tree untouched"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; the previously unreached branches (topology:, dedupe, MENU_MAX break, sequence join, unknown-type fallthrough) are now reached: P1, P2, P3, P4, P6 and P14 each turn test_cepa_mode.py red at 6541c0e"
+  l4_adversarial_input:
+    status: n/a
+    reason: "NOT verified by a run. The only input is the mode name on the command line, validated against the closed MODES table (unknown -> rc 2, covered by P9) and need strings read from the in-repo table (unknown type covered by P6). The diff touches no input-bearing api-rest module; the human may reject this."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is a Story/criterion, not a Bug; red-at-base for the CS-1 test is recorded under l3_load_bearing (11 FAIL at 3bdbf8d)"
+routing_reason: "The test is red at base (11 checks) and every perturbation of a changed behavior turns a suite red at the head: the six that survived at d0015a8 (cap at 5, dedupe, topology:, file:, unknown requirement type, sequence join) were killed by the construction tests added in 6541c0e and re-run independently; the --json actions key is guarded by test_modes_single_source.py. No test double stands in for the changed code. Residual notes: L4 is n/a on a diff-based claim with no run, which the reviewer may overrule; P5-P13 were measured at d0015a8, not re-run at 6541c0e."

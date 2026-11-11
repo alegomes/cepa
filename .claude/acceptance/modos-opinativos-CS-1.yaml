@@ -1,0 +1,26 @@
+schema_version: 1
+card: modos-opinativos-CS-1
+status: complete
+audited_at: 2026-11-11T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "`cepa-modes --menu <modo>` imprime o menu do modo, numerado, com frase leiga e comando por ação, lido do campo `actions` de `_modes.py` (docs/spec/modos-opinativos.md, CS-1)"
+    altitude: cli
+    surface: "executável common/bin/cepa-modes invocado como subprocesso (`--menu discovery --no-color`) num repo descartável sem board-flow.yaml, com HOME falso que tem o plugin discovery habilitado; rc e stdout"
+    demonstrated_by:
+      test: "tests/test_cepa_mode.py::test_menu_discovery e test_menu_empty_and_unknown"
+      layer: "subprocesso real do CLI (sys.executable CEPA_MODES --menu ...), sem mock; exige rc 0, '1) Detail an idea until it becomes a build-ready specification' com /common:spec, e na ordem /common:spec --continuar, /common:epic, /discovery:capture, /common:queue; sem /board-flow:; sem /discovery:capture quando o plugin não está instalado; --menu design = rc 0 e saída vazia; modo desconhecido = rc 2"
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_mode.py   -> rc=0, "tudo verde"
+          ok   --menu discovery rc 0
+          ok   menu has the lines in order
+          ok   --menu design: rc 0 and empty
+          ok   --menu unknown mode: rc 2
+        python3 tests/test_modes_single_source.py -> rc=0
+          ok — 7 modos, mesma lista no `cepa` e em _modes.py, todos com os 5 campos
+        Execução manual (repo vazio, HOME sem plugins): imprime 4 ações numeradas "N) frase: comando", rc=0
+        (checagens passadas: N > 0, ver linhas ok acima)
+    verdict: complete
+    gap: null
+    note: "CS-2..CS-12 fora de escopo desta auditoria (filtro de 5 ações, prompt do launcher, telemetria, docs, testes de fonte única de actions)."
