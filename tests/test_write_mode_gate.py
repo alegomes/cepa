@@ -22,7 +22,11 @@ Contracts guarded here:
     bash-path-lock, which silenced perturbations for 2 months);
   - a write OUTSIDE the session root passes — the perturbation worktree in /tmp and the
     session's scratchpad are not governed by mode (path-lock-out-of-root);
-  - an undecidable construct (`python3 -c`, `patch`, heredoc) does NOT block and
+  - a python/node inline script (`-c`, `-e`, heredoc) has its script read: a
+    known write call whose path is readable is judged like any target, so a
+    write outside the mode BLOCKS (fb-20261106-1); a script that only reads passes;
+  - what still cannot be read (`patch`, a computed path, a script with no
+    known write call) does NOT block and
     WARNS — blocking would take every heredoc along, which is how this repo runs
     scripts; the silence of before let the line break the mode without a trace;
   - the message says what to do (record through off-mode-capture, or end the
@@ -229,7 +233,7 @@ def test_undecidable_construct_warns_without_blocking():
     """
     with Repo() as r:
         r.mode("exploration")
-        for cmd in ('python3 -c "open(\'common/hooks/evil.py\',\'w\').write(1)"',
+        for cmd in ('python3 -c "import sys; print(sys.argv)"',
                     'patch common/bin/cepa < /tmp/p.diff',
                     "python3 - <<'PY'\nprint(1)\nPY"):
             p = r.bash(cmd)
@@ -481,6 +485,136 @@ def test_git_dir_is_checkout_preparation_in_every_mode():
               p.returncode == 2, p.stderr[:160])
 
 
+# fb-20261106-1 (2026-11-06): in an `exploration` session five files outside
+# docs/ and .claude/ were edited by `python3` with a heredoc, and the gate only
+# warned. The shape of those edits, which is how this repo patches a file:
+INTERP_WRITES_OUTSIDE = [
+    # heredoc, the variable holding a literal path
+    "python3 - <<'PY'\nfrom pathlib import Path\np = Path('common/hooks/_modes.py')\n"
+    "s = p.read_text()\np.write_text(s.replace('a', 'b'))\nPY",
+    # heredoc without the dash, open() in write mode
+    'python3 <<EOF\nwith open("common/bin/cepa-intent", "w") as f:\n    f.write("x")\nEOF',
+    # python -c
+    'python3 -c "open(\'common/hooks/evil.py\',\'w\').write(\'1\')"',
+    # node -e and node heredoc
+    "node -e \"require('fs').writeFileSync('compass/hooks/a.tsx', 'x')\"",
+    "node <<'JS'\nconst fs = require('fs');\nfs.appendFileSync(`compass/hooks/b.ts`, 'x');\nJS",
+    # a loop over literal paths
+    "python3 - <<'PY'\nimport pathlib\nfor f in ['docs/a.md', 'common/bin/cepa-metrics']:\n"
+    "    pathlib.Path(f).write_text('x')\nPY",
+    # absolute path inside the session root is resolved like a relative one
+    "python3 - <<'PY'\nopen('{root}/tests/test_x.py', 'a').write('x')\nPY",
+]
+
+
+def test_interpreter_write_outside_mode_blocks():
+    """A python/node script that writes a readable path outside the mode BLOCKS."""
+    with Repo() as r:
+        r.mode("exploration")
+        for cmd in INTERP_WRITES_OUTSIDE:
+            cmd = cmd.replace("{root}", str(r.path))
+            p = r.bash(cmd)
+            check(f"interpretador fora do modo barra: {cmd[:40]!r}",
+                  p.returncode == 2, p.stderr[:200] or "(stderr vazio)")
+            check(f"mensagem é a de fora do modo: {cmd[:30]!r}",
+                  "outside what that mode" in p.stderr, p.stderr[:200])
+
+
+def test_interpreter_block_names_the_script_target():
+    with Repo() as r:
+        r.mode("exploration")
+        p = r.bash(INTERP_WRITES_OUTSIDE[0])
+        check("o alvo barrado é o caminho do script",
+              "common/hooks/_modes.py" in p.stderr, p.stderr[:200])
+
+
+def test_interpreter_write_inside_mode_passes():
+    """Writing what the mode produces through a script stays allowed, without noise."""
+    with Repo() as r:
+        r.mode("exploration")
+        for cmd in ("python3 - <<'PY'\nfrom pathlib import Path\n"
+                    "Path('docs/estrategia.md').write_text('x')\nPY",
+                    "python3 -c \"open('.claude/x.yaml','w').write('1')\"",
+                    "node -e \"require('fs').writeFileSync('BACKLOG.md','x')\""):
+            p = r.bash(cmd)
+            check(f"interpretador dentro do modo passa: {cmd[:36]!r}",
+                  p.returncode == 0, p.stderr[:200])
+            check(f"sem aviso quando o alvo foi lido: {cmd[:30]!r}",
+                  "WARNING" not in p.stderr, p.stderr[:200])
+
+
+def test_interpreter_reading_outside_mode_passes():
+    """Reading a file outside the mode is not writing it: the script that only reads passes."""
+    with Repo() as r:
+        r.mode("exploration")
+        for cmd in ("python3 - <<'PY'\nfrom pathlib import Path\n"
+                    "print(Path('common/hooks/_modes.py').read_text()[:10])\nPY",
+                    "python3 -c \"print(open('common/bin/cepa').read())\"",
+                    # reads outside, writes inside
+                    "python3 - <<'PY'\nfrom pathlib import Path\n"
+                    "src = Path('common/hooks/_modes.py').read_text()\n"
+                    "Path('docs/notas.md').write_text(src)\nPY"):
+            p = r.bash(cmd)
+            check(f"leitura fora do modo passa: {cmd[:40]!r}",
+                  p.returncode == 0, p.stderr[:200])
+
+
+def test_interpreter_write_outside_root_passes():
+    """Decision 2 holds for scripts too: /tmp belongs to no mode."""
+    with Repo() as r:
+        r.mode("exploration")
+        p = r.bash("python3 - <<'PY'\nopen('/tmp/cepa-scratch.txt', 'w').write('x')\nPY")
+        check("script gravando em /tmp passa", p.returncode == 0, p.stderr[:200])
+
+
+def test_interpreter_unreadable_target_still_warns():
+    """A write whose path the script computes is not guessed: warning, as before."""
+    with Repo() as r:
+        r.mode("exploration")
+        p = r.bash("python3 - <<'PY'\nimport sys\nopen(sys.argv[1], 'w').write('x')\nPY")
+        check("alvo computado não barra", p.returncode == 0, p.stderr[:200])
+        check("alvo computado avisa", "WARNING" in p.stderr, p.stderr[:200])
+
+
+def test_interpreter_in_construction_is_silent():
+    for mode in ("construction", "refactor"):
+        with Repo() as r:
+            r.mode(mode)
+            p = r.bash(INTERP_WRITES_OUTSIDE[0])
+            check(f"{mode}: script livre", p.returncode == 0 and not p.stderr.strip(),
+                  p.stderr[:160])
+
+
+def test_interpreter_reads_which_argument_writes():
+    """The source of a copy is read, the destination is written."""
+    with Repo() as r:
+        r.mode("exploration")
+        ok = r.bash("python3 - <<'PY'\nimport shutil\n"
+                    "shutil.copy('common/hooks/_modes.py', 'docs/modes-copia.py')\nPY")
+        check("copiar DE fora para docs passa", ok.returncode == 0, ok.stderr[:200])
+        bad = r.bash("python3 - <<'PY'\nimport shutil\n"
+                     "shutil.copy('docs/a.md', 'common/hooks/a.md')\nPY")
+        check("copiar PARA fora barra", bad.returncode == 2, bad.stderr[:200])
+        # `move` deletes its source: both ends are writes
+        for src, dst in (("docs/a.md", "common/hooks/a.md"),
+                         ("common/hooks/a.md", "docs/a.md")):
+            mv = r.bash(f"python3 -c \"import shutil; shutil.move('{src}','{dst}')\"")
+            check(f"mover {src} -> {dst} barra", mv.returncode == 2, mv.stderr[:200])
+        mv_ok = r.bash("python3 -c \"import shutil; shutil.move('docs/a.md','docs/b.md')\"")
+        check("mover dentro de docs passa", mv_ok.returncode == 0, mv_ok.stderr[:200])
+        env = r.bash("CEPA_X=1 python3 -c \"open('tests/t.py','w').write('x')\"")
+        check("prefixo de variável não esconde o -c", env.returncode == 2,
+              env.stderr[:200])
+
+
+def test_heredoc_to_a_script_file_is_data():
+    """`python3 tool.py <<EOF` feeds DATA to a script: the body is not the program."""
+    with Repo() as r:
+        r.mode("exploration")
+        p = r.bash("python3 tool.py <<'EOF'\nopen('common/x.py', 'w')\nEOF")
+        check("stdin de script não vira programa", p.returncode == 0, p.stderr[:200])
+
+
 def main():
     print("test_write_mode_gate")
     if not GATE.exists():
@@ -500,7 +634,16 @@ def main():
                test_heredoc_body_is_not_a_target,
                test_variable_of_the_command_itself_is_expanded,
                test_unresolvable_target_does_not_blame_the_mode,
-               test_git_dir_is_checkout_preparation_in_every_mode):
+               test_git_dir_is_checkout_preparation_in_every_mode,
+               test_interpreter_write_outside_mode_blocks,
+               test_interpreter_block_names_the_script_target,
+               test_interpreter_write_inside_mode_passes,
+               test_interpreter_reading_outside_mode_passes,
+               test_interpreter_write_outside_root_passes,
+               test_interpreter_unreadable_target_still_warns,
+               test_interpreter_in_construction_is_silent,
+               test_interpreter_reads_which_argument_writes,
+               test_heredoc_to_a_script_file_is_data):
         fn()
     if failures:
         print(f"\n{len(failures)} falha(s): {', '.join(failures)}")

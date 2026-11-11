@@ -1,0 +1,35 @@
+key: worktree-retomada-nao-some
+status: complete
+diff_range: 2c6e2f1..40a3884
+criteria:
+  - id: AC1
+    altitude: event
+    surface: >
+      common/hooks/session-heartbeat.py como UserPromptSubmit (stdin JSON),
+      registrado em common/.claude-plugin/plugin.json; atualiza last_seen no
+      registro a cada prompt, renova pid morto; STALE_HOURS segue 24.
+    test: tests/test_session_heartbeat.py (prompt bumps last_seen; dead pid refreshed; worktree da sessao que deu prompt recente e MANTIDO pelo auto_clean; controle: silenciosa e removida; wiring no plugin.json)
+    layer: subprocesso real dos hooks + registro em disco
+    evidence: verified
+    run: "python3 tests/test_session_heartbeat.py -> 'all green' (exit 0, rodado em 40a3884); python3 -m pytest tests/test_session_heartbeat.py -> 1 passed"
+  - id: AC2
+    altitude: event
+    surface: >
+      session-heartbeat.py no primeiro prompt de conversa retomada cujo
+      worktree sumiu: additionalContext em pt-BR com caminho, branch, dir de
+      resgate e quem removeu; uma vez so; funciona com cwd apagado e com entry
+      cujo cwd sumiu.
+    test: tests/test_session_heartbeat.py (first resumed prompt warns with path, branch, rescue dir and remover; second prompt does NOT repeat; cwd deleted; entry cwd vanished)
+    layer: subprocesso real dos hooks
+    evidence: verified
+    run: "python3 tests/test_session_heartbeat.py -> 'all green' (exit 0)"
+  - id: AC3
+    altitude: persistence
+    surface: >
+      telemetria worktree_auto_clean (auto_clean) e worktree_remove_allow
+      (worktree-remove-guard.py) com branch, path e by_session.
+    test: tests/test_session_heartbeat.py (worktree_auto_clean carries branch, path, by_session; worktree_remove_allow carries ...; git branch -D)
+    layer: subprocesso real dos hooks + arquivo de telemetria
+    evidence: verified
+    run: "python3 tests/test_session_heartbeat.py -> 'all green' (exit 0); regressao: tests/test_cepa_chaining.py OK, tests/test_cepa_slice_isolation.py all ok"
+    # re-verificado em 40a3884; tests/test_state_deposits.py (catalogo de ~/.claude/cepa-wt-index) todos os testes passaram; test_worktree_remove_guard all green

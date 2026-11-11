@@ -19,7 +19,10 @@ Entry schema (all optional except session_id/pid/cwd):
     "hostname": "macbook",         # PID liveness only valid on the same host
     "cwd": "/abs/worktree",        # the working tree this session runs in
     "started_at": "2026-06-11T...",
-    "last_seen": "2026-06-11T...", # bumped by session-activity on each edit
+    "last_seen": "2026-06-11T...", # bumped at SessionStart, on each edit
+                                   # (session-activity) and on EVERY user prompt
+                                   # (session-heartbeat); entry_is_live goes
+                                   # stale STALE_HOURS after the last bump
     "branch": "session/0611-1430",
     "is_session_worktree": true,   # launcher created this as an isolated wt
     "worktree_path": "/abs/repo-session-0611-1430",
@@ -42,6 +45,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 STALE_HOURS = 24
+
+# How long a "worktree gone" tombstone (see write_tombstone) is kept. Long
+# enough for a conversation parked over a holiday to be resumed and told what
+# happened to its worktree; short enough that the sessions dir does not grow.
+TOMBSTONE_DAYS = 45
 
 # Gitignored files copied into a fresh worktree by default (override via
 # $CEPA_SEED or a .claude/worktree-seed file). A fresh worktree starts without
@@ -312,10 +320,156 @@ def prune_dead(root: str, keep_key: str = "") -> None:
         if f.stem == keep_key:
             continue
         if not entry_is_live(entry):
+            # The entry is the only record of which conversation owned a
+            # session worktree. Leave a tombstone first: a conversation parked
+            # for days and resumed must still be able to be told that its
+            # worktree went away (session-heartbeat reads it).
+            write_tombstone(root, entry, reason="registry entry pruned (session looked dead)")
             try:
                 f.unlink()
             except OSError:
                 pass
+    reap_tombstones(root)
+
+
+# ── tombstones: what a removed session worktree used to be ─────────────────
+#
+# `.claude/sessions/<session_id>.gone` (NOT .json, so read_entries never
+# mistakes it for a live session). Written when a dead entry is pruned and
+# completed by auto_clean when it actually removes the worktree. Read by
+# session-heartbeat on the first prompt of a resumed conversation.
+
+def tombstone_path(root: str, key: str) -> Path:
+    return sessions_dir(root) / f"{key}.gone"
+
+
+def read_tombstone(root: str, key: str):
+    try:
+        data = json.loads(tombstone_path(root, key).read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def write_tombstone(root: str, entry: dict, reason: str = "", **extra) -> None:
+    """Record cwd/branch of a session worktree that may be removed. Only for
+    isolated session worktrees (the only thing auto_clean removes); merges into
+    an existing tombstone so the later auto_clean data adds to the earlier one.
+    Never raises."""
+    try:
+        sid = entry.get("session_id") or ""
+        wt = entry.get("worktree_path") or entry.get("cwd") or ""
+        if not sid or "/" in sid or not wt or not entry.get("is_session_worktree"):
+            return
+        data = read_tombstone(root, sid) or {}
+        data.update({
+            "session_id": sid,
+            "cwd": entry.get("cwd") or wt,
+            "worktree_path": wt,
+            "branch": entry.get("branch") or data.get("branch", ""),
+            "recorded_at": data.get("recorded_at") or now_iso(),
+        })
+        if reason and not data.get("reason"):
+            data["reason"] = reason
+        data.update(extra)
+        sessions_dir(root).mkdir(parents=True, exist_ok=True)
+        tombstone_path(root, sid).write_text(json.dumps(data, indent=2), encoding="utf-8")
+        index_register(wt, root)
+    except Exception:  # noqa: BLE001 — bookkeeping never breaks the caller
+        pass
+
+
+def tombstone_for_path(root: str, path: str):
+    """(session_id, data) of a tombstone whose worktree is `path`, else None."""
+    try:
+        files = sorted(sessions_dir(root).glob("*.gone"))
+    except OSError:
+        return None
+    for f in files:
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict) and same_path(data.get("worktree_path", ""), path):
+            return f.stem, data
+    return None
+
+
+def reap_tombstones(root: str) -> None:
+    cutoff = datetime.now(timezone.utc).timestamp() - TOMBSTONE_DAYS * 86400
+    try:
+        for f in _index_dir().glob("*.json"):
+            try:
+                if f.stat().st_mtime < cutoff:
+                    f.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
+    try:
+        for f in sessions_dir(root).glob("*.gone"):
+            try:
+                if f.stat().st_mtime < cutoff:
+                    f.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
+# ── worktree -> main root index ───────────────────────────────────────────
+#
+# The registry lives under the MAIN root, but a resumed conversation whose
+# worktree was deleted has nothing but the deleted path: cwd and
+# $CLAUDE_PROJECT_DIR both point at it. In the `~/cepa-worktrees/<repo>-<slug>`
+# layout the worktree is a SIBLING of the main clone, so walking up from it
+# never reaches the clone. A tiny index in the home dir, keyed by the worktree
+# path, is what still answers "which repo was this worktree of?". Written at
+# SessionStart and when a tombstone is written; looked up by session-heartbeat.
+
+def _index_dir() -> Path:
+    return Path.home() / ".claude" / "cepa-wt-index"
+
+
+def _index_file(path: str) -> Path:
+    import hashlib
+    return _index_dir() / (hashlib.sha1(os.path.realpath(path).encode()).hexdigest() + ".json")
+
+
+def index_register(wt_path: str, root: str) -> None:
+    """Remember that worktree `wt_path` belongs to the repo whose main root is
+    `root`. Never raises."""
+    try:
+        if not wt_path or not root or same_path(wt_path, root):
+            return
+        _index_dir().mkdir(parents=True, exist_ok=True)
+        _index_file(wt_path).write_text(
+            json.dumps({"worktree": os.path.realpath(wt_path), "root": root}),
+            encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def index_lookup(path: str) -> str:
+    """Main root registered for `path` or the nearest ancestor of it (cwd may
+    be a subdirectory of the worktree); "" when unknown or the root is gone."""
+    try:
+        cur = os.path.realpath(path)
+        while True:
+            f = _index_file(cur)
+            if f.is_file():
+                root = json.loads(f.read_text(encoding="utf-8")).get("root", "")
+                return root if root and os.path.isdir(root) else ""
+            parent = os.path.dirname(cur)
+            if parent == cur:
+                return ""
+            cur = parent
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def rescue_slug(branch: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", branch or "unknown").strip("-") or "unknown"
 
 
 def same_path(a: str, b: str) -> bool:
@@ -416,6 +570,7 @@ def classify(root: str, predict=False):
         info = {
             "path": wt["path"],
             "branch": branch,
+            "session_id": e.get("session_id", ""),
             # `git worktree list` keeps naming a branch whose ref was deleted
             # (update-ref -d, a tool that bypassed `git branch -D`). Then ahead
             # comes back -1 and, when the directory survives, `git status`
@@ -557,7 +712,7 @@ def rescue_artifacts(wt_path: str, base_root: str, branch: str):
     doomed = doomed_artifacts(wt_path)
     if not doomed:
         return []
-    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", branch or "unknown").strip("-") or "unknown"
+    slug = rescue_slug(branch)
     dest_root = Path(base_root) / ".claude" / "rescued" / slug
     saved = []
     for rel in doomed:
@@ -628,9 +783,15 @@ def rescued_dirs(root: str):
     return out
 
 
-def auto_clean(root: str):
+def auto_clean(root: str, by_session: str = ""):
     """Remove session worktrees that are provably safe to drop:
     not alive AND clean AND (fully merged or zero commits). Returns names removed.
+
+    `by_session` is the session_id that is doing the removal (the one whose
+    SessionStart triggered this). Each removal emits a `worktree_auto_clean`
+    telemetry event with branch, path and by_session, and completes the
+    tombstone of the conversation that owned the worktree, so a resume can be
+    told what happened (see write_tombstone).
     """
     removed = []
     for info in classify(root):
@@ -638,12 +799,34 @@ def auto_clean(root: str):
             continue
         if info["ahead"] != 0:   # has unmerged commits (or unknown) → keep
             continue
-        rescue_artifacts(info["path"], root, info["branch"])
+        saved = rescue_artifacts(info["path"], root, info["branch"])
+        # Owner of the worktree: the live-looking registry entry if there still
+        # is one, otherwise the tombstone prune_dead left behind.
+        owner = info.get("session_id") or ""
+        tomb = tombstone_for_path(root, info["path"])
+        if not owner and tomb:
+            owner = tomb[0]
         rc, _, _ = git(["worktree", "remove", info["path"]], cwd=root)
         if rc != 0:
             git(["worktree", "remove", "--force", info["path"]], cwd=root)
         git(["branch", "-D", info["branch"]], cwd=root)
         removed.append(info["branch"])
+        if owner:
+            write_tombstone(
+                root,
+                {"session_id": owner, "cwd": info["path"], "worktree_path": info["path"],
+                 "branch": info["branch"], "is_session_worktree": True},
+                reason="auto_clean removed the worktree",
+                removed_at=now_iso(), removed_by_session=by_session,
+                rescued=len(saved), rescued_dir=f".claude/rescued/{rescue_slug(info['branch'])}",
+            )
+        try:
+            import _telemetry as T
+            T.emit("worktree_auto_clean", cwd=root, branch=info["branch"],
+                   path=info["path"], by_session=by_session,
+                   owner_session=owner, rescued=len(saved))
+        except Exception:  # noqa: BLE001 — telemetry never breaks the cleanup
+            pass
     return removed
 
 

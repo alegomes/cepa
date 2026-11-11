@@ -267,7 +267,10 @@ def test_j_plugin_registration():
     d = json.loads((REPO / "common/.claude-plugin/plugin.json").read_text())
     cmds = [h["command"] for g in d["hooks"]["Stop"] for h in g["hooks"]]
     check("j: registrado em Stop", any("safe-exit-gate.py" in c for c in cmds), cmds)
-    check("j: versão 3.5.0", d["version"] == "3.5.0", d["version"])
+    # The gate shipped in 3.5.0; later releases keep it. Pinning the exact
+    # version broke the suite on every unrelated bump (run 2026-11-10-1135).
+    ver = tuple(int(x) for x in d["version"].split("."))
+    check("j: versão >= 3.5.0", ver >= (3, 5, 0), d["version"])
 
 
 def test_k_prose():

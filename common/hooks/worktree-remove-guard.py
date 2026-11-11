@@ -157,6 +157,33 @@ def describe(e):
             f"ativa há {L.age_str(e.get('last_seen') or e.get('started_at'))})")
 
 
+def removal_targets(command, cwd):
+    """[(branch, path)] of what the command removes, for telemetry only.
+    `git worktree remove X` gives the worktree's branch and path; `git branch -D b`
+    gives the branch and an empty path. Never raises; unresolved targets are
+    skipped."""
+    out = []
+    try:
+        for seg, seg_dir, _ in S.segment_dirs(command, cwd):
+            t = targets_of(git_args(seg))
+            if not t:
+                continue
+            root = L.main_root(seg_dir)
+            if not root:
+                continue
+            kind, names = t
+            for n in names:
+                if kind == "worktree":
+                    wt = find_worktree(root, n, seg_dir)
+                    if wt is not None:
+                        out.append((wt.get("branch") or "", wt["path"]))
+                else:
+                    out.append((n, ""))
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
 def find_offences(command, cwd, sid):
     out = []
     for seg, seg_dir, _ in S.segment_dirs(command, cwd):
@@ -205,7 +232,13 @@ def main():
     except Exception:  # um bug aqui nunca pode travar o Bash
         sys.exit(0)
     if not offences:
-        T.emit("worktree_remove_allow", cwd=str(cwd))
+        # Who removed what: branch, path and the removing session. Without
+        # them the 2026-11-10 incident (fb-20261110-4) could not be traced.
+        # One event per removal target; a git command that removes nothing
+        # keeps the single event, with empty branch/path.
+        for branch, path in (removal_targets(command, cwd) or [("", "")]):
+            T.emit("worktree_remove_allow", cwd=str(cwd), branch=branch,
+                   path=path, by_session=sid)
         sys.exit(0)
 
     seg, target, owners, slice_name = offences[0]

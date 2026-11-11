@@ -1,0 +1,48 @@
+schema_version: 2
+card: worktree-retomada-nao-some
+verdict: proven
+reviewed_at: 2026-11-10T22:35:00-03:00
+base_commit: 2c6e2f1
+head_commit: 40a3884
+issue_type: Bug
+scope:
+  topology: build-solo (Python hooks repo, not Quarkus; PIT not applicable, perturbation used)
+  criterion: "fb-20261110-4: a session worktree must not vanish under a parked conversation; a prompt keeps the registry entry alive, a resumed conversation whose worktree is gone is told once, removal telemetry carries branch/path/by_session"
+  covering_test: "tests/test_session_heartbeat.py; neighbors tests/test_worktree_remove_guard.py, tests/test_cepa_slice_isolation.py, tests/test_cepa_chaining.py, tests/test_state_deposits.py"
+  changed_classes:
+    - { class: "common/hooks/session-heartbeat.py (new, UserPromptSubmit)", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/_wtlib.py (prune_dead tombstone, auto_clean by_session + event, index_register/index_lookup, reap_tombstones)", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/session-registry.py (by_session, index_register)", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/worktree-remove-guard.py (worktree_remove_allow per target)", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/_state.py (CATALOGUE entry cepa-wt-index)", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline at 40a3884 (detached throwaway worktree, HOME isolated): test_session_heartbeat.py 'all green'; test_state_deposits.py 'todos os testes passaram'; test_worktree_remove_guard.py 'all green'; test_cepa_slice_isolation.py 'all ok'; test_cepa_chaining.py 'OK'"
+        - "NEW catalogue line: deleting the `cepa-wt-index` entry in common/hooks/_state.py -> test_state_deposits.py FAIL 'todo `.claude/<nome>` citado no código de common/ está no catálogo  cepa-wt-index (em _wtlib.py)' (1 FAILED). Restored -> green"
+        - "last_seen bump in session-heartbeat.py replaced by pass -> 5 FAIL in test_session_heartbeat.py"
+        - "live-pid guard `if not L.pid_alive(...)` -> `if True` -> FAIL 'a live pid is left alone'"
+        - "prune_dead `reap_tombstones(root)` -> pass -> FAIL 'old tombstone is reaped', 'old index file is reaped'"
+        - "warned_at stamp removed -> FAIL 'second prompt does NOT repeat the warning'"
+        - "worktree-remove-guard.py telemetry `path=path` -> `path=\"\"` -> 2 FAIL in test_session_heartbeat.py ('worktree_remove_allow carries branch, path, by_session', 'git branch -D records the branch with an empty path and the session'); test_worktree_remove_guard.py alone does NOT catch it, the heartbeat suite does"
+        - "carried from the attempt at a798360 (same code apart from the catalogue line, tests unchanged since): the other perturbations of that round (pid refresh, reap cutoff, etc.) were KILLED; not re-run here, sampled set above re-run at HEAD"
+        - "no proof worktree left behind; throwaway HOME discarded"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every changed region is reached: each perturbation above turns a covering test RED, including reap_tombstones and the catalogue line"
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff reads only a hook JSON payload already trusted by the harness (session_id guarded against '/'), builds paths from registry data and writes bookkeeping files; no api-rest module and no new external parser"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "git checkout 2c6e2f1 -- common/hooks in a throwaway worktree, python3 tests/test_session_heartbeat.py -> FAIL 'prompt bumps last_seen', 'dead pid is refreshed to a live one', 'entry is live again after the prompt'; at 40a3884 -> all green"
+routing_reason: "Regression test red at base; each perturbation (6 run at HEAD, incl. the new catalogue line) turns a covering test red. No double on changed code, no skipped or assumed level. Computed verdict: PROVEN."

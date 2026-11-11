@@ -1,0 +1,45 @@
+schema_version: 2
+card: write-mode-gate-ve-python
+verdict: proven
+reviewed_at: 2026-11-10T12:30:00-03:00
+base_commit: f8ec43506aee412acd49ebff5c44c6fc9524f70f
+head_commit: fd22d0b
+issue_type: Bug
+scope:
+  changed_classes:
+    - class: "common/hooks/write-mode-gate.py (targets, interpreter_targets, _script_writes, _resolve, _assignments_in, _interpreter_scripts, relative_to realpath fallback)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null        # tests/test_write_mode_gate.py runs the real hook as a subprocess (stdin JSON, exit code)
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at fd22d0b: python3 tests/test_write_mode_gate.py -> 'tudo verde' (throwaway worktree /tmp/proof-wmg-py2)"
+        - "P1 targets(): script_targets merge disabled ('if t not in found' -> 'if False') -> 19 FAIL checks (RED)"
+        - "P2 _script_writes returns (None, False) -> 22 FAIL checks (RED)"
+        - "P3 read_spans blanking disabled ('for a, b in read_spans' -> 'in []') -> 3 FAIL checks (RED)"
+        - "P4 relative_to realpath fallback disabled ('if path != base and ...' -> 'if False') -> 2 FAIL checks (RED)"
+        - "P5 shutil.copy destination index 1 -> 0 -> 2 FAIL checks (RED)"
+        - "P7a shutil.move (0, 1) -> (0,) -> 1 FAIL check (RED; previously survived at b94a4c3 with 0, closed by fd22d0b)"
+        - "P7b shutil.move (0, 1) -> (1,) -> 1 FAIL check (RED)"
+        - "P6 interpreter_targets 'opaque = True' -> 'opaque = False' -> 0 FAIL at b94a4c3 (not re-run at fd22d0b, tests-only change). Equivalent mutant, shown by reading the code, not by a test: an unreadable script is not appended to read_spans, so it is not blanked and _shellscan.extract_write_targets(rest) still flags it; the `opaque` flag is redundant with that path. No observable behavior differs."
+        - "each perturbation restored by git checkout; final run 'tudo verde', worktree clean"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; the previously uncovered shutil.move destination index is now reached: P7a and P7b turn test_interpreter_reads_which_argument_writes red"
+  l4_adversarial_input:
+    status: n/a
+    reason: "NOT verified by a run in this proof. The coordinator's rule set limits runs to tests/test_write_mode_gate.py, which already carries tests for traversal, unresolved variables and /var vs /private/var. Marked n/a only because the diff touches no input-bearing api-rest module; the human may reject this."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "f8ec435 hook (git checkout f8ec435 -- common/hooks) + fd22d0b tests -> 22 FAIL checks (inline python/node writes outside the mode only warned instead of blocking); fd22d0b hook -> 'tudo verde'. Also at b94a4c3 tests: 20 FAIL checks."
+routing_reason: "Regression is red at base (22 checks) and every perturbation that changes behavior turns the suite red (P1-P5, P7a, P7b), including the shutil.move destination gap that survived at b94a4c3. The only survivor, P6, is an equivalent mutant (redundant flag, same warning produced by the _shellscan path). No test double in play. L4 is marked n/a on a diff-based claim and no run, which the reviewer may overrule."
