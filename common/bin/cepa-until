@@ -812,6 +812,18 @@ def read_item(plan_path, ident):
 
 # ── running an item ─────────────────────────────────────────────────────────
 
+# CS-12: the cut the owner made (spec perguntar-antes-do-run, Q7). Every item's agent gets
+# it, because the route it would open is decided at its `finish`, not by the supervisor.
+# The flags are named as `cepa-plan finish`'s, so drain-plan never reads them as its own.
+CUT_RULE = (
+    "Closing rule for this item: a behavior choice you already committed on this branch "
+    "is not a question for the owner. Record it with `cepa-plan finish ... --decision "
+    "\"<the choice, in plain words>\" --decision-commit <sha>` (default HEAD), and it shows "
+    "up in the run summary with the commit. Keep `cepa-plan finish ... --human-pending` "
+    "for what only the owner closes: a proof waiver, moving a card to Done, and any task "
+    "outside the repository (credentials, a real environment, a conversation).")
+
+
 def build_command(name, branch, permissions, session_id=None, note=""):
     # stream-json is what carries the `rate_limit_event` with the quota usage. `--verbose`
     # is required by `claude` itself for that format with `-p`.
@@ -820,6 +832,7 @@ def build_command(name, branch, permissions, session_id=None, note=""):
     request = f"/common:drain-plan {name} --max 1"
     if branch:
         request += f" --na-branch {branch}"
+    request += "\n\n" + CUT_RULE
     if note:
         # CS-6: the pre-read's preference, after the arguments, in its own paragraph.
         request += "\n\n" + note
