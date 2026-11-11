@@ -1,0 +1,17 @@
+key: perguntar-antes-do-run-CS-6
+status: complete
+criteria:
+  - id: CS-6
+    text: "preferência que a leitura prévia acha roda com o padrão do agente quando o dono não responde, e com a resposta dele quando responde"
+    altitude: cli
+    surface: "cepa-until <queue> (launch) with a fake reader plugged through CEPA_UNTIL_LEITOR returning preferencia (padrao 'usar o formato curto') for x1; observed in the -p request handed to the fake claude for x1, the end-of-run summary on stdout, and <run>.jsonl (item_start.preferencia, leitura_previa escolha/fonte)"
+    test: "tests/test_cepa_until_decide.py::test_pre_read_cs6_without_answer_the_prompt_carries_the_default_and_the_summary_lists_it, test_pre_read_cs6_answer_typed_in_the_launch_panel_goes_into_the_prompt, test_pre_read_cs6_enter_or_silence_in_the_panel_keeps_the_default (+ _preference_without_default_is_no_finding, _note_and_command_units)"
+    layer: "real subprocess of common/bin/cepa-until, fake claude recording each -p request, fake reader script; default case without terminal (stdin DEVNULL); answer case on a real pty (on_tty) typing the answer into the panel; asserts prompt contains default (no answer) or the owner's answer (answered, default not used as the choice), summary block 'Choices the pre-read found (1)' lists x1 with its source, enter and silence keep the default, y1 prompt unchanged"
+    evidence: verified
+    run: "cd /Users/alegomes/cepa-worktrees/cepa-until-2026-11-10-1650 && python3 -c \"import sys; sys.path.insert(0,'tests'); import test_cepa_until_decide as t; [f() for n,f in sorted(vars(t).items()) if n.startswith('test_pre_read_cs6')]; print('FAIL', t.FAILURES)\" -> 'FAIL []', 5 test functions, 27 'ok' checks (N>0), ~26 s; foreground, run-all.sh not run"
+    status: complete
+    extra: "Product change in 03e3602 (preference_note, build_command note param, escolha/fonte on leitura_previa and item_start, summary block). Red-at-base not re-run; evident from the diff since before this commit no note existed in the prompt."
+    notes:
+      - "Outermost layer is the real CLI launch plus the prompt actually handed to the agent subprocess; exercised, not mocked. The 'answer injected in the panel' half goes through a real pty."
+      - "Out of scope by spec ordering: merging the preference question into the shared panel list and total (CS-8), skip option and no-terminal text listing (CS-9), largada event (CS-13)."
+gap: []
