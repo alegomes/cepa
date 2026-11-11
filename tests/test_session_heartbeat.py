@@ -163,10 +163,17 @@ def main():
               and subprocess.run(["kill", "-0", str(after["pid"])]).returncode == 0)
         import _wtlib as L
         check("entry is live again after the prompt", L.entry_is_live(after))
-        live_pid = os.getpid()
-        after["pid"] = live_pid
-        (sdir / "aaaaaaaa-prompted.json").write_text(json.dumps(after))
-        prompt("aaaaaaaa-prompted", wt_a, env)
+        # A live pid that is NOT the hook's parent (the test process): if the hook
+        # overwrote it unconditionally, the change would show.
+        sleeper = subprocess.Popen(["sleep", "60"])
+        try:
+            live_pid = sleeper.pid
+            after["pid"] = live_pid
+            (sdir / "aaaaaaaa-prompted.json").write_text(json.dumps(after))
+            prompt("aaaaaaaa-prompted", wt_a, env)
+        except BaseException:
+            sleeper.kill()
+            raise
         check("a live pid is left alone",
               json.loads((sdir / "aaaaaaaa-prompted.json").read_text())["pid"] == live_pid)
         check("no entry -> no entry created",
@@ -190,6 +197,8 @@ def main():
               and mine[0].get("by_session") == "cccccccc-newcomer", str(ev))
         check("no auto_clean event for the kept worktree",
               not [e for e in ev if e.get("branch") == "session/alive"])
+        sleeper.kill()   # kept alive until here: its pid is what makes the entry live
+        sleeper.wait()
 
         # ── 2. resumed conversation of the removed worktree ─────────────────
         check("rescue copied the artifact",
@@ -237,6 +246,23 @@ def main():
         start("ffffffff-linked", wt_s, env)
         check("SessionStart in a linked worktree registers it in the index",
               L.index_lookup(str(wt_s)) != "")
+
+        # reap_tombstones (via prune_dead): old .gone and old index files go,
+        # fresh ones stay. Ages are set with os.utime.
+        old_t = datetime.now(timezone.utc).timestamp() - (L.TOMBSTONE_DAYS + 5) * 86400
+        for name in ("old-1", "fresh-1"):
+            (sdir / f"{name}.gone").write_text("{}")
+        L.index_register(str(base / "wt-old-idx"), str(repo))
+        L.index_register(str(base / "wt-fresh-idx"), str(repo))
+        old_idx = L._index_file(str(base / "wt-old-idx"))
+        fresh_idx = L._index_file(str(base / "wt-fresh-idx"))
+        for f in (sdir / "old-1.gone", old_idx):
+            os.utime(f, (old_t, old_t))
+        L.prune_dead(str(repo))
+        check("old tombstone is reaped", not (sdir / "old-1.gone").exists())
+        check("fresh tombstone is kept", (sdir / "fresh-1.gone").exists())
+        check("old index file is reaped", not old_idx.exists())
+        check("fresh index file is kept", fresh_idx.exists())
 
         # entry-only fallback: entry survives (live pid), cwd was deleted
         wt_c, _ = add_session_wt(repo, base, "orphan", "dddddddd-entry")
