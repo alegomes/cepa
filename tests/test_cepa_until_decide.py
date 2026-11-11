@@ -2195,6 +2195,25 @@ def test_launch_cs8_preference_counts_in_the_total_after_the_queue_route():
     check("cs8 pref: x1 runs", "x1" in _started(events), out[-1500:])
 
 
+def test_launch_cs8_route_just_opened_is_asked_even_over_an_old_no():
+    """A route the pre-read opened on an item whose evidence starts with an old "não"
+    is still asked: it is counted in the total, so it must be shown."""
+    import contextlib, io
+    m = load_module()
+    deferred = [{"id": "x1", "reason": "human_pending", "human_pending": "token",
+                 "evidence": _answered("2026-11-02")}]
+    m.query_queue = lambda *a, **k: ({"deferred": deferred}, None)
+    asked = []
+    m.decide = lambda *a, **k: (asked.append([d["id"] for d in a[4]]), ([], []))[1]
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        m.ask_at_launch(Path("/nao/existe"), "fila", {"batch": []}, only={"x1"},
+                        tally={"shown": 1, "of": 2})
+    check("cs8 old no: the just-opened route is asked", asked == [["x1"]], str(asked))
+    check("cs8 old no: no CS-4 summary line in the pre-read part",
+          "already answered" not in buf.getvalue(), buf.getvalue())
+
+
 def main():
     print("cepa-until decidir — o fim do run pergunta\n")
     for given_name, fn in sorted(globals().items()):

@@ -3259,7 +3259,10 @@ def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False):
     answered_no = []
     to_ask = []
     for ad in deferred:
-        date = last_owner_no(ad.get("evidence"))
+        # A route the pre-read has just opened is a new question, even when the
+        # evidence it carried over starts with an old "não": it is always asked, so
+        # the total and the numbering announced for it hold (CS-8).
+        date = None if only is not None else last_owner_no(ad.get("evidence"))
         if date:
             answered_no.append(date)
         else:
