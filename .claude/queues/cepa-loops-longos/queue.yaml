@@ -23,6 +23,21 @@ items:
     seção 4.1): em 5 de 37 runs o dono respondeu antes do prazo, 4 relançando à
     mão (3h11 de intervalo somado) e 1 sem relançar (11,1h de janela sobrando).
     Sem processo dormindo e sem canal de aviso, decisões X1 a X4 do painel docs/reviews/2026-11-10-painel-loops-longos.md.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits fd411d5, 55d7b54 e o dos artefatos, em until/2026-11-10-2059
+    (sem merge, sem push; o build completo é do supervisor). common/bin/cepa-until:
+    fila vazia (end-of-queue) + itens esperando o dono + terminal + janela >= --min-reserve
+    -> painel antes de fechar (evento painel_antes_de_fechar, estado fase aguardando-dono);
+    um sim que deixa item executável registra retomada_pelo_dono e o MESMO laço
+    continua; item perguntado no meio não é perguntado de novo no fim; silêncio/EOF
+    fecham e o fim lista em vez de esperar de novo; chave --no-resume-on-answer.
+    Doc em docs/cepa-until.md. Testes: tests/test_cepa_until_resume_on_answer.py
+    (7 casos, pty) verde, test_cepa_until_decide verde (caso do painel do fim passou
+    a usar a chave), test_cepa_until/land/resume/english_aliases/session/quota verdes.
+    completion-auditor COMPLETE (.claude/acceptance/LL-1.yaml); proof-reviewer PROVEN
+    (docs/proof/LL-1.yaml, 9 perturbações RED nesta rodada, 13 na anterior). Fora
+    do escopo: run que já LANÇA com a fila sem item executável sai antes do laço
+    sem perguntar nada (achado durante os testes).'
+  head_commit: 6f54f33d9f7ebf4ff14f92cfe2bc17f72c7f82b1

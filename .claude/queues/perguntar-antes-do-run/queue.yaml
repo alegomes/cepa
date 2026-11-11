@@ -113,16 +113,29 @@ items:
     largada imprime uma linha com "2" e "02/11" e não pede resposta para elas, e
     `cepa-until decide <fila>` ainda pergunta as duas; hoje a largada não imprime
     a linha.'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  claimed_by:
-    session_id: b3369eeb-07ad-434d-8234-57f0adbea6c3
-    pid: 30746
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-until-2026-11-10-1650
-    branch: until/2026-11-10-1650
-    started_at: '2026-11-10T23:50:19+00:00'
+  evidence: 'Commits na branch until/2026-11-10-1650 (código na branch do run, sem
+    merge nem push): f8cf226 (last_owner_no e o desvio em ask_at_launch, common/bin/cepa-until:
+    rota cuja última resposta do dono começa com ''Resposta do dono em <data>: não''
+    sai do painel da largada e vira uma linha ''── N route(s) you already answered
+    "no" (last on dd/mm): not asked again here; to revisit them: cepa-until decide
+    <fila>''; sem rota sobrando, o painel não abre), 2e2b4d4 (testes pedidos pela
+    prova: data mais recente entre várias, inclusive na virada do ano; espaço antes
+    da evidência), 9d10994 (arquivos dos portões). cepa-until decide, close_with_owner,
+    pending_as_text e cepa-plan inalterados. Testes: 7 funções novas em tests/test_cepa_until_decide.py
+    (test_last_owner_no_*, test_launch_cs4_*); arquivo inteiro verde, 237 ok, 0
+    FAIL, exit 0. pair-reviewer: OK-WITH-NOTES (nota não aplicada: texto livre do
+    dono começando com ''não'', como ''não sei'', também conta como ''não'' e sai
+    do painel; o decide da fila ainda o pergunta). completion-auditor: COMPLETE
+    (.claude/acceptance/perguntar-antes-do-run-CS-4.yaml, auditado em f8cf226; 2e2b4d4
+    só acrescenta testes). proof-reviewer: UNPROVEN em f8cf226 (sobreviveram max->min
+    e remoção do lstrip), PROVEN em 2e2b4d4 (10 perturbações vermelhas, vermelho
+    na base e6204f3; docs/proof/perguntar-antes-do-run-CS-4.yaml). Build completo:
+    delegado ao supervisor, não rodado aqui. Ficou de fora: evento largada, run
+    que não começa sem item (CS-10), listagem sem terminal (CS-9).'
+  head_commit: 9d1099478012010231c3a6cbf147a2b725eda5e7
 - id: CS-5
   title: pré-condição que a leitura prévia acha adia o item sem gastar o run nele
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -130,9 +143,36 @@ items:
     leitor falso que devolve `pre-condicao` para o item X, e sem resposta do dono,
     o `<run>.jsonl` traz o evento `leitura_previa` com X, não traz `item_start`
     de X, e o `queue.yaml` passa a ter a rota aberta em X; hoje X recebe `item_start`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-10-1650 (código na branch do run, sem
+    merge nem push): b08c0d7 (leitura prévia na largada em common/bin/cepa-until:
+    reader_command, parse_finding, read_one, pre_read, open_precondition_route;
+    chamada em _main depois do --dry-run e antes de ask_at_launch, com ou sem terminal;
+    leitor = CEPA_UNTIL_LEITOR, ''off'' desliga, padrão claude -p com --tools/--allowedTools
+    Read,Glob,Grep e --strict-mcp-config, modelo por CEPA_UNTIL_MODELO_LEITOR; teto
+    comum CEPA_UNTIL_TETO_LEITURA 300 s, até 8 leitores, grupo de processos morto
+    no teto e no Ctrl-C; achado pre-condicao abre a rota via cepa-plan finish --status
+    pending --human-pending --question --supervisor, preservando evidence e owner_summary
+    anteriores, sem as variáveis de sessão no ambiente, e repetindo sem --question
+    se recusado; evento leitura_previa logo depois de run_start; helpers de teste
+    de 7 arquivos com CEPA_UNTIL_LEITOR=off), 20384b1 (testes pedidos pela prova),
+    7efdca2 (arquivos dos portões). Testes: 13 test_pre_read_cs5_* em tests/test_cepa_until_decide.py,
+    arquivo inteiro 287 ok, 0 FAIL; os 15 arquivos tests/test_cepa_until*.py rodados
+    um a um, todos exit 0 (os 7 tocados antes dos testes extras, o decide de novo
+    depois). pair-reviewer: NEEDS-FIX (evidência anterior apagada), corrigido junto
+    com 5 notas (MCP, variáveis de sessão, repetição sem pergunta, Ctrl-C, comentário).
+    completion-auditor: COMPLETE (.claude/acceptance/perguntar-antes-do-run-CS-5.yaml,
+    auditado em b08c0d7; 20384b1 só acrescenta testes). proof-reviewer: UNPROVEN
+    em b08c0d7 (5 perturbações sobreviventes), PROVEN em 20384b1 (15 de 15 vermelhas,
+    vermelho na base 9d10994; docs/proof/perguntar-antes-do-run-CS-5.yaml). Build
+    completo: delegado ao supervisor, não rodado aqui. O claude real nunca foi executado
+    como leitor (só leitores falsos): os flags vieram do claude --help. Ficou de
+    fora: preferência (CS-6), marca de não lido (CS-7), painel durante a leitura
+    (CS-8), opção de pular (CS-9), evento largada (CS-13). A linha de previsão do
+    cabeçalho mostra os números de antes da leitura.'
+  head_commit: 7efdca26e7674b6a5483f9f6c984db27dd262d6f
 - id: CS-6
   title: preferência que a leitura prévia acha roda com o padrão do agente quando
     o dono não responde, e com a resposta dele quando responde
@@ -142,9 +182,34 @@ items:
     o prompt entregue ao agente de Y contém "P" e o resumo do fim do run lista a
     escolha; com a resposta "R" injetada no painel, o prompt contém "R"; hoje o
     prompt não contém nenhum dos dois.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-10-1650 (code is on the run branch, no merge,
+    no push): 03e3602 (common/bin/cepa-until: READER_PROMPT also asks for preferencia
+    with padrao; parse_finding drops a preference with empty padrao; ask_preferences
+    = launch panel on a terminal, after ask_at_launch, Enter / no answer within
+    CEPA_UNTIL_ESPERA_RESPOSTA / EOF / Ctrl-C keep the default; preference_note
+    appended to the /common:drain-plan request after a blank line, naming the item,
+    with flag-looking words stripped; item_start.preferencia {escolha, fonte}; leitura_previa
+    rows get escolha/fonte; end-of-run block ''Choices the pre-read found'' listing
+    only items that started), 53bdfe7 (test asked by the proof), be455c9 (gate files).
+    Tests: 5 test_pre_read_cs6_* in tests/test_cepa_until_decide.py; whole file
+    green (315 ok, before the last check was added; cs6 rerun green after); the
+    other 14 tests/test_cepa_until*.py run one by one, all exit 0; red at base 7efdca2
+    (15 checks failed with the base cepa-until). pair-reviewer: OK-WITH-NOTES (flag
+    injection through the free-text answer: fixed; asking about preferences of items
+    that may not run this time: left for CS-8, which merges the panel). completion-auditor:
+    COMPLETE (.claude/acceptance/perguntar-antes-do-run-CS-6.yaml). proof-reviewer:
+    UNPROVEN at 03e3602 (summary text not asserted, P13), PROVEN at 53bdfe7 (docs/proof/perguntar-antes-do-run-CS-6.yaml;
+    P15 = reader prompt wording, not testable deterministically). Full build: delegated
+    to the supervisor, not run here. Process deviation: the orchestrator wrote the
+    code itself instead of delegating to pair-dev; and the two gates were first
+    launched in the background, stopped and rerun in the foreground. Choices made
+    without asking: preference questions come in their own block after the route
+    panel (CS-8 unifies them); without a terminal the default is used silently (CS-9
+    adds the text listing). The real claude reader was never run (fake readers only).'
+  head_commit: be455c96addc5e35c8d40b008bb29907caef3f3f
 - id: CS-7
   title: a leitura prévia para no teto e o item não lido roda como hoje
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -153,9 +218,31 @@ items:
     5 segundos, a largada segue depois do teto, o evento `leitura_previa` marca
     o item como não lido e o item recebe `item_start`; hoje não existe leitura nem
     evento.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-10-1650 (code is on the run branch, no merge,
+    no push): da38706 (common/bin/cepa-until: READ_CEILING_ERROR constant used by
+    both ceiling paths of read_one (never launched, left<=0, and TimeoutExpired);
+    each pre_read row gets lido (True only when the reader finished with exit 0
+    inside the ceiling) and nao_lido (teto | falha | None), set before the call
+    site overwrites erro with the route error; read_ok counts lido; leitura_previa
+    event carries lido/nao_lido per row and nao_lidos (ids stopped at the ceiling);
+    screen line ''pre-read: not read within the Ns ceiling: <ids> — they run as
+    usual''), af4784a (test asked by the proof: 9 items, 8 readers, the 9th never
+    launched is teto), aba8b2a (gate files). Tests: 4 test_pre_read_cs7_* in tests/test_cepa_until_decide.py
+    (declared red test: ceiling 1 s, reader 5 s, segundos < 5, x1 lido False / teto,
+    item_start of x1; mixed queue; failing reader = falha; 9 items waiting for a
+    free reader); whole file green, 334 ok, 0 FAIL. No other tests/test_cepa_until*.py
+    mentions leitura_previa or lidos. pair-reviewer: OK-WITH-NOTES (no blocking
+    note). completion-auditor: COMPLETE (.claude/acceptance/perguntar-antes-do-run-CS-7.yaml,
+    audited at da38706; af4784a only adds a test). proof-reviewer: UNPROVEN at da38706
+    (left<=0 branch not covered), PROVEN at af4784a (13 of 13 perturbations RED,
+    red at base be455c9: 11 checks; docs/proof/perguntar-antes-do-run-CS-7.yaml).
+    Full build: delegated to the supervisor, not run here. Left out: panel during
+    the reading and ''lendo 3 de 7'' progress (CS-8), skip option (CS-9), largada
+    event (CS-13). The real claude reader was never run (fake readers only).'
+  head_commit: aba8b2aa3068c92958a2bf4bafdfe82fba4030c7
 - id: CS-8
   title: as perguntas que a fila já tem aparecem antes de a leitura prévia acabar,
     e as da leitura entram no fim da mesma lista
@@ -164,9 +251,38 @@ items:
     leitor falso que demora 2 segundos e uma fila com uma rota aberta, a saída mostra
     a pergunta da rota antes da pergunta que veio da leitura, e o total do painel
     soma as duas; hoje não há painel na largada.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-10-1650 over aba8b2a (code is on the run branch,
+    no merge, no push): 99b36b2 (BackgroundRead runs pre_read on a daemon thread
+    on a terminal; ask_at_launch asks the queue''s routes first with the line ''the
+    pre-read is still reading; its questions come at the end of this list''; then
+    the pre-read''s routes (ask_at_launch only=opened ids) and preferences (ask_preferences
+    first/of) come numbered after them, with ''the pre-read added K question(s)
+    at the end of this list: N question(s) in total'', and one closing for the whole
+    list; _READ_STOP keeps unstarted readers from launching after Ctrl-C; without
+    a terminal the pre-read stays synchronous, no panel), 192cd88 (a route the pre-read
+    just opened is always asked, even over an old ''não'', so the total holds),
+    4ea7e29 (tests the proof asked for: list opens once; empty queue sums route
+    + preference in one header), 9b15a4b (gate files). Tests: 5 test_launch_cs8_*
+    in tests/test_cepa_until_decide.py; whole file green at 192cd88 (serial run);
+    the other 14 tests/test_cepa_until*.py files exit 0 at 99b36b2. Gates: pair-reviewer
+    OK-WITH-NOTES (finding 3 fixed in 192cd88; kept on purpose: ''q'' in the queue
+    part still lets the pre-read''s questions be asked, as the preferences already
+    were; a closing after an interrupted first part when the second part is answered);
+    completion-auditor COMPLETE (.claude/acceptance/perguntar-antes-do-run-CS-8.yaml,
+    audited at 192cd88; 4ea7e29 only adds tests); proof-reviewer UNPROVEN at 192cd88
+    (P15, P16, P18 survived) then PROVEN at 4ea7e29 (docs/proof/perguntar-antes-do-run-CS-8.yaml;
+    20 of 21 perturbations RED, P10 equivalent; red at base). Not proven: the Ctrl-C
+    path of BackgroundRead.stop, covered only by the old interrupt test. Pre-existing
+    flake, not from this change: test_launch_interrupt_at_the_question_prints_one_line_and_carries_on
+    (Ctrl-C) fails under heavy parallel load at base aba8b2a too (6/6 both sides
+    in parallel, passes alone on both). Worktrees opened by this round: /tmp/cs8base
+    (mine, flake comparison, removed), /tmp/proof-cs8 and /tmp/proof-cs8-base and
+    /tmp/proof-CS8 (proof-reviewer, removed). Full build (tests/run-all.sh) NOT
+    run here: delegated to the supervisor.'
+  head_commit: 9b15a4b5606dc943ac5fdb78bc135cc590b4b5a9
 - id: CS-9
   title: uma opção na linha de comando pula a leitura e o painel, e sem terminal
     a leitura roda sem painel
@@ -176,18 +292,52 @@ items:
     mas traz a linha do CS-1; sem terminal e sem a opção, o `<run>.jsonl` traz `leitura_previa`,
     a saída lista as perguntas como texto e nada espera entrada; hoje a opção é
     recusada como argumento desconhecido.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-10-1650 over 9b15a4b: 7d19591 (common/bin/cepa-until:
+    new --no-pre-read / --sem-leitura flag skips the launch pre-read and the launch
+    panel, forecast line of CS-1 stays; without a terminal the pre-read runs and
+    the new pre_read_as_text lists its findings as text, nothing reads input; 4
+    tests at the end of tests/test_cepa_until_decide.py), 4b1692a (gates). Gates:
+    pair-reviewer OK-WITH-NOTES (style only, nothing to fix); completion-auditor
+    COMPLETE (.claude/acceptance/perguntar-antes-do-run-CS-9.yaml); proof-reviewer
+    PROVEN at 7d19591 (10 perturbations all RED; docs/proof/perguntar-antes-do-run-CS-9.yaml;
+    PIT n/a, Python repo). Tests run here: tests/test_cepa_until_decide.py whole,
+    tudo verde; the other 47 tests/test_*.py files that mention cepa-until, one
+    by one (6 in parallel), all exit 0. Full build (tests/run-all.sh) NOT run here:
+    delegated to the supervisor. Code is on the run branch, no merge, no push. Left
+    out: the end-of-run panel still asks on a terminal even with --no-pre-read (the
+    option is about the launch, as spec Q9 says).'
+  head_commit: 4b1692aeb8d2387bf5af2d0d72ccb511cfb39ac4
 - id: CS-10
   title: depois do painel, se nenhum item roda, o run não começa
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
     entre si · superfície onde se observa: cli · teste vermelho declarado: numa
     fila só com rotas respondidas "não", a largada termina dizendo que nenhum item
     roda e não cria o worktree `until/<run>`; hoje o run começa e acaba em `end-of-queue`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-10-1650 over 4b1692a: 64adab2 (pair-dev: message
+    ''nothing to do: no item runs, so the run does not start (no until/<run> branch
+    or worktree is created)'' + ''N item(s) wait for you: cepa-until decide <queue>''
+    line filtered by OWNER_REASON; tests _cs10_check), 4812f32 (message interpolates
+    the real run id, was the literal <run_id>), bd9443b (test: all-done queue has
+    no wait-for-you line), 61fb95d (test: depends-on-deferred item not counted),
+    e16d105 (acceptance), e414c3f (proof). Reproduced BEFORE any change: the early
+    return before open_run_branch already existed, so no branch/worktree/ledger
+    was created; the spec''s ''hoje o run começa'' was stale. Only the message was
+    red at base. Gates: pair-reviewer OK-WITH-NOTES (note 3, negative case, applied
+    in bd9443b); completion-auditor COMPLETE (.claude/acceptance/perguntar-antes-do-run-CS-10.yaml,
+    audited at bd9443b; 61fb95d only adds a test); proof-reviewer UNPROVEN at e16d105
+    (filter mutant survived) then PROVEN at 61fb95d (6 perturbations RED, docs/proof/perguntar-antes-do-run-CS-10.yaml).
+    Tests run here: tests/test_cepa_until_decide.py whole at 4812f32 rc 0 (tudo
+    verde); tests/test_cepa_until.py at 64adab2 rc 0; the 4 test_launch_cs10_* at
+    61fb95d green. Full build NOT run here: delegated to the supervisor. Code is
+    on the run branch, no merge, no push. Known limit: the count stops at the first
+    unmet blocked_by outside the batch, same as the CS-1 forecast.'
+  head_commit: e414c3fa3d20c699043ca4424baf14968a2d39a5
 - id: CS-11
   title: escolha de comportamento já commitada é gravada sem abrir rota e aparece
     no relatório do run com o commit
@@ -197,9 +347,33 @@ items:
     deixa `human_pending` nulo e grava a escolha em `decisions`; o resumo do fim
     do run a lista com o commit; `cepa-until decide <fila>` não pergunta sobre ela;
     hoje `--decision` é recusado como argumento desconhecido.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-10-1650 over e414c3f: 2a68188 (cepa-plan finish
+    --decision TEXT [--decision-commit SHA, default HEAD]; records item key decisions
+    [{texto, commit full sha}], opens no human_pending; refuses nonexistent commit,
+    commit not on the current branch, empty text, --decision-commit without --decision;
+    cepa-until snapshots the item''s decisions before each round and lists in the
+    end summary under ''Decided for you'' only the ones recorded in this run whose
+    commit is still an ancestor of the run tree HEAD; plan-schema.yaml documents
+    the key), cce2abb (acceptance), 11d2e47 (test for a re-run item carrying an
+    older decision), b2ef68f (proof). Deliberate deviation from the spec''s red-test
+    wording: the flag is --decision-commit, not --commit, because finish --commit
+    already exists as a boolean that commits the queue file; status stays --status
+    done. Gates: pair-reviewer OK-WITH-NOTES (no bug; note: default HEAD may name
+    a later commit than the one carrying the choice if the agent commits more before
+    finish, to be covered by CS-12''s prompt telling the agent to pass --decision-commit);
+    completion-auditor COMPLETE (.claude/acceptance/perguntar-antes-do-run-CS-11.yaml);
+    proof-reviewer UNPROVEN at cce2abb (P12, recorded-in-this-run filter survived)
+    then PROVEN at 11d2e47 (17 perturbations RED; docs/proof/perguntar-antes-do-run-CS-11.yaml).
+    Tests run here: tests/test_cepa_plan_finish_decision.py, test_cepa_until.py,
+    test_cepa_until_decide.py, test_cepa_plan_finish_owner.py, test_cepa_plan_single_track.py,
+    test_cepa_queue_ready_and_decide_queue.py, test_cepa_plan_write_commits.py,
+    all exit 0 (test_cepa_until_decide had one pty-timing failure only when 6 files
+    ran in parallel; alone it passed). Full build (tests/run-all.sh) NOT run here:
+    delegated to the supervisor. Code is on the run branch, no merge, no push.'
+  head_commit: b2ef68f72df86914ac5398b47c802e9315a6e02e
 - id: CS-12
   title: o agente do item recebe a regra do corte
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -208,9 +382,20 @@ items:
     para escolha de comportamento já commitada e de manter `--human-pending` para
     dispensa de prova, card para Done e tarefa fora do repositório; hoje o prompt
     não menciona `--decision`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'CUT_RULE appended to every item''s -p request in common/bin/cepa-until
+    build_command (6f1b8a9): --decision for a behavior choice already committed,
+    --human-pending kept for proof waiver, card to Done and work outside the repo.
+    Test tests/test_cepa_until_cut_rule.py (red first b153ae1; moved to own file
+    f287935; survivors P2/P8 killed c0be1e4). completion-auditor COMPLETE (.claude/acceptance/perguntar-antes-do-run-CS-12.yaml);
+    proof-reviewer PROVEN at c0be1e4 (base b2ef68f red, 9/9 perturbations killed;
+    first pass UNPROVEN at f287935 with 2 test-gap survivors). Neighbors: test_cepa_until_digest
+    green; test_cepa_until_decide 1 flaky pty failure under parallel load (Ctrl-C
+    interrupted line), 3/3 green in isolation, untouched by this change. Code is
+    on the overnight branch until/2026-11-10-1650; full build left to the supervisor.'
+  head_commit: cf793522d5940ba591367a3e41d920b24ec63e37
 - id: CS-13
   title: a largada grava a medição no registro do run
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -219,6 +404,29 @@ items:
     o `<run>.jsonl` traz um evento `largada` com os campos itens que rodam, itens
     que esperam, perguntas mostradas, perguntas respondidas, rotas resumidas, itens
     lidos, achados por tipo e segundos gastos; hoje o evento não existe.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-10-1650 over cf79352: 97ce6c7 (test, red before
+    fix), 42b740f (cepa-until writes a `largada` event right after run_start/leitura_previa:
+    rodam, esperam [forecast before the panel, same rule as the header line], perguntas_mostradas,
+    perguntas_respondidas, rotas_resumidas, itens_lidos, achados {pre-condicao,
+    preferencia}, segundos [launch start to run_start, includes the owner''s wait]),
+    e87cf2d (test: panel cut after the first answer, red before fix), 0f411e0 (decide
+    gains progress{asked,answered} counted as it goes, so a panel cut by the wait/EOF/Ctrl-C
+    measures right; pair-review finding), 6fcec7b (tests killing proof survivors),
+    61d2860 (gates). Gates: pair-reviewer CHANGES-REQUESTED at 42b740f (2 findings
+    on the cut panel, both fixed in 0f411e0); completion-auditor COMPLETE at 0f411e0
+    (.claude/acceptance/perguntar-antes-do-run-CS-13.yaml; 6fcec7b only adds tests);
+    proof-reviewer UNPROVEN at 0f411e0 (6 survivors) then PROVEN at 6fcec7b (24
+    perturbations RED, red at base; docs/proof/perguntar-antes-do-run-CS-13.yaml).
+    Spec risk L132 checked: cepa-until-digest lists unknown events as raw JSON under
+    ''Eventos do registro fora das rodadas'', no crash (read in code, not executed).
+    Tests run here, one file at a time, all exit 0 / 0 FAIL: test_cepa_until_launch_measure,
+    test_cepa_until_decide, test_cepa_until, test_cepa_until_cut_rule, test_cepa_until_digest,
+    test_cepa_until_run_branch, test_cepa_until_resume, test_common_drain_plan,
+    test_session_intent_contract, test_cepa_until_land. Full build (tests/run-all.sh)
+    NOT run here: delegated to the supervisor. Code is on the run branch, no merge,
+    no push. Known limit: the event is written only when the run starts (CS-10 path
+    with nothing to run writes no ledger, by design).'
+  head_commit: 61d2860e5150cc71ec008645566d19b8b67d06db
