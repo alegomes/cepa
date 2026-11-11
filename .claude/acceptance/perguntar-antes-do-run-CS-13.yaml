@@ -1,0 +1,20 @@
+key: perguntar-antes-do-run-CS-13
+status: complete
+head: 0f411e07cd7626148b16fc2b496725c19cb7aa21
+criteria:
+  - id: CS-13
+    text: "depois de uma largada com 1 rota respondida, 1 rota resumida e 1 achado da leitura, o `<run>.jsonl` traz um evento `largada` com os campos itens que rodam, itens que esperam, perguntas mostradas, perguntas respondidas, rotas resumidas, itens lidos, achados por tipo e segundos gastos; hoje o evento não existe."
+    altitude: cli
+    surface: "o `<run>.jsonl` gravado por um run real de common/bin/cepa-until (subprocesso: com terminal simulado, sem terminal e com painel cortado pela espera), evento `largada` entre run_start e o primeiro item"
+    test: "tests/test_cepa_until_launch_measure.py::test_launch_measure_cs13_on_terminal, ::test_launch_measure_cs13_without_terminal_records_no_panel, ::test_launch_measure_cs13_panel_cut_after_the_first_answer"
+    layer: "subprocesso real do cepa-until com leitor/claude falsos; lê o .jsonl e asserta o evento e cada campo"
+    evidence: verified
+    run: "python3 tests/test_cepa_until_launch_measure.py -> 29 checks ok (12 com terminal + 9 painel cortado + 8 sem terminal), '✓ tudo verde' (N=29 > 0)"
+    status: complete
+    notes:
+      - "Cenário do critério (r1 respondida, n1 resumida, x1 com 1 preferência): rodam=2, esperam=2, mostradas=2, respondidas=1, resumidas=1, lidos=2, achados={pre-condicao:0, preferencia:1}, segundos >= 0, evento único entre run_start e o primeiro item."
+      - "Novo no head 0f411e0: painel cortado após a 1a resposta (3 rotas, dono responde a 1a e some): mostradas=2 (r3 nunca chegou à tela), respondidas=1, rodam=1, esperam=3. Cobre o contador progress do decide (asked/answered) que sobrevive a corte por espera/EOF/Ctrl-C."
+      - "Diff 42b740f..HEAD lido: progress['asked'] incrementa quando a pergunta vai à tela; progress['answered'] só quando rc==0 grava a resposta; ask_at_launch repassa tally como progress; o evento usa tally asked/answered. Consistente com os asserts."
+      - "Red do teste novo: commit e87cf2d precede o fix 0f411e0; o auditor não re-executou o red."
+      - "Pendência da spec (L132): cepa-until-digest com evento desconhecido, lido no código na auditoria anterior, não re-executado."
+gap: []
