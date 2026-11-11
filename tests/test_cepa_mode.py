@@ -20,6 +20,7 @@ Contracts guarded here:
 No third-party deps — run with `python3 tests/test_cepa_mode.py`.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -780,9 +781,68 @@ def test_hook_reads_old_session_mode_and_intent():
               "**refactor**" in c and "só o módulo de auth" in c, c)
 
 
+CEPA_MODES = REPO / "common" / "bin" / "cepa-modes"
+
+
+def fake_home(tmp, plugins=("discovery",), name="home"):
+    """A throwaway HOME whose Claude install has `plugins` installed AND enabled,
+    seen the way cepa-doctor sees it (known_marketplaces + cache + enabledPlugins).
+    The manifests are read from this very repo; the real machine's plugins never count."""
+    home = Path(tmp) / name
+    claude = home / ".claude"
+    (claude / "plugins").mkdir(parents=True)
+    (claude / "plugins" / "known_marketplaces.json").write_text(
+        json.dumps({"cepa": {"installLocation": str(REPO)}}))
+    for name in plugins:
+        (claude / "plugins" / "cache" / "cepa" / name / "99.0.0").mkdir(parents=True)
+    (claude / "settings.json").write_text(
+        json.dumps({"enabledPlugins": {f"{n}@cepa": True for n in plugins}}))
+    return home
+
+
+def run_menu(repo, mode, home):
+    env = {**os.environ, "HOME": str(home)}
+    return subprocess.run([sys.executable, str(CEPA_MODES), "--menu", mode, "--no-color"],
+                          cwd=repo.path, env=env, stdin=subprocess.DEVNULL,
+                          capture_output=True, text=True, timeout=30)
+
+
+def test_menu_discovery():
+    """CS-1: `cepa-modes --menu discovery` prints the numbered menu from `actions`."""
+    print("menu: discovery, no board-flow.yaml, discovery plugin installed")
+    with Repo() as r:
+        p = run_menu(r, "discovery", fake_home(r.tmp.name))
+        check("--menu discovery rc 0", p.returncode == 0, p.stderr[-200:])
+        out = p.stdout
+        want = ["1) Detail an idea until it becomes a build-ready specification",
+                "/common:spec", "/common:spec --continuar", "/common:epic",
+                "/discovery:capture", "/common:queue"]
+        pos, ordered = 0, True
+        for w in want:
+            i = out.find(w, pos)
+            if i < 0:
+                ordered = False
+                break
+            pos = i + len(w) if w.startswith("1)") else i
+        check("menu has the lines in order", ordered, out)
+        check("board-flow action hidden without board-flow.yaml", "/board-flow:" not in out, out)
+        bare = run_menu(r, "discovery", fake_home(r.tmp.name, plugins=(), name="bare"))
+        check("capture hidden without the discovery plugin",
+              "/discovery:capture" not in bare.stdout, bare.stdout)
+
+
+def test_menu_empty_and_unknown():
+    with Repo() as r:
+        home = fake_home(r.tmp.name)
+        p = run_menu(r, "design", home)
+        check("--menu design: rc 0 and empty", p.returncode == 0 and p.stdout == "", repr(p.stdout))
+        q = run_menu(r, "nope", home)
+        check("--menu unknown mode: rc 2", q.returncode == 2)
+
+
 def main():
     print("test_cepa_mode")
-    for fn in (test_valid_mode, test_invalid_mode, test_without_mode_without_tty,
+    for fn in (test_menu_discovery, test_menu_empty_and_unknown, test_valid_mode, test_invalid_mode, test_without_mode_without_tty,
                test_old_cepa_names, test_hook_reads_old_session_mode_and_intent,
                test_kill_switch, test_overhaul_budget,
                test_help_non_interactive, test_help_in_the_menu_and_re_presents,

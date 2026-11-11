@@ -24,6 +24,15 @@ list — not that it is free of enforcement: in construction the
 completion-auditor and the proof-reviewer enforce, and in refactor the
 `refactor-gate.py` does.
 
+Each mode also declares `actions`: the ordered menu of common actions of that
+mode (`cepa-modes --menu <mode>` is the only place that renders it). An action is
+a dict: `label` (lay phrase, English, "(no command yet)" when there is none),
+`command` (a str, a list of str run in sequence, or None), optional `ask` (the
+one-line question when the command needs an argument) and optional `needs`
+(a list of `file:<path from the root>`, `topology:<name>` or `plugin:<name>`;
+all must hold or the action leaves the menu). Several variants may share a
+`label`; the menu shows only the first that passes. Empty list = no menu.
+
 `deploy` is NOT here on purpose: it is the 8th mode of the document, left out of
 the round by the owner's decision (it is the only one that depends on external
 infra). When it comes in, it comes in here first.
@@ -50,6 +59,13 @@ MODES = {
                 "run through the /common:advisors panel with the disagreements named",
         "gate": "mechanical: the hook and `cepa-modes --exit` check on disk the panel saved in docs/reviews, the document it evaluated and the `Decisão do dono` on each named disagreement; the write-mode-gate blocks writes outside docs/**",
         "write": ["docs/**", ".claude/**", "BACKLOG.md"],
+        "actions": [
+            {"label": "Write the strategy document with 2 or more paths (no command yet)", "command": None},
+            {"label": "Run the document through the advisors panel", "command": "/common:advisors <document>", "ask": "Which document?"},
+            {"label": "See what is missing to close the exploration", "command": "/common:modes --exit"},
+            {"label": "See in numbers where the harness gets in the way", "command": "/common:metrics"},
+            {"label": "Review the decisions of a past run", "command": "/common:debrief"},
+        ],
     },
     "discovery": {
         "purpose": "turn a desired behavior into an enforceable acceptance criterion, with evidence behind it",
@@ -60,6 +76,14 @@ MODES = {
                 "acceptance criteria written at the altitude + the red test of each one",
         "gate": "partly: the spec-readiness-gate blocks a ready spec without a declared surface and red test per criterion, but does not run the test; the write-mode-gate blocks writes outside docs/discovery, docs/spec and docs/epics",
         "write": ["docs/discovery/**", "docs/spec/**", "docs/epics/**", ".claude/**", "BACKLOG.md"],
+        "actions": [
+            {"label": "Detail an idea until it becomes a build-ready specification", "command": "/common:spec <the idea>", "ask": "What is the idea?"},
+            {"label": "Continue an open specification", "command": "/common:spec --continuar <slug>", "ask": "Which specification (slug)?"},
+            {"label": "Design a large package in cycles", "command": "/common:epic <name>", "ask": "What is the package name?"},
+            {"label": "Record a user signal", "command": "/discovery:capture <the signal>", "ask": "What is the signal?", "needs": ["plugin:discovery"]},
+            {"label": "Turn the ready specification into a build queue", "command": "/common:queue <name> --from-spec", "ask": "What is the queue name?"},
+            {"label": "Advance a discovery card", "command": "/board-flow:advance <key>", "ask": "What is the card key?", "needs": ["file:board-flow.yaml", "plugin:discovery"]},
+        ],
     },
     "design": {
         "purpose": "design how the thing works and how it looks, before any code exists",
@@ -69,6 +93,7 @@ MODES = {
         "exit": "design-critic returning SHIP",
         "gate": "exists and works (design topology); the write-mode-gate blocks writes outside docs/design",
         "write": ["docs/design/**", ".claude/**", "BACKLOG.md"],
+        "actions": [],
     },
     "construction": {
         "purpose": "write the code that turns the criterion's red test green",
@@ -78,6 +103,19 @@ MODES = {
         "exit": "completion-auditor COMPLETE and proof-reviewer PROVEN",
         "gate": "exists and works (the two gates, in this order)",
         "write": "tudo",
+        "actions": [
+            {"label": "Do the next item in the queue", "command": "/common:next"},
+            {"label": "Run the whole queue in a batch", "command": "/common:drain-plan <queue>", "ask": "Which queue?"},
+            {"label": "Execute a Jira card", "command": "/board-flow:execute <key>", "ask": "What is the card key?", "needs": ["file:board-flow.yaml"]},
+            {"label": "Fix a bug", "command": ["/board-flow:capture Bug: <description>", "/board-flow:fix <created key>"], "ask": "What is the card key or the bug description?", "needs": ["file:board-flow.yaml"]},
+            {"label": "Fix a bug", "command": "/build-solo:reproduce-fix-verify <description>", "ask": "What is the bug description?", "needs": ["topology:build-solo"]},
+            {"label": "Fix a bug", "command": "/build-hex:reproduce-fix-verify <description>", "ask": "What is the bug description?", "needs": ["topology:build-hex"]},
+            {"label": "Build a task described in prose", "command": "/build-solo:plan-build-validate <task>", "ask": "What is the task?", "needs": ["topology:build-solo"]},
+            {"label": "Build a task described in prose", "command": "/build-hex:plan-build-validate <task>", "ask": "What is the task?", "needs": ["topology:build-hex"]},
+            {"label": "Build a task described in prose", "command": "/build-team:plan-build-validate <task>", "ask": "What is the task?", "needs": ["topology:build-team"]},
+            {"label": "Prove what is in Review", "command": "/board-flow:prove-drain", "needs": ["file:board-flow.yaml"]},
+            {"label": "Write the red test of the criterion (no command yet)", "command": None},
+        ],
     },
     "refactor": {
         "purpose": "reorganize delivered code without changing anything visible from outside",
@@ -88,6 +126,7 @@ MODES = {
                 "test edited (edited test = changed behavior = it was not a refactor)",
         "gate": "refactor-gate.py blocks editing an external test while the mode lasts",
         "write": "tudo",
+        "actions": [],
     },
     "reflection": {
         "purpose": "look at what already exists through a chosen lens and give each finding a destination",
@@ -98,6 +137,7 @@ MODES = {
                 "discarded with a written reason",
         "gate": "reflection-gate.py blocks a closed report with a loose finding, and the write-mode-gate blocks writes outside docs/** and .claude/reflection (or the legacy .claude/reflexao)",
         "write": [".claude/reflection/**", ".claude/reflexao/**", "docs/**", "BACKLOG.md"],
+        "actions": [],
     },
     "documentation": {
         "purpose": "document stable code in the Diátaxis tree, with every why citing its source",
@@ -106,6 +146,7 @@ MODES = {
         "exit": "consistency-reviewer PASS and its signature in /docs:finalize",
         "gate": "exists and works (docs topology); the write-mode-gate blocks writes outside docs/**",
         "write": ["docs/**", ".claude/**", "BACKLOG.md", "README.md"],
+        "actions": [],
     },
 }
 

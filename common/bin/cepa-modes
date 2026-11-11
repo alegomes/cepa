@@ -15,11 +15,19 @@ Usage:
     cepa-modes --purposes # one line per mode: what it is for
     cepa-modes --json
     cepa-modes --exit       # the exit verdict of this session's mode, from the disk
+    cepa-modes --menu <name> # the mode's menu of common actions, numbered, filtered by this repo
 
 `--exit` is the verdict that exploration lacked: it reads docs/reviews/ and
 says which of the three parts of the exit condition are on disk (panel saved,
 strategy document it ran over, owner's decision on each named disagreement).
 rc 0 = closed, 1 = still open, 2 = the mode has no mechanical verdict here.
+
+`--menu` is the ONLY place that builds the menu text (`actions` of `_modes.py`).
+An action whose `needs` the repo does not meet (`file:<path>` at the repo root,
+`topology:<name>` = content of `.claude/topology`, `plugin:<name>` installed and
+enabled, checked like `cepa-doctor` does via `_pluginver.scan`) is left out; of
+variants sharing a label only the first that passes shows; at most 5 lines.
+A mode with no actions prints nothing and returns 0.
 """
 
 import json
@@ -32,6 +40,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
 import _clihelp  # noqa: E402
+try:
+    import _pluginver as PV
+except ImportError:  # same fallback as cepa-doctor: no comparator, no plugin knowledge
+    PV = None
 try:
     from _modes import MODES, read_session_mode, normalize_mode, exploration_exit
 except ImportError:
@@ -84,6 +96,67 @@ def render_exit(name):
     return 1
 
 
+MENU_MAX = 5
+
+
+def installed_plugins():
+    """Names of the plugins installed AND enabled, the way `cepa-doctor`
+    (check_plugins) decides it: `_pluginver.scan` over the marketplace repo,
+    with `enabledPlugins` of ~/.claude/settings.json. Never raises."""
+    if PV is None:
+        return set()
+    try:
+        settings = json.loads((Path.home() / ".claude" / "settings.json")
+                              .read_text(encoding="utf-8"))
+        enabled = settings.get("enabledPlugins", {})
+    except (OSError, ValueError, AttributeError):
+        return set()
+    try:
+        return {p["name"] for p in PV.scan(PV.cepa_repo_root(), enabled)
+                if p["enabled"] and not p["missing"]}
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def need_met(need, root, plugins):
+    kind, _, value = str(need).partition(":")
+    if kind == "file":
+        return os.path.exists(os.path.join(root, value))
+    if kind == "topology":
+        try:
+            return (Path(root) / ".claude" / "topology").read_text(
+                encoding="utf-8").strip() == value
+        except OSError:
+            return False
+    if kind == "plugin":
+        return value in plugins
+    return False  # unknown requirement type: the action does not show
+
+
+def menu_actions(name, root):
+    """The actions of `name` that pass the filter: the first variant per label, max MENU_MAX."""
+    plugins = installed_plugins()
+    shown, seen = [], set()
+    for a in MODES[name].get("actions", []):
+        if a["label"] in seen:
+            continue
+        if all(need_met(n, root, plugins) for n in a.get("needs", [])):
+            seen.add(a["label"])
+            shown.append(a)
+        if len(shown) == MENU_MAX:
+            break
+    return shown
+
+
+def render_menu(name):
+    """`--menu`: numbered lines "N) label: command" (a sequence reads "a, then b")."""
+    for i, a in enumerate(menu_actions(name, repo_root()), 1):
+        cmd = a.get("command")
+        cmds = [cmd] if isinstance(cmd, str) else list(cmd or [])
+        print(f"{i}) {a['label']}" + (f": {', then '.join(cmds)}" if cmds else ""))
+    return 0
+
+
 def render_block(name, info, current, color):
     mark = f"  {GREEN}◀ esta sessão{RESET}" if name == current else ""
     lines = [f"{BOLD}{YELLOW}{name}{RESET}{mark}"]
@@ -106,6 +179,9 @@ def main():
             "is the table and nothing else. The source is common/hooks/_modes.py,\n"
             "the same one the session hook reads.\n"
             "\n"
+            "--menu MODE prints that mode's menu of common actions (numbered, with the\n"
+            "command of each), dropping the ones this repo cannot run.\n"
+            "\n"
             "--exit is the verdict exploration lacked: it reads docs/reviews/ and says\n"
             "which of the three parts of the exit condition are on disk (panel saved,\n"
             "the strategy document it ran over, the owner's decision on each named\n"
@@ -115,6 +191,7 @@ def main():
             ("cepa modes exploration", "one mode: enters with, produces, closes when, gate"),
             ("cepa modes --purposes", "one line per mode: what it is for"),
             ("cepa modes --exit", "the exit verdict of this session's mode"),
+            ("cepa modes --menu discovery", "the numbered menu of common actions of a mode"),
             ("cepa modes --json", "the table as JSON (pt-BR keys), for code"),
         ],
         exit_codes=[
@@ -132,6 +209,8 @@ def main():
                     help="one line per mode: what it is for")
     ap.add_argument("--exit", "--saida", action="store_true", dest="exit_",
                     help="exit verdict of this session's mode (or of the given mode), read from disk")
+    ap.add_argument("--menu", metavar="MODE", dest="menu",
+                    help="the numbered menu of common actions of MODE, filtered by this repo")
     ap.add_argument("--no-color", "--sem-cor", action="store_true", dest="no_color",
                     help="no terminal colors")
     args = ap.parse_args()
@@ -148,6 +227,14 @@ def main():
               file=sys.stderr)
         return 2
 
+    if args.menu:
+        name = normalize_mode(args.menu)
+        if name not in MODES:
+            print(f"✗ modo desconhecido: {name}\n  válidos: {', '.join(MODES)}",
+                  file=sys.stderr)
+            return 2
+        return render_menu(name)
+
     if args.exit_:
         name = args.mode or session_mode()
         if not name:
@@ -158,7 +245,7 @@ def main():
 
     target = {args.mode: MODES[args.mode]} if args.mode else MODES
     if args.as_json:
-        legacy = {n: {_JSON_KEYS[k]: v for k, v in d.items()} for n, d in target.items()}
+        legacy = {n: {_JSON_KEYS.get(k, k): v for k, v in d.items()} for n, d in target.items()}
         print(json.dumps(legacy, indent=2, ensure_ascii=False))
         return 0
 
