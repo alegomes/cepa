@@ -1,0 +1,17 @@
+key: perguntar-antes-do-run-CS-4
+status: complete
+criteria:
+  - id: CS-4
+    text: "rota que o dono já respondeu 'não' aparece numa linha resumida, não como pergunta"
+    altitude: cli
+    surface: "cepa-until <queue> on a pty: launch output up to the first item's line; plus `cepa-until decide <queue>` on a pty (still asks both)"
+    test: "tests/test_cepa_until_decide.py::test_launch_cs4_answered_no_routes_become_one_line_not_questions (+ test_launch_cs4_decide_on_the_queue_still_asks_both, test_launch_cs4_mixed_asks_only_the_unanswered_route, test_launch_cs4_latest_answer_wins_over_an_older_no, test_last_owner_no_reads_only_the_first_answer)"
+    layer: "real subprocess of common/bin/cepa-until on a pty (_launch_on_tty / on_tty), fake claude; queue with two routes whose last answer was 'não' on 2026-11-02: asserts exactly one 'already answered' line with '2 route(s)' and '02/11', no 'question(s) for you' panel, no route text, no answer prompt; decide <queue> asks both (2 question(s), both route texts)"
+    evidence: verified
+    run: "cd /Users/alegomes/cepa-worktrees/cepa-until-2026-11-10-1650 && python3 tests/test_cepa_until_decide.py -> '✓ tudo verde', all test_launch_cs4_* and test_last_owner_no_* checks 'ok' (whole file, not run-all.sh)"
+    status: complete
+    extra: "Product change in f8cf226 (last_owner_no + ask_at_launch). Red-at-base (launch printed no line) not re-run by the auditor. Spec Q8 owner decision matches the asserted behavior."
+    notes:
+      - "Outermost layer is the launch output on a pty; exercised, not mocked."
+      - "Edge cases pinned: later sim wins over older não; free text is not a não; mixed queue asks only the unanswered route."
+gap: []
