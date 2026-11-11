@@ -201,6 +201,56 @@ def on_tty(cmd, cwd, inputs=(), env=None, timeout=120):
     return os.waitstatus_to_exitcode(st), out_text
 
 
+def test_decide_on_an_hc_terminal_reports_needs_you_while_it_asks():
+    """`cepa-until decide` in a terminal of the Herdr desktop app (`HC_TERMINAL_ID`):
+    each question that waits at the keyboard says `state=blocked:kind=question`
+    (the Agents panel's "Needs you"), the typed answer puts it back to `working`
+    while it is applied, and the exit drops the status and the title (owner,
+    2026-11-11: "cepa is asking me, but the tab appears as idle")."""
+    import base64
+
+    def seq(payload, message=None):
+        tail = (":msg=" + base64.b64encode(message.encode()).decode()) if message else ""
+        return f"\033]7501;{payload}{tail}\033\\"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        stuck = item("a1", status="blocked")
+        stuck["owner_question"] = "Fecho o card?"
+        root = build_repo(tmp, [stuck])
+        env = dict(os.environ)
+        for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
+            env.pop(k, None)
+        env["HC_TERMINAL_ID"] = "t9"
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, inputs=[
+            ("[t] I write the answer", "n"), ("Anything to add", "")])
+        blocked = seq("state=blocked:kind=question:app=cepa-until",
+                      "fila: waiting for your answer")
+        working = seq("state=working:app=cepa-until", "fila: applying your answer")
+        clear = seq("state=clear")
+        check("decide hc: a pergunta foi respondida", rc == 0
+              and "não: Fecho o card?" in items_of(root)["a1"]["evidence"], out[-800:])
+        check("decide hc: um blocked por pergunta que esperou (a pergunta e o acréscimo)",
+              out.count(blocked) == 2 and out.count(working) == 2,
+              (out.count(blocked), out.count(working)))
+        check("decide hc: o título diz que a fila espera resposta",
+              "\033]2;fila: waiting for your answer\033\\" in out, repr(out[:400]))
+        check("decide hc: a resposta digitada volta para working",
+              working in out and out.index(blocked) < out.index(working), repr(out[-400:]))
+        check("decide hc: a saída limpa o status e devolve o título ao shell",
+              clear in out and out.rfind("\033]7501;") == out.rfind(clear)
+              and out.rfind("\033]2;") == out.rfind("\033]2;\033\\"),
+              repr(out[-200:]))
+    env.pop("HC_TERMINAL_ID")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [stuck])
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, inputs=[
+            ("[t] I write the answer", "n"), ("Anything to add", "")])
+        check("decide fora do Herdr desktop: nenhuma sequência 7501 nem título",
+              rc == 0 and "]7501;" not in out and "\033]2;" not in out, repr(out[-200:]))
+
+
 def plan_of(root):
     return root / ".claude" / "programs" / "fila" / "plan.yaml"
 
