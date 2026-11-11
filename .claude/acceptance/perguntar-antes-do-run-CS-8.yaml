@@ -1,0 +1,17 @@
+key: perguntar-antes-do-run-CS-8
+status: complete
+criteria:
+  - id: CS-8
+    text: "as perguntas que a fila já tem aparecem antes de a leitura prévia acabar, e as da leitura entram no fim da mesma lista"
+    altitude: cli
+    surface: "cepa-until <queue> (launch) on a pty with a fake reader (CEPA_UNTIL_LEITOR) that sleeps 2 s and writes a marker file when done; observed on the terminal output (panel order, numbering, total) and in the run events / queue items"
+    test: "tests/test_cepa_until_decide.py::test_launch_cs8_queue_route_comes_before_the_pre_read_question_and_the_total_sums_both (+ _without_queue_routes_the_pre_read_opens_the_panel_itself, _preference_counts_in_the_total_after_the_queue_route, _route_just_opened_is_asked_even_over_an_old_no)"
+    layer: "real subprocess of common/bin/cepa-until on a pty, fake claude, fake 2 s reader; declared scenario: queue with one open route (r1) plus x1,y1; asserts the route text appears before the pre-read's question, the marker file does not yet exist when the route is answered (reader_done False), panel says the pre-read is still reading, pre-read question numbered 2/2, '2 question(s) in total', list closes once, y1 runs, x1 deferred by its route. Others: no queue route gives 1/1 and no 'still reading'; a preference counts 2/2 after the route; a just-opened route is asked even over an old 'no' (unit call of ask_at_launch with stubs)"
+    evidence: verified
+    run: "cd /Users/alegomes/cepa-worktrees/cepa-until-2026-11-10-1650 && python3 -c \"import sys; sys.path.insert(0,'tests'); import test_cepa_until_decide as t; [f() for n,f in sorted(vars(t).items()) if n.startswith('test_launch_cs8')]; print('FAIL', t.FAILURES)\" -> 19 'ok' checks (N>0) across 4 test functions, 'FAIL []', ~31 s; foreground, run-all.sh not run"
+    status: complete
+    extra: "Product change in 99b36b2 and 192cd88 (launch panel asks queue routes while the pre-read runs; pre-read questions appended to the same list; tally shown/of). Red-at-base not re-run; evident from the diff since the base had no panel at launch before the pre-read ended. The fourth test is a function-level call (ask_at_launch with stubbed decide/query_queue), a supporting check, not the demonstrating one."
+    notes:
+      - "Outermost layer is the real CLI launch on a pty; exercised, not mocked. Ordering against the reader is proven by the marker file, not by timing alone."
+      - "Out of scope by spec ordering: skip option and no-terminal listing (CS-9), largada event (CS-13)."
+gap: []
