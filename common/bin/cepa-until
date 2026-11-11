@@ -4252,8 +4252,15 @@ def _main(argv=None):
             if pref:
                 row.update(escolha=pref["escolha"], fonte=pref["fonte"])
     if not data.get("batch"):
+        # CS-10: after the panel, if no item runs the run does not start: this return
+        # comes before `open_run_branch`, so no `until/<run_id>` branch or worktree exists.
         stop = data.get("stop") or {}
-        print(f"\nnothing to do: {stop.get('reason')} — {stop.get('detail')}")
+        print(f"\nnothing to do: no item runs, so the run does not start (no until/<run_id> "
+              f"branch or worktree is created). {stop.get('reason')} — {stop.get('detail')}")
+        waiting = [ad for ad in (data.get("deferred") or [])
+                   if reason_alias(ad.get("reason")) in OWNER_REASON]
+        if waiting:
+            print(f"{len(waiting)} item(s) wait for you: cepa-until decide {a.queue}")
         return 0
 
     # A closed terminal tab sends SIGHUP to the terminal's group. `claude`

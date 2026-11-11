@@ -1446,6 +1446,41 @@ def test_launch_cs4_answered_no_routes_become_one_line_not_questions():
           and "first route text" not in (before or ""), (before or "")[-1500:])
 
 
+def _cs10_check(label, items, answers, count):
+    """CS-10: no item runs after the panel, so the run does not start: no branch, no
+    worktree, no ledger; the output says so and points at `decide`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, items)
+        binv = fake_claude(tmp, "pass")
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"], str(root),
+            inputs=answers, env=env, timeout=90)
+        branches = subprocess.run(["git", "-C", str(root), "branch", "--list", "until/*"],
+                                  capture_output=True, text=True).stdout.strip()
+        wts = subprocess.run(["git", "-C", str(root), "worktree", "list"],
+                             capture_output=True, text=True).stdout.strip().splitlines()
+        check(f"{label}: exits 0", rc == 0, out[-1500:])
+        check(f"{label}: says no item runs and the run does not start",
+              "nothing to do: no item runs, so the run does not start" in out, out[-1500:])
+        check(f"{label}: no until/* branch", branches == "", branches)
+        check(f"{label}: worktree list has only the clone", len(wts) == 1, str(wts))
+        check(f"{label}: no ledger events", _launch_events(root) == [], out[-800:])
+        check(f"{label}: wait-for-you line with count {count}",
+              f"{count} item(s) wait for you: cepa-until decide fila" in out, out[-1500:])
+
+
+def test_launch_cs10_only_answered_no_routes_the_run_does_not_start():
+    _cs10_check("cs10 answered no", _no_routes(), [], 2)
+
+
+def test_launch_cs10_route_answered_no_in_the_panel_the_run_does_not_start():
+    _cs10_check("cs10 panel n", [item("a1", human_pending="provision the Keycloak role")],
+                [("[t] I write the answer", "n")], 1)
+
+
 def test_launch_cs4_decide_on_the_queue_still_asks_both():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, _no_routes())
