@@ -2161,6 +2161,10 @@ def test_launch_cs8_queue_route_comes_before_the_pre_read_question_and_the_total
           "[2/2] x1" in out or "2/2 · x1" in out, out[-2500:])
     check("cs8: the panel total sums both (2 question(s) in total)",
           "2 question(s) in total" in out, out[-2500:])
+    check("cs8: the list opens once (one header before 2/2 · x1)",
+          out[:out.find("2/2 · x1")].count("question(s) for you") == 1
+          and out[:out.find("── closing")].count("question(s) for you") == 1,
+          out[-2500:])
     check("cs8: the list closes once",
           out.count("Answered now:") + out.count("answered now ") == 1, out[-2500:])
     check("cs8: y1 still runs", "y1" in _started(events), out[-1500:])
@@ -2212,6 +2216,42 @@ def test_launch_cs8_route_just_opened_is_asked_even_over_an_old_no():
     check("cs8 old no: the just-opened route is asked", asked == [["x1"]], str(asked))
     check("cs8 old no: no CS-4 summary line in the pre-read part",
           "already answered" not in buf.getvalue(), buf.getvalue())
+
+
+def test_launch_cs8_empty_queue_route_and_preference_from_the_pre_read_share_one_count():
+    """No route in the queue; the pre-read opens a route on x1 and finds a preference
+    on y1: one header with 2, numbered 1/2 (the route) and 2/2 (the preference)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("x1"), item("y1")])
+        binv = fake_claude(tmp, "pass")
+        reader = Path(tmp) / "leitor-misto.py"
+        reader.write_text(
+            f"#!{sys.executable}\n"
+            "import json, sys\n"
+            "it = json.load(sys.stdin)\n"
+            "if it['id'] == 'x1':\n"
+            "    print(json.dumps({'tipo': 'pre-condicao',\n"
+            "        'texto': 'Falta o token de acesso do ambiente de homologação.',\n"
+            "        'pergunta': 'Você já providenciou o token de acesso?'}))\n"
+            "else:\n"
+            "    print(json.dumps({'tipo': 'preferencia', 'padrao': 'usar o formato curto',\n"
+            "        'texto': 'Há duas formas de mostrar a data.',\n"
+            "        'pergunta': 'Posso usar o formato curto?'}))\n")
+        reader.chmod(0o755)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(reader)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "5"
+        _, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"], str(root),
+            inputs=[("[t] I write the answer", ""), ("Your choice, in one line", "")],
+            env=env, timeout=90)
+        out = ANSI.sub("", out)
+    launch = out[:out.find("── closing")]
+    check("cs8 mixed: one header with the sum", "2 question(s) for you" in launch
+          and launch.count("question(s) for you") == 1, launch[-2500:])
+    check("cs8 mixed: the route is 1/2", "1/2 · x1" in out, out[-2500:])
+    check("cs8 mixed: the preference is 2/2", "2/2 · y1" in out, out[-2500:])
 
 
 def main():
