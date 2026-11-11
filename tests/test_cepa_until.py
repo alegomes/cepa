@@ -1770,6 +1770,57 @@ def test_hc_waiting_for_the_owner_reports_blocked_question_before_the_prompt():
           blocked in written and written.index(blocked) < written.find("   > "), repr(written))
 
 
+def _main_ending_with(mod, ending):
+    """Runs `main` with `_main` arming the run and then ending with `ending`
+    (an exception to raise); returns what reached the fake terminal."""
+    saved = (mod.sys.stdout, dict(os.environ), mod._main, mod._herdr_armed, mod._hc_label)
+    for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
+        os.environ.pop(k, None)
+    os.environ["HC_TERMINAL_ID"] = "t9"
+    tty = _FakeTty()
+    mod.sys.stdout = tty
+
+    def fake_main(argv=None):
+        mod._herdr_armed, mod._hc_label = True, "fila"
+        raise ending
+
+    mod._main = fake_main
+    try:
+        mod.main([])
+    except BaseException:  # noqa: BLE001 — main re-raises; only the terminal matters
+        pass
+    finally:
+        mod.sys.stdout, mod._main = saved[0], saved[2]
+        os.environ.clear()
+        os.environ.update(saved[1])
+        mod._herdr_armed, mod._hc_label = saved[3], saved[4]
+    return tty.written
+
+
+def test_hc_a_run_that_dies_lands_in_needs_you_and_ctrl_c_drops_the_row():
+    """A dead run reports `blocked` (not `error`: the Agents panel files `error`
+    under Idle with a transparent dot); the owner's own Ctrl+C just clears."""
+    import base64
+    mod = _until_module()
+    for label, ending, message in (
+            ("exceção", RuntimeError("boom"), "fila: run died (RuntimeError)"),
+            ("SIGTERM", SystemExit(128 + 15), "fila: run stopped by SIGTERM")):
+        written = _main_ending_with(mod, ending)
+        blocked = hc_seq("state=blocked:app=cepa-until:msg="
+                         + base64.b64encode(message.encode()).decode())
+        check(f"hc morte ({label}): blocked com o motivo no terminal",
+              blocked in written, repr(written))
+        check(f"hc morte ({label}): o título diz o motivo",
+              f"\033]2;{message}\033\\" in written, repr(written))
+        check(f"hc morte ({label}): nem clear nem done",
+              "state=clear" not in written and "state=done" not in written, repr(written))
+    for label, ending in (("Ctrl+C", KeyboardInterrupt()), ("SIGINT", SystemExit(128 + 2))):
+        written = _main_ending_with(mod, ending)
+        check(f"hc ({label} do dono): só o clear, nada de blocked",
+              hc_seq("state=clear") in written and "state=blocked" not in written,
+              repr(written))
+
+
 def test_hc_blocked_is_not_reported_outside_the_armed_run():
     """`cepa-until decide` and the other subcommands never arm the run: the owner is
     already at the keyboard and nothing is listed in the Agents panel."""

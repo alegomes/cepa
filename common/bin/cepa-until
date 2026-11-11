@@ -1198,14 +1198,19 @@ def herdr_blocked():
     _hc_status(f"state=blocked:kind=question:app=cepa-until:msg={_hc_b64(message)}")
 
 
-def herdr_release(agent="cepa-until", done=False):
+def herdr_release(agent="cepa-until", done=False, failure=None):
     """Gives the pane back to herdr (`release-agent`), so it stops showing a
     `cepa-until` agent once the run is over. Same gate, timeout and ignored
     failures as `herdr_report` (herdr may itself be shutting down). SIGTERM and
     SIGINT are ignored for the (at most 1 s) call so a second signal cannot cut it.
     With `done` (the run returned instead of dying on an exception or signal), the
     Herdr desktop app gets OSC 7501 `state=done` and the title `<queue>: finished`,
-    so its Agents panel moves the row to Done; otherwise `state=clear` drops it."""
+    so its Agents panel moves the row to Done. With `failure` (why the run died: an
+    exception or a SIGTERM), it gets `state=blocked` and the title
+    `<queue>: <failure>`, so the row lands in "Needs you". Not `state=error`: the
+    panel ranks `error` with Idle and draws it as a transparent dot, so a dead run
+    would go unseen (`~/.config/herdr-app/mods/agents/main.js`, `RANK` and `status`,
+    2026-11-11). Otherwise (the owner's Ctrl+C) `state=clear` drops the row."""
     saved = {}
     for sig in (signal.SIGTERM, signal.SIGINT):
         try:
@@ -1217,6 +1222,10 @@ def herdr_release(agent="cepa-until", done=False):
         if done:
             message = f"{_hc_label}: finished" if _hc_label else "finished"
             _hc_status(f"state=done:app={agent}:msg={_hc_b64(message)}")
+            _hc_title(message)
+        elif failure:
+            message = f"{_hc_label}: {failure}" if _hc_label else failure
+            _hc_status(f"state=blocked:app={agent}:msg={_hc_b64(message)}")
             _hc_title(message)
         else:
             _hc_status("state=clear")
@@ -3531,14 +3540,29 @@ def main(argv=None):
     """Runs the command; once the main run is armed (past preflight, signal handlers
     installed) every way out, return or exception, releases the herdr pane. The
     subcommands never arm it, so they never call herdr."""
-    returned = False
+    returned, failure = False, None
     try:
         code = _main(argv)
         returned = True
         return code
+    except KeyboardInterrupt:
+        raise
+    except SystemExit as e:
+        # The signal handler exits with 128 + signum: SIGINT is the owner's Ctrl+C,
+        # anything else (SIGTERM) came from elsewhere and the owner should know.
+        if isinstance(e.code, int) and e.code > 128 and e.code != 128 + signal.SIGINT:
+            try:
+                name = signal.Signals(e.code - 128).name
+            except ValueError:
+                name = f"signal {e.code - 128}"
+            failure = f"run stopped by {name}"
+        raise
+    except BaseException as e:  # noqa: BLE001 — reported, then re-raised as is
+        failure = f"run died ({type(e).__name__})"
+        raise
     finally:
         if _herdr_armed:
-            herdr_release(done=returned)
+            herdr_release(done=returned, failure=failure)
 
 
 def _main(argv=None):
