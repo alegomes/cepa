@@ -1760,6 +1760,7 @@ def hc_scenario(tmp, hc_id="t9", tty=True):
     env["FAKE_PLANO"] = str(plan)
     env["CEPA_WORKTREE_HOME"] = str(Path(root).parent / "worktrees")
     env["FAKE_CHAMADAS"] = str(Path(root).parent / "chamadas.jsonl")
+    env["CEPA_UNTIL_LEITOR"] = "off"  # the pre-read must not call the fake claude
     argv = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
             "--for", "2h", "--no-verify", "--no-analysis"]
     if not tty:
@@ -1905,6 +1906,51 @@ def test_hc_a_run_that_dies_lands_in_needs_you_and_ctrl_c_drops_the_row():
         check(f"hc ({label} do dono): só o clear, nada de blocked",
               hc_seq("state=clear") in written and "state=blocked" not in written,
               repr(written))
+
+
+def test_hc_a_run_that_ends_with_an_unanswered_question_stays_in_needs_you():
+    """A question nobody answered within the wait leaves the run ending with work for
+    the owner: the row goes to "Needs you", not Done (2026-11-11: four questions
+    waited and the row read `kairos-etapa-1: finished` under Idle)."""
+    import base64
+    mod = _until_module()
+    saved = (mod.sys.stdout, mod.sys.stdin, dict(os.environ), mod._herdr_armed,
+             mod._hc_label, mod._main, mod._hc_unanswered)
+    for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
+        os.environ.pop(k, None)
+    os.environ["HC_TERMINAL_ID"] = "t9"
+    tty = _FakeTty()
+    r, w = os.pipe()
+    mod.sys.stdout, mod.sys.stdin = tty, os.fdopen(r)
+    raised = []
+
+    def fake_main(argv=None):
+        mod._herdr_armed, mod._hc_label = True, "fila"
+        try:
+            mod.read_line("   > ", wait=0.05)
+        except mod.NoAnswer:
+            raised.append(True)
+        return 0
+
+    mod._main = fake_main
+    try:
+        mod.main([])
+    finally:
+        mod.sys.stdin.close()
+        os.close(w)
+        mod.sys.stdout, mod.sys.stdin = saved[0], saved[1]
+        os.environ.clear()
+        os.environ.update(saved[2])
+        (mod._herdr_armed, mod._hc_label, mod._main,
+         mod._hc_unanswered) = saved[3], saved[4], saved[5], saved[6]
+    message = "fila: finished, questions wait for you"
+    blocked = hc_seq("state=blocked:kind=question:app=cepa-until:msg="
+                     + base64.b64encode(message.encode()).decode())
+    written = tty.written
+    check("hc sem resposta: a espera acabou sem resposta", raised == [True], raised)
+    check("hc sem resposta: a run termina em blocked, não em done",
+          written.rstrip().endswith(blocked + f"\033]2;{message}\033\\")
+          and "state=done" not in written, repr(written[-300:]))
 
 
 def test_hc_blocked_is_not_reported_outside_the_armed_run():

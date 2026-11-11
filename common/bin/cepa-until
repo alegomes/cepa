@@ -1226,6 +1226,10 @@ _hc_label = None
 # `done` at the exit).
 _hc_asking = False
 
+# True once a question of the armed run waited past its time with no answer: the
+# run then ends with work for the owner, and the exit reports "Needs you".
+_hc_unanswered = False
+
 
 def herdr_blocked():
     """Tells the Herdr desktop app the run waits for the owner's answer: OSC 7501
@@ -1261,7 +1265,9 @@ def herdr_release(agent="cepa-until", done=False, failure=None):
     SIGINT are ignored for the (at most 1 s) call so a second signal cannot cut it.
     With `done` (the run returned instead of dying on an exception or signal), the
     Herdr desktop app gets OSC 7501 `state=done` and the title `<queue>: finished`,
-    so its Agents panel moves the row to Done. With `failure` (why the run died: an
+    so its Agents panel moves the row to Done; if a question went unanswered past
+    its wait (`_hc_unanswered`), `state=blocked:kind=question` instead, so the row
+    stays in "Needs you" until `cepa-until decide`. With `failure` (why the run died: an
     exception or a SIGTERM), it gets `state=blocked` and the title
     `<queue>: <failure>`, so the row lands in "Needs you". Not `state=error`: the
     panel ranks `error` with Idle and draws it as a transparent dot, so a dead run
@@ -1275,7 +1281,12 @@ def herdr_release(agent="cepa-until", done=False, failure=None):
             pass
     try:
         _herdr_call(["release-agent"], agent)
-        if done:
+        if done and _hc_unanswered:
+            message = (f"{_hc_label}: " if _hc_label else "") \
+                + "finished, questions wait for you"
+            _hc_status(f"state=blocked:kind=question:app={agent}:msg={_hc_b64(message)}")
+            _hc_title(message)
+        elif done:
             message = f"{_hc_label}: finished" if _hc_label else "finished"
             _hc_status(f"state=done:app={agent}:msg={_hc_b64(message)}")
             _hc_title(message)
@@ -2492,8 +2503,13 @@ def read_line(prompt, output=print, wait=None):
     half-erased arrives as a stray byte (`n\\xcb\\xc3\\xa3o`) and
     `input()` blows up with UnicodeDecodeError; the line was already consumed, so
     just ask again (decidir WEGO 2026-09-29-2059)."""
+    global _hc_unanswered
     herdr_blocked()
-    line = _read_line(prompt, output, wait)
+    try:
+        line = _read_line(prompt, output, wait)
+    except NoAnswer:
+        _hc_unanswered = _hc_unanswered or _herdr_armed
+        raise
     hc_answered()
     return line
 
