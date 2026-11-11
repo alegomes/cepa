@@ -1398,6 +1398,36 @@ def test_last_owner_no_reads_only_the_first_answer():
     check("empty and None", m.last_owner_no("") is None and m.last_owner_no(None) is None)
 
 
+def test_last_owner_no_tolerates_leading_whitespace():
+    m = load_module()
+    check("leading spaces and a newline before the answer still count",
+          m.last_owner_no("  \n" + _answered("2026-11-02")) == "2026-11-02")
+
+
+def test_launch_cs4_summary_line_shows_the_most_recent_of_several_dates():
+    """Two routes answered "não" on different days: the line names the latest (09/11),
+    not the oldest, and with the year turning the ISO comparison still picks the latest."""
+    import contextlib, io
+    m = load_module()
+    for days, expected in ((("2026-11-02", "2026-11-09"), "09/11"),
+                           (("2026-11-09", "2026-11-02"), "09/11"),
+                           (("2026-12-30", "2027-01-02"), "02/01")):
+        deferred = [{"id": f"a{i}", "reason": "human_pending",
+                     "human_pending": f"route {i}", "evidence": _answered(d)}
+                    for i, d in enumerate(days, 1)]
+        m.query_queue = lambda *a, **k: ({"deferred": deferred}, None)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            got = m.ask_at_launch(Path("/nao/existe"), "fila", {"batch": []})
+        out = buf.getvalue()
+        line = [l for l in out.splitlines() if "already answered" in l]
+        check(f"{days}: one line with 2 and {expected}",
+              len(line) == 1 and "2 route(s)" in line[0]
+              and f"last on {expected}" in line[0], out)
+        check(f"{days}: nothing asked, data returned as is",
+              got == {"batch": []} and "question(s) for you" not in out, out)
+
+
 def test_launch_cs4_answered_no_routes_become_one_line_not_questions():
     """CS-4 declared scenario: two routes whose last answer was "não" on 2026-11-02."""
     rc, out, events, _ = _launch_on_tty([], wait="2", items=_no_routes() + [item("a3")])
