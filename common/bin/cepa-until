@@ -790,6 +790,13 @@ def summarize_reason(text):
     return f"{text[:half]} [...] {text[-half:]}"
 
 
+def item_decisions(item):
+    """CS-11: the item's `decisions` ({texto, commit}) that are well formed."""
+    return [{"texto": str(d["texto"]), "commit": str(d["commit"])}
+            for d in ((item or {}).get("decisions") or [])
+            if isinstance(d, dict) and d.get("texto") and d.get("commit")]
+
+
 def read_item(plan_path, ident):
     """The item's current status on disk. The truth about the outcome is the PLAN, not the
     subprocess exit code — synchronize on the verifiable effect."""
@@ -4460,6 +4467,7 @@ def _main(argv=None):
     # Items started with a tight quota and the reset outside the window.
     tight = []
     followed = {}  # CS-6: id -> the preference handed to its agent, for the summary
+    decided = []   # CS-11: (id, {texto, commit}) recorded with `finish --decision`
     # Plugin hooks that the night branch changed and that the screen has already warned about. The
     # base is the clone's HEAD, and not the night's, so the inheritance counts: what
     # it brought is not in the installed plugin either.
@@ -4614,6 +4622,9 @@ def _main(argv=None):
                   + (f", attempt {round_n}/{a.attempts_per_item}" if round_n > 1 else "") + ")")
         before = head_of(tree)
         first.setdefault(ident, (before, len(delivered)))
+        # CS-11: the item's `decisions` before the round, so the summary lists
+        # only the ones this run recorded.
+        known_decisions = item_decisions(read_item(plan_path, ident)[0])
         # Fresh per launch: `claude --session-id` refuses a reused one.
         session_id = str(uuid.uuid4())
         pref = preferences.get(str(ident))
@@ -4687,6 +4698,9 @@ def _main(argv=None):
             end_motive = end_reason_of(code, killed, output)
         except Exception:  # noqa: BLE001  (a classifier bug must not lose the record)
             end_motive = "desconhecido"
+        for dec in item_decisions(after):
+            if dec not in known_decisions and (ident, dec) not in decided:
+                decided.append((ident, dec))
         log_event({"evento": "item_end", "id": ident, "status": run_state,
                   "session_id": session_id,
                   "motivo_fim": end_motive,
@@ -5243,6 +5257,15 @@ def _main(argv=None):
             who = ("your answer at the launch" if pref["fonte"] == "dono"
                    else "the agent's default, nobody answered")
             print(f"     - {ident}: {pref['escolha']} ({who}) · {pref['texto']}")
+    # CS-11: only the choices whose commit is still on the run branch; a red
+    # build takes the item's commits off, and with them the choice.
+    decided = [(i, d) for i, d in decided
+               if git(["merge-base", "--is-ancestor", d["commit"], "HEAD"], tree)[0] == 0]
+    if decided:
+        print(f"\n   Decided for you ({len(decided)}) — already committed on the run "
+              "branch, nobody was asked; undoing one is a `git revert`:")
+        for ident, dec in decided:
+            print(f"     - {ident}: {dec['texto']} · commit {dec['commit'][:10]}")
     if drops:
         print(f"\n   Network drops ({len(drops)}) — not the item's fault:")
         for ident, dropped_at, returned in drops:

@@ -119,12 +119,18 @@ Subcommands:
       same as the worktree system — two copies of the rule diverge.
 
   cepa-plan finish <nome> <id> --status done|blocked|pending --evidence TEXTO
-                   [--human-pending ROTA]
+                   [--human-pending ROTA] [--decision TEXTO [--decision-commit SHA]]
       Records the outcome. `--evidence` is mandatory: `done` without what
       happened is just a word, and this repo's queue keeps the evidence of each
       closed item. `--human-pending` OPENS a route only the human closes;
       closing it (passing empty) is refused, because only whoever ran the route
       knows whether it passed.
+      `--decision` records a behavior choice the agent ALREADY committed on the
+      branch (item key `decisions`: text + commit, default HEAD, refused when the
+      commit is not on the branch). It opens no route: the run summary lists it
+      with the commit, and undoing it is a `git revert` (CS-11 of
+      docs/spec/perguntar-antes-do-run.md). A proof waiver, a card to Done and a
+      task outside the repo stay `--human-pending` (owner's answer to Q7).
       `--status done` is refused when the `.claude/last-build.json` at the
       root of the `--repo` session is EMPTY (a test filter that matched zero
       tests): green without a test does not close an item.
@@ -3186,10 +3192,41 @@ def record_refusal(root, name, target, plan, it, status, reason, commit, repo):
                 commit)
 
 
+def resolve_decisions(repo, texts, sha):
+    """CS-11: ([{texto, commit}], None) or (None, refusal). The commit must exist
+    and be on the current branch: "already committed on the run branch" is the
+    whole of the owner's Q7 answer, and a choice that never landed would be
+    reported as decided with nothing to `git revert`."""
+    if not texts:
+        if sha:
+            return None, "`--decision-commit` sem `--decision`: falta dizer qual escolha"
+        return [], None
+    flat = [" ".join(str(t or "").split()) for t in texts]
+    if not all(flat):
+        return None, "`--decision` vazio: diga a escolha em palavras simples"
+    tree = session_root(repo)
+    ref = (sha or "HEAD").strip()
+    rc, full, _ = _git(tree, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+    if rc != 0 or not full.strip():
+        return None, (f"o commit `{ref}` da decisão não existe em {tree}: a "
+                      "escolha só vira decisão depois de commitada")
+    full = full.strip()
+    rc, _, _ = _git(tree, "merge-base", "--is-ancestor", full, "HEAD")
+    if rc != 0:
+        return None, (f"o commit `{full[:10]}` da decisão não está na branch "
+                      "atual: a escolha tem que estar commitada nesta branch")
+    return [{"texto": t, "commit": full} for t in flat], None
+
+
 def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
-               question=None, commit=False, owner=None, supervisor=False):
+               question=None, commit=False, owner=None, supervisor=False,
+               decisions=None, decision_commit=None):
     owner = {k: " ".join(str(v).split()) for k, v in (owner or {}).items()
              if v is not None and str(v).strip()}
+    new_decisions, why_not = resolve_decisions(repo, decisions, decision_commit)
+    if why_not:
+        print(f"`{status}` recusado para {ident}: {why_not}", file=sys.stderr)
+        return 2
     refusal = human_section_refusal(status, owner, question)
     if refusal:
         print(f"`{status}` recusado para {ident}: {refusal}", file=sys.stderr)
@@ -3258,8 +3295,17 @@ def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
         it["owner_summary"] = owner
     elif status in ("done", "pending"):
         it.pop("owner_summary", None)
+    if new_decisions:
+        kept = [d for d in (it.get("decisions") or []) if isinstance(d, dict)]
+        for d in new_decisions:
+            if d not in kept:
+                kept.append(d)
+        it["decisions"] = kept
     write_body(target, plan, plan.get("items") or [])
     print(f"{ident} → `{status}` em {target}")
+    for d in new_decisions:
+        print(f"  decisão registrada, sem rota para o dono: {d['texto']} "
+              f"(commit {d['commit'][:10]})")
     if status in ("done", "blocked"):
         clear_validation_owed(name, ident)
     elif status == "pending":
@@ -5192,6 +5238,23 @@ def main(argv=None):
                         metavar="TEXT",
                         help=owner_help[key] + ". Up to 30 words, no card, "
                              "commit, file or verdict")
+    # CS-11 of docs/spec/perguntar-antes-do-run.md (owner's answer to Q7): a
+    # behavior choice the agent already committed is recorded, not asked.
+    fi.add_argument("--decision", "--decisao", dest="decision", action="append",
+                    metavar="TEXT",
+                    help="a behavior choice you ALREADY committed on this branch, "
+                         "in plain words (\"the batch skips inactive "
+                         "credentials\"). Recorded in the item's `decisions` with "
+                         "its commit and listed in the run summary; it opens no "
+                         "route and `cepa-until decide` never asks about it. "
+                         "Repeatable. NOT for a proof waiver, moving a card to "
+                         "Done or a task outside the repo: those stay "
+                         "--human-pending")
+    fi.add_argument("--decision-commit", dest="decision_commit", metavar="SHA",
+                    help="the commit that carries the --decision choice (default: "
+                         "HEAD of --repo). Must be on the current branch. Not "
+                         "`--commit`, which already means \"commit the queue "
+                         "file\"")
     fi.add_argument("--commit", action="store_true", help=commit_help)
     fi.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
@@ -5505,7 +5568,7 @@ def main(argv=None):
                           a.human_pending, a.repo, a.question, a.commit,
                           {key: getattr(a, f"owner_{key}")
                            for key, _, _ in _ownertext.FIELDS},
-                          a.supervisor)
+                          a.supervisor, a.decision, a.decision_commit)
     if a.cmd == "answer":
         return cmd_answer(root, a.name, a.id, a.answer, a.keep,
                             a.force, not a.no_commit, a.repo, a.author, a.drop)
