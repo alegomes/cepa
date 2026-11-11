@@ -793,8 +793,8 @@ def fake_home(tmp, plugins=("discovery",), name="home"):
     (claude / "plugins").mkdir(parents=True)
     (claude / "plugins" / "known_marketplaces.json").write_text(
         json.dumps({"cepa": {"installLocation": str(REPO)}}))
-    for name in plugins:
-        (claude / "plugins" / "cache" / "cepa" / name / "99.0.0").mkdir(parents=True)
+    for plugin in plugins:
+        (claude / "plugins" / "cache" / "cepa" / plugin / "99.0.0").mkdir(parents=True)
     (claude / "settings.json").write_text(
         json.dumps({"enabledPlugins": {f"{n}@cepa": True for n in plugins}}))
     return home
@@ -840,9 +840,67 @@ def test_menu_empty_and_unknown():
         check("--menu unknown mode: rc 2", q.returncode == 2)
 
 
+def set_topology(repo, topology, board_flow=False):
+    claude = Path(repo.path) / ".claude"
+    claude.mkdir(exist_ok=True)
+    (claude / "topology").write_text(topology + "\n")
+    if board_flow:
+        (Path(repo.path) / "board-flow.yaml").write_text("project: X\n")
+
+
+def test_menu_construction_build_solo_without_board_flow():
+    """CS-2: no board-flow.yaml hides every board-flow line; topology picks the build-solo variants."""
+    print("menu: construction, build-solo, no board-flow.yaml")
+    with Repo() as r:
+        set_topology(r, "build-solo")
+        p = run_menu(r, "construction", fake_home(r.tmp.name))
+        out = p.stdout
+        check("--menu construction rc 0", p.returncode == 0, p.stderr[-200:])
+        check("no /board-flow: line", "/board-flow:" not in out, out)
+        check("build-solo fix variant shows", "/build-solo:reproduce-fix-verify" in out, out)
+        check("build-solo build variant shows", "/build-solo:plan-build-validate" in out, out)
+        check("red-test action without command shows",
+              "Write the red test of the criterion (no command yet)" in out, out)
+        check("build-hex variants hidden", "/build-hex:" not in out, out)
+
+
+def test_menu_construction_with_board_flow():
+    """CS-2: with board-flow.yaml the menu is capped at 5, one line per label, sequences joined by ', then '."""
+    print("menu: construction, build-solo, with board-flow.yaml")
+    with Repo() as r:
+        set_topology(r, "build-solo", board_flow=True)
+        p = run_menu(r, "construction", fake_home(r.tmp.name))
+        out = p.stdout
+        lines = [l for l in out.splitlines() if l.strip()]
+        check("exactly 5 numbered actions",
+              len(lines) == 5 and all(l.startswith(f"{i}) ") for i, l in enumerate(lines, 1)), out)
+        check("/board-flow:execute shows", "/board-flow:execute" in out, out)
+        check("'Fix a bug' appears exactly once", out.count("Fix a bug") == 1, out)
+        check("sequence joined by ', then '",
+              "/board-flow:capture Bug: <description>, then /board-flow:fix <created key>" in out, out)
+        check("later variant of the same label dropped", "/build-solo:reproduce-fix-verify" not in out, out)
+        check("prove-drain cut by the cap", "/board-flow:prove-drain" not in out, out)
+
+
+def test_need_met_unknown_type_is_not_met():
+    """An unknown requirement type never lets an action show."""
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader("cepa_modes_under_test", str(CEPA_MODES))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    with tempfile.TemporaryDirectory() as d:
+        check("unknown type `bogus:x` is not met", mod.need_met("bogus:x", d, set()) is False)
+        check("known type still works (plugin)", mod.need_met("plugin:x", d, {"x"}) is True)
+
+
 def main():
     print("test_cepa_mode")
-    for fn in (test_menu_discovery, test_menu_empty_and_unknown, test_valid_mode, test_invalid_mode, test_without_mode_without_tty,
+    for fn in (test_menu_discovery, test_menu_empty_and_unknown,
+               test_menu_construction_build_solo_without_board_flow,
+               test_menu_construction_with_board_flow,
+               test_need_met_unknown_type_is_not_met, test_valid_mode, test_invalid_mode, test_without_mode_without_tty,
                test_old_cepa_names, test_hook_reads_old_session_mode_and_intent,
                test_kill_switch, test_overhaul_budget,
                test_help_non_interactive, test_help_in_the_menu_and_re_presents,
