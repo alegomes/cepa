@@ -3047,12 +3047,14 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
     closed question with the agent's default. A line typed is the owner's answer
     (`escolha` becomes it, `fonte` "dono"); Enter keeps the default. No answer within
     the wait, EOF or Ctrl-C: one line, and every preference not answered yet keeps the
-    default (`fonte` stays "padrao"). `prefs` is changed in place."""
+    default (`fonte` stays "padrao"). `prefs` is changed in place. Returns how many
+    questions reached the screen (CS-13)."""
     if not prefs:
-        return
+        return 0
     if question is None:
         def question(prompt):
             return read_line(prompt, print, wait)
+    shown = 0
     print(f"\n── {len(prefs)} choice(s) the pre-read found: answer to decide, "
           "Enter keeps the agent's default")
     for i, (ident, pref) in enumerate(prefs.items(), first):
@@ -3060,19 +3062,21 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
         if pref.get("pergunta"):
             print(f"   {pref['pergunta']}")
         print(f"   If nobody answers, the agent goes with: {pref['padrao']}")
+        shown += 1
         try:
             raw = question("   ▸ Your choice, in one line [Enter keeps the default]: ")
         except NoAnswer:
             print(f"\n   nobody answered in {(wait or 0) / 60:g} min; the remaining "
                   "choice(s) run with the agent's default")
-            return
+            return shown
         except (EOFError, KeyboardInterrupt):
             print("\n   choices interrupted; the remaining ones run with the agent's "
                   "default")
-            return
+            return shown
         text = " ".join(str(raw or "").split())
         if text:
             pref.update(escolha=text, fonte="dono")
+    return shown
 
 
 def preference_note(ident, pref):
@@ -3310,6 +3314,8 @@ def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False):
             answered_no.append(date)
         else:
             to_ask.append(ad)
+    if tally is not None and only is None:
+        tally["summarized"] = len(answered_no)  # CS-13
     if answered_no and only is None:
         latest = max(answered_no)
         latest = f"{latest[8:10]}/{latest[5:7]}"
@@ -4020,6 +4026,7 @@ def _main(argv=None):
 
     repo = Path(a.repo).resolve()
     now = datetime.now()
+    launch_clock = time.monotonic()  # CS-13: the launch's seconds, up to `run_start`
 
     try:
         deadline = (now + parse_duration(a.duration)) if a.duration \
@@ -4154,6 +4161,7 @@ def _main(argv=None):
     # It rides on the `1st item:` line, not on a line of its own: the header has
     # a 7-line ceiling (A6) and a taller header blocked the supervisor on a pty.
     whole, whole_err = query_queue(a.queue, repo, max_items=10 ** 6)
+    runs = waits = None
     if whole:
         runs = len(whole.get("batch") or [])
         waits = sum(1 for ad in whole.get("deferred") or []
@@ -4260,8 +4268,9 @@ def _main(argv=None):
             tally["of"] = added
         if opened_ids:
             data = ask_at_launch(repo, a.queue, data, only=opened_ids, tally=tally)
-        ask_preferences(preferences, wait=ANSWER_WAIT_SEC,
-                        first=from_queue + len(opened_ids) + 1, of=tally.get("of"))
+        tally["prefs_shown"] = ask_preferences(
+            preferences, wait=ANSWER_WAIT_SEC,
+            first=from_queue + len(opened_ids) + 1, of=tally.get("of"))
         if tally.get("shown", 0) and not tally.get("cut"):
             Panel(SCREEN, print).close_panel(
                 [], tally.get("applied", []), tally.get("for_later", []),
@@ -4318,6 +4327,18 @@ def _main(argv=None):
               "pid": pid, "host": host, "versao_registro": 2})
     if pre_read_event:
         log_event(pre_read_event)
+    # CS-13: the launch's measurement. No numeric goal (spec): the event is what lets a
+    # later run be compared with the 31% of items that got stuck in the middle.
+    found = {kind: sum(1 for r in rows or [] if r.get("tipo") == kind)
+             for kind in READER_KINDS}
+    log_event({"evento": "largada", "rodam": runs, "esperam": waits,
+               "perguntas_mostradas": tally.get("shown", 0) + tally.get("prefs_shown", 0),
+               "perguntas_respondidas": len(tally.get("applied", []))
+               + sum(1 for p in preferences.values() if p.get("fonte") == "dono"),
+               "rotas_resumidas": tally.get("summarized", 0),
+               "itens_lidos": sum(1 for r in rows or [] if r.get("lido")),
+               "achados": found,
+               "segundos": round(time.monotonic() - launch_clock, 1)})
     # The run state, next to the `.jsonl` (C6): `rodando` now, and at the end
     # `esperando-dono` (there is an action or pending item) or `encerrado`. It is written BEFORE
     # the model analysis, which may fail on the quota (C7); `/common:until-review`
