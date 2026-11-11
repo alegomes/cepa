@@ -213,6 +213,10 @@ runs in THIS run. Nothing extra is printed when nothing waits for the owner. The
 waits `CEPA_UNTIL_ESPERA_RESPOSTA` seconds (600 by default); with no answer, or on
 Ctrl-C / EOF, one line says so and the run goes on as if the item were not answered.
 `--dry-run` and runs without a terminal never ask: they list, as before.
+Without a terminal the pre-read still runs (a missing pre-condition defers the item)
+and its findings are printed as text, with nothing waiting for input.
+`--no-pre-read` skips both the pre-read and the launch panel: the forecast line
+stays, nothing is read and nothing is asked.
 
 ## After the end
 
@@ -2999,6 +3003,25 @@ def parse_finding(text):
     return found
 
 
+def pre_read_as_text(queue, rows, prefs, output=print):
+    """CS-9, without a terminal: what the pre-read found, as text, with no prompt.
+    A pre-condition whose route opened is deferred and answered later with `decide`;
+    a preference runs with the agent's default. Prints nothing with no finding."""
+    deferred = [r for r in rows if r.get("tipo") == "pre-condicao" and r.get("rota_aberta")]
+    if not deferred and not prefs:
+        return
+    output(f"\n── the pre-read's questions ({len(deferred) + len(prefs)}), "
+           "listed without asking: no terminal")
+    for r in deferred:
+        output(f"   - {r['id']} (deferred, missing pre-condition): "
+               f"{r.get('pergunta') or r.get('texto')}")
+    for ident, pref in prefs.items():
+        output(f"   - {ident} (runs with the agent's default: {pref['padrao']}): "
+               f"{pref.get('pergunta') or pref['texto']}")
+    if deferred:
+        output(f"   To answer the deferred ones, in a terminal: cepa-until decide {queue}")
+
+
 def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
     """CS-6, on a terminal at the launch: each preference the pre-read found, as one
     closed question with the agent's default. A line typed is the owner's answer
@@ -3885,7 +3908,8 @@ def _main(argv=None):
             "item (red = the item becomes `blocked` and the branch rolls back) and log.\n"
             "\n"
             "On a terminal, the launch first asks about the tasks the queue holds for you;\n"
-            "a \"yes\" makes that item run in the same run.\n"
+            "a \"yes\" makes that item run in the same run. --no-pre-read skips that\n"
+            "panel and the read-only pre-read of each item.\n"
             "\n"
             "The cut happens between items, never in the middle of one. Nothing goes to\n"
             "main or origin: afterwards, `cepa until decide <queue>/<run>` asks what\n"
@@ -3965,6 +3989,10 @@ def _main(argv=None):
                          "width (the `.jsonl` always keeps the full title)")
     ap.add_argument("--dry-run", action="store_true", dest="dry",
                     help="shows the run plan and exits without executing anything")
+    ap.add_argument("--no-pre-read", "--sem-leitura", action="store_true",
+                    dest="no_pre_read",
+                    help="skips the launch pre-read and the launch panel; the "
+                         "forecast line stays (CS-9)")
     if not argv:
         ap.print_help(sys.stderr)
         return 2
@@ -4134,9 +4162,12 @@ def _main(argv=None):
     # uncapped read of the forecast above, in queue order.
     pre_read_event = None
     preferences = {}  # CS-6: id -> {texto, pergunta, padrao, escolha, fonte}
-    on_terminal = sys.stdin.isatty() and sys.stdout.isatty()
+    # CS-9 (spec Q9): `--no-pre-read` skips both the pre-read and the panel, so the
+    # run behaves as if it had no terminal and no reader; the forecast is above.
+    on_terminal = (sys.stdin.isatty() and sys.stdout.isatty()) and not a.no_pre_read
     rows, opened_ids, reading, tally = None, set(), None, {}
-    if whole and whole.get("batch") and reader_command({}) is not None:
+    if (whole and whole.get("batch") and not a.no_pre_read
+            and reader_command({}) is not None):
         to_read = [{k: it.get(k) for k in ("id", "title", "why", "blocked_by")}
                    for it in whole["batch"]]
         print(f"\n── pre-read: {len(to_read)} item(s), read-only, "
@@ -4193,6 +4224,8 @@ def _main(argv=None):
         if opened:
             fresh, _ = query_queue(a.queue, repo)
             data = fresh or data
+        if not on_terminal:
+            pre_read_as_text(a.queue, rows, preferences)
     if on_terminal:
         # CS-8: the pre-read's questions at the end of the same list, numbered after
         # the queue's, with the total that sums both parts.

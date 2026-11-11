@@ -2254,6 +2254,170 @@ def test_launch_cs8_empty_queue_route_and_preference_from_the_pre_read_share_one
     check("cs8 mixed: the preference is 2/2", "2/2 · y1" in out, out[-2500:])
 
 
+
+# ── CS-9: an option skips the pre-read and the panel; no terminal reads without one ──
+
+def _mixed_reader(tmp):
+    """Fake reader: x1 has a missing pre-condition, y1 a preference, the rest nothing.
+    Records each id it was asked about."""
+    script = Path(tmp) / "leitor-misto.py"
+    log = Path(tmp) / "leitor-chamadas.txt"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys\n"
+        "it = json.load(sys.stdin)\n"
+        f"open({str(log)!r}, 'a').write(it['id'] + '\\n')\n"
+        "if it['id'] == 'x1':\n"
+        "    print(json.dumps({'tipo': 'pre-condicao',\n"
+        "        'texto': 'Falta o token de acesso do ambiente de homologação.',\n"
+        "        'pergunta': 'Você já providenciou o token de acesso?'}))\n"
+        "elif it['id'] == 'y1':\n"
+        "    print(json.dumps({'tipo': 'preferencia', 'padrao': 'usar o formato curto',\n"
+        "        'texto': 'Há duas formas de mostrar a data.',\n"
+        "        'pergunta': 'Posso usar o formato curto?'}))\n"
+        "else:\n"
+        "    print(json.dumps({'tipo': None}))\n")
+    script.chmod(0o755)
+    return script, log
+
+
+def _cs9_items():
+    return [item("r1", human_pending="provision the Keycloak role"), item("x1"),
+            item("y1")]
+
+
+def test_launch_cs9_option_on_terminal_skips_the_pre_read_and_the_panel():
+    """CS-9 declared scenario, first half: with the option, the ledger has no
+    `leitura_previa`, nothing is asked at the launch, and the CS-1 line is there."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, _cs9_items())
+        binv = fake_claude(tmp, "pass")
+        reader, log = _mixed_reader(tmp)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(reader)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis", "--no-pre-read"],
+            str(root), inputs=[], env=env, timeout=90)
+        events = _launch_events(root)
+        calls = log.read_text().split() if log.exists() else []
+        launch = _before_first_item(out)
+    plain = ANSI.sub("", out)
+    check("cs9 option: the option is accepted (exit 0)", rc == 0, plain[-1500:])
+    check("cs9 option: no leitura_previa in the ledger",
+          not any(e.get("evento") == "leitura_previa" for e in events),
+          str([e.get("evento") for e in events]))
+    check("cs9 option: the reader was not called", not calls, str(calls))
+    check("cs9 option: the launch reaches the first item", launch is not None,
+          plain[-2500:])
+    check("cs9 option: nothing is asked before the first item",
+          launch is not None and not any(m in launch for m in (
+              "[t] I write the answer", "question(s) for you", "Your choice",
+              "pre-read")), (launch or plain)[-2500:])
+    check("cs9 option: the CS-1 forecast line is there",
+          "start: 2 run, 1 wait for the owner" in plain, plain[:2500])
+    check("cs9 option: x1 and y1 run as today", {"x1", "y1"} <= set(_started(events)),
+          str(_started(events)))
+
+
+def test_launch_cs9_option_has_a_portuguese_alias_and_is_in_the_help():
+    p = subprocess.run([sys.executable, str(CEPA_UNTIL), "--help"],
+                       capture_output=True, text=True, timeout=60)
+    check("cs9 help: --no-pre-read is documented", "--no-pre-read" in p.stdout,
+          p.stdout[-2000:])
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, _cs9_items())
+        binv = fake_claude(tmp, "pass")
+        reader, log = _mixed_reader(tmp)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(reader)
+        q = subprocess.run(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis", "--sem-leitura"],
+            capture_output=True, text=True, env=env, timeout=120,
+            stdin=subprocess.DEVNULL)
+        events = _launch_events(root)
+        check("cs9 alias: --sem-leitura accepted", q.returncode == 0, q.stderr[-800:])
+        check("cs9 alias: no terminal + option: no leitura_previa, reader not called",
+              not any(e.get("evento") == "leitura_previa" for e in events)
+              and not log.exists(), str(events))
+        check("cs9 alias: x1 runs (nothing deferred it)", "x1" in _started(events),
+              str(_started(events)))
+
+
+def test_launch_cs9_without_terminal_reads_and_lists_the_questions_as_text():
+    """CS-9 declared scenario, second half: no terminal and no option. stdin is a pipe
+    whose write end stays open the whole run, so any read of input would hang until
+    the timeout instead of getting EOF."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, _cs9_items())
+        binv = fake_claude(tmp, "pass")
+        reader, log = _mixed_reader(tmp)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(reader)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "600"
+        rfd, wfd = os.pipe()
+        try:
+            proc = subprocess.Popen(
+                [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+                 "--for", "2h", "--no-verify", "--no-analysis"],
+                stdin=rfd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, env=env)
+            os.close(rfd)
+            try:
+                out, _ = proc.communicate(timeout=120)
+                hung = False
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                out, _ = proc.communicate()
+                hung = True
+        finally:
+            os.close(wfd)
+        events = _launch_events(root)
+        items = items_of(root)
+    check("cs9 no terminal: the run ends without waiting for input",
+          not hung and proc.returncode == 0, out[-1500:])
+    reads = [e for e in events if e.get("evento") == "leitura_previa"]
+    check("cs9 no terminal: leitura_previa is in the ledger", len(reads) == 1,
+          str([e.get("evento") for e in events]))
+    check("cs9 no terminal: the pre-read's questions are listed as text",
+          "the pre-read's questions (2)" in out
+          and "Você já providenciou o token de acesso?" in out
+          and "Posso usar o formato curto?" in out, out[-2500:])
+    check("cs9 no terminal: the preference line names the default",
+          "runs with the agent's default: usar o formato curto" in out, out[-2500:])
+    check("cs9 no terminal: the listing says where to answer",
+          "cepa-until decide fila" in out, out[-2500:])
+    check("cs9 no terminal: no panel prompt",
+          not any(m in out for m in ("[t] I write the answer", "question(s) for you",
+                                     "Your choice", "nobody answered in")), out[-2500:])
+    check("cs9 no terminal: x1 deferred by the route, y1 runs",
+          "x1" not in _started(events) and "y1" in _started(events)
+          and "token" in str(items["x1"].get("human_pending")), str(_started(events)))
+
+
+def test_pre_read_as_text_unit():
+    m = load_module()
+    lines = []
+    m.pre_read_as_text("fila", [{"id": "a", "tipo": None, "rota_aberta": False}], {},
+                       output=lines.append)
+    check("cs9 unit: no finding prints nothing", lines == [], str(lines))
+    lines = []
+    m.pre_read_as_text("fila", [{"id": "a", "tipo": "pre-condicao", "rota_aberta": False,
+                                 "texto": "t", "pergunta": "q?"}], {},
+                       output=lines.append)
+    check("cs9 unit: a route that failed to open is not listed as deferred",
+          lines == [], str(lines))
+    lines = []
+    m.pre_read_as_text("fila", [], {"b": {"texto": "t", "pergunta": None, "padrao": "P"}},
+                       output=lines.append)
+    joined = "\n".join(lines)
+    check("cs9 unit: a preference alone is listed, without the decide line",
+          "b (runs with the agent's default: P): t" in joined
+          and "cepa-until decide" not in joined, joined)
+
+
 def main():
     print("cepa-until decidir — o fim do run pergunta\n")
     for given_name, fn in sorted(globals().items()):
