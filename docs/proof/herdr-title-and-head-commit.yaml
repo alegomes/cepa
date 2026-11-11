@@ -1,0 +1,49 @@
+schema_version: 2
+card: herdr-title-and-head-commit
+verdict: needs-human
+reviewed_at: 2026-11-10T00:00:00-03:00
+base_commit: a30fc85
+head_commit: b9d9d86
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until (_hc_flat, _hc_b64, _hc_status, _hc_title, _hc_write, herdr_report, herdr_release, RUN_FIELDS)"
+      module: common
+      external_observable: true
+      substituted_by_double: null   # tests run the real cepa-until binary / real module against a fake tty (the tty is the far boundary)
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: skipped
+      results:
+        - "baseline (unperturbed, throwaway worktree of b9d9d86): FAILURES [] in test_cepa_until.py (test_hc_ + dirtied_by_the_live_run) and test_cepa_prove.py (test_hc_)"
+        - "P1 delete `_hc_title(message)` in herdr_report (l.1176): RED, 4 failures (until) + 1 (prove)"
+        - "P2 replace `_hc_title(\"\")` in herdr_release (l.1197) by pass: RED, 3 (until) + 1 (prove)"
+        - "P3 drop \"head_commit\" from RUN_FIELDS (l.1344): RED, 1 failure ('...nem o head_commit do item que o run vivo entregou')"
+        - "P4 remove `if ch.isprintable()` from _hc_title (l.1153): RED, 1 failure (control chars test)"
+        - "P5 remove `[:HC_MSG_MAX]` cap in _hc_flat (l.1128): RED, 2 failures"
+        - "P5b uncap only the title (l.1153 uses join/split without cap): RED, 2 failures"
+        - "P6 _hc_flat without whitespace flattening (l.1128): RED, 3 failures"
+        - "P7 delete the HC_TERMINAL_ID gate in _hc_write (l.1158-1159): RED, 2 failures"
+        - "P8 replace sys.stdout.isatty() by True in _hc_write (l.1161): RED, until 1 + prove 1 failure"
+        - "P9 OSC 2 -> OSC 0 in _hc_title (l.1154): RED, 4 failures"
+        - "P12 `except ...: pass` -> raise in _hc_write (l.1165): RED, 1 failure"
+        - "NOT RUN: swapping the order title/7501 in herdr_report and herdr_release (path-lock hook denied the sed that swaps two lines). Order is pinned by the exact-string `wanted` in test_hc_message_is_one_line..., but not perturbed"
+        - "all 11 executed perturbations killed; 0 survivors; each anchor matched exactly once"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in this Python repo; every changed function/line was reached by the covering test (each perturbation above turned its test RED, which implies execution)"
+  l4_adversarial_input:
+    status: skipped
+    reason: ""
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: ""
+routing_reason: "No surviving perturbation (11 of 11 RED). Verdict is NEEDS-HUMAN only because two perturbations (title/7501 write order in report and release) could not be run (hook denied the line swap), and the adversarial-input level (queue text that reaches a terminal escape) was not exercised beyond the existing control-character test, which P4 shows is load-bearing."
