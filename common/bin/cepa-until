@@ -3968,8 +3968,8 @@ def _main(argv=None):
               "rounds of this run keep the installed version")
 
     # LL-1: the panel before closing. Who was already asked in this run, whether
-    # a panel went unanswered (then nobody is at the keyboard: no second wait),
-    # and whether there is a terminal to ask at.
+    # that panel went unanswered (then nobody is at the keyboard, and the end
+    # lists instead of waiting a second time), and whether there is a terminal.
     asked_mid_run, mid_run_silent = set(), False
     interactive_run = sys.stdin.isatty() and sys.stdout.isatty()
     print()
@@ -4040,7 +4040,7 @@ def _main(argv=None):
             # 3h11 of gaps). Asking here, before the closing, lets a yes
             # put the item back into THIS run instead of a new one.
             questions = owner_questions(data.get("deferred"), asked_mid_run)
-            if not mid_run_silent and ask_mid_run(
+            if ask_mid_run(
                     stop_now, deadline - datetime.now(), reserve, interactive_run,
                     a.no_resume_on_answer, questions):
                 asked_mid_run.update(str(ad.get("id")) for ad in questions)
@@ -4060,6 +4060,7 @@ def _main(argv=None):
                           "the run closes")
                 except EOFError:
                     mid_run_silent = True
+                    print("\n   the terminal closed the input; the run closes")
                 after, after_error = query_queue(a.queue, repo)
                 if not after_error and (after or {}).get("batch"):
                     nxt = after["batch"][0].get("id")
@@ -4861,8 +4862,11 @@ def _main(argv=None):
             item_states = json.loads(state_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             item_states = {}
+        # Nobody answered the panel before closing: nobody is at the keyboard,
+        # so the end lists instead of waiting another ANSWER_WAIT_SEC.
         return close_with_owner(repo, a.queue, run_id, item_states, review,
-                               wait=ANSWER_WAIT_SEC, already_asked=asked_mid_run)
+                               wait=ANSWER_WAIT_SEC, already_asked=asked_mid_run,
+                               interactive=False if mid_run_silent else None)
 
     # The analysis spends quota: stopping on the quota and then analyzing hits the
     # same ceiling. In those cases, and with nothing executed, it is left for by hand.

@@ -17,6 +17,11 @@ What these cases pin:
   - an item already asked in this run is not asked again at the end;
   - `--no-resume-on-answer` keeps the old behavior (the answer applies, the
     run ends);
+  - nobody answering (or the terminal closing the input) closes the run, and
+    the end then LISTS what waits on the owner instead of waiting a second
+    time; while the panel waits the state says `fase: aguardando-dono`;
+  - a window already under `--min-reserve` ends by `prazo`, and the question
+    comes only at the end, with no resume;
   - the decision of asking mid-run is a pure function, tested apart: no
     terminal, no window, a stop reason other than `end-of-queue`, or no owner
     question left means no mid-run panel.
@@ -24,8 +29,12 @@ What these cases pin:
 Run with `python3 tests/test_cepa_until_resume_on_answer.py`.
 """
 
+import json
+import subprocess
 import sys
 import tempfile
+import threading
+import time
 from datetime import timedelta
 from pathlib import Path
 
@@ -121,6 +130,107 @@ def test_switch_off_keeps_the_old_end():
               "retomada_pelo_dono" not in kinds, kinds)
         check("a resposta vale, o item volta para a fila e espera o próximo run",
               items_of(root)["a1"]["status"] == "pending", items_of(root)["a1"])
+
+
+# a1 blocks with a question; a2 commits, so the run branch has a landing to offer.
+BLOCKS_A1_COMMITS_A2 = (
+    "import subprocess\n"
+    "ident = primeiro_pendente()\n"
+    "if ident == 'a1':\n"
+    "    marca(ident, status='blocked', evidence='não há produção',\n"
+    "          owner_question='Fecho o card como medir depois do go-live?')\n"
+    "elif ident:\n"
+    "    open(ident + '.txt', 'w').write('feito')\n"
+    "    subprocess.run(['git', 'add', '-A'], check=True)\n"
+    "    subprocess.run(['git', '-c', 'user.email=t@t', '-c', 'user.name=t',\n"
+    "                    'commit', '-qm', ident], check=True)\n"
+    "    marca(ident, status='done')\n")
+
+
+def watch_phases(root, seen, stop):
+    """Polls the run state while the run is alive and keeps every `fase` seen:
+    the panel's phase only exists while it waits."""
+    d = root / ".claude" / "programs" / "fila" / "until"
+    while not stop.is_set():
+        for f in d.glob("*.estado.json"):
+            try:
+                seen.add(json.loads(f.read_text()).get("fase"))
+            except (OSError, ValueError):
+                pass
+        time.sleep(0.1)
+
+
+def silent_run(tmp, root, inputs=()):
+    binv = fake_claude(tmp, BLOCKS_A1_COMMITS_A2)
+    env = env_do_run(tmp, root, binv)
+    env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "3"
+    seen, stop = set(), threading.Event()
+    t = threading.Thread(target=watch_phases, args=(root, seen, stop), daemon=True)
+    t.start()
+    try:
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"], str(root),
+            inputs=list(inputs), env=env, timeout=120)
+    finally:
+        stop.set()
+        t.join(2)
+    return rc, out, seen
+
+
+def test_nobody_answers_closes_and_the_end_does_not_wait_again():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        rc, out, seen = silent_run(tmp, root)
+        check("o run sai 0", rc == 0, out[-2000:])
+        check("o painel antes de fechar mostrou a pergunta",
+              QUESTION in out, out[-2000:])
+        check("diz que ninguém respondeu, uma vez só",
+              out.count("nobody answered") == 1, out[-2000:])
+        check("o fim não pergunta de novo (nem a aterrissagem): lista",
+              "Land now?" not in out and "waiting on you" in out
+              and "aterrissar" in out, out[-2000:])
+        events = ledger_of(root)
+        panel = [e for e in events if e.get("evento") == "painel_antes_de_fechar"]
+        check("o registro marca o painel com o item perguntado",
+              len(panel) == 1 and panel[0].get("itens") == ["a1"], panel)
+        check("sem retomada", not any(e.get("evento") == "retomada_pelo_dono"
+                                      for e in events))
+        check("durante a espera o estado diz aguardando-dono",
+              "aguardando-dono" in seen, seen)
+        check("a1 continua travado", items_of(root)["a1"]["status"] == "blocked")
+
+
+def test_terminal_closing_the_input_closes_the_run():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        rc, out, _seen = silent_run(tmp, root, inputs=[("[s] yes", b"\x04")])
+        check("o run sai 0", rc == 0, out[-2000:])
+        check("diz que a entrada fechou",
+              "the terminal closed the input" in out, out[-2000:])
+        check("o fim lista em vez de perguntar",
+              "Land now?" not in out and "waiting on you" in out, out[-2000:])
+
+
+def test_window_under_the_reserve_ends_by_deadline_and_asks_at_the_end():
+    with tempfile.TemporaryDirectory() as tmp:
+        stuck = item("a1", status="blocked")
+        stuck["owner_question"] = QUESTION
+        stuck["evidence"] = "não há produção"
+        # a2 pending: with nothing runnable the launcher exits before the loop.
+        root = build_repo(tmp, [stuck, item("a2")])
+        rc, out = run_on_tty(tmp, root, extra=["--min-reserve", "3h"], inputs=[
+            ("[s] yes", "s"), ("Anything to add", "")])
+        check("o run sai 0", rc == 0, out[-2000:])
+        events = ledger_of(root)
+        end = [e for e in events if e.get("evento") == "run_end"]
+        check("termina pelo prazo", end and end[0].get("motivo") == "prazo", end)
+        check("sem painel antes de fechar e sem retomada",
+              not any(e.get("evento") in ("painel_antes_de_fechar",
+                                          "retomada_pelo_dono") for e in events))
+        check("a pergunta veio no fim e a resposta vale para o próximo run",
+              QUESTION in out and items_of(root)["a1"]["status"] == "pending",
+              items_of(root)["a1"])
 
 
 def test_when_to_ask_mid_run():
