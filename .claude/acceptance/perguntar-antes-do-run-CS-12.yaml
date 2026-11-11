@@ -1,0 +1,18 @@
+key: perguntar-antes-do-run-CS-12
+status: complete
+criteria:
+  - id: CS-12
+    text: "o prompt que o `cepa-until` entrega ao agente de um item contém a instrução de usar `--decision` para escolha de comportamento já commitada e de manter `--human-pending` para dispensa de prova, card para Done e tarefa fora do repositório; hoje o prompt não menciona `--decision`."
+    altitude: cli
+    surface: "request (-p) que o cepa-until passa ao claude de cada item; build_command + run real do cepa-until com claude falso que grava o request"
+    test: "tests/test_cepa_until_cut_rule.py::test_cut_rule_cs12_every_item_request_carries_it"
+    layer: "unit de build_command (com e sem nota de preferência) + subprocesso real de common/bin/cepa-until com fake claude; asserta o request recebido por cada item (x1, y1)"
+    evidence: verified
+    run: "python3 tests/test_cepa_until_cut_rule.py (test moved here from test_cepa_until_decide.py, same body) -> exit 0, 6 checks ok (5 unit + 1 run), FAILURES [] (N=6 > 0)"
+    status: complete
+    notes:
+      - "Asserção _has_cut_rule exige --decision, --human-pending, 'already committed', 'proof waiver', 'done', 'outside the repository' no texto."
+      - "Regra não pode parecer flag do drain-plan (--max/--offline/--dry-run/--na-branch) e nomeia `cepa-plan finish`."
+      - "Red antes do fix: commit b153ae1 (teste) precede 6f1b8a9 (CUT_RULE); o auditor não re-executou o red."
+      - "Teste é de texto do prompt; o comportamento do agente ao seguir a regra está fora do critério."
+gap: []

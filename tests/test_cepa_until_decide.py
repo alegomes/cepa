@@ -2110,39 +2110,6 @@ def test_pre_read_cs6_note_and_command_units():
           "preferencia" in mod.READER_PROMPT and '"padrao"' in mod.READER_PROMPT)
 
 
-# ── CS-12: the item's agent receives the cut rule (--decision vs --human-pending) ──
-
-def _has_cut_rule(request):
-    low = request.lower()
-    return ("--decision" in request and "--human-pending" in request
-            and "already committed" in low and "proof waiver" in low
-            and "done" in low and "outside the repository" in low)
-
-
-def test_cut_rule_cs12_every_item_request_carries_it():
-    mod = load_module()
-    plain = mod.build_command("fila", "until/b", False)[2]
-    check("cs12 unit: the request still starts with the drain-plan call",
-          plain.startswith("/common:drain-plan fila --max 1 --na-branch until/b\n\n"), plain)
-    check("cs12 unit: the request without a note carries the cut rule",
-          _has_cut_rule(plain), plain)
-    check("cs12 unit: the rule names the finish flags, not drain-plan's",
-          "cepa-plan finish" in plain, plain)
-    pref = {"texto": "T.", "padrao": "P", "escolha": "R", "fonte": "padrao"}
-    noted = mod.build_command("fila", "until/b", False,
-                              note=mod.preference_note("x1", pref))[2]
-    check("cs12 unit: with a note the rule is still there, and so is the note",
-          _has_cut_rule(noted) and "Go with: R" in noted, noted)
-    check("cs12 unit: the rule never reads as one of drain-plan's own flags",
-          not re.search(r"(?<!\S)--(max|offline|dry-run|na-branch)\b",
-                        (plain.split("\n\n", 1) + [""])[1]), plain)
-    # Through the real supervisor: what the fake `claude` received.
-    out, _, reqs = _pref_launch()
-    check("cs12 run: every item's prompt carries the cut rule",
-          set(reqs) == {"x1", "y1"} and all(_has_cut_rule(r) for r in reqs.values()),
-          str(reqs) + out[-800:])
-
-
 # ── CS-8: the queue's questions come before the pre-read ends; its own go at the end ──
 
 def _slow_reader(tmp, mode="pre", delay=2):
