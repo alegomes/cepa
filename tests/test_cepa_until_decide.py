@@ -1471,12 +1471,21 @@ def _cs10_check(label, items, answers, count):
         check(f"{label}: no until/* branch", branches == "", branches)
         check(f"{label}: worktree list has only the clone", len(wts) == 1, str(wts))
         check(f"{label}: no ledger events", _launch_events(root) == [], out[-800:])
-        check(f"{label}: wait-for-you line with count {count}",
-              f"{count} item(s) wait for you: cepa-until decide fila" in out, out[-1500:])
+        if count:
+            check(f"{label}: wait-for-you line with count {count}",
+                  f"{count} item(s) wait for you: cepa-until decide fila" in out,
+                  out[-1500:])
+        else:
+            check(f"{label}: nothing waits for the owner, so no wait-for-you line",
+                  "wait for you" not in out, out[-1500:])
 
 
 def test_launch_cs10_only_answered_no_routes_the_run_does_not_start():
     _cs10_check("cs10 answered no", _no_routes(), [], 2)
+
+
+def test_launch_cs10_queue_with_only_done_items_has_no_wait_for_you_line():
+    _cs10_check("cs10 all done", [item("d1", status="done")], [], 0)
 
 
 def test_launch_cs10_route_answered_no_in_the_panel_the_run_does_not_start():
