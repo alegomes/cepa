@@ -201,7 +201,18 @@ def test_run_summary_lists_the_decision_with_its_commit_and_decide_skips_it():
         old = dict(item("a0", status="done"),
                    decisions=[{"texto": "escolha de um run antigo",
                                "commit": "0" * 40}])
-        root = build_repo(tmp, [old, item("a1"), item("a2")])
+        root = build_repo(tmp, [old, item("a1"), item("a2"), item("a3")])
+        # a3 runs in this run but carries a choice recorded before it, on a
+        # commit that IS on the run branch: only the "recorded in this run"
+        # filter keeps it out of the summary.
+        seeded = yaml.safe_load(plan_file(root).read_text())
+        for it in seeded["items"]:
+            if it["id"] == "a3":
+                it["decisions"] = [{"texto": "escolha antiga em item relançado",
+                                    "commit": git(root, "rev-parse", "HEAD")}]
+        plan_file(root).write_text(yaml.safe_dump(seeded, allow_unicode=True))
+        git(root, "add", "-A")
+        git(root, "commit", "-qm", "seed a3 decision")
         binv = fake_claude(tmp, AGENT)
         p, calls = run_until(root, binv, plan_file(root), ["--for", "2h"],
                              extra_env={"CEPA_PLAN_BIN": str(CEPA_PLAN),
@@ -209,8 +220,8 @@ def test_run_summary_lists_the_decision_with_its_commit_and_decide_skips_it():
         finish_log = Path(tmp, "chamadas.jsonl.finish")
         finish_out = finish_log.read_text() if finish_log.exists() else ""
         its = items_of(root)
-        check("o agente falso fechou os dois itens pelo cepa-plan real",
-              its["a1"]["status"] == "done" and its["a2"]["status"] == "done",
+        check("o agente falso fechou os três itens pelo cepa-plan real",
+              all(its[i]["status"] == "done" for i in ("a1", "a2", "a3")),
               finish_out + p.stdout[-800:])
         dec = (its["a1"].get("decisions") or [{}])[0]
         check("a1 tem a decisão e nenhuma rota",
@@ -225,6 +236,9 @@ def test_run_summary_lists_the_decision_with_its_commit_and_decide_skips_it():
               "escolha fora da branch" not in out, out[-1500:])
         check("o resumo não lista a decisão de um run anterior",
               "escolha de um run antigo" not in out, out[-1500:])
+        check("o resumo não lista a decisão antiga de um item que rodou neste run",
+              its["a3"].get("decisions") and "escolha antiga em item relançado"
+              not in out, out[-1500:])
         waiting = out.split("waiting on you", 1)[-1] if "waiting on you" in out else ""
         check("a decisão não vira rota no resumo",
               "- a1" not in waiting and DECISION not in waiting
