@@ -1,0 +1,73 @@
+schema_version: 1
+card: herdr-title-and-head-commit
+status: complete
+audited_at: 2026-11-10T00:00:00-03:00
+commit: b9d9d86
+criteria:
+  - id: AC1
+    text: "cepa-until em terminal hc escreve OSC 2 'fila: item i/N id' uma vez por item, em ordem, e título vazio no fim"
+    altitude: cli
+    surface: "bytes escritos no pty pelo binário cepa-until real"
+    demonstrated_by:
+      test: "tests/test_cepa_until.py::test_hc_terminal_gets_one_working_status_per_item_and_a_clear_at_the_end"
+      layer: "subprocess do binário com stdout num pty; títulos extraídos por regex == ['fila: item 1/2 a1','fila: item 2/2 a2','']"
+      evidence: verified
+      run: "python3 alvo.py tests/test_cepa_until.py test_hc_ dirtied_by_the_live_run -> 'ok hc: o título do terminal é o item em curso e volta vazio no fim', FAILURES: []"
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "Idem para cepa-prove: título é a mensagem da rodada, vazio no fim"
+    altitude: cli
+    surface: "bytes escritos no pty pelo binário cepa-prove real"
+    demonstrated_by:
+      test: "tests/test_cepa_prove.py::test_hc_terminal_shows_cepa_prove_working_per_round_and_is_cleared_at_the_end"
+      layer: "subprocess do binário com pty; 3 títulos de rodada + vazio"
+      evidence: verified
+      run: "python3 alvo.py tests/test_cepa_prove.py test_hc_ -> 'ok hc: o título do terminal é a rodada em curso e volta vazio no fim', FAILURES: []"
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "Sem OSC 2 com HC_TERMINAL_ID ausente/vazio ou stdout pipe"
+    altitude: cli
+    surface: "bytes do binário real"
+    demonstrated_by:
+      test: "test_hc_status_is_not_written_outside_an_hc_terminal_or_into_a_pipe (until: ausente, vazio, pipe); test_hc_status_is_not_written_by_cepa_prove_outside_hc_or_into_a_pipe (prove: ausente, pipe)"
+      layer: "subprocess do binário"
+      evidence: verified
+      run: "3 checagens until ok + 2 prove ok, FAILURES: []"
+    verdict: complete
+    gap: null
+    note: "cepa-prove com HC_TERMINAL_ID vazio não é testado no binário do prove; o código é o mesmo _hc_write de cepa-until, coberto lá. Não bloqueia."
+  - id: AC4
+    text: "Título numa linha, até 200 caracteres, sem caracteres de controle (ESC, BEL)"
+    altitude: cli
+    surface: "bytes escritos por herdr_report (função pública usada pelos binários) num tty falso"
+    demonstrated_by:
+      test: "test_hc_message_is_one_line_capped_at_200_utf8_and_names_the_agent; test_hc_title_drops_control_characters_that_would_end_the_sequence"
+      layer: "módulo carregado como o cepa-prove faz; comparação byte a byte"
+      evidence: verified
+      run: "ok mensagem numa linha só, cortada em 200; ok o título sai sem ESC nem BEL do texto; FAILURES: []"
+    verdict: complete
+    gap: null
+  - id: AC5
+    text: "Falha de escrita no terminal não propaga"
+    altitude: cli
+    surface: "herdr_report com tty que falha"
+    demonstrated_by:
+      test: "test_hc_terminal_that_fails_to_write_does_not_break_the_report"
+      layer: "módulo + tty falso com fail=True"
+      evidence: verified
+      run: "ok hc: erro de escrita no terminal não propaga"
+    verdict: complete
+    gap: null
+  - id: AC6
+    text: "Lançar na fila A com run vivo da fila B que alterou só status/claimed_by/evidence/head_commit de itens que iniciou não é recusa por árvore suja; head_commit em item não iniciado continua sujeira"
+    altitude: cli
+    surface: "lançamento do cepa-until real: exit code e stderr"
+    demonstrated_by:
+      test: "tests/test_cepa_until.py::test_plan_of_another_queue_dirtied_by_the_live_run_is_not_dirt"
+      layer: "subprocess do binário em repo git descartável com supervisor vivo"
+      evidence: verified
+      run: "ok ...nem o head_commit do item que o run vivo entregou; ok ...head_commit em item que o run não iniciou ainda é sujeira (exit 2, 'modified file(s)'); FAILURES: []"
+    verdict: complete
+    gap: null
