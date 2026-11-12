@@ -1,0 +1,45 @@
+schema_version: 2
+card: modos-opinativos-CS-3
+verdict: proven
+reviewed_at: 2026-11-11T23:10:00-03:00
+base_commit: 7c7f7618e16f4e87e1052c3089cf2a4f08aba928
+head_commit: dd031a1230ab107f316a3b7c7b2a16b6c808aaae
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa (OWNER_REQUEST scan, opening_prompt(), `set -- \"$@\" \"$OPENING\"` after preflight)"
+      module: bin
+      external_observable: true
+      substituted_by_double: null        # test_opening_prompt_carries_the_menu runs the real launcher as a subprocess; only `claude` (far boundary, a recording fake) and HOME are faked. cepa-modes --menu is the real script.
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # shell + Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at dd031a1: python3 tests/test_cepa_mode.py -> 'tudo verde' (throwaway detached worktree /tmp/proof-cs3b, removed afterwards)"
+        - "RED-at-base: common/bin/cepa from 7c7f761 + tests from dd031a1 -> 6 FAIL (no request: exactly one prompt argument; starts with [menu do modo]; carries /common:spec; ends with the reply line; carries the numbered menu; a flag=value alone still gets the menu)"
+        - "Former survivor 1 (--resume=*): dropping '--resume=*' from the case -> 1 FAIL '--resume=abc: no opening prompt' (RED)"
+        - "Former survivor 2 (empty menu): deleting `[ -n \"$_menu\" ] || return 0` -> 1 FAIL 'mode with an empty menu: no opening prompt' (RED)"
+        - "Former survivor 4 (reply line): 'Reply with the number, ...' -> 'X' -> 1 FAIL 'prompt ends with the reply line' (RED)"
+        - "Former survivor 3 (empty-MODE guard) REMOVED in dd031a1 (diff 4797984..dd031a1 of common/bin/cepa is exactly that one line). Reasoning confirmed against the code: with CEPA_MODO on, lines ~634-645 exit 2 on an invalid mode and ask_mode/is_valid_mode exit 2 on an empty one, so MODE is non-empty and valid when opening_prompt runs after preflight; with CEPA_MODO=off opening_prompt returns at its CEPA_MODO guard first; `--mode help` exits before; a non-git dir execs claude before any of this. The guard was an equivalent mutant."
+        - "Other perturbations, each RED at dd031a1 and restored: drop '-p|--print' -> 1 FAIL; drop '-c|--continue' -> 2 FAIL; drop '-r|--resume' -> 2 FAIL; positional '*) OWNER_REQUEST=1' -> ':' -> 2 FAIL; delete the OWNER_REQUEST guard -> 9 FAIL; delete CEPA_MENU=off guard -> 1 FAIL; delete CEPA_MODO=off guard -> 1 FAIL; delete CEPA_UNTIL_RUN guard -> 1 FAIL; marker '[menu do modo]' -> '[menu' -> 2 FAIL; delete `set -- \"$@\" \"$OPENING\"` -> 6 FAIL; '--menu' -> '--json' in the cepa-modes call -> 2 FAIL"
+        - "Prepend-instead-of-append (`set -- \"$OPENING\" \"$@\"`): killed at 4797984 ('a flag=value alone still gets the menu'); NOT re-run at dd031a1 (the sandbox hook refused the command because the argument contains a dollar sign), but dd031a1 changes neither that line nor the test case, so the earlier RED stands"
+        - "Unperturbed on purpose: the `command -v python3` guard, the `|| return 0` on a cepa-modes failure and the stderr notice '◆ menu do modo: ...' are fail-safe fallbacks or cosmetic (stderr), with no externally visible behavior to assert"
+        - "worktrees /tmp/proof-cs3b and /tmp/proof-cs3base removed; git worktree list shows neither; primary tree untouched except this file"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; the three branches uncovered at 4797984 (--resume=*, empty-menu guard, reply line) each now turn test_cepa_mode.py red when removed; the empty-MODE line no longer exists"
+  l4_adversarial_input:
+    status: n/a
+    reason: "NOT verified by a run. The input is the owner's own command-line args (classified by a closed case, now including --resume=*) and a mode name validated against the closed MODES table; no network or api-rest surface. The diff touches no input-bearing module."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is a Story, not a Bug; red-at-base is recorded under l3_load_bearing (6 FAIL at 7c7f761 with the dd031a1 tests)"
+routing_reason: "Test is red at base (6 checks) and green at head. The three survivors from the previous run that were real (--resume=*, empty menu, reply line) now turn the suite red; the fourth (empty-MODE guard) was unreachable and was removed, with the reasoning confirmed in the code. Every other changed behavior line perturbed goes RED. Residual notes: prepend-order perturbation not re-run at dd031a1 (earlier RED stands, line untouched); L4 is n/a by diff-based claim, which the reviewer may overrule."

@@ -1,0 +1,26 @@
+schema_version: 1
+card: modos-opinativos-CS-3
+status: complete
+audited_at: 2026-11-11T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "`cepa --mode <modo>` sem prompt inicial abre a sessão com um prompt de abertura que carrega o menu; com prompt inicial não manda nada extra (docs/spec/modos-opinativos.md, CS-3)"
+    altitude: cli
+    surface: "executável real common/bin/cepa invocado como subprocesso (`--mode discovery`) com um claude falso que grava os argumentos recebidos (um JSON por chamada), HOME falso e repo descartável"
+    demonstrated_by:
+      test: "tests/test_cepa_mode.py::test_opening_prompt_carries_the_menu"
+      layer: "subprocesso real do CLI, sem mock. Sem pedido: claude recebe exatamente 1 argumento, que começa com `[menu do modo]`, contém `/common:spec` e a linha numerada `1) Detail an idea until it becomes a build-ready specification`. Com `arruma o teste X`: args == [\"arruma o teste X\"] (nada extra). Regras do spec cobertas: --resume, -c, --continue, -p, --print, -r não recebem abertura; CEPA_MENU=off, CEPA_MODO=off e CEPA_UNTIL_RUN=1 desligam; `--model=opus` sozinho ainda recebe o menu (e vem antes dele); `--model opus` conta como pedido (lado seguro); erro de --prompt inexistente sai rc 2 sem lançar claude."
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_mode.py -> rc=0, "tudo verde"
+          seção "cepa --mode: opening prompt with the menu": 18 checagens "ok" (nenhuma FAIL); 153 checagens "ok" no arquivo todo (N > 0)
+          ok   no request: exactly one prompt argument / starts with [menu do modo] / carries /common:spec / carries the numbered menu
+          ok   with request: only the owner's args
+          ok   --resume, -c, --continue, -p, --print, -r: no opening prompt
+          ok   CEPA_MENU=off / inside cepa-until / CEPA_MODO=off: no opening prompt
+    verdict: complete
+    gap: null
+    note: |
+      Diff auditado 7c7f761..HEAD: common/bin/cepa (+44, função opening_prompt e injeção do prompt como último posicional) e tests/test_cepa_mode.py (+81). O menu vem só de `cepa-modes --menu`, sem duplicação.
+      Ressalva de leitura, não bloqueia: "sem pedido" na implementação é decidido sobre o que o dono digitou; uma palavra solta depois de flag com valor (`--model opus`) conta como pedido e suprime o menu. Está testado e documentado no código como lado seguro; o spec não fala disso.
+      Fora de escopo (CS-4..CS-12): tratamento do turno de abertura pelo hook, telemetria, linha de intenção.
