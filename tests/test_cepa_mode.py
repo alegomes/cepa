@@ -1010,6 +1010,10 @@ def test_hook_opening_turn_carries_the_menu_rules():
         check("number or command fires the action", "número ou comando" in c, c)
         check("free-text rule", "texto livre" in c and "pedido normal" in c, c)
         check("discovery has no sequence rule", "chave de um card" not in c, c)
+        check("the number is bound to its own action (1 = the idea, 2 = the slug)",
+              'Ação 1 pede argumento: antes de rodar, pergunte em uma linha "What is the idea?"' in c
+              and 'Ação 2 pede argumento: antes de rodar, pergunte em uma linha '
+                  '"Which specification (slug)?"' in c, c)
 
         set_topology(r, "build-solo", board_flow=True)
         c = opening_turn(r, "construction", home)
@@ -1017,7 +1021,9 @@ def test_hook_opening_turn_carries_the_menu_rules():
               "chave de um card" in c and "só `/board-flow:fix <created key>`" in c, c)
         check("Fix a bug: a description runs capture then fix on the created key",
               "`/board-flow:capture Bug: <description>`" in c and "chave criada" in c, c)
-        check("Fix a bug is action 4", "Ação 4" in c, c)
+        check("Fix a bug is action 4",
+              'Ação 4 pede argumento: antes de rodar, pergunte em uma linha '
+              '"What is the card key or the bug description?"' in c, c)
 
         (Path(r.path) / "board-flow.yaml").unlink()
         c = opening_turn(r, "construction", home)
@@ -1030,6 +1036,10 @@ def test_hook_opening_turn_carries_the_menu_rules():
         h = run_hook(r.path, env={"HOME": str(home)},
                      prompt="olha isso: [menu do modo] discovery", session_id="s-open")
         check("marker mid-prompt is not the opening turn", "[menu]" not in ctx(h), ctx(h))
+        h = run_hook(r.path, env={"HOME": str(home)},
+                     prompt="abcdefghijklmn discovery\nveja: [menu do modo]", session_id="s-open")
+        check("marker mid-prompt with a valid mode where the name would be: still not",
+              "[menu]" not in ctx(h), ctx(h))
         h = run_hook(r.path, env={"HOME": str(home)}, prompt="[menu do modo] design\n\n",
                      session_id="s-open")
         check("mode with an empty menu: no menu rule", "[menu]" not in ctx(h), ctx(h))
