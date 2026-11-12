@@ -3057,3 +3057,17 @@ items:
     sem merge nem push. Topologia build-solo: sem validation-lead.'
   sem_epic: true
   head_commit: 546d078c425850115f49586096e0deacffca034c
+- id: skills-docs-sem-cabecalho
+  title: Consertar os 2 SKILL.md sem bloco de cabeçalho (docs-topology/skills/diataxis-discipline
+    e how-why-boundary)
+  why: 'Lote 0 da seção 7 de docs/estrategia-lacunas-ecc.md, pela rota de item avulso:
+    não espera a fila lacunas-ecc (proposta 10 do painel docs/reviews/2026-11-12-painel-lacunas-ecc.md,
+    achado FU9). Defeito: sem o bloco de cabeçalho o Claude Code não carrega as
+    2 skills, e dois agentes do plugin mandam aplicá-las. Precondição escrita no
+    documento: um teste que mostre que o Claude Code não as carrega hoje (achado
+    CR10). (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
