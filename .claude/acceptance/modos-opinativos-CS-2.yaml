@@ -1,0 +1,25 @@
+schema_version: 1
+card: modos-opinativos-CS-2
+status: complete
+audited_at: 2026-11-11T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "ação cujo requisito o repo não cumpre some do menu, e o menu mostra no máximo as 5 primeiras que passam (docs/spec/modos-opinativos.md, CS-2)"
+    altitude: cli
+    surface: "executável common/bin/cepa-modes invocado como subprocesso (`--menu construction --no-color`) em dois repos descartáveis com HOME falso; rc e stdout"
+    demonstrated_by:
+      test: "tests/test_cepa_mode.py::test_menu_construction_build_solo_without_board_flow e ::test_menu_construction_with_board_flow"
+      layer: "subprocesso real do CLI, sem mock. Repo 1 (topology build-solo, sem board-flow.yaml): rc 0, sem '/board-flow:', com /build-solo:reproduce-fix-verify, /build-solo:plan-build-validate e 'Write the red test of the criterion (no command yet)', sem /build-hex:. Repo 2 (com board-flow.yaml): exatamente 5 linhas numeradas 1..5, /board-flow:execute presente, 'Fix a bug' uma vez com '/board-flow:capture Bug: <description>, then /board-flow:fix <created key>', sem /build-solo:reproduce-fix-verify, sem /board-flow:prove-drain."
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_mode.py -> rc=0, "tudo verde"
+          ok   --menu construction rc 0 / no /board-flow: line / build-solo fix variant shows / build-solo build variant shows / red-test action without command shows / build-hex variants hidden
+          ok   exactly 5 numbered actions / /board-flow:execute shows / 'Fix a bug' appears exactly once / sequence joined by ', then ' / later variant of the same label dropped / prove-drain cut by the cap
+        (12 checagens destes dois testes executadas, N > 0)
+    verdict: complete
+    gap: null
+    note: |
+      Fidelidade do segundo repo: o teste usa topology build-solo + board-flow.yaml; o spec diz só "com board-flow.yaml".
+      Verifiquei à mão (repo só com board-flow.yaml, sem topology): o menu sai com 1 next, 2 drain-plan, 3 execute, 4 Fix a bug, 5 /board-flow:prove-drain.
+      Ou seja, na leitura literal sem topology o critério "sem /board-flow:prove-drain" seria falso, pois prove-drain seria a 5a ação que passa. Leitura fiel é a do teste: o repo 2 é o repo 1 mais board-flow.yaml (mesma topology), e aí a 5a vaga é "Build a task described in prose" (build-solo) e prove-drain é cortado pelo teto, que é exatamente o que o critério pede para demonstrar. Ressalva: o spec está subespecificado; sugere-se, se o dono quiser, acrescentar "e topology build-solo" ao segundo repo no spec. Não bloqueia.
+      Nota de processo: o código chegou em dd53967/dbf4d1f durante o CS-1 (decisão registrada), então o "hoje falha" do spec não vale mais; os testes são verdes e foram escritos contra o critério, e dbf4d1f já matou mutantes de teto e filtro.
