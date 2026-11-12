@@ -104,6 +104,39 @@ def menu_failures(modes, repo=REPO):
     return failures
 
 
+# --- the doc keeps "mode is not routine" while describing the menu (CS-11) --
+# The menu offers the mode's routines; it must not undo the rule that a session
+# is one mandatory mode plus at most one routine. The paragraph lives INSIDE the
+# section, so a reader who only reads that section learns both things.
+DOC = REPO / "docs" / "modos-de-trabalho.md"
+RULE = "Uma sessão = um modo obrigatório + no máximo uma rotina"
+
+
+def doc_section(text, title="## Modo não é Rotina"):
+    start = text.find(title)
+    if start < 0:
+        return None
+    end = text.find("\n## ", start + len(title))
+    return text[start:] if end < 0 else text[start:end]
+
+
+def doc_failures(text):
+    section = doc_section(text)
+    if section is None:
+        return ["docs/modos-de-trabalho.md: seção \"Modo não é Rotina\" sumiu"]
+    failures = []
+    if RULE not in section:
+        failures.append(f"docs/modos-de-trabalho.md: a seção \"Modo não é Rotina\" "
+                        f"perdeu a frase \"{RULE}\"")
+    paragraphs = [p for p in section.split("\n\n")
+                  if "`actions`" in p and "cepa-modes --menu" in p]
+    if not paragraphs:
+        failures.append("docs/modos-de-trabalho.md: a seção \"Modo não é Rotina\" "
+                        "não tem parágrafo que cite o campo `actions` e o comando "
+                        "`cepa-modes --menu`")
+    return failures
+
+
 def main():
     try:
         from _modes import MODES, EXIT
@@ -174,6 +207,7 @@ def main():
         failures.append("o atalho cepa-modos não roda como executável direto")
 
     failures.extend(menu_failures(MODES))
+    failures.extend(doc_failures(DOC.read_text(encoding="utf-8")))
 
     for f in failures:
         print("FAIL:", f, file=sys.stderr)
