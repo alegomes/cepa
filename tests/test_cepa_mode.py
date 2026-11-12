@@ -895,9 +895,86 @@ def test_need_met_unknown_type_is_not_met():
         check("known type still works (plugin)", mod.need_met("plugin:x", d, {"x"}) is True)
 
 
+# A fake claude that records each argument it got, one JSON list per call,
+# so a multi-line prompt survives intact (FAKE_CLAUDE joins them with spaces).
+RECORDING_CLAUDE = (
+    '#!/bin/sh\n'
+    'python3 -c \'import json,os,sys; '
+    'open(os.environ["FAKE_ARGS_FILE"],"a").write(json.dumps(sys.argv[1:])+"\\n")\' "$@"\n'
+)
+
+
+def recorded_args(repo, *cepa_args, env=None):
+    """Runs cepa with the recording claude; returns (proc, owner args of the last call)."""
+    fake = Path(repo.tmp.name) / "recclaude"
+    fake.write_text(RECORDING_CLAUDE)
+    fake.chmod(0o755)
+    out = Path(repo.tmp.name) / "args.jsonl"
+    if out.exists():
+        out.unlink()
+    home = Path(repo.tmp.name) / "rechome"
+    if not home.exists():
+        fake_home(repo.tmp.name, name="rechome")
+    e = {"CLAUDE_WT_CLAUDE_BIN": str(fake), "FAKE_ARGS_FILE": str(out), "HOME": str(home),
+         "CEPA_ENCADEAR": "off"}
+    e.update(env or {})
+    for k in ("CEPA_UNTIL_RUN", "CEPA_MENU"):
+        if k not in e:
+            e[k] = ""
+    p = repo.run(*cepa_args, env=e)
+    lines = out.read_text().splitlines() if out.exists() else []
+    args = json.loads(lines[-1]) if lines else None
+    if args is not None:
+        args = [a for a in args if a.split("=")[0] not in CEPA_FLAGS]
+    return p, args
+
+
+def test_opening_prompt_carries_the_menu():
+    """CS-3: `cepa --mode discovery` with no request sends the menu as the opening prompt;
+    with a request, only the owner's args reach claude."""
+    print("cepa --mode: opening prompt with the menu")
+    with Repo() as r:
+        p, args = recorded_args(r, "--mode", "discovery")
+        check("no request: claude was called", args is not None, p.stderr[-300:])
+        opening = (args or [None])[-1] or ""
+        check("no request: exactly one prompt argument", args is not None and len(args) == 1, args)
+        check("no request: prompt starts with [menu do modo]",
+              opening.startswith("[menu do modo]"), repr(opening[:200]))
+        check("no request: prompt carries /common:spec", "/common:spec" in opening, repr(opening))
+        check("no request: prompt carries the numbered menu",
+              "1) Detail an idea until it becomes a build-ready specification" in opening,
+              repr(opening))
+
+        p, args = recorded_args(r, "--mode", "discovery", "arruma o teste X")
+        check("with request: only the owner's args", args == ["arruma o teste X"], args)
+
+        for extra, label in ((["--resume"], "--resume"), (["-c"], "-c"),
+                             (["--continue"], "--continue"), (["-p", "x"], "-p"),
+                             (["--print"], "--print"), (["-r"], "-r")):
+            p, args = recorded_args(r, "--mode", "discovery", *extra)
+            check(f"{label}: no opening prompt", args == extra, args)
+
+        p, args = recorded_args(r, "--mode", "discovery", env={"CEPA_MENU": "off"})
+        check("CEPA_MENU=off: no opening prompt", args == [], args)
+        p, args = recorded_args(r, "--mode", "discovery", env={"CEPA_UNTIL_RUN": "1"})
+        check("inside cepa-until: no opening prompt", args == [], args)
+        p, args = recorded_args(r, "--mode", "discovery", env={"CEPA_MODO": "off"})
+        check("CEPA_MODO=off: no opening prompt", args == [], args)
+
+        p, args = recorded_args(r, "--mode", "discovery", "--model=opus")
+        check("a flag=value alone still gets the menu",
+              args is not None and len(args) == 2 and args[0] == "--model=opus"
+              and args[1].startswith("[menu do modo]"), args)
+
+        p, args = recorded_args(r, "--mode", "discovery", "--prompt", "nope-missing")
+        check("system prompt error still exits 2 (no launch)", p.returncode == 2 and args is None,
+              (p.returncode, args))
+
+
 def main():
     print("test_cepa_mode")
     for fn in (test_menu_discovery, test_menu_empty_and_unknown,
+               test_opening_prompt_carries_the_menu,
                test_menu_construction_build_solo_without_board_flow,
                test_menu_construction_with_board_flow,
                test_need_met_unknown_type_is_not_met, test_valid_mode, test_invalid_mode, test_without_mode_without_tty,
