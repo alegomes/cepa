@@ -3071,3 +3071,16 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: licenca-mit
+  title: Adicionar o arquivo LICENSE com a licença MIT
+  why: 'Lote 0 da seção 7 de docs/estrategia-lacunas-ecc.md, pela rota de item avulso:
+    não espera a fila lacunas-ecc. Não move nenhum dos quatro números do scorecard;
+    é a precondição legal da resposta do dono à pergunta Q1 (alguém além do dono
+    poder usar o Cepa, na forma mínima) e a licença MIT é a resposta à Q2, ambas
+    de 2026-11-12. Precondição escrita no documento: nome do titular e ano. (ainda
+    não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
