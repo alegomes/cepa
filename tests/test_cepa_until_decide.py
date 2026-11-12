@@ -251,6 +251,143 @@ def test_decide_on_an_hc_terminal_reports_needs_you_while_it_asks():
               rc == 0 and "]7501;" not in out and "\033]2;" not in out, repr(out[-200:]))
 
 
+def _hc_env(extra=None):
+    env = dict(os.environ if extra is None else extra)
+    for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
+        env.pop(k, None)
+    env["HC_TERMINAL_ID"] = "t9"
+    return env
+
+
+def _last_hc(out):
+    """(the last OSC 7501 payload, the last OSC 2 title) that reached the terminal."""
+    states = re.findall(r"\033\]7501;([^\033]*)\033\\", out)
+    titles = re.findall(r"\033\]2;([^\033]*)\033\\", out)
+    return (states[-1] if states else None), (titles[-1] if titles else None)
+
+
+def test_decide_on_an_hc_terminal_clears_on_ctrl_c_and_on_an_exception():
+    """The exit of `cepa-until decide` drops the status and the title on Ctrl+C at a
+    question (real process, pty) and when the questions die on an exception."""
+    with tempfile.TemporaryDirectory() as tmp:
+        stuck = item("a1", status="blocked")
+        stuck["owner_question"] = "Fecho o card?"
+        root = build_repo(tmp, [stuck])
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=_hc_env(),
+                         # Ctrl+C once the question waits: the menu text reaches
+                         # the screen before `read_line` writes the status.
+                         inputs=[("state=blocked:kind=question", b"\x03")])
+        state, title = _last_hc(out)
+        check("decide hc Ctrl+C: a pergunta chegou a dizer blocked",
+              "state=blocked:kind=question" in out, repr(out[-300:]))
+        check("decide hc Ctrl+C: a última sequência 7501 é o clear",
+              state == "state=clear", (rc, state, out[-300:]))
+        check("decide hc Ctrl+C: o título volta para o shell", title == "", repr(title))
+
+    class Tty:
+        def __init__(self):
+            self.written = ""
+
+        def isatty(self):
+            return True
+
+        def write(self, text):
+            self.written += text
+
+        def flush(self):
+            pass
+
+    mod = load_module()
+    saved = (mod.sys.stdout, mod.sys.stdin, dict(os.environ))
+    os.environ.update(_hc_env())
+    tty = Tty()
+    mod.sys.stdout, mod.sys.stdin = tty, Tty()
+
+    def ask():
+        mod.herdr_blocked()
+        raise RuntimeError("boom")
+
+    raised = False
+    try:
+        mod._decide_reporting("fila", ask)
+    except RuntimeError:
+        raised = True
+    finally:
+        mod.sys.stdout, mod.sys.stdin = saved[0], saved[1]
+        os.environ.clear()
+        os.environ.update(saved[2])
+    state, title = _last_hc(tty.written)
+    check("decide hc exceção: a exceção sobe intacta", raised)
+    check("decide hc exceção: a última sequência 7501 é o clear, depois do blocked",
+          "state=blocked" in tty.written and state == "state=clear", repr(tty.written))
+    check("decide hc exceção: o título volta para o shell", title == "", repr(title))
+    check("decide hc exceção: a marca de decide se desliga", mod._hc_asking is False)
+
+
+def test_decide_listing_as_text_in_an_hc_terminal_writes_no_status():
+    """With `HC_TERMINAL_ID` set but stdin and stdout pipes, `decide` lists the
+    questions as text and writes no OSC 7501 nor title."""
+    with tempfile.TemporaryDirectory() as tmp:
+        stuck = item("a1", status="blocked")
+        stuck["owner_question"] = "Fecho o card?"
+        root = build_repo(tmp, [stuck])
+        p = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide", "fila",
+                            "--repo", str(root)], capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL, env=_hc_env(), timeout=60)
+        check("decide hc sem tty: lista a pergunta como texto",
+              p.returncode == 0 and "Fecho o card?" in p.stdout, p.stdout[-500:])
+        check("decide hc sem tty: nenhuma sequência 7501 nem título",
+              "]7501;" not in p.stdout and "\033]2;" not in p.stdout, repr(p.stdout[-300:]))
+        # stdin not a terminal, stdout a terminal: still listed as text, still silent.
+        master, slave = pty.openpty()
+        proc = subprocess.Popen([sys.executable, str(CEPA_UNTIL), "decide", "fila",
+                                 "--repo", str(root)], stdin=subprocess.DEVNULL,
+                                stdout=slave, stderr=subprocess.DEVNULL, env=_hc_env())
+        os.close(slave)
+        chunks = []
+        while True:
+            try:
+                data = os.read(master, 65536)
+            except OSError:
+                break
+            if not data:
+                break
+            chunks.append(data)
+        os.close(master)
+        rc = proc.wait(timeout=60)
+        out = b"".join(chunks).decode("utf-8", "replace")
+        check("decide hc stdin sem tty: lista como texto",
+              rc == 0 and "Fecho o card?" in out, out[-500:])
+        check("decide hc stdin sem tty: nenhuma sequência 7501 nem título",
+              "]7501;" not in out and "\033]2;" not in out, repr(out[-300:]))
+
+
+def test_run_on_an_hc_terminal_that_nobody_answers_ends_in_needs_you():
+    """A real run whose end-of-run question expires ends with `blocked` and
+    `<queue>: finished, questions wait for you`, not with `done`."""
+    import base64
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        env = _hc_env(env_do_run(tmp, root, binv))
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"], str(root),
+            inputs=[], env=env, timeout=90)
+        message = "fila: finished, questions wait for you"
+        state, title = _last_hc(out)
+        check("run hc sem resposta: sai 0 e a pergunta expirou",
+              rc == 0 and "cepa-until decide fila/" in out, out[-800:])
+        check("run hc sem resposta: termina em blocked kind=question",
+              state == "state=blocked:kind=question:app=cepa-until:msg="
+              + base64.b64encode(message.encode()).decode(), repr(state))
+        check("run hc sem resposta: o título diz que há perguntas", title == message,
+              repr(title))
+        check("run hc sem resposta: nenhum done", "state=done" not in out)
+
+
 def plan_of(root):
     return root / ".claude" / "programs" / "fila" / "plan.yaml"
 
