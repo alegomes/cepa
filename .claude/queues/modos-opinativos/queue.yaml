@@ -27,9 +27,36 @@ items:
     as linhas de `/common:spec --continuar`, `/common:epic`, `/discovery:capture`
     e `/common:queue`. Hoje falha porque `cepa-modes` recusa a flag `--menu` com
     código 2.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Retry 2: cherry-picked the side branch until/2026-11-11-2031-vermelho-CS-1
+    (d0015a8,6541c0e,09a79be -> dd53967,dbf4d1f,66d7b93); CS-1 tree identical to
+    the gated one, so acceptance .claude/acceptance/modos-opinativos-CS-1.yaml COMPLETE
+    and proof docs/proof/modos-opinativos-CS-1.yaml PROVEN (head_commit 6541c0e
+    = dbf4d1f here) stand. Root cause of the red full build was NOT CS-1: tests/test_cepa_until.py::test_hc_terminal_gets_one_working_status_per_item_and_a_done_at_the_end
+    was red at base 3bdbf8d (reproduced without CS-1): hc_scenario did not set CEPA_UNTIL_LEITOR=off,
+    so the launch pre-read called the fake claude, which closed a1. Fixed in d5bf12a
+    (test helper only). Local: test_cepa_mode.py green, test_cepa_until.py green
+    (exit 0), test_cepa_until_quota.py green twice. Known flake NOT fixed (out of
+    scope): test_cepa_until_quota.py ''herdr (teto): a pausa vem depois do relatório''
+    failed in build 1 only, passed in build 2 and twice here; likely the 1 s timeout
+    of the herdr subprocess under suite load drops the first report. Full build
+    left to the supervisor. Code is on the run branch until/2026-11-11-2031.'
+  decisions:
+  - texto: O menu do modo construction já sai com o filtro e o limite de 5 ações
+      que o próximo critério pede, porque o mesmo código do menu precisa deles;
+      o próximo item só acrescenta o teste dele
+    commit: d0015a8d94d7c1192bc93adfb0bbfbeeec38e546
+  - texto: O menu do modo construction já sai com o filtro e o limite de 5 ações
+      que o próximo critério pede, porque o mesmo código do menu precisa deles;
+      o próximo item só acrescenta o teste dele
+    commit: d5bf12abd72fdd6064e9ee76e34acb84f7ae4711
+  - texto: 'Corrigi um teste do Herdr que já estava quebrado antes deste item: ele
+      deixava a leitura de abertura chamar o claude de mentira, que fechava o primeiro
+      item antes da hora'
+    commit: d5bf12abd72fdd6064e9ee76e34acb84f7ae4711
+  head_commit: d5bf12abd72fdd6064e9ee76e34acb84f7ae4711
 - id: CS-2
   title: ação cujo requisito o repo não cumpre some do menu, e o menu mostra no
     máximo as 5 primeiras que passam
@@ -43,9 +70,26 @@ items:
     numeradas, com `/board-flow:execute` entre elas, com a ação "Fix a bug" mostrando
     `/board-flow:capture Bug:` seguido de `/board-flow:fix`, e sem `/board-flow:prove-drain`.
     Hoje falha porque a flag `--menu` não existe.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'No new code: filter (need_met file:/topology:/plugin:, unknown kind
+    = not met), first-variant-per-label dedupe and MENU_MAX=5 shipped with CS-1
+    in dd53967+dbf4d1f (recorded decision of CS-1). Covering tests tests/test_cepa_mode.py::test_menu_construction_build_solo_without_board_flow,
+    ::test_menu_construction_with_board_flow, ::test_need_met_unknown_type_is_not_met;
+    local run ''tudo verde''. Gates committed in 7c7f761: .claude/acceptance/modos-opinativos-CS-2.yaml
+    COMPLETE, docs/proof/modos-opinativos-CS-2.yaml PROVEN (RED-at-base 11 FAIL;
+    perturbations cap, dedupe, file:, topology:, plugin:, unknown kind all RED at
+    d5bf12a; sequence join not re-run, RED in CS-1 proof). Spec note: the second
+    repo of the declared red test only works with topology build-solo too (without
+    topology prove-drain is the 5th passing action); test reads it that way. Full
+    build left to the supervisor. Code is on the run branch until/2026-11-11-2031.'
+  head_commit: 7c7f7618e16f4e87e1052c3089cf2a4f08aba928
+  decisions:
+  - texto: No segundo cenário do teste do menu, li o repo com o arquivo do Jira
+      como o primeiro repo mais esse arquivo, com o mesmo fluxo de trabalho; sem
+      fluxo nenhum, a ação de provar a revisão entraria como quinta
+    commit: dbf4d1fbf20501ca7ab3cebf9cda86e7807bd801
 - id: CS-3
   title: '`cepa --mode <modo>` sem prompt inicial abre a sessão com um prompt de
     abertura que carrega o menu, e com prompt inicial não manda nada a mais'
@@ -57,9 +101,26 @@ items:
     --mode discovery "arruma o teste X"` e exigir que os argumentos sejam só os
     do dono. Hoje a primeira asserção falha: o `claude` falso não recebe prompt
     nenhum.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 57236de (launcher: OWNER_REQUEST scan + opening_prompt + set
+    -- "$@" "$OPENING" after preflight), 4797984 (test --model opus), dd031a1 (tests
+    kill 4 proof survivors: --resume=, empty menu, reply line; unreachable empty-mode
+    guard dropped), 5b7a004 (gates). pair-reviewer APPROVE. Acceptance .claude/acceptance/modos-opinativos-CS-3.yaml
+    COMPLETE; proof docs/proof/modos-opinativos-CS-3.yaml PROVEN at dd031a1 (first
+    pass UNPROVEN at 4797984 with 4 survivors, fixed). Local: tests/test_cepa_mode.py
+    green; neighbors test_cepa_chaining, test_cepa_prompt, test_cepa_slice_isolation,
+    test_cepa_plan_ready, test_cepa_prove, test_doctor_fix, test_modes_single_source,
+    test_write_mode_gate green. Empty-menu mode already opens without prompt (CS-4
+    adds only its test). Full build left to the supervisor; code is on the run branch
+    until/2026-11-11-2031.'
+  head_commit: 5b7a0046680b9346736fb518e0620edebea27500
+  decisions:
+  - texto: Quando o dono escreve uma opção seguida de valor separado (como --model
+      opus), a sessão abre sem o menu, porque o cepa não sabe se a palavra é um
+      pedido; com --model=opus o menu aparece
+    commit: 479798444527442981fee5b9d8803bfacaefa783
 - id: CS-4
   title: modo com lista vazia abre como hoje, sem prompt de abertura
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -67,9 +128,20 @@ items:
     exigir que `cepa-modes --menu design` saia com código 0 e saída vazia, e que
     `cepa --mode design` sem argumentos não entregue prompt ao `claude` falso. Hoje
     a primeira asserção falha porque `--menu` devolve código 2.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'No new code: empty-menu behavior shipped with CS-1 (dd53967, cepa-modes
+    --menu prints nothing rc 0 for actions: []) and CS-3 (57236de launcher skips
+    opening prompt when menu empty; dd031a1 added the test case). Covering checks
+    in tests/test_cepa_mode.py: test_menu_empty_and_unknown (''--menu design: rc
+    0 and empty'') and ''mode with an empty menu: no opening prompt''. Local: python3
+    tests/test_cepa_mode.py ''tudo verde'' (156 ok, 0 FAIL). Gates in 05351da: .claude/acceptance/modos-opinativos-CS-4.yaml
+    COMPLETE; docs/proof/modos-opinativos-CS-4.yaml PROVEN (perturbations a1,a2,b1,b2,b3
+    RED at HEAD; b4 equivalent mutant; RED-at-base dd53967^ 17 FAIL for the cepa-modes
+    half; launcher half passes at base by design, it is the behavior preserved).
+    Full build left to the supervisor. Code is on the run branch until/2026-11-11-2031.'
+  head_commit: 05351daf82d97cf0979e38126dbaf569001b1765
 - id: CS-5
   title: 'no turno de abertura, o hook do modo instrui o agente a mostrar o menu
     traduzido para a língua do dono, sem mudar a ordem, a numeração nem os comandos,
@@ -87,9 +159,31 @@ items:
     for a chave de um card, rodar só `/board-flow:fix`, e se for uma descrição,
     rodar `/board-flow:capture Bug:` e depois `/board-flow:fix` na chave criada.
     Hoje falha: o hook devolve só as linhas `[modo]` e `[intenção]`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-11-2031: 576d06a (red test tests/test_cepa_mode.py::test_hook_opening_turn_carries_the_menu_rules,
+    committed before the fix), b40355a (common/hooks/session-mode.py menu_lines()+MENU_MARK;
+    common/bin/cepa-modes --menu <mode> --json), 0ffef0d (test kills the 2 perturbation
+    survivors of the 1st proof pass: action number off by one, marker mid-prompt),
+    c72646b (gates). Acceptance .claude/acceptance/modos-opinativos-CS-5.yaml COMPLETE;
+    proof docs/proof/modos-opinativos-CS-5.yaml PROVEN at head 0ffef0d (15 perturbations
+    RED, 2 equivalent; RED at base 05351da with 10 FAIL). Local: test_cepa_mode,
+    test_whereami_intent, test_modes_single_source, test_epic_where, test_write_mode_gate,
+    test_cepa_intent_reminders, test_exploration_exit all green. Full build left
+    to the supervisor. Out of scope, left for later items: CS-6 (the opening prompt
+    still shows in the [intenção] first-prompts list), CS-7 (telemetry). Code is
+    on the run branch until/2026-11-11-2031.'
+  head_commit: c72646bb2ece37ae533f80b90962474aad0d4183
+  decisions:
+  - texto: No turno de abertura, o hook pega a lista de ações pelo mesmo comando
+      que monta o menu, numa saída nova em formato de dados, para que o número que
+      o agente usa seja o mesmo que o dono vê
+    commit: b40355a9b9278ad26b1399a87df18f715a909692
+  - texto: 'A regra de ''Corrigir um bug'' com Jira vale para toda ação que é uma
+      sequência de comandos: se o dono responde a chave de um card, roda só o último
+      comando; se responde uma descrição, roda a sequência inteira'
+    commit: b40355a9b9278ad26b1399a87df18f715a909692
 - id: CS-6
   title: o prompt de abertura não conta como prompt do dono na linha `[intenção]`
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -98,9 +192,23 @@ items:
     especificar X", rodar o hook sem intenção gravada e exigir que a lista "Primeiros
     prompts" contenha "quero especificar X" e não contenha `[menu do modo]`. Hoje
     falha: o hook lista todo prompt do log.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 60267f2 (teste vermelho), 52b7d5e (fix em common/hooks/session-mode.py:
+    helper is_menu_opening compartilhado por menu_lines e first_prompts; filtra
+    a abertura do log e do prompt do turno), 911a9bf (portões). pair-reviewer OK-WITH-NOTES,
+    nota aplicada (checagem no prompt cru). Acceptance .claude/acceptance/modos-opinativos-CS-6.yaml
+    COMPLETE; proof docs/proof/modos-opinativos-CS-6.yaml PROVEN (6 perturbações
+    vermelhas, 1 mutante equivalente em menu_lines; teste vermelho no base c72646b).
+    Rodado só python3 tests/test_cepa_mode.py (tudo verde); suíte completa fica
+    com o supervisor. Código está na branch until/2026-11-11-2031.'
+  head_commit: 911a9bf3be375b2a437de72f71855040a599f426
+  decisions:
+  - texto: a abertura do menu só é reconhecida quando o marcador está no primeiro
+      caractere do prompt, sem tirar espaços; um prompt com espaço antes do marcador
+      não recebe menu e continua contando como prompt do dono
+    commit: 52b7d5e122cb60ed5feb2928390c81469de9bd8a
 - id: CS-7
   title: a telemetria grava `mode_menu.shown` quando o menu é mostrado e `mode_menu.chosen`
     quando a resposta seguinte é um número do menu ou um comando do menu, os dois
@@ -113,9 +221,30 @@ items:
     e uma linha `mode_menu.chosen` com `mode: discovery`, `action: 1` e `command:
     /common:spec`. Entregar depois "quero outra coisa" e exigir que nenhum `mode_menu.chosen`
     novo apareça. Hoje falha: nenhum dos dois eventos existe.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Red test a7d6bc8 (tests/test_cepa_mode.py::test_menu_telemetry_shown_and_chosen);
+    impl 53e4142 (common/hooks/session-mode.py: record_menu_shown emits mode_menu.shown{mode}
+    and writes .claude/mode-menu-pending; record_menu_reply on the next prompt of
+    the same session consumes it and emits mode_menu.chosen{mode,action,command}
+    for a menu number (''1'',''1.'',''1)'') or a prompt starting with a menu command,
+    longest match, placeholders stripped; _state.py catalogue entry; .gitignore).
+    b04743b adds cases killing the 2 perturbations that survived proof round 1 (p16
+    number regex, p18 gitignore). Gates 7dd0e79: .claude/acceptance/modos-opinativos-CS-7.yaml
+    COMPLETE; docs/proof/modos-opinativos-CS-7.yaml PROVEN (head b04743b, 18 perturbations,
+    red at base 911a9bf). Local: test_cepa_mode.py, test_state_deposits.py, test_isolated_telemetry.py,
+    test_modes_single_source.py and 12 hook-neighbor tests green. Full build left
+    to the supervisor. Code is on the run branch until/2026-11-11-2031.'
+  head_commit: 7dd0e7956634fd98822d98cfc8bb867f9457df83
+  decisions:
+  - texto: Para saber qual foi a resposta logo depois do menu, o hook guarda o menu
+      mostrado num arquivo local que o turno seguinte apaga; só conta a resposta
+      da mesma sessão e só a imediatamente seguinte
+    commit: 53e414278eff11b1ce207c91ccf659f6a5e2a2ae
+  - texto: Respostas como 1. e 1) contam como o número 1, e um comando do menu digitado
+      com texto depois conta como escolha daquela ação
+    commit: 53e414278eff11b1ce207c91ccf659f6a5e2a2ae
 - id: CS-8
   title: '`/common:metrics` mostra a conta de uso do menu por modo'
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -123,9 +252,26 @@ items:
     `cepa-metrics` sobre um arquivo de eventos descartável com 4 `mode_menu.shown`
     e 1 `mode_menu.chosen` do modo discovery e exigir na saída a linha do modo discovery
     com "1 ÷ 4 = 25%". Hoje falha: o relatório não tem seção do menu.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 2047838 (red test tests/test_cepa_metrics_mode_menu.py), e9c310c
+    (common/bin/cepa-metrics: mode_menu_counts + mode_menu_lines, section ''Menu
+    do modo — escolhas ÷ exibições, por modo'', mode_menu in --json, the two events
+    out of custom; common/commands/metrics.md paragraph), 0531ed2 (tests killing
+    3 survivors of proof round 1: no-mode ''?'' bucket, sort by showings, exit 0
+    with no menu event), 589f157 (gates). Acceptance .claude/acceptance/modos-opinativos-CS-8.yaml
+    COMPLETE; proof docs/proof/modos-opinativos-CS-8.yaml PROVEN at 0531ed2 (round
+    1 UNPROVEN at e9c310c, recorded). Local: test_cepa_metrics_mode_menu.py, test_cepa_metrics_scorecard.py,
+    test_cepa_tokens.py, test_intent_telemetry.py, test_report_style_lint.py, test_session_edges_friction.py,
+    test_write_mode_gate.py, test_isolated_telemetry.py, test_cepa_help_layout.py
+    green. Full build left to the supervisor. Code is on the run branch until/2026-11-11-2031.'
+  head_commit: 589f15778f390968896a7953263f4a3ea26ce2ed
+  decisions:
+  - texto: O relatório do menu põe primeiro o modo com mais exibições, conta evento
+      sem modo numa linha '?' e, quando uma escolha não tem exibição na janela,
+      diz 'sem exibição' em vez de dividir
+    commit: e9c310cc3ea267e54496ff729c3210c99b990dfd
 - id: CS-9
   title: '`/common:modes` mostra o menu do modo da sessão, depois da tabela'
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -135,9 +281,27 @@ items:
     com o menu de exploration, incluindo "Write the strategy document with 2 or
     more paths (no command yet)" e `/common:advisors`. Hoje falha: a saída termina
     na tabela.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Red test e3eac80 (tests/test_cepa_mode.py::test_table_ends_with_the_session_mode_menu,
+    red at base 589f157 with 6 FAILs). Fix 0dd776b: common/bin/cepa-modes with no
+    arguments ends the table with render_menu(current) under the header ''O que
+    dá para fazer em <mode>'', only when the session mode has actions passing the
+    repo filter and no mode was named; doc step 4 in common/commands/modes.md. Proof
+    round 1 at 0dd776b UNPROVEN (4 surviving perturbations: header deleted/changed,
+    has-actions guard dropped, current-in-MODES guard dropped -> KeyError rc 1);
+    aa06c55 strengthened the test only. Gates in 8e3477e: .claude/acceptance/modos-opinativos-CS-9.yaml
+    COMPLETE; docs/proof/modos-opinativos-CS-9.yaml PROVEN (head_commit aa06c55,
+    10/10 perturbations red). Local: test_cepa_mode.py ''tudo verde'', test_modes_single_source.py
+    ok, test_exploration_exit.py ok. Full build left to the supervisor. Code is
+    on the run branch until/2026-11-11-2031. Topology build-solo: no validation-lead.'
+  head_commit: 8e3477e21fdc9568f3951eea910721ec526781c7
+  decisions:
+  - texto: O menu só aparece no fim da tabela completa; quem pede um modo pelo nome
+      (cepa-modes discovery) vê só a tabela daquele modo, sem menu, e modo sem ações
+      não ganha título vazio
+    commit: 0dd776bb48136af17f2a612cf37f99b1c6a547db
 - id: CS-10
   title: todo comando citado num menu existe no repo do Cepa, e todo requisito usa
     um dos três tipos fechados
@@ -149,9 +313,24 @@ items:
     `topology:` ou `plugin:`, que toda ação tenha frase leiga, e que construction,
     discovery e exploration tenham de 3 a 8 ações e os outros 4 modos tenham lista
     vazia. Hoje falha com `KeyError: ''actions''`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'test 613b8d1 (tests/test_modes_single_source.py: menu_failures checks
+    every /<plugin>:<name> command has <plugin>/commands/<name>.md, needs in file:/topology:/plugin:,
+    non-empty label, None command needs ''(no command yet)'', 3-8 distinct labels
+    in construction/discovery/exploration, empty elsewhere); gates commit 10e64b7:
+    completion-auditor COMPLETE (.claude/acceptance/modos-opinativos-CS-10.yaml),
+    proof-reviewer PROVEN 10/10 perturbations RED (docs/proof/modos-opinativos-CS-10.yaml).
+    Item only adds a test: the actions field already existed from CS-1..CS-9, so
+    no red-before-code commit. Ran only test_modes_single_source.py and test_cepa_mode.py;
+    full build left to the supervisor. Code is on the overnight branch until/2026-11-11-2031.'
+  head_commit: 10e64b7741dd7f1974a085632fc346beaebfded9
+  decisions:
+  - texto: o limite de 3 a 8 ações conta frases distintas, porque variantes do mesmo
+      comando dividem a frase e o menu mostra só uma; o menu de construção tem 11
+      variantes e 7 frases
+    commit: 613b8d13123212e610a6dec14e3c80c7c6b23054
 - id: CS-11
   title: '`docs/modos-de-trabalho.md` descreve o menu sem desfazer a distinção entre
     modo e rotina'
@@ -162,9 +341,22 @@ items:
     obrigatório + no máximo uma rotina" e contenha um parágrafo que cite o campo
     `actions` e o comando `cepa-modes --menu`. Hoje falha: o documento não cita
     nenhum dos dois.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 9577ad4 (test doc_failures in tests/test_modes_single_source.py,
+    red first), 1d6bbd9 (docs/modos-de-trabalho.md: paragraph in ''Modo não é Rotina''
+    citing `actions` and `cepa-modes --menu`, rule sentence kept; status block and
+    build-list item 5b), df49b7c (gates). completion-auditor COMPLETE (.claude/acceptance/modos-opinativos-CS-11.yaml);
+    proof-reviewer PROVEN (docs/proof/modos-opinativos-CS-11.yaml, 6 perturbations
+    RED, red at 9577ad4). Tests run: test_modes_single_source, test_cepa_mode, test_refactor_gate,
+    test_reflection_gate, all green; full build left to the supervisor. Code is
+    on the overnight branch until/2026-11-11-2031.'
+  head_commit: df49b7cb3c516e0b742ef598585505e6ea6887fe
+  decisions:
+  - texto: o parágrafo novo também diz que escolher uma ação do menu não grava nada
+      no campo de rotina da sessão, como o dono decidiu na pergunta P3
+    commit: 1d6bbd981c26b5dd093d50210b39d07236e8f4a0
 - id: CS-12
   title: '`/common:modes --exit` é um argumento declarado do comando e chega ao
     `cepa-modes` como veio'
@@ -174,6 +366,20 @@ items:
     que a linha `argument-hint:` do cabeçalho contenha `--exit` e que o passo que
     roda `cepa-modes` continue repassando `$ARGUMENTS`. Hoje falha: o `argument-hint`
     declara só `[mode-name]`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'red de22cf5 (tests/test_modes_single_source.py command_failures: argument-hint
+    must contain --exit, cepa-modes run line must end in $ARGUMENTS); fix 3d56afb
+    (common/commands/modes.md argument-hint: [mode-name] [--exit] + step 5 documenting
+    the exit verdict); gates: .claude/acceptance/modos-opinativos-CS-12.yaml COMPLETE
+    (cba81d8), docs/proof/modos-opinativos-CS-12.yaml PROVEN (0ea102e, perturbation:
+    red at base, red without --exit, red without $ARGUMENTS). Neighbors green: test_modes_single_source,
+    test_commands_english, test_flags_hint_variables. Full build left to the cepa-until
+    supervisor; code is on the overnight branch until/2026-11-11-2031. Left out:
+    step 5 text is not guarded by a test.'
+  head_commit: 0ea102e391133c0e3fecaa19bd9796fa4402e05f
+  decisions:
+  - texto: o /common:modes passou a anunciar o --exit no cabeçalho e ganhou um passo
+      explicando o veredito de saída
+    commit: 3d56afba348e8e134287702ab195d41189efa45a
