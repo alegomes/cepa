@@ -1085,12 +1085,92 @@ def test_empty_intent_listing_skips_the_menu_opening_prompt():
               '"[menu do modo] discovery' not in c, c)
 
 
+def menu_events(tdir):
+    """The `mode_menu.*` events written to the disposable ledger `tdir`."""
+    out = []
+    for f in sorted(Path(tdir).glob("events-*.jsonl")):
+        for line in f.read_text(encoding="utf-8").splitlines():
+            e = json.loads(line)
+            if str(e.get("event", "")).startswith("mode_menu."):
+                out.append(e)
+    return out
+
+
+def test_menu_telemetry_shown_and_chosen():
+    """CS-7: the opening turn records `mode_menu.shown` with the mode; the NEXT reply,
+    when it is a number or a command of the menu, records `mode_menu.chosen` with the
+    mode, the action number and the command. Free text, or any later turn, records none."""
+    print("hook: telemetry of the mode menu")
+    with Repo() as r:
+        home = fake_home(r.tmp.name, name="telhome")
+        tdir = Path(r.tmp.name) / "tel"
+        env = {"HOME": str(home), "CEPA_TELEMETRY_DIR": str(tdir)}
+        p, args = recorded_args(r, "--mode", "discovery")
+        opening = (args or [""])[-1]
+        run_hook(r.path, env=env, prompt=opening, session_id="s-tel")
+        ev = menu_events(tdir)
+        shown = [e for e in ev if e["event"] == "mode_menu.shown"]
+        check("opening turn: one mode_menu.shown with mode discovery",
+              len(shown) == 1 and shown[0].get("mode") == "discovery", ev)
+        check("opening turn: no mode_menu.chosen yet",
+              not [e for e in ev if e["event"] == "mode_menu.chosen"], ev)
+
+        run_hook(r.path, env=env, prompt="1", session_id="s-tel")
+        chosen = [e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]
+        check("reply '1': mode_menu.chosen with mode, action 1 and /common:spec",
+              len(chosen) == 1 and chosen[0].get("mode") == "discovery"
+              and chosen[0].get("action") == 1 and chosen[0].get("command") == "/common:spec",
+              chosen)
+
+        run_hook(r.path, env=env, prompt="quero outra coisa", session_id="s-tel")
+        chosen = [e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]
+        check("free text after: no new mode_menu.chosen", len(chosen) == 1, chosen)
+
+        # only the reply RIGHT AFTER the menu counts: a later "2" is not a menu choice
+        run_hook(r.path, env=env, prompt="2", session_id="s-tel")
+        chosen = [e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]
+        check("a number two turns after the menu: no new mode_menu.chosen",
+              len(chosen) == 1, chosen)
+
+        # a menu command typed as the reply is a choice too, bound to its own action
+        run_hook(r.path, env=env, prompt=opening, session_id="s-tel")
+        run_hook(r.path, env=env, prompt="/common:spec --continuar modos", session_id="s-tel")
+        chosen = [e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]
+        check("reply with a menu command: action 2, /common:spec --continuar",
+              len(chosen) == 2 and chosen[1].get("action") == 2
+              and chosen[1].get("command") == "/common:spec --continuar", chosen)
+
+        # free text right after the menu: shown, never chosen
+        run_hook(r.path, env=env, prompt=opening, session_id="s-tel")
+        run_hook(r.path, env=env, prompt="quero outra coisa", session_id="s-tel")
+        ev = menu_events(tdir)
+        check("three openings, three mode_menu.shown",
+              len([e for e in ev if e["event"] == "mode_menu.shown"]) == 3, ev)
+        check("free text right after the menu: still 2 mode_menu.chosen",
+              len([e for e in ev if e["event"] == "mode_menu.chosen"]) == 2, ev)
+
+        # a number outside the menu is not a choice
+        run_hook(r.path, env=env, prompt=opening, session_id="s-tel")
+        run_hook(r.path, env=env, prompt="9", session_id="s-tel")
+        check("a number outside the menu: no mode_menu.chosen",
+              len([e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]) == 2,
+              menu_events(tdir))
+
+        # another session's menu never becomes this session's choice
+        run_hook(r.path, env=env, prompt=opening, session_id="s-tel")
+        run_hook(r.path, env=env, prompt="1", session_id="s-outra")
+        check("reply from another session: no mode_menu.chosen",
+              len([e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]) == 2,
+              menu_events(tdir))
+
+
 def main():
     print("test_cepa_mode")
     for fn in (test_menu_discovery, test_menu_empty_and_unknown,
                test_opening_prompt_carries_the_menu,
                test_hook_opening_turn_carries_the_menu_rules,
                test_empty_intent_listing_skips_the_menu_opening_prompt,
+               test_menu_telemetry_shown_and_chosen,
                test_menu_construction_build_solo_without_board_flow,
                test_menu_construction_with_board_flow,
                test_need_met_unknown_type_is_not_met, test_valid_mode, test_invalid_mode, test_without_mode_without_tty,
