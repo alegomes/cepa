@@ -193,6 +193,12 @@ def session_start(root, session_id):
     return _iso(entry.get("started_at", ""))
 
 
+def is_menu_opening(prompt):
+    """True for the launcher's opening prompt of the mode menu (CS-3/CS-6): the
+    prompt STARTS with `MENU_MARK`. The one rule, shared by `menu_lines`."""
+    return str(prompt or "").startswith(MENU_MARK)
+
+
 def first_prompts(root, session_id, current_prompt):
     """The FIRST prompts of this session, cut. Without a recorded start, falls
     back to today's prompts (UTC). The turn's prompt is included if the log does
@@ -204,7 +210,10 @@ def first_prompts(root, session_id, current_prompt):
     else:
         today = datetime.now(timezone.utc).date()
         prompts = [t for q, t in prompts if q.date() == today]
+    prompts = [t for t in prompts if not is_menu_opening(t)]
     current = " ".join(str(current_prompt or "").split())
+    if is_menu_opening(current_prompt):  # RAW prompt: same rule as menu_lines
+        current = ""
     if current and (not prompts or prompts[-1] != current):
         prompts.append(current)
     return [cut(t, PROMPT_CUT) for t in prompts[:FIRST_N]]
@@ -329,7 +338,7 @@ def menu_lines(root, prompt):
     the menu, so the numbers here are the numbers the owner sees in the prompt.
     Only the opening turn pays this subprocess. Fail-silent."""
     text = str(prompt or "")
-    if not text.startswith(MENU_MARK):
+    if not is_menu_opening(text):
         return []
     try:
         mode = text[len(MENU_MARK):].split("\n", 1)[0].strip()
