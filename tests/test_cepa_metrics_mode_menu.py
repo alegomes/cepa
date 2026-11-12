@@ -140,13 +140,44 @@ def test_no_menu_events_no_section():
     with tempfile.TemporaryDirectory() as tmp:
         write_ledger(tmp, [{"event": "session_start"}])
         r = run(tmp)
+        check("without menu events the report still exits 0", r.returncode == 0,
+              r.stderr[-400:])
         check("without menu events there is no menu section",
               section(r.stdout, "Menu do modo") is None, r.stdout[-800:])
 
 
+def test_most_shown_mode_first():
+    """The busiest menu comes first, so the line the owner reads first is the one
+    with the most evidence: discovery (4 shown) before construction (2) before
+    exploration (1), whatever the alphabetical order says."""
+    with tempfile.TemporaryDirectory() as tmp:
+        ev = [{"event": "mode_menu.shown", "mode": "exploration"}]
+        ev += [{"event": "mode_menu.shown", "mode": "construction"} for _ in range(2)]
+        ev += [{"event": "mode_menu.shown", "mode": "discovery"} for _ in range(4)]
+        write_ledger(tmp, ev)
+        body = section(run(tmp).stdout, "Menu do modo") or []
+        order = [ln.split()[0] for ln in body
+                 if ln.strip().split()[:1] in (["discovery"], ["construction"], ["exploration"])]
+        check("modes ordered by showings, most shown first",
+              order == ["discovery", "construction", "exploration"], "\n".join(body))
+
+
+def test_event_without_mode_counts_under_question_mark():
+    """An old or truncated event without `mode` is counted under "?" instead of
+    vanishing: both the showing and the choice."""
+    with tempfile.TemporaryDirectory() as tmp:
+        write_ledger(tmp, [{"event": "mode_menu.shown"}, {"event": "mode_menu.shown"},
+                           {"event": "mode_menu.chosen", "action": 1}])
+        body = section(run(tmp).stdout, "Menu do modo") or []
+        q = [ln for ln in body if ln.strip().startswith("? ")]
+        check("events without mode show as the '?' line with 1 ÷ 2 = 50%",
+              len(q) == 1 and "1 ÷ 2 = 50%" in q[0], "\n".join(body))
+
+
 def main():
     for fn in (test_menu_rate_per_mode, test_menu_json,
-               test_choice_without_showing_in_the_window, test_no_menu_events_no_section):
+               test_choice_without_showing_in_the_window, test_no_menu_events_no_section,
+               test_most_shown_mode_first, test_event_without_mode_counts_under_question_mark):
         fn()
     if FAILURES:
         print(f"\n{len(FAILURES)} falha(s): {', '.join(FAILURES)}")
