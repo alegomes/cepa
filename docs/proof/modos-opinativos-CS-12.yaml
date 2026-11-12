@@ -1,0 +1,46 @@
+schema_version: 2
+card: modos-opinativos-CS-12
+verdict: proven
+reviewed_at: 2026-11-12T06:00:00-03:00
+base_commit: df49b7c
+head_commit: 3d56afb
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "tests/test_modes_single_source.py (command_failures(): argument-hint must contain `--exit`; the `python3 .../bin/cepa-modes` line must end with `$ARGUMENTS`)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null        # the guard reads the real common/commands/modes.md; no double
+    - class: "common/commands/modes.md (header `argument-hint: [mode-name] [--exit]` + step 5 documenting the exit verdict)"
+      module: commands
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python harness repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "RED at base (test de22cf5 + modes.md from df49b7c, detached worktree /tmp/cs12-proof): python3 tests/test_modes_single_source.py -> rc 1: FAIL common/commands/modes.md: `argument-hint:` não declara `--exit` ('argument-hint: [mode-name]')"
+        - "GREEN at head (modes.md from 3d56afb): python3 tests/test_modes_single_source.py -> 'ok — 7 modos, mesma lista no `cepa` e em _modes.py, todos com os 5 campos' rc 0"
+        - "(p1) `--exit` dropped from the header (`argument-hint: [mode-name]`) -> RED rc 1: same FAIL as the base run"
+        - "(p2) `$ARGUMENTS` dropped from the run line (`python3 \"${CLAUDE_PLUGIN_ROOT}/bin/cepa-modes\"`) -> RED rc 1: FAIL common/commands/modes.md: o passo que roda `cepa-modes` não repassa `$ARGUMENTS` como veio"
+        - "After p2, modes.md restored from 3d56afb -> rc 0. Worktree removed at the end; primary tree untouched."
+        - "Not perturbed, no silent cap: the prose of step 5 (exit verdict description) is not guarded by the test; only the two properties named in the criterion are."
+    pit_note: "n/a"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; both branches of command_failures() (hint without --exit, run line without $ARGUMENTS) are reached by p1 and p2 on the real file and each turns the test RED."
+  l4_adversarial_input:
+    status: n/a
+    reason: "Test-and-docs diff: the guard reads an in-repo markdown command file written by the harness itself; no network, no external text parsing, no api-rest surface."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is a Story; red-at-base shown above (de22cf5 test vs df49b7c modes.md rc 1, vs 3d56afb rc 0)."
+routing_reason: "Guard RED without the --exit hint (test de22cf5 against modes.md of df49b7c), GREEN with it (3d56afb), and each guarded property broken separately (hint without --exit; run line without $ARGUMENTS) turns it RED in a throwaway worktree (removed). Only tests/test_modes_single_source.py was run. Caveat: the check is textual, so it proves the command file declares and forwards --exit, not that cepa-modes --exit behaves so (other CS cards)."
