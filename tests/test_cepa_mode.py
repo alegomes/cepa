@@ -982,10 +982,68 @@ def test_opening_prompt_carries_the_menu():
               (p.returncode, args))
 
 
+def opening_turn(repo, mode, home):
+    """The real opening prompt `cepa --mode <mode>` sends, then the hook's context for it."""
+    p, args = recorded_args(repo, "--mode", mode)
+    opening = (args or [""])[-1]
+    check(f"{mode}: launcher sent an opening prompt", opening.startswith("[menu do modo]"),
+          repr(opening[:200]))
+    h = run_hook(repo.path, env={"HOME": str(home)}, prompt=opening, session_id="s-open")
+    check(f"{mode}: hook rc 0", h.returncode == 0, h.stderr)
+    return ctx(h)
+
+
+def test_hook_opening_turn_carries_the_menu_rules():
+    """CS-5: on the opening turn the hook tells the agent how to show the menu and how to
+    treat the next reply (number/command fires, ask first, no command = conversation,
+    free text = normal request)."""
+    print("hook: opening turn of the mode menu")
+    with Repo() as r:
+        home = fake_home(r.tmp.name, name="hookhome")
+        c = opening_turn(r, "discovery", home)
+        check("display rule: translate the phrases",
+              "traduzid" in c and "língua do dono" in c, c)
+        check("display rule: keep order, numbering and commands",
+              "ordem" in c and "numeração" in c and "comandos" in c, c)
+        check("action 1 asks its one-line question first",
+              "Ação 1" in c and '"What is the idea?"' in c and "/common:spec <the idea>" in c, c)
+        check("number or command fires the action", "número ou comando" in c, c)
+        check("free-text rule", "texto livre" in c and "pedido normal" in c, c)
+        check("discovery has no sequence rule", "chave de um card" not in c, c)
+
+        set_topology(r, "build-solo", board_flow=True)
+        c = opening_turn(r, "construction", home)
+        check("Fix a bug: a card key runs only /board-flow:fix",
+              "chave de um card" in c and "só `/board-flow:fix <created key>`" in c, c)
+        check("Fix a bug: a description runs capture then fix on the created key",
+              "`/board-flow:capture Bug: <description>`" in c and "chave criada" in c, c)
+        check("Fix a bug is action 4", "Ação 4" in c, c)
+
+        (Path(r.path) / "board-flow.yaml").unlink()
+        c = opening_turn(r, "construction", home)
+        check("no-command action is led in conversation",
+              "sem comando" in c and "conversa" in c, c)
+
+        h = run_hook(r.path, env={"HOME": str(home)}, prompt="quero especificar X",
+                     session_id="s-open")
+        check("an ordinary turn carries no menu rule", "[menu]" not in ctx(h), ctx(h))
+        h = run_hook(r.path, env={"HOME": str(home)},
+                     prompt="olha isso: [menu do modo] discovery", session_id="s-open")
+        check("marker mid-prompt is not the opening turn", "[menu]" not in ctx(h), ctx(h))
+        h = run_hook(r.path, env={"HOME": str(home)}, prompt="[menu do modo] design\n\n",
+                     session_id="s-open")
+        check("mode with an empty menu: no menu rule", "[menu]" not in ctx(h), ctx(h))
+        h = run_hook(r.path, env={"HOME": str(home)}, prompt="[menu do modo] nope\n\n",
+                     session_id="s-open")
+        check("unknown mode in the marker: hook still rc 0, no menu rule",
+              h.returncode == 0 and "[menu]" not in ctx(h), (h.returncode, ctx(h)))
+
+
 def main():
     print("test_cepa_mode")
     for fn in (test_menu_discovery, test_menu_empty_and_unknown,
                test_opening_prompt_carries_the_menu,
+               test_hook_opening_turn_carries_the_menu_rules,
                test_menu_construction_build_solo_without_board_flow,
                test_menu_construction_with_board_flow,
                test_need_met_unknown_type_is_not_met, test_valid_mode, test_invalid_mode, test_without_mode_without_tty,
