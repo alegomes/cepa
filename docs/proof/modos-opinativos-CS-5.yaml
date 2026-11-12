@@ -1,0 +1,59 @@
+schema_version: 2
+card: modos-opinativos-CS-5
+verdict: proven
+reviewed_at: 2026-11-12T01:10:00-03:00
+base_commit: 05351da
+head_commit: 0ffef0d
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/hooks/session-mode.py (MENU_MARK, menu_lines(); main() calls it outside cepa-until runs)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null        # tests run the real hook as a subprocess (run_hook) and the real cepa-modes it spawns; only HOME is faked
+    - class: "common/bin/cepa-modes (render_menu as_json, _commands, `--menu <mode> --json`)"
+      module: bin
+      external_observable: true
+      substituted_by_double: null        # real script, called by the hook as a subprocess
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # shell + Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at HEAD 0ffef0d: python3 tests/test_cepa_mode.py -> 'tudo verde' (throwaway detached worktree /tmp/proof-cs5c, removed afterwards)"
+        - "(p1) hook: main() call `blocks += menu_lines(...)` -> `pass` -> FAIL 'display rule: translate the phrases' and others (RED)"
+        - "(p2, was a survivor) hook: `if not text.startswith(MENU_MARK):` -> `if MENU_MARK not in text:` -> FAIL 'marker mid-prompt with a valid mode where the name would be: still not' (RED)"
+        - "(p3) hook: `if not actions:` -> `if False:` -> FAIL 'mode with an empty menu: no menu rule' (RED)"
+        - "(p5) hook: `len(cmds) > 1` -> `> 99` -> FAIL 'Fix a bug: a card key runs only /board-flow:fix' and 'a description runs capture then fix' (RED)"
+        - "(p6) hook: `elif ask:` -> `elif False:` -> FAIL 'action 1 asks its one-line question first' and 'the number is bound to its own action' (RED)"
+        - "(p7) hook: `if not cmds:` -> `if False:` -> FAIL 'no-command action is led in conversation' (RED)"
+        - "(p8) hook: free-text rule text changed -> FAIL 'free-text rule' (RED)"
+        - "(p9) hook: 'número ou comando do menu dispara a ação' replaced -> FAIL 'number or command fires the action' (RED)"
+        - "(p10) hook: translate-to-owner's-language phrase removed -> FAIL 'display rule: translate the phrases' (RED)"
+        - "(p11) hook: keep-order/numbering/commands phrase replaced -> FAIL 'display rule: keep order, numbering and commands' (RED)"
+        - "(p12) hook: first/last of the sequence swapped -> FAIL 'Fix a bug: a card key runs only /board-flow:fix' (RED)"
+        - "(p14) cepa-modes: `as_json=args.as_json` -> `as_json=False` -> FAIL 'display rule: translate the phrases', 'action 1 asks ...' and others (RED)"
+        - "(p15, was a survivor) cepa-modes: json `\"n\": i` -> `\"n\": i - 1` -> FAIL 'the number is bound to its own action (1 = the idea, 2 = the slug)' and 'Fix a bug is action 4' (RED)"
+        - "(p16) cepa-modes: json `ask` forced to None -> FAIL 'action 1 asks its one-line question first', 'the number is bound to its own action', 'Fix a bug is action 4' (RED)"
+        - "(p17) cepa-modes: `_commands` returns [] -> FAIL 'menu has the lines in order ...', 'no request: prompt carries /common:spec', 'action 1 asks ...' (RED)"
+        - "equivalent, no gap (p4) hook: `if out.returncode != 0:` -> `if False:` -> green. cepa-modes writes nothing to stdout on a non-zero return, so the next lines yield an empty list anyway"
+        - "equivalent, no gap (p13) hook: `if not mode:` -> `if False:` -> green. An empty mode makes cepa-modes return non-zero with empty stdout, same empty list"
+        - "RED-at-base: base 05351da with only tests/test_cepa_mode.py from 0ffef0d applied (git checkout 0ffef0d -- tests/test_cepa_mode.py) -> 10 FAIL, all in test_hook_opening_turn_carries_the_menu_rules (display rules, action 1 question, number-or-command rule, free-text rule, number bound to its action, Fix a bug sequences, action 4, no-command rule)"
+        - "worktree /tmp/proof-cs5c removed; git worktree list does not show it; primary tree untouched except this file"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every changed line of the criterion's path (hook call, opening-turn check, empty-menu return, each rule branch, json numbering, ask, commands, --json flag) turns tests/test_cepa_mode.py red when perturbed (p1-p3, p5-p12, p14-p17); p4 and p13 are equivalent mutants"
+  l4_adversarial_input:
+    status: n/a
+    reason: "NOT verified by a run. The only input is the owner's prompt text, of which the hook reads just the leading marker and a mode name that cepa-modes validates against the closed MODES table (unknown mode -> rc 2, hook stays silent, checked by the test 'unknown mode in the marker'; marker mid-prompt checked by p2's test). No network or api-rest surface. The diff touches no input-bearing module. The reviewer may overrule."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is a Story, not a Bug; red-at-base is recorded under l3_load_bearing (10 FAIL at 05351da with the 0ffef0d test)"
+routing_reason: "The criterion (opening turn of the mode instructs the agent to show the translated menu keeping order, numbering and commands, and to treat the next reply) is load-bearing: removing the hook call, the --json flag, each rule (display, fires, ask, sequence, no-command, free text), the sequence order, the json numbering or the opening-turn check turns the test red, and the test is red at base. The two survivors of the previous pass (action numbering p15, startswith vs in p2) are now killed by 0ffef0d. The two remaining green perturbations (p4, p13) are equivalent mutants. L4 is n/a by diff-based claim, which the reviewer may overrule."

@@ -1760,7 +1760,9 @@ def hc_scenario(tmp, hc_id="t9", tty=True):
     env["FAKE_PLANO"] = str(plan)
     env["CEPA_WORKTREE_HOME"] = str(Path(root).parent / "worktrees")
     env["FAKE_CHAMADAS"] = str(Path(root).parent / "chamadas.jsonl")
-    env["CEPA_UNTIL_LEITOR"] = "off"  # the pre-read must not call the fake claude
+    # The pre-read must not call the fake claude: it marks the first pending item
+    # done on ANY call, so a1 was closed by the pre-read and only a2 ran.
+    env["CEPA_UNTIL_LEITOR"] = "off"
     argv = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
             "--for", "2h", "--no-verify", "--no-analysis"]
     if not tty:

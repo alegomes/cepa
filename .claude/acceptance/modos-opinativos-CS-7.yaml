@@ -1,0 +1,22 @@
+schema_version: 1
+card: modos-opinativos-CS-7
+status: complete
+audited_at: 2026-11-12T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "a telemetria grava mode_menu.shown quando o menu é mostrado e mode_menu.chosen quando a resposta seguinte é um número do menu ou um comando do menu, os dois com o modo (docs/spec/modos-opinativos.md, CS-7)"
+    altitude: event
+    surface: "hook real common/hooks/session-mode.py executado como subprocesso (payload JSON de UserPromptSubmit via stdin) com CEPA_TELEMETRY_DIR descartável; asserção sobre as linhas do arquivo de eventos jsonl."
+    demonstrated_by:
+      test: "tests/test_cepa_mode.py::test_menu_telemetry_shown_and_chosen"
+      layer: "subprocesso real do hook (run_hook), repo temporário, telemetria real em disco; sem mock. Cobre o teste vermelho declarado: abertura discovery -> uma mode_menu.shown mode=discovery; prompt '1' -> mode_menu.chosen mode=discovery, action=1, command=/common:spec; 'quero outra coisa' -> nenhum chosen novo. Cobre também: '2' dois turnos depois não conta; comando do menu como resposta (/common:spec --continuar, action 2); texto livre logo após o menu; número fora do menu (9); resposta de outra sessão."
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_mode.py -> rc=0, "tudo verde"; 194 checagens "ok", 0 FAIL (N > 0); 10 delas na seção "hook: telemetry of the mode menu"
+        python3 tests/test_state_deposits.py -> "todos os testes passaram" (entrada mode-menu-pending do catálogo aceita pelo doctor)
+    verdict: complete
+    gap: null
+    note: |
+      Diff auditado: git diff 911a9bf..HEAD (session-mode.py, _state.py, .gitignore, tests/test_cepa_mode.py). Rodado só os dois testes, não a suíte inteira.
+      Limites da spec respeitados: /common:modes não emite shown (a emissão fica em menu_lines, só no turno de abertura); resposta em prosa conta como não escolhida (consome o pendente sem gravar).
+      A superfície 'event' é o evento gravado em disco, exercida pelo hook real; não há camada acima dela.

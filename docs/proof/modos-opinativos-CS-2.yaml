@@ -1,0 +1,49 @@
+schema_version: 2
+card: modos-opinativos-CS-2
+verdict: proven
+reviewed_at: 2026-11-11T22:00:00-03:00
+base_commit: 3bdbf8d0b9bd541fa0dd153f763821a9c9b22f62
+head_commit: d5bf12abd72fdd6064e9ee76e34acb84f7ae4711
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-modes (need_met, menu_actions, MENU_MAX, render_menu sequence join)"
+      module: bin
+      external_observable: true
+      substituted_by_double: null        # tests/test_cepa_mode.py runs the real CLI as a subprocess; only HOME is faked (plugin install state). need_met is also called directly by test_need_met_unknown_type_is_not_met (real code, no double)
+    - class: "common/hooks/_modes.py (construction `actions` with `needs` file:/topology:/plugin:)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at d5bf12a: python3 tests/test_cepa_mode.py -> 'tudo verde' (throwaway detached worktree /tmp/proof-cs2, removed at the end)"
+        - "RED-at-base: common/bin/cepa-modes and common/hooks/_modes.py from 3bdbf8d + tests from HEAD -> 11 FAIL checks (first three: '--menu discovery rc 0' with 'unrecognized arguments: --menu', 'menu has the lines in order', '--menu design: rc 0 and empty')"
+        - "P1 cap 'MENU_MAX = 5' -> 50 -> RED: 'exactly 5 numbered actions', 'prove-drain cut by the cap'"
+        - "P2 dedupe 'if a[\"label\"] in seen:' -> 'if False:' -> RED: \"'Fix a bug' appears exactly once\", 'later variant of the same label dropped'"
+        - "P3 need_met topology '.strip() == value' -> '!= value' -> RED: 'build-solo fix variant shows', 'build-solo build variant shows', 'build-hex variants hidden'"
+        - "P4 need_met file: 'os.path.exists(...)' -> 'True' -> RED: 'no /board-flow: line', 'build-solo fix variant shows', 'red-test action without command shows'"
+        - "P5 need_met plugin: 'return value in plugins' -> 'return True' -> RED: 'capture hidden without the discovery plugin'"
+        - "P6 unknown need type 'return False' -> 'return True' -> RED: 'unknown type `bogus:x` is not met' (direct call to need_met)"
+        - "every perturbation applied by sed in /tmp/proof-cs2, confirmed by git diff --stat (1 file, 1 line), run with python3 tests/test_cepa_mode.py, restored with git checkout; worktree removed; primary tree untouched except this file"
+        - "Not re-run (CS-1 covered it, unchanged here): sequence join ', then ' -> ' | ' (RED in the CS-1 proof at 6541c0e); test_modes_single_source.py not run (supervisor's suite)"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every branch of need_met (file, topology, plugin, unknown) and of menu_actions (dedupe, MENU_MAX break) is reached: P1-P6 each turn test_cepa_mode.py red"
+  l4_adversarial_input:
+    status: n/a
+    reason: "NOT verified by a run. The only input is the mode name on the command line, validated against the closed MODES table, and need strings read from the in-repo table (unknown type covered by P6). The diff touches no input-bearing api-rest module; the human may reject this."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is a Story/criterion, not a Bug; red-at-base for the CS-2 tests is recorded under l3_load_bearing (11 FAIL at 3bdbf8d)"
+routing_reason: "Tests are red at base (11 checks) and each of the six perturbations that matter for CS-2 (cap at 5, label dedupe, file:, topology:, plugin: always true, unknown requirement type returns True) turns tests/test_cepa_mode.py red at HEAD d5bf12a. The CLI runs for real in the tests, no double stands in for the changed code. Residual note: L4 is n/a on a diff-based claim with no run, which the reviewer may overrule."

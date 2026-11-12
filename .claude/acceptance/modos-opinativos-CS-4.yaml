@@ -1,0 +1,21 @@
+schema_version: 1
+card: modos-opinativos-CS-4
+status: complete
+audited_at: 2026-11-11T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "modo com lista vazia abre como hoje, sem prompt de abertura (docs/spec/modos-opinativos.md, CS-4)"
+    altitude: cli
+    surface: "`cepa-modes --menu design` (executável real, subprocesso) com rc 0 e saída vazia; e `cepa --mode design` sem argumentos (launcher real, subprocesso) com claude falso gravador de argumentos, HOME falso e repo descartável"
+    demonstrated_by:
+      test: "tests/test_cepa_mode.py::test_menu_empty_and_unknown (checagem '--menu design: rc 0 and empty') e tests/test_cepa_mode.py::test_opening_prompt_carries_the_menu (checagem 'mode with an empty menu: no opening prompt')"
+      layer: "subprocessos reais de cepa-modes e do launcher cepa, sem mock; só o claude é falso, na borda. A checagem do launcher exige args == [] (não None), então prova que o claude foi lançado (sessão abre como hoje) e que nenhum prompt foi entregue."
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_mode.py -> rc=0, "tudo verde"; 156 checagens "ok", 0 FAIL (N > 0)
+          ok   --menu design: rc 0 and empty
+          ok   mode with an empty menu: no opening prompt
+    verdict: complete
+    gap: null
+    note: |
+      Sem código novo neste item; o comportamento veio do CS-1 (dd53967) e do CS-3 (57236de, dd031a1 adicionou o caso de menu vazio). Alterações do working tree: nenhuma além deste arquivo.

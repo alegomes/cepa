@@ -1,0 +1,22 @@
+schema_version: 1
+card: modos-opinativos-CS-12
+status: complete
+audited_at: 2026-11-12T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "`/common:modes --exit` é um argumento declarado do comando e chega ao `cepa-modes` como veio (CS-12)"
+    altitude: domain
+    surface: "cabeçalho e passo de execução de common/commands/modes.md, lidos por command_failures em tests/test_modes_single_source.py."
+    demonstrated_by:
+      test: "tests/test_modes_single_source.py::command_failures (chamada por main)"
+      layer: "domínio, sem mock: lê o arquivo real do comando, exige `--exit` na linha `argument-hint:` do cabeçalho e exige que a linha que roda `python3 .../bin/cepa-modes` termine em `$ARGUMENTS`."
+      evidence: verified
+      run: |
+        python3 tests/test_modes_single_source.py -> rc=0, "ok — 7 modos, mesma lista no `cepa` e em _modes.py, todos com os 5 campos" (command_failures == [])
+        python3 tests/test_commands_english.py -> rc=0, "tudo ok"
+        python3 tests/test_flags_hint_variables.py -> rc=0, "tudo ok (71 comandos varridos)"
+    verdict: complete
+    gap: null
+    note: |
+      Diff auditado: git diff df49b7c..HEAD (de22cf5 teste vermelho, 3d56afb correção). modes.md linha 3: `argument-hint: [mode-name] [--exit]`; linha 26: `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-modes" $ARGUMENTS` (sem filtro, repassa como veio). Passo 5 novo documenta o veredito de saída. Conferido que common/bin/cepa-modes aceita `--exit` (argparse, linha 226; `cepa-modes --exit exploration` rc=0).
+      Observação (não bloqueia): o teste confere o texto do comando, não executa o slash command dentro do Claude Code; o critério está no altitude domain e é esse o nível declarado.

@@ -1,0 +1,52 @@
+schema_version: 2
+card: modos-opinativos-CS-9
+verdict: proven
+reviewed_at: 2026-11-12T03:40:00-03:00
+base_commit: 589f157
+head_commit: aa06c55
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-modes (main: block that closes the no-argument table with header + render_menu(current), guarded by `current in MODES and menu_actions(current, repo_root())` inside `if not args.mode`)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # tests/test_cepa_mode.py runs the real cepa-modes as a subprocess (run_table) over a throwaway repo and fake HOME; no double of the changed class
+    - class: "common/commands/modes.md (doc note 4)"
+      module: docs
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python harness repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at aa06c55 (detached worktree /tmp/proof-cs9b): python3 tests/test_cepa_mode.py -> 'tudo verde' (many checks, N > 0)"
+        - "(p1) render_menu(current) -> pass -> RED rc 1: 6 FAIL ('output ends with the exploration menu', 'menu comes after the table', 'strategy-document action shows', ...)"
+        - "(p2) header print deleted -> RED rc 1: FAIL 'the menu has its header, right before the first action' (was a survivor in round 1)"
+        - "(p3) header text 'O que dá para fazer em' -> 'Menu de' -> RED rc 1: FAIL 'the menu has its header, right before the first action' (was a survivor in round 1)"
+        - "(p4) render_menu called twice -> RED rc 1: FAIL 'menu printed once'"
+        - "(p5) guard `menu_actions(...)` dropped (`if current in MODES:`) -> RED rc 1: FAIL 'mode without actions: no menu header' (was a survivor in round 1)"
+        - "(p6) guard `current in MODES` dropped (`if menu_actions(current, repo_root()):`) -> RED rc 1: FAIL 'no session mode: rc 0' (KeyError at line 295) (was a survivor in round 1)"
+        - "(p7) guard -> `if False:` -> RED rc 1: 6 FAIL ('output ends with the exploration menu', 'menu comes after the table', ...)"
+        - "(p8) `if not args.mode` -> `if True` (menu also for a named mode) -> RED rc 1: FAIL 'named mode: table of that mode only, no menu'"
+        - "(p9) menu printed before the closing lines of the table -> RED rc 1: FAIL 'menu comes after the table', 'menu printed once', 'the menu has its header, right before the first action'"
+        - "(p10) render_menu of another mode (discovery/design) -> RED rc 1: 6 FAIL ('output ends with the exploration menu', ...)"
+        - "Not perturbed, no silent cap: common/commands/modes.md (doc only); the usage/help strings (docstring line and the `cepa modes` example text)."
+    pit_note: "n/a"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; the new block is reached by test_table_ends_with_the_session_mode_menu (exploration: menu printed; none/design/named: guard paths), and all 10 perturbations of its lines turn the test RED, so the lines are load-bearing, not just reached."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The only inputs are the .claude/session-mode file of the tree and the repo filter, both written by the harness itself; the diff adds no network, no parsing of external text and no api-rest surface. The one adversarial shape (no session mode) is covered by p6, now RED."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is a Story. Declared red at base: git checkout 589f157 -- common/bin/cepa-modes; python3 tests/test_cepa_mode.py -> 6 FAIL ('output ends with the exploration menu', 'menu comes after the table', 'strategy-document action shows', '/common:advisors action shows', 'menu printed once', 'the menu has its header, right before the first action'); restored to aa06c55 -> 'tudo verde'."
+routing_reason: "All 10 perturbations (p1 to p10) turn tests/test_cepa_mode.py RED at aa06c55, including the 4 that survived in round 1 (p2, p3, p5, p6), which commit aa06c55 closed by strengthening the test. Test is GREEN at head and RED at base. Only the covering test file was run; the full suite belongs to the supervisor."

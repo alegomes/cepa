@@ -1,0 +1,49 @@
+schema_version: 2
+card: modos-opinativos-CS-4
+verdict: proven
+reviewed_at: 2026-11-12T00:10:00-03:00
+base_commit: dd53967^
+head_commit: 5b7a0046680b9346736fb518e0620edebea27500
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-modes (render_menu: a mode with no actions prints nothing, rc 0)"
+      module: bin
+      external_observable: true
+      substituted_by_double: null        # tests run the real cepa-modes as a subprocess/module; no double on the changed script
+    - class: "common/bin/cepa (opening_prompt(): `[ -n \"$_menu\" ] || return 0`; `if [ -n \"$OPENING\" ]` before `set -- \"$@\" \"$OPENING\"`)"
+      module: bin
+      external_observable: true
+      substituted_by_double: null        # real launcher as a subprocess; only `claude` (far boundary, recording fake) and HOME are faked
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # shell + Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at HEAD 5b7a004: python3 tests/test_cepa_mode.py -> 'tudo verde' (throwaway detached worktree /tmp/proof-cs4, removed afterwards)"
+        - "(a1) cepa-modes render_menu prints '[sem acoes]' when the mode has no actions -> 2 FAIL: '--menu design: rc 0 and empty' and 'mode with an empty menu: no opening prompt' (RED)"
+        - "(a2) render_menu returns 1 when the mode has no actions -> 1 FAIL: '--menu design: rc 0 and empty' (RED). The launcher falls back to no prompt on a non-zero menu, so only the cepa-modes check catches it, which is the intended division"
+        - "(b1) launcher: delete `[ -n \"$_menu\" ] || return 0` -> 1 FAIL 'mode with an empty menu: no opening prompt' (prompt = header + blank menu + reply line) (RED)"
+        - "(b2) launcher: empty menu emits a header-only prompt `[menu do modo] design` -> 1 FAIL 'mode with an empty menu: no opening prompt' (RED)"
+        - "(b3) launcher: line 656 `if [ -n \"$OPENING\" ]` -> `if true` (an empty-string arg reaches claude) -> 10 FAIL, including 'mode with an empty menu: no opening prompt' (args == [''] ) (RED)"
+        - "(b4) launcher: empty menu emits only a newline -> NO FAIL, and correctly so: `OPENING=$(opening_prompt)` (cepa line 655) strips trailing newlines and line 656 guards with -n, so no argument is sent. Equivalent mutant, not a gap (b3 shows the guard itself is load-bearing)"
+        - "RED-at-base: tests from 5b7a004 against dd53967^ (before cepa-modes --menu existed) -> 17 FAIL, including '--menu design: rc 0 and empty' (the flag did not exist), plus AttributeError on need_met (the filter did not exist). The launcher half ('mode with an empty menu: no opening prompt') is trivially OK at base because no opening prompt existed then: today's behavior, which is exactly what the criterion asks to preserve"
+        - "Cites the CS-3 proof (docs/proof/modos-opinativos-CS-3.yaml, empty-menu perturbation RED) and re-ran it at HEAD as (b1)"
+        - "worktree /tmp/proof-cs4 removed; git worktree list does not show it; primary tree untouched except this file"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every line of the criterion's path (render_menu on a mode with no actions, the empty-menu return in opening_prompt, the -n OPENING guard) turns test_cepa_mode.py red when perturbed (a1, a2, b1, b2, b3)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "NOT verified by a run. No new code in this item. The input is the owner's own command-line args and a mode name validated against the closed MODES table; no network or api-rest surface. The diff touches no input-bearing module."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is a Story, not a Bug; red-at-base is recorded under l3_load_bearing (17 FAIL at dd53967^ with the 5b7a004 tests)"
+routing_reason: "The criterion (a mode with an empty actions list opens as today, with no opening prompt) is protected on both sides: breaking cepa-modes --menu (printing something or returning non-zero) or the launcher (header-only prompt, no empty-menu return, empty-string argument) turns tests/test_cepa_mode.py red, and the checks are red at the commit before the --menu flag existed. The only perturbation that stayed green (newline-only output) is an equivalent mutant, explained by command-substitution stripping plus the -n guard. L4 is n/a by diff-based claim (no new code), which the reviewer may overrule."

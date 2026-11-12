@@ -44,6 +44,125 @@ def cepa_modes():
     return m.group(1).split()
 
 
+# --- menus of the modes (CS-10, modos-opinativos) ----------------------
+# A menu that cites a command the repo does not ship sends the owner to an
+# "unknown command"; a `needs` outside the three closed kinds is a filter
+# `cepa-modes --menu` does not know how to evaluate.
+WITH_MENU = ("construction", "discovery", "exploration")
+NEEDS_KINDS = ("file:", "topology:", "plugin:")
+COMMAND_RE = re.compile(r"^/([a-z0-9-]+):([a-z0-9-]+)(?:\s|$)")
+
+
+def menu_failures(modes, repo=REPO):
+    failures = []
+    for name, d in modes.items():
+        actions = d["actions"]
+        if not isinstance(actions, list):
+            failures.append(f"`{name}`: `actions` deveria ser lista, é {type(actions).__name__}")
+            continue
+        # variants share a `label` and the menu shows only the first that
+        # passes, so what the owner sees is one line per distinct label
+        shown = len({a.get("label") for a in actions})
+        if name in WITH_MENU:
+            if not 3 <= shown <= 8:
+                failures.append(f"`{name}`: menu com {shown} ação(ões) distintas; "
+                                f"o combinado é de 3 a 8")
+        elif actions:
+            failures.append(f"`{name}`: deveria ter menu vazio, tem {len(actions)} ação(ões)")
+        for i, a in enumerate(actions, 1):
+            where = f"`{name}` ação {i}"
+            label = a.get("label")
+            if not isinstance(label, str) or not label.strip():
+                failures.append(f"{where}: sem frase leiga (`label`)")
+            command = a.get("command")
+            if command is None:
+                if "(no command yet)" not in (label or ""):
+                    failures.append(f"{where}: sem comando e a frase não diz "
+                                    f"\"(no command yet)\"")
+                commands = []
+            elif isinstance(command, str):
+                commands = [command]
+            elif isinstance(command, list) and command:
+                commands = command
+            else:
+                failures.append(f"{where}: `command` deveria ser str, lista de str ou None")
+                commands = []
+            for c in commands:
+                m = COMMAND_RE.match(c) if isinstance(c, str) else None
+                if not m:
+                    failures.append(f"{where}: comando {c!r} fora do formato /<plugin>:<nome>")
+                    continue
+                plugin, cmd = m.groups()
+                if not (repo / plugin / "commands" / f"{cmd}.md").is_file():
+                    failures.append(f"{where}: `/{plugin}:{cmd}` não existe "
+                                    f"({plugin}/commands/{cmd}.md ausente)")
+            for need in a.get("needs", []) or []:
+                if not (isinstance(need, str) and need.startswith(NEEDS_KINDS)
+                        and need.split(":", 1)[1].strip()):
+                    failures.append(f"{where}: requisito {need!r} fora dos tipos "
+                                    f"file:, topology:, plugin:")
+    return failures
+
+
+# --- the doc keeps "mode is not routine" while describing the menu (CS-11) --
+# The menu offers the mode's routines; it must not undo the rule that a session
+# is one mandatory mode plus at most one routine. The paragraph lives INSIDE the
+# section, so a reader who only reads that section learns both things.
+DOC = REPO / "docs" / "modos-de-trabalho.md"
+RULE = "Uma sessão = um modo obrigatório + no máximo uma rotina"
+
+
+def doc_section(text, title="## Modo não é Rotina"):
+    start = text.find(title)
+    if start < 0:
+        return None
+    end = text.find("\n## ", start + len(title))
+    return text[start:] if end < 0 else text[start:end]
+
+
+def doc_failures(text):
+    section = doc_section(text)
+    if section is None:
+        return ["docs/modos-de-trabalho.md: seção \"Modo não é Rotina\" sumiu"]
+    failures = []
+    if RULE not in section:
+        failures.append(f"docs/modos-de-trabalho.md: a seção \"Modo não é Rotina\" "
+                        f"perdeu a frase \"{RULE}\"")
+    paragraphs = [p for p in section.split("\n\n")
+                  if "`actions`" in p and "cepa-modes --menu" in p]
+    if not paragraphs:
+        failures.append("docs/modos-de-trabalho.md: a seção \"Modo não é Rotina\" "
+                        "não tem parágrafo que cite o campo `actions` e o comando "
+                        "`cepa-modes --menu`")
+    return failures
+
+
+# --- `/common:modes --exit` is a declared argument and reaches cepa-modes (CS-12)
+# `cepa-modes --exit` exists; the slash command must advertise it in its header
+# (`argument-hint:`, what the picker shows) and keep forwarding `$ARGUMENTS`
+# verbatim to the script, otherwise `/common:modes --exit` is undiscoverable or
+# silently dropped.
+COMMAND = REPO / "common" / "commands" / "modes.md"
+
+
+def command_failures(text):
+    failures = []
+    header = text.split("\n---", 1)[0] if text.startswith("---") else ""
+    hint = next((l for l in header.splitlines() if l.startswith("argument-hint:")), None)
+    if hint is None:
+        failures.append("common/commands/modes.md: cabeçalho sem linha `argument-hint:`")
+    elif "--exit" not in hint:
+        failures.append("common/commands/modes.md: `argument-hint:` não declara `--exit` "
+                        f"({hint.strip()!r})")
+    runs = [l for l in text.splitlines() if "bin/cepa-modes" in l and "python3" in l]
+    if not runs:
+        failures.append("common/commands/modes.md: nenhum passo roda `cepa-modes`")
+    elif not any(l.rstrip().endswith("$ARGUMENTS") for l in runs):
+        failures.append("common/commands/modes.md: o passo que roda `cepa-modes` "
+                        "não repassa `$ARGUMENTS` como veio")
+    return failures
+
+
 def main():
     try:
         from _modes import MODES, EXIT
@@ -112,6 +231,10 @@ def main():
                             capture_output=True, text=True, timeout=30)
     if direct.returncode != 0 or "construction" not in direct.stdout:
         failures.append("o atalho cepa-modos não roda como executável direto")
+
+    failures.extend(menu_failures(MODES))
+    failures.extend(doc_failures(DOC.read_text(encoding="utf-8")))
+    failures.extend(command_failures(COMMAND.read_text(encoding="utf-8")))
 
     for f in failures:
         print("FAIL:", f, file=sys.stderr)

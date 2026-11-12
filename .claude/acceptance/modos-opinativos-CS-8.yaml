@@ -1,0 +1,23 @@
+schema_version: 1
+card: modos-opinativos-CS-8
+status: complete
+audited_at: 2026-11-12T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "`/common:metrics` mostra a conta de uso do menu por modo (docs/spec/modos-opinativos.md, CS-8)"
+    altitude: cli
+    surface: "executável real common/bin/cepa-metrics (o que /common:metrics roda) como subprocesso, com CEPA_TELEMETRY_DIR descartável; asserção sobre o stdout (e o --json)."
+    demonstrated_by:
+      test: "tests/test_cepa_metrics_mode_menu.py::test_menu_rate_per_mode"
+      layer: "subprocesso real do CLI, ledger jsonl em disco descartável, sem mock. Cobre o teste vermelho declarado (4 shown + 1 chosen de discovery -> linha discovery com '1 ÷ 4 = 25%'), mais construction 2 ÷ 2 = 100%, exploration só exibida = 0 ÷ 1 = 0%, memória de cálculo na seção e eventos do menu fora de 'Eventos custom'. Também: --json (mode_menu por modo), escolha sem exibição na janela (sem divisão por zero) e ausência de seção sem eventos do menu."
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_metrics_mode_menu.py -> rc=0, "tudo verde"; 12 checagens "ok", 0 FAIL (N > 0)
+        python3 tests/test_cepa_metrics_scorecard.py -> termina em "ok" (vizinho; relatório de sempre continua)
+    verdict: complete
+    gap: null
+    note: |
+      Diff auditado: git diff 7dd0e79..HEAD (cepa-metrics, commands/metrics.md, tests/test_cepa_metrics_mode_menu.py). Rodados só os dois testes, não a suíte inteira.
+      Limite da spec respeitado: /common:modes não emite shown (a seção diz que o menu pedido pelo /common:modes não conta como exibição; a emissão segue só no turno de abertura, CS-7).
+      Riscos: a conta serve à decisão de custo do turno do menu; a seção traz a frase e a memória de cálculo. O lembrete de reconsiderar o menu dos modos vazios está em metrics.md.
+      A superfície 'cli' é a saída do cepa-metrics; /common:metrics apenas o executa (metrics.md atualizado).

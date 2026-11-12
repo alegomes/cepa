@@ -77,6 +77,7 @@ CATALOGUE = {
     "session-intent": (None, "cepa-intent (intenção da sessão; lida por /common:whereami)"),
     "reminders": (None, "cepa-intent remind (lembretes do dono; lidos por /common:whereami e pelo hook de sessão)"),
     "session-mode": (None, "cepa-mode (modo da sessão)"),
+    "mode-menu-pending": (None, "session-mode.py (menu do modo mostrado no turno anterior; consumido no seguinte para medir a escolha)"),
     "last-build.json": (None, "cepa-build (baseline do último build)"),
     "no-build": (None, "o dono (opta por não ter baseline de build)"),
     "last-root-install.json": (None, "bin/install.sh (registro da última instalação)"),

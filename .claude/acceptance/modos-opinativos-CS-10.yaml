@@ -1,0 +1,24 @@
+schema_version: 1
+card: modos-opinativos-CS-10
+status: complete
+audited_at: 2026-11-12T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "Todo comando citado num menu existe no repo do Cepa, e todo requisito usa um dos três tipos fechados (docs/spec/modos-opinativos.md, CS-10)"
+    altitude: domain
+    surface: "tabela MODES[*]['actions'] de common/hooks/_modes.py, lida pela função menu_failures de tests/test_modes_single_source.py; os arquivos <plugin>/commands/<nome>.md são lidos do disco do repo."
+    demonstrated_by:
+      test: "tests/test_modes_single_source.py::menu_failures (chamada por main)"
+      layer: "domínio, sem mock: importa MODES real e confere o disco. Exige comando (str ou cada item da lista) no formato /<plugin>:<nome> com <plugin>/commands/<nome>.md existente; needs com prefixo file:/topology:/plugin: e valor não vazio; label não vazio; command None só com '(no command yet)' no label; construction/discovery/exploration com 3 a 8 ações; os outros 4 modos com lista vazia."
+      evidence: verified
+      run: |
+        python3 tests/test_modes_single_source.py -> rc=0, "ok — 7 modos, mesma lista no `cepa` e em _modes.py, todos com os 5 campos" (menu_failures(MODES) == [] ; 7 modos percorridos, 25 ações: exploration 5, discovery 6, construction 11)
+        python3 tests/test_cepa_mode.py -> rc=0, "tudo verde"
+        Perturbação em memória (deepcopy de MODES, sem tocar arquivos), cada uma gera falha: comando /common:nope, comando inexistente dentro de lista, needs 'env:X', label ausente, design com ação, exploration com 2 ações distintas, exploration com 9 distintas.
+    verdict: complete
+    gap: null
+    note: |
+      Diff auditado: git diff 8e3477e..613b8d1 (só tests/test_modes_single_source.py). O campo `actions` já existia (CS-1..CS-9), então o item só acrescenta o teste, como o implementador disse.
+      Decisão "3 a 8 conta labels distintos": fiel. O docstring de _modes.py diz que variantes compartilham o label e o menu mostra só a primeira que passa; construction tem 11 entradas e 7 labels distintos, que é exatamente a lista de 7 do P8. Contar 11 reprovaria um menu que a especificação aprovou. Em discovery e exploration distintos == entradas, então a leitura não afrouxa nada ali.
+      "command None exige '(no command yet)' no label": vem do docstring e de P6/P14 da especificação; é checagem extra, não contradiz o critério.
+      Observação (não bloqueia): o teste não olha se a ordem ou o conteúdo dos menus bate com P8/P9/P10; isso não é pedido por CS-10.

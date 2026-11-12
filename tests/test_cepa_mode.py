@@ -20,6 +20,7 @@ Contracts guarded here:
 No third-party deps — run with `python3 tests/test_cepa_mode.py`.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -780,9 +781,467 @@ def test_hook_reads_old_session_mode_and_intent():
               "**refactor**" in c and "só o módulo de auth" in c, c)
 
 
+CEPA_MODES = REPO / "common" / "bin" / "cepa-modes"
+
+
+def fake_home(tmp, plugins=("discovery",), name="home"):
+    """A throwaway HOME whose Claude install has `plugins` installed AND enabled,
+    seen the way cepa-doctor sees it (known_marketplaces + cache + enabledPlugins).
+    The manifests are read from this very repo; the real machine's plugins never count."""
+    home = Path(tmp) / name
+    claude = home / ".claude"
+    (claude / "plugins").mkdir(parents=True)
+    (claude / "plugins" / "known_marketplaces.json").write_text(
+        json.dumps({"cepa": {"installLocation": str(REPO)}}))
+    for plugin in plugins:
+        (claude / "plugins" / "cache" / "cepa" / plugin / "99.0.0").mkdir(parents=True)
+    (claude / "settings.json").write_text(
+        json.dumps({"enabledPlugins": {f"{n}@cepa": True for n in plugins}}))
+    return home
+
+
+def run_menu(repo, mode, home):
+    env = {**os.environ, "HOME": str(home)}
+    return subprocess.run([sys.executable, str(CEPA_MODES), "--menu", mode, "--no-color"],
+                          cwd=repo.path, env=env, stdin=subprocess.DEVNULL,
+                          capture_output=True, text=True, timeout=30)
+
+
+def test_menu_discovery():
+    """CS-1: `cepa-modes --menu discovery` prints the numbered menu from `actions`."""
+    print("menu: discovery, no board-flow.yaml, discovery plugin installed")
+    with Repo() as r:
+        p = run_menu(r, "discovery", fake_home(r.tmp.name))
+        check("--menu discovery rc 0", p.returncode == 0, p.stderr[-200:])
+        out = p.stdout
+        want = ["1) Detail an idea until it becomes a build-ready specification",
+                "/common:spec", "/common:spec --continuar", "/common:epic",
+                "/discovery:capture", "/common:queue"]
+        pos, ordered = 0, True
+        for w in want:
+            i = out.find(w, pos)
+            if i < 0:
+                ordered = False
+                break
+            pos = i + len(w) if w.startswith("1)") else i
+        check("menu has the lines in order", ordered, out)
+        check("board-flow action hidden without board-flow.yaml", "/board-flow:" not in out, out)
+        bare = run_menu(r, "discovery", fake_home(r.tmp.name, plugins=(), name="bare"))
+        check("capture hidden without the discovery plugin",
+              "/discovery:capture" not in bare.stdout, bare.stdout)
+
+
+def test_menu_empty_and_unknown():
+    with Repo() as r:
+        home = fake_home(r.tmp.name)
+        p = run_menu(r, "design", home)
+        check("--menu design: rc 0 and empty", p.returncode == 0 and p.stdout == "", repr(p.stdout))
+        q = run_menu(r, "nope", home)
+        check("--menu unknown mode: rc 2", q.returncode == 2)
+
+
+def set_topology(repo, topology, board_flow=False):
+    claude = Path(repo.path) / ".claude"
+    claude.mkdir(exist_ok=True)
+    (claude / "topology").write_text(topology + "\n")
+    if board_flow:
+        (Path(repo.path) / "board-flow.yaml").write_text("project: X\n")
+
+
+def test_menu_construction_build_solo_without_board_flow():
+    """CS-2: no board-flow.yaml hides every board-flow line; topology picks the build-solo variants."""
+    print("menu: construction, build-solo, no board-flow.yaml")
+    with Repo() as r:
+        set_topology(r, "build-solo")
+        p = run_menu(r, "construction", fake_home(r.tmp.name))
+        out = p.stdout
+        check("--menu construction rc 0", p.returncode == 0, p.stderr[-200:])
+        check("no /board-flow: line", "/board-flow:" not in out, out)
+        check("build-solo fix variant shows", "/build-solo:reproduce-fix-verify" in out, out)
+        check("build-solo build variant shows", "/build-solo:plan-build-validate" in out, out)
+        check("red-test action without command shows",
+              "Write the red test of the criterion (no command yet)" in out, out)
+        check("build-hex variants hidden", "/build-hex:" not in out, out)
+
+
+def test_menu_construction_with_board_flow():
+    """CS-2: with board-flow.yaml the menu is capped at 5, one line per label, sequences joined by ', then '."""
+    print("menu: construction, build-solo, with board-flow.yaml")
+    with Repo() as r:
+        set_topology(r, "build-solo", board_flow=True)
+        p = run_menu(r, "construction", fake_home(r.tmp.name))
+        out = p.stdout
+        lines = [l for l in out.splitlines() if l.strip()]
+        check("exactly 5 numbered actions",
+              len(lines) == 5 and all(l.startswith(f"{i}) ") for i, l in enumerate(lines, 1)), out)
+        check("/board-flow:execute shows", "/board-flow:execute" in out, out)
+        check("'Fix a bug' appears exactly once", out.count("Fix a bug") == 1, out)
+        check("sequence joined by ', then '",
+              "/board-flow:capture Bug: <description>, then /board-flow:fix <created key>" in out, out)
+        check("later variant of the same label dropped", "/build-solo:reproduce-fix-verify" not in out, out)
+        check("prove-drain cut by the cap", "/board-flow:prove-drain" not in out, out)
+
+
+def test_need_met_unknown_type_is_not_met():
+    """An unknown requirement type never lets an action show."""
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader("cepa_modes_under_test", str(CEPA_MODES))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    with tempfile.TemporaryDirectory() as d:
+        check("unknown type `bogus:x` is not met", mod.need_met("bogus:x", d, set()) is False)
+        check("known type still works (plugin)", mod.need_met("plugin:x", d, {"x"}) is True)
+
+
+
+def run_table(repo, home, *args):
+    env = {**os.environ, "HOME": str(home)}
+    return subprocess.run([sys.executable, str(CEPA_MODES), *args, "--no-color"],
+                          cwd=repo.path, env=env, stdin=subprocess.DEVNULL,
+                          capture_output=True, text=True, timeout=30)
+
+
+def test_table_ends_with_the_session_mode_menu():
+    """CS-9: `cepa-modes` with no arguments (what /common:modes runs) ends with the
+    menu of the session's mode, after the table."""
+    print("table: session in exploration ends with the exploration menu")
+    with Repo() as r:
+        write_mode(r, "mode: exploration\n")
+        home = fake_home(r.tmp.name)
+        p = run_table(r, home)
+        out = p.stdout
+        check("cepa-modes rc 0", p.returncode == 0, p.stderr[-200:])
+        menu = run_menu(r, "exploration", home).stdout
+        check("the menu is not empty", menu.strip() != "", repr(menu))
+        check("output ends with the exploration menu",
+              out.rstrip().endswith(menu.rstrip()), out[-800:])
+        check("menu comes after the table",
+              out.find("Falta o 8º") < out.find("1) Write the strategy document"), out[-800:])
+        check("strategy-document action shows",
+              "Write the strategy document with 2 or more paths (no command yet)" in out, out[-800:])
+        check("/common:advisors action shows", ": /common:advisors <document>" in out, out[-800:])
+        check("menu printed once", out.count("1) Write the strategy document") == 1, out[-800:])
+        head = "O que dá para fazer em exploration"
+        check("the menu has its header, right before the first action",
+              head in out and out.find(head) < out.find("1) Write the strategy document")
+              and out.find("Falta o 8º") < out.find(head), out[-800:])
+    print("table: no menu without a session mode, for a mode without actions, or for one mode")
+    with Repo() as r:
+        home = fake_home(r.tmp.name)
+        p = run_table(r, home)
+        bare = p.stdout
+        check("no session mode: rc 0", p.returncode == 0, p.stderr[-300:])
+        check("no session mode: no menu line", "1) " not in bare, bare[-400:])
+        check("no session mode: no menu header", "O que dá para fazer" not in bare, bare[-400:])
+        write_mode(r, "mode: design\n")
+        p = run_table(r, home)
+        design = p.stdout
+        check("mode without actions: rc 0", p.returncode == 0, p.stderr[-300:])
+        check("mode without actions: no menu line", "1) " not in design, design[-400:])
+        check("mode without actions: no menu header", "O que dá para fazer" not in design,
+              design[-400:])
+        write_mode(r, "mode: exploration\n")
+        one = run_table(r, home, "discovery").stdout
+        check("named mode: table of that mode only, no menu", "1) " not in one, one[-400:])
+
+# A fake claude that records each argument it got, one JSON list per call,
+# so a multi-line prompt survives intact (FAKE_CLAUDE joins them with spaces).
+RECORDING_CLAUDE = (
+    '#!/bin/sh\n'
+    'python3 -c \'import json,os,sys; '
+    'open(os.environ["FAKE_ARGS_FILE"],"a").write(json.dumps(sys.argv[1:])+"\\n")\' "$@"\n'
+)
+
+
+def recorded_args(repo, *cepa_args, env=None):
+    """Runs cepa with the recording claude; returns (proc, owner args of the last call)."""
+    fake = Path(repo.tmp.name) / "recclaude"
+    fake.write_text(RECORDING_CLAUDE)
+    fake.chmod(0o755)
+    out = Path(repo.tmp.name) / "args.jsonl"
+    if out.exists():
+        out.unlink()
+    home = Path(repo.tmp.name) / "rechome"
+    if not home.exists():
+        fake_home(repo.tmp.name, name="rechome")
+    e = {"CLAUDE_WT_CLAUDE_BIN": str(fake), "FAKE_ARGS_FILE": str(out), "HOME": str(home),
+         "CEPA_ENCADEAR": "off"}
+    e.update(env or {})
+    for k in ("CEPA_UNTIL_RUN", "CEPA_MENU"):
+        if k not in e:
+            e[k] = ""
+    p = repo.run(*cepa_args, env=e)
+    lines = out.read_text().splitlines() if out.exists() else []
+    args = json.loads(lines[-1]) if lines else None
+    if args is not None:
+        args = [a for a in args if a.split("=")[0] not in CEPA_FLAGS]
+    return p, args
+
+
+def test_opening_prompt_carries_the_menu():
+    """CS-3: `cepa --mode discovery` with no request sends the menu as the opening prompt;
+    with a request, only the owner's args reach claude."""
+    print("cepa --mode: opening prompt with the menu")
+    with Repo() as r:
+        p, args = recorded_args(r, "--mode", "discovery")
+        check("no request: claude was called", args is not None, p.stderr[-300:])
+        opening = (args or [None])[-1] or ""
+        check("no request: exactly one prompt argument", args is not None and len(args) == 1, args)
+        check("no request: prompt starts with [menu do modo]",
+              opening.startswith("[menu do modo]"), repr(opening[:200]))
+        check("no request: prompt carries /common:spec", "/common:spec" in opening, repr(opening))
+        check("no request: prompt ends with the reply line",
+              opening.rstrip().endswith(
+                  "Reply with the number, the command, or write what you want to do."),
+              repr(opening[-200:]))
+        check("no request: prompt carries the numbered menu",
+              "1) Detail an idea until it becomes a build-ready specification" in opening,
+              repr(opening))
+
+        p, args = recorded_args(r, "--mode", "discovery", "arruma o teste X")
+        check("with request: only the owner's args", args == ["arruma o teste X"], args)
+
+        for extra, label in ((["--resume"], "--resume"), (["-c"], "-c"),
+                             (["--continue"], "--continue"), (["-p", "x"], "-p"),
+                             (["--print"], "--print"), (["-r"], "-r"),
+                             (["--resume=abc"], "--resume=abc")):
+            p, args = recorded_args(r, "--mode", "discovery", *extra)
+            check(f"{label}: no opening prompt", args == extra, args)
+
+        p, args = recorded_args(r, "--mode", "design")
+        check("mode with an empty menu: no opening prompt", args == [], args)
+        p, args = recorded_args(r, "--mode", "discovery", env={"CEPA_MENU": "off"})
+        check("CEPA_MENU=off: no opening prompt", args == [], args)
+        p, args = recorded_args(r, "--mode", "discovery", env={"CEPA_UNTIL_RUN": "1"})
+        check("inside cepa-until: no opening prompt", args == [], args)
+        p, args = recorded_args(r, "--mode", "discovery", env={"CEPA_MODO": "off"})
+        check("CEPA_MODO=off: no opening prompt", args == [], args)
+
+        p, args = recorded_args(r, "--mode", "discovery", "--model=opus")
+        check("a flag=value alone still gets the menu",
+              args is not None and len(args) == 2 and args[0] == "--model=opus"
+              and args[1].startswith("[menu do modo]"), args)
+
+        p, args = recorded_args(r, "--mode", "discovery", "--model", "opus")
+        check("a flag with a separate value counts as a request (safe side)",
+              args == ["--model", "opus"], args)
+
+        p, args = recorded_args(r, "--mode", "discovery", "--prompt", "nope-missing")
+        check("system prompt error still exits 2 (no launch)", p.returncode == 2 and args is None,
+              (p.returncode, args))
+
+
+def opening_turn(repo, mode, home):
+    """The real opening prompt `cepa --mode <mode>` sends, then the hook's context for it."""
+    p, args = recorded_args(repo, "--mode", mode)
+    opening = (args or [""])[-1]
+    check(f"{mode}: launcher sent an opening prompt", opening.startswith("[menu do modo]"),
+          repr(opening[:200]))
+    h = run_hook(repo.path, env={"HOME": str(home)}, prompt=opening, session_id="s-open")
+    check(f"{mode}: hook rc 0", h.returncode == 0, h.stderr)
+    return ctx(h)
+
+
+def test_hook_opening_turn_carries_the_menu_rules():
+    """CS-5: on the opening turn the hook tells the agent how to show the menu and how to
+    treat the next reply (number/command fires, ask first, no command = conversation,
+    free text = normal request)."""
+    print("hook: opening turn of the mode menu")
+    with Repo() as r:
+        home = fake_home(r.tmp.name, name="hookhome")
+        c = opening_turn(r, "discovery", home)
+        check("display rule: translate the phrases",
+              "traduzid" in c and "língua do dono" in c, c)
+        check("display rule: keep order, numbering and commands",
+              "ordem" in c and "numeração" in c and "comandos" in c, c)
+        check("action 1 asks its one-line question first",
+              "Ação 1" in c and '"What is the idea?"' in c and "/common:spec <the idea>" in c, c)
+        check("number or command fires the action", "número ou comando" in c, c)
+        check("free-text rule", "texto livre" in c and "pedido normal" in c, c)
+        check("discovery has no sequence rule", "chave de um card" not in c, c)
+        check("the number is bound to its own action (1 = the idea, 2 = the slug)",
+              'Ação 1 pede argumento: antes de rodar, pergunte em uma linha "What is the idea?"' in c
+              and 'Ação 2 pede argumento: antes de rodar, pergunte em uma linha '
+                  '"Which specification (slug)?"' in c, c)
+
+        set_topology(r, "build-solo", board_flow=True)
+        c = opening_turn(r, "construction", home)
+        check("Fix a bug: a card key runs only /board-flow:fix",
+              "chave de um card" in c and "só `/board-flow:fix <created key>`" in c, c)
+        check("Fix a bug: a description runs capture then fix on the created key",
+              "`/board-flow:capture Bug: <description>`" in c and "chave criada" in c, c)
+        check("Fix a bug is action 4",
+              'Ação 4 pede argumento: antes de rodar, pergunte em uma linha '
+              '"What is the card key or the bug description?"' in c, c)
+
+        (Path(r.path) / "board-flow.yaml").unlink()
+        c = opening_turn(r, "construction", home)
+        check("no-command action is led in conversation",
+              "sem comando" in c and "conversa" in c, c)
+
+        h = run_hook(r.path, env={"HOME": str(home)}, prompt="quero especificar X",
+                     session_id="s-open")
+        check("an ordinary turn carries no menu rule", "[menu]" not in ctx(h), ctx(h))
+        h = run_hook(r.path, env={"HOME": str(home)},
+                     prompt="olha isso: [menu do modo] discovery", session_id="s-open")
+        check("marker mid-prompt is not the opening turn", "[menu]" not in ctx(h), ctx(h))
+        h = run_hook(r.path, env={"HOME": str(home)},
+                     prompt="abcdefghijklmn discovery\nveja: [menu do modo]", session_id="s-open")
+        check("marker mid-prompt with a valid mode where the name would be: still not",
+              "[menu]" not in ctx(h), ctx(h))
+        h = run_hook(r.path, env={"HOME": str(home)}, prompt="[menu do modo] design\n\n",
+                     session_id="s-open")
+        check("mode with an empty menu: no menu rule", "[menu]" not in ctx(h), ctx(h))
+        h = run_hook(r.path, env={"HOME": str(home)}, prompt="[menu do modo] nope\n\n",
+                     session_id="s-open")
+        check("unknown mode in the marker: hook still rc 0, no menu rule",
+              h.returncode == 0 and "[menu]" not in ctx(h), (h.returncode, ctx(h)))
+
+
+def test_empty_intent_listing_skips_the_menu_opening_prompt():
+    """CS-6: the opening prompt of the mode menu is the launcher's, not the owner's: it
+    never shows in "Primeiros prompts". Only a prompt that STARTS with the marker is it."""
+    print("hook: first prompts skip the menu opening prompt")
+    opening = "[menu do modo] discovery\n\nAções:\n1. Ideia\n2. Spec"
+    with Repo() as r:
+        write_mode(r, "mode: exploration\n")
+        register(r, SID, "2026-10-16T18:00:00+00:00")
+        write_log(r, [("2026-10-16", "18:01:00", opening),
+                      ("2026-10-16", "18:02:00", "quero especificar X")])
+        c = ctx(run_hook(r.path, session_id=SID, prompt="quero especificar X"))
+        check("log has opening + owner prompt: the owner prompt is listed",
+              '"quero especificar X"' in c, c)
+        check("the menu opening prompt is not listed", "[menu do modo]" not in c, c)
+
+        # the opening turn itself: the log may not have the prompt yet
+        write_log(r, [])
+        c = ctx(run_hook(r.path, session_id=SID, prompt=opening))
+        check("opening turn, nothing else: 'nenhum ainda'",
+              "Primeiros prompts: nenhum ainda." in c and "[menu do modo]" not in c, c)
+
+        # leading whitespace before the marker: menu_lines gives no menu, so it is an owner prompt
+        c = ctx(run_hook(r.path, session_id=SID, prompt="  [menu do modo] discovery"))
+        check("raw prompt with whitespace before the marker: still listed",
+              '"[menu do modo] discovery"' in c, c)
+
+        # marker mid-prompt: an owner prompt, still listed
+        write_log(r, [("2026-10-16", "18:01:00", opening),
+                      ("2026-10-16", "18:02:00", "olha isso: [menu do modo] discovery")])
+        c = ctx(run_hook(r.path, session_id=SID, prompt="outra coisa"))
+        check("marker mid-prompt is an owner prompt: listed",
+              '"olha isso: [menu do modo] discovery"' in c, c)
+        check("...and the real opening prompt is still skipped",
+              '"[menu do modo] discovery' not in c, c)
+
+
+def menu_events(tdir):
+    """The `mode_menu.*` events written to the disposable ledger `tdir`."""
+    out = []
+    for f in sorted(Path(tdir).glob("events-*.jsonl")):
+        for line in f.read_text(encoding="utf-8").splitlines():
+            e = json.loads(line)
+            if str(e.get("event", "")).startswith("mode_menu."):
+                out.append(e)
+    return out
+
+
+def test_menu_telemetry_shown_and_chosen():
+    """CS-7: the opening turn records `mode_menu.shown` with the mode; the NEXT reply,
+    when it is a number or a command of the menu, records `mode_menu.chosen` with the
+    mode, the action number and the command. Free text, or any later turn, records none."""
+    print("hook: telemetry of the mode menu")
+    with Repo() as r:
+        home = fake_home(r.tmp.name, name="telhome")
+        tdir = Path(r.tmp.name) / "tel"
+        env = {"HOME": str(home), "CEPA_TELEMETRY_DIR": str(tdir)}
+        p, args = recorded_args(r, "--mode", "discovery")
+        opening = (args or [""])[-1]
+        run_hook(r.path, env=env, prompt=opening, session_id="s-tel")
+        ev = menu_events(tdir)
+        shown = [e for e in ev if e["event"] == "mode_menu.shown"]
+        check("opening turn: one mode_menu.shown with mode discovery",
+              len(shown) == 1 and shown[0].get("mode") == "discovery", ev)
+        check("opening turn: no mode_menu.chosen yet",
+              not [e for e in ev if e["event"] == "mode_menu.chosen"], ev)
+
+        run_hook(r.path, env=env, prompt="1", session_id="s-tel")
+        chosen = [e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]
+        check("reply '1': mode_menu.chosen with mode, action 1 and /common:spec",
+              len(chosen) == 1 and chosen[0].get("mode") == "discovery"
+              and chosen[0].get("action") == 1 and chosen[0].get("command") == "/common:spec",
+              chosen)
+
+        run_hook(r.path, env=env, prompt="quero outra coisa", session_id="s-tel")
+        chosen = [e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]
+        check("free text after: no new mode_menu.chosen", len(chosen) == 1, chosen)
+
+        # only the reply RIGHT AFTER the menu counts: a later "2" is not a menu choice
+        run_hook(r.path, env=env, prompt="2", session_id="s-tel")
+        chosen = [e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]
+        check("a number two turns after the menu: no new mode_menu.chosen",
+              len(chosen) == 1, chosen)
+
+        # a menu command typed as the reply is a choice too, bound to its own action
+        run_hook(r.path, env=env, prompt=opening, session_id="s-tel")
+        run_hook(r.path, env=env, prompt="/common:spec --continuar modos", session_id="s-tel")
+        chosen = [e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]
+        check("reply with a menu command: action 2, /common:spec --continuar",
+              len(chosen) == 2 and chosen[1].get("action") == 2
+              and chosen[1].get("command") == "/common:spec --continuar", chosen)
+
+        # free text right after the menu: shown, never chosen
+        run_hook(r.path, env=env, prompt=opening, session_id="s-tel")
+        run_hook(r.path, env=env, prompt="quero outra coisa", session_id="s-tel")
+        ev = menu_events(tdir)
+        check("three openings, three mode_menu.shown",
+              len([e for e in ev if e["event"] == "mode_menu.shown"]) == 3, ev)
+        check("free text right after the menu: still 2 mode_menu.chosen",
+              len([e for e in ev if e["event"] == "mode_menu.chosen"]) == 2, ev)
+
+        # a number outside the menu is not a choice
+        run_hook(r.path, env=env, prompt=opening, session_id="s-tel")
+        run_hook(r.path, env=env, prompt="9", session_id="s-tel")
+        check("a number outside the menu: no mode_menu.chosen",
+              len([e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]) == 2,
+              menu_events(tdir))
+
+        # another session's menu never becomes this session's choice
+        run_hook(r.path, env=env, prompt=opening, session_id="s-tel")
+        run_hook(r.path, env=env, prompt="1", session_id="s-outra")
+        check("reply from another session: no mode_menu.chosen",
+              len([e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]) == 2,
+              menu_events(tdir))
+
+        # "1." and "1)" are the same number, the way a menu number is often typed
+        for reply in ("1.", "3)"):
+            run_hook(r.path, env=env, prompt=opening, session_id="s-tel")
+            run_hook(r.path, env=env, prompt=reply, session_id="s-tel")
+        chosen = [e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]
+        check("reply '1.' is action 1 (/common:spec), reply '3)' is action 3 (/common:epic)",
+              len(chosen) == 4
+              and (chosen[2].get("action"), chosen[2].get("command")) == (1, "/common:spec")
+              and (chosen[3].get("action"), chosen[3].get("command")) == (3, "/common:epic"),
+              chosen)
+
+    # the pending menu is machine-local state: it must never reach a commit
+    p = subprocess.run(["git", "check-ignore", "-q", ".claude/mode-menu-pending"],
+                       cwd=REPO, capture_output=True, text=True)
+    check(".claude/mode-menu-pending is gitignored", p.returncode == 0, p.stderr)
+
+
 def main():
     print("test_cepa_mode")
-    for fn in (test_valid_mode, test_invalid_mode, test_without_mode_without_tty,
+    for fn in (test_menu_discovery, test_menu_empty_and_unknown,
+               test_table_ends_with_the_session_mode_menu,
+               test_opening_prompt_carries_the_menu,
+               test_hook_opening_turn_carries_the_menu_rules,
+               test_empty_intent_listing_skips_the_menu_opening_prompt,
+               test_menu_telemetry_shown_and_chosen,
+               test_menu_construction_build_solo_without_board_flow,
+               test_menu_construction_with_board_flow,
+               test_need_met_unknown_type_is_not_met, test_valid_mode, test_invalid_mode, test_without_mode_without_tty,
                test_old_cepa_names, test_hook_reads_old_session_mode_and_intent,
                test_kill_switch, test_overhaul_budget,
                test_help_non_interactive, test_help_in_the_menu_and_re_presents,

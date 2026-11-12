@@ -1,0 +1,20 @@
+schema_version: 1
+card: modos-opinativos-CS-9
+status: complete
+audited_at: 2026-11-12T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "`/common:modes` mostra o menu do modo da sessão, depois da tabela (docs/spec/modos-opinativos.md, CS-9)"
+    altitude: cli
+    surface: "executável real common/bin/cepa-modes sem argumentos (o que /common:modes roda) como subprocesso, repo descartável com .claude/session-mode em `mode: exploration`; asserção sobre o stdout."
+    demonstrated_by:
+      test: "tests/test_cepa_mode.py::test_table_ends_with_the_session_mode_menu"
+      layer: "subprocesso real do CLI, HOME e repo descartáveis, sem mock. Exige que a saída TERMINE com o menu de exploration (igual a `--menu exploration`), venha depois da tabela ('Falta o 8º'), contenha 'Write the strategy document with 2 or more paths (no command yet)' e '/common:advisors', e apareça uma só vez. Negativos: sem modo de sessão, modo sem ações (design) e modo nomeado (discovery) não imprimem menu."
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_mode.py -> rc=0, "tudo verde"; 206 checagens "ok", 0 FAIL (N > 0); bloco "table: session in exploration..." com 10 ok
+        python3 tests/test_modes_single_source.py -> rc=0 ("7 modos, mesma lista ... todos com os 5 campos")
+    verdict: complete
+    gap: null
+    note: |
+      Diff auditado: git diff 589f157..HEAD (common/bin/cepa-modes, common/commands/modes.md, tests/test_cepa_mode.py). Rodados só os dois testes, não a suíte. A superfície 'cli' é a saída do cepa-modes; /common:modes apenas o executa (modes.md atualizado, passo 4).

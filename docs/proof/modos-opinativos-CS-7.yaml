@@ -1,0 +1,67 @@
+schema_version: 2
+card: modos-opinativos-CS-7
+verdict: proven
+reviewed_at: 2026-11-12T02:40:00-03:00
+base_commit: 911a9bf
+head_commit: b04743b
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/hooks/session-mode.py (bare_command, menu_choice, record_menu_reply, record_menu_shown, call sites in menu_lines and main, _telemetry import)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null        # test_menu_telemetry_shown_and_chosen runs the real hook as a subprocess and reads the real telemetry JSONL; only HOME and CEPA_TELEMETRY_DIR are faked
+    - class: "common/hooks/_state.py (catalogue entry mode-menu-pending)"
+      module: hooks
+      external_observable: false
+      substituted_by_double: null
+    - class: ".gitignore (.claude/mode-menu-pending)"
+      module: repo-config
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python hooks repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "Round 1 (head 53e4142, worktree /tmp/proof-cs7): GREEN python3 tests/test_cepa_mode.py -> 'tudo verde'; python3 tests/test_state_deposits.py -> 'todos os testes passaram'"
+        - "(p1) record_menu_shown: T.emit(mode_menu.shown) -> pass -> FAIL 'opening turn: one mode_menu.shown with mode discovery', 'three openings, three mode_menu.shown' (RED)"
+        - "(p2) record_menu_shown: pending file not written -> FAIL 'reply 1: mode_menu.chosen ...', 'reply with a menu command ...' and others (RED)"
+        - "(p3) record_menu_reply: os.remove(path) -> pass (pending not consumed) -> FAIL 'a number two turns after the menu: no new mode_menu.chosen', 'free text right after the menu', 'a number outside the menu' (RED)"
+        - "(p4) record_menu_reply: session_id comparison -> `if False:` -> FAIL 'reply from another session: no mode_menu.chosen' (RED)"
+        - "(p5) record_menu_reply: `if choice and T is not None:` -> `if False:` -> FAIL 'reply 1: mode_menu.chosen ...' and others (RED)"
+        - "(p6) menu_choice: `a.get(n) == n and` removed -> FAIL 'a number outside the menu', 'reply from another session' (RED)"
+        - "(p7) menu_choice: `text == b or text.startswith(b + ' ')` -> `text == b` -> FAIL 'reply with a menu command: action 2', 'free text right after the menu', 'a number outside the menu' (RED)"
+        - "(p8) menu_choice: longest command wins `>` -> `<` -> FAIL 'reply with a menu command: action 2, /common:spec --continuar' (RED)"
+        - "(p9) bare_command: placeholder strip -> str(cmd) -> FAIL 'reply 1: mode_menu.chosen ... /common:spec', 'reply with a menu command', 'free text right after the menu' (RED)"
+        - "(p10) main: record_menu_reply(root, payload) call removed -> FAIL 'reply 1: mode_menu.chosen ...', 'free text after', 'a number two turns after the menu' (RED)"
+        - "(p11) main: menu_lines called without payload -> FAIL 'reply 1: mode_menu.chosen ...', 'free text after', 'a number two turns after the menu' (RED)"
+        - "(p12) record_menu_shown: mode dropped from mode_menu.shown -> FAIL 'opening turn: one mode_menu.shown with mode discovery' (RED)"
+        - "(p13) record_menu_reply: action and command swapped in the emit -> FAIL 'reply 1 ...', 'reply with a menu command ...' (RED)"
+        - "(p14) record_menu_reply: mode=pending.get(mode) -> mode=None -> FAIL 'reply 1: mode_menu.chosen with mode, action 1 and /common:spec' (RED)"
+        - "(p15) menu_lines: record_menu_shown(...) call removed -> FAIL 'opening turn: one mode_menu.shown ...', 'reply 1 ...' (RED)"
+        - "(p17) _state.py catalogue entry removed -> python3 tests/test_state_deposits.py -> FAIL 'todo .claude/<nome> citado no codigo de common/ esta no catalogo  mode-menu-pending (em session-mode.py)' (RED)"
+        - "RED-at-base: HEAD tests with the hook from 911a9bf -> FAIL 'opening turn: one mode_menu.shown with mode discovery', \"reply '1': mode_menu.chosen ...\", 'free text after', 'a number two turns after the menu', 'reply with a menu command: action 2' ..."
+        - "Round 1 survivors (head 53e4142): (p16) number regex `(\\d+)[.)]?` -> `(\\d+)` stayed GREEN; (p18) dropping the .gitignore line stayed GREEN. Closed by commit b04743b, which only adds 16 lines to tests/test_cepa_mode.py (git diff --stat 53e4142 b04743b: 1 file, 16 insertions); no production change."
+        - "Round 2 (head b04743b, fresh detached worktree /tmp/proof-cs7b): GREEN python3 tests/test_cepa_mode.py -> 'tudo verde'; python3 tests/test_state_deposits.py -> 'todos os testes passaram'"
+        - "(p16, re-run) menu_choice: `(\\d+)[.)]?` -> `(\\d+)` -> FAIL \"reply '1.' is action 1 (/common:spec), reply '3)' is action 3 (/common:epic)\" (RED)"
+        - "(p18, re-run) .gitignore line `.claude/mode-menu-pending` removed -> FAIL '.claude/mode-menu-pending is gitignored' (RED)"
+        - "Not perturbed, no silent cap: the try/except fail-silent wrappers, os.makedirs, and the whitespace normalization `' '.join(str(prompt).split())`; they only matter on failure paths the test does not provoke."
+        - "both worktrees (/tmp/proof-cs7, /tmp/proof-cs7b) removed; git worktree list shows neither; primary tree untouched except this file"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; coverage judged by perturbation: every changed line turns a test red when broken (p1-p15, p16 and p18 re-run at b04743b, p17)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "NOT verified by a run. The only input is the owner's next prompt text, which the diff compares to the menu's numbers and commands read from a file the hook itself wrote; no network, no new parsed fields from outside, no api-rest surface. Edge cases (free text, later turn, out-of-range number, other session, '1.' and '3)') are asserted by the test itself (p3, p4, p6, p7, p16). The diff touches no input-bearing module. The reviewer may overrule."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is a Story, not a Bug; red-at-base is recorded under l3_load_bearing (test red with the 911a9bf hook)"
+routing_reason: "The behavior is load-bearing: the shown event, the pending file, its consumption by the very next prompt, the session check, the out-of-range number, the command match, longest-command-wins, placeholder stripping, the mode/action/command fields, the call sites, the catalogue entry, the '1.'/'3)' number forms and the .gitignore entry each turn a test red when broken, and the test is red at base. The two survivors of round 1 (p16 and p18) were closed by test-only commit b04743b and re-run RED. No survivors left. L4 is n/a by a diff-based claim, which the reviewer may overrule."

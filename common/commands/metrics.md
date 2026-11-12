@@ -29,6 +29,13 @@ we / next step", each line with the arithmetic. It is the reading of the
 criterion that decides whether cycle 2 of the intent goes in
 (docs/estrategia-intencao-da-sessao.md).
 
+Since 12/11/2026 it includes the **Menu do modo** section (mode menu;
+`mode_menu.shown` and `mode_menu.chosen` events): per mode, how many times the
+opening turn showed the menu and how many times the next reply picked one of its
+actions, as "choices ÷ showings = %". It is the count that says whether the turn
+the menu spends at every opening pays for itself, and the moment to reconsider a
+menu for the modes that still have none (docs/spec/modos-opinativos.md, CS-8).
+
 ## Steps
 
 1. Run the aggregator, passing the user's arguments verbatim:

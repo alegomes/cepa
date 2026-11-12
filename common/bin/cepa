@@ -19,6 +19,9 @@
 #   cepa --mode help     # the purpose of each mode, then exits (opens no session);
 #                        #   in the interactive menu, `?` does the same and shows the menu again
 #
+#   cepa --mode discovery  # no request: the first prompt is the mode's menu
+#                          #   ([menu do modo]); CEPA_MENU=off turns it off
+#
 #   cepa --prompt smartass            # appends a custom system prompt
 #   cepa --prompt ~/prompts/x.md      # ...by path, or by name (see below)
 #   cepa --prompt-replace base.md   # replaces the WHOLE system prompt (dangerous)
@@ -543,6 +546,38 @@ done
 
 MODE=$(normalize_mode "$MODE")
 
+# --- Opening prompt with the mode's menu ---------------------------------------
+# A session opened with no request gets, as its first prompt, the mode's menu
+# (built ONLY by `cepa-modes --menu`), behind the fixed marker `[menu do modo]`
+# the session-mode hook recognizes. "No request" is decided HERE, on what the
+# owner typed, before cepa prepends its own flags: no positional argument (a
+# prompt, or a chained session's brief), and none of -c/--continue/-r/--resume/
+# -p/--print (resuming brings its own request). A bare word after a flag that
+# takes a value (`--model opus`) also counts as a request: the safe side is the
+# session opening as before. Never inside a cepa-until run (CEPA_UNTIL_RUN).
+# Off with CEPA_MENU=off; CEPA_MODO=off turns off this along with the mode.
+OWNER_REQUEST=0
+for _a in "$@"; do
+  case "$_a" in
+    -c|--continue|-r|--resume|--resume=*|-p|--print) OWNER_REQUEST=1 ;;
+    -*) ;;
+    *) OWNER_REQUEST=1 ;;
+  esac
+done
+
+# Prints the opening prompt for $MODE, or nothing when there must be none.
+opening_prompt() {
+  [ "$OWNER_REQUEST" = "0" ] || return 0
+  [ "${CEPA_MENU:-on}" = "off" ] && return 0
+  [ "${CEPA_MODO:-on}" = "off" ] && return 0
+  [ -n "${CEPA_UNTIL_RUN:-}" ] && return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+  _menu=$(python3 "$MODES_BIN" --menu "$MODE" --no-color 2>/dev/null) || return 0
+  [ -n "$_menu" ] || return 0
+  printf '[menu do modo] %s\n\n%s\n\nReply with the number, the command, or write what you want to do.\n' \
+    "$MODE" "$_menu"
+}
+
 # `cepa --mode help` is a query, not a session launch: it prints the purpose of
 # each mode and exits, without touching worktree, preflight or claude.
 case "$MODE" in
@@ -623,6 +658,14 @@ if [ "${CEPA_MODO:-on}" != "off" ]; then
 fi
 
 preflight
+
+# The mode is final now (it may have come from the tty question), so the menu
+# can be built. Claude takes the prompt as its last positional argument.
+OPENING=$(opening_prompt)
+if [ -n "$OPENING" ]; then
+  set -- "$@" "$OPENING"
+  printf '◆ menu do modo: %s (CEPA_MENU=off desliga)\n' "$MODE" >&2
+fi
 
 [ -f "$LAUNCH_PY" ] || launch_here "$@"
 

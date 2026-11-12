@@ -8,6 +8,8 @@
 > trava da Reforma (`reforma-gate.py`), a da Reflexão (`reflexao-gate.py`) e o veredito de
 > saída da Exploração (`cepa-modes --exit`, e a linha `Saída: n/3` que o hook injeta a cada
 > turno; construído em 2026-11-04). `/common:modes` mostra a tabela e o modo da sessão.
+> O menu de ações do modo (campo `actions`, `cepa-modes --menu <modo>`) abre a sessão
+> sem pedido inicial e fecha a saída de `/common:modes` (construído em 2026-11-12).
 >
 > Falta: o resto da cobrança do critério de aceite na
 > passagem da Descoberta para a Construção (a parte textual já existe, no
@@ -43,6 +45,17 @@ pipeline). Rotina sem modo, não.
 
 O erro a evitar: fazer a sessão morrer junto com a rotina. A rotina acaba, você
 continua ali, e é exatamente nesse intervalo que o micro-ajuste entra.
+
+O modo agora oferece as rotinas dele, sem deixar de ser modo. Cada modo da tabela
+`common/hooks/_modes.py` tem o campo `actions`: a lista ordenada das ações comuns
+naquele modo, cada uma com uma frase leiga e o comando que a executa (ou a marca
+"(no command yet)", quando ainda não há comando e o agente conduz em conversa).
+`cepa-modes --menu <modo>` imprime esse menu numerado, já filtrado pelo que o repo
+tem (uma ação que pede `board-flow.yaml` some num repo sem quadro). Ele aparece
+na abertura de `cepa --mode <modo>` sem pedido inicial e no fim de
+`/common:modes`. Hoje só construction, discovery e exploration têm menu; os
+outros quatro têm a lista vazia. Escolher uma ação do menu não grava nada em
+`routine:`: o menu é um atalho para começar, a regra acima continua valendo.
 
 ## Os oito modos
 
@@ -374,6 +387,9 @@ Em ordem:
 5. ~~**Gate da Exploração**~~ — feito (2026-11-04): `exploration_exit` em
    `common/hooks/_modes.py`, lido pelo hook e por `cepa-modes --exit`; o
    `advisors` grava a linha `Decisão do dono` por discordância.
+5b. ~~**Menu de ações do modo**~~ — feito (2026-11-12): campo `actions` em
+   `common/hooks/_modes.py`, impresso por `cepa-modes --menu <modo>`, mostrado na
+   abertura de `cepa --mode` e no fim de `/common:modes`.
 6. **Cobrança do critério de aceite na saída da Descoberta / entrada da
    Construção** — a peça que dá dente ao `completion-auditor`. **Em parte:** o
    `/common:spec` e o hook `common/hooks/spec-readiness-gate.py` barram uma

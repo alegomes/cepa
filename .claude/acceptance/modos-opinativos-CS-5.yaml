@@ -1,0 +1,26 @@
+schema_version: 1
+card: modos-opinativos-CS-5
+status: complete
+audited_at: 2026-11-12T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "no turno de abertura, o hook do modo instrui o agente a mostrar o menu traduzido para a língua do dono, sem mudar ordem, numeração nem comandos, e a tratar a resposta seguinte: número ou comando dispara a ação, ação com argumento recebe antes uma pergunta de uma linha, ação sem comando é conduzida em conversa, texto livre é pedido normal (docs/spec/modos-opinativos.md, CS-5)"
+    altitude: cli
+    surface: "hook real common/hooks/session-mode.py (subprocesso, payload UserPromptSubmit) alimentado com o prompt de abertura real produzido pelo launcher cepa (discovery; construction com e sem board-flow.yaml); asserção sobre o additionalContext. Verifica a instrução injetada, não a redação da resposta do agente (spec, Riscos)."
+    demonstrated_by:
+      test: "tests/test_cepa_mode.py::test_hook_opening_turn_carries_the_menu_rules"
+      layer: "subprocessos reais (launcher cepa com claude falso na borda, hook, cepa-modes --menu --json); sem mock do hook. Cobre: regra de exibição (traduzir, ordem, numeração, comandos), pergunta 'What is the idea?' da ação 1 com /common:spec <the idea>, regra de número/comando, texto livre = pedido normal, ausência de regra de sequência em discovery, Fix a bug (chave de card -> só /board-flow:fix; descrição -> /board-flow:capture Bug: e depois fix na chave criada), ação sem comando conduzida em conversa, e negativos (turno comum, marcador no meio do prompt, modo com menu vazio, modo desconhecido rc 0)."
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_mode.py -> rc=0, "tudo verde"; 176 checagens "ok", 0 FAIL (N > 0)
+          ok   display rule: translate the phrases
+          ok   action 1 asks its one-line question first
+          ok   free-text rule
+          ok   Fix a bug: a card key runs only /board-flow:fix
+          ok   Fix a bug: a description runs capture then fix on the created key
+          ok   no-command action is led in conversation
+    verdict: complete
+    gap: null
+    note: |
+      Limite assumido pela spec (Riscos): nenhum hook lê a redação da resposta do agente, então o agente pode reescrever o menu; o CS-5 confere só a instrução injetada. Não é lacuna deste critério.
+      Diff auditado: git diff 05351da..HEAD (common/hooks/session-mode.py, common/bin/cepa-modes, tests/test_cepa_mode.py). Rodado só tests/test_cepa_mode.py, não a suíte inteira.
