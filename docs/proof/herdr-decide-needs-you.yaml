@@ -1,0 +1,40 @@
+schema_version: 2
+card: herdr-decide-needs-you
+verdict: proven
+reviewed_at: 2026-11-11T00:00:00-03:00
+base_commit: 96845c9
+head_commit: 18080a8
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until (_decide_reporting, herdr_blocked, hc_answered, read_line, herdr_release)", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline 18080a8: test_decide_on_an_hc_terminal_reports_needs_you_while_it_asks -> FAILURES: [] ; test_hc_a_run_that_ends_with_an_unanswered_question_stays_in_needs_you -> FAILURES: []"
+        - "B1a remove _hc_status(state=clear) do exit de _decide_reporting -> RED: 'decide hc: a saida limpa o status e devolve o titulo ao shell'"
+        - "B1b remove _hc_title('') do exit -> RED: mesmo teste (a saida limpa o status e devolve o titulo)"
+        - "B1c _hc_asking nunca vira True -> RED: 3 FAIL (blocked por pergunta, titulo, resposta volta para working)"
+        - "B2 herdr_blocked ignora _hc_asking (if not _herdr_armed) -> RED: 'um blocked por pergunta que esperou' e 'o titulo diz que a fila espera resposta'"
+        - "B3 hc_answered nunca escreve (if True: return) -> RED: 'um blocked por pergunta...' e 'a resposta digitada volta para working'"
+        - "B4 read_line nao marca _hc_unanswered (= False) -> RED: 'hc sem resposta: a run termina em blocked, nao em done'"
+        - "B5 herdr_release sem o ramo done+_hc_unanswered (if False) -> RED: 'hc sem resposta: a run termina em blocked, nao em done'"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "cada hunk alterado foi quebrado e derrubou o teste que o cobre (B1-B5 acima); nenhuma ferramenta de cobertura medida"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff so adiciona escrita de sequencias OSC 7501/OSC 2 no terminal e uma flag; nenhuma nova leitura ou parsing de entrada externa (o prompt de decide ja existia)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "n/a: nao e Bug"
+routing_reason: "B1-B5 provados load-bearing: cada quebra derrubou o teste que a guarda. Ressalvas honestas: (a) rodada completa de tests/test_cepa_until.py nao terminou dentro de 120 s, entao os demais test_hc_* nao foram reexecutados nesta prova; (b) a perturbacao B1c/B2/B3 e B4/B5 foi pelos dois testes citados, sem varrer variacoes de borda."
