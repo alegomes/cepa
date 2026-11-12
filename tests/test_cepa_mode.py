@@ -966,6 +966,10 @@ def test_opening_prompt_carries_the_menu():
               args is not None and len(args) == 2 and args[0] == "--model=opus"
               and args[1].startswith("[menu do modo]"), args)
 
+        p, args = recorded_args(r, "--mode", "discovery", "--model", "opus")
+        check("a flag with a separate value counts as a request (safe side)",
+              args == ["--model", "opus"], args)
+
         p, args = recorded_args(r, "--mode", "discovery", "--prompt", "nope-missing")
         check("system prompt error still exits 2 (no launch)", p.returncode == 2 and args is None,
               (p.returncode, args))
