@@ -1049,11 +1049,48 @@ def test_hook_opening_turn_carries_the_menu_rules():
               h.returncode == 0 and "[menu]" not in ctx(h), (h.returncode, ctx(h)))
 
 
+def test_empty_intent_listing_skips_the_menu_opening_prompt():
+    """CS-6: the opening prompt of the mode menu is the launcher's, not the owner's: it
+    never shows in "Primeiros prompts". Only a prompt that STARTS with the marker is it."""
+    print("hook: first prompts skip the menu opening prompt")
+    opening = "[menu do modo] discovery\n\nAções:\n1. Ideia\n2. Spec"
+    with Repo() as r:
+        write_mode(r, "mode: exploration\n")
+        register(r, SID, "2026-10-16T18:00:00+00:00")
+        write_log(r, [("2026-10-16", "18:01:00", opening),
+                      ("2026-10-16", "18:02:00", "quero especificar X")])
+        c = ctx(run_hook(r.path, session_id=SID, prompt="quero especificar X"))
+        check("log has opening + owner prompt: the owner prompt is listed",
+              '"quero especificar X"' in c, c)
+        check("the menu opening prompt is not listed", "[menu do modo]" not in c, c)
+
+        # the opening turn itself: the log may not have the prompt yet
+        write_log(r, [])
+        c = ctx(run_hook(r.path, session_id=SID, prompt=opening))
+        check("opening turn, nothing else: 'nenhum ainda'",
+              "Primeiros prompts: nenhum ainda." in c and "[menu do modo]" not in c, c)
+
+        # leading whitespace before the marker: menu_lines gives no menu, so it is an owner prompt
+        c = ctx(run_hook(r.path, session_id=SID, prompt="  [menu do modo] discovery"))
+        check("raw prompt with whitespace before the marker: still listed",
+              '"[menu do modo] discovery"' in c, c)
+
+        # marker mid-prompt: an owner prompt, still listed
+        write_log(r, [("2026-10-16", "18:01:00", opening),
+                      ("2026-10-16", "18:02:00", "olha isso: [menu do modo] discovery")])
+        c = ctx(run_hook(r.path, session_id=SID, prompt="outra coisa"))
+        check("marker mid-prompt is an owner prompt: listed",
+              '"olha isso: [menu do modo] discovery"' in c, c)
+        check("...and the real opening prompt is still skipped",
+              '"[menu do modo] discovery' not in c, c)
+
+
 def main():
     print("test_cepa_mode")
     for fn in (test_menu_discovery, test_menu_empty_and_unknown,
                test_opening_prompt_carries_the_menu,
                test_hook_opening_turn_carries_the_menu_rules,
+               test_empty_intent_listing_skips_the_menu_opening_prompt,
                test_menu_construction_build_solo_without_board_flow,
                test_menu_construction_with_board_flow,
                test_need_met_unknown_type_is_not_met, test_valid_mode, test_invalid_mode, test_without_mode_without_tty,
