@@ -941,6 +941,10 @@ def test_opening_prompt_carries_the_menu():
         check("no request: prompt starts with [menu do modo]",
               opening.startswith("[menu do modo]"), repr(opening[:200]))
         check("no request: prompt carries /common:spec", "/common:spec" in opening, repr(opening))
+        check("no request: prompt ends with the reply line",
+              opening.rstrip().endswith(
+                  "Reply with the number, the command, or write what you want to do."),
+              repr(opening[-200:]))
         check("no request: prompt carries the numbered menu",
               "1) Detail an idea until it becomes a build-ready specification" in opening,
               repr(opening))
@@ -950,10 +954,13 @@ def test_opening_prompt_carries_the_menu():
 
         for extra, label in ((["--resume"], "--resume"), (["-c"], "-c"),
                              (["--continue"], "--continue"), (["-p", "x"], "-p"),
-                             (["--print"], "--print"), (["-r"], "-r")):
+                             (["--print"], "--print"), (["-r"], "-r"),
+                             (["--resume=abc"], "--resume=abc")):
             p, args = recorded_args(r, "--mode", "discovery", *extra)
             check(f"{label}: no opening prompt", args == extra, args)
 
+        p, args = recorded_args(r, "--mode", "design")
+        check("mode with an empty menu: no opening prompt", args == [], args)
         p, args = recorded_args(r, "--mode", "discovery", env={"CEPA_MENU": "off"})
         check("CEPA_MENU=off: no opening prompt", args == [], args)
         p, args = recorded_args(r, "--mode", "discovery", env={"CEPA_UNTIL_RUN": "1"})

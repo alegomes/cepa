@@ -562,7 +562,6 @@ opening_prompt() {
   [ "${CEPA_MENU:-on}" = "off" ] && return 0
   [ "${CEPA_MODO:-on}" = "off" ] && return 0
   [ -n "${CEPA_UNTIL_RUN:-}" ] && return 0
-  [ -n "$MODE" ] || return 0
   command -v python3 >/dev/null 2>&1 || return 0
   _menu=$(python3 "$MODES_BIN" --menu "$MODE" --no-color 2>/dev/null) || return 0
   [ -n "$_menu" ] || return 0
