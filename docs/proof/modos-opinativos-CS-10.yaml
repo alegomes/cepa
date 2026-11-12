@@ -1,0 +1,49 @@
+schema_version: 2
+card: modos-opinativos-CS-10
+verdict: proven
+reviewed_at: 2026-11-12T04:10:00-03:00
+base_commit: 8e3477e
+head_commit: 613b8d1
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "tests/test_modes_single_source.py (menu_failures(modes, repo) + call from main(): `failures.extend(menu_failures(MODES))`)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null        # the guard reads the real MODES from common/hooks/_modes.py and the real <plugin>/commands/*.md; no double
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python harness repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at 613b8d1 (detached worktree /tmp/cs10-proof): python3 tests/test_modes_single_source.py -> 'ok — 7 modos ...' rc 0"
+        - "(p1) exploration command -> /common:nonexistentzz -> RED rc 1: FAIL `exploration` ação 4: `/common:nonexistentzz` não existe (common/commands/nonexistentzz.md ausente)"
+        - "(p2) second command of the list (construction 'Fix a bug') -> /board-flow:nopezz -> RED rc 1: FAIL `construction` ação 4: `/board-flow:nopezz` não existe"
+        - "(p3) command 'common metrics' (no /<plugin>:<name>) -> RED rc 1: FAIL `exploration` ação 4: comando 'common metrics' fora do formato"
+        - "(p4) needs 'env:X' -> RED rc 1: FAIL `discovery` ação 4: requisito 'env:X' fora dos tipos file:, topology:, plugin:"
+        - "(p5) empty label -> RED rc 1: FAIL `exploration` ação 4: sem frase leiga (`label`)"
+        - "(p6) command None without '(no command yet)' -> RED rc 1: FAIL `construction` ação 11: sem comando e a frase não diz \"(no command yet)\""
+        - "(p7) exploration with 2 distinct labels -> RED rc 1: FAIL `exploration`: menu com 2 ação(ões) distintas; o combinado é de 3 a 8 (first attempt left 3 labels, still green correctly, boundary 3 is valid; redone with 2)"
+        - "(p8) discovery with 9 distinct labels -> RED rc 1: FAIL `discovery`: menu com 9 ação(ões) distintas; o combinado é de 3 a 8"
+        - "(p9) design with 1 action -> RED rc 1: FAIL `design`: deveria ter menu vazio, tem 1 ação(ões)"
+        - "(p10) refactor without the `actions` key -> RED rc 1 via KeyError: 'actions' at menu_failures (line 59), a raw traceback and not a FAIL line; the rule is load-bearing (rc != 0) but the message is not friendly"
+        - "main() is executed by the file (`if __name__ == '__main__': sys.exit(main())`, line 189-190) and menu_failures is called at line 176; every RED above came from the file's own rc."
+        - "Not perturbed, no silent cap: physical deletion of a command file (p1 and p2 exercise the same is_file() branch with a nonexistent name; the move was blocked by the path-lock inside the worktree)."
+    pit_note: "n/a"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; each branch of menu_failures (actions not a list, count bounds, non-empty menu, label, None without marker, command shape, command file, needs) is reached by p1..p10 on the real data, and each turns the file RED."
+  l4_adversarial_input:
+    status: n/a
+    reason: "Test-only diff: the guard reads in-repo data (common/hooks/_modes.py and command files) written by the harness itself; no network, no external text parsing, no api-rest surface."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is a Story; the item adds a guard over existing data, so the proof is green at head plus load-bearing perturbations."
+routing_reason: "Test GREEN at 613b8d1 (rc 0) and each of the 10 rules turns it RED when its rule is broken in a throwaway worktree (now removed). Only tests/test_modes_single_source.py was run. Caveat: a missing `actions` key crashes with KeyError instead of a FAIL line."
