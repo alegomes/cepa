@@ -1,6 +1,6 @@
 ---
 description: Shows the table of work modes — what each mode asks for to enter, what it produces, and what must be true to close it. Answers "what mode am I in again, and what was it for?" without opening the 307-line document. Marks the current session's mode. Read-only, changes no mode.
-argument-hint: [mode-name]
+argument-hint: [mode-name] [--exit]
 interaction: conversational
 ---
 
@@ -39,6 +39,11 @@ on purpose: if you could switch midway, the mode would go back to being a label.
    `cepa-modes --menu <mode>`, already filtered by this repo). Show it as it
    came: it answers the question that follows "what was this mode for?",
    which is "so what do I do now?". A mode without actions shows no menu.
+
+5. With `--exit` (`/common:modes --exit`, or `/common:modes --exit <mode>`),
+   the script prints the exit verdict of this session's mode computed from the
+   disk: each exit condition checked, and whether the mode is closed (exit 0)
+   or still open (exit 1). Show it as it came; it changes no mode either.
 
 ## Notes
 
