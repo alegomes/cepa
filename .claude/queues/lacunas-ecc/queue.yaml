@@ -1,0 +1,70 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/estrategia-lacunas-ecc.md, seção 7 (revisão 2), lotes 1, 2 e 3. Pergunta que a fila responde: o que o Cepa pode aprender com o projeto ECC, e o que falta ao Cepa para chegar onde o ECC chegou?
+# Escrito em: 2026-11-12
+
+schema_version: 2
+mode: single-track
+queue: lacunas-ecc
+source: 'docs/estrategia-lacunas-ecc.md, seção 7 (revisão 2), lotes 1, 2 e 3. Pergunta
+  que a fila responde: o que o Cepa pode aprender com o projeto ECC, e o que falta
+  ao Cepa para chegar onde o ECC chegou?'
+items:
+- id: L1
+  title: O resumo final do instalador e a lista de docs/getting-started.md são derivados
+    de .claude-plugin/marketplace.json
+  why: 'Lote 1 da seção 7 de docs/estrategia-lacunas-ecc.md (revisão 2, depois do
+    painel de 2026-11-12). Número que move: fração de sessões no repositório cepa,
+    porque a lista passa a ser editada em um lugar em vez de três. Substitui a checagem
+    de lista E5: hoje o marketplace.json tem 12 plugins, o resumo do instalador
+    imprime 11 e o getting-started lista 10. Posição herdada da ordem dos lotes
+    no documento; ninguém priorizou os itens entre si.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: 'Resposta do dono em 2026-11-12: sim, mostrar os 12 plugins do marketplace.json,
+    sem esconder nenhum. Rota humana fechada pelo dono: Precondição do lote 1 no
+    documento: o dono diz quais dos 12 plugins do marketplace.json um recém-chegado
+    deve ver..'
+- id: L2-E3
+  title: Validador de todo comando, agente e skill (E3) como teste da suíte
+  why: 'Lote 2 da seção 7 de docs/estrategia-lacunas-ecc.md. Não move nenhum dos
+    quatro números do scorecard; entra como exceção registrada no documento: impede
+    que o defeito do lote 0 (2 SKILL.md sem bloco de cabeçalho, que o Claude Code
+    não carrega) volte a acontecer. Risco R1 do documento: é um teste na suíte,
+    não um hook. Posição herdada da ordem dos lotes no documento; ninguém priorizou
+    os itens entre si.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: L2-TAG
+  title: Uma tag do repositório a cada fila aterrissada
+  why: 'Lote 2 da seção 7 de docs/estrategia-lacunas-ecc.md e decisão do dono em
+    2026-11-12 sobre a discordância D4 do painel (docs/reviews/2026-11-12-painel-lacunas-ecc.md).
+    Não move nenhum dos quatro números; entra como exceção registrada no documento:
+    a tag é o ponto para onde voltar antes de qualquer lote que mexa em hook. Sem
+    CHANGELOG.md escrito à mão; a versão por plugin segue docs/versionamento.md.
+    Posição herdada da ordem do texto do lote; ninguém priorizou os itens entre
+    si.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: L3
+  title: Executor que compara as decisões de um hook antes e depois de uma mudança
+    (E1), com entradas escritas à mão para os três hooks que mais bloqueiam
+  why: 'Lote 3 da seção 7 de docs/estrategia-lacunas-ecc.md. É o instrumento que
+    mostra qual número do scorecard uma mudança de hook moveu (P1-4). Adiantado
+    para fora do ciclo 3 pelo dono em 2026-11-12 (discordância D3 do painel), por
+    ser um teste que não toca nos hooks. Risco R3 do documento: os cenários não
+    contêm sessão gravada nem dado de cliente, porque o repositório é público. Posição
+    herdada da ordem dos lotes no documento; ninguém priorizou os itens entre si.'
+  status: pending
+  blocked_by: []
+  human_pending: null
