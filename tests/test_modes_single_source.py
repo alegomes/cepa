@@ -137,6 +137,32 @@ def doc_failures(text):
     return failures
 
 
+# --- `/common:modes --exit` is a declared argument and reaches cepa-modes (CS-12)
+# `cepa-modes --exit` exists; the slash command must advertise it in its header
+# (`argument-hint:`, what the picker shows) and keep forwarding `$ARGUMENTS`
+# verbatim to the script, otherwise `/common:modes --exit` is undiscoverable or
+# silently dropped.
+COMMAND = REPO / "common" / "commands" / "modes.md"
+
+
+def command_failures(text):
+    failures = []
+    header = text.split("\n---", 1)[0] if text.startswith("---") else ""
+    hint = next((l for l in header.splitlines() if l.startswith("argument-hint:")), None)
+    if hint is None:
+        failures.append("common/commands/modes.md: cabeçalho sem linha `argument-hint:`")
+    elif "--exit" not in hint:
+        failures.append("common/commands/modes.md: `argument-hint:` não declara `--exit` "
+                        f"({hint.strip()!r})")
+    runs = [l for l in text.splitlines() if "bin/cepa-modes" in l and "python3" in l]
+    if not runs:
+        failures.append("common/commands/modes.md: nenhum passo roda `cepa-modes`")
+    elif not any(l.rstrip().endswith("$ARGUMENTS") for l in runs):
+        failures.append("common/commands/modes.md: o passo que roda `cepa-modes` "
+                        "não repassa `$ARGUMENTS` como veio")
+    return failures
+
+
 def main():
     try:
         from _modes import MODES, EXIT
@@ -208,6 +234,7 @@ def main():
 
     failures.extend(menu_failures(MODES))
     failures.extend(doc_failures(DOC.read_text(encoding="utf-8")))
+    failures.extend(command_failures(COMMAND.read_text(encoding="utf-8")))
 
     for f in failures:
         print("FAIL:", f, file=sys.stderr)
