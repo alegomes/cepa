@@ -1163,6 +1163,22 @@ def test_menu_telemetry_shown_and_chosen():
               len([e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]) == 2,
               menu_events(tdir))
 
+        # "1." and "1)" are the same number, the way a menu number is often typed
+        for reply in ("1.", "3)"):
+            run_hook(r.path, env=env, prompt=opening, session_id="s-tel")
+            run_hook(r.path, env=env, prompt=reply, session_id="s-tel")
+        chosen = [e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]
+        check("reply '1.' is action 1 (/common:spec), reply '3)' is action 3 (/common:epic)",
+              len(chosen) == 4
+              and (chosen[2].get("action"), chosen[2].get("command")) == (1, "/common:spec")
+              and (chosen[3].get("action"), chosen[3].get("command")) == (3, "/common:epic"),
+              chosen)
+
+    # the pending menu is machine-local state: it must never reach a commit
+    p = subprocess.run(["git", "check-ignore", "-q", ".claude/mode-menu-pending"],
+                       cwd=REPO, capture_output=True, text=True)
+    check(".claude/mode-menu-pending is gitignored", p.returncode == 0, p.stderr)
+
 
 def main():
     print("test_cepa_mode")
