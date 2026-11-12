@@ -27,7 +27,8 @@ An action whose `needs` the repo does not meet (`file:<path>` at the repo root,
 `topology:<name>` = content of `.claude/topology`, `plugin:<name>` installed and
 enabled, checked like `cepa-doctor` does via `_pluginver.scan`) is left out; of
 variants sharing a label only the first that passes shows; at most 5 lines.
-A mode with no actions prints nothing and returns 0.
+A mode with no actions prints nothing and returns 0. `--menu <mode> --json` is the
+same list as data, read by the session-mode hook on the opening turn.
 """
 
 import json
@@ -148,11 +149,25 @@ def menu_actions(name, root):
     return shown
 
 
-def render_menu(name):
-    """`--menu`: numbered lines "N) label: command" (a sequence reads "a, then b")."""
-    for i, a in enumerate(menu_actions(name, repo_root()), 1):
-        cmd = a.get("command")
-        cmds = [cmd] if isinstance(cmd, str) else list(cmd or [])
+def _commands(action):
+    cmd = action.get("command")
+    return [cmd] if isinstance(cmd, str) else list(cmd or [])
+
+
+def render_menu(name, as_json=False):
+    """`--menu`: numbered lines "N) label: command" (a sequence reads "a, then b").
+
+    With `--json`, the same filtered list as data (`n`, `label`, `commands`, `ask`),
+    for the session-mode hook: it writes the reply rules of the opening turn and
+    must number the actions exactly as the text the owner sees."""
+    shown = menu_actions(name, repo_root())
+    if as_json:
+        print(json.dumps([{"n": i, "label": a["label"], "commands": _commands(a),
+                           "ask": a.get("ask")} for i, a in enumerate(shown, 1)],
+                         ensure_ascii=False))
+        return 0
+    for i, a in enumerate(shown, 1):
+        cmds = _commands(a)
         print(f"{i}) {a['label']}" + (f": {', then '.join(cmds)}" if cmds else ""))
     return 0
 
@@ -233,7 +248,7 @@ def main():
             print(f"✗ modo desconhecido: {name}\n  válidos: {', '.join(MODES)}",
                   file=sys.stderr)
             return 2
-        return render_menu(name)
+        return render_menu(name, as_json=args.as_json)
 
     if args.exit_:
         name = args.mode or session_mode()

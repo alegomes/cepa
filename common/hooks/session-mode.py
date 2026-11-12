@@ -44,6 +44,14 @@ A `[lembretes]` line also comes on the first turn only (and not in a `cepa-until
 run) when `.claude/reminders` in the main clone has owner reminders: it counts
 them and gives the oldest date; the list is `/common:whereami`.
 
+On the OPENING turn of a session `cepa` opened with no request (the prompt
+starts with `[menu do modo] <mode>`), a `[menu]` block tells the agent how to
+show the menu (translated, same order, numbering and commands) and how to treat
+the owner's next reply: number or command fires the action, an action with an
+argument gets its one-line question first, an action with no command is led in
+conversation, free text is a normal request. The actions come from
+`cepa-modes --menu <mode> --json`, the only builder of the menu.
+
 Never blocks anything. With no mode and no intent, it is silent.
 """
 
@@ -308,6 +316,64 @@ def reminders_lines(root, payload):
         return []
 
 
+# The fixed marker `cepa` puts at the start of the opening prompt (CS-3). Only a
+# prompt that STARTS with it is the opening turn: the launcher knows for sure no
+# request came, so the hook does not have to guess whether a prompt is vague.
+MENU_MARK = "[menu do modo]"
+
+
+def menu_lines(root, prompt):
+    """The `[menu]` block of the opening turn, or [] on any other turn.
+
+    The actions come from `cepa-modes --menu <mode> --json`, the only builder of
+    the menu, so the numbers here are the numbers the owner sees in the prompt.
+    Only the opening turn pays this subprocess. Fail-silent."""
+    text = str(prompt or "")
+    if not text.startswith(MENU_MARK):
+        return []
+    try:
+        mode = text[len(MENU_MARK):].split("\n", 1)[0].strip()
+        if not mode:
+            return []
+        modes_bin = Path(__file__).resolve().parent.parent / "bin" / "cepa-modes"
+        out = subprocess.run(
+            [sys.executable, str(modes_bin), "--menu", mode, "--json", "--no-color"],
+            cwd=root, capture_output=True, text=True, timeout=8)
+        if out.returncode != 0:
+            return []
+        actions = json.loads(out.stdout or "[]")
+    except Exception:  # noqa: BLE001
+        return []
+    if not actions:
+        return []
+    rules = [
+        "[menu] Este é o turno de abertura do modo: o prompt traz o menu de ações dele. "
+        "Mostre o menu ao dono traduzido para a língua do dono: traduza só as frases e "
+        "mantenha a ordem, a numeração e os comandos exatamente como vieram. Não "
+        "acrescente, não tire, não reordene ação nenhuma.",
+        "Na resposta seguinte do dono: número ou comando do menu dispara a ação.",
+    ]
+    for a in actions:
+        n, cmds, ask = a.get("n"), a.get("commands") or [], a.get("ask")
+        if not cmds:
+            rules.append(f"Ação {n} está sem comando ainda: se escolhida, conduza-a em "
+                         "conversa com o dono.")
+            continue
+        if len(cmds) > 1:
+            first, last = cmds[0], cmds[-1]
+            rules.append(
+                f"Ação {n} pede argumento: antes de rodar, pergunte em uma linha "
+                f'"{ask}" (traduzida). Se a resposta for a chave de um card, rode só '
+                f"`{last}` nessa chave; se for uma descrição, rode `{first}` com ela e "
+                f"depois `{last}` na chave criada.")
+        elif ask:
+            rules.append(f"Ação {n} pede argumento: antes de rodar, pergunte em uma linha "
+                         f'"{ask}" (traduzida) e rode `{cmds[0]}` com a resposta.')
+    rules.append("Resposta em texto livre, que não é número nem comando do menu, é pedido "
+                 "normal: atenda como atenderia sem o menu.")
+    return [" ".join(rules)]
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
@@ -346,6 +412,7 @@ def main():
                 print(f"[session-mode] intenção: {e}", file=sys.stderr)
 
         if not os.environ.get(ENV_WINDOW):
+            blocks += menu_lines(root, payload.get("prompt"))
             blocks += epic_lines(root, payload)
             blocks += reminders_lines(root, payload)
 
