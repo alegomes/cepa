@@ -5105,3 +5105,43 @@ O passo de triagem do `/common:feedback --triage` tem três destinos: seção no
 
 (1) Seção nova no `BACKLOG.md` vem sempre acompanhada de `cepa plan add` na fila do repo, com o `why` citando o feedback e a seção. (2) Episódio anexado a seção cujo item da fila já está `done` abre item novo, porque o episódio prova que a correção não cobriu o caso. (3) Episódio anexado a seção com item pendente só cita o id do item. (4) O relatório da triagem termina dizendo quantos itens entraram na fila e em que posição. Aceite: depois de uma triagem, `cepa feedback list --status triado` e `cepa plan status <fila>` casam, nenhum destino sem item pendente ou feito.
 
+
+---
+
+## Nenhum hook tem um conjunto fixo de sessões para comparar as decisões antes e depois de uma mudança
+
+> **Decisão do dono em 2026-11-12** (painel `docs/reviews/2026-11-12-painel-lacunas-ecc.md`): adiantado para fora do ciclo 3, na fila `lacunas-ecc`. Os cenários são entradas de hook escritas à mão, sem sessão real gravada e sem dado de cliente.
+
+**Status:** pendente · **Lar provável:** `tests/replay/` (corpus e runner novos), ao lado de `tests/eval/` · **Origem:** leitura do projeto ECC (`~/coding/floss/ECC`, v2.2.3) em 2026-11-12, sessão `session/ecc` · **Serve a:** P1-4 ("Não existe modo de saber se uma mudança no harness melhorou alguma coisa") e ciclo 3 do Epic `cepa-em-espiral`
+
+### Problema
+
+Os hooks do Cepa têm teste unitário, que prova um caso por vez. A suíte `tests/eval/` roda tarefas inteiras com agente e custa US$ 4,69 por volta, com 3 tarefas e nenhuma comparação antes/depois feita (status do P1-4). Entre os dois não existe nada que responda, sem gastar token: "esta mudança no hook X passou a negar mais, negar menos ou deixar passar o que não devia?".
+
+### O que o ECC faz
+
+O `scripts/dev/gateguard-eval.js` reexecuta 20 sessões gravadas (184 chamadas de ferramenta) contra o hook da árvore de trabalho e contra o hook de um commit antigo, extraído com `git show <ref>:<arquivo>`. Cada chamada do corpus traz o rótulo da decisão esperada (`expect: deny|allow`), se a negação seria repetição de trabalho já feito (`redundant`) e se deixar passar é furo de segurança (`mustDeny`). A saída é uma tabela por versão: negações, negações repetidas, furos, tokens estimados das mensagens de negação e latência. Lá a tabela mostrou 157 negações virando 132 (25 ÷ 157 = 16% a menos), 38 negações repetidas virando 0 e 8 furos virando 0. Um teste (`tests/hooks/gateguard-scenarios.test.js`) roda o mesmo corpus só contra a árvore de trabalho e falha se alguma decisão mudar.
+
+### Esboço
+
+(1) Corpus em `tests/replay/<hook>/*.json`: cada cenário é uma lista de payloads de hook (o JSON que o Claude Code entrega no stdin) com `expect`, `redundant` e `must_deny`. Fonte dos payloads: as transcrições em `~/.claude/projects/` dos casos que já viraram seção deste BACKLOG. (2) Runner que roda cada cenário em diretório temporário próprio contra a árvore de trabalho e contra uma ou mais refs do git, e imprime a tabela comparativa. (3) Começar pelos três hooks que mais bloqueiam segundo a telemetria (`cepa-metrics`), não por todos. (4) Um teste por hook coberto falha se uma decisão do corpus mudar sem o rótulo mudar junto. Aceite: mudar de propósito a regra de um hook coberto faz a tabela mostrar a diferença em número, com custo zero de token.
+
+---
+
+## Hook do Cepa não tem identificador estável nem interruptor: desligar um para medir exige editar o `plugin.json`
+
+> **Decisão do dono em 2026-11-12** (mesmo painel): adiado. Não entra em fila até o experimento com e sem gate ter fila. Quando entrar, o interruptor só é obedecido pelo executor do experimento, grava um evento a cada uso e nunca desliga uma invariante do Epic `cepa-em-espiral`, como o gate de escrita por modo.
+
+**Status:** pendente · **Lar provável:** `common/.claude-plugin/plugin.json` (53 comandos de hook: 31 PreToolUse + 8 PostToolUse + 7 UserPromptSubmit + 5 Stop + 1 SessionStart + 1 SessionEnd), helper novo em `common/hooks/` · **Origem:** leitura do projeto ECC em 2026-11-12, sessão `session/ecc` · **Serve a:** ciclo 3 do Epic `cepa-em-espiral` (poda guiada pelo scorecard)
+
+### Problema
+
+Para saber se um hook paga o que custa é preciso rodar a mesma tarefa com ele ligado e desligado. Hoje isso pede editar o `plugin.json` ou o código do hook. Também não há como dar ao filho do `cepa-until` um conjunto de hooks mais leve que o da sessão interativa sem escrever a condição dentro de cada hook (como o `no-background-build` faz com `CEPA_UNTIL_RUN`).
+
+### O que o ECC faz
+
+Cada hook tem um identificador (`pre:bash:commit-quality`) num arquivo ao lado do `hooks.json`, com uma impressão digital do comando para o validador acusar quando os dois arquivos saem de sincronia. Todo hook passa por `scripts/lib/hook-flags.js`, que lê `ECC_HOOKS_ENABLED`, `ECC_HOOK_PROFILE=minimal|standard|strict` e `ECC_DISABLED_HOOKS=id1,id2`. Cada hook declara em quais perfis roda. Os hooks de segurança ficam nos três perfis.
+
+### Esboço
+
+(1) Identificador por hook, derivado do nome do arquivo (`gate-advance`, `no-busy-wait`). A telemetria hoje grava o nome do evento (`busy_wait_block`), não o do hook, então o evento passa a levar também o identificador. (2) Um helper único consultado no início de cada hook: `CEPA_DISABLED_HOOKS=id1,id2` desliga pela lista, `CEPA_HOOK_PROFILE` escolhe o conjunto. (3) Lista fechada de hooks que nenhum interruptor desliga (os que protegem contra perda: `worktree-remove-guard`, `worktree-guard`, `jira-write-lock`). (4) Todo desligamento grava um evento de telemetria, para o scorecard não comparar sessões com conjuntos diferentes sem saber. Aceite: `CEPA_DISABLED_HOOKS=no-busy-wait` faz o hook sair com 0 sem avaliar, o evento aparece em `cepa-metrics`, e a mesma variável com `worktree-remove-guard` é ignorada com aviso.
