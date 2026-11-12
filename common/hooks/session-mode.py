@@ -52,6 +52,14 @@ argument gets its one-line question first, an action with no command is led in
 conversation, free text is a normal request. The actions come from
 `cepa-modes --menu <mode> --json`, the only builder of the menu.
 
+The menu is measured (CS-7): the opening turn records `mode_menu.shown` with the
+mode and leaves `.claude/mode-menu-pending` (the mode, the session and each
+action's number and commands). The NEXT prompt consumes that file, whatever it
+is: when it is a menu number or starts with a menu command it records
+`mode_menu.chosen` with the mode, the action and the command; free text records
+nothing. Only the reply right after the menu counts, so a "2" typed later is
+never read as a choice.
+
 Never blocks anything. With no mode and no intent, it is silent.
 """
 
@@ -83,6 +91,10 @@ try:
     from _modes import parse_session_mode
 except Exception:  # noqa: BLE001
     parse_session_mode = None
+try:
+    import _telemetry as T
+except Exception:  # noqa: BLE001 — telemetry never takes the hook down
+    T = None
 # The exit VERDICT of exploration, read from the disk (docs/reviews/): the
 # condition alone was a reminder nobody measured, and the agent kept proposing
 # one more turn. Only exploration has it; the other modes close by their gates.
@@ -331,7 +343,81 @@ def reminders_lines(root, payload):
 MENU_MARK = "[menu do modo]"
 
 
-def menu_lines(root, prompt):
+# What the opening turn leaves for the next one: the menu shown, so the reply can
+# be told apart as a choice (CS-7). Machine-local state, gitignored.
+MENU_PENDING = os.path.join(".claude", "mode-menu-pending")
+
+
+def bare_command(cmd):
+    """`/common:spec --continuar <slug>` -> `/common:spec --continuar`: the command
+    without its placeholders, which is what the owner types and what is recorded."""
+    return " ".join(re.sub(r"<[^>]*>", " ", str(cmd)).split())
+
+
+def menu_choice(pending, prompt):
+    """(action, command) when `prompt` picks an action of the `pending` menu, else None.
+
+    A choice is the bare number of an action (`1`, `1.`, `1)`) or a prompt that
+    starts with one of the menu's commands; the longest command wins, so
+    `/common:spec --continuar x` is action 2, not action 1."""
+    text = " ".join(str(prompt or "").split())
+    actions = pending.get("actions") or []
+    m = re.fullmatch(r"(\d+)[.)]?", text)
+    if m:
+        n = int(m.group(1))
+        for a in actions:
+            if a.get("n") == n and a.get("commands"):
+                return n, bare_command(a["commands"][0])
+        return None
+    best = None
+    for a in actions:
+        for c in a.get("commands") or []:
+            b = bare_command(c)
+            if b and (text == b or text.startswith(b + " ")):
+                if best is None or len(b) > len(best[1]):
+                    best = (a.get("n"), b)
+    return best
+
+
+def record_menu_reply(root, payload):
+    """Consumes the pending menu of the previous turn: `mode_menu.chosen` when this
+    prompt is a choice of it. Any prompt consumes it. Fail-silent."""
+    path = os.path.join(root, MENU_PENDING)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            pending = json.load(fh)
+    except Exception:  # noqa: BLE001 — no menu shown (or unreadable): nothing to measure
+        return
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    try:
+        if pending.get("session_id") != payload.get("session_id"):
+            return
+        choice = menu_choice(pending, payload.get("prompt"))
+        if choice and T is not None:
+            T.emit("mode_menu.chosen", cwd=root, mode=pending.get("mode"),
+                   action=choice[0], command=choice[1])
+    except Exception:  # noqa: BLE001
+        return
+
+
+def record_menu_shown(root, payload, mode, actions):
+    """`mode_menu.shown` and the pending menu for the next turn. Fail-silent."""
+    if T is not None:
+        T.emit("mode_menu.shown", cwd=root, mode=mode)
+    try:
+        os.makedirs(os.path.join(root, ".claude"), exist_ok=True)
+        with open(os.path.join(root, MENU_PENDING), "w", encoding="utf-8") as fh:
+            json.dump({"mode": mode, "session_id": payload.get("session_id"),
+                       "actions": [{"n": a.get("n"), "commands": a.get("commands") or []}
+                                   for a in actions]}, fh)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def menu_lines(root, prompt, payload=None):
     """The `[menu]` block of the opening turn, or [] on any other turn.
 
     The actions come from `cepa-modes --menu <mode> --json`, the only builder of
@@ -355,6 +441,7 @@ def menu_lines(root, prompt):
         return []
     if not actions:
         return []
+    record_menu_shown(root, payload or {}, mode, actions)
     rules = [
         "[menu] Este é o turno de abertura do modo: o prompt traz o menu de ações dele. "
         "Mostre o menu ao dono traduzido para a língua do dono: traduza só as frases e "
@@ -421,7 +508,8 @@ def main():
                 print(f"[session-mode] intenção: {e}", file=sys.stderr)
 
         if not os.environ.get(ENV_WINDOW):
-            blocks += menu_lines(root, payload.get("prompt"))
+            record_menu_reply(root, payload)
+            blocks += menu_lines(root, payload.get("prompt"), payload)
             blocks += epic_lines(root, payload)
             blocks += reminders_lines(root, payload)
 
