@@ -895,6 +895,46 @@ def test_need_met_unknown_type_is_not_met():
         check("known type still works (plugin)", mod.need_met("plugin:x", d, {"x"}) is True)
 
 
+
+def run_table(repo, home, *args):
+    env = {**os.environ, "HOME": str(home)}
+    return subprocess.run([sys.executable, str(CEPA_MODES), *args, "--no-color"],
+                          cwd=repo.path, env=env, stdin=subprocess.DEVNULL,
+                          capture_output=True, text=True, timeout=30)
+
+
+def test_table_ends_with_the_session_mode_menu():
+    """CS-9: `cepa-modes` with no arguments (what /common:modes runs) ends with the
+    menu of the session's mode, after the table."""
+    print("table: session in exploration ends with the exploration menu")
+    with Repo() as r:
+        write_mode(r, "mode: exploration\n")
+        home = fake_home(r.tmp.name)
+        p = run_table(r, home)
+        out = p.stdout
+        check("cepa-modes rc 0", p.returncode == 0, p.stderr[-200:])
+        menu = run_menu(r, "exploration", home).stdout
+        check("the menu is not empty", menu.strip() != "", repr(menu))
+        check("output ends with the exploration menu",
+              out.rstrip().endswith(menu.rstrip()), out[-800:])
+        check("menu comes after the table",
+              out.find("Falta o 8º") < out.find("1) Write the strategy document"), out[-800:])
+        check("strategy-document action shows",
+              "Write the strategy document with 2 or more paths (no command yet)" in out, out[-800:])
+        check("/common:advisors action shows", ": /common:advisors <document>" in out, out[-800:])
+        check("menu printed once", out.count("1) Write the strategy document") == 1, out[-800:])
+    print("table: no menu without a session mode, for a mode without actions, or for one mode")
+    with Repo() as r:
+        home = fake_home(r.tmp.name)
+        bare = run_table(r, home).stdout
+        check("no session mode: no menu line", "1) " not in bare, bare[-400:])
+        write_mode(r, "mode: design\n")
+        design = run_table(r, home).stdout
+        check("mode without actions: no menu line", "1) " not in design, design[-400:])
+        write_mode(r, "mode: exploration\n")
+        one = run_table(r, home, "discovery").stdout
+        check("named mode: table of that mode only, no menu", "1) " not in one, one[-400:])
+
 # A fake claude that records each argument it got, one JSON list per call,
 # so a multi-line prompt survives intact (FAKE_CLAUDE joins them with spaces).
 RECORDING_CLAUDE = (
@@ -1183,6 +1223,7 @@ def test_menu_telemetry_shown_and_chosen():
 def main():
     print("test_cepa_mode")
     for fn in (test_menu_discovery, test_menu_empty_and_unknown,
+               test_table_ends_with_the_session_mode_menu,
                test_opening_prompt_carries_the_menu,
                test_hook_opening_turn_carries_the_menu_rules,
                test_empty_intent_listing_skips_the_menu_opening_prompt,
