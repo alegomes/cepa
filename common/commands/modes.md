@@ -34,6 +34,12 @@ on purpose: if you could switch midway, the mode would go back to being a label.
 3. If the user named a mode (`/common:modes refactor`), the script already
    filters — you do not filter anything on your own.
 
+4. With no argument and a mode declared in this tree, the output ends with
+   that mode's numbered menu of common actions (the same text as
+   `cepa-modes --menu <mode>`, already filtered by this repo). Show it as it
+   came: it answers the question that follows "what was this mode for?",
+   which is "so what do I do now?". A mode without actions shows no menu.
+
 ## Notes
 
 - The source is `common/hooks/_modes.py`, the same file `session-mode.py` reads

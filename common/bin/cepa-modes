@@ -10,7 +10,8 @@ The source is `common/hooks/_modes.py`, the same file `session-mode.py` reads
 to inject the exit condition on every turn. One table, two readers.
 
 Usage:
-    cepa-modes              # the whole table; marks the current session's mode
+    cepa-modes              # the whole table; marks the current session's mode and
+                            # ends with that mode's menu (the same text as --menu)
     cepa-modes <name>       # a single mode, with entry/produces/exit/gate
     cepa-modes --purposes # one line per mode: what it is for
     cepa-modes --json
@@ -202,7 +203,7 @@ def main():
             "the strategy document it ran over, the owner's decision on each named\n"
             "disagreement). Only exploration has a mechanical verdict."),
         examples=[
-            ("cepa modes", "the whole table; marks this session's mode"),
+            ("cepa modes", "the whole table; marks this session's mode and ends with its menu"),
             ("cepa modes exploration", "one mode: enters with, produces, closes when, gate"),
             ("cepa modes --purposes", "one line per mode: what it is for"),
             ("cepa modes --exit", "the exit verdict of this session's mode"),
@@ -291,6 +292,12 @@ def main():
             print(f"{DIM}Esta árvore não tem modo declarado.{RESET}")
         print(f"{DIM}Falta o 8º, `deploy`: fora da rodada por decisão do dono — "
               f"é o único que depende de infra externa.{RESET}")
+        if current in MODES and menu_actions(current, repo_root()):
+            # The menu of the session's mode closes the table: whoever asked "what
+            # was this mode for?" usually asks next "so what do I do now?" (CS-9).
+            print(f"\n{BOLD}O que dá para fazer em {current}{RESET}"
+                  f"{DIM} (responda com o número ou o comando):{RESET}")
+            render_menu(current)
     return 0
 
 
