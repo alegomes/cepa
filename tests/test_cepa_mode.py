@@ -923,14 +923,25 @@ def test_table_ends_with_the_session_mode_menu():
               "Write the strategy document with 2 or more paths (no command yet)" in out, out[-800:])
         check("/common:advisors action shows", ": /common:advisors <document>" in out, out[-800:])
         check("menu printed once", out.count("1) Write the strategy document") == 1, out[-800:])
+        head = "O que dá para fazer em exploration"
+        check("the menu has its header, right before the first action",
+              head in out and out.find(head) < out.find("1) Write the strategy document")
+              and out.find("Falta o 8º") < out.find(head), out[-800:])
     print("table: no menu without a session mode, for a mode without actions, or for one mode")
     with Repo() as r:
         home = fake_home(r.tmp.name)
-        bare = run_table(r, home).stdout
+        p = run_table(r, home)
+        bare = p.stdout
+        check("no session mode: rc 0", p.returncode == 0, p.stderr[-300:])
         check("no session mode: no menu line", "1) " not in bare, bare[-400:])
+        check("no session mode: no menu header", "O que dá para fazer" not in bare, bare[-400:])
         write_mode(r, "mode: design\n")
-        design = run_table(r, home).stdout
+        p = run_table(r, home)
+        design = p.stdout
+        check("mode without actions: rc 0", p.returncode == 0, p.stderr[-300:])
         check("mode without actions: no menu line", "1) " not in design, design[-400:])
+        check("mode without actions: no menu header", "O que dá para fazer" not in design,
+              design[-400:])
         write_mode(r, "mode: exploration\n")
         one = run_table(r, home, "discovery").stdout
         check("named mode: table of that mode only, no menu", "1) " not in one, one[-400:])
