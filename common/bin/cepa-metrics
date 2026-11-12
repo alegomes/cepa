@@ -163,6 +163,45 @@ def intent_lines(events):
     return L
 
 
+def mode_menu_counts(events):
+    """{mode: {"shown": n, "chosen": n}} from `mode_menu.shown` / `mode_menu.chosen`
+    (CS-7 and CS-8 of docs/spec/modos-opinativos.md). An event without a mode
+    counts under "?" instead of vanishing."""
+    counts = defaultdict(lambda: {"shown": 0, "chosen": 0})
+    for e in events:
+        ev = e.get("event")
+        if ev == "mode_menu.shown":
+            counts[e.get("mode") or "?"]["shown"] += 1
+        elif ev == "mode_menu.chosen":
+            counts[e.get("mode") or "?"]["chosen"] += 1
+    return {m: dict(c) for m, c in counts.items()}
+
+
+def mode_menu_lines(counts):
+    """Lines of the "Menu do modo" block: per mode, choices ÷ showings, with the
+    arithmetic in the line. Returns [] when there is no menu event."""
+    if not counts:
+        return []
+    L = []
+    width = max(len(m) for m in counts)
+    for mode in sorted(counts, key=lambda m: (-counts[m]["shown"], m)):
+        shown, chosen = counts[mode]["shown"], counts[mode]["chosen"]
+        if shown:
+            rate = f"{100 * chosen / shown:.0f}%"
+            L.append(f"    {mode:<{width}}  {chosen} ÷ {shown} = {rate}  "
+                     f"({chosen} escolha(s) de {shown} exibição(ões))")
+        else:
+            L.append(f"    {mode:<{width}}  {chosen} escolha(s), sem exibição na janela "
+                     f"(sem divisor)")
+    L += ["    memória de cálculo: por modo, escolhas ÷ exibições × 100.",
+          "      exibição = um mode_menu.shown (o turno de abertura mostrou o menu);",
+          "      escolha = um mode_menu.chosen (a resposta seguinte foi um número ou",
+          "      um comando do menu). Pedido em prosa depois do menu conta como não",
+          "      escolheu. O menu pedido pelo /common:modes não conta como exibição.",
+          "    É a conta que diz se o turno que o menu gasta em cada abertura se paga."]
+    return L
+
+
 def _line(name, numerator, denominator, pct, units):
     if not denominator:
         return f"    {name}: sem dados ({units[1]} = 0)"
@@ -403,7 +442,8 @@ def main():
     known = {"session_start", "session_end", "build_result", "gate_block", "gate_warn",
              "proof_verdict", "proof_block", "report_style", "prompt", "token_usage",
              "intent.written", "intent.cursor_advanced", "intent.asked",
-             "intent.finished_at_last_step"}
+             "intent.finished_at_last_step", "mode_menu.shown", "mode_menu.chosen"}
+    menu_counts = mode_menu_counts(events)
     custom = Counter(e.get("event") for e in events if e.get("event") not in known)
 
     if args.as_json:
@@ -433,6 +473,7 @@ def main():
                        "contexto_novo_por_repo": dict(tok_repo),
                        "por_agente": {k: dict(v) for k, v in tok_agent.items()},
                        "resultado_chars": dict(tok_chars)},
+            "mode_menu": menu_counts,
             "custom_events": dict(custom),
         }, indent=2, ensure_ascii=False, default=str))
         return 0
@@ -479,6 +520,11 @@ def main():
     if intent_block:
         print("\n## Intenção da sessão")
         print("\n".join(intent_block))
+
+    menu_block = mode_menu_lines(menu_counts)
+    if menu_block:
+        print("\n## Menu do modo — escolhas ÷ exibições, por modo")
+        print("\n".join(menu_block))
 
     print("\n## Proof gate — vereditos escritos (repo · veredito)")
     print(fmt_counter(Counter({f"{r} · {v}": n for (r, v), n in proof_verdicts.items()})))
