@@ -1,0 +1,45 @@
+schema_version: 2
+card: modos-opinativos-CS-6
+verdict: proven
+reviewed_at: 2026-11-12T02:00:00-03:00
+base_commit: c72646b
+head_commit: 52b7d5e
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/hooks/session-mode.py (is_menu_opening(), first_prompts() log filter and current-turn drop, menu_lines() uses is_menu_opening)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null        # test_empty_intent_listing_skips_the_menu_opening_prompt runs the real hook as a subprocess; only HOME is faked
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python hooks repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at HEAD 52b7d5e: python3 tests/test_cepa_mode.py -> 'tudo verde' (throwaway detached worktree /tmp/proof-cs6, removed afterwards)"
+        - "(p1) first_prompts: log filter `prompts = [t for t in prompts if not is_menu_opening(t)]` -> `pass` -> FAIL 'the menu opening prompt is not listed' and '...and the real opening prompt is still skipped' (RED)"
+        - "(p2) first_prompts: `if is_menu_opening(current_prompt):` -> `if False:` (current-turn drop removed) -> FAIL \"opening turn, nothing else: 'nenhum ainda'\" (RED)"
+        - "(p3) first_prompts: `is_menu_opening(current_prompt)` -> `is_menu_opening(current)` (normalized instead of RAW) -> FAIL 'raw prompt with whitespace before the marker: still listed' (RED)"
+        - "(p4) is_menu_opening: startswith -> `MENU_MARK in prompt` -> FAIL 'marker mid-prompt with a valid mode where the name would be: still not', 'raw prompt with whitespace before the marker: still listed', 'marker mid-prompt is an owner prompt: listed' (RED)"
+        - "(p5) is_menu_opening: `.strip().startswith` -> FAIL 'raw prompt with whitespace before the marker: still listed' (RED)"
+        - "(p6) is_menu_opening: body -> `return False` -> FAIL 'display rule: translate the phrases', 'display rule: keep order, numbering and commands', 'action 1 asks its one-line question first' and others (RED)"
+        - "equivalent, no gap (p7) menu_lines: `if not is_menu_opening(text):` -> `if not text.startswith(MENU_MARK):` -> green. Same predicate inlined, identical behavior; the refactor-inverse cannot be observed"
+        - "RED-at-base: hook from c72646b with the HEAD test file (worktree at HEAD, session-mode.py replaced by `git show c72646b:...`) -> FAIL 'the menu opening prompt is not listed', \"opening turn, nothing else: 'nenhum ainda'\", '...and the real opening prompt is still skipped'"
+        - "worktree /tmp/proof-cs6 removed; git worktree list does not show it; primary tree untouched except this file"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; each changed line (is_menu_opening body, log filter, current-turn drop and its RAW-vs-normalized input) turns tests/test_cepa_mode.py red when perturbed (p1-p6); p7 is an equivalent mutant"
+  l4_adversarial_input:
+    status: n/a
+    reason: "NOT verified by a run. The only input is the owner's prompt text, of which the diff just checks whether it starts with the fixed marker to decide whether to list it; no parsing of new fields, no network, no api-rest surface. Edge cases (leading whitespace, marker mid-prompt) are asserted by the test itself (p3, p4, p5). The diff touches no input-bearing module. The reviewer may overrule."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is a Story, not a Bug; red-at-base is recorded under l3_load_bearing (3 FAIL at c72646b hook with the HEAD test)"
+routing_reason: "The behavior (the mode-menu opening prompt no longer appears in the [intenção] 'Primeiros prompts' list, neither from the log nor as the current turn, and only when the prompt really starts with the marker) is load-bearing: removing the log filter, the current-turn drop, testing the normalized prompt, loosening startswith to `in` or adding strip, or neutralizing is_menu_opening each turns the test red, and the test is red at base. No survivors; the one green perturbation (p7) is an equivalent mutant. L4 is n/a by diff-based claim, which the reviewer may overrule."

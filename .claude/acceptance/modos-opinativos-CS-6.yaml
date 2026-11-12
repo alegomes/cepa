@@ -1,0 +1,27 @@
+schema_version: 1
+card: modos-opinativos-CS-6
+status: complete
+audited_at: 2026-11-12T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "o prompt de abertura do menu do modo não conta como prompt do dono na linha [intenção]: com .claude/session-log.md contendo o prompt de abertura seguido de 'quero especificar X', sem intenção gravada, a lista 'Primeiros prompts' contém 'quero especificar X' e não contém [menu do modo] (docs/spec/modos-opinativos.md, CS-6)"
+    altitude: cli
+    surface: "hook real common/hooks/session-mode.py executado como subprocesso (sys.executable HOOK, payload JSON de UserPromptSubmit com cwd, session_id e prompt via stdin); asserção sobre o additionalContext decodificado da saída."
+    demonstrated_by:
+      test: "tests/test_cepa_mode.py::test_empty_intent_listing_skips_the_menu_opening_prompt"
+      layer: "subprocesso real do hook (run_hook), repo temporário, session-log.md e registro de sessão reais em disco; sem mock. Cobre o caso do critério (log com abertura + 'quero especificar X': o prompt do dono aparece e [menu do modo] não), o turno de abertura com log vazio ('nenhum ainda'), e negativos: espaço antes do marcador e marcador no meio do prompt continuam sendo prompt do dono."
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_mode.py -> rc=0, "tudo verde"; 184 checagens "ok", 0 FAIL (N > 0)
+          ok   log has opening + owner prompt: the owner prompt is listed
+          ok   the menu opening prompt is not listed
+          ok   opening turn, nothing else: 'nenhum ainda'
+          ok   raw prompt with whitespace before the marker: still listed
+          ok   marker mid-prompt is an owner prompt: listed
+          ok   ...and the real opening prompt is still skipped
+    verdict: complete
+    gap: null
+    note: |
+      Diff auditado: git diff c72646b..HEAD (common/hooks/session-mode.py, tests/test_cepa_mode.py). Rodado só tests/test_cepa_mode.py, não a suíte inteira.
+      Altitude cli confirmada: run_hook invoca o script do hook em subprocesso com payload JSON no stdin, a mesma borda que o Claude Code usa.
+      A regra de pular a abertura é compartilhada com menu_lines via is_menu_opening, então não há duas definições divergentes.
