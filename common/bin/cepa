@@ -363,6 +363,15 @@ launch_here() {
 run_claude() {
   CEPA_LAUNCH_ID=$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
   export CEPA_LAUNCH_ID
+  # Was this session isolated in a linked worktree? Asked now, because the
+  # wrap-up may delete the worktree before claude exits. session-chain.py uses
+  # it to open the next session in a worktree too, instead of the main tree.
+  CEPA_CHAIN_FROM_WORKTREE=0
+  if [ "$(git rev-parse --path-format=absolute --git-dir 2>/dev/null)" != \
+       "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" ]; then
+    CEPA_CHAIN_FROM_WORKTREE=1
+  fi
+  export CEPA_CHAIN_FROM_WORKTREE
   set +e
   "$CLAUDE_BIN" "$@"
   _rc=$?

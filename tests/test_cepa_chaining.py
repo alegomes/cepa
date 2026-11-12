@@ -465,11 +465,61 @@ def t_worktree_erased():
               repr(c[:1]))
         check("o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
         if len(c) == 2:
-            check("a segunda rodou com cwd = repo do arquivo", same(c[1]["cwd"], w.b), c[1]["cwd"])
+            check("a segunda rodou numa worktree do repo do arquivo",
+                  Path(c[1]["cwd"]).resolve().is_relative_to(w.wt_home.resolve())
+                  and Path(c[1]["cwd"]).name.startswith("repo-b-chain-"), c[1]["cwd"])
         check("sem 'shell-init' nem 'getcwd' no stderr",
               "shell-init" not in r.stderr and "getcwd" not in r.stderr, r.stderr)
         check("o .next.json foi apagado", not (w.sessions / "sess-1.next.json").exists())
         check("sai 0", r.returncode == 0, f"rc={r.returncode} stderr={r.stderr!r}")
+
+
+def _branches(repo):
+    out = subprocess.run(["git", "branch", "--list", "session/*", "--format=%(refname:short)"],
+                         cwd=repo, capture_output=True, text=True).stdout
+    return set(out.split())
+
+
+def t_worktree_to_worktree():
+    print("sessão numa worktree encadeia: a seguinte abre numa worktree com o nome do card")
+    nxt = {"repo": None, "mode": "construction", "comando": "/board-flow:execute WEGO-2537",
+           "brief": BRIEF}
+    with World() as w:
+        r = w.run(nxt={**nxt, "repo": str(w.a)}, args=["-s", "fatia"])
+        c = w.calls()
+        check("o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
+        if len(c) == 2:
+            check("a segunda rodou na worktree session/wego-2537",
+                  Path(c[1]["cwd"]).name == "repo-a-wego-2537", c[1]["cwd"])
+            check("o -s não vaza para o claude", "-s" not in c[1]["args"], repr(c[1]["args"]))
+            check("o prompt continua comando + brief",
+                  c[1]["args"][-1] == nxt["comando"] + "\n\n" + BRIEF, repr(c[1]["args"]))
+            check("a segunda abriu em modo construction",
+                  "mode: construction" in c[1]["mode"], repr(c[1]["mode"]))
+        check("o cepa diz a worktree", "worktree session/wego-2537" in r.stderr, r.stderr)
+    print("nome derivado já existe: ganha sufixo, não retoma a worktree velha")
+    with World() as w:
+        subprocess.run(["git", "branch", "session/wego-2537"], cwd=w.a, check=True)
+        r = w.run(nxt={**nxt, "repo": str(w.a)}, args=["-s", "fatia"])
+        c = w.calls()
+        check("colisão: a segunda rodou em session/wego-2537-2",
+              len(c) == 2 and Path(c[1]["cwd"]).name == "repo-a-wego-2537-2",
+              repr([x["cwd"] for x in c]) + r.stderr)
+    print("`slice` no arquivo vale mesmo vindo da árvore principal")
+    with World() as w:
+        r = w.run(nxt={"repo": str(w.a), "mode": "discovery", "brief": BRIEF, "slice": "proxima"})
+        c = w.calls()
+        check("slice explícito: a primeira rodou na raiz", len(c) >= 1 and same(c[0]["cwd"], w.a),
+              repr(c[:1]))
+        check("slice explícito: a segunda rodou em session/proxima",
+              len(c) == 2 and Path(c[1]["cwd"]).name == "repo-a-proxima", repr(c) + r.stderr)
+        check("slice explícito: a branch existe", "session/proxima" in _branches(w.a), repr(_branches(w.a)))
+    print("`slice` inválido no arquivo é ignorado (árvore principal continua na raiz)")
+    with World() as w:
+        r = w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF, "slice": "../x"})
+        c = w.calls()
+        check("slice inválido: a segunda rodou na raiz de b", len(c) == 2 and same(c[1]["cwd"], w.b),
+              repr(c) + r.stderr)
 
 
 def t_record_ignores_next():
@@ -540,6 +590,7 @@ if __name__ == "__main__":
     t_most_recent_wins()
     t_without_session_end()
     t_worktree_erased()
+    t_worktree_to_worktree()
     t_record_ignores_next()
     if failures:
         print(f"\n{len(failures)} FAIL")

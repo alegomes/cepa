@@ -28,6 +28,16 @@ SessionStart, notes each `session_id` born from that opening in
 opens another `session_id` in the same process). Here the most recent one that
 left a `.next.json` wins.
 
+Worktree: when the session that left ran in a linked worktree (the launcher
+exports CEPA_CHAIN_FROM_WORKTREE=1), the next one opens in a worktree too, via
+`cepa -s <slice>`, instead of landing in the main tree. The slice is the
+file's `slice` when it carries one; otherwise the first Jira key found in
+`comando` + `brief`, lowercased (`WEGO-2537` -> `wego-2537`); otherwise
+`chain-<MMDD-HHMM>`. A derived name that already has a `session/<name>` branch
+gets `-2`, `-3`... so it never resumes an old worktree by accident; an explicit
+`slice` is used as given (resuming is what `-s` does). A file `slice` is
+honoured even when the session that left was in the main tree.
+
 Usage: session-chain.py <launch_id> <cepa> <rc>
 Output: exec of `cepa` (chained), or exit <rc> (nothing to chain, or invalid
 file, which stays in place for the owner to see).
@@ -35,7 +45,10 @@ file, which stays in place for the owner to see).
 
 import json
 import os
+import re
+import subprocess
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _wtlib as L  # noqa: E402
@@ -52,6 +65,31 @@ def breadcrumb_path(root: str, launch_id: str):
 
 def next_path(root: str, session_id: str):
     return L.sessions_dir(root) / f"{session_id}.next.json"
+
+
+_JIRA_KEY = re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")
+_SLICE_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _branch_exists(repo: str, name: str) -> bool:
+    r = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"refs/heads/session/{name}"],
+                       cwd=repo, capture_output=True)
+    return r.returncode == 0
+
+
+def chain_slice(spec: dict, repo: str, from_worktree: bool, text: str):
+    """The slice for `cepa -s`, or None to open in place (see the docstring)."""
+    given = spec.get("slice")
+    if isinstance(given, str) and _SLICE_OK.match(given.strip()):
+        return given.strip()
+    if not from_worktree:
+        return None
+    m = _JIRA_KEY.search(text)
+    base = m.group(1).lower() if m else "chain-" + time.strftime("%m%d-%H%M")
+    name, n = base, 2
+    while _branch_exists(repo, name):
+        name, n = f"{base}-{n}", n + 1
+    return name
 
 
 def main() -> int:
@@ -118,10 +156,14 @@ def main() -> int:
                 f.unlink()
             except OSError:
                 pass
-    print(f"↻ cepa: próxima sessão em {repo} (modo {mode}) — CEPA_ENCADEAR=off desliga",
+    sl = chain_slice(spec, repo, os.environ.get("CEPA_CHAIN_FROM_WORKTREE") == "1", prompt)
+    where = f"{repo}, worktree session/{sl}" if sl else repo
+    print(f"↻ cepa: próxima sessão em {where} (modo {mode}) — CEPA_ENCADEAR=off desliga",
           file=sys.stderr)
     os.chdir(repo)
-    os.execv(cepa, [cepa, "--mode", mode, *intent_args(spec.get("intent") or spec.get("intencao"), nxt), prompt])
+    os.environ.pop("CEPA_CHAIN_FROM_WORKTREE", None)
+    os.execv(cepa, [cepa, "--mode", mode, *(["-s", sl] if sl else []),
+                    *intent_args(spec.get("intent") or spec.get("intencao"), nxt), prompt])
     return rc  # unreachable
 
 
