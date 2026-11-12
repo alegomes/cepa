@@ -1,0 +1,22 @@
+schema_version: 1
+card: modos-opinativos-CS-11
+status: complete
+audited_at: 2026-11-12T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "docs/modos-de-trabalho.md descreve o menu sem desfazer a distinção entre modo e rotina (docs/spec/modos-opinativos.md, CS-11; P3)"
+    altitude: domain
+    surface: "texto da seção '## Modo não é Rotina' de docs/modos-de-trabalho.md, lido por doc_failures em tests/test_modes_single_source.py."
+    demonstrated_by:
+      test: "tests/test_modes_single_source.py::doc_failures (chamada por main)"
+      layer: "domínio, sem mock: lê o arquivo real, recorta a seção até o próximo '## ' e exige (a) a frase 'Uma sessão = um modo obrigatório + no máximo uma rotina' dentro dela e (b) um parágrafo (separado por linha em branco) dentro dela com `actions` e 'cepa-modes --menu'."
+      evidence: verified
+      run: |
+        python3 tests/test_modes_single_source.py -> rc=0, "ok — 7 modos, mesma lista no `cepa` e em _modes.py, todos com os 5 campos" (doc_failures(DOC) == [])
+    verdict: complete
+    gap: null
+    note: |
+      Diff auditado: git diff 10e64b7..HEAD (9577ad4 teste, 1d6bbd9 doc). A frase está na linha 42 e o parágrafo novo vem logo depois, antes de '## Os oito modos'; ambos dentro da seção.
+      Afirmações do parágrafo conferidas no código: (1) MODES[*]['actions'] existe (exploration 5, discovery 6, construction 11, os outros quatro 0); cada ação tem label e command. (2) `cepa-modes --menu <modo>` imprime menu numerado e filtra por needs (file:board-flow.yaml etc., _modes.py linhas 85 e 109; cepa-modes menu_actions/need_met). (3) Aparece na abertura de `cepa --mode` sem pedido inicial (cepa linhas 22-23, 540-542, marcador [menu do modo]) e no fim de `/common:modes` (cepa-modes linha 295-300). (4) Só construction, discovery e exploration têm menu: confere, cepa-modes --menu devolve 0 linhas para documentation, design, refactor, reflection. (5) "Escolher uma ação não grava nada em routine:": o único ponto que escreve `routine:` é write_mode em common/bin/cepa (linha 391), que grava sempre 'routine: null' na abertura; nem cepa-modes nem session-mode.py escrevem esse campo. Verdadeiro.
+      Extras do doc (linha de status no topo e item 5b da lista de construção) batem com a especificação ("bloco de status e lista ganham a linha do menu"); o teste não os cobre, e CS-11 não pede isso.
+      Observação (não bloqueia): o teste só confere a presença textual; a veracidade das afirmações foi conferida por leitura do código, não por teste.
