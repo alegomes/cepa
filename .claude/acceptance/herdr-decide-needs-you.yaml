@@ -1,0 +1,57 @@
+key: herdr-decide-needs-you
+status: complete
+criteria:
+  - id: AC1
+    text: "decide em terminal HC escreve state=blocked:kind=question (título '<queue>: waiting for your answer') antes de cada pergunta"
+    altitude: cli
+    surface: "bytes no pty do processo real `cepa-until decide`"
+    test: tests/test_cepa_until_decide.py::test_decide_on_an_hc_terminal_reports_needs_you_while_it_asks
+    layer: e2e (pty, subprocesso real)
+    evidence: verified
+    run: "python3 (runner de função única) -> 6 checks ok, FAILURES=[]  (1 teste, 6 asserções)"
+    verdict: complete
+  - id: AC2
+    text: "após a resposta, state=working (título '<queue>: applying your answer')"
+    altitude: cli
+    surface: "bytes no pty"
+    test: tests/test_cepa_until_decide.py::test_decide_on_an_hc_terminal_reports_needs_you_while_it_asks
+    layer: e2e (pty)
+    evidence: verified
+    run: "mesmo run; 'a resposta digitada volta para working' ok, 2 working para 2 blocked"
+    verdict: complete
+  - id: AC3
+    text: "ao sair do decide (saída normal, exceção e Ctrl+C; SIGTERM/SIGHUP fora de escopo por decisão), escreve state=clear e título vazio"
+    altitude: cli
+    surface: "bytes no pty em todas as saídas"
+    test: tests/test_cepa_until_decide.py::test_decide_on_an_hc_terminal_clears_on_ctrl_c_and_on_an_exception (+ saída normal no teste do AC1)
+    layer: e2e (pty/pipe, processo real)
+    evidence: verified
+    run: "7 checks ok, FAILURES: [] (Ctrl+C em pty real e exceção via _decide_reporting)"
+    verdict: complete
+  - id: AC4
+    text: "nenhuma sequência fora de terminal HC, nem quando só lista perguntas como texto (não-tty)"
+    altitude: cli
+    surface: "stdout do processo real"
+    test: tests/test_cepa_until_decide.py::test_decide_listing_as_text_in_an_hc_terminal_writes_no_status (+ metade sem HC no teste do AC1)
+    layer: e2e (pty/pipe, processo real)
+    evidence: verified
+    run: "4 checks ok, FAILURES: [] (pipes; stdin DEVNULL com stdout pty; HC_TERMINAL_ID=t9)"
+    verdict: complete
+  - id: AC5
+    text: "run principal que termina normal com pergunta sem resposta termina em blocked:kind=question '<queue>: finished, questions wait for you', não done; sem pergunta pendente continua done"
+    altitude: cli
+    surface: "bytes no terminal do processo principal cepa-until"
+    test: tests/test_cepa_until_decide.py::test_run_on_an_hc_terminal_that_nobody_answers_ends_in_needs_you (+ ramo done no teste do AC6)
+    layer: e2e (pty/pipe, processo real)
+    evidence: verified
+    run: "4 checks ok, FAILURES: [] (run real em pty, CEPA_UNTIL_ESPERA_RESPOSTA=2)"
+    verdict: complete
+  - id: AC6
+    text: "test_hc_terminal_gets_one_working_status_per_item_and_a_done_at_the_end passa"
+    altitude: cli
+    surface: "processo real em pty (hc_scenario)"
+    test: tests/test_cepa_until.py::test_hc_terminal_gets_one_working_status_per_item_and_a_done_at_the_end
+    layer: e2e
+    evidence: verified
+    run: "runner de função única: 6 checks ok, FAILURES=[]"
+    verdict: complete
