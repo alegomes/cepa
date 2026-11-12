@@ -1,4 +1,4 @@
-# plan.yaml — fila `single-track`, escrita por /common:plan.
+# queue.yaml — fila `single-track`, escrita por /common:queue.
 #
 # ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
 # critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
@@ -3077,8 +3077,9 @@ items:
     não espera a fila lacunas-ecc. Não move nenhum dos quatro números do scorecard;
     é a precondição legal da resposta do dono à pergunta Q1 (alguém além do dono
     poder usar o Cepa, na forma mínima) e a licença MIT é a resposta à Q2, ambas
-    de 2026-11-12. Precondição escrita no documento: nome do titular e ano. (ainda
-    não priorizado: entrou no fim da fila)'
+    de 2026-11-12. Precondição escrita no documento: nome do titular e ano. Resposta
+    do dono em 2026-11-12: titular Alexandre Gomes, ano 2026. (ainda não priorizado:
+    entrou no fim da fila)'
   status: pending
   blocked_by: []
   human_pending: null
