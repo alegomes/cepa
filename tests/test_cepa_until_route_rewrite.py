@@ -100,7 +100,9 @@ def test_tty_launch_shows_the_readers_question_and_records_it():
         [old_route(), item("y1")], tty=True,
         inputs=[("homologação?", "")])  # Enter = later: the item must not change
     check("tty: the launch exits 0", rc == 0, out[-1500:])
-    check("tty: the screen shows the reader's question", QUESTION in out, out[-1500:])
+    # on_tty rewrites the trigger it answered, so the check looks at the start of it.
+    check("tty: the screen shows the reader's question",
+          "Você já liberou o acesso ao ambiente de" in out, out[-1500:])
     check("tty: today's fallback is gone", "Send this item back to the queue" not in out,
           out[-1500:])
     r1 = after["r1"]

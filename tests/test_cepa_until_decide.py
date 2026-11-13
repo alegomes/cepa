@@ -2342,6 +2342,17 @@ def _slow_reader(tmp, mode="pre", delay=2):
     return slow, done
 
 
+def _written_route(ident, text):
+    """A route that already has its closed question and kind: the launch asks it right
+    away (CS-8). An OLD route (no question or no kind) waits for its reader (CS-4 of
+    perguntas-da-largada-legiveis) and comes at the end of the list."""
+    it = item(ident, human_pending=text)
+    it.update(route_kind="owner-task", owner_question="Você já providenciou isso?",
+              owner_summary={"se_sim": "O item volta para a fila.",
+                             "se_nao": "O item continua esperando."})
+    return it
+
+
 def _cs8_launch(items, mode="pre", inputs=None, wait="5", delay=2):
     """Real launch on a pty with the slow fake reader. Returns (out, events, items,
     reader_done_when_the_first_question_was_answered)."""
@@ -2412,7 +2423,7 @@ def test_launch_cs8_queue_route_comes_before_the_pre_read_question_and_the_total
     route. The route's question is on the screen before the reading ends, the
     pre-read's question comes after it in the same list, and the total sums both."""
     out, events, items, seen = _cs8_launch(
-        [item("r1", human_pending="provision the Keycloak role"), item("x1"),
+        [_written_route("r1", "provision the Keycloak role"), item("x1"),
          item("y1")])
     route = out.find("provision the Keycloak role")
     found = out.find("Falta o token de acesso")
@@ -2455,7 +2466,7 @@ def test_launch_cs8_preference_counts_in_the_total_after_the_queue_route():
     """A preference found by the pre-read comes after the queue's route and counts in
     the total; Enter keeps the default and the item runs."""
     out, events, items, _ = _cs8_launch(
-        [item("r1", human_pending="provision the Keycloak role"), item("x1")],
+        [_written_route("r1", "provision the Keycloak role"), item("x1")],
         mode="pref", inputs=[("[t] I write the answer", ""),
                              ("Your choice, in one line", "")])
     route = out.find("provision the Keycloak role")

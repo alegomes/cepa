@@ -3176,18 +3176,49 @@ Item:
 """
 
 
-def reader_command(item):
+# CS-4 of docs/spec/perguntas-da-largada-legiveis.md: the reader of an OLD route (an
+# open `human_pending` with no closed question or no kind). Same closed-JSON idea; the
+# payload carries `"tarefa": "reescrever-rota"` so a fake reader can tell the two jobs
+# apart.
+ROUTE_TASK = "reescrever-rota"
+ROUTE_EVIDENCE_CHARS = 6000
+
+ROUTE_READER_PROMPT = """You are a READ-ONLY reader that rewrites an OLD route as a \
+closed question. A route is something only the owner of the repository can close: it \
+is written in the item's `human_pending`. This one was written before routes had a \
+kind and a closed yes/no question, so the owner cannot tell what to answer. Read the \
+item below (and, only if needed, the relevant parts of the repository with Read, Glob \
+and Grep; change nothing) and decide:
+- route_kind: "owner-task" (a task only the owner does, outside the repository), \
+"external-block" (something outside must exist and it is not an owner decision) or \
+"open-question" (a doubt the owner answers);
+- question: ONE closed yes/no question, in Brazilian Portuguese, up to 25 words, with \
+a "?", in lay words: no codes, file names, commit hashes or card ids;
+- if_yes: what a "yes" does to the WORK, in Brazilian Portuguese, up to 30 words, lay \
+words (a "yes" sends the item back to the queue for the next run);
+- if_no: what a "no" does to the WORK, same rules (a "no" leaves the item waiting).
+
+Answer with ONLY one JSON object, no prose, no code fence:
+{{"route_kind": "...", "question": "...", "if_yes": "...", "if_no": "..."}}
+
+Item:
+{item}
+"""
+
+
+def reader_command(item, prompt=READER_PROMPT):
     """(argv, stdin_text) of the reader of ONE item, or None when the pre-read is off.
     `CEPA_UNTIL_LEITOR` replaces the command (shlex-split; it gets the item as JSON on
     stdin); `off` disables the pre-read. The default is a `claude -p` limited to the
-    read-only tools, with the item inside the prompt (stdin stays closed)."""
+    read-only tools, with the item inside the prompt (stdin stays closed). `prompt`
+    is the job: READER_PROMPT (the item) or ROUTE_READER_PROMPT (an old route)."""
     override = os.environ.get("CEPA_UNTIL_LEITOR")
     payload = json.dumps(item, ensure_ascii=False)
     if override is not None:
         if override.strip().lower() == "off":
             return None
         return shlex.split(override), payload
-    cmd = ["claude", "-p", READER_PROMPT.format(item=payload),
+    cmd = ["claude", "-p", prompt.format(item=payload),
            "--output-format", "text",
            "--tools", "Read,Glob,Grep", "--allowedTools", "Read,Glob,Grep",
            # no MCP server: its tools are not covered by `--tools`
@@ -3198,20 +3229,40 @@ def reader_command(item):
     return cmd, None
 
 
-def parse_finding(text):
-    """The closed JSON the reader printed, as {tipo, texto, pergunta[, padrao]}, or
-    None when there is no finding (null type, text that is not that JSON, a type
-    outside the closed set, or a finding with nothing written in `texto`)."""
+def _json_object(text):
+    """The JSON the reader printed (tolerating a fence or a sentence around it), or
+    None when it is not valid JSON."""
     text = (text or "").strip()
     try:
-        body = json.loads(text)
+        return json.loads(text)
     except ValueError:
         # Models wrap the object in a fence or a sentence despite the instruction.
         start, end = text.find("{"), text.rfind("}")
         try:
-            body = json.loads(text[start:end + 1]) if 0 <= start < end else None
+            return json.loads(text[start:end + 1]) if 0 <= start < end else None
         except ValueError:
             return None
+
+
+def parse_route(text):
+    """CS-4: the rewritten route the reader printed, as {route_kind, question, if_yes,
+    if_no}, or None when it is not that (kind outside the closed set, a question
+    without `?`, an empty effect, or text that is not that JSON)."""
+    body = _json_object(text)
+    if not isinstance(body, dict) or body.get("route_kind") not in tuple(ROUTE_KIND_LABEL):
+        return None
+    flat = {k: " ".join(str(body.get(k) or "").split())
+            for k in ("question", "if_yes", "if_no")}
+    if "?" not in flat["question"] or not flat["if_yes"] or not flat["if_no"]:
+        return None
+    return {"route_kind": body["route_kind"], **flat}
+
+
+def parse_finding(text):
+    """The closed JSON the reader printed, as {tipo, texto, pergunta[, padrao]}, or
+    None when there is no finding (null type, text that is not that JSON, a type
+    outside the closed set, or a finding with nothing written in `texto`)."""
+    body = _json_object(text)
     if not isinstance(body, dict) or body.get("tipo") not in READER_KINDS:
         return None
     texto = " ".join(str(body.get("texto") or "").split())
@@ -3321,11 +3372,12 @@ READ_STOPPED_ERROR = "launch interrupted before the reader started"
 _READ_STOP = threading.Event()
 
 
-def read_one(repo, item, deadline):
-    """Runs the reader of one item; returns (finding_or_None, error_or_None). Anything
-    that goes wrong (no command, non-zero exit, past the shared deadline) is "no
-    finding": the item then runs as it does today."""
-    built = reader_command(item)
+def _run_reader(repo, item, deadline, prompt, parse):
+    """Runs the reader of one job; returns (parsed_or_None, error_or_None). Anything
+    that goes wrong (no command, non-zero exit, past the shared deadline) is "nothing
+    read": the item then runs as it does today. Shared by the item reader and the
+    route reader: same deadline, same kill of the process group, same `_LIVE_READERS`."""
+    built = reader_command(item, prompt)
     if built is None:
         return None, None
     cmd, stdin_text = built
@@ -3353,17 +3405,44 @@ def read_one(repo, item, deadline):
         _LIVE_READERS.discard(proc)
     if proc.returncode != 0:
         return None, f"reader exited {proc.returncode}"
-    return parse_finding(out), None
+    return parse(out), None
+
+
+def read_one(repo, item, deadline):
+    """Runs the reader of one item; returns (finding_or_None, error_or_None)."""
+    return _run_reader(repo, item, deadline, READER_PROMPT, parse_finding)
+
+
+def read_route(repo, item, deadline):
+    """CS-4: runs the route reader of one item; returns (route_or_None, error_or_None).
+    A reader that ran but printed something that is not a valid route is an error."""
+    route, error = _run_reader(repo, item, deadline, ROUTE_READER_PROMPT, parse_route)
+    if route is None and error is None and reader_command({}) is not None:
+        error = "the reader did not return a valid closed question"
+    return route, error
+
+
+def _read_in_parallel(items, one, ceiling):
+    """Calls `one(item, deadline)` for each item, in parallel, in queue order, all
+    together bounded by `ceiling` seconds (None: READER_CEILING_SEC)."""
+    from concurrent.futures import ThreadPoolExecutor
+    deadline = time.monotonic() + (READER_CEILING_SEC if ceiling is None else ceiling)
+    pool = ThreadPoolExecutor(max_workers=min(READER_WORKERS, max(len(items), 1)))
+    try:
+        return list(pool.map(lambda it: one(it, deadline), items))
+    finally:
+        # On Ctrl-C / SIGTERM the readers still alive die with their children, and the
+        # waiting threads return at once instead of holding the interpreter open.
+        for proc in list(_LIVE_READERS):
+            _kill_group(proc)
+        pool.shutdown(wait=True, cancel_futures=True)
 
 
 def pre_read(repo, items, ceiling=None):
     """Reads `items` (dicts with id/title/why) in parallel, in queue order, all
     together bounded by `ceiling` seconds. Returns one dict per item:
     {id, tipo, texto, pergunta, erro[, padrao]} (`tipo` None = no finding)."""
-    from concurrent.futures import ThreadPoolExecutor
-    deadline = time.monotonic() + (READER_CEILING_SEC if ceiling is None else ceiling)
-
-    def one(item):
+    def one(item, deadline):
         try:
             finding, error = read_one(repo, item, deadline)
         except Exception as e:  # noqa: BLE001  (a reader must never stop the launch)
@@ -3378,15 +3457,30 @@ def pre_read(repo, items, ceiling=None):
         row.update(finding or {})
         return row
 
-    pool = ThreadPoolExecutor(max_workers=min(READER_WORKERS, max(len(items), 1)))
-    try:
-        return list(pool.map(one, items))
-    finally:
-        # On Ctrl-C / SIGTERM the readers still alive die with their children, and the
-        # waiting threads return at once instead of holding the interpreter open.
-        for proc in list(_LIVE_READERS):
-            _kill_group(proc)
-        pool.shutdown(wait=True, cancel_futures=True)
+    return _read_in_parallel(items, one, ceiling)
+
+
+def route_payload(ad):
+    """CS-4: what the route reader receives about an old route (a `deferred` entry of the
+    queue read): the item, the marker of the job, the route text and the evidence."""
+    return {"id": ad.get("id"), "title": ad.get("title"), "tarefa": ROUTE_TASK,
+            "human_pending": ad.get("human_pending"),
+            "evidence": str(ad.get("evidence") or "")[:ROUTE_EVIDENCE_CHARS]}
+
+
+def route_read(repo, routes, ceiling=None):
+    """CS-4: runs the route reader over `routes` (payloads from `route_payload`), in
+    parallel, bounded by `ceiling`. Returns one dict per route: {id, route, erro}
+    (`route` None = nothing to record, `erro` says why). Never writes the queue: the
+    caller records each reading with `reword_route`, one at a time."""
+    def one(payload, deadline):
+        try:
+            route, error = read_route(repo, payload, deadline)
+        except Exception as e:  # noqa: BLE001  (a reader must never stop the launch)
+            route, error = None, f"reader failed: {e}"
+        return {"id": payload.get("id"), "route": route, "erro": error}
+
+    return _read_in_parallel(routes, one, ceiling)
 
 
 class BackgroundRead:
@@ -3394,15 +3488,16 @@ class BackgroundRead:
     holds while the readers run. `result()` waits for the rows; Ctrl-C (or any error)
     during the wait kills the readers and stops the ones not started yet."""
 
-    def __init__(self, repo, items, ceiling=None):
+    def __init__(self, repo, items, ceiling=None, job=None):
         self.rows, self.error = None, None
-        self.thread = threading.Thread(target=self._run, args=(repo, items, ceiling),
+        self.thread = threading.Thread(target=self._run,
+                                       args=(job or pre_read, repo, items, ceiling),
                                        name="pre-read", daemon=True)
         self.thread.start()
 
-    def _run(self, repo, items, ceiling):
+    def _run(self, job, repo, items, ceiling):
         try:
-            self.rows = pre_read(repo, items, ceiling)
+            self.rows = job(repo, items, ceiling)
         except BaseException as e:  # noqa: BLE001  (reported by result())
             self.error = e
 
@@ -3499,7 +3594,38 @@ def last_owner_no(evidence):
     return f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else None
 
 
-def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False):
+def is_old_route(ad):
+    """CS-4: an entry of the queue read's `deferred` that is an OLD route: an open
+    `human_pending` (reason `human_pending`, so never a delivered item) with no written
+    question or no kind."""
+    return (reason_alias(ad.get("reason")) == "human_pending"
+            and bool(str(ad.get("human_pending") or "").strip())
+            and not (str(ad.get("question") or "").strip()
+                     and ad.get("route_kind")))
+
+
+def reword_route(queue, repo, ident, route):
+    """CS-4: records a route the reader rewrote, through `cepa-plan reword-route` (the
+    only door: this script never edits queue.yaml). It fills only what the item lacks
+    and never touches `human_pending`, `status` nor `evidence`. Returns None or the
+    error as text."""
+    cmd = [sys.executable, str(CEPA_PLAN), "reword-route", queue, str(ident),
+           "--route-kind", route["route_kind"], "--question", route["question"],
+           "--if-yes", route["if_yes"], "--if-no", route["if_no"],
+           "--repo", str(repo)]
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")}
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=env)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return f"`cepa-plan reword-route` did not answer: {e}"
+    if p.returncode == 0:
+        return None
+    return (p.stderr or p.stdout or "").strip() or \
+        f"`cepa-plan reword-route` exited {p.returncode}"
+
+
+def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False, skip=()):
     """The launch panel (CS-2). Shows `decide` for the owner-reason items still open
     in the queue (an uncapped read; `delivered_leftovers` is deliberately not added:
     a task left on a delivered item holds nothing back) and returns the queue read
@@ -3511,11 +3637,14 @@ def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False):
     CS-8: the panel can come in two parts of one list. `tally` (a dict, filled here)
     turns the closing off and keeps the count, the answers and the numbering across
     calls; `reading` adds the line that says the pre-read is still running; `only`
-    (ids) restricts the call to the routes the pre-read opened, with no CS-4 line."""
+    (ids) restricts the call to the routes the pre-read opened, with no CS-4 line.
+    CS-4 (perguntas-da-largada-legiveis): `skip` (ids) leaves out the old routes that
+    wait for their reader; they come in the second part with `only`."""
     whole, _ = query_queue(queue, repo, max_items=10 ** 6)
     deferred = [ad for ad in (whole or {}).get("deferred") or []
                 if reason_alias(ad.get("reason")) in OWNER_REASON
-                and (only is None or str(ad.get("id")) in only)]
+                and (only is None or str(ad.get("id")) in only)
+                and str(ad.get("id")) not in skip]
     answered_no = []
     to_ask = []
     for ad in deferred:
@@ -4451,8 +4580,25 @@ def _main(argv=None):
     # run behaves as if it had no terminal and no reader; the forecast is above.
     on_terminal = (sys.stdin.isatty() and sys.stdout.isatty()) and not a.no_pre_read
     rows, opened_ids, reading, tally = None, set(), None, {}
-    if (whole and whole.get("batch") and not a.no_pre_read
-            and reader_command({}) is not None):
+    # CS-4 (perguntas-da-largada-legiveis): old routes (an open `human_pending` with no
+    # closed question or no kind) are rewritten by the route reader, with or without a
+    # terminal and even when no item runs. On a terminal the ones the owner is asked
+    # about wait for their reader and come at the END of the panel list.
+    reader_on = not a.no_pre_read and reader_command({}) is not None
+    old_routes = ([ad for ad in (whole or {}).get("deferred") or [] if is_old_route(ad)]
+                  if reader_on else [])
+    route_payloads = [route_payload(ad) for ad in old_routes]
+    # An old route whose last answer was "no" stays in the summary line of the first
+    # call (it is rewritten and recorded, but never asked here).
+    waiting_routes = [str(ad.get("id")) for ad in old_routes
+                      if not last_owner_no(ad.get("evidence"))] if on_terminal else []
+    route_reading, route_rows = None, None
+    if route_payloads:
+        print(f"\n── route reader: {len(route_payloads)} old route(s) to rewrite as a "
+              f"closed question, read-only, up to {READER_CEILING_SEC / 60:g} min")
+        if on_terminal:
+            route_reading = BackgroundRead(repo, route_payloads, job=route_read)
+    if (whole and whole.get("batch") and reader_on):
         to_read = [{k: it.get(k) for k in ("id", "title", "why", "blocked_by")}
                    for it in whole["batch"]]
         print(f"\n── pre-read: {len(to_read)} item(s), read-only, "
@@ -4469,9 +4615,37 @@ def _main(argv=None):
     # terminal nothing changes (the end-of-run listing stays as it was).
     if on_terminal:
         data = ask_at_launch(repo, a.queue, data, tally=tally,
-                             reading=reading is not None)
+                             reading=reading is not None or route_reading is not None,
+                             skip=set(waiting_routes))
         if reading is not None:
             rows = reading.result()
+        if route_reading is not None:
+            route_rows = route_reading.result()
+    elif route_payloads:
+        route_rows = route_read(repo, route_payloads)
+    rewrite_event = None
+    if route_rows is not None:
+        rewritten, failed = [], []
+        for r in route_rows:
+            error = r["erro"]
+            if r["route"] is not None:
+                error = reword_route(a.queue, repo, r["id"], r["route"])
+                if error:
+                    print(f"   route reader: could not record the rewritten question "
+                          f"of {r['id']} ({error.splitlines()[0][:160]}); it stays as it was")
+            if error:
+                failed.append({"id": r["id"], "erro": error.splitlines()[0][:200]})
+            else:
+                rewritten.append(str(r["id"]))
+        print(f"\n   route reader: {len(rewritten)} of {len(route_rows)} route(s) "
+              "rewritten as a closed question and recorded"
+              + ("" if on_terminal else "; they are asked with `cepa-until decide "
+                 f"{a.queue}`"))
+        rewrite_event = {"evento": "rotas_reescritas", "reescritas": rewritten,
+                         "falhas": failed}
+        if rewritten:
+            fresh, _ = query_queue(a.queue, repo)
+            data = fresh or data
     if rows is not None:
         opened = 0
         for row in rows:
@@ -4515,7 +4689,8 @@ def _main(argv=None):
         # CS-8: the pre-read's questions at the end of the same list, numbered after
         # the queue's, with the total that sums both parts.
         from_queue = tally.get("shown", 0)
-        added = len(opened_ids) + len(preferences)
+        late_ids = opened_ids | set(waiting_routes)
+        added = len(late_ids) + len(preferences)
         if from_queue and added:
             tally["of"] = from_queue + added
             Panel(SCREEN, print).continue_panel(
@@ -4523,11 +4698,11 @@ def _main(argv=None):
                 f"{from_queue + added} question(s) in total")
         elif added:
             tally["of"] = added
-        if opened_ids:
-            data = ask_at_launch(repo, a.queue, data, only=opened_ids, tally=tally)
+        if late_ids:
+            data = ask_at_launch(repo, a.queue, data, only=late_ids, tally=tally)
         tally["prefs_shown"] = ask_preferences(
             preferences, wait=ANSWER_WAIT_SEC,
-            first=from_queue + len(opened_ids) + 1, of=tally.get("of"))
+            first=from_queue + len(late_ids) + 1, of=tally.get("of"))
         if tally.get("shown", 0) and not tally.get("cut"):
             Panel(SCREEN, print).close_panel(
                 [], tally.get("applied", []), tally.get("for_later", []),
@@ -4584,6 +4759,8 @@ def _main(argv=None):
               "pid": pid, "host": host, "versao_registro": 2})
     if pre_read_event:
         log_event(pre_read_event)
+    if rewrite_event:
+        log_event(rewrite_event)
     # CS-13: the launch's measurement. No numeric goal (spec): the event is what lets a
     # later run be compared with the 31% of items that got stuck in the middle.
     found = {kind: sum(1 for r in rows or [] if r.get("tipo") == kind)
