@@ -1,0 +1,45 @@
+schema_version: 2
+card: perguntas-da-largada-legiveis-CS-12
+verdict: proven
+reviewed_at: 2026-11-13T10:00:00-03:00
+base_commit: b4b9d2b
+head_commit: ac8ef40
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until (CUT_RULE: route-opening paragraph appended; reaches every item's prompt via build_command)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # build_command runs for real; the run case goes through the real supervisor with only claude (the far boundary) faked
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at ac8ef40 (throwaway worktree /tmp/proof-cs12b): python3 tests/test_cepa_until_route_rule.py -> 'tudo verde'; python3 tests/test_cepa_until_cut_rule.py -> 'tudo verde'"
+        - "RED at base: common/bin/cepa-until from b4b9d2b + test from ac8ef40 -> 4 FAIL (3 unit cases + 'route run: every item's prompt carries the route rule')"
+        - "P1 `--route-kind` renamed in the prompt -> 4 FAIL (RED)"
+        - "P2 `--question` renamed -> 4 FAIL (RED)"
+        - "P3 `--if-yes` renamed -> 4 FAIL (RED); P4 `--if-no` renamed -> 4 FAIL (RED)"
+        - "P5 `owner-task` renamed -> 4 FAIL (RED); P6 `external-block` renamed -> 4 FAIL (RED); P7 `open-question` renamed -> 4 FAIL (RED)"
+        - "P8 'with a `?`' replaced by 'with a mark' -> 4 FAIL (RED)"
+        - "P9 (the survivor of 70759e1) 'refuses and records nothing' shortened to 'refuses' -> 4 FAIL (RED); P10 'If any of them is missing' changed to 'If one of ...' -> 4 FAIL (RED)"
+        - "Note: _kinds_match_cepa_plan(request) ignores its argument and only reads cepa-plan source; the kinds in the prompt are guarded by _has_route_rule (P5-P7 RED)."
+        - "each perturbation restored with git checkout; worktree removed, primary tree untouched"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every string added to CUT_RULE is reached and asserted by test_cepa_until_route_rule.py (P1-P10 RED)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff only appends constant text to the prompt handed to the item's agent; it parses nothing coming from outside and there is no api-rest module in the diff."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Story, not Bug. Spec test checked anyway: b4b9d2b common/bin/cepa-until + ac8ef40 tests/test_cepa_until_route_rule.py -> 4 FAIL; at ac8ef40 -> tudo verde."
+routing_reason: "Every instruction the paragraph teaches, including the closing warning that a missing field gets finish refused, is load-bearing: breaking any turns the covering test red, and the test is red at base. The survivor at 70759e1 is closed by ac8ef40. No test double stands in for the changed class."
