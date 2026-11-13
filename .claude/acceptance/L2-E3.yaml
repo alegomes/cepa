@@ -1,0 +1,50 @@
+schema_version: 1
+card: L2-E3
+status: complete
+audited_at: 2026-11-13T09:00:00-03:00
+criteria:
+  - id: AC1
+    text: "E3 (docs/estrategia-lacunas-ecc.md §3 e §7 lote 2): validador do bloco de cabeçalho e das referências pendentes de todo comando, agente e skill, como teste da suíte."
+    altitude: cli (suíte de testes)
+    surface: "python3 tests/test_component_headers.py e tests/run-all.sh component_headers"
+    demonstrated_by:
+      test: "tests/test_component_headers.py (main sobre o repo real: cabeçalho de todo componente + toda citação plugin:nome resolve)"
+      layer: script de teste rodado pelo runner da suíte
+      evidence: verified
+      run: |
+        python3 tests/test_component_headers.py -> 13 checagens "ok", "all ok", sai 0.
+        tests/run-all.sh component_headers -> "filtro: component_headers → 1 arquivo(s)", "ok tests/test_component_headers.py", "arquivos rodados: 1 de 1", "tudo verde", exit=0 (N=1 > 0).
+        Perturbação em cópia descartável (git worktree --detach, removida depois; árvore primária limpa): tirei o cabeçalho de common/skills/acceptance-completeness/SKILL.md e acrescentei "common:ghost-thing" a common/commands/advisors.md -> "4 falha(s)" (cabeçalho ausente apontado por caminho, citação pendurada apontada por arquivo:linha), saída não-zero.
+    verdict: complete
+    gap: null
+
+  - id: AC2
+    text: "§3 defeito vivo: 2 das 21 SKILL.md sem bloco de cabeçalho (docs-topology diataxis-discipline e how-why-boundary) deixam de passar despercebidas; o teste mantém os 2 arquivos como exceções (catraca), pois o conserto é o lote 0, fora de escopo."
+    altitude: cli (suíte de testes)
+    surface: "python3 tests/test_component_headers.py (KNOWN_BROKEN)"
+    demonstrated_by:
+      test: "tests/test_component_headers.py (checagens 'exceção ainda verdadeira: ...' e self-test 'SKILL.md sem cabeçalho é pego')"
+      layer: script de teste
+      evidence: verified
+      run: |
+        Rodada real: "ok exceção ainda verdadeira: docs-topology/skills/diataxis-discipline/SKILL.md" e "...how-why-boundary/SKILL.md" (os dois ainda quebrados, listados).
+        Perturbação em cópia descartável: dei cabeçalho válido a diataxis-discipline -> "FAIL exceção ainda verdadeira: ... o arquivo passou; apague a linha de KNOWN_BROKEN", "1 falha(s)", saída não-zero. A catraca só encolhe, como declarado.
+        Um terceiro arquivo sem cabeçalho fora da lista falha (provado na perturbação do AC1).
+    verdict: complete
+    gap: null
+
+  - id: AC3
+    text: "§9 R1: nenhum hook; E3 é um teste da suíte, e o runner o descobre."
+    altitude: cli (suíte de testes)
+    surface: "git show --stat HEAD e tests/run-all.sh"
+    demonstrated_by:
+      test: "tests/run-all.sh component_headers (descoberta pelo runner) + diff do commit a46400e"
+      layer: runner da suíte
+      evidence: verified
+      run: |
+        git show --stat HEAD -> 1 arquivo alterado, tests/test_component_headers.py (+229); nenhum hook, nenhum arquivo de produção tocado.
+        tests/run-all.sh component_headers -> o arquivo roda na família script, verde.
+    verdict: complete
+    gap: null
+
+notes: "Fora de escopo, conforme o pedido: o marco (tag) do lote 2 (L2-TAG) e o conserto das 2 SKILL.md (lote 0). A exceção DANGLING_OK de discovery:investigate está justificada no próprio arquivo ('when/if it exists' em common/commands/autonomous-start.md) e também é catraca (falha se a citação sumir ou passar a resolver). Não executei a suíte completa (é do supervisor)."
