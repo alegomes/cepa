@@ -830,9 +830,9 @@ CUT_RULE = (
     "`--route-kind` with one of `owner-task` (a task only the owner does, outside the "
     "repository), `external-block` (something outside has to exist, not an owner "
     "decision) or `open-question` (a doubt the owner answers); `--question` with a "
-    "closed yes-or-no question, ending in `?` (your recommendation may follow it); and "
-    "`--if-yes` and `--if-no` saying what each answer does to the work. Without any of "
-    "them `finish` refuses and records nothing.")
+    "closed yes-or-no question, with a `?` (your recommendation may follow it); and "
+    "`--if-yes` and `--if-no` saying what each answer does to the work. If any of "
+    "them is missing, `finish` refuses and records nothing.")
 
 
 def build_command(name, branch, permissions, session_id=None, note=""):

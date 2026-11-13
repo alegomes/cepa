@@ -25,7 +25,10 @@ def _has_route_rule(request):
             and re.search(r"--question\b", request) is not None
             and "closed" in low and "?" in request
             and re.search(r"--if-yes\b", request) is not None
-            and re.search(r"--if-no\b", request) is not None)
+            and re.search(r"--if-no\b", request) is not None
+            # proof survivor: the warning that a missing field gets the finish refused
+            and "if any of them is missing" in low
+            and "refuses and records nothing" in low)
 
 
 def _kinds_match_cepa_plan(request):
