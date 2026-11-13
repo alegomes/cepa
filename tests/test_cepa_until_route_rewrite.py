@@ -367,6 +367,70 @@ def test_reword_route_fills_only_what_is_missing():
               and "nothing changed" in (p.stdout + p.stderr), p.stdout + p.stderr)
 
 
+def test_an_interrupted_pool_kills_its_own_running_readers():
+    """An exception (Ctrl-C) while a pool's readers run: the pool kills ITS OWN still
+    running readers (no stray process), instead of waiting for their ceiling."""
+    import os
+    import time
+    mod = base.load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        pidfile = Path(tmp) / "leitor.pid"
+        script = Path(tmp) / "leitor-longo.py"
+        script.write_text(
+            f"#!{sys.executable}\n"
+            "import os, time\n"
+            f"open({str(pidfile)!r}, 'w').write(str(os.getpid()))\n"
+            "time.sleep(30)\n")
+        script.chmod(0o755)
+        before = os.environ.get("CEPA_UNTIL_LEITOR")
+        os.environ["CEPA_UNTIL_LEITOR"] = str(script)
+        pid = None
+
+        def one(it, deadline):
+            if it["id"] == "boom":  # first in queue order: map raises it first
+                end = time.monotonic() + 10
+                while not pidfile.exists() and time.monotonic() < end:
+                    time.sleep(0.02)
+                time.sleep(0.2)  # let the reader write its pid fully
+                raise KeyboardInterrupt
+            return mod._run_reader(Path(tmp), it, deadline, "p", lambda out: out)
+
+        raised = False
+        started = time.monotonic()
+        try:
+            try:
+                mod._read_in_parallel([{"id": "boom"}, {"id": "slow"}], one, 60)
+            except KeyboardInterrupt:
+                raised = True
+            took = time.monotonic() - started
+            check("the pool returns at once, not after the reader's 30 s",
+                  took < 10, f"took {took:.1f}s")
+            check("the interruption reaches the caller", raised)
+            check("the long reader had started", pidfile.exists())
+            pid = int(pidfile.read_text() or 0) if pidfile.exists() else None
+            dead = False
+            end = time.monotonic() + 5
+            while pid and time.monotonic() < end:
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    dead = True
+                    break
+                time.sleep(0.05)
+            check("the pool killed its own running reader", dead,
+                  f"pid {pid} still alive")
+        finally:
+            if pid:
+                try:
+                    os.killpg(pid, 9)
+                except OSError:
+                    pass
+            if before is None:
+                os.environ.pop("CEPA_UNTIL_LEITOR", None)
+            else:
+                os.environ["CEPA_UNTIL_LEITOR"] = before
+
+
 def main():
     print("cepa-until: a largada reescreve a rota antiga e grava no item (CS-4)\n")
     for given_name, fn in sorted(globals().items()):
