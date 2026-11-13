@@ -152,6 +152,10 @@ items:                          # ORDEM DA LISTA = ordem de execução. É o dad
                                 # A resposta do dono que fecha a rota (`answer`)
                                 # remove a chave. Fila sem a chave segue válida;
                                 # valor fora dos três é rejeitado.
+                                # Rota antiga (sem tipo ou sem pergunta) é reescrita na
+                                # largada do cepa-until por `cepa-plan reword-route`,
+                                # que só preenche o que falta e nunca toca em
+                                # human_pending, status nem evidence.
 
   - id: WEGO-1962
     title: "Agregar rota de validação humana"

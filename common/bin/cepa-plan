@@ -3376,6 +3376,64 @@ def resolve_decisions(repo, texts, sha):
     return [{"texto": t, "commit": full} for t in flat], None
 
 
+def cmd_reword_route(root, name, ident, route_kind, question, if_yes, if_no):
+    """CS-4 of docs/spec/perguntas-da-largada-legiveis.md: records the rewrite of an OLD
+    route (an open `human_pending` written before the kind and the closed question
+    existed). Fills ONLY what the item lacks (`route_kind`, `owner_question`,
+    `owner_summary.se_sim`/`se_nao`) and never touches `human_pending`, `status`,
+    `evidence`, `claimed_by`, `head_commit` or `decisions`: only the human closes a
+    route. Refuses (exit 2, nothing written) on an item that does not exist, has no
+    route, is not open (`pending`/`blocked`), or on text that fails the same rules
+    `finish` applies. Does not commit (the supervisor's `finish` calls do not either)."""
+    owner = {k: " ".join(str(v).split()) for k, v in
+             (("se_sim", if_yes), ("se_nao", if_no)) if v is not None and str(v).strip()}
+    target, plan, by_id, rc = open_plan_for_marking(root, name)
+    if rc:
+        return rc
+    it = by_id.get(str(ident))
+    if it is None:
+        print(f"a fila {name} não tem item '{ident}'", file=sys.stderr)
+        return 2
+    route = it.get("human_pending")
+    if not (isinstance(route, str) and route.strip()):
+        print(f"`reword-route` recusado para {ident}: o item não tem rota aberta "
+              "(`human_pending` vazio); nada foi gravado.", file=sys.stderr)
+        return 2
+    status = it.get("status")
+    if status not in ("pending", "blocked"):
+        print(f"`reword-route` recusado para {ident}: o item está `{status}`, e só "
+              "item aberto (`pending` ou `blocked`) tem a rota reescrita; nada foi "
+              "gravado.", file=sys.stderr)
+        return 2
+    # "pending": the blocked-needs-a-blocker rule is about `finish`, not about this.
+    refusal = human_section_refusal("pending", owner, question) \
+        or route_refusal(route, route_kind, question, owner)
+    if refusal:
+        print(f"`reword-route` recusado para {ident}: {refusal}", file=sys.stderr)
+        return 2
+    summary = it.get("owner_summary")
+    summary = dict(summary) if isinstance(summary, dict) else {}
+    changed = []
+    if not it.get("route_kind"):
+        it["route_kind"] = route_kind
+        changed.append("route_kind")
+    if not str(it.get("owner_question") or "").strip():
+        it["owner_question"] = " ".join(str(question).split())
+        changed.append("question")
+    for key, label in (("se_sim", "if-yes"), ("se_nao", "if-no")):
+        if not str(summary.get(key) or "").strip():
+            summary[key] = owner[key]
+            changed.append(label)
+    if not changed:
+        print(f"{ident}: nothing changed (the route already has kind, question and "
+              "both effects)")
+        return 0
+    it["owner_summary"] = summary
+    write_body(target, plan, plan.get("items") or [])
+    print(f"{ident}: route reworded in {target} (filled: {', '.join(changed)})")
+    return 0
+
+
 def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
                question=None, commit=False, owner=None, supervisor=False,
                decisions=None, decision_commit=None, route_kind=None):
@@ -5013,7 +5071,7 @@ def main(argv=None):
             ("sources (read only, return JSON)", ["from-spec", "from-epic", "from-triage"]),
             ("writing", ["write", "add", "verdict", "migrate", "check-name", "validate"]),
             ("reading", ["queue", "status", "show", "epics", "decisions", "promote", "order"]),
-            ("one item's cycle", ["start", "finish", "answer"]),
+            ("one item's cycle", ["start", "finish", "reword-route", "answer"]),
             ("against the Jira board", ["reconcile", "landed", "divergence"]),
         ],
         examples=[
@@ -5448,6 +5506,37 @@ def main(argv=None):
     fi.add_argument("--commit", action="store_true", help=commit_help)
     fi.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
+    rw = sub.add_parser(
+        "reword-route", help="records the closed question of an old route",
+        description=(
+            "Fills what an OLD open route lacks (written before the kind and the\n"
+            "closed question existed): the kind, the question and what yes and no do\n"
+            "to the work. It never replaces what is already there, and never touches\n"
+            "`human_pending`, `status` nor `evidence`: only the human closes a route.\n"
+            "Refused (nothing written) when the item has no open route, is not\n"
+            "`pending` or `blocked`, or the text breaks the rules `finish` applies.\n"
+            "Does not commit."),
+        examples=[('cepa plan reword-route wego WEGO-123 --route-kind external-block '
+                   '--question "Did the staging access arrive?" '
+                   '--if-yes "The item goes back to the queue." '
+                   '--if-no "The item keeps waiting."',
+                   "record the reworded route")],
+        exit_codes=[(0, "recorded, or nothing was missing"),
+                    (2, f"invalid usage, {not_git}, {no_queue}, unknown item id, item "
+                        "without an open route or not `pending`/`blocked`, question "
+                        "without `?`, missing --if-yes/--if-no, text with codes")])
+    rw.add_argument("name", metavar="name", help="queue name")
+    rw.add_argument("id", help="item id in the queue")
+    rw.add_argument("--route-kind", dest="route_kind", required=True,
+                    choices=ROUTE_KINDS, help="the kind of the route")
+    rw.add_argument("--question", required=True, metavar="TEXT",
+                    help="the CLOSED question (with `?`), up to 25 words, no codes")
+    rw.add_argument("--if-yes", dest="if_yes", required=True, metavar="TEXT",
+                    help="what happens to the work if the owner answers yes")
+    rw.add_argument("--if-no", dest="if_no", required=True, metavar="TEXT",
+                    help="what happens to the work if the owner answers no")
+    rw.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
+
     rs = sub.add_parser(
         "answer", aliases=["responde"],
         help="records the owner's answer to a deferred item (terminal only)",
@@ -5766,6 +5855,9 @@ def main(argv=None):
                            for key, _, _ in _ownertext.FIELDS},
                           a.supervisor, a.decision, a.decision_commit,
                           a.route_kind)
+    if a.cmd == "reword-route":
+        return cmd_reword_route(root, a.name, a.id, a.route_kind, a.question,
+                                a.if_yes, a.if_no)
     if a.cmd == "answer":
         return cmd_answer(root, a.name, a.id, a.answer, a.keep,
                             a.force, not a.no_commit, a.repo, a.author, a.drop)
