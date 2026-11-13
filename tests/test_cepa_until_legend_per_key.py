@@ -137,6 +137,47 @@ def test_decide_without_terminal_legend_is_one_line_per_key():
           "s = o trabalho vai para revisão" in w1, w1)
     check("CS-3 text: the no line says what no does to the work",
           "n = o trabalho espera o defeito" in w1, w1)
+    d1 = text.split("] d1\n")[1]
+    check("CS-3 text: a delivered route's legend speaks of the task, not the item "
+          "(proof survivor P7)",
+          "s = the task closes; the delivered work stays as it is" in d1
+          and "n = the task stays open and I only record what you say" in d1
+          and "d = the task no longer applies and closes without being done" in d1
+          and "the item leaves the queue" not in d1, d1)
+    x1 = text.split("] x1\n")[1].split("━━ [")[0]
+    check("CS-3 text: an open route's legend speaks of the item",
+          "s = the item goes back to the queue with your answer" in x1
+          and "d = the item leaves the queue" in x1
+          and "e = shows the technical detail" in x1, x1)
+
+
+def test_decide_on_terminal_wraps_a_long_legend_line_under_its_own_text():
+    """On a terminal a legend line longer than the width wraps, and the rest goes
+    under the text, past `s = `, so the key column stays readable (proof survivor
+    P8: without the hanging indent the rest started at the border, level with
+    the keys)."""
+    m = load_module(color="sempre")
+    check("CS-3 card: decoration on", m.SCREEN.enabled)
+    long_yes = " ".join(["o trabalho vai para revisão com os casos pendentes"] * 4)
+    deferred = [{"id": "w1", "title": "t", "reason": "blocked-before",
+                 "human_pending": None, "question": "Entrego assim?",
+                 "evidence": "", "owner_summary": {"se_sim": long_yes}}]
+    screen = []
+    m.decide(Path("/nao/existe"), "fila", None, {}, deferred, {},
+             question=lambda _p: "", output=screen.append,
+             answer=lambda i, t, keep=False, drop=False: (0, "ok"))
+    lines = ANSI.sub("", "\n".join(screen)).splitlines()
+    first = next((i for i, l in enumerate(lines) if l.startswith("│  s = ")), None)
+    check("CS-3 card: the s line opens at the key column", first is not None, lines)
+    rest = []
+    for l in lines[(first or 0) + 1:]:
+        if l.startswith("│  n = "):
+            break
+        rest.append(l)
+    check("CS-3 card: the long s line wrapped", len(rest) >= 1, lines)
+    check("CS-3 card: every wrapped part sits under the text, past 's = '",
+          rest and all(l.startswith("│      ") and l[7:8].strip() for l in rest),
+          rest)
 
 
 if __name__ == "__main__":
