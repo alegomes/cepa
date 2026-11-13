@@ -1907,6 +1907,15 @@ def test_pre_read_cs5_precondition_defers_the_item_without_spending_the_run_on_i
           items["x1"].get("status") == "pending", str(items["x1"]))
     check("cs5: the question is recorded", "token" in str(items["x1"].get("owner_question")),
           str(items["x1"]))
+    summary = items["x1"].get("owner_summary") or {}
+    check("cs5 CS-1: the route has its kind", items["x1"].get("route_kind") == "external-block",
+          str(items["x1"]))
+    check("cs5 CS-1: the question is the pre-read's own",
+          items["x1"].get("owner_question") == "Você já providenciou o token de acesso?",
+          str(items["x1"]))
+    check("cs5 CS-1: what yes and no do is filled",
+          str(summary.get("se_sim") or "").strip() and str(summary.get("se_nao") or "").strip(),
+          str(summary))
     check("cs5: leitura_previa comes right after run_start",
           [e.get("evento") for e in events][:2] == ["run_start", "leitura_previa"],
           str([e.get("evento") for e in events]))
@@ -1933,6 +1942,13 @@ def test_pre_read_cs5_question_refused_by_cepa_plan_still_opens_the_route():
     check("cs5 long question: the route opened without the question",
           "token" in str(items["x1"].get("human_pending")), str(items["x1"]))
     check("cs5 long question: x1 has no item_start", "x1" not in _started(events), out[-800:])
+    summary = items["x1"].get("owner_summary") or {}
+    check("cs5 long question CS-1: the fixed question took its place",
+          items["x1"].get("owner_question") == "Does this exist now?", str(items["x1"]))
+    check("cs5 long question CS-1: kind and yes/no filled",
+          items["x1"].get("route_kind") == "external-block"
+          and str(summary.get("se_sim") or "").strip()
+          and str(summary.get("se_nao") or "").strip(), str(items["x1"]))
     reads = [e for e in events if e.get("evento") == "leitura_previa"]
     check("cs5 long question: event says rota_aberta without error",
           reads and reads[0]["itens"][0]["rota_aberta"] is True

@@ -166,6 +166,29 @@ def test_invalid_route_kind_is_rejected_by_argparse():
         check("nada gravado", queue_file(d).read_bytes() == before)
 
 
+def test_validator_rejects_route_kind_outside_the_three():
+    with tempfile.TemporaryDirectory() as base:
+        d = make_repo(base, "r7")
+        plan = yaml.safe_load(queue_file(d).read_text())
+        plan["items"][0]["route_kind"] = "whatever"
+        queue_file(d).write_text(yaml.safe_dump(plan, allow_unicode=True),
+                                 encoding="utf-8")
+        r = run(d, "validate", "fila", "--repo", ".")
+        check("route_kind inválido: recusa", r.returncode == 2, r.stdout + r.stderr)
+        check("a recusa nomeia route_kind", "route_kind" in r.stdout + r.stderr,
+              r.stdout + r.stderr)
+        del plan["items"][0]["route_kind"]
+        queue_file(d).write_text(yaml.safe_dump(plan, allow_unicode=True),
+                                 encoding="utf-8")
+        r = run(d, "validate", "fila", "--repo", ".")
+        check("fila sem a chave segue válida", r.returncode == 0, r.stdout + r.stderr)
+        plan["items"][0]["route_kind"] = "open-question"
+        queue_file(d).write_text(yaml.safe_dump(plan, allow_unicode=True),
+                                 encoding="utf-8")
+        r = run(d, "validate", "fila", "--repo", ".")
+        check("valor válido passa", r.returncode == 0, r.stdout + r.stderr)
+
+
 def answer_on_tty(d, *extra):
     env = {k: v for k, v in os.environ.items()
            if k not in ("CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID",
