@@ -1,0 +1,269 @@
+#!/usr/bin/env python3
+"""CS-4 of docs/spec/perguntas-da-largada-legiveis.md: the launch rewrites an old route
+(an open `human_pending` with no written question or no kind) as a closed question and
+records the result in the item, through `cepa-plan reword-route`.
+
+What these cases prove:
+
+  - on a terminal, the launch shows the reader's question (not today's fallback) and,
+    afterwards, `queue.yaml` carries `route_kind`, `owner_question` and the yes/no effects
+    on that item, with `human_pending`, `status` and `evidence` unchanged;
+  - without a terminal the rewrite is recorded too, and nothing is asked;
+  - a reader that prints garbage or fails leaves the item as it was and the launch goes on;
+  - a route that already has question and kind never reaches the reader;
+  - `cepa-plan reword-route` refuses what it must, fills only what is missing and never
+    touches `human_pending`, `status` nor `evidence`.
+
+Its own file (helpers borrowed from test_cepa_until_decide.py) so the proof gate can run
+it alone: `python3 tests/test_cepa_until_route_rewrite.py`, exit 1 on any failure.
+"""
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import test_cepa_until_decide as base  # noqa: E402
+from test_cepa_until_decide import (  # noqa: E402
+    check, item, build_repo, fake_claude, env_do_run, on_tty, items_of, CEPA_UNTIL,
+    CEPA_PLAN)
+
+QUESTION = "Você já liberou o acesso ao ambiente de homologação?"
+IF_YES = "O item volta para a fila e o próximo run tenta de novo."
+IF_NO = "O item continua esperando o acesso."
+ROUTE = "falta o acesso ao ambiente de homologação"
+
+
+def old_route(ident="r1"):
+    it = item(ident, human_pending=ROUTE)
+    it["evidence"] = "x"
+    return it
+
+
+def _route_reader(tmp, mode="ok"):
+    """A fake reader: for the route job (`tarefa` = reescrever-rota) it answers by `mode`;
+    for the item job it answers no finding. Every call is logged as `id tarefa`."""
+    script = Path(tmp) / "leitor-rota.py"
+    log = Path(tmp) / "leitor-rota-chamadas.txt"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys\n"
+        "it = json.load(sys.stdin)\n"
+        f"open({str(log)!r}, 'a').write(it['id'] + ' ' + str(it.get('tarefa')) + '\\n')\n"
+        f"mode = {mode!r}\n"
+        "if it.get('tarefa') != 'reescrever-rota':\n"
+        "    print(json.dumps({'tipo': None}))\n"
+        "elif mode == 'ok':\n"
+        f"    print(json.dumps({{'route_kind': 'external-block', 'question': {QUESTION!r},\n"
+        f"        'if_yes': {IF_YES!r}, 'if_no': {IF_NO!r}}}))\n"
+        "elif mode == 'garbage':\n"
+        "    print('this is not json')\n"
+        "elif mode == 'noquestion':\n"
+        f"    print(json.dumps({{'route_kind': 'external-block', 'question': 'Sem interrogação',\n"
+        f"        'if_yes': {IF_YES!r}, 'if_no': {IF_NO!r}}}))\n"
+        "elif mode == 'fail':\n"
+        "    sys.exit(3)\n")
+    script.chmod(0o755)
+    return script, log
+
+
+def _launch(items, mode="ok", tty=True, inputs=()):
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, items)
+        before = {k: dict(v) for k, v in items_of(root).items()}
+        binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        reader, log = _route_reader(tmp, mode)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_LEITOR"] = str(reader)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "5"
+        cmd = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+               "--for", "2h", "--no-verify", "--no-analysis"]
+        if tty:
+            rc, out = on_tty(cmd, str(root), env=env, timeout=120, inputs=list(inputs))
+        else:
+            p = subprocess.run(cmd, capture_output=True, text=True, env=env,
+                               timeout=120, stdin=subprocess.DEVNULL, cwd=str(root))
+            rc, out = p.returncode, p.stdout + p.stderr
+        calls = log.read_text().splitlines() if log.exists() else []
+        return rc, out, before, items_of(root), calls
+
+
+def _same_core(label, before, after):
+    for key in ("human_pending", "status", "evidence"):
+        check(f"{label}: `{key}` is unchanged", before.get(key) == after.get(key),
+              f"{before.get(key)!r} -> {after.get(key)!r}")
+
+
+def test_tty_launch_shows_the_readers_question_and_records_it():
+    rc, out, before, after, calls = _launch(
+        [old_route(), item("y1")], tty=True,
+        inputs=[("homologação?", "")])  # Enter = later: the item must not change
+    check("tty: the launch exits 0", rc == 0, out[-1500:])
+    check("tty: the screen shows the reader's question", QUESTION in out, out[-1500:])
+    check("tty: today's fallback is gone", "Send this item back to the queue" not in out,
+          out[-1500:])
+    r1 = after["r1"]
+    check("tty: route_kind recorded", r1.get("route_kind") == "external-block", str(r1))
+    check("tty: owner_question recorded", r1.get("owner_question") == QUESTION, str(r1))
+    summary = r1.get("owner_summary") or {}
+    check("tty: yes/no effects recorded",
+          summary.get("se_sim") == IF_YES and summary.get("se_nao") == IF_NO, str(r1))
+    _same_core("tty", before["r1"], r1)
+    check("tty: the route job reached the reader", "r1 reescrever-rota" in calls,
+          str(calls))
+
+
+def test_launch_without_terminal_records_the_rewrite_and_asks_nothing():
+    rc, out, before, after, calls = _launch([old_route(), item("y1")], tty=False)
+    check("no tty: the launch exits 0", rc == 0, out[-1500:])
+    r1 = after["r1"]
+    check("no tty: route_kind and question recorded",
+          r1.get("route_kind") == "external-block"
+          and r1.get("owner_question") == QUESTION, str(r1))
+    _same_core("no tty", before["r1"], r1)
+    check("no tty: one line says how many routes were rewritten",
+          "1 route" in out and "rewritten" in out, out[-1500:])
+    check("no tty: the other item still ran", after["y1"]["status"] == "done",
+          str(after["y1"]))
+
+
+def test_a_reader_that_prints_garbage_or_fails_changes_nothing():
+    for mode in ("garbage", "fail", "noquestion"):
+        rc, out, before, after, calls = _launch([old_route(), item("y1")], mode=mode,
+                                                tty=False)
+        check(f"{mode}: the launch goes on and exits 0", rc == 0, out[-1500:])
+        check(f"{mode}: the route item is exactly as it was", before["r1"] == after["r1"],
+              f"{before['r1']} -> {after['r1']}")
+        check(f"{mode}: the other item ran", after["y1"]["status"] == "done",
+              str(after["y1"]))
+
+
+def test_a_reader_that_fails_on_a_terminal_leaves_todays_question():
+    rc, out, before, after, calls = _launch(
+        [old_route(), item("y1")], mode="garbage", tty=True,
+        inputs=[("Send this item back to the queue", "")])
+    check("tty garbage: the launch exits 0", rc == 0, out[-1500:])
+    check("tty garbage: the route is still asked, with today's question",
+          "Send this item back to the queue" in out, out[-1500:])
+    check("tty garbage: the item is unchanged", before["r1"] == after["r1"],
+          str(after["r1"]))
+
+
+def test_a_route_that_already_has_question_and_kind_is_not_read():
+    done_route = old_route("r2")
+    done_route.update(route_kind="owner-task", owner_question="Você já rodou a rota?",
+                      owner_summary={"se_sim": IF_YES, "se_nao": IF_NO})
+    rc, out, before, after, calls = _launch([done_route, item("y1")], tty=False)
+    check("complete: the launch exits 0", rc == 0, out[-1500:])
+    check("complete: the reader never got a route job for r2",
+          not any(c.startswith("r2 ") for c in calls), str(calls))
+    check("complete: the item is untouched", before["r2"] == after["r2"],
+          str(after["r2"]))
+
+
+def test_a_route_with_a_question_but_no_kind_is_read_and_keeps_its_question():
+    half = old_route("r3")
+    half["owner_question"] = "Você já rodou a rota?"
+    rc, out, before, after, calls = _launch([half, item("y1")], tty=False)
+    check("half: the route job reached the reader", "r3 reescrever-rota" in calls,
+          str(calls))
+    check("half: the kind was filled in", after["r3"].get("route_kind") == "external-block",
+          str(after["r3"]))
+    check("half: the written question was kept",
+          after["r3"].get("owner_question") == "Você já rodou a rota?", str(after["r3"]))
+
+
+# ── cepa-plan reword-route ───────────────────────────────────────────────────
+
+def _reword(root, ident, kind="external-block", question=QUESTION, if_yes=IF_YES,
+            if_no=IF_NO):
+    cmd = [sys.executable, str(CEPA_PLAN), "reword-route", "fila", ident,
+           "--route-kind", kind, "--repo", str(root)]
+    for flag, val in (("--question", question), ("--if-yes", if_yes), ("--if-no", if_no)):
+        if val is not None:
+            cmd += [flag, val]
+    return subprocess.run(cmd, capture_output=True, text=True)
+
+
+def _plan_text(root):
+    return base.plan_of(root).read_text()
+
+
+def test_reword_route_refuses_and_writes_nothing():
+    with tempfile.TemporaryDirectory() as tmp:
+        done = old_route("d1")
+        done["status"] = "done"
+        none = item("n1")
+        blocked = old_route("b1")
+        blocked["status"] = "blocked"
+        root = build_repo(tmp, [old_route(), done, none, blocked])
+        text = _plan_text(root)
+        cases = {
+            "no question mark": _reword(root, "r1", question="Sem interrogação"),
+            "no if-yes": _reword(root, "r1", if_yes=None),
+            "no if-no": _reword(root, "r1", if_no=None),
+            "done item": _reword(root, "d1"),
+            "no human_pending": _reword(root, "n1"),
+            "unknown item": _reword(root, "zz"),
+            "code in the question": _reword(root, "r1",
+                                            question="O commit abc1234 já passou?"),
+        }
+        for label, p in cases.items():
+            check(f"refuses {label} with exit 2", p.returncode == 2,
+                  f"{p.returncode} {p.stderr}")
+            check(f"{label}: says why", bool(p.stderr.strip()), p.stderr)
+        check("refusals write nothing", _plan_text(root) == text)
+        ok = _reword(root, "b1")
+        check("a blocked item (open) is accepted", ok.returncode == 0, ok.stderr)
+
+
+def test_reword_route_fills_only_what_is_missing():
+    with tempfile.TemporaryDirectory() as tmp:
+        half = old_route("h1")
+        half.update(owner_question="Pergunta antiga já escrita?", route_kind=None,
+                    owner_summary={"pedido": "o pedido original",
+                                   "se_sim": "o que o sim já dizia"})
+        root = build_repo(tmp, [old_route(), half])
+        p = _reword(root, "r1")
+        check("fills a bare route: exit 0", p.returncode == 0, p.stderr)
+        r1 = items_of(root)["r1"]
+        check("bare route gets kind, question and both effects",
+              r1.get("route_kind") == "external-block"
+              and r1.get("owner_question") == QUESTION
+              and r1["owner_summary"] == {"se_sim": IF_YES, "se_nao": IF_NO}, str(r1))
+        _same_core("bare", old_route(), r1)
+        p = _reword(root, "h1")
+        check("fills a half route: exit 0", p.returncode == 0, p.stderr)
+        h1 = items_of(root)["h1"]
+        check("half route keeps its question and its summary keys",
+              h1["owner_question"] == "Pergunta antiga já escrita?"
+              and h1["owner_summary"]["pedido"] == "o pedido original"
+              and h1["owner_summary"]["se_sim"] == "o que o sim já dizia"
+              and h1["owner_summary"]["se_nao"] == IF_NO
+              and h1["route_kind"] == "external-block", str(h1))
+        _same_core("half", {"human_pending": ROUTE, "status": "pending", "evidence": "x"},
+                   h1)
+        before = _plan_text(root)
+        p = _reword(root, "r1", kind="owner-task", question="Outra pergunta qualquer?")
+        check("a second call changes nothing and says so",
+              p.returncode == 0 and _plan_text(root) == before
+              and "nothing changed" in (p.stdout + p.stderr), p.stdout + p.stderr)
+
+
+def main():
+    print("cepa-until: a largada reescreve a rota antiga e grava no item (CS-4)\n")
+    for given_name, fn in sorted(globals().items()):
+        if given_name.startswith("test_") and callable(fn):
+            print(f"{given_name}:")
+            fn()
+    print()
+    if base.FAILURES:
+        print(f"✗ {len(base.FAILURES)} falha(s): {', '.join(base.FAILURES)}")
+        return 1
+    print("✓ tudo verde")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
