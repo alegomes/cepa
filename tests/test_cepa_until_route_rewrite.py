@@ -73,6 +73,12 @@ def _route_reader(tmp, mode="ok"):
         "elif mode == 'noquestion':\n"
         f"    print(json.dumps({{'route_kind': 'external-block', 'question': 'Sem interrogação',\n"
         f"        'if_yes': {IF_YES!r}, 'if_no': {IF_NO!r}}}))\n"
+        "elif mode == 'nul':\n"
+        "    sys.stdout.write('{\"route_kind\":\"external-block\",\"question\":\"a\\\\u0000b?\",'\n"
+        "        '\"if_yes\":\"a\",\"if_no\":\"b\"}')\n"
+        "elif mode == 'surrogate':\n"
+        "    sys.stdout.write('{\"route_kind\":\"external-block\",\"question\":\"a\\\\ud800b?\",'\n"
+        "        '\"if_yes\":\"a\",\"if_no\":\"b\"}')\n"
         "elif mode == 'fail':\n"
         "    sys.exit(3)\n")
     script.chmod(0o755)
@@ -231,6 +237,55 @@ def test_the_run_ledger_records_the_rewrite_and_its_failures():
         check("ledger fail: nothing rewritten and the failing reader is in `falhas`",
               events[0].get("reescritas") == [] and len(falhas) == 1
               and falhas[0].get("id") == "r1" and falhas[0].get("erro"), str(events[0]))
+
+
+def test_a_reader_with_nul_or_a_lone_surrogate_does_not_kill_the_launch():
+    for mode in ("nul", "surrogate"):
+        rc, out, before, after, calls = _launch([old_route(), item("y1")], mode=mode,
+                                                tty=False)
+        check(f"{mode}: the launch exits 0", rc == 0, out[-1500:])
+        check(f"{mode}: the route item is exactly as it was",
+              before["r1"] == after["r1"], f"{before['r1']} -> {after['r1']}")
+        check(f"{mode}: the other item ran", after["y1"]["status"] == "done",
+              str(after["y1"]))
+
+
+def test_parse_route_rejects_bad_characters_and_non_strings():
+    mod = base.load_module()
+    for label, bad in (("NUL", "a\x00b?"), ("lone surrogate", "a\ud800b?"),
+                       ("ESC sequence", "\x1b[31mred?"), ("BEL", "a\x07b?"),
+                       ("DEL", "a\x7fb?"), ("bidi override", "a\u202eb?")):
+        for key in ("question", "if_yes", "if_no"):
+            text = bad if key == "question" else "ok " + bad
+            raw = _good(**{key: text})  # json.dumps escapes the character
+            check(f"parse_route: {label} in {key} is rejected",
+                  mod.parse_route(raw) is None, raw)
+    check("parse_route: a raw JSON \\u0000 escape is rejected",
+          mod.parse_route('{"route_kind":"external-block","question":"a\\u0000b?",'
+                          '"if_yes":"a","if_no":"b"}') is None)
+    check("parse_route: a raw JSON \\ud800 escape is rejected",
+          mod.parse_route('{"route_kind":"external-block","question":"a\\ud800b?",'
+                          '"if_yes":"a","if_no":"b"}') is None)
+    for label, val in (("list", ["a?"]), ("dict", {"a": "b?"}), ("number", 5),
+                       ("inf", float("inf"))):
+        for key in ("question", "if_yes", "if_no"):
+            check(f"parse_route: a {label} in {key} is rejected",
+                  mod.parse_route(_good(**{key: val})) is None)
+
+
+def test_reword_route_returns_a_failure_for_arguments_subprocess_refuses():
+    mod = base.load_module()
+    for label, q in (("NUL", "a\x00b?"), ("lone surrogate", "a\ud800b?")):
+        route = {"route_kind": "external-block", "question": q, "if_yes": "a",
+                 "if_no": "b"}
+        try:
+            err = mod.reword_route("/nonexistent/queue.yaml", "/nonexistent", "r1", route)
+        except Exception as e:  # noqa: BLE001
+            err = None
+            check(f"reword_route: {label} does not raise", False, repr(e))
+            continue
+        check(f"reword_route: {label} comes back as a failure text",
+              isinstance(err, str) and err, repr(err))
 
 
 def _good(**over):

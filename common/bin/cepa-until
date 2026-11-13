@@ -247,6 +247,7 @@ import subprocess
 import sys
 import threading
 import time
+import unicodedata
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -3247,12 +3248,19 @@ def _json_object(text):
 def parse_route(text):
     """CS-4: the rewritten route the reader printed, as {route_kind, question, if_yes,
     if_no}, or None when it is not that (kind outside the closed set, a question
-    without `?`, an empty effect, or text that is not that JSON)."""
+    without `?`, an empty effect, a field that is not a string, a NUL, a lone surrogate
+    or a control/format character (ESC, BEL, DEL, bidi override) in the text, or text
+    that is not that JSON). Rejected, never stripped: a mangled question is worse than
+    the fallback."""
     body = _json_object(text)
     if not isinstance(body, dict) or body.get("route_kind") not in tuple(ROUTE_KIND_LABEL):
         return None
-    flat = {k: " ".join(str(body.get(k) or "").split())
-            for k in ("question", "if_yes", "if_no")}
+    if not all(isinstance(body.get(k), str) for k in ("question", "if_yes", "if_no")):
+        return None
+    flat = {k: " ".join(body[k].split()) for k in ("question", "if_yes", "if_no")}
+    if any(unicodedata.category(ch) in ("Cc", "Cf", "Cs")
+           for v in flat.values() for ch in v):
+        return None
     if "?" not in flat["question"] or not flat["if_yes"] or not flat["if_no"]:
         return None
     return {"route_kind": body["route_kind"], **flat}
@@ -3632,7 +3640,7 @@ def reword_route(queue, repo, ident, route):
            if k not in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")}
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=env)
-    except (subprocess.TimeoutExpired, OSError) as e:
+    except (subprocess.TimeoutExpired, OSError, ValueError) as e:  # UnicodeError is a ValueError
         return f"`cepa-plan reword-route` did not answer: {e}"
     if p.returncode == 0:
         return None
