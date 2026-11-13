@@ -333,7 +333,7 @@ cepa-until <queue> (--for 12h | --until 07:00) [--repo DIR]
 
 cepa-until pending [--repo DIR] [--json]       runs waiting for the owner, dead supervisors
 cepa-until decide <queue>[/<run>] [--repo DIR]   one closed question at a time, applied on the spot
-cepa-until land <queue>/<run> [--yes]      merge + full build + push to the clone's branch
+cepa-until land <queue>/<run> [--yes]      merge + full build + push to the clone's branch, local tag landed/<queue>/<run>
 cepa-until close-dead <queue>/<run> [--yes]     the build a dead supervisor never ran
 ```
 

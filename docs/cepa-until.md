@@ -158,6 +158,12 @@ next run reads it. `m` records the answer and keeps the item as it was (still `b
 route still open), for answers like "keep it blocked". Enter leaves an item for later; `q`
 stops asking.
 
+A landing that ends green tags the landed commit `landed/<queue>/<run>` (the queue plus the
+run's date and time), in the clone only: the tag is lightweight, so `git push` does not send it
+even with `push.followTags`. It is the point to return to before a lot that touches a hook
+(owner's decision on D4, `docs/reviews/2026-11-12-painel-lacunas-ecc.md`). A red build leaves no
+tag, and a tag of the same name already on another commit is never moved.
+
 **An answer can resume the same run (LL-1, 2026-11-10).** When the queue runs dry
 (`end-of-queue`) with items waiting on the owner, the run is attached to a terminal and the
 window still holds `--min-reserve`, the questions about those items come BEFORE the closing,

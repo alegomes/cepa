@@ -2107,7 +2107,9 @@ def land_parser():
             "it (the red is usually a neighbouring test, not the run's code), and\n"
             "running it again resumes where it stopped: with the merge done, it goes\n"
             "on from the build. To give up instead, `git reset --keep` to the return\n"
-            "point it prints. On success it removes the run worktree and branch.\n"
+            "point it prints. On success it tags the landed commit\n"
+            "landed/<queue>/<run> in the clone only (never pushed), the point to\n"
+            "return to, and removes the run worktree and branch.\n"
             "Without --yes, it only shows the plan."),
         examples=[
             ("cepa until land wego/2026-11-03-2210", "show the landing plan"),
@@ -2304,6 +2306,9 @@ def cmd_land(argv):
             return 5
         print(f"  green ({human(timedelta(seconds=sec))})")
 
+    tag_landing(repo, queue, run_id, landing_info)
+    record(aterrissagem=landing_info)
+
     if has_upstream(repo):
         code, output = git(["push"], repo, timeout=300)
         if code != 0:
@@ -2332,6 +2337,36 @@ def cmd_land(argv):
         print(f"the queue ({clone_queue}) holds the run's marks without a commit; "
               "commit whenever you want")
     return 0
+
+
+def landing_tag(queue, run_id):
+    """The repository tag of a landed queue (L2-TAG of `lacunas-ecc`, owner's
+    decision on D4 of docs/reviews/2026-11-12-painel-lacunas-ecc.md): the point to
+    return to before a lot that touches a hook. Name: the queue plus the run's
+    date (the run id is `YYYY-MM-DD-HHMM`, so two landings on one day differ)."""
+    return f"landed/{queue}/{run_id}"
+
+
+def tag_landing(repo, queue, run_id, landing_info):
+    """Tags the landed commit, only in the clone: `git push` without `--tags`
+    does not send a lightweight tag, even with `push.followTags`. Runs after the green build, so a red landing has no tag.
+    A tag of the same name on another commit is never moved: it warns."""
+    tag = landing_tag(queue, run_id)
+    head = head_of(repo)
+    code, existing = git(["rev-parse", "-q", "--verify", f"{tag}^{{commit}}"], repo)
+    if code == 0 and existing != head:
+        print(f"warning: tag `{tag}` already exists on {existing[:10]}; "
+              f"did not move it to {head[:10]}")
+        return
+    if code != 0:
+        # Lightweight on purpose: `push.followTags` sends annotated tags along
+        # with a plain `git push`, and this one stays in the clone.
+        code, output = git(["tag", tag, head], repo)
+        if code != 0:
+            print(f"warning: could not create tag `{tag}` ({output})")
+            return
+    landing_info["tag"] = tag
+    print(f"tag: `{tag}` on {head[:10]} (local only, not pushed)")
 
 
 def land_action(repo, tree, queue, run_id, n):
