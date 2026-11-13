@@ -1,0 +1,45 @@
+schema_version: 2
+card: perguntas-da-largada-legiveis-CS-3
+verdict: proven
+reviewed_at: 2026-11-13T11:30:00-03:00
+base_commit: d81d10e
+head_commit: a7b2a0f
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until (decide() question choice; legend_lines; Panel.legend)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # pty test runs the real cepa-until decide as a process; the text-mode test injects only input/output callables
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at a7b2a0f (throwaway worktree /tmp/proof-cs3b): python3 tests/test_cepa_until_legend_per_key.py -> 26 ok lines, 'tudo verde'; python3 tests/test_cepa_until_decide.py -> 'tudo verde'"
+        - "P1 no-question route text -> 'Done already? With yes, send this item back...': legend_per_key 1 FAIL, decide FAIL (RED)"
+        - "P2 delivered question 'Is this task finished?' -> 'Done already? With yes': legend_per_key 1 FAIL (RED)"
+        - "P3 legend_lines yes = None (se_sim ignored): legend_per_key 3 FAIL, decide FAIL (RED)"
+        - "P4 legend_lines no = None (se_nao ignored): legend_per_key 1 FAIL, decide FAIL (RED)"
+        - "P5 legend_lines iterate reversed(chips) (order): legend_per_key 6 FAIL, decide FAIL (RED)"
+        - "P6 legend_lines drop the q line: legend_per_key 5 FAIL (RED)"
+        - "P7 decide() passes delivered=False to legend_lines: legend_per_key 1 FAIL (RED) -- previous survivor now killed by a7b2a0f"
+        - "P8 Panel.legend hanging indent 2+len(key)+3 -> 2: legend_per_key 1 FAIL (RED) -- previous survivor now killed by a7b2a0f"
+        - "each perturbation applied with sed in the throwaway worktree, tests run sequentially, restored with git checkout before the next; worktree removed; primary tree untouched; nothing in background"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; the two previously unasserted spots (delivered-route legend texts; hanging indent) are now guarded: P7 and P8 go RED at a7b2a0f"
+  l4_adversarial_input:
+    status: n/a
+    reason: "NOT verified by a run. The diff adds no CLI input: it changes only text printed by decide and how it is laid out; the strings come from owner_summary already stored in the queue. No api-rest module in the diff. The human may overrule."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Story, not Bug. Equivalent done: new test file at base d81d10e source (git checkout d81d10e -- common/bin/cepa-until) -> python3 tests/test_cepa_until_legend_per_key.py 14 FAIL (RED); restored a7b2a0f -> tudo verde"
+routing_reason: "All eight perturbations (including the two earlier survivors, delivered-route legend wording and wrapped-line indent) turn the suite RED at a7b2a0f, the new test is RED at the base source, and the run is green unperturbed. L4 is n/a because the diff only changes printed text and layout."
