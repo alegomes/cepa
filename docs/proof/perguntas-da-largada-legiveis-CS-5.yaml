@@ -1,0 +1,44 @@
+schema_version: 2
+card: perguntas-da-largada-legiveis-CS-5
+verdict: proven
+reviewed_at: 2026-11-13T20:00:00-03:00
+base_commit: 794573e
+head_commit: 5f8f172
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until (decide(): label of a route with no kind, ROUTE_KIND_LABEL comment)"
+      module: cli
+      external_observable: true
+      # Only the far boundary is faked: CEPA_UNTIL_LEITOR stands in for `claude -p` (the model),
+      # here a reader that sleeps past CEPA_UNTIL_TETO_LEITURA. The launch, the panel (on a pty),
+      # cepa-plan and queue.yaml are real.
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "git diff 794573e..5f8f172: common/bin/cepa-until +7/-2 (one production line changed: screen.label(\"Task left for you\", route, short_path=\"Task\") -> screen.label(\"Left for you\", route)); tests in decide, route_kind_label, route_rewrite"
+        - "GREEN at 5f8f172 (throwaway detached worktree /tmp/proof-cs5): test_cepa_until_route_rewrite.py -> 'tudo verde'; test_cepa_until_route_kind_label.py -> 'tudo verde'"
+        - "KILLED P1, label reverted to `Task left for you` / short `Task`: route_rewrite 2 FAIL (ceiling: 'Left for you' labels the route text; ceiling: the old 'Task' label no longer stands beside the route); route_kind_label 2 FAIL (CS-2 pty, CS-2 text); decide 3 FAIL (rotulos numa coluna, rota humana sem pergunta, bloco em ordem). The launch-level test (pty, reader past the ceiling) is red, so the label is load-bearing at the external surface."
+        - "KILLED P2, neutral question line (from CS-3) replaced by 'done already? ...': route_rewrite 3 FAIL (ceiling: the screen shows the neutral question; ceiling: no 'done already?'; tty garbage: today's question)"
+        - "perturbations by sed with absolute path inside the throwaway worktree, foreground, restored with git checkout; worktree removed (git worktree list confirms); primary tree untouched, status clean."
+        - "test_cepa_until_decide.py was run only in P1 (judged by the specific checks above); the known Ctrl-C failure did not show in that run."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; the one changed production line is guarded: reverting it turns test_cepa_until_route_rewrite.py RED (2 FAIL), route_kind_label 2 FAIL, decide 3 FAIL"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only changes the text of a label shown for a route already read from queue.yaml; it parses nothing coming from outside and touches no input-bearing module (the hostile reader outputs were covered in CS-4)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Story, not Bug. Equivalent: P1 and P2 turn the new launch test RED."
+routing_reason: "The label change is load-bearing at the launch surface: reverting it makes the pty test (reader that misses the ceiling) fail, as does reverting the neutral question. The real launch, panel and cepa-plan run; only the model is faked. PROVEN."
