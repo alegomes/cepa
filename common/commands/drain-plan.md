@@ -423,7 +423,10 @@ For each item of the batch, in order:
      months later is what happened. If the run produced a route only the human
      closes (validate in the UI, approve a PR, rotate a secret), open it with
      `--human-pending "<the route, verbatim>"` — that is how it survives the
-     session. **Never close a route**: only whoever ran it knows whether it
+     session. The route opens only with `--route-kind` (`owner-task`,
+     `external-block` or `open-question`), a closed `--question` (yes or no,
+     with `?`), `--if-yes` and `--if-no`; without any of them `finish` refuses,
+     lists what is missing and writes nothing. **Never close a route**: only whoever ran it knows whether it
      passed, and the command refuses.
 
      **A waiver produced in the item is a proposal, not a waiver.** If a waiver
@@ -431,6 +434,7 @@ For each item of the batch, in order:
      `status: proposta`, with `fila=`/`item=`), open it as `--human-pending
      "Aceitar ou recusar a dispensa de <escopo> (<motivo>)"` with `--question
      "Aceito a dispensa de <escopo> por <razão>? Recomendo <sim/não>: <porquê>"`
+     and `--route-kind open-question`, `--if-yes`, `--if-no`
      (both owner-facing, in pt-BR: "Accept or refuse the waiver of <scope>
      (<reason>)" / "Do I accept the waiver of <scope> for <reason>? I recommend
      <yes/no>: <why>"). The owner's `cepa-plan answer ... "sim: ..."` turns

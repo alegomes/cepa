@@ -3400,9 +3400,12 @@ def open_precondition_route(queue, repo, row):
     because nobody reserved the item. Never writes queue.yaml: `cepa-plan` keeps its
     own validation of the human text. `finish` REPLACES `evidence` and drops
     `owner_summary` on a `pending`, so both are read first and carried over (a red
-    build leaves the side branch and commits in that evidence). If `finish` refuses,
-    it is tried once more without the question, the part that most often fails the
-    plain-text validation. Returns None or the error as text."""
+    build leaves the side branch and commits in that evidence). `finish` requires a
+    kind, a closed question and what yes and no do: the kind is always
+    `external-block`; the question is the pre-read's (`row["pergunta"]`) and, if
+    `finish` refuses it, the fixed "Does this exist now?"; `--if-yes`/`--if-no` get a
+    plain default when the carried-over summary has none. Returns None or the error
+    as text."""
     previous = current_item(queue, repo, row["id"])
     evidence = ("Pre-read at launch found a missing pre-condition: "
                 f"{row['texto']}")
@@ -3410,18 +3413,23 @@ def open_precondition_route(queue, repo, row):
         evidence += "\n" + str(previous["evidence"])
     cmd = [sys.executable, str(CEPA_PLAN), "finish", queue, str(row["id"]),
            "--status", "pending", "--human-pending", row["texto"],
+           "--route-kind", "external-block",
            "--evidence", evidence, "--repo", str(repo), "--supervisor"]
     summary = previous.get("owner_summary")
-    if isinstance(summary, dict):
-        for key, flag, _ in _ownertext.FIELDS:
-            if str(summary.get(key) or "").strip():
-                cmd += [flag, str(summary[key])]
+    if not isinstance(summary, dict):
+        summary = {}
+    defaults = {"se_sim": "o item volta para a fila e o próximo run tenta de novo",
+                "se_nao": "o item continua esperando essa condição"}
+    for key, flag, _ in _ownertext.FIELDS:
+        text = str(summary.get(key) or "").strip() or defaults.get(key, "")
+        if text:
+            cmd += [flag, text]
     # The outer session did not build this item: with its id in the environment,
     # `finish --status pending` would flag THAT session as owing a validation.
     env = {k: v for k, v in os.environ.items()
            if k not in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")}
     attempts = [cmd + ["--question", row["pergunta"]]] if row.get("pergunta") else []
-    attempts.append(cmd)
+    attempts.append(cmd + ["--question", "Does this exist now?"])
     error = None
     for attempt in attempts:
         try:
