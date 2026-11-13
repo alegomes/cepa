@@ -61,11 +61,11 @@ O teste `test_invalid_byte_on_terminal_does_not_crash_decide` (em `tests/test_ce
 - [x] Q6. Resposta de várias linhas mantém as quebras no `queue.yaml`? — Mantém (dono, 2026-11-13).
 
 ## Decided without asking
-- O editor é escolhido nesta ordem: `$VISUAL`, `$EDITOR` e, sem nenhum dos dois, `vi`. É a ordem do git, que o dono já usa. Vete aqui se discordar.
-- O arquivo aberto no editor traz a pergunta do item em linhas começadas por `#`, e essas linhas são descartadas ao salvar, como na mensagem de commit do git. Vete aqui se discordar.
-- Seta para cima e para baixo trazem as respostas anteriores do mesmo `decide`. Esse histórico não é gravado em disco, para resposta do dono não vazar entre repos. Vete aqui se discordar.
-- O `readline` só é ativado quando a entrada é um terminal. Em teste, `nohup` ou agente, a leitura e o texto da tela ficam byte a byte como hoje. Vete aqui se discordar.
-- A confirmação do CS-5 tem Enter como sim, porque o texto com `?` quase sempre é o que o dono quis dizer. Vete aqui se discordar.
+- O editor é escolhido nesta ordem: `$VISUAL`, `$EDITOR` e, sem nenhum dos dois, `vi`. É a ordem do git, que o dono já usa. Vete aqui se discordar. · mantida em 2026-11-13
+- O arquivo aberto no editor traz a pergunta do item em linhas começadas por `#`, e essas linhas são descartadas ao salvar, como na mensagem de commit do git. Vete aqui se discordar. · mantida em 2026-11-13
+- Seta para cima e para baixo trazem as respostas anteriores do mesmo `decide`. Esse histórico não é gravado em disco, para resposta do dono não vazar entre repos. Vete aqui se discordar. · mantida em 2026-11-13
+- O `readline` só é ativado quando a entrada é um terminal. Em teste, `nohup` ou agente, a leitura e o texto da tela ficam byte a byte como hoje. Vete aqui se discordar. · mantida em 2026-11-13
+- A confirmação do CS-5 tem Enter como sim, porque o texto com `?` quase sempre é o que o dono quis dizer. Vete aqui se discordar. · mantida em 2026-11-13
 
 ## Riscos e o que ficou de fora desta especificação
 - O Python do macOS pode vir com `libedit` no lugar do GNU readline. Setas, Home/End e colar funcionam nos dois, mas atalhos menos comuns variam.
