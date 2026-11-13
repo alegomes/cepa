@@ -18,6 +18,7 @@ Its own file (helpers borrowed from test_cepa_until_decide.py) so the proof gate
 it alone: `python3 tests/test_cepa_until_route_rewrite.py`, exit 1 on any failure.
 """
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -80,12 +81,14 @@ def _route_reader(tmp, mode="ok"):
         "    sys.stdout.write('{\"route_kind\":\"external-block\",\"question\":\"a\\\\ud800b?\",'\n"
         "        '\"if_yes\":\"a\",\"if_no\":\"b\"}')\n"
         "elif mode == 'fail':\n"
-        "    sys.exit(3)\n")
+        "    sys.exit(3)\n"
+        "elif mode == 'hang':\n"
+        "    import time; time.sleep(60)\n")
     script.chmod(0o755)
     return script, log
 
 
-def _launch(items, mode="ok", tty=True, inputs=()):
+def _launch(items, mode="ok", tty=True, inputs=(), ceiling=None):
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, items)
         before = {k: dict(v) for k, v in items_of(root).items()}
@@ -94,6 +97,8 @@ def _launch(items, mode="ok", tty=True, inputs=()):
         env = env_do_run(tmp, root, binv)
         env["CEPA_UNTIL_LEITOR"] = str(reader)
         env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "5"
+        if ceiling is not None:
+            env["CEPA_UNTIL_TETO_LEITURA"] = str(ceiling)
         cmd = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
                "--for", "2h", "--no-verify", "--no-analysis"]
         if tty:
@@ -194,6 +199,34 @@ def test_a_reader_that_fails_on_a_terminal_leaves_todays_question():
           "Send this item back to the queue" in out, out[-1500:])
     check("tty garbage: the item is unchanged", before["r1"] == after["r1"],
           str(after["r1"]))
+
+
+def test_a_route_the_reader_does_not_rewrite_within_the_ceiling_gets_the_neutral_question():
+    """CS-5: the CS-4 scenario with a reader that does not answer within the ceiling.
+    The old route is still asked at the launch, with the neutral question and the
+    "Left for you" label (it has no kind, so no kind label applies); never with
+    "done already?". The item is left exactly as it was."""
+    rc, out, before, after, calls = _launch(
+        [old_route(), item("y1")], mode="hang", tty=True, ceiling=2,
+        inputs=[("Send this item back", "")])
+    # on_tty wraps the trigger it answered in <>; colours are stripped to read the labels.
+    screen = re.sub(r"\x1b\[[0-9;]*m", "", out).replace("<Send this item back>",
+                                                         "Send this item back")
+    check("ceiling: the launch exits 0", rc == 0, screen[-1500:])
+    check("ceiling: the route job reached the reader", "r1 reescrever-rota" in calls,
+          str(calls))
+    check("ceiling: the screen shows the neutral question",
+          "Send this item back to the queue for the next run to try again?" in screen,
+          screen[-2500:])
+    check("ceiling: 'Left for you' labels the route text",
+          re.search(r"Left for you\s+falta o acesso", screen) is not None, screen[-2500:])
+    check("ceiling: the old 'Task' label no longer stands beside the route",
+          re.search(r"Task\s+falta o acesso", screen) is None, screen[-2500:])
+    check("ceiling: no 'done already?'", "done already" not in out, out[-2500:])
+    check("ceiling: the item is exactly as it was", before["r1"] == after["r1"],
+          f"{before['r1']} -> {after['r1']}")
+    check("ceiling: the other item still ran", after["y1"]["status"] == "done",
+          str(after["y1"]))
 
 
 def test_a_route_that_already_has_question_and_kind_is_not_read():

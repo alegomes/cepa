@@ -122,7 +122,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
     check("rótulos numa coluna, com o curto no lugar do longo",
           "│  Stopped because the agent marked" in plain_text
           and "│  Context         dois clientes" in plain_text
-          and "│  Task            rotacionar no cofre" in plain_text, plain_text)
+          and "│  Left for you    rotacionar no cofre" in plain_text, plain_text)
     check("a pergunta marcada e a instrução embaixo dela",
           "│  ? Mantenho o reenvio?" in plain_text
           and "│    If yes, the next run receives: cancelar e recriar" in plain_text,
@@ -643,7 +643,7 @@ def test_decide_s_and_n_answer_the_drafted_question():
     text2 = "\n".join(screen2)
     check("rota humana sem pergunta: mostra a tarefa e a pergunta neutra "
           "(CS-3 de perguntas-da-largada-legiveis tirou o 'done already?')",
-          "Task left for you: valide o login real" in text2
+          "Left for you: valide o login real" in text2
           and "Question: Send this item back to the queue for the next run to "
               "try again?" in text2
           and "done already" not in text2, text2)
@@ -694,16 +694,16 @@ def test_decide_shows_context_instruction_and_warns_question_outside_the_rules()
           "Se sim / Recomendo, nesta ordem",
           [block_s5.find(r) for r in (
               "Stopped because: a task only you can do was left",
-              "Task left for you: rodar os 20 lotes",
+              "Left for you: rodar os 20 lotes",
               "Context: O código está pronto numa branch lateral",
               "Question: Deixo a rodada dos 20 lotes",
               "If yes, the next run receives: retomar de until/",
               "Recommend yes: a rodada só é possível")]
           == sorted(i for i in (block_s5.find(r) for r in (
-              "Stopped because:", "Task left for you", "Context:",
+              "Stopped because:", "Left for you", "Context:",
               "Question:", "If yes,", "Recommend yes")))
           and all(r in block_s5 for r in (
-              "Stopped because:", "Task left for you", "Context:",
+              "Stopped because:", "Left for you", "Context:",
               "Question:", "If yes,", "Recommend yes")), block_s5)
     check("linha em branco antes da pergunta e antes da legenda do menu",
           "\n\n       Question:" in block_s5

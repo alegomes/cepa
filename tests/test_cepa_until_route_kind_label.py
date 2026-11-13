@@ -71,8 +71,9 @@ def test_decide_on_terminal_labels_each_route_by_its_kind():
                       any(t in l for t in ("falta a chave", "de onde vem",
                                            "criar o papel"))
                       for l in lines), plain)
-        check("CS-2 pty: a route with no kind keeps the old label",
-              beside("Task", "valide o login real")
+        check("CS-2 pty: a route with no kind gets 'Left for you' (CS-5)",
+              beside("Left for you", "valide o login real")
+              and not beside("Task", "valide o login real")
               and not beside("Blocked outside", "valide o login real"), plain)
 
 
@@ -94,8 +95,8 @@ def test_decide_without_terminal_names_the_kind_too():
     text = "\n".join(screen)
     check("CS-2 text: 'Blocked outside: <route>'",
           "Blocked outside: falta a chave do cofre" in text, text)
-    check("CS-2 text: route with no kind keeps 'Task left for you: <route>'",
-          "Task left for you: valide o login" in text, text)
+    check("CS-2 text: route with no kind gets 'Left for you: <route>' (CS-5)",
+          "Left for you: valide o login" in text, text)
 
 
 def test_queue_hands_route_kind_to_the_panel():

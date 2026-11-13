@@ -2482,7 +2482,8 @@ def owner_summary_of(ad, d):
 
 # CS-2 (perguntas-da-largada-legiveis): the label beside the route text says
 # which kind of route it is, as `cepa-plan finish --route-kind` recorded it. A
-# route with no kind (recorded before the kind existed) keeps "Task".
+# route with no kind (recorded before the kind existed, and not rewritten by the
+# route reader within its ceiling) gets "Left for you" (CS-5).
 ROUTE_KIND_LABEL = {"owner-task": "Task for you",
                     "external-block": "Blocked outside",
                     "open-question": "Open question"}
@@ -2913,7 +2914,11 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             if kind_label:
                 screen.label(kind_label, route)
             else:
-                screen.label("Task left for you", route, short_path="Task")
+                # CS-5 (perguntas-da-largada-legiveis): a route with no kind is an
+                # old one the route reader did not rewrite (or a route in a delivered
+                # item, which is never rewritten). "Task" assumed it was a task of
+                # the owner; "Left for you" claims only what is known.
+                screen.label("Left for you", route)
         if context:
             screen.label("Context", context)
         # A single question, and `sim` always means the same thing: the item
