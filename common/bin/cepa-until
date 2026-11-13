@@ -822,7 +822,17 @@ CUT_RULE = (
     "\"<the choice, in plain words>\" --decision-commit <sha>` (default HEAD), and it shows "
     "up in the run summary with the commit. Keep `cepa-plan finish ... --human-pending` "
     "for what only the owner closes: a proof waiver, moving a card to Done, and any task "
-    "outside the repository (credentials, a real environment, a conversation).")
+    "outside the repository (credentials, a real environment, a conversation). "
+    # CS-12 of perguntas-da-largada-legiveis: since CS-1, `finish --human-pending`
+    # refuses a route the owner cannot read, so the agent learns the shape up front
+    # instead of from the refusal. The three kinds are `cepa-plan`'s ROUTE_KINDS.
+    "To open such a route, `--human-pending` needs, in the same `finish`: "
+    "`--route-kind` with one of `owner-task` (a task only the owner does, outside the "
+    "repository), `external-block` (something outside has to exist, not an owner "
+    "decision) or `open-question` (a doubt the owner answers); `--question` with a "
+    "closed yes-or-no question, ending in `?` (your recommendation may follow it); and "
+    "`--if-yes` and `--if-no` saying what each answer does to the work. Without any of "
+    "them `finish` refuses and records nothing.")
 
 
 def build_command(name, branch, permissions, session_id=None, note=""):
