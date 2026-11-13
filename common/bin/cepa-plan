@@ -1489,6 +1489,7 @@ def build_batch(items, max_items, reservation_state=reservation_of):
                         "question": it.get("owner_question"),
                         "owner_summary": it.get("owner_summary"),
                         "human_pending": it.get("human_pending"),
+                        "route_kind": it.get("route_kind"),
                         "evidence": it.get("evidence")})
 
     batch, stop = [], {"reason": "end-of-queue", "reason_pt": "fim-da-fila",
@@ -1846,6 +1847,8 @@ def cmd_status(root, name, status_filter, as_json, item_id=None, via_show=False)
             "status": status_of(it), "why": it.get("why"),
             "blocked_by": it.get("blocked_by") or [],
             "human_pending": it.get("human_pending"),
+            "route_kind": it.get("route_kind"),
+            "question": it.get("owner_question"),
             "evidence": it.get("evidence"),
             "owner_summary": it.get("owner_summary"),
             "claimed_by": ({"session_id": owner.get("session_id"),

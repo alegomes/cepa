@@ -2479,6 +2479,14 @@ def owner_summary_of(ad, d):
     return summary
 
 
+# CS-2 (perguntas-da-largada-legiveis): the label beside the route text says
+# which kind of route it is, as `cepa-plan finish --route-kind` recorded it. A
+# route with no kind (recorded before the kind existed) keeps "Task".
+ROUTE_KIND_LABEL = {"owner-task": "Task for you",
+                    "external-block": "Blocked outside",
+                    "open-question": "Open question"}
+
+
 def answers_legend(summary):
     """What `sim` and `não` lead to. The mechanics never change (sim returns
     the item to the queue, não keeps it); what the owner needs is what that
@@ -2882,7 +2890,11 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         if summary.get("pronto"):
             screen.label("Already done", summary["pronto"])
         if route is not None:
-            screen.label("Task left for you", route, short_path="Task")
+            kind_label = ROUTE_KIND_LABEL.get(ad.get("route_kind"))
+            if kind_label:
+                screen.label(kind_label, route)
+            else:
+                screen.label("Task left for you", route, short_path="Task")
         if context:
             screen.label("Context", context)
         # A single question, and `sim` always means the same thing: the item
@@ -3035,7 +3047,8 @@ def delivered_leftovers(queue, repo):
     except (subprocess.TimeoutExpired, ValueError):
         items = []
     return [{"id": l.get("id"), "title": l.get("title"), "reason": "pos-entrega",
-             "question": None, "human_pending": l.get("human_pending"),
+             "question": l.get("question"), "human_pending": l.get("human_pending"),
+             "route_kind": l.get("route_kind"),
              "owner_summary": l.get("owner_summary"),
              "evidence": l.get("evidence")}
             for l in items if l.get("human_pending") is not None]
