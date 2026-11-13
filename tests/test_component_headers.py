@@ -71,12 +71,16 @@ def header(text):
     """The header block as {key: value}, or None when absent or unclosed.
 
     A block scalar (`description: |` or `>`) takes the indented lines below it.
+    Lenient on purpose, line by line and not strict YAML: about 45 components
+    carry an unquoted `: ` inside `description`, strict YAML rejects them, and
+    Claude Code loads them today. Failing them would be a red with no defect.
     """
     if not text.startswith("---\n"):
         return None
-    end = text.find("\n---", 3)
-    if end < 0:
+    close = re.search(r"\n---[ \t]*(\n|$)", text[3:])
+    if close is None:
         return None
+    end = 3 + close.start()
     fields, key = {}, None
     for line in text[4:end].splitlines():
         m = re.match(r"^([A-Za-z][\w-]*):\s*(.*)$", line)
