@@ -24,9 +24,16 @@ items:
     finish <fila> <id> --status pending --human-pending "falta o acesso" --evidence
     "x"`, sem `--question`, sai com código diferente de 0, nomeia o que falta e
     deixa o `queue.yaml` igual; hoje sai com 0 e grava a rota.'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  claimed_by:
+    session_id: 83809f91-b9db-4dc8-ad22-9337c2065bbc
+    pid: 18419
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-cs-1-until-2026-11-13-0719
+    branch: until/2026-11-13-0719
+    started_at: '2026-11-13T10:20:21+00:00'
 - id: CS-12
   title: o agente do item recebe a regra de como abrir rota
   why: 'posição dada pelo dono em 2026-11-13: logo depois do CS-1, porque sem a
