@@ -1,0 +1,63 @@
+schema_version: 2
+card: L3
+verdict: unproven
+reviewed_at: 2026-11-13T11:00:00-03:00
+base_commit: 0ba9ae1
+head_commit: 0281f93
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "tests/replay/run.py (executor: scrub de env e GIT_*, isolamento de telemetria, decisao allow/deny/error2/missing, summarize: denials/redundant/holes/mismatches/tokens/ms, materialize de ref, diffs entre versoes)", module: tests-replay, external_observable: true, substituted_by_double: null }
+    - { class: "tests/test_hook_replay.py (rotulos no worktree, regra enfraquecida em repo scratch, higiene R3)", module: tests, external_observable: true, substituted_by_double: null }
+    - { class: "tests/replay/<hook>/*.json (9 cenarios, 45 chamadas, 3 hooks)", module: tests-replay, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo Python (harness cepa), nao Quarkus: sem Maven/PIT. A superficie externa
+    e o CLI `python3 tests/replay/run.py` rodado como subprocesso pelo
+    tests/test_hook_replay.py (comparacao com --ref/--repo) e, para os rotulos,
+    run.py importado como modulo (run_scenario roda os hooks reais como
+    subprocesso). Nenhum double no lugar do codigo alterado: os hooks sao os
+    reais. Tecnica: perturbacao em worktree descartavel --detach
+    (/tmp/proof-l3 em 0281f93), removida ao final. Diff e so aditivo (nenhum
+    hook alterado, R1 ok).
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: survived
+      results:
+        - "baseline (0281f93): `python3 tests/test_hook_replay.py` -> exit 0, 70 checks 'ok', 'ok' final (0 FAIL)"
+        - "P6 RED: contagem de holes zerada (`holes += 0`) -> exit 1, FAIL 'weakened hook has holes the old one lacked'"
+        - "P8 RED: contagem de mismatches zerada -> exit 1, FAIL 'weakened hook has more mismatches'"
+        - "P10 RED: lista de diffs entre versoes suprimida (`if False:`) -> exit 1, FAIL 'decision diffs name only the changed hook'"
+        - "P11 RED: ramo 'hook file missing' desligado -> exit 1, FAIL 'missing hook counted'"
+        - "P12 RED: substituicao de {root} removida -> exit 1, 4 FAIL (rotulos do corpus e os 3 checks do hook enfraquecido)"
+        - "P13 RED: materialize passa a extrair sempre HEAD em vez do ref -> exit 1, 3 FAIL (hook enfraquecido nao nega menos / mais mismatches / mais holes)"
+        - "P14 RED: sys.exit(0) em main() de maven-reactor-guard.py (regra enfraquecida no worktree) -> exit 1, FAIL 'all 45 corpus calls match their label' (maven-reactor-guard/multi-module.json :: pl-without-am ...)"
+        - "P14b RED: mesmo sys.exit(0) em bash-path-lock.py -> FAIL 'all 45 corpus calls match their label' (bash-path-lock/domain-dev-lane.json)"
+        - "P14c RED: mesmo sys.exit(0) em gate-advance.py -> FAIL 'all 45 corpus calls match their label' (gate-advance/no-baseline.json)"
+        - "R3 RED (7 injecoes em gate-advance/green-build.json, uma por vez): campo session_id; campo transcript_path; UUID; 'Wego'; 'kodez'; '/Users/'; '.claude/projects' -> cada uma derruba o check de higiene correspondente (3 'no recorded-session fields', 2 'no client names', 2 'no personal paths'). As regexes de R3 sao load-bearing."
+        - "SOBREVIVEU P1: SCRUBBED_ENV neutralizado (lista de variaveis de ambiente que alteram hooks nao e mais removida do ambiente) -> exit 0, nenhum teste vermelho"
+        - "SOBREVIVEU P2: scrub de GIT_* removido -> exit 0, nenhum teste vermelho"
+        - "SOBREVIVEU P3: tratamento de error2 removido (`can't open file` volta a contar como deny) -> exit 0, nenhum teste vermelho"
+        - "SOBREVIVEU P4: exit 1 contado como deny (`returncode in (1, 2)`) -> exit 0, nenhum teste vermelho (nenhum caso do corpus faz o hook sair com 1)"
+        - "SOBREVIVEU P5: isolamento de telemetria removido (CEPA_TELEMETRY_DIR nao e mais definido) -> exit 0, nenhum teste vermelho. Provavel mascaramento: o proprio teste chama isolate() (tests/_isolated_telemetry) e o ambiente isolado e herdado, entao o teste nao distingue run.py isolar de nao isolar."
+        - "SOBREVIVEU P7: contagem de redundant_denials zerada -> exit 0, nenhum teste vermelho (nenhum check le a coluna 'redundant')"
+        - "SOBREVIVEU P9: deny_tokens_est fixado em 0 -> exit 0, nenhum teste vermelho (a coluna tokens so e comparada entre versoes de hooks que nao mudaram, onde 0 == 0)"
+      run: "worktree /tmp/proof-l3 (`git worktree add --detach /tmp/proof-l3 0281f93`); para cada perturbacao: `git -C /tmp/proof-l3 checkout -q -- <arquivo>`, `sed -i ''` na linha alvo, `cd /tmp/proof-l3 && python3 tests/test_hook_replay.py` (~20s, exit 0 = verde, 1 = vermelho). Restaurado entre rodadas; worktree removido com `git worktree remove --force /tmp/proof-l3`. Nao rodei tests/run-all.sh."
+    pit:
+      status: n/a
+      results:
+        - "pitest nao se aplica: repo Python, sem Maven."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "Sem ferramenta de cobertura no repo. Determinado por perturbacao: todas as linhas alcancadas pelo teste, mas 7 perturbacoes (P1-P5, P7, P9) mostram linhas que o teste executa sem afirmar nada sobre elas (ou que nenhum cenario exercita: exit 1, error2 real, env hostil)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff so adiciona um executor de teste e corpus escrito a mao; nao abre superficie de entrada nova no produto (nenhum hook foi alterado, R1). Os argumentos do CLI run.py (--hook, --ref, --repo) sao usados por quem roda o teste, nao por entrada externa. Nenhuma classe mudada esta em modulo de entrada (api-rest; o repo nao tem)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+base_regression_note: "feature nova, nao Bug."
+routing_reason: "O nucleo da prova e load-bearing: rotulos dos 3 hooks (45 chamadas), regra enfraquecida aparece em numero so no hook certo (holes, mismatches, denials, diffs), ref, hook ausente, {root} e as regexes de R3 derrubam testes quando quebrados. Mas 7 trechos alterados do run.py sobrevivem a perturbacao (scrub de env, scrub de GIT_*, error2, exit 1, isolamento de telemetria, coluna redundant, coluna tokens). Isso e deterministico e fechavel por teste, entao UNPROVEN (nao NEEDS-HUMAN). Para fechar: (a) teste com env hostil (CEPA_UNTIL_RUN, CLAUDE_AGENT_NAME, GIT_DIR) passado ao subprocesso do run.py comparando decisoes; (b) teste de error2 com um hook ausente/ilegivel dentro de um ref; (c) teste que confira CEPA_TELEMETRY_DIR com o isolate() do teste desligado, ou que o ledger real nao ganhou linhas; (d) afirmar redundant_denials e deny_tokens_est > 0 no hook de regra intacta, e diferenca no hook enfraquecido."

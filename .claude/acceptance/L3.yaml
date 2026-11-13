@@ -1,0 +1,59 @@
+schema_version: 1
+card: L3
+status: complete
+audited_at: 2026-11-13T10:30:00-03:00
+criteria:
+  - id: AC1
+    text: "Executor que compara as decisões de um hook antes e depois de uma mudança (E1), com entradas escritas à mão para os três hooks que mais bloqueiam."
+    altitude: cli
+    surface: "python3 tests/replay/run.py --ref <ref> imprime a tabela por hook e versão (worktree vs ref) e as chamadas cuja decisão mudou"
+    demonstrated_by:
+      test: "tests/test_hook_replay.py (test_comparison_shows_a_changed_rule, test_labels_hold_in_worktree) e execução direta de tests/replay/run.py --ref 0ba9ae1"
+      layer: teste de integração que roda run.py em subprocesso, inclusive contra repo git temporário com ref
+      evidence: verified
+      run: |
+        python3 tests/replay/run.py --ref 0ba9ae1 -> tabela com bash-path-lock 16 chamadas, gate-advance 15, maven-reactor-guard 14 (45), colunas denials/redundant/holes/mismatch/tokens/ms para worktree e 0ba9ae1; "No call changed decision between versions."
+        Os três hooks conferem com o ledger recontado: bash_pathlock_deny 3922, maven_reactor_block 1804, gate_block 952 (os próximos são background_build_block 676 e ui_proof_block 622).
+    verdict: complete
+    gap: null
+
+  - id: AC2
+    text: "Aceite do BACKLOG: mudar de propósito a regra de um hook coberto faz a tabela mostrar a diferença em número, com custo zero de token."
+    altitude: cli
+    surface: "tabela do run.py depois de enfraquecer a regra do maven-reactor-guard num repo git temporário"
+    demonstrated_by:
+      test: "tests/test_hook_replay.py::test_comparison_shows_a_changed_rule"
+      layer: teste de integração (CLI sobre repo temporário, com commit da regra enfraquecida)
+      evidence: verified
+      run: |
+        python3 tests/test_hook_replay.py -> "ok" final, exit 0 (~17 s; time: 16.8 s). Inclui "weakened hook denies less", "weakened hook has more mismatches", "weakened hook has holes the old one lacked", "decision diffs name only the changed hook", "bash-path-lock numbers identical across versions", "gate-advance numbers identical across versions". Nenhuma chamada a modelo (script Python puro, sem cliente de API). O hook real do repo não é tocado (o enfraquecimento ocorre na cópia temporária).
+    verdict: complete
+    gap: null
+
+  - id: AC3
+    text: "Um teste falha se uma decisão do corpus mudar sem o rótulo mudar junto (Esboço 4); cenários escritos à mão, sem sessão gravada nem dado de cliente (decisão do dono 2026-11-12, R3)."
+    altitude: cli
+    surface: "tests/test_hook_replay.py contra a árvore de trabalho e sobre os JSON do corpus"
+    demonstrated_by:
+      test: "tests/test_hook_replay.py::test_labels_hold_in_worktree e test_corpus_hygiene"
+      layer: teste de integração
+      evidence: verified
+      run: |
+        Mesma rodada: "ok  all 45 corpus calls match their label", "ok  covers the three hooks", e por arquivo "no personal paths", "no recorded-session fields", "no client names", "every call has a valid expect"; por hook "has deny and allow / redundant call / must_deny call".
+    verdict: complete
+    gap: null
+
+  - id: AC4
+    text: "R1: nenhum hook adicionado ou alterado (docs/estrategia-lacunas-ecc.md §9)."
+    altitude: cli (diff)
+    surface: "git diff --name-only 0ba9ae1 HEAD"
+    demonstrated_by:
+      test: "inspeção do diff (não há teste para ausência)"
+      layer: diff
+      evidence: verified
+      run: |
+        git diff --name-only 0ba9ae1 HEAD -> só tests/replay/** (README, run.py, 9 JSON) e tests/test_hook_replay.py; contagem de caminhos com "hooks" = 0.
+    verdict: complete
+    gap: null
+
+notes: "Não rodei tests/run-all.sh (do supervisor). Observação sem efeito no veredito: o corpus tem 45 chamadas, todas escritas à mão, e os três hooks cobertos batem com o ledger recontado. A seção do BACKLOG pedia escrever a fonte como transcrições, mas a decisão do dono de 2026-11-12 a substitui por entradas à mão."

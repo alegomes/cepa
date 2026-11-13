@@ -99,6 +99,19 @@ def test_comparison_shows_a_changed_rule():
         check("weakened hook denies less", new["denials"] < old["denials"], f"{new} vs {old}")
         check("weakened hook has more mismatches", new["mismatches"] > old["mismatches"], f"{new} vs {old}")
         check("weakened hook has holes the old one lacked", new["holes"] > old["holes"], f"{new} vs {old}")
+        # The intact version's columns equal what the labels predict, so a
+        # column that is dropped or miscounted shows here, not only as a delta.
+        labels = [c for f in sorted((REPLAY / "maven-reactor-guard").glob("*.json"))
+                  for c in json.loads(f.read_text(encoding="utf-8"))["calls"]]
+        check("intact hook: denials equal deny labels",
+              old["denials"] == sum(c["expect"] == "deny" for c in labels), str(old))
+        check("intact hook: redundant column equals redundant labels",
+              old["redundant_denials"] == sum(bool(c.get("redundant")) for c in labels) > 0, str(old))
+        check("weakened hook loses its redundant denials",
+              new["redundant_denials"] < old["redundant_denials"], f"{new} vs {old}")
+        check("intact hook: denial tokens are counted", old["deny_tokens_est"] > 0, str(old))
+        check("weakened hook: denial tokens drop", new["deny_tokens_est"] < old["deny_tokens_est"],
+              f"{new} vs {old}")
         for other in ("bash-path-lock", "gate-advance"):
             a, b = h[other]["worktree"], h[other]["HEAD~1"]
             keys = ("calls", "denials", "redundant_denials", "holes", "mismatches", "deny_tokens_est")
@@ -145,10 +158,69 @@ def test_corpus_hygiene():
               all(c["expect"] == "deny" for c in calls if c.get("redundant") or c.get("must_deny")))
 
 
+PROBE = r"""import json, os, sys
+sys.stdin.read()
+out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seen-env.json")
+json.dump(dict(os.environ), open(out, "w"))
+sys.exit(int(os.environ.get("PROBE_EXIT", "0")))
+"""
+
+
+def test_runner_mechanics():
+    """What the corpus cannot show: env scrub, telemetry isolation, error exits."""
+    sys.path.insert(0, str(REPLAY))
+    import run  # noqa: E402
+    call = {"name": "c", "payload": {"tool_name": "Bash", "tool_input": {"command": "true"}},
+            "expect": "allow"}
+    hostile = {name: "hostile" for name in run.SCRUBBED_ENV}
+    hostile.update({"GIT_DIR": "/nonexistent", "GIT_WORK_TREE": "/nonexistent",
+                    "CEPA_TELEMETRY_DIR": "/real-ledger-must-not-be-used"})
+    saved = dict(os.environ)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "hooks").mkdir()
+        (root / "hooks" / "probe.py").write_text(PROBE, encoding="utf-8")
+        tel = str(root / "tel")
+        try:
+            os.environ.update(hostile)
+            sc = {"_file": "probe.json", "hook": "hooks/probe.py", "calls": [call]}
+            res = run.run_scenario(sc, str(root), tel)
+        finally:
+            os.environ.clear()
+            os.environ.update(saved)
+        check("probe hook allowed", res[0]["decision"] == "allow", str(res[0]["decision"]))
+        seen = json.loads((root / "hooks" / "seen-env.json").read_text(encoding="utf-8"))
+        leaked = [k for k in run.SCRUBBED_ENV if k in seen]
+        check("every hook-altering env var is scrubbed", not leaked, str(leaked))
+        check("GIT_* is scrubbed", not [k for k in seen if k.startswith("GIT_")],
+              str([k for k in seen if k.startswith("GIT_")]))
+        check("telemetry goes to the replay's own dir", seen.get("CEPA_TELEMETRY_DIR") == tel,
+              str(seen.get("CEPA_TELEMETRY_DIR")))
+
+        sc1 = {"_file": "probe.json", "hook": "hooks/probe.py", "env": {"PROBE_EXIT": "1"},
+               "calls": [call]}
+        r1 = run.run_scenario(sc1, str(root), tel)[0]
+        check("a hook that exits 1 is an error, not a denial", r1["decision"] == "error1", r1["decision"])
+
+        locked = root / "hooks" / "locked.py"
+        locked.write_text("import sys\nsys.exit(0)\n", encoding="utf-8")
+        locked.chmod(0)
+        try:
+            sc2 = {"_file": "probe.json", "hook": "hooks/locked.py", "calls": [dict(call, expect="deny")]}
+            r2 = run.run_scenario(sc2, str(root), tel)[0]
+        finally:
+            locked.chmod(0o644)
+        check("python's own exit 2 (can't open file) is an error, not a denial",
+              r2["decision"] == "error2", r2["decision"])
+        summ = run.summarize([r1, r2])
+        check("errors are counted, not denials", summ["errors"] == 2 and summ["denials"] == 0, str(summ))
+
+
 if __name__ == "__main__":
     test_labels_hold_in_worktree()
     test_comparison_shows_a_changed_rule()
     test_corpus_hygiene()
+    test_runner_mechanics()
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILED")
         sys.exit(1)
