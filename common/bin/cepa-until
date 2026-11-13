@@ -3356,6 +3356,9 @@ def preference_note(ident, pref):
 # Readers still running, so Ctrl-C / SIGTERM during the wait can kill their process
 # groups instead of leaving orphan `claude` processes behind.
 _LIVE_READERS = set()
+# Each `_read_in_parallel` call keeps its own readers here (per worker thread), so the end
+# of one pool kills only its own readers, not those of a pool running at the same time.
+_POOL = threading.local()
 
 
 def _kill_group(proc):
@@ -3395,6 +3398,9 @@ def _run_reader(repo, item, deadline, prompt, parse):
     except OSError as e:
         return None, f"reader did not launch: {e}"
     _LIVE_READERS.add(proc)
+    own = getattr(_POOL, "own", None)  # the set of the pool this thread works for
+    if own is not None:
+        own.add(proc)
     try:
         out, _ = proc.communicate(stdin_text, timeout=max(left, 0.05))
     except subprocess.TimeoutExpired:
@@ -3403,6 +3409,8 @@ def _run_reader(repo, item, deadline, prompt, parse):
         return None, READ_CEILING_ERROR
     finally:
         _LIVE_READERS.discard(proc)
+        if own is not None:
+            own.discard(proc)
     if proc.returncode != 0:
         return None, f"reader exited {proc.returncode}"
     return parse(out), None
@@ -3428,12 +3436,19 @@ def _read_in_parallel(items, one, ceiling):
     from concurrent.futures import ThreadPoolExecutor
     deadline = time.monotonic() + (READER_CEILING_SEC if ceiling is None else ceiling)
     pool = ThreadPoolExecutor(max_workers=min(READER_WORKERS, max(len(items), 1)))
+    own = set()
+
+    def run(it):
+        _POOL.own = own
+        return one(it, deadline)
+
     try:
-        return list(pool.map(lambda it: one(it, deadline), items))
+        return list(pool.map(run, items))
     finally:
-        # On Ctrl-C / SIGTERM the readers still alive die with their children, and the
-        # waiting threads return at once instead of holding the interpreter open.
-        for proc in list(_LIVE_READERS):
+        # On Ctrl-C / SIGTERM the readers of THIS pool still alive die with their
+        # children, and the waiting threads return at once instead of holding the
+        # interpreter open. Another pool's readers are left alone.
+        for proc in list(own):
             _kill_group(proc)
         pool.shutdown(wait=True, cancel_futures=True)
 

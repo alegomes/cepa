@@ -52,9 +52,17 @@ def _route_reader(tmp, mode="ok"):
         "it = json.load(sys.stdin)\n"
         f"open({str(log)!r}, 'a').write(it['id'] + ' ' + str(it.get('tarefa')) + '\\n')\n"
         f"mode = {mode!r}\n"
-        "if it.get('tarefa') != 'reescrever-rota':\n"
+        "if it.get('tarefa') != 'reescrever-rota' and mode == 'itemslow':\n"
+        "    import time; time.sleep(3)\n"
+        "    print(json.dumps({'tipo': 'preferencia', 'texto': 'PREFTEXTO sobre o item',\n"
+        "        'pergunta': 'Qual formato?', 'padrao': 'o formato curto'}))\n"
+        "elif it.get('tarefa') != 'reescrever-rota':\n"
         "    print(json.dumps({'tipo': None}))\n"
-        "elif mode == 'ok':\n"
+        "elif mode in ('ok', 'itemslow'):\n"
+        f"    print(json.dumps({{'route_kind': 'external-block', 'question': {QUESTION!r},\n"
+        f"        'if_yes': {IF_YES!r}, 'if_no': {IF_NO!r}}}))\n"
+        "elif mode == 'slow':\n"
+        "    import time; time.sleep(3)\n"
         f"    print(json.dumps({{'route_kind': 'external-block', 'question': {QUESTION!r},\n"
         f"        'if_yes': {IF_YES!r}, 'if_no': {IF_NO!r}}}))\n"
         "elif mode == 'garbage':\n"
@@ -139,6 +147,32 @@ def test_a_reader_that_prints_garbage_or_fails_changes_nothing():
               f"{before['r1']} -> {after['r1']}")
         check(f"{mode}: the other item ran", after["y1"]["status"] == "done",
               str(after["y1"]))
+
+
+def test_a_slow_route_reader_survives_the_item_pre_read_finishing_first():
+    """The item pre-read answers at once and its pool ends while the route reader is
+    still sleeping: it must not kill the other pool's reader (global _LIVE_READERS)."""
+    rc, out, before, after, calls = _launch(
+        [old_route(), item("y1")], mode="slow", tty=True,
+        inputs=[("homologação?", "")])
+    check("slow tty: the route was recorded", after["r1"].get("owner_question") == QUESTION
+          and after["r1"].get("route_kind") == "external-block", str(after["r1"]))
+    _same_core("slow tty", before["r1"], after["r1"])
+    rc, out, before, after, calls = _launch([old_route(), item("y1")], mode="slow",
+                                            tty=False)
+    check("slow no tty: the route was recorded",
+          after["r1"].get("owner_question") == QUESTION, str(after["r1"]))
+
+
+def test_a_slow_item_pre_read_survives_the_route_reader_finishing_first():
+    """The reverse: the route reader answers at once, the item reader is slow and finds a
+    preference. Its finding must still come out (no tty: listed as text)."""
+    rc, out, before, after, calls = _launch([old_route(), item("y1")], mode="itemslow",
+                                            tty=False)
+    check("item slow: the route was recorded",
+          after["r1"].get("owner_question") == QUESTION, str(after["r1"]))
+    check("item slow: the pre-read finding was not lost", "PREFTEXTO" in out,
+          out[-1500:])
 
 
 def test_a_reader_that_fails_on_a_terminal_leaves_todays_question():
