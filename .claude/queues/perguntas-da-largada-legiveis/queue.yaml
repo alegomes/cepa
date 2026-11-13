@@ -1,0 +1,155 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/perguntas-da-largada-legiveis.md (12 critérios de sucesso; ordem herdada do texto, exceto CS-12 movido para depois do CS-1 pelo dono em 2026-11-13)
+# Escrito em: 2026-11-13
+
+schema_version: 2
+mode: single-track
+queue: perguntas-da-largada-legiveis
+source: docs/spec/perguntas-da-largada-legiveis.md (12 critérios de sucesso; ordem
+  herdada do texto, exceto CS-12 movido para depois do CS-1 pelo dono em 2026-11-13)
+items:
+- id: CS-1
+  title: '`cepa-plan finish` recusa abrir rota sem tipo, sem pergunta fechada ou
+    sem o efeito do sim e do não'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: `cepa-plan
+    finish <fila> <id> --status pending --human-pending "falta o acesso" --evidence
+    "x"`, sem `--question`, sai com código diferente de 0, nomeia o que falta e
+    deixa o `queue.yaml` igual; hoje sai com 0 e grava a rota.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-12
+  title: o agente do item recebe a regra de como abrir rota
+  why: 'posição dada pelo dono em 2026-11-13: logo depois do CS-1, porque sem a
+    regra os agentes do run abrem rota do jeito antigo e passam a ser recusados
+    pelo CS-1 · superfície onde se observa: application · teste vermelho declarado:
+    o texto do pedido que o `cepa-until` monta para o agente de um item cita `--route-kind`,
+    os três valores e a exigência de pergunta fechada com o efeito do sim e do não;
+    hoje o texto não cita nenhum dos três.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: a rota gravada com tipo aparece no painel com o rótulo do tipo e com a
+    pergunta do agente
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
+    `cepa-until decide <fila>` sobre um item com `route_kind: external-block` mostra
+    o rótulo "Blocked outside" ao lado do texto da rota e a pergunta gravada; hoje
+    o rótulo é sempre "Task".'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: nenhuma rota recebe a frase "done already?", e a legenda traz uma frase
+    por tecla
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
+    a saída de `cepa-until decide <fila>` sobre um item com `human_pending` e sem
+    pergunta não contém "done already" nem "the task closes and the item goes back",
+    e a legenda tem uma linha para cada tecla do menu; hoje contém as duas frases
+    e a legenda é uma linha só.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: a largada reescreve a rota antiga como pergunta fechada e grava o resultado
+    no item
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: numa
+    fila com um item `pending` que tem `human_pending` e não tem `question`, com
+    um leitor falso em `CEPA_UNTIL_LEITOR` que devolve tipo, pergunta e os dois
+    efeitos, a largada num pseudo-terminal mostra a pergunta do leitor, e depois
+    dela o `queue.yaml` traz `route_kind` e `question` nesse item com `human_pending`,
+    `status` e `evidence` iguais; hoje a tela mostra "done already?" e o item não
+    muda.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: rota antiga que o leitor não reescreve no teto recebe uma pergunta neutra
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: no cenário
+    do CS-4 com um leitor falso que não responde dentro do teto, a tela mostra "Send
+    this item back to the queue for the next run to try again?" e o rótulo "Left
+    for you"; hoje mostra "done already?".'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: a tecla `?` registra a pergunta mal escrita sem gravar resposta no item
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
+    apertar `?` numa pergunta do painel deixa o item igual no `queue.yaml` e acrescenta
+    uma linha ao arquivo de feedback com alvo `cepa-until`, o id do item e o texto
+    da pergunta; hoje a tela responde que `?` não é uma das opções.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: depois do `?`, a pergunta reescrita aparece no mesmo bloco em até 60 segundos
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: no cenário
+    do CS-6 com um leitor falso que devolve outra pergunta, a tela mostra a pergunta
+    nova no bloco do mesmo item e pede a resposta de novo, e o `queue.yaml` passa
+    a trazer a pergunta nova; hoje não existe reescrita.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-8
+  title: se a reescrita falha, ou no segundo `?` do mesmo item, o item fica para
+    depois e a largada segue
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: no cenário
+    do CS-6 com um leitor falso que não responde em 60 segundos, a tela mostra uma
+    linha dizendo que a pergunta não foi reescrita e que o item fica para depois,
+    passa ao item seguinte e lista o item em "for later" no fecho do painel; hoje
+    não existe esse caminho.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-9
+  title: as escolhas da leitura prévia aparecem na moldura do painel, sem linha
+    mais larga que o terminal
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal
+    de 80 colunas, com um leitor falso que devolve uma preferência cujo texto tem
+    200 caracteres, nenhuma linha do bloco passa de 80 colunas, o bloco abre com
+    a linha `N/M · <id>` da moldura e traz os rótulos "Choice", "Agent''s default"
+    e o menu de teclas; hoje o texto sai numa linha de mais de 80 colunas e sem
+    menu.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-10
+  title: na escolha da leitura prévia, `s` ou Enter aceita o padrão, `n` exige uma
+    linha com o que fazer no lugar, `t` grava uma resposta livre
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: no cenário
+    do CS-9, responder `n` e depois "usar a data da guia" grava no evento `largada`
+    do registro do run a escolha "não: <pergunta>. Em vez disso: usar a data da
+    guia" com `fonte` "dono", e responder `n` com a linha vazia volta ao menu sem
+    gravar; hoje qualquer texto digitado vira a escolha inteira e não existe `n`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-11
+  title: a recusa de `cepa-plan answer` a um texto que pede esclarecimento aponta
+    a tecla `?`
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: `cepa-plan
+    answer <fila> <id> --answer "não entendi a pergunta"` sai com código 6 e a mensagem
+    cita a tecla `?` de `cepa-until decide <fila>`, sem a frase "responda a essa
+    pergunta (sim/não e o porquê)"; hoje a mensagem traz essa frase.'
+  status: pending
+  blocked_by: []
+  human_pending: null
