@@ -35,6 +35,9 @@ IF_NO = "O item continua esperando o acesso."
 ROUTE = "falta o acesso ao ambiente de homologação"
 
 
+LAST_EVENTS = []  # the run ledger's events of the last `_launch`
+
+
 def old_route(ident="r1"):
     it = item(ident, human_pending=ROUTE)
     it["evidence"] = "x"
@@ -94,6 +97,7 @@ def _launch(items, mode="ok", tty=True, inputs=()):
                                timeout=120, stdin=subprocess.DEVNULL, cwd=str(root))
             rc, out = p.returncode, p.stdout + p.stderr
         calls = log.read_text().splitlines() if log.exists() else []
+        LAST_EVENTS[:] = base._launch_events(root)
         return rc, out, before, items_of(root), calls
 
 
@@ -208,6 +212,82 @@ def test_a_route_with_a_question_but_no_kind_is_read_and_keeps_its_question():
           str(after["r3"]))
     check("half: the written question was kept",
           after["r3"].get("owner_question") == "Você já rodou a rota?", str(after["r3"]))
+
+
+def test_the_run_ledger_records_the_rewrite_and_its_failures():
+    rc, out, before, after, calls = _launch([old_route(), item("y1")], tty=False)
+    events = [e for e in LAST_EVENTS if e.get("evento") == "rotas_reescritas"]
+    check("ledger ok: one rotas_reescritas event", len(events) == 1, str(LAST_EVENTS))
+    if events:
+        check("ledger ok: `reescritas` has the rewritten id and `falhas` is empty",
+              events[0].get("reescritas") == ["r1"] and events[0].get("falhas") == [],
+              str(events[0]))
+    rc, out, before, after, calls = _launch([old_route(), item("y1")], mode="fail",
+                                            tty=False)
+    events = [e for e in LAST_EVENTS if e.get("evento") == "rotas_reescritas"]
+    check("ledger fail: one rotas_reescritas event", len(events) == 1, str(LAST_EVENTS))
+    if events:
+        falhas = events[0].get("falhas") or []
+        check("ledger fail: nothing rewritten and the failing reader is in `falhas`",
+              events[0].get("reescritas") == [] and len(falhas) == 1
+              and falhas[0].get("id") == "r1" and falhas[0].get("erro"), str(events[0]))
+
+
+def _good(**over):
+    body = {"route_kind": "external-block", "question": QUESTION, "if_yes": IF_YES,
+            "if_no": IF_NO}
+    body.update(over)
+    return json.dumps(body)
+
+
+def test_parse_route_accepts_and_rejects():
+    mod = base.load_module()
+    ok = mod.parse_route(_good())
+    check("parse_route: a complete route is accepted",
+          ok == {"route_kind": "external-block", "question": QUESTION, "if_yes": IF_YES,
+                 "if_no": IF_NO}, str(ok))
+    check("parse_route: JSON wrapped in prose is accepted",
+          mod.parse_route("Here it is:\n" + _good() + "\nDone.") is not None)
+    check("parse_route: JSON in a code fence is accepted",
+          mod.parse_route("```json\n" + _good() + "\n```") is not None)
+    check("parse_route: a question without `?` is rejected",
+          mod.parse_route(_good(question="Sem interrogação")) is None)
+    check("parse_route: a kind outside the closed set is rejected",
+          mod.parse_route(_good(route_kind="whatever")) is None)
+    check("parse_route: a missing kind is rejected",
+          mod.parse_route(json.dumps({"question": QUESTION, "if_yes": IF_YES,
+                                      "if_no": IF_NO})) is None)
+    for key in ("if_yes", "if_no"):
+        check(f"parse_route: an empty {key} is rejected",
+              mod.parse_route(_good(**{key: ""})) is None)
+        check(f"parse_route: a blank {key} is rejected",
+              mod.parse_route(_good(**{key: "   "})) is None)
+    check("parse_route: text that is not JSON is rejected",
+          mod.parse_route("this is not json") is None)
+
+
+def test_is_old_route_selects_only_open_human_pending_routes():
+    mod = base.load_module()
+
+    def ad(**over):
+        d = {"id": "r1", "reason": "human_pending", "human_pending": ROUTE}
+        d.update(over)
+        return d
+
+    check("is_old_route: an open human_pending without question is old",
+          mod.is_old_route(ad()) is True)
+    check("is_old_route: a question without kind is old",
+          mod.is_old_route(ad(question="Q?")) is True)
+    check("is_old_route: a kind without question is old",
+          mod.is_old_route(ad(route_kind="external-block")) is True)
+    check("is_old_route: question and kind make it a current route",
+          mod.is_old_route(ad(question="Q?", route_kind="external-block")) is False)
+    for reason in ("blocked-before", "reserved", "depends-on-deferred"):
+        check(f"is_old_route: reason `{reason}` is not an old route",
+              mod.is_old_route(ad(reason=reason)) is False)
+    for blank in (None, "", "   \n"):
+        check(f"is_old_route: human_pending {blank!r} is not an old route",
+              mod.is_old_route(ad(human_pending=blank)) is False)
 
 
 # ── cepa-plan reword-route ───────────────────────────────────────────────────

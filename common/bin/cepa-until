@@ -4658,9 +4658,6 @@ def _main(argv=None):
                  f"{a.queue}`"))
         rewrite_event = {"evento": "rotas_reescritas", "reescritas": rewritten,
                          "falhas": failed}
-        if rewritten:
-            fresh, _ = query_queue(a.queue, repo)
-            data = fresh or data
     if rows is not None:
         opened = 0
         for row in rows:
