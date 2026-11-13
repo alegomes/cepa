@@ -364,6 +364,9 @@ def test_l2_tag_landing_tags_the_landed_commit_locally():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
         remote = with_origin(root)
+        # With followTags a plain `git push` sends annotated tags: only a
+        # lightweight tag stays local, and this is what tells them apart.
+        git(root, "config", "push.followTags", "true")
         run_id, _, _ = night(root)
         p = land(root, run_id, "--yes")
         check("aterrissa", p.returncode == 0, p.stdout + p.stderr)
