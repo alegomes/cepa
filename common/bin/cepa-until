@@ -2487,16 +2487,31 @@ ROUTE_KIND_LABEL = {"owner-task": "Task for you",
                     "open-question": "Open question"}
 
 
-def answers_legend(summary):
-    """What `sim` and `não` lead to. The mechanics never change (sim returns
-    the item to the queue, não keeps it); what the owner needs is what that
-    means for the WORK, which only the agent knows (WEGO-2381: "libero o In
-    Review?" next to "sim = o item volta para a fila")."""
+def legend_lines(chips, summary, delivered=False):
+    """One line per key of the menu, in the menu's order: what each key does.
+    The mechanics never change (`s` returns the item to the queue, `n` keeps it);
+    what the owner needs is what that means for the WORK, which only the agent
+    knows (WEGO-2381: "libero o In Review?" next to "sim = o item volta para a
+    fila"). CS-3 (perguntas-da-largada-legiveis): the legend used to be a single
+    line naming three of the keys, and the question described "yes" a second
+    way; now only the legend says it, once per key, and "task" and "item" never
+    share a line (L3)."""
     yes = summary.get("se_sim")
     no = summary.get("se_nao")
-    return (f"yes = {yes or 'the item goes back to the queue with your answer'}"
-            + (". The item goes back to the queue with your answer" if yes else "")
-            + f"; no = {no or 'it stays as it is and I only record what you say'}")
+    if delivered:
+        effect = {"s": "the task closes; the delivered work stays as it is",
+                  "n": "the task stays open and I only record what you say",
+                  "d": "the task no longer applies and closes without being done"}
+    else:
+        effect = {"s": (f"{yes}. The item goes back to the queue with your answer"
+                        if yes else "the item goes back to the queue with your answer"),
+                  "n": no or "it stays as it is and I only record what you say",
+                  "d": "the item leaves the queue"}
+    effect.update({"t": "you write the answer in one line; the next run reads it",
+                   "e": "shows the technical detail, written for agents",
+                   "Enter": "leaves the question for later",
+                   "q": "stops the questions; the rest stays for later"})
+    return [f"{key} = {effect[key]}" for key, _ in chips if key in effect]
 
 
 def pending_action(item_states):
@@ -2740,12 +2755,15 @@ class Panel:
         for l in lines[1:]:
             self._border(l, color)
 
-    def legend(self, text):
-        if not self.enabled:
-            self.output(indented(text))
-            return
-        for l in self._wrap(text, 2):
-            self._border(l, "cinza")
+    def legend(self, lines):
+        """One line per key (CS-3); a long line wraps under its own text."""
+        for text in lines:
+            if not self.enabled:
+                self.output(indented(text))
+                continue
+            key = text.split(" = ", 1)[0]
+            for l in self._wrap(text, 2, 2 + len(key) + 3):
+                self._border(l, "cinza")
 
     def menu(self, chips, recommended):
         """`chips` is the list of (key, label); returns the `input()`
@@ -2911,12 +2929,16 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 screen.warning(f"(this question was written outside the "
                            f"rules: {outside}. If it makes no sense, "
                            "[e] shows the technical detail)")
+        # CS-3 (perguntas-da-largada-legiveis): a route with no written question
+        # used to get "done already? With yes, the task closes and the item goes
+        # back to the queue.", which assumed every route is a task of the owner
+        # (C1-45 held an open question, C1-47 three outside blocks). The question
+        # no longer describes the keys; the legend below does, a line per key.
         elif route is not None and ad.get("reason") == "pos-entrega":
-            screen.question("done already? With yes, the task closes; the item stays "
-                          "complete.")
+            screen.question("Is this task finished?")
         elif route is not None:
-            screen.question("done already? With yes, the task closes and the item goes "
-                          "back to the queue.")
+            screen.question("Send this item back to the queue for the next run to "
+                          "try again?")
         elif summary.get("impede"):
             screen.question("unblock the item and send it back to the queue?")
         else:
@@ -2929,11 +2951,6 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         rec = recommendation_line(d)
         if rec:
             screen.recommend(rec)
-        screen.blank()
-        screen.legend("yes = the task closes; no = it stays open; d = it no "
-                      "longer applies and closes without being done"
-                      if ad.get("reason") == "pos-entrega"
-                      else answers_legend(summary) + "; d = the item leaves the queue")
         show = bool(ad.get("evidence"))
         delivered = ad.get("reason") == "pos-entrega"
         # `d` exists because "sim" always means "back to the queue": on
@@ -2945,6 +2962,8 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         if show:
             chips.append(("e", "technical detail"))
         chips += [("Enter", "later"), ("q", "quit")]
+        screen.blank()
+        screen.legend(legend_lines(chips, summary, delivered))
         prompt = screen.menu(chips, recommended_letter(d))
         valid = {"s", "n", "t", "d", "", "q"} | ({"e"} if show else set())
         while True:

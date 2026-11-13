@@ -612,7 +612,7 @@ def test_decide_s_and_n_answer_the_drafted_question():
     check("a recomendação marca a letra no menu",
           any("[s] yes (recommended)" in p_ for p_ in questions), questions)
     check("a legenda diz o que sim e não fazem",
-          "yes = the item goes back to the queue" in plain_text, plain_text)
+          "s = the item goes back to the queue" in plain_text, plain_text)
     check("sem pergunta redigida, o terminal faz a padrão",
           "unblock the item and send it back to the queue?" in plain_text
           and "The agent stopped because: sem produção" in plain_text, plain_text)
@@ -641,9 +641,12 @@ def test_decide_s_and_n_answer_the_drafted_question():
                "evidence": None}], {},
              question=lambda _p: next(resp2), output=screen2.append)
     text2 = "\n".join(screen2)
-    check("rota humana sem pergunta: mostra a tarefa e pergunta 'já fez?'",
+    check("rota humana sem pergunta: mostra a tarefa e a pergunta neutra "
+          "(CS-3 de perguntas-da-largada-legiveis tirou o 'done already?')",
           "Task left for you: valide o login real" in text2
-          and "Question: done already?" in text2, text2)
+          and "Question: Send this item back to the queue for the next run to "
+              "try again?" in text2
+          and "done already" not in text2, text2)
     check("...e sem evidência o menu não oferece [e]",
           not any("[e]" in p_ for p_ in screen2), screen2)
 
@@ -704,7 +707,7 @@ def test_decide_shows_context_instruction_and_warns_question_outside_the_rules()
               "Question:", "If yes,", "Recommend yes")), block_s5)
     check("linha em branco antes da pergunta e antes da legenda do menu",
           "\n\n       Question:" in block_s5
-          and "\n\n       yes = the item goes back" in block_s5, block_s5)
+          and "\n\n       s = the item goes back" in block_s5, block_s5)
     check("a pergunta dentro das regras não ganha aviso",
           "outside the rules" not in block_s5, block_s5)
     check("o sim grava a pergunta E a instrução, para o próximo run",
@@ -1332,8 +1335,8 @@ def test_decide_shows_human_section_and_what_each_answer_does():
         "Was meant to: testar a parte",
         "Already done: 136 de 154",
         "Question: Entrego com os 18 casos",
-        "yes = o trabalho vai para revisão. The item goes back to the queue",
-        "no = o trabalho espera o defeito ser corrigido")]
+        "s = o trabalho vai para revisão. The item goes back to the queue",
+        "n = o trabalho espera o defeito ser corrigido")]
     check("motivo, pedido, pronto, pergunta e legenda, nesta ordem",
           -1 not in order and order == sorted(order), text)
     check("a etiqueta genérica some quando há motivo leigo",
