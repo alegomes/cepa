@@ -118,7 +118,7 @@ A largada do `cepa-until` (o supervisor que executa a fila sem o dono presente) 
 - O teto da reescrita na hora é 60 segundos, o número que a opção escolhida na Q6 citava. Vete aqui se discordar.
 
 ## Riscos e o que ficou de fora desta especificação
-- **O agente do run pode não conseguir abrir a rota.** Com a recusa do CS-1, um agente que escreve uma pergunta ruim é barrado mais vezes. O que acontece hoje com o item quando `finish` recusa não foi lido nesta especificação; o primeiro item da fila deve conferir isso antes de construir o CS-1.
+- **O agente do run pode não conseguir abrir a rota.** Com a recusa do CS-1, um agente que escreve uma pergunta ruim é barrado mais vezes. Lido em 2026-11-13, antes do run: a recusa sai com código diferente de 0, nomeia o campo, grava a recusa no item (`finish_recusado`, últimas 5) e deixa o item `in_progress`, reservado pela sessão. O agente pode corrigir e chamar `finish` de novo no mesmo turno. Se o subprocesso morre sem um `finish` aceito, a reserva fica órfã, o `cepa-until` tenta o item de novo no máximo 2 vezes na mesma janela (`DEFAULT_ATTEMPTS_PER_ITEM` em `common/bin/cepa-until`) e então marca `blocked`. O item não se perde, mas uma pergunta ruim custa até 2 tentativas.
 - **O leitor pode classificar errado.** A reescrita de uma rota antiga é a leitura de um agente sobre o texto de outro. A tecla `[e]` continua mostrando o texto original.
 - **A reescrita na hora segura a largada.** Cada `?` custa até 60 segundos de espera antes do primeiro item.
 - **Rotas em item já entregue continuam com a frase antiga fora da largada.** `cepa-until decide` as mostra, e elas não são reescritas; recebem a pergunta neutra do CS-5.
