@@ -1,0 +1,166 @@
+{
+  "hook": "common/hooks/maven-reactor-guard.py",
+  "description": "Multi-module reactor: -pl without -am is denied; escapes and non-Maven text pass.",
+  "setup": {
+    "git": false,
+    "files": {
+      "pom.xml": "<project>\n  <artifactId>root</artifactId>\n  <modules>\n    <module>domain</module>\n    <module>bootstrap</module>\n  </modules>\n</project>\n"
+    }
+  },
+  "env": {},
+  "calls": [
+    {
+      "name": "pl-without-am",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "./mvnw test -pl bootstrap"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "deny",
+      "must_deny": true,
+      "note": "the core rule"
+    },
+    {
+      "name": "pl-without-am-retried",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "./mvnw test -pl bootstrap"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "deny",
+      "redundant": true,
+      "note": "same blocked command, retried"
+    },
+    {
+      "name": "pl-with-am",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "./mvnw test -pl domain,bootstrap -am"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow"
+    },
+    {
+      "name": "also-make-long-form",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "./mvnw test -pl domain --also-make"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow"
+    },
+    {
+      "name": "amd-is-not-am",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "./mvnw test -pl domain -amd"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "deny",
+      "must_deny": true,
+      "note": "-amd builds dependents, not dependencies"
+    },
+    {
+      "name": "long-form-projects",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "mvn test --projects bootstrap"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "deny",
+      "must_deny": true
+    },
+    {
+      "name": "env-prefix",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "DEMO_KEY=x ./mvnw test -pl bootstrap"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "deny",
+      "must_deny": true
+    },
+    {
+      "name": "chained-segment",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "cd /tmp && ./mvnw test -pl bootstrap"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "deny",
+      "must_deny": true
+    },
+    {
+      "name": "whole-reactor-verify",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "./mvnw verify"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow"
+    },
+    {
+      "name": "non-compiling-goal",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "./mvnw clean -pl domain"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow",
+      "note": "clean never compiles"
+    },
+    {
+      "name": "echo-is-text",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo \"./mvnw test -pl bootstrap\""
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow"
+    },
+    {
+      "name": "stale-ok-escape",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "./mvnw test -pl bootstrap # stale-ok"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow"
+    },
+    {
+      "name": "other-tool",
+      "payload": {
+        "tool_name": "Read",
+        "tool_input": {
+          "command": "./mvnw test -pl bootstrap"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "hook": "common/hooks/gate-advance.py",
+  "description": "Explicit .claude/no-build opt-out releases the gate even on a red baseline.",
+  "setup": {
+    "git": true,
+    "files": {
+      "pom.xml": "<project/>",
+      "README.md": "demo\n",
+      ".claude/last-build.json": "{\"status\": \"FAILURE\", \"at\": \"2026-11-01T10:00:00+00:00\", \"command\": \"./mvnw verify\", \"kind\": \"maven\"}",
+      ".claude/no-build": ""
+    }
+  },
+  "env": {},
+  "calls": [
+    {
+      "name": "push-with-optout",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git push origin main"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow"
+    }
+  ]
+}

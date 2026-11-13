@@ -1,0 +1,85 @@
+{
+  "hook": "common/hooks/gate-advance.py",
+  "description": "Baseline is FAILURE: sharing and non-test local commits are denied.",
+  "setup": {
+    "git": true,
+    "files": {
+      "pom.xml": "<project/>",
+      "README.md": "demo\n",
+      ".claude/last-build.json": "{\"status\": \"FAILURE\", \"at\": \"2026-11-01T10:00:00+00:00\", \"command\": \"./mvnw verify\", \"kind\": \"maven\"}"
+    }
+  },
+  "env": {},
+  "calls": [
+    {
+      "name": "push-on-red",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git push origin main"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "deny",
+      "must_deny": true
+    },
+    {
+      "name": "push-on-red-retried",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git push origin main"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "deny",
+      "redundant": true
+    },
+    {
+      "name": "commit-on-red",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git commit -m 'change'"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "deny",
+      "must_deny": true,
+      "note": "no staged test files: tests-only exemption does not apply"
+    },
+    {
+      "name": "status-is-exempt",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git status"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow"
+    },
+    {
+      "name": "log-is-exempt",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git log --oneline -3"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow"
+    },
+    {
+      "name": "unrelated-command",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "ls -la"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow"
+    }
+  ]
+}

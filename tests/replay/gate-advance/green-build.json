@@ -1,0 +1,37 @@
+{
+  "hook": "common/hooks/gate-advance.py",
+  "description": "Baseline is SUCCESS: everything passes.",
+  "setup": {
+    "git": true,
+    "files": {
+      "pom.xml": "<project/>",
+      "README.md": "demo\n",
+      ".claude/last-build.json": "{\"status\": \"SUCCESS\", \"at\": \"2026-11-01T10:00:00+00:00\", \"command\": \"./mvnw verify\", \"kind\": \"maven\"}"
+    }
+  },
+  "env": {},
+  "calls": [
+    {
+      "name": "commit-on-green",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git commit -m 'change'"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow"
+    },
+    {
+      "name": "push-on-green",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git push origin main"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow"
+    }
+  ]
+}

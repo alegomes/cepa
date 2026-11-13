@@ -1,0 +1,181 @@
+{
+  "hook": "build-hex/hooks/bash-path-lock.py",
+  "description": "domain-dev may write under domain/ and application/ main sources only.",
+  "setup": {
+    "git": false,
+    "files": {
+      "domain/src/main/java/Foo.java": "class Foo {}\n",
+      "infrastructure/src/main/java/Bar.java": "class Bar {}\n",
+      "api-rest/src/main/java/Baz.java": "class Baz {}\n",
+      "pom.xml": "<project>\n  <artifactId>root</artifactId>\n  <modules>\n    <module>domain</module>\n    <module>bootstrap</module>\n  </modules>\n</project>\n"
+    }
+  },
+  "env": {},
+  "calls": [
+    {
+      "name": "redirect-into-own-lane",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo 'class Foo {}' > domain/src/main/java/Foo.java"
+        },
+        "cwd": "{root}",
+        "agent_type": "build-hex:domain-dev"
+      },
+      "expect": "allow"
+    },
+    {
+      "name": "redirect-into-adapter-lane",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo 'x' > infrastructure/src/main/java/Bar.java"
+        },
+        "cwd": "{root}",
+        "agent_type": "build-hex:domain-dev"
+      },
+      "expect": "deny",
+      "must_deny": true
+    },
+    {
+      "name": "redirect-into-adapter-lane-retried",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo 'x' > infrastructure/src/main/java/Bar.java"
+        },
+        "cwd": "{root}",
+        "agent_type": "build-hex:domain-dev"
+      },
+      "expect": "deny",
+      "redundant": true
+    },
+    {
+      "name": "sed-inplace-api-lane",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "sed -i 's/Baz/Qux/' api-rest/src/main/java/Baz.java"
+        },
+        "cwd": "{root}",
+        "agent_type": "build-hex:domain-dev"
+      },
+      "expect": "deny",
+      "must_deny": true
+    },
+    {
+      "name": "tee-into-adapter-lane",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo x | tee infrastructure/src/main/java/New.java"
+        },
+        "cwd": "{root}",
+        "agent_type": "build-hex:domain-dev"
+      },
+      "expect": "deny",
+      "must_deny": true
+    },
+    {
+      "name": "cp-into-test-tree",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "cp domain/src/main/java/Foo.java domain/src/test/java/FooTest.java"
+        },
+        "cwd": "{root}",
+        "agent_type": "build-hex:domain-dev"
+      },
+      "expect": "deny",
+      "must_deny": true,
+      "note": "tests belong to qa-engineer"
+    },
+    {
+      "name": "python-inline-writer",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "python3 -c \"open('infrastructure/src/main/java/Bar.java','w').write('x')\""
+        },
+        "cwd": "{root}",
+        "agent_type": "build-hex:domain-dev"
+      },
+      "expect": "deny",
+      "must_deny": true,
+      "note": "deny-by-default for unanalyzable writers"
+    },
+    {
+      "name": "read-only-cat",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "cat domain/src/main/java/Foo.java"
+        },
+        "cwd": "{root}",
+        "agent_type": "build-hex:domain-dev"
+      },
+      "expect": "allow"
+    },
+    {
+      "name": "read-only-grep",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "grep -rn Foo domain/src/main/java"
+        },
+        "cwd": "{root}",
+        "agent_type": "build-hex:domain-dev"
+      },
+      "expect": "allow"
+    },
+    {
+      "name": "git-status",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git status --short"
+        },
+        "cwd": "{root}",
+        "agent_type": "build-hex:domain-dev"
+      },
+      "expect": "allow"
+    },
+    {
+      "name": "write-outside-root",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo x > /tmp/replay-scratch.txt"
+        },
+        "cwd": "{root}",
+        "agent_type": "build-hex:domain-dev"
+      },
+      "expect": "allow",
+      "note": "outside the project root is not this lock's jurisdiction"
+    },
+    {
+      "name": "main-session-not-gated",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo x > infrastructure/src/main/java/Bar.java"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow",
+      "note": "no agent_type: main session"
+    },
+    {
+      "name": "other-plugin-agent-not-gated",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo x > infrastructure/src/main/java/Bar.java"
+        },
+        "cwd": "{root}",
+        "agent_type": "other-plugin:domain-dev"
+      },
+      "expect": "allow"
+    }
+  ]
+}
