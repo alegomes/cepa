@@ -138,6 +138,65 @@ def test_second_question_mark_does_not_call_the_reader_again():
     check("CS-7 text: the item stays for later", len(later) == 1, later)
 
 
+def _default_rewrite_run(read_result):
+    """Runs `decide` with its OWN default rewrite (no `rewrite=` injected), with the
+    module's `read_route` and `reword_route` swapped so nothing is spawned. Returns
+    (read calls, reword calls, screen text, for_later)."""
+    m = load_module()
+    reads, rewords, screen = [], [], []
+
+    def fake_read(repo, payload, deadline, prompt=None):
+        reads.append({"left": deadline - m.time.monotonic(), "prompt": prompt,
+                      "payload": payload})
+        return read_result
+
+    m.read_route = fake_read
+    m.reword_route = lambda *a, **k: rewords.append((a, k)) or None
+    deferred = [{"id": "b1", "title": "t", "reason": "human_pending",
+                 "human_pending": ROUTE, "question": OLD_Q, "evidence": "x",
+                 "route_kind": "external-block"}]
+    replies = iter(["?", ""])
+    _, later = m.decide(Path("/nao/existe"), "fila", None, {}, deferred, {},
+                        question=lambda _p: next(replies, ""), output=screen.append,
+                        answer=lambda *a, **k: (0, "ok"),
+                        unclear=lambda ident, text: (0, "ok"))
+    return m, reads, rewords, "\n".join(screen), later
+
+
+def test_the_rewrite_waits_at_most_60_seconds():
+    """Spec, "Decided without asking": the rewrite ceiling is 60 s. The default
+    rewrite hands the reader a deadline 60 s ahead, with the unclear-question prompt
+    and the question the owner did not understand in the payload."""
+    new = {"route_kind": "owner-task", "question": NEW_Q, "if_yes": NEW_YES,
+           "if_no": NEW_NO}
+    m, reads, rewords, text, _ = _default_rewrite_run((new, None))
+    check("CS-7 ceiling: the reader ran once", len(reads) == 1, reads)
+    if reads:
+        check("CS-7 ceiling: the deadline is 60 s ahead",
+              58 <= reads[0]["left"] <= 60, reads[0]["left"])
+        check("CS-7 ceiling: the unclear-question prompt",
+              reads[0]["prompt"] is m.UNCLEAR_READER_PROMPT, reads[0]["prompt"])
+        check("CS-7 ceiling: payload carries the job and the old question",
+              reads[0]["payload"].get("tarefa") == "reescrever-pergunta"
+              and reads[0]["payload"].get("pergunta_mal_escrita") == OLD_Q,
+              reads[0]["payload"])
+    check("CS-7 ceiling: the screen names the 60 s", "up to 60 s" in text, text)
+    check("CS-7 ceiling: recorded with --replace", len(rewords) == 1
+          and rewords[0][1].get("replace") is True, rewords)
+
+
+def test_a_rewrite_with_the_same_question_is_not_a_rewrite():
+    """A reader that hands back the question the owner did not understand changes
+    nothing: no record in the queue, no "rewritten" line, the item stays for later."""
+    same = {"route_kind": "external-block", "question": "  " + OLD_Q,
+            "if_yes": NEW_YES, "if_no": NEW_NO}
+    _, reads, rewords, text, later = _default_rewrite_run((same, None))
+    check("CS-7 same: the reader ran", len(reads) == 1, reads)
+    check("CS-7 same: nothing recorded in the queue", rewords == [], rewords)
+    check("CS-7 same: no 'rewritten' line", "question rewritten" not in text, text)
+    check("CS-7 same: the item stays for later", len(later) == 1, later)
+
+
 def test_reword_route_replace_overwrites_question_and_keeps_the_route():
     """`cepa-plan reword-route --replace` overwrites kind, question and effects (the
     owner said the old ones were unclear); without it, nothing already there changes."""
