@@ -1,0 +1,32 @@
+schema_version: 1
+card: campo-de-resposta-CS-3
+status: complete
+audited_at: 2026-11-14T00:00:00-03:00
+covers: 42c86da..21e715a
+criteria:
+  - id: AC1
+    text: "CS-3: com EDITOR apontando para um editor falso que grava 'linha 1\\nlinha 2', num pty o menu mostra '[v] write in the editor', o dono aperta v e responde s em 'Send the item back to the queue'. O evidence do item contém 'linha 1\\nlinha 2' com a quebra e o item volta para pending (docs/spec/campo-de-resposta-until.md)"
+    altitude: cli
+    surface: "`cepa-until decide` real num pty: menu do item, tecla `v`, editor falso via $EDITOR, `s` em 'Send the item back to the queue'; estado e evidence do item no queue.yaml (caminho decide -> cepa-plan answer --multiline)"
+    demonstrated_by:
+      test: "tests/test_cepa_until_decide.py::test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer"
+      layer: "subprocess real de cepa-until decide num pty (on_tty), editor falso em shell script, lendo o queue.yaml"
+      evidence: verified
+      run: |
+        python3 -c "import sys; sys.path.insert(0,'tests'); import test_cepa_until_decide as t; t.test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer(); print('FAILURES',t.FAILURES); sys.exit(1 if t.FAILURES else 0)"
+          ok  cs3: sem traceback
+          ok  cs3: o menu mostra [v] write in the editor
+          ok  cs3: o item volta para pending
+          ok  cs3: a evidência traz as duas linhas com a quebra
+        FAILURES [] exit=0 (HEAD 21e715a; 4 checagens, N>0)
+    verdict: complete
+    gap: null
+notes:
+  - "A checagem do menu usa o marcador <...> do on_tty, que só aparece quando a tela mostrou o texto (commit 21e715a); o texto solto também aparece na nota de timeout e não provaria nada."
+  - "O teste existente de menu (test_decide_on_terminal_draws_one_card_per_question) foi atualizado para o novo chip [v]."
+  - "Seção 'Decided without asking' lida no código (edit_in_editor em common/bin/cepa-until): $VISUAL, depois $EDITOR, depois vi; linhas começadas por # são descartadas. O teste do CS-3 só exercita $EDITOR e não escreve linha # nem define $VISUAL: a ordem e o descarte de # estão implementados mas sem asserção própria. Não são parte da letra do critério do CS-3; ficam como candidatos a teste no CS-6 ou num card próprio."
+  - "Não rodei o lado vermelho (antes de 324de4b); não rodei a suíte inteira, por instrução do supervisor."
+  - "CS-4, CS-5 e CS-6 fora de escopo (a mensagem 'nothing written in the editor' e a volta ao menu são do CS-6)."
+decided_without_asking_respected:
+  - "editor: $VISUAL -> $EDITOR -> vi (no código; sem teste de precedência)"
+  - "linhas # descartadas ao salvar (no código; sem teste)"
