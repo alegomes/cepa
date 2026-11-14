@@ -1147,11 +1147,11 @@ def test_decidir_s_and_n_on_terminal_reach_the_plan():
               (a1, out[-800:]))
 
 
-def test_invalid_byte_on_terminal_does_not_crash_decide():
-    """In decidir WEGO 2026-09-29-2059 the owner typed `não` and the terminal
-    delivered `n\\xcb...` (the tilde of the dead key, half erased): `input()`
-    blew up with UnicodeDecodeError and the questions died with a
-    traceback. The unreadable line has to be asked for again."""
+def _cs5_run(confirm_inputs):
+    """`decide` in a pty: `t` at the menu, then a line with a stray byte
+    (`n\\xcb\\xc3\\xa3o vira checklist`, the tilde of the dead key half
+    erased, decidir WEGO 2026-09-29-2059) at "Your answer", then
+    `confirm_inputs`. Returns (rc, screen, item a1)."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1"), item("a2")])
         binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
@@ -1161,17 +1161,41 @@ def test_invalid_byte_on_terminal_does_not_crash_decide():
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), inputs=[
-                ("[t] I write the answer", b"n\xcb\xc3\xa3o"),
-                ("could not read that line", "t"),
-                ("Your answer", "vira checklist"),
-                ("Send the item back to the queue", "s")])
-        check("sem traceback", "Traceback" not in out, out[-1500:])
-        check("...avisa que não leu e pede de novo",
-              "could not read that line" in out, out[-1500:])
-        a1 = items_of(root)["a1"]
-        check("...e a resposta seguinte ainda é aplicada",
-              rc == 0 and a1["status"] == "pending"
-              and "vira checklist" in a1["evidence"], a1)
+                ("[t] I write the answer", "t"),
+                ("Your answer", b"n\xcb\xc3\xa3o vira checklist"),
+                *confirm_inputs])
+        return rc, out, items_of(root)["a1"]
+
+
+def test_cs5_unreadable_byte_is_shown_as_question_mark_and_enter_keeps_it():
+    """CS-5 of docs/spec/campo-de-resposta-until.md: the line with an
+    unreadable byte is not lost. The stray byte becomes `?`, the screen shows
+    the text read and asks "Use this text? [Y/n]"; Enter keeps it."""
+    rc, out, a1 = _cs5_run([("Use this text? [Y/n]", ""),
+                            ("Send the item back to the queue", "s")])
+    check("cs5: sem traceback", "Traceback" not in out, out[-1500:])
+    check("cs5: a tela mostra o texto lido com ?",
+          "n?ão vira checklist" in out, out[-1500:])
+    check("cs5: e pergunta Use this text? [Y/n]",
+          "<Use this text? [Y/n]>" in out, out[-1500:])
+    check("cs5: com Enter o evidence contém n?ão vira checklist",
+          rc == 0 and a1["status"] == "pending"
+          and "n?ão vira checklist" in a1["evidence"], (a1, out[-800:]))
+
+
+def test_cs5_n_at_the_confirmation_asks_the_field_again():
+    """CS-5: with `n` at "Use this text? [Y/n]" the same field is asked again
+    and the text read is not applied."""
+    rc, out, a1 = _cs5_run([("Use this text? [Y/n]", "n"),
+                            ("type it again", "vira checklist"),
+                            ("Send the item back to the queue", "s")])
+    check("cs5 n: sem traceback", "Traceback" not in out, out[-1500:])
+    check("cs5 n: o campo é pedido de novo",
+          out.count("in one line (the next run reads this)") == 2, out[-1500:])
+    check("cs5 n: a resposta digitada de novo é a aplicada, não a recusada",
+          rc == 0 and a1["status"] == "pending"
+          and "vira checklist" in a1["evidence"]
+          and "n?ão" not in a1["evidence"], (a1, out[-800:]))
 
 
 def _long_accented_answer():

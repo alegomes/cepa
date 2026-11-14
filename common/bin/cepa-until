@@ -2500,10 +2500,13 @@ class NoAnswer(TimeoutError):
 
 
 def read_line(prompt, output=print, wait=None):
-    """`input()` that doesn't die on an unreadable line. A dead-key accent
-    half-erased arrives as a stray byte (`n\\xcb\\xc3\\xa3o`) and
-    `input()` blows up with UnicodeDecodeError; the line was already consumed, so
-    just ask again (decidir WEGO 2026-09-29-2059)."""
+    """`input()` that never loses the line. A dead-key accent half-erased
+    arrives as a stray byte (`n\\xcb\\xc3\\xa3o`, decidir WEGO
+    2026-09-29-2059); each unreadable byte becomes `?`, the text read is shown
+    and the owner confirms it (Enter keeps it, `n` asks the field again).
+    CS-5 of docs/spec/campo-de-resposta-until.md: before it, the line was
+    dropped with "could not read that line" and the owner typed it all
+    again."""
     global _hc_unanswered
     herdr_blocked()
     try:
@@ -2574,16 +2577,53 @@ def _timed_input(prompt, wait):
     return input("")
 
 
+_UNREADABLE = re.compile("[\udc80-\udcff]")
+
+
+def _keep_unreadable_bytes():
+    """Has stdin decode an unreadable byte as a lone surrogate
+    (`surrogateescape`) instead of raising: `input()`, with or without
+    `readline`, decodes with `sys.stdin.errors`, so the line arrives whole
+    and `_read_line` turns each such byte into `?`. Without it,
+    UnicodeDecodeError came after the line was consumed, and the text was
+    lost. Best effort: a stdin that cannot be reconfigured keeps raising,
+    and `_read_line` still asks again."""
+    try:
+        if sys.stdin.errors != "surrogateescape":
+            sys.stdin.reconfigure(errors="surrogateescape")
+    except (AttributeError, ValueError, OSError):
+        pass
+
+
+def _input_once(prompt, wait):
+    if wait is not None:
+        return _timed_input(prompt, wait)
+    return input(prompt)
+
+
 def _read_line(prompt, output, wait):
     _enable_line_editing()
+    _keep_unreadable_bytes()
     while True:
         try:
-            if wait is not None:
-                return _timed_input(prompt, wait)
-            return input(prompt)
+            line = _input_once(prompt, wait)
         except UnicodeDecodeError:
             output("       could not read that line (an accent arrived "
                   "half-way); type it again")
+            continue
+        if not _UNREADABLE.search(line):
+            return line
+        line = _UNREADABLE.sub("?", line)
+        output(f"       read as: {line}")
+        try:
+            confirm = _input_once("       Use this text? [Y/n] ", wait)
+        except UnicodeDecodeError:
+            confirm = ""
+        if _UNREADABLE.sub("?", confirm).strip().lower() in (
+                "n", "no", "nao", "não"):
+            output("       ok, type it again")
+            continue
+        return line
 
 
 class Panel:
