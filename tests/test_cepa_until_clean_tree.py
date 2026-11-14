@@ -156,6 +156,50 @@ def test_commit_leaves_the_owners_staged_file_out():
               str(staged))
 
 
+def test_cs2_owners_modified_and_staged_files_stay_as_they_were():
+    """CS-2: with a tracked `notas.txt` modified (not staged) and a new
+    `rascunho.md` staged in the clone before the run, the run's commit holds
+    neither, and `git status --porcelain` shows both exactly as before: same
+    status codes, same contents on disk and in the index. A `git add -A` (or
+    `commit -a`) would take `notas.txt`; a commit without `--only` would take
+    `rascunho.md`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _scenario(tmp)
+        (root / "notas.txt").write_text("versão commitada\n", encoding="utf-8")
+        subprocess.run(["git", "add", "notas.txt"], cwd=root, check=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                        "commit", "-qm", "notas"], cwd=root, check=True)
+        (root / "notas.txt").write_text("edição do dono, sem stage\n",
+                                        encoding="utf-8")
+        (root / "rascunho.md").write_text("# rascunho do dono\n", encoding="utf-8")
+        subprocess.run(["git", "add", "rascunho.md"], cwd=root, check=True)
+        owners = ["notas.txt", "rascunho.md"]
+        st_before = _git(root, "status", "--porcelain", "--", *owners)
+        index_before = _git(root, "ls-files", "-s", "--", *owners)
+        binv = base.fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        before = _git(root, "rev-parse", "HEAD").strip()
+        p, _calls = base.run_until(root, binv, plan, ["--for", "2h", "--dirty-ok"])
+        check("CS-2: o run termina", p.returncode == 0, p.stderr[-400:])
+        check("CS-2: há um commit novo do run",
+              _git(root, "rev-parse", "HEAD~1").strip() == before)
+        files = _git(root, "show", "--name-only", "--format=", "HEAD").split()
+        check("CS-2: o commit do run não leva nenhum dos dois arquivos do dono",
+              not set(owners) & set(files)
+              and any(f.endswith(".jsonl") for f in files), str(files))
+        check("CS-2: git status mostra os dois como estavam",
+              st_before == " M notas.txt\nA  rascunho.md\n"
+              and _git(root, "status", "--porcelain", "--", *owners) == st_before,
+              _git(root, "status", "--porcelain", "--", *owners))
+        check("CS-2: o índice dos dois não mudou",
+              _git(root, "ls-files", "-s", "--", *owners) == index_before)
+        check("CS-2: o conteúdo em disco não mudou",
+              (root / "notas.txt").read_text(encoding="utf-8")
+              == "edição do dono, sem stage\n"
+              and (root / "rascunho.md").read_text(encoding="utf-8")
+              == "# rascunho do dono\n")
+
+
 def test_failing_pre_commit_hook_is_respected():
     """The run never skips the repo's hooks: a pre-commit that refuses leaves the
     records without a commit and the run says git refused. The proof of 2026-11-14
