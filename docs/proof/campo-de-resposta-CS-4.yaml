@@ -1,14 +1,16 @@
 schema_version: 2
 card: campo-de-resposta-CS-4
 verdict: unproven
-reviewed_at: 2026-11-14T20:00:00-03:00
+reviewed_at: 2026-11-14T21:00:00-03:00
 base_commit: 4144082
-head_commit: e6274c8
+head_commit: 79feaf3
 issue_type: Feature
 repo_kind: harness            # repo Python (cepa), não Quarkus. Superfície = `cepa-until decide` num pseudo-terminal
+round: 2
+round_1_note: "Round 1 (e6274c8): UNPROVEN, P3 (`extra.lower()` -> `extra`, nas duas linhas) sobreviveu porque nenhum teste digitava V maiúsculo. 79feaf3 acrescentou test_cs4_capital_v_after_no_also_opens_the_editor (V no 'Anything to add'). Round 2 mostra que isso fechou o ramo do 'Anything to add' mas não o do 'Why'."
 scope:
   changed_classes:
-    - class: "common/bin/cepa-until::decide (ramos `Why` do [d] e `Anything to add` de [s]/[n]: `if extra.lower() == \"v\": extra = edit_in_editor(...)`, mais a dica do prompt)"
+    - class: "common/bin/cepa-until::decide (ramos `Why` do [d] (linha 3010) e `Anything to add` de [s]/[n] (linha 3030): `if extra.lower() == \"v\": extra = edit_in_editor(...)`, mais a dica do prompt)"
       module: cli
       external_observable: true
       substituted_by_double: null   # cepa-until e cepa-plan reais em pty; o único dublê é o editor falso ($EDITOR), fronteira externa
@@ -19,40 +21,36 @@ levels:
     pit:
       status: n/a
       results:
-        - "sem pitest: repo Python; perturbação manual em worktree descartável detached em e6274c8 (/tmp/proof-campo-cs4), removido ao fim."
+        - "sem pitest: repo Python; perturbação manual em worktree descartável detached em 79feaf3 (/tmp/proof-cs4-r2), removido ao fim."
     perturbation:
       status: survived
       results:
-        - "GREEN de partida em e6274c8: os 2 testes cs4 imprimem 8 checks 'ok', nfail=0."
-        - "(P1) ramo do Why desligado (linha 3010 `if extra.lower() == \"v\":` -> `if False:`) -> RED (nfail=2, só os checks 'cs4 why')."
-        - "(P2) ramo do Anything to add desligado (linha 3030, mesma troca) -> RED (nfail=2, só os checks 'cs4:')."
-        - "(P4) resultado do editor descartado nos dois ramos (`extra = \"v\"`) -> RED (nfail=4)."
-        - "(P3) SOBREVIVEU: `extra.lower() == \"v\"` trocado por `extra == \"v\"` nas duas linhas -> nfail=0. Nenhum teste digita `V` maiúsculo, então o `.lower()` (linha alterada pelo diff) não é preso por teste. O comportamento existe e funciona (L4 caso upperV abaixo), só não tem asserção."
+        - "GREEN de partida em 79feaf3: 3 testes cs4, 12 checks 'ok', nfail=0."
+        - "(P1) ramo do Why desligado (linha 3010 -> `if False:`) -> RED (nfail=2, só 'cs4 why')."
+        - "(P2) ramo do Anything to add desligado (linha 3030 -> `if False:`) -> RED (nfail=4: 'cs4:' e 'cs4 V:')."
+        - "(P3 nas duas linhas) `extra.lower()` -> `extra` em 3010 e 3030 -> RED (nfail=2, 'cs4 V:'). Fechado pelo teste novo, mas só para a linha 3030."
+        - "(P3-why) `extra.lower()` -> `extra` só na linha 3010 (Why) -> nfail=0, SOBREVIVEU. Nenhum teste digita `V` maiúsculo no prompt do Why; a linha 3010 foi acrescentada pelo diff (git diff 4144082 79feaf3 mostra `+ if extra.lower() == \"v\":` nas duas linhas). O P3 em dupla escondia isso porque o teste novo já matava a troca em 3030."
+        - "(P4) resultado do editor descartado nos dois ramos (3011 e 3031 -> `extra = \"v\"`) -> RED (nfail=5)."
       run: >-
-        `git worktree add --detach /tmp/proof-campo-cs4 e6274c8`; runner fora do pytest (porque `check()` só acumula em FAILURES e um check falho PASSA sob pytest): carrega tests/test_cepa_until_decide.py por importlib, chama test_cs4_v_in_anything_to_add_opens_the_editor e test_cs4_v_in_why_opens_the_editor, imprime `nfail=` e FAILURES.
-        Cada perturbação por sed, restaurada por `git checkout` do arquivo. Resultados: baseline nfail=0 (8 checks ok); P1 nfail=2; P2 nfail=2; P4 nfail=4; P3 nfail=0 (sobreviveu).
-        Só os testes alvo, em primeiro plano; suíte completa não rodada (o supervisor roda).
-        Obs: um worktree antigo já ocupava /tmp/proof-cs4 (outro commit); usei outro caminho.
+        `git worktree add --detach /tmp/proof-cs4-r2 79feaf3`; `git diff e6274c8 79feaf3 -- common/bin/cepa-until` = 0 bytes (código idêntico ao round 1; só o teste mudou).
+        Runner fora do pytest (check() só acumula em FAILURES; falho PASSA sob pytest): importlib carrega tests/test_cepa_until_decide.py, chama test_cs4_capital_v_after_no_also_opens_the_editor, test_cs4_v_in_anything_to_add_opens_the_editor, test_cs4_v_in_why_opens_the_editor, imprime nfail= e FAILURES.
+        Resultados: baseline nfail=0; P1 nfail=2; P2 nfail=4; P3 (3010+3030) nfail=2; P3-why (só 3010) nfail=0; P4 nfail=5. Cada perturbação por sed, restaurada por git checkout. Só os testes alvo, em primeiro plano; suíte completa não rodada (o supervisor roda).
   l2_coverage:
     status: pass
     uncovered_lines: []
-    run: "sem coverage ligado; as duas linhas `edit_in_editor` novas ficam vermelhas quando quebradas (P1, P2, P4), logo são alcançadas e exercidas por asserção. A única exceção é o `.lower()` (P3)."
+    run: "sem coverage ligado; as linhas `edit_in_editor` ficam vermelhas quando quebradas (P1, P2, P4), logo são alcançadas e exercidas por asserção. A exceção é o `.lower()` da linha 3010 (P3-why), alcançado mas sem asserção que o distinga."
   l4_adversarial_input:
     status: clean
     findings: []
     run: >-
-      Worktree descartável em e6274c8; runner Python em primeiro plano reaproveitando build_repo, fake_claude, run_until e on_tty do arquivo de testes, dirigindo `cepa-until decide fila/<run>` numa pty real com `$EDITOR` falso que ANEXA conteúdo hostil ao arquivo temporário. Para cada caso conferi: rc 0, sem "Traceback", todo .yaml sob .claude recarrega com yaml.safe_load, e o item foi gravado com o texto ou ficou intacto.
-      Resultados (14 casos, 0 achados): `V` maiúsculo no Why (dropped, texto com quebra gravado); `V` maiúsculo no Anything to add (pending, idem); ` v ` com espaços (abre o editor); `vv` (tratado como texto literal, gravado "vv", não abre o editor); byte inválido \xcb (vira U+FFFD, resto preservado); CRLF (vira \n); só linha `#` (texto vazio, item volta a pending sem comentário); texto hostil a YAML (`: x`, `- y`, aspas, `|`, `{a: [b}`, `& *r !t %d @a` e crase) gravado literal e yaml recarrega; ~4.500 caracteres com acento (gravado inteiro); editor que não escreve nada ou só `#` no Why (item permanece `blocked`, idêntico a apertar Enter no Why: mesmo comportamento pré-existente de motivo vazio); editor vazio no Anything to add (pending sem comentário).
-      Observação sem veredito: no Why, motivo vazio (Enter ou editor vazio) deixa o item `blocked` em vez de descartar; é comportamento anterior ao CS-4 e igual nos dois caminhos; mensagem de vazio é CS-6.
+      Reaproveitado do round 1 (14 casos hostis, 0 achados), válido porque `git diff e6274c8 79feaf3 -- common/bin/cepa-until` tem 0 bytes: o código sob teste é byte a byte o mesmo. Round 1 cobriu V maiúsculo no Why e no Anything to add (funcionam), ` v ` com espaços, `vv` literal, byte inválido, CRLF, só `#`, texto hostil a YAML, ~4.500 caracteres, editor vazio. Rodou em rc 0, sem Traceback, yaml recarregável.
   bugfix_regression_red_at_base:
     status: n/a
-    run: "Feature (CS-4 de docs/spec/campo-de-resposta-until.md); a prova é a perturbação P1, P2 e P4 RED."
+    run: "Feature (CS-4 de docs/spec/campo-de-resposta-until.md); a prova é a perturbação P1, P2, P4 RED."
 routing_reason: >-
-  Três perturbações (ramo do Why, ramo do Anything to add, uso do texto do
-  editor) deixam os testes vermelhos, o único dublê é o editor falso (fronteira
-  externa) e o nível de entradas hostis rodou limpo com 14 casos. Mas a quarta
-  perturbação sobreviveu: o `.lower()` que o diff acrescentou (aceitar `V`
-  maiúsculo) pode ser removido sem teste nenhum ficar vermelho. A regra não
-  deixa `proven` com perturbação sobrevivente numa linha alterada: UNPROVEN.
-  Correção de uma linha de teste: digitar `V` em um dos dois prompts e exigir
-  que o editor abra e o texto salvo vire o comentário.
+  O teste novo fechou o V maiúsculo no 'Anything to add' (P3 nessa linha agora
+  fica vermelho), mas o mesmo `.lower()` acrescentado na linha do 'Why' (3010)
+  pode ser removido sem teste nenhum ficar vermelho (nfail=0). A regra não deixa
+  `proven` com perturbação sobrevivente em linha alterada: UNPROVEN. Correção:
+  um teste que digite `V` maiúsculo no prompt do 'Why' ([d]) e exija que o editor
+  abra e o texto salvo vire o motivo.
