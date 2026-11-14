@@ -1,0 +1,18 @@
+schema_version: 1
+card: perguntas-da-largada-legiveis-CS-9
+status: complete
+audited_at: 2026-11-14T14:30:00-03:00
+audited_diff: 2a4cb46..a71a69a
+criteria:
+  - id: AC1
+    text: "num pseudo-terminal de 80 colunas, com um leitor falso que devolve uma preferência cujo texto tem 200 caracteres, nenhuma linha do bloco passa de 80 colunas, o bloco abre com a linha `N/M · <id>` da moldura e traz os rótulos 'Choice', 'Agent's default' e o menu de teclas"
+    altitude: cli
+    surface: "cepa-until <fila> em pseudo-terminal de 80 colunas (TIOCSWINSZ), leitor falso via CEPA_UNTIL_LEITOR devolvendo texto de 200 caracteres; bloco das escolhas da leitura prévia na tela"
+    demonstrated_by:
+      test: "tests/test_cepa_until_preference_panel.py::test_cs9_long_preference_fits_80_columns_inside_the_frame"
+      layer: cli-subprocess-pty
+      evidence: verified
+      run: "python3 tests/test_cepa_until_preference_panel.py -> 13 checagens ok (7 no pty, 6 em processo), 'tudo verde', ~9 s. No pty: nenhuma linha do bloco > 80, linha '┌─ 1/1 · x1', rótulos 'Choice' e 'Agent's default' dentro da moldura, menu '[Enter] keep the agent's default (recommended)', texto inteiro na tela. Também rodei python3 tests/test_cepa_until_decide.py (a mudança em Panel._wrap é compartilhada): 'tudo verde'."
+    verdict: complete
+    gap: null
+    note: "Cobre também, em processo, as três saídas (resposta, espera esgotada, Ctrl-C) com texto, pergunta e padrão longos: nenhuma linha > 80 e a linha de moldura presente. O menu hoje tem só Enter e texto; as teclas s/n/t são o CS-10, fora de escopo. A correção de Panel._wrap (largura - 1 para a borda) vale para todo o painel; o teste de decide continua verde. Não rodei a suíte completa (reservada ao supervisor)."
