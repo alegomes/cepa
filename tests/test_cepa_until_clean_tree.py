@@ -107,6 +107,31 @@ def test_normal_end_without_analysis_commits_what_exists():
               and any(f.endswith(".jsonl") for f in files), str(files))
 
 
+def test_quota_end_also_commits_the_record():
+    """The run that stops on the account's usage ceiling (`limite-de-uso`) skips
+    the analysis and ends through its own return path: that path commits too.
+    The proof of 2026-11-14 removed the commit on this path and every other
+    test stayed green. `--com-analise` is what reaches the path: with analysis
+    off, the run returns before the quota branch."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _scenario(tmp)
+        binv = base.fake_claude(tmp, f"print({base.FAR_LIMIT!r})\nsys.exit(1)")
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        before = _git(root, "rev-parse", "HEAD").strip()
+        p, _calls = base.run_until(root, binv, plan,
+                                   ["--for", "2h", "--com-analise"])
+        end = [e for e in base.ledger_of(root) if e.get("evento") == "run_end"]
+        check("cota: o run termina por limite-de-uso",
+              end and end[0].get("motivo") == "limite-de-uso", str(end))
+        st = _git(root, "status", "--porcelain", "--untracked-files=all")
+        check("cota: git status do clone vazio", st == "", st)
+        check("cota: um commit novo sobre a base",
+              _git(root, "rev-parse", "HEAD~1").strip() == before)
+        files = _git(root, "show", "--name-only", "--format=", "HEAD").split()
+        check("cota: o commit leva o registro do run",
+              any(f.endswith(".jsonl") for f in files), str(files))
+
+
 def main():
     print("cepa-until — árvore limpa no fim do run\n")
     for given_name, fn in sorted(globals().items()):
