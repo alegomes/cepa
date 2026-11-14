@@ -2592,7 +2592,8 @@ class Panel:
         import textwrap
         hanging = indent if hanging is None else hanging
         text = " ".join(str(text).split())
-        return textwrap.wrap(text, width=self._w(),
+        # One column less than the terminal: `_border` prepends the `│`.
+        return textwrap.wrap(text, width=max(self._w() - 1, 20),
                              initial_indent=" " * indent,
                              subsequent_indent=" " * hanging,
                              break_on_hyphens=False) or [" " * indent]
@@ -2639,7 +2640,11 @@ class Panel:
 
     def panel_note(self, text):
         """A line under the opening (CS-8: "the pre-read is still reading")."""
-        self.output("   " + (self.t.c("cinza", text) if self.enabled else text))
+        if not self.enabled:
+            self.output("   " + text)
+            return
+        for l in self._wrap(text, 3):
+            self.output(self.t.c("cinza", l))
 
     def continue_panel(self, text):
         """A rule inside a list already open (CS-8: the pre-read's part)."""
@@ -2710,8 +2715,9 @@ class Panel:
             return
         self.output("")
         self._top(f"{i}/{n} · {ident}", "ciano")
-        for l in self._wrap(title, 2):
-            self._border(l, "negrito")
+        if title:
+            for l in self._wrap(title, 2):
+                self._border(l, "negrito")
         self._border()
 
     def label(self, name, text, short_path=None):
@@ -3468,24 +3474,53 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
         def question(prompt):
             return read_line(prompt, print, wait)
     shown = 0
-    print(f"\n── {len(prefs)} choice(s) the pre-read found: answer to decide, "
-          "Enter keeps the agent's default")
+    panel = Panel(SCREEN, print)
+    total = of or len(prefs)
+    if panel.enabled:
+        panel.continue_panel(f"{len(prefs)} choice(s) the pre-read found")
+        panel.panel_note("answer to decide, Enter keeps the agent's default")
+    else:
+        print(f"\n── {len(prefs)} choice(s) the pre-read found: answer to decide, "
+              "Enter keeps the agent's default")
+
+    def stop(message):
+        if panel.enabled:
+            panel.end()
+            panel.panel_note(message)
+        else:
+            print(f"\n   {message}")
+
     for i, (ident, pref) in enumerate(prefs.items(), first):
-        print(f"\n   {i}/{of or len(prefs)} · {ident}: {pref['texto']}")
-        if pref.get("pergunta"):
-            print(f"   {pref['pergunta']}")
-        print(f"   If nobody answers, the agent goes with: {pref['padrao']}")
+        if panel.enabled:
+            panel.item(i, total, ident, "")
+        else:
+            print(f"\n   {i}/{total} · {ident}: {pref['texto']}")
+        if panel.enabled:
+            panel.label("Choice", pref["texto"])
+            panel.label("Agent's default", pref["padrao"])
+            if pref.get("pergunta"):
+                panel.question(pref["pergunta"])
+            panel.menu([("Enter", "keep the agent's default"),
+                        ("text", "type your choice in one line")], "Enter")
+            prompt = panel._prompt("Your choice, in one line: ")
+        else:
+            if pref.get("pergunta"):
+                print(f"   {pref['pergunta']}")
+            print(f"   If nobody answers, the agent goes with: {pref['padrao']}")
+            prompt = "   ▸ Your choice, in one line [Enter keeps the default]: "
         shown += 1
         try:
-            raw = question("   ▸ Your choice, in one line [Enter keeps the default]: ")
+            raw = question(prompt)
         except NoAnswer:
-            print(f"\n   nobody answered in {(wait or 0) / 60:g} min; the remaining "
-                  "choice(s) run with the agent's default")
+            stop(f"nobody answered in {(wait or 0) / 60:g} min; the remaining "
+                 "choice(s) run with the agent's default")
             return shown
         except (EOFError, KeyboardInterrupt):
-            print("\n   choices interrupted; the remaining ones run with the agent's "
-                  "default")
+            stop("choices interrupted; the remaining ones run with the agent's "
+                 "default")
             return shown
+        if panel.enabled:
+            panel.end()
         text = " ".join(str(raw or "").split())
         if text:
             pref.update(escolha=text, fonte="dono")

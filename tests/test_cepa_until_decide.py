@@ -2256,7 +2256,7 @@ def test_pre_read_cs6_answer_typed_in_the_launch_panel_goes_into_the_prompt():
         tty_inputs=[("Your choice, in one line", "mostrar a data por extenso")])
     check("cs6 answer: the panel showed the question and the default",
           "Posso usar o formato curto?" in out
-          and "the agent goes with: usar o formato curto" in out, out[-1500:])
+          and re.search(r"Agent's default\s+usar o formato curto", out) is not None, out[-1500:])
     check("cs6 answer: x1's prompt carries the owner's answer",
           "mostrar a data por extenso" in reqs.get("x1", ""), str(reqs) + out[-800:])
     check("cs6 answer: and not the default as the choice",
