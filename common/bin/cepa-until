@@ -2660,6 +2660,8 @@ class Panel:
             for x in applied:
                 self.output(f"     ✓ {x}")
             if for_later:
+                self.output(f"     ○ {later_names(for_later)}")
+            if for_later:
                 self.output(f"   To come back to these questions: {back}")
             return
         self.output("")
@@ -2674,6 +2676,10 @@ class Panel:
                          f"for later {len(for_later)}"))
         for x in applied:
             self.output("     " + t.c("verde", "✓ ") + x)
+        # CS-8 (perguntas-da-largada-legiveis): the items left for later are named,
+        # not only counted.
+        if for_later:
+            self.output("     " + t.c("amarelo", "○ ") + later_names(for_later))
         if for_later:
             self.output("   " + t.c("cinza", "to come back to these questions: ")
                        + t.c("ciano", back))
@@ -2820,6 +2826,13 @@ class Panel:
             return
         self._border("  " + (self.t.c("verde", f"✓ {msg}") if ok
                             else self.t.c("vermelho", f"✗ not recorded: {msg}")))
+
+
+def later_names(for_later):
+    """CS-8 (perguntas-da-largada-legiveis): the closing names what was left for
+    later by its id only (`b1, b2`); the reason beside it is the generic label the
+    item block already replaced with the lay one."""
+    return ", ".join(str(x).split(":", 1)[0] for x in for_later)
 
 
 def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
@@ -3045,12 +3058,18 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             rc, msg = unclear(ident, shown_question)
             screen.recorded("question recorded as badly written; no answer on the "
                             "item" if rc == 0 else msg, ok=rc == 0)
+            # CS-8: a failed rewrite, or the second `?`, says so in one line and the
+            # item stays for later; the panel goes on to the next item.
             if rewritten:
+                screen.warning("question not rewritten again, the item stays for "
+                               "later: the reader rewrites once per item")
                 break
             rewritten = True
             screen.note(f"rewriting the question, up to {UNCLEAR_REWRITE_SEC} s")
-            new_route, _error = rewrite(ad, shown_question)
+            new_route, error = rewrite(ad, shown_question)
             if new_route is None:
+                screen.warning(f"question not rewritten, the item stays for later "
+                               f"and the panel goes on: {error}")
                 break
             ad = dict(ad, question=new_route["question"],
                       route_kind=new_route["route_kind"],
