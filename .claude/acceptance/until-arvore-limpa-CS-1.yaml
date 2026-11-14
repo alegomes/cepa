@@ -1,0 +1,18 @@
+key: until-arvore-limpa-CS-1
+status: complete
+criteria:
+  - id: CS-1
+    text: "Ao terminar normalmente, o run deixa a main sem nenhum arquivo dele fora do git"
+    altitude: cli
+    surface: "cepa-until <fila> --for ... : git status --porcelain do clone vazio e um commit novo com exatamente queue/plan.yaml, .jsonl e .review.md"
+    test: "tests/test_cepa_until_clean_tree.py::test_normal_end_commits_queue_record_and_review (+ test_normal_end_without_analysis_commits_what_exists, test_quota_end_also_commits_the_record)"
+    layer: "subprocess real de common/bin/cepa-until em repo git de teste, claude falso; assert em git status --porcelain --untracked-files=all, HEAD~1 == base, git show --name-only == 3 caminhos, mensagem do commit"
+    evidence: verified
+    run: "python3 tests/test_cepa_until_clean_tree.py -> 14 linhas 'ok' (3 testes), '✓ tudo verde'; tests/test_cepa_until.py, test_queue_rename.py, test_default_yes_inject.py tambem verdes"
+    status: complete
+    notes:
+      - "Desvio do teste vermelho declarado: usa --for 2h e nao 5m, porque a reserva minima (45min) recusa iniciar item em janela de 5m. A mudanca nao reduz a altitude; mesmo caminho de fim normal."
+      - "Fixture inclui .gitignore para .log/.estado.json, como no repo real (spec os mantem ignorados)."
+      - "test_default_yes_inject.py: correcao de isolamento, nao ligada ao criterio."
+      - "Escopo CS-2 (arquivos sujos do dono) e CS-3 (SIGINT/SIGTERM) nao fazem parte deste criterio; o commit ja usa --only nos caminhos do run."
+gap: []
