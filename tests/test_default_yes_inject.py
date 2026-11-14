@@ -125,8 +125,14 @@ def test_when_in_doubt_does_not_grant():
     # (A nonexistent root INSIDE the repo, on the contrary, resolves — the siblings
     # of CLAUDE_PLUGIN_ROOT are exactly where the plugins live, and that is how
     # the session-routine-guard finds it too. That is correct, not a leak.)
+    # The root sits two levels inside the private temp dir: `bases()` scans the
+    # root's parent AND grandparent, and with `<tmp>/<x>/common` the grandparent is
+    # the system temp folder itself, where any leftover copy of `common/` (a
+    # throwaway proof tree left by `mktemp -d`) makes the command resolve. That
+    # turned this test red on the 2026-11-14-0956 run without any code change.
     with tempfile.TemporaryDirectory() as outside:
-        rc, ctx = run("/common:doctor", plugin_root=Path(outside) / "common")
+        rc, ctx = run("/common:doctor",
+                      plugin_root=Path(outside) / "plugins" / "common")
         check("raiz fora do repo não injeta", rc == 0 and ctx == "",
               f"rc={rc} ctx={ctx[:120]!r}")
 
