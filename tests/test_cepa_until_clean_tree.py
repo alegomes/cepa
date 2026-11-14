@@ -132,6 +132,55 @@ def test_quota_end_also_commits_the_record():
               any(f.endswith(".jsonl") for f in files), str(files))
 
 
+def test_commit_leaves_the_owners_staged_file_out():
+    """A file the owner had staged before the run stays out of the run's commit
+    and stays staged after it. It is what `git commit --only` buys: a plain
+    `git commit` takes the whole index along (the proof of 2026-11-14 removed
+    `--only` and every other test stayed green)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _scenario(tmp)
+        (root / "alheio.txt").write_text("do dono\n", encoding="utf-8")
+        subprocess.run(["git", "add", "alheio.txt"], cwd=root, check=True)
+        binv = base.fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        # `--dirty-ok`: the launch refuses a dirty tree by default; the owner who
+        # runs with their own change staged passes this flag.
+        p, _calls = base.run_until(root, binv, plan, ["--for", "2h", "--dirty-ok"])
+        check("staged: o run termina", p.returncode == 0, p.stderr[-400:])
+        files = _git(root, "show", "--name-only", "--format=", "HEAD").split()
+        check("staged: o commit do run não leva o arquivo do dono",
+              "alheio.txt" not in files and any(f.endswith(".jsonl") for f in files),
+              str(files))
+        staged = _git(root, "diff", "--cached", "--name-only").split()
+        check("staged: o arquivo do dono continua em stage", staged == ["alheio.txt"],
+              str(staged))
+
+
+def test_failing_pre_commit_hook_is_respected():
+    """The run never skips the repo's hooks: a pre-commit that refuses leaves the
+    records without a commit and the run says git refused. The proof of 2026-11-14
+    added `--no-verify` and every other test stayed green."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _scenario(tmp)
+        hook = root / ".git" / "hooks" / "pre-commit"
+        hook.write_text("#!/bin/sh\necho 'recusado pelo hook' >&2\nexit 1\n",
+                        encoding="utf-8")
+        hook.chmod(0o755)
+        binv = base.fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        before = _git(root, "rev-parse", "HEAD").strip()
+        p, _calls = base.run_until(root, binv, plan, ["--for", "2h"])
+        check("hook: o run termina", p.returncode == 0, p.stderr[-400:])
+        check("hook: nenhum commit novo",
+              _git(root, "rev-parse", "HEAD").strip() == before)
+        st = _git(root, "status", "--porcelain", "--untracked-files=all")
+        check("hook: os registros ficam sem commit",
+              "plan.yaml" in st and ".jsonl" in st, st)
+        check("hook: o run avisa que o git recusou",
+              "git refused the commit of the run records" in p.stdout + p.stderr,
+              (p.stdout + p.stderr)[-600:])
+
+
 def main():
     print("cepa-until — árvore limpa no fim do run\n")
     for given_name, fn in sorted(globals().items()):
