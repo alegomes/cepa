@@ -3625,6 +3625,17 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                     screen.key_error(f"\"{raw.strip()}\" is not one of the options; "
                                        "to write an answer, type t first")
                     continue
+                if r == "v":
+                    # CS-6: an editor that fails or saves nothing writes nothing;
+                    # the same item's menu comes back, no answer, no "[y/N]".
+                    edit_status = {}
+                    typed = edit_in_editor(ident, question_text or route,
+                                           ad.get("title"), status=edit_status)
+                    if not typed:
+                        code = edit_status.get("rc")
+                        screen.key_error((f"the editor exited with code {code}; "
+                                          if code else "") + "nothing written in the editor")
+                        continue
                 break
             if r != "?":
                 break
@@ -3670,8 +3681,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             text = (("tarefa encerrada" if delivered else "descartado")
                     + f": {base}" + (f". {extra}" if extra else ""))
         elif r in ("t", "v"):
-            text = (edit_in_editor(ident, question_text or route, ad.get("title"))
-                    if r == "v" else
+            text = (typed if r == "v" else
                     str(question(screen.follow_up("Your answer, in one line (the "
                                                   "next run reads this): "))).strip())
             if text:
@@ -3712,14 +3722,16 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     return applied, for_later
 
 
-def edit_in_editor(ident, question_text, title=None):
+def edit_in_editor(ident, question_text, title=None, status=None):
     """CS-3 (docs/spec/campo-de-resposta-until.md): the `[v]` key. Opens the
     system editor (`$VISUAL`, then `$EDITOR`, then `vi`, git's order) on a temp
     file that starts with the item's id, title and question in `#` lines, and
     returns the saved text with the `#` lines dropped (like a git commit
     message) and the leading/trailing blank space stripped; line breaks inside
     are kept. Run through the shell so `code --wait` works. Returns "" when
-    the editor exits nonzero or nothing was written (CS-6 refines the message)."""
+    the editor exits nonzero or nothing was written; `status`, when given, gets
+    the editor's exit code under "rc" so the caller (CS-6, the menu `[v]`)
+    can say why nothing was written."""
     editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi"
     head = [f"# {ident}" + (f" - {title}" if title else "")]
     head += [f"# {l}" for l in str(question_text or "").splitlines()]
@@ -3729,6 +3741,8 @@ def edit_in_editor(ident, question_text, title=None):
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write("\n".join(head))
         rc = subprocess.run(["sh", "-c", editor + ' "$@"', editor, path]).returncode
+        if status is not None:
+            status["rc"] = rc
         if rc != 0:
             return ""
         with open(path, encoding="utf-8", errors="replace") as f:

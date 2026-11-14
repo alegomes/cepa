@@ -1305,6 +1305,64 @@ def test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer():
               repr(a1.get("evidence", ""))[-300:])
 
 
+def _cs6_run(editor_body):
+    """CS-6 helper: `v` at the menu with a fake editor whose body is
+    `editor_body`; then `q` at the next menu prompt that shows. Returns
+    (rc, out, queue bytes before, queue bytes after)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        editor = Path(tmp) / "fake-editor.sh"
+        editor.write_text(editor_body)
+        editor.chmod(0o755)
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("VISUAL", "EDITOR")}
+        env["EDITOR"] = str(editor)
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        before = Path(plan_of(root)).read_bytes()
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+             "--repo", str(root)], str(root), env=env, inputs=[
+                ("[v] write in the editor", "v"),
+                ("nothing written in the editor", "q")], timeout=60)
+        return rc, out, before, Path(plan_of(root)).read_bytes()
+
+
+def _cs6_check(out, before, after):
+    # Asking again prints only the input line (`▸`) under the same card, like
+    # the "is not one of the options" path; the card and chips stay above.
+    warn = out.find("nothing written in the editor")
+    tail = out[warn:] if warn >= 0 else ""
+    check("cs6: sem traceback", "Traceback" not in out, out[-800:])
+    check("cs6: o menu mostra [v] write in the editor",
+          "<[v] write in the editor>" in out, out[-800:])
+    check("cs6: o aviso 'nothing written in the editor' aparece",
+          warn >= 0, out[-800:])
+    check("cs6: o prompt do menu volta depois do aviso, e e o mesmo item "
+          "(nenhum cartao novo)",
+          "<nothing written in the editor>" in out and "▸" in tail
+          and "┌─" not in tail, tail[:500])
+    check("cs6: nenhum '[y/N]' foi perguntado", "[y/N]" not in out, out[-800:])
+    check("cs6: a sessao fecha com 0 respondidas e 1 para depois",
+          "answered now 0" in out and "for later 1" in out, tail[-400:])
+    check("cs6: queue.yaml fica byte a byte igual", before == after,
+          (len(before), len(after)))
+
+
+def test_cs6_editor_exiting_with_error_writes_nothing_and_returns_to_the_menu():
+    """CS-6 (docs/spec/campo-de-resposta-until.md): the editor exits with
+    code 1; the screen warns "nothing written in the editor", the menu of the
+    same item comes back and queue.yaml does not change."""
+    _cs6_check(*_cs6_run("#!/bin/sh\nexit 1\n")[1:])
+
+
+def test_cs6_editor_saved_empty_writes_nothing_and_returns_to_the_menu():
+    """CS-6: the editor saves the file empty; same outcome as the error."""
+    _cs6_check(*_cs6_run('#!/bin/sh\n: > "$1"\n')[1:])
+
+
 def _cs4_run(menu_key, follow_up_trigger, typed="v"):
     """CS-4 helper: the CS-3 fake editor, `menu_key` in the menu, then `typed` at
     the follow-up prompt that contains `follow_up_trigger`. Returns (rc, out,
