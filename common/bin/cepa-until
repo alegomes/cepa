@@ -2382,11 +2382,61 @@ def commit_run_records(repo, paths, message):
         return None, None
     code, output = git(["add", "--", *dirty], root)
     if code != 0:
-        return None, output
+        return None, output or f"`git add` exited {code} with no message"
     code, output = git(["commit", "-q", "-m", message, "--only", "--", *dirty], root)
     if code != 0:
-        return None, output
+        # A hook that exits 1 without printing leaves git silent too: without
+        # this text the caller's `elif error` saw "" and the run said nothing.
+        return None, output or (f"`git commit` exited {code} with no message "
+                                "(a pre-commit or commit-msg hook refused?)")
     return head_of(root), None
+
+
+def refusal_reason(error):
+    """The line of git's refusal that names the cause: the last non-empty one
+    (a hook prints its own lines before git's)."""
+    lines = [l.strip() for l in str(error).splitlines() if l.strip()]
+    return lines[-1] if lines else str(error)
+
+
+def owner_commit_command(repo, paths, message):
+    """The exact command the owner runs to make, by hand, the commit git refused
+    (spec `until-arvore-limpa`, CS-5): the same `git add` + `git commit --only`
+    over the same paths and with the same message as `commit_run_records`, with
+    `-C <clone>` so it works from any directory. Never `--no-verify`: the hook
+    that refused is the owner's to deal with, not the harness's to skip."""
+    root = main_root(repo)
+    rel = []
+    for path in paths:
+        if not path:
+            continue
+        try:
+            rel.append(str(Path(path).resolve().relative_to(root.resolve())))
+        except ValueError:
+            continue
+    quoted = " ".join(shlex.quote(r) for r in rel)
+    clone = shlex.quote(str(root))
+    return (f"git -C {clone} add -- {quoted} && git -C {clone} commit "
+            f"-m {shlex.quote(message)} --only -- {quoted}")
+
+
+def note_refused_commit(review, reason, command):
+    """Appends to the run's `.review.md` (creating it when the analysis did not
+    run) the git refusal and the command for the owner (CS-5). The review is the
+    file the owner opens after the run; the screen may already be gone. The
+    note goes at the end, after the `cepa-decisoes` block, which is found by
+    search and not by position."""
+    note = ("\n\n## The run's commit was refused by git\n\n"
+            f"Reason: {reason}\n\n"
+            "The queue marks and the run records stay in the clone without a "
+            "commit. Once the cause is dealt with, commit them with:\n\n"
+            f"```sh\n{command}\n```\n")
+    try:
+        previous = review.read_text(encoding="utf-8") if review.exists() else ""
+        review.write_text(previous.rstrip("\n") + note if previous else note.lstrip("\n"),
+                          encoding="utf-8")
+    except OSError:
+        pass
 
 
 # A run's own paths in the main clone, in both layouts: the queue file and the
@@ -5018,9 +5068,12 @@ def _main(argv=None):
                              "caminhos": all_paths}
             elif error:
                 print(f"cepa-until: git refused the commit that collects the loose "
-                      f"records of dead runs ({names}): "
-                      f"{error.splitlines()[-1] if error.splitlines() else error}",
+                      f"records of dead runs ({names}): {refusal_reason(error)}",
                       file=sys.stderr)
+                print("cepa-until: to commit by hand: " + owner_commit_command(
+                    repo, [root / p for p in all_paths],
+                    f"until: collect records of dead runs ({names})"),
+                    file=sys.stderr)
 
     dirt = dirty_tree(repo, live_run_ok=True)
     if a.dry and collected:
@@ -5412,10 +5465,11 @@ def _main(argv=None):
                 saved[sig] = signal.signal(sig, signal.SIG_IGN)
             except Exception:  # noqa: BLE001
                 pass
+        review_path = ledger.with_suffix(".review.md")
+        message = f"until {a.queue}/{run_id}: queue marks and run records"
         try:
             sha, error = commit_run_records(
-                repo, [run_queue_path, ledger, ledger.with_suffix(".review.md")],
-                f"until {a.queue}/{run_id}: queue marks and run records")
+                repo, [run_queue_path, ledger, review_path], message)
         finally:
             for sig, handler in saved.items():
                 signal.signal(sig, handler)
@@ -5424,9 +5478,16 @@ def _main(argv=None):
                                     "with the queue marks and the run records "
                                     "(not pushed)"))
         elif error:
+            # CS-5: no forcing (never `--no-verify`) and no change to the run's
+            # exit code; the reason and the exact command go on screen and into
+            # the `.review.md`, which joins the command's paths once written.
+            reason = refusal_reason(error)
+            command = owner_commit_command(
+                repo, [run_queue_path, ledger, review_path], message)
+            note_refused_commit(review_path, reason, command)
             print(f"   commit: git refused the commit of the run records "
-                  f"({error.splitlines()[-1] if error.splitlines() else error}); "
-                  "they stay in the clone without a commit")
+                  f"({reason}); they stay in the clone without a commit")
+            print(f"   to commit by hand: {command}")
 
     def interrupt(signum, _frame):
         name = signal.Signals(signum).name
