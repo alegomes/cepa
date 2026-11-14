@@ -2828,6 +2828,21 @@ class Panel:
                             else self.t.c("vermelho", f"✗ not recorded: {msg}")))
 
 
+# CS-8: the longest rewrite-failure reason the panel prints.
+FAILURE_REASON_MAX = 200
+
+
+def failure_reason(error):
+    """CS-8: the rewrite-failure reason as one safe line. It may be raw output of
+    `cepa-plan reword-route` (stderr or stdout, a traceback included), so terminal
+    control characters (ESC, BEL, NUL) are dropped, every whitespace run becomes one
+    space and the text is cut at FAILURE_REASON_MAX."""
+    text = "".join(" " if ch.isspace() else ch for ch in str(error or "")
+                   if ch.isspace() or unicodedata.category(ch) not in ("Cc", "Cf", "Cs"))
+    text = " ".join(text.split()) or "unknown reason"
+    return text if len(text) <= FAILURE_REASON_MAX else text[:FAILURE_REASON_MAX - 1] + "…"
+
+
 def later_names(for_later):
     """CS-8 (perguntas-da-largada-legiveis): the closing names what was left for
     later by its id only (`b1, b2`); the reason beside it is the generic label the
@@ -3069,7 +3084,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             new_route, error = rewrite(ad, shown_question)
             if new_route is None:
                 screen.warning(f"question not rewritten, the item stays for later "
-                               f"and the panel goes on: {error}")
+                               f"and the panel goes on: {failure_reason(error)}")
                 break
             ad = dict(ad, question=new_route["question"],
                       route_kind=new_route["route_kind"],

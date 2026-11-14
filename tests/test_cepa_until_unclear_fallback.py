@@ -129,6 +129,25 @@ def test_second_question_mark_says_so_and_moves_on():
     check("CS-8 second: b1 for later", later and later[0].startswith("b1"), later)
 
 
+def test_a_hostile_failure_reason_reaches_the_screen_as_one_safe_line():
+    """The reason may be raw output of `cepa-plan reword-route`: terminal control
+    sequences (clear screen, window title, NUL) never reach the screen raw, and a
+    long reason is cut to one bounded line (proof L4 of CS-8)."""
+    hostile = ("recusado\x1b[2J\x1b]0;pwned\x07\x00\r\nlinha nova " + "A" * 5000)
+    text, later, _, _ = _run(["?", ""], (None, hostile))
+    line = next((l for l in text.splitlines() if NOT_REWRITTEN in l), "")
+    check("CS-8 hostile: the line shows", bool(line), text)
+    check("CS-8 hostile: no control character on the screen",
+          not any(ch in text for ch in "\x1b\x07\x00\r"), repr(text[:400]))
+    flat = "".join(text.split())  # the panel wraps; joined, the A run is whole
+    check("CS-8 hostile: the reason shows, cut to a bounded length",
+          "recusado" in flat and "A" * 150 in flat and "A" * 300 not in flat,
+          flat[:400])
+    check("CS-8 hostile: the panel goes on",
+          NEXT_Q in text.split(NOT_REWRITTEN, 1)[-1]
+          and [x.split(":")[0] for x in later] == ["b1", "b2"], later)
+
+
 def test_the_closing_names_each_item_left_for_later():
     """The closing lists the items left for later by name, not only their count."""
     text, later, _, _ = _run(["?", ""], (None, "reader exited 1"))
