@@ -2539,16 +2539,57 @@ def _enable_line_editing():
     return _line_editing
 
 
+def _timed_input(prompt, wait):
+    """Writes `prompt`, then `input("")` once the owner starts typing within
+    `wait`; NoAnswer if nobody does. On a terminal with `readline`, the line
+    mode goes off before the prompt shows (a paste right after it would
+    still meet the canonical terminal) and stays off until `input()` returns: in canonical mode the select only wakes
+    on a whole line, and a pasted line past 1024 bytes never becomes one (the
+    end of a real run, CS-1); handing the terminal back to the line mode
+    between the select and `readline` loses the bytes still arriving. The
+    echo is off only during the wait (`readline` echoes the queued bytes
+    itself, and refuses to edit on a terminal that does not echo); the
+    terminal is restored before returning, whatever happens."""
+    saved = None
+    if _line_editing:
+        import termios
+        fd = sys.stdin.fileno()
+        try:
+            saved = termios.tcgetattr(fd)
+        except termios.error:
+            saved = None
+    if saved is None:
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+        if not select.select([sys.stdin], [], [], wait)[0]:
+            raise NoAnswer(f"no answer in {wait}s")
+        return input("")
+
+    def mode(echo):
+        attrs = termios.tcgetattr(fd)
+        attrs[3] &= ~termios.ICANON
+        attrs[3] = (attrs[3] | termios.ECHO) if echo else (attrs[3] & ~termios.ECHO)
+        attrs[6][termios.VMIN], attrs[6][termios.VTIME] = 1, 0
+        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+
+    try:
+        mode(echo=False)
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+        if not select.select([sys.stdin], [], [], wait)[0]:
+            raise NoAnswer(f"no answer in {wait}s")
+        mode(echo=True)
+        return input("")
+    finally:
+        termios.tcsetattr(fd, termios.TCSANOW, saved)
+
+
 def _read_line(prompt, output, wait):
     _enable_line_editing()
     while True:
         try:
             if wait is not None:
-                sys.stdout.write(prompt)
-                sys.stdout.flush()
-                if not select.select([sys.stdin], [], [], wait)[0]:
-                    raise NoAnswer(f"no answer in {wait}s")
-                return input("")
+                return _timed_input(prompt, wait)
             return input(prompt)
         except UnicodeDecodeError:
             output("       could not read that line (an accent arrived "

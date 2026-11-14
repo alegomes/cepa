@@ -1219,6 +1219,31 @@ def test_cs1_long_pasted_answer_with_accents_reaches_the_item():
               str(a1.get("evidence", ""))[-200:])
 
 
+def test_cs1_long_answer_also_arrives_on_the_timed_wait():
+    """CS-1, the path the end of a real run takes: the questions are asked with
+    `wait` (select on stdin, then `input("")`). During the select the terminal
+    is still canonical, so it cuts the pasted line at 1024 bytes before
+    `readline` takes over, and select never wakes. On a pty, `read_line` with
+    a wait must return the 1,500 bytes intact."""
+    long_text = _long_accented_answer()
+    child = ("import importlib.machinery, importlib.util, sys\n"
+             f"loader = importlib.machinery.SourceFileLoader('cu', {str(CEPA_UNTIL)!r})\n"
+             "spec = importlib.util.spec_from_loader('cu', loader)\n"
+             "m = importlib.util.module_from_spec(spec); loader.exec_module(m)\n"
+             "m.herdr_blocked = lambda: None; m.hc_answered = lambda: None\n"
+             "line = m.read_line('Anything to add? ', wait=30)\n"
+             "sys.stdout.write('\\nGOT %d %s\\n' % (len(line.encode()), "
+             "line.encode().hex()))\n")
+    with tempfile.TemporaryDirectory() as tmp:
+        rc, out = on_tty([sys.executable, "-c", child], tmp,
+                         inputs=[("Anything to add?", long_text)], timeout=60)
+    got = re.search(r"GOT (\d+) ([0-9a-f]*)", out)
+    check("cs1 (wait): read_line com espera devolve os 1.500 bytes intactos",
+          rc == 0 and got is not None
+          and bytes.fromhex(got.group(2)).decode() == long_text,
+          (rc, got.group(1) if got else None, out[-300:]))
+
+
 def test_loose_text_at_options_prompt_does_not_vanish():
     """In the same decidir the owner wrote the answer straight into the options
     prompt (`eu não faço ideia...`, `não`): it was not r/f/e/q, the item went
