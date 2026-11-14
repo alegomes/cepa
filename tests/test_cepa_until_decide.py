@@ -1251,6 +1251,55 @@ def test_cs1_long_answer_also_arrives_on_the_timed_wait():
           out.count(echoed) == 1, out.count(echoed))
 
 
+def test_cs1_timed_wait_turns_the_line_mode_off_before_the_prompt():
+    """CS-1, the order on the timed path: the terminal leaves the line mode
+    (and the echo) BEFORE the prompt shows, or a paste right after the
+    prompt still meets the canonical terminal and is cut at 1024 bytes. A
+    paste cannot land in that gap reliably, so this reads the terminal mode
+    at the instant the prompt is written, on a real pty, and checks the
+    terminal is handed back as it was when nobody answers."""
+    import termios
+    mod = load_module()
+    master, slave = pty.openpty()
+    saved_in, saved_out = sys.stdin, sys.stdout
+    seen = []
+
+    class Recorder:
+        def write(self, text):
+            lflag = termios.tcgetattr(slave)[3]
+            seen.append((text, bool(lflag & termios.ICANON),
+                         bool(lflag & termios.ECHO)))
+
+        def flush(self):
+            pass
+
+    before = termios.tcgetattr(slave)
+    sys.stdin = os.fdopen(slave, closefd=False)
+    sys.stdout = Recorder()
+    mod._line_editing = True
+    try:
+        try:
+            mod._timed_input("Anything to add? ", 0.2)
+            raised = False
+        except mod.NoAnswer:
+            raised = True
+    finally:
+        sys.stdin, sys.stdout = saved_in, saved_out
+    after = termios.tcgetattr(slave)
+    os.close(master)
+    os.close(slave)
+    prompt = [x for x in seen if "Anything to add" in x[0]]
+    check("cs1 (ordem): a pergunta sai com o modo de linha e o eco já desligados",
+          prompt and prompt[0][1:] == (False, False), seen)
+    # PENDIN ("retype pending input") is set by the macOS kernel itself when
+    # the line mode comes back on; it is not part of what the code restores.
+    pendin = getattr(termios, "PENDIN", 0)
+    after[3] &= ~pendin
+    before[3] &= ~pendin
+    check("cs1 (ordem): sem resposta, NoAnswer e o terminal volta como estava",
+          raised and after == before, (raised, before[3], after[3]))
+
+
 def test_loose_text_at_options_prompt_does_not_vanish():
     """In the same decidir the owner wrote the answer straight into the options
     prompt (`eu não faço ideia...`, `não`): it was not r/f/e/q, the item went
