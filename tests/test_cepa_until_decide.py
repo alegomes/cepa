@@ -1244,8 +1244,10 @@ def test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer():
                 ("Send the item back to the queue", "s")], timeout=60)
         a1 = items_of(root)["a1"]
         check("cs3: sem traceback", "Traceback" not in out, out[-800:])
+        # `on_tty` wraps a trigger in <...> only once the screen showed it;
+        # its timeout note repeats the bare text, so the bare text proves nothing.
         check("cs3: o menu mostra [v] write in the editor",
-              "[v] write in the editor" in out, out[-800:])
+              "<[v] write in the editor>" in out, out[-800:])
         check("cs3: o item volta para pending",
               rc == 0 and a1["status"] == "pending", (rc, a1.get("status"),
                                                       out[-800:]))
