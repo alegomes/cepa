@@ -1,0 +1,50 @@
+schema_version: 2
+card: until-arvore-limpa-CS-5
+verdict: proven               # proven | unproven | needs-human
+reviewed_at: 2026-11-14T14:50:00-03:00
+base_commit: 901136c
+head_commit: bd96753
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: commit_run_records, refusal_reason, owner_commit_command, note_refused_commit, commit_run_end refusal branch"
+      module: common
+      external_observable: true     # screen, .review.md, exit code and git history of the clone after the cli run (surface: cli)
+      substituted_by_double: null   # tests run the real cepa-until as a subprocess against a real temp git repo with a real pre-commit hook; only `claude` is faked (far boundary); git is wrapped by a pass-through spy that logs argv and execs the real git
+    - class: "common/bin/cepa-until :: CS-4 collect refusal branch (prints the owner command)"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+    - class: "tests/test_cepa_until_clean_tree.py (a5efa64: test_cs5_*)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway worktree /tmp/proof-cs5-x at bd96753 (removed at the end). Green first: 28 `ok` lines from the two test_cs5_* functions, FAILURES: [] (full `python3 tests/test_cepa_until_clean_tree.py` -> 'tudo verde'). Each perturbation applied by sed to common/bin/cepa-until, test_cs5_* run, file restored with `git checkout`."
+      results:
+        - "P1 note_refused_commit call removed (.review.md gets no reason/command) -> RED: 4 failures ('.review.md traz o motivo' and 'traz o mesmo comando', both hooks)"
+        - "P2 screen line 'to commit by hand: <cmd>' removed -> RED: 6 failures (screen command, .review.md same command, command free of --no-verify, both hooks)"
+        - "P3 `--no-verify` added to the `git commit` argv in commit_run_records -> RED: both hooks fail 'nenhum commit novo', 'nenhuma chamada a git traz --no-verify', reason line, screen command, .review.md checks. (The whole-file run aborts earlier in CS-3 with ProcessLookupError, so this was measured on the test_cs5_* functions alone.)"
+        - "P4 silent-hook fallback text removed (commit_run_records returns '' when git is silent) -> RED: 5 failures, all 'hook mudo' (screen reason, screen command, .review.md reason/command, no --no-verify in command). The 'hook com mensagem' test stays green, as it should: it does not reach the fallback."
+        - "P5 run exits 9 after printing the owner command (exit code differs from the no-hook run) -> RED: 'o código de saída é o mesmo do run sem o hook' 9 != 0, plus dependent checks"
+        - "Two earlier attempts at P4 produced a SyntaxError in the perturbed file (bad sed); discarded as invalid perturbations, redone cleanly. Not counted as evidence."
+        - "Not perturbed: owner_commit_command path/quoting (covered by the test that runs the printed command via sh -c from another cwd, then asserts empty git status, one commit over base, three files) and the `git add` fallback message (no test refuses `git add`; message text is not part of the CS-5 criterion)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; each changed CS-5 line that the criterion names (reason on screen, command on screen, both in .review.md, no --no-verify, silent-hook fallback, exit code unchanged) was perturbed and turned test_cs5_* RED (P1-P5). Uncovered and outside the criterion: the CS-4 collect-refusal print (see routing_reason)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only formats and prints a refusal message and appends it to the run's own .review.md; it parses no input from outside and no changed class is in an input-bearing module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "CS-5 criterion (hook exits 1: same exit code as without the hook, reason and exact `git commit` command on the final screen and in the .review.md, no new commit, no --no-verify in any git call) is load-bearing at the cli surface: each element turned test_cs5_* RED when broken, and the printed command is executed by the test as printed and leaves a clean tree with one commit. Non-vacuity: the hook-with-message and silent-hook scenarios really refuse the commit (HEAD unchanged, spy log shows `commit` was called). Gap noted, does not block: the CS-4 collect-refusal line (`cepa-until: to commit by hand: ...` on stderr in the launch path, bd96753 hunk near l.4492) has no test. CS-5 is about the run's own commit, so it is outside this criterion; the same helper (owner_commit_command) is exercised by the CS-5 tests, so the risk is only that the print itself is dropped or mis-formatted in that branch. The supervisor still runs the full build."
