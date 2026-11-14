@@ -24,16 +24,40 @@ items:
     finish <fila> <id> --status pending --human-pending "falta o acesso" --evidence
     "x"`, sem `--question`, sai com código diferente de 0, nomeia o que falta e
     deixa o `queue.yaml` igual; hoje sai com 0 e grava a rota.'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  claimed_by:
-    session_id: 83809f91-b9db-4dc8-ad22-9337c2065bbc
-    pid: 18419
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-cs-1-until-2026-11-13-0719
-    branch: until/2026-11-13-0719
-    started_at: '2026-11-13T10:20:21+00:00'
+  evidence: 'Commits a1891d2 (cepa-plan finish route_refusal + --route-kind owner-task|external-block|open-question,
+    route_kind stored and dropped by answer, validator rejects unknown kind; cepa-until
+    open_precondition_route passes external-block, fallback question ''Does this
+    exist now?'', default if-yes/if-no; plan-schema.yaml, drain-plan.md, board-flow
+    decide.md, docs/cepa-cli.md updated), c3d64f1 (tests), b4b9d2b (gate artifacts).
+    pair-reviewer OK-WITH-NOTES (notes applied: stale doc examples). completion-auditor
+    COMPLETE .claude/acceptance/perguntas-da-largada-legiveis-CS-1.yaml; proof-reviewer
+    PROVEN docs/proof/perguntas-da-largada-legiveis-CS-1.yaml (7 perturbations RED,
+    red at base ddd56cd). Tests run: test_cepa_plan_finish_route, test_common_drain_plan,
+    test_cepa_plan_finish_owner, test_cepa_plan_finish_decision, test_cepa_plan_answer_waiver,
+    test_cepa_until_decide, test_cepa_plan_single_track, test_commands_english,
+    test_commands_catalog, test_autonomy_yaml: all green. Full suite left to the
+    supervisor. Code is on the overnight branch. Left out: CS-12 (agent prompt in
+    cepa-until still does not teach --route-kind; agents get the refusal listing
+    what is missing). Orphan reservation of run 2026-11-13-0719 (interrupted by
+    SIGINT, no commits) recovered.'
+  head_commit: b4b9d2b87759b842080a46eab6d4f702dba3971c
+  decisions:
+  - texto: 'a recusa de rota sem tipo, pergunta ou efeitos não grava nada na fila,
+      nem o registro de recusas: o teste da especificação pede a fila igual'
+    commit: a1891d2c74ec07c32b298c9922b22642967e5f53
+  - texto: pergunta fechada é a que tem ponto de interrogação; a recomendação pode
+      vir depois dele
+    commit: a1891d2c74ec07c32b298c9922b22642967e5f53
+  - texto: a rota que a leitura prévia abre sozinha usa o tipo bloqueio externo,
+      a pergunta Does this exist now? quando a dela é recusada, e textos padrão
+      para o que o sim e o não fazem
+    commit: a1891d2c74ec07c32b298c9922b22642967e5f53
+  - texto: os exemplos dos comandos que ainda ensinavam a abrir rota sem os campos
+      novos foram atualizados junto
+    commit: a1891d2c74ec07c32b298c9922b22642967e5f53
 - id: CS-12
   title: o agente do item recebe a regra de como abrir rota
   why: 'posição dada pelo dono em 2026-11-13: logo depois do CS-1, porque sem a
@@ -42,9 +66,28 @@ items:
     o texto do pedido que o `cepa-until` monta para o agente de um item cita `--route-kind`,
     os três valores e a exigência de pergunta fechada com o efeito do sim e do não;
     hoje o texto não cita nenhum dos três.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 70759e1 (cepa-until CUT_RULE now teaches route opening: --route-kind
+    owner-task|external-block|open-question, closed --question with ?, --if-yes/--if-no,
+    refusal when any is missing; new tests/test_cepa_until_route_rule.py, red first
+    at base with 4 FAIL), ac8ef40 (proof survivor fixed: sentence ''If any of them
+    is missing, finish refuses and records nothing'' now asserted; ''ending in ?''
+    -> ''with a ?'', also resolves pair-reviewer ambiguity note), bec7133 (gate
+    artifacts). pair-reviewer OK-WITH-NOTES (ambiguity note applied; note on human_section_refusal
+    length/jargon limits not taught, left out as scope). completion-auditor COMPLETE
+    .claude/acceptance/perguntas-da-largada-legiveis-CS-12.yaml; proof-reviewer
+    PROVEN docs/proof/perguntas-da-largada-legiveis-CS-12.yaml (10 perturbations
+    RED, red at base b4b9d2b). Tests run: test_cepa_until_route_rule, test_cepa_until_cut_rule,
+    test_cepa_until_decide, test_cepa_plan_finish_route, test_common_drain_plan:
+    all green. Full suite left to the supervisor. Code is on the overnight branch.'
+  head_commit: bec713359d92d37d346803d3a1c20a096fbfb25d
+  decisions:
+  - texto: o texto ensinado ao agente fica dentro da mesma regra de fechamento que
+      todo item já recebe, em inglês como o resto do pedido, e não ensina os limites
+      de tamanho e jargão da pergunta (a recusa do finish já diz isso)
+    commit: ac8ef406d0225762636ea1c9d1824a58f18fb014
 - id: CS-2
   title: a rota gravada com tipo aparece no painel com o rótulo do tipo e com a
     pergunta do agente
@@ -53,9 +96,26 @@ items:
     `cepa-until decide <fila>` sobre um item com `route_kind: external-block` mostra
     o rótulo "Blocked outside" ao lado do texto da rota e a pergunta gravada; hoje
     o rótulo é sempre "Task".'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commit 9b94b93 (cepa-until decide: ROUTE_KIND_LABEL maps owner-task/external-block/open-question
+    to ''Task for you''/''Blocked outside''/''Open question'' beside the route;
+    no-kind route keeps ''Task''; delivered_leftovers passes question+route_kind;
+    cepa-plan queue deferred and status lines carry route_kind, status carries owner_question
+    as question). Test tests/test_cepa_until_route_kind_label.py: RED before fix
+    (6 FAIL), green after. Neighbors green: test_cepa_until_decide, test_cepa_plan_finish_route,
+    test_cepa_until_route_rule, test_cepa_plan_status_code_and_epic, test_common_queue_status,
+    test_cepa_plan_single_track, test_cepa_plan_finish_owner, test_cepa_until_launch_measure,
+    test_cepa_plan_reason_aliases. Gates commit d81d10e: acceptance COMPLETE (.claude/acceptance/perguntas-da-largada-legiveis-CS-2.yaml),
+    proof PROVEN (docs/proof/perguntas-da-largada-legiveis-CS-2.yaml, 7 perturbations
+    all RED). Left out: legend and ''done already?'' removal (CS-3). Code is on
+    the overnight branch until/2026-11-13-0731; full build left to the supervisor.'
+  head_commit: d81d10e85cc654df5abfb23d8dff9dbe63b6b716
+  decisions:
+  - texto: Itens já entregues que guardam uma tarefa para o dono passam a mostrar
+      a pergunta escrita pelo agente e o rótulo do tipo, não só os itens parados
+    commit: 9b94b93c0efe2d0390b4204368d935daa1d9ec06
 - id: CS-3
   title: nenhuma rota recebe a frase "done already?", e a legenda traz uma frase
     por tecla
@@ -65,9 +125,35 @@ items:
     pergunta não contém "done already" nem "the task closes and the item goes back",
     e a legenda tem uma linha para cada tecla do menu; hoje contém as duas frases
     e a legenda é uma linha só.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Retry 1 of 2. Cherry-picked ba5ea42+a7b2a0f from until/2026-11-13-0731-vermelho-CS-3
+    (now e5042db, 934b0ad) and gates 09171db (now 114ba77). Cause of the red run
+    build: tests/test_cepa_queue_ready_and_decide_queue.py::test_decide_d_drops
+    pinned the old one-line legend (''the item stays complete'', ''d = it no longer
+    applies''); fixed in 20f39f2 to assert the new per-key lines (''s = the task
+    closes; the delivered work stays as it is'', ''d = the task no longer applies''),
+    same guarantee (delivered: yes does not promise back-to-queue), not weakened.
+    git diff a7b2a0f 20f39f2 touches only that test file, so the behavior code proven
+    at a7b2a0f is identical: acceptance COMPLETE (.claude/acceptance/perguntas-da-largada-legiveis-CS-3.yaml)
+    and proof PROVEN (docs/proof/perguntas-da-largada-legiveis-CS-3.yaml, head_commit
+    a7b2a0f) still apply. Grepped tests/common/docs for other dependents of the
+    old wording: none. Ran green in foreground: test_cepa_queue_ready_and_decide_queue,
+    test_cepa_until_decide, test_cepa_until_legend_per_key, test_cepa_until_route_kind_label.
+    Full build left to the supervisor. Code is on the run branch until/2026-11-13-0731.'
+  decisions:
+  - texto: Uma rota sem pergunta escrita passa a perguntar 'Send this item back
+      to the queue for the next run to try again?' (a pergunta neutra do CS-5),
+      e a rota de item já entregue pergunta 'Is this task finished?'; o que cada
+      tecla faz fica só na legenda, uma linha por tecla
+    commit: ba5ea427e47c8316b410a6d5a3a8b55a3a4d93fc
+  - texto: Uma pendência sem pergunta escrita agora pergunta 'Is this task finished?'
+      quando o trabalho já foi entregue, e 'Send this item back to the queue for
+      the next run to try again?' nos outros casos; a legenda embaixo explica cada
+      tecla numa linha própria
+    commit: e5042dbf9a9f064d2b3555b6d3f4e56447999087
+  head_commit: 114ba77a6df8ffa6eefbf9ca0e33e386f00b62de
 - id: CS-4
   title: a largada reescreve a rota antiga como pergunta fechada e grava o resultado
     no item
@@ -79,9 +165,52 @@ items:
     dela o `queue.yaml` traz `route_kind` e `question` nesse item com `human_pending`,
     `status` e `evidence` iguais; hoje a tela mostra "done already?" e o item não
     muda.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 0256e6d (tests, red first: launch did not rewrite or record),
+    8e6c5ae (new cepa-plan reword-route: fills only missing route_kind/owner_question/owner_summary.se_sim/se_nao
+    on a pending|blocked item with human_pending; refuses via route_refusal + human_section_refusal;
+    never touches human_pending/status/evidence; plan-schema.yaml, docs/cepa-cli.md),
+    661ccdd (cepa-until: ROUTE_READER_PROMPT, parse_route, reader_command(item,
+    prompt), shared _run_reader/_read_in_parallel; is_old_route = deferred human_pending
+    with non-blank text missing question or route_kind; route readers run with the
+    pre-read, background on a terminal, inline without; first ask_at_launch skips
+    old routes except last-answer-no ones, asked at the end with only=late_ids;
+    ledger event rotas_reescritas; two CS-8 tests in test_cepa_until_decide.py now
+    give their route a written question+kind, as the spec decision requires), 77bbbf3
+    (pair-reviewer NEEDS-FIX: global _LIVE_READERS let one pool kill the other''s
+    readers, the cause of a flake; per-pool kill set + deterministic slow-reader
+    race test, red on pty before fix), 52a5bb9 (proof survivors: ledger event, parse_route,
+    is_old_route tests; dead queue re-read removed), 777eb92 (interrupted pool kills
+    its own readers test), f5e3328 (L4 adversarial found NUL/lone surrogate in reader
+    output crashing the launch: parse_route rejects non-str fields and Cc/Cf/Cs
+    chars; reword_route catches ValueError), 794573e (gate artifacts). pair-reviewer
+    NEEDS-FIX then fixed. completion-auditor COMPLETE .claude/acceptance/perguntas-da-largada-legiveis-CS-4.yaml
+    (audited at 77bbbf3; later commits only add rejection of hostile reader text,
+    tests and a dead-line removal). proof-reviewer PROVEN docs/proof/perguntas-da-largada-legiveis-CS-4.yaml
+    at f5e3328 (24+ perturbations RED, red at base 114ba77, L4 41 hostile reader
+    outputs: exit 0, queue parseable, route fields intact). Tests run green in foreground:
+    test_cepa_until_route_rewrite, test_cepa_until_decide, test_cepa_until_launch_measure,
+    test_cepa_until_route_kind_label, test_cepa_until_legend_per_key, test_cepa_plan_finish_route,
+    test_commands_catalog, test_cepa_help_layout, test_cepa_until_english_aliases,
+    test_cepa_until_adversarial, test_cepa_until_twg_version. Full suite left to
+    the supervisor. Code is on the run branch until/2026-11-13-0731. Left out: CS-5
+    (neutral question + ''Left for you'' when the reader times out), CS-6..10; a
+    question ending in Arabic ؟ or containing ZWJ emoji is not rewritten (falls
+    back).'
+  head_commit: 794573eb5bd78f2a78104d30c72b07a8bd769bfc
+  decisions:
+  - texto: 'a pergunta reescrita fica no campo de pergunta que a fila já tinha,
+      e a reescrita só preenche o que falta: se o agente já escreveu uma pergunta,
+      ela fica'
+    commit: 661ccdd377f1ac0fa050cf095593e04bb2e84d51
+  - texto: rota antiga cuja última resposta do dono foi não é reescrita e gravada,
+      mas continua só resumida na largada, sem ser perguntada de novo
+    commit: 661ccdd377f1ac0fa050cf095593e04bb2e84d51
+  - texto: a reescrita roda também sem terminal e mesmo quando nenhum item vai rodar;
+      sem terminal ela só grava, não pergunta nada
+    commit: 661ccdd377f1ac0fa050cf095593e04bb2e84d51
 - id: CS-5
   title: rota antiga que o leitor não reescreve no teto recebe uma pergunta neutra
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -89,9 +218,32 @@ items:
     do CS-4 com um leitor falso que não responde dentro do teto, a tela mostra "Send
     this item back to the queue for the next run to try again?" e o rótulo "Left
     for you"; hoje mostra "done already?".'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 5f8f172 (cepa-until decide(): a route with no route_kind is
+    labelled ''Left for you'' instead of ''Task left for you''/short ''Task''; the
+    neutral question ''Send this item back to the queue for the next run to try
+    again?'' already existed since CS-3 (e5042db); new test test_a_route_the_reader_does_not_rewrite_within_the_ceiling_gets_the_neutral_question
+    in tests/test_cepa_until_route_rewrite.py: fake reader mode ''hang'' sleeps
+    60s, CEPA_UNTIL_TETO_LEITURA=2, launch on pty; red first with 2 FAIL on the
+    label; test_cepa_until_decide.py and test_cepa_until_route_kind_label.py updated
+    to the new label), 459e609 (gate artifacts). pair-reviewer OK. completion-auditor
+    COMPLETE .claude/acceptance/perguntas-da-largada-legiveis-CS-5.yaml; proof-reviewer
+    PROVEN docs/proof/perguntas-da-largada-legiveis-CS-5.yaml (label revert -> 2
+    RED in route_rewrite, 2 in route_kind_label, 3 in decide; neutral question ->
+    ''done already?'' -> 3 RED). Tests run green in foreground: test_cepa_until_route_rewrite,
+    test_cepa_until_route_kind_label, test_cepa_until_legend_per_key, test_cepa_until_launch_measure,
+    test_guiding_thread. test_cepa_until_decide: 1 pre-existing failure ''Ctrl-C:
+    prints the interrupted line'', also failing at parent 794573e without this change
+    (not caused by CS-5, left out of scope). Full suite left to the supervisor.
+    Code is on the overnight branch.'
+  head_commit: 459e6096500890a96fd6cd968bd187a5a1a5b89e
+  decisions:
+  - texto: rota sem tipo passa a ter o rótulo Left for you em todo lugar onde aparece,
+      inclusive no painel do fim do run e em rota de item já entregue, não só na
+      largada
+    commit: 5f8f17211efd48ea195cfc05d568ea92c3f68e9d
 - id: CS-6
   title: a tecla `?` registra a pergunta mal escrita sem gravar resposta no item
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
