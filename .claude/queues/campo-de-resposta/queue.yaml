@@ -1,0 +1,87 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/campo-de-resposta-until.md (6 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-13
+
+schema_version: 2
+mode: single-track
+queue: campo-de-resposta
+source: docs/spec/campo-de-resposta-until.md (6 critérios de sucesso; ordem herdada
+  do texto)
+items:
+- id: CS-1
+  title: uma resposta colada com mais de 1024 bytes e acentos chega inteira ao item
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pty,
+    `cepa-until decide` recebe `s` no menu e, em "Anything to add", 1.500 bytes
+    com "ção" atravessando o byte 1024, seguidos de Enter. O `evidence` do item
+    no `queue.yaml` termina com os 1.500 bytes intactos. Hoje o Enter é engolido
+    ou a leitura falha com "an accent arrived half-way", e o texto não chega.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: setas e Home/End editam a linha em qualquer campo de texto
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pty,
+    em "Anything to add", o dono digita `abd`, seta esquerda, `c`, Home, `>`, End,
+    `!` e Enter. O `evidence` do item termina com `>abcd!`. O mesmo roteiro em "Your
+    choice" da leitura prévia grava `>abcd!` como escolha. Hoje o texto gravado
+    traz as sequências de escape das setas (`\x1b[D`, `\x1b[H`, `\x1b[F`) misturadas
+    às letras.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: a tecla `[v]` do menu abre o editor e o texto salvo vira a resposta, com
+    as quebras de linha
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com `EDITOR`
+    apontando para um editor falso que grava "linha 1\nlinha 2", num pty o menu
+    mostra `[v] write in the editor`, o dono aperta `v` e responde `s` em "Send
+    the item back to the queue". O `evidence` do item contém "linha 1\nlinha 2"
+    com a quebra e o item volta para `pending`. Hoje `v` cai em "is not one of the
+    options".'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: digitar só `v` em "Anything to add" ou "Why" abre o editor
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com o
+    mesmo editor falso, num pty o dono aperta `s` no menu e digita `v` e Enter em
+    "Anything to add". O `evidence` termina com "linha 1\nlinha 2", não com "v".
+    O mesmo vale para `d` seguido de `v` em "Why". Hoje grava a letra `v` literal.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: uma linha com byte ilegível é mostrada com `?` e o dono confirma, sem perder
+    o texto
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pty,
+    depois de `t`, o dono envia `n\xcb\xc3\xa3o vira checklist` em "Your answer".
+    A tela mostra "n?ão vira checklist" e pergunta "Use this text? [Y/n]". Com Enter,
+    o `evidence` do item contém "n?ão vira checklist". Com `n`, o campo é pedido
+    de novo. Hoje a tela diz "could not read that line" e o texto se perde.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: editor salvo vazio ou fechado com erro não grava nada
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com `EDITOR`
+    apontando para um editor falso que sai com código 1 (e outro que salva o arquivo
+    vazio), num pty o dono aperta `v`. A tela avisa "nothing written in the editor",
+    volta ao menu do mesmo item, e o `queue.yaml` não muda. Hoje a tecla `v` não
+    existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
