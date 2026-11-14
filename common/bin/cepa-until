@@ -4642,10 +4642,51 @@ def _main(argv=None):
     # runs in its own session and doesn't receive the signal.
     in_flight = {}
     closed = [False]
+    # `final_state` is set once the run's final state is recorded (the end
+    # analysis and the owner's questions come after it); `committed` makes the
+    # run's commit happen once, whichever way out reaches it first.
+    final_state = [False]
+    committed = [False]
+
+    def commit_run_end():
+        """The run's commit (CS-1), on every way out: the normal end, the quota
+        end, and Ctrl+C / SIGTERM (CS-3), which before this left the queue marks
+        and the `.jsonl` with `run_interrompido` loose in the clone. SIGTERM and
+        SIGINT are ignored while git runs: a second signal raising SystemExit
+        inside `subprocess.run` would kill `git commit` halfway and could leave
+        `.git/index.lock` behind."""
+        if committed[0]:
+            return
+        committed[0] = True
+        saved = {}
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            try:
+                saved[sig] = signal.signal(sig, signal.SIG_IGN)
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            sha, error = commit_run_records(
+                repo, [run_queue_path, ledger, ledger.with_suffix(".review.md")],
+                f"until {a.queue}/{run_id}: queue marks and run records")
+        finally:
+            for sig, handler in saved.items():
+                signal.signal(sig, handler)
+        if sha:
+            print(SCREEN.c("cinza", f"   commit: {sha[:7]} on the clone's branch, "
+                                    "with the queue marks and the run records "
+                                    "(not pushed)"))
+        elif error:
+            print(f"   commit: git refused the commit of the run records "
+                  f"({error.splitlines()[-1] if error.splitlines() else error}); "
+                  "they stay in the clone without a commit")
 
     def interrupt(signum, _frame):
         name = signal.Signals(signum).name
         if closed[0]:
+            # After the final state (analysis, end questions) the signal only
+            # ends the run, but what the run wrote still goes into its commit.
+            if final_state[0]:
+                commit_run_end()
             raise SystemExit(128 + signum)
         closed[0] = True
         flight = dict(in_flight) or None
@@ -4671,6 +4712,7 @@ def _main(argv=None):
         print(f"  to run the missing build and leave the run ready to "
               f"land: cepa-until close-dead {a.queue}/{run_id}",
               file=sys.stderr)
+        commit_run_end()
         raise SystemExit(128 + signum)
 
     signal.signal(signal.SIGTERM, interrupt)
@@ -5691,6 +5733,7 @@ def _main(argv=None):
     # Final state recorded: a signal from here on (during the analysis) only ends the run,
     # without switching the state to `interrompido`.
     closed[0] = True
+    final_state[0] = True
     if costs:
         br = lambda v: f"{v:.2f}".replace(".", ",")  # noqa: E731
         print(f"\n   cost: US$ {br(cost)} (sum of `total_cost_usd` over "
@@ -5714,17 +5757,7 @@ def _main(argv=None):
         # The run's last step (CS-1), after the end questions (which write answers
         # into the queue through `cepa-plan answer`) and after the `.review.md`:
         # committing earlier would leave the queue dirty again.
-        sha, error = commit_run_records(
-            repo, [run_queue_path, ledger, ledger.with_suffix(".review.md")],
-            f"until {a.queue}/{run_id}: queue marks and run records")
-        if sha:
-            print(SCREEN.c("cinza", f"   commit: {sha[:7]} on the clone's branch, "
-                                    "with the queue marks and the run records "
-                                    "(not pushed)"))
-        elif error:
-            print(f"   commit: git refused the commit of the run records "
-                  f"({error.splitlines()[-1] if error.splitlines() else error}); "
-                  "they stay in the clone without a commit")
+        commit_run_end()
         return result
 
     # The analysis spends quota: stopping on the quota and then analyzing hits the
