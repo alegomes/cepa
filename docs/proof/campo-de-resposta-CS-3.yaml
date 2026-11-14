@@ -1,7 +1,7 @@
 schema_version: 2
 card: campo-de-resposta-CS-3
-verdict: needs-human
-reviewed_at: 2026-11-14T16:00:00-03:00
+verdict: proven
+reviewed_at: 2026-11-14T17:00:00-03:00
 base_commit: 42c86da
 head_commit: b757d23
 issue_type: Feature
@@ -13,7 +13,11 @@ history:
     reason: "P7 sobreviveu: o filtro que descarta as linhas `#` do arquivo do editor podia ser removido sem nenhum teste ficar vermelho (o editor falso sobrescrevia o cabeçalho). Commit do artefato: 4062262."
   - round: 2
     head_commit: b757d23
-    note: "b757d23 acrescenta test_cs3_the_editor_header_lines_do_not_reach_the_answer (editor falso que anexa a resposta sem apagar o cabeçalho). Todas as perturbações P1-P7 foram refeitas do zero neste round."
+    verdict: needs-human
+    note: "b757d23 acrescenta test_cs3_the_editor_header_lines_do_not_reach_the_answer (editor falso que anexa a resposta sem apagar o cabeçalho). Perturbações P1-P7 refeitas do zero e todas RED; faltou só o nível L4 (skipped). Commit do artefato: 272bf43."
+  - round: 3
+    head_commit: b757d23
+    note: "Mesmo código do round 2; só o L4 foi executado (10 entradas hostis na tecla [v] numa pty). L1-L3 e P1-P7 do round 2 permanecem válidos (código idêntico)."
 scope:
   changed_classes:
     - class: "common/bin/cepa-until::decide (chip [v], conjunto valid, ramo r in (t, v), repasse de --multiline) e ::edit_in_editor"
@@ -53,17 +57,34 @@ levels:
     uncovered_lines: []
     run: "sem coverage ligado; a linha que descarta `#` (gap do round 1) agora fica vermelha quando quebrada (P7 nfail=1), logo é alcançada e exercida por asserção."
   l4_adversarial_input:
-    status: skipped
+    status: clean
     findings: []
-    run: "não gerei entradas adversariais: o teste é um editor falso de caminho feliz. Saída com erro e arquivo vazio são o CS-6 e `v` digitado nos campos é o CS-4, fora do CS-3. Observação: uma resposta cuja primeira linha começa com `#` é descartada pelo filtro (desenho declarado, como mensagem de commit do git); nenhum teste cobre isso."
+    run: >-
+      `git worktree add --detach /tmp/proof-cs3-r3 b757d23`; runner Python em primeiro plano (`python3 -I l4run.py <caso>...`) que reaproveita build_repo, fake_claude(BLOCKS_WITH_QUESTION), run_until e on_tty de tests/test_cepa_until_decide.py e dirige `cepa-until decide fila/<run>` numa pty real, com `$EDITOR` apontando para um editor falso que ANEXA o conteúdo hostil ao arquivo temporário (o cabeçalho `#` fica). Entradas `v` e, quando há texto, `s`. Para cada caso conferi: sem "Traceback" na tela, rc 0, todos os .yaml sob programs/plans recarregam com yaml.safe_load, e o item ou foi gravado com o texto preservado ou ficou intacto com mensagem. Worktree removido ao fim.
+      Resultados (10 casos, 0 achados):
+      (1) byte \xcb no meio da palavra -> gravado; o byte vira U+FFFD (`errors="replace"`), o resto do texto e a segunda linha ficam; item `pending`.
+      (2) CRLF -> gravado "linha 1\nlinha 2", sem \r (splitlines).
+      (3) 7 linhas em branco entre linhas -> gravado com as quebras e as linhas em branco preservadas.
+      (4) ~5.000 bytes, 80 linhas com acento (ç, ã, ú) -> gravado inteiro (evidência de 6.421 caracteres incluindo o texto anterior), item `pending`, yaml recarrega.
+      (5) só linhas `#` -> texto vazio: item continua `blocked` com a evidência original, sem Traceback e sem prompt de envio (mensagem de vazio é CS-6).
+      (6) resposta terminando em `?` -> cepa-plan recusa ("resposta recusada para a1: o texto é uma pergunta, não uma resposta; nada foi gravado" + a pergunta da rota + dica de --force); item intacto, fila intacta, sem crash.
+      (7) texto hostil a YAML (`: isso`, `- item`, aspas simples e duplas, `| pipe`, `{a: [b}`, `& *ref !tag %dir @at` e crase) -> gravado literal; yaml recarrega; só a indentação inicial de cada linha é achatada pelo `" ".join(l.split())` do --multiline.
+      (8) primeira linha começando com `|` -> gravado literal, yaml recarrega.
+      (9) `$EDITOR` entre aspas apontando para script em diretório com espaço no caminho -> editor abre, gravado "com espaco\nok", `pending`.
+      (10) `$EDITOR="<script> --flag"` (divisão de shell no estilo git) -> script recebe `--flag` como $1, gravado "com flag\nok", `pending`.
+      Caso extra, sem entrar na contagem: `$EDITOR` SEM aspas com espaço no caminho (`.../fake editor.sh`) é dividido pelo shell, o editor não abre, o item fica `blocked` com evidência intacta e a tela mostra o erro do shell, sem Traceback (igual ao git; mensagem melhor é CS-6).
+      Observações sem veredito (não são achados do CS-3): o byte inválido é trocado por U+FFFD em vez de recusado; uma linha da resposta que comece com `#` é descartada pelo filtro (desenho declarado, como mensagem de commit do git) e nenhum teste cobre isso.
   bugfix_regression_red_at_base:
     status: n/a
     run: "Feature (CS-3 de docs/spec/campo-de-resposta-until.md); a prova é a perturbação P1-P7 RED."
 routing_reason: >-
-  Todas as sete perturbações (chip, tecla aceita, ramo do v, repasse de --multiline,
-  ramo multilinha do cepa-plan, checagem de saída do editor e filtro do cabeçalho)
-  agora deixam o teste vermelho, e o dublê é só o editor falso, fronteira externa.
-  O sobrevivente do round 1 (P7) está fechado. Falta apenas o nível de entradas
-  adversariais, que não foi rodado (skipped), e por regra isso impede PROVEN.
-  Recomendação default: aceitar, porque os casos de saída com erro e arquivo vazio
-  são do CS-6 e o `v` nos campos é do CS-4.
+  Sete perturbações (chip, tecla aceita, ramo do v, repasse de --multiline, ramo
+  multilinha do cepa-plan, checagem de saída do editor e filtro do cabeçalho)
+  deixam o teste vermelho, e o dublê é só o editor falso, fronteira externa. No
+  round 3 o nível de entradas adversariais rodou com 10 casos hostis na tecla [v]
+  (byte inválido, CRLF, linhas em branco, 5.000 bytes com acento, só `#`, pergunta
+  terminada em `?`, texto hostil a YAML, `|` na primeira linha, caminho com
+  espaço, `$EDITOR` com flag): nenhum Traceback, a fila sempre recarrega, e cada
+  caso ou gravou o texto preservado ou deixou o item intacto com mensagem (a
+  recusa do `?` apareceu como mensagem). Todos os níveis passaram com evidência
+  executada: PROVEN.
