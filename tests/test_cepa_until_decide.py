@@ -131,7 +131,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
           plain_text)
     check("menu em chips dentro do cartão, com a recomendada marcada",
           "│  [s] yes · [n] no (recommended) · [t] I write the answer · "
-          "[d] discard the item" in plain_text
+          "[v] write in the editor\n│  [d] discard the item" in plain_text
           and "[e] technical detail" in plain_text, plain_text)
     check("o prompt fica dentro do cartão e o cartão fecha",
           ANSI.sub("", prompts[1]) == "│  ▸ " and plain_text.count("└─") == 3,
@@ -1217,6 +1217,41 @@ def test_cs1_long_pasted_answer_with_accents_reaches_the_item():
         check("cs1: a resposta na evidência termina com os 1.500 bytes intactos",
               f"{long_text}. O item voltou de" in str(a1.get("evidence", "")),
               str(a1.get("evidence", ""))[-200:])
+
+
+def test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer():
+    """CS-3 (docs/spec/campo-de-resposta-until.md): the menu has
+    `[v] write in the editor`, with the same destination as `[t]`. With
+    `EDITOR` pointing at a fake editor that saves "linha 1\nlinha 2", `v` then
+    `s` at "Send the item back to the queue" puts the two lines, with the line
+    break, in the item's evidence and sends it back to `pending`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        editor = Path(tmp) / "fake-editor.sh"
+        editor.write_text('#!/bin/sh\nprintf \'linha 1\\nlinha 2\' > "$1"\n')
+        editor.chmod(0o755)
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("VISUAL", "EDITOR")}
+        env["EDITOR"] = str(editor)
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+             "--repo", str(root)], str(root), env=env, inputs=[
+                ("[v] write in the editor", "v"),
+                ("Send the item back to the queue", "s")], timeout=60)
+        a1 = items_of(root)["a1"]
+        check("cs3: sem traceback", "Traceback" not in out, out[-800:])
+        check("cs3: o menu mostra [v] write in the editor",
+              "[v] write in the editor" in out, out[-800:])
+        check("cs3: o item volta para pending",
+              rc == 0 and a1["status"] == "pending", (rc, a1.get("status"),
+                                                      out[-800:]))
+        check("cs3: a evidência traz as duas linhas com a quebra",
+              "linha 1\nlinha 2" in str(a1.get("evidence", "")),
+              repr(a1.get("evidence", ""))[-300:])
 
 
 def test_cs1_long_answer_also_arrives_on_the_timed_wait():

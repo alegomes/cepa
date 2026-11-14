@@ -245,6 +245,7 @@ import socket
 import select
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -2861,7 +2862,8 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 [sys.executable, str(CEPA_PLAN), "answer", queue, ident,
                  "--answer", text, "--repo", str(repo)]
                 + (["--keep"] if keep else [])
-                + (["--drop"] if drop else []),
+                + (["--drop"] if drop else [])
+                + (["--multiline"] if "\n" in text else []),
                 capture_output=True, text=True, timeout=60)
             return p.returncode, (p.stdout or p.stderr).strip()
     if land is None:
@@ -2974,13 +2976,14 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # 2026-11-02 the owner said sim to "descarto este pedido?" (WEGO-2463)
         # and the item went back to `pending`, for the next run to redo.
         chips = [("s", "yes"), ("n", "no"), ("t", "I write the answer"),
+                 ("v", "write in the editor"),
                  ("d", "the task no longer applies" if delivered
                   else "discard the item")]
         if show:
             chips.append(("e", "technical detail"))
         chips += [("Enter", "later"), ("q", "quit")]
         prompt = screen.menu(chips, recommended_letter(d))
-        valid = {"s", "n", "t", "d", "", "q"} | ({"e"} if show else set())
+        valid = {"s", "n", "t", "v", "d", "", "q"} | ({"e"} if show else set())
         while True:
             raw = str(question(prompt))
             r = raw.strip().lower()
@@ -3006,9 +3009,11 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 "Why, in one line? [Enter skips] "))).strip()
             text = (("tarefa encerrada" if delivered else "descartado")
                     + f": {base}" + (f". {extra}" if extra else ""))
-        elif r == "t":
-            text = str(question(screen.follow_up("Your answer, in one line (the "
-                                               "next run reads this): "))).strip()
+        elif r in ("t", "v"):
+            text = (edit_in_editor(ident, question_text or route, ad.get("title"))
+                    if r == "v" else
+                    str(question(screen.follow_up("Your answer, in one line (the "
+                                                  "next run reads this): "))).strip())
             if text:
                 give_back = is_yes(question(screen.follow_up(
                     "Send the item back to the queue with that answer? [y/N] ")))
@@ -3043,6 +3048,37 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                             f"({NO_OWNER_REASON[reason_alias(ad['reason'])]})"
                             for ad in without_owner], applied, for_later, back)
     return applied, for_later
+
+
+def edit_in_editor(ident, question_text, title=None):
+    """CS-3 (docs/spec/campo-de-resposta-until.md): the `[v]` key. Opens the
+    system editor (`$VISUAL`, then `$EDITOR`, then `vi`, git's order) on a temp
+    file that starts with the item's id, title and question in `#` lines, and
+    returns the saved text with the `#` lines dropped (like a git commit
+    message) and the leading/trailing blank space stripped; line breaks inside
+    are kept. Run through the shell so `code --wait` works. Returns "" when
+    the editor exits nonzero or nothing was written (CS-6 refines the message)."""
+    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi"
+    head = [f"# {ident}" + (f" - {title}" if title else "")]
+    head += [f"# {l}" for l in str(question_text or "").splitlines()]
+    head += ["# Write your answer below. Lines starting with # are ignored.", "", ""]
+    fd, path = tempfile.mkstemp(prefix="cepa-answer-", suffix=".txt")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("\n".join(head))
+        rc = subprocess.run(["sh", "-c", editor + ' "$@"', editor, path]).returncode
+        if rc != 0:
+            return ""
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = [l for l in f.read().splitlines() if not l.startswith("#")]
+        return "\n".join(lines).strip()
+    except OSError:
+        return ""
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
 
 
 def pending_as_text(queue, run_id, item_states, deferred, analysis, output=print):
