@@ -1305,10 +1305,12 @@ def test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer():
               repr(a1.get("evidence", ""))[-300:])
 
 
-def _cs6_run(editor_body):
+def _cs6_run(editor_body, after_warning=(("nothing written in the editor", "q"),),
+             with_a1=False):
     """CS-6 helper: `v` at the menu with a fake editor whose body is
-    `editor_body`; then `q` at the next menu prompt that shows. Returns
-    (rc, out, queue bytes before, queue bytes after)."""
+    `editor_body`; then `after_warning` (default: `q` at the next menu prompt
+    that shows). Returns (rc, out, queue bytes before, queue bytes after), plus
+    the item a1 when `with_a1`."""
     with tempfile.TemporaryDirectory() as tmp:
         editor = Path(tmp) / "fake-editor.sh"
         editor.write_text(editor_body)
@@ -1325,9 +1327,9 @@ def _cs6_run(editor_body):
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), env=env, inputs=[
-                ("[v] write in the editor", "v"),
-                ("nothing written in the editor", "q")], timeout=60)
-        return rc, out, before, Path(plan_of(root)).read_bytes()
+                ("[v] write in the editor", "v"), *after_warning], timeout=60)
+        result = (rc, out, before, Path(plan_of(root)).read_bytes())
+        return result + (items_of(root)["a1"],) if with_a1 else result
 
 
 def _cs6_check(out, before, after):
@@ -1361,6 +1363,24 @@ def test_cs6_editor_exiting_with_error_writes_nothing_and_returns_to_the_menu():
 def test_cs6_editor_saved_empty_writes_nothing_and_returns_to_the_menu():
     """CS-6: the editor saves the file empty; same outcome as the error."""
     _cs6_check(*_cs6_run('#!/bin/sh\n: > "$1"\n')[1:])
+
+
+def test_cs6_the_menu_that_comes_back_still_answers_the_same_item():
+    """CS-6: the prompt that comes back after the warning is the live menu of
+    the same item. After the failed editor, `t`, a typed answer and `s` land
+    the answer in a1 and send it back to `pending`."""
+    rc, out, _, _, a1 = _cs6_run("#!/bin/sh\nexit 1\n", after_warning=(
+        ("nothing written in the editor", "t"),
+        ("Your answer", "depois do editor"),
+        ("Send the item back to the queue", "s")), with_a1=True)
+    check("cs6 mesmo item: sem traceback", "Traceback" not in out, out[-800:])
+    check("cs6 mesmo item: o aviso veio antes da resposta",
+          0 <= out.find("nothing written in the editor") < out.find("Your answer"),
+          out[-800:])
+    check("cs6 mesmo item: a resposta escrita depois do aviso chega ao a1",
+          rc == 0 and a1["status"] == "pending"
+          and "depois do editor" in str(a1.get("evidence", "")),
+          (rc, a1.get("status"), repr(a1.get("evidence", ""))[-300:]))
 
 
 def _cs4_run(menu_key, follow_up_trigger, typed="v"):
