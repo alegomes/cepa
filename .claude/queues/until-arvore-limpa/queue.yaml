@@ -1,0 +1,113 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/until-arvore-limpa.md (9 critérios de sucesso; ordem herdada do texto)
+# Escrito em: (data não informada)
+
+schema_version: 2
+mode: single-track
+queue: until-arvore-limpa
+source: docs/spec/until-arvore-limpa.md (9 critérios de sucesso; ordem herdada do
+  texto)
+items:
+- id: CS-1
+  title: Ao terminar normalmente, o run deixa a main sem nenhum arquivo dele fora
+    do git
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    de teste com uma fila de um item, `cepa-until <fila> --for 5m` termina e `git
+    status --porcelain` do clone lista a `queue.yaml`, o `.jsonl` e o `.review.md`
+    do run; o teste exige a saída vazia e um commit novo no topo que contém exatamente
+    esses três caminhos.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: O commit do run não leva arquivos que o dono deixou sujos na main
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com um
+    `notas.txt` modificado e um `rascunho.md` em stage no clone antes do run, ao
+    fim do run o commit novo não contém nenhum dos dois, e `git status --porcelain`
+    ainda mostra os dois exatamente como estavam (um modificado, outro em stage).'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: Ctrl+C, SIGTERM e limite de uso também terminam com o commit
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: mandar
+    SIGINT ao supervisor no meio do segundo item (e, num segundo caso, simular a
+    parada por limite de uso) e, depois que o processo sai, exigir `git status --porcelain`
+    sem nenhum caminho de `.claude/queues/<fila>/` e o `.jsonl` com `run_interrompido`
+    dentro do último commit.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: A largada recolhe registros soltos de runs mortos de qualquer fila
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com um
+    `.jsonl` e uma `queue.yaml` modificada da fila `outra` cujo supervisor morreu
+    (pid inexistente), lançar `cepa-until <fila>`; o teste exige um commit de recolha
+    com os caminhos de `outra` antes do primeiro item, e que a largada não recuse
+    por árvore suja.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: Se o git recusar o commit, o run avisa com o motivo e o comando, sem forçar
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com um
+    hook `pre-commit` que sai com 1 no repo de teste, o run termina com o código
+    de saída que teria sem o hook, a tela final e o `.review.md` trazem a linha
+    do motivo e o comando `git commit` exato para o dono, nenhum commit novo é criado
+    e nenhuma chamada a `git` traz `--no-verify`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: Com a main no meio de um merge ou rebase, o run não commita e avisa
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com `.git/MERGE_HEAD`
+    presente no clone ao fim do run, nenhum commit é criado, o merge em andamento
+    continua intacto (`git status` ainda diz "All conflicts fixed but you are still
+    merging" ou o estado original) e a tela final diz por que não commitou.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: '`decide`, `close-dead` e `land` commitam o que escreveram na fila e nos
+    registros'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: depois
+    de um run terminado e commitado, `cepa-until decide` respondendo uma pergunta
+    deixa `git status --porcelain` vazio e um commit novo com a `queue.yaml`; o
+    mesmo para `close-dead` sobre um run morto (commit com o `.jsonl` e a fila)
+    e para `land --yes` (nenhum caminho de `.claude/queues/` sujo depois).'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-8
+  title: O run não faz push
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    de teste com um remoto bare, ao fim do run o `HEAD` do remoto é o mesmo de antes
+    da largada, enquanto o clone tem o commit novo.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-9
+  title: A `queue.yaml.bak` não aparece no `git status`
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: `cepa-plan
+    --from-spec` regravando uma fila existente cria `queue.yaml.bak`, e `git status
+    --porcelain --untracked-files=all` não lista esse arquivo.'
+  status: pending
+  blocked_by: []
+  human_pending: null
