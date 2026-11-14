@@ -1251,6 +1251,47 @@ def test_cs1_long_answer_also_arrives_on_the_timed_wait():
           out.count(echoed) == 1, out.count(echoed))
 
 
+# CS-2: `abd`, left arrow, `c`, Home, `>`, End, `!` (Enter is added by on_tty).
+CS2_KEYS = "abd\x1b[Dc\x1b[H>\x1b[F!"
+
+
+def test_cs2_arrows_and_home_end_edit_anything_to_add():
+    """CS-2 (docs/spec/campo-de-resposta-until.md): on a pty, in "Anything to
+    add", the owner types `abd`, left arrow, `c`, Home, `>`, End, `!` and
+    Enter. The item's evidence ends with `>abcd!`, not with the escape
+    sequences of the arrows mixed into the letters."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+             "--repo", str(root)], str(root), inputs=[
+                ("[t] I write the answer", "s"),
+                ("Anything to add", CS2_KEYS)], timeout=60)
+        evidence = str(items_of(root)["a1"].get("evidence", ""))
+        check("cs2: a evidência termina com '>abcd!'",
+              rc == 0 and ">abcd!. O item voltou de" in evidence,
+              (rc, evidence[-200:], out[-600:]))
+        check("cs2: nenhuma sequência de escape das setas na evidência",
+              "\x1b" not in evidence and "[D" not in evidence, evidence[-200:])
+
+
+def test_cs2_arrows_and_home_end_edit_your_choice_of_the_pre_read():
+    """CS-2, the same keys in "Your choice" of the pre-read (the timed path:
+    select on stdin, then `input("")`): the choice recorded is `>abcd!`."""
+    out, events, reqs = _pref_launch(
+        tty_inputs=[("Your choice, in one line", CS2_KEYS)])
+    start = [e for e in events if e.get("evento") == "item_start" and e.get("id") == "x1"]
+    choice = (start[0].get("preferencia") or {}).get("escolha") if start else None
+    check("cs2 (pre-read): a escolha gravada é '>abcd!'",
+          choice == ">abcd!", (choice, out[-800:]))
+    check("cs2 (pre-read): o prompt de x1 leva '>abcd!'",
+          ">abcd!" in reqs.get("x1", ""), str(reqs)[-400:])
+
+
 def test_cs1_timed_wait_turns_the_line_mode_off_before_the_prompt():
     """CS-1, the order on the timed path: the terminal leaves the line mode
     (and the echo) BEFORE the prompt shows, or a paste right after the

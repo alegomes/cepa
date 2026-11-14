@@ -2524,7 +2524,9 @@ def _enable_line_editing():
     its Enter, or the cut fell inside an accent and became "an accent
     arrived half-way" (C1-47, wego-faturamento-backend, 2026-11-13; CS-1 of
     docs/spec/campo-de-resposta-until.md). `readline` reads the line itself,
-    with no such ceiling. Outside a terminal (tests, `nohup`, agent) nothing
+    with no such ceiling, and it is also what makes the arrows and Home/End
+    edit the line instead of landing in the answer as `\x1b[D` (CS-2).
+    Outside a terminal (tests, `nohup`, agent) nothing
     changes. The history stays in memory: nothing is written to disk, so an
     answer does not leak between repos."""
     global _line_editing
