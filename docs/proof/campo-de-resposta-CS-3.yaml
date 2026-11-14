@@ -1,17 +1,25 @@
 schema_version: 2
 card: campo-de-resposta-CS-3
-verdict: unproven
-reviewed_at: 2026-11-14T15:00:00-03:00
+verdict: needs-human
+reviewed_at: 2026-11-14T16:00:00-03:00
 base_commit: 42c86da
-head_commit: 21e715a
+head_commit: b757d23
 issue_type: Feature
 repo_kind: harness            # repo Python (cepa), não Quarkus. Superfície = `cepa-until decide` num pseudo-terminal
+history:
+  - round: 1
+    head_commit: 21e715a
+    verdict: unproven
+    reason: "P7 sobreviveu: o filtro que descarta as linhas `#` do arquivo do editor podia ser removido sem nenhum teste ficar vermelho (o editor falso sobrescrevia o cabeçalho). Commit do artefato: 4062262."
+  - round: 2
+    head_commit: b757d23
+    note: "b757d23 acrescenta test_cs3_the_editor_header_lines_do_not_reach_the_answer (editor falso que anexa a resposta sem apagar o cabeçalho). Todas as perturbações P1-P7 foram refeitas do zero neste round."
 scope:
   changed_classes:
-    - class: "common/bin/cepa-until::decide (chip [v], conjunto valid, ramo r in (t, v), flag --multiline) e ::edit_in_editor"
+    - class: "common/bin/cepa-until::decide (chip [v], conjunto valid, ramo r in (t, v), repasse de --multiline) e ::edit_in_editor"
       module: cli
       external_observable: true
-      substituted_by_double: null   # o teste roda o cepa-until e o cepa-plan reais em pty; o único dublê é o editor falso ($EDITOR), que é a fronteira externa
+      substituted_by_double: null   # cepa-until e cepa-plan reais em pty; o único dublê é o editor falso ($EDITOR), fronteira externa
     - class: "common/bin/cepa-plan::cmd_answer (--multiline, preserva quebras de linha)"
       module: cli
       external_observable: true
@@ -23,43 +31,39 @@ levels:
     pit:
       status: n/a
       results:
-        - "sem pitest: repo Python; perturbação manual em worktree descartável detached em 21e715a (/tmp/proof-cs3), removido ao fim."
+        - "sem pitest: repo Python; perturbação manual em worktree descartável detached em b757d23 (/tmp/proof-cs3-r2), removido ao fim."
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "GREEN de partida em 21e715a: test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer + test_decide_on_terminal_draws_one_card_per_question -> nfail=0."
-        - "(P1) chip (\"v\", \"write in the editor\") removido -> RED (4 falhas: menu sem [v], item fica blocked, sem evidência, e o teste do cartão com os chips)."
-        - "(P2) \"v\" retirado do conjunto `valid` -> RED (2 falhas: item fica blocked, sem evidência)."
-        - "(P3) `if r == \"v\"` trocado por `if False` (v cai no ramo de uma linha de t) -> RED (2 falhas)."
-        - "(P4) `--multiline` deixa de ser passado pelo cepa-until -> RED (evidência achatada em 'linha 1 linha 2')."
-        - "(P5) ramo `if multiline:` do cepa-plan cmd_answer trocado por `if False` -> RED (evidência achatada)."
-        - "(P6) `if rc != 0` trocado por `if rc == 0` em edit_in_editor -> RED (2 falhas)."
-        - "(P7) SOBREVIVEU: o filtro que descarta as linhas `#` (`if not l.startswith(\"#\")` trocado por `if True`) -> continua GREEN (nfail=0). O editor falso do teste sobrescreve o arquivo inteiro com `printf '...' > \"$1\"`, então o cabeçalho com id, título e pergunta nunca está no arquivo salvo e nenhum teste exercita a remoção. Um editor real, que mantém o cabeçalho, gravaria id/título/pergunta dentro da resposta do dono."
+        - "GREEN de partida em b757d23 (3 testes, cada check impresso 'ok'): nfail=0."
+        - "(P1) chip (\"v\", \"write in the editor\") removido -> RED (5 falhas: menu sem [v], item não volta, sem evidência, e o teste do cartão com chips)."
+        - "(P2) \"v\" retirado do conjunto `valid` -> RED (3 falhas)."
+        - "(P3) `if r == \"v\" else` trocado por `if False else` (v cai no ramo de uma linha de t) -> RED (3 falhas)."
+        - "(P4) `--multiline` deixa de ser passado pelo cepa-until -> RED (2 falhas: evidência achatada)."
+        - "(P5) ramo `if multiline:` do cepa-plan cmd_answer trocado por `if False:` -> RED (2 falhas: evidência achatada)."
+        - "(P6) `if rc != 0` trocado por `if rc == 0` em edit_in_editor -> RED (3 falhas)."
+        - "(P7) filtro de linhas `#` (`if not l.startswith(\"#\")` trocado por `if True`) -> RED (1 falha: 'nenhuma linha # do editor chega à evidência'). Era o sobrevivente do round 1; agora o teste novo o prende."
         - "Não perturbados (amostra, registrado): `.strip()` final de edit_in_editor, ordem VISUAL/EDITOR/vi, o ramo `except OSError`, o `finally` de unlink do arquivo temporário."
       run: >-
-        `git worktree add --detach /tmp/proof-cs3 21e715a`; em cada perturbação (sed em /tmp/proof-cs3, restaurada por `git -C /tmp/proof-cs3 checkout -- <arquivo>`):
-        `cd /tmp/proof-cs3 && timeout 400 python3 -c "import sys; sys.path.insert(0,'tests'); import test_cepa_until_decide as t; t.test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer(); t.test_decide_on_terminal_draws_one_card_per_question(); print('nfail=',len(t.FAILURES), t.FAILURES)"`.
-        Resultados: baseline nfail=0; P1 nfail=4; P2 nfail=2; P3 nfail=2; P4 nfail=1; P5 nfail=1; P6 nfail=2; P7 nfail=0. Só os testes alvo, em primeiro plano (timeout do pty = 60s dentro do teste, nenhuma RED foi só por travamento: as falhas citam item blocked/evidência achatada, rc 0 ou -9 conforme o caso); suíte completa não rodada.
+        `git worktree add --detach /tmp/proof-cs3-r2 b757d23`; runner fora do pytest (porque `check()` só acumula em FAILURES e um check falho PASSA sob pytest): carrega tests/test_cepa_until_decide.py por importlib, chama test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer, test_cs3_the_editor_header_lines_do_not_reach_the_answer e test_decide_on_terminal_draws_one_card_per_question, imprime `nfail=` e FAILURES.
+        Cada perturbação por sed no worktree, restaurada por `git checkout` do arquivo. Resultados: baseline nfail=0; P1 nfail=5; P2 nfail=3; P3 nfail=3; P4 nfail=2; P5 nfail=2; P6 nfail=3; P7 nfail=1.
+        Só os testes alvo, em primeiro plano; suíte completa não rodada.
   l2_coverage:
-    status: gap
-    uncovered_lines:
-      - "common/bin/cepa-until::edit_in_editor, linha que descarta as linhas `#` (cabeçalho); alcançada pelo teste mas sem asserção que dependa dela (P7 verde)"
-    run: "sem coverage ligado; apurado por perturbação (P7 sobreviveu)."
+    status: pass
+    uncovered_lines: []
+    run: "sem coverage ligado; a linha que descarta `#` (gap do round 1) agora fica vermelha quando quebrada (P7 nfail=1), logo é alcançada e exercida por asserção."
   l4_adversarial_input:
     status: skipped
     findings: []
-    run: "não gerei entradas adversariais novas neste round: o teste é um editor falso de caminho feliz; saída com erro e arquivo vazio são o CS-6, e `v` digitado nos campos é o CS-4, ambos fora do CS-3."
+    run: "não gerei entradas adversariais: o teste é um editor falso de caminho feliz. Saída com erro e arquivo vazio são o CS-6 e `v` digitado nos campos é o CS-4, fora do CS-3. Observação: uma resposta cuja primeira linha começa com `#` é descartada pelo filtro (desenho declarado, como mensagem de commit do git); nenhum teste cobre isso."
   bugfix_regression_red_at_base:
     status: n/a
-    run: "Feature (CS-3 de docs/spec/campo-de-resposta-until.md); a prova é a perturbação P1-P6 RED."
+    run: "Feature (CS-3 de docs/spec/campo-de-resposta-until.md); a prova é a perturbação P1-P7 RED."
 routing_reason: >-
-  O comportamento pedido pelo CS-3 está preso: tirando o chip, a tecla, o
-  repasse de --multiline, o ramo multilinha do cepa-plan ou a checagem de
-  saída do editor, o teste fica vermelho. Mas uma linha que o diff criou, a
-  que remove do texto salvo o cabeçalho `#` (id, título e pergunta do item),
-  pode ser quebrada sem nenhum teste reclamar, porque o editor falso apaga o
-  cabeçalho ao gravar. Um editor de verdade (vi, code --wait) mantém o
-  cabeçalho, e a resposta do dono sairia com a pergunta dentro. Fechar:
-  um segundo editor falso que acrescenta a linha de resposta ao arquivo sem
-  apagar o cabeçalho e o teste conferir que a evidência não contém o id nem
-  a pergunta.
+  Todas as sete perturbações (chip, tecla aceita, ramo do v, repasse de --multiline,
+  ramo multilinha do cepa-plan, checagem de saída do editor e filtro do cabeçalho)
+  agora deixam o teste vermelho, e o dublê é só o editor falso, fronteira externa.
+  O sobrevivente do round 1 (P7) está fechado. Falta apenas o nível de entradas
+  adversariais, que não foi rodado (skipped), e por regra isso impede PROVEN.
+  Recomendação default: aceitar, porque os casos de saída com erro e arquivo vazio
+  são do CS-6 e o `v` nos campos é do CS-4.
