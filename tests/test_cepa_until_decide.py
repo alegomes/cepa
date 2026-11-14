@@ -143,7 +143,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
           and "for later 1" in plain_text
           and "cepa-until decide fila/run1" in plain_text, plain_text)
     triggers = ("Land now? [y/N/q] ", "[t] I write the answer",
-                "Anything to add, in one line? [Enter skips] ")
+                "Anything to add, in one line? [Enter skips, v opens the editor] ")
     all_ = raw + "\n".join(prompts)
     check("as frases que o pty responde ficam inteiras, sem cor no meio",
           all(g in all_ for g in triggers), all_)
@@ -1254,6 +1254,58 @@ def test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer():
         check("cs3: a evidência traz as duas linhas com a quebra",
               "linha 1\nlinha 2" in str(a1.get("evidence", "")),
               repr(a1.get("evidence", ""))[-300:])
+
+
+def _cs4_run(menu_key, follow_up_trigger):
+    """CS-4 helper: the CS-3 fake editor, `menu_key` in the menu, then `v` at
+    the follow-up prompt that contains `follow_up_trigger`. Returns (rc, out,
+    a1)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        editor = Path(tmp) / "fake-editor.sh"
+        editor.write_text('#!/bin/sh\nprintf \'linha 1\\nlinha 2\' > "$1"\n')
+        editor.chmod(0o755)
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("VISUAL", "EDITOR")}
+        env["EDITOR"] = str(editor)
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+             "--repo", str(root)], str(root), env=env, inputs=[
+                ("[t] I write the answer", menu_key),
+                (follow_up_trigger, "v")], timeout=60)
+        return rc, out, items_of(root)["a1"]
+
+
+def test_cs4_v_in_anything_to_add_opens_the_editor():
+    """CS-4 (docs/spec/campo-de-resposta-until.md): typing only `v` at
+    "Anything to add" opens the editor; the saved text, with its line break,
+    is the comment, not the letter."""
+    rc, out, a1 = _cs4_run("s", "Anything to add")
+    ev = str(a1.get("evidence", ""))
+    check("cs4: sem traceback", "Traceback" not in out, out[-800:])
+    check("cs4: o item volta para pending",
+          rc == 0 and a1["status"] == "pending", (rc, a1.get("status"), out[-600:]))
+    check("cs4: a evidência traz as duas linhas com a quebra",
+          "linha 1\nlinha 2" in ev, repr(ev)[-300:])
+    check("cs4: a letra v não é gravada como comentário",
+          ". v." not in ev and not ev.rstrip(". ").endswith(". v"), repr(ev)[-300:])
+
+
+def test_cs4_v_in_why_opens_the_editor():
+    """CS-4: same at "Why, in one line?" after `d` (drop)."""
+    rc, out, a1 = _cs4_run("d", "Why")
+    ev = str(a1.get("evidence", ""))
+    check("cs4 why: sem traceback", "Traceback" not in out, out[-800:])
+    check("cs4 why: o item foi descartado",
+          rc == 0 and a1["status"] == "dropped", (rc, a1.get("status"), out[-600:]))
+    check("cs4 why: a evidência traz as duas linhas com a quebra",
+          "linha 1\nlinha 2" in ev, repr(ev)[-300:])
+    check("cs4 why: a letra v não é gravada como motivo",
+          ". v." not in ev and not ev.rstrip(". ").endswith(". v"), repr(ev)[-300:])
 
 
 def test_cs3_the_editor_header_lines_do_not_reach_the_answer():

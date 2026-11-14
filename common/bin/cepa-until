@@ -3006,7 +3006,9 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             drop = True
             base = question_text or route or "the item"
             extra = str(question(screen.follow_up(
-                "Why, in one line? [Enter skips] "))).strip()
+                "Why, in one line? [Enter skips, v opens the editor] "))).strip()
+            if extra.lower() == "v":
+                extra = edit_in_editor(ident, question_text or route, ad.get("title"))
             text = (("tarefa encerrada" if delivered else "descartado")
                     + f": {base}" + (f". {extra}" if extra else ""))
         elif r in ("t", "v"):
@@ -3024,7 +3026,9 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             # written question: the owner wanted to say something beyond yes/no and
             # the next run reads what he wrote (10/15).
             extra = str(question(screen.follow_up(
-                "Anything to add, in one line? [Enter skips] "))).strip()
+                "Anything to add, in one line? [Enter skips, v opens the editor] "))).strip()
+            if extra.lower() == "v":
+                extra = edit_in_editor(ident, question_text or route, ad.get("title"))
             text = (("sim" if give_back else "não") + f": {base}"
                      + (f" Instrução: {instruction}" if give_back and instruction
                         else "")
