@@ -1,0 +1,54 @@
+schema_version: 1
+card: campo-de-resposta-CS-5
+status: complete
+audited_at: 2026-11-14T00:00:00-03:00
+covers: 05d5dcd..819c2b8
+criteria:
+  - id: AC1
+    text: "CS-5: num pty, depois de `t`, o dono envia `n\\xcb\\xc3\\xa3o vira checklist` em 'Your answer'. A tela mostra 'n?ão vira checklist' e pergunta 'Use this text? [Y/n]'. Com Enter, o evidence do item contém 'n?ão vira checklist' (docs/spec/campo-de-resposta-until.md)"
+    altitude: cli
+    surface: "`cepa-until decide` real num pty: tecla `t`, bytes crus em 'Your answer', tela, Enter na confirmação; estado e evidence do item no queue.yaml"
+    demonstrated_by:
+      test: "tests/test_cepa_until_decide.py::test_cs5_unreadable_byte_is_shown_as_question_mark_and_enter_keeps_it"
+      layer: "subprocess real de cepa-until decide num pty (on_tty), lendo a tela e o queue.yaml"
+      evidence: verified
+      run: |
+        timeout 400 python3 /tmp/cs5run.py test_cs5_unreadable_byte_is_shown_as_question_mark_and_enter_keeps_it test_cs5_n_at_the_confirmation_asks_the_field_again
+          ok  cs5: sem traceback
+          ok  cs5: a tela mostra o texto lido com ?
+          ok  cs5: e pergunta Use this text? [Y/n]
+          ok  cs5: com Enter o evidence contém n?ão vira checklist
+        FAILURES [] (HEAD 819c2b8; 4 checagens, N>0; rodado via script porque check() só acumula em FAILURES)
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "CS-5: com `n` na confirmação, o campo é pedido de novo"
+    altitude: cli
+    surface: "`cepa-until decide` real num pty: `n` em 'Use this text? [Y/n]', segunda resposta em 'Your answer', evidence no queue.yaml"
+    demonstrated_by:
+      test: "tests/test_cepa_until_decide.py::test_cs5_n_at_the_confirmation_asks_the_field_again"
+      layer: "subprocess real de cepa-until decide num pty, contando as perguntas na tela e lendo o queue.yaml"
+      evidence: verified
+      run: |
+        mesmo comando acima
+          ok  cs5 n: sem traceback
+          ok  cs5 n: o campo é pedido de novo
+          ok  cs5 n: a resposta digitada de novo é a aplicada, não a recusada
+        FAILURES [] (HEAD 819c2b8; 3 checagens, N>0)
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "Estado e migração: test_invalid_byte_on_terminal_does_not_crash_decide passa a exigir o comportamento do CS-5"
+    altitude: cli
+    surface: "tests/test_cepa_until_decide.py"
+    demonstrated_by:
+      test: "tests/test_cepa_until_decide.py (teste antigo substituído pelos dois testes cs5; helper _cs5_run)"
+      layer: "diff do commit 819c2b8; os dois testes acima exigem o comportamento novo"
+      evidence: verified
+      run: |
+        git show 819c2b8 -- tests: o teste antigo (que exigia 'could not read that line') foi removido e trocado pelos dois testes CS-5; grep no tests/ não acha mais o nome antigo
+    verdict: complete
+    gap: null
+notes:
+  - "Teste vermelho (antes de 819c2b8) não rodado por mim; suíte inteira não rodada, por instrução do supervisor."
+  - "Implementação: common/bin/cepa-until, stdin reconfigurado com surrogateescape, cada byte ilegível vira '?', mostra 'read as:' e 'Use this text? [Y/n]'; Enter mantém, n/no/nao/não pede de novo."
