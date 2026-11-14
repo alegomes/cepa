@@ -1256,6 +1256,40 @@ def test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer():
               repr(a1.get("evidence", ""))[-300:])
 
 
+def test_cs3_the_editor_header_lines_do_not_reach_the_answer():
+    """CS-3, the "Decided without asking" of the spec: the file opened in the
+    editor carries the item's id, title and question in `#` lines, and those
+    are dropped on save, like a git commit message. A real editor (`vi`,
+    `code --wait`) keeps the header; this fake one appends the answer under
+    it, so the header must not land in the item's evidence."""
+    with tempfile.TemporaryDirectory() as tmp:
+        editor = Path(tmp) / "keeps-header.sh"
+        editor.write_text('#!/bin/sh\nprintf \'resposta do dono\\nsegunda\' >> "$1"\n')
+        editor.chmod(0o755)
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("VISUAL", "EDITOR")}
+        env["EDITOR"] = str(editor)
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+             "--repo", str(root)], str(root), env=env, inputs=[
+                ("[v] write in the editor", "v"),
+                ("Send the item back to the queue", "s")], timeout=60)
+        a1 = items_of(root)["a1"]
+        ev = str(a1.get("evidence", ""))
+        check("cs3 cabeçalho: o item volta para pending com a resposta",
+              rc == 0 and a1["status"] == "pending"
+              and "resposta do dono\nsegunda" in ev,
+              (rc, a1.get("status"), repr(ev)[-300:], out[-600:]))
+        check("cs3 cabeçalho: nenhuma linha # do editor chega à evidência",
+              "# a1" not in ev and "Lines starting with #" not in ev,
+              repr(ev)[-400:])
+
+
 def test_cs1_long_answer_also_arrives_on_the_timed_wait():
     """CS-1, the path the end of a real run takes: the questions are asked with
     `wait` (select on stdin, then `input("")`). During the select the terminal
