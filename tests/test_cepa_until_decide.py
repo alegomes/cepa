@@ -1360,7 +1360,8 @@ def test_cs6_editor_exiting_with_error_writes_nothing_and_returns_to_the_menu():
     rc, out, before, after = _cs6_run("#!/bin/sh\nexit 1\n")
     _cs6_check(out, before, after)
     check("cs6: o aviso diz o codigo de saida do editor",
-          "the editor exited with code 1; nothing written in the editor" in out,
+          # on_tty wraps the consumed trigger in <...>
+          "the editor exited with code 1; <nothing written in the editor>" in out,
           out[-800:])
 
 
