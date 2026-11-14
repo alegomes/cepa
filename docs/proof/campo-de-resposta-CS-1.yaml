@@ -1,0 +1,58 @@
+schema_version: 2
+card: campo-de-resposta-CS-1
+verdict: proven
+reviewed_at: 2026-11-14T13:10:00-03:00
+base_commit: 4f1c14f
+head_commit: e506def
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa), não Quarkus. Superfície = cepa-until lendo a linha do dono em pseudo-terminal
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until (_enable_line_editing: importa readline uma vez quando stdin é tty)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes rodam o cepa-until real em pty
+    - class: "common/bin/cepa-until (_timed_input: ICANON+ECHO off antes do prompt, select, termios restaurado no finally, depois input(''))"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbação manual em worktree descartável detached em e506def (/tmp/proof-cs1d), removido ao fim. Nenhum código de produção mudou entre 6d89030 e e506def (só teste)."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida em e506def: 4 testes alvo -> nfail=0 (~3,5s)."
+        - "(P5) escrita do prompt movida para ANTES de ligar ICANON/ECHO off -> RED: 'cs1 (ordem): a pergunta sai com o modo de linha e o eco já desligados' FAIL [('Anything to add? ', True, True)]. O sobrevivente da rodada anterior está morto."
+        - "(P4) restauro do termios no finally trocado por `pass` -> RED: 2 FAIL ('cs1 (wait): o texto colado aparece na tela uma vez' e 'cs1 (ordem): sem resposta, NoAnswer e o terminal volta como estava')."
+        - "(P3) só ICANON off (ECHO mantido ligado) -> RED por travamento: timeout 120 rc=124 (baseline 3,5s). Não passa; sem mensagem de falha própria."
+        - "(P2) só ECHO off (ICANON mantido ligado) -> RED: 3 FAIL (read_line com espera 1.500 bytes; texto colado uma vez; ordem: modo de linha ainda ligado)."
+        - "(P1) `import readline` trocado por `pass` -> RED por travamento: timeout 120 rc=124. Não passa; sem mensagem de falha própria."
+        - "Ramos defensivos (tcgetattr falha -> saved=None; ImportError/OSError/ValueError em _enable_line_editing): fallback ao comportamento antigo, não comportamento novo; nenhum teste os alcança (assumed, sem ferramenta de cobertura)."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs1d e506def`; em cada perturbação (sed em caminho absoluto, restaurada por `git -C /tmp/proof-cs1d checkout -- common/bin/cepa-until`):
+        `timeout 120 python3 -c "import sys; sys.path.insert(0,'tests'); import test_cepa_until_decide as t; [getattr(t,n)() for n in ['test_cs1_long_pasted_answer_with_accents_reaches_the_item','test_cs1_long_answer_also_arrives_on_the_timed_wait','test_cs1_timed_wait_turns_the_line_mode_off_before_the_prompt','test_read_line_raises_when_nobody_types']]; print('nfail=',len(t.FAILURES)); sys.exit(1 if t.FAILURES else 0)"`.
+        Resultados: baseline nfail=0; P5 nfail=1; P4 nfail=2; P2 nfail=3; P3 rc=124; P1 rc=124. Só testes alvo, em primeiro plano; suíte completa não rodada.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem coverage ligado; as linhas alteradas de _timed_input (ajuste de modo, ordem prompt/modo, restauro) são cada uma pinada por uma perturbação RED (P2-P5), e o import por P1. Ramos defensivos (fallback) registrados acima como fora de escopo, não são comportamento novo."
+  l4_adversarial_input:
+    status: clean
+    findings: []
+    run: "os testes cs1 são adversariais: resposta de 1.500 bytes com acentos atravessando o byte 1024 (MAX_CANON do macOS), no decide e no read_line com espera; sem achado extra. Não gerei entradas novas."
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-1 de docs/spec/campo-de-resposta-until.md); a prova é a perturbação RED."
+routing_reason: >-
+  O commit e506def acrescentou só um teste, que grava o modo do terminal no
+  instante em que o prompt é escrito e confere que o terminal volta como
+  estava. Com ele, P5 (prompt antes do ajuste de modo), que sobrevivia em
+  6d89030, agora fica RED. P1 a P4 continuam RED (P1 e P3 por travamento
+  sob timeout, não por asserção). Nenhuma perturbação sobrevive; os dois
+  trechos alterados são o código real em pty, sem dublê.
