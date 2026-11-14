@@ -77,7 +77,7 @@ def test_hung_reader_leaves_the_item_for_later_and_the_panel_goes_on():
         check("CS-8 pty: the closing counts both for later",
               "answered now 0" in closing and "for later 2" in closing, closing)
         check("CS-8 pty: the closing lists b1 under for later",
-              "b1" in closing, closing)
+              "○ b1, b2" in closing, closing)
 
 
 def _run(replies, rewrite):
@@ -133,8 +133,8 @@ def test_the_closing_names_each_item_left_for_later():
     """The closing lists the items left for later by name, not only their count."""
     text, later, _, _ = _run(["?", ""], (None, "reader exited 1"))
     closing = text.rsplit("Answered now", 1)[-1]
-    check("CS-8 closing: both items named", "b1" in closing and "b2" in closing,
-          closing)
+    check("CS-8 closing: both items named on the for-later line",
+          "○ b1, b2" in closing, closing)
 
 
 if __name__ == "__main__":
