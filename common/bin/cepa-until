@@ -2334,6 +2334,49 @@ def cmd_land(argv):
     return 0
 
 
+def commit_run_records(repo, paths, message):
+    """Commits, on the main clone's branch, the run's own paths that git sees as
+    changed or new (spec `until-arvore-limpa`, CS-1): the queue marks, the
+    `.jsonl` record and the `.review.md`. Before it, every run left those three
+    loose in the clone and the owner cleaned up by hand, mixed with their own
+    changes and the next run's.
+
+    Only the listed paths go in: `git add` of those paths and `git commit --only`
+    on them, so whatever else the owner has staged or modified stays as it was.
+    Never `--no-verify`. Returns (sha, None) on a commit, (None, None) when there
+    was nothing to commit, (None, reason) when git refused."""
+    root = main_root(repo)
+    rel = []
+    for path in paths:
+        if not path:
+            continue
+        try:
+            rel.append(str(Path(path).resolve().relative_to(root.resolve())))
+        except ValueError:
+            continue  # outside the clone: not this commit's business
+    if not rel:
+        return None, None
+    try:
+        st = subprocess.run(["git", "status", "--porcelain", "-z",
+                             "--untracked-files=all", "--", *rel],
+                            cwd=str(root), capture_output=True, text=True,
+                            timeout=120)
+    except (OSError, subprocess.SubprocessError) as e:
+        return None, str(e)
+    if st.returncode != 0:
+        return None, (st.stderr or "").strip() or f"git status exited {st.returncode}"
+    dirty = [entry[3:] for entry in st.stdout.split("\0") if len(entry) > 3]
+    if not dirty:
+        return None, None
+    code, output = git(["add", "--", *dirty], root)
+    if code != 0:
+        return None, output
+    code, output = git(["commit", "-q", "-m", message, "--only", "--", *dirty], root)
+    if code != 0:
+        return None, output
+    return head_of(root), None
+
+
 def land_action(repo, tree, queue, run_id, n):
     """The `aterrissar` action of the run's state: the run's normal end and
     `fecha-morto` propose the same one."""
@@ -4330,6 +4373,9 @@ def _main(argv=None):
     run_id = now.strftime("%Y-%m-%d-%H%M")
     ledger = ledger_dir / f"{run_id}.jsonl"
     log = ledger_dir / f"{run_id}.log"
+    # Taken now: `data` is re-read on every round and is None when the queue turns
+    # unreadable mid-run, and the end-of-run commit still needs the path.
+    run_queue_path = data.get("path")
 
     # Short header (A6): the 09/26 run opened with 15 configuration lines
     # and absolute paths through the Insync folder taking up half a screen.
@@ -5664,16 +5710,33 @@ def _main(argv=None):
                                wait=ANSWER_WAIT_SEC, already_asked=asked_mid_run,
                                interactive=False if mid_run_silent else None)
 
+    def commit_records(result):
+        # The run's last step (CS-1), after the end questions (which write answers
+        # into the queue through `cepa-plan answer`) and after the `.review.md`:
+        # committing earlier would leave the queue dirty again.
+        sha, error = commit_run_records(
+            repo, [run_queue_path, ledger, ledger.with_suffix(".review.md")],
+            f"until {a.queue}/{run_id}: queue marks and run records")
+        if sha:
+            print(SCREEN.c("cinza", f"   commit: {sha[:7]} on the clone's branch, "
+                                    "with the queue marks and the run records "
+                                    "(not pushed)"))
+        elif error:
+            print(f"   commit: git refused the commit of the run records "
+                  f"({error.splitlines()[-1] if error.splitlines() else error}); "
+                  "they stay in the clone without a commit")
+        return result
+
     # The analysis spends quota: stopping on the quota and then analyzing hits the
     # same ceiling. In those cases, and with nothing executed, it is left for by hand.
     if a.no_analysis or items == 0:
-        return ask_owner()
+        return commit_records(ask_owner())
     if end_reason == "limite-de-uso":
         print("   analysis: not run (the run stopped on the quota) — run "
               f"`/common:until-review {short_path(ledger, repo)}` once the quota "
               "is back")
         log_event({"evento": "analise", "feita": False, "motivo": "cota"})
-        return ask_owner()
+        return commit_records(ask_owner())
     print("   analysis: running /common:until-review…")
     review, review_error = analyze_run(repo, tree if tree.exists() else None,
                                       ledger, a.with_permissions)
@@ -5684,7 +5747,7 @@ def _main(argv=None):
     else:
         print(f"   analysis: failed ({review_error}) — run `/common:until-review "
               f"{short_path(ledger, repo)}` by hand")
-    return ask_owner(review)
+    return commit_records(ask_owner(review))
 
 
 if __name__ == "__main__":
