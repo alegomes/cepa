@@ -1198,6 +1198,28 @@ def test_cs5_n_at_the_confirmation_asks_the_field_again():
           and "n?ão" not in a1["evidence"], (a1, out[-800:]))
 
 
+def _cs5_refusal_asks_again(refusal):
+    rc, out, a1 = _cs5_run([("Use this text? [Y/n]", refusal),
+                            ("type it again", "vira checklist"),
+                            ("Send the item back to the queue", "s")])
+    check(f"cs5 {refusal}: o campo é pedido de novo",
+          out.count("in one line (the next run reads this)") == 2, out[-1500:])
+    check(f"cs5 {refusal}: a resposta recusada não é aplicada",
+          rc == 0 and a1["status"] == "pending"
+          and "vira checklist" in a1["evidence"]
+          and "n?ão" not in a1["evidence"], (a1, out[-800:]))
+
+
+def test_cs5_capital_n_at_the_confirmation_also_asks_again():
+    """The prompt shows `[Y/n]`; a capital `N` is the same refusal."""
+    _cs5_refusal_asks_again("N")
+
+
+def test_cs5_nao_spelled_out_at_the_confirmation_also_asks_again():
+    """`não` typed out, the owner's own language, is the same refusal."""
+    _cs5_refusal_asks_again("não")
+
+
 def _long_accented_answer():
     """1,500 bytes of UTF-8 with `ção` starting at byte 1023, so the `ç`
     straddles byte 1024, where the macOS canonical terminal cuts the line

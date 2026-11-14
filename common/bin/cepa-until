@@ -2619,8 +2619,8 @@ def _read_line(prompt, output, wait):
             confirm = _input_once("       Use this text? [Y/n] ", wait)
         except UnicodeDecodeError:
             confirm = ""
-        if _UNREADABLE.sub("?", confirm).strip().lower() in (
-                "n", "no", "nao", "não"):
+        # n, N, no, não: anything starting with n refuses; Enter keeps it.
+        if _UNREADABLE.sub("?", confirm).strip().lower().startswith("n"):
             output("       ok, type it again")
             continue
         return line
