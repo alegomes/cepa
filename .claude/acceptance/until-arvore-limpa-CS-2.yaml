@@ -1,0 +1,18 @@
+key: until-arvore-limpa-CS-2
+status: complete
+criteria:
+  - id: CS-2
+    text: "com um notas.txt modificado e um rascunho.md em stage no clone antes do run, ao fim do run o commit novo nao contem nenhum dos dois, e git status --porcelain ainda mostra os dois exatamente como estavam (um modificado, outro em stage)"
+    altitude: cli
+    surface: "cepa-until <fila> --for 2h --dirty-ok : git show --name-only HEAD sem notas.txt/rascunho.md; git status --porcelain -- notas.txt rascunho.md == ' M notas.txt\\nA  rascunho.md\\n' antes e depois"
+    test: "tests/test_cepa_until_clean_tree.py::test_cs2_owners_modified_and_staged_files_stay_as_they_were"
+    layer: "subprocess real de common/bin/cepa-until em repo git de teste, claude falso; asserts em HEAD~1 == base, git show --name-only (sem os dois, com .jsonl), git status --porcelain igual ao de antes, git ls-files -s inalterado, conteudo em disco inalterado"
+    evidence: verified
+    run: "python3 tests/test_cepa_until_clean_tree.py -> 6 linhas 'ok' de CS-2 (run termina, commit novo, commit sem os dois, status igual, indice igual, disco igual), '✓ tudo verde', exit 0 (rodado duas vezes)"
+    status: complete
+    notes:
+      - "Cenario identico ao da spec: notas.txt rastreado e editado sem stage, rascunho.md novo em stage."
+      - "Usa --dirty-ok para o run aceitar iniciar com o clone sujo; nao reduz a altitude."
+      - "O teste e escrito depois da implementacao (comportamento veio com CS-1, commit --only). Nao prova vermelho, mas as asserts discriminam: git add -A levaria notas.txt, commit sem --only levaria rascunho.md."
+      - "Nao executei mutacao da producao (somente leitura)."
+gap: []
