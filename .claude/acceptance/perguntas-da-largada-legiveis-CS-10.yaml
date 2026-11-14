@@ -1,0 +1,18 @@
+schema_version: 1
+card: perguntas-da-largada-legiveis-CS-10
+status: complete
+audited_at: 2026-11-14
+audited_diff: e81cbc1..d2d5cd7
+criteria:
+  - id: AC1
+    text: "no cenário do CS-9, responder `n` e depois 'usar a data da guia' grava no evento `largada` do registro do run a escolha 'não: <pergunta>. Em vez disso: usar a data da guia' com `fonte` 'dono', e responder `n` com a linha vazia volta ao menu sem gravar (título: `s` ou Enter aceita o padrão, `t` grava resposta livre)"
+    altitude: cli
+    surface: "cepa-until <fila> em pseudo-terminal, leitor falso; evento largada no registro do run"
+    demonstrated_by:
+      test: "tests/test_cepa_until_preference_keys.py::test_cs10_n_then_a_line_records_no_question_instead_in_largada, test_cs10_n_with_an_empty_line_goes_back_to_the_menu_without_recording, test_cs10_t_records_a_free_answer"
+      layer: cli-subprocess-pty
+      evidence: verified
+      run: "python3 tests/test_cepa_until_preference_keys.py -> 25 checagens ok, 'tudo verde'. Também python3 tests/test_cepa_until_preference_panel.py -> 'tudo verde'. Suíte completa não rodada (regra da branch)."
+    verdict: complete
+    gap: null
+    note: "Cobre também s/sim/Enter (fonte padrao no Enter), t, texto solto rejeitado, n sem pergunta, em painel e em modo simples."
