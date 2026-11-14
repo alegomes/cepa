@@ -3500,6 +3500,8 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
             panel.label("Agent's default", pref["padrao"])
             if pref.get("pergunta"):
                 panel.question(pref["pergunta"])
+            # menu() prints the chips; the prompt it returns is not used, because
+            # this screen keeps the "Your choice, in one line" prompt (pty tests).
             panel.menu([("Enter", "keep the agent's default"),
                         ("text", "type your choice in one line")], "Enter")
             prompt = panel._prompt("Your choice, in one line: ")

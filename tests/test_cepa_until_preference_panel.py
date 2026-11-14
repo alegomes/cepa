@@ -130,6 +130,38 @@ def test_cs9_in_process_every_line_fits_for_each_exit():
         check(f"cs9 in process ({name}): no line wider than 80", not wide, str(wide))
         check(f"cs9 in process ({name}): the frame line is there",
               any(l.startswith("┌─ 1/1 · x1 ") for l in lines), "\n".join(lines))
+        top = next((i for i, l in enumerate(lines) if l.startswith("┌─ 1/1 · x1 ")), 0)
+        # no title: the top is followed by one blank bordered line, then the Choice label
+        check(f"cs9 in process ({name}): no extra blank bordered line after the top",
+              lines[top + 1].strip() == "│" and lines[top + 1] == "│"
+              and "Choice" in lines[top + 2], "\n".join(lines[top:top + 4]))
+        closing = [i for i, l in enumerate(lines) if l.startswith("└")]
+        check(f"cs9 in process ({name}): the card is closed with └ after the prompt area",
+              len(closing) == 1 and closing[0] > top, "\n".join(lines))
+
+
+def test_cs9_route_card_with_long_text_fits_80_columns():
+    """The shared Panel primitives (route cards of `decide` and the launch): a bordered
+    line is at most as wide as the terminal, with the `│` counted."""
+    m = base.load_module(color="sempre")
+    m.shutil.get_terminal_size = lambda *a, **k: os.terminal_size((COLS, 24))
+    out = []
+    panel = m.Panel(m.SCREEN, out.append)
+    long = " ".join(["palavra"] * 60)
+    panel.item(1, 2, "W-1", long)
+    panel.label("Evidence", long)
+    panel.question(long)
+    panel.recommend("Recommendation: yes, " + long)
+    panel.warning(long)
+    panel.note(long)
+    panel.legend([f"y = {long}"])
+    panel.menu([("y", "yes"), ("n", "no"), ("t", "I write the answer")], "y")
+    panel.end()
+    lines = ANSI.sub("", "\n".join(out)).split("\n")
+    wide = [(len(l), l) for l in lines if len(l) > COLS]
+    check("cs9 route card: no line wider than 80 columns", not wide, str(wide))
+    check("cs9 route card: it has bordered lines", sum(l.startswith("│") for l in lines) > 10,
+          str(lines))
 
 
 def main():
