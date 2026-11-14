@@ -1357,12 +1357,19 @@ def test_cs6_editor_exiting_with_error_writes_nothing_and_returns_to_the_menu():
     """CS-6 (docs/spec/campo-de-resposta-until.md): the editor exits with
     code 1; the screen warns "nothing written in the editor", the menu of the
     same item comes back and queue.yaml does not change."""
-    _cs6_check(*_cs6_run("#!/bin/sh\nexit 1\n")[1:])
+    rc, out, before, after = _cs6_run("#!/bin/sh\nexit 1\n")
+    _cs6_check(out, before, after)
+    check("cs6: o aviso diz o codigo de saida do editor",
+          "the editor exited with code 1; nothing written in the editor" in out,
+          out[-800:])
 
 
 def test_cs6_editor_saved_empty_writes_nothing_and_returns_to_the_menu():
     """CS-6: the editor saves the file empty; same outcome as the error."""
-    _cs6_check(*_cs6_run('#!/bin/sh\n: > "$1"\n')[1:])
+    rc, out, before, after = _cs6_run('#!/bin/sh\n: > "$1"\n')
+    _cs6_check(out, before, after)
+    check("cs6: editor que sai com 0 nao fala de codigo de saida",
+          "exited with code" not in out, out[-800:])
 
 
 def test_cs6_the_menu_that_comes_back_still_answers_the_same_item():
