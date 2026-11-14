@@ -62,6 +62,20 @@ Três partes, decididas pelo dono em 2026-11-10:
 
 ---
 
+## Branch lateral de um run é casada com o item de outra fila que tem o mesmo id
+
+Registrado em 2026-11-14 a pedido do dono, ao gerar a fila `until-arvore-limpa`.
+
+### Problema
+
+As filas reusam ids (`CS-1`, `CS-3`), e o nome da branch lateral (`until/<run>-vermelho-<id>`) não diz de que fila ela veio. Dois lugares casam a branch só pelo id. O `cepa-plan status` (`code_location`, `common/bin/cepa-plan`, por volta da linha 1696) mostrou na fila nova `until-arvore-limpa`, que acabara de nascer, "código fora do main: until/2026-11-10-1650-vermelho-CS-1 (+1 commit)" e "until/2026-11-13-0731-vermelho-CS-3 (+11 commits)". As duas branches são das filas `perguntar-antes-do-run` e `perguntas-da-largada-legiveis`. O caso mais caro é o `clean_side_branches` (`common/bin/cepa-until`, por volta da linha 1962): ele roda na largada e apaga toda branch lateral cujo id esteja `done` ou `dropped` na fila do run. Quando o CS-1 da fila nova fechar, o run seguinte apaga a branch vermelha da outra fila e guarda o patch dela na pasta errada, `until-arvore-limpa/until/<run>.laterais`. O run não constrói em cima dessas branches: a worktree nasce do HEAD do clone.
+
+### Esboço de solução
+
+Casar a branch com o item pelo run, não pelo id. O run é o `<run>` do nome da branch, e o `.jsonl` de cada run fica na pasta da própria fila. Uma branch só pertence a uma fila se `.claude/queues/<fila>/until/<run>.jsonl` existe. Outra opção é pôr o nome da fila no nome da branch lateral. **Lar:** `common/bin/cepa-until` (`clean_side_branches`) e `common/bin/cepa-plan` (`code_location`).
+
+---
+
 ## `cepa-until land` refaz a checagem de conflito antes do merge
 
 Registrado em 2026-11-06 a pedido do dono, a partir do run `until/2026-11-05-2031` do wego-acessos-backend.
