@@ -1378,9 +1378,14 @@ def test_plan_of_another_queue_dirtied_by_the_live_run_is_not_dirt():
             alive.kill()
             alive.wait()
         p, calls = tries(alive.pid, fields_o1=of_run)
-        check("...com o supervisor morto o mesmo diff é sujeira",
-              p.returncode == 2 and not calls
-              and "modified file(s)" in p.stderr, p.stderr[:300])
+        # Since `until-arvore-limpa` CS-4, a dead run's loose record and queue
+        # marks are no longer dirt that refuses the launch: they go into a
+        # collect commit first (tests/test_cepa_until_clean_tree.py pins it).
+        check("...com o supervisor morto o mesmo diff é recolhido e o run larga",
+              "modified file(s)" not in p.stderr and len(calls) == 1
+              and "until: collect records of dead runs (outra)" in subprocess.run(
+                  ["git", "log", "--format=%s"], cwd=root, capture_output=True,
+                  text=True).stdout, p.stderr[:300])
 
 
 def test_live_run_refuses_before_the_dirt_guard():

@@ -426,6 +426,198 @@ def test_cs3_signal_during_the_end_analysis_commits_the_records():
               and any(f.endswith(".jsonl") for f in files), str(files))
 
 
+def _dead_pid():
+    """A pid that no longer exists: a child that already exited and was reaped."""
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    return proc.pid
+
+
+def _other_queue(root, layout="queues"):
+    """Commits a second queue `outra` (new layout by default) with two items and
+    returns its queue file."""
+    import yaml
+    fname = "queue.yaml" if layout == "queues" else "plan.yaml"
+    path = root / ".claude" / layout / "outra" / fname
+    path.parent.mkdir(parents=True)
+    key = "queue" if layout == "queues" else "program"
+    path.write_text(yaml.safe_dump(
+        {"schema_version": 2, "mode": "single-track", key: "outra",
+         "source": "teste", "items": [base.item("o1"), base.item("o2")]},
+        allow_unicode=True), encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-qm", "outra"], cwd=root, check=True)
+    return path
+
+
+def _dead_run_of(queue_file, pid, run="2026-11-13-2200", ended=False, host=None):
+    """What a run of `outra` killed without warning leaves in the clone: its
+    `.jsonl` with `run_start` (pid, host) and `item_start`, the state `rodando`
+    (ignored by git) and the queue marks of the item in flight, all uncommitted."""
+    import json
+    import socket
+    import yaml
+    d = queue_file.parent / "until"
+    d.mkdir(exist_ok=True)
+    host = host or socket.gethostname()
+    events = [{"evento": "run_start", "fila": "outra", "pid": pid, "host": host,
+               "branch": "until/x", "prazo": "2026-11-14T06:00:00"},
+              {"evento": "item_start", "id": "o1"}]
+    if ended:
+        events.append({"evento": "run_end", "motivo": "fim-da-fila"})
+    (d / f"{run}.jsonl").write_text(
+        "".join(json.dumps(e) + "\n" for e in events), encoding="utf-8")
+    (d / f"{run}.estado.json").write_text(json.dumps(
+        {"run": run, "fila": "outra", "estado": "rodando", "pid": pid,
+         "host": host, "branch": "until/x", "registro": f"{run}.jsonl"}),
+        encoding="utf-8")
+    q = yaml.safe_load(queue_file.read_text(encoding="utf-8"))
+    q["items"][0].update(status="in_progress", claimed_by={"pid": pid})
+    queue_file.write_text(yaml.safe_dump(q, allow_unicode=True), encoding="utf-8")
+    rel = str(queue_file.parent.relative_to(queue_file.parents[3]))
+    return [f"{rel}/{queue_file.name}", f"{rel}/until/{run}.jsonl"]
+
+
+def test_cs4_launch_collects_the_loose_records_of_a_dead_run_of_another_queue():
+    """CS-4: with a `.jsonl` and a modified `queue.yaml` of queue `outra` whose
+    supervisor died (pid that no longer exists), `cepa-until fila` does not refuse
+    over a dirty tree: it makes a collect commit with exactly the paths of
+    `outra` BEFORE the first item (the run branch starts on top of it), and the
+    run's own commit comes after."""
+    import json
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _scenario(tmp)
+        other = _other_queue(root)
+        expected = sorted(_dead_run_of(other, _dead_pid()))
+        before = _git(root, "rev-parse", "HEAD").strip()
+        binv = base.fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, calls = base.run_until(root, binv, plan, ["--for", "2h"])
+        check("CS-4: a largada não recusa por árvore suja",
+              p.returncode == 0 and "modified file(s)" not in p.stderr,
+              f"saiu {p.returncode}: {p.stderr[-400:]}")
+        check("CS-4: o item da fila rodou", len(calls) == 1, str(calls))
+        subjects = _git(root, "log", "--format=%H %s", f"{before}..HEAD").splitlines()
+        collect = [s.split(" ", 1)[0] for s in subjects
+                   if s.split(" ", 1)[1] == "until: collect records of dead runs (outra)"]
+        check("CS-4: há um commit de recolha com a mensagem decidida",
+              len(collect) == 1, "\n".join(subjects))
+        sha = collect[0] if collect else "HEAD"
+        files = sorted(_git(root, "show", "--name-only", "--format=", sha).split())
+        check("CS-4: o commit de recolha leva exatamente os caminhos de outra",
+              files == expected, f"{files} != {expected}")
+        check("CS-4: a recolha é o primeiro commit sobre a base",
+              _git(root, "rev-parse", f"{sha}~1").strip() == before)
+        start = [e for e in base.ledger_of(root) if e.get("evento") == "run_start"]
+        run_base = (start[0].get("base") if start else None) or "?"
+        check("CS-4: a recolha veio antes do primeiro item (o run larga sobre ela)",
+              subprocess.run(["git", "merge-base", "--is-ancestor", sha, run_base],
+                             cwd=root).returncode == 0, run_base)
+        check("CS-4: o run_start registra a recolha",
+              start and (start[0].get("recolha") or {}).get("commit") == sha,
+              json.dumps(start)[:400])
+        st = _git(root, "status", "--porcelain", "--untracked-files=all")
+        check("CS-4: nada de outra fica solto depois",
+              ".claude/queues/outra/" not in st.replace(".estado.json", ""), st)
+
+
+def test_cs4_collects_from_the_legacy_layout_and_leaves_the_owners_change_out():
+    """The same collect for a queue in the old layout (`.claude/programs/<q>/
+    plan.yaml`), and only the run's paths: a file the owner left modified beside
+    it stays out of the collect commit (the launch then runs with `--dirty-ok`,
+    the owner's own escape)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _scenario(tmp)
+        other = _other_queue(root, layout="programs")
+        expected = sorted(_dead_run_of(other, _dead_pid()))
+        (root / "notas.txt").write_text("do dono\n", encoding="utf-8")
+        binv = base.fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, calls = base.run_until(root, binv, plan, ["--for", "2h", "--dirty-ok"])
+        check("CS-4 legado: o run larga", len(calls) == 1, p.stderr[-400:])
+        sha = _git(root, "log", "--format=%H", "--grep",
+                   "^until: collect records of dead runs (outra)$").strip()
+        files = sorted(_git(root, "show", "--name-only", "--format=", sha).split()) \
+            if sha else []
+        check("CS-4 legado: recolha com exatamente o plan.yaml e o registro",
+              files == expected, f"{files} != {expected}")
+        check("CS-4 legado: o arquivo do dono segue solto e fora dos commits",
+              "?? notas.txt" in _git(root, "status", "--porcelain"))
+
+
+def test_cs4_what_is_not_a_dead_run_is_not_collected():
+    """The counterpoints. (1) A modified queue with no loose run record is the
+    owner's change, not a dead run's: the launch refuses as before and commits
+    nothing. (2) A run of `outra` with a live supervisor is left alone (the
+    existing live-run tests pin that the live run's marks are not dirt).
+    (3) A record from ANOTHER machine with no `run_end` may be a live run there:
+    not collected, so the launch refuses over its queue marks."""
+    import yaml
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _scenario(tmp)
+        other = _other_queue(root)
+        binv = base.fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        q = yaml.safe_load(other.read_text(encoding="utf-8"))
+        q["items"][1]["title"] = "editado pelo dono"
+        other.write_text(yaml.safe_dump(q, allow_unicode=True), encoding="utf-8")
+        before = _git(root, "rev-parse", "HEAD").strip()
+        p, calls = base.run_until(root, binv, plan, ["--for", "2h"])
+        check("sem registro solto: a fila editada pelo dono ainda recusa",
+              p.returncode == 2 and not calls and "outra/queue.yaml" in p.stderr,
+              f"saiu {p.returncode}: {p.stderr[-400:]}")
+        check("...e nenhum commit foi feito",
+              _git(root, "rev-parse", "HEAD").strip() == before)
+        subprocess.run(["git", "checkout", "-q", "--", str(other)], cwd=root,
+                       check=True)
+
+        alive = subprocess.Popen([sys.executable, "-c",
+                                  "import time; time.sleep(60)", "cepa-until"])
+        try:
+            _dead_run_of(other, alive.pid)
+            (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
+            p, calls = base.run_until(root, binv, plan, ["--for", "2h"])
+            check("supervisor vivo: o registro dele não é recolhido",
+                  "collect records of dead runs" not in _git(
+                      root, "log", "--format=%s"), _git(root, "log", "--oneline"))
+        finally:
+            alive.kill()
+            alive.wait()
+        for f in (other.parent / "until").iterdir():
+            f.unlink()
+        subprocess.run(["git", "checkout", "-q", "--", str(other)], cwd=root,
+                       check=True)
+
+        _dead_run_of(other, _dead_pid(), host="outra-maquina.local")
+        base.requeue(root, plan)
+        before = _git(root, "rev-parse", "HEAD").strip()
+        (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
+        p, calls = base.run_until(root, binv, plan, ["--for", "2h"])
+        check("registro de outra máquina sem run_end não é recolhido",
+              p.returncode == 2 and not calls
+              and _git(root, "rev-parse", "HEAD").strip() == before,
+              f"saiu {p.returncode}: {p.stderr[-400:]}")
+
+
+def test_cs4_dry_run_says_what_it_would_collect_and_commits_nothing():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _scenario(tmp)
+        other = _other_queue(root)
+        _dead_run_of(other, _dead_pid())
+        before = _git(root, "rev-parse", "HEAD").strip()
+        binv = base.fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, calls = base.run_until(root, binv, plan, ["--for", "2h", "--dry-run"])
+        check("CS-4 dry-run: sai 0 sem recusar", p.returncode == 0
+              and "modified file(s)" not in p.stderr, p.stderr[-400:])
+        check("CS-4 dry-run: diz o que recolheria",
+              "would collect 2 loose record(s) of dead runs (outra)" in p.stdout,
+              p.stdout[-600:])
+        check("CS-4 dry-run: nenhum commit",
+              _git(root, "rev-parse", "HEAD").strip() == before and not calls)
+
+
 def main():
     print("cepa-until — árvore limpa no fim do run\n")
     for given_name, fn in sorted(globals().items()):
