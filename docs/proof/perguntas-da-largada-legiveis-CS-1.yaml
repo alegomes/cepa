@@ -1,0 +1,49 @@
+schema_version: 2
+card: perguntas-da-largada-legiveis-CS-1
+verdict: proven
+reviewed_at: 2026-11-13T09:00:00-03:00
+base_commit: ddd56cd
+head_commit: c3d64f1
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (route_refusal, cmd_finish call, --route-kind flag, route_kind stored on item, pop in cmd_answer, validate_items route_kind check)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # tests run the real CLI as subprocess
+    - class: "common/bin/cepa-until (open_precondition_route: --route-kind external-block, fallback question, default --if-yes/--if-no)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # real cepa-plan runs; only the pre-read reader (claude) is faked at the far boundary
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at c3d64f1 (throwaway worktree /tmp/proof-cs1-b): tests/test_cepa_plan_finish_route.py 'tudo verde' (0 FAIL); tests/test_cepa_until_decide.py rc=0 'tudo verde' (0 FAIL); tests/test_common_drain_plan.py 'all green'"
+        - "P1 route_refusal: 'if not missing:' -> 'if True:' -> 16 FAIL (RED), run at a1891d2"
+        - "P2 validate_items route_kind check ('if rk is not None and rk not in ROUTE_KINDS:' -> 'if False:'): at a1891d2 SURVIVED (0 FAIL in both covering files); at c3d64f1 (test_validator_rejects_route_kind_outside_the_three added) -> rc=1, 2 FAIL ('route_kind inválido: recusa', 'a recusa nomeia route_kind') (RED); restored, re-run -> rc=0 'tudo verde', 0 FAIL"
+        - "P3 cmd_answer: it.pop('route_kind') -> pass -> 1 FAIL (RED), at a1891d2"
+        - "P4 cmd_finish: it['route_kind'] = route_kind -> pass -> 3 FAIL (RED), at a1891d2"
+        - "P5 cepa-until: '--route-kind external-block' removed -> 30 FAIL (RED), at a1891d2"
+        - "P6 cepa-until: fallback question line replaced by attempts.append(cmd) -> 3 FAIL (RED), at a1891d2. A first run read 0 FAIL because it overlapped a leftover background run on the same worktree; discarded and re-run alone."
+        - "P7 cepa-until: default --if-yes text set to '' -> 30 FAIL (RED), at a1891d2"
+        - "P1, P3-P7 were run at a1891d2; the commit c3d64f1 only adds tests (and test asserts in test_cepa_until_decide.py), so the production hunks are unchanged and they were not re-run. P2 was run at both."
+        - "each perturbation restored with git checkout; worktrees removed, primary tree untouched"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; the validator branch previously reached by no test is now reached: P2 at c3d64f1 turns test_validator_rejects_route_kind_outside_the_three red (2 FAIL)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "NOT verified by a run. The diff adds CLI input (--route-kind, --question, --if-yes/--if-no) but all of it is validated by route_refusal and argparse choices, and the covering tests exercise missing/invalid forms. Marked n/a because there is no api-rest module in the diff; the human may reject this."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Story, not Bug. Spec red test checked anyway: ddd56cd common/bin + a1891d2 tests/test_cepa_plan_finish_route.py -> rc=1 with 23 FAIL lines; 'rota aberta' and 'sem --route-kind: recusa' FAIL (finish --status pending --human-pending without --route-kind is accepted at base), '--route-kind' reported as 'unrecognized arguments'. At c3d64f1 -> tudo verde."
+routing_reason: "Every changed hunk is load-bearing on the real-CLI surface: the one that survived at a1891d2 (validator rejecting an unknown route_kind) now turns the suite red at c3d64f1 and green again once restored. The spec's red test is red at base. No test double stands in for a changed class. L4 is n/a on a diff-based claim with no run, which the reviewer may overrule."

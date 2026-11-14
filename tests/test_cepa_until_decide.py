@@ -122,7 +122,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
     check("rótulos numa coluna, com o curto no lugar do longo",
           "│  Stopped because the agent marked" in plain_text
           and "│  Context         dois clientes" in plain_text
-          and "│  Task            rotacionar no cofre" in plain_text, plain_text)
+          and "│  Left for you    rotacionar no cofre" in plain_text, plain_text)
     check("a pergunta marcada e a instrução embaixo dela",
           "│  ? Mantenho o reenvio?" in plain_text
           and "│    If yes, the next run receives: cancelar e recriar" in plain_text,
@@ -612,7 +612,7 @@ def test_decide_s_and_n_answer_the_drafted_question():
     check("a recomendação marca a letra no menu",
           any("[s] yes (recommended)" in p_ for p_ in questions), questions)
     check("a legenda diz o que sim e não fazem",
-          "yes = the item goes back to the queue" in plain_text, plain_text)
+          "s = the item goes back to the queue" in plain_text, plain_text)
     check("sem pergunta redigida, o terminal faz a padrão",
           "unblock the item and send it back to the queue?" in plain_text
           and "The agent stopped because: sem produção" in plain_text, plain_text)
@@ -641,9 +641,12 @@ def test_decide_s_and_n_answer_the_drafted_question():
                "evidence": None}], {},
              question=lambda _p: next(resp2), output=screen2.append)
     text2 = "\n".join(screen2)
-    check("rota humana sem pergunta: mostra a tarefa e pergunta 'já fez?'",
-          "Task left for you: valide o login real" in text2
-          and "Question: done already?" in text2, text2)
+    check("rota humana sem pergunta: mostra a tarefa e a pergunta neutra "
+          "(CS-3 de perguntas-da-largada-legiveis tirou o 'done already?')",
+          "Left for you: valide o login real" in text2
+          and "Question: Send this item back to the queue for the next run to "
+              "try again?" in text2
+          and "done already" not in text2, text2)
     check("...e sem evidência o menu não oferece [e]",
           not any("[e]" in p_ for p_ in screen2), screen2)
 
@@ -691,20 +694,20 @@ def test_decide_shows_context_instruction_and_warns_question_outside_the_rules()
           "Se sim / Recomendo, nesta ordem",
           [block_s5.find(r) for r in (
               "Stopped because: a task only you can do was left",
-              "Task left for you: rodar os 20 lotes",
+              "Left for you: rodar os 20 lotes",
               "Context: O código está pronto numa branch lateral",
               "Question: Deixo a rodada dos 20 lotes",
               "If yes, the next run receives: retomar de until/",
               "Recommend yes: a rodada só é possível")]
           == sorted(i for i in (block_s5.find(r) for r in (
-              "Stopped because:", "Task left for you", "Context:",
+              "Stopped because:", "Left for you", "Context:",
               "Question:", "If yes,", "Recommend yes")))
           and all(r in block_s5 for r in (
-              "Stopped because:", "Task left for you", "Context:",
+              "Stopped because:", "Left for you", "Context:",
               "Question:", "If yes,", "Recommend yes")), block_s5)
     check("linha em branco antes da pergunta e antes da legenda do menu",
           "\n\n       Question:" in block_s5
-          and "\n\n       yes = the item goes back" in block_s5, block_s5)
+          and "\n\n       s = the item goes back" in block_s5, block_s5)
     check("a pergunta dentro das regras não ganha aviso",
           "outside the rules" not in block_s5, block_s5)
     check("o sim grava a pergunta E a instrução, para o próximo run",
@@ -1332,8 +1335,8 @@ def test_decide_shows_human_section_and_what_each_answer_does():
         "Was meant to: testar a parte",
         "Already done: 136 de 154",
         "Question: Entrego com os 18 casos",
-        "yes = o trabalho vai para revisão. The item goes back to the queue",
-        "no = o trabalho espera o defeito ser corrigido")]
+        "s = o trabalho vai para revisão. The item goes back to the queue",
+        "n = o trabalho espera o defeito ser corrigido")]
     check("motivo, pedido, pronto, pergunta e legenda, nesta ordem",
           -1 not in order and order == sorted(order), text)
     check("a etiqueta genérica some quando há motivo leigo",
@@ -1907,6 +1910,15 @@ def test_pre_read_cs5_precondition_defers_the_item_without_spending_the_run_on_i
           items["x1"].get("status") == "pending", str(items["x1"]))
     check("cs5: the question is recorded", "token" in str(items["x1"].get("owner_question")),
           str(items["x1"]))
+    summary = items["x1"].get("owner_summary") or {}
+    check("cs5 CS-1: the route has its kind", items["x1"].get("route_kind") == "external-block",
+          str(items["x1"]))
+    check("cs5 CS-1: the question is the pre-read's own",
+          items["x1"].get("owner_question") == "Você já providenciou o token de acesso?",
+          str(items["x1"]))
+    check("cs5 CS-1: what yes and no do is filled",
+          str(summary.get("se_sim") or "").strip() and str(summary.get("se_nao") or "").strip(),
+          str(summary))
     check("cs5: leitura_previa comes right after run_start",
           [e.get("evento") for e in events][:2] == ["run_start", "leitura_previa"],
           str([e.get("evento") for e in events]))
@@ -1933,6 +1945,13 @@ def test_pre_read_cs5_question_refused_by_cepa_plan_still_opens_the_route():
     check("cs5 long question: the route opened without the question",
           "token" in str(items["x1"].get("human_pending")), str(items["x1"]))
     check("cs5 long question: x1 has no item_start", "x1" not in _started(events), out[-800:])
+    summary = items["x1"].get("owner_summary") or {}
+    check("cs5 long question CS-1: the fixed question took its place",
+          items["x1"].get("owner_question") == "Does this exist now?", str(items["x1"]))
+    check("cs5 long question CS-1: kind and yes/no filled",
+          items["x1"].get("route_kind") == "external-block"
+          and str(summary.get("se_sim") or "").strip()
+          and str(summary.get("se_nao") or "").strip(), str(items["x1"]))
     reads = [e for e in events if e.get("evento") == "leitura_previa"]
     check("cs5 long question: event says rota_aberta without error",
           reads and reads[0]["itens"][0]["rota_aberta"] is True
@@ -2323,6 +2342,17 @@ def _slow_reader(tmp, mode="pre", delay=2):
     return slow, done
 
 
+def _written_route(ident, text):
+    """A route that already has its closed question and kind: the launch asks it right
+    away (CS-8). An OLD route (no question or no kind) waits for its reader (CS-4 of
+    perguntas-da-largada-legiveis) and comes at the end of the list."""
+    it = item(ident, human_pending=text)
+    it.update(route_kind="owner-task", owner_question="Você já providenciou isso?",
+              owner_summary={"se_sim": "O item volta para a fila.",
+                             "se_nao": "O item continua esperando."})
+    return it
+
+
 def _cs8_launch(items, mode="pre", inputs=None, wait="5", delay=2):
     """Real launch on a pty with the slow fake reader. Returns (out, events, items,
     reader_done_when_the_first_question_was_answered)."""
@@ -2393,7 +2423,7 @@ def test_launch_cs8_queue_route_comes_before_the_pre_read_question_and_the_total
     route. The route's question is on the screen before the reading ends, the
     pre-read's question comes after it in the same list, and the total sums both."""
     out, events, items, seen = _cs8_launch(
-        [item("r1", human_pending="provision the Keycloak role"), item("x1"),
+        [_written_route("r1", "provision the Keycloak role"), item("x1"),
          item("y1")])
     route = out.find("provision the Keycloak role")
     found = out.find("Falta o token de acesso")
@@ -2436,7 +2466,7 @@ def test_launch_cs8_preference_counts_in_the_total_after_the_queue_route():
     """A preference found by the pre-read comes after the queue's route and counts in
     the total; Enter keeps the default and the item runs."""
     out, events, items, _ = _cs8_launch(
-        [item("r1", human_pending="provision the Keycloak role"), item("x1")],
+        [_written_route("r1", "provision the Keycloak role"), item("x1")],
         mode="pref", inputs=[("[t] I write the answer", ""),
                              ("Your choice, in one line", "")])
     route = out.find("provision the Keycloak role")
