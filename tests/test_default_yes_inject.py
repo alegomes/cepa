@@ -125,8 +125,11 @@ def test_when_in_doubt_does_not_grant():
     # (A nonexistent root INSIDE the repo, on the contrary, resolves — the siblings
     # of CLAUDE_PLUGIN_ROOT are exactly where the plugins live, and that is how
     # the session-routine-guard finds it too. That is correct, not a leak.)
+    # Nested one level down: `bases()` also scans the root's grandparent, and for
+    # `<tmp>/common` that is the system TMPDIR itself, where any loose copy of the
+    # plugin left by another process (seen on 2026-11-14) answers the scan.
     with tempfile.TemporaryDirectory() as outside:
-        rc, ctx = run("/common:doctor", plugin_root=Path(outside) / "common")
+        rc, ctx = run("/common:doctor", plugin_root=Path(outside) / "x" / "common")
         check("raiz fora do repo não injeta", rc == 0 and ctx == "",
               f"rc={rc} ctx={ctx[:120]!r}")
 

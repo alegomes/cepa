@@ -567,7 +567,9 @@ def test_cepa_until_header_shows_queue_name_with_only_queue():
 def test_cepa_until_run_landing_pending_and_doctor_see_new_queue():
     """[U6] ledger and log in queues/<n>/until; [U5] the live run there is found by
     `pendentes` and by the doctor ([D5]: repo with only .claude/queues); [U4] the queue
-    dirty in the clone, in the new layout, does not prevent `aterrissar`.
+    marks, in the new layout, do not prevent `aterrissar`. Since `until-arvore-limpa`
+    CS-1 the run commits its queue marks on the clone's branch at the normal end, so
+    the clone ends with no queue path loose.
     """
     from test_cepa_until import fake_claude, item as it, build_repo, run_until
     from test_cepa_until_run_branch import WORKS, VERIFY
@@ -581,8 +583,13 @@ def test_cepa_until_run_landing_pending_and_doctor_see_new_queue():
         assert list(until.glob("*.jsonl")) and list(until.glob("*.log")), list(until.glob("*"))
         assert not (root / ".claude" / "programs").exists()
         run_id = sorted(until.glob("*.jsonl"))[-1].stem
-        assert "status: done" in plan_file.read_text(), "a fila do clone foi marcada (suja)"
-        assert git(root, "status", "--porcelain").count("queues/fila/queue.yaml") == 1
+        assert "status: done" in plan_file.read_text(), "a fila do clone foi marcada"
+        # This scenario repo has no `.gitignore` for the run's `.log`/`.estado.json`
+        # (the real repo ignores both), so only the paths the run commits are checked.
+        st = git(root, "status", "--porcelain")
+        assert "queues/fila/queue.yaml" not in st and ".jsonl" not in st, \
+            f"o fim normal do run commita as marcas da fila e o registro (CS-1): {st!r}"
+        assert "status: done" in git(root, "show", "HEAD:.claude/queues/fila/queue.yaml")
 
         p = subprocess.run([sys.executable, str(CEPA_UNTIL), "pendentes",
                             "--repo", str(root)], capture_output=True, text=True,
