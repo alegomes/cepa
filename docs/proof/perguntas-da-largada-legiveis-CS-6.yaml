@@ -1,0 +1,43 @@
+schema_version: 2
+card: perguntas-da-largada-legiveis-CS-6
+verdict: proven
+reviewed_at: 2026-11-14T10:20:00-03:00
+base_commit: 5066b1c
+head_commit: d7b1c22
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until (decide: `?` key, default `unclear` writer calling cepa-feedback add --target cepa-until, shown_question, legend_lines `?` entry, menu chip, valid-keys set)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # the pty test drives the real `cepa-until decide` and the real cepa-feedback ledger; the text-level cases inject `unclear` only to simulate a failing writer
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at d7b1c22 (throwaway detached worktree /tmp/proof-cs6): python3 tests/test_cepa_until_unclear_key.py -> 'tudo verde', 15 ok, 0 FAIL, ~1s; python3 tests/test_cepa_until_legend_per_key.py -> 'tudo verde'"
+        - "P1 target: '--target cepa-until' -> '--target other' -> 1 FAIL ('pty: target cepa-until') (RED)"
+        - "P2 item stays: line 3015 for_later.append(...) in the `?` branch -> pass -> 1 FAIL ('pty: the item stays for later, nothing answered') (RED)"
+        - "P3 menu chip: ('?', \"I don't understand\") removed from chips -> 2 FAIL ('the menu offers [?]', 'the legend says what ? does') (RED)"
+        - "P4 legend text: the `?` entry of effect{} deleted (a first attempt left a syntax error, discarded: it proved nothing) -> 1 FAIL ('the legend says what ? does') (RED)"
+        - "P5 valid keys: '?' removed from `valid` -> 7 FAIL, including '? is not refused as not one of the options' and 'exactly one feedback line' (RED)"
+        - "P6 recorded text: unclear(ident, shown_question) -> unclear(ident, '') -> 1 FAIL ('pty: text carries the question') (RED)"
+        - "every perturbation restored with git checkout; final re-run of both tests 'tudo verde'; worktree removed, primary tree untouched"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; every changed hunk (writer, legend, chip, valid set, shown_question, for_later append) is reached by the pty test, shown by P1-P6 each turning it red"
+  l4_adversarial_input:
+    status: n/a
+    reason: "NOT verified by a run. The only new input is one keystroke `?` on an existing menu prompt, handled by the same valid-key set as every other key; the question text it records is the one the screen already showed, passed as an argv element (no shell). No api-rest module in the diff. The human may overrule."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Story, not Bug. Spec red test checked anyway: git checkout 5066b1c -- common/bin/cepa-until, python3 tests/test_cepa_until_unclear_key.py -> FAIL lines incl. 'pty: decide exits 0', '? is not refused as not one of the options' (screen printed: \"?\" is not one of the options; to write an answer, type t first), 'the menu offers [?]', 'the legend says what ? does'. At d7b1c22 -> tudo verde."
+routing_reason: "Every changed hunk of the `?` key is load-bearing on the real pty surface: six perturbations (target, item stays, chip, legend, valid set, recorded text) each turn the covering test red, and the test is red at base with the expected refusal. No double stands in for the changed code. L4 is n/a on a diff-based claim with no run, which the reviewer may overrule."
