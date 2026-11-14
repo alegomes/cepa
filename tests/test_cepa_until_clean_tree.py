@@ -343,6 +343,60 @@ def test_cs3_signal_mid_second_item_commits_the_records():
                   "commit:" in output and "not pushed" in output, output[-600:])
 
 
+def test_cs3_second_signal_during_the_commit_does_not_cut_it():
+    """The owner presses Ctrl+C twice. The second signal arrives while the run's
+    `git commit` is still running (here a slow pre-commit hook holds it). Without
+    ignoring SIGTERM/SIGINT around the commit, the handler raises SystemExit inside
+    `subprocess.run`, git is killed halfway, nothing is committed and
+    `.git/index.lock` may stay behind. The proof of 2026-11-14 swapped the ignore
+    for the live handler and every other test stayed green."""
+    import os
+    import signal
+    import time
+    with tempfile.TemporaryDirectory() as tmp:
+        root = base.build_repo(tmp, [base.item("a1"), base.item("a2")])
+        started = Path(tmp) / "hook.started"
+        hook = root / ".git" / "hooks" / "pre-commit"
+        hook.write_text(f"#!/bin/sh\ntouch '{started}'\nsleep 3\nexit 0\n",
+                        encoding="utf-8")
+        hook.chmod(0o755)
+        binv = base.fake_claude(tmp, _WAITS_ON_A2)
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        before = _git(root, "rev-parse", "HEAD").strip()
+        proc = _launch(root, binv, plan, ["--for", "2h", "--no-analysis"])
+        try:
+            mark = Path(tmp) / "segue.a2"
+            end = time.time() + 60
+            while not mark.exists() and time.time() < end and proc.poll() is None:
+                time.sleep(0.1)
+            check("2º sinal: o segundo item entrou em voo", mark.exists())
+            os.kill(proc.pid, signal.SIGTERM)
+            end = time.time() + 30
+            while not started.exists() and time.time() < end and proc.poll() is None:
+                time.sleep(0.05)
+            check("2º sinal: o commit do run começou (hook rodando)", started.exists())
+            os.kill(proc.pid, signal.SIGINT)
+            try:
+                output, _ = proc.communicate(timeout=60)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                output, _ = proc.communicate()
+        finally:
+            (Path(tmp) / "segue").write_text("")
+            time.sleep(1.0)
+        check("2º sinal: o processo sai com 143 (o 1º sinal)",
+              proc.returncode == 143, f"{proc.returncode}: {output[-600:]}")
+        check("2º sinal: o commit do run terminou mesmo assim",
+              _git(root, "rev-parse", "HEAD~1").strip() == before,
+              _git(root, "log", "--oneline", "-3"))
+        check("2º sinal: não sobrou .git/index.lock",
+              not (root / ".git" / "index.lock").exists())
+        st = _git(root, "status", "--porcelain", "--untracked-files=all")
+        loose = [line for line in st.splitlines() if ".claude/programs/fila/" in line
+                 and not line.endswith(".log") and not line.endswith(".estado.json")]
+        check("2º sinal: nenhum registro do run solto", not loose, st)
+
+
 def test_cs3_signal_during_the_end_analysis_commits_the_records():
     """After the final state is recorded, a signal only ends the run (it no
     longer writes `run_interrompido`), but the records the run wrote still have
