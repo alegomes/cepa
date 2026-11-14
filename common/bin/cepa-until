@@ -4643,10 +4643,8 @@ def _main(argv=None):
     in_flight = {}
     closed = [False]
     # `final_state` is set once the run's final state is recorded (the end
-    # analysis and the owner's questions come after it); `committed` makes the
-    # run's commit happen once, whichever way out reaches it first.
+    # analysis and the owner's questions come after it).
     final_state = [False]
-    committed = [False]
 
     def commit_run_end():
         """The run's commit (CS-1), on every way out: the normal end, the quota
@@ -4654,10 +4652,8 @@ def _main(argv=None):
         and the `.jsonl` with `run_interrompido` loose in the clone. SIGTERM and
         SIGINT are ignored while git runs: a second signal raising SystemExit
         inside `subprocess.run` would kill `git commit` halfway and could leave
-        `.git/index.lock` behind."""
-        if committed[0]:
-            return
-        committed[0] = True
+        `.git/index.lock` behind. A second call (a signal landing right after
+        the normal end's commit) finds the paths clean and commits nothing."""
         saved = {}
         for sig in (signal.SIGTERM, signal.SIGINT):
             try:
