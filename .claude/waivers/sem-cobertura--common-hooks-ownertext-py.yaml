@@ -1,0 +1,17 @@
+status: proposta
+motivo: sem-cobertura
+escopo: common/hooks/_ownertext.py
+razao: No item CS-7 da fila perguntas-da-largada-legiveis, a prova com entradas hostis
+  achou que o filtro de jargão compartilhado deixa passar caminho de pasta sem extensão,
+  nome de função e URL na pergunta reescrita. O filtro é o mesmo do finish desde antes
+  do CS-7, que não o mexeu; os outros 35 casos hostis foram recusados ou gravados
+  certos.
+revisit_trigger: quando o filtro de jargão compartilhado for endurecido contra caminho
+  sem extensão, nome de função e URL
+autor: null
+proposto_por: drain-plan CS-7 (run cepa-until-2026-11-14-0956)
+proposto_em: '2026-11-14'
+pergunta: 'Aceito entregar a reescrita da pergunta com o filtro de jargão como está
+  hoje? Recomendo sim: o furo é antigo e vale corrigir à parte'
+fila: perguntas-da-largada-legiveis
+item: CS-7

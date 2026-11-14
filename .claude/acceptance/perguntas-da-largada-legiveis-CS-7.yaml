@@ -1,0 +1,18 @@
+schema_version: 1
+card: perguntas-da-largada-legiveis-CS-7
+status: complete
+audited_at: 2026-11-14T11:00:00-03:00
+audited_diff: 859b59c..30930f5
+criteria:
+  - id: AC1
+    text: "depois do `?`, a pergunta reescrita aparece no mesmo bloco em até 60 segundos"
+    altitude: cli
+    surface: "cepa-until decide <fila> em pseudo-terminal (tecla `?`), leitor falso via CEPA_UNTIL_LEITOR; plan.yaml (queue.yaml) via cepa-plan reword-route --replace"
+    demonstrated_by:
+      test: "tests/test_cepa_until_unclear_rewrite.py::test_question_mark_rewrites_in_the_same_block_and_asks_again"
+      layer: cli-subprocess-pty
+      evidence: verified
+      run: "python3 tests/test_cepa_until_unclear_rewrite.py -> 20 checagens ok, 'tudo verde'. Vizinho: python3 tests/test_cepa_until_unclear_key.py -> 15 ok, 'tudo verde'"
+    verdict: complete
+    gap: null
+    note: "O teste roda o cepa-until real no pty: a nova pergunta aparece depois do `?`, o cabecalho do item aparece uma vez (mesmo bloco), o painel pede a resposta de novo, o plan.yaml traz a pergunta/tipo/efeitos novos e human_pending, status e evidence ficam iguais. Teto de 60 s: UNCLEAR_REWRITE_SEC = 60 passado como prazo da chamada ao leitor; o teste nao exercita o estouro do prazo (isso e CS-8, fora de escopo). Segundo `?` no mesmo item nao chama o leitor de novo (teste de texto, linha da spec 'Decided without asking'). Nota: o arquivo da fila neste layout e plan.yaml; o criterio diz queue.yaml."
