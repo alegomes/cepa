@@ -1256,8 +1256,8 @@ def test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer():
               repr(a1.get("evidence", ""))[-300:])
 
 
-def _cs4_run(menu_key, follow_up_trigger):
-    """CS-4 helper: the CS-3 fake editor, `menu_key` in the menu, then `v` at
+def _cs4_run(menu_key, follow_up_trigger, typed="v"):
+    """CS-4 helper: the CS-3 fake editor, `menu_key` in the menu, then `typed` at
     the follow-up prompt that contains `follow_up_trigger`. Returns (rc, out,
     a1)."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -1276,7 +1276,7 @@ def _cs4_run(menu_key, follow_up_trigger):
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), env=env, inputs=[
                 ("[t] I write the answer", menu_key),
-                (follow_up_trigger, "v")], timeout=60)
+                (follow_up_trigger, typed)], timeout=60)
         return rc, out, items_of(root)["a1"]
 
 
@@ -1306,6 +1306,21 @@ def test_cs4_v_in_why_opens_the_editor():
           "linha 1\nlinha 2" in ev, repr(ev)[-300:])
     check("cs4 why: a letra v não é gravada como motivo",
           ". v." not in ev and not ev.rstrip(". ").endswith(". v"), repr(ev)[-300:])
+
+
+def test_cs4_capital_v_after_no_also_opens_the_editor():
+    """CS-4: a capital `V` (caps lock, phone keyboard) at "Anything to add"
+    after `n` opens the editor too; the item stays blocked with the saved
+    text as the comment, not the letter."""
+    rc, out, a1 = _cs4_run("n", "Anything to add", typed="V")
+    ev = str(a1.get("evidence", ""))
+    check("cs4 V: sem traceback", "Traceback" not in out, out[-800:])
+    check("cs4 V: o item continua blocked",
+          rc == 0 and a1["status"] == "blocked", (rc, a1.get("status"), out[-600:]))
+    check("cs4 V: a evidência traz as duas linhas com a quebra",
+          "linha 1\nlinha 2" in ev, repr(ev)[-300:])
+    check("cs4 V: a letra V não é gravada como comentário",
+          ". V." not in ev and not ev.rstrip(". ").endswith(". V"), repr(ev)[-300:])
 
 
 def test_cs3_the_editor_header_lines_do_not_reach_the_answer():
