@@ -2253,7 +2253,8 @@ def test_pre_read_cs6_without_answer_the_prompt_carries_the_default_and_the_summ
 
 def test_pre_read_cs6_answer_typed_in_the_launch_panel_goes_into_the_prompt():
     out, events, reqs = _pref_launch(
-        tty_inputs=[("Your choice, in one line", "mostrar a data por extenso")])
+        tty_inputs=[("Your choice, in one line", "t"),
+                    ("Your answer, in one line", "mostrar a data por extenso")])
     check("cs6 answer: the panel showed the question and the default",
           "Posso usar o formato curto?" in out
           and re.search(r"Agent's default\s+usar o formato curto", out) is not None, out[-1500:])

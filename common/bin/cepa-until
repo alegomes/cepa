@@ -3463,11 +3463,16 @@ def pre_read_as_text(queue, rows, prefs, output=print):
 
 def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
     """CS-6, on a terminal at the launch: each preference the pre-read found, as one
-    closed question with the agent's default. A line typed is the owner's answer
-    (`escolha` becomes it, `fonte` "dono"); Enter keeps the default. No answer within
-    the wait, EOF or Ctrl-C: one line, and every preference not answered yet keeps the
-    default (`fonte` stays "padrao"). `prefs` is changed in place. Returns how many
-    questions reached the screen (CS-13)."""
+    closed question with the agent's default. CS-10 (perguntas-da-largada-legiveis):
+    the answer is a key, as in the route cards. `s` accepts the default (`fonte`
+    "dono"); Enter keeps it (`fonte` stays "padrao"); `n` asks for one line saying
+    what to do instead and records "não: <question>. Em vez disso: <line>"; `t`
+    records a free line. An empty follow-up line, or loose text at the menu, goes back
+    to the menu with nothing recorded: loose text used to become the whole choice, and
+    a bare "Não" reached the item's agent without saying what to do instead. No answer
+    within the wait, EOF or Ctrl-C: one line, and every preference not answered yet
+    keeps the default. `prefs` is changed in place. Returns how many questions reached
+    the screen (CS-13)."""
     if not prefs:
         return 0
     if question is None:
@@ -3478,10 +3483,11 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
     total = of or len(prefs)
     if panel.enabled:
         panel.continue_panel(f"{len(prefs)} choice(s) the pre-read found")
-        panel.panel_note("answer to decide, Enter keeps the agent's default")
+        panel.panel_note("s accepts the agent's default, n says what to do instead, "
+                         "t writes a free answer")
     else:
-        print(f"\n── {len(prefs)} choice(s) the pre-read found: answer to decide, "
-              "Enter keeps the agent's default")
+        print(f"\n── {len(prefs)} choice(s) the pre-read found: s accepts the agent's "
+              "default, n says what to do instead, t writes a free answer")
 
     def stop(message):
         if panel.enabled:
@@ -3490,6 +3496,19 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
         else:
             print(f"\n   {message}")
 
+    def say(text):
+        if panel.enabled:
+            panel.key_error(text)
+        else:
+            print(f"       {text}")
+
+    def follow(text):
+        return panel.follow_up(text) if panel.enabled else f"       {text}"
+
+    chips = [("s", "yes, go with the agent's default"),
+             ("n", "no, I say what to do instead"),
+             ("t", "I write the answer"),
+             ("Enter", "keep the agent's default")]
     for i, (ident, pref) in enumerate(prefs.items(), first):
         if panel.enabled:
             panel.item(i, total, ident, "")
@@ -3501,18 +3520,52 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
             if pref.get("pergunta"):
                 panel.question(pref["pergunta"])
             # menu() prints the chips; the prompt it returns is not used, because
-            # this screen keeps the "Your choice, in one line" prompt (pty tests).
-            panel.menu([("Enter", "keep the agent's default"),
-                        ("text", "type your choice in one line")], "Enter")
-            prompt = panel._prompt("Your choice, in one line: ")
+            # this screen keeps the "Your choice, in one line" anchor (pty tests).
+            panel.menu(chips, "Enter")
+            prompt = panel._prompt("Your choice, in one line [s/n/t, Enter keeps "
+                                   "the default]: ")
         else:
             if pref.get("pergunta"):
                 print(f"   {pref['pergunta']}")
             print(f"   If nobody answers, the agent goes with: {pref['padrao']}")
-            prompt = "   ▸ Your choice, in one line [Enter keeps the default]: "
+            print("       [s] yes, go with the default · [n] no, I say what to do "
+                  "instead · [t] I write the answer")
+            prompt = ("   ▸ Your choice, in one line [s/n/t, Enter keeps the "
+                      "default]: ")
         shown += 1
         try:
-            raw = question(prompt)
+            while True:
+                raw = " ".join(str(question(prompt) or "").split())
+                key = raw.lower()
+                key = {"sim": "s", "yes": "s", "y": "s",
+                       "não": "n", "nao": "n", "no": "n"}.get(key, key)
+                if key == "":
+                    break
+                if key == "s":
+                    pref.update(escolha=pref["padrao"], fonte="dono")
+                    break
+                if key == "n":
+                    line = " ".join(str(question(follow(
+                        "What should the agent do instead, in one line? "
+                        "[Enter goes back to the menu] ")) or "").split())
+                    if not line:
+                        say("nothing recorded; choose again")
+                        continue
+                    base = pref.get("pergunta") or pref["texto"]
+                    pref.update(escolha=f"não: {base}. Em vez disso: {line}",
+                                fonte="dono")
+                    break
+                if key == "t":
+                    line = " ".join(str(question(follow(
+                        "Your answer, in one line (the item's agent reads this) "
+                        "[Enter goes back to the menu]: ")) or "").split())
+                    if not line:
+                        say("nothing recorded; choose again")
+                        continue
+                    pref.update(escolha=line, fonte="dono")
+                    break
+                say(f"\"{raw}\" is not one of the options; to write an answer, "
+                    "type t first")
         except NoAnswer:
             stop(f"nobody answered in {(wait or 0) / 60:g} min; the remaining "
                  "choice(s) run with the agent's default")
@@ -3523,9 +3576,6 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
             return shown
         if panel.enabled:
             panel.end()
-        text = " ".join(str(raw or "").split())
-        if text:
-            pref.update(escolha=text, fonte="dono")
     return shown
 
 
@@ -4979,6 +5029,11 @@ def _main(argv=None):
                "rotas_resumidas": tally.get("summarized", 0),
                "itens_lidos": sum(1 for r in rows or [] if r.get("lido")),
                "achados": found,
+               # CS-10 (perguntas-da-largada-legiveis): each pre-read choice as it
+               # left the launch, with who decided it (`dono` or `padrao`).
+               "escolhas": [{"id": ident, "pergunta": p.get("pergunta"),
+                             "escolha": p["escolha"], "fonte": p["fonte"]}
+                            for ident, p in preferences.items()],
                "segundos": round(time.monotonic() - launch_clock, 1)})
     # The run state, next to the `.jsonl` (C6): `rodando` now, and at the end
     # `esperando-dono` (there is an action or pending item) or `encerrado`. It is written BEFORE
