@@ -32,7 +32,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_cepa_until import (  # noqa: E402
-    CEPA_UNTIL, fake_claude, item, ledger_of, build_repo, run_until)
+    CEPA_UNTIL, fake_claude, item, ledger_of, build_repo, run_until, warm_up)
 
 FAILURES = []
 
@@ -390,9 +390,11 @@ def herdr_env(tmp):
     log = Path(tmp) / "herdr.log"
     herdr.write_text(f"#!{sys.executable}\n"
                      "import sys, json, time\n"
+                     "if sys.argv[1:] == ['--warmup']: sys.exit(0)\n"
                      f"open({str(log)!r}, 'a').write(json.dumps("
                      "{'t': time.time(), 'argv': sys.argv[1:]}) + '\\n')\n")
     herdr.chmod(0o755)
+    warm_up(herdr)
     return ({"CEPA_UNTIL_MARGEM_RESET": str(HERDR_MARGIN), "HERDR_ENV": "1",
              "HERDR_PANE_ID": "w9:p9", "HERDR_BIN_PATH": str(herdr)}, log)
 
