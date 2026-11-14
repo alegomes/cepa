@@ -2377,6 +2377,96 @@ def commit_run_records(repo, paths, message):
     return head_of(root), None
 
 
+# A run's own paths in the main clone, in both layouts: the queue file and the
+# `until/<run>.jsonl` / `until/<run>.review.md` records. Group 1 or 3 is the queue
+# name; group 2 or 4 is set when the path is a run record (not the queue file).
+RUN_PATH = re.compile(
+    r"^\.claude/(?:queues/([^/]+)/(?:queue\.yaml|(until/[^/]+\.(?:jsonl|review\.md)))"
+    r"|programs/([^/]+)/(?:plan\.yaml|(until/[^/]+\.(?:jsonl|review\.md))))$")
+
+
+def _record_of_live_elsewhere(root, path):
+    """Is the `.jsonl` at `path` a run that may still be alive on ANOTHER machine?
+    Its pid can't be checked from here (same rule as `dead_runs`), so a record
+    from another host with no `run_end` is left alone. A clone synced between two
+    machines (Insync) would otherwise commit the other machine's live run."""
+    if not path.endswith(".jsonl"):
+        return False
+    try:
+        lines = (Path(root) / path).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return False
+    start, ended = {}, False
+    for line in lines:
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(ev, dict):
+            continue
+        if ev.get("evento") == "run_start" and not start:
+            start = ev
+        elif ev.get("evento") == "run_end":
+            ended = True
+    host = start.get("host")
+    return bool(host and host != socket.gethostname() and not ended)
+
+
+def loose_records_of_dead_runs(repo):
+    """{queue: [paths]} of what runs whose supervisor died left without a commit in
+    the main clone, in ANY queue of the repo (spec `until-arvore-limpa`, CS-4). A
+    run that ends normally, by quota or by a signal commits its own records
+    (CS-1/CS-3); one killed without warning (kill -9, power cut, a crash in the
+    middle of the commit) leaves its `.jsonl` loose, and the queue marks with it.
+
+    A queue counts only when a run record of it is loose (untracked, modified or
+    staged): a modified queue file with no loose record is not a dead run's, it is
+    the owner's, and stays dirt. A queue with a live run (`live_run_of_queue`) is
+    left out whole: that run is still writing its queue and its record, and
+    commits them itself. Paths are relative to the main clone."""
+    root = main_root(repo)
+    try:
+        st = subprocess.run(["git", "status", "--porcelain", "-z",
+                             "--untracked-files=all", "--",
+                             qp.NEW_DIR, qp.LEGACY_DIR],
+                            cwd=str(root), capture_output=True, text=True,
+                            timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    if st.returncode != 0:
+        return {}
+    by_queue = {}
+    entries = st.stdout.split("\0")
+    i = 0
+    while i < len(entries):
+        entry = entries[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        xy, path = entry[:2], entry[3:]
+        if "R" in xy or "C" in xy:
+            i += 1  # `-z` writes the rename's source as the next entry
+        if "D" in xy:
+            continue  # a vanished file is not a record to commit
+        m = RUN_PATH.match(path)
+        if not m:
+            continue
+        queue = m.group(1) or m.group(3)
+        is_record = bool(m.group(2) or m.group(4))
+        by_queue.setdefault(queue, {"records": [], "queue": []})[
+            "records" if is_record else "queue"].append(path)
+    found = {}
+    for queue, paths in sorted(by_queue.items()):
+        if not paths["records"]:
+            continue
+        if live_run_of_queue(root, queue):
+            continue
+        if any(_record_of_live_elsewhere(root, p) for p in paths["records"]):
+            continue
+        found[queue] = sorted(paths["queue"] + paths["records"])
+    return found
+
+
 def land_action(repo, tree, queue, run_id, n):
     """The `aterrissar` action of the run's state: the run's normal end and
     `fecha-morto` propose the same one."""
@@ -4325,7 +4415,42 @@ def _main(argv=None):
               "starting another.", file=sys.stderr)
         return 2
 
+    # CS-4 (spec `until-arvore-limpa`): before the dirt guard, the records a dead
+    # run left loose (its `.jsonl`, `.review.md` and queue marks), of any queue,
+    # go into one collect commit. Without it, a run killed without warning made
+    # the next launch refuse "dirty tree" over what the harness itself wrote.
+    # `--dry-run` only says what it would collect, and the guard ignores it.
+    collected = {}
+    loose = loose_records_of_dead_runs(repo)
+    if loose:
+        all_paths = [p for paths in loose.values() for p in paths]
+        names = ", ".join(loose)
+        if a.dry:
+            print(f"cepa-until: would collect {len(all_paths)} loose record(s) of "
+                  f"dead runs ({names}) in one commit before the run")
+            collected = {"filas": list(loose), "caminhos": all_paths}
+        else:
+            root = main_root(repo)
+            sha, error = commit_run_records(
+                repo, [root / p for p in all_paths],
+                f"until: collect records of dead runs ({names})")
+            if sha:
+                print(SCREEN.c("cinza", f"cepa-until: collected {len(all_paths)} loose "
+                                        f"record(s) of dead runs ({names}) in "
+                                        f"commit {sha[:7]} (not pushed)"))
+                collected = {"commit": sha, "filas": list(loose),
+                             "caminhos": all_paths}
+            elif error:
+                print(f"cepa-until: git refused the commit that collects the loose "
+                      f"records of dead runs ({names}): "
+                      f"{error.splitlines()[-1] if error.splitlines() else error}",
+                      file=sys.stderr)
+
     dirt = dirty_tree(repo, live_run_ok=True)
+    if a.dry and collected:
+        would = set(collected["caminhos"])
+        dirt = [l for l in dirt or [] if _dirt._path_of(l) not in would] \
+            if dirt is not None else dirt
     ghosts = ghost_deletions(repo, a.queue) if dirt else []
     if ghosts and not a.dirty_ok:
         # No `--dirty-ok` in the message on purpose: with it the next item runs
@@ -4577,7 +4702,8 @@ def _main(argv=None):
               "arvore": str(tree), "base": run_base,
               "herdou": inheritance,
               "branch_do_clone": current_branch(repo), "verify": verify,
-              "pid": pid, "host": host, "versao_registro": 2})
+              "pid": pid, "host": host, "versao_registro": 2,
+              **({"recolha": collected} if collected else {})})
     if pre_read_event:
         log_event(pre_read_event)
     # CS-13: the launch's measurement. No numeric goal (spec): the event is what lets a
