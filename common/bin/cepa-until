@@ -2511,6 +2511,8 @@ def legend_lines(chips, summary, delivered=False):
                   "d": "the item leaves the queue"}
     effect.update({"t": "you write the answer in one line; the next run reads it",
                    "e": "shows the technical detail, written for agents",
+                   "?": "I did not understand the question: it is recorded as "
+                        "badly written and nothing is answered",
                    "Enter": "leaves the question for later",
                    "q": "stops the questions; the rest stays for later"})
     return [f"{key} = {effect[key]}" for key, _ in chips if key in effect]
@@ -2822,7 +2824,7 @@ class Panel:
 
 def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
            output=print, answer=None, land=None, wait=None, first=1, of=None,
-           opened=False, note=None, close=True, progress=None):
+           opened=False, note=None, close=True, progress=None, unclear=None):
     """Goes through what only the owner unblocks and applies each answer. Returns
     (applied, for_later), as text, for the closing.
     CS-8 (the launch panel in two parts): `first`/`of` number the questions inside a
@@ -2845,6 +2847,22 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 + (["--keep"] if keep else [])
                 + (["--drop"] if drop else []),
                 capture_output=True, text=True, timeout=60)
+            return p.returncode, (p.stdout or p.stderr).strip()
+    if unclear is None:
+        # CS-6 (perguntas-da-largada-legiveis): "I did not understand" goes to the
+        # global feedback ledger `/common:feedback` triages, target `cepa-until`;
+        # the item gets no answer (spec Q3, "Decided without asking").
+        def unclear(ident, text):
+            msg = (f"pergunta mal escrita no painel do cepa-until (fila {queue}, "
+                   f"item {ident}): {text}")
+            try:
+                p = subprocess.run(
+                    [sys.executable, str(HERE / "cepa-feedback"), "add", msg,
+                     "--target", "cepa-until", "--origin", "comando",
+                     "--repo", str(repo)],
+                    capture_output=True, text=True, timeout=60)
+            except (OSError, subprocess.SubprocessError) as e:
+                return 1, str(e)
             return p.returncode, (p.stdout or p.stderr).strip()
     if land is None:
         def land():
@@ -2928,6 +2946,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # question, the terminal asks the default one, instead of showing the evidence and
         # leaving the owner to find the question on his own.
         screen.blank()
+        shown_question = question_text
         if question_text:
             screen.question(question_text)
             outside = question_breaks_rules(question_text)
@@ -2941,17 +2960,19 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # (C1-45 held an open question, C1-47 three outside blocks). The question
         # no longer describes the keys; the legend below does, a line per key.
         elif route is not None and ad.get("reason") == "pos-entrega":
-            screen.question("Is this task finished?")
+            shown_question = "Is this task finished?"
         elif route is not None:
-            screen.question("Send this item back to the queue for the next run to "
-                          "try again?")
+            shown_question = ("Send this item back to the queue for the next run "
+                              "to try again?")
         elif summary.get("impede"):
-            screen.question("unblock the item and send it back to the queue?")
+            shown_question = "unblock the item and send it back to the queue?"
         else:
             screen.label("The agent stopped because",
                         summarize_reason(ad.get('evidence') or ''),
                         short_path="Evidence")
-            screen.question("unblock the item and send it back to the queue?")
+            shown_question = "unblock the item and send it back to the queue?"
+        if not question_text:
+            screen.question(shown_question)
         if instruction:
             screen.note(f"If yes, the next run receives: {instruction}")
         rec = recommendation_line(d)
@@ -2967,11 +2988,11 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                   else "discard the item")]
         if show:
             chips.append(("e", "technical detail"))
-        chips += [("Enter", "later"), ("q", "quit")]
+        chips += [("?", "I don't understand"), ("Enter", "later"), ("q", "quit")]
         screen.blank()
         screen.legend(legend_lines(chips, summary, delivered))
         prompt = screen.menu(chips, recommended_letter(d))
-        valid = {"s", "n", "t", "d", "", "q"} | ({"e"} if show else set())
+        valid = {"s", "n", "t", "d", "", "q", "?"} | ({"e"} if show else set())
         while True:
             raw = str(question(prompt))
             r = raw.strip().lower()
@@ -2987,6 +3008,13 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                                    "to write an answer, type t first")
                 continue
             break
+        if r == "?":
+            rc, msg = unclear(ident, shown_question)
+            screen.recorded("question recorded as badly written; no answer on the "
+                            "item" if rc == 0 else msg, ok=rc == 0)
+            for_later.append(f"{ident}: {OWNER_REASON[reason_alias(ad['reason'])]}")
+            screen.end()
+            continue
         if r == "q":
             stopped = True
         text, give_back, drop = "", False, False
