@@ -3,7 +3,7 @@ card: perguntas-da-largada-legiveis-CS-9
 verdict: proven
 reviewed_at: 2026-11-14T17:00:00-03:00
 base_commit: 2a4cb46
-head_commit: 160e786
+head_commit: bb9a59a   # cherry-pick of 160e786 (side branch until/2026-11-14-0956-vermelho-CS-9); git diff 160e786 bb9a59a is empty
 issue_type: Story
 scope:
   changed_classes:

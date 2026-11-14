@@ -2,7 +2,7 @@ schema_version: 1
 card: perguntas-da-largada-legiveis-CS-9
 status: complete
 audited_at: 2026-11-14T14:30:00-03:00
-audited_diff: 2a4cb46..a71a69a
+audited_diff: 2a4cb46..4cc3762   # cherry-pick of a71a69a, identical tree
 criteria:
   - id: AC1
     text: "num pseudo-terminal de 80 colunas, com um leitor falso que devolve uma preferência cujo texto tem 200 caracteres, nenhuma linha do bloco passa de 80 colunas, o bloco abre com a linha `N/M · <id>` da moldura e traz os rótulos 'Choice', 'Agent's default' e o menu de teclas"
