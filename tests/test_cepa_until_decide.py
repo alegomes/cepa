@@ -1174,6 +1174,51 @@ def test_invalid_byte_on_terminal_does_not_crash_decide():
               and "vira checklist" in a1["evidence"], a1)
 
 
+def _long_accented_answer():
+    """1,500 bytes of UTF-8 with `ção` starting at byte 1023, so the `ç`
+    straddles byte 1024, where the macOS canonical terminal cuts the line
+    (`getconf MAX_CANON /dev/tty` = 1024)."""
+    head = "a" * 1023
+    text = head + "ção"
+    text += "x" * (1500 - len(text.encode()))
+    assert len(text.encode()) == 1500
+    assert text.encode()[1023:1025] == "ç".encode()
+    return text
+
+
+def test_cs1_long_pasted_answer_with_accents_reaches_the_item():
+    """CS-1 (docs/spec/campo-de-resposta-until.md): in C1-47 of
+    wego-faturamento-backend the owner pasted ~1,150 characters with accents
+    and `cepa-until` answered "an accent arrived half-way": without
+    `readline` the terminal stays canonical, cuts the line at 1024 bytes and
+    the answer is lost. On a pty, `s` then 1,500 bytes in "Anything to add"
+    must end the item's evidence intact."""
+    long_text = _long_accented_answer()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+             "--repo", str(root)], str(root), inputs=[
+                ("[t] I write the answer", "s"),
+                ("Anything to add", long_text)], timeout=60)
+        a1 = items_of(root)["a1"]
+        check("cs1: sem traceback nem 'half-way'",
+              "Traceback" not in out and "half-way" not in out, out[-800:])
+        check("cs1: o item volta para pending",
+              rc == 0 and a1["status"] == "pending", (rc, a1.get("status"),
+                                                      out[-800:]))
+        # The owner's text is the end of the answer segment; after it
+        # `cepa-plan responde` appends its fixed trailer ("O item voltou de
+        # `blocked` para `pending`."), so "ends with" is read up to there.
+        check("cs1: a resposta na evidência termina com os 1.500 bytes intactos",
+              f"{long_text}. O item voltou de" in str(a1.get("evidence", "")),
+              str(a1.get("evidence", ""))[-200:])
+
+
 def test_loose_text_at_options_prompt_does_not_vanish():
     """In the same decidir the owner wrote the answer straight into the options
     prompt (`eu não faço ideia...`, `não`): it was not r/f/e/q, the item went

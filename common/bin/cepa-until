@@ -2514,7 +2514,33 @@ def read_line(prompt, output=print, wait=None):
     return line
 
 
+_line_editing = None
+
+
+def _enable_line_editing():
+    """Loads `readline` once, and only when stdin is a terminal. Without it
+    the terminal stays canonical: no arrow keys, and macOS cuts the line at
+    1024 bytes (`getconf MAX_CANON /dev/tty`), so a long pasted answer lost
+    its Enter, or the cut fell inside an accent and became "an accent
+    arrived half-way" (C1-47, wego-faturamento-backend, 2026-11-13; CS-1 of
+    docs/spec/campo-de-resposta-until.md). `readline` reads the line itself,
+    with no such ceiling. Outside a terminal (tests, `nohup`, agent) nothing
+    changes. The history stays in memory: nothing is written to disk, so an
+    answer does not leak between repos."""
+    global _line_editing
+    if _line_editing is None:
+        _line_editing = False
+        try:
+            if sys.stdin.isatty():
+                import readline  # noqa: F401  (side effect: input() edits the line)
+                _line_editing = True
+        except (ImportError, OSError, ValueError):
+            pass
+    return _line_editing
+
+
 def _read_line(prompt, output, wait):
+    _enable_line_editing()
     while True:
         try:
             if wait is not None:
