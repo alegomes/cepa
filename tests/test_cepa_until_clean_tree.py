@@ -451,7 +451,8 @@ def _other_queue(root, layout="queues"):
     return path
 
 
-def _dead_run_of(queue_file, pid, run="2026-11-13-2200", ended=False, host=None):
+def _dead_run_of(queue_file, pid, run="2026-11-13-2200", ended=False, host=None,
+                 review=False):
     """What a run of `outra` killed without warning leaves in the clone: its
     `.jsonl` with `run_start` (pid, host) and `item_start`, the state `rodando`
     (ignored by git) and the queue marks of the item in flight, all uncommitted."""
@@ -476,7 +477,13 @@ def _dead_run_of(queue_file, pid, run="2026-11-13-2200", ended=False, host=None)
     q["items"][0].update(status="in_progress", claimed_by={"pid": pid})
     queue_file.write_text(yaml.safe_dump(q, allow_unicode=True), encoding="utf-8")
     rel = str(queue_file.parent.relative_to(queue_file.parents[3]))
-    return [f"{rel}/{queue_file.name}", f"{rel}/until/{run}.jsonl"]
+    paths = [f"{rel}/{queue_file.name}", f"{rel}/until/{run}.jsonl"]
+    if review:
+        # The analysis a run writes at its end; a crash right after it leaves
+        # it loose beside the record.
+        (d / f"{run}.review.md").write_text("# revisão\n", encoding="utf-8")
+        paths.append(f"{rel}/until/{run}.review.md")
+    return paths
 
 
 def test_cs4_launch_collects_the_loose_records_of_a_dead_run_of_another_queue():
@@ -489,7 +496,7 @@ def test_cs4_launch_collects_the_loose_records_of_a_dead_run_of_another_queue():
     with tempfile.TemporaryDirectory() as tmp:
         root = _scenario(tmp)
         other = _other_queue(root)
-        expected = sorted(_dead_run_of(other, _dead_pid()))
+        expected = sorted(_dead_run_of(other, _dead_pid(), review=True))
         before = _git(root, "rev-parse", "HEAD").strip()
         binv = base.fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
         plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
@@ -530,7 +537,7 @@ def test_cs4_collects_from_the_legacy_layout_and_leaves_the_owners_change_out():
     with tempfile.TemporaryDirectory() as tmp:
         root = _scenario(tmp)
         other = _other_queue(root, layout="programs")
-        expected = sorted(_dead_run_of(other, _dead_pid()))
+        expected = sorted(_dead_run_of(other, _dead_pid(), review=True))
         (root / "notas.txt").write_text("do dono\n", encoding="utf-8")
         binv = base.fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
         plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
@@ -540,7 +547,7 @@ def test_cs4_collects_from_the_legacy_layout_and_leaves_the_owners_change_out():
                    "^until: collect records of dead runs (outra)$").strip()
         files = sorted(_git(root, "show", "--name-only", "--format=", sha).split()) \
             if sha else []
-        check("CS-4 legado: recolha com exatamente o plan.yaml e o registro",
+        check("CS-4 legado: recolha com exatamente o plan.yaml, o registro e a revisão",
               files == expected, f"{files} != {expected}")
         check("CS-4 legado: o arquivo do dono segue solto e fora dos commits",
               "?? notas.txt" in _git(root, "status", "--porcelain"))
@@ -598,6 +605,36 @@ def test_cs4_what_is_not_a_dead_run_is_not_collected():
               p.returncode == 2 and not calls
               and _git(root, "rev-parse", "HEAD").strip() == before,
               f"saiu {p.returncode}: {p.stderr[-400:]}")
+
+
+def test_cs4_a_record_deleted_from_disk_is_not_collected_as_a_deletion():
+    """An older run's record that was committed and then vanished from disk (a
+    sync tool, a hand `rm`) is not a dead run's loose record: the collect commit
+    takes the dead run's paths and does not turn the vanishing into a deletion
+    in history. The file stays committed at HEAD."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _scenario(tmp)
+        other = _other_queue(root)
+        old = other.parent / "until" / "2026-11-01-0000.jsonl"
+        old.parent.mkdir()
+        old.write_text('{"evento": "run_start"}\n', encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                        "commit", "-qm", "registro antigo"], cwd=root, check=True)
+        old.unlink()
+        expected = sorted(_dead_run_of(other, _dead_pid()))
+        binv = base.fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, calls = base.run_until(root, binv, plan, ["--for", "2h"])
+        sha = _git(root, "log", "--format=%H", "--grep",
+                   "^until: collect records of dead runs (outra)$").strip()
+        files = sorted(_git(root, "show", "--name-only", "--format=", sha).split()) \
+            if sha else []
+        check("apagado: a recolha leva só os caminhos do run morto",
+              files == expected, f"{files} != {expected}: {p.stderr[-300:]}")
+        check("apagado: o registro antigo segue no HEAD",
+              _git(root, "ls-files", "--", str(old.relative_to(root))).strip()
+              == str(old.relative_to(root)))
 
 
 def test_cs4_dry_run_says_what_it_would_collect_and_commits_nothing():
