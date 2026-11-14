@@ -225,6 +225,112 @@ def test_failing_pre_commit_hook_is_respected():
               (p.stdout + p.stderr)[-600:])
 
 
+# ── CS-5: git refuses the commit: the run warns with the reason and the command ─
+
+def _git_spy(tmp):
+    """A `git` first on PATH that logs each call's argv and runs the real git, so
+    the test sees every flag the run handed to git (`--no-verify` included)."""
+    import shutil
+    real = shutil.which("git")
+    spy_dir = Path(tmp) / "espiao-git"
+    spy_dir.mkdir()
+    log = Path(tmp) / "git-chamadas.txt"
+    spy = spy_dir / "git"
+    spy.write_text(f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> {log}\nexec {real} \"$@\"\n",
+                   encoding="utf-8")
+    spy.chmod(0o755)
+    return spy_dir, log
+
+
+def _cs5_run(tmp, hook_body):
+    """One run with analysis on (so a `.review.md` exists) and, when `hook_body`
+    is set, a pre-commit hook with that body. Returns (root, process, git log,
+    HEAD before the run)."""
+    import os
+    root = _scenario(tmp)
+    if hook_body is not None:
+        hook = root / ".git" / "hooks" / "pre-commit"
+        hook.write_text(hook_body, encoding="utf-8")
+        hook.chmod(0o755)
+    binv = base.fake_claude(tmp, (
+        "if any('until-review' in a for a in ARGS):\n"
+        "    print('# revisão do run\\n\\nnada pendente')\n"
+        "else:\n"
+        "    marca(primeiro_pendente(), status='done')"))
+    spy_dir, log = _git_spy(tmp)
+    plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+    before = _git(root, "rev-parse", "HEAD").strip()
+    p, _calls = base.run_until(root, binv, plan, ["--for", "2h", "--com-analise"],
+                               extra_env={"PATH": f"{spy_dir}:{os.environ['PATH']}"})
+    return root, p, log, before
+
+
+def _cs5_checks(label, tmp, hook_body, reason):
+    with tempfile.TemporaryDirectory() as tmp_ok:
+        _r, p_ok, _l, _b = _cs5_run(tmp_ok, None)
+    root, p, log, before = _cs5_run(tmp, hook_body)
+    out = p.stdout + p.stderr
+    check(f"CS-5 {label}: o código de saída é o mesmo do run sem o hook",
+          p.returncode == p_ok.returncode, f"{p.returncode} != {p_ok.returncode}")
+    check(f"CS-5 {label}: nenhum commit novo",
+          _git(root, "rev-parse", "HEAD").strip() == before)
+    calls = log.read_text(encoding="utf-8") if log.exists() else ""
+    check(f"CS-5 {label}: o run chamou git commit pelo espião", "commit" in calls,
+          calls[-400:])
+    check(f"CS-5 {label}: nenhuma chamada a git traz --no-verify",
+          "--no-verify" not in calls,
+          [l for l in calls.splitlines() if "--no-verify" in l])
+    reason_lines = [l for l in out.splitlines() if "git refused" in l]
+    check(f"CS-5 {label}: a tela final traz a linha do motivo",
+          any(reason in l for l in reason_lines), out[-800:])
+    marker = "to commit by hand: "
+    cmds = [l.split(marker, 1)[1].strip() for l in out.splitlines() if marker in l]
+    check(f"CS-5 {label}: a tela final traz o comando para o dono",
+          len(cmds) == 1 and "git" in cmds[0] and " commit " in cmds[0], out[-800:])
+    reviews = sorted((root / ".claude" / "programs" / "fila" / "until")
+                     .glob("*.review.md"))
+    text = reviews[0].read_text(encoding="utf-8") if reviews else ""
+    check(f"CS-5 {label}: o .review.md mantém a análise",
+          "nada pendente" in text, text[:300])
+    check(f"CS-5 {label}: o .review.md traz o motivo", reason in text, text[-600:])
+    check(f"CS-5 {label}: o .review.md traz o mesmo comando",
+          bool(cmds) and cmds[0] in text, text[-600:])
+    check(f"CS-5 {label}: o comando não traz --no-verify",
+          bool(cmds) and "--no-verify" not in cmds[0], cmds)
+    if not cmds:
+        return
+    # The command is exact: once the owner deals with the hook, running it as
+    # printed, from anywhere, leaves the clone clean with one commit of the run.
+    (root / ".git" / "hooks" / "pre-commit").unlink()
+    r = subprocess.run(["sh", "-c", cmds[0]], cwd=tmp, capture_output=True,
+                       text=True)
+    check(f"CS-5 {label}: o comando roda como impresso", r.returncode == 0,
+          r.stdout + r.stderr)
+    st = _git(root, "status", "--porcelain", "--untracked-files=all")
+    check(f"CS-5 {label}: depois do comando, git status vazio", st == "", st)
+    check(f"CS-5 {label}: ...com um commit só, sobre a base",
+          _git(root, "rev-parse", "HEAD~1").strip() == before)
+    files = sorted(_git(root, "show", "--name-only", "--format=", "HEAD").split())
+    check(f"CS-5 {label}: ...que leva fila, registro e revisão",
+          len(files) == 3 and any(f.endswith("plan.yaml") for f in files)
+          and any(f.endswith(".jsonl") for f in files)
+          and any(f.endswith(".review.md") for f in files), files)
+
+
+def test_cs5_refusing_hook_with_a_message():
+    with tempfile.TemporaryDirectory() as tmp:
+        _cs5_checks("hook com mensagem", tmp,
+                    "#!/bin/sh\necho 'lint: 3 erros em fila' >&2\nexit 1\n",
+                    "lint: 3 erros em fila")
+
+
+def test_cs5_silent_refusing_hook_still_warns():
+    """A hook that exits 1 without printing: git says nothing, and before CS-5 the
+    run said nothing either (`elif error` on an empty string)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        _cs5_checks("hook mudo", tmp, "#!/bin/sh\nexit 1\n", "exited 1")
+
+
 # ── CS-3: Ctrl+C and SIGTERM also end with the commit ───────────────────────
 
 # The fake `claude` for CS-3: a1 is worked and closed like in a normal run; a2
