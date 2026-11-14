@@ -29,10 +29,21 @@ items:
   status: pending
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-11-12: sim, mostrar os 12 plugins do marketplace.json,
-    sem esconder nenhum. Rota humana fechada pelo dono: Precondição do lote 1 no
-    documento: o dono diz quais dos 12 plugins do marketplace.json um recém-chegado
-    deve ver..'
+  evidence: 'Resposta do dono em 2026-11-14: sim: Os 12 plugins do marketplace devem
+    aparecer todos, sem nenhum escondido, no resumo do instalador e no guia de primeiros
+    passos? Instrução: owner answer (2026-11-12, confirmed 2026-11-13): show all
+    12 plugins of .claude-plugin/marketplace.json, none hidden, in the installer''s
+    final summary and in docs/getting-started.md; derive both lists from marketplace.json.
+    Rota humana fechada pelo dono: O documento de estratégia diz que este lote precisa
+    antes de uma resposta do dono: quais dos 12 plugins uma pessoa que está chegando
+    agora deve ver na lista do guia de primeiros passos e no resumo do instalador..
+    Evidência anterior: Pre-read at launch found a missing pre-condition: O documento
+    de estratégia diz que este lote precisa antes de uma resposta do dono: quais
+    dos 12 plugins uma pessoa que está chegando agora deve ver na lista do guia
+    de primeiros passos e no resumo do instalador. Resposta do dono em 2026-11-12:
+    sim, mostrar os 12 plugins do marketplace.json, sem esconder nenhum. Rota humana
+    fechada pelo dono: Precondição do lote 1 no documento: o dono diz quais dos
+    12 plugins do marketplace.json um recém-chegado deve ver..'
 - id: L2-E3
   title: Validador de todo comando, agente e skill (E3) como teste da suíte
   why: 'Lote 2 da seção 7 de docs/estrategia-lacunas-ecc.md. Não move nenhum dos
@@ -41,9 +52,26 @@ items:
     não carrega) volte a acontecer. Risco R1 do documento: é um teste na suíte,
     não um hook. Posição herdada da ordem dos lotes no documento; ninguém priorizou
     os itens entre si.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits a46400e + f6ece39 (tests/test_component_headers.py) e 4c? acceptance.
+    Teste na suíte, sem hook (R1): valida cabeçalho (--- fechado, name = pasta/arquivo,
+    description não vazio) de 21 skills, 55 agentes, 71 comandos, e que toda citação
+    plugin:nome nos componentes resolve. Autoteste com mini repo cobre os defeitos.
+    Perturbação no repo real (tirar name de common/skills/till-done; citar common:nao-existe)
+    ficou RED. Gates: pair-reviewer APPROVE (2 ressalvas aplicadas em f6ece39: fechamento
+    só em linha ''---'', docstring do parser leniente); completion-auditor COMPLETE
+    (.claude/acceptance/L2-E3.yaml). Fora: lote 0 (os 2 SKILL.md de docs-topology
+    seguem sem cabeçalho, como exceções-catraca em KNOWN_BROKEN que falham quando
+    forem consertados); L2-TAG. Suíte completa fica com o supervisor. Código está
+    na branch until/2026-11-13-0800.'
+  head_commit: 42fe0a39fbd9a9ec9e716693ae7972cdc412a8ea
+  decisions:
+  - texto: Os dois arquivos de skill quebrados do lote 0 não foram consertados aqui;
+      o teste os lista como exceção e fica vermelho no dia em que forem consertados,
+      para a exceção ser apagada
+    commit: a46400e8dc653a22fc54ddf3a5ec418510ac6691
 - id: L2-TAG
   title: Uma tag do repositório a cada fila aterrissada
   why: 'Lote 2 da seção 7 de docs/estrategia-lacunas-ecc.md e decisão do dono em
@@ -53,9 +81,26 @@ items:
     CHANGELOG.md escrito à mão; a versão por plugin segue docs/versionamento.md.
     Posição herdada da ordem do texto do lote; ninguém priorizou os itens entre
     si.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 7f97b70 (cepa-until land: landing_tag/tag_landing, tag leve
+    landed/<fila>/<run> no commit aterrissado, depois do build verde, antes do push;
+    build vermelho não cria tag; tag de mesmo nome em outro commit não é movida,
+    só avisa; landing_info.tag no estado; docs/cepa-until.md e docs/cepa-cli.md),
+    fe07d71 (teste liga push.followTags para matar P6 do proof). Segui a pré-leitura
+    do lançamento: nome = fila + data (o run id YYYY-MM-DD-HHMM), tag só local.
+    Sem CHANGELOG.md; versão por plugin intocada. Portões: completion-auditor COMPLETE
+    (.claude/acceptance/L2-TAG.yaml, 94228f3); proof-reviewer PROVEN (docs/proof/L2-TAG.yaml,
+    0ba9ae1; 1ª rodada 975d0ba UNPROVEN só pela P6, fechada). Testes: python3 tests/test_cepa_until_land.py
+    verde; vizinhos test_cepa_until_run_branch, test_cepa_until_dead_supervisor,
+    test_queue_rename, test_pt_names_to_english, test_cepa_help_layout verdes. Suíte
+    completa fica com o supervisor. Código está na branch until/2026-11-13-0800.'
+  head_commit: 0ba9ae13b40ec468e11cb25867b866815df076ef
+  decisions:
+  - texto: Cada fila aterrissada ganha a tag landed/<fila>/<data-hora do run>, criada
+      só na máquina e nunca enviada ao repositório remoto
+    commit: 7f97b7063ce92f357a1989b58b135233bed3db93
 - id: L3
   title: Executor que compara as decisões de um hook antes e depois de uma mudança
     (E1), com entradas escritas à mão para os três hooks que mais bloqueiam
@@ -65,6 +110,26 @@ items:
     ser um teste que não toca nos hooks. Risco R3 do documento: os cenários não
     contêm sessão gravada nem dado de cliente, porque o repositório é público. Posição
     herdada da ordem dos lotes no documento; ninguém priorizou os itens entre si.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 0281f93 (tests/replay/run.py + corpus de 45 chamadas escritas
+    à mão para build-hex bash-path-lock, maven-reactor-guard, gate-advance + tests/test_hook_replay.py
+    + README), 7a58f09 (testes que mataram 7 sobreviventes da prova: scrub de env
+    e GIT_*, telemetria isolada, exit 1/exit 2 do Python como erro, colunas redundant
+    e tokens), 9a94fed (prova). Os três hooks vieram do ledger ~/.claude/cepa-telemetry:
+    bash_pathlock_deny 3922 (100% build-hex), maven_reactor_block 1804, gate_block
+    952. pair-reviewer APPROVE (3 ressalvas corrigidas). completion-auditor COMPLETE
+    (.claude/acceptance/L3.yaml). proof-reviewer UNPROVEN em 0281f93, PROVEN em
+    7a58f09 (docs/proof/L3.yaml). Nenhum hook alterado (R1); corpus sem sessão gravada
+    nem dado de cliente (R3). Rodados só tests/test_hook_replay.py e vizinhos (maven_reactor_guard,
+    gate_advance_target_repo, bash_path_lock_redir), todos verdes; suíte completa
+    fica com o supervisor. Código está no branch until/2026-11-13-0800. Fora: só
+    a cópia build-hex do bash-path-lock é medida (as outras 5 são geradas do mesmo
+    template).'
+  head_commit: 9a94fedc82d3031e84461dcca7475cf5d1f22aa4
+  decisions:
+  - texto: O comparador mede só a cópia do build-hex da trava de escrita por shell,
+      porque todas as negações registradas vieram dela, e um hook que sai com erro
+      conta como erro, não como negação
+    commit: 0281f93f2b002090d3283fb6976b2ac458c605de
