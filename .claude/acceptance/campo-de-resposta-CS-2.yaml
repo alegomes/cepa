@@ -1,0 +1,50 @@
+schema_version: 1
+card: campo-de-resposta-CS-2
+status: complete
+audited_at: 2026-11-14T00:00:00-03:00
+covers: b2c1c83..7288dfd
+criteria:
+  - id: AC1
+    text: "CS-2: num pty, em 'Anything to add', o dono digita abd, seta esquerda, c, Home, >, End, ! e Enter; o evidence do item termina com >abcd! (docs/spec/campo-de-resposta-until.md)"
+    altitude: cli
+    surface: "`cepa-until decide` real num pty: `s` no menu, depois as teclas em 'Anything to add' (caminho input(prompt) de _read_line); evidence do item no queue.yaml"
+    demonstrated_by:
+      test: "tests/test_cepa_until_decide.py::test_cs2_arrows_and_home_end_edit_anything_to_add"
+      layer: "subprocess real de cepa-until decide num pty, lendo o queue.yaml"
+      evidence: verified
+      run: |
+        python3 -c "import sys; sys.path.insert(0,'tests'); import test_cepa_until_decide as t; [getattr(t,n)() for n in [2 testes cs2]]; sys.exit(1 if t.FAILURES else 0)"
+          ok  cs2: a evidência termina com '>abcd!'
+          ok  cs2: nenhuma sequência de escape das setas na evidência
+        FAILURES [] exit=0 (HEAD 7288dfd; 4 checagens no total, N>0)
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "CS-2: o mesmo roteiro em 'Your choice' da leitura prévia grava >abcd! como escolha"
+    altitude: cli
+    surface: "cepa-until com a leitura prévia num pty (caminho temporizado: select no stdin, depois input('')); evento item_start preferencia.escolha e o prompt do item"
+    demonstrated_by:
+      test: "tests/test_cepa_until_decide.py::test_cs2_arrows_and_home_end_edit_your_choice_of_the_pre_read"
+      layer: "cepa-until real num pty (_pref_launch), lendo o evento item_start e o prompt enviado"
+      evidence: verified
+      run: |
+        ok  cs2 (pre-read): a escolha gravada é '>abcd!'
+        ok  cs2 (pre-read): o prompt de x1 leva '>abcd!'
+        FAILURES [] exit=0 (mesma invocação, HEAD 7288dfd)
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "Título do CS-2: 'em qualquer campo de texto'"
+    altitude: cli
+    surface: "todos os prompts de texto passam por _read_line, que tem dois ramos: _timed_input (com espera) e input(prompt) (sem espera)"
+    demonstrated_by:
+      test: "AC1 (ramo input(prompt)) e AC2 (ramo _timed_input)"
+      layer: "pty real nos dois ramos de _read_line"
+      evidence: verified
+      run: "grep de input( em common/bin/cepa-until: só _timed_input (l.2573) e _read_line (l.2582) chamam input; readline é carregado uma vez em _enable_line_editing. Os dois ramos têm teste, os campos restantes não têm teste próprio (mesmo código)."
+    verdict: complete
+    gap: null
+notes:
+  - "Os testes foram vistos vermelhos contra a-3.. a3e503c^ (evidence abd\\x1b[Dc\\x1b[H>\\x1b[F!), conforme o supervisor; não reexecutei esse lado."
+  - "Cobertura por campo é por ramo de código, não por prompt: se um campo novo contornar _read_line, o teste não o pegaria."
+decided_without_asking_respected: []
