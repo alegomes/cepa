@@ -45,6 +45,6 @@ criteria:
     verdict: complete
     gap: null
 notes:
-  - "Os testes foram vistos vermelhos contra a-3.. a3e503c^ (evidence abd\\x1b[Dc\\x1b[H>\\x1b[F!), conforme o supervisor; não reexecutei esse lado."
+  - "Os testes foram vistos vermelhos contra a3e503c^ (evidence abd\\x1b[Dc\\x1b[H>\\x1b[F!), conforme o supervisor; não reexecutei esse lado."
   - "Cobertura por campo é por ramo de código, não por prompt: se um campo novo contornar _read_line, o teste não o pegaria."
 decided_without_asking_respected: []
