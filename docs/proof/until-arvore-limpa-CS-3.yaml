@@ -1,0 +1,66 @@
+schema_version: 2
+card: until-arvore-limpa-CS-3
+verdict: proven
+reviewed_at: 2026-11-14T15:00:00-03:00
+base_commit: 18e7f52
+head_commit: 0233bcd
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa), não Quarkus. Superfície externa = o CLI `cepa-until` rodado como subprocesso por tests/test_cepa_until_clean_tree.py
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until::commit_run_end (nova, dentro de _main)"
+      module: cli
+      external_observable: true   # commit e git status do clone são observáveis fora do processo
+      substituted_by_double: null # o CLI real roda; só o binário `claude` é falso (fronteira distante, via base.fake_claude)
+    - class: "common/bin/cepa-until::interrupt (chama commit_run_end; ramo final_state)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until::_main (final_state[0] = True; commit_records chama commit_run_end)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python, não Maven/JVM; perturbação manual em worktree descartável é o mecanismo aplicável."
+    perturbation:
+      status: pass
+      results:
+        - "Histórico: em 9d4c09c o único sobrevivente era a guarda `if committed[0]: return`; 0233bcd removeu essa linha, então não há mais mutante pendente."
+        - "Limpo (0233bcd, sem perturbação): exit 0, '✓ tudo verde'."
+        - "P1 (linha 4660, SIG_IGN -> signal.getsignal(sig) em commit_run_end): RED, 4 falhas ('2º sinal: o processo sai com 143', 'o commit do run terminou mesmo assim', 'não sobrou .git/index.lock', 'nenhum registro do run solto')."
+        - "P2 (linha 4711, commit_run_end() do primeiro sinal -> pass): RED, exit 1; o teste do sinal no meio do 2º item aborta com ProcessLookupError (o processo já saiu sem commitar). RED por abortar, não por asserção granular."
+        - "P3 (linha 4685, ramo `if final_state[0]: commit_run_end()` -> pass): RED, 3 falhas ('CS-3 análise: nenhum caminho da fila solto', 'um commit novo sobre a base', 'o commit leva a fila (a1 done) e o registro')."
+        - "P4 (linha 5732, final_state[0] = True -> False): RED, as mesmas 3 falhas 'CS-3 análise' de P3."
+        - "P5 (linha 5756, commit_run_end() em commit_records -> pass): RED, 14 falhas (CS-1, CS-2, cota, hook, staged)."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs3-final 0233bcd` (removido ao fim com
+        `git worktree remove --force`, confirmado por `git worktree list`).
+        Perturbações por `sed -i ''` na cópia do worktree, desfeitas com
+        `git checkout -- common/bin/cepa-until`. Só
+        `python3 tests/test_cepa_until_clean_tree.py` foi rodado (nunca o build
+        completo), em primeiro plano, uma vez por perturbação. Limpo: exit 0 '✓ tudo verde'.
+        P1: '✗ 4 falha(s)'. P2: exit 1 (ProcessLookupError). P3: '✗ 3 falha(s)'.
+        P4: '✗ 3 falha(s)'. P5: '✗ 14 falha(s)'. Nenhuma falha de teste de timeout de 2s apareceu.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura ligada ao repo; as cinco linhas alteradas do CS-3 (4660, 4685, 4711, 5732, 5756) foram quebradas uma a uma e cada quebra deixou a suíte RED, o que mostra que todas são alcançadas por teste do CLI real."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff não lê entrada nova vinda de fora: só muda quando o commit acontece em sinal/fim de run; nenhum módulo api-rest/parsing tocado."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "testes do CS-3 de 886f92b contra common/bin/cepa-until de 18e7f52: RED, 15 falhas em 'CS-3 análise', 'CS-3 SIGINT' e 'CS-3 SIGTERM'; com a implementação: '✓ tudo verde'. (issue_type Feature; regressão-no-base usada como prova de que os testes novos são capazes de falhar.)"
+routing_reason: >-
+  Quando o run termina, por fim normal, por Ctrl+C ou SIGTERM (inclusive durante
+  a análise final), o commit do run é feito; um segundo sinal durante esse
+  commit não o corta. Cada uma das cinco linhas que implementam isso, quebrada
+  de propósito, deixa a suíte do CLI real vermelha. O único sobrevivente da
+  rodada anterior (a guarda de commit único) foi removido em 0233bcd. PROVEN.

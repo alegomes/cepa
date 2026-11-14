@@ -1,0 +1,18 @@
+key: until-arvore-limpa-CS-3
+status: complete
+diff_range: 18e7f52..886f92b
+criteria:
+  - id: CS-3
+    text: "Ctrl+C, SIGTERM e limite de uso também terminam com o commit"
+    altitude: cli
+    surface: "processo real de common/bin/cepa-until recebendo SIGINT/SIGTERM com o segundo item em voo (e durante a análise final), e terminando por limite-de-uso; depois da saída: git status --porcelain sem caminho da fila e .jsonl com run_interrompido no último commit"
+    test: "tests/test_cepa_until_clean_tree.py::test_cs3_signal_mid_second_item_commits_the_records (SIGINT->130 e SIGTERM->143), ::test_cs3_signal_during_the_end_analysis_commits_the_records, ::test_quota_end_also_commits_the_record"
+    layer: "subprocess real de cepa-until em repo git de teste, claude falso; sinal enviado ao supervisor via os.kill; asserts em git status, HEAD~1 == base, git show --name-only, conteudo do .jsonl em HEAD"
+    evidence: verified
+    run: "python3 tests/test_cepa_until_clean_tree.py -> 50 linhas 'ok' (CS-3 SIGINT 9, CS-3 SIGTERM 9, CS-3 analise 5, cota 4), sem falha, '✓ tudo verde' (rodado duas vezes, foreground)"
+    status: complete
+    notes:
+      - "SIGINT e SIGTERM: asserts de saida 130/143, status sem caminho da fila, commit novo sobre a base com plan.yaml e um .jsonl, run_interrompido no .jsonl commitado, a2 em voo registrado, mensagem no formato decidido."
+      - "Limite de uso: o caminho nao emite run_interrompido (termina com run_end motivo limite-de-uso). O teste preexistente exige git status vazio e o .jsonl no commit; o teste de cota nao foi alterado neste diff e cobre a metade 'limite de uso' do criterio, mas sem a string run_interrompido, que ali nao se aplica."
+      - "Nao executei mutacao da producao (somente leitura); a robustez da trava SIG_IGN durante o git commit nao tem teste proprio."
+gap: []
