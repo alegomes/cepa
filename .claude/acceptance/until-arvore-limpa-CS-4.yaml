@@ -1,0 +1,20 @@
+key: until-arvore-limpa-CS-4
+status: complete
+diff_range: 43daca5..1bf5f98
+criteria:
+  - id: CS-4
+    text: "A largada recolhe registros soltos de runs mortos de qualquer fila (com um .jsonl e uma queue.yaml modificada da fila outra cujo supervisor morreu, lancar cepa-until <fila>; commit de recolha com os caminhos de outra antes do primeiro item; a largada nao recusa por arvore suja)"
+    altitude: cli
+    surface: "processo real de common/bin/cepa-until <fila> em repo git de teste, com registro solto de fila 'outra' (pid morto); asserts em exit code/stderr, git log, git show --name-only, run_start do ledger, git status"
+    test: "tests/test_cepa_until_clean_tree.py::test_cs4_launch_collects_the_loose_records_of_a_dead_run_of_another_queue (+ ::test_cs4_collects_from_the_legacy_layout_and_leaves_the_owners_change_out, ::test_cs4_what_is_not_a_dead_run_is_not_collected, ::test_cs4_dry_run_says_what_it_would_collect_and_commits_nothing); tests/test_cepa_until.py::test_plan_of_another_queue_dirtied_by_the_live_run_is_not_dirt (check invertido)"
+    layer: "subprocess real de cepa-until, claude falso, repo git temporario; pid morto real; supervisor vivo real (Popen) no contraponto"
+    evidence: verified
+    run: "python3 tests/test_cepa_until_clean_tree.py -> rc=0, 74 linhas 'ok', '✓ tudo verde' (CS-4 principal 8 ok, legado 3, dry-run 3, contrapontos 4). python3 tests/test_cepa_until.py -> rc=0, '✓ tudo verde', incluindo '...com o supervisor morto o mesmo diff e recolhido e o run larga'. Ambos em primeiro plano."
+    status: complete
+    notes:
+      - "Asserts do teste principal: saida 0 sem 'modified file(s)'; item rodou; exatamente 1 commit 'until: collect records of dead runs (outra)'; arquivos == queue.yaml + .jsonl de outra; commit e o primeiro sobre a base (sha~1 == before); e ancestral da base do run_start; run_start.recolha.commit == sha; nada de outra solto."
+      - "Mensagem decidida, sem commit vazio (so quando ha registro solto) e so caminhos do run (arquivo do dono fica fora) estao cobertos."
+      - "Contrapontos: fila editada pelo dono sem registro solto ainda recusa sem commit; supervisor vivo nao e recolhido; registro de outra maquina sem run_end nao e recolhido."
+      - "Nao executei mutacao da producao (somente leitura). Nao ha teste de recolha com recusa de hook pre-commit na largada (ramo 'elif error' do bloco); isso e CS-5, fora do criterio CS-4."
+      - "Contagem de testes: a suite e um script proprio (sem filtro), logo N>0 comprovado pelas linhas 'ok'."
+gap: []
