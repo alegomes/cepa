@@ -1323,6 +1323,20 @@ def test_cs4_capital_v_after_no_also_opens_the_editor():
           ". V." not in ev and not ev.rstrip(". ").endswith(". V"), repr(ev)[-300:])
 
 
+def test_cs4_capital_v_in_why_also_opens_the_editor():
+    """CS-4: a capital `V` at "Why, in one line?" after `d` opens the editor
+    too; the item is dropped with the saved text as the reason."""
+    rc, out, a1 = _cs4_run("d", "Why", typed="V")
+    ev = str(a1.get("evidence", ""))
+    check("cs4 why V: sem traceback", "Traceback" not in out, out[-800:])
+    check("cs4 why V: o item foi descartado",
+          rc == 0 and a1["status"] == "dropped", (rc, a1.get("status"), out[-600:]))
+    check("cs4 why V: a evidência traz as duas linhas com a quebra",
+          "linha 1\nlinha 2" in ev, repr(ev)[-300:])
+    check("cs4 why V: a letra V não é gravada como motivo",
+          ". V." not in ev and not ev.rstrip(". ").endswith(". V"), repr(ev)[-300:])
+
+
 def test_cs3_the_editor_header_lines_do_not_reach_the_answer():
     """CS-3, the "Decided without asking" of the spec: the file opened in the
     editor carries the item's id, title and question in `#` lines, and those
