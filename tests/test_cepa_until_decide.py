@@ -1242,6 +1242,13 @@ def test_cs1_long_answer_also_arrives_on_the_timed_wait():
           rc == 0 and got is not None
           and bytes.fromhex(got.group(2)).decode() == long_text,
           (rc, got.group(1) if got else None, out[-300:]))
+    # The owner sees what was pasted, once: no echo would be a blind field,
+    # two would be the terminal and `readline` echoing the same bytes. The
+    # GOT line is hex, so `ão` plus the run of `x` on screen is only the echo
+    # (the `ç` itself may reach the reader split across two reads).
+    echoed = "ão" + "x" * (len(long_text) - long_text.index("ão") - 2)
+    check("cs1 (wait): o texto colado aparece na tela uma vez",
+          out.count(echoed) == 1, out.count(echoed))
 
 
 def test_loose_text_at_options_prompt_does_not_vanish():
