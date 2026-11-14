@@ -2824,7 +2824,8 @@ class Panel:
 
 def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
            output=print, answer=None, land=None, wait=None, first=1, of=None,
-           opened=False, note=None, close=True, progress=None, unclear=None):
+           opened=False, note=None, close=True, progress=None, unclear=None,
+           rewrite=None):
     """Goes through what only the owner unblocks and applies each answer. Returns
     (applied, for_later), as text, for the closing.
     CS-8 (the launch panel in two parts): `first`/`of` number the questions inside a
@@ -2832,7 +2833,10 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     is a line under the opening and `close=False` leaves the closing to the caller.
     CS-13: `progress` (a dict) counts as it goes, so a panel cut by the wait, EOF or
     Ctrl-C still has the right numbers: `asked` (owner questions that reached the
-    screen) and `answered` (answers recorded in the queue)."""
+    screen) and `answered` (answers recorded in the queue).
+    CS-7 (perguntas-da-largada-legiveis): `rewrite(ad, shown_question)` returns
+    (route_or_None, error_or_None): after `?`, the new question replaces the old one
+    in the same block, is recorded in the queue, and the menu asks again."""
     progress = {} if progress is None else progress
     if question is None:
         def question(prompt):
@@ -2864,6 +2868,29 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             except (OSError, subprocess.SubprocessError) as e:
                 return 1, str(e)
             return p.returncode, (p.stdout or p.stderr).strip()
+    if rewrite is None:
+        # CS-7: the route reader rewrites the question right there, within
+        # UNCLEAR_REWRITE_SEC, and the new one is recorded through `cepa-plan
+        # reword-route --replace` (this script never edits queue.yaml). Only an open
+        # route can be reworded: a delivered item or one without a route keeps the
+        # CS-6 path (recorded as unclear, left for later).
+        def rewrite(ad, shown):
+            if ad.get("human_pending") is None or ad.get("reason") == "pos-entrega":
+                return None, "the item has no open route to reword"
+            payload = dict(route_payload(ad), tarefa=UNCLEAR_TASK,
+                           pergunta_mal_escrita=shown)
+            try:
+                route, error = read_route(repo, payload,
+                                          time.monotonic() + UNCLEAR_REWRITE_SEC,
+                                          UNCLEAR_READER_PROMPT)
+            except Exception as e:  # noqa: BLE001  (a reader must never stop the panel)
+                return None, f"reader failed: {e}"
+            if route is None:
+                return None, error or "the pre-read is off"
+            if " ".join(route["question"].split()) == " ".join(str(shown).split()):
+                return None, "the reader returned the same question"
+            error = reword_route(queue, repo, ad.get("id"), route, replace=True)
+            return (None, error) if error else (route, None)
     if land is None:
         def land():
             return cmd_land([f"{queue}/{run_id}", "--repo", str(repo),
@@ -2945,73 +2972,96 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # 10/15: "99% of the time I don't know what to answer"). With no written
         # question, the terminal asks the default one, instead of showing the evidence and
         # leaving the owner to find the question on his own.
-        screen.blank()
-        shown_question = question_text
-        if question_text:
-            screen.question(question_text)
-            outside = question_breaks_rules(question_text)
-            if outside:
-                screen.warning(f"(this question was written outside the "
-                           f"rules: {outside}. If it makes no sense, "
-                           "[e] shows the technical detail)")
-        # CS-3 (perguntas-da-largada-legiveis): a route with no written question
-        # used to get "done already? With yes, the task closes and the item goes
-        # back to the queue.", which assumed every route is a task of the owner
-        # (C1-45 held an open question, C1-47 three outside blocks). The question
-        # no longer describes the keys; the legend below does, a line per key.
-        elif route is not None and ad.get("reason") == "pos-entrega":
-            shown_question = "Is this task finished?"
-        elif route is not None:
-            shown_question = ("Send this item back to the queue for the next run "
-                              "to try again?")
-        elif summary.get("impede"):
-            shown_question = "unblock the item and send it back to the queue?"
-        else:
-            screen.label("The agent stopped because",
-                        summarize_reason(ad.get('evidence') or ''),
-                        short_path="Evidence")
-            shown_question = "unblock the item and send it back to the queue?"
-        if not question_text:
-            screen.question(shown_question)
-        if instruction:
-            screen.note(f"If yes, the next run receives: {instruction}")
-        rec = recommendation_line(d)
-        if rec:
-            screen.recommend(rec)
-        show = bool(ad.get("evidence"))
-        delivered = ad.get("reason") == "pos-entrega"
-        # `d` exists because "sim" always means "back to the queue": on
-        # 2026-11-02 the owner said sim to "descarto este pedido?" (WEGO-2463)
-        # and the item went back to `pending`, for the next run to redo.
-        chips = [("s", "yes"), ("n", "no"), ("t", "I write the answer"),
-                 ("d", "the task no longer applies" if delivered
-                  else "discard the item")]
-        if show:
-            chips.append(("e", "technical detail"))
-        chips += [("?", "I don't understand"), ("Enter", "later"), ("q", "quit")]
-        screen.blank()
-        screen.legend(legend_lines(chips, summary, delivered))
-        prompt = screen.menu(chips, recommended_letter(d))
-        valid = {"s", "n", "t", "d", "", "q", "?"} | ({"e"} if show else set())
+        rewritten = False
+        # CS-7: `?` rewrites the question once and the block asks again; the second
+        # `?` on the same item does not call the reader (spec, "Decided without
+        # asking": no loop holding the launch).
         while True:
-            raw = str(question(prompt))
-            r = raw.strip().lower()
-            r = {"sim": "s", "yes": "s", "y": "s",
-                 "não": "n", "nao": "n", "no": "n"}.get(r, r)
-            if r == "e" and show:
-                screen.evidence(ad.get("evidence"))
-                continue
-            if r not in valid:
-                # Loose text here used to go to later silently, and the answer
-                # the owner wrote vanished (decidir WEGO 2026-09-29-2059).
-                screen.key_error(f"\"{raw.strip()}\" is not one of the options; "
-                                   "to write an answer, type t first")
-                continue
-            break
-        if r == "?":
+            screen.blank()
+            shown_question = question_text
+            if question_text:
+                screen.question(question_text)
+                outside = question_breaks_rules(question_text)
+                if outside:
+                    screen.warning(f"(this question was written outside the "
+                               f"rules: {outside}. If it makes no sense, "
+                               "[e] shows the technical detail)")
+            # CS-3 (perguntas-da-largada-legiveis): a route with no written question
+            # used to get "done already? With yes, the task closes and the item goes
+            # back to the queue.", which assumed every route is a task of the owner
+            # (C1-45 held an open question, C1-47 three outside blocks). The question
+            # no longer describes the keys; the legend below does, a line per key.
+            elif route is not None and ad.get("reason") == "pos-entrega":
+                shown_question = "Is this task finished?"
+            elif route is not None:
+                shown_question = ("Send this item back to the queue for the next run "
+                                  "to try again?")
+            elif summary.get("impede"):
+                shown_question = "unblock the item and send it back to the queue?"
+            else:
+                screen.label("The agent stopped because",
+                            summarize_reason(ad.get('evidence') or ''),
+                            short_path="Evidence")
+                shown_question = "unblock the item and send it back to the queue?"
+            if not question_text:
+                screen.question(shown_question)
+            if instruction:
+                screen.note(f"If yes, the next run receives: {instruction}")
+            rec = recommendation_line(d)
+            if rec:
+                screen.recommend(rec)
+            show = bool(ad.get("evidence"))
+            delivered = ad.get("reason") == "pos-entrega"
+            # `d` exists because "sim" always means "back to the queue": on
+            # 2026-11-02 the owner said sim to "descarto este pedido?" (WEGO-2463)
+            # and the item went back to `pending`, for the next run to redo.
+            chips = [("s", "yes"), ("n", "no"), ("t", "I write the answer"),
+                     ("d", "the task no longer applies" if delivered
+                      else "discard the item")]
+            if show:
+                chips.append(("e", "technical detail"))
+            chips += [("?", "I don't understand"), ("Enter", "later"), ("q", "quit")]
+            screen.blank()
+            screen.legend(legend_lines(chips, summary, delivered))
+            prompt = screen.menu(chips, recommended_letter(d))
+            valid = {"s", "n", "t", "d", "", "q", "?"} | ({"e"} if show else set())
+            while True:
+                raw = str(question(prompt))
+                r = raw.strip().lower()
+                r = {"sim": "s", "yes": "s", "y": "s",
+                     "não": "n", "nao": "n", "no": "n"}.get(r, r)
+                if r == "e" and show:
+                    screen.evidence(ad.get("evidence"))
+                    continue
+                if r not in valid:
+                    # Loose text here used to go to later silently, and the answer
+                    # the owner wrote vanished (decidir WEGO 2026-09-29-2059).
+                    screen.key_error(f"\"{raw.strip()}\" is not one of the options; "
+                                       "to write an answer, type t first")
+                    continue
+                break
+            if r != "?":
+                break
             rc, msg = unclear(ident, shown_question)
             screen.recorded("question recorded as badly written; no answer on the "
                             "item" if rc == 0 else msg, ok=rc == 0)
+            if rewritten:
+                break
+            rewritten = True
+            screen.note(f"rewriting the question, up to {UNCLEAR_REWRITE_SEC} s")
+            new_route, _error = rewrite(ad, shown_question)
+            if new_route is None:
+                break
+            ad = dict(ad, question=new_route["question"],
+                      route_kind=new_route["route_kind"],
+                      owner_summary=dict(ad.get("owner_summary") or {},
+                                         se_sim=new_route["if_yes"],
+                                         se_nao=new_route["if_no"]))
+            question_text = new_route["question"]
+            summary = owner_summary_of(ad, d)
+            screen.recorded("question rewritten and recorded in the queue; "
+                            "answer it again")
+        if r == "?":
             for_later.append(f"{ident}: {OWNER_REASON[reason_alias(ad['reason'])]}")
             screen.end()
             continue
@@ -3228,6 +3278,38 @@ and Grep; change nothing) and decide:
 "open-question" (a doubt the owner answers);
 - question: ONE closed yes/no question, in Brazilian Portuguese, up to 25 words, with \
 a "?", in lay words: no codes, file names, commit hashes or card ids;
+- if_yes: what a "yes" does to the WORK, in Brazilian Portuguese, up to 30 words, lay \
+words (a "yes" sends the item back to the queue for the next run);
+- if_no: what a "no" does to the WORK, same rules (a "no" leaves the item waiting).
+
+Answer with ONLY one JSON object, no prose, no code fence:
+{{"route_kind": "...", "question": "...", "if_yes": "...", "if_no": "..."}}
+
+Item:
+{item}
+"""
+
+
+# CS-7 of docs/spec/perguntas-da-largada-legiveis.md: the owner pressed `?` ("I don't
+# understand") on a panel question. The same route reader rewrites it right there, in
+# the same closed JSON; the payload's `tarefa` tells a fake reader the job apart and
+# `pergunta_mal_escrita` carries the question the owner did not understand.
+UNCLEAR_TASK = "reescrever-pergunta"
+# The panel waits at most this for the rewrite (spec, "Decided without asking": 60 s).
+UNCLEAR_REWRITE_SEC = 60
+
+UNCLEAR_READER_PROMPT = """You are a READ-ONLY reader that rewrites a question the \
+owner of the repository did NOT understand. The item below waits on the owner: its \
+`human_pending` says what only the owner can close, and `pergunta_mal_escrita` is the \
+question the owner was shown and marked as unclear. Read the item (and, only if \
+needed, the relevant parts of the repository with Read, Glob and Grep; change \
+nothing) and write a NEW, plainer question about the same route:
+- route_kind: "owner-task" (a task only the owner does, outside the repository), \
+"external-block" (something outside must exist and it is not an owner decision) or \
+"open-question" (a doubt the owner answers);
+- question: ONE closed yes/no question, in Brazilian Portuguese, up to 25 words, with \
+a "?", in lay words: no codes, file names, commit hashes or card ids, and NOT the same \
+words as `pergunta_mal_escrita`;
 - if_yes: what a "yes" does to the WORK, in Brazilian Portuguese, up to 30 words, lay \
 words (a "yes" sends the item back to the queue for the next run);
 - if_no: what a "no" does to the WORK, same rules (a "no" leaves the item waiting).
@@ -3462,10 +3544,11 @@ def read_one(repo, item, deadline):
     return _run_reader(repo, item, deadline, READER_PROMPT, parse_finding)
 
 
-def read_route(repo, item, deadline):
+def read_route(repo, item, deadline, prompt=ROUTE_READER_PROMPT):
     """CS-4: runs the route reader of one item; returns (route_or_None, error_or_None).
-    A reader that ran but printed something that is not a valid route is an error."""
-    route, error = _run_reader(repo, item, deadline, ROUTE_READER_PROMPT, parse_route)
+    A reader that ran but printed something that is not a valid route is an error.
+    CS-7: `prompt` is UNCLEAR_READER_PROMPT when the owner pressed `?`."""
+    route, error = _run_reader(repo, item, deadline, prompt, parse_route)
     if route is None and error is None and reader_command({}) is not None:
         error = "the reader did not return a valid closed question"
     return route, error
@@ -3660,15 +3743,15 @@ def is_old_route(ad):
                      and ad.get("route_kind")))
 
 
-def reword_route(queue, repo, ident, route):
+def reword_route(queue, repo, ident, route, replace=False):
     """CS-4: records a route the reader rewrote, through `cepa-plan reword-route` (the
     only door: this script never edits queue.yaml). It fills only what the item lacks
     and never touches `human_pending`, `status` nor `evidence`. Returns None or the
-    error as text."""
+    error as text. CS-7: `replace` overwrites the question the owner found unclear."""
     cmd = [sys.executable, str(CEPA_PLAN), "reword-route", queue, str(ident),
            "--route-kind", route["route_kind"], "--question", route["question"],
            "--if-yes", route["if_yes"], "--if-no", route["if_no"],
-           "--repo", str(repo)]
+           "--repo", str(repo)] + (["--replace"] if replace else [])
     env = {k: v for k, v in os.environ.items()
            if k not in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")}
     try:

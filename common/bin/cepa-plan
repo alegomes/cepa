@@ -3376,7 +3376,8 @@ def resolve_decisions(repo, texts, sha):
     return [{"texto": t, "commit": full} for t in flat], None
 
 
-def cmd_reword_route(root, name, ident, route_kind, question, if_yes, if_no):
+def cmd_reword_route(root, name, ident, route_kind, question, if_yes, if_no,
+                     replace=False):
     """CS-4 of docs/spec/perguntas-da-largada-legiveis.md: records the rewrite of an OLD
     route (an open `human_pending` written before the kind and the closed question
     existed). Fills ONLY what the item lacks (`route_kind`, `owner_question`,
@@ -3384,7 +3385,10 @@ def cmd_reword_route(root, name, ident, route_kind, question, if_yes, if_no):
     `evidence`, `claimed_by`, `head_commit` or `decisions`: only the human closes a
     route. Refuses (exit 2, nothing written) on an item that does not exist, has no
     route, is not open (`pending`/`blocked`), or on text that fails the same rules
-    `finish` applies. Does not commit (the supervisor's `finish` calls do not either)."""
+    `finish` applies. Does not commit (the supervisor's `finish` calls do not either).
+    CS-7: `replace` overwrites the kind, the question and both effects even when the
+    item has them (the owner pressed `?` on that question: it was unclear). It still
+    never touches `human_pending`, `status` nor `evidence`."""
     owner = {k: " ".join(str(v).split()) for k, v in
              (("se_sim", if_yes), ("se_nao", if_no)) if v is not None and str(v).strip()}
     target, plan, by_id, rc = open_plan_for_marking(root, name)
@@ -3414,14 +3418,18 @@ def cmd_reword_route(root, name, ident, route_kind, question, if_yes, if_no):
     summary = it.get("owner_summary")
     summary = dict(summary) if isinstance(summary, dict) else {}
     changed = []
-    if not it.get("route_kind"):
-        it["route_kind"] = route_kind
-        changed.append("route_kind")
-    if not str(it.get("owner_question") or "").strip():
-        it["owner_question"] = " ".join(str(question).split())
-        changed.append("question")
+    if replace or not it.get("route_kind"):
+        if it.get("route_kind") != route_kind:
+            it["route_kind"] = route_kind
+            changed.append("route_kind")
+    new_question = " ".join(str(question).split())
+    if replace or not str(it.get("owner_question") or "").strip():
+        if it.get("owner_question") != new_question:
+            it["owner_question"] = new_question
+            changed.append("question")
     for key, label in (("se_sim", "if-yes"), ("se_nao", "if-no")):
-        if not str(summary.get(key) or "").strip():
+        if (replace and summary.get(key) != owner[key]) \
+                or not str(summary.get(key) or "").strip():
             summary[key] = owner[key]
             changed.append(label)
     if not changed:
@@ -5511,7 +5519,8 @@ def main(argv=None):
         description=(
             "Fills what an OLD open route lacks (written before the kind and the\n"
             "closed question existed): the kind, the question and what yes and no do\n"
-            "to the work. It never replaces what is already there, and never touches\n"
+            "to the work. It never replaces what is already there (unless --replace:\n"
+            "the owner found the question unclear), and never touches\n"
             "`human_pending`, `status` nor `evidence`: only the human closes a route.\n"
             "Refused (nothing written) when the item has no open route, is not\n"
             "`pending` or `blocked`, or the text breaks the rules `finish` applies.\n"
@@ -5535,6 +5544,9 @@ def main(argv=None):
                     help="what happens to the work if the owner answers yes")
     rw.add_argument("--if-no", dest="if_no", required=True, metavar="TEXT",
                     help="what happens to the work if the owner answers no")
+    rw.add_argument("--replace", action="store_true",
+                    help="overwrite the kind, question and effects already there "
+                         "(the owner pressed `?` on that question)")
     rw.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
     rs = sub.add_parser(
@@ -5857,7 +5869,7 @@ def main(argv=None):
                           a.route_kind)
     if a.cmd == "reword-route":
         return cmd_reword_route(root, a.name, a.id, a.route_kind, a.question,
-                                a.if_yes, a.if_no)
+                                a.if_yes, a.if_no, a.replace)
     if a.cmd == "answer":
         return cmd_answer(root, a.name, a.id, a.answer, a.keep,
                             a.force, not a.no_commit, a.repo, a.author, a.drop)

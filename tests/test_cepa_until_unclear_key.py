@@ -41,7 +41,9 @@ def test_question_mark_on_terminal_records_feedback_and_leaves_item():
         root = build_repo(tmp, [it])
         qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
         before = qfile.read_bytes()
-        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb)
+        # CS-7 rewrites the question after `?`; this case is about the record
+        # alone, so the reader is off (and a real `claude` never runs in a test).
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_UNTIL_LEITOR="off")
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), env=env,
                          inputs=[("[t] I write the answer", "?")], timeout=60)
@@ -77,7 +79,8 @@ def test_question_mark_records_the_default_question_when_none_was_written():
     m.decide(Path("/nao/existe"), "fila", None, {}, deferred, {},
              question=lambda _p: next(replies, ""), output=screen.append,
              answer=lambda *a, **k: answers_given.append(a) or (0, "ok"),
-             unclear=lambda ident, text: calls.append((ident, text)) or (0, "ok"))
+             unclear=lambda ident, text: calls.append((ident, text)) or (0, "ok"),
+             rewrite=lambda ad, text: (None, "off"))
     text = "\n".join(screen)
     check("CS-6 text: no answer recorded", answers_given == [], answers_given)
     check("CS-6 text: one unclear record for x1", len(calls) == 1
@@ -97,7 +100,8 @@ def test_unclear_record_failure_is_said_not_swallowed():
     m.decide(Path("/nao/existe"), "fila", None, {}, deferred, {},
              question=lambda _p: next(replies, ""), output=screen.append,
              answer=lambda *a, **k: answers_given.append(a) or (0, "ok"),
-             unclear=lambda ident, text: (2, "disco cheio"))
+             unclear=lambda ident, text: (2, "disco cheio"),
+             rewrite=lambda ad, text: (None, "off"))
     text = "\n".join(screen)
     check("CS-6 text: failure is shown", "not recorded" in text
           and "disco cheio" in text, text)
