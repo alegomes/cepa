@@ -331,6 +331,122 @@ def test_cs5_silent_refusing_hook_still_warns():
         _cs5_checks("hook mudo", tmp, "#!/bin/sh\nexit 1\n", "exited 1")
 
 
+# ── CS-6: merge, rebase or detached HEAD at the end: no commit, a warning ────
+
+def _cs6_run(tmp, make_state):
+    """One run with analysis on. `make_state` is Python run by the fake `claude`
+    when it is the end analysis (the run's last act before the commit), inside the
+    main clone: the launch refuses a tree that is mid-merge, so the state has to
+    appear during the run. It snapshots the index right after. Returns (root,
+    process, HEAD before, `git ls-files -s` snapshot taken by the fake)."""
+    root = _scenario(tmp)
+    # A side branch that changes another file, for `git merge --no-commit`.
+    _git(root, "checkout", "-qb", "lado")
+    (root / "lado.txt").write_text("lado\n", encoding="utf-8")
+    _git(root, "add", "lado.txt")
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit",
+                    "-qm", "lado"], cwd=root, check=True)
+    _git(root, "checkout", "-q", "-")
+    snap = Path(tmp) / "indice-antes.txt"
+    binv = base.fake_claude(tmp, (
+        "def git(*a):\n"
+        "    import subprocess\n"
+        f"    return subprocess.run(['git', '-C', {str(root)!r}, *a],\n"
+        "        capture_output=True, text=True, check=True).stdout\n"
+        "if any('until-review' in a for a in ARGS):\n"
+        "    print('# revisão do run\\n\\nnada pendente')\n"
+        + "".join("    " + l + "\n" for l in make_state.splitlines())
+        + f"    open({str(snap)!r}, 'w').write(git('ls-files', '-s'))\n"
+        "else:\n"
+        "    marca(primeiro_pendente(), status='done')"))
+    plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+    before = _git(root, "rev-parse", "HEAD").strip()
+    p, _calls = base.run_until(root, binv, plan, ["--for", "2h", "--com-analise"])
+    return root, p, before, snap
+
+
+_CS6_STATES = {
+    "merge": ("git('-c', 'user.email=t@t', '-c', 'user.name=t', 'merge', "
+              "'--no-commit', '--no-ff', 'lado')", "merge", ["MERGE_HEAD"]),
+    "rebase": ("os.makedirs(os.path.join(git('rev-parse', '--absolute-git-dir')"
+               ".strip(), 'rebase-merge'))", "rebase", ["rebase-merge"]),
+    "cherry-pick": ("open(os.path.join(git('rev-parse', '--absolute-git-dir')"
+                    ".strip(), 'CHERRY_PICK_HEAD'), 'w').write("
+                    "git('rev-parse', 'HEAD'))", "cherry-pick",
+                    ["CHERRY_PICK_HEAD"]),
+    "revert": ("open(os.path.join(git('rev-parse', '--absolute-git-dir')"
+               ".strip(), 'REVERT_HEAD'), 'w').write(git('rev-parse', 'HEAD'))",
+               "revert", ["REVERT_HEAD"]),
+    "HEAD destacado": ("git('checkout', '-q', '--detach')", "detached HEAD", []),
+}
+
+
+def _cs6_checks(label, tmp, tmp_ok):
+    code, word, markers = _CS6_STATES[label]
+    root, p, before, snap = _cs6_run(tmp, code)
+    root_ok, p_ok, _b, _s = _cs6_run(tmp_ok, "pass")
+    out = p.stdout + p.stderr
+    gitdir = Path(_git(root, "rev-parse", "--absolute-git-dir").strip())
+    check(f"CS-6 {label}: o código de saída é o mesmo do run sem o estado",
+          p.returncode == p_ok.returncode, f"{p.returncode} != {p_ok.returncode}")
+    check(f"CS-6 {label}: nenhum commit novo",
+          _git(root, "rev-parse", "HEAD").strip() == before)
+    for m in markers:
+        check(f"CS-6 {label}: {m} segue no lugar", (gitdir / m).exists())
+    if label == "merge":
+        check(f"CS-6 {label}: o git status ainda diz que está no merge",
+              "merging" in _git(root, "status").lower(), _git(root, "status"))
+    snapshot = snap.read_text(encoding="utf-8") if snap.exists() else None
+    check(f"CS-6 {label}: o fake chegou a tirar o retrato do índice",
+          snapshot is not None, out[-600:])
+    check(f"CS-6 {label}: o índice é idêntico byte a byte ao de antes do commit",
+          snapshot == _git(root, "ls-files", "-s"),
+          (snapshot, _git(root, "ls-files", "-s")))
+    staged = _git(root, "diff", "--cached", "--name-only")
+    check(f"CS-6 {label}: nada do run foi para o índice",
+          not any(x in staged for x in ("plan.yaml", ".jsonl", ".review.md")), staged)
+    lines = [l for l in out.splitlines() if "commit:" in l or "cepa-until:" in l]
+    check(f"CS-6 {label}: a tela final diz por que não commitou ({word})",
+          any(word in l for l in lines), out[-800:])
+    check(f"CS-6 {label}: a tela não diz que o git recusou",
+          not any("git refused" in l for l in out.splitlines()), out[-800:])
+    marker = "to commit by hand: "
+    cmds = [l.split(marker, 1)[1].strip() for l in out.splitlines() if marker in l]
+    check(f"CS-6 {label}: a tela traz o comando para o dono",
+          len(cmds) == 1 and " commit " in cmds[0], out[-800:])
+    reviews = sorted((root / ".claude" / "programs" / "fila" / "until")
+                     .glob("*.review.md"))
+    text = reviews[0].read_text(encoding="utf-8") if reviews else ""
+    check(f"CS-6 {label}: o .review.md mantém a análise e traz o motivo",
+          "nada pendente" in text and word in text, text[-600:])
+
+
+def _cs6(label):
+    with tempfile.TemporaryDirectory() as tmp, \
+            tempfile.TemporaryDirectory() as tmp_ok:
+        _cs6_checks(label, tmp, tmp_ok)
+
+
+def test_cs6_merge_in_progress_is_left_alone():
+    _cs6("merge")
+
+
+def test_cs6_rebase_in_progress_is_left_alone():
+    _cs6("rebase")
+
+
+def test_cs6_cherry_pick_in_progress_is_left_alone():
+    _cs6("cherry-pick")
+
+
+def test_cs6_revert_in_progress_is_left_alone():
+    _cs6("revert")
+
+
+def test_cs6_detached_head_does_not_commit():
+    _cs6("HEAD destacado")
+
+
 # ── CS-3: Ctrl+C and SIGTERM also end with the commit ───────────────────────
 
 # The fake `claude` for CS-3: a1 is worked and closed like in a normal run; a2
