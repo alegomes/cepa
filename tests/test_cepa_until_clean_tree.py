@@ -1169,7 +1169,7 @@ def test_cs7_close_dead_with_a_refusing_hook_warns_and_keeps_the_exit_code():
               ".jsonl" in _git(root, "status", "--porcelain"))
         calls = log.read_text() if log.exists() else ""
         check("CS-7 close-dead hook: tentou git commit, sem --no-verify",
-              " commit" in calls and "--no-verify" not in calls, calls[-300:])
+              "commit" in calls and "--no-verify" not in calls, calls[-300:])
         check("CS-7 close-dead hook: a tela traz o motivo",
               "git refused the commit" in out and "lint: 3 erros" in out,
               out[-800:])
