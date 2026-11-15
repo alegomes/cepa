@@ -1649,6 +1649,45 @@ def test_cs7_decide_second_signal_while_ending_does_not_cut_the_commit():
               st)
 
 
+# ── CS-8: the run does not push ─────────────────────────────────────────────
+
+def test_cs8_run_does_not_push():
+    """CS-8: with a bare remote that the clone's branch tracks (so a plain
+    `git push` would succeed), the run ends with its new commit in the clone and
+    every ref of the remote exactly as before the launch, the run's own
+    `until/<run>` branch included. Only `land`, fired by the owner, publishes."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _scenario(tmp)
+        remote = Path(tmp) / "remoto.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+        branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD").strip()
+        subprocess.run(["git", "remote", "add", "origin", str(remote)], cwd=root,
+                       check=True)
+        subprocess.run(["git", "push", "-q", "-u", "origin", branch], cwd=root,
+                       check=True, capture_output=True)
+        refs_before = _git(remote, "for-each-ref", "--format=%(refname) %(objectname)")
+        remote_head_before = _git(remote, "rev-parse", branch).strip()
+        before = _git(root, "rev-parse", "HEAD").strip()
+        binv = base.fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, _calls = base.run_until(root, binv, plan, ["--for", "2h"])
+        check("CS-8: o run termina", p.returncode == 0,
+              f"saiu {p.returncode}: {p.stderr[-400:]}")
+        head = _git(root, "rev-parse", "HEAD").strip()
+        check("CS-8: o clone tem o commit novo do run",
+              head != before and _git(root, "rev-parse", "HEAD~1").strip() == before,
+              _git(root, "log", "-2", "--format=%h %s"))
+        check("CS-8: o HEAD do remoto é o mesmo de antes da largada",
+              _git(remote, "rev-parse", branch).strip() == remote_head_before,
+              _git(remote, "log", "-2", "--format=%h %s", branch))
+        refs_after = _git(remote, "for-each-ref", "--format=%(refname) %(objectname)")
+        check("CS-8: nenhuma ref do remoto mudou (nem a branch do run)",
+              refs_after == refs_before, f"{refs_before!r} -> {refs_after!r}")
+        ahead = _git(root, "rev-list", "--count", f"origin/{branch}..HEAD").strip()
+        check("CS-8: o clone fica à frente do remoto pelo commit do run",
+              ahead == "1", ahead)
+
+
 def main():
     print("cepa-until — árvore limpa no fim do run\n")
     for given_name, fn in sorted(globals().items()):
