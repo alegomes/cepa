@@ -929,6 +929,329 @@ def test_cs4_dry_run_says_what_it_would_collect_and_commits_nothing():
               _git(root, "rev-parse", "HEAD").strip() == before and not calls)
 
 
+# ── CS-7: decide, close-dead and land commit what they wrote ─────────────────
+
+import json  # noqa: E402
+import os  # noqa: E402
+
+import yaml  # noqa: E402
+
+import test_cepa_until_decide as dec  # noqa: E402
+from test_cepa_until_run_branch import WORKS, VERIFY  # noqa: E402
+
+CS7_BLOCKS = (
+    "ident = primeiro_pendente()\n"
+    "if ident == 'a1':\n"
+    "    marca(ident, status='blocked', evidence='sem produção',\n"
+    "          owner_question='Fecho o card?')\n"
+    "elif ident:\n"
+    "    marca(ident, status='done')\n")
+
+
+def _git_ok(root, *args):
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
+                   cwd=root, check=True, capture_output=True)
+
+
+def _two_item_scenario(tmp):
+    """`_scenario` with a second item, so the run ends with a1 blocked on a question
+    and a2 done, and the run's own commit already made."""
+    root = base.build_repo(tmp, [base.item("a1"), base.item("a2")])
+    (root / ".gitignore").write_text(
+        ".claude/programs/*/until/*.log\n"
+        ".claude/programs/*/until/*.estado.json\n"
+        ".claude/queues/*/until/*.log\n"
+        ".claude/queues/*/until/*.estado.json\n", encoding="utf-8")
+    _git_ok(root, "add", ".gitignore")
+    _git_ok(root, "commit", "-qm", "gitignore")
+    return root
+
+
+def _blocked_run(tmp):
+    """A finished, committed run that left a question for the owner."""
+    root = _two_item_scenario(tmp)
+    binv = base.fake_claude(tmp, CS7_BLOCKS)
+    plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+    p, _calls = base.run_until(root, binv, plan, ["--for", "2h"])
+    run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
+                    .glob("*.estado.json"))[-1].name.split(".")[0]
+    return root, run_id, p
+
+
+def _decide_cmd(root, target):
+    return [sys.executable, str(base.CEPA_UNTIL), "decide", target,
+            "--repo", str(root)]
+
+
+def test_cs7_decide_commits_the_answer_it_wrote_to_the_queue():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, run_id, p = _blocked_run(tmp)
+        check("CS-7 decide: o run termina e deixa a árvore limpa",
+              p.returncode == 0 and _git(root, "status", "--porcelain") == "",
+              p.stdout[-400:] + _git(root, "status", "--porcelain"))
+        # What the owner has around: a staged file, a modified tracked file, an
+        # untracked one. None of it is the run's.
+        (root / "staged.txt").write_text("s\n")
+        _git_ok(root, "add", "staged.txt")
+        gi = root / ".gitignore"
+        gi.write_text(gi.read_text() + "# dono\n")
+        (root / "solto.txt").write_text("x\n")
+        before = _git(root, "rev-parse", "HEAD").strip()
+        rc, out = dec.on_tty(_decide_cmd(root, f"fila/{run_id}"), str(root), inputs=[
+            ("[t] I write the answer", "n"), ("Anything to add", "")])
+        check("CS-7 decide: a resposta foi aplicada na fila",
+              "não: Fecho o card?" in (yaml.safe_load(
+                  (root / ".claude/programs/fila/plan.yaml").read_text())
+                  ["items"][0]["evidence"] or ""), out[-800:])
+        check("CS-7 decide: sai 0", rc == 0, out[-400:])
+        st = _git(root, "status", "--porcelain", "--untracked-files=all")
+        check("CS-7 decide: nenhum caminho da fila ou do registro fica sujo",
+              ".claude/" not in st, st)
+        check("CS-7 decide: um commit novo sobre a base",
+              _git(root, "rev-parse", "HEAD~1").strip() == before
+              and _git(root, "rev-parse", "HEAD").strip() != before)
+        files = sorted(_git(root, "show", "--name-only", "--format=",
+                            "HEAD").split())
+        check("CS-7 decide: o commit leva a fila e nada do dono",
+              files == [".claude/programs/fila/plan.yaml"], files)
+        msg = _git(root, "log", "-1", "--format=%s").strip()
+        check("CS-7 decide: a mensagem é `until <fila>/<run> decide: ...`",
+              msg.startswith(f"until fila/{run_id} decide: "), msg)
+        check("CS-7 decide: a tela diz do commit", "commit: " in out, out[-600:])
+        check("CS-7 decide: o que era do dono fica como estava",
+              "A  staged.txt" in st and " M .gitignore" in st
+              and "?? solto.txt" in st, st)
+
+
+def test_cs7_decide_on_a_whole_queue_commits_only_the_queue():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, run_id, _p = _blocked_run(tmp)
+        before = _git(root, "rev-parse", "HEAD").strip()
+        rc, out = dec.on_tty(_decide_cmd(root, "fila"), str(root), inputs=[
+            ("[t] I write the answer", "n"), ("Anything to add", "")])
+        check("CS-7 decide <fila>: sai 0", rc == 0, out[-400:])
+        check("CS-7 decide <fila>: git status vazio",
+              _git(root, "status", "--porcelain", "--untracked-files=all") == "",
+              _git(root, "status", "--porcelain"))
+        check("CS-7 decide <fila>: um commit novo",
+              _git(root, "rev-parse", "HEAD~1").strip() == before)
+        msg = _git(root, "log", "-1", "--format=%s").strip()
+        check("CS-7 decide <fila>: a mensagem é `until <fila> decide: ...`",
+              msg.startswith("until fila decide: "), msg)
+
+
+def test_cs7_decide_listing_without_a_terminal_commits_nothing():
+    """Nothing was written: a queue the owner left dirty is not swept in."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, run_id, _p = _blocked_run(tmp)
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        plan.write_text(plan.read_text() + "# nota do dono\n")
+        before = _git(root, "rev-parse", "HEAD").strip()
+        r = subprocess.run(_decide_cmd(root, f"fila/{run_id}"), cwd=root,
+                           capture_output=True, text=True, timeout=60)
+        check("CS-7 decide sem terminal: lista e sai 0", r.returncode == 0,
+              r.stdout + r.stderr)
+        check("CS-7 decide sem terminal: nenhum commit",
+              _git(root, "rev-parse", "HEAD").strip() == before)
+
+
+def test_cs7_decide_mid_merge_does_not_commit_and_says_why():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, run_id, _p = _blocked_run(tmp)
+        (root / ".git" / "MERGE_HEAD").write_text(
+            _git(root, "rev-parse", "HEAD"))
+        before = _git(root, "rev-parse", "HEAD").strip()
+        rc, out = dec.on_tty(_decide_cmd(root, f"fila/{run_id}"), str(root), inputs=[
+            ("[t] I write the answer", "n"), ("Anything to add", "")])
+        check("CS-7 decide merge: o código de saída não muda (0)", rc == 0,
+              out[-400:])
+        check("CS-7 decide merge: nenhum commit",
+              _git(root, "rev-parse", "HEAD").strip() == before)
+        check("CS-7 decide merge: a fila segue com a resposta, sem commit",
+              "plan.yaml" in _git(root, "status", "--porcelain"))
+        check("CS-7 decide merge: a tela diz o motivo",
+              "a merge is in progress" in out and "commit: not made" in out,
+              out[-800:])
+        check("CS-7 decide merge: ...e o comando exato, sem --no-verify",
+              "to commit by hand: git -C" in out and " commit -m " in out
+              and "--no-verify" not in out, out[-800:])
+        check("CS-7 decide merge: o merge segue intacto",
+              (root / ".git" / "MERGE_HEAD").exists())
+
+
+def _night_that_died(tmp, queue_dirty=True):
+    """A real run (a1 delivered, build green) rewound to where a dead supervisor
+    leaves it: state `rodando`, the record without `run_end`, and the queue with
+    the mark of the item in flight, all of it modified in the clone."""
+    root = _scenario(tmp)
+    binv = base.fake_claude(tmp, WORKS)
+    plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+    base.run_until(root, binv, plan, ["--for", "2h", "--verify", VERIFY])
+    d = root / ".claude" / "programs" / "fila" / "until"
+    jsonl = sorted(d.glob("*.jsonl"))[-1]
+    events = [json.loads(l) for l in jsonl.read_text().splitlines()]
+    cut = next(i for i, e in enumerate(events) if e["evento"] == "item_start")
+    events = events[:cut + 1]
+    jsonl.write_text("".join(json.dumps(e) + "\n" for e in events))
+    import socket
+    spath = sorted(d.glob("*.estado.json"))[-1]
+    st = json.loads(spath.read_text())
+    st.update(estado="rodando", pid=_dead_pid(), host=socket.gethostname())
+    for k in ("acoes", "fica_com_voce", "itens", "motivo_fim"):
+        st.pop(k, None)
+    spath.write_text(json.dumps(st))
+    if queue_dirty:
+        q = yaml.safe_load(plan.read_text())
+        q["items"][0]["evidence"] = "marca do run que morreu"
+        plan.write_text(yaml.safe_dump(q, allow_unicode=True))
+    return root, events[0]["branch"].split("/", 1)[1]
+
+
+def _close_dead(root, tmp, run_id, extra_env=None):
+    env = dict(os.environ, CEPA_WORKTREE_HOME=str(root.parent / "worktrees"))
+    env.update(extra_env or {})
+    return subprocess.run([sys.executable, str(base.CEPA_UNTIL), "close-dead",
+                           f"fila/{run_id}", "--repo", str(root), "--yes"],
+                          capture_output=True, text=True, cwd=str(root), env=env,
+                          timeout=120)
+
+
+def test_cs7_close_dead_commits_the_record_and_the_queue():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, run_id = _night_that_died(tmp)
+        (root / "solto.txt").write_text("x\n")
+        before = _git(root, "rev-parse", "HEAD").strip()
+        r = _close_dead(root, tmp, run_id)
+        check("CS-7 close-dead: sai 0 com o build verde", r.returncode == 0,
+              r.stdout + r.stderr)
+        st = _git(root, "status", "--porcelain", "--untracked-files=all")
+        check("CS-7 close-dead: nenhum caminho da fila ou do registro sujo",
+              ".claude/" not in st, st)
+        check("CS-7 close-dead: um commit novo sobre a base",
+              _git(root, "rev-parse", "HEAD~1").strip() == before)
+        files = sorted(_git(root, "show", "--name-only", "--format=",
+                            "HEAD").split())
+        rel = ".claude/programs/fila/"
+        check("CS-7 close-dead: o commit leva o .jsonl e a fila, e só eles",
+              files == sorted([f"{rel}plan.yaml", f"{rel}until/{run_id}.jsonl"]),
+              files)
+        msg = _git(root, "log", "-1", "--format=%s").strip()
+        check("CS-7 close-dead: a mensagem é `until <fila>/<run> close-dead: ...`",
+              msg.startswith(f"until fila/{run_id} close-dead: "), msg)
+        check("CS-7 close-dead: o arquivo do dono fica fora", "?? solto.txt" in st,
+              st)
+        ev = [json.loads(l) for l in _git(
+            root, "show", f"HEAD:{rel}until/{run_id}.jsonl").splitlines()]
+        check("CS-7 close-dead: o commit já traz o run_end",
+              ev[-1]["evento"] == "run_end", ev[-1])
+
+
+def test_cs7_close_dead_with_a_refusing_hook_warns_and_keeps_the_exit_code():
+    with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp_ok:
+            root_ok, run_ok = _night_that_died(tmp_ok)
+            r_ok = _close_dead(root_ok, tmp_ok, run_ok)
+        root, run_id = _night_that_died(tmp)
+        hook = root / ".git" / "hooks" / "pre-commit"
+        hook.write_text("#!/bin/sh\necho 'lint: 3 erros' >&2\nexit 1\n")
+        hook.chmod(0o755)
+        spy_dir, log = _git_spy(tmp)
+        before = _git(root, "rev-parse", "HEAD").strip()
+        r = _close_dead(root, tmp, run_id,
+                        {"PATH": f"{spy_dir}:{os.environ['PATH']}"})
+        out = r.stdout + r.stderr
+        check("CS-7 close-dead hook: o código de saída é o do run sem hook",
+              r.returncode == r_ok.returncode == 0,
+              f"{r.returncode} vs {r_ok.returncode}")
+        check("CS-7 close-dead hook: nenhum commit novo",
+              _git(root, "rev-parse", "HEAD").strip() == before)
+        check("CS-7 close-dead hook: o registro fica sem commit",
+              ".jsonl" in _git(root, "status", "--porcelain"))
+        calls = log.read_text() if log.exists() else ""
+        check("CS-7 close-dead hook: tentou git commit, sem --no-verify",
+              " commit" in calls and "--no-verify" not in calls, calls[-300:])
+        check("CS-7 close-dead hook: a tela traz o motivo",
+              "git refused the commit" in out and "lint: 3 erros" in out,
+              out[-800:])
+        cmds = [l.split("to commit by hand: ", 1)[1].strip()
+                for l in out.splitlines() if "to commit by hand: " in l]
+        check("CS-7 close-dead hook: ...e o comando exato",
+              len(cmds) == 1 and " commit " in cmds[0]
+              and "--no-verify" not in cmds[0], out[-800:])
+        if cmds:
+            hook.unlink()
+            c = subprocess.run(["sh", "-c", cmds[0]], cwd=tmp,
+                               capture_output=True, text=True)
+            check("CS-7 close-dead hook: o comando roda como impresso e limpa",
+                  c.returncode == 0 and ".claude/" not in _git(
+                      root, "status", "--porcelain"), c.stdout + c.stderr)
+
+
+def _land_ready(tmp, layout="programs"):
+    """A finished, committed run (a1 delivered) whose queue the owner's clone holds
+    modified, the state a refused or older commit leaves."""
+    root = _scenario(tmp)
+    if layout == "queues":
+        (root / ".claude" / "queues").mkdir()
+        _git_ok(root, "mv", ".claude/programs/fila", ".claude/queues/fila")
+        _git_ok(root, "mv", ".claude/queues/fila/plan.yaml",
+                ".claude/queues/fila/queue.yaml")
+        _git_ok(root, "commit", "-qm", "new layout")
+    binv = base.fake_claude(tmp, WORKS)
+    qfile = root / ".claude" / layout / "fila" / (
+        "queue.yaml" if layout == "queues" else "plan.yaml")
+    p, _c = base.run_until(root, binv, qfile, ["--for", "2h", "--verify", VERIFY])
+    d = qfile.parent / "until"
+    run_id = sorted(d.glob("*.estado.json"))[-1].name.split(".")[0]
+    q = yaml.safe_load(qfile.read_text())
+    q["items"][0]["evidence"] = "marca que ficou na fila"
+    qfile.write_text(yaml.safe_dump(q, allow_unicode=True))
+    return root, run_id, qfile
+
+
+def _land_yes(root, run_id):
+    env = dict(os.environ, CEPA_WORKTREE_HOME=str(root.parent / "worktrees"))
+    return subprocess.run([sys.executable, str(base.CEPA_UNTIL), "land",
+                           f"fila/{run_id}", "--repo", str(root), "--yes"],
+                          capture_output=True, text=True, cwd=str(root), env=env,
+                          timeout=180)
+
+
+def _cs7_land_checks(layout):
+    with tempfile.TemporaryDirectory() as tmp:
+        root, run_id, qfile = _land_ready(tmp, layout)
+        rel = str(qfile.relative_to(root))
+        r = _land_yes(root, run_id)
+        out = r.stdout + r.stderr
+        check(f"CS-7 land ({layout}): aterrissa com saída 0", r.returncode == 0,
+              out[-800:])
+        st = _git(root, "status", "--porcelain", "--untracked-files=all")
+        check(f"CS-7 land ({layout}): nenhum caminho de .claude/ sujo", ".claude/" not in st,
+              st)
+        check(f"CS-7 land ({layout}): a velha linha 'commit whenever you want' sumiu",
+              "commit whenever you want" not in out, out[-800:])
+        files = _git(root, "show", "--name-only", "--format=", "HEAD").split()
+        check(f"CS-7 land ({layout}): o commit do topo leva a fila",
+              files == [rel], files)
+        msg = _git(root, "log", "-1", "--format=%s").strip()
+        check(f"CS-7 land ({layout}): a mensagem é `until <fila>/<run> land: ...`",
+              msg.startswith(f"until fila/{run_id} land: "), msg)
+        check(f"CS-7 land ({layout}): o merge do run está embaixo do commit",
+              len(_git(root, "rev-list", "--parents", "-1",
+                       "HEAD~1").split()) == 3, _git(root, "log", "-3",
+                                                     "--format=%s"))
+        check(f"CS-7 land ({layout}): a tela diz do commit", "commit: " in out,
+              out[-600:])
+
+
+def test_cs7_land_commits_the_queue_marks_it_leaves_behind():
+    _cs7_land_checks("programs")
+
+
+def test_cs7_land_commits_in_the_new_queue_layout_too():
+    _cs7_land_checks("queues")
+
+
 def main():
     print("cepa-until — árvore limpa no fim do run\n")
     for given_name, fn in sorted(globals().items()):
