@@ -1,0 +1,21 @@
+key: until-arvore-limpa-CS-6
+status: complete
+diff_range: c6f3cec..072cd1e
+criteria:
+  - id: CS-6
+    text: "Com a main no meio de um merge ou rebase, o run nao commita e avisa. Red test: com .git/MERGE_HEAD presente no clone ao fim do run, nenhum commit e criado, o merge em andamento continua intacto (git status ainda diz que esta no merge) e a tela final diz por que nao commitou. Premissa sob CS-7: com HEAD destacado o run tambem nao commita e avisa, pela mesma regra."
+    altitude: cli
+    surface: "processo real de common/bin/cepa-until <fila> --com-analise em repo git de teste; o claude falso cria o estado (merge --no-commit, rebase-merge/, CHERRY_PICK_HEAD, REVERT_HEAD, checkout --detach) durante a analise final, logo antes do commit; asserts em returncode (comparado a run sem o estado), stdout/stderr, .review.md, HEAD, marcadores no gitdir, git status, git ls-files -s"
+    test: "tests/test_cepa_until_clean_tree.py::test_cs6_merge_in_progress_is_left_alone, ::test_cs6_rebase_in_progress_is_left_alone, ::test_cs6_cherry_pick_in_progress_is_left_alone, ::test_cs6_revert_in_progress_is_left_alone, ::test_cs6_detached_head_does_not_commit"
+    layer: "subprocess real de cepa-until, claude falso, repo temporario; sem mocks do git"
+    evidence: verified
+    run: "python3 tests/test_cepa_until_clean_tree.py -> '✓ tudo verde' (76 s, primeiro plano); 5 testes test_cs6_* executados, 52 linhas 'ok' de CS-6 (11 no merge, 10 em rebase, cherry-pick e revert, 9 no HEAD destacado), nenhuma falha. Tree do repo limpo antes da execucao."
+    status: complete
+    notes:
+      - "Cobre cada clausula do red test: nenhum commit novo (HEAD igual ao anterior); MERGE_HEAD segue no lugar; git status ainda contem 'merging'; indice identico byte a byte ao retrato tirado pelo fake imediatamente antes do commit (prova que nem o git add tocou no indice); nada de plan.yaml/.jsonl/.review.md em stage; tela final traz a linha com o motivo (palavra merge/rebase/cherry-pick/revert/detached HEAD) e nao diz 'git refused'; traz o comando 'to commit by hand'; .review.md mantem a analise e traz o motivo; codigo de saida igual ao de um run sem o estado."
+      - "Premissa HEAD destacado (CS-7, 'pela mesma regra do CS-6') coberta por test_cs6_detached_head_does_not_commit. Rebase, cherry-pick e revert alem do literal 'merge ou rebase' tambem cobertos."
+      - "Altitude e camada mais externa: o fix esta no caminho de commit do fim do run em common/bin/cepa-until (clone_state_blocking_commit, commit_run_records, mensagem de tela e .review.md), e o teste exerce o processo real, a tela e o arquivo que o dono ve."
+      - "Ressalva menor: o teste de merge usa 'merge --no-commit' sem conflito, e afirma 'merging' no git status, nao a frase literal 'All conflicts fixed but you are still merging'. O red test aceita 'ou o estado original', e a presenca de MERGE_HEAD e o mesmo gatilho; nao considerei isso lacuna."
+      - "Fora do alcance dos testes: o ramo de recolha na largada (CS-4, mensagem 'did not commit the loose records of dead runs ... the index was not touched') recebeu o tratamento NotAttempted no diff mas nao tem teste com merge/HEAD destacado. O criterio CS-6 literal trata do fim do run; o launch recusa arvore em merge, segundo o docstring do teste. Nao bloqueia, registrado para o dono."
+      - "Nao rodei a suite inteira (tests/run-all.sh), por instrucao; so o script do arquivo."
+gap: []

@@ -1,0 +1,19 @@
+key: until-arvore-limpa-CS-5
+status: complete
+diff_range: 901136c..bd96753
+criteria:
+  - id: CS-5
+    text: "Se o git recusar o commit, o run avisa com o motivo e o comando, sem forcar. Red test: com um hook pre-commit que sai com 1 no repo de teste, o run termina com o codigo de saida que teria sem o hook, a tela final e o .review.md trazem a linha do motivo e o comando git commit exato para o dono, nenhum commit novo e criado e nenhuma chamada a git traz --no-verify."
+    altitude: cli
+    surface: "processo real de common/bin/cepa-until <fila> --com-analise em repo git de teste com .git/hooks/pre-commit recusando (exit 1); asserts em returncode (comparado a run sem hook), stdout/stderr, .review.md, HEAD, log de um git espiao no PATH"
+    test: "tests/test_cepa_until_clean_tree.py::test_cs5_refusing_hook_with_a_message e ::test_cs5_silent_refusing_hook_still_warns"
+    layer: "subprocess real de cepa-until, claude falso, git espiao (registra argv e delega ao git real), repo temporario"
+    evidence: verified
+    run: "python3 tests/test_cepa_until_clean_tree.py -> '✓ tudo verde'; 28 linhas 'ok' de CS-5 (14 por cenario: hook com mensagem e hook mudo), nenhuma falha. Primeiro plano."
+    status: complete
+    notes:
+      - "Cobre cada clausula: exit code igual ao do run sem hook; HEAD inalterado; espiao prova que git commit foi chamado e que nenhuma chamada traz --no-verify; tela traz a linha 'git refused ... <motivo>' e 'to commit by hand: <cmd>'; .review.md mantem a analise e traz motivo e o mesmo comando; o comando impresso, executado depois de remover o hook, deixa git status vazio com um commit so."
+      - "P6 (spec): 'nao forca e avisa: motivo e comando exato na tela final e no .review.md, nunca --no-verify, o resultado do run continua valendo' coberto pelos mesmos testes. Ressalva: o '--no-verify' que o harness de teste passa e flag do proprio cepa-until, nao do git; o espiao so ve chamadas a git."
+      - "Fora do alcance dos testes: o aviso de recusa na recolha da largada (CS-4, print em stderr com owner_commit_command) nao tem teste de hook recusando; o criterio CS-5 literal trata do commit do fim do run, e o ramo da recolha so reutiliza as mesmas funcoes."
+      - "Nao rodei a suite inteira (tests/run-all.sh), por instrucao; so o script do arquivo."
+gap: []

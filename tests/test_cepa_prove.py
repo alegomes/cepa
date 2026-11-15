@@ -549,14 +549,26 @@ def test_mode_menu_points_to_cepa_help():
 # docs/spec/herdr-agent-status.md CS-4: herdr (the terminal multiplexer) only sees
 # an agent that reports itself, and `cepa-prove` runs `claude -p` with no TUI.
 
+def warm_up(script):
+    """Runs a freshly written fake once (`--warmup`, which it skips without logging).
+    On macOS the first exec of a new executable goes through a security check that
+    costs 0.2-0.4 s at rest (later execs: 0.02 s) and more than 1 s on a busy
+    machine: past `cepa-until`'s 1 s herdr timeout the first report was killed
+    before being logged, and the suite went red at random (run 2026-11-14-0954)."""
+    subprocess.run([str(script), "--warmup"], stdin=subprocess.DEVNULL,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+
+
 def herdr_env(tmp):
     """A fake `herdr` that appends its argv as one JSON line to a log."""
     herdr = Path(tmp) / "herdr"
     log = Path(tmp) / "herdr.log"
     herdr.write_text(f"#!{sys.executable}\n"
                      "import sys, json\n"
+                     "if sys.argv[1:] == ['--warmup']: sys.exit(0)\n"
                      f"open({str(log)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
     herdr.chmod(0o755)
+    warm_up(herdr)
     return ({"HERDR_ENV": "1", "HERDR_PANE_ID": "w9:p9", "HERDR_BIN_PATH": str(herdr)},
             log)
 

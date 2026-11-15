@@ -1,0 +1,44 @@
+schema_version: 2
+card: until-arvore-limpa-CS-9
+verdict: proven               # proven | unproven | needs-human
+reviewed_at: 2026-11-15T14:30:00-03:00
+base_commit: d129bba
+head_commit: d1338ee
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: ".gitignore (two new rules: .claude/queues/*/queue.yaml.bak and .claude/programs/*/plan.yaml.bak)"
+      module: repo-config
+      external_observable: true     # what `git status --porcelain --untracked-files=all` lists after a queue rewrite
+      substituted_by_double: null
+    - class: "tests/test_common_plan.py :: test_rewrite_backup_stays_out_of_git_status (new)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null   # runs the real common/bin/cepa-plan write --from-spec twice in a real temp git repo carrying this repo's real .gitignore; nothing faked
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                   # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway detached worktree /tmp/proof-cs9 at d1338ee (removed with `git worktree remove --force`; absent from `git worktree list`; primary tree `git status --short` empty before writing this file). GREEN baseline: `python3 tests/test_common_plan.py` -> test_rewrite_backup_stays_out_of_git_status 7 checks ok, `all green`. Each defect planted in /tmp/proof-cs9/.gitignore (diff read back with `git diff -U0`), the SAME command re-run, file restored with `git checkout` before the next. Foreground only, only this test file."
+      results:
+        - "P1 remove `.claude/queues/*/queue.yaml.bak` alone -> RED, 2 failures: 'git status não lista a queue.yaml.bak' and 'a árvore fica limpa depois da regravação' (both show `?? .claude/queues/daspec/queue.yaml.bak`). The legacy check stayed ok."
+        - "P2 remove `.claude/programs/*/plan.yaml.bak` alone -> RED, 1 failure: 'o .bak do layout antigo (plan.yaml.bak) também some do git status' (`?? .claude/programs/velha/plan.yaml.bak`). The queue.yaml.bak checks stayed ok."
+        - "P3 over-broad rule appended, `.claude/queues/*/queue.yaml*` -> RED, 1 failure: 'a queue.yaml segue rastreável (a regra não pega a fila)'. The .bak checks stayed ok, so this check alone catches a rule that also hides the queue."
+        - "P4 base .gitignore (d129bba) with the test from HEAD (`git checkout d129bba -- .gitignore` in the worktree) -> RED, 3 failures: queue.yaml.bak listed, tree not clean, plan.yaml.bak listed; the 'queue.yaml segue rastreável' check stayed ok. Same as the bug-at-base proof."
+        - "Every run printed its checks under `test_rewrite_backup_stays_out_of_git_status`; none was a zero-test green."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; both .gitignore lines were reached: each removal alone (P1, P2) turned a distinct check RED, and the over-broad rule (P3) turned the tracking check RED. The test also asserts the .bak was actually created ('a regravação criou a queue.yaml.bak'), so the ignore rule is exercised on a real file, not a vacuous absence."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff adds two ignore patterns and one test; it parses no input from outside and no changed class is in an input-bearing module (api-rest)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "O teste novo é capaz de falhar e cada linha do .gitignore sustenta uma checagem própria. Com o .gitignore do commit base (d129bba) e o teste novo, o teste fica vermelho (3 falhas): o backup da fila aparece no git status. Tirando só a regra da fila, 2 falhas; tirando só a regra do layout antigo, 1 falha; uma regra larga demais que esconderia também a queue.yaml, 1 falha. O critério (regravar a fila cria a queue.yaml.bak e o git status não a lista) está provado com o cepa-plan real num repositório git real. Limite: a prova roda só tests/test_common_plan.py; a suíte inteira fica com o supervisor."

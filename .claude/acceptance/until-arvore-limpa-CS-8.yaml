@@ -1,0 +1,18 @@
+key: until-arvore-limpa-CS-8
+status: complete
+diff_range: 4d11f07..000395a
+criteria:
+  - id: CS-8
+    text: "O run não faz push. Red test: num repo de teste com um remoto bare, ao fim do run o HEAD do remoto é o mesmo de antes da largada, enquanto o clone tem o commit novo."
+    altitude: cli
+    surface: "processo real de common/bin/cepa-until --for 2h (claude falso), repo git temporario com remoto bare rastreado (push -u), asserts em returncode, HEAD do clone, HEAD e todas as refs do remoto, contagem de commits a frente de origin"
+    test: "tests/test_cepa_until_clean_tree.py::test_cs8_run_does_not_push"
+    layer: "subprocess real de cepa-until, claude falso, repo e remoto bare temporarios; sem mocks do git"
+    evidence: verified
+    run: "python3 -c (importa tests/test_cepa_until_clean_tree e chama test_cs8_run_does_not_push; primeiro plano, ~10 s) -> 5 linhas 'ok' (run termina; clone com o commit novo sobre a base; HEAD do remoto igual ao de antes; nenhuma ref do remoto mudou, nem until/<run>; clone 1 a frente de origin), FAILURES []. Arvore limpa depois."
+    status: complete
+    notes:
+      - "Sem codigo de produto no diff (so o teste). A afirmacao 'ja era assim' confere: em common/bin/cepa-until o unico git push executavel esta em _cmd_land (linha 2352); as demais ocorrencias de 'push' sao texto de ajuda/mensagens."
+      - "O branch do clone rastreia o remoto, entao um 'git push' simples teria sucesso: o teste nao passa por acaso."
+      - "Nao rodei o arquivo inteiro nem a suite, por instrucao; so este teste. Nao mutei o produto para ver o teste ficar vermelho."
+gap: []

@@ -1325,6 +1325,16 @@ _hc_label = None
 # `done` at the exit).
 _hc_asking = False
 
+# CS-7: `cepa-until decide` writes the owner's answers without `cepa-plan answer`'s
+# own commit and commits them itself at the end (one commit, the `until ...`
+# message, the same refusal handling). The run's end leaves it True: its own
+# commit comes after.
+_answer_commit = True
+
+# True once `decide` itself landed a run (CS-7): its final commit then takes the run's
+# paths even when no answer changed them, like `cepa-until land --yes` does.
+_decide_landed = False
+
 # True once a question of the armed run waited past its time with no answer: the
 # run then ends with work for the owner, and the exit reports "Needs you".
 _hc_unanswered = False
@@ -2212,6 +2222,10 @@ def land_parser():
             "running it again resumes where it stopped: with the merge done, it goes\n"
             "on from the build. To give up instead, `git reset --keep` to the return\n"
             "point it prints. On success it removes the run worktree and branch.\n"
+            "At the end, whatever way it ends, it commits the queue marks and the run\n"
+            "records the clone holds for the run (only those paths, never\n"
+            "--no-verify, not pushed). If git refuses, it says why and prints the\n"
+            "command to run by hand; the exit code does not change.\n"
             "Without --yes, it only shows the plan."),
         examples=[
             ("cepa until land wego/2026-11-03-2210", "show the landing plan"),
@@ -2239,6 +2253,21 @@ def land_parser():
 
 
 def cmd_land(argv):
+    """`cepa-until land <queue>/<run> [--yes]`, and then (CS-7) the commit of what the
+    landing leaves in the clone: the queue marks and the run's records, after the
+    merge, on every way out once the landing really started. Not when it only showed
+    the plan or refused."""
+    wrote = {}
+    try:
+        return _cmd_land(argv, wrote)
+    finally:
+        if wrote:
+            commit_subcommand_records(
+                wrote["repo"], wrote["queue"], wrote["run"], "land",
+                "queue marks and run records left in the clone")
+
+
+def _cmd_land(argv, wrote):
     """`cepa-until land <queue>/<run> [--yes]` — step 3 of
     until-fim-sem-dono.
 
@@ -2356,6 +2385,9 @@ def cmd_land(argv):
     if tree and Path(tree).exists() and dirty_tree(tree):
         return refuse(f"the run worktree ({tree}) has uncommitted changes")
 
+    # From here the landing runs: whatever way it ends, `cmd_land` commits the
+    # queue marks and the records the clone holds for the run.
+    wrote.update(repo=repo, queue=queue, run=run_id)
     if not already_merged:
         return_value = head_of(repo)
         landing_info.update({"retorno": return_value, "destino": destination})
@@ -2432,10 +2464,43 @@ def cmd_land(argv):
     record(estado="aterrissado", aterrissagem=landing_info)
     print(f"landed: `{branch}` is in `{destination}`; the run worktree and branch "
           "were removed")
-    if dirty_queue:
-        print(f"the queue ({clone_queue}) holds the run's marks without a commit; "
-              "commit whenever you want")
     return 0
+
+
+class NotAttempted(str):
+    """The reason `commit_run_records` gives when the harness itself decided not to
+    call git (an operation in progress, a detached HEAD): not a git refusal, so the
+    screen must not say "git refused"."""
+
+    # What the owner does before the by-hand command: during a merge git refuses
+    # `commit --only`, so the command printed next would fail as it stands.
+    FIRST = "Conclude or abort the operation (or check out a branch) first"
+
+
+def clone_state_blocking_commit(root):
+    """Why a commit of the run's records on the clone's branch must not even be
+    tried (spec `until-arvore-limpa`, CS-6): a merge, rebase, cherry-pick or revert
+    in progress (`git commit --only` refuses those, but only after `git add` has
+    already touched the index of the operation) or a detached HEAD (a commit there
+    belongs to no branch). Returns a one-line reason, or None when the clone is
+    free. Git paths come from `git rev-parse --git-path`, not from `.git/`."""
+    for name, what in (("MERGE_HEAD", "a merge"),
+                       ("rebase-merge", "a rebase"),
+                       ("rebase-apply", "a rebase or `git am`"),
+                       ("CHERRY_PICK_HEAD", "a cherry-pick"),
+                       ("REVERT_HEAD", "a revert")):
+        code, out = git(["rev-parse", "--git-path", name], root)
+        if code != 0 or not out.strip():
+            continue
+        path = Path(out.strip().splitlines()[-1])
+        if not path.is_absolute():
+            path = root / path
+        if path.exists():
+            return f"{what} is in progress in the clone"
+    code, _out = git(["symbolic-ref", "-q", "HEAD"], root)
+    if code == 1:
+        return "the clone is on a detached HEAD, not on a branch"
+    return None
 
 
 def commit_run_records(repo, paths, message):
@@ -2448,7 +2513,9 @@ def commit_run_records(repo, paths, message):
     Only the listed paths go in: `git add` of those paths and `git commit --only`
     on them, so whatever else the owner has staged or modified stays as it was.
     Never `--no-verify`. Returns (sha, None) on a commit, (None, None) when there
-    was nothing to commit, (None, reason) when git refused."""
+    was nothing to commit, (None, reason) when git refused, and
+    (None, NotAttempted(reason)) when the clone is mid-merge/rebase/cherry-pick/
+    revert or on a detached HEAD: then git is not called at all (CS-6)."""
     root = main_root(repo)
     rel = []
     for path in paths:
@@ -2472,13 +2539,156 @@ def commit_run_records(repo, paths, message):
     dirty = [entry[3:] for entry in st.stdout.split("\0") if len(entry) > 3]
     if not dirty:
         return None, None
+    blocked = clone_state_blocking_commit(root)
+    if blocked:
+        return None, NotAttempted(blocked)
     code, output = git(["add", "--", *dirty], root)
     if code != 0:
-        return None, output
+        return None, output or f"`git add` exited {code} with no message"
     code, output = git(["commit", "-q", "-m", message, "--only", "--", *dirty], root)
     if code != 0:
-        return None, output
+        # A hook that exits 1 without printing leaves git silent too: without
+        # this text the caller's `elif error` saw "" and the run said nothing.
+        return None, output or (f"`git commit` exited {code} with no message "
+                                "(a pre-commit or commit-msg hook refused?)")
     return head_of(root), None
+
+
+def refusal_reason(error):
+    """The line of git's refusal that names the cause: the last non-empty one
+    (a hook prints its own lines before git's)."""
+    lines = [l.strip() for l in str(error).splitlines() if l.strip()]
+    return lines[-1] if lines else str(error)
+
+
+def owner_commit_command(repo, paths, message):
+    """The exact command the owner runs to make, by hand, the commit git refused
+    (spec `until-arvore-limpa`, CS-5): the same `git add` + `git commit --only`
+    over the same paths and with the same message as `commit_run_records`, with
+    `-C <clone>` so it works from any directory. Never `--no-verify`: the hook
+    that refused is the owner's to deal with, not the harness's to skip."""
+    root = main_root(repo)
+    rel = []
+    for path in paths:
+        if not path:
+            continue
+        try:
+            rel.append(str(Path(path).resolve().relative_to(root.resolve())))
+        except ValueError:
+            continue
+    quoted = " ".join(shlex.quote(r) for r in rel)
+    clone = shlex.quote(str(root))
+    return (f"git -C {clone} add -- {quoted} && git -C {clone} commit "
+            f"-m {shlex.quote(message)} --only -- {quoted}")
+
+
+def note_refused_commit(review, reason, command, not_attempted=False):
+    """Appends to the run's `.review.md` (creating it when the analysis did not
+    run) the git refusal and the command for the owner (CS-5). The review is the
+    file the owner opens after the run; the screen may already be gone. The
+    note goes at the end, after the `cepa-decisoes` block, which is found by
+    search and not by position."""
+    if not_attempted:
+        note = ("\n\n## The run did not commit its records\n\n"
+                f"Reason: {reason}; the run left the clone's index as it was.\n\n"
+                "The queue marks and the run records stay in the clone without a "
+                "commit. Once you conclude or abort the operation (or check out "
+                "a branch), commit them with:\n\n"
+                f"```sh\n{command}\n```\n")
+    else:
+        note = ("\n\n## The run's commit was refused by git\n\n"
+                f"Reason: {reason}\n\n"
+                "The queue marks and the run records stay in the clone without a "
+                "commit. Once the cause is dealt with, commit them with:\n\n"
+                f"```sh\n{command}\n```\n")
+    try:
+        previous = review.read_text(encoding="utf-8") if review.exists() else ""
+        review.write_text(previous.rstrip("\n") + note if previous else note.lstrip("\n"),
+                          encoding="utf-8")
+    except OSError:
+        pass
+
+
+def print_commit_made(sha, what="the queue marks and the run records"):
+    """The screen line of a commit the harness made (the run's end and the
+    `decide`, `close-dead` and `land` subcommands say it the same way)."""
+    print(SCREEN.c("cinza", f"   commit: {sha[:7]} on the clone's branch, "
+                            f"with {what} (not pushed)"))
+
+
+def print_commit_refused(reason, command, skipped, what="the run records"):
+    """The screen lines of a commit that was not made: git refused it (a hook) or
+    the harness did not call git (a merge, a rebase, a detached HEAD; CS-5, CS-6),
+    plus the exact command for the owner. Never changes an exit code."""
+    if skipped:
+        print(f"   commit: not made, {reason}; {what} stay in the "
+              "clone without a commit and the index was not touched. "
+              f"{NotAttempted.FIRST}, then run the command below")
+    else:
+        print(f"   commit: git refused the commit of {what} "
+              f"({reason}); they stay in the clone without a commit")
+    print(f"   to commit by hand: {command}")
+
+
+def run_record_paths(repo, queue, run_id=None):
+    """The paths a subcommand may have written for a queue (and a run): the queue
+    file, in whichever layout it lives, and the run's `.jsonl` and `.review.md`."""
+    qfile = qp.queue_file(main_root(repo), queue)
+    paths = [qfile]
+    if run_id:
+        folder = qfile.parent / "until"
+        paths += [folder / f"{run_id}.jsonl", folder / f"{run_id}.review.md"]
+    return paths
+
+
+def commit_subcommand_records(repo, queue, run_id, verb, summary,
+                              what="the queue marks and the run records",
+                              extra_paths=()):
+    """CS-7: `decide`, `close-dead` and `land` commit what they wrote to the queue
+    and to the run's records, like the run's end does: the same
+    `commit_run_records` (only these paths, `--only`, never `--no-verify`, no empty
+    commit, no push), the same screen wording, and an exit code that never changes
+    because of it. The message is `until <queue>/<run> <verb>: <summary>`, or
+    `until <queue> <verb>: <summary>` when the command has no run. SIGINT and
+    SIGTERM are ignored while git runs, so a Ctrl+C cannot kill `git commit`
+    halfway and leave `.git/index.lock` behind."""
+    paths = run_record_paths(repo, queue, run_id) + list(extra_paths)
+    target = f"{queue}/{run_id}" if run_id else queue
+    message = f"until {target} {verb}: {summary}"
+    saved = {}
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        try:
+            saved[sig] = signal.signal(sig, signal.SIG_IGN)
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        sha, error = commit_run_records(repo, paths, message)
+    except Exception as e:  # noqa: BLE001  (a failed commit must not mask the exit code)
+        sha, error = None, str(e)
+    finally:
+        for sig, handler in saved.items():
+            signal.signal(sig, handler)
+    if sha:
+        print_commit_made(sha, what)
+    elif error:
+        print_commit_refused(refusal_reason(error),
+                             # Only paths that exist: `git add` of a `.review.md`
+                             # the run never had fails the whole command.
+                             owner_commit_command(
+                                 repo, [x for x in paths if x.exists()], message),
+                             isinstance(error, NotAttempted), what)
+
+
+def _content_snapshot(paths):
+    """What each path holds now (a hash, or None when it does not exist): `decide`
+    compares it before and after to know whether it wrote anything."""
+    snap = {}
+    for path in paths:
+        try:
+            snap[str(path)] = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        except OSError:
+            snap[str(path)] = None
+    return snap
 
 
 # A run's own paths in the main clone, in both layouts: the queue file and the
@@ -3207,9 +3417,18 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                  "--answer", text, "--repo", str(repo)]
                 + (["--keep"] if keep else [])
                 + (["--drop"] if drop else [])
+                + ([] if _answer_commit else ["--no-commit"])
                 + (["--multiline"] if "\n" in text else []),
                 capture_output=True, text=True, timeout=60)
-            return p.returncode, (p.stdout or p.stderr).strip()
+            text_out = (p.stdout or p.stderr).strip()
+            if not _answer_commit:
+                # `decide` commits at its end and says so: the "queue written
+                # without a commit" notice of `cepa-plan answer --no-commit` would
+                # be false by the time the owner reads it.
+                text_out = "\n".join(
+                    l for l in text_out.splitlines()
+                    if not l.lstrip().startswith("fila gravada sem commit")).strip()
+            return p.returncode, text_out
     if unclear is None:
         # CS-6 (perguntas-da-largada-legiveis): "I did not understand" goes to the
         # global feedback ledger `/common:feedback` triages, target `cepa-until`;
@@ -3251,8 +3470,16 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             return (None, error) if error else (route, None)
     if land is None:
         def land():
-            return cmd_land([f"{queue}/{run_id}", "--repo", str(repo),
-                                   "--yes"])
+            # `_cmd_land`: the commit of the records is the caller's, once, at the
+            # end of the whole `decide` (or of the run's end), not one per landing.
+            global _decide_landed
+            wrote = {}
+            try:
+                return _cmd_land([f"{queue}/{run_id}", "--repo", str(repo),
+                                  "--yes"], wrote)
+            finally:
+                if wrote:
+                    _decide_landed = True
     back = f"cepa-until decide {queue}" + (f"/{run_id}" if run_id else "")
     screen = Panel(SCREEN, output)
     applied, for_later = [], []
@@ -4337,8 +4564,12 @@ def cmd_decide(argv):
             "that run.\n"
             "\n"
             "Each question is closed, with a recommendation, and the answer is\n"
-            "applied right away (cepa plan answer). Outside a terminal it prints\n"
-            "the pending questions as text instead of asking."),
+            "applied right away (cepa plan answer). When it ends, whatever the way\n"
+            "(Ctrl+C included), it commits what the answers wrote: the queue and, with\n"
+            "<run>, the run records (only those paths, never --no-verify, not pushed).\n"
+            "If git refuses, it says why and prints the command to run by hand; the\n"
+            "exit code does not change. Outside a terminal it prints the pending\n"
+            "questions as text instead of asking, and commits nothing."),
         examples=[
             ("cepa until decide wego", "every question the queue holds for you"),
             ("cepa until decide wego/2026-11-03-2210", "the questions of one run"),
@@ -4367,8 +4598,9 @@ def cmd_decide(argv):
             print(f"cepa-until decide: could not read the queue {a.target!r} ({error})",
                   file=sys.stderr)
             return 2
-        return _decide_reporting(a.target, lambda: close_with_owner(
-            repo, a.target, None, {}))
+        return _decide_reporting(a.target, lambda: commit_after_decide(
+            repo, a.target, None, lambda: close_with_owner(
+                repo, a.target, None, {})))
     queue, run_id = a.target.split("/", 1)
     # Queue and run names are a single segment: `queue/../../x` would read a
     # state from outside the run folder and ask about it.
@@ -4387,8 +4619,77 @@ def cmd_decide(argv):
               file=sys.stderr)
         return 2
     review = folder / f"{run_id}.review.md"
-    return _decide_reporting(queue, lambda: close_with_owner(
-        repo, queue, run_id, item_states, review if review.exists() else None))
+    return _decide_reporting(queue, lambda: commit_after_decide(
+        repo, queue, run_id, lambda: close_with_owner(
+            repo, queue, run_id, item_states,
+            review if review.exists() else None)))
+
+
+def _waiver_files(repo):
+    """The waiver files `cepa-plan answer` may rewrite (a "sim" or "não" to a proposed
+    waiver): `.claude/waivers/*.yaml` of the main clone and of `repo`."""
+    folders = []
+    for base_dir in (main_root(repo), Path(repo).resolve()):
+        folder = base_dir / ".claude" / "waivers"
+        if folder not in folders:
+            folders.append(folder)
+    return sorted({p for folder in folders for p in folder.glob("*.yaml")})
+
+
+def commit_after_decide(repo, queue, run_id, ask):
+    """Runs `ask` (the questions) and, on every way out, commits what the answers
+    wrote (CS-7): the queue, the waiver files an answer changed and, with a run, its
+    records. Compares the paths before and after, so listing the questions without a
+    terminal, or leaving without answering, commits nothing, and a queue (or a
+    waiver) the owner left modified is not swept in by a `decide` that did not touch
+    it. Ctrl+C after one answer is a way out too, and so are SIGTERM and SIGHUP (a
+    closed terminal): they end the questions through the same `finally`, with the
+    exit status 128 + the signal number, as the run's own `interrupt` does. When
+    `decide` landed the run, the run's paths are committed even if no answer changed
+    them (as `land --yes` does)."""
+    global _answer_commit, _decide_landed
+    paths = run_record_paths(repo, queue, run_id)
+    before = _content_snapshot(paths)
+    waivers_before = _content_snapshot(_waiver_files(repo))
+    _answer_commit = False
+    _decide_landed = False
+
+    def ended_by(signum, _frame):
+        raise SystemExit(128 + signum)
+
+    saved = {}
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        try:
+            saved[sig] = signal.signal(sig, ended_by)
+        except Exception:  # noqa: BLE001  (not the main thread)
+            pass
+    try:
+        return ask()
+    finally:
+        # A second signal must not cut the commit; the handlers come back last.
+        for sig in saved:
+            signal.signal(sig, signal.SIG_IGN)
+        try:
+            _answer_commit = True
+            waivers_after = _content_snapshot(_waiver_files(repo))
+            changed_waivers = [Path(p) for p in waivers_after
+                               if waivers_after[p] != waivers_before.get(p)]
+            # A waiver changed by an answer never triggers the commit by itself:
+            # `cepa-plan answer` rewrites the item's `evidence` (today's date, the
+            # answer, the previous evidence) in the same step that converts the
+            # waiver, so the queue snapshot has changed whenever a waiver has. The
+            # waivers only ride along in the paths of that commit.
+            if _content_snapshot(paths) != before or _decide_landed:
+                commit_subcommand_records(
+                    repo, queue, run_id, "decide",
+                    "owner answers recorded in the queue",
+                    what="the owner's answers" if not run_id else
+                    "the owner's answers and the run records",
+                    extra_paths=changed_waivers)
+        finally:
+            _decide_landed = False
+            for sig, handler in saved.items():
+                signal.signal(sig, handler)
 
 
 def _decide_reporting(queue, ask):
@@ -4410,6 +4711,20 @@ def _decide_reporting(queue, ask):
 
 
 def cmd_close_dead(argv):
+    """`cepa-until close-dead <queue>/<run> [--yes]`, and then (CS-7) the commit of what
+    it wrote: the run's `.jsonl` (the build, `run_end`) and the queue marks the dead
+    run left, on every way out once it started to write, a red build included."""
+    wrote = {}
+    try:
+        return _cmd_close_dead(argv, wrote)
+    finally:
+        if wrote:
+            commit_subcommand_records(
+                wrote["repo"], wrote["queue"], wrote["run"], "close-dead",
+                "run closed, queue marks and run records")
+
+
+def _cmd_close_dead(argv, wrote):
     """`cepa-until close-dead <queue>/<run> [--yes]` — closes the run whose
     supervisor died (or was interrupted) before the end.
 
@@ -4434,6 +4749,10 @@ def cmd_close_dead(argv):
             "ready for aterrissar. Red: nothing changes, and cepa doctor keeps\n"
             "pointing at the run. It refuses while the supervisor or the child\n"
             "process of the item in flight is still alive.\n"
+            "At the end it commits the run's `.jsonl` and the queue marks the dead run\n"
+            "left (only those paths, never --no-verify, not pushed), a red build\n"
+            "included. If git refuses, it says why and prints the command to run by\n"
+            "hand; the exit code does not change.\n"
             "Without --yes, it only shows the plan."),
         examples=[
             ("cepa until close-dead wego/2026-09-28-2003", "show the closing plan"),
@@ -4531,6 +4850,8 @@ def cmd_close_dead(argv):
                       "stash first:\n  " + "\n  ".join(dirty_files[:10]))
 
     record_path = Path(m["registro"])
+    # From here the record is written: `cmd_close_dead` commits it on the way out.
+    wrote.update(repo=repo, queue=queue, run=run_id)
 
     def log_event(event):
         event["quando"] = datetime.now().isoformat(timespec="seconds")
@@ -5149,10 +5470,19 @@ def _main(argv=None):
                 collected = {"commit": sha, "filas": list(loose),
                              "caminhos": all_paths}
             elif error:
-                print(f"cepa-until: git refused the commit that collects the loose "
-                      f"records of dead runs ({names}): "
-                      f"{error.splitlines()[-1] if error.splitlines() else error}",
-                      file=sys.stderr)
+                if isinstance(error, NotAttempted):
+                    print(f"cepa-until: did not commit the loose records of dead "
+                          f"runs ({names}): {error}; the index was not touched. "
+                          f"{NotAttempted.FIRST}, then run the command below",
+                          file=sys.stderr)
+                else:
+                    print(f"cepa-until: git refused the commit that collects the "
+                          f"loose records of dead runs ({names}): "
+                          f"{refusal_reason(error)}", file=sys.stderr)
+                print("cepa-until: to commit by hand: " + owner_commit_command(
+                    repo, [root / p for p in all_paths],
+                    f"until: collect records of dead runs ({names})"),
+                    file=sys.stderr)
 
     dirt = dirty_tree(repo, live_run_ok=True)
     if a.dry and collected:
@@ -5561,21 +5891,26 @@ def _main(argv=None):
                 saved[sig] = signal.signal(sig, signal.SIG_IGN)
             except Exception:  # noqa: BLE001
                 pass
+        review_path = ledger.with_suffix(".review.md")
+        message = f"until {a.queue}/{run_id}: queue marks and run records"
         try:
             sha, error = commit_run_records(
-                repo, [*run_queue_paths, ledger, ledger.with_suffix(".review.md")],
-                f"until {a.queue}/{run_id}: queue marks and run records")
+                repo, [*run_queue_paths, ledger, review_path], message)
         finally:
             for sig, handler in saved.items():
                 signal.signal(sig, handler)
         if sha:
-            print(SCREEN.c("cinza", f"   commit: {sha[:7]} on the clone's branch, "
-                                    "with the queue marks and the run records "
-                                    "(not pushed)"))
+            print_commit_made(sha)
         elif error:
-            print(f"   commit: git refused the commit of the run records "
-                  f"({error.splitlines()[-1] if error.splitlines() else error}); "
-                  "they stay in the clone without a commit")
+            # CS-5: no forcing (never `--no-verify`) and no change to the run's
+            # exit code; the reason and the exact command go on screen and into
+            # the `.review.md`, which joins the command's paths once written.
+            reason = refusal_reason(error)
+            command = owner_commit_command(
+                repo, [*run_queue_paths, ledger, review_path], message)
+            skipped = isinstance(error, NotAttempted)
+            note_refused_commit(review_path, reason, command, skipped)
+            print_commit_refused(reason, command, skipped)
 
     def interrupt(signum, _frame):
         name = signal.Signals(signum).name
