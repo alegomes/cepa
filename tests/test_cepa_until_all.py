@@ -497,6 +497,37 @@ def test_same_id_stopped_in_two_queues_keeps_two_side_branches_with_all_attempts
                   not any(s.startswith(f"{other}:") for s in subj), str(subj))
 
 
+def test_all_leaves_side_branches_of_earlier_runs_alone():
+    """The cleanup of side branches reads the item ids of ONE queue; in `--all`
+    it is skipped. A `vermelho` side branch of an earlier run, whose id is
+    `done` in queue a, survives (single-queue it would be deleted), and the
+    run still delivers its items."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("old1", status="done"),
+                                        base.item("a1")],
+                                  "b": [base.item("b1")]})
+        old = "until/2026-01-01-0000-vermelho-old1"
+        _git(root, "checkout", "-q", "-b", old)
+        (root / "l1.txt").write_text("x")
+        _git(root, "add", "-A")
+        _git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit",
+             "-qm", "commit of l1")
+        _git(root, "checkout", "-q", "-")
+        p, calls = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                    "--no-analysis"],
+                        claude_body=DONE_IN_ITS_QUEUE)
+        check("--all sai com 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        check("a lateral da rodada antiga continua la", old in _branches(root),
+              f"{_branches(root)} {p.stdout[-800:]}")
+        check("...e nenhum aviso de lateral apagada ou mantida",
+              "side branch" not in p.stdout, p.stdout[-800:])
+        check("os itens prontos foram entregues",
+              _statuses(paths["a"]).get("a1") == "done"
+              and _statuses(paths["b"]) == {"b1": "done"},
+              f"{_statuses(paths['a'])} {_statuses(paths['b'])}")
+
+
 def test_single_queue_dry_run_unchanged():
     with tempfile.TemporaryDirectory() as tmp:
         root, _ = _repo(tmp, {"a": [base.item("a1")]})
