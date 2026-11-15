@@ -53,8 +53,8 @@ def _repo(tmp, queues):
     return root, paths
 
 
-def _run(tmp, root, args, via_launcher=True):
-    binv = base.fake_claude(tmp, "pass")
+def _run(tmp, root, args, via_launcher=True, claude_body="pass"):
+    binv = base.fake_claude(tmp, claude_body)
     env = dict(os.environ)
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(Path(tmp) / "nenhum.yaml")
@@ -62,6 +62,7 @@ def _run(tmp, root, args, via_launcher=True):
     env["FAKE_CHAMADAS"] = str(calls)
     env["CEPA_UNTIL_LEITOR"] = "off"
     env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
+    env["FAKE_CEPA_PLAN"] = str(REPO / "common" / "bin" / "cepa-plan")
     cmd = ([str(CEPA), "until"] if via_launcher
            else [sys.executable, str(CEPA_UNTIL)])
     p = subprocess.run(cmd + list(args) + ["--repo", str(root)],
@@ -71,8 +72,9 @@ def _run(tmp, root, args, via_launcher=True):
 
 
 def _branches(root):
-    return subprocess.run(["git", "branch", "--list", "until/*"], cwd=root,
-                          capture_output=True, text=True).stdout.split()
+    return subprocess.run(
+        ["git", "for-each-ref", "--format=%(refname:short)", "refs/heads/until/"],
+        cwd=root, capture_output=True, text=True).stdout.split()
 
 
 def test_dry_run_lists_every_queue_in_ready_order():
@@ -174,18 +176,182 @@ def test_neither_queue_nor_all_is_refused():
         check("...e a recusa sugere o --all", "--all" in p.stderr, p.stderr[-400:])
 
 
-def test_all_without_dry_run_is_refused_until_cs2():
-    """CS-1 ships only the plan of the run. Until CS-2 executes it, a real
-    `--all` must refuse instead of running ONE queue or nothing silently."""
+# A fake `claude` that works like `/common:drain-plan <queue> --max 1` on the run
+# worktree: asks `cepa-plan` for the queue's first runnable item, reserves it,
+# commits a file named after it and closes it `done`, all in ITS queue.
+DONE_IN_ITS_QUEUE = (
+    "import subprocess\n"
+    "req = ARGS[1].split()\n"
+    "queue = req[1]\n"
+    "cp = [sys.executable, os.environ['FAKE_CEPA_PLAN']]\n"
+    "repo = ['--repo', os.getcwd()]\n"
+    "q = json.loads(subprocess.run(cp + ['queue', queue, '--max', '1', '--json']"
+    " + repo, capture_output=True, text=True).stdout)\n"
+    "ident = q['batch'][0]['id']\n"
+    "subprocess.run(cp + ['start', queue, ident] + repo, check=True,"
+    " capture_output=True)\n"
+    "open(queue + '-' + ident + '.txt', 'w').write('feito')\n"
+    "subprocess.run(['git', 'add', '-A'], check=True)\n"
+    "subprocess.run(['git', '-c', 'user.email=t@t', '-c', 'user.name=t',\n"
+    "                'commit', '-qm', queue + ':' + ident], check=True)\n"
+    "subprocess.run(cp + ['finish', queue, ident, '--status', 'done',"
+    " '--evidence', 'ok'] + repo, check=True)\n")
+
+
+def _statuses(path):
+    return {str(i["id"]): i["status"]
+            for i in yaml.safe_load(path.read_text())["items"]}
+
+
+def test_all_runs_items_of_two_queues_on_one_branch():
+    """CS-2: one run, one `until/<run>` branch, one commit per queue's item,
+    each item closed `done` in its own queue.yaml."""
     with tempfile.TemporaryDirectory() as tmp:
-        root, paths = _repo(tmp, {"a": [base.item("a1")]})
-        before = paths["a"].read_text()
-        p, calls = _run(tmp, root, ["--all", "--for", "1h", "--no-verify"])
-        check("--all sem --dry-run é recusado com 2", p.returncode == 2,
-              f"rc={p.returncode} out={p.stdout[-300:]}")
-        check("...sem chamar o claude nem tocar a fila",
-              not calls and paths["a"].read_text() == before)
-        check("...e sem criar branch", not _branches(root))
+        root, paths = _repo(tmp, {"a": [base.item("a1")],
+                                  "b": [base.item("b1")]})
+        p, calls = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                    "--no-analysis"],
+                        claude_body=DONE_IN_ITS_QUEUE)
+        check("--all sai com 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        check("a1 fica done na fila a", _statuses(paths["a"]) == {"a1": "done"},
+              str(_statuses(paths["a"])))
+        check("b1 fica done na fila b", _statuses(paths["b"]) == {"b1": "done"},
+              str(_statuses(paths["b"])))
+        check("um claude por item: dois subprocessos", len(calls) == 2,
+              str(calls))
+        branches = _branches(root)
+        check("uma só branch until/<run>", len(branches) == 1, str(branches))
+        if len(branches) == 1:
+            subjects = subprocess.run(
+                ["git", "log", "--format=%s", f"HEAD..{branches[0]}"],
+                cwd=root, capture_output=True, text=True).stdout.split()
+            check("...com os dois commits, um de cada fila",
+                  "a:a1" in subjects and "b:b1" in subjects, str(subjects))
+
+
+def test_same_id_in_two_queues_both_delivered():
+    """The per-item bookkeeping is keyed by (queue, id): two queues with a `CS-1`
+    each are two items, both `done`, both in the summary with their queue."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("CS-1")],
+                                  "b": [base.item("CS-1")]})
+        p, calls = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                    "--no-analysis"],
+                        claude_body=DONE_IN_ITS_QUEUE)
+        check("rc 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        check("a/CS-1 done", _statuses(paths["a"]) == {"CS-1": "done"})
+        check("b/CS-1 done", _statuses(paths["b"]) == {"CS-1": "done"})
+        check("dois subprocessos", len(calls) == 2, str(calls))
+        check("o resumo lista 2 itens", "Items (2)" in p.stdout, p.stdout[-1500:])
+        check("...cada um com a sua fila",
+              "a/CS-1" in p.stdout and "b/CS-1" in p.stdout, p.stdout[-1500:])
+
+
+NO_PROGRESS_ON_B_CS1 = DONE_IN_ITS_QUEUE.replace(
+    "subprocess.run(cp + ['start'",
+    "if queue == 'b' and ident == 'CS-1':\n    sys.exit(0)\n"
+    "subprocess.run(cp + ['start'", 1)
+
+
+def test_same_id_stuck_in_one_queue_does_not_inherit_the_other_ones_state():
+    """a/CS-1 delivered, b/CS-1 makes no progress: b/CS-1 gets its own full
+    attempts from 1, the run does not end `item-preso`, b/CS-2 still runs."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("CS-1")],
+                                  "b": [base.item("CS-1"), base.item("CS-2")]})
+        p, calls = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                    "--no-analysis"],
+                        claude_body=NO_PROGRESS_ON_B_CS1)
+        out = p.stdout
+        check("a/CS-1 fica done", _statuses(paths["a"])["CS-1"] == "done",
+              out[-1500:])
+        check("b/CS-2 roda e fica done", _statuses(paths["b"])["CS-2"] == "done",
+              f"{_statuses(paths['b'])} {out[-1500:]}")
+        check("b/CS-1 nao fecha", _statuses(paths["b"])["CS-1"] != "done")
+        check("a run nao termina em item-preso", "item-preso" not in out
+              and "item-preso" not in p.stderr, out[-1500:])
+        b_lines = [ln for ln in out.splitlines() if "b/CS-1" in ln and "left" in ln]
+        check("b/CS-1 tem as 2 tentativas, a 1a sem 'attempt' e a 2a 'attempt 2/2'",
+              len(b_lines) == 2 and "attempt" not in b_lines[0]
+              and "attempt 2/2" in b_lines[1], str(b_lines))
+        subjects = subprocess.run(
+            ["git", "log", "--format=%s", "--all"], cwd=root,
+            capture_output=True, text=True).stdout.split()
+        check("o commit de a/CS-1 segue na branch", "a:CS-1" in subjects,
+              str(subjects))
+
+
+def test_done_without_commit_in_one_queue_does_not_taint_the_same_id_in_another():
+    """a/CS-1 closes `done` with no commit, then b/CS-1 closes `done` WITH a
+    commit: b/CS-1 is a normal delivery, not `done-sem-commit`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("CS-1")],
+                                  "b": [base.item("CS-1")]})
+        body = DONE_IN_ITS_QUEUE.replace(
+            "open(queue + '-'",
+            "if queue == 'a':\n"
+            "    subprocess.run(cp + ['finish', queue, ident, '--status',"
+            " 'done', '--evidence', 'ok'] + repo, check=True)\n"
+            "    sys.exit(0)\n"
+            "open(queue + '-'", 1)
+        p, calls = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                    "--no-analysis"], claude_body=body)
+        out = p.stdout
+        check("b/CS-1 fica done", _statuses(paths["b"]) == {"CS-1": "done"},
+              out[-1500:])
+        ev = [json.loads(ln) for ln in
+              next((root / ".claude" / "queues" / "_all" / "until").glob(
+                  "*.jsonl")).read_text().splitlines()]
+        check("so um done_sem_commit no ledger (o de a)",
+              len([e for e in ev if e["evento"] == "done_sem_commit"]) == 1,
+              str(ev))
+        sem = [ln for ln in out.splitlines()
+               if "done-sem-commit" in ln or "no commit" in ln]
+        check("b/CS-1 nao e done-sem-commit no resumo",
+              not any("b/CS-1" in ln for ln in sem), str(sem) + out[-1500:])
+
+
+BREAKS_BUILD = DONE_IN_ITS_QUEUE.replace(
+    "open(queue + '-' + ident + '.txt', 'w').write('feito')\n",
+    "open(queue + '-' + ident + '.txt', 'w').write('feito')\n"
+    "open('quebra.txt', 'w').write('x')\n", 1)
+
+
+def test_same_id_red_in_two_queues_keeps_two_side_branches_and_own_returns():
+    """a/CS-1 and b/CS-1 both go red in the same run: each one's commits stay in
+    their own side branch (queue in the name), and a/CS-1's red returns do not
+    count against b/CS-1 (its first return is 1/N, not blocked at once)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("CS-1")],
+                                  "b": [base.item("CS-1")]})
+        p, calls = _run(tmp, root, ["--all", "--for", "1h", "--verify",
+                                    "test ! -f quebra.txt", "--no-analysis",
+                                    "--max-failures", "10"],
+                        claude_body=BREAKS_BUILD)
+        out = p.stdout
+        side = [b for b in _branches(root) if "vermelho" in b]
+        check("lateral de a/CS-1 e de b/CS-1 sao branches distintas",
+              any("-a-CS-1" in b for b in side)
+              and any("-b-CS-1" in b for b in side), str(side))
+        for q in ("a", "b"):
+            subj = []
+            for b in side:
+                if f"-{q}-CS-1" in b:
+                    subj += subprocess.run(
+                        ["git", "log", "--format=%s", b], cwd=root,
+                        capture_output=True, text=True).stdout.split()
+            check(f"{q}/CS-1: o commit dele esta na lateral dele",
+                  f"{q}:CS-1" in subj, f"{subj} {side}")
+        ev = [json.loads(ln) for ln in
+              next((root / ".claude" / "queues" / "_all" / "until").glob(
+                  "*.jsonl")).read_text().splitlines()]
+        voltas = [(e.get("fila"), e["volta"]) for e in ev
+                  if e["evento"] == "volta_vermelha"]
+        check("cada fila tem as voltas 1 e 2, nao 1,2,3,4",
+              sorted(voltas) == [("a", 1), ("a", 2), ("b", 1), ("b", 2)],
+              f"{voltas} {out[-1500:]}")
 
 
 def test_single_queue_dry_run_unchanged():
