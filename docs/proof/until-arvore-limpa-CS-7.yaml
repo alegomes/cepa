@@ -1,0 +1,67 @@
+schema_version: 2
+card: until-arvore-limpa-CS-7
+verdict: proven               # proven | unproven | needs-human
+reviewed_at: 2026-11-15T13:05:00-03:00
+base_commit: 80dc84eaef29c809bd2208bae2d9d329aa54d706
+head_commit: 35b06c4afabf715937d244e4d9e29569d5e9fd44
+issue_type: Task
+rounds: 2                     # round 1 at 8537f67 (unproven, 6 survivors); round 2 at 35b06c4 (this file's levels)
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: cmd_land/_cmd_land, cmd_close_dead/_cmd_close_dead, decide (--no-commit to cepa-plan answer, filter of 'fila gravada sem commit', land() wrapper), cmd_decide, commit_after_decide, _waiver_files, commit_subcommand_records, run_record_paths, _content_snapshot, print_commit_made, print_commit_refused, removal of the 'commit whenever you want' line"
+      module: common
+      external_observable: true     # git status, git log and screen of the clone after the cli run (surface: cli)
+      substituted_by_double: null   # test_cs7_* run the real cepa-until as a subprocess against a real temp git repo; only `claude` is faked (far boundary)
+    - class: "tests/test_cepa_until_clean_tree.py (bfa8e36 + 8537f67 + 35b06c4: test_cs7_*)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "round 2: throwaway detached worktree /tmp/proof-cs7-r2 at 35b06c4 (removed at the end with `git worktree remove --force`; the primary tree was never touched). Each defect planted in common/bin/cepa-until by a one-hunk perl substitution (diff read back with `git diff -U0` before the run), ONE covering test_cs7_* function called directly (`python3 -c ... import test_cepa_until_clean_tree as t; t.<name>(); print(len(t.FAILURES), t.FAILURES)`; the `check` helper appends the name of each failed assertion to FAILURES, so FAILURES_COUNT > 0 is RED), file restored with `git checkout -q -- common/bin/cepa-until` and `git status --short` empty before the next one. No full-file run, no full suite. Every run printed its checks (no zero-test green)."
+      results:
+        - "S2 (round 1 survivor) decide's land() calls `cmd_land(...)` (which commits by itself) instead of `_cmd_land(..., wrote)` -> RED on test_cs7_decide_that_lands_makes_exactly_one_records_commit: 1 failure ('ele é o do decide, não o do land': the commit below the top is `until fila/<run> land: queue marks and run records left in the clone`). The 'exactly one commit' count itself stayed green (the land commit leaves nothing for decide to commit); the message check is what turns it red."
+        - "S3 (round 1 survivor) SIGINT/SIGTERM/SIGHUP not ignored while git commit runs in commit_subcommand_records (`signal.getsignal(sig)` instead of `signal.signal(sig, SIG_IGN)`, cepa-until:2569) -> RED on test_cs7_close_dead_signals_during_the_commit_do_not_cut_it: 5 failures (exit code not 0, commit not made, screen does not report it, .git/index.lock check, records left loose: files staged in the index)."
+        - "S4 (round 1 survivor) the run's `.review.md` removed from run_record_paths (cepa-until:2548) -> RED on test_cs7_close_dead_leaves_the_review_in_the_commit: 2 failures ('o commit leva o .review.md junto', 'o .review.md não fica solto': `?? ...review.md` left untracked)."
+        - "S5 (round 1 survivor) second signal not ignored in the finally of commit_after_decide (the body of `for sig in saved: signal.signal(sig, SIG_IGN)` made `pass`, cepa-until:4579) -> RED on test_cs7_decide_second_signal_while_ending_does_not_cut_the_commit in both runs: run A 4 failures (the flaky mode described under determinism: the test never got its second signal in); run B 2 failures ('o commit terminou mesmo assim', 'a fila não fica suja': the second SIGTERM, delivered while decide read the FIFO waiver file in the finally, cut the commit; exit 143 and 'o decide estava no fim' held). Only run B is the defect showing through the intended mechanism."
+        - "S6 (round 1 survivor) close-dead commits only when the build was green (`if wrote and rc == 0`, cepa-until:4623) -> RED on test_cs7_close_dead_with_a_red_build_exits_1_and_commits_the_record: 3 failures ('nada do run fica sujo', 'um commit novo sobre a base', 'o registro commitado traz o evento verify vermelho'); exit 1 and the red-build screen stayed ok."
+        - "T1 (new trigger of 35b06c4) trigger of commit_after_decide forced `if True:` -> RED on test_cs7_decide_listing_without_a_terminal_commits_nothing: 1 failure ('nenhum commit')."
+        - "T2 (new trigger) `or _decide_landed` dropped: `if _content_snapshot(paths) != before:` -> RED on test_cs7_decide_that_lands_commits_the_run_paths_already_dirty: 3 failures (queue already dirty goes out committed, top commit carries the queue, screen says it)."
+        - "T3 (new trigger) `_content_snapshot(paths) != before` dropped: `if _decide_landed:` -> RED on test_cs7_decide_commits_the_answer_it_wrote_to_the_queue: 5 failures (dirty path, new commit over the base, commit content, message, screen)."
+        - "T4 (the waiver files still ride along; 35b06c4 kept `changed_waivers` only as `extra_paths`) `extra_paths=[]` -> RED on test_cs7_decide_commits_the_waiver_the_answer_converted: 2 failures ('so o arquivo do dono fica fora do commit', 'o commit leva a fila e a dispensa')."
+        - "S1 (round 1 survivor, `or changed_waivers` as a commit trigger): the clause no longer exists at 35b06c4, so it cannot be planted. Closed by the reading of cepa-plan in `s1_dead_code_check` below; the trigger that replaced it is perturbed by T1, T2, T3 (all RED) and the waiver riding along by T4 (RED)."
+        - "Carried over from round 1 (8537f67), NOT redone: P1..P17 with P7b, P7c, P8b (20 perturbations that were RED: --no-commit to cepa-plan answer, filter of 'fila gravada sem commit', commit in land, in close-dead and in decide, SIGTERM/SIGHUP handler of decide and its exit code, the 'commit whenever you want' line, print_commit_refused branches, refusal exit code, the existing-paths filter in the owner's command, run_record_paths `.jsonl`, commit message verb, print_commit_made at the end of the run). Valid because `git diff 8537f67..HEAD -- common/bin/cepa-until` changes exactly one hunk: the trigger of commit_after_decide (`or changed_waivers` removed) plus the comment above it; no other line of cepa-until moved. The round-1 perturbations that touch that hunk (P6 waiver in the commit, P8/P8b `_decide_landed`, P14 trigger forced True) were redone as T4, T2, T1."
+        - "Not perturbed (carried from round 1): `_answer_commit = True` at the end of commit_after_decide (module flag read only while asking; the process ends right after, equivalent)."
+      s1_dead_code_check:
+        status: pass
+        run: "read common/bin/cepa-plan:3681-3783 (cmd_answer) and 3642-3678 (decide_waivers) at 35b06c4. The waiver file is written only inside decide_waivers (3658 'sim', 3667 'não'), called from cmd_answer at 3736, and only when item_proposals found a `status: proposta` file for the item (`--keep`, an answer that is neither sim nor não, and no proposals write no waiver). cmd_answer then sets `it['evidence'] = ' '.join(parts)` (3766): parts starts with `Resposta do dono em <today>: <answer>.` and, whenever the item had evidence, ends with `Evidência anterior: <previous>`; the new evidence is never byte-equal to the old one. `write_body(target, plan, ...)` (3772) rewrites the queue file, which is the first element of cepa-until's `paths` (run_record_paths). So wherever the waiver changed in a normal pass, the queue snapshot changed too."
+        residual: "one path writes the waiver and not the queue: an OSError (or yaml error) inside write_body (3772) AFTER decide_waivers already rewrote the waiver (3736). `answer` then ends with a traceback and rc != 0, the queue is untouched and the waiver stays modified; with the clause removed `decide` leaves that waiver uncommitted. Needs a failed write of the queue file right after the waiver write succeeded (disk full, read-only queue); not reachable in normal use. Not gating."
+      determinism_of_the_new_signal_tests:
+        outcome: "one of the two is flaky (a quality caveat of the test, not a gap in what the proof shows); recorded without a level status because it is not an unproven change, and surfaced in routing_reason"
+        run: "each new signal test run 3 times, unperturbed, at 35b06c4, from the throwaway worktree. test_cs7_close_dead_signals_during_the_commit_do_not_cut_it: FAILURES_COUNT 0, 0, 0 (all 3 agree). test_cs7_decide_second_signal_while_ending_does_not_cut_the_commit: first 3 runs gave 4 failures, 0, 0; 3 more gave 0, 0, 0: 1 failure in 6 unperturbed runs. The failing run's signature ('o decide estava no fim quando o 2o chegou' false and exit not 143, so the process hung and the test's own 30 s deadline killed it) is the same as S5 run A."
+        results:
+          - "close-dead signals test: synchronises on an event (the pre-commit hook `touch`es a marker, the test polls for it every 50 ms up to 60 s, then sends SIGTERM and SIGINT while the hook still sleeps 3 s). The 3 s is a window the signal has to land in, not a wait for the outcome; the only sleep is the 50 ms poll. Agreed 3/3."
+          - "decide second-signal test: the intended event is 'decide is blocked opening a FIFO waiver file'. The feeder thread decides whether to send the second signal by checking `gate.is_set()` at each FIFO open and sleeps 0.5 s after sending; the main loop polls the pty with a 0.5 s select and has 30 s / 120 s deadlines. It depends on the pairing of FIFO readers and writers between decide's start-time snapshot, cepa-plan answer and the end-time snapshot, and that pairing raced: 1 in 6 unperturbed runs never got the second signal and hung (false red). It is not synchronised only on an event; it is timing-dependent and flaky (small sample)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; the lines found uncovered in round 1 are each turned RED at 35b06c4: S2, S3, S4, S5, S6 above; S1 is deleted code and the trigger that replaced it is turned RED by T1, T2, T3"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff decides whether to call git and prints messages; the subcommands already parsed their arguments before, and no changed class is in an input-bearing module (api-rest)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Round 2 closes the six survivors of round 1 at 35b06c4. S2 (decide's landing committing on its own), S3 (signals not ignored during the commit of close-dead/land/decide), S4 (the .review.md leg), S5 (second signal during the end-of-decide commit) and S6 (close-dead after a red build) were each planted again and each turned its covering test_cs7_* RED. S1 is a removed line: reading cepa-plan answer shows the queue evidence is rewritten, and never equal to the old one, in the same step that converts a waiver, so the queue snapshot always changes with a waiver; the trigger that replaced it (T1 forced True, T2 without `_decide_landed`, T3 without the queue comparison) and the waiver riding in the commit (T4) are each RED. The other 20 round-1 perturbations carry over because 35b06c4 touched only that trigger hunk in cepa-until. Not gating, for the owner to decide: test_cs7_decide_second_signal_while_ending_does_not_cut_the_commit is timing-dependent and failed once in 6 unperturbed runs (false red, process hung until the test's 30 s deadline), so the supervisor's full suite can fail intermittently on it; and a failed write of the queue after the waiver was already rewritten would leave that waiver uncommitted (one crash path, not reachable in normal use)."
+round_1:
+  verdict: unproven
+  reviewed_at: 2026-11-15T12:40:00-03:00
+  head_commit: 8537f67e7e6f9ce8c64bb5d1d0d66b94d4066e4b
+  record: "26 perturbations of common/bin/cepa-until at 8537f67, 20 RED (P1..P17 with P7b, P7c, P8b: --no-commit to cepa-plan answer, filter of the 'fila gravada sem commit' line, the commit in land, close-dead and decide, the waiver file in the commit, the SIGTERM/SIGHUP handler of decide and its exit code 128+signal, `_decide_landed`, the removal of the 'commit whenever you want' line, the refusal path reason/command/exit code, the existing-paths filter of the owner's command, trigger forced True, the .jsonl leg of run_record_paths, the message verb, print_commit_made at the end of the run) and 6 survivors: S1 cepa-until:4585 `or changed_waivers`; S2 :3386 decide's land() calling the committing cmd_land; S3 :2569 signals not ignored during the commit of the subcommands; S4 :2548 the .review.md leg; S5 :4579 the second signal in the finally of commit_after_decide; S6 :4623 close-dead committing only after a green build. Closing asked for: one test per survivor in tests/test_cepa_until_clean_tree.py (S1 by a test or by showing the clause dead). Delivered by 35b06c4."

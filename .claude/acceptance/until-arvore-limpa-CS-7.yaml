@@ -1,0 +1,20 @@
+key: until-arvore-limpa-CS-7
+status: complete
+diff_range: 80dc84e..8537f67
+criteria:
+  - id: CS-7
+    text: "decide, close-dead e land commitam o que escreveram na fila e nos registros. Red test: depois de um run terminado e commitado, cepa-until decide respondendo uma pergunta deixa git status --porcelain vazio e um commit novo com a queue.yaml; o mesmo para close-dead sobre um run morto (commit com o .jsonl e a fila) e para land --yes (nenhum caminho de .claude/queues/ sujo depois)."
+    altitude: cli
+    surface: "processo real de common/bin/cepa-until decide (num pty, respondendo as perguntas), close-dead e land --yes, em repo git de teste; asserts em returncode, git status --porcelain --untracked-files=all, git show --name-only HEAD, mensagem do commit, tela"
+    test: "tests/test_cepa_until_clean_tree.py::test_cs7_decide_commits_the_answer_it_wrote_to_the_queue, ::test_cs7_decide_on_a_whole_queue_commits_only_the_queue, ::test_cs7_close_dead_commits_the_record_and_the_queue, ::test_cs7_land_commits_the_queue_marks_it_leaves_behind, ::test_cs7_land_commits_in_the_new_queue_layout_too (mais: decide_listing_without_a_terminal, decide_mid_merge, close_dead_with_a_refusing_hook, decide_commits_the_waiver, decide_that_lands, decide_killed_by_sigterm_or_sighup)"
+    layer: "subprocess real de cepa-until, claude falso, repo temporario; sem mocks do git"
+    evidence: verified
+    run: "python3 -c (importa tests/test_cepa_until_clean_tree e chama os 11 test_cs7_*; primeiro plano, 44 s) -> 'N 11 FAILURES []', todas as linhas 'ok', nenhuma falha. Arvore do repo limpa antes e depois."
+    status: complete
+    notes:
+      - "decide: o teste exige commit novo sobre a base so com a fila (nada do dono em stage/modificado/untracked), mensagem 'until <fila>/<run> decide: ...', git status vazio na forma por fila inteira, e '.claude/' fora do status na forma por run (o dono deixa sujeira de proposito)."
+      - "close-dead: commit leva exatamente o .jsonl (ja com run_end) e a fila; arquivo do dono fica fora; mensagem 'close-dead: ...'; hook recusando avisa e mantem o codigo de saida."
+      - "land --yes: nenhum caminho de .claude/ sujo, commit do topo leva so a fila, merge do run embaixo, aviso 'commit whenever you want' sumiu; nos dois layouts (programs/plan.yaml e queues/queue.yaml)."
+      - "Extras cobertos: dispensa convertida por decide entra no commit, decide que aterrissa, SIGTERM/SIGHUP depois de resposta commitam, merge em andamento nao commita e explica."
+      - "Nao rodei a suite inteira nem o arquivo todo, por instrucao; so os 11 test_cs7_*."
+gap: []
