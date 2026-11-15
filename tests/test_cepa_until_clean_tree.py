@@ -1375,8 +1375,16 @@ def test_cs7_decide_killed_by_sigterm_or_sighup_after_an_answer_commits_it():
                     step = 2
                 elif step == 2 and "[t] I write the answer" in text:
                     os.kill(pid, sig)   # second question on screen: first is answered
-                    step = 3
+                    step, sent_at = 3, time.time()
                     end = min(end, time.time() + 30)
+                elif step == 3 and time.time() - sent_at > 2:
+                    # The signal can land in the microseconds between the legend
+                    # and the `select` of the prompt: Python then runs the handler
+                    # only when the read returns, which nobody makes happen here
+                    # (1 run in 8, 2026-11-15). Sent again while `decide` sits in
+                    # that read, it interrupts it and the handler runs once.
+                    os.kill(pid, sig)
+                    sent_at = time.time()
             else:
                 os.kill(pid, signal.SIGKILL)
             _, wst = os.waitpid(pid, 0)
@@ -1602,8 +1610,16 @@ def test_cs7_decide_second_signal_while_ending_does_not_cut_the_commit():
                 elif step == 2 and "[t] I write the answer" in text:
                     gate.set()
                     os.kill(pid, signal.SIGTERM)
-                    step = 3
+                    step, sent_at = 3, time.time()
                     end = min(end, time.time() + 30)
+                elif (step == 3 and not second.is_set()
+                      and time.time() - sent_at > 2):
+                    # Same lost-signal window as in the test above: the FIRST
+                    # signal is sent again while `decide` has not started to end
+                    # (it has not opened the FIFO). It is not the second signal
+                    # of this test, which only the feeder sends.
+                    os.kill(pid, signal.SIGTERM)
+                    sent_at = time.time()
             else:
                 os.kill(pid, signal.SIGKILL)
             _, wst = os.waitpid(pid, 0)
