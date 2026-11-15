@@ -2346,6 +2346,38 @@ def cmd_land(argv):
     return 0
 
 
+class NotAttempted(str):
+    """The reason `commit_run_records` gives when the harness itself decided not to
+    call git (an operation in progress, a detached HEAD): not a git refusal, so the
+    screen must not say "git refused"."""
+
+
+def clone_state_blocking_commit(root):
+    """Why a commit of the run's records on the clone's branch must not even be
+    tried (spec `until-arvore-limpa`, CS-6): a merge, rebase, cherry-pick or revert
+    in progress (`git commit --only` refuses those, but only after `git add` has
+    already touched the index of the operation) or a detached HEAD (a commit there
+    belongs to no branch). Returns a one-line reason, or None when the clone is
+    free. Git paths come from `git rev-parse --git-path`, not from `.git/`."""
+    for name, what in (("MERGE_HEAD", "a merge"),
+                       ("rebase-merge", "a rebase"),
+                       ("rebase-apply", "a rebase"),
+                       ("CHERRY_PICK_HEAD", "a cherry-pick"),
+                       ("REVERT_HEAD", "a revert")):
+        code, out = git(["rev-parse", "--git-path", name], root)
+        if code != 0 or not out.strip():
+            continue
+        path = Path(out.strip().splitlines()[-1])
+        if not path.is_absolute():
+            path = root / path
+        if path.exists():
+            return f"{what} is in progress in the clone"
+    code, _out = git(["symbolic-ref", "-q", "HEAD"], root)
+    if code == 1:
+        return "the clone is on a detached HEAD, not on a branch"
+    return None
+
+
 def commit_run_records(repo, paths, message):
     """Commits, on the main clone's branch, the run's own paths that git sees as
     changed or new (spec `until-arvore-limpa`, CS-1): the queue marks, the
@@ -2356,7 +2388,9 @@ def commit_run_records(repo, paths, message):
     Only the listed paths go in: `git add` of those paths and `git commit --only`
     on them, so whatever else the owner has staged or modified stays as it was.
     Never `--no-verify`. Returns (sha, None) on a commit, (None, None) when there
-    was nothing to commit, (None, reason) when git refused."""
+    was nothing to commit, (None, reason) when git refused, and
+    (None, NotAttempted(reason)) when the clone is mid-merge/rebase/cherry-pick/
+    revert or on a detached HEAD: then git is not called at all (CS-6)."""
     root = main_root(repo)
     rel = []
     for path in paths:
@@ -2380,6 +2414,9 @@ def commit_run_records(repo, paths, message):
     dirty = [entry[3:] for entry in st.stdout.split("\0") if len(entry) > 3]
     if not dirty:
         return None, None
+    blocked = clone_state_blocking_commit(root)
+    if blocked:
+        return None, NotAttempted(blocked)
     code, output = git(["add", "--", *dirty], root)
     if code != 0:
         return None, output or f"`git add` exited {code} with no message"
@@ -2420,17 +2457,25 @@ def owner_commit_command(repo, paths, message):
             f"-m {shlex.quote(message)} --only -- {quoted}")
 
 
-def note_refused_commit(review, reason, command):
+def note_refused_commit(review, reason, command, not_attempted=False):
     """Appends to the run's `.review.md` (creating it when the analysis did not
     run) the git refusal and the command for the owner (CS-5). The review is the
     file the owner opens after the run; the screen may already be gone. The
     note goes at the end, after the `cepa-decisoes` block, which is found by
     search and not by position."""
-    note = ("\n\n## The run's commit was refused by git\n\n"
-            f"Reason: {reason}\n\n"
-            "The queue marks and the run records stay in the clone without a "
-            "commit. Once the cause is dealt with, commit them with:\n\n"
-            f"```sh\n{command}\n```\n")
+    if not_attempted:
+        note = ("\n\n## The run did not commit its records\n\n"
+                f"Reason: {reason}; the run left the clone's index as it was.\n\n"
+                "The queue marks and the run records stay in the clone without a "
+                "commit. Once you conclude or abort the operation (or check out "
+                "a branch), commit them with:\n\n"
+                f"```sh\n{command}\n```\n")
+    else:
+        note = ("\n\n## The run's commit was refused by git\n\n"
+                f"Reason: {reason}\n\n"
+                "The queue marks and the run records stay in the clone without a "
+                "commit. Once the cause is dealt with, commit them with:\n\n"
+                f"```sh\n{command}\n```\n")
     try:
         previous = review.read_text(encoding="utf-8") if review.exists() else ""
         review.write_text(previous.rstrip("\n") + note if previous else note.lstrip("\n"),
@@ -5067,9 +5112,14 @@ def _main(argv=None):
                 collected = {"commit": sha, "filas": list(loose),
                              "caminhos": all_paths}
             elif error:
-                print(f"cepa-until: git refused the commit that collects the loose "
-                      f"records of dead runs ({names}): {refusal_reason(error)}",
-                      file=sys.stderr)
+                if isinstance(error, NotAttempted):
+                    print(f"cepa-until: did not commit the loose records of dead "
+                          f"runs ({names}): {error}; the index was not touched",
+                          file=sys.stderr)
+                else:
+                    print(f"cepa-until: git refused the commit that collects the "
+                          f"loose records of dead runs ({names}): "
+                          f"{refusal_reason(error)}", file=sys.stderr)
                 print("cepa-until: to commit by hand: " + owner_commit_command(
                     repo, [root / p for p in all_paths],
                     f"until: collect records of dead runs ({names})"),
@@ -5484,9 +5534,14 @@ def _main(argv=None):
             reason = refusal_reason(error)
             command = owner_commit_command(
                 repo, [run_queue_path, ledger, review_path], message)
-            note_refused_commit(review_path, reason, command)
-            print(f"   commit: git refused the commit of the run records "
-                  f"({reason}); they stay in the clone without a commit")
+            skipped = isinstance(error, NotAttempted)
+            note_refused_commit(review_path, reason, command, skipped)
+            if skipped:
+                print(f"   commit: not made, {reason}; the run records stay in the "
+                      "clone without a commit and the index was not touched")
+            else:
+                print(f"   commit: git refused the commit of the run records "
+                      f"({reason}); they stay in the clone without a commit")
             print(f"   to commit by hand: {command}")
 
     def interrupt(signum, _frame):
