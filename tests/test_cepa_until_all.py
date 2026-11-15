@@ -121,6 +121,38 @@ def test_dry_run_order_is_the_order_of_plan_ready():
               f"esperado {expected}, posições {pos}\n{out[-800:]}")
         check("...item feito e item à espera do dono não aparecem como prontos",
               "x1 " not in out and "m1 —" not in out, out[-800:])
+        check("...fila sem item pronto não ganha cabeçalho de fila",
+              "queue meio" not in out and "queue alfa" in out, out[-800:])
+        check("...e aparece no rodapé dos que não têm nada pronto",
+              any(l.strip().startswith("nothing ready:") and "meio" in l
+                  and "alfa" not in l and "zeta" not in l
+                  for l in out.splitlines()), out[-800:])
+
+
+def test_dry_run_with_nothing_ready_says_so_and_exits_0():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _repo(tmp, {"a": [base.item("a1", status="done")],
+                              "b": [base.item("b1", human_pending="validar")]})
+        p, calls = _run(tmp, root, ["--all", "--for", "8h", "--dry-run"])
+        check("nenhum pronto: --all --dry-run sai com 0", p.returncode == 0,
+              p.stderr[-400:])
+        check("...e diz que nenhuma fila tem item pronto",
+              "no queue has a ready item" in p.stdout, p.stdout[-600:])
+        check("...sem chamar o claude", not calls)
+
+
+def test_dependency_inside_the_run_is_named():
+    """A ready item whose `blocked_by` is another ready item of the same run
+    says what it waits for, as `cepa plan ready` does."""
+    with tempfile.TemporaryDirectory() as tmp:
+        c2 = dict(base.item("c2"), blocked_by=["c1"])
+        root, _ = _repo(tmp, {"c": [base.item("c1"), c2]})
+        p, _ = _run(tmp, root, ["--all", "--for", "8h", "--dry-run"])
+        lines = p.stdout.splitlines()
+        i = next((k for k, l in enumerate(lines) if "c2 —" in l), None)
+        check("item que depende de outro pronto mostra a linha waits",
+              i is not None and i + 1 < len(lines)
+              and "waits: c1" in lines[i + 1], p.stdout[-600:])
 
 
 def test_all_and_queue_name_together_are_refused():
