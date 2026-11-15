@@ -25,9 +25,27 @@ items:
     de teste com as filas `a` (1 pronto) e `b` (1 pronto), `cepa until --all --for
     8h --dry-run` sai com 0 e a saída traz `a` antes de `b` com os dois ids; hoje
     sai com 2 porque `--all` não existe e o nome da fila é obrigatório.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-15-1010: c6067cc (common/bin/cepa-until: QUEUE
+    positional optional, --all flag, query_ready() over ''cepa-plan ready --json'',
+    all_queues_launch() prints ready items per queue in ready order, exits 0 with
+    --dry-run; --all + name or neither -> exit 2; --all without --dry-run -> exit
+    2 until CS-2), ef078dc (tests/test_cepa_until_all.py extended after proof found
+    4 surviving perturbations), ffbef4f (gate artifacts). Gates: completion-auditor
+    COMPLETE (.claude/acceptance/until-todas-as-filas-CS-1.yaml); proof-reviewer
+    PROVEN (docs/proof/until-todas-as-filas-CS-1.yaml, head ef078dc, red at base
+    e475353 with 11 failures, 15 perturbations all RED). Tests run: tests/test_cepa_until_all.py
+    (8 ok), tests/test_cepa_until.py, tests/test_cepa_until_english_aliases.py,
+    tests/test_cepa_plan_ready.py, tests/test_cepa_help_layout.py all green. Full
+    build left to the supervisor. Out of scope: CS-2..CS-9 (execution, _all ledger,
+    live-run guards, panel). Code is on the overnight branch, not on main.'
+  head_commit: ffbef4f61cc154327d748d763ccbb9fa1de687b3
+  decisions:
+  - texto: Enquanto a execução entre filas não existe, 'cepa until --all' sem --dry-run
+      é recusado com saída 2 em vez de rodar nada ou só uma fila
+    commit: c6067ccb5270f651a31ea184fa1b15d3d9130e1f
 - id: CS-2
   title: Um run `--all` executa itens de mais de uma fila numa única branch `until/<run>`
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -36,9 +54,39 @@ items:
     e encerra o item como `done`, `cepa until --all --for 1h` termina com os dois
     itens `done` nos respectivos `queue.yaml` e os dois commits na mesma branch
     `until/<run>`; hoje o comando é recusado.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-15-1010: c2fcbf5 (implementacao em
+    common/bin/cepa-until + testes), b6efbce e 3f4404b (testes que a prova pediu),
+    8fbfcd0 (artefatos dos portoes). pair-reviewer: NEEDS-FIX (contabilidade por
+    id puro), NEEDS-FIX (3 pontos restantes no caminho de build vermelho), OK-WITH-NOTES
+    na terceira passada; a segunda devolucao foi feita apesar da regra ''segundo
+    NEEDS-FIX = BLOCKED'' do build-solo porque nao havia divergencia, eram achados
+    novos do mesmo defeito. completion-auditor: COMPLETE (.claude/acceptance/until-todas-as-filas-CS-2.yaml).
+    proof-reviewer: UNPROVEN -> NEEDS-HUMAN -> PROVEN (docs/proof/until-todas-as-filas-CS-2.yaml,
+    head 3f4404b, 19 perturbacoes vermelhas; P2, P19, P22 classificadas como nao-lacuna).
+    Testes rodados: tests/test_cepa_until_all.py (17 verdes) e vizinhos test_cepa_until{,_run_branch,_clean_tree,_land,_decide,_resume}.py
+    verdes em c2fcbf5; build completo delegado ao supervisor. Ficou de fora (itens
+    seguintes): eventos item_start/item_end do registro --all sem o campo fila (retomada
+    de run --all morto degrada); limpeza de laterais em --all desligada; land/decide/pending
+    em all/<run> (CS-6); painel de largada (CS-7).'
+  head_commit: 8fbfcd0f96eb7d44330f0ded2a170573a94e8a1a
+  decisions:
+  - texto: Num run --all, a contagem de tentativas, o ponto de partida, o desfecho
+      e as voltas vermelhas de cada item sao por fila e id, porque nove filas tem
+      um item CS-1
+    commit: c2fcbf54210b1edda29e972a9f28abadceef288d
+  - texto: 'Num run --all, a branch lateral que guarda os commits de um item desfeito
+      leva o nome da fila: until/<run>-<sufixo>-<fila>-<id>'
+    commit: c2fcbf54210b1edda29e972a9f28abadceef288d
+  - texto: O run --all nao limpa branches laterais de runs anteriores, nao mostra
+      o painel de largada e nao faz as perguntas de fim de run; ficam para os itens
+      seguintes da fila
+    commit: c2fcbf54210b1edda29e972a9f28abadceef288d
+  - texto: O registro do run --all fica em .claude/queues/_all/until/ e o limite
+      de itens travados seguidos ainda vale para o run inteiro, nao por fila
+    commit: c2fcbf54210b1edda29e972a9f28abadceef288d
 - id: CS-3
   title: A ordem é fila a fila, e um item que fica pronto durante o run entra antes
     de passar à fila seguinte
