@@ -1252,6 +1252,147 @@ def test_cs7_land_commits_in_the_new_queue_layout_too():
     _cs7_land_checks("queues")
 
 
+def _proposed_waiver(root, queue="fila", item="a1"):
+    """A waiver the agent proposed for `item` (`status: proposta`), committed, so the
+    owner's "sim" in `decide` rewrites a tracked file."""
+    sys.path.insert(0, str(Path(base.__file__).resolve().parent.parent
+                           / "board-flow" / "bin"))
+    import waivers
+    before = os.environ.get("CEPA_UNTIL_RUN")
+    os.environ["CEPA_UNTIL_RUN"] = "1"
+    try:
+        path = Path(waivers.write(str(root), "teste-cego", "PlugSignAdapter",
+                                  "o fornecedor não é alcançável", "alegomes",
+                                  "quando o adapter mudar", queue=queue, item=item))
+    finally:
+        if before is None:
+            os.environ.pop("CEPA_UNTIL_RUN")
+        else:
+            os.environ["CEPA_UNTIL_RUN"] = before
+    _git_ok(root, "add", "-f", "--", str(path))
+    _git_ok(root, "commit", "-qm", "proposed waiver")
+    return path
+
+
+def test_cs7_decide_commits_the_waiver_the_answer_converted():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, run_id, _p = _blocked_run(tmp)
+        waiver = _proposed_waiver(root)
+        rel = str(waiver.relative_to(root))
+        (root / "outro.txt").write_text("do dono\n")
+        _git_ok(root, "add", "outro.txt")
+        before = _git(root, "rev-parse", "HEAD").strip()
+        rc, out = dec.on_tty(_decide_cmd(root, f"fila/{run_id}"), str(root), inputs=[
+            ("[t] I write the answer", "s"), ("Anything to add", "")],
+            env=dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+                     GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t"))
+        check("CS-7 decide dispensa: a proposta virou dispensa",
+              "status" not in yaml.safe_load(waiver.read_text()), waiver.read_text())
+        st = _git(root, "status", "--porcelain", "--untracked-files=all")
+        check("CS-7 decide dispensa: so o arquivo do dono fica fora do commit",
+              st.strip() == "A  outro.txt", st)
+        files = _git(root, "show", "--name-only", "--format=", "HEAD").split()
+        check("CS-7 decide dispensa: o commit leva a fila e a dispensa",
+              rel in files and ".claude/programs/fila/plan.yaml" in files
+              and "outro.txt" not in files
+              and _git(root, "rev-parse", "HEAD~1").strip() == before, files)
+        # CS-7 follow-up 3: `answer` runs with --no-commit under `decide`, and its
+        # "queue written without a commit" line would contradict the commit line.
+        check("CS-7 decide: a tela nao diz 'fila gravada sem commit'",
+              "sem commit" not in out and "Falta commitar" not in out
+              and "commita a fila" not in out, out[-900:])
+        check("CS-7 decide dispensa: a tela diz do commit", "commit: " in out,
+              out[-600:])
+
+
+def test_cs7_decide_that_lands_commits_the_run_paths_already_dirty():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, run_id, qfile = _land_ready(tmp)
+        rel = str(qfile.relative_to(root))
+        before = _git(root, "rev-parse", "HEAD").strip()
+        env = dict(os.environ, CEPA_WORKTREE_HOME=str(root.parent / "worktrees"))
+        rc, out = dec.on_tty(_decide_cmd(root, f"fila/{run_id}"), str(root),
+                             inputs=[("Land now?", "s")], env=env, timeout=180)
+        check("CS-7 decide aterrissa: sai 0", rc == 0, out[-600:])
+        check("CS-7 decide aterrissa: o run foi aterrissado",
+              _git(root, "rev-list", "--count", f"{before}..HEAD").strip() != "0",
+              out[-600:])
+        st = _git(root, "status", "--porcelain", "--untracked-files=all")
+        check("CS-7 decide aterrissa: a fila ja suja antes sai commitada",
+              ".claude/" not in st, st)
+        check("CS-7 decide aterrissa: o commit do topo leva a fila",
+              _git(root, "show", "--name-only", "--format=", "HEAD").split() == [rel],
+              _git(root, "log", "-3", "--format=%s"))
+        check("CS-7 decide aterrissa: a tela diz do commit", "commit: " in out,
+              out[-600:])
+
+
+def test_cs7_decide_killed_by_sigterm_or_sighup_after_an_answer_commits_it():
+    import pty
+    import select
+    import signal
+    import time
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        label = f"CS-7 decide {sig.name}"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _two_item_scenario(tmp)
+            binv = base.fake_claude(tmp, (
+                "ident = primeiro_pendente()\n"
+                "if ident:\n"
+                "    marca(ident, status='blocked', evidence='sem producao',\n"
+                "          owner_question='Fecho o card ' + ident + '?')\n"))
+            plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+            base.run_until(root, binv, plan, ["--for", "2h"])
+            run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
+                            .glob("*.estado.json"))[-1].name.split(".")[0]
+            before = _git(root, "rev-parse", "HEAD").strip()
+            cmd = _decide_cmd(root, f"fila/{run_id}")
+            env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+                       GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+            pid, fd = pty.fork()
+            if pid == 0:
+                os.chdir(str(root))
+                os.execve(cmd[0], cmd, env)
+            seen, step, text, end = 0, 0, "", time.time() + 120
+            status = None
+            while time.time() < end:
+                r, _, _ = select.select([fd], [], [], 0.5)
+                if r:
+                    try:
+                        data = os.read(fd, 4096)
+                    except OSError:
+                        break
+                    if not data:
+                        break
+                    text += data.decode(errors="replace")
+                if step == 0 and "[t] I write the answer" in text:
+                    text = text.replace("[t] I write the answer", "<q1>", 1)
+                    os.write(fd, b"n\n")
+                    step = 1
+                elif step == 1 and "Anything to add" in text:
+                    text = text.replace("Anything to add", "<add>", 1)
+                    os.write(fd, b"\n")
+                    step = 2
+                elif step == 2 and "[t] I write the answer" in text:
+                    os.kill(pid, sig)   # second question on screen: first is answered
+                    step = 3
+                    end = min(end, time.time() + 30)
+            else:
+                os.kill(pid, signal.SIGKILL)
+            _, wst = os.waitpid(pid, 0)
+            code = os.waitstatus_to_exitcode(wst)
+            check(f"{label}: chegou a segunda pergunta e o sinal foi enviado",
+                  step == 3, text[-500:])
+            check(f"{label}: sai com 128 + sinal", code == 128 + sig, str(code))
+            st = _git(root, "status", "--porcelain", "--untracked-files=all")
+            check(f"{label}: a fila nao fica suja", ".claude/" not in st, st)
+            check(f"{label}: um commit novo com a fila",
+                  _git(root, "rev-parse", "HEAD~1").strip() == before
+                  and ".claude/programs/fila/plan.yaml" in _git(
+                      root, "show", "--name-only", "--format=", "HEAD").split(),
+                  _git(root, "log", "-2", "--format=%s"))
+
+
 def main():
     print("cepa-until — árvore limpa no fim do run\n")
     for given_name, fn in sorted(globals().items()):

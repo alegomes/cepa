@@ -1244,6 +1244,10 @@ _hc_asking = False
 # commit comes after.
 _answer_commit = True
 
+# True once `decide` itself landed a run (CS-7): its final commit then takes the run's
+# paths even when no answer changed them, like `cepa-until land --yes` does.
+_decide_landed = False
+
 # True once a question of the armed run waited past its time with no answer: the
 # run then ends with work for the owner, and the exit reports "Needs you".
 _hc_unanswered = False
@@ -2546,7 +2550,8 @@ def run_record_paths(repo, queue, run_id=None):
 
 
 def commit_subcommand_records(repo, queue, run_id, verb, summary,
-                              what="the queue marks and the run records"):
+                              what="the queue marks and the run records",
+                              extra_paths=()):
     """CS-7: `decide`, `close-dead` and `land` commit what they wrote to the queue
     and to the run's records, like the run's end does: the same
     `commit_run_records` (only these paths, `--only`, never `--no-verify`, no empty
@@ -2555,11 +2560,11 @@ def commit_subcommand_records(repo, queue, run_id, verb, summary,
     `until <queue> <verb>: <summary>` when the command has no run. SIGINT and
     SIGTERM are ignored while git runs, so a Ctrl+C cannot kill `git commit`
     halfway and leave `.git/index.lock` behind."""
-    paths = run_record_paths(repo, queue, run_id)
+    paths = run_record_paths(repo, queue, run_id) + list(extra_paths)
     target = f"{queue}/{run_id}" if run_id else queue
     message = f"until {target} {verb}: {summary}"
     saved = {}
-    for sig in (signal.SIGTERM, signal.SIGINT):
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         try:
             saved[sig] = signal.signal(sig, signal.SIG_IGN)
         except Exception:  # noqa: BLE001
@@ -3323,7 +3328,15 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 + ([] if _answer_commit else ["--no-commit"])
                 + (["--multiline"] if "\n" in text else []),
                 capture_output=True, text=True, timeout=60)
-            return p.returncode, (p.stdout or p.stderr).strip()
+            text_out = (p.stdout or p.stderr).strip()
+            if not _answer_commit:
+                # `decide` commits at its end and says so: the "queue written
+                # without a commit" notice of `cepa-plan answer --no-commit` would
+                # be false by the time the owner reads it.
+                text_out = "\n".join(
+                    l for l in text_out.splitlines()
+                    if not l.lstrip().startswith("fila gravada sem commit")).strip()
+            return p.returncode, text_out
     if unclear is None:
         # CS-6 (perguntas-da-largada-legiveis): "I did not understand" goes to the
         # global feedback ledger `/common:feedback` triages, target `cepa-until`;
@@ -3367,8 +3380,14 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         def land():
             # `_cmd_land`: the commit of the records is the caller's, once, at the
             # end of the whole `decide` (or of the run's end), not one per landing.
-            return _cmd_land([f"{queue}/{run_id}", "--repo", str(repo),
-                              "--yes"], {})
+            global _decide_landed
+            wrote = {}
+            try:
+                return _cmd_land([f"{queue}/{run_id}", "--repo", str(repo),
+                                  "--yes"], wrote)
+            finally:
+                if wrote:
+                    _decide_landed = True
     back = f"cepa-until decide {queue}" + (f"/{run_id}" if run_id else "")
     screen = Panel(SCREEN, output)
     applied, for_later = [], []
@@ -4514,25 +4533,67 @@ def cmd_decide(argv):
             review if review.exists() else None)))
 
 
+def _waiver_files(repo):
+    """The waiver files `cepa-plan answer` may rewrite (a "sim" or "não" to a proposed
+    waiver): `.claude/waivers/*.yaml` of the main clone and of `repo`."""
+    folders = []
+    for base_dir in (main_root(repo), Path(repo).resolve()):
+        folder = base_dir / ".claude" / "waivers"
+        if folder not in folders:
+            folders.append(folder)
+    return sorted({p for folder in folders for p in folder.glob("*.yaml")})
+
+
 def commit_after_decide(repo, queue, run_id, ask):
     """Runs `ask` (the questions) and, on every way out, commits what the answers
-    wrote (CS-7): the queue and, with a run, its records. Compares the paths before
-    and after, so listing the questions without a terminal, or leaving without
-    answering, commits nothing, and a queue the owner left modified is not swept in
-    by a `decide` that did not touch it. Ctrl+C after one answer is a way out too."""
-    global _answer_commit
+    wrote (CS-7): the queue, the waiver files an answer changed and, with a run, its
+    records. Compares the paths before and after, so listing the questions without a
+    terminal, or leaving without answering, commits nothing, and a queue (or a
+    waiver) the owner left modified is not swept in by a `decide` that did not touch
+    it. Ctrl+C after one answer is a way out too, and so are SIGTERM and SIGHUP (a
+    closed terminal): they end the questions through the same `finally`, with the
+    exit status 128 + the signal number, as the run's own `interrupt` does. When
+    `decide` landed the run, the run's paths are committed even if no answer changed
+    them (as `land --yes` does)."""
+    global _answer_commit, _decide_landed
     paths = run_record_paths(repo, queue, run_id)
     before = _content_snapshot(paths)
+    waivers_before = _content_snapshot(_waiver_files(repo))
     _answer_commit = False
+    _decide_landed = False
+
+    def ended_by(signum, _frame):
+        raise SystemExit(128 + signum)
+
+    saved = {}
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        try:
+            saved[sig] = signal.signal(sig, ended_by)
+        except Exception:  # noqa: BLE001  (not the main thread)
+            pass
     try:
         return ask()
     finally:
-        _answer_commit = True
-        if _content_snapshot(paths) != before:
-            commit_subcommand_records(
-                repo, queue, run_id, "decide", "owner answers recorded in the queue",
-                what="the owner's answers" if not run_id else
-                "the owner's answers and the run records")
+        # A second signal must not cut the commit; the handlers come back last.
+        for sig in saved:
+            signal.signal(sig, signal.SIG_IGN)
+        try:
+            _answer_commit = True
+            waivers_after = _content_snapshot(_waiver_files(repo))
+            changed_waivers = [Path(p) for p in waivers_after
+                               if waivers_after[p] != waivers_before.get(p)]
+            if (_content_snapshot(paths) != before or changed_waivers
+                    or _decide_landed):
+                commit_subcommand_records(
+                    repo, queue, run_id, "decide",
+                    "owner answers recorded in the queue",
+                    what="the owner's answers" if not run_id else
+                    "the owner's answers and the run records",
+                    extra_paths=changed_waivers)
+        finally:
+            _decide_landed = False
+            for sig, handler in saved.items():
+                signal.signal(sig, handler)
 
 
 def _decide_reporting(queue, ask):
