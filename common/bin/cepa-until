@@ -4582,8 +4582,12 @@ def commit_after_decide(repo, queue, run_id, ask):
             waivers_after = _content_snapshot(_waiver_files(repo))
             changed_waivers = [Path(p) for p in waivers_after
                                if waivers_after[p] != waivers_before.get(p)]
-            if (_content_snapshot(paths) != before or changed_waivers
-                    or _decide_landed):
+            # A waiver changed by an answer never triggers the commit by itself:
+            # `cepa-plan answer` rewrites the item's `evidence` (today's date, the
+            # answer, the previous evidence) in the same step that converts the
+            # waiver, so the queue snapshot has changed whenever a waiver has. The
+            # waivers only ride along in the paths of that commit.
+            if _content_snapshot(paths) != before or _decide_landed:
                 commit_subcommand_records(
                     repo, queue, run_id, "decide",
                     "owner answers recorded in the queue",

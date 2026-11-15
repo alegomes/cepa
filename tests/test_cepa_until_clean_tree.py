@@ -1393,6 +1393,246 @@ def test_cs7_decide_killed_by_sigterm_or_sighup_after_an_answer_commits_it():
                   _git(root, "log", "-2", "--format=%s"))
 
 
+def test_cs7_decide_that_lands_makes_exactly_one_records_commit():
+    """`decide` that lands the run commits the records ONCE, at its end, with the
+    `decide` message. The landing inside it must not commit on its own (a `land`
+    commit before the `decide` one). The proof of 2026-11-15 made `decide` call the
+    landing that commits and every other test stayed green: the final state is the
+    same, there is one commit more."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, run_id, _qfile = _land_ready(tmp)
+        before = _git(root, "rev-parse", "HEAD").strip()
+        env = dict(os.environ, CEPA_WORKTREE_HOME=str(root.parent / "worktrees"))
+        rc, out = dec.on_tty(_decide_cmd(root, f"fila/{run_id}"), str(root),
+                             inputs=[("Land now?", "s")], env=env, timeout=180)
+        check("CS-7 decide 1 commit: sai 0", rc == 0, out[-600:])
+        subjects = _git(root, "log", "--format=%s", f"{before}..HEAD").splitlines()
+        mine = [x for x in subjects if x.startswith(f"until fila/{run_id} ")]
+        check("CS-7 decide 1 commit: exatamente um commit de registro do run",
+              len(mine) == 1, subjects)
+        check("CS-7 decide 1 commit: ele é o do decide, não o do land",
+              len(mine) == 1 and mine[0].startswith(f"until fila/{run_id} decide: "),
+              subjects)
+        check("CS-7 decide 1 commit: ele é o do topo",
+              _git(root, "log", "-1", "--format=%s").strip() in mine, subjects)
+
+
+def test_cs7_close_dead_leaves_the_review_in_the_commit():
+    """A run's `.review.md` that is on disk when `close-dead` commits goes in the
+    commit with the `.jsonl` and the queue: no path of the run is left behind."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, run_id = _night_that_died(tmp)
+        rel = ".claude/programs/fila/"
+        review = root / rel / "until" / f"{run_id}.review.md"
+        review.write_text("# revisão do run\n\nnada pendente\n", encoding="utf-8")
+        before = _git(root, "rev-parse", "HEAD").strip()
+        r = _close_dead(root, tmp, run_id)
+        check("CS-7 close-dead review: sai 0", r.returncode == 0,
+              r.stdout + r.stderr)
+        files = sorted(_git(root, "show", "--name-only", "--format=",
+                            "HEAD").split())
+        check("CS-7 close-dead review: o commit leva o .review.md junto",
+              files == sorted([f"{rel}plan.yaml", f"{rel}until/{run_id}.jsonl",
+                               f"{rel}until/{run_id}.review.md"])
+              and _git(root, "rev-parse", "HEAD~1").strip() == before, files)
+        st = _git(root, "status", "--porcelain", "--untracked-files=all")
+        check("CS-7 close-dead review: o .review.md não fica solto",
+              "review.md" not in st and ".claude/" not in st, st)
+
+
+def test_cs7_close_dead_with_a_red_build_exits_1_and_commits_the_record():
+    """Red build: the exit code stays 1 and the state does not change, but the
+    `.jsonl` now holds a `verify` event and the queue marks are still the dead
+    run's: both are committed (help text and docstring say so)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, run_id = _night_that_died(tmp)
+        rel = ".claude/programs/fila/"
+        state = root / rel / "until" / f"{run_id}.estado.json"
+        st = json.loads(state.read_text())
+        st["verify"] = "false"
+        state.write_text(json.dumps(st))
+        before = _git(root, "rev-parse", "HEAD").strip()
+        r = _close_dead(root, tmp, run_id)
+        out = r.stdout + r.stderr
+        check("CS-7 close-dead red: sai 1, como antes", r.returncode == 1, out[-800:])
+        check("CS-7 close-dead red: a tela diz que o build ficou vermelho",
+              "red (" in out, out[-800:])
+        status = _git(root, "status", "--porcelain", "--untracked-files=all")
+        check("CS-7 close-dead red: nada do run fica sujo", ".claude/" not in status,
+              status)
+        check("CS-7 close-dead red: um commit novo sobre a base",
+              _git(root, "rev-parse", "HEAD~1").strip() == before)
+        files = sorted(_git(root, "show", "--name-only", "--format=",
+                            "HEAD").split())
+        check("CS-7 close-dead red: o commit leva o .jsonl e a fila",
+              files == sorted([f"{rel}plan.yaml", f"{rel}until/{run_id}.jsonl"]),
+              files)
+        ev = [json.loads(l) for l in _git(
+            root, "show", f"HEAD:{rel}until/{run_id}.jsonl").splitlines()]
+        check("CS-7 close-dead red: o registro commitado traz o evento verify vermelho",
+              ev[-1]["evento"] == "verify" and ev[-1]["verde"] is False, ev[-1])
+        check("CS-7 close-dead red: o estado não mudou (segue rodando)",
+              json.loads(state.read_text()).get("estado") == "rodando")
+
+
+def test_cs7_close_dead_signals_during_the_commit_do_not_cut_it():
+    """The owner presses Ctrl+C (and a SIGTERM comes too) while `close-dead`'s
+    `git commit` runs (a slow pre-commit hook holds it, and the test signals once
+    the hook has started). Without ignoring SIGTERM/SIGINT around the commit the
+    process dies (or git is killed halfway and `.git/index.lock` can stay), and
+    the records stay loose. The proof of 2026-11-15 removed the ignore of the
+    subcommands' commit and every other test stayed green."""
+    import signal
+    import time
+    with tempfile.TemporaryDirectory() as tmp:
+        root, run_id = _night_that_died(tmp)
+        started = Path(tmp) / "hook.started"
+        hook = root / ".git" / "hooks" / "pre-commit"
+        hook.write_text(f"#!/bin/sh\ntouch '{started}'\nsleep 3\nexit 0\n",
+                        encoding="utf-8")
+        hook.chmod(0o755)
+        before = _git(root, "rev-parse", "HEAD").strip()
+        env = dict(os.environ, CEPA_WORKTREE_HOME=str(root.parent / "worktrees"))
+        proc = subprocess.Popen(
+            [sys.executable, str(base.CEPA_UNTIL), "close-dead",
+             f"fila/{run_id}", "--repo", str(root), "--yes"], env=env,
+            cwd=str(root), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True)
+        try:
+            end = time.time() + 60
+            while not started.exists() and time.time() < end and proc.poll() is None:
+                time.sleep(0.05)
+            check("CS-7 close-dead sinal: o commit começou (hook rodando)",
+                  started.exists())
+            if proc.poll() is None:
+                proc.send_signal(signal.SIGTERM)
+                proc.send_signal(signal.SIGINT)
+            try:
+                output, _ = proc.communicate(timeout=60)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                output, _ = proc.communicate()
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+        check("CS-7 close-dead sinal: o processo sai 0, como sem sinal",
+              proc.returncode == 0, f"{proc.returncode}: {output[-600:]}")
+        check("CS-7 close-dead sinal: o commit terminou mesmo assim",
+              _git(root, "rev-parse", "HEAD~1").strip() == before,
+              _git(root, "log", "--oneline", "-3"))
+        check("CS-7 close-dead sinal: a tela diz do commit", "commit: " in output,
+              output[-600:])
+        check("CS-7 close-dead sinal: não sobrou .git/index.lock",
+              not (root / ".git" / "index.lock").exists())
+        st = _git(root, "status", "--porcelain", "--untracked-files=all")
+        check("CS-7 close-dead sinal: nada do run solto", ".claude/" not in st, st)
+
+
+def test_cs7_decide_second_signal_while_ending_does_not_cut_the_commit():
+    """The first SIGTERM ends the questions; a second one arrives while `decide` is
+    still inside the `finally` that commits (here: reading a waiver file that is a
+    FIFO, held open by the test until the signal has been sent: the reader being
+    blocked on it is the observable event that `decide` is in that window). The
+    second signal must not cut the commit. The proof of 2026-11-15 left the live
+    handler there and every other test stayed green."""
+    import pty
+    import select
+    import signal
+    import threading
+    import time
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _two_item_scenario(tmp)
+        binv = base.fake_claude(tmp, (
+            "ident = primeiro_pendente()\n"
+            "if ident:\n"
+            "    marca(ident, status='blocked', evidence='sem producao',\n"
+            "          owner_question='Fecho o card ' + ident + '?')\n"))
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        base.run_until(root, binv, plan, ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        fifo = root / ".claude" / "waivers" / "gate.yaml"
+        fifo.parent.mkdir(parents=True, exist_ok=True)
+        os.mkfifo(fifo)
+        before = _git(root, "rev-parse", "HEAD").strip()
+        cmd = _decide_cmd(root, f"fila/{run_id}")
+        env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+        pid, fd = pty.fork()
+        if pid == 0:
+            os.chdir(str(root))
+            os.execve(cmd[0], cmd, env)
+        gate, stop, second = threading.Event(), threading.Event(), threading.Event()
+
+        def feeder():
+            # Every reader of the FIFO gets an empty file. The one that opens it
+            # after the gate (the first signal already sent) is `decide` ending.
+            while not stop.is_set():
+                wfd = os.open(fifo, os.O_WRONLY)
+                try:
+                    if gate.is_set() and not stop.is_set() and not second.is_set():
+                        os.kill(pid, signal.SIGTERM)
+                        second.set()
+                        time.sleep(0.5)
+                finally:
+                    os.close(wfd)
+
+        thread = threading.Thread(target=feeder, daemon=True)
+        thread.start()
+        step, text, end, status = 0, "", time.time() + 120, None
+        try:
+            while time.time() < end:
+                r, _, _ = select.select([fd], [], [], 0.5)
+                if r:
+                    try:
+                        data = os.read(fd, 4096)
+                    except OSError:
+                        break
+                    if not data:
+                        break
+                    text += data.decode(errors="replace")
+                if step == 0 and "[t] I write the answer" in text:
+                    text = text.replace("[t] I write the answer", "<q1>", 1)
+                    os.write(fd, b"n\n")
+                    step = 1
+                elif step == 1 and "Anything to add" in text:
+                    text = text.replace("Anything to add", "<add>", 1)
+                    os.write(fd, b"\n")
+                    step = 2
+                elif step == 2 and "[t] I write the answer" in text:
+                    gate.set()
+                    os.kill(pid, signal.SIGTERM)
+                    step = 3
+                    end = min(end, time.time() + 30)
+            else:
+                os.kill(pid, signal.SIGKILL)
+            _, wst = os.waitpid(pid, 0)
+            code = os.waitstatus_to_exitcode(wst)
+        finally:
+            stop.set()
+            try:
+                os.close(os.open(fifo, os.O_RDONLY | os.O_NONBLOCK))
+            except OSError:
+                pass
+            thread.join(timeout=10)
+        check("CS-7 decide 2o sinal: o primeiro sinal foi enviado", step == 3,
+              text[-500:])
+        check("CS-7 decide 2o sinal: o decide estava no fim quando o 2o chegou",
+              second.is_set(), text[-500:])
+        check("CS-7 decide 2o sinal: sai com 143 (o 1o sinal)", code == 143,
+              str(code))
+        check("CS-7 decide 2o sinal: o commit terminou mesmo assim",
+              _git(root, "rev-parse", "HEAD~1").strip() == before
+              and ".claude/programs/fila/plan.yaml" in _git(
+                  root, "show", "--name-only", "--format=", "HEAD").split(),
+              _git(root, "log", "-2", "--format=%s"))
+        check("CS-7 decide 2o sinal: não sobrou .git/index.lock",
+              not (root / ".git" / "index.lock").exists())
+        st = _git(root, "status", "--porcelain", "--untracked-files=all")
+        check("CS-7 decide 2o sinal: a fila não fica suja", ".claude/programs" not in st,
+              st)
+
+
 def main():
     print("cepa-until — árvore limpa no fim do run\n")
     for given_name, fn in sorted(globals().items()):
