@@ -171,25 +171,25 @@ items:
     de saída que teria sem o hook, a tela final e o `.review.md` trazem a linha
     do motivo e o comando `git commit` exato para o dono, nenhum commit novo é criado
     e nenhuma chamada a `git` traz `--no-verify`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-11-14: sim: Do I return this item to the queue
-    so the next run fixes the slow test fake the earlier fix missed? Instrução:
-    resume from until/2026-11-14-0954-vermelho-CS-5-v2 (cherry-pick ccb88fe, e6bfb8b,
-    58b56ad, 082e158); in tests/test_cepa_until.py add the ''--warmup'' early exit
-    to the fake written by herdr_release_env (line ~1698) and call warm_up(herdr)
-    there, like herdr_scenario; grep every other test that writes a fake herdr (test_cepa_prove.py,
-    test_cepa_until_quota.py) for the same gap; the failing check was ''herdr (fim
-    da janela)'' with an empty log; production code and the clean-tree test must
-    stay byte-identical to bd96753. O item voltou de `blocked` para `pending`. Evidência
-    anterior: This is return 2 of 2: the item closed `done`, but the full build
-    of the run branch (`tests/run-all.sh`) exited 1, and the 2nd build exited 1.
-    Output in the `.log` of run 2026-11-14-0954. The commits of every attempt are
-    in `until/2026-11-14-0954-vermelho-CS-5-v2` and the run branch went back to
-    901136c59a. Marked `blocked`: the item already came back with the note and went
-    red again. The card in Jira may have moved to Review before the build — check
-    it.'
+  evidence: 'Return resumed from until/2026-11-14-0954-vermelho-CS-5-v2: cherry-picked
+    ccb88fe->e5ae0dd (test), e6bfb8b->249b817 (cepa-until), 58b56ad->96e902d (proof/acceptance),
+    082e158->bb3519e (warm-up). New c6f3cec: herdr_release_env in tests/test_cepa_until.py
+    now skips --warmup and calls warm_up(herdr) (the gap that made ''herdr (fim
+    da janela)'' red with an empty log); the dead-supervisor fake in tests/test_cepa_until_dead_supervisor.py
+    got the same guard + warm-up (it sleeps 0.7 s under the 1 s timeout, so a cold
+    first exec crosses it). Grepped every fake herdr writer: test_cepa_prove.py
+    herdr_env and test_cepa_until_quota.py herdr_env already warmed; the rest only
+    pop HERDR_* env or use HC_TERMINAL_ID. Production diff (common/bin) and tests/test_cepa_until_clean_tree.py
+    are line-identical to a5efa64^..bd96753 (checked with diff of the patches).
+    Gates: completion-auditor COMPLETE (.claude/acceptance/until-arvore-limpa-CS-5.yaml)
+    and proof-reviewer PROVEN at bd96753 (docs/proof/until-arvore-limpa-CS-5.yaml),
+    not re-run because the new commits are test-only and the behavior is byte-identical.
+    Ran individually green: test_cepa_until.py (252 s), test_cepa_until_dead_supervisor.py,
+    test_cepa_until_clean_tree.py, test_cepa_until_quota.py, test_cepa_prove.py,
+    0 FAIL. Full build left to the supervisor; code on the run branch until/2026-11-15-1011.'
   decisions:
   - texto: Quando o git recusa o commit do fim do run, o cepa-until escreve o motivo
       e o comando no fim do .review.md, criando o arquivo se a análise não rodou
@@ -198,6 +198,11 @@ items:
       usa --no-verify) e não muda o código de saída: mostra na tela e escreve no
       .review.md o motivo e o comando git exato para o dono commitar à mão'
     commit: e6bfb8b3c99e330f8be7438efd0ca340e75af0ba
+  - texto: Os testes que criam um herdr falso rodam esse falso uma vez antes do
+      run, para que a checagem de segurança do macOS na primeira execução não estoure
+      o limite de 1 segundo do cepa-until
+    commit: c6f3ceca8df3f12a65db3050dbbe3274609ea9ce
+  head_commit: c6f3ceca8df3f12a65db3050dbbe3274609ea9ce
 - id: CS-6
   title: Com a main no meio de um merge ou rebase, o run não commita e avisa
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -205,9 +210,31 @@ items:
     presente no clone ao fim do run, nenhum commit é criado, o merge em andamento
     continua intacto (`git status` ainda diz "All conflicts fixed but you are still
     merging" ou o estado original) e a tela final diz por que não commitou.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits na branch until/2026-11-15-1011: eb6d6e9 (testes, vermelhos
+    antes do fix), 072cd1e (fix: clone_state_blocking_commit antes do git add em
+    commit_run_records), cc6a02b (testes: rebase-apply, texto do .review.md, recolha
+    na largada, dica na tela), 18b13de (fix dos textos), 80dc84e (artefatos). pair-reviewer:
+    APPROVE. completion-auditor: COMPLETE em 072cd1e (.claude/acceptance/until-arvore-limpa-CS-6.yaml).
+    proof-reviewer: rodada 1 UNPROVEN em 072cd1e (3 perturbacoes sobreviveram),
+    rodada 2 PROVEN em 18b13de (docs/proof/until-arvore-limpa-CS-6.yaml). python3
+    tests/test_cepa_until_clean_tree.py verde em 18b13de; build completo fica com
+    o supervisor. Ficou de fora: cherry-pick de varios commits parado sem CHERRY_PICK_HEAD
+    (so o diretorio sequencer) nao e detectado.'
+  head_commit: 80dc84eaef29c809bd2208bae2d9d329aa54d706
+  decisions:
+  - texto: Além de merge e rebase, o run também não commita com cherry-pick ou revert
+      em andamento, nem com HEAD destacado
+    commit: 072cd1e54932fbc30113a42cd245880c23451c2b
+  - texto: 'Quando o run decide não commitar, a tela diz ''commit: not made'' com
+      o motivo e manda concluir ou abortar a operação antes do comando manual, em
+      vez de dizer que o git recusou'
+    commit: 072cd1e54932fbc30113a42cd245880c23451c2b
+  - texto: 'A recolha de registros de runs mortos, na largada, segue a mesma regra:
+      não commita no meio de uma operação e avisa'
+    commit: 072cd1e54932fbc30113a42cd245880c23451c2b
 - id: CS-7
   title: '`decide`, `close-dead` e `land` commitam o que escreveram na fila e nos
     registros'
@@ -217,24 +244,94 @@ items:
     deixa `git status --porcelain` vazio e um commit novo com a `queue.yaml`; o
     mesmo para `close-dead` sobre um run morto (commit com o `.jsonl` e a fila)
     e para `land --yes` (nenhum caminho de `.claude/queues/` sujo depois).'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits na branch until/2026-11-15-1011: bfa8e36 (testes, vermelhos
+    antes da mudança), f6673dd (decide, close-dead e land commitam a fila e os registros
+    via commit_run_records), 8537f67 (correções da revisão pair-reviewer: dispensa
+    convertida entra no commit do decide, SIGTERM/SIGHUP no decide passam pelo commit,
+    aviso ''fila gravada sem commit'' não aparece no decide, decide que aterrissa
+    commita os caminhos já sujos), 35b06c4 (testes para 5 sobreviventes da prova
+    e remoção da cláusula morta changed_waivers), 8f55c94 (os dois testes de sinal
+    do decide reenviam o primeiro sinal se o decide não reagir: falhavam 1 em 8
+    sem defeito), 4d11f07 (artefatos dos gates). Gates: completion-auditor COMPLETE
+    em 8537f67 (.claude/acceptance/until-arvore-limpa-CS-7.yaml); proof-reviewer
+    rodada 1 UNPROVEN em 8537f67 (20 de 26 perturbações vermelhas, 6 sobreviventes),
+    rodada 2 PROVEN em 35b06c4 (docs/proof/until-arvore-limpa-CS-7.yaml). Topologia
+    build-solo, sem validation-lead. Testes rodados: python3 tests/test_cepa_until_clean_tree.py
+    inteiro verde em 8f55c94; tests/test_cepa_until_decide.py, _land, _dead_supervisor
+    verdes em 8537f67. Build completo: fica com o supervisor. A nota de intermitência
+    dentro do artefato de prova é anterior a 8f55c94, que só mexe em testes. Ficou
+    de fora, aceito: depois de build vermelho no land, um git reset --keep ao ponto
+    de retorno também desfaz o commit dos registros; kill -9 no meio do decide deixa
+    respostas sem commit (a largada seguinte recolhe, CS-4); o cepa-plan answer
+    no fim do run normal segue commitando por resposta sem a guarda de merge (é
+    do CS-6, não tocado).'
+  head_commit: 4d11f074a90bcaac951491da46553335b21bf5e7
+  decisions:
+  - texto: 'Dentro do decide, as respostas do dono viram um único commit no fim
+      (mensagem ''until <fila>/<run> decide: ...''), em vez de um commit por resposta
+      como o cepa-plan answer fazia'
+    commit: f6673ddfd79f6126baf6a2e2ae9f2c89b279dbd6
+  - texto: 'O decide chamado só com o nome da fila usa a mensagem ''until <fila>
+      decide: owner answers recorded in the queue'''
+    commit: f6673ddfd79f6126baf6a2e2ae9f2c89b279dbd6
+  - texto: 'No land, o commit dos registros vem depois do merge e do push e não
+      é empurrado: o clone fica um commit à frente do remoto'
+    commit: f6673ddfd79f6126baf6a2e2ae9f2c89b279dbd6
+  - texto: O close-dead commita o registro do run também quando o build dá vermelho,
+      mantendo o código de saída 1
+    commit: f6673ddfd79f6126baf6a2e2ae9f2c89b279dbd6
 - id: CS-8
   title: O run não faz push
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
     entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
     de teste com um remoto bare, ao fim do run o `HEAD` do remoto é o mesmo de antes
     da largada, enquanto o clone tem o commit novo.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits na branch until/2026-11-15-1011: 000395a (teste test_cs8_run_does_not_push
+    em tests/test_cepa_until_clean_tree.py: remoto bare rastreado, o run termina
+    com o commit novo no clone e todas as refs do remoto iguais às de antes), 951be4e
+    (main() do arquivo roda só os testes nomeados na linha de comando, para a prova
+    rodar um teste sem python3 -c, que um hook bloqueia), d129bba (artefatos). Nenhum
+    código de produto mudou: o único git push executado em common/bin/cepa-until
+    é o do land (~l.2352). Portões: completion-auditor COMPLETE (.claude/acceptance/until-arvore-limpa-CS-8.yaml,
+    em 000395a; 951be4e só mexe no main() do teste); proof-reviewer PROVEN em 951be4e
+    (docs/proof/until-arvore-limpa-CS-8.yaml): P1 push após o commit do run RED,
+    P2 push de ref nova RED, P3 push na largada equivalente (nada a publicar) e
+    P3'' com ref nova RED, P4 push no fim RED. Arquivo inteiro test_cepa_until_clean_tree.py
+    verde em 000395a (2m27s). Fora do critério: um build/hook do projeto que faça
+    push por conta própria. Suíte completa fica para o supervisor.'
+  head_commit: d129bba4caecefda2fd19d61538bebb276075236
+  decisions:
+  - texto: o teste do CS-8 exige que nenhuma ref do remoto mude, não só a da branch
+      do clone, para pegar também um push da branch do run
+    commit: 000395acde559e13c85578e0b58103d79386c0e9
 - id: CS-9
   title: A `queue.yaml.bak` não aparece no `git status`
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
     entre si · superfície onde se observa: cli · teste vermelho declarado: `cepa-plan
     --from-spec` regravando uma fila existente cria `queue.yaml.bak`, e `git status
     --porcelain --untracked-files=all` não lista esse arquivo.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on overnight branch until/2026-11-15-1011: 2fdea83 (test test_rewrite_backup_stays_out_of_git_status
+    in tests/test_common_plan.py, RED by ordering: 3 failures before the fix), d1338ee
+    (.gitignore: .claude/queues/*/queue.yaml.bak and .claude/programs/*/plan.yaml.bak),
+    2c769db (artifacts). Gates: completion-auditor COMPLETE (.claude/acceptance/until-arvore-limpa-CS-9.yaml);
+    proof-reviewer PROVEN at d1338ee (docs/proof/until-arvore-limpa-CS-9.yaml; 4
+    perturbations RED: each gitignore line removed alone, over-broad queue.yaml*
+    rule, base .gitignore). Ran only tests/test_common_plan.py, test_queue_rename,
+    test_plan_program_naming, test_cepa_plan_write_commits: green. Full build left
+    to the supervisor. Code is on the overnight branch, not on main. Left out: the
+    3 loose queue.yaml.bak in the main clone disappear from git status only after
+    this branch lands.'
+  head_commit: 2c769db5219edf6f6417d6a48d05ad2fe786629f
+  decisions:
+  - texto: O backup que o cepa-plan faz da fila antes de regravá-la passa a ser
+      ignorado pelo git, inclusive o do formato antigo de pasta (plan.yaml.bak)
+    commit: d1338ee8c59df17dad3a8435f5f6899ff4cb6447
