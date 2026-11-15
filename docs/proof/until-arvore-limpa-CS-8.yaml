@@ -1,0 +1,44 @@
+schema_version: 2
+card: until-arvore-limpa-CS-8
+verdict: proven               # proven | unproven | needs-human
+reviewed_at: 2026-11-15T13:50:00-03:00
+base_commit: 4d11f07
+head_commit: 951be4e
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "tests/test_cepa_until_clean_tree.py :: test_cs8_run_does_not_push (new) and main() running only the test names given in argv"
+      module: tests
+      external_observable: false
+      substituted_by_double: null   # the test runs the real cepa-until as a subprocess against a real temp git repo and a real bare remote; only `claude` is faked (far boundary)
+    - class: "common/bin/cepa-until (no change in this diff; the claim is that the behavior already held)"
+      module: common
+      external_observable: true     # refs of the bare remote after the cli run
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                   # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway detached worktree /tmp/proof-cs8 at 951be4e (removed with `git worktree remove --force`; absent from `git worktree list` afterwards; primary tree untouched). GREEN baseline: `python3 tests/test_cepa_until_clean_tree.py test_cs8_run_does_not_push` -> 5 checks ok (o run termina; o clone tem o commit novo; HEAD do remoto igual ao de antes da largada; nenhuma ref do remoto mudou; clone um commit a frente), `tudo verde`. Each defect planted in /tmp/proof-cs8/common/bin/cepa-until with one `sed -i` insertion (diff read back with `git diff -U0`), the SAME command re-run, file restored with `git checkout -- common/bin/cepa-until` and `git status --short` empty before the next one. Foreground only, no full suite."
+      results:
+        - "P1 `git(['push'], root)` before `return head_of(root), None` at the end of commit_run_records (cepa-until:2462) -> RED, 3 failures: 'HEAD do remoto é o mesmo de antes da largada' (remote main moved 3c776c9 -> 98243f7), 'nenhuma ref do remoto mudou' (refs/heads/main changed), 'o clone fica à frente do remoto pelo commit do run' (0 commits ahead). The first two checks of the run (run ends, clone has the commit) stayed ok."
+        - "P2 `git(['push','origin','HEAD:refs/heads/until/x'], root)` at the same spot -> RED, 1 failure: 'nenhuma ref do remoto mudou (nem a branch do run)' (refs/heads/until/x appeared). Remote HEAD and clone-ahead checks stayed ok, so this is the check that alone catches a push that creates a new ref."
+        - "P3 `git(['push'], repo)` right after `save_state('rodando')` at launch (cepa-until:5702), before the first item -> GREEN (5 ok). Equivalent mutant, not a gap: at launch the clone equals its upstream, so a plain `git push` publishes nothing and no remote ref can change. To make the launch-time push observable it was re-planted as P3' `git(['push','origin','HEAD:refs/heads/until/x'], repo)` at the same line -> RED, 1 failure: 'nenhuma ref do remoto mudou (nem a branch do run)' (refs/heads/until/x appeared). So a push at launch that publishes anything is caught."
+        - "P4 `git(['push'], repo)` after `print_commit_made(sha)` at the normal end of the run (cepa-until:5754, inside `if sha:`) -> RED, 3 failures: remote HEAD moved (62cf6fd -> 8808c36), refs changed, clone not ahead (0)."
+        - "Every run printed its checks under `test_cs8_run_does_not_push:`; none was a zero-test green."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; reachability measured by the perturbations themselves: a defect planted at commit_run_records (P1, P2), at launch (P3') and at the end of the run (P4) each turned the test RED, so the test executes all three spots. Structural reading: `grep -n push common/bin/cepa-until` at 951be4e shows one executed `git push`, `git(['push'], repo, timeout=300)` at cepa-until:2352 in the land path (the test never calls land, correct for the criterion); other hits are help text, 'not pushed' messages and `git stash push` (1859, local). Outside the criterion and not covered: a project build command or hook that itself pushes."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff adds one test and changes how the test file picks which tests to run; it opens no input surface and no changed class is in an input-bearing module (api-rest)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "O teste novo é capaz de falhar. Rodando sozinho (cerca de 3 s), ficou verde sem defeito (5 checagens) e vermelho em todo push plantado que publica algo: push no commit do run (P1, 3 falhas), push criando uma branch nova no remoto (P2, 1 falha, só a checagem de refs pega), push no fim do run (P4, 3 falhas) e push na largada criando branch (P3', 1 falha). Um `git push` simples na largada (P3) fica verde, e isso é correto: na largada o clone é igual ao remoto, então não há nada a publicar; não é lacuna do teste. Só o `land` (cepa-until:2352) executa `git push`, e o teste não passa por ele. Fora do critério e não coberto: comando de build ou hook do projeto que faça push. Nenhum código de produto mudou neste diff."
