@@ -1,0 +1,17 @@
+key: until-todas-as-filas-CS-2
+status: complete
+criteria:
+  - id: CS-2
+    text: "um run `--all` executa itens de mais de uma fila numa unica branch `until/<run>` (com as filas a e b, 1 pronto cada, e um claude falso que commita e fecha `done`, `cepa until --all --for 1h` termina com os dois itens `done` nos respectivos queue.yaml e os dois commits na mesma branch until/<run>)"
+    altitude: cli
+    surface: "cepa until --all --for 1h (launcher common/bin/cepa -> common/bin/cepa-until): exit code, queue.yaml de cada fila, branches until/* e git log da branch"
+    test: "tests/test_cepa_until_all.py::test_all_runs_items_of_two_queues_on_one_branch (+ test_same_id_in_two_queues_both_delivered, test_same_id_stuck_in_one_queue_does_not_inherit_the_other_ones_state, test_done_without_commit_in_one_queue_does_not_taint_the_same_id_in_another, test_same_id_red_in_two_queues_keeps_two_side_branches_and_own_returns)"
+    layer: "subprocess real de `cepa until` pelo launcher (via_launcher=True), repo git temporario com filas a e b (1 pronto cada), claude falso que usa o cepa-plan real (queue/start/finish) e commita um arquivo por item; assert em rc==0, a1 e b1 `done` em cada queue.yaml, 2 subprocessos claude, exatamente 1 branch until/*, e os commits `a:a1` e `b:b1` em HEAD..branch"
+    evidence: verified
+    run: "timeout 550 python3 tests/test_cepa_until_all.py -> todas as linhas 'ok', '✓ 12 testes'"
+    status: complete
+    notes:
+      - "O teste vermelho declarado e coberto literalmente pelo primeiro teste; o --no-verify e --no-analysis so desligam a verificacao de build e a analise, nao o caminho do --all."
+      - "Os testes de mesmo id (CS-1 em a e em b) cobrem a chave (fila, id) do controle por item, parte da mesma entrega; todos passam."
+      - "Suite completa (tests/run-all.sh) nao rodada por instrucao; fica com o supervisor do run."
+gap: []

@@ -1,0 +1,61 @@
+schema_version: 2
+card: until-todas-as-filas-CS-2
+verdict: proven               # proven | unproven | needs-human
+reviewed_at: 2026-11-15T14:40:00-03:00
+base_commit: ef078dc10e313bebd8f6a82d06ab4ac911f2bae2
+head_commit: 3f4404b5997c0417e3d4c6ead91b050f3a5e0c35
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: _main (--all run path), query_next_ready, undo_item(queue=), red_returns(queue=), per-(queue,id) bookkeeping, volta_vermelha `fila`"
+      module: common
+      external_observable: true     # stdout, exit code, git branches, queue files and .jsonl ledger of `cepa until --all --for 1h` (surface: cli)
+      substituted_by_double: null   # tests/test_cepa_until_all.py runs the real `cepa until` as a process against a real temp git repo and the real `cepa-plan`; only `claude` is faked (far boundary)
+    - class: "tests/test_cepa_until_all.py (extended in c2fcbf5, b6efbce and 3f4404b)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "Pass 1 (head c2fcbf5) and pass 2 (head b6efbce) as before. Pass 3 (head 3f4404b, throwaway detached worktree /tmp/proof-until-todas-as-filas-CS-2c): `git diff --stat b6efbce..3f4404b` touches only tests/test_cepa_until_all.py; `git diff --stat b6efbce..3f4404b -- common/bin/cepa-until` is empty, so every earlier RED stays valid. Unperturbed `timeout 550 python3 tests/test_cepa_until_all.py` -> '✓ 17 testes' (N=17). P20 applied (line 5626 `[] if a.all_queues else clean_side_branches(...)` -> `clean_side_branches(...)`): '✗ 2 falha(s)' (FAIL 'a lateral da rodada antiga continua la', FAIL '...e nenhum aviso de lateral apagada ou mantida', both in test_all_leaves_side_branches_of_earlier_runs_alone). Restored with `git checkout -- common/bin/cepa-until`, status clean, worktree removed."
+      results:
+        - "KILLED (pass 1) P1 `if a.all_queues and a.dry:` -> `if a.all_queues:` (--all never executes): RED, Traceback/StopIteration"
+        - "KILLED (pass 1) P3 queue name read from `q['queue']`+'x' instead of the plan path folder: RED, StopIteration"
+        - "KILLED (pass 1) P4 `if data.get('batch'):` -> `if False:` in query_next_ready: RED, StopIteration"
+        - "KILLED (pass 1) P5 ledger dir `ALL_DIR if a.all_queues else a.queue` -> `a.queue`: RED, StopIteration"
+        - "KILLED (pass 1) P8 red_returns called with `None` instead of the queue: RED, 1 falha"
+        - "KILLED (pass 1) P9 `fila` field removed from volta_vermelha: RED, 3 falhas"
+        - "KILLED (pass 1) P10 red_returns filter `e.get('fila') == queue` -> `True`: RED, 1 falha"
+        - "KILLED (pass 1) P11 queue segment removed from the red side-branch name: RED, 3 falhas"
+        - "KILLED (pass 1) P12 undo_item(queue=None) on the red path: RED, 3 falhas"
+        - "KILLED (pass 1) P15 attempts keyed by bare ident: RED, 1 falha"
+        - "KILLED (pass 1) P16 key = ('x', ident) (queues collapsed in every per-item structure): RED, 4 falhas"
+        - "KILLED (pass 1) P18 label() returns the bare id in --all: RED, 2 falhas"
+        - "CAUGHT BY TIMEOUT (pass 1) P23 next_item() in --all returns the already-read item (stale read): the file did not finish in 120s (loops on the same item); a hang, not a clean red"
+        - "KILLED (pass 2) P6 line 5845 `if plan_path not in run_queue_paths:` -> `if False:`: RED, 2 falhas"
+        - "KILLED (pass 2) P7 line 6006 `without_commit.append(key)` -> `append(ident)`: RED, 1 falha"
+        - "KILLED (pass 2) P13 line 6183 `queue=cur if a.all_queues else None` -> `queue=None` (travado path): RED, 3 falhas"
+        - "KILLED (pass 2) P14 line 6448 same change on the parado path: RED, 3 falhas"
+        - "KILLED (pass 2) P21 line 5907 `first.setdefault(key, ...)` -> `first[key] = ...`: RED, 3 falhas"
+        - "KILLED (pass 3) P20 line 5626 clean_side_branches not skipped in --all: RED, 2 falhas (unperturbed 17/17 green first)"
+        - "NOT A GAP (equivalent), P2 `if not q.get('prontos'): continue` -> `if False:` (line 817): green. A queue with nothing ready only costs one extra query_queue call; line 825 `if data.get('batch')` skips it just the same. Output identical."
+        - "NOT A GAP (unobservable from the CLI), P19 `return 0` skipped after the --all end: green. Differs only in the interactive close-out; the test run is non-interactive."
+        - "NOT A GAP (cosmetic), P22 `a.queue = ALL_QUEUE` -> 'zzz': green. Label in messages/commit message, no state keyed on it."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; reachability determined by perturbation. Every changed behavior line in the diff has a perturbation that turns the file RED (P1, P3-P16, P18, P20, P21; P23 by hang), including ~5626 in pass 3. Lines behind P2/P19/P22 are the three classified non-gaps above."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff changes how the supervisor keys its own bookkeeping and which queue's items it runs; it parses no input from outside and no changed class is in an input-bearing module (api-rest)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "A ultima lacuna (P20, o --all nao apagar as branches laterais de runs anteriores) agora derruba o teste novo: 17 testes verdes sem perturbacao, 2 falhas ao remover a protecao. Todas as outras mudancas ja derrubavam testes; P2, P19 e P22 seguem classificadas como nao-lacuna (equivalente, invisivel em run nao interativa, cosmetica) pela passada anterior."
