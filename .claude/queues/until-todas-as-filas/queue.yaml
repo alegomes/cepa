@@ -1,0 +1,119 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/until-todas-as-filas.md (9 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-15
+
+schema_version: 2
+mode: single-track
+queue: until-todas-as-filas
+source: docs/spec/until-todas-as-filas.md (9 critérios de sucesso; ordem herdada
+  do texto)
+items:
+- id: CS-1
+  title: '`cepa until --all --for 8h --dry-run` lista os itens prontos de todas
+    as filas, agrupados por fila e na ordem do `cepa plan ready`, e sai com 0 sem
+    executar nada'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    de teste com as filas `a` (1 pronto) e `b` (1 pronto), `cepa until --all --for
+    8h --dry-run` sai com 0 e a saída traz `a` antes de `b` com os dois ids; hoje
+    sai com 2 porque `--all` não existe e o nome da fila é obrigatório.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: Um run `--all` executa itens de mais de uma fila numa única branch `until/<run>`
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com as
+    filas `a` e `b`, cada uma com 1 item pronto, e um `claude` falso que commita
+    e encerra o item como `done`, `cepa until --all --for 1h` termina com os dois
+    itens `done` nos respectivos `queue.yaml` e os dois commits na mesma branch
+    `until/<run>`; hoje o comando é recusado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: A ordem é fila a fila, e um item que fica pronto durante o run entra antes
+    de passar à fila seguinte
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: fila
+    `a` com `a1` e `a2` (`a2` espera `a1`) e fila `b` com `b1`; após `cepa until
+    --all --for 1h` com o `claude` falso, os eventos `item_start` do registro aparecem
+    na ordem `a1`, `a2`, `b1`; hoje o comando é recusado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: Uma fila com run próprio vivo é pulada com aviso, e as outras seguem
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com um
+    `*.estado.json` em estado `rodando` e pid vivo na fila `a`, `cepa until --all
+    --for 1h` imprime um aviso que nomeia a fila `a` e o run dela, não inicia nenhum
+    item de `a` e termina `b1` como `done`; hoje o comando é recusado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: '`--max-blocked` itens `blocked` seguidos tiram a fila do run e ele segue
+    nas outras'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: fila
+    `a` com 3 itens que o `claude` falso devolve como `blocked` e fila `b` com 1
+    item `done`, `cepa until --all --for 1h --max-blocked 3` imprime uma linha dizendo
+    que a fila `a` saiu do run e termina `b1` como `done`; hoje o comando é recusado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: O registro fica em `.claude/queues/_all/until/` e `pending`, `decide`,
+    `land` e `close-dead` aceitam o alvo `all/<run>`
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: depois
+    de um run `--all`, existe `.claude/queues/_all/until/<run>.jsonl`, `cepa until
+    pending` lista `all/<run>` e `cepa until land all/<run> --yes` aterrissa a branch;
+    hoje `land` recusa o alvo com "the target is <queue>/<run>" porque não existe
+    fila `all`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: Num terminal, a largada mostra um painel único com o que todas as filas
+    guardam para o dono, agrupado por fila, e um "sim" faz o item rodar neste run
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com a
+    fila `a` tendo um item com `human_pending` e a fila `b` outro, `cepa until --all
+    --for 1h` num pseudo-terminal mostra um único painel com as seções `a` e `b`;
+    respondendo "sim" ao item de `a`, ele aparece com `item_start` no registro do
+    run; hoje o comando é recusado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-8
+  title: Enquanto um run `--all` está vivo, um segundo `--all` e um `cepa until
+    <fila>` de qualquer fila são recusados com o nome do run vivo
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com um
+    `.claude/queues/_all/until/*.estado.json` em estado `rodando` e pid vivo, `cepa
+    until --all --for 1h` e `cepa until a --for 1h` saem com 2 e citam `all/<run>`;
+    hoje o segundo comando larga normalmente.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-9
+  title: Sem item pronto em nenhuma fila, o `--all` sai com 0, diz isso e não cria
+    branch
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com todas
+    as filas fechadas ou esperando o dono e o painel recusado (`--no-pre-read`),
+    `cepa until --all --for 1h` sai com 0, imprime que nenhuma fila tem item pronto
+    e `git branch --list ''until/*''` não ganha branch nova; hoje o comando é recusado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
