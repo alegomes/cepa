@@ -430,7 +430,7 @@ def _cs6_checks(label, tmp, tmp_ok):
           "conclude or abort" in text and bool(cmds) and cmds[0] in text,
           text[-600:])
     check(f"CS-6 {label}: a tela diz o que fazer antes do comando",
-          any("conclude or abort" in l for l in lines), out[-800:])
+          any("Conclude or abort" in l for l in lines), out[-800:])
 
 
 def _cs6(label):
@@ -478,7 +478,8 @@ def test_cs6_launch_collect_does_not_commit_mid_rebase():
                  if "did not commit the loose records of dead runs (outra)" in l]
         check("CS-6 recolha: a largada diz por que não recolheu",
               len(lines) == 1 and "rebase" in lines[0]
-              and "the index was not touched" in lines[0], out[-800:])
+              and "the index was not touched" in lines[0]
+              and "Conclude or abort" in lines[0], out[-800:])
         check("CS-6 recolha: a largada não diz que o git recusou",
               "git refused" not in out, out[-800:])
         check("CS-6 recolha: a largada traz o comando para o dono",

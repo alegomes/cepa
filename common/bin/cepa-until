@@ -2351,6 +2351,10 @@ class NotAttempted(str):
     call git (an operation in progress, a detached HEAD): not a git refusal, so the
     screen must not say "git refused"."""
 
+    # What the owner does before the by-hand command: during a merge git refuses
+    # `commit --only`, so the command printed next would fail as it stands.
+    FIRST = "Conclude or abort the operation (or check out a branch) first"
+
 
 def clone_state_blocking_commit(root):
     """Why a commit of the run's records on the clone's branch must not even be
@@ -2361,7 +2365,7 @@ def clone_state_blocking_commit(root):
     free. Git paths come from `git rev-parse --git-path`, not from `.git/`."""
     for name, what in (("MERGE_HEAD", "a merge"),
                        ("rebase-merge", "a rebase"),
-                       ("rebase-apply", "a rebase"),
+                       ("rebase-apply", "a rebase or `git am`"),
                        ("CHERRY_PICK_HEAD", "a cherry-pick"),
                        ("REVERT_HEAD", "a revert")):
         code, out = git(["rev-parse", "--git-path", name], root)
@@ -5114,7 +5118,8 @@ def _main(argv=None):
             elif error:
                 if isinstance(error, NotAttempted):
                     print(f"cepa-until: did not commit the loose records of dead "
-                          f"runs ({names}): {error}; the index was not touched",
+                          f"runs ({names}): {error}; the index was not touched. "
+                          f"{NotAttempted.FIRST}, then run the command below",
                           file=sys.stderr)
                 else:
                     print(f"cepa-until: git refused the commit that collects the "
@@ -5538,7 +5543,8 @@ def _main(argv=None):
             note_refused_commit(review_path, reason, command, skipped)
             if skipped:
                 print(f"   commit: not made, {reason}; the run records stay in the "
-                      "clone without a commit and the index was not touched")
+                      "clone without a commit and the index was not touched. "
+                      f"{NotAttempted.FIRST}, then run the command below")
             else:
                 print(f"   commit: git refused the commit of the run records "
                       f"({reason}); they stay in the clone without a commit")
