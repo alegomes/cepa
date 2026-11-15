@@ -779,6 +779,93 @@ def query_queue(name, repo, max_items=1):
         return None, f"`cepa-plan queue` did not return JSON ({e})"
 
 
+def query_ready(repo):
+    """`cepa-plan ready --json`: the ready items of every single-track queue, in
+    the order `ready` lists them. Returns (data, error)."""
+    try:
+        p = subprocess.run(
+            [sys.executable, str(CEPA_PLAN), "ready", "--repo", str(repo),
+             "--json"], capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        return None, "`cepa-plan ready` did not answer within 60s"
+    if p.returncode != 0:
+        return None, (p.stderr or p.stdout or "").strip() or \
+            f"`cepa-plan ready` exited {p.returncode}"
+    try:
+        return json.loads(p.stdout), None
+    except json.JSONDecodeError as e:
+        return None, f"`cepa-plan ready` did not return JSON ({e})"
+
+
+# The name a `--all` run carries where a single-queue run carries its queue name
+# (`all/<run>` in messages and in the run state), and the folder of its record.
+ALL_QUEUE = "all"
+ALL_DIR = "_all"
+
+
+def query_next_ready(repo):
+    """The next item of a `--all` run, read fresh (spec until-todas-as-filas, Q4):
+    the first ready item in the order of `cepa-plan ready` (queue by queue, the
+    recorded order inside a queue). Returns (queue, data, error): `data` is
+    `query_queue` of that queue, so the run loop handles it like a single-queue
+    round. With nothing ready anywhere, `data` has an empty batch and an
+    `end-of-queue` stop, which is what ends a single-queue run too."""
+    ready, error = query_ready(repo)
+    if error:
+        return None, None, error
+    for q in ready.get("filas") or []:
+        if not q.get("prontos"):
+            continue
+        name = Path(str(q.get("path") or "")).parent.name or str(q["queue"])
+        data, error = query_queue(name, repo)
+        if error:
+            return name, None, f"queue {name!r}: {error}"
+        if data.get("batch"):
+            return name, data, None
+    return None, {"batch": [], "deferred": [], "totals": {},
+                  "stop": {"reason": "end-of-queue",
+                           "detail": "no queue has a ready item"}}, None
+
+
+def all_queues_launch(a, repo, now, deadline):
+    """`cepa until --all --dry-run` (spec until-todas-as-filas, CS-1): the plan of
+    the run, the ready items of every queue, queue by queue in the order of
+    `cepa plan ready`, and inside a queue the recorded order. Nothing runs,
+    nothing is marked, no branch is created. The real run (CS-2) is the loop of
+    `_main`, which asks `query_next_ready` for each item."""
+    data, error = query_ready(repo)
+    if error:
+        print(f"cepa-until: could not read the queues — {error}", file=sys.stderr)
+        return 2
+    queues = data.get("filas") or []
+    with_ready = [q for q in queues if q.get("prontos")]
+    total = sum(len(q["prontos"]) for q in with_ready)
+    lbl = lambda r: SCREEN.c("cinza", r)  # noqa: E731
+    print(SCREEN.c("negrito", "cepa-until") + " · " + SCREEN.c("ciano", "--all")
+          + f" · {repo.name} · until "
+          + SCREEN.c("negrito", deadline.strftime('%d/%m %H:%M'))
+          + f" ({human(deadline - now)})")
+    print(lbl("  plan   : ") + f"{total} ready item(s) in {len(with_ready)} of "
+          f"{len(queues)} queue(s), queue by queue in `cepa plan ready` order")
+    for q in with_ready:
+        ready = q["prontos"]
+        print("\n" + lbl("queue ") + SCREEN.c("ciano", str(q["queue"]))
+              + f" · {len(ready)} ready of {q.get('pendentes', len(ready))} pending")
+        for l in ready:
+            print(f"  {l['posicao']:>3}. {l['id']} — "
+                  + SCREEN.truncate(str(l.get("title") or ""), slack=10))
+            if l.get("blocked_by"):
+                print(lbl(f"       waits: {', '.join(map(str, l['blocked_by']))} "
+                          "(runs before it in this run)"))
+    rest = [str(q["queue"]) for q in queues if not q.get("prontos")]
+    if rest:
+        print("\n" + lbl(f"  nothing ready: {', '.join(rest)}"))
+    if not total:
+        print("\nno queue has a ready item")
+    print("\n(--dry-run: nothing was executed)")
+    return 0
+
+
 # How much of a blocked item's `evidence` the end-of-run summary shows. The command the
 # owner needs to run tends to be at the end of the text ("I left X for you to
 # run"), so the cut keeps the beginning AND the end, not just the beginning.
@@ -1907,7 +1994,7 @@ def run_verify(command, tree, limit_sec, log, on_launch=None, on_tick=None,
 
 
 def undo_item(repo, tree, run_id, ident, since, in_the_middle=(),
-                suffix="vermelho", back=1):
+                suffix="vermelho", back=1, queue=None):
     """Takes off the night branch the commits of an item whose build went
     red, without losing them: they stay in `until/<run>-<suffix>-<id>`.
 
@@ -1932,7 +2019,10 @@ def undo_item(repo, tree, run_id, ident, since, in_the_middle=(),
                       "is not an ancestor of the run branch's HEAD")
     # The 2nd return of the same item in the same run can't overwrite the side branch of the
     # 1st: it holds commits the agent may not have used.
-    side_branch = (f"until/{run_id}-{suffix}-{ident}"
+    # In `--all` the same id lives in several queues: without the queue in the name,
+    # the 2nd `branch -f` would overwrite the 1st one's commits.
+    side_branch = (f"until/{run_id}-{suffix}-"
+               + (f"{queue}-" if queue else "") + f"{ident}"
                + (f"-v{back}" if back > 1 else ""))
     code, output = git(["branch", "-f", side_branch, "HEAD"], tree)
     if code != 0:
@@ -1943,9 +2033,10 @@ def undo_item(repo, tree, run_id, ident, since, in_the_middle=(),
     return side_branch, None
 
 
-def red_returns(ledger_dir, ident):
+def red_returns(ledger_dir, ident, queue=None):
     """How many red returns the item has already had, counted in the `.jsonl` of ALL
-    the queue's runs: the ceiling holds across runs, and without a new file."""
+    the queue's runs: the ceiling holds across runs, and without a new file.
+    In `--all` (`queue` given) only the events of that queue's item count."""
     n = 0
     for reg in ledger_dir.glob("*.jsonl"):
         try:
@@ -1958,7 +2049,8 @@ def red_returns(ledger_dir, ident):
             except ValueError:
                 continue
             if (isinstance(e, dict) and e.get("evento") == "volta_vermelha"
-                    and str(e.get("id")) == str(ident)):
+                    and str(e.get("id")) == str(ident)
+                    and (queue is None or e.get("fila") == queue)):
                 n += 1
     return n
 
@@ -4832,6 +4924,7 @@ def _main(argv=None):
     ap = _clihelp.Parser(
         prog="cepa until",
         usage="cepa until <queue> (--for DURATION | --until HH:MM) [options]\n"
+              "       cepa until --all (--for DURATION | --until HH:MM) --dry-run\n"
               "       cepa until <subcommand> ...",
         description=(
             "One item per subprocess: each item starts a fresh `claude -p`\n"
@@ -4855,6 +4948,8 @@ def _main(argv=None):
         examples=[
             ("cepa until wego --for 12h", "run the wego queue for 12 hours"),
             ("cepa until wego --until 07:00 --dry-run", "the run plan, nothing executed"),
+            ("cepa until --all --for 8h --dry-run",
+             "the ready items of every queue, in `cepa plan ready` order"),
             ("cepa until wego --for 8h --no-verify", "a repo without a build"),
             ("cepa until pending", "runs waiting for you"),
             ("cepa until decide wego/2026-11-03-2210", "answer what a run left for you"),
@@ -4873,8 +4968,13 @@ def _main(argv=None):
                   "cepa until-digest: the summary of a finished run",
                   "/common:until-review: what the owner has to do from a run",
                   "cepa plan: the queue this command runs"])
-    ap.add_argument("queue", metavar="QUEUE",
-                    help="queue name, as in .claude/queues/<name>/queue.yaml")
+    ap.add_argument("queue", metavar="QUEUE", nargs="?",
+                    help="queue name, as in .claude/queues/<name>/queue.yaml "
+                         "(or --all, in its place)")
+    ap.add_argument("--all", action="store_true", dest="all_queues",
+                    help="every single-track queue instead of one, queue by "
+                         "queue in the order of `cepa plan ready`. For now "
+                         "only with --dry-run (spec until-todas-as-filas)")
     window = ap.add_mutually_exclusive_group(required=True)
     window.add_argument("--for", dest="duration", metavar="DURATION",
                         help="how long to run (e.g. 12h, 90m)")
@@ -4939,6 +5039,15 @@ def _main(argv=None):
         ap.print_help(sys.stderr)
         return 2
     a = ap.parse_args(argv)
+    if a.all_queues and a.queue:
+        print(f"cepa-until: --all takes the place of the queue name; pass "
+              f"either {a.queue!r} or --all, not both", file=sys.stderr)
+        return 2
+    if not a.all_queues and not a.queue:
+        print("cepa-until: missing the queue name (or --all, for every queue). "
+              "`cepa plan ready` lists the queues with ready items",
+              file=sys.stderr)
+        return 2
 
     repo = Path(a.repo).resolve()
     now = datetime.now()
@@ -4968,17 +5077,40 @@ def _main(argv=None):
               "nothing to supervise", file=sys.stderr)
         return 2
 
-    data, error = query_queue(a.queue, repo)
-    if error:
-        print(f"cepa-until: queue {a.queue!r} is not executable — {error}",
-              file=sys.stderr)
-        return 2
+    if a.all_queues and a.dry:
+        return all_queues_launch(a, repo, now, deadline)
+
+    # From here a `--all` run goes through the same path as a single-queue one,
+    # under the name `all` (spec until-todas-as-filas, CS-2). `cur` is the queue
+    # of the item in hand: always `a.queue` in a single-queue run, the queue the
+    # next ready item belongs to in a `--all` run.
+    if a.all_queues:
+        a.queue = ALL_QUEUE
+        cur, data, error = query_next_ready(repo)
+        if error:
+            print(f"cepa-until: could not read the queues — {error}",
+                  file=sys.stderr)
+            return 2
+    else:
+        cur = a.queue
+        data, error = query_queue(a.queue, repo)
+        if error:
+            print(f"cepa-until: queue {a.queue!r} is not executable — {error}",
+                  file=sys.stderr)
+            return 2
+
+    def next_item():
+        """(queue, data, error) of the next item, read fresh."""
+        if a.all_queues:
+            return query_next_ready(repo)
+        fresh, fresh_error = query_queue(a.queue, repo)
+        return a.queue, fresh, fresh_error
 
     # Before the dirt guard, and with no `--dirty-ok` in the message nor as an
     # escape: two supervisors on the same queue is the failure. On 2026-10-15 19:08 the
     # refusal came out as "dirty tree" (the `plan.yaml` that the live run was writing) and
     # suggested the wrong escape (fb-20261015-4).
-    alive = live_run_of_queue(repo, a.queue)
+    alive = None if a.all_queues else live_run_of_queue(repo, a.queue)
     if alive:
         try:
             end = datetime.fromisoformat(str(alive["prazo"])) \
@@ -5069,14 +5201,16 @@ def _main(argv=None):
               "of it.", file=sys.stderr)
         return 2
 
-    ledger_dir = qp.queue_dir(repo, a.queue) / "until"
+    ledger_dir = qp.queue_dir(
+        repo, ALL_DIR if a.all_queues else a.queue) / "until"
     ledger_dir.mkdir(parents=True, exist_ok=True)
     run_id = now.strftime("%Y-%m-%d-%H%M")
     ledger = ledger_dir / f"{run_id}.jsonl"
     log = ledger_dir / f"{run_id}.log"
     # Taken now: `data` is re-read on every round and is None when the queue turns
     # unreadable mid-run, and the end-of-run commit still needs the path.
-    run_queue_path = data.get("path")
+    # A `--all` run adds each queue it takes an item from (see the loop).
+    run_queue_paths = [data.get("path")]
 
     # Short header (A6): the 09/26 run opened with 15 configuration lines
     # and absolute paths through the Insync folder taking up half a screen.
@@ -5085,7 +5219,8 @@ def _main(argv=None):
     SCREEN.full_title = a.full_title
     lbl = lambda r: SCREEN.c("cinza", r)  # noqa: E731
     print(SCREEN.c("negrito", "cepa-until") + " · queue "
-          + SCREEN.c("ciano", str(qp.queue_name_of(data))) + f" · {repo.name} · until "
+          + SCREEN.c("ciano", "--all" if a.all_queues else str(qp.queue_name_of(data)))
+          + f" · {repo.name} · until "
           + SCREEN.c("negrito", deadline.strftime('%d/%m %H:%M'))
           + f" ({human(deadline - now)})")
     if SCREEN.enabled:
@@ -5114,9 +5249,22 @@ def _main(argv=None):
     # instead of printing the number of the capped read (which would be wrong).
     # It rides on the `1st item:` line, not on a line of its own: the header has
     # a 7-line ceiling (A6) and a taller header blocked the supervisor on a pty.
-    whole, whole_err = query_queue(a.queue, repo, max_items=10 ** 6)
     runs = waits = None
-    if whole:
+    if a.all_queues:
+        # No single queue to count: the ready list of every queue is the forecast.
+        # No pre-read and no panel in a `--all` run for now (CS-7).
+        whole = None
+        ready_all, _ready_err = query_ready(repo)
+        runs = sum(len(q.get("prontos") or [])
+                   for q in (ready_all or {}).get("filas") or [])
+        waits = 0
+        forecast = f" · start: {runs} ready in every queue"
+        a.no_pre_read = True
+    else:
+        whole, whole_err = query_queue(a.queue, repo, max_items=10 ** 6)
+    if a.all_queues:
+        pass
+    elif whole:
         runs = len(whole.get("batch") or [])
         waits = sum(1 for ad in whole.get("deferred") or []
                     if ad.get("reason") == "human_pending")
@@ -5130,7 +5278,8 @@ def _main(argv=None):
           + f" · queue: {t.get('por_status', {}).get('pending', 0)} "
             f"pending, {t.get('por_status', {}).get('done', 0)} done"
           + forecast)
-    inheritance = inheritance_from_previous_run(repo, a.queue, data.get("path"))
+    inheritance = ([] if a.all_queues else
+                   inheritance_from_previous_run(repo, a.queue, data.get("path")))
     for h in inheritance:
         print(lbl("  inherits: ") + f"`{h['branch']}` ({h['commits']} commit(s) the "
               f"clone does not have) — {', '.join(h['itens'])} was left half-done "
@@ -5414,7 +5563,7 @@ def _main(argv=None):
                 pass
         try:
             sha, error = commit_run_records(
-                repo, [run_queue_path, ledger, ledger.with_suffix(".review.md")],
+                repo, [*run_queue_paths, ledger, ledger.with_suffix(".review.md")],
                 f"until {a.queue}/{run_id}: queue marks and run records")
         finally:
             for sig, handler in saved.items():
@@ -5472,9 +5621,11 @@ def _main(argv=None):
     def launched(child_pid):
         in_flight["pid_filho"] = child_pid
     kept_side_branches = []
-    for side, patch, side_error in clean_side_branches(
+    # A `--all` run leaves them for now: the cleanup reads ONE queue's item ids,
+    # and ids can repeat across queues.
+    for side, patch, side_error in ([] if a.all_queues else clean_side_branches(
             repo, data.get("path"), ledger_dir / f"{run_id}.laterais",
-            start_branch):
+            start_branch)):
         if patch:
             log_event({"evento": "lateral_apagada", "branch": side,
                       "patch": patch})
@@ -5510,17 +5661,24 @@ def _main(argv=None):
     # started there, and the return point is the clone before the inheritance merge. The
     # other inherited items still open enter the "in the middle": the return would take
     # their work out too, and then the supervisor stops instead of resetting (C4).
-    inherited = {str(i) for h in inheritance for i in h.get("itens") or []}
+    # Every per-item structure of the loop is keyed by `(queue, id)`: queues
+    # routinely share ids (`CS-1`), and in a `--all` run two of them are two items.
+    inherited = {(a.queue, str(i)) for h in inheritance for i in h.get("itens") or []}
     for i in inherited:
         first[i] = (clone_base, 0)
 
-    def in_the_middle_of(ident, n_before):
+    def label(k):
+        """What the screen and the record call an item: `queue/id` in a `--all`
+        run, the bare id in a single-queue run (as it always was)."""
+        return f"{k[0]}/{k[1]}" if a.all_queues else str(k[1])
+
+    def in_the_middle_of(key, n_before):
         others = []
-        if ident in inherited:
-            others = [f"{o} (inherited from the previous run, still open)"
-                      for o in sorted(inherited - {ident})
+        if key in inherited:
+            others = [f"{label(o)} (inherited from the previous run, still open)"
+                      for o in sorted(inherited - {key})
                       if o not in delivered]
-        return delivered[n_before:] + others
+        return [label(k) for k in delivered[n_before:]] + others
 
     # The outcome of each item in this window, in the order it appeared: it is the
     # "one line per item" list at the end (A4). The item's last outcome wins.
@@ -5531,7 +5689,7 @@ def _main(argv=None):
     costs = {}
 
     def outcome(ident, kind, text):
-        outcomes[ident] = (kind, text)
+        outcomes[(cur, ident)] = (kind, text)
 
     end_reason, end_detail = None, None
     # The 5h quota seen through the `rate_limit_event`s: the start reading of each
@@ -5620,7 +5778,7 @@ def _main(argv=None):
                 "decision to commit per item on a single branch exists to prevent")
             break
 
-        data, error = query_queue(a.queue, repo)
+        cur, data, error = next_item()
         if error:
             end_reason, end_detail = "fila-ilegivel", error
             break
@@ -5631,8 +5789,8 @@ def _main(argv=None):
         # undecidable without an owner): every `reserved` deferral (old name `reservado`).
         # logged once per item per run, so the record says why it never started.
         for skip in data.get("deferred") or []:
-            if reason_alias(skip.get("reason")) == "reserved" and skip.get("id") not in skipped_logged:
-                skipped_logged.add(skip.get("id"))
+            if reason_alias(skip.get("reason")) == "reserved" and (cur, skip.get("id")) not in skipped_logged:
+                skipped_logged.add((cur, skip.get("id")))
                 log_event({"evento": "item_pulado", "id": skip.get("id"),
                           "motivo": "reservado", "detalhe": skip.get("detail")})
         if not data.get("batch"):
@@ -5682,7 +5840,10 @@ def _main(argv=None):
 
         item = data["batch"][0]
         ident = item["id"]
+        key = (cur, ident)
         plan_path = data.get("path")
+        if plan_path not in run_queue_paths:
+            run_queue_paths.append(plan_path)
 
         # Doesn't start an item the 5h quota can't hold: cut in the middle, it
         # wastes what it already spent and leaves the tree half-done.
@@ -5715,15 +5876,15 @@ def _main(argv=None):
                 waits.append(("before the item", ident, reset))
                 # A pause stays `working`: herdr's `blocked` means "needs you", and
                 # this needs nothing from the owner (spec herdr-agent-status, CS-2).
-                herdr_report(f"{a.queue}: paused for 5h quota until "
+                herdr_report(f"{cur}: paused for 5h quota until "
                              f"{wake_at.strftime('%H:%M')}")
                 wait_until(wake_at, on_tick=tick_wait)
                 last_reading, fresh_reading = None, False
                 continue
 
         items += 1
-        attempts[ident] = attempts.get(ident, 0) + 1
-        round_n = attempts[ident]
+        attempts[key] = attempts.get(key, 0) + 1
+        round_n = attempts[key]
 
         if SCREEN.enabled:
             # Block per item: time, id, attempt no., how much of the window
@@ -5731,7 +5892,7 @@ def _main(argv=None):
             if items > 1:
                 print()
             window_total = max((deadline - now).total_seconds(), 1)
-            print(SCREEN.stamp() + " " + SCREEN.c("negrito", ident)
+            print(SCREEN.stamp() + " " + SCREEN.c("negrito", label(key))
                   + (SCREEN.c("amarelo", f" attempt {round_n}/{a.attempts_per_item}")
                      if round_n > 1 else "")
                   + SCREEN.c("cinza", f"   item {items}   ")
@@ -5739,17 +5900,19 @@ def _main(argv=None):
                   + SCREEN.c("cinza", f" {human(remaining)} left"))
             print(SCREEN.c("cinza", "       " + SCREEN.truncate(str(item.get('title')), slack=8)))
         else:
-            print(f"[{datetime.now().strftime('%H:%M')}] {ident} — {item.get('title')} "
+            print(f"[{datetime.now().strftime('%H:%M')}] {label(key)} — {item.get('title')} "
                   f"({human(remaining)} left"
                   + (f", attempt {round_n}/{a.attempts_per_item}" if round_n > 1 else "") + ")")
         before = head_of(tree)
-        first.setdefault(ident, (before, len(delivered)))
+        first.setdefault(key, (before, len(delivered)))
         # CS-11: the item's `decisions` before the round, so the summary lists
         # only the ones this run recorded.
         known_decisions = item_decisions(read_item(plan_path, ident)[0])
         # Fresh per launch: `claude --session-id` refuses a reused one.
         session_id = str(uuid.uuid4())
-        pref = preferences.get(str(ident))
+        # The pre-read runs only for a single queue (a `--all` run has none),
+        # so `preferences` stays keyed by the bare id of THAT queue.
+        pref = None if a.all_queues else preferences.get(str(ident))
         note = preference_note(ident, pref)
         start_event = {"evento": "item_start", "id": ident, "title": item.get("title"),
                        "restante_seg": int(remaining.total_seconds()),
@@ -5759,7 +5922,7 @@ def _main(argv=None):
         if pref:
             start_event["preferencia"] = {"escolha": pref["escolha"],
                                           "fonte": pref["fonte"]}
-            followed[str(ident)] = pref
+            followed[key] = pref
         log_event(start_event)
 
         # herdr label: "<queue>: item <i>/<n> <id>". i = distinct items this run has
@@ -5768,13 +5931,13 @@ def _main(argv=None):
         # if the queue grows and is only an estimate of what is left.
         pos = len(attempts)
         pending_now = ((data.get("totals") or {}).get("por_status") or {}).get("pending") or 0
-        herdr_report(f"{a.queue}: item {pos}/{max(pos - 1 + pending_now, pos)} {ident}")
+        herdr_report(f"{cur}: item {pos}/{max(pos - 1 + pending_now, pos)} {ident}")
         in_flight.update(id=ident, fase="item", tentativa=round_n,
                          session_id=session_id)
         tick()
         limit = (remaining + slack).total_seconds()
         code, killed, spent, output = run_item(
-            a.queue, tree, start_branch, a.with_permissions, limit, log,
+            cur, tree, start_branch, a.with_permissions, limit, log,
             on_launch=launched, session_id=session_id, on_tick=tick, note=note)
         in_flight.pop("pid_filho", None)
 
@@ -5840,7 +6003,7 @@ def _main(argv=None):
         # run it before the last refactor, run it in two halves or skip the
         # validation phase (all three happened on 09/23).
         if run_state == "done" and n_commits == 0:
-            without_commit.append(ident)
+            without_commit.append(key)
             log_event({"evento": "done_sem_commit", "id": ident})
             step("`done` with no commit on the run branch: the "
                   "work, if any, ended up on another branch")
@@ -5875,15 +6038,15 @@ def _main(argv=None):
                     log_event({"evento": "verify_repetido_verde", "id": ident,
                               "motivo_1": verify_reason})
                     emit_telemetry("build_instavel", repo, card=ident,
-                                     run=run_id, fila=a.queue,
+                                     run=run_id, fila=cur,
                                      motivo=verify_reason)
                     step("green on the 2nd try: flaky build, "
                           "recorded in telemetry")
                     unstable = True
             if green:
                 step(f"green ({human(timedelta(seconds=verify_sec))})")
-                hook_files = (changed_hooks(tree, first[ident][0])
-                              if cepa_repo(tree) and ident in first else [])
+                hook_files = (changed_hooks(tree, first[key][0])
+                              if cepa_repo(tree) and key in first else [])
                 left = (deadline + slack - datetime.now()).total_seconds()
                 if hook_files and left < REINSTALL_MIN_SEC:
                     why = (f"{int(left)}s left, under the floor of "
@@ -5937,17 +6100,19 @@ def _main(argv=None):
                             reinstall_failures.append((ident, why))
                             reinstall_broken = True
             else:
-                back = red_returns(ledger_dir, ident) + 1
-                since, n_before = first[ident]
+                back = red_returns(ledger_dir, ident,
+                                   cur if a.all_queues else None) + 1
+                since, n_before = first[key]
                 side_branch, undo_error = undo_item(
                     repo, tree, run_id, ident, since,
-                    in_the_middle=in_the_middle_of(ident, n_before), back=back)
+                    in_the_middle=in_the_middle_of(key, n_before), back=back,
+                    queue=cur if a.all_queues else None)
                 last = back >= MAX_RED_RETURNS or bool(undo_error)
                 new_status = "blocked" if last else "pending"
                 if side_branch:
                     # The reset already took the attempts away; the next one starts from zero.
-                    first.pop(ident, None)
-                    inherited.discard(ident)
+                    first.pop(key, None)
+                    inherited.discard(key)
                     evid = (f"This is return {back} of "
                             f"{MAX_RED_RETURNS}: the item closed `done`, "
                             f"but the full build of the run branch "
@@ -5975,7 +6140,7 @@ def _main(argv=None):
                             f"take the commits off the run branch: "
                             f"{undo_error}")
                 finish_error = finish_item(
-                    a.queue, repo, ident, new_status, evid,
+                    cur, repo, ident, new_status, evid,
                     "the agent delivered, but the project's full test suite "
                     "failed after it, and failed again when the "
                     "item came back to be fixed." if new_status == "blocked"
@@ -5985,6 +6150,7 @@ def _main(argv=None):
                           "lateral": side_branch, "erro": undo_error or finish_error})
                 if side_branch:
                     log_event({"evento": "volta_vermelha", "id": ident,
+                              **({"fila": cur} if a.all_queues else {}),
                               "volta": back, "lateral": side_branch,
                               "motivo": verify_reason, "motivo_2": reason2,
                               "status": new_status})
@@ -6008,23 +6174,24 @@ def _main(argv=None):
         # `blocked` after committing left those commits on the night
         # branch with no build, underneath the next card. They go to the side branch, like
         # those of the exhausted item, and the evidence says where they are.
-        elif run_state == "blocked" and ident in first:
-            since, n_before = first[ident]
+        elif run_state == "blocked" and key in first:
+            since, n_before = first[key]
             if since and head_of(tree) != since:
                 side_branch, undo_error = undo_item(
                     repo, tree, run_id, ident, since,
-                    in_the_middle=in_the_middle_of(ident, n_before), suffix="travado")
+                    in_the_middle=in_the_middle_of(key, n_before), suffix="travado",
+                    queue=cur if a.all_queues else None)
                 finish_error = None
                 if side_branch:
-                    first.pop(ident, None)
-                    inherited.discard(ident)
+                    first.pop(key, None)
+                    inherited.discard(key)
                     reread, _ = read_item(plan_path, ident)
                     ev = str((reread or {}).get("evidence") or "").strip()
                     # The agent's human section survives the re-finish: only
                     # the agents' section gets the supervisor's note.
                     kept = (reread or {}).get("owner_summary") or {}
                     finish_error = finish_item(
-                        a.queue, repo, ident, "blocked",
+                        cur, repo, ident, "blocked",
                         (ev + " " if ev else "") +
                         f"[supervisor] The item's commits, which did not go "
                         f"through the supervisor's build (it only runs after "
@@ -6052,7 +6219,7 @@ def _main(argv=None):
                       f"`{side_branch}` and the run branch went back to "
                       f"{since[:10]}")
         if run_state == "done":
-            delivered.append(ident)
+            delivered.append(key)
         elif run_state == "blocked":
             # The reason goes along: the end-of-run summary is where the owner reads what to do,
             # and on 09/25 it only said "Travados (1)" while the command that
@@ -6072,7 +6239,7 @@ def _main(argv=None):
         elif pending_item:
             outcome(ident, "rota-humana",
                      f"`{run_state}`, waiting on you: {pending_item}")
-        elif run_state == "done" and ident in without_commit:
+        elif run_state == "done" and key in without_commit:
             outcome(ident, "done-sem-commit",
                      "`done` with no commit on the run branch: look for the "
                      "work on another branch")
@@ -6112,7 +6279,7 @@ def _main(argv=None):
         if back_now:
             consecutive_failures += 1
             if run_state == "blocked":
-                consecutive_blocked.append(ident)
+                consecutive_blocked.append(key)
             if consecutive_failures >= a.max_failures:
                 end_reason = "disjuntor"
                 end_detail = (f"{consecutive_failures} items in a row failed to close "
@@ -6124,7 +6291,7 @@ def _main(argv=None):
                 end_reason = "fila-travada"
                 end_detail = (
                     f"{len(consecutive_blocked)} items in a row came out `blocked` "
-                    f"({', '.join(consecutive_blocked)}); the reason for each "
+                    f"({', '.join(label(k) for k in consecutive_blocked)}); the reason for each "
                     "is in the queue's `evidence`")
                 break
             continue
@@ -6133,7 +6300,7 @@ def _main(argv=None):
         # `claude` couldn't reach the API. Gives back the turn, waits for the network to return and
         # resumes the same item — the orphan reservation is claimed by `start`.
         if not progress and network_drop(output):
-            attempts[ident] -= 1
+            attempts[key] -= 1
             consecutive_drops += 1
             dropped_at = datetime.now()
             until_at = deadline - reserve
@@ -6192,7 +6359,7 @@ def _main(argv=None):
                 outcome(ident, "limite-de-uso", "cut off by the account "
                          "usage cap; not the item's fault")
                 # The attempt cut by the ceiling is not the item's: gives back the turn.
-                attempts[ident] -= 1
+                attempts[key] -= 1
                 consecutive_waits += 1
                 wake_at = (reset_at + timedelta(seconds=RESET_MARGIN)
                           if reset_at else None)
@@ -6209,7 +6376,7 @@ def _main(argv=None):
                     step(f"waiting for the reset, resuming {ident} at "
                           f"{wake_at.strftime('%H:%M')}")
                     waits.append(("item cut off", ident, reset_at))
-                    herdr_report(f"{a.queue}: paused for 5h quota until "
+                    herdr_report(f"{cur}: paused for 5h quota until "
                                  f"{wake_at.strftime('%H:%M')}")
                     wait_until(wake_at, on_tick=tick_wait)
                     last_reading, fresh_reading = None, False
@@ -6235,7 +6402,7 @@ def _main(argv=None):
             consecutive_failures = 0
             consecutive_waits = 0
             consecutive_drops = 0
-            done_items.append((ident, run_state, pending_item))
+            done_items.append((key, run_state, pending_item))
             mark = run_state
             if pending_item:
                 mark += " · human route open"
@@ -6244,21 +6411,21 @@ def _main(argv=None):
             step(f"{mark} ({human(timedelta(seconds=spent))})")
 
             if run_state == "blocked":
-                consecutive_blocked.append(ident)
+                consecutive_blocked.append(key)
             else:
                 consecutive_blocked = []
             if len(consecutive_blocked) >= a.max_blocked:
                 end_reason = "fila-travada"
                 end_detail = (
                     f"{len(consecutive_blocked)} items in a row came out `blocked` "
-                    f"({', '.join(consecutive_blocked)}) — the queue is getting stuck "
+                    f"({', '.join(label(k) for k in consecutive_blocked)}) — the queue is getting stuck "
                     "on an outside condition, not on the items' failures. Going on "
                     "would rediscover the same cause on every item; the reason for "
                     "each is in the queue's `evidence`")
                 break
         else:
             consecutive_failures += 1
-            failed.append((ident, run_state, code, killed))
+            failed.append((key, run_state, code, killed))
             reason_text = ("killed by timeout" if killed else
                      "could not even launch `claude`" if code == -2 else
                      f"claude exited {code}" if code else
@@ -6273,16 +6440,17 @@ def _main(argv=None):
                 # commits never went through the build and can't stay underneath
                 # the next card (C4).
                 side_branch, undo_error = None, None
-                since, n_before = first[ident]
+                since, n_before = first[key]
                 if since and head_of(tree) != since:
                     side_branch, undo_error = undo_item(
                         repo, tree, run_id, ident, since,
-                        in_the_middle=in_the_middle_of(ident, n_before), suffix="parado")
+                        in_the_middle=in_the_middle_of(key, n_before), suffix="parado",
+                        queue=cur if a.all_queues else None)
                     log_event({"evento": "tentativas_separadas", "id": ident,
                               "lateral": side_branch, "erro": undo_error})
                     if side_branch:
-                        first.pop(ident, None)
-                        inherited.discard(ident)
+                        first.pop(key, None)
+                        inherited.discard(key)
                 if undo_error:
                     end_reason = "item-preso"
                     end_detail = (
@@ -6291,7 +6459,7 @@ def _main(argv=None):
                         f"run branch ({undo_error}); the next card "
                         "would start on top of them")
                     break
-                block_error = block_item(a.queue, repo, ident, round_n, side_branch)
+                block_error = block_item(cur, repo, ident, round_n, side_branch)
                 if block_error:
                     end_reason = "item-preso"
                     end_detail = (
@@ -6302,7 +6470,7 @@ def _main(argv=None):
                     log_event({"evento": "esgotado", "id": ident, "tentativas": round_n,
                               "bloqueado": False, "erro": block_error})
                     break
-                exhausted.append((ident, round_n))
+                exhausted.append((key, round_n))
                 outcome(ident, "travado",
                          f"taken off the front of the queue (`blocked`) after "
                          f"{round_n} attempt(s) without moving"
@@ -6347,7 +6515,8 @@ def _main(argv=None):
              if limited else ""))
     if outcomes:
         print("\n   " + SCREEN.c("negrito", f"Items ({len(outcomes)}):"))
-        for ident, (kind, text) in outcomes.items():
+        for okey, (kind, text) in outcomes.items():
+            ident = label(okey)
             if SCREEN.enabled:
                 glyph = OUTCOME_GLYPHS.get(kind, ("·", "cinza"))
                 print("     " + SCREEN.c(glyph[1], glyph[0]) + " "
@@ -6375,7 +6544,8 @@ def _main(argv=None):
     if followed:
         print(f"\n   Choices the pre-read found ({len(followed)}) — the agent was told "
               "to follow them:")
-        for ident, pref in followed.items():
+        for fkey, pref in followed.items():
+            ident = label(fkey)
             who = ("your answer at the launch" if pref["fonte"] == "dono"
                    else "the agent's default, nobody answered")
             print(f"     - {ident}: {pref['escolha']} ({who}) · {pref['texto']}")
@@ -6414,8 +6584,9 @@ def _main(argv=None):
         for h in inheritance:
             print(f"   it already contains `{h['branch']}` (inherited at the start): "
                   "merging the run branch brings both")
-    stays = [{"id": ident, "texto": text}
-            for ident, (kind, text) in outcomes.items()
+    shown = {label(okey): v for okey, v in outcomes.items()}
+    stays = [{"id": label(okey), "texto": text}
+            for okey, (kind, text) in outcomes.items()
             if kind in ("travado", "rota-humana", "done-sem-commit")]
     stays += [{"id": side, "texto": f"side branch not deleted, the copy failed: {error}"}
              for side, error in kept_side_branches]
@@ -6464,18 +6635,18 @@ def _main(argv=None):
     if stays:
         # The items already have a line under "Itens"; here only the name, so the same item
         # doesn't show up as two problems (A4).
-        of_items = [f_["id"] for f_ in stays if f_["id"] in outcomes]
+        of_items = [f_["id"] for f_ in stays if f_["id"] in shown]
         print("\n   " + SCREEN.c("negrito", f"Left with you ({len(stays)}):"))
         if of_items:
             print(f"     {', '.join(of_items)} (each one's question comes "
                   "at the end, under \"waiting on you\")")
         for f_ in stays:
-            if f_["id"] not in outcomes:
+            if f_["id"] not in shown:
                 print(f"     - {f_['id']}: {f_['texto']}")
     save_state("esperando-dono" if actions or stays else "encerrado",
                  motivo_fim=end_reason,
                  itens=[{"id": i, "desfecho": t, "texto": x}
-                        for i, (t, x) in outcomes.items()],
+                        for i, (t, x) in shown.items()],
                  acoes=actions, fica_com_voce=stays,
                  custo_usd=cost if costs else None)
     # Final state recorded: a signal from here on (during the analysis) only ends the run,
@@ -6497,6 +6668,10 @@ def _main(argv=None):
             item_states = {}
         # Nobody answered the panel before closing: nobody is at the keyboard,
         # so the end lists instead of waiting another ANSWER_WAIT_SEC.
+        if a.all_queues:
+            # The end questions are per queue (`decide <queue>`); a `--all` run
+            # does not ask them yet (CS-6/CS-7).
+            return 0
         return close_with_owner(repo, a.queue, run_id, item_states, review,
                                wait=ANSWER_WAIT_SEC, already_asked=asked_mid_run,
                                interactive=False if mid_run_silent else None)

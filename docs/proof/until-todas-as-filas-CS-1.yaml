@@ -1,0 +1,46 @@
+schema_version: 2
+card: until-todas-as-filas-CS-1
+verdict: proven             # proven | unproven | needs-human
+reviewed_at: 2026-11-15T11:50:00-03:00
+base_commit: e4753532b21111bf0f23b75eca5ef8f066f3d5c7
+head_commit: ef078dc
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: _main (--all flag, QUEUE nargs=?, both/neither refusals) + query_ready + all_queues_launch"
+      module: common
+      external_observable: true     # stdout and exit code of `cepa until --all ... --dry-run` (surface: cli)
+      substituted_by_double: null   # tests run the real CLI through the `cepa` launcher against a real temp git repo and the real `cepa-plan ready`; only the `claude` binary is faked (far boundary) and it must not be called
+    - class: "tests/test_cepa_until_all.py (new, extended in ef078dc)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway worktree /tmp/proof-until-all-cs1b (detached at ef078dc, removed at the end). Unperturbed: `python3 tests/test_cepa_until_all.py` -> '✓ 8 testes', exit 0 (N=8 tests). Each perturbation applied with sed to common/bin/cepa-until one at a time, test run, file restored with `git checkout HEAD --`. cepa-until is unchanged between c6067cc and ef078dc, so P1-P10 and P12 from the earlier round (all RED at c6067cc against a subset of the same test) carry over; they were not re-run this round."
+      results:
+        - "BASE (common/bin/cepa-until from e475353 + HEAD test) -> RED: '✗ 11 falha(s)' (rc=2 'the following arguments are required: QUEUE'). The test fails before the change."
+        - "P11 `with_ready = list(queues)` (queues with nothing ready also get a header) -> RED, '✗ 1 falha(s)' (survived at c6067cc, now killed)"
+        - "P13 `if rest:` -> `if False:` (nothing-ready footer removed) -> RED, '✗ 1 falha(s)' (survived at c6067cc, now killed)"
+        - "P14 `if not total:` -> `if False:` ('no queue has a ready item' removed) -> RED, '✗ 1 falha(s)' (survived at c6067cc, now killed)"
+        - "P15 `if l.get(\"blocked_by\"):` -> `if False:` ('waits:' line removed) -> RED, '✗ 1 falha(s)' (survived at c6067cc, now killed)"
+        - "Carried from c6067cc (code unchanged, not re-run): P1 QUEUE nargs='?' removed, P2/P3 both/neither refusals, P4 dispatch, P5 --all without --dry-run, P6 queue order, P7 first queue only, P8 exit code, P9 plan ready -> plan queue, P10 item order, P12 group header -> all RED"
+        - "Restored file: git status clean in the throwaway, final unperturbed run '✓ 8 testes'."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; reachability determined by perturbation: the four lines left uncovered at c6067cc (with_ready filter, `if rest:` footer, `if not total:` message, blocked_by waits line) each turn the 8-test run RED (see P11, P13, P14, P15)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff adds a dry-run listing of items read from the repo's own queue files through `cepa plan ready --json`; it parses no input from outside and no changed class is in an input-bearing module (api-rest)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Os quatro pontos que sobreviviam em c6067cc (cabeçalho de fila vazia, rodapé 'nothing ready', mensagem 'no queue has a ready item', linha 'waits:') agora derrubam o teste quando quebrados no código (P11, P13, P14, P15 RED, 1 falha cada). O teste continua vermelho contra o cepa-until da base (11 falhas) e verde no HEAD (8 testes). Os demais perturbações (P1-P10, P12) vêm da rodada anterior, com cepa-until inalterado."

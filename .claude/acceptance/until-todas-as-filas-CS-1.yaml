@@ -1,0 +1,16 @@
+key: until-todas-as-filas-CS-1
+status: complete
+criteria:
+  - id: CS-1
+    text: "`cepa until --all --for 8h --dry-run` lista os itens prontos de todas as filas, agrupados por fila e na ordem do `cepa plan ready`, e sai com 0 sem executar nada"
+    altitude: cli
+    surface: "cepa until --all --for 8h --dry-run (launcher common/bin/cepa -> common/bin/cepa-until): exit code e stdout"
+    test: "tests/test_cepa_until_all.py::test_dry_run_lists_every_queue_in_ready_order (+ test_dry_run_order_is_the_order_of_plan_ready, test_all_and_queue_name_together_are_refused, test_neither_queue_nor_all_is_refused, test_all_without_dry_run_is_refused_until_cs2, test_single_queue_dry_run_unchanged)"
+    layer: "subprocess real de `cepa until` pelo launcher, repo git temporario com filas a e b (1 pronto cada), claude falso que registra chamadas; assert em rc==0, a1 antes de b1 na saida, agrupamento por fila, zero chamadas ao claude, fila intocada, nenhuma branch until/*"
+    evidence: verified
+    run: "python3 tests/test_cepa_until_all.py -> todas as linhas 'ok', '✓ 6 testes'; python3 tests/test_cepa_plan_ready.py -> '✓ cepa-plan ready'"
+    status: complete
+    notes:
+      - "A ordem e comparada com `cepa-plan ready --json` num segundo teste (3 filas, item feito e item aguardando o dono fora da lista)."
+      - "`--all` sem --dry-run e recusado com 2 ate o CS-2; fora do escopo deste criterio, coerente."
+gap: []
