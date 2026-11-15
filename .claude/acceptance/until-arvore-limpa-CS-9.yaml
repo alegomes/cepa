@@ -1,0 +1,18 @@
+key: until-arvore-limpa-CS-9
+status: complete
+diff_range: d129bba..d1338ee
+criteria:
+  - id: CS-9
+    text: "A `queue.yaml.bak` não aparece no `git status`. Red test: `cepa-plan --from-spec` regravando uma fila existente cria `queue.yaml.bak`, e `git status --porcelain --untracked-files=all` não lista esse arquivo. (P3: o .bak vai para o .gitignore; P4: os .bak somem pelo .gitignore.)"
+    altitude: cli
+    surface: "processo real de common/bin/cepa-plan write --from-spec (duas vezes) num repo git temporario com o .gitignore real deste repo; asserts em returncode, existencia da queue.yaml.bak, saida de git status --porcelain --untracked-files=all"
+    test: "tests/test_common_plan.py::test_rewrite_backup_stays_out_of_git_status"
+    layer: "subprocess real de cepa-plan e git, repo temporario; o .gitignore sob teste e a copia do .gitignore do repo (nao uma regra escrita no teste); sem mocks"
+    evidence: verified
+    run: "python3 tests/test_common_plan.py (primeiro plano) -> 166 linhas 'ok', 'all green'; secao do teste: 7 'ok' (1a gravacao; regravacao; .bak criada; status nao lista queue.yaml.bak; arvore limpa; queue.yaml segue rastreavel; plan.yaml.bak do layout antigo tambem some). Arvore do worktree limpa depois."
+    status: complete
+    notes:
+      - "O diff de produto e so o .gitignore (queue.yaml.bak e plan.yaml.bak legado); coerente com P3/P4, que pedem a solucao por .gitignore."
+      - "O teste prova que o .bak existe antes de afirmar que sumiu do status, entao nao passa por vacuidade."
+      - "Nao rodei a suite inteira, por instrucao. Nao removi a regra do .gitignore para ver o teste ficar vermelho."
+gap: []
