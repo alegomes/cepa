@@ -1,0 +1,596 @@
+From 9319da951ea7692a45d7b816e2efce0676a1c715 Mon Sep 17 00:00:00 2001
+From: alegomes <alegomes@gmail.com>
+Date: Fri, 6 Nov 2026 18:06:18 -0300
+Subject: [PATCH 1/4] test CS-1 (tres-portas-c1): red test for the decision
+ count on the passage to ready
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ tests/test_spec_readiness_decision_count.py | 248 ++++++++++++++++++++
+ 1 file changed, 248 insertions(+)
+ create mode 100644 tests/test_spec_readiness_decision_count.py
+
+diff --git a/tests/test_spec_readiness_decision_count.py b/tests/test_spec_readiness_decision_count.py
+new file mode 100644
+index 0000000..17b2a08
+--- /dev/null
++++ b/tests/test_spec_readiness_decision_count.py
+@@ -0,0 +1,248 @@
++#!/usr/bin/env python3
++"""CS-1 of docs/spec/tres-portas-spec-epic.md (item 6 of O2'): when the
++spec-readiness-gate lets a spec through to `ready-to-build` (or an Epic to
++`ready`/`closed`), it shows the owner "N decisões sem veredito neste arquivo",
++counting the list lines of the "Decided without asking" section that carry
++neither `· mantida em`, `· vetada em` nor `· refinada em`.
++
++Driven the way Claude Code drives the hook: the PreToolUse payload on stdin.
++What reaches the owner is the `systemMessage` field of the JSON on stdout
++(exit 0); the same text goes in `additionalContext`, so the agent can repeat it
++in the final report (CS-3).
++
++The count only prints on the PASSAGE to ready: a second Write over a file that
++is already ready on disk stays quiet, otherwise every later edit would repeat it.
++
++Run: python3 tests/test_spec_readiness_decision_count.py
++"""
++
++import json
++import subprocess
++import sys
++import tempfile
++from pathlib import Path
++
++REPO = Path(__file__).resolve().parent.parent
++HOOK = REPO / "common" / "hooks" / "spec-readiness-gate.py"
++
++FAILURES = []
++
++
++def check(name, cond, detail=""):
++    if cond:
++        print(f"  ok  {name}")
++    else:
++        print(f"FAIL  {name}   {detail}")
++        FAILURES.append(name)
++
++
++def run(payload):
++    p = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload),
++                       capture_output=True, text=True)
++    return p.returncode, p.stdout, p.stderr
++
++
++def shown(stdout):
++    """The text shown to the owner (`systemMessage`), or '' when silent."""
++    if not stdout.strip():
++        return ""
++    try:
++        return json.loads(stdout).get("systemMessage", "") or ""
++    except json.JSONDecodeError:
++        return ""
++
++
++def agent_sees(stdout):
++    try:
++        return (json.loads(stdout).get("hookSpecificOutput") or {}).get(
++            "additionalContext", "") or ""
++    except (json.JSONDecodeError, AttributeError):
++        return ""
++
++
++DECISIONS_3 = """## Decided without asking
++- A primeira decisão, que ninguém vetou ainda. Vete aqui se discordar.
++- A segunda decisão, já conferida. Vete aqui se discordar. · mantida em 2026-11-06
++- A terceira decisão, também pendente. Vete aqui se discordar.
++"""
++
++DECISIONS_NONE_PENDING = """## Decided without asking
++- Uma decisão vetada. · vetada em 2026-11-06: fora do ciclo
++- Uma decisão refinada. · refinada em 2026-11-06: só no hook
++"""
++
++
++def spec(status="ready-to-build", decisions=DECISIONS_3):
++    return f"""# Especificação: x
++
++**Status:** {status}
++
++## Como chegamos aqui
++O dono perguntou em 2026-11-06: "quantas decisões ficaram sem veredito?"
++
++## Critérios de sucesso
++
++### CS-1: o hook conta as decisões
++
++**Surface:** event
++**Red test:** o hook imprime a contagem — hoje não imprime.
++
++## Perguntas em aberto
++- [x] Conta só o arquivo? — sim (dono, 2026-11-06).
++
++{decisions}"""
++
++
++def tmp_spec_path():
++    d = Path(tempfile.mkdtemp())
++    (d / "docs" / "spec").mkdir(parents=True)
++    return d / "docs" / "spec" / "x.md"
++
++
++def write_payload(path, content):
++    return {"tool_name": "Write",
++            "tool_input": {"file_path": str(path), "content": content}}
++
++
++def test_passage_to_ready_shows_pending_count():
++    path = tmp_spec_path()          # nothing on disk yet: it is a passage
++    rc, out, err = run(write_payload(path, spec()))
++    msg = shown(out)
++    check("ready-to-build completo sai com 0", rc == 0, f"rc={rc} err={err[:200]}")
++    check("mostra '2 decisões sem veredito' (3 linhas, 1 mantida)",
++          "2 decisões sem veredito" in msg, f"stdout={out[:300]!r}")
++    check("a frase diz que a conta é deste arquivo",
++          "neste arquivo" in msg, msg)
++    check("o agente recebe o mesmo número para repetir no relatório",
++          "2 decisões sem veredito" in agent_sees(out), out[:300])
++
++
++def test_zero_pending_prints_zero():
++    path = tmp_spec_path()
++    rc, out, err = run(write_payload(path, spec(decisions=DECISIONS_NONE_PENDING)))
++    check("zero pendente sai com 0", rc == 0, f"rc={rc} err={err[:200]}")
++    check("imprime '0 decisões sem veredito' em vez de calar",
++          "0 decisões sem veredito" in shown(out), f"stdout={out[:300]!r}")
++
++
++def test_one_pending_is_singular():
++    path = tmp_spec_path()
++    one = DECISIONS_NONE_PENDING + "- Uma pendente.\n"
++    rc, out, _ = run(write_payload(path, spec(decisions=one)))
++    check("uma pendente vira '1 decisão sem veredito'",
++          "1 decisão sem veredito" in shown(out), f"stdout={out[:300]!r}")
++
++
++def test_without_section_says_so():
++    path = tmp_spec_path()
++    rc, out, err = run(write_payload(path, spec(decisions="")))
++    check("spec sem a seção sai com 0 (seção não é obrigatória em spec)",
++          rc == 0, f"rc={rc} err={err[:200]}")
++    check("mostra 'sem seção Decided without asking'",
++          "sem seção Decided without asking" in shown(out), f"stdout={out[:300]!r}")
++
++
++def test_old_section_name_counts():
++    path = tmp_spec_path()
++    old = DECISIONS_3.replace("## Decided without asking", "## Decidido sem perguntar")
++    rc, out, _ = run(write_payload(path, spec(decisions=old)))
++    check("o nome antigo da seção também conta",
++          "2 decisões sem veredito" in shown(out), f"stdout={out[:300]!r}")
++
++
++def test_second_write_on_ready_file_is_quiet():
++    path = tmp_spec_path()
++    path.write_text(spec(), encoding="utf-8")       # already ready on disk
++    rc, out, err = run(write_payload(path, spec() + "\nmais uma linha\n"))
++    check("segundo Write sobre arquivo já pronto sai com 0", rc == 0,
++          f"rc={rc} err={err[:200]}")
++    check("...e não imprime a contagem", "sem veredito" not in out,
++          f"stdout={out[:300]!r}")
++
++
++def test_passage_from_draft_on_disk_prints():
++    path = tmp_spec_path()
++    path.write_text(spec(status="draft"), encoding="utf-8")
++    rc, out, _ = run(write_payload(path, spec()))
++    check("draft no disco -> Write ready imprime",
++          "2 decisões sem veredito" in shown(out), f"stdout={out[:300]!r}")
++
++
++def test_edit_that_flips_status_prints():
++    path = tmp_spec_path()
++    path.write_text(spec(status="draft"), encoding="utf-8")
++    payload = {"tool_name": "Edit", "tool_input": {
++        "file_path": str(path),
++        "old_string": "**Status:** draft",
++        "new_string": "**Status:** ready-to-build"}}
++    rc, out, err = run(payload)
++    check("Edit que troca draft -> ready sai com 0", rc == 0, f"rc={rc} err={err[:200]}")
++    check("...e imprime a contagem do arquivo resultante",
++          "2 decisões sem veredito" in shown(out), f"stdout={out[:300]!r}")
++
++
++def test_draft_and_blocked_are_quiet():
++    path = tmp_spec_path()
++    rc, out, _ = run(write_payload(path, spec(status="draft")))
++    check("draft não imprime contagem", rc == 0 and "sem veredito" not in out,
++          f"rc={rc} stdout={out[:200]!r}")
++    broken = spec().replace("**Surface:** event\n", "")
++    rc, out, err = run(write_payload(path, broken))
++    check("ready bloqueado sai com 2 e não imprime contagem no stdout",
++          rc == 2 and "sem veredito" not in out, f"rc={rc} stdout={out[:200]!r}")
++
++
++EPIC = """# Epic: x
++
++**Status:** {status}
++
++## Who it is for
++O dono do Cepa, que fecha specs sozinho.
++
++## Out of scope
++- Mudar o debrief.
++
++## Outcome metric
++**Baseline:** 7 · **Target:** 0 · **Source:** cepa-doctor
++
++## Value ladder
++| Cycle | Script | Effect on screen | Effect in backend |
++|---|---|---|---|
++| c1 | o dono fecha | a contagem aparece | o hook sai com 0 |
++
++## Invariants
++- Draft nunca bloqueia.
++
++{decisions}"""
++
++
++def test_epic_ready_shows_count():
++    d = Path(tempfile.mkdtemp())
++    (d / "docs" / "epics").mkdir(parents=True)
++    path = d / "docs" / "epics" / "x.md"
++    rc, out, err = run(write_payload(path, EPIC.format(status="ready",
++                                                      decisions=DECISIONS_3)))
++    check("Epic ready sai com 0", rc == 0, f"rc={rc} err={err[:300]}")
++    check("Epic ready mostra '2 decisões sem veredito'",
++          "2 decisões sem veredito" in shown(out), f"stdout={out[:300]!r}")
++    path.write_text(EPIC.format(status="ready", decisions=DECISIONS_3), encoding="utf-8")
++    rc, out, _ = run(write_payload(path, EPIC.format(status="ready",
++                                                    decisions=DECISIONS_3) + "\n"))
++    check("Epic já ready no disco: segundo Write quieto",
++          rc == 0 and "sem veredito" not in out, f"stdout={out[:200]!r}")
++
++
++def main():
++    for name, fn in sorted(globals().items()):
++        if name.startswith("test_") and callable(fn):
++            print(f"\n{name}")
++            fn()
++    print()
++    if FAILURES:
++        print(f"{len(FAILURES)} FAILURE(S): {', '.join(FAILURES)}")
++        sys.exit(1)
++    print("all green")
++
++
++if __name__ == "__main__":
++    main()
+-- 
+2.56.0
+
+
+From f97e75c6a6159517b12dee4041c1d2d1dff4eb4f Mon Sep 17 00:00:00 2001
+From: alegomes <alegomes@gmail.com>
+Date: Fri, 6 Nov 2026 18:07:22 -0300
+Subject: [PATCH 2/4] spec-readiness-gate: show the owner the count of
+ decisions without verdict on the passage to ready (CS-1, tres-portas-c1)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+On the passage of a spec to ready-to-build, or of an Epic to ready/closed,
+the hook prints "N decisões sem veredito neste arquivo" (lines of
+"Decided without asking" without · mantida/vetada/refinada em), "0" when
+none, and "sem seção Decided without asking" when the spec has no section.
+Goes out as systemMessage (owner) and additionalContext (agent). A file
+already ready on disk stays quiet on later edits.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ common/hooks/spec-readiness-gate.py | 106 ++++++++++++++++++++++++----
+ 1 file changed, 91 insertions(+), 15 deletions(-)
+
+diff --git a/common/hooks/spec-readiness-gate.py b/common/hooks/spec-readiness-gate.py
+index efc58cd..c261c0a 100644
+--- a/common/hooks/spec-readiness-gate.py
++++ b/common/hooks/spec-readiness-gate.py
+@@ -84,6 +84,20 @@ Epic screen (`/common:epic`, CS-5 of cycle 1 of the spiral Cepa Epic):
+     pronta` in it is not gated, only `ready-to-build` (or the old
+     `pronta-para-construir`).
+ 
++Decision count on the passage (CS-1 of docs/spec/tres-portas-spec-epic.md,
++item 6 of O2'):
++  - When the screen lets a spec through to `ready-to-build` or an Epic to
++    `ready`/`closed`, the hook tells the owner how many lines of the "Decided
++    without asking" section (or the old "Decidido sem perguntar") carry no
++    verdict: no `· mantida em`, `· vetada em` nor `· refinada em`. Zero prints
++    as "0"; a spec without the section prints "sem seção Decided without
++    asking" (the section stays optional in a spec). Only this file is counted;
++    the repo total belongs to the doctor.
++  - Only on the PASSAGE: if the file on disk is already ready, a later edit
++    stays quiet. The text goes out as JSON on stdout, in `systemMessage` (what
++    the owner sees) and in `additionalContext` (so the agent repeats it in the
++    final report).
++
+ Exit codes:
+   0 -- allowed
+   2 -- blocked (stderr reaches the agent, which fixes it on its own)
+@@ -454,6 +468,77 @@ def block_epic(problems, status="ready"):
+     sys.exit(2)
+ 
+ 
++DECISIONS_SECTION = ("decided without asking", "decidido sem perguntar")
++
++# The verdict marker `cepa-plan verdict` writes at the end of the line.
++VERDICT_RE = re.compile(r"·\s*(?:mantida|vetada|refinada)\s+em\b", re.IGNORECASE)
++
++TOP_ITEM_RE = re.compile(r"^[-*+]\s+(?!\[[ xX]\])(.+)$", re.MULTILINE)
++
++
++def pending_decisions(content: str):
++    """The list lines of "Decided without asking" with no verdict marker, or
++    None when the section does not exist."""
++    body = section(content, DECISIONS_SECTION)
++    if body is None:
++        return None
++    return [v for v in TOP_ITEM_RE.findall(body)
++            if not is_empty(v) and not VERDICT_RE.search(v)]
++
++
++def decision_count_line(content: str) -> str:
++    pending = pending_decisions(content)
++    if pending is None:
++        return ("[spec-readiness-gate] liberado: sem seção Decided without "
++                "asking neste arquivo.")
++    n = len(pending)
++    noun = "decisão" if n == 1 else "decisões"
++    return (f"[spec-readiness-gate] liberado: {n} {noun} sem veredito neste "
++            "arquivo (seção \"Decided without asking\"). Repita esse número "
++            "no relatório final.")
++
++
++def statuses(content: str):
++    status = [clean(v).lower() for v in STATUS_RE.findall(content)]
++    status = [s for s in status if not s.startswith("<")]
++    # The template line "draft | ready-to-build" teaches the format.
++    return [s for s in status if "|" not in s]
++
++
++def ready_claim(content: str, file_path):
++    """The word with which the document claims to be ready, or None."""
++    status = statuses(content)
++    if is_epic(content, file_path):
++        # The Epic Status often shares the line with other fields
++        # (`**Status:** pronta · **Opened on:** ...`): the first word counts.
++        first_words = [re.split(r"\s*[·•]\s*|\s+\*\*|\s+__", s)[0].strip()
++                       for s in status]
++        return next((s for s in first_words if s in EPIC_READY), None)
++    return next((s for s in status if s in SPEC_READY), None)
++
++
++def was_ready_on_disk(file_path) -> bool:
++    if not isinstance(file_path, str) or not file_path:
++        return False
++    try:
++        before = Path(file_path).read_text(encoding="utf-8", errors="replace")
++    except OSError:
++        return False
++    return ready_claim(before, file_path) is not None
++
++
++def allow_ready(content: str, file_path):
++    """The screen passed: on the passage to ready, show the decision count."""
++    if not was_ready_on_disk(file_path):
++        line = decision_count_line(content)
++        print(json.dumps({
++            "systemMessage": line,
++            "hookSpecificOutput": {"hookEventName": "PreToolUse",
++                                   "additionalContext": line},
++        }, ensure_ascii=False))
++    sys.exit(0)
++
++
+ def main():
+     raw = sys.stdin.read()
+     try:
+@@ -480,29 +565,20 @@ def main():
+         if content is None:
+             sys.exit(0)          # without seeing the content, nothing is blocked
+ 
+-    status = [clean(v).lower() for v in STATUS_RE.findall(content)]
+-    status = [s for s in status if not s.startswith("<")]
+-    # The template line "draft | ready-to-build" teaches the format.
+-    status = [s for s in status if "|" not in s]
++    claimed = ready_claim(content, file_path)
++    if claimed is None:
++        sys.exit(0)          # a draft runs free; only the claim is gated
+ 
+     if is_epic(content, file_path):
+-        # The Epic Status often shares the line with other fields
+-        # (`**Status:** pronta · **Opened on:** ...`): the first word counts.
+-        first_words = [re.split(r"\s*[·•]\s*|\s+\*\*|\s+__", s)[0].strip()
+-                     for s in status]
+-        if not any(s in EPIC_READY for s in first_words):
+-            sys.exit(0)      # a draft runs free
+-        claimed = next(s for s in first_words if s in EPIC_READY)
+         problems = epic_problems(content)
+         if claimed in EPIC_OUTCOME:
+             problems += outcome_problems(content, claimed == EPIC_CLOSED)
+         if problems:
+             block_epic(problems, claimed)
++        if claimed in EPIC_OUTCOME:
++            allow_ready(content, file_path)
+         sys.exit(0)
+ 
+-    if not any(s in SPEC_READY for s in status):
+-        sys.exit(0)          # a draft runs free; only the claim is gated
+-
+     problems = []
+ 
+     origin = section(content, "como chegamos aqui")
+@@ -545,7 +621,7 @@ def main():
+         problems.append(f"... e mais {len(open_questions) - 5} pergunta(s) em aberto")
+ 
+     if not problems:
+-        sys.exit(0)
++        allow_ready(content, file_path)
+ 
+     lines = "\n".join(f"   · {p}" for p in problems)
+     print(
+-- 
+2.56.0
+
+
+From 20b346a93b11c43f59d4a6af1a01effb7ef0da0f Mon Sep 17 00:00:00 2001
+From: alegomes <alegomes@gmail.com>
+Date: Fri, 6 Nov 2026 18:09:30 -0300
+Subject: [PATCH 3/4] test CS-1 (tres-portas-c1): cover Epic closed and
+ template lines left out of the count
+
+Gaps named by completion-auditor (Epic closed untested) and proof-reviewer
+(the is_empty filter in pending_decisions survived perturbation).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ tests/test_spec_readiness_decision_count.py | 24 +++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/tests/test_spec_readiness_decision_count.py b/tests/test_spec_readiness_decision_count.py
+index 17b2a08..c1bf119 100644
+--- a/tests/test_spec_readiness_decision_count.py
++++ b/tests/test_spec_readiness_decision_count.py
+@@ -232,6 +232,30 @@ def test_epic_ready_shows_count():
+           rc == 0 and "sem veredito" not in out, f"stdout={out[:200]!r}")
+ 
+ 
++def test_epic_closed_shows_count():
++    d = Path(tempfile.mkdtemp())
++    (d / "docs" / "epics").mkdir(parents=True)
++    path = d / "docs" / "epics" / "x.md"
++    impact = "## Impact\n**Measured value:** 0 · **Measured on:** 2026-11-06\n\n"
++    closed = EPIC.format(status="closed", decisions=impact + DECISIONS_3)
++    rc, out, err = run(write_payload(path, closed))
++    check("Epic closed completo sai com 0", rc == 0, f"rc={rc} err={err[:300]}")
++    check("Epic closed mostra '2 decisões sem veredito'",
++          "2 decisões sem veredito" in shown(out), f"stdout={out[:300]!r}")
++    path.write_text(closed, encoding="utf-8")
++    rc, out, _ = run(write_payload(path, closed + "\n"))
++    check("Epic já closed no disco: segundo Write quieto",
++          rc == 0 and "sem veredito" not in out, f"stdout={out[:200]!r}")
++
++
++def test_template_lines_do_not_count():
++    path = tmp_spec_path()
++    with_template = DECISIONS_3 + "- <decisão que você tomou sozinho>\n- n/a\n"
++    rc, out, _ = run(write_payload(path, spec(decisions=with_template)))
++    check("linha de modelo (<...>) e 'n/a' não entram na conta",
++          "2 decisões sem veredito" in shown(out), f"stdout={out[:300]!r}")
++
++
+ def main():
+     for name, fn in sorted(globals().items()):
+         if name.startswith("test_") and callable(fn):
+-- 
+2.56.0
+
+
+From bf1d523069dfe0db81cb2c9473e878b59be693f9 Mon Sep 17 00:00:00 2001
+From: alegomes <alegomes@gmail.com>
+Date: Fri, 6 Nov 2026 18:11:38 -0300
+Subject: [PATCH 4/4] proof+acceptance tres-portas-c1-CS-1: PROVEN and COMPLETE
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .claude/acceptance/tres-portas-c1-CS-1.yaml | 31 +++++++++++++++
+ docs/proof/tres-portas-c1-CS-1.yaml         | 42 +++++++++++++++++++++
+ 2 files changed, 73 insertions(+)
+ create mode 100644 .claude/acceptance/tres-portas-c1-CS-1.yaml
+ create mode 100644 docs/proof/tres-portas-c1-CS-1.yaml
+
+diff --git a/.claude/acceptance/tres-portas-c1-CS-1.yaml b/.claude/acceptance/tres-portas-c1-CS-1.yaml
+new file mode 100644
+index 0000000..b947cc6
+--- /dev/null
++++ b/.claude/acceptance/tres-portas-c1-CS-1.yaml
+@@ -0,0 +1,31 @@
++key: tres-portas-c1-CS-1
++status: complete
++criteria:
++  - id: CS-1a
++    text: "Write de docs/spec/x.md em ready-to-build: 2 pendentes / 0 pendentes / sem seção / segundo Write quieto"
++    altitude: event
++    surface: "hook spec-readiness-gate, payload PreToolUse no stdin, systemMessage no stdout, exit 0"
++    test: tests/test_spec_readiness_decision_count.py (test_passage_to_ready_shows_pending_count, test_zero_pending_prints_zero, test_without_section_says_so, test_second_write_on_ready_file_is_quiet)
++    layer: event
++    evidence: verified
++    run: "python3 tests/test_spec_readiness_decision_count.py -> 24 checks ok, 0 falhas, 'all green'; python3 tests/test_spec_readiness_gate.py -> 54 ok, 'all green' (regressão)"
++    verdict: complete
++  - id: CS-1b
++    text: "Epic em ready (titulo do criterio)"
++    altitude: event
++    surface: "hook, docs/epics/x.md Status ready"
++    test: test_epic_ready_shows_count
++    layer: event
++    evidence: verified
++    run: "mesma execução, 24 checks ok"
++    verdict: complete
++  - id: CS-1c
++    text: "Epic em closed (titulo do criterio)"
++    altitude: event
++    surface: "hook, docs/epics/x.md Status closed, com Impact preenchido"
++    test: test_epic_closed_shows_count
++    layer: event
++    evidence: verified
++    run: "mesma execução, 24 checks ok; test_epic_closed_shows_count: exit 0, systemMessage '2 decisões sem veredito', segundo Write sobre closed no disco quieto"
++    verdict: complete
++status_note: "Lacuna anterior (CS-1c) fechada pelo commit 20b346a. O teste dirige o payload via stdin com Epic closed e asserta o número e o silêncio no segundo Write; sem asserção enfraquecida. test_template_lines_do_not_count também verde."
+diff --git a/docs/proof/tres-portas-c1-CS-1.yaml b/docs/proof/tres-portas-c1-CS-1.yaml
+new file mode 100644
+index 0000000..86e2c04
+--- /dev/null
++++ b/docs/proof/tres-portas-c1-CS-1.yaml
+@@ -0,0 +1,42 @@
++schema_version: 2
++card: tres-portas-c1-CS-1
++verdict: proven
++reviewed_at: 2026-11-06T00:00:00-03:00
++base_commit: b06eee5
++head_commit: 20b346a
++issue_type: Task
++scope:
++  changed_classes:
++    - class: "common/hooks/spec-readiness-gate.py (decision count on passage to ready)"
++      module: common-hooks
++      external_observable: true       # hook run as subprocess, JSON on stdout
++      substituted_by_double: null     # the test runs the real hook as a subprocess with the payload on stdin
++  base_commit_resolved: true
++levels:
++  l3_load_bearing:
++    technique: perturbation
++    pit:
++      status: n/a                     # Python harness, no PIT
++      results: []
++    perturbation:
++      status: pass
++      results:
++        - "unperturbed HEAD 20b346a: python3 tests/test_spec_readiness_decision_count.py -> exit 0, 'all green'"
++        - "previously SURVIVING mutant re-run: pending_decisions line 486 `if not is_empty(v) and not VERDICT_RE.search(v)` -> `if not VERDICT_RE.search(v)`: exit 1, FAIL 'linha de modelo (<...>) e n/a nao entram na conta' (count 4 instead of 2). Now RED."
++        - "Epic branch (line 579 allow_ready -> pass): exit 1, 2 FAIL: 'Epic closed mostra 2 decisoes sem veredito', 'Epic ready mostra ...' (closed now covered)"
++        - "earlier run (head f97e75c) RED: verdict regex drops/never matches, singular/plural, off by one, missing-section line, passage check inverted/always true/was_ready_on_disk, spec branch without allow_ready, systemMessage/additionalContext keys renamed, old section name dropped (17 perturbations). Valid for HEAD: git diff --stat f97e75c 20b346a -- common/hooks/spec-readiness-gate.py is empty (20b346a only touched the test)."
++  l2_coverage:
++    status: pass
++    uncovered_lines: []
++    run: "no coverage tool in repo; every changed line of common/hooks/spec-readiness-gate.py was perturbed (18 perturbations across two runs, all RED), so the test reaches each through the real hook process (subprocess, payload on stdin). Re-run at HEAD 20b346a: python3 -I tests/test_spec_readiness_decision_count.py -> exit 0, 'all green'"
++  l4_adversarial_input:
++    status: n/a
++    reason: "the diff only adds a count printed by a hook over a spec file already accepted by the gate; it opens no new input parsing surface beyond a regex over list lines of a markdown section"
++    findings: []
++  bugfix_regression_red_at_base:
++    status: n/a
++    run: "not a Bug card; red-at-base for the test: detached worktree at HEAD with common/hooks/spec-readiness-gate.py checked out from b06eee5 -> python3 tests/test_spec_readiness_decision_count.py: 12 FAIL, exit 1; at HEAD exit 0"
++existing_tests_at_head:
++  - "python3 tests/test_spec_readiness_gate.py -> 'all green'"
++  - "python3 tests/test_epic_readiness_gate.py -> 'OK'"
++routing_reason: "Same shape as the settled precedent write-mode-gate-libera-git-info-exclude (Python hook, real subprocess, no double, no coverage tool in repo): reachability of each changed line is shown by perturbation. Test is red at base b06eee5 (12 FAIL), green at HEAD (exit 0), 18 perturbations RED including the previously surviving mutant (now killed) and the Epic closed/ready branch, both pre-existing suites green. Computed verdict: PROVEN."
+-- 
+2.56.0
+
