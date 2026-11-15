@@ -1,0 +1,59 @@
+schema_version: 2
+card: until-arvore-limpa-CS-6
+verdict: proven               # proven | unproven | needs-human
+reviewed_at: 2026-11-15T12:40:00-03:00
+base_commit: c6f3cec
+head_commit: 18b13de1bd29b15f6211608b53ee363fc83de934
+issue_type: Task
+rounds: 2                     # round 1 at 072cd1e (unproven); round 2 at 18b13de (this file's levels)
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: NotAttempted (+ FIRST hint), clone_state_blocking_commit, commit_run_records (guard before git add), note_refused_commit (not_attempted branch), commit_run_end screen message"
+      module: common
+      external_observable: true     # screen, .review.md, index and git history of the clone after the cli run (surface: cli)
+      substituted_by_double: null   # tests run the real cepa-until as a subprocess against a real temp git repo; only `claude` is faked (far boundary); the fake creates the merge/rebase/cherry-pick/revert/detached state inside the clone during the run
+    - class: "common/bin/cepa-until :: launch-time collect caller message (loose records of dead runs)"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+    - class: "tests/test_cepa_until_clean_tree.py (eb6d6e9 + cc6a02b: test_cs6_*)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "round 2: throwaway detached worktree /tmp/proof-cs6-r2 at 18b13de (removed at the end). Green first: the 7 test_cs6_* functions called directly (merge, rebase, rebase-apply, launch collect mid-rebase, cherry-pick, revert, detached HEAD), FAILURES 0. Each perturbation applied to common/bin/cepa-until by exact string replacement (asserted to match once), the covering test_cs6_* run, file restored with `git checkout -- common/bin/cepa-until`. `git diff 072cd1e..18b13de -- common/bin/cepa-until` touches only the FIRST constant, the rebase-apply label and the two screen lines; the rest of round 1's perturbations (P2, P3, P5, P6, P7, P9, P10) stay as recorded."
+      results:
+        - "P4 rebase-apply removed from the marker list -> RED: 8 failures, all on the rebase-apply state (new commit created, index differs, screen lacks reason and command). Round 1: survived."
+        - "P11 note_refused_commit `if not_attempted:` disabled (.review.md says 'refused by git') -> RED: 12 failures (5 states x 'run não commitou, não que o git recusou' and 'o que fazer antes do comando', plus 2). Round 1: survived."
+        - "P12 launch collect caller `isinstance(error, NotAttempted)` disabled -> RED: 2 failures in test_cs6_launch_collect_does_not_commit_mid_rebase ('diz por que não recolheu', 'não diz que o git recusou'). Round 1: survived."
+        - "P12b launch collect caller NotAttempted case prints the git-refused text (refusal_reason(error)) -> RED: 2 failures, same two checks."
+        - "H1 FIRST hint dropped from the end-of-run screen line -> RED: 2 failures ('a tela diz o que fazer antes do comando' on merge and on detached HEAD; the full 5-state set was not run for this one, the two states run are enough to turn it red)."
+        - "H2 FIRST hint dropped from the launch collect line -> RED: 1 failure ('a largada diz por que não recolheu', the check that requires 'Conclude or abort')."
+        - "P1 guard call removed (blocked = None) -> RED: failures on the index byte-for-byte check, 'nada do run foi para o índice', screen and .review.md checks (count not captured, the output was tailed)."
+        - "P8 guard moved after `git add` -> RED: failures on the index byte-for-byte check and 'nada do run foi para o índice' on merge and rebase (count not captured, the output was tailed)."
+        - "cc6a02b (tests of round 2 with the code of 072cd1e, before the fix 18b13de): 6 failures, all 'a tela diz o que fazer antes do comando' on the screen checks (merge, rebase, rebase-apply, cherry-pick, plus the remaining states and the launch collect hint); the tests were red for the missing hint and are green at 18b13de."
+        - "Round 1 (072cd1e), kept: P1 RED 22; P2 RED 3; P3 RED 5; P4 SURVIVED; P5 RED 3; P6 RED 6; P7 RED 5; P8 RED 10; P9 RED 5; P10 RED 5; P11 SURVIVED; P12 SURVIVED; base eb6d6e9 RED 22. All three survivors are closed in round 2 above."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; the three lines found uncovered in round 1 (rebase-apply marker, .review.md not_attempted text, launch collect NotAttempted message) are now each turned RED by P4, P11, P12/P12b at 18b13de; the two hint lines by H1, H2"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only decides whether to call git and prints a message; it parses no input from outside and no changed class is in an input-bearing module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Round 2 closes the three survivors of round 1: removing the rebase-apply marker, disabling the .review.md not-attempted note and disabling or reversing the launch-time collect message each turn test_cs6_* RED at 18b13de. The two things 18b13de added (the 'Conclude or abort first' hint on the end-of-run line and on the launch collect line) are each guarded: dropping either goes RED. Spot-check of P1 (guard removed) and P8 (guard after git add) still RED. Every changed line of cepa-until has a perturbation that went RED at the cli surface, with the real binary and only claude faked. Known imprecision, not gating: the failure counts of P1, P8 and H1 were not captured (output tailed); the RED state itself was observed."
+round_1:
+  verdict: unproven
+  reviewed_at: 2026-11-15T12:00:00-03:00
+  head_commit: 072cd1e54932fbc30113a42cd245880c23451c2b
+  record: "see levels.l3_load_bearing.perturbation.results, last entry, for the round 1 perturbation table (P1..P12); original routing: three changed lines survived their perturbation (rebase-apply marker, .review.md not-attempted text, launch-time collect message), so UNPROVEN. Closing asked for: (1) a rebase-apply case in _CS6_STATES; (2) a .review.md assertion for 'did not commit'; (3) a test where the launch-time collect meets a clone with a marker. All three were delivered by cc6a02b."
