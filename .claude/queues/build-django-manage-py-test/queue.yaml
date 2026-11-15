@@ -1,0 +1,71 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/build-django-manage-py-test.md (5 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-15
+
+schema_version: 2
+mode: single-track
+queue: build-django-manage-py-test
+source: docs/spec/build-django-manage-py-test.md (5 critérios de sucesso; ordem
+  herdada do texto)
+items:
+- id: CS-1
+  title: '`manage.py test` verde, em qualquer formato de comando, grava SUCCESS
+    no `.claude/last-build.json`'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: dado
+    o payload de PostToolUse de um Bash com comando `uv run python manage.py test`
+    (e, parametrizado, `python manage.py test` e `docker compose exec web python
+    manage.py test`), saída `Found 12 test(s).\nRan 12 tests in 0.312s\n\nOK` e
+    sem exit code, rodar `capture-build-result.py` pela entrada padrão escreve `.claude/last-build.json`
+    com `status: SUCCESS`. Hoje o arquivo não é escrito.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: '`manage.py test` com teste falhando ou com erro grava FAILURE'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: o mesmo
+    payload com saída `Ran 12 tests in 0.4s\n\nFAILED (failures=1, errors=2)` grava
+    `status: FAILURE`. Hoje o arquivo não é escrito.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: '`Ran 0 tests` grava EMPTY, com ou sem rótulo no comando'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: comando
+    `python manage.py test` com saída `Ran 0 tests in 0.000s\n\nOK`, e comando `python
+    manage.py test app.tests.NaoExiste` com saída `Ran 0 tests in 0.000s\n\nNO TESTS
+    RAN`, gravam `status: EMPTY` nos dois casos. Hoje o arquivo não é escrito.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: '`python -m unittest` e `django-admin test` são reconhecidos igual'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: comandos
+    `python3 -m unittest discover` e `django-admin test --settings=proj.settings`
+    com saída `Ran 5 tests in 0.1s\n\nOK` gravam `status: SUCCESS`. Hoje o arquivo
+    não é escrito.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: depois de um `manage.py test` verde, a trava libera o `git commit`
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repositório
+    git temporário com `pyproject.toml`, um `.py` alterado e `.claude/last-build.json`
+    em STALE, rodar `capture-build-result.py` com o payload verde do CS-1 e depois
+    `gate-advance.py` com o payload de PreToolUse de `git commit -m x` termina sem
+    bloqueio (exit 0). Hoje o `gate-advance.py` bloqueia com "build is STALE".'
+  status: pending
+  blocked_by: []
+  human_pending: null
