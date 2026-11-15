@@ -25,9 +25,36 @@ items:
     status --porcelain` do clone lista a `queue.yaml`, o `.jsonl` e o `.review.md`
     do run; o teste exige a saída vazia e um commit novo no topo que contém exatamente
     esses três caminhos.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Return 1 of 2 resumed: cherry-picked the side branch until/2026-11-14-0954-vermelho-CS-1
+    (8df2517->c579aa0, 04c9437->eedf8ad). The red full build had 2 failures: tests/test_queue_rename.py
+    asserted the OLD contract (clone queue dirty after the run), updated to assert
+    queue.yaml and .jsonl committed (41939b3); tests/test_default_yes_inject.py
+    ''raiz fora do repo'' was red on base 4f1c14f too: the root <tmp>/common has
+    the system TMPDIR as grandparent and _cmdmeta.bases() scanned a loose plugin
+    copy left at $TMPDIR/tmp.PllR47ZTT3/common (created 2026-11-14 10:11); root
+    now nested one level deeper (41939b3). Proof gate first UNPROVEN (survivors:
+    no --only, --no-verify); added 2 tests in 65fb796 (owner''s staged file stays
+    out and staged; refusing pre-commit hook respected). Gates: completion-auditor
+    COMPLETE (.claude/acceptance/until-arvore-limpa-CS-1.yaml), proof-reviewer PROVEN
+    at 65fb796 (docs/proof/until-arvore-limpa-CS-1.yaml; P6 literal --only removal
+    is an equivalent mutant since git commit with pathspecs defaults to --only,
+    P6b --include goes RED). Ran individually green: test_cepa_until_clean_tree.py,
+    test_queue_rename.py, test_default_yes_inject.py, test_cepa_until.py (by auditor).
+    Full build left to the supervisor. Code is on the run branch until/2026-11-14-0954;
+    the leftover TMPDIR copy was not deleted.'
+  decisions:
+  - texto: No fim normal do run (e no fim por limite de uso), o cepa-until faz um
+      commit local na branch do clone só com a fila, o registro e a revisão do run,
+      sem push e sem pular hooks
+    commit: 8df251754af797f4c9f3db457b0f9b783c1695a4
+  - texto: O teste do hook default-yes passou a usar uma raiz falsa um nível mais
+      funda, para não varrer a pasta temporária do sistema, onde uma cópia solta
+      do plugin fazia o teste falhar
+    commit: 41939b3771fda10f578d66938216c6cf16a6bc2b
+  head_commit: 3577692f6a8e8dcb2753ed7599fdba071415f119
 - id: CS-2
   title: O commit do run não leva arquivos que o dono deixou sujos na main
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -35,9 +62,27 @@ items:
     `notas.txt` modificado e um `rascunho.md` em stage no clone antes do run, ao
     fim do run o commit novo não contém nenhum dos dois, e `git status --porcelain`
     ainda mostra os dois exatamente como estavam (um modificado, outro em stage).'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Behavior was already in place from CS-1 (commit_run_records: git add
+    of the run paths + git commit --only, c579aa0/65fb796); CS-2 pins the spec scenario
+    at the CLI surface with test_cs2_owners_modified_and_staged_files_stay_as_they_were
+    in tests/test_cepa_until_clean_tree.py (b86300b): tracked notas.txt modified
+    unstaged + new rascunho.md staged, run with --dirty-ok; asserts the run commit
+    holds neither, porcelain stays '' M notas.txt / A  rascunho.md'', index (ls-files
+    -s) and disk contents unchanged. Gates: completion-auditor COMPLETE (.claude/acceptance/until-arvore-limpa-CS-2.yaml),
+    proof-reviewer PROVEN at b86300b (docs/proof/until-arvore-limpa-CS-2.yaml; 5
+    perturbations in a throwaway worktree all RED: add -A + no --only, no --only,
+    add -A alone, reset after commit, checkout -- . before add). Ran: tests/test_cepa_until_clean_tree.py
+    green (27 checks). No production code changed. Full build left to the supervisor;
+    code is on the run branch until/2026-11-14-0954.'
+  head_commit: 18e7f52881ca5bdafcf4be2ddec877be9684d3a6
+  decisions:
+  - texto: O critério já era cumprido pelo código do CS-1; o item virou só um teste
+      novo que reproduz o cenário da especificação (um arquivo modificado e outro
+      em stage) e prova que os dois ficam intactos
+    commit: b86300bc1b9eb89101885b47bc440bdf01f7d302
 - id: CS-3
   title: Ctrl+C, SIGTERM e limite de uso também terminam com o commit
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -46,9 +91,34 @@ items:
     parada por limite de uso) e, depois que o processo sai, exigir `git status --porcelain`
     sem nenhum caminho de `.claude/queues/<fila>/` e o `.jsonl` com `run_interrompido`
     dentro do último commit.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Interrupt handler of cepa-until now makes the run''s commit (commit_run_end:
+    queue + .jsonl + .review.md, git commit --only, SIGTERM/SIGINT ignored while
+    git runs); a signal after the final state (end analysis / owner questions) commits
+    too; quota end already committed since CS-1 (test_quota_end_also_commits_the_record).
+    Commits: 886f92b (fix + tests SIGINT/SIGTERM mid 2nd item, signal during analysis),
+    9d4c09c (test: 2nd signal during a slow pre-commit hook; mutant exits 130, no
+    commit, leaves .git/index.lock), 0233bcd (dropped the once-guard, unobservable
+    per proof: a second call finds the paths clean). Red at base 18e7f52 (15 failures).
+    Gates: completion-auditor COMPLETE at 886f92b (.claude/acceptance/until-arvore-limpa-CS-3.yaml;
+    later commits add a test and remove a guard, criterion coverage unchanged);
+    proof-reviewer UNPROVEN at 886f92b (SIG_IGN survivor) -> NEEDS-HUMAN at 9d4c09c
+    (once-guard) -> PROVEN at 0233bcd (docs/proof/until-arvore-limpa-CS-3.yaml,
+    5 perturbations all RED). Ran green: tests/test_cepa_until_clean_tree.py, tests/test_cepa_until_dead_supervisor.py,
+    tests/test_queue_rename.py. Full build left to the supervisor; code is on the
+    run branch until/2026-11-14-0954. Leftover throwaway /private/tmp/proof-cs3-r2
+    belongs to run until/2026-11-14-0953, not touched.'
+  head_commit: 43daca5b4372add3b39147eb19ef53df959248fa
+  decisions:
+  - texto: Ctrl+C e SIGTERM fazem o mesmo commit do fim normal (fila, registro e
+      revisão), e um sinal durante a análise final também commita; um segundo sinal
+      no meio do commit é ignorado para não deixar o git pela metade
+    commit: 0233bcd3c97428eca20f57ea2e0bab7478ded8e0
+  - texto: 'A trava que impedia uma segunda tentativa de commit saiu: a segunda
+      tentativa encontra tudo já commitado e não faz nada'
+    commit: 0233bcd3c97428eca20f57ea2e0bab7478ded8e0
 - id: CS-4
   title: A largada recolhe registros soltos de runs mortos de qualquer fila
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -57,9 +127,42 @@ items:
     (pid inexistente), lançar `cepa-until <fila>`; o teste exige um commit de recolha
     com os caminhos de `outra` antes do primeiro item, e que a largada não recuse
     por árvore suja.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Launch of cepa-until now collects, before the dirt guard, loose run
+    records (until/*.jsonl, until/*.review.md) of any queue in both layouts plus
+    that queue''s modified queue file, in one commit ''until: collect records of
+    dead runs (<queues>)'' via commit_run_records (git add + commit --only, no --no-verify);
+    run_start records ''recolha'' {commit, filas, caminhos}. Skipped: queue with
+    no loose record (owner''s edit stays dirt), queue with a live run on this host,
+    record from another host without run_end; deleted records are never collected;
+    --dry-run only reports. Commits: ef4aa17 (tests, RED at 43daca5: 11 failures),
+    1bf5f98 (fix in common/bin/cepa-until: RUN_PATH, _record_of_live_elsewhere,
+    loose_records_of_dead_runs, collect block in _main), 88601a0 (tests for .review.md
+    and deleted record, killing proof survivors P8/P9), 901136c (gate artifacts).
+    Flipped the last check of tests/test_cepa_until.py::test_plan_of_another_queue_dirtied_by_the_live_run_is_not_dirt
+    (dead supervisor diff is now collected, not refused). Gates: completion-auditor
+    COMPLETE (.claude/acceptance/until-arvore-limpa-CS-4.yaml, at 1bf5f98; 88601a0
+    only adds tests); proof-reviewer UNPROVEN at 1bf5f98 (survivors P8 review.md
+    alternative, P9 deletion skip) -> PROVEN at 88601a0 (docs/proof/until-arvore-limpa-CS-4.yaml).
+    Ran green: tests/test_cepa_until_clean_tree.py, tests/test_cepa_until.py, tests/test_cepa_until_dead_supervisor.py.
+    Not covered: git refusing the collect commit (CS-5 territory), rename branch
+    of the -z parser. Full build left to the supervisor; code is on the run branch
+    until/2026-11-14-0954. Throwaway worktrees /tmp/proof-cs4, /tmp/proof-cs4b,
+    /tmp/proof-cs4c removed.'
+  head_commit: 901136c59a625f318ce55196980d38d2e85d17bb
+  decisions:
+  - texto: A largada só recolhe uma fila quando ela tem um registro de run solto;
+      uma fila editada à mão sem registro solto continua sendo mudança do dono e
+      a largada recusa como antes
+    commit: 1bf5f98be822cb248cf1f21ac255b9e39b1d1e1d
+  - texto: Registro de run de outra máquina que não terminou não é recolhido, porque
+      o run pode estar vivo lá; e um registro apagado do disco nunca vira apagamento
+      no commit
+    commit: 1bf5f98be822cb248cf1f21ac255b9e39b1d1e1d
+  - texto: Com --dry-run a largada só diz o que recolheria, sem commitar
+    commit: 1bf5f98be822cb248cf1f21ac255b9e39b1d1e1d
 - id: CS-5
   title: Se o git recusar o commit, o run avisa com o motivo e o comando, sem forçar
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -68,9 +171,26 @@ items:
     de saída que teria sem o hook, a tela final e o `.review.md` trazem a linha
     do motivo e o comando `git commit` exato para o dono, nenhum commit novo é criado
     e nenhuma chamada a `git` traz `--no-verify`.'
-  status: pending
+  status: blocked
   blocked_by: []
   human_pending: null
+  evidence: 'This is return 2 of 2: the item closed `done`, but the full build of
+    the run branch (`tests/run-all.sh`) exited 1, and the 2nd build exited 1. Output
+    in the `.log` of run 2026-11-14-0954. The commits of every attempt are in `until/2026-11-14-0954-vermelho-CS-5-v2`
+    and the run branch went back to 901136c59a. Marked `blocked`: the item already
+    came back with the note and went red again. The card in Jira may have moved
+    to Review before the build — check it.'
+  decisions:
+  - texto: Quando o git recusa o commit do fim do run, o cepa-until escreve o motivo
+      e o comando no fim do .review.md, criando o arquivo se a análise não rodou
+    commit: bd96753f76fd96dd5cc1808b28a515e1b5f34f81
+  - texto: 'Quando o git recusa o commit do fim do run, o cepa-until não força (nunca
+      usa --no-verify) e não muda o código de saída: mostra na tela e escreve no
+      .review.md o motivo e o comando git exato para o dono commitar à mão'
+    commit: e6bfb8b3c99e330f8be7438efd0ca340e75af0ba
+  owner_summary:
+    impede: the agent delivered, but the project's full test suite failed after
+      it, and failed again when the item came back to be fixed.
 - id: CS-6
   title: Com a main no meio de um merge ou rebase, o run não commita e avisa
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios

@@ -24,9 +24,34 @@ items:
     com "ção" atravessando o byte 1024, seguidos de Enter. O `evidence` do item
     no `queue.yaml` termina com os 1.500 bytes intactos. Hoje o Enter é engolido
     ou a leitura falha com "an accent arrived half-way", e o texto não chega.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-14-0953: a3e503c (readline loaded once when
+    stdin is a tty, in _read_line; test_cs1_long_pasted_answer_with_accents_reaches_the_item,
+    pty decide with 1,500 bytes, ''ção'' straddling byte 1024), 09dfdb4+6d89030
+    (timed end-of-run path _timed_input: ICANON+ECHO off before the prompt, termios
+    restored in finally before input(); test_cs1_long_answer_also_arrives_on_the_timed_wait,
+    incl. echo-once check), e506def (test_cs1_timed_wait_turns_the_line_mode_off_before_the_prompt),
+    b2c1c83 (gate artifacts). RED before fix: decide test item stayed blocked, Enter
+    swallowed at 1024 bytes; timed test NoAnswer. Gates: pair-reviewer APPROVE (a3e503c;
+    its caveat on the timed path led to 09dfdb4); completion-auditor COMPLETE at
+    e506def (.claude/acceptance/campo-de-resposta-CS-1.yaml); proof-reviewer PROVEN
+    at e506def (docs/proof/campo-de-resposta-CS-1.yaml; P1-P5 red, P1/P3 by hang
+    under timeout 120), after two UNPROVEN rounds that drove 6d89030 and e506def.
+    Tests run: tests/test_cepa_until_decide.py full file green; tests/test_cepa_until.py
+    had 1 timing failure (test_a_broken_or_slow_herdr_does_not_change_the_run) under
+    load, green twice in isolation, unrelated to the change. The decide test checks
+    the owner''s text ends right before cepa-plan responde''s fixed trailer (''.
+    O item voltou de''). Untested fallbacks: tcgetattr failure, readline ImportError.
+    Out of scope: CS-2..CS-6 (arrows test, editor key, lossless ''?'', empty editor).
+    Code is on the overnight branch; full build belongs to the supervisor.'
+  head_commit: b2c1c837ef0e4ebdb50ae06abbfbd9d1aea42370
+  decisions:
+  - texto: 'a resposta longa colada também chega inteira nas perguntas do fim de
+      um run, não só no cepa-until decide: o terminal sai do modo de linha antes
+      de a pergunta aparecer e volta ao normal depois'
+    commit: 6d89030e421c81b76abd960c2b820ebd486eef72
 - id: CS-2
   title: setas e Home/End editam a linha em qualquer campo de texto
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -36,9 +61,23 @@ items:
     choice" da leitura prévia grava `>abcd!` como escolha. Hoje o texto gravado
     traz as sequências de escape das setas (`\x1b[D`, `\x1b[H`, `\x1b[F`) misturadas
     às letras.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Código já estava no branch: o import readline do CS-1 (a3e503c) é o
+    que faz setas e Home/End editarem a linha. Este item fixa o comportamento com
+    2 testes em pty (7288dfd): tests/test_cepa_until_decide.py::test_cs2_arrows_and_home_end_edit_anything_to_add
+    (decide, ''Anything to add'', evidence termina com ''>abcd!'') e ::test_cs2_arrows_and_home_end_edit_your_choice_of_the_pre_read
+    (leitura prévia, caminho com espera, escolha ''>abcd!''). Verde em HEAD; vermelho
+    contra a3e503c^ (gravava ''abd\x1b[Dc\x1b[H>\x1b[F!''). Gates: acceptance COMPLETE
+    (.claude/acceptance/campo-de-resposta-CS-2.yaml), proof PROVEN (docs/proof/campo-de-resposta-CS-2.yaml,
+    head 7288dfd; perturbar o import readline deixa os 4 checks RED). Ficou de fora:
+    suíte completa (do supervisor). Código no branch until/2026-11-14-0953.'
+  head_commit: 42c86dac400e3f36349e4e96d9cde8c14ae24abb
+  decisions:
+  - texto: 'Não escrevi código novo para as setas: o readline carregado no item
+      anterior já resolve; só acrescentei os testes que garantem isso nos dois campos'
+    commit: 7288dfda8cd43ff503480920cb5a7252cd767b9a
 - id: CS-3
   title: a tecla `[v]` do menu abre o editor e o texto salvo vira a resposta, com
     as quebras de linha
@@ -49,9 +88,39 @@ items:
     the item back to the queue". O `evidence` do item contém "linha 1\nlinha 2"
     com a quebra e o item volta para `pending`. Hoje `v` cai em "is not one of the
     options".'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-14-0953: 324de4b (cepa-until decide: chip
+    ''[v] write in the editor'' after [t], v in valid, same destination as [t];
+    edit_in_editor() opens $VISUAL > $EDITOR > vi via sh -c git-style on a temp
+    file with id/title/question in # lines, dropped on read; cepa-plan answer --multiline
+    keeps line breaks, passed only when the text has a newline; menu chip expectation
+    updated in test_decide_on_terminal_draws_one_card_per_question), 21e715a (menu
+    check requires on_tty to have consumed the [v] trigger), b757d23 (test_cs3_the_editor_header_lines_do_not_reach_the_answer).
+    Tests: test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer
+    RED before 324de4b (v fell into ''is not one of the options'', item stayed blocked).
+    Gates: pair-reviewer APPROVE; completion-auditor COMPLETE (.claude/acceptance/campo-de-resposta-CS-3.yaml,
+    14e5b38, at 21e715a); proof-reviewer PROVEN round 3 at b757d23 (docs/proof/campo-de-resposta-CS-3.yaml,
+    4144082): P1-P7 RED, round 1 UNPROVEN (header filter P7 survived) drove b757d23,
+    round 2 NEEDS-HUMAN (L4 skipped) closed by round 3 L4 with 10 hostile editor
+    contents, no crash or corruption. NOTE for next agents: in tests/test_cepa_until_decide.py
+    check() only appends to FAILURES; under pytest a failing check PASSES; run the
+    file via python3 tests/test_cepa_until_decide.py (whole file green at b757d23,
+    5 min) or importlib. Neighbors green via main: test_cepa_queue_ready_and_decide_queue.py,
+    test_cepa_until_launch_measure.py, test_cepa_plan_answer_waiver.py. Left out:
+    CS-4 (v typed in text fields), CS-5 (? for unreadable bytes; today an invalid
+    byte from the editor becomes U+FFFD), CS-6 (empty/failed editor today goes silently
+    to ''later'', no message). Known: a line of the answer starting with # is dropped
+    (git-style, by design); --multiline strips leading indentation per line; the
+    answer is not protected if the [y/N] follow-up times out on the timed path (same
+    as [t]). Code is on the overnight branch; full build belongs to the supervisor.'
+  head_commit: 4144082eb43d4b22ed3564f11dea0a04aa923f2b
+  decisions:
+  - texto: a resposta escrita no editor guarda as quebras de linha por uma opção
+      nova do registro de respostas, usada só quando o texto tem mais de uma linha;
+      respostas de uma linha seguem gravadas como antes
+    commit: 324de4b1c7177d89076701e35aaacddd3e22d3e5
 - id: CS-4
   title: digitar só `v` em "Anything to add" ou "Why" abre o editor
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -59,9 +128,33 @@ items:
     mesmo editor falso, num pty o dono aperta `s` no menu e digita `v` e Enter em
     "Anything to add". O `evidence` termina com "linha 1\nlinha 2", não com "v".
     O mesmo vale para `d` seguido de `v` em "Why". Hoje grava a letra `v` literal.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-14-0953: e6274c8 (cepa-until decide: a lone
+    v/V, after strip, at ''Why'' (after d) or ''Anything to add'' (after s/n) is
+    replaced by edit_in_editor''s text; both prompts now say ''[Enter skips, v opens
+    the editor]''; test line ~146 updated for the new prompt), 79feaf3 + c1b1609
+    (capital V tests at Anything to add after n, and at Why). Tests: test_cs4_v_in_anything_to_add_opens_the_editor,
+    test_cs4_v_in_why_opens_the_editor (RED before e6274c8: evidence got ''. v''),
+    test_cs4_capital_v_after_no_also_opens_the_editor, test_cs4_capital_v_in_why_also_opens_the_editor.
+    Gates: pair-reviewer APPROVE; completion-auditor COMPLETE at e6274c8 (.claude/acceptance/campo-de-resposta-CS-4.yaml,
+    3ccf4bd); proof-reviewer PROVEN round 3 at c1b1609 (docs/proof/campo-de-resposta-CS-4.yaml):
+    P1-P4 RED with P3 per line; round 1 UNPROVEN (lower() untested) drove 79feaf3,
+    round 2 UNPROVEN (Why line alone) drove c1b1609; L4 14 hostile cases clean.
+    Neighbors green: test_cepa_queue_ready_and_decide_queue.py, test_cepa_until_resume_on_answer.py,
+    test_cepa_until_launch_measure.py (18 passed); CS-1/CS-2/CS-3 and the 13 decide
+    tests using ''Anything to add'' green via importlib. Run tests/test_cepa_until_decide.py
+    with python3, not pytest (check() only records). Left out: CS-5, CS-6 (empty/failed
+    editor at these prompts silently counts as skipped). Known: a literal one-letter
+    comment ''v'' can no longer be written. Code is on the overnight branch; full
+    build belongs to the supervisor.'
+  head_commit: 05d5dcd5bf156f4c2fae0fc88a940ba0e476501e
+  decisions:
+  - texto: nos campos 'Why' e 'Anything to add' a pergunta agora avisa que digitar
+      v abre o editor, e V maiúsculo também abre; com isso não dá mais para gravar
+      só a letra v como comentário
+    commit: e6274c8ab92b791dbd2a299a4e3b610c3ebb4546
 - id: CS-5
   title: uma linha com byte ilegível é mostrada com `?` e o dono confirma, sem perder
     o texto
@@ -71,9 +164,37 @@ items:
     A tela mostra "n?ão vira checklist" e pergunta "Use this text? [Y/n]". Com Enter,
     o `evidence` do item contém "n?ão vira checklist". Com `n`, o campo é pedido
     de novo. Hoje a tela diz "could not read that line" e o texto se perde.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-14-0953: 819c2b8 (read_line: stdin reconfigured
+    with errors=surrogateescape, each unreadable byte becomes ''?'', screen shows
+    ''read as: <text>'' and asks ''Use this text? [Y/n]''; Enter keeps it, n asks
+    the field again with ''ok, type it again''; old UnicodeDecodeError branch kept
+    as fallback; test_invalid_byte_on_terminal_does_not_crash_decide replaced by
+    the CS-5 tests, as the spec states), 4e7f8de (refusal = answer starting with
+    n after lower(); tests for N and não), gate artifacts commit after it. Tests
+    (tests/test_cepa_until_decide.py): test_cs5_unreadable_byte_is_shown_as_question_mark_and_enter_keeps_it,
+    test_cs5_n_at_the_confirmation_asks_the_field_again, test_cs5_capital_n_at_the_confirmation_also_asks_again,
+    test_cs5_nao_spelled_out_at_the_confirmation_also_asks_again; RED before 819c2b8
+    (screen said ''could not read that line'', item stayed blocked). Whole decide
+    file green at 819c2b8 via python3 (464 ok, 5 min); 4 cs5 tests green at 4e7f8de.
+    Gates: pair-reviewer APPROVE (819c2b8); completion-auditor COMPLETE at 819c2b8
+    (.claude/acceptance/campo-de-resposta-CS-5.yaml; 4e7f8de only widens the refusal
+    and adds tests); proof-reviewer PROVEN round 2 at 4e7f8de (docs/proof/campo-de-resposta-CS-5.yaml):
+    P1-P7 RED, round 1 UNPROVEN (lower() and synonyms uncovered) drove 4e7f8de;
+    L4 7 hostile pty cases clean. Known: a timeout at the confirmation loses the
+    typed line (NoAnswer propagates, same as other prompts); a confirmation starting
+    with a stray byte keeps the text; a stray byte at the menu shows read-as then
+    falls into the invalid-option path; editor text with invalid bytes still becomes
+    U+FFFD (not in CS-5). Left out: CS-6. Run the decide file with python3, not
+    pytest. Code is on the overnight branch; full build belongs to the supervisor.'
+  head_commit: 65520c1520f921916768078ad44312b90f5b7395
+  decisions:
+  - texto: quando a linha tem um caractere ilegível, qualquer resposta que comece
+      com n (n, N, no, não) recusa o texto lido e pede o campo de novo; Enter ou
+      outra resposta aceita o texto com ?
+    commit: 4e7f8dec654b06d048bb8d1dd127bf82cc1ff56b
 - id: CS-6
   title: editor salvo vazio ou fechado com erro não grava nada
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -85,3 +206,15 @@ items:
   status: pending
   blocked_by: []
   human_pending: null
+  evidence: 'This is return 1 of 2: the item closed `done`, but the full build of
+    the run branch (`tests/run-all.sh`) exited 1, and the 2nd build exited 1. Output
+    in the `.log` of run 2026-11-14-0953. The commits of every attempt are in `until/2026-11-14-0953-vermelho-CS-6`
+    and the run branch went back to 65520c1520. The item went back to `pending`:
+    reuse the side branch (`git cherry-pick` or `git merge` inside the attempt)
+    or redo it; the supervisor''s build judges the result. Disabling or deleting
+    the failing test does not count as a fix.'
+  decisions:
+  - texto: quando o editor fecha com erro, o aviso diz o código de saída antes de
+      'nothing written in the editor'; quando salva vazio, só o aviso; nos dois
+      casos o mesmo menu volta
+    commit: 587708a94574df63b88d99fcdc4044d60eb96ee5

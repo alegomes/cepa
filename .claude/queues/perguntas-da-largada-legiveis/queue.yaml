@@ -251,9 +251,36 @@ items:
     apertar `?` numa pergunta do painel deixa o item igual no `queue.yaml` e acrescenta
     uma linha ao arquivo de feedback com alvo `cepa-until`, o id do item e o texto
     da pergunta; hoje a tela responde que `?` não é uma das opções.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Return 1 of 2. Side branch until/2026-11-14-0956-vermelho-CS-6 fast-forwarded
+    onto the run branch (5066b1c merge of until/2026-11-13-0731 with CS-1..CS-5,
+    d7b1c22 the ? key in cepa-until decide records the badly written question in
+    the feedback ledger with target cepa-until + item id + question text and leaves
+    the item unchanged, 4754a92 gate artifacts). Gates from attempt 1 reused, code
+    unchanged since: completion-auditor COMPLETE .claude/acceptance/perguntas-da-largada-legiveis-CS-6.yaml;
+    proof-reviewer PROVEN docs/proof/perguntas-da-largada-legiveis-CS-6.yaml (base
+    5066b1c, head d7b1c22). Red build cause: the only failure in both supervisor
+    builds was tests/test_default_yes_inject.py ''raiz fora do repo não injeta'',
+    also red at base 4f1c14f without CS-6: its outside-repo root was <TMPDIR>/<x>/common,
+    bases() scans the grandparent = TMPDIR, and a leftover copy of common/ at TMPDIR/tmp.PllR47ZTT3
+    (mktemp -d at 10:11 during attempt 1, likely a proof tree) made /common:doctor
+    resolve. Fix 859b59c: root moved to <tmp>/<x>/plugins/common; test passes with
+    the leftover present; leftover deleted afterwards. Tests run: test_cepa_until_unclear_key,
+    test_cepa_until_decide, test_cepa_until_legend_per_key, test_cepa_until_route_kind_label,
+    test_cepa_queue_ready_and_decide_queue, test_default_yes_inject, test_common_drain_plan:
+    all green. Full suite left to the supervisor. Code is on the overnight branch.'
+  decisions:
+  - texto: trouxe para o ramo desta noite o trabalho da noite de 13/11 (CS-1 a CS-5),
+      que ainda não estava na main, porque o CS-6 mexe no mesmo painel; ao levar
+      este ramo para a main, aquele vai junto
+    commit: 5066b1c0d7a03de0f1709e595daf1ca81fd840de
+  - texto: o teste que confere que uma instalação fora do repositório não ativa
+      a política passou a montar essa instalação dentro da própria pasta temporária,
+      para que uma cópia esquecida na pasta temporária do sistema não o deixe vermelho
+    commit: 859b59c197f61f11b4d329e449e159a648dac56c
+  head_commit: 859b59c197f61f11b4d329e449e159a648dac56c
 - id: CS-7
   title: depois do `?`, a pergunta reescrita aparece no mesmo bloco em até 60 segundos
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -263,7 +290,57 @@ items:
     a trazer a pergunta nova; hoje não existe reescrita.'
   status: pending
   blocked_by: []
-  human_pending: null
+  human_pending: 'Aceitar ou recusar a dispensa de common/hooks/_ownertext.py (sem-cobertura):
+    o filtro de jargão deixa passar caminho de pasta, nome de função e URL na pergunta
+    reescrita'
+  evidence: 'Commits 30930f5 (cepa-until decide: after ?, route reader rewrites
+    the question once with UNCLEAR_READER_PROMPT, tarefa reescrever-pergunta, pergunta_mal_escrita,
+    ceiling UNCLEAR_REWRITE_SEC=60; recorded via new cepa-plan reword-route --replace;
+    same item block re-shows question + menu; second ? does not call the reader;
+    CS-6 tests set CEPA_UNTIL_LEITOR=off; docs/cepa-cli.md), ccf1da3 (tests for
+    the two proof survivors: 60 s ceiling, same-question refusal), d1da1c8 (gate
+    artifacts + waiver proposal). New test file tests/test_cepa_until_unclear_rewrite.py,
+    red at base 859b59c. pair-reviewer OK-WITH-NOTES (not applied, left out as cosmetic:
+    the kind label and the recommendation/instruction lines above the question are
+    not refreshed after the rewrite; the ''rewriting'' note shows even with the
+    reader off). completion-auditor COMPLETE .claude/acceptance/perguntas-da-largada-legiveis-CS-7.yaml.
+    proof-reviewer NEEDS-HUMAN docs/proof/perguntas-da-largada-legiveis-CS-7.yaml:
+    L3 8/8 perturbations red; L4 ran 36 hostile reader outputs + a hung reader (cut
+    at 60.7 s), queue never corrupted, no raw control chars; finding F1 (low): shared
+    jargon filter common/hooks/_ownertext.py lets a folder path without extension,
+    a snake_case function name and a URL through, so such a question gets recorded.
+    Pre-existing, not touched by CS-7. Waiver PROPOSAL .claude/waivers/sem-cobertura--common-hooks-ownertext-py.yaml
+    (status proposta) for the owner. Tests run: test_cepa_until_unclear_rewrite,
+    test_cepa_until_unclear_key, test_cepa_until_route_rewrite, test_cepa_until_route_kind_label,
+    test_cepa_until_route_rule, test_cepa_plan_finish_route, test_commands_english,
+    test_cepa_until_decide, test_commands_catalog: all green. Full suite left to
+    the supervisor. Code is on the overnight branch. Left out: CS-8 (line saying
+    the rewrite failed).'
+  route_kind: open-question
+  owner_question: 'Entrego a reescrita da pergunta com o filtro de palavras técnicas
+    como está hoje? Recomendo sim: o furo é antigo e vale corrigir à parte'
+  owner_summary:
+    pedido: depois do ponto de interrogação, reescrever na hora a pergunta que o
+      dono não entendeu
+    pronto: a pergunta nova aparece no mesmo bloco em até um minuto e fica gravada
+      na fila
+    impede: o filtro de palavras técnicas, que já existia, deixa passar caminho
+      de pasta, nome de função e endereço de site na pergunta reescrita
+    se_sim: o trabalho é entregue como está e o filtro vira um item separado
+    se_nao: o trabalho espera o filtro ser endurecido antes de ser entregue
+  decisions:
+  - texto: 'o segundo ponto de interrogação no mesmo item não chama o leitor de
+      novo: registra e deixa o item para depois'
+    commit: 30930f556acf54cf7442a7976eaa56d420928a96
+  - texto: só item com pendência aberta tem a pergunta reescrita; item já entregue
+      ou sem pendência segue só registrando a pergunta como mal escrita
+    commit: 30930f556acf54cf7442a7976eaa56d420928a96
+  - texto: uma reescrita igual à pergunta que o dono não entendeu conta como não
+      reescrita e não muda a fila
+    commit: 30930f556acf54cf7442a7976eaa56d420928a96
+  - texto: a reescrita substitui tipo, pergunta e o efeito do sim e do não, nunca
+      o texto da pendência, o status nem a evidência
+    commit: 30930f556acf54cf7442a7976eaa56d420928a96
 - id: CS-8
   title: se a reescrita falha, ou no segundo `?` do mesmo item, o item fica para
     depois e a largada segue
@@ -273,9 +350,32 @@ items:
     linha dizendo que a pergunta não foi reescrita e que o item fica para depois,
     passa ao item seguinte e lista o item em "for later" no fecho do painel; hoje
     não existe esse caminho.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 59799b4 (decide: failed rewrite or second ? prints one warning
+    line, item stays for later, panel goes on; close_panel names for-later ids via
+    later_names()), 8ffa493 (closing check tightened, pair-reviewer note 3), bbb62a1
+    (failure_reason(): drops Cc/Cf/Cs, folds whitespace, cuts at 200; fixes proof
+    L4 finding of raw ESC/BEL/NUL from cepa-plan reword-route output), 2a4cb46 (gate
+    artifacts). New test tests/test_cepa_until_unclear_fallback.py (pty case with
+    a reader hung 300 s, cut at the 60 s ceiling; 4 in-process cases), red at base
+    d1da1c8 (7 checks). pair-reviewer OK-WITH-NOTES (notes 1-2 cosmetic, not applied:
+    two adjacent ''if for_later'' blocks; second-? line only exercised in plain
+    mode). completion-auditor COMPLETE .claude/acceptance/perguntas-da-largada-legiveis-CS-8.yaml.
+    proof-reviewer PROVEN docs/proof/perguntas-da-largada-legiveis-CS-8.yaml at
+    bbb62a1 (P1-P8 red; L4 hostile reword-route output clean). Tests run: unclear_fallback,
+    unclear_rewrite, unclear_key, cepa_until_decide, commands_english, commands_catalog:
+    green. Full suite left to the supervisor. Code is on the overnight branch.'
+  head_commit: 2a4cb462c97874671087b0bcc7912b109a3bb74c
+  decisions:
+  - texto: o fecho do painel passa a listar pelo nome (só o código do item) tudo
+      o que ficou para depois, não só a contagem; vale para qualquer item deixado
+      para depois, não só o do ponto de interrogação
+    commit: bbb62a15acc23ddb01e0817f7bf59ceae5bf18f2
+  - texto: o motivo da falha da reescrita aparece na tela limpo de caracteres de
+      controle e cortado em 200 caracteres
+    commit: bbb62a15acc23ddb01e0817f7bf59ceae5bf18f2
 - id: CS-9
   title: as escolhas da leitura prévia aparecem na moldura do painel, sem linha
     mais larga que o terminal
@@ -286,9 +386,42 @@ items:
     a linha `N/M · <id>` da moldura e traz os rótulos "Choice", "Agent''s default"
     e o menu de teclas; hoje o texto sai numa linha de mais de 80 colunas e sem
     menu.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Attempt 2 of 2. Reused side branch until/2026-11-14-0956-vermelho-CS-9
+    by cherry-pick, unchanged: 4cc3762 (was a71a69a: ask_preferences renders inside
+    the Panel frame with ''N/M · id'' top, labels Choice / Agent''s default, key
+    menu; Panel._wrap width-1; panel_note wraps; item skips empty title), bb9a59a
+    (was 160e786: tests), 59f4d84 (was 4b490af: gates), e81cbc1 (gate artifacts
+    repointed to the new shas, git diff 160e786 bb9a59a empty). Diagnosis of the
+    red build: the two supervisor builds (14:21, 14:51) failed only herdr-timing
+    checks in tests/test_cepa_until.py, test_cepa_until_quota.py and test_cepa_prove.py
+    (first herdr report or the release missing, ''slow run'' 4.2s vs 10.1s), different
+    checks each time, none in files CS-9 touched; three cepa-until runs (0953, 0954,
+    0956) were running full suites on the same machine, and the fake herdr gets
+    a 1 s timeout (HERDR_TIMEOUT_SEC). Reruns here with CS-9 applied, one at a time:
+    test_cepa_until.py rc=0 (3m54s), test_cepa_until_quota.py rc=0 (also rc=0 at
+    base), test_cepa_until_preference_panel, test_cepa_until_decide, test_cepa_until_unclear_rewrite,
+    test_cepa_until_unclear_fallback all rc=0. Gates: completion-auditor COMPLETE
+    .claude/acceptance/perguntas-da-largada-legiveis-CS-9.yaml; proof-reviewer PROVEN
+    docs/proof/perguntas-da-largada-legiveis-CS-9.yaml (limit stated there: key-menu
+    perturbation not re-run at the last round). No board (no board-flow.yaml). Full
+    suite left to the supervisor; code is on the overnight branch. Left out: hardening
+    the 1 s herdr timeout in tests against a loaded machine (outside CS-9).'
+  decisions:
+  - texto: a tela das escolhas da leitura prévia mantém as teclas de hoje (Enter
+      fica com o padrão do agente, uma linha digitada vira a escolha do dono); as
+      teclas s, n e t ficam para o próximo item
+    commit: a71a69aafafb0177ee8d8f08967b0dd529171308
+  - texto: a moldura do painel passou a quebrar o texto uma coluna antes, para nenhuma
+      linha passar da largura do terminal; isso vale também para os cartões das
+      perguntas do fim do run
+    commit: a71a69aafafb0177ee8d8f08967b0dd529171308
+  - texto: a quebra de linha do painel passou a deixar uma coluna para a borda em
+      todas as caixas do painel, não só nas escolhas da leitura prévia
+    commit: 4cc3762b9e6f701e4a5d916d3e659577dbf9448f
+  head_commit: e81cbc1b62d9a68d2e9dfeda365050ece1ce7a1d
 - id: CS-10
   title: na escolha da leitura prévia, `s` ou Enter aceita o padrão, `n` exige uma
     linha com o que fazer no lugar, `t` grava uma resposta livre
@@ -298,9 +431,31 @@ items:
     do registro do run a escolha "não: <pergunta>. Em vez disso: usar a data da
     guia" com `fonte` "dono", e responder `n` com a linha vazia volta ao menu sem
     gravar; hoje qualquer texto digitado vira a escolha inteira e não existe `n`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits d2d5cd7 (cepa-until ask_preferences: pre-read choice answered
+    by key; s accepts default with fonte dono, Enter keeps default fonte padrao,
+    n asks a line and records ''não: <pergunta>. Em vez disso: <linha>'', t records
+    a free line, empty follow-up or loose text goes back to the menu with nothing
+    recorded; largada event gains escolhas [id, pergunta, escolha, fonte]) and 273fc10
+    (gate artifacts). New test tests/test_cepa_until_preference_keys.py, red at
+    base e81cbc1 (19 failures). Adapted tests/test_cepa_until_decide.py (free answer
+    now via t) and tests/test_cepa_until_launch_measure.py (answer by s). pair-reviewer
+    OK-WITH-NOTES (not applied: aliases sim/yes/não beyond s/n, kept for parity
+    with the route menu; unbounded re-ask loop only matters for a stub that never
+    stops). completion-auditor COMPLETE .claude/acceptance/perguntas-da-largada-legiveis-CS-10.yaml.
+    proof-reviewer PROVEN docs/proof/perguntas-da-largada-legiveis-CS-10.yaml (7/7
+    perturbations red; Enter line and aliases exercised but not perturbed one by
+    one). Tests run: preference_keys, preference_panel, launch_measure, commands_english,
+    the 29 pre_read/launch/preference cases of test_cepa_until_decide: all green.
+    Full suite left to the supervisor. Code is on the overnight branch.'
+  head_commit: 273fc1055a3182a9f1de6e1ecd402c93b4364a89
+  decisions:
+  - texto: 'Na escolha da largada, texto digitado solto não vira mais a escolha:
+      a tela diz que não é uma opção e pergunta de novo; s conta como resposta do
+      dono, Enter continua como padrão do agente'
+    commit: d2d5cd72a28d43dafc83b500166a29ca508c205e
 - id: CS-11
   title: a recusa de `cepa-plan answer` a um texto que pede esclarecimento aponta
     a tecla `?`
