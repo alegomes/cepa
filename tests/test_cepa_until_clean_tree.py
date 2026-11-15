@@ -1690,8 +1690,12 @@ def test_cs8_run_does_not_push():
 
 def main():
     print("cepa-until — árvore limpa no fim do run\n")
+    # Names on the command line run only those tests (the proof perturbs one
+    # behavior and re-runs the test that covers it, without the whole file).
+    wanted = set(sys.argv[1:])
     for given_name, fn in sorted(globals().items()):
-        if given_name.startswith("test_") and callable(fn):
+        if (given_name.startswith("test_") and callable(fn)
+                and (not wanted or given_name in wanted)):
             print(f"{given_name}:")
             fn()
     print()
