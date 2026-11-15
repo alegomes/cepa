@@ -779,6 +779,68 @@ def query_queue(name, repo, max_items=1):
         return None, f"`cepa-plan queue` did not return JSON ({e})"
 
 
+def query_ready(repo):
+    """`cepa-plan ready --json`: the ready items of every single-track queue, in
+    the order `ready` lists them. Returns (data, error)."""
+    try:
+        p = subprocess.run(
+            [sys.executable, str(CEPA_PLAN), "ready", "--repo", str(repo),
+             "--json"], capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        return None, "`cepa-plan ready` did not answer within 60s"
+    if p.returncode != 0:
+        return None, (p.stderr or p.stdout or "").strip() or \
+            f"`cepa-plan ready` exited {p.returncode}"
+    try:
+        return json.loads(p.stdout), None
+    except json.JSONDecodeError as e:
+        return None, f"`cepa-plan ready` did not return JSON ({e})"
+
+
+def all_queues_launch(a, repo, now, deadline):
+    """`cepa until --all` (spec until-todas-as-filas). CS-1: the plan of the run,
+    with `--dry-run`: the ready items of every queue, queue by queue in the order
+    of `cepa plan ready`, and inside a queue the recorded order. Nothing runs,
+    nothing is marked, no branch is created. Executing the plan is CS-2: until it
+    exists a real `--all` is refused, instead of running nothing in silence."""
+    if not a.dry:
+        print("cepa-until: --all only shows the run plan for now (add "
+              "--dry-run). Running items across queues is not built yet; "
+              "`cepa until <queue>` runs one queue", file=sys.stderr)
+        return 2
+    data, error = query_ready(repo)
+    if error:
+        print(f"cepa-until: could not read the queues — {error}", file=sys.stderr)
+        return 2
+    queues = data.get("filas") or []
+    with_ready = [q for q in queues if q.get("prontos")]
+    total = sum(len(q["prontos"]) for q in with_ready)
+    lbl = lambda r: SCREEN.c("cinza", r)  # noqa: E731
+    print(SCREEN.c("negrito", "cepa-until") + " · " + SCREEN.c("ciano", "--all")
+          + f" · {repo.name} · until "
+          + SCREEN.c("negrito", deadline.strftime('%d/%m %H:%M'))
+          + f" ({human(deadline - now)})")
+    print(lbl("  plan   : ") + f"{total} ready item(s) in {len(with_ready)} of "
+          f"{len(queues)} queue(s), queue by queue in `cepa plan ready` order")
+    for q in with_ready:
+        ready = q["prontos"]
+        print("\n" + lbl("queue ") + SCREEN.c("ciano", str(q["queue"]))
+              + f" · {len(ready)} ready of {q.get('pendentes', len(ready))} pending")
+        for l in ready:
+            print(f"  {l['posicao']:>3}. {l['id']} — "
+                  + SCREEN.truncate(str(l.get("title") or ""), slack=10))
+            if l.get("blocked_by"):
+                print(lbl(f"       waits: {', '.join(map(str, l['blocked_by']))} "
+                          "(runs before it in this run)"))
+    rest = [str(q["queue"]) for q in queues if not q.get("prontos")]
+    if rest:
+        print("\n" + lbl(f"  nothing ready: {', '.join(rest)}"))
+    if not total:
+        print("\nno queue has a ready item")
+    print("\n(--dry-run: nothing was executed)")
+    return 0
+
+
 # How much of a blocked item's `evidence` the end-of-run summary shows. The command the
 # owner needs to run tends to be at the end of the text ("I left X for you to
 # run"), so the cut keeps the beginning AND the end, not just the beginning.
@@ -4832,6 +4894,7 @@ def _main(argv=None):
     ap = _clihelp.Parser(
         prog="cepa until",
         usage="cepa until <queue> (--for DURATION | --until HH:MM) [options]\n"
+              "       cepa until --all (--for DURATION | --until HH:MM) --dry-run\n"
               "       cepa until <subcommand> ...",
         description=(
             "One item per subprocess: each item starts a fresh `claude -p`\n"
@@ -4855,6 +4918,8 @@ def _main(argv=None):
         examples=[
             ("cepa until wego --for 12h", "run the wego queue for 12 hours"),
             ("cepa until wego --until 07:00 --dry-run", "the run plan, nothing executed"),
+            ("cepa until --all --for 8h --dry-run",
+             "the ready items of every queue, in `cepa plan ready` order"),
             ("cepa until wego --for 8h --no-verify", "a repo without a build"),
             ("cepa until pending", "runs waiting for you"),
             ("cepa until decide wego/2026-11-03-2210", "answer what a run left for you"),
@@ -4873,8 +4938,13 @@ def _main(argv=None):
                   "cepa until-digest: the summary of a finished run",
                   "/common:until-review: what the owner has to do from a run",
                   "cepa plan: the queue this command runs"])
-    ap.add_argument("queue", metavar="QUEUE",
-                    help="queue name, as in .claude/queues/<name>/queue.yaml")
+    ap.add_argument("queue", metavar="QUEUE", nargs="?",
+                    help="queue name, as in .claude/queues/<name>/queue.yaml "
+                         "(or --all, in its place)")
+    ap.add_argument("--all", action="store_true", dest="all_queues",
+                    help="every single-track queue instead of one, queue by "
+                         "queue in the order of `cepa plan ready`. For now "
+                         "only with --dry-run (spec until-todas-as-filas)")
     window = ap.add_mutually_exclusive_group(required=True)
     window.add_argument("--for", dest="duration", metavar="DURATION",
                         help="how long to run (e.g. 12h, 90m)")
@@ -4939,6 +5009,15 @@ def _main(argv=None):
         ap.print_help(sys.stderr)
         return 2
     a = ap.parse_args(argv)
+    if a.all_queues and a.queue:
+        print(f"cepa-until: --all takes the place of the queue name; pass "
+              f"either {a.queue!r} or --all, not both", file=sys.stderr)
+        return 2
+    if not a.all_queues and not a.queue:
+        print("cepa-until: missing the queue name (or --all, for every queue). "
+              "`cepa plan ready` lists the queues with ready items",
+              file=sys.stderr)
+        return 2
 
     repo = Path(a.repo).resolve()
     now = datetime.now()
@@ -4967,6 +5046,9 @@ def _main(argv=None):
         print("cepa-until: `claude` is not on the PATH — without it there is "
               "nothing to supervise", file=sys.stderr)
         return 2
+
+    if a.all_queues:
+        return all_queues_launch(a, repo, now, deadline)
 
     data, error = query_queue(a.queue, repo)
     if error:
