@@ -1,0 +1,34 @@
+schema_version: 1
+card: campo-de-resposta-CS-1
+status: complete
+audited_at: 2026-11-14T00:00:00-03:00
+covers: 4f1c14f..e506def
+criteria:
+  - id: AC1
+    text: "CS-1: uma resposta colada com mais de 1024 bytes e acentos chega inteira ao item (docs/spec/campo-de-resposta-until.md)"
+    altitude: cli
+    surface: "`cepa-until decide` num pty: `s` no menu, 1.500 bytes com 'ção' atravessando o byte 1024 em 'Anything to add', Enter; evidence do item no queue.yaml termina com os 1.500 bytes (cepa-plan responde acrescenta um trailer fixo depois do texto do dono). Também as perguntas com espera do fim de run (read_line com wait)."
+    demonstrated_by:
+      test: "tests/test_cepa_until_decide.py::test_cs1_long_pasted_answer_with_accents_reaches_the_item"
+      layer: "subprocess real de cepa-until decide num pty, lendo o queue.yaml"
+      evidence: verified
+      run: |
+        python3 -c "import sys; sys.path.insert(0,'tests'); import test_cepa_until_decide as t; [getattr(t,n)() for n in [3 testes cs1]]; sys.exit(1 if t.FAILURES else 0)"
+          ok  cs1: sem traceback nem 'half-way'
+          ok  cs1: o item volta para pending
+          ok  cs1: a resposta na evidência termina com os 1.500 bytes intactos
+        FAILURES [] exit=0 (HEAD e506def; 7 checagens no total, N>0)
+      also_demonstrated_by:
+        - test: "tests/test_cepa_until_decide.py::test_cs1_long_answer_also_arrives_on_the_timed_wait"
+          layer: "read_line(..., wait=30) real num pty (caminho das perguntas do fim de run)"
+          evidence: verified
+          run: "ok cs1 (wait): 1.500 bytes intactos; ok texto colado aparece na tela uma vez; exit=0"
+        - test: "tests/test_cepa_until_decide.py::test_cs1_timed_wait_turns_the_line_mode_off_before_the_prompt"
+          layer: "pty: ordem prompt/modo de linha/eco e restauracao do termios; NoAnswer sem resposta"
+          evidence: verified
+          run: "ok cs1 (ordem): modo de linha e eco desligados antes da pergunta; ok NoAnswer e terminal restaurado; exit=0"
+    verdict: complete
+    gap: null
+decided_without_asking_respected:
+  - "readline só quando stdin é terminal (sys.stdin.isatty() em _enable_line_editing)"
+  - "histórico não gravado em disco"

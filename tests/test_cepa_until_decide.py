@@ -131,7 +131,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
           plain_text)
     check("menu em chips dentro do cartão, com a recomendada marcada",
           "│  [s] yes · [n] no (recommended) · [t] I write the answer · "
-          "[d] discard the item" in plain_text
+          "[v] write in the editor\n│  [d] discard the item" in plain_text
           and "[e] technical detail" in plain_text, plain_text)
     check("o prompt fica dentro do cartão e o cartão fecha",
           ANSI.sub("", prompts[1]) == "│  ▸ " and plain_text.count("└─") == 3,
@@ -143,7 +143,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
           and "for later 1" in plain_text
           and "cepa-until decide fila/run1" in plain_text, plain_text)
     triggers = ("Land now? [y/N/q] ", "[t] I write the answer",
-                "Anything to add, in one line? [Enter skips] ")
+                "Anything to add, in one line? [Enter skips, v opens the editor] ")
     all_ = raw + "\n".join(prompts)
     check("as frases que o pty responde ficam inteiras, sem cor no meio",
           all(g in all_ for g in triggers), all_)
@@ -1147,11 +1147,11 @@ def test_decidir_s_and_n_on_terminal_reach_the_plan():
               (a1, out[-800:]))
 
 
-def test_invalid_byte_on_terminal_does_not_crash_decide():
-    """In decidir WEGO 2026-09-29-2059 the owner typed `não` and the terminal
-    delivered `n\\xcb...` (the tilde of the dead key, half erased): `input()`
-    blew up with UnicodeDecodeError and the questions died with a
-    traceback. The unreadable line has to be asked for again."""
+def _cs5_run(confirm_inputs):
+    """`decide` in a pty: `t` at the menu, then a line with a stray byte
+    (`n\\xcb\\xc3\\xa3o vira checklist`, the tilde of the dead key half
+    erased, decidir WEGO 2026-09-29-2059) at "Your answer", then
+    `confirm_inputs`. Returns (rc, screen, item a1)."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1"), item("a2")])
         binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
@@ -1161,17 +1161,382 @@ def test_invalid_byte_on_terminal_does_not_crash_decide():
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), inputs=[
-                ("[t] I write the answer", b"n\xcb\xc3\xa3o"),
-                ("could not read that line", "t"),
-                ("Your answer", "vira checklist"),
-                ("Send the item back to the queue", "s")])
-        check("sem traceback", "Traceback" not in out, out[-1500:])
-        check("...avisa que não leu e pede de novo",
-              "could not read that line" in out, out[-1500:])
+                ("[t] I write the answer", "t"),
+                ("Your answer", b"n\xcb\xc3\xa3o vira checklist"),
+                *confirm_inputs])
+        return rc, out, items_of(root)["a1"]
+
+
+def test_cs5_unreadable_byte_is_shown_as_question_mark_and_enter_keeps_it():
+    """CS-5 of docs/spec/campo-de-resposta-until.md: the line with an
+    unreadable byte is not lost. The stray byte becomes `?`, the screen shows
+    the text read and asks "Use this text? [Y/n]"; Enter keeps it."""
+    rc, out, a1 = _cs5_run([("Use this text? [Y/n]", ""),
+                            ("Send the item back to the queue", "s")])
+    check("cs5: sem traceback", "Traceback" not in out, out[-1500:])
+    check("cs5: a tela mostra o texto lido com ?",
+          "n?ão vira checklist" in out, out[-1500:])
+    check("cs5: e pergunta Use this text? [Y/n]",
+          "<Use this text? [Y/n]>" in out, out[-1500:])
+    check("cs5: com Enter o evidence contém n?ão vira checklist",
+          rc == 0 and a1["status"] == "pending"
+          and "n?ão vira checklist" in a1["evidence"], (a1, out[-800:]))
+
+
+def test_cs5_n_at_the_confirmation_asks_the_field_again():
+    """CS-5: with `n` at "Use this text? [Y/n]" the same field is asked again
+    and the text read is not applied."""
+    rc, out, a1 = _cs5_run([("Use this text? [Y/n]", "n"),
+                            ("type it again", "vira checklist"),
+                            ("Send the item back to the queue", "s")])
+    check("cs5 n: sem traceback", "Traceback" not in out, out[-1500:])
+    check("cs5 n: o campo é pedido de novo",
+          out.count("in one line (the next run reads this)") == 2, out[-1500:])
+    check("cs5 n: a resposta digitada de novo é a aplicada, não a recusada",
+          rc == 0 and a1["status"] == "pending"
+          and "vira checklist" in a1["evidence"]
+          and "n?ão" not in a1["evidence"], (a1, out[-800:]))
+
+
+def _cs5_refusal_asks_again(refusal):
+    rc, out, a1 = _cs5_run([("Use this text? [Y/n]", refusal),
+                            ("type it again", "vira checklist"),
+                            ("Send the item back to the queue", "s")])
+    check(f"cs5 {refusal}: o campo é pedido de novo",
+          out.count("in one line (the next run reads this)") == 2, out[-1500:])
+    check(f"cs5 {refusal}: a resposta recusada não é aplicada",
+          rc == 0 and a1["status"] == "pending"
+          and "vira checklist" in a1["evidence"]
+          and "n?ão" not in a1["evidence"], (a1, out[-800:]))
+
+
+def test_cs5_capital_n_at_the_confirmation_also_asks_again():
+    """The prompt shows `[Y/n]`; a capital `N` is the same refusal."""
+    _cs5_refusal_asks_again("N")
+
+
+def test_cs5_nao_spelled_out_at_the_confirmation_also_asks_again():
+    """`não` typed out, the owner's own language, is the same refusal."""
+    _cs5_refusal_asks_again("não")
+
+
+def _long_accented_answer():
+    """1,500 bytes of UTF-8 with `ção` starting at byte 1023, so the `ç`
+    straddles byte 1024, where the macOS canonical terminal cuts the line
+    (`getconf MAX_CANON /dev/tty` = 1024)."""
+    head = "a" * 1023
+    text = head + "ção"
+    text += "x" * (1500 - len(text.encode()))
+    assert len(text.encode()) == 1500
+    assert text.encode()[1023:1025] == "ç".encode()
+    return text
+
+
+def test_cs1_long_pasted_answer_with_accents_reaches_the_item():
+    """CS-1 (docs/spec/campo-de-resposta-until.md): in C1-47 of
+    wego-faturamento-backend the owner pasted ~1,150 characters with accents
+    and `cepa-until` answered "an accent arrived half-way": without
+    `readline` the terminal stays canonical, cuts the line at 1024 bytes and
+    the answer is lost. On a pty, `s` then 1,500 bytes in "Anything to add"
+    must end the item's evidence intact."""
+    long_text = _long_accented_answer()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+             "--repo", str(root)], str(root), inputs=[
+                ("[t] I write the answer", "s"),
+                ("Anything to add", long_text)], timeout=60)
         a1 = items_of(root)["a1"]
-        check("...e a resposta seguinte ainda é aplicada",
+        check("cs1: sem traceback nem 'half-way'",
+              "Traceback" not in out and "half-way" not in out, out[-800:])
+        check("cs1: o item volta para pending",
+              rc == 0 and a1["status"] == "pending", (rc, a1.get("status"),
+                                                      out[-800:]))
+        # The owner's text is the end of the answer segment; after it
+        # `cepa-plan responde` appends its fixed trailer ("O item voltou de
+        # `blocked` para `pending`."), so "ends with" is read up to there.
+        check("cs1: a resposta na evidência termina com os 1.500 bytes intactos",
+              f"{long_text}. O item voltou de" in str(a1.get("evidence", "")),
+              str(a1.get("evidence", ""))[-200:])
+
+
+def test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer():
+    """CS-3 (docs/spec/campo-de-resposta-until.md): the menu has
+    `[v] write in the editor`, with the same destination as `[t]`. With
+    `EDITOR` pointing at a fake editor that saves "linha 1\nlinha 2", `v` then
+    `s` at "Send the item back to the queue" puts the two lines, with the line
+    break, in the item's evidence and sends it back to `pending`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        editor = Path(tmp) / "fake-editor.sh"
+        editor.write_text('#!/bin/sh\nprintf \'linha 1\\nlinha 2\' > "$1"\n')
+        editor.chmod(0o755)
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("VISUAL", "EDITOR")}
+        env["EDITOR"] = str(editor)
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+             "--repo", str(root)], str(root), env=env, inputs=[
+                ("[v] write in the editor", "v"),
+                ("Send the item back to the queue", "s")], timeout=60)
+        a1 = items_of(root)["a1"]
+        check("cs3: sem traceback", "Traceback" not in out, out[-800:])
+        # `on_tty` wraps a trigger in <...> only once the screen showed it;
+        # its timeout note repeats the bare text, so the bare text proves nothing.
+        check("cs3: o menu mostra [v] write in the editor",
+              "<[v] write in the editor>" in out, out[-800:])
+        check("cs3: o item volta para pending",
+              rc == 0 and a1["status"] == "pending", (rc, a1.get("status"),
+                                                      out[-800:]))
+        check("cs3: a evidência traz as duas linhas com a quebra",
+              "linha 1\nlinha 2" in str(a1.get("evidence", "")),
+              repr(a1.get("evidence", ""))[-300:])
+
+
+def _cs4_run(menu_key, follow_up_trigger, typed="v"):
+    """CS-4 helper: the CS-3 fake editor, `menu_key` in the menu, then `typed` at
+    the follow-up prompt that contains `follow_up_trigger`. Returns (rc, out,
+    a1)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        editor = Path(tmp) / "fake-editor.sh"
+        editor.write_text('#!/bin/sh\nprintf \'linha 1\\nlinha 2\' > "$1"\n')
+        editor.chmod(0o755)
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("VISUAL", "EDITOR")}
+        env["EDITOR"] = str(editor)
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+             "--repo", str(root)], str(root), env=env, inputs=[
+                ("[t] I write the answer", menu_key),
+                (follow_up_trigger, typed)], timeout=60)
+        return rc, out, items_of(root)["a1"]
+
+
+def test_cs4_v_in_anything_to_add_opens_the_editor():
+    """CS-4 (docs/spec/campo-de-resposta-until.md): typing only `v` at
+    "Anything to add" opens the editor; the saved text, with its line break,
+    is the comment, not the letter."""
+    rc, out, a1 = _cs4_run("s", "Anything to add")
+    ev = str(a1.get("evidence", ""))
+    check("cs4: sem traceback", "Traceback" not in out, out[-800:])
+    check("cs4: o item volta para pending",
+          rc == 0 and a1["status"] == "pending", (rc, a1.get("status"), out[-600:]))
+    check("cs4: a evidência traz as duas linhas com a quebra",
+          "linha 1\nlinha 2" in ev, repr(ev)[-300:])
+    check("cs4: a letra v não é gravada como comentário",
+          ". v." not in ev and not ev.rstrip(". ").endswith(". v"), repr(ev)[-300:])
+
+
+def test_cs4_v_in_why_opens_the_editor():
+    """CS-4: same at "Why, in one line?" after `d` (drop)."""
+    rc, out, a1 = _cs4_run("d", "Why")
+    ev = str(a1.get("evidence", ""))
+    check("cs4 why: sem traceback", "Traceback" not in out, out[-800:])
+    check("cs4 why: o item foi descartado",
+          rc == 0 and a1["status"] == "dropped", (rc, a1.get("status"), out[-600:]))
+    check("cs4 why: a evidência traz as duas linhas com a quebra",
+          "linha 1\nlinha 2" in ev, repr(ev)[-300:])
+    check("cs4 why: a letra v não é gravada como motivo",
+          ". v." not in ev and not ev.rstrip(". ").endswith(". v"), repr(ev)[-300:])
+
+
+def test_cs4_capital_v_after_no_also_opens_the_editor():
+    """CS-4: a capital `V` (caps lock, phone keyboard) at "Anything to add"
+    after `n` opens the editor too; the item stays blocked with the saved
+    text as the comment, not the letter."""
+    rc, out, a1 = _cs4_run("n", "Anything to add", typed="V")
+    ev = str(a1.get("evidence", ""))
+    check("cs4 V: sem traceback", "Traceback" not in out, out[-800:])
+    check("cs4 V: o item continua blocked",
+          rc == 0 and a1["status"] == "blocked", (rc, a1.get("status"), out[-600:]))
+    check("cs4 V: a evidência traz as duas linhas com a quebra",
+          "linha 1\nlinha 2" in ev, repr(ev)[-300:])
+    check("cs4 V: a letra V não é gravada como comentário",
+          ". V." not in ev and not ev.rstrip(". ").endswith(". V"), repr(ev)[-300:])
+
+
+def test_cs4_capital_v_in_why_also_opens_the_editor():
+    """CS-4: a capital `V` at "Why, in one line?" after `d` opens the editor
+    too; the item is dropped with the saved text as the reason."""
+    rc, out, a1 = _cs4_run("d", "Why", typed="V")
+    ev = str(a1.get("evidence", ""))
+    check("cs4 why V: sem traceback", "Traceback" not in out, out[-800:])
+    check("cs4 why V: o item foi descartado",
+          rc == 0 and a1["status"] == "dropped", (rc, a1.get("status"), out[-600:]))
+    check("cs4 why V: a evidência traz as duas linhas com a quebra",
+          "linha 1\nlinha 2" in ev, repr(ev)[-300:])
+    check("cs4 why V: a letra V não é gravada como motivo",
+          ". V." not in ev and not ev.rstrip(". ").endswith(". V"), repr(ev)[-300:])
+
+
+def test_cs3_the_editor_header_lines_do_not_reach_the_answer():
+    """CS-3, the "Decided without asking" of the spec: the file opened in the
+    editor carries the item's id, title and question in `#` lines, and those
+    are dropped on save, like a git commit message. A real editor (`vi`,
+    `code --wait`) keeps the header; this fake one appends the answer under
+    it, so the header must not land in the item's evidence."""
+    with tempfile.TemporaryDirectory() as tmp:
+        editor = Path(tmp) / "keeps-header.sh"
+        editor.write_text('#!/bin/sh\nprintf \'resposta do dono\\nsegunda\' >> "$1"\n')
+        editor.chmod(0o755)
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("VISUAL", "EDITOR")}
+        env["EDITOR"] = str(editor)
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+             "--repo", str(root)], str(root), env=env, inputs=[
+                ("[v] write in the editor", "v"),
+                ("Send the item back to the queue", "s")], timeout=60)
+        a1 = items_of(root)["a1"]
+        ev = str(a1.get("evidence", ""))
+        check("cs3 cabeçalho: o item volta para pending com a resposta",
               rc == 0 and a1["status"] == "pending"
-              and "vira checklist" in a1["evidence"], a1)
+              and "resposta do dono\nsegunda" in ev,
+              (rc, a1.get("status"), repr(ev)[-300:], out[-600:]))
+        check("cs3 cabeçalho: nenhuma linha # do editor chega à evidência",
+              "# a1" not in ev and "Lines starting with #" not in ev,
+              repr(ev)[-400:])
+
+
+def test_cs1_long_answer_also_arrives_on_the_timed_wait():
+    """CS-1, the path the end of a real run takes: the questions are asked with
+    `wait` (select on stdin, then `input("")`). During the select the terminal
+    is still canonical, so it cuts the pasted line at 1024 bytes before
+    `readline` takes over, and select never wakes. On a pty, `read_line` with
+    a wait must return the 1,500 bytes intact."""
+    long_text = _long_accented_answer()
+    child = ("import importlib.machinery, importlib.util, sys\n"
+             f"loader = importlib.machinery.SourceFileLoader('cu', {str(CEPA_UNTIL)!r})\n"
+             "spec = importlib.util.spec_from_loader('cu', loader)\n"
+             "m = importlib.util.module_from_spec(spec); loader.exec_module(m)\n"
+             "m.herdr_blocked = lambda: None; m.hc_answered = lambda: None\n"
+             "line = m.read_line('Anything to add? ', wait=30)\n"
+             "sys.stdout.write('\\nGOT %d %s\\n' % (len(line.encode()), "
+             "line.encode().hex()))\n")
+    with tempfile.TemporaryDirectory() as tmp:
+        rc, out = on_tty([sys.executable, "-c", child], tmp,
+                         inputs=[("Anything to add?", long_text)], timeout=60)
+    got = re.search(r"GOT (\d+) ([0-9a-f]*)", out)
+    check("cs1 (wait): read_line com espera devolve os 1.500 bytes intactos",
+          rc == 0 and got is not None
+          and bytes.fromhex(got.group(2)).decode() == long_text,
+          (rc, got.group(1) if got else None, out[-300:]))
+    # The owner sees what was pasted, once: no echo would be a blind field,
+    # two would be the terminal and `readline` echoing the same bytes. The
+    # GOT line is hex, so `ão` plus the run of `x` on screen is only the echo
+    # (the `ç` itself may reach the reader split across two reads).
+    echoed = "ão" + "x" * (len(long_text) - long_text.index("ão") - 2)
+    check("cs1 (wait): o texto colado aparece na tela uma vez",
+          out.count(echoed) == 1, out.count(echoed))
+
+
+# CS-2: `abd`, left arrow, `c`, Home, `>`, End, `!` (Enter is added by on_tty).
+CS2_KEYS = "abd\x1b[Dc\x1b[H>\x1b[F!"
+
+
+def test_cs2_arrows_and_home_end_edit_anything_to_add():
+    """CS-2 (docs/spec/campo-de-resposta-until.md): on a pty, in "Anything to
+    add", the owner types `abd`, left arrow, `c`, Home, `>`, End, `!` and
+    Enter. The item's evidence ends with `>abcd!`, not with the escape
+    sequences of the arrows mixed into the letters."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+             "--repo", str(root)], str(root), inputs=[
+                ("[t] I write the answer", "s"),
+                ("Anything to add", CS2_KEYS)], timeout=60)
+        evidence = str(items_of(root)["a1"].get("evidence", ""))
+        check("cs2: a evidência termina com '>abcd!'",
+              rc == 0 and ">abcd!. O item voltou de" in evidence,
+              (rc, evidence[-200:], out[-600:]))
+        check("cs2: nenhuma sequência de escape das setas na evidência",
+              "\x1b" not in evidence and "[D" not in evidence, evidence[-200:])
+
+
+def test_cs2_arrows_and_home_end_edit_your_choice_of_the_pre_read():
+    """CS-2, the same keys in "Your choice" of the pre-read (the timed path:
+    select on stdin, then `input("")`): the choice recorded is `>abcd!`."""
+    out, events, reqs = _pref_launch(
+        tty_inputs=[("Your choice, in one line", CS2_KEYS)])
+    start = [e for e in events if e.get("evento") == "item_start" and e.get("id") == "x1"]
+    choice = (start[0].get("preferencia") or {}).get("escolha") if start else None
+    check("cs2 (pre-read): a escolha gravada é '>abcd!'",
+          choice == ">abcd!", (choice, out[-800:]))
+    check("cs2 (pre-read): o prompt de x1 leva '>abcd!'",
+          ">abcd!" in reqs.get("x1", ""), str(reqs)[-400:])
+
+
+def test_cs1_timed_wait_turns_the_line_mode_off_before_the_prompt():
+    """CS-1, the order on the timed path: the terminal leaves the line mode
+    (and the echo) BEFORE the prompt shows, or a paste right after the
+    prompt still meets the canonical terminal and is cut at 1024 bytes. A
+    paste cannot land in that gap reliably, so this reads the terminal mode
+    at the instant the prompt is written, on a real pty, and checks the
+    terminal is handed back as it was when nobody answers."""
+    import termios
+    mod = load_module()
+    master, slave = pty.openpty()
+    saved_in, saved_out = sys.stdin, sys.stdout
+    seen = []
+
+    class Recorder:
+        def write(self, text):
+            lflag = termios.tcgetattr(slave)[3]
+            seen.append((text, bool(lflag & termios.ICANON),
+                         bool(lflag & termios.ECHO)))
+
+        def flush(self):
+            pass
+
+    before = termios.tcgetattr(slave)
+    sys.stdin = os.fdopen(slave, closefd=False)
+    sys.stdout = Recorder()
+    mod._line_editing = True
+    try:
+        try:
+            mod._timed_input("Anything to add? ", 0.2)
+            raised = False
+        except mod.NoAnswer:
+            raised = True
+    finally:
+        sys.stdin, sys.stdout = saved_in, saved_out
+    after = termios.tcgetattr(slave)
+    os.close(master)
+    os.close(slave)
+    prompt = [x for x in seen if "Anything to add" in x[0]]
+    check("cs1 (ordem): a pergunta sai com o modo de linha e o eco já desligados",
+          prompt and prompt[0][1:] == (False, False), seen)
+    # PENDIN ("retype pending input") is set by the macOS kernel itself when
+    # the line mode comes back on; it is not part of what the code restores.
+    pendin = getattr(termios, "PENDIN", 0)
+    after[3] &= ~pendin
+    before[3] &= ~pendin
+    check("cs1 (ordem): sem resposta, NoAnswer e o terminal volta como estava",
+          raised and after == before, (raised, before[3], after[3]))
 
 
 def test_loose_text_at_options_prompt_does_not_vanish():

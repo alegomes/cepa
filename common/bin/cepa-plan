@@ -3566,13 +3566,20 @@ def decide_waivers(proposals, answer, keep, today, author):
 
 
 def cmd_answer(root, name, ident, answer, keep=False, force=False,
-                 commit=True, repo=".", author=None, drop=False):
+                 commit=True, repo=".", author=None, drop=False,
+                 multiline=False):
     if not sys.stdin.isatty():
         print("`answer` é a resposta do dono e só roda num terminal: sem "
               "TTY, quem chama é um agente, e só o humano fecha uma rota "
               "`human_pending` ou destrava um `blocked`.", file=sys.stderr)
         return 2
-    answer = " ".join(str(answer or "").split())
+    if multiline:
+        # Whitespace collapsed per line: line breaks written in the editor
+        # (campo-de-resposta CS-3, Q6) stay in the evidence.
+        answer = "\n".join(" ".join(l.split())
+                           for l in str(answer or "").splitlines()).strip()
+    else:
+        answer = " ".join(str(answer or "").split())
     if not answer:
         print("resposta vazia não destrava nada: o próximo run precisa saber "
               "o que você decidiu ou viu.", file=sys.stderr)
@@ -5423,6 +5430,9 @@ def main(argv=None):
     rs.add_argument("--drop", "--descarta", dest="drop", action="store_true",
                     help="drops the item (`dropped`) and closes the route; on a "
                          "`done` item, only closes the leftover task")
+    rs.add_argument("--multiline", dest="multiline", action="store_true",
+                    help="keeps the line breaks of the answer (default: the "
+                         "answer is flattened into one line)")
     rs.add_argument("--force", "--forca", dest="force", action="store_true",
                     help="records even a text that does not seem to answer the "
                          "route (a request for clarification, a question)")
@@ -5709,7 +5719,8 @@ def main(argv=None):
                           a.supervisor, a.decision, a.decision_commit)
     if a.cmd == "answer":
         return cmd_answer(root, a.name, a.id, a.answer, a.keep,
-                            a.force, not a.no_commit, a.repo, a.author, a.drop)
+                            a.force, not a.no_commit, a.repo, a.author, a.drop,
+                          a.multiline)
     return cmd_write(root, a)
 
 

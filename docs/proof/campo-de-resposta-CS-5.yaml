@@ -1,0 +1,65 @@
+schema_version: 2
+card: campo-de-resposta-CS-5
+verdict: proven
+reviewed_at: 2026-11-14T23:40:00-03:00
+base_commit: 05d5dcd
+head_commit: 4e7f8de
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa), não Quarkus. Superfície = `cepa-until decide` num pseudo-terminal
+round: 2
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until::_read_line / _keep_unreadable_bytes / _input_once (reconfigure surrogateescape linha 2593, substituição `?` linha 2616, `read as:` linha 2617, ramo de confirmação `.strip().lower().startswith(\"n\")` linha 2623, `continue` 2625, `return line` linha 2626)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # cepa-until real em pty; sem dublê da classe alterada (só o claude falso, fronteira externa)
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbação manual em worktree descartável detached em 4e7f8de (/tmp/proof-cs5b), removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida em 4e7f8de: os 4 testes cs5, FAILURES=[] (12s)."
+        - "(P1) reconfigure surrogateescape desligado (2593 -> pass) -> RED: 3 checks (tela com ?, pergunta Use this text, evidence com Enter); o outro teste trava até o timeout de 120s do on_tty."
+        - "(P2) substituição `?` -> `X` (2616) -> RED (2 checks: tela mostra n?ão, evidence com Enter)."
+        - "(P3) exibição `read as:` removida (2617 -> pass) -> RED (1 check: tela mostra o texto lido com ?)."
+        - "(P4) `.lower()` removido (2623) -> RED (2 checks, teste do N maiúsculo). Era o sobrevivente P6 da rodada 1."
+        - "(P5) `startswith(\"n\")` -> `== \"n\"` (2623) -> RED (2 checks, teste do `não`). Era o sobrevivente P7 da rodada 1."
+        - "(P6) `startswith(\"n\")` -> `startswith(\"zzz\")` (2623) -> RED (2 checks, teste do n: campo pedido de novo, resposta nova aplicada)."
+        - "(P7) `return line` -> `return \"\"` (2626) -> RED (1 check: evidence contém n?ão vira checklist)."
+        - "Não perturbados: `.strip()` (2623) e a substituição `?` dentro da própria confirmação (2623); são endurecimento da confirmação, sem critério da CS-5 que os exija."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs5b 4e7f8de`; `cd /tmp/proof-cs5b && timeout 550 python3 cs5run.py <testes>` (cópia do runner dentro do worktree; check() só acumula em FAILURES).
+        Baseline FAILURES []. Cada perturbação por `sed -i ''` em /tmp/proof-cs5b/common/bin/cepa-until, restaurada por `git checkout`. P1 FAILURES com 3 itens; P2 2 itens; P3 1; P4 2; P5 2; P6 2; P7 1 (exit 1 em todas). Suíte completa não rodada.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem coverage ligado; linhas 2593, 2616, 2617, 2623 (lower, startswith), 2626 ficam vermelhas quando quebradas (P1-P7), logo são alcançadas e afirmadas."
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: >-
+      adv.py (descartado com o worktree) dirige read_line real num pty com TERM=dumb, 7 casos, todos sem exceção nem travamento:
+      (A) só bytes soltos + Enter -> devolve "???", mostra `read as: ???`;
+      (B) byte solto na linha e outro na confirmação -> confirmação vira "?", mantém `n?ão`;
+      (C) confirmação `N` -> `ok, type it again`, redigitado `sim` devolvido;
+      (D) linha de 200011 caracteres com 1 byte solto + Enter -> devolve os 200011 com 1 `?`;
+      (E) confirmação `n`+byte solto -> recusa, redigitado `ok` devolvido;
+      (F) confirmação só com espaços -> mantém;
+      (G) confirmação `Não` -> recusa, redigitado `fresh` devolvido.
+    observacao: "Confirmação que COMEÇA com byte solto (caso B) vira `?...` e mantém o texto, não recusa. Não é defeito: a tela mostrou o texto e Enter/qualquer não-n é o aceite."
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-5 de docs/spec/campo-de-resposta-until.md); a prova é a perturbação."
+routing_reason: >-
+  Rodada 2: os dois sobreviventes da rodada 1 (`.lower()` e os sinônimos de
+  recusa) agora ficam vermelhos com os testes novos (N maiúsculo, `não`),
+  e a troca por `startswith` também. Todas as 7 perturbações ficam vermelhas na
+  superfície real (pty). L4 com 7 entradas hostis sem exceção, sem perda de
+  texto e sem travamento. PROVEN.

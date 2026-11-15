@@ -1,0 +1,44 @@
+schema_version: 1
+card: campo-de-resposta-CS-4
+status: complete
+audited_at: 2026-11-14T00:00:00-03:00
+covers: 4144082..e6274c8
+criteria:
+  - id: AC1
+    text: "CS-4: digitar só `v` em 'Anything to add' abre o editor. Com o editor falso, num pty o dono aperta `s` no menu e digita `v` e Enter em 'Anything to add'. O evidence termina com 'linha 1\\nlinha 2', não com 'v' (docs/spec/campo-de-resposta-until.md)"
+    altitude: cli
+    surface: "`cepa-until decide` real num pty: menu, tecla `s`, `v` em 'Anything to add', editor falso via $EDITOR; estado e evidence do item no queue.yaml"
+    demonstrated_by:
+      test: "tests/test_cepa_until_decide.py::test_cs4_v_in_anything_to_add_opens_the_editor"
+      layer: "subprocess real de cepa-until decide num pty (on_tty), editor falso em shell script, lendo o queue.yaml"
+      evidence: verified
+      run: |
+        python3 -c "importlib ... m.test_cs4_v_in_anything_to_add_opens_the_editor(); m.test_cs4_v_in_why_opens_the_editor(); print(m.FAILURES)"
+          ok  cs4: sem traceback
+          ok  cs4: o item volta para pending
+          ok  cs4: a evidência traz as duas linhas com a quebra
+          ok  cs4: a letra v não é gravada como comentário
+        FAILURES [] (HEAD e6274c8; 4 checagens, N>0; rodado via importlib porque check() só acumula em FAILURES)
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "CS-4: o mesmo vale para `d` seguido de `v` em 'Why'"
+    altitude: cli
+    surface: "`cepa-until decide` real num pty: tecla `d`, `v` em 'Why, in one line?', editor falso; item dropped com evidence do editor"
+    demonstrated_by:
+      test: "tests/test_cepa_until_decide.py::test_cs4_v_in_why_opens_the_editor"
+      layer: "subprocess real de cepa-until decide num pty, editor falso, lendo o queue.yaml"
+      evidence: verified
+      run: |
+        mesmo comando acima
+          ok  cs4 why: sem traceback
+          ok  cs4 why: o item foi descartado
+          ok  cs4 why: a evidência traz as duas linhas com a quebra
+          ok  cs4 why: a letra v não é gravada como motivo
+        FAILURES [] (HEAD e6274c8; 4 checagens, N>0)
+    verdict: complete
+    gap: null
+notes:
+  - "A letra do critério diz 'termina com'; os testes asseguram 'contém' as duas linhas e 'não termina com . v'. No código o texto do editor é o último trecho de `text` (f'. {extra}'), então termina de fato com ele; a asserção é mais fraca que a letra, sem consequência prática hoje."
+  - "Teste vermelho (antes de e6274c8) não rodado; suíte inteira não rodada, por instrução do supervisor."
+  - "Implementação: common/bin/cepa-until chama edit_in_editor quando a resposta é só 'v' (case-insensitive) nos dois prompts; prompts agora anunciam 'v opens the editor'."

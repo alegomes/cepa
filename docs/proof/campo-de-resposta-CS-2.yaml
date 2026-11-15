@@ -1,0 +1,53 @@
+schema_version: 2
+card: campo-de-resposta-CS-2
+verdict: proven
+reviewed_at: 2026-11-14T13:40:00-03:00
+base_commit: b2c1c83
+head_commit: 7288dfd
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa), não Quarkus. Superfície = cepa-until lendo a linha do dono em pseudo-terminal
+scope:
+  changed_classes:
+    - class: "tests/test_cepa_until_decide.py (dois testes novos CS-2) + docstring de _enable_line_editing; o código que carrega o comportamento é `import readline` em common/bin/cepa-until::_enable_line_editing (commit a3e503c, CS-1)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes rodam o cepa-until real em pty (decide e fila com pré-leitura), sem dublê
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbação manual em worktree descartável detached em 7288dfd (/tmp/proof-cs2), removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida em 7288dfd: os 2 testes CS-2 (4 checks) -> nfail=0."
+        - "(P1) `import readline` trocado por `pass` -> RED nos 4 checks: a evidência vira `abd\\x1b[Dc\\x1b[H>\\x1b[F!` (setas entram como texto) e a escolha da pré-leitura idem. Ambos os caminhos (decide 'Anything to add' e pré-leitura 'Your choice') ficam vermelhos."
+        - "(P2, informativo) `if _line_editing:` em _timed_input trocado por `if False:` -> continua GREEN (nfail=0). Esperado: esse trecho é o modo de linha do CS-1 (colar >1024 bytes), já pinado pelos testes cs1 (prova CS-1, P2-P5); não é o que faz as setas editarem. Não é código do CS-2."
+        - "(P3, informativo) `_line_editing = True` trocado por `False` (readline continua importado) -> GREEN. Esperado: a flag só governa o modo de linha do CS-1; a edição vem do import. Não é código do CS-2."
+        - "Ramos defensivos de _enable_line_editing (ImportError/OSError/ValueError): fallback ao comportamento antigo; não alcançados por teste, fora do escopo do CS-2 (já registrado na prova do CS-1)."
+        - "Complemento já registrado pelo supervisor: contra a3e503c^:common/bin/cepa-until (sem readline) os testes ficaram RED com `abd\\x1b[Dc\\x1b[H>\\x1b[F!`; coerente com P1. Não reexecutado por mim."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs2 7288dfd`; em cada perturbação (sed em caminho absoluto, restaurada por `git -C /tmp/proof-cs2 checkout -- .`):
+        `timeout 300 python3 -c "import sys; sys.path.insert(0,'tests'); import test_cepa_until_decide as t; [getattr(t,n)() for n in ['test_cs2_arrows_and_home_end_edit_anything_to_add','test_cs2_arrows_and_home_end_edit_your_choice_of_the_pre_read']]; print('nfail=',len(t.FAILURES))"`.
+        Resultados: baseline nfail=0 (4 checks ok); P1 nfail=4; P2 nfail=0; P3 nfail=0. Só os dois testes alvo, em primeiro plano; suíte completa não rodada.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem coverage ligado; a única linha de produção que carrega o CS-2 (`import readline`) é pinada pela perturbação P1, que derruba os 4 checks. O diff b2c1c83..7288dfd não altera código de produção além de docstring."
+  l4_adversarial_input:
+    status: clean
+    findings: []
+    run: "os testes CS-2 são a própria entrada adversarial: setas esquerda, Home e End (sequências ESC [ D, ESC [ H, ESC [ F) misturadas às letras, nos dois campos de texto (Anything to add e Your choice da pré-leitura). Sem achado extra; não gerei entradas novas."
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-2 de docs/spec/campo-de-resposta-until.md); a prova é a perturbação P1 RED."
+routing_reason: >-
+  Os dois testes novos digitam letras, seta para a esquerda, Home e End num
+  terminal de verdade (pty) com o cepa-until real, sem dublê, e conferem que a
+  resposta fica `>abcd!` sem as sequências das setas. Tirando o `import
+  readline`, os 4 checks ficam vermelhos, então os testes seguram o
+  comportamento. Os ajustes de modo de linha do CS-1 (P2, P3) não mexem nas
+  setas e continuam verdes aqui, como deve ser: pertencem à prova do CS-1.

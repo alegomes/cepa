@@ -1,0 +1,57 @@
+schema_version: 2
+card: campo-de-resposta-CS-4
+verdict: proven
+reviewed_at: 2026-11-14T22:00:00-03:00
+base_commit: 4144082
+head_commit: c1b1609
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa), não Quarkus. Superfície = `cepa-until decide` num pseudo-terminal
+round: 3
+round_1_note: "Round 1 (e6274c8): UNPROVEN, P3 (`extra.lower()` -> `extra`, nas duas linhas) sobreviveu porque nenhum teste digitava V maiúsculo."
+round_2_note: "Round 2 (79feaf3): UNPROVEN. test_cs4_capital_v_after_no_also_opens_the_editor fechou o V maiúsculo no 'Anything to add' (linha 3030), mas P3 só na linha do 'Why' (3010) sobreviveu (nfail=0)."
+round_3_note: "Round 3 (c1b1609): c1b1609 acrescentou test_cs4_capital_v_in_why_also_opens_the_editor. P3 em 3010 sozinha agora fica vermelha."
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until::decide (ramos `Why` do [d] (linha 3010) e `Anything to add` de [s]/[n] (linha 3030): `if extra.lower() == \"v\": extra = edit_in_editor(...)`, mais a dica do prompt)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # cepa-until e cepa-plan reais em pty; o único dublê é o editor falso ($EDITOR), fronteira externa
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbação manual em worktree descartável detached em c1b1609 (/tmp/proof-cs4-r3), removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida em c1b1609: 4 testes cs4, nfail=0."
+        - "(P1) ramo do Why desligado (linha 3010 -> `if False:`) -> RED (nfail=4: 'cs4 why' e 'cs4 why V')."
+        - "(P2) ramo do Anything to add desligado (linha 3030 -> `if False:`) -> RED (nfail=4: 'cs4' e 'cs4 V')."
+        - "(P3-3010) `extra.lower()` -> `extra` só no Why -> RED (nfail=2, 'cs4 why V'). Era o sobrevivente do round 2; fechado."
+        - "(P3-3030) `extra.lower()` -> `extra` só no Anything to add -> RED (nfail=2, 'cs4 V')."
+        - "(P4) resultado do editor descartado nos dois ramos (3011 e 3031 -> `extra = \"v\"`) -> RED (nfail=6)."
+      run: >-
+        `git diff e6274c8 c1b1609 -- common/bin/cepa-until` = 0 bytes (código idêntico ao round 1; só testes mudaram).
+        `git worktree add --detach /tmp/proof-cs4-r3 c1b1609`; runner fora do pytest (check() só acumula em FAILURES; falho PASSA sob pytest): importlib carrega tests/test_cepa_until_decide.py e chama test_cs4_capital_v_in_why_also_opens_the_editor, test_cs4_capital_v_after_no_also_opens_the_editor, test_cs4_v_in_anything_to_add_opens_the_editor, test_cs4_v_in_why_opens_the_editor; imprime len(FAILURES).
+        Resultados: baseline nfail=0; P1 nfail=4; P2 nfail=4; P3-3010 nfail=2; P3-3030 nfail=2; P4 nfail=6. Cada perturbação por sed, restaurada por git checkout. Só os testes alvo, em primeiro plano; suíte completa não rodada (o supervisor roda).
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem coverage ligado; cada linha alterada (3010, 3011, 3030, 3031) fica vermelha quando quebrada (P1-P4), logo é alcançada e exercida por asserção, inclusive o .lower() de cada linha."
+  l4_adversarial_input:
+    status: clean
+    findings: []
+    run: >-
+      Reaproveitado do round 1 (14 casos hostis, 0 achados), válido porque `git diff e6274c8 c1b1609 -- common/bin/cepa-until` tem 0 bytes. Cobriu V maiúsculo no Why e no Anything to add, ` v ` com espaços, `vv` literal, byte inválido, CRLF, só `#`, texto hostil a YAML, ~4.500 caracteres, editor vazio. Rodou em rc 0, sem Traceback, yaml recarregável.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-4 de docs/spec/campo-de-resposta-until.md); a prova é a perturbação P1-P4 RED."
+routing_reason: >-
+  Todas as perturbações de linha alterada (ramo do Why, ramo do Anything to add,
+  .lower() em cada uma, descarte do resultado do editor) ficam vermelhas contra
+  os quatro testes cs4, na superfície real (cepa-until em pty). O sobrevivente do
+  round 2 (.lower() só no Why) foi fechado por c1b1609. Código idêntico desde
+  e6274c8, então L4 do round 1 vale. PROVEN.

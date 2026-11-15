@@ -1,0 +1,90 @@
+schema_version: 2
+card: campo-de-resposta-CS-3
+verdict: proven
+reviewed_at: 2026-11-14T17:00:00-03:00
+base_commit: 42c86da
+head_commit: b757d23
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa), não Quarkus. Superfície = `cepa-until decide` num pseudo-terminal
+history:
+  - round: 1
+    head_commit: 21e715a
+    verdict: unproven
+    reason: "P7 sobreviveu: o filtro que descarta as linhas `#` do arquivo do editor podia ser removido sem nenhum teste ficar vermelho (o editor falso sobrescrevia o cabeçalho). Commit do artefato: 4062262."
+  - round: 2
+    head_commit: b757d23
+    verdict: needs-human
+    note: "b757d23 acrescenta test_cs3_the_editor_header_lines_do_not_reach_the_answer (editor falso que anexa a resposta sem apagar o cabeçalho). Perturbações P1-P7 refeitas do zero e todas RED; faltou só o nível L4 (skipped). Commit do artefato: 272bf43."
+  - round: 3
+    head_commit: b757d23
+    note: "Mesmo código do round 2; só o L4 foi executado (10 entradas hostis na tecla [v] numa pty). L1-L3 e P1-P7 do round 2 permanecem válidos (código idêntico)."
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until::decide (chip [v], conjunto valid, ramo r in (t, v), repasse de --multiline) e ::edit_in_editor"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # cepa-until e cepa-plan reais em pty; o único dublê é o editor falso ($EDITOR), fronteira externa
+    - class: "common/bin/cepa-plan::cmd_answer (--multiline, preserva quebras de linha)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbação manual em worktree descartável detached em b757d23 (/tmp/proof-cs3-r2), removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida em b757d23 (3 testes, cada check impresso 'ok'): nfail=0."
+        - "(P1) chip (\"v\", \"write in the editor\") removido -> RED (5 falhas: menu sem [v], item não volta, sem evidência, e o teste do cartão com chips)."
+        - "(P2) \"v\" retirado do conjunto `valid` -> RED (3 falhas)."
+        - "(P3) `if r == \"v\" else` trocado por `if False else` (v cai no ramo de uma linha de t) -> RED (3 falhas)."
+        - "(P4) `--multiline` deixa de ser passado pelo cepa-until -> RED (2 falhas: evidência achatada)."
+        - "(P5) ramo `if multiline:` do cepa-plan cmd_answer trocado por `if False:` -> RED (2 falhas: evidência achatada)."
+        - "(P6) `if rc != 0` trocado por `if rc == 0` em edit_in_editor -> RED (3 falhas)."
+        - "(P7) filtro de linhas `#` (`if not l.startswith(\"#\")` trocado por `if True`) -> RED (1 falha: 'nenhuma linha # do editor chega à evidência'). Era o sobrevivente do round 1; agora o teste novo o prende."
+        - "Não perturbados (amostra, registrado): `.strip()` final de edit_in_editor, ordem VISUAL/EDITOR/vi, o ramo `except OSError`, o `finally` de unlink do arquivo temporário."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs3-r2 b757d23`; runner fora do pytest (porque `check()` só acumula em FAILURES e um check falho PASSA sob pytest): carrega tests/test_cepa_until_decide.py por importlib, chama test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer, test_cs3_the_editor_header_lines_do_not_reach_the_answer e test_decide_on_terminal_draws_one_card_per_question, imprime `nfail=` e FAILURES.
+        Cada perturbação por sed no worktree, restaurada por `git checkout` do arquivo. Resultados: baseline nfail=0; P1 nfail=5; P2 nfail=3; P3 nfail=3; P4 nfail=2; P5 nfail=2; P6 nfail=3; P7 nfail=1.
+        Só os testes alvo, em primeiro plano; suíte completa não rodada.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem coverage ligado; a linha que descarta `#` (gap do round 1) agora fica vermelha quando quebrada (P7 nfail=1), logo é alcançada e exercida por asserção."
+  l4_adversarial_input:
+    status: clean
+    findings: []
+    run: >-
+      `git worktree add --detach /tmp/proof-cs3-r3 b757d23`; runner Python em primeiro plano (`python3 -I l4run.py <caso>...`) que reaproveita build_repo, fake_claude(BLOCKS_WITH_QUESTION), run_until e on_tty de tests/test_cepa_until_decide.py e dirige `cepa-until decide fila/<run>` numa pty real, com `$EDITOR` apontando para um editor falso que ANEXA o conteúdo hostil ao arquivo temporário (o cabeçalho `#` fica). Entradas `v` e, quando há texto, `s`. Para cada caso conferi: sem "Traceback" na tela, rc 0, todos os .yaml sob programs/plans recarregam com yaml.safe_load, e o item ou foi gravado com o texto preservado ou ficou intacto com mensagem. Worktree removido ao fim.
+      Resultados (10 casos, 0 achados):
+      (1) byte \xcb no meio da palavra -> gravado; o byte vira U+FFFD (`errors="replace"`), o resto do texto e a segunda linha ficam; item `pending`.
+      (2) CRLF -> gravado "linha 1\nlinha 2", sem \r (splitlines).
+      (3) 7 linhas em branco entre linhas -> gravado com as quebras e as linhas em branco preservadas.
+      (4) ~5.000 bytes, 80 linhas com acento (ç, ã, ú) -> gravado inteiro (evidência de 6.421 caracteres incluindo o texto anterior), item `pending`, yaml recarrega.
+      (5) só linhas `#` -> texto vazio: item continua `blocked` com a evidência original, sem Traceback e sem prompt de envio (mensagem de vazio é CS-6).
+      (6) resposta terminando em `?` -> cepa-plan recusa ("resposta recusada para a1: o texto é uma pergunta, não uma resposta; nada foi gravado" + a pergunta da rota + dica de --force); item intacto, fila intacta, sem crash.
+      (7) texto hostil a YAML (`: isso`, `- item`, aspas simples e duplas, `| pipe`, `{a: [b}`, `& *ref !tag %dir @at` e crase) -> gravado literal; yaml recarrega; só a indentação inicial de cada linha é achatada pelo `" ".join(l.split())` do --multiline.
+      (8) primeira linha começando com `|` -> gravado literal, yaml recarrega.
+      (9) `$EDITOR` entre aspas apontando para script em diretório com espaço no caminho -> editor abre, gravado "com espaco\nok", `pending`.
+      (10) `$EDITOR="<script> --flag"` (divisão de shell no estilo git) -> script recebe `--flag` como $1, gravado "com flag\nok", `pending`.
+      Caso extra, sem entrar na contagem: `$EDITOR` SEM aspas com espaço no caminho (`.../fake editor.sh`) é dividido pelo shell, o editor não abre, o item fica `blocked` com evidência intacta e a tela mostra o erro do shell, sem Traceback (igual ao git; mensagem melhor é CS-6).
+      Observações sem veredito (não são achados do CS-3): o byte inválido é trocado por U+FFFD em vez de recusado; uma linha da resposta que comece com `#` é descartada pelo filtro (desenho declarado, como mensagem de commit do git) e nenhum teste cobre isso.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-3 de docs/spec/campo-de-resposta-until.md); a prova é a perturbação P1-P7 RED."
+routing_reason: >-
+  Sete perturbações (chip, tecla aceita, ramo do v, repasse de --multiline, ramo
+  multilinha do cepa-plan, checagem de saída do editor e filtro do cabeçalho)
+  deixam o teste vermelho, e o dublê é só o editor falso, fronteira externa. No
+  round 3 o nível de entradas adversariais rodou com 10 casos hostis na tecla [v]
+  (byte inválido, CRLF, linhas em branco, 5.000 bytes com acento, só `#`, pergunta
+  terminada em `?`, texto hostil a YAML, `|` na primeira linha, caminho com
+  espaço, `$EDITOR` com flag): nenhum Traceback, a fila sempre recarrega, e cada
+  caso ou gravou o texto preservado ou deixou o item intacto com mensagem (a
+  recusa do `?` apareceu como mensagem). Todos os níveis passaram com evidência
+  executada: PROVEN.
