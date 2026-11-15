@@ -241,11 +241,17 @@ def test_a_second_signal_during_the_herdr_release_does_not_cut_it():
             herdr.write_text(
                 f"#!{sys.executable}\n"
                 "import sys, json, time\n"
+                "if sys.argv[1:] == ['--warmup']: sys.exit(0)\n"
                 "if sys.argv[2] == 'release-agent':\n"
                 f"    open({str(marker)!r}, 'w').write('x')\n"
                 "    time.sleep(0.7)\n"
                 f"open({str(log)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
             herdr.chmod(0o755)
+            # First exec of a new file on macOS costs 0.2-0.4 s (more when busy);
+            # on top of the 0.7 s sleep it would cross the 1 s herdr timeout.
+            subprocess.run([str(herdr), "--warmup"], stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=60)
             for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
                 os.environ.pop(k, None)
             env = {"HERDR_ENV": "1", "HERDR_PANE_ID": "w9:p9",

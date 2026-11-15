@@ -1701,8 +1701,10 @@ def herdr_release_env(tmp):
     log = Path(tmp) / "herdr.log"
     herdr.write_text(f"#!{sys.executable}\n"
                      "import sys, json\n"
+                     "if sys.argv[1:] == ['--warmup']: sys.exit(0)\n"
                      f"open({str(log)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
     herdr.chmod(0o755)
+    warm_up(herdr)
     for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
         os.environ.pop(k, None)
     return ({"HERDR_ENV": "1", "HERDR_PANE_ID": "w9:p9", "HERDR_BIN_PATH": str(herdr)},
