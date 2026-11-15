@@ -119,6 +119,7 @@ SESSIONS_KINDS = {
     "*.launch": "lançamentos do launcher (session-registry.py)",
     "*.prune-on-exit": "marcador de poda ao sair (session-registry.py)",
     ".launch.lock": "trava do lançador (session-launch.py)",
+    "*.gone": "marca de sessão morta podada (_wtlib.tombstone_path)",
 }
 HANDOFFS_KINDS = {
     "*.md": "handoff da branch (_handoff.py)",

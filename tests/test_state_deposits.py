@@ -92,6 +92,9 @@ def test_unknown_entries():
         (c / "last-build.json").write_text("{}")
         (c / "sessions" / "k.json").write_text("{}")
         (c / "sessions" / "k.next.json").write_text("{}")
+        # The tombstone _wtlib.tombstone_path writes when a dead session is pruned
+        # (2026-11-15: one left on 11/11 turned the repo's own check red).
+        (c / "sessions" / "k.gone").write_text("{}")
         (c / "handoffs" / "b.md").write_text("x")
         check("sem estranhos, nada é reportado", _state.unknown_entries(tmp) == [],
               str(_state.unknown_entries(tmp)))
