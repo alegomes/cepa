@@ -5,6 +5,32 @@ e onde provavelmente mora. Sem ordem de prioridade fixa.
 
 ---
 
+## Registrar desvios do objetivo da sessão (refazer o trabalho da `session/gtd`)
+
+Registrado em 2026-11-15 a pedido do dono, ao desistir do merge da `session/gtd`.
+
+### Problema
+
+Uma sessão de exploração de 2026-11-06 começou a registrar quando um pedido do dono sai
+do plano gravado na intenção da sessão. Esse trabalho ficou num salvamento automático
+(commit `8964c56`, guardado na tag local `archive/session-gtd`) e não entrou na `main`:
+juntado com a `main` de 2026-11-15, ele quebrou 3 arquivos de teste
+(`test_cepa_mode.py`, `test_epic_where.py`, `test_compass_mod.py`). O hook pedia a
+intenção mesmo sem modo, coisa que a `main` decidiu não fazer, e o card Sessão do
+Compass perdia a indicação de `/common:wrap-up` com o plano cumprido.
+
+### Esboço de solução
+
+Refazer em cima da `main` atual, com teste para cada parte: o comando
+`cepa-intent deviation "<pedido>"`, a lista `deviations` no `.claude/session-intent`
+(`common/hooks/_modes.py`), o evento `intent.deviation` e a linha de desvios no
+`cepa-metrics`, e a contagem no card Sessão do Compass. Não trazer a pergunta de
+intenção sem modo. Para ver o código antigo: `git show archive/session-gtd`.
+**Lar:** `common/bin/cepa-intent`, `common/hooks/_modes.py`,
+`common/hooks/session-mode.py`, `common/bin/cepa-metrics`, `compass/hooks/`.
+
+---
+
 ## Descoberta: perguntar antes do run e perguntar menos em ação reversível
 
 Registrado em 2026-11-10 a pedido do dono, como tema da próxima sessão em modo descoberta
