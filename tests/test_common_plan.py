@@ -959,6 +959,46 @@ def test_triage_contract(_base):
           or "Triage never writes `queue.yaml`" in f)
 
 
+def test_rewrite_backup_stays_out_of_git_status(base):
+    """until-arvore-limpa CS-9: rewriting an existing queue copies the old file to
+    `queue.yaml.bak`, and that copy must not show up in `git status`. Before, each
+    rewrite left a loose untracked `.bak` in the main clone, the dirt the spec
+    exists to remove. The temp repo carries THIS repo's `.gitignore`: what is under
+    test is the rule this repo ships, not one written for the test."""
+    d = git_repo(base, "bak-ignorado")
+    (d / ".gitignore").write_text((REPO / ".gitignore").read_text(encoding="utf-8"),
+                                  encoding="utf-8")
+    sp = d / "spec.md"
+    sp.write_text(SPEC_FIXTURE, encoding="utf-8")
+    r = run(d, "write", "daspec", "--from-spec", str(sp), "--repo", ".")
+    check("primeira gravação da fila", r.returncode == 0, r.stderr)
+    subprocess.run(["git", "-C", str(d), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(d), "-c", "user.name=t", "-c", "user.email=t@t",
+                    "commit", "-qm", "fila"], check=True)
+    r = run(d, "write", "daspec", "--from-spec", str(sp), "--repo", ".")
+    check("regravar a fila pela spec", r.returncode == 0, r.stderr)
+    bak = d / ".claude" / "queues" / "daspec" / "queue.yaml.bak"
+    check("a regravação criou a queue.yaml.bak", bak.is_file())
+    st = subprocess.run(["git", "-C", str(d), "status", "--porcelain",
+                         "--untracked-files=all"],
+                        capture_output=True, text=True, check=True).stdout
+    check("git status não lista a queue.yaml.bak", "queue.yaml.bak" not in st, st)
+    check("a árvore fica limpa depois da regravação", st.strip() == "", st)
+    # The rule must not swallow the queue itself, nor a legacy-layout backup.
+    ign = subprocess.run(["git", "-C", str(d), "check-ignore", "-q",
+                          ".claude/queues/daspec/queue.yaml"])
+    check("a queue.yaml segue rastreável (a regra não pega a fila)",
+          ign.returncode == 1)
+    legacy = d / ".claude" / "programs" / "velha"
+    legacy.mkdir(parents=True)
+    (legacy / "plan.yaml.bak").write_text("x\n", encoding="utf-8")
+    st = subprocess.run(["git", "-C", str(d), "status", "--porcelain",
+                         "--untracked-files=all"],
+                        capture_output=True, text=True, check=True).stdout
+    check("o .bak do layout antigo (plan.yaml.bak) também some do git status",
+          "plan.yaml.bak" not in st, st)
+
+
 def main():
     with tempfile.TemporaryDirectory() as base:
         for fn in (test_writes_valid_queue, test_refuses_without_why,
@@ -979,6 +1019,7 @@ def main():
                    test_partial_triage_preserves_queue_order,
                    test_from_triage_preserves_absent_done_and_applies_the_order,
                    test_from_spec_and_from_epic_still_refuse_vanished_item,
+                   test_rewrite_backup_stays_out_of_git_status,
                    test_command_contract, test_triage_contract):
             print(f"\n{fn.__name__}")
             fn(base)
