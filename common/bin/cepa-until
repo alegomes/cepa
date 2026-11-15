@@ -2335,6 +2335,139 @@ def cmd_land(argv):
     return 0
 
 
+def commit_run_records(repo, paths, message):
+    """Commits, on the main clone's branch, the run's own paths that git sees as
+    changed or new (spec `until-arvore-limpa`, CS-1): the queue marks, the
+    `.jsonl` record and the `.review.md`. Before it, every run left those three
+    loose in the clone and the owner cleaned up by hand, mixed with their own
+    changes and the next run's.
+
+    Only the listed paths go in: `git add` of those paths and `git commit --only`
+    on them, so whatever else the owner has staged or modified stays as it was.
+    Never `--no-verify`. Returns (sha, None) on a commit, (None, None) when there
+    was nothing to commit, (None, reason) when git refused."""
+    root = main_root(repo)
+    rel = []
+    for path in paths:
+        if not path:
+            continue
+        try:
+            rel.append(str(Path(path).resolve().relative_to(root.resolve())))
+        except ValueError:
+            continue  # outside the clone: not this commit's business
+    if not rel:
+        return None, None
+    try:
+        st = subprocess.run(["git", "status", "--porcelain", "-z",
+                             "--untracked-files=all", "--", *rel],
+                            cwd=str(root), capture_output=True, text=True,
+                            timeout=120)
+    except (OSError, subprocess.SubprocessError) as e:
+        return None, str(e)
+    if st.returncode != 0:
+        return None, (st.stderr or "").strip() or f"git status exited {st.returncode}"
+    dirty = [entry[3:] for entry in st.stdout.split("\0") if len(entry) > 3]
+    if not dirty:
+        return None, None
+    code, output = git(["add", "--", *dirty], root)
+    if code != 0:
+        return None, output
+    code, output = git(["commit", "-q", "-m", message, "--only", "--", *dirty], root)
+    if code != 0:
+        return None, output
+    return head_of(root), None
+
+
+# A run's own paths in the main clone, in both layouts: the queue file and the
+# `until/<run>.jsonl` / `until/<run>.review.md` records. Group 1 or 3 is the queue
+# name; group 2 or 4 is set when the path is a run record (not the queue file).
+RUN_PATH = re.compile(
+    r"^\.claude/(?:queues/([^/]+)/(?:queue\.yaml|(until/[^/]+\.(?:jsonl|review\.md)))"
+    r"|programs/([^/]+)/(?:plan\.yaml|(until/[^/]+\.(?:jsonl|review\.md))))$")
+
+
+def _record_of_live_elsewhere(root, path):
+    """Is the `.jsonl` at `path` a run that may still be alive on ANOTHER machine?
+    Its pid can't be checked from here (same rule as `dead_runs`), so a record
+    from another host with no `run_end` is left alone. A clone synced between two
+    machines (Insync) would otherwise commit the other machine's live run."""
+    if not path.endswith(".jsonl"):
+        return False
+    try:
+        lines = (Path(root) / path).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return False
+    start, ended = {}, False
+    for line in lines:
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(ev, dict):
+            continue
+        if ev.get("evento") == "run_start" and not start:
+            start = ev
+        elif ev.get("evento") == "run_end":
+            ended = True
+    host = start.get("host")
+    return bool(host and host != socket.gethostname() and not ended)
+
+
+def loose_records_of_dead_runs(repo):
+    """{queue: [paths]} of what runs whose supervisor died left without a commit in
+    the main clone, in ANY queue of the repo (spec `until-arvore-limpa`, CS-4). A
+    run that ends normally, by quota or by a signal commits its own records
+    (CS-1/CS-3); one killed without warning (kill -9, power cut, a crash in the
+    middle of the commit) leaves its `.jsonl` loose, and the queue marks with it.
+
+    A queue counts only when a run record of it is loose (untracked, modified or
+    staged): a modified queue file with no loose record is not a dead run's, it is
+    the owner's, and stays dirt. A queue with a live run (`live_run_of_queue`) is
+    left out whole: that run is still writing its queue and its record, and
+    commits them itself. Paths are relative to the main clone."""
+    root = main_root(repo)
+    try:
+        st = subprocess.run(["git", "status", "--porcelain", "-z",
+                             "--untracked-files=all", "--",
+                             qp.NEW_DIR, qp.LEGACY_DIR],
+                            cwd=str(root), capture_output=True, text=True,
+                            timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    if st.returncode != 0:
+        return {}
+    by_queue = {}
+    entries = st.stdout.split("\0")
+    i = 0
+    while i < len(entries):
+        entry = entries[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        xy, path = entry[:2], entry[3:]
+        if "R" in xy or "C" in xy:
+            i += 1  # `-z` writes the rename's source as the next entry
+        if "D" in xy:
+            continue  # a vanished file is not a record to commit
+        m = RUN_PATH.match(path)
+        if not m:
+            continue
+        queue = m.group(1) or m.group(3)
+        is_record = bool(m.group(2) or m.group(4))
+        by_queue.setdefault(queue, {"records": [], "queue": []})[
+            "records" if is_record else "queue"].append(path)
+    found = {}
+    for queue, paths in sorted(by_queue.items()):
+        if not paths["records"]:
+            continue
+        if live_run_of_queue(root, queue):
+            continue
+        if any(_record_of_live_elsewhere(root, p) for p in paths["records"]):
+            continue
+        found[queue] = sorted(paths["queue"] + paths["records"])
+    return found
+
+
 def land_action(repo, tree, queue, run_id, n):
     """The `aterrissar` action of the run's state: the run's normal end and
     `fecha-morto` propose the same one."""
@@ -4418,7 +4551,42 @@ def _main(argv=None):
               "starting another.", file=sys.stderr)
         return 2
 
+    # CS-4 (spec `until-arvore-limpa`): before the dirt guard, the records a dead
+    # run left loose (its `.jsonl`, `.review.md` and queue marks), of any queue,
+    # go into one collect commit. Without it, a run killed without warning made
+    # the next launch refuse "dirty tree" over what the harness itself wrote.
+    # `--dry-run` only says what it would collect, and the guard ignores it.
+    collected = {}
+    loose = loose_records_of_dead_runs(repo)
+    if loose:
+        all_paths = [p for paths in loose.values() for p in paths]
+        names = ", ".join(loose)
+        if a.dry:
+            print(f"cepa-until: would collect {len(all_paths)} loose record(s) of "
+                  f"dead runs ({names}) in one commit before the run")
+            collected = {"filas": list(loose), "caminhos": all_paths}
+        else:
+            root = main_root(repo)
+            sha, error = commit_run_records(
+                repo, [root / p for p in all_paths],
+                f"until: collect records of dead runs ({names})")
+            if sha:
+                print(SCREEN.c("cinza", f"cepa-until: collected {len(all_paths)} loose "
+                                        f"record(s) of dead runs ({names}) in "
+                                        f"commit {sha[:7]} (not pushed)"))
+                collected = {"commit": sha, "filas": list(loose),
+                             "caminhos": all_paths}
+            elif error:
+                print(f"cepa-until: git refused the commit that collects the loose "
+                      f"records of dead runs ({names}): "
+                      f"{error.splitlines()[-1] if error.splitlines() else error}",
+                      file=sys.stderr)
+
     dirt = dirty_tree(repo, live_run_ok=True)
+    if a.dry and collected:
+        would = set(collected["caminhos"])
+        dirt = [l for l in dirt or [] if _dirt._path_of(l) not in would] \
+            if dirt is not None else dirt
     ghosts = ghost_deletions(repo, a.queue) if dirt else []
     if ghosts and not a.dirty_ok:
         # No `--dirty-ok` in the message on purpose: with it the next item runs
@@ -4466,6 +4634,9 @@ def _main(argv=None):
     run_id = now.strftime("%Y-%m-%d-%H%M")
     ledger = ledger_dir / f"{run_id}.jsonl"
     log = ledger_dir / f"{run_id}.log"
+    # Taken now: `data` is re-read on every round and is None when the queue turns
+    # unreadable mid-run, and the end-of-run commit still needs the path.
+    run_queue_path = data.get("path")
 
     # Short header (A6): the 09/26 run opened with 15 configuration lines
     # and absolute paths through the Insync folder taking up half a screen.
@@ -4667,7 +4838,8 @@ def _main(argv=None):
               "arvore": str(tree), "base": run_base,
               "herdou": inheritance,
               "branch_do_clone": current_branch(repo), "verify": verify,
-              "pid": pid, "host": host, "versao_registro": 2})
+              "pid": pid, "host": host, "versao_registro": 2,
+              **({"recolha": collected} if collected else {})})
     if pre_read_event:
         log_event(pre_read_event)
     # CS-13: the launch's measurement. No numeric goal (spec): the event is what lets a
@@ -4732,10 +4904,47 @@ def _main(argv=None):
     # runs in its own session and doesn't receive the signal.
     in_flight = {}
     closed = [False]
+    # `final_state` is set once the run's final state is recorded (the end
+    # analysis and the owner's questions come after it).
+    final_state = [False]
+
+    def commit_run_end():
+        """The run's commit (CS-1), on every way out: the normal end, the quota
+        end, and Ctrl+C / SIGTERM (CS-3), which before this left the queue marks
+        and the `.jsonl` with `run_interrompido` loose in the clone. SIGTERM and
+        SIGINT are ignored while git runs: a second signal raising SystemExit
+        inside `subprocess.run` would kill `git commit` halfway and could leave
+        `.git/index.lock` behind. A second call (a signal landing right after
+        the normal end's commit) finds the paths clean and commits nothing."""
+        saved = {}
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            try:
+                saved[sig] = signal.signal(sig, signal.SIG_IGN)
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            sha, error = commit_run_records(
+                repo, [run_queue_path, ledger, ledger.with_suffix(".review.md")],
+                f"until {a.queue}/{run_id}: queue marks and run records")
+        finally:
+            for sig, handler in saved.items():
+                signal.signal(sig, handler)
+        if sha:
+            print(SCREEN.c("cinza", f"   commit: {sha[:7]} on the clone's branch, "
+                                    "with the queue marks and the run records "
+                                    "(not pushed)"))
+        elif error:
+            print(f"   commit: git refused the commit of the run records "
+                  f"({error.splitlines()[-1] if error.splitlines() else error}); "
+                  "they stay in the clone without a commit")
 
     def interrupt(signum, _frame):
         name = signal.Signals(signum).name
         if closed[0]:
+            # After the final state (analysis, end questions) the signal only
+            # ends the run, but what the run wrote still goes into its commit.
+            if final_state[0]:
+                commit_run_end()
             raise SystemExit(128 + signum)
         closed[0] = True
         flight = dict(in_flight) or None
@@ -4761,6 +4970,7 @@ def _main(argv=None):
         print(f"  to run the missing build and leave the run ready to "
               f"land: cepa-until close-dead {a.queue}/{run_id}",
               file=sys.stderr)
+        commit_run_end()
         raise SystemExit(128 + signum)
 
     signal.signal(signal.SIGTERM, interrupt)
@@ -5781,6 +5991,7 @@ def _main(argv=None):
     # Final state recorded: a signal from here on (during the analysis) only ends the run,
     # without switching the state to `interrompido`.
     closed[0] = True
+    final_state[0] = True
     if costs:
         br = lambda v: f"{v:.2f}".replace(".", ",")  # noqa: E731
         print(f"\n   cost: US$ {br(cost)} (sum of `total_cost_usd` over "
@@ -5800,16 +6011,23 @@ def _main(argv=None):
                                wait=ANSWER_WAIT_SEC, already_asked=asked_mid_run,
                                interactive=False if mid_run_silent else None)
 
+    def commit_records(result):
+        # The run's last step (CS-1), after the end questions (which write answers
+        # into the queue through `cepa-plan answer`) and after the `.review.md`:
+        # committing earlier would leave the queue dirty again.
+        commit_run_end()
+        return result
+
     # The analysis spends quota: stopping on the quota and then analyzing hits the
     # same ceiling. In those cases, and with nothing executed, it is left for by hand.
     if a.no_analysis or items == 0:
-        return ask_owner()
+        return commit_records(ask_owner())
     if end_reason == "limite-de-uso":
         print("   analysis: not run (the run stopped on the quota) — run "
               f"`/common:until-review {short_path(ledger, repo)}` once the quota "
               "is back")
         log_event({"evento": "analise", "feita": False, "motivo": "cota"})
-        return ask_owner()
+        return commit_records(ask_owner())
     print("   analysis: running /common:until-review…")
     review, review_error = analyze_run(repo, tree if tree.exists() else None,
                                       ledger, a.with_permissions)
@@ -5820,7 +6038,7 @@ def _main(argv=None):
     else:
         print(f"   analysis: failed ({review_error}) — run `/common:until-review "
               f"{short_path(ledger, repo)}` by hand")
-    return ask_owner(review)
+    return commit_records(ask_owner(review))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,66 @@
+schema_version: 2
+card: until-arvore-limpa-CS-2
+verdict: proven
+reviewed_at: 2026-11-14T12:30:00-03:00
+base_commit: 3577692
+head_commit: b86300b
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa), não Quarkus. Superfície externa = o CLI `cepa-until` rodado como subprocesso por tests/test_cepa_until_clean_tree.py
+scope:
+  changed_classes:
+    - class: "tests/test_cepa_until_clean_tree.py::test_cs2_owners_modified_and_staged_files_stay_as_they_were (único arquivo mudado no diff; teste novo)"
+      module: tests
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until::commit_run_records (comportamento fixado pelo teste; não mudou neste diff, vem do CS-1)"
+      module: cli
+      external_observable: true   # o commit e o estado de git do clone do dono são observáveis fora do processo
+      substituted_by_double: null # o CLI real roda; só o binário `claude` é falso (fronteira distante, via base.fake_claude)
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python, não Maven/JVM; a perturbação manual em worktree descartável é o mecanismo aplicável."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida em b86300b (worktree descartável /tmp/proof-cs2): `python3 tests/test_cepa_until_clean_tree.py` -> 27 asserções ok, '✓ tudo verde'; as 6 do CS-2 verdes (o run termina; commit novo; commit sem os dois arquivos do dono; git status igual; índice igual; conteúdo em disco igual)."
+        - "P1 (`git add -A` no lugar de `git add -- <paths>` E commit sem `--only`/pathspec): RED, 5 falhas, entre elas CS-2 'o commit do run não leva nenhum dos dois arquivos do dono' (o commit levou notas.txt e rascunho.md), 'git status mostra os dois como estavam' e 'o índice dos dois não mudou'."
+        - "P2 (só remove `--only -- <paths>` do commit; add continua restrito): RED, 4 falhas; CS-2 'o commit do run não leva...' (commit levou rascunho.md) e 'git status mostra os dois como estavam' (notas.txt saiu do estado ' M')."
+        - "P3 (só `git add -A`, `--only` mantido): RED isolado em CS-2 'git status mostra os dois como estavam' (notas.txt virou 'M ', staged) e 'o índice dos dois não mudou'. Mostra que o teste pega a mudança de índice do dono mesmo quando o commit continua certo."
+        - "P5 (`git reset -q` depois do commit): RED, 3 falhas; CS-2 'git status...' (rascunho.md perdeu o stage) e 'o índice dos dois não mudou'; também a asserção 'staged: o arquivo do dono continua em stage' do CS-1."
+        - "P6 (`git checkout -- .` antes do add, descarta a edição do dono no disco): RED; CS-2 'o conteúdo em disco não mudou' e 'git status mostra os dois como estavam', mais 3 asserções do CS-1/hook que dependem do mesmo caminho."
+      run: >-
+        Worktree descartável fora da árvore principal
+        (`git worktree add --detach /tmp/proof-cs2 b86300b`, removida ao fim
+        com `git worktree remove --force`). Perturbações aplicadas com
+        `git apply <patch>` e desfeitas com `git checkout -- common/bin/cepa-until`
+        entre uma e outra (P4, `commit -a`, não foi rodada: coberta por P1/P3).
+        Só `python3 tests/test_cepa_until_clean_tree.py` foi rodado (nunca o
+        build completo), sempre em primeiro plano. Cada execução mostrou suas
+        linhas `ok`/`FAIL` (N > 0 asserções).
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      As linhas de comportamento (`git add -- <dirty>` e `git commit --only --
+      <dirty>` em commit_run_records) são exercitadas pelo teste CS-2 e
+      confirmadas por perturbação (P1, P2, P3, P5 e P6 ficam RED), não só por
+      leitura estrutural.
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff é só um teste novo: não adiciona nem altera nada que leia entrada vinda de fora (nenhum módulo api-rest/CLI de parsing tocado)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature (item CS-2 da spec until-arvore-limpa), não Bug; o diff só adiciona teste, o comportamento já estava no CS-1."
+routing_reason: >-
+  O teste novo do CS-2 é load-bearing: GREEN de partida (27 asserções ok) e
+  RED em cada uma das cinco quebras do commit do run (add amplo com commit
+  sem --only, só commit sem --only, só add amplo, reset do índice, descarte
+  da edição do dono), cada uma pega pelas asserções do CS-2 sobre o commit,
+  o git status, o índice ou o conteúdo em disco. O CLI real roda, só o
+  `claude` é falso. Nenhum nível ficou assumed/skipped/gap/survived. PROVEN.

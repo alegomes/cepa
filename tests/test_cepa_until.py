@@ -157,6 +157,23 @@ def run_until(root, binv, plan, args, timeout=120, extra_env=None, repo_arg=None
     return p, lines
 
 
+def requeue(root, *paths):
+    """Puts the queue back as it was before the runs, the way the owner returns an
+    item to the queue: restores the paths from the newest commit that is not a run's
+    own `until <queue>/<run>: ...` commit, and commits the restore. Before
+    `until-arvore-limpa` (CS-1) the run left the marks uncommitted and a plain
+    `git checkout -- <plan>` did this; now the marks are in the run's commit."""
+    log = subprocess.run(["git", "log", "--format=%H %s"], cwd=root,
+                         capture_output=True, text=True, check=True).stdout
+    before = next(line.split(" ", 1)[0] for line in log.splitlines()
+                  if not line.split(" ", 1)[1].startswith("until "))
+    subprocess.run(["git", "checkout", "-q", before, "--", *map(str, paths)],
+                   cwd=root, check=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-qm", "requeue", "--allow-empty", "--",
+                    *map(str, paths)], cwd=root, check=True)
+
+
 def ledger_of(root):
     d = Path(root) / ".claude" / "programs" / "fila" / "until"
     events = []
@@ -522,13 +539,14 @@ def test_previous_run_record_is_not_dirt():
         p1, _ = run_until(root, binv, plan, ["--for", "2h"])
         check("o primeiro run anda", p1.returncode == 0, p1.stderr[-300:])
         # the morning: the owner lands what the run did and the queue has a pending
-        # item again; only the run's record is left behind, as in the real clone
-        subprocess.run(["git", "checkout", "-q", "--", str(plan)], cwd=root,
-                       check=True)
+        # item again. Since `until-arvore-limpa` (CS-1) the `.jsonl` is in the run's
+        # commit; what is left untracked in this repo (no `.gitignore`) is the
+        # run's live state, `.estado.json`, which the next launch must not take as dirt
+        requeue(root, plan)
         st = subprocess.run(["git", "status", "--porcelain"], cwd=root,
                             capture_output=True, text=True).stdout
-        check("...e deixa o registro não rastreado na árvore",
-              "?? .claude/programs/fila/until/" in st, st)
+        check("...e deixa só o estado do run não rastreado na árvore",
+              "?? .claude/programs/fila/until/" in st and ".jsonl" not in st, st)
         (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
         p2, calls2 = run_until(root, binv, plan, ["--for", "2h"])
         check("o run seguinte larga mesmo com o registro do anterior",
@@ -537,8 +555,7 @@ def test_previous_run_record_is_not_dirt():
               f"{p2.stderr[:300]}")
 
         # the filter is only for the record: real dirt beside it still refuses
-        subprocess.run(["git", "checkout", "-q", "--", str(plan)], cwd=root,
-                       check=True)
+        requeue(root, plan)
         (root / "lixo.txt").write_text("pendura", encoding="utf-8")
         (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
         p3, calls3 = run_until(root, binv, plan, ["--for", "2h"])
@@ -1284,8 +1301,7 @@ def test_live_run_of_the_same_queue_refuses_the_launch():
             alive.wait()
         # a state that is not `rodando` does not block either
         (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
-        subprocess.run(["git", "checkout", "-q", "--", str(plan)], cwd=root,
-                       check=True)
+        requeue(root, plan)
         alive = _cepa_until_process()
         try:
             _fake_supervisor(root, "fila", alive.pid, state="esperando-dono")
@@ -1326,8 +1342,7 @@ def test_plan_of_another_queue_dirtied_by_the_live_run_is_not_dirt():
                   "evidence": "feito"}
 
         def tries(live_pid, **changed):
-            subprocess.run(["git", "checkout", "-q", "--", str(plan),
-                            str(other)], cwd=root, check=True)
+            requeue(root, plan, other)
             (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
             _fake_supervisor(root, "outra", live_pid, item_list=["o1"])
             changes(other, **changed)
@@ -1363,9 +1378,14 @@ def test_plan_of_another_queue_dirtied_by_the_live_run_is_not_dirt():
             alive.kill()
             alive.wait()
         p, calls = tries(alive.pid, fields_o1=of_run)
-        check("...com o supervisor morto o mesmo diff é sujeira",
-              p.returncode == 2 and not calls
-              and "modified file(s)" in p.stderr, p.stderr[:300])
+        # Since `until-arvore-limpa` CS-4, a dead run's loose record and queue
+        # marks are no longer dirt that refuses the launch: they go into a
+        # collect commit first (tests/test_cepa_until_clean_tree.py pins it).
+        check("...com o supervisor morto o mesmo diff é recolhido e o run larga",
+              "modified file(s)" not in p.stderr and len(calls) == 1
+              and "until: collect records of dead runs (outra)" in subprocess.run(
+                  ["git", "log", "--format=%s"], cwd=root, capture_output=True,
+                  text=True).stdout, p.stderr[:300])
 
 
 def test_live_run_refuses_before_the_dirt_guard():

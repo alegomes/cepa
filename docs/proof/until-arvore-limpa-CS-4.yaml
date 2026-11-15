@@ -1,0 +1,65 @@
+schema_version: 2
+card: until-arvore-limpa-CS-4
+verdict: proven
+reviewed_at: 2026-11-14T17:00:00-03:00
+base_commit: 43daca5
+head_commit: 88601a0
+issue_type: Feature
+repo_kind: harness            # repo Python, nao Maven/Quarkus. Superficie externa = o CLI `cepa-until` rodado como subprocesso pelos testes, com `claude` falso no PATH
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until::RUN_PATH"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # o CLI real roda; so o binario `claude` e falso (fronteira distante)
+    - class: "common/bin/cepa-until::_record_of_live_elsewhere"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until::loose_records_of_dead_runs"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until::_main (bloco de recolha, filtro do --dry-run, recolha no run_start)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbacao manual em worktree descartavel."
+    perturbation:
+      status: pass
+      results:
+        - "Limpo (88601a0): tests/test_cepa_until_clean_tree.py e tests/test_cepa_until.py, '✓ tudo verde'."
+        - "P8 (RUN_PATH sem a alternativa review.md, nos dois layouts) RED, 3 falhas: 'CS-4 legado: recolha com exatamente o plan.yaml, o registro e a revisao', 'CS-4: o commit de recolha leva exatamente os caminhos de outra', 'CS-4: nada de outra fica solto depois'. Sobrevivente da rodada anterior, agora morto."
+        - "P9 (linha 2449, `if \"D\" in xy` -> if False) RED, 2 falhas: 'apagado: a recolha leva so os caminhos do run morto', 'apagado: o registro antigo segue no HEAD'. Sobrevivente da rodada anterior, agora morto."
+        - "P1 (linha 2462, guarda de supervisor vivo -> if False) RED, 1 falha 'supervisor vivo: o registro dele nao e recolhido'."
+        - "P3 (linha 4425, bloco de recolha `if loose:` -> if False) RED, 12 falhas em clean_tree."
+        - "Rodada anterior (1bf5f98), nao re-executadas aqui: P2 (outra maquina), P4 (exigir registro solto), P5 (filtro --dry-run), P6 (layout antigo), P7 (recolha no run_start) todas RED; os testes que as matavam seguem no arquivo."
+        - "Nao perturbados (amostragem declarada): ramo R/C (rename) do parser -z, ramo OSError/returncode!=0 de git status, mensagem de erro quando o git recusa o commit."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs4c 88601a0`; perturbacoes por `sed -i ''` na copia, desfeitas por
+        `git checkout -- common/bin/cepa-until`. Em primeiro plano: `python3 tests/test_cepa_until_clean_tree.py`
+        limpo '✓ tudo verde'; P8 '✗ 3 falha(s)'; P9 '✗ 2 falha(s)'; P1 '✗ 1 falha(s)'; P3 '✗ 12 falha(s)'.
+        `python3 tests/test_cepa_until.py` limpo '✓ tudo verde'. Worktree removido ao fim.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; alternativa review.md do RUN_PATH e ramo `D` agora alcancados, provado pelas perturbacoes P8 e P9 ficarem RED."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff le so o `git status` e os .jsonl/.review.md do proprio repo, nao abre entrada nova vinda de fora; nenhum modulo api-rest tocado."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature; nao e bug."
+routing_reason: >-
+  Os dois sobreviventes da rodada anterior (a parte review.md do RUN_PATH e o
+  descarte de arquivo apagado) agora ficam vermelhos quando quebrados de
+  proposito. As guardas de supervisor vivo e o bloco de recolha seguem
+  vermelhos. Suites limpas verdes em 88601a0. PROVEN.

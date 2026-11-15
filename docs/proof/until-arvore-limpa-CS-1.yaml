@@ -1,0 +1,56 @@
+schema_version: 2
+card: until-arvore-limpa-CS-1
+verdict: proven               # proven | unproven | needs-human
+reviewed_at: 2026-11-14T13:00:00-03:00
+base_commit: 4f1c14f
+head_commit: 65fb796
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: commit_run_records + commit_records (end of run and quota end)"
+      module: common
+      external_observable: true     # git history of the clone after the cli run (surface: cli)
+      substituted_by_double: null   # tests run the real cepa-until as a subprocess against a real temp git repo; only the `claude` binary is faked (far boundary)
+    - class: "tests/test_default_yes_inject.py (test-only isolation fix)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+    - class: "tests/test_cepa_until.py (old tests restore the queue from before the run's commit)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+    - class: "tests/test_cepa_until_clean_tree.py (65fb796: staged-file and failing-pre-commit-hook tests)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "throwaway worktree at 65fb796 (/tmp/proof-cs1-c, removed at the end). Unperturbed: `cd /tmp/proof-cs1-c && python3 tests/test_cepa_until_clean_tree.py` -> '✓ tudo verde' (5 tests, 4 + 4 new checks ok, exit 0). Each perturbation applied with sed to common/bin/cepa-until, test run, file restored with git checkout. common/bin/cepa-until is unchanged between 41939b3 and 65fb796, so P1-P5 and P8 below are carried over from the earlier run at 41939b3."
+      results:
+        - "P1 normal end (l.5750) returns ask_owner(review) without commit_records -> RED (clean_tree: 5 failures) [run at 41939b3, product code unchanged]"
+        - "P2 quota end (l.5739) without commit_records -> RED (clean_tree: 3 failures, the 'cota:' checks) [41939b3]"
+        - "P8 no-analysis end (l.5733) without commit_records -> RED (clean_tree: 2 failures; test_queue_rename.py: 1 FAIL) [41939b3]"
+        - "P3 .review.md dropped from the path list -> RED (2 failures) [41939b3]"
+        - "P4 .jsonl dropped from the path list -> RED (7 failures) [41939b3]"
+        - "P5 queue.yaml dropped from the path list -> RED (4 failures) [41939b3]"
+        - "P6 (literal) `--only` removed from the git commit (`commit -q -m msg -- paths`) at 65fb796 -> still green ('✓ tudo verde'). Cause measured: this is an EQUIVALENT mutant, not a test gap. With explicit paths, `git commit -- <paths>` already defaults to --only (git 2.56.0), so the behavior is identical and no test could tell them apart. The `--only` token is explicit documentation, not extra behavior."
+        - "P6b (non-equivalent replacement) `--only` replaced by `--include` (stages the paths AND commits the whole index) at 65fb796 -> RED: 'FAIL staged: o commit do run não leva o arquivo do dono' (commit held plan.yaml, .jsonl, alheio.txt) and 'FAIL staged: o arquivo do dono continua em stage' (2 failures). So test_commit_leaves_the_owners_staged_file_out does guard the owner's staged work staying out of the run's commit."
+        - "P7 `--no-verify` added to the git commit at 65fb796 -> RED: 3 failures ('hook: nenhum commit novo', 'hook: os registros ficam sem commit', 'hook: o run avisa que o git recusou'). test_failing_pre_commit_hook_is_respected guards that hooks are honored."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; every changed executable line of commit_records call sites, the path list and the git commit argument vector was perturbed and turned a test RED (P1-P5, P6b, P7, P8); the only literal mutation that stayed green (P6) is semantically equivalent in git"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff adds a git commit of the run's own paths at the end of a cli run; it parses no input from outside and no changed class is in an input-bearing module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Commit at the normal end, quota end and no-analysis end, and the three-path list, are load-bearing (all RED when broken). The two earlier survivors are closed by the tests added in 65fb796: removing `--no-verify` protection (P7) turns the hook test RED; the owner's-staged-file promise (P6b, `--include` in place of `--only`) turns the staged-file test RED. Literal removal of `--only` (P6) stays green because git already treats `git commit -- <paths>` as --only; that is an equivalent mutant, and the non-equivalent substitute was shown RED. The supervisor still runs the full build."
