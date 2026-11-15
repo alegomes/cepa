@@ -376,6 +376,10 @@ def test_finish_opens_debt_but_never_closes(base):
     target = write_queue(d, [item("A"), item("B", human_pending="conferir na UI")])
     r = run(d, "finish", "fila", "A", "--status", "done", "--evidence", "e",
             "--human-pending", "abrir /admin/devolucoes e conferir a recusa",
+            "--route-kind", "owner-task",
+            "--question", "A recusa em /admin/devolucoes já foi conferida? Recomendo sim.",
+            "--if-yes", "o item segue como entregue",
+            "--if-no", "o item volta para a fila",
             "--repo", ".")
     check("o desfecho pode ABRIR uma rota humana", r.returncode == 0, r.stderr)
     check("a rota fica no item",

@@ -1,0 +1,29 @@
+key: perguntas-da-largada-legiveis-CS-5
+status: complete
+diff_range: 794573e..5f8f172
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      Tela do `cepa-until fila` lancado num pseudo-terminal, com item pendente
+      human_pending sem pergunta e leitor falso (CEPA_UNTIL_LEITOR) que nao
+      responde dentro do teto (CEPA_UNTIL_TETO_LEITURA=2): a tela deve mostrar
+      "Send this item back to the queue for the next run to try again?" e o
+      rotulo "Left for you", e nao "done already?".
+    test: >
+      tests/test_cepa_until_route_rewrite.py::test_a_route_the_reader_does_not_rewrite_within_the_ceiling_gets_the_neutral_question
+    layer: cli / pseudo-terminal sobre o executavel real, leitor falso que dorme 60s
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_route_rewrite.py -> bloco do teste com 8
+      checks "ok" (exit 0; launch exits 0, job chegou ao leitor, pergunta
+      neutra na tela, rotulo "Left for you" ao lado do texto da rota, sem
+      "Task" ao lado, sem "done already", item identico a antes, outro item
+      rodou), arquivo termina em "tudo verde". N=8 checks no teste, rodado 2x.
+    outermost_layer: >
+      common/bin/cepa-until (decide: screen.label("Left for you", route)) mudou
+      no diff e e exercido pelo teste de pty. Testes de decide e de rotulo de
+      rota (test_cepa_until_decide.py, test_cepa_until_route_kind_label.py)
+      foram atualizados para o novo rotulo; nao os rodei (a suite completa e do
+      supervisor).
+    gap: none

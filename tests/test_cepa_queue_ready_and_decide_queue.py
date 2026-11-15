@@ -130,7 +130,8 @@ def test_decide_d_drops():
     check("o menu nomeia as duas variantes",
           "discard the item" in text and "the task no longer applies" in text, text)
     check("no item entregue, sim não promete devolver à fila",
-          "the item stays complete" in text and "d = it no longer applies" in text,
+          "s = the task closes; the delivered work stays as it is" in text
+          and "d = the task no longer applies" in text,
           text)
     check("o fecho do modo fila não cita run",
           "fila/" not in text, text)

@@ -1,0 +1,18 @@
+schema_version: 1
+card: perguntas-da-largada-legiveis-CS-12
+status: complete
+audited_at: 2026-11-13T10:00:00-03:00
+audited_diff: b4b9d2b..ac8ef40
+criteria:
+  - id: AC1
+    text: "o texto do pedido que o `cepa-until` monta para o agente de um item cita `--route-kind`, os três valores e a exigência de pergunta fechada com o efeito do sim e do não; hoje o texto não cita nenhum dos três."
+    altitude: application
+    surface: "common/bin/cepa-until build_command() -> pedido (prompt) entregue ao agente de cada item (CUT_RULE); sem camada http/ui"
+    demonstrated_by:
+      test: "tests/test_cepa_until_route_rule.py::test_route_rule_every_item_request_carries_it (unidade de build_command, com e sem branch, com nota, e execução via _pref_launch capturando o prompt real de x1 e y1)"
+      layer: application (unidade + execução do cepa-until com agente simulado)
+      evidence: verified
+      run: "python3 tests/test_cepa_until_route_rule.py -> exit 0, 7 checagens ok, 0 falhas, '✓ tudo verde'"
+    verdict: complete
+    gap: null
+    note: "Diff confere: CUT_RULE ganhou --route-kind, owner-task/external-block/open-question, --question fechada terminando em '?', --if-yes e --if-no. O teste checa os valores contra common/bin/cepa-plan. N>0 (7 checagens). Em ac8ef40 a frase final virou 'If any of them is missing, finish refuses and records nothing' e o teste também a afirma."

@@ -135,8 +135,9 @@ def test_launch_measure_cs13_panel_cut_after_the_first_answer():
 
 
 def test_launch_measure_cs13_typed_preference_counts_as_answered():
-    """A preference the owner answers by typing counts, next to the route answered."""
-    ev = _the_event("cs13 typed", *_launch(tty=True, pref_answer="usar o formato longo"))
+    """A preference the owner answers counts, next to the route answered. Since CS-10
+    of perguntas-da-largada-legiveis the answer is a key: `s` accepts the default."""
+    ev = _the_event("cs13 typed", *_launch(tty=True, pref_answer="s"))
     check("cs13 typed: 2 questions answered (r1's route and x1's preference)",
           ev.get("perguntas_respondidas") == 2, str(ev))
 

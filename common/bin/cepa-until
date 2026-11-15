@@ -248,6 +248,7 @@ import sys
 import tempfile
 import threading
 import time
+import unicodedata
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -823,7 +824,17 @@ CUT_RULE = (
     "\"<the choice, in plain words>\" --decision-commit <sha>` (default HEAD), and it shows "
     "up in the run summary with the commit. Keep `cepa-plan finish ... --human-pending` "
     "for what only the owner closes: a proof waiver, moving a card to Done, and any task "
-    "outside the repository (credentials, a real environment, a conversation).")
+    "outside the repository (credentials, a real environment, a conversation). "
+    # CS-12 of perguntas-da-largada-legiveis: since CS-1, `finish --human-pending`
+    # refuses a route the owner cannot read, so the agent learns the shape up front
+    # instead of from the refusal. The three kinds are `cepa-plan`'s ROUTE_KINDS.
+    "To open such a route, `--human-pending` needs, in the same `finish`: "
+    "`--route-kind` with one of `owner-task` (a task only the owner does, outside the "
+    "repository), `external-block` (something outside has to exist, not an owner "
+    "decision) or `open-question` (a doubt the owner answers); `--question` with a "
+    "closed yes-or-no question, with a `?` (your recommendation may follow it); and "
+    "`--if-yes` and `--if-no` saying what each answer does to the work. If any of "
+    "them is missing, `finish` refuses and records nothing.")
 
 
 def build_command(name, branch, permissions, session_id=None, note=""):
@@ -2603,16 +2614,43 @@ def owner_summary_of(ad, d):
     return summary
 
 
-def answers_legend(summary):
-    """What `sim` and `não` lead to. The mechanics never change (sim returns
-    the item to the queue, não keeps it); what the owner needs is what that
-    means for the WORK, which only the agent knows (WEGO-2381: "libero o In
-    Review?" next to "sim = o item volta para a fila")."""
+# CS-2 (perguntas-da-largada-legiveis): the label beside the route text says
+# which kind of route it is, as `cepa-plan finish --route-kind` recorded it. A
+# route with no kind (recorded before the kind existed, and not rewritten by the
+# route reader within its ceiling) gets "Left for you" (CS-5).
+ROUTE_KIND_LABEL = {"owner-task": "Task for you",
+                    "external-block": "Blocked outside",
+                    "open-question": "Open question"}
+
+
+def legend_lines(chips, summary, delivered=False):
+    """One line per key of the menu, in the menu's order: what each key does.
+    The mechanics never change (`s` returns the item to the queue, `n` keeps it);
+    what the owner needs is what that means for the WORK, which only the agent
+    knows (WEGO-2381: "libero o In Review?" next to "sim = o item volta para a
+    fila"). CS-3 (perguntas-da-largada-legiveis): the legend used to be a single
+    line naming three of the keys, and the question described "yes" a second
+    way; now only the legend says it, once per key, and "task" and "item" never
+    share a line (L3)."""
     yes = summary.get("se_sim")
     no = summary.get("se_nao")
-    return (f"yes = {yes or 'the item goes back to the queue with your answer'}"
-            + (". The item goes back to the queue with your answer" if yes else "")
-            + f"; no = {no or 'it stays as it is and I only record what you say'}")
+    if delivered:
+        effect = {"s": "the task closes; the delivered work stays as it is",
+                  "n": "the task stays open and I only record what you say",
+                  "d": "the task no longer applies and closes without being done"}
+    else:
+        effect = {"s": (f"{yes}. The item goes back to the queue with your answer"
+                        if yes else "the item goes back to the queue with your answer"),
+                  "n": no or "it stays as it is and I only record what you say",
+                  "d": "the item leaves the queue"}
+    effect.update({"t": "you write the answer in one line; the next run reads it",
+                   "v": "you write the answer in the editor; the next run reads it",
+                   "e": "shows the technical detail, written for agents",
+                   "?": "I did not understand the question: it is recorded as "
+                        "badly written and nothing is answered",
+                   "Enter": "leaves the question for later",
+                   "q": "stops the questions; the rest stays for later"})
+    return [f"{key} = {effect[key]}" for key, _ in chips if key in effect]
 
 
 def pending_action(item_states):
@@ -2785,7 +2823,8 @@ class Panel:
         import textwrap
         hanging = indent if hanging is None else hanging
         text = " ".join(str(text).split())
-        return textwrap.wrap(text, width=self._w(),
+        # One column less than the terminal: `_border` prepends the `│`.
+        return textwrap.wrap(text, width=max(self._w() - 1, 20),
                              initial_indent=" " * indent,
                              subsequent_indent=" " * hanging,
                              break_on_hyphens=False) or [" " * indent]
@@ -2832,7 +2871,11 @@ class Panel:
 
     def panel_note(self, text):
         """A line under the opening (CS-8: "the pre-read is still reading")."""
-        self.output("   " + (self.t.c("cinza", text) if self.enabled else text))
+        if not self.enabled:
+            self.output("   " + text)
+            return
+        for l in self._wrap(text, 3):
+            self.output(self.t.c("cinza", l))
 
     def continue_panel(self, text):
         """A rule inside a list already open (CS-8: the pre-read's part)."""
@@ -2853,6 +2896,8 @@ class Panel:
             for x in applied:
                 self.output(f"     ✓ {x}")
             if for_later:
+                self.output(f"     ○ {later_names(for_later)}")
+            if for_later:
                 self.output(f"   To come back to these questions: {back}")
             return
         self.output("")
@@ -2867,6 +2912,10 @@ class Panel:
                          f"for later {len(for_later)}"))
         for x in applied:
             self.output("     " + t.c("verde", "✓ ") + x)
+        # CS-8 (perguntas-da-largada-legiveis): the items left for later are named,
+        # not only counted.
+        if for_later:
+            self.output("     " + t.c("amarelo", "○ ") + later_names(for_later))
         if for_later:
             self.output("   " + t.c("cinza", "to come back to these questions: ")
                        + t.c("ciano", back))
@@ -2897,8 +2946,9 @@ class Panel:
             return
         self.output("")
         self._top(f"{i}/{n} · {ident}", "ciano")
-        for l in self._wrap(title, 2):
-            self._border(l, "negrito")
+        if title:
+            for l in self._wrap(title, 2):
+                self._border(l, "negrito")
         self._border()
 
     def label(self, name, text, short_path=None):
@@ -2952,12 +3002,15 @@ class Panel:
         for l in lines[1:]:
             self._border(l, color)
 
-    def legend(self, text):
-        if not self.enabled:
-            self.output(indented(text))
-            return
-        for l in self._wrap(text, 2):
-            self._border(l, "cinza")
+    def legend(self, lines):
+        """One line per key (CS-3); a long line wraps under its own text."""
+        for text in lines:
+            if not self.enabled:
+                self.output(indented(text))
+                continue
+            key = text.split(" = ", 1)[0]
+            for l in self._wrap(text, 2, 2 + len(key) + 3):
+                self._border(l, "cinza")
 
     def menu(self, chips, recommended):
         """`chips` is the list of (key, label); returns the `input()`
@@ -3012,9 +3065,32 @@ class Panel:
                             else self.t.c("vermelho", f"✗ not recorded: {msg}")))
 
 
+# CS-8: the longest rewrite-failure reason the panel prints.
+FAILURE_REASON_MAX = 200
+
+
+def failure_reason(error):
+    """CS-8: the rewrite-failure reason as one safe line. It may be raw output of
+    `cepa-plan reword-route` (stderr or stdout, a traceback included), so terminal
+    control characters (ESC, BEL, NUL) are dropped, every whitespace run becomes one
+    space and the text is cut at FAILURE_REASON_MAX."""
+    text = "".join(" " if ch.isspace() else ch for ch in str(error or "")
+                   if ch.isspace() or unicodedata.category(ch) not in ("Cc", "Cf", "Cs"))
+    text = " ".join(text.split()) or "unknown reason"
+    return text if len(text) <= FAILURE_REASON_MAX else text[:FAILURE_REASON_MAX - 1] + "…"
+
+
+def later_names(for_later):
+    """CS-8 (perguntas-da-largada-legiveis): the closing names what was left for
+    later by its id only (`b1, b2`); the reason beside it is the generic label the
+    item block already replaced with the lay one."""
+    return ", ".join(str(x).split(":", 1)[0] for x in for_later)
+
+
 def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
            output=print, answer=None, land=None, wait=None, first=1, of=None,
-           opened=False, note=None, close=True, progress=None):
+           opened=False, note=None, close=True, progress=None, unclear=None,
+           rewrite=None):
     """Goes through what only the owner unblocks and applies each answer. Returns
     (applied, for_later), as text, for the closing.
     CS-8 (the launch panel in two parts): `first`/`of` number the questions inside a
@@ -3022,7 +3098,10 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     is a line under the opening and `close=False` leaves the closing to the caller.
     CS-13: `progress` (a dict) counts as it goes, so a panel cut by the wait, EOF or
     Ctrl-C still has the right numbers: `asked` (owner questions that reached the
-    screen) and `answered` (answers recorded in the queue)."""
+    screen) and `answered` (answers recorded in the queue).
+    CS-7 (perguntas-da-largada-legiveis): `rewrite(ad, shown_question)` returns
+    (route_or_None, error_or_None): after `?`, the new question replaces the old one
+    in the same block, is recorded in the queue, and the menu asks again."""
     progress = {} if progress is None else progress
     if question is None:
         def question(prompt):
@@ -3039,6 +3118,45 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 + (["--multiline"] if "\n" in text else []),
                 capture_output=True, text=True, timeout=60)
             return p.returncode, (p.stdout or p.stderr).strip()
+    if unclear is None:
+        # CS-6 (perguntas-da-largada-legiveis): "I did not understand" goes to the
+        # global feedback ledger `/common:feedback` triages, target `cepa-until`;
+        # the item gets no answer (spec Q3, "Decided without asking").
+        def unclear(ident, text):
+            msg = (f"pergunta mal escrita no painel do cepa-until (fila {queue}, "
+                   f"item {ident}): {text}")
+            try:
+                p = subprocess.run(
+                    [sys.executable, str(HERE / "cepa-feedback"), "add", msg,
+                     "--target", "cepa-until", "--origin", "comando",
+                     "--repo", str(repo)],
+                    capture_output=True, text=True, timeout=60)
+            except (OSError, subprocess.SubprocessError) as e:
+                return 1, str(e)
+            return p.returncode, (p.stdout or p.stderr).strip()
+    if rewrite is None:
+        # CS-7: the route reader rewrites the question right there, within
+        # UNCLEAR_REWRITE_SEC, and the new one is recorded through `cepa-plan
+        # reword-route --replace` (this script never edits queue.yaml). Only an open
+        # route can be reworded: a delivered item or one without a route keeps the
+        # CS-6 path (recorded as unclear, left for later).
+        def rewrite(ad, shown):
+            if ad.get("human_pending") is None or ad.get("reason") == "pos-entrega":
+                return None, "the item has no open route to reword"
+            payload = dict(route_payload(ad), tarefa=UNCLEAR_TASK,
+                           pergunta_mal_escrita=shown)
+            try:
+                route, error = read_route(repo, payload,
+                                          time.monotonic() + UNCLEAR_REWRITE_SEC,
+                                          UNCLEAR_READER_PROMPT)
+            except Exception as e:  # noqa: BLE001  (a reader must never stop the panel)
+                return None, f"reader failed: {e}"
+            if route is None:
+                return None, error or "the pre-read is off"
+            if " ".join(route["question"].split()) == " ".join(str(shown).split()):
+                return None, "the reader returned the same question"
+            error = reword_route(queue, repo, ad.get("id"), route, replace=True)
+            return (None, error) if error else (route, None)
     if land is None:
         def land():
             return cmd_land([f"{queue}/{run_id}", "--repo", str(repo),
@@ -3103,7 +3221,15 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         if summary.get("pronto"):
             screen.label("Already done", summary["pronto"])
         if route is not None:
-            screen.label("Task left for you", route, short_path="Task")
+            kind_label = ROUTE_KIND_LABEL.get(ad.get("route_kind"))
+            if kind_label:
+                screen.label(kind_label, route)
+            else:
+                # CS-5 (perguntas-da-largada-legiveis): a route with no kind is an
+                # old one the route reader did not rewrite (or a route in a delivered
+                # item, which is never rewritten). "Task" assumed it was a task of
+                # the owner; "Left for you" claims only what is known.
+                screen.label("Left for you", route)
         if context:
             screen.label("Context", context)
         # A single question, and `sim` always means the same thing: the item
@@ -3112,66 +3238,106 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # 10/15: "99% of the time I don't know what to answer"). With no written
         # question, the terminal asks the default one, instead of showing the evidence and
         # leaving the owner to find the question on his own.
-        screen.blank()
-        if question_text:
-            screen.question(question_text)
-            outside = question_breaks_rules(question_text)
-            if outside:
-                screen.warning(f"(this question was written outside the "
-                           f"rules: {outside}. If it makes no sense, "
-                           "[e] shows the technical detail)")
-        elif route is not None and ad.get("reason") == "pos-entrega":
-            screen.question("done already? With yes, the task closes; the item stays "
-                          "complete.")
-        elif route is not None:
-            screen.question("done already? With yes, the task closes and the item goes "
-                          "back to the queue.")
-        elif summary.get("impede"):
-            screen.question("unblock the item and send it back to the queue?")
-        else:
-            screen.label("The agent stopped because",
-                        summarize_reason(ad.get('evidence') or ''),
-                        short_path="Evidence")
-            screen.question("unblock the item and send it back to the queue?")
-        if instruction:
-            screen.note(f"If yes, the next run receives: {instruction}")
-        rec = recommendation_line(d)
-        if rec:
-            screen.recommend(rec)
-        screen.blank()
-        screen.legend("yes = the task closes; no = it stays open; d = it no "
-                      "longer applies and closes without being done"
-                      if ad.get("reason") == "pos-entrega"
-                      else answers_legend(summary) + "; d = the item leaves the queue")
-        show = bool(ad.get("evidence"))
-        delivered = ad.get("reason") == "pos-entrega"
-        # `d` exists because "sim" always means "back to the queue": on
-        # 2026-11-02 the owner said sim to "descarto este pedido?" (WEGO-2463)
-        # and the item went back to `pending`, for the next run to redo.
-        chips = [("s", "yes"), ("n", "no"), ("t", "I write the answer"),
-                 ("v", "write in the editor"),
-                 ("d", "the task no longer applies" if delivered
-                  else "discard the item")]
-        if show:
-            chips.append(("e", "technical detail"))
-        chips += [("Enter", "later"), ("q", "quit")]
-        prompt = screen.menu(chips, recommended_letter(d))
-        valid = {"s", "n", "t", "v", "d", "", "q"} | ({"e"} if show else set())
+        rewritten = False
+        # CS-7: `?` rewrites the question once and the block asks again; the second
+        # `?` on the same item does not call the reader (spec, "Decided without
+        # asking": no loop holding the launch).
         while True:
-            raw = str(question(prompt))
-            r = raw.strip().lower()
-            r = {"sim": "s", "yes": "s", "y": "s",
-                 "não": "n", "nao": "n", "no": "n"}.get(r, r)
-            if r == "e" and show:
-                screen.evidence(ad.get("evidence"))
-                continue
-            if r not in valid:
-                # Loose text here used to go to later silently, and the answer
-                # the owner wrote vanished (decidir WEGO 2026-09-29-2059).
-                screen.key_error(f"\"{raw.strip()}\" is not one of the options; "
-                                   "to write an answer, type t first")
-                continue
-            break
+            screen.blank()
+            shown_question = question_text
+            if question_text:
+                screen.question(question_text)
+                outside = question_breaks_rules(question_text)
+                if outside:
+                    screen.warning(f"(this question was written outside the "
+                               f"rules: {outside}. If it makes no sense, "
+                               "[e] shows the technical detail)")
+            # CS-3 (perguntas-da-largada-legiveis): a route with no written question
+            # used to get "done already? With yes, the task closes and the item goes
+            # back to the queue.", which assumed every route is a task of the owner
+            # (C1-45 held an open question, C1-47 three outside blocks). The question
+            # no longer describes the keys; the legend below does, a line per key.
+            elif route is not None and ad.get("reason") == "pos-entrega":
+                shown_question = "Is this task finished?"
+            elif route is not None:
+                shown_question = ("Send this item back to the queue for the next run "
+                                  "to try again?")
+            elif summary.get("impede"):
+                shown_question = "unblock the item and send it back to the queue?"
+            else:
+                screen.label("The agent stopped because",
+                            summarize_reason(ad.get('evidence') or ''),
+                            short_path="Evidence")
+                shown_question = "unblock the item and send it back to the queue?"
+            if not question_text:
+                screen.question(shown_question)
+            if instruction:
+                screen.note(f"If yes, the next run receives: {instruction}")
+            rec = recommendation_line(d)
+            if rec:
+                screen.recommend(rec)
+            show = bool(ad.get("evidence"))
+            delivered = ad.get("reason") == "pos-entrega"
+            # `d` exists because "sim" always means "back to the queue": on
+            # 2026-11-02 the owner said sim to "descarto este pedido?" (WEGO-2463)
+            # and the item went back to `pending`, for the next run to redo.
+            chips = [("s", "yes"), ("n", "no"), ("t", "I write the answer"),
+                     ("v", "write in the editor"),
+                     ("d", "the task no longer applies" if delivered
+                      else "discard the item")]
+            if show:
+                chips.append(("e", "technical detail"))
+            chips += [("?", "I don't understand"), ("Enter", "later"), ("q", "quit")]
+            screen.blank()
+            screen.legend(legend_lines(chips, summary, delivered))
+            prompt = screen.menu(chips, recommended_letter(d))
+            valid = {"s", "n", "t", "v", "d", "", "q", "?"} | ({"e"} if show else set())
+            while True:
+                raw = str(question(prompt))
+                r = raw.strip().lower()
+                r = {"sim": "s", "yes": "s", "y": "s",
+                     "não": "n", "nao": "n", "no": "n"}.get(r, r)
+                if r == "e" and show:
+                    screen.evidence(ad.get("evidence"))
+                    continue
+                if r not in valid:
+                    # Loose text here used to go to later silently, and the answer
+                    # the owner wrote vanished (decidir WEGO 2026-09-29-2059).
+                    screen.key_error(f"\"{raw.strip()}\" is not one of the options; "
+                                       "to write an answer, type t first")
+                    continue
+                break
+            if r != "?":
+                break
+            rc, msg = unclear(ident, shown_question)
+            screen.recorded("question recorded as badly written; no answer on the "
+                            "item" if rc == 0 else msg, ok=rc == 0)
+            # CS-8: a failed rewrite, or the second `?`, says so in one line and the
+            # item stays for later; the panel goes on to the next item.
+            if rewritten:
+                screen.warning("question not rewritten again, the item stays for "
+                               "later: the reader rewrites once per item")
+                break
+            rewritten = True
+            screen.note(f"rewriting the question, up to {UNCLEAR_REWRITE_SEC} s")
+            new_route, error = rewrite(ad, shown_question)
+            if new_route is None:
+                screen.warning(f"question not rewritten, the item stays for later "
+                               f"and the panel goes on: {failure_reason(error)}")
+                break
+            ad = dict(ad, question=new_route["question"],
+                      route_kind=new_route["route_kind"],
+                      owner_summary=dict(ad.get("owner_summary") or {},
+                                         se_sim=new_route["if_yes"],
+                                         se_nao=new_route["if_no"]))
+            question_text = new_route["question"]
+            summary = owner_summary_of(ad, d)
+            screen.recorded("question rewritten and recorded in the queue; "
+                            "answer it again")
+        if r == "?":
+            for_later.append(f"{ident}: {OWNER_REASON[reason_alias(ad['reason'])]}")
+            screen.end()
+            continue
         if r == "q":
             stopped = True
         text, give_back, drop = "", False, False
@@ -3294,7 +3460,8 @@ def delivered_leftovers(queue, repo):
     except (subprocess.TimeoutExpired, ValueError):
         items = []
     return [{"id": l.get("id"), "title": l.get("title"), "reason": "pos-entrega",
-             "question": None, "human_pending": l.get("human_pending"),
+             "question": l.get("question"), "human_pending": l.get("human_pending"),
+             "route_kind": l.get("route_kind"),
              "owner_summary": l.get("owner_summary"),
              "evidence": l.get("evidence")}
             for l in items if l.get("human_pending") is not None]
@@ -3403,18 +3570,81 @@ Item:
 """
 
 
-def reader_command(item):
+# CS-4 of docs/spec/perguntas-da-largada-legiveis.md: the reader of an OLD route (an
+# open `human_pending` with no closed question or no kind). Same closed-JSON idea; the
+# payload carries `"tarefa": "reescrever-rota"` so a fake reader can tell the two jobs
+# apart.
+ROUTE_TASK = "reescrever-rota"
+ROUTE_EVIDENCE_CHARS = 6000
+
+ROUTE_READER_PROMPT = """You are a READ-ONLY reader that rewrites an OLD route as a \
+closed question. A route is something only the owner of the repository can close: it \
+is written in the item's `human_pending`. This one was written before routes had a \
+kind and a closed yes/no question, so the owner cannot tell what to answer. Read the \
+item below (and, only if needed, the relevant parts of the repository with Read, Glob \
+and Grep; change nothing) and decide:
+- route_kind: "owner-task" (a task only the owner does, outside the repository), \
+"external-block" (something outside must exist and it is not an owner decision) or \
+"open-question" (a doubt the owner answers);
+- question: ONE closed yes/no question, in Brazilian Portuguese, up to 25 words, with \
+a "?", in lay words: no codes, file names, commit hashes or card ids;
+- if_yes: what a "yes" does to the WORK, in Brazilian Portuguese, up to 30 words, lay \
+words (a "yes" sends the item back to the queue for the next run);
+- if_no: what a "no" does to the WORK, same rules (a "no" leaves the item waiting).
+
+Answer with ONLY one JSON object, no prose, no code fence:
+{{"route_kind": "...", "question": "...", "if_yes": "...", "if_no": "..."}}
+
+Item:
+{item}
+"""
+
+
+# CS-7 of docs/spec/perguntas-da-largada-legiveis.md: the owner pressed `?` ("I don't
+# understand") on a panel question. The same route reader rewrites it right there, in
+# the same closed JSON; the payload's `tarefa` tells a fake reader the job apart and
+# `pergunta_mal_escrita` carries the question the owner did not understand.
+UNCLEAR_TASK = "reescrever-pergunta"
+# The panel waits at most this for the rewrite (spec, "Decided without asking": 60 s).
+UNCLEAR_REWRITE_SEC = 60
+
+UNCLEAR_READER_PROMPT = """You are a READ-ONLY reader that rewrites a question the \
+owner of the repository did NOT understand. The item below waits on the owner: its \
+`human_pending` says what only the owner can close, and `pergunta_mal_escrita` is the \
+question the owner was shown and marked as unclear. Read the item (and, only if \
+needed, the relevant parts of the repository with Read, Glob and Grep; change \
+nothing) and write a NEW, plainer question about the same route:
+- route_kind: "owner-task" (a task only the owner does, outside the repository), \
+"external-block" (something outside must exist and it is not an owner decision) or \
+"open-question" (a doubt the owner answers);
+- question: ONE closed yes/no question, in Brazilian Portuguese, up to 25 words, with \
+a "?", in lay words: no codes, file names, commit hashes or card ids, and NOT the same \
+words as `pergunta_mal_escrita`;
+- if_yes: what a "yes" does to the WORK, in Brazilian Portuguese, up to 30 words, lay \
+words (a "yes" sends the item back to the queue for the next run);
+- if_no: what a "no" does to the WORK, same rules (a "no" leaves the item waiting).
+
+Answer with ONLY one JSON object, no prose, no code fence:
+{{"route_kind": "...", "question": "...", "if_yes": "...", "if_no": "..."}}
+
+Item:
+{item}
+"""
+
+
+def reader_command(item, prompt=READER_PROMPT):
     """(argv, stdin_text) of the reader of ONE item, or None when the pre-read is off.
     `CEPA_UNTIL_LEITOR` replaces the command (shlex-split; it gets the item as JSON on
     stdin); `off` disables the pre-read. The default is a `claude -p` limited to the
-    read-only tools, with the item inside the prompt (stdin stays closed)."""
+    read-only tools, with the item inside the prompt (stdin stays closed). `prompt`
+    is the job: READER_PROMPT (the item) or ROUTE_READER_PROMPT (an old route)."""
     override = os.environ.get("CEPA_UNTIL_LEITOR")
     payload = json.dumps(item, ensure_ascii=False)
     if override is not None:
         if override.strip().lower() == "off":
             return None
         return shlex.split(override), payload
-    cmd = ["claude", "-p", READER_PROMPT.format(item=payload),
+    cmd = ["claude", "-p", prompt.format(item=payload),
            "--output-format", "text",
            "--tools", "Read,Glob,Grep", "--allowedTools", "Read,Glob,Grep",
            # no MCP server: its tools are not covered by `--tools`
@@ -3425,20 +3655,47 @@ def reader_command(item):
     return cmd, None
 
 
-def parse_finding(text):
-    """The closed JSON the reader printed, as {tipo, texto, pergunta[, padrao]}, or
-    None when there is no finding (null type, text that is not that JSON, a type
-    outside the closed set, or a finding with nothing written in `texto`)."""
+def _json_object(text):
+    """The JSON the reader printed (tolerating a fence or a sentence around it), or
+    None when it is not valid JSON."""
     text = (text or "").strip()
     try:
-        body = json.loads(text)
+        return json.loads(text)
     except ValueError:
         # Models wrap the object in a fence or a sentence despite the instruction.
         start, end = text.find("{"), text.rfind("}")
         try:
-            body = json.loads(text[start:end + 1]) if 0 <= start < end else None
+            return json.loads(text[start:end + 1]) if 0 <= start < end else None
         except ValueError:
             return None
+
+
+def parse_route(text):
+    """CS-4: the rewritten route the reader printed, as {route_kind, question, if_yes,
+    if_no}, or None when it is not that (kind outside the closed set, a question
+    without `?`, an empty effect, a field that is not a string, a NUL, a lone surrogate
+    or a control/format character (ESC, BEL, DEL, bidi override) in the text, or text
+    that is not that JSON). Rejected, never stripped: a mangled question is worse than
+    the fallback."""
+    body = _json_object(text)
+    if not isinstance(body, dict) or body.get("route_kind") not in tuple(ROUTE_KIND_LABEL):
+        return None
+    if not all(isinstance(body.get(k), str) for k in ("question", "if_yes", "if_no")):
+        return None
+    flat = {k: " ".join(body[k].split()) for k in ("question", "if_yes", "if_no")}
+    if any(unicodedata.category(ch) in ("Cc", "Cf", "Cs")
+           for v in flat.values() for ch in v):
+        return None
+    if "?" not in flat["question"] or not flat["if_yes"] or not flat["if_no"]:
+        return None
+    return {"route_kind": body["route_kind"], **flat}
+
+
+def parse_finding(text):
+    """The closed JSON the reader printed, as {tipo, texto, pergunta[, padrao]}, or
+    None when there is no finding (null type, text that is not that JSON, a type
+    outside the closed set, or a finding with nothing written in `texto`)."""
+    body = _json_object(text)
     if not isinstance(body, dict) or body.get("tipo") not in READER_KINDS:
         return None
     texto = " ".join(str(body.get("texto") or "").split())
@@ -3476,38 +3733,119 @@ def pre_read_as_text(queue, rows, prefs, output=print):
 
 def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
     """CS-6, on a terminal at the launch: each preference the pre-read found, as one
-    closed question with the agent's default. A line typed is the owner's answer
-    (`escolha` becomes it, `fonte` "dono"); Enter keeps the default. No answer within
-    the wait, EOF or Ctrl-C: one line, and every preference not answered yet keeps the
-    default (`fonte` stays "padrao"). `prefs` is changed in place. Returns how many
-    questions reached the screen (CS-13)."""
+    closed question with the agent's default. CS-10 (perguntas-da-largada-legiveis):
+    the answer is a key, as in the route cards. `s` accepts the default (`fonte`
+    "dono"); Enter keeps it (`fonte` stays "padrao"); `n` asks for one line saying
+    what to do instead and records "não: <question>. Em vez disso: <line>"; `t`
+    records a free line. An empty follow-up line, or loose text at the menu, goes back
+    to the menu with nothing recorded: loose text used to become the whole choice, and
+    a bare "Não" reached the item's agent without saying what to do instead. No answer
+    within the wait, EOF or Ctrl-C: one line, and every preference not answered yet
+    keeps the default. `prefs` is changed in place. Returns how many questions reached
+    the screen (CS-13)."""
     if not prefs:
         return 0
     if question is None:
         def question(prompt):
             return read_line(prompt, print, wait)
     shown = 0
-    print(f"\n── {len(prefs)} choice(s) the pre-read found: answer to decide, "
-          "Enter keeps the agent's default")
+    panel = Panel(SCREEN, print)
+    total = of or len(prefs)
+    if panel.enabled:
+        panel.continue_panel(f"{len(prefs)} choice(s) the pre-read found")
+        panel.panel_note("s accepts the agent's default, n says what to do instead, "
+                         "t writes a free answer")
+    else:
+        print(f"\n── {len(prefs)} choice(s) the pre-read found: s accepts the agent's "
+              "default, n says what to do instead, t writes a free answer")
+
+    def stop(message):
+        if panel.enabled:
+            panel.end()
+            panel.panel_note(message)
+        else:
+            print(f"\n   {message}")
+
+    def say(text):
+        if panel.enabled:
+            panel.key_error(text)
+        else:
+            print(f"       {text}")
+
+    def follow(text):
+        return panel.follow_up(text) if panel.enabled else f"       {text}"
+
+    chips = [("s", "yes, go with the agent's default"),
+             ("n", "no, I say what to do instead"),
+             ("t", "I write the answer"),
+             ("Enter", "keep the agent's default")]
     for i, (ident, pref) in enumerate(prefs.items(), first):
-        print(f"\n   {i}/{of or len(prefs)} · {ident}: {pref['texto']}")
-        if pref.get("pergunta"):
-            print(f"   {pref['pergunta']}")
-        print(f"   If nobody answers, the agent goes with: {pref['padrao']}")
+        if panel.enabled:
+            panel.item(i, total, ident, "")
+        else:
+            print(f"\n   {i}/{total} · {ident}: {pref['texto']}")
+        if panel.enabled:
+            panel.label("Choice", pref["texto"])
+            panel.label("Agent's default", pref["padrao"])
+            if pref.get("pergunta"):
+                panel.question(pref["pergunta"])
+            # menu() prints the chips; the prompt it returns is not used, because
+            # this screen keeps the "Your choice, in one line" anchor (pty tests).
+            panel.menu(chips, "Enter")
+            prompt = panel._prompt("Your choice, in one line [s/n/t, Enter keeps "
+                                   "the default]: ")
+        else:
+            if pref.get("pergunta"):
+                print(f"   {pref['pergunta']}")
+            print(f"   If nobody answers, the agent goes with: {pref['padrao']}")
+            print("       [s] yes, go with the default · [n] no, I say what to do "
+                  "instead · [t] I write the answer")
+            prompt = ("   ▸ Your choice, in one line [s/n/t, Enter keeps the "
+                      "default]: ")
         shown += 1
         try:
-            raw = question("   ▸ Your choice, in one line [Enter keeps the default]: ")
+            while True:
+                raw = " ".join(str(question(prompt) or "").split())
+                key = raw.lower()
+                key = {"sim": "s", "yes": "s", "y": "s",
+                       "não": "n", "nao": "n", "no": "n"}.get(key, key)
+                if key == "":
+                    break
+                if key == "s":
+                    pref.update(escolha=pref["padrao"], fonte="dono")
+                    break
+                if key == "n":
+                    line = " ".join(str(question(follow(
+                        "What should the agent do instead, in one line? "
+                        "[Enter goes back to the menu] ")) or "").split())
+                    if not line:
+                        say("nothing recorded; choose again")
+                        continue
+                    base = pref.get("pergunta") or pref["texto"]
+                    pref.update(escolha=f"não: {base}. Em vez disso: {line}",
+                                fonte="dono")
+                    break
+                if key == "t":
+                    line = " ".join(str(question(follow(
+                        "Your answer, in one line (the item's agent reads this) "
+                        "[Enter goes back to the menu]: ")) or "").split())
+                    if not line:
+                        say("nothing recorded; choose again")
+                        continue
+                    pref.update(escolha=line, fonte="dono")
+                    break
+                say(f"\"{raw}\" is not one of the options; to write an answer, "
+                    "type t first")
         except NoAnswer:
-            print(f"\n   nobody answered in {(wait or 0) / 60:g} min; the remaining "
-                  "choice(s) run with the agent's default")
+            stop(f"nobody answered in {(wait or 0) / 60:g} min; the remaining "
+                 "choice(s) run with the agent's default")
             return shown
         except (EOFError, KeyboardInterrupt):
-            print("\n   choices interrupted; the remaining ones run with the agent's "
-                  "default")
+            stop("choices interrupted; the remaining ones run with the agent's "
+                 "default")
             return shown
-        text = " ".join(str(raw or "").split())
-        if text:
-            pref.update(escolha=text, fonte="dono")
+        if panel.enabled:
+            panel.end()
     return shown
 
 
@@ -3532,6 +3870,9 @@ def preference_note(ident, pref):
 # Readers still running, so Ctrl-C / SIGTERM during the wait can kill their process
 # groups instead of leaving orphan `claude` processes behind.
 _LIVE_READERS = set()
+# Each `_read_in_parallel` call keeps its own readers here (per worker thread), so the end
+# of one pool kills only its own readers, not those of a pool running at the same time.
+_POOL = threading.local()
 
 
 def _kill_group(proc):
@@ -3548,11 +3889,12 @@ READ_STOPPED_ERROR = "launch interrupted before the reader started"
 _READ_STOP = threading.Event()
 
 
-def read_one(repo, item, deadline):
-    """Runs the reader of one item; returns (finding_or_None, error_or_None). Anything
-    that goes wrong (no command, non-zero exit, past the shared deadline) is "no
-    finding": the item then runs as it does today."""
-    built = reader_command(item)
+def _run_reader(repo, item, deadline, prompt, parse):
+    """Runs the reader of one job; returns (parsed_or_None, error_or_None). Anything
+    that goes wrong (no command, non-zero exit, past the shared deadline) is "nothing
+    read": the item then runs as it does today. Shared by the item reader and the
+    route reader: same deadline, same kill of the process group, same `_LIVE_READERS`."""
+    built = reader_command(item, prompt)
     if built is None:
         return None, None
     cmd, stdin_text = built
@@ -3570,6 +3912,9 @@ def read_one(repo, item, deadline):
     except OSError as e:
         return None, f"reader did not launch: {e}"
     _LIVE_READERS.add(proc)
+    own = getattr(_POOL, "own", None)  # the set of the pool this thread works for
+    if own is not None:
+        own.add(proc)
     try:
         out, _ = proc.communicate(stdin_text, timeout=max(left, 0.05))
     except subprocess.TimeoutExpired:
@@ -3578,19 +3923,56 @@ def read_one(repo, item, deadline):
         return None, READ_CEILING_ERROR
     finally:
         _LIVE_READERS.discard(proc)
+        if own is not None:
+            own.discard(proc)
     if proc.returncode != 0:
         return None, f"reader exited {proc.returncode}"
-    return parse_finding(out), None
+    return parse(out), None
+
+
+def read_one(repo, item, deadline):
+    """Runs the reader of one item; returns (finding_or_None, error_or_None)."""
+    return _run_reader(repo, item, deadline, READER_PROMPT, parse_finding)
+
+
+def read_route(repo, item, deadline, prompt=ROUTE_READER_PROMPT):
+    """CS-4: runs the route reader of one item; returns (route_or_None, error_or_None).
+    A reader that ran but printed something that is not a valid route is an error.
+    CS-7: `prompt` is UNCLEAR_READER_PROMPT when the owner pressed `?`."""
+    route, error = _run_reader(repo, item, deadline, prompt, parse_route)
+    if route is None and error is None and reader_command({}) is not None:
+        error = "the reader did not return a valid closed question"
+    return route, error
+
+
+def _read_in_parallel(items, one, ceiling):
+    """Calls `one(item, deadline)` for each item, in parallel, in queue order, all
+    together bounded by `ceiling` seconds (None: READER_CEILING_SEC)."""
+    from concurrent.futures import ThreadPoolExecutor
+    deadline = time.monotonic() + (READER_CEILING_SEC if ceiling is None else ceiling)
+    pool = ThreadPoolExecutor(max_workers=min(READER_WORKERS, max(len(items), 1)))
+    own = set()
+
+    def run(it):
+        _POOL.own = own
+        return one(it, deadline)
+
+    try:
+        return list(pool.map(run, items))
+    finally:
+        # On Ctrl-C / SIGTERM the readers of THIS pool still alive die with their
+        # children, and the waiting threads return at once instead of holding the
+        # interpreter open. Another pool's readers are left alone.
+        for proc in list(own):
+            _kill_group(proc)
+        pool.shutdown(wait=True, cancel_futures=True)
 
 
 def pre_read(repo, items, ceiling=None):
     """Reads `items` (dicts with id/title/why) in parallel, in queue order, all
     together bounded by `ceiling` seconds. Returns one dict per item:
     {id, tipo, texto, pergunta, erro[, padrao]} (`tipo` None = no finding)."""
-    from concurrent.futures import ThreadPoolExecutor
-    deadline = time.monotonic() + (READER_CEILING_SEC if ceiling is None else ceiling)
-
-    def one(item):
+    def one(item, deadline):
         try:
             finding, error = read_one(repo, item, deadline)
         except Exception as e:  # noqa: BLE001  (a reader must never stop the launch)
@@ -3605,15 +3987,30 @@ def pre_read(repo, items, ceiling=None):
         row.update(finding or {})
         return row
 
-    pool = ThreadPoolExecutor(max_workers=min(READER_WORKERS, max(len(items), 1)))
-    try:
-        return list(pool.map(one, items))
-    finally:
-        # On Ctrl-C / SIGTERM the readers still alive die with their children, and the
-        # waiting threads return at once instead of holding the interpreter open.
-        for proc in list(_LIVE_READERS):
-            _kill_group(proc)
-        pool.shutdown(wait=True, cancel_futures=True)
+    return _read_in_parallel(items, one, ceiling)
+
+
+def route_payload(ad):
+    """CS-4: what the route reader receives about an old route (a `deferred` entry of the
+    queue read): the item, the marker of the job, the route text and the evidence."""
+    return {"id": ad.get("id"), "title": ad.get("title"), "tarefa": ROUTE_TASK,
+            "human_pending": ad.get("human_pending"),
+            "evidence": str(ad.get("evidence") or "")[:ROUTE_EVIDENCE_CHARS]}
+
+
+def route_read(repo, routes, ceiling=None):
+    """CS-4: runs the route reader over `routes` (payloads from `route_payload`), in
+    parallel, bounded by `ceiling`. Returns one dict per route: {id, route, erro}
+    (`route` None = nothing to record, `erro` says why). Never writes the queue: the
+    caller records each reading with `reword_route`, one at a time."""
+    def one(payload, deadline):
+        try:
+            route, error = read_route(repo, payload, deadline)
+        except Exception as e:  # noqa: BLE001  (a reader must never stop the launch)
+            route, error = None, f"reader failed: {e}"
+        return {"id": payload.get("id"), "route": route, "erro": error}
+
+    return _read_in_parallel(routes, one, ceiling)
 
 
 class BackgroundRead:
@@ -3621,15 +4018,16 @@ class BackgroundRead:
     holds while the readers run. `result()` waits for the rows; Ctrl-C (or any error)
     during the wait kills the readers and stops the ones not started yet."""
 
-    def __init__(self, repo, items, ceiling=None):
+    def __init__(self, repo, items, ceiling=None, job=None):
         self.rows, self.error = None, None
-        self.thread = threading.Thread(target=self._run, args=(repo, items, ceiling),
+        self.thread = threading.Thread(target=self._run,
+                                       args=(job or pre_read, repo, items, ceiling),
                                        name="pre-read", daemon=True)
         self.thread.start()
 
-    def _run(self, repo, items, ceiling):
+    def _run(self, job, repo, items, ceiling):
         try:
-            self.rows = pre_read(repo, items, ceiling)
+            self.rows = job(repo, items, ceiling)
         except BaseException as e:  # noqa: BLE001  (reported by result())
             self.error = e
 
@@ -3669,9 +4067,12 @@ def open_precondition_route(queue, repo, row):
     because nobody reserved the item. Never writes queue.yaml: `cepa-plan` keeps its
     own validation of the human text. `finish` REPLACES `evidence` and drops
     `owner_summary` on a `pending`, so both are read first and carried over (a red
-    build leaves the side branch and commits in that evidence). If `finish` refuses,
-    it is tried once more without the question, the part that most often fails the
-    plain-text validation. Returns None or the error as text."""
+    build leaves the side branch and commits in that evidence). `finish` requires a
+    kind, a closed question and what yes and no do: the kind is always
+    `external-block`; the question is the pre-read's (`row["pergunta"]`) and, if
+    `finish` refuses it, the fixed "Does this exist now?"; `--if-yes`/`--if-no` get a
+    plain default when the carried-over summary has none. Returns None or the error
+    as text."""
     previous = current_item(queue, repo, row["id"])
     evidence = ("Pre-read at launch found a missing pre-condition: "
                 f"{row['texto']}")
@@ -3679,18 +4080,23 @@ def open_precondition_route(queue, repo, row):
         evidence += "\n" + str(previous["evidence"])
     cmd = [sys.executable, str(CEPA_PLAN), "finish", queue, str(row["id"]),
            "--status", "pending", "--human-pending", row["texto"],
+           "--route-kind", "external-block",
            "--evidence", evidence, "--repo", str(repo), "--supervisor"]
     summary = previous.get("owner_summary")
-    if isinstance(summary, dict):
-        for key, flag, _ in _ownertext.FIELDS:
-            if str(summary.get(key) or "").strip():
-                cmd += [flag, str(summary[key])]
+    if not isinstance(summary, dict):
+        summary = {}
+    defaults = {"se_sim": "o item volta para a fila e o próximo run tenta de novo",
+                "se_nao": "o item continua esperando essa condição"}
+    for key, flag, _ in _ownertext.FIELDS:
+        text = str(summary.get(key) or "").strip() or defaults.get(key, "")
+        if text:
+            cmd += [flag, text]
     # The outer session did not build this item: with its id in the environment,
     # `finish --status pending` would flag THAT session as owing a validation.
     env = {k: v for k, v in os.environ.items()
            if k not in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")}
     attempts = [cmd + ["--question", row["pergunta"]]] if row.get("pergunta") else []
-    attempts.append(cmd)
+    attempts.append(cmd + ["--question", "Does this exist now?"])
     error = None
     for attempt in attempts:
         try:
@@ -3718,7 +4124,38 @@ def last_owner_no(evidence):
     return f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else None
 
 
-def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False):
+def is_old_route(ad):
+    """CS-4: an entry of the queue read's `deferred` that is an OLD route: an open
+    `human_pending` (reason `human_pending`, so never a delivered item) with no written
+    question or no kind."""
+    return (reason_alias(ad.get("reason")) == "human_pending"
+            and bool(str(ad.get("human_pending") or "").strip())
+            and not (str(ad.get("question") or "").strip()
+                     and ad.get("route_kind")))
+
+
+def reword_route(queue, repo, ident, route, replace=False):
+    """CS-4: records a route the reader rewrote, through `cepa-plan reword-route` (the
+    only door: this script never edits queue.yaml). It fills only what the item lacks
+    and never touches `human_pending`, `status` nor `evidence`. Returns None or the
+    error as text. CS-7: `replace` overwrites the question the owner found unclear."""
+    cmd = [sys.executable, str(CEPA_PLAN), "reword-route", queue, str(ident),
+           "--route-kind", route["route_kind"], "--question", route["question"],
+           "--if-yes", route["if_yes"], "--if-no", route["if_no"],
+           "--repo", str(repo)] + (["--replace"] if replace else [])
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")}
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=env)
+    except (subprocess.TimeoutExpired, OSError, ValueError) as e:  # UnicodeError is a ValueError
+        return f"`cepa-plan reword-route` did not answer: {e}"
+    if p.returncode == 0:
+        return None
+    return (p.stderr or p.stdout or "").strip() or \
+        f"`cepa-plan reword-route` exited {p.returncode}"
+
+
+def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False, skip=()):
     """The launch panel (CS-2). Shows `decide` for the owner-reason items still open
     in the queue (an uncapped read; `delivered_leftovers` is deliberately not added:
     a task left on a delivered item holds nothing back) and returns the queue read
@@ -3730,11 +4167,14 @@ def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False):
     CS-8: the panel can come in two parts of one list. `tally` (a dict, filled here)
     turns the closing off and keeps the count, the answers and the numbering across
     calls; `reading` adds the line that says the pre-read is still running; `only`
-    (ids) restricts the call to the routes the pre-read opened, with no CS-4 line."""
+    (ids) restricts the call to the routes the pre-read opened, with no CS-4 line.
+    CS-4 (perguntas-da-largada-legiveis): `skip` (ids) leaves out the old routes that
+    wait for their reader; they come in the second part with `only`."""
     whole, _ = query_queue(queue, repo, max_items=10 ** 6)
     deferred = [ad for ad in (whole or {}).get("deferred") or []
                 if reason_alias(ad.get("reason")) in OWNER_REASON
-                and (only is None or str(ad.get("id")) in only)]
+                and (only is None or str(ad.get("id")) in only)
+                and str(ad.get("id")) not in skip]
     answered_no = []
     to_ask = []
     for ad in deferred:
@@ -4708,8 +5148,25 @@ def _main(argv=None):
     # run behaves as if it had no terminal and no reader; the forecast is above.
     on_terminal = (sys.stdin.isatty() and sys.stdout.isatty()) and not a.no_pre_read
     rows, opened_ids, reading, tally = None, set(), None, {}
-    if (whole and whole.get("batch") and not a.no_pre_read
-            and reader_command({}) is not None):
+    # CS-4 (perguntas-da-largada-legiveis): old routes (an open `human_pending` with no
+    # closed question or no kind) are rewritten by the route reader, with or without a
+    # terminal and even when no item runs. On a terminal the ones the owner is asked
+    # about wait for their reader and come at the END of the panel list.
+    reader_on = not a.no_pre_read and reader_command({}) is not None
+    old_routes = ([ad for ad in (whole or {}).get("deferred") or [] if is_old_route(ad)]
+                  if reader_on else [])
+    route_payloads = [route_payload(ad) for ad in old_routes]
+    # An old route whose last answer was "no" stays in the summary line of the first
+    # call (it is rewritten and recorded, but never asked here).
+    waiting_routes = [str(ad.get("id")) for ad in old_routes
+                      if not last_owner_no(ad.get("evidence"))] if on_terminal else []
+    route_reading, route_rows = None, None
+    if route_payloads:
+        print(f"\n── route reader: {len(route_payloads)} old route(s) to rewrite as a "
+              f"closed question, read-only, up to {READER_CEILING_SEC / 60:g} min")
+        if on_terminal:
+            route_reading = BackgroundRead(repo, route_payloads, job=route_read)
+    if (whole and whole.get("batch") and reader_on):
         to_read = [{k: it.get(k) for k in ("id", "title", "why", "blocked_by")}
                    for it in whole["batch"]]
         print(f"\n── pre-read: {len(to_read)} item(s), read-only, "
@@ -4726,9 +5183,34 @@ def _main(argv=None):
     # terminal nothing changes (the end-of-run listing stays as it was).
     if on_terminal:
         data = ask_at_launch(repo, a.queue, data, tally=tally,
-                             reading=reading is not None)
+                             reading=reading is not None or route_reading is not None,
+                             skip=set(waiting_routes))
         if reading is not None:
             rows = reading.result()
+        if route_reading is not None:
+            route_rows = route_reading.result()
+    elif route_payloads:
+        route_rows = route_read(repo, route_payloads)
+    rewrite_event = None
+    if route_rows is not None:
+        rewritten, failed = [], []
+        for r in route_rows:
+            error = r["erro"]
+            if r["route"] is not None:
+                error = reword_route(a.queue, repo, r["id"], r["route"])
+                if error:
+                    print(f"   route reader: could not record the rewritten question "
+                          f"of {r['id']} ({error.splitlines()[0][:160]}); it stays as it was")
+            if error:
+                failed.append({"id": r["id"], "erro": error.splitlines()[0][:200]})
+            else:
+                rewritten.append(str(r["id"]))
+        print(f"\n   route reader: {len(rewritten)} of {len(route_rows)} route(s) "
+              "rewritten as a closed question and recorded"
+              + ("" if on_terminal else "; they are asked with `cepa-until decide "
+                 f"{a.queue}`"))
+        rewrite_event = {"evento": "rotas_reescritas", "reescritas": rewritten,
+                         "falhas": failed}
     if rows is not None:
         opened = 0
         for row in rows:
@@ -4772,7 +5254,8 @@ def _main(argv=None):
         # CS-8: the pre-read's questions at the end of the same list, numbered after
         # the queue's, with the total that sums both parts.
         from_queue = tally.get("shown", 0)
-        added = len(opened_ids) + len(preferences)
+        late_ids = opened_ids | set(waiting_routes)
+        added = len(late_ids) + len(preferences)
         if from_queue and added:
             tally["of"] = from_queue + added
             Panel(SCREEN, print).continue_panel(
@@ -4780,11 +5263,11 @@ def _main(argv=None):
                 f"{from_queue + added} question(s) in total")
         elif added:
             tally["of"] = added
-        if opened_ids:
-            data = ask_at_launch(repo, a.queue, data, only=opened_ids, tally=tally)
+        if late_ids:
+            data = ask_at_launch(repo, a.queue, data, only=late_ids, tally=tally)
         tally["prefs_shown"] = ask_preferences(
             preferences, wait=ANSWER_WAIT_SEC,
-            first=from_queue + len(opened_ids) + 1, of=tally.get("of"))
+            first=from_queue + len(late_ids) + 1, of=tally.get("of"))
         if tally.get("shown", 0) and not tally.get("cut"):
             Panel(SCREEN, print).close_panel(
                 [], tally.get("applied", []), tally.get("for_later", []),
@@ -4842,6 +5325,8 @@ def _main(argv=None):
               **({"recolha": collected} if collected else {})})
     if pre_read_event:
         log_event(pre_read_event)
+    if rewrite_event:
+        log_event(rewrite_event)
     # CS-13: the launch's measurement. No numeric goal (spec): the event is what lets a
     # later run be compared with the 31% of items that got stuck in the middle.
     found = {kind: sum(1 for r in rows or [] if r.get("tipo") == kind)
@@ -4853,6 +5338,11 @@ def _main(argv=None):
                "rotas_resumidas": tally.get("summarized", 0),
                "itens_lidos": sum(1 for r in rows or [] if r.get("lido")),
                "achados": found,
+               # CS-10 (perguntas-da-largada-legiveis): each pre-read choice as it
+               # left the launch, with who decided it (`dono` or `padrao`).
+               "escolhas": [{"id": ident, "pergunta": p.get("pergunta"),
+                             "escolha": p["escolha"], "fonte": p["fonte"]}
+                            for ident, p in preferences.items()],
                "segundos": round(time.monotonic() - launch_clock, 1)})
     # The run state, next to the `.jsonl` (C6): `rodando` now, and at the end
     # `esperando-dono` (there is an action or pending item) or `encerrado`. It is written BEFORE

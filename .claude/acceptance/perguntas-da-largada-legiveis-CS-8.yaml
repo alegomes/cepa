@@ -1,0 +1,18 @@
+schema_version: 1
+card: perguntas-da-largada-legiveis-CS-8
+status: complete
+audited_at: 2026-11-14T12:00:00-03:00
+audited_diff: d1da1c8..8ffa493
+criteria:
+  - id: AC1
+    text: "no cenário do CS-6 com um leitor falso que não responde em 60 segundos, a tela mostra uma linha dizendo que a pergunta não foi reescrita e que o item fica para depois, passa ao item seguinte e lista o item em 'for later' no fecho do painel"
+    altitude: cli
+    surface: "cepa-until decide <fila> em pseudo-terminal (tecla `?`), leitor falso via CEPA_UNTIL_LEITOR que dorme 300 s no job reescrever-pergunta; tela e fecho do painel"
+    demonstrated_by:
+      test: "tests/test_cepa_until_unclear_fallback.py::test_hung_reader_leaves_the_item_for_later_and_the_panel_goes_on"
+      layer: cli-subprocess-pty
+      evidence: verified
+      run: "python3 tests/test_cepa_until_unclear_fallback.py -> 17 checagens ok (7 no pty), 'tudo verde', ~61 s. Checa corte em 55-90 s, linha 'not rewritten ... for later', próximo item aparece depois, fecho 'answered now 0 / for later 2' e '○ b1, b2'."
+    verdict: complete
+    gap: null
+    note: "Cobre também o segundo `?` (decisão 'Decided without asking': não chama o leitor de novo, linha 'not rewritten again, the item stays for later', segue ao próximo, item em for later) em test_second_question_mark_says_so_and_moves_on, e erro do leitor em test_a_failed_rewrite_says_so_and_moves_on, ambos via decide() com leitor injetado (nível função, não pty). O fecho lista os ids de todos os itens deixados para depois (later_names), não só o do `?`; no teste o b2 também fica para depois por Enter. Não rodei a suíte completa (reservada ao supervisor)."

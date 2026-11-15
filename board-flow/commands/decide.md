@@ -218,7 +218,8 @@ Per accepted group:
   `fila=`/`item=` and open the human route on the item: `cepa-plan finish <fila> <id> --status
   blocked|pending --human-pending "Aceitar ou recusar a dispensa de <escopo>
   (<motivo>)" --question "Aceito a dispensa de <escopo> por <razão>? Recomendo
-  <sim/não>: <porquê>"`. Only the owner's `cepa-plan answer <fila> <id> --answer "sim:
+  <sim/não>: <porquê>" --route-kind open-question --if-yes "<o que o sim faz
+  ao trabalho>" --if-no "<o que o não faz>"`. Only the owner's `cepa-plan answer <fila> <id> --answer "sim:
   ..."`, in a terminal, converts the proposal into a waiver (fb-20261014-3).
 - **don't accept** → create the card for the missing test (one per real gap,
   not one per stuck card) and send the cards back with `**Reason:**` **per

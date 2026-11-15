@@ -1,0 +1,46 @@
+schema_version: 2
+card: perguntas-da-largada-legiveis-CS-8
+verdict: proven
+reviewed_at: 2026-11-14T15:00:00-03:00
+base_commit: d1da1c8
+head_commit: bbb62a1
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until (decide: two screen.warning lines after a failed rewrite and on the second `?`; later_names(); close_panel plain and tty branches; failure_reason() and FAILURE_REASON_MAX added by bbb62a1)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # the pty case drives the real `cepa-until decide`; only the far boundary (the route reader, an LLM call) is a fake reader that sleeps 300 s. The in-process cases inject `rewrite`/`unclear`/`answer` callables into decide() on purpose, to reach the fallback branches fast; the pty case is the external proof. The L4 re-probe at bbb62a1 used the REAL rewrite path (read_route + reword_route) and, in case (a), the REAL `cepa-plan reword-route`.
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at bbb62a1 (throwaway detached worktree /tmp/cs8-l4d): python3 tests/test_cepa_until_unclear_fallback.py -> 23 'ok' checks, 0 FAIL, 'tudo verde' (pty case 7 checks incl. the 60 s ceiling, 5 in-process cases). Neighbors at bbb62a1: tests/test_cepa_until_unclear_rewrite.py 'tudo verde'; tests/test_cepa_until_unclear_key.py 'tudo verde'."
+        - "Earlier perturbations P1-P5 (recorded at 8ffa493: failed-rewrite line text, second-`?` line text, closing plain branch, closing tty branch, second-`?` break): not re-perturbed one by one at bbb62a1. bbb62a1 only adds failure_reason() and wraps the {error} in the P1 line; the covering file is green at HEAD and still asserts each of those lines (checks 'a line says the question was not rewritten', 'the same line says the item stays for later', 'both items named on the for-later line', 'the closing lists b1 under for later', 'the reader ran once')."
+        - "P6 failure_reason returns `str(error)` raw (first line of the function) -> 2 FAIL: 'CS-8 hostile: no control character on the screen' and 'CS-8 hostile: the reason shows, cut to a bounded length' (RED)"
+        - "P7 failure_reason drops the cut (`return text`) -> 1 FAIL: 'CS-8 hostile: the reason shows, cut to a bounded length' (RED)"
+        - "P8 failure_reason drops the Cc/Cf/Cs filter (keeps whitespace folding and the cut) -> 1 FAIL: 'CS-8 hostile: no control character on the screen' (RED)"
+        - "not perturbed (named, not silently skipped): the `break` after a failed rewrite (new_route is None); guarded by structure (removing it falls through to `new_route[\"question\"]` and crashes), also covered end to end by the pty case (next item shows after the line). Whitespace folding inside failure_reason is covered only through the hostile case's CR/LF and not perturbed on its own."
+        - "every perturbation restored with `git -C /tmp/cs8-l4d checkout HEAD -- common/bin/cepa-until`; `git diff --stat` empty in the throwaway before the neighbor runs; worktree removed with `git worktree remove --force`; primary tree has only the two untracked CS-8 yaml files (this proof and the acceptance file)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in the repo; failure_reason() is reached by the in-process hostile case and by the pty case (reason text on the real screen), and each of its three behaviors (control-character drop, whitespace fold at the CR/LF, cut at 200) turned the covering file red when broken (P6, P7, P8)."
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    run: "scratch probe /tmp/cs8-l4d/scratch/l4d.py in a throwaway detached worktree at bbb62a1, `python3 -I scratch/l4d.py`: real decide() with the real rewrite path (CEPA_UNTIL_LEITOR fake reader returning a valid route), queue from build_repo, queue read before/after as bytes. Output: case a: line shown=True, next item after=True, later=['b1','b2'], plan.yaml identical=True, loads=True, control chars=[]; case b1 (fake CEPA_PLAN, exit 2, hostile text on stderr): same, control chars=[]; case b2 (exit 3, hostile text on stdout): same, control chars=[]."
+    results:
+      - "(a) the reader returns a valid route and the real `cepa-plan reword-route` refuses it (b1 is `done` in plan.yaml): the screen shows `question not rewritten, the item stays for later and the panel goes on: `reword-route` recusado para b1: o item está `done`, e só item aberto (`pending` ou `blocked`) tem a rota reescrita; nada foi gravado.`; the next item [2/2] b2 shows after it; for_later = [b1, b2]; plan.yaml byte-identical and loads as YAML; no control character on screen."
+      - "(b) hostile reword-route output (fake CEPA_PLAN printing ESC[2J, ESC]0;pwned BEL, NUL, CR, newlines and 5000 `A`, once on stderr with exit 2, once on stdout with exit 3): the failure line shows (`... and the panel goes on: recusado[2J]0;pwned linha nova AAAA...`), the panel moves on to b2, for_later = [b1, b2], plan.yaml byte-identical and loads. ESC, BEL, NUL and CR are gone (no control character left on screen); the `[2J` and `]0;pwned` remnants are plain printable text and do nothing; the 5000 A's are cut to 170 A's in the output (reason capped at 200 characters including the words before them)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Story, not Bug. Red-at-base was not re-run: at base d1da1c8 `decide` discards the rewrite error (`new_route, _error = rewrite(...)`, recorded in the CS-7 proof) and prints no such line, so the pty case's 'a line says the question was not rewritten' cannot pass there; P1 (recorded at 8ffa493) reproduces exactly that absence (4 FAIL). The finding F of the earlier L4 (raw ESC/BEL/NUL and 5000 characters on screen) is reproduced as red by P6/P8/P7 against the new hostile test."
+routing_reason: "The L4 finding F (low) of the previous round is closed: at bbb62a1 the rewrite-failure reason reaches the screen as one line with no control character and at most 200 characters, in both the refusal case (real cepa-plan) and the hostile-output case (fake cepa-plan on stderr and on stdout); the panel moves to the next item and plan.yaml is byte-identical. The new test turns red when failure_reason is made raw (P6), loses its cut (P7) or loses its control-character filter (P8). The covering file (23 checks) and two neighbor files are green at HEAD. Every applicable level passed with run evidence and nothing is assumed or skipped, so the verdict is proven. Limits stated above: P1-P5 were not re-perturbed at HEAD (covering file green and asserting those lines), and the `break` after a failed rewrite is covered structurally and end to end only."

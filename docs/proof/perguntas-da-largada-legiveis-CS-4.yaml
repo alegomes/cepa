@@ -1,0 +1,57 @@
+schema_version: 2
+card: perguntas-da-largada-legiveis-CS-4
+verdict: proven
+reviewed_at: 2026-11-13T19:10:00-03:00
+base_commit: 114ba77
+head_commit: f5e3328
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (cmd_reword_route, reword-route subcommand)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # the test runs the real cepa-plan as a process
+    - class: "common/bin/cepa-until (ROUTE_READER_PROMPT, parse_route, _run_reader, _read_in_parallel per-pool set, is_old_route, reword_route, route_read, launch flow, ask_at_launch skip)"
+      module: cli
+      external_observable: true
+      # Only the far boundary is faked: CEPA_UNTIL_LEITOR stands in for `claude -p` (the model).
+      # The launch, the panel (on a pty), cepa-plan reword-route and queue.yaml are real.
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "git diff 777eb92..f5e3328: common/bin/cepa-until (+12/-4: import unicodedata, parse_route non-str rejection, Cc/Cf/Cs rejection, ValueError in reword_route except) and tests/test_cepa_until_route_rewrite.py (+55)"
+        - "GREEN at f5e3328 (throwaway detached worktree /tmp/proof-cs4c): python3 tests/test_cepa_until_route_rewrite.py -> exit 0, 138 ok, 0 FAIL, 'tudo verde'"
+        - "KILLED P1, non-string rejection dropped (`if False and not all(isinstance...)`, str(body.get(k) or '') restored): exit 1, 128 ok, 10 FAIL ('parse_route: a list in question is rejected', dict, number, inf...)"
+        - "KILLED P2, character-category rejection dropped (`if False and any(unicodedata.category...)`): exit 1, 118 ok, 20 FAIL ('parse_route: NUL in question is rejected', lone surrogate, ESC, BEL, DEL, bidi...)"
+        - "KILLED P3, ValueError removed from the except in reword_route: exit 1, 136 ok, 2 FAIL ('reword_route: NUL does not raise ValueError(embedded null byte)', 'lone surrogate does not raise UnicodeEncodeError')"
+        - "SPOT CHECK 1 of an earlier kill, still killed: is_old_route `== \"human_pending\"` inverted to `!=` (cepa-until:3624) -> exit 1, 115 ok, 21 FAIL"
+        - "SPOT CHECK 2 of an earlier kill, still killed: _read_in_parallel `_kill_group(proc)` replaced by `pass` (cepa-until:3460) -> exit 1, 137 ok, 1 FAIL 'the pool returns at once, not after the reader's 30 s  took 30.4s'"
+        - "every perturbation applied with sed by absolute path inside the throwaway worktree, foreground, restored with git checkout; worktree removed at the end (git worktree list confirms); primary tree untouched; nothing in background. Other earlier kills (reword-route 12, cepa-until 6, ...) stand: those production lines are unchanged since 777eb92 (the only production diff is the three hunks above)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; each of the 3 new production lines is guarded: removing it turns python3 tests/test_cepa_until_route_rewrite.py RED (P1 10 FAIL, P2 20 FAIL, P3 2 FAIL)"
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    run: "throwaway detached worktree at f5e3328 (removed afterwards); 41 hostile reader outputs (the 30 of the previous run plus extra variants: ESC in if_yes, NUL in if_yes, lone surrogate in if_no, bare 10k, route_kind variants, fenced+trailing, code-in-text), each through the real `cepa-until fila` launch without a terminal (CEPA_UNTIL_LEITOR = fake reader writing the raw bytes, real cepa-plan reword-route, queue with 2 old routes r1/r2 and a plain item y1). Result: 41 of 41 -> rc 0, no traceback, queue.yaml parseable, r1/r2 human_pending/status/evidence unchanged, y1 ran (done) with human_pending/evidence unchanged. Driver: tests/l4_hostile_cs4.py inside the throwaway worktree (removed with it)."
+    findings: []
+    cases:
+      - "FIXED, was FAIL: NUL in question / if_yes, lone surrogate in question / if_no -> rc 0, not rewritten, item untouched (previous run: rc 1 with traceback)"
+      - "FIXED, was minor: ESC [31m, BEL, DEL, U+202E in question; ESC in if_yes -> rejected by parse_route, not rewritten, nothing reaches queue.yaml"
+      - "FIXED, was minor: question as list or dict, if_yes as number, if_yes 1e999, huge integer -> rejected, not rewritten"
+      - "OK, rewritten as plain text with core fields unchanged: `--status done?`, `--human-pending x?`, if_yes `--status done`, YAML specials (`: # &a *a !!python/object/apply:os.system --- quotes braces`), if_yes spanning lines with `- a`, `---`, `!!python/object` and a tab (newlines collapsed), newlines/tabs/CR in the question, accents+emoji, U+2028, 10k-char question and effects, extra keys human_pending/status/evidence/owner_summary (ignored)"
+      - "OK, not rewritten, launch goes on: if_no bare `--human-pending` (argparse refuses), route_kind list/null/int/dict, if_yes null, two JSON objects, JSON array, fenced block + trailing `{not}`, empty, whitespace only, non-UTF8 bytes, pure binary, 5000-deep nested list, question with a card code and a commit hash (cepa-plan refuses)"
+      - "side effect, fail-soft (not a defect): a question with a ZWJ emoji family (U+200D is category Cf) is now not rewritten (before: recorded intact); an Arabic question ending in U+061F has no ASCII `?` so it is not rewritten either (pre-existing rule, not from this commit). In both the item keeps its old route and the launch goes on."
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Story, not Bug. Equivalent: the new tests were red against the defect (P1/P2/P3 each turn the file RED, exit 1); the earlier base check (git checkout 114ba77 -- common/bin/cepa-until common/bin/cepa-plan common/plan-schema.yaml -> exit 1, 5 FAIL then AttributeError) stands."
+routing_reason: "L3: all 3 new production lines are load-bearing (each perturbation turns the covering file red, 10/20/2 FAIL) and 2 earlier kills re-checked. L4: the 30 hostile cases of the previous run, plus 11 variants, 41 of 41 through the real launch with rc 0, no traceback, queue.yaml parseable, core fields unchanged; the NUL/lone-surrogate crash and the control/bidi/non-string leaks are closed. No double substitutes a changed class. PROVEN."

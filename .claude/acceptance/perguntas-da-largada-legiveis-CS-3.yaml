@@ -1,0 +1,17 @@
+schema_version: 1
+card: perguntas-da-largada-legiveis-CS-3
+status: complete
+audited_at: 2026-11-13T11:00:00-03:00
+audited_diff: d81d10e..ba5ea42
+criteria:
+  - id: AC1
+    text: "nenhuma rota recebe a frase \"done already?\", e a legenda traz uma frase por tecla"
+    altitude: cli
+    surface: "cepa-until decide <fila> num pseudo-terminal sobre item com human_pending e sem question (pending e done): sem 'done already' nem 'the task closes and the item goes back'; uma linha de legenda por tecla do menu, na ordem do menu; 'task' e 'item' nunca na mesma linha da legenda"
+    demonstrated_by:
+      test: "tests/test_cepa_until_legend_per_key.py::test_decide_on_terminal_has_no_done_already_and_one_legend_line_per_key (pty rodando o cepa-until decide real); test_decide_without_terminal_legend_is_one_line_per_key (saida sem terminal, se_sim/se_nao na legenda)"
+      layer: cli-pty-subprocess
+      evidence: verified
+      run: "python3 tests/test_cepa_until_legend_per_key.py -> 20 checagens ok, 0 FAIL, 'tudo verde'; python3 tests/test_cepa_until_decide.py -> exit 0, 433 ok, 0 FAIL, 'tudo verde'"
+    verdict: complete
+    gap: null

@@ -1,0 +1,18 @@
+schema_version: 1
+card: perguntas-da-largada-legiveis-CS-6
+status: complete
+audited_at: 2026-11-14T10:30:00-03:00
+audited_diff: 5066b1c..d7b1c22
+criteria:
+  - id: AC1
+    text: "num pseudo-terminal, apertar `?` numa pergunta do painel deixa o item igual no `queue.yaml` e acrescenta uma linha ao arquivo de feedback com alvo `cepa-until`, o id do item e o texto da pergunta; hoje a tela responde que `?` não é uma das opções."
+    altitude: cli
+    surface: "cepa-until decide <fila> em pseudo-terminal (tecla `?`); arquivo da fila (plan.yaml) e ledger feedback-*.jsonl em CEPA_FEEDBACK_DIR"
+    demonstrated_by:
+      test: "tests/test_cepa_until_unclear_key.py::test_question_mark_on_terminal_records_feedback_and_leaves_item"
+      layer: cli-subprocess-pty
+      evidence: verified
+      run: "python3 tests/test_cepa_until_unclear_key.py -> exit 0, 15 checagens ok (10 no pty: fila byte a byte igual, 1 linha no ledger, alvo cepa-until, id b1, texto da pergunta, sem 'is not one of the options'), 'tudo verde'. Vizinho: python3 tests/test_cepa_until_decide.py -> exit 0, 431 ok, 'tudo verde'"
+    verdict: complete
+    gap: null
+    note: "O teste roda o cepa-until real e o cepa-feedback real (sem mock) e lê o ledger gravado. Spec 'Decided without asking' (cepa-feedback add, alvo cepa-until) respeitada: diff chama cepa-feedback add --target cepa-until. Teste de texto cobre a pergunta fixa quando não há pergunta escrita; teste de falha cobre ledger recusando (mensagem mostrada, sem resposta). Reescrita pós-? (CS-7/CS-8) fora de escopo. Nota: o arquivo da fila neste layout é plan.yaml; o critério diz queue.yaml, mesma coisa."

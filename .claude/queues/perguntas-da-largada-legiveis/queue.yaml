@@ -290,11 +290,15 @@ items:
     a trazer a pergunta nova; hoje não existe reescrita.'
   status: pending
   blocked_by: []
-  human_pending: 'Aceitar ou recusar a dispensa de common/hooks/_ownertext.py (sem-cobertura):
-    o filtro de jargão deixa passar caminho de pasta, nome de função e URL na pergunta
-    reescrita'
-  evidence: 'Commits 30930f5 (cepa-until decide: after ?, route reader rewrites
-    the question once with UNCLEAR_READER_PROMPT, tarefa reescrever-pergunta, pergunta_mal_escrita,
+  human_pending: null
+  evidence: 'Resposta do dono em 2026-11-14: sim: Entrego a reescrita da pergunta
+    com o filtro de palavras técnicas como está hoje? Recomendo sim: o furo é antigo
+    e vale corrigir à parte. Dispensa sem-cobertura em common/hooks/_ownertext.py:
+    aceita pelo dono. Rota humana fechada pelo dono: Aceitar ou recusar a dispensa
+    de common/hooks/_ownertext.py (sem-cobertura): o filtro de jargão deixa passar
+    caminho de pasta, nome de função e URL na pergunta reescrita. Evidência anterior:
+    Commits 30930f5 (cepa-until decide: after ?, route reader rewrites the question
+    once with UNCLEAR_READER_PROMPT, tarefa reescrever-pergunta, pergunta_mal_escrita,
     ceiling UNCLEAR_REWRITE_SEC=60; recorded via new cepa-plan reword-route --replace;
     same item block re-shows question + menu; second ? does not call the reader;
     CS-6 tests set CEPA_UNTIL_LEITOR=off; docs/cepa-cli.md), ccf1da3 (tests for
@@ -316,18 +320,6 @@ items:
     test_cepa_until_decide, test_commands_catalog: all green. Full suite left to
     the supervisor. Code is on the overnight branch. Left out: CS-8 (line saying
     the rewrite failed).'
-  route_kind: open-question
-  owner_question: 'Entrego a reescrita da pergunta com o filtro de palavras técnicas
-    como está hoje? Recomendo sim: o furo é antigo e vale corrigir à parte'
-  owner_summary:
-    pedido: depois do ponto de interrogação, reescrever na hora a pergunta que o
-      dono não entendeu
-    pronto: a pergunta nova aparece no mesmo bloco em até um minuto e fica gravada
-      na fila
-    impede: o filtro de palavras técnicas, que já existia, deixa passar caminho
-      de pasta, nome de função e endereço de site na pergunta reescrita
-    se_sim: o trabalho é entregue como está e o filtro vira um item separado
-    se_nao: o trabalho espera o filtro ser endurecido antes de ser entregue
   decisions:
   - texto: 'o segundo ponto de interrogação no mesmo item não chama o leitor de
       novo: registra e deixa o item para depois'

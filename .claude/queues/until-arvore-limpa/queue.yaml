@@ -171,15 +171,25 @@ items:
     de saída que teria sem o hook, a tela final e o `.review.md` trazem a linha
     do motivo e o comando `git commit` exato para o dono, nenhum commit novo é criado
     e nenhuma chamada a `git` traz `--no-verify`.'
-  status: blocked
+  status: pending
   blocked_by: []
   human_pending: null
-  evidence: 'This is return 2 of 2: the item closed `done`, but the full build of
-    the run branch (`tests/run-all.sh`) exited 1, and the 2nd build exited 1. Output
-    in the `.log` of run 2026-11-14-0954. The commits of every attempt are in `until/2026-11-14-0954-vermelho-CS-5-v2`
-    and the run branch went back to 901136c59a. Marked `blocked`: the item already
-    came back with the note and went red again. The card in Jira may have moved
-    to Review before the build — check it.'
+  evidence: 'Resposta do dono em 2026-11-14: sim: Do I return this item to the queue
+    so the next run fixes the slow test fake the earlier fix missed? Instrução:
+    resume from until/2026-11-14-0954-vermelho-CS-5-v2 (cherry-pick ccb88fe, e6bfb8b,
+    58b56ad, 082e158); in tests/test_cepa_until.py add the ''--warmup'' early exit
+    to the fake written by herdr_release_env (line ~1698) and call warm_up(herdr)
+    there, like herdr_scenario; grep every other test that writes a fake herdr (test_cepa_prove.py,
+    test_cepa_until_quota.py) for the same gap; the failing check was ''herdr (fim
+    da janela)'' with an empty log; production code and the clean-tree test must
+    stay byte-identical to bd96753. O item voltou de `blocked` para `pending`. Evidência
+    anterior: This is return 2 of 2: the item closed `done`, but the full build
+    of the run branch (`tests/run-all.sh`) exited 1, and the 2nd build exited 1.
+    Output in the `.log` of run 2026-11-14-0954. The commits of every attempt are
+    in `until/2026-11-14-0954-vermelho-CS-5-v2` and the run branch went back to
+    901136c59a. Marked `blocked`: the item already came back with the note and went
+    red again. The card in Jira may have moved to Review before the build — check
+    it.'
   decisions:
   - texto: Quando o git recusa o commit do fim do run, o cepa-until escreve o motivo
       e o comando no fim do .review.md, criando o arquivo se a análise não rodou
@@ -188,9 +198,6 @@ items:
       usa --no-verify) e não muda o código de saída: mostra na tela e escreve no
       .review.md o motivo e o comando git exato para o dono commitar à mão'
     commit: e6bfb8b3c99e330f8be7438efd0ca340e75af0ba
-  owner_summary:
-    impede: the agent delivered, but the project's full test suite failed after
-      it, and failed again when the item came back to be fixed.
 - id: CS-6
   title: Com a main no meio de um merge ou rebase, o run não commita e avisa
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios

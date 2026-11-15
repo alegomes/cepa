@@ -1,0 +1,57 @@
+schema_version: 2
+card: perguntas-da-largada-legiveis-CS-7
+verdict: needs-human
+reviewed_at: 2026-11-14T12:10:00-03:00
+base_commit: 859b59c
+head_commit: ccf1da3
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until (decide: `?` rewrite loop, default `rewrite`, UNCLEAR_READER_PROMPT, UNCLEAR_TASK, UNCLEAR_REWRITE_SEC, read_route prompt arg, reword_route replace arg)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # the pty test drives the real `cepa-until decide` and the real `cepa-plan reword-route`; only the far boundary (the route reader, an LLM call) is a fake reader
+    - class: "common/bin/cepa-plan (cmd_reword_route --replace)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at ccf1da3 (throwaway detached worktree /tmp/cs7-proof2-a): python3 tests/test_cepa_until_unclear_rewrite.py -> 'tudo verde'; python3 tests/test_cepa_until_unclear_key.py -> 'tudo verde'"
+        - "P1 second `?` does not call the reader: `if rewritten:` -> `if False:` -> 1 FAIL ('CS-7 text: the reader ran once') (RED)"
+        - "P2 cepa-until does not pass --replace: `replace=True)` -> `replace=False)` -> 3 FAIL ('queue.yaml carries the new question', '... new kind and effects', 'ceiling: recorded with --replace') (RED)"
+        - "P3 payload job: tarefa=UNCLEAR_TASK -> tarefa=\"outra\" -> 5 FAIL (reader got the job, new question shows, queue carries question/kind, payload carries the job) (RED)"
+        - "P4 payload old question: pergunta_mal_escrita=shown -> \"\" -> 2 FAIL ('the reader got the unclear-question job with the old question', 'ceiling: payload carries the job and the old question') (RED)"
+        - "P5 cepa-plan --replace ignored for route_kind: `if replace or not it.get(\"route_kind\")` -> `if not it.get(\"route_kind\")` -> 2 FAIL ('queue.yaml carries the new kind and effects', 'reword-route --replace: new question and kind') (RED)"
+        - "P6 no re-ask after the rewrite: `if r != \"?\":` -> `if True:` -> 8+ FAIL (reader job, new question shows, queue carries new question, text: reader ran once, both `?` recorded ...) (RED)"
+        - "P7 (was survivor) 60 s ceiling: UNCLEAR_REWRITE_SEC = 60 -> 600 -> 2 FAIL ('ceiling: the deadline is 60 s ahead  599.99...', 'ceiling: the screen names the 60 s') (RED)"
+        - "P8 (was survivor) same-question guard: `return None, \"the reader returned the same question\"` -> `pass` -> 2 FAIL ('same: nothing recorded in the queue', 'same: no rewritten line') (RED)"
+        - "every perturbation restored with git checkout ccf1da3 -- <file>; final re-run of both tests 'tudo verde'; git status clean in the throwaway; worktree removed, primary tree untouched"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; the two hunks previously unasserted (60 s ceiling, same-question guard) are now reached and asserted: P7 and P8 each turn red"
+  l4_adversarial_input:
+    status: findings
+    reason: ""
+    run: "python3 /tmp/cs7-l4/run2.py (36 hostile reader outputs, each in a fresh tmp git repo, real `cepa-until decide fila --repo <tmp>` in a pty via on_tty, keys `?` then Enter, CEPA_UNTIL_LEITOR = fake reader that prints the case bytes and exits with the case code, CEPA_FEEDBACK_DIR = temp dir) -> 36 cases, 0 corrupted queue; python3 /tmp/cs7-l4/hang.py (reader that sleeps 300 s) -> exit 0, elapsed 60.7 s, queue byte-identical, 'answered now 0 / for later 1', no reader process left. The harness diffs the whole queue item and flags any raw ESC/OSC/C0/C1/format char on the screen beyond the sequences the panel itself draws (measured on the valid baseline run)."
+    results:
+      - "ACCEPTED, valid text, recorded in queue.yaml, no control char on screen: baseline valid; JSON wrapped in a ```json fence and prose; ESC/OSC bytes in the prose AROUND a valid JSON (stripped by the JSON extraction, never reach the screen); JSON with extra keys (extra, evidence, owner_question ignored); JSON carrying human_pending=null, status=done, evidence=PWNED, claimed_by, decisions (all ignored: parse_route keeps only route_kind/question/if_yes/if_no, and human_pending, status, evidence, claimed_by, head_commit, decisions, blocked_by, id, title, why were compared equal to the pre-run item); a question with YAML text (`- id: injected / status: done / !!python/object/apply:os.system`) is flattened to one line and stored as a plain string, queue stays 1 item, no extra keys; effects with `a: b --- status: done` and `{x: [y`; `{0} %s %(x)s {id}` and `[bold]a[/bold]` stored literally (no format or markup expansion)"
+      - "REJECTED, queue.yaml byte-identical, no control char on screen, panel closes the item 'for later 1': ESC/OSC escaped (\\u001b[2J, \\u001b]0;..\\u0007, OSC 8 hyperlink), ESC as RAW bytes inside the JSON string, NUL in question and in an effect, bidi override U+202E, C1 CSI U+009B, zero-width U+200B, tag char U+E0041, lone surrogate, question with no `?`, route_kind outside the set ('admin-override'), route_kind missing or a list, question as a list, effect as an int, effects empty and whitespace-only, non-JSON prose, empty output, JSON array, same question as the old one, commit hash in the question (ccf1da3), card ids (CS-7, WEGO-1234), 130-word question (limit 25), 200 000-character question, reader exit 3 with valid JSON, reader exit 1 with no output, reader that hangs (stopped at 60.7 s)"
+      - "FINDING F1 (low), a question with jargon still gets through when the jargon filter does not see it: `O arquivo common/bin/cepa-until precisa mudar o cmd_reword_route?` was recorded in queue.yaml and shown to the owner. Probe of the shared filter (common/hooks/_ownertext.py, called by cepa-plan human_section_refusal): a directory path without extension, a snake_case function name and a URL give problems=[]; a file with extension, a commit hash, a card id, backticks and more than 25 words (question) / 30 words (effect) are caught. The rule is the same one `finish` applies, so CS-7 inherits it; it was not tightened for the reader that rewrites after `?`."
+      - "NOTE (not a defect of CS-7, scope of CS-8): when the rewrite is rejected or fails, `rewrite()` returns the reason but `decide` discards it (`new_route, _error = rewrite(...)`), so the screen shows `rewriting the question, up to 60 s` and then closes the block with no line saying the question was not rewritten. docs/spec/perguntas-da-largada-legiveis.md CS-8 is the card that asks for that line, and it is not implemented yet."
+      - "Screen safety: in all 36 cases, the pty stream carried no escape sequence, C0, C1 or format character beyond the ones the panel itself draws (the OSC 2 title and OSC 7501 state lines present in the baseline). The only text that reaches the screen from the reader is the output of parse_route, which rejects Cc/Cf/Cs characters instead of stripping them."
+    findings:
+      - "F1 (low): parse_route + cepa-plan reword-route --replace accept a rewritten question or effect that still carries a path without extension, a function name or a URL, and overwrite the owner's old question with it. Fix location: common/hooks/_ownertext.py (problems), used by common/bin/cepa-plan human_section_refusal. Needed test: reader returns `O arquivo common/bin/cepa-until muda?` and queue.yaml keeps the old question."
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Story, not Bug. Spec red test checked in the previous pass at 30930f5 (base 859b59c: FAIL on 'the reader got the unclear-question job with the old question (no call)', 'the new question shows after the `?`', 'queue.yaml carries the new question', then Traceback); not re-run in this pass."
+routing_reason: "L3: eight perturbations red, both test files green unperturbed. L4 now run for real: 36 hostile reader outputs plus a hanging reader through the real `cepa-until decide` in a pty; the queue stayed correct in every one (human_pending, status, evidence, claimed_by, head_commit, decisions never changed; nothing invalid recorded; no extra keys) and the screen never printed a raw control character. One low finding (F1: jargon filter misses a directory path, a function name and a URL, so such a question overwrites the old one). By the routing rule, an L4 finding is NEEDS-HUMAN, never proven. Suggested decision for the human (not a waiver): accept F1 as outside CS-7, because the filter is the shared one `finish` already uses, and ship; the silent failure line belongs to CS-8."

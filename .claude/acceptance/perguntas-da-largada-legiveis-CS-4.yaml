@@ -1,0 +1,18 @@
+schema_version: 1
+card: perguntas-da-largada-legiveis-CS-4
+status: complete
+audited_at: 2026-11-13T12:00:00-03:00
+audited_diff: 114ba77..77bbbf3
+criteria:
+  - id: AC1
+    text: "a largada reescreve a rota antiga como pergunta fechada e grava o resultado no item"
+    altitude: cli
+    surface: "cepa-until <fila> (largada) num pseudo-terminal, com leitor falso em CEPA_UNTIL_LEITOR, sobre item pending com human_pending e sem pergunta: a tela mostra a pergunta do leitor; depois, queue.yaml traz route_kind e a pergunta (campo owner_question, que a spec chama de question) com os dois efeitos em owner_summary.se_sim/se_nao, e human_pending, status e evidence iguais"
+    demonstrated_by:
+      test: "tests/test_cepa_until_route_rewrite.py::test_tty_launch_shows_the_readers_question_and_records_it (largada real em pty; confere tela, route_kind, owner_question, se_sim/se_nao e igualdade de human_pending/status/evidence); complementos: test_launch_without_terminal_records_the_rewrite_and_asks_nothing, test_a_reader_that_prints_garbage_or_fails_changes_nothing, test_a_route_that_already_has_question_and_kind_is_not_read, test_a_route_with_a_question_but_no_kind_is_read_and_keeps_its_question, test_reword_route_refuses_and_writes_nothing, test_reword_route_fills_only_what_is_missing, leitores lentos nos dois sentidos"
+      layer: cli-pty-subprocess
+      evidence: verified
+      run: "python3 tests/test_cepa_until_route_rewrite.py -> 69 checagens ok, 0 FAIL, 'tudo verde'; python3 tests/test_cepa_until_decide.py (vizinho) -> exit 0, 'tudo verde'"
+    verdict: complete
+    gap: null
+    note: "Bullets da spec lidos. Espera pelo leitor, gravacao no item e nunca tocar human_pending/status/evidence estao demonstrados pelo teste. O posicionamento da rota antiga no FIM da lista do painel (junto das escolhas da leitura previa, renumeracao 'of') existe no codigo (waiting_routes/late_ids em _main) mas nenhum teste usa fila com mais de uma pergunta para provar a ordem; nao e parte do red test do CS-4, fica registrado como observacao para o humano."

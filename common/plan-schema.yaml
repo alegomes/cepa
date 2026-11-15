@@ -141,6 +141,21 @@ items:                          # ORDEM DA LISTA = ordem de execução. É o dad
                                 # abertas e oferece fechá-las; agente nenhum
                                 # fecha por conta própria, senão a lista vira
                                 # decoração e a dívida volta a sumir.
+    route_kind: external-block  # OPCIONAL. Tipo da rota aberta em human_pending:
+                                # owner-task (tarefa que só o dono faz, fora do
+                                # repo) | external-block (algo de fora precisa
+                                # existir e não é decisão do dono) |
+                                # open-question (dúvida que o dono responde).
+                                # `finish --human-pending` EXIGE `--route-kind`,
+                                # `--question` (fechada, com `?`), `--if-yes` e
+                                # `--if-no`; sem algum deles recusa e não grava.
+                                # A resposta do dono que fecha a rota (`answer`)
+                                # remove a chave. Fila sem a chave segue válida;
+                                # valor fora dos três é rejeitado.
+                                # Rota antiga (sem tipo ou sem pergunta) é reescrita na
+                                # largada do cepa-until por `cepa-plan reword-route`,
+                                # que só preenche o que falta e nunca toca em
+                                # human_pending, status nem evidence.
 
   - id: WEGO-1962
     title: "Agregar rota de validação humana"
