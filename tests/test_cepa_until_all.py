@@ -354,6 +354,149 @@ def test_same_id_red_in_two_queues_keeps_two_side_branches_and_own_returns():
               f"{voltas} {out[-1500:]}")
 
 
+def _git(root, *args):
+    return subprocess.run(["git", *args], cwd=root, capture_output=True,
+                          text=True).stdout
+
+
+def test_final_commit_holds_the_queue_file_of_every_touched_queue():
+    """The run's final record commit (on the clone's branch, not the run branch)
+    carries the `queue.yaml` of EVERY queue the run touched, not only the first."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1")],
+                                  "b": [base.item("b1")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                "--no-analysis"],
+                    claude_body=DONE_IN_ITS_QUEUE)
+        check("rc 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        changed = _git(root, "show", "--name-only", "--format=", "HEAD").split()
+        check("o ultimo commit do clone leva a fila a",
+              ".claude/queues/a/queue.yaml" in changed, str(changed))
+        check("...e a fila b",
+              ".claude/queues/b/queue.yaml" in changed, str(changed))
+        dirty = _git(root, "status", "--porcelain", "--", ".claude/queues/a/queue.yaml",
+                     ".claude/queues/b/queue.yaml")
+        check("...e nenhum queue.yaml fica sujo", dirty.strip() == "", dirty)
+
+
+def test_done_without_commit_is_reported_for_the_queue_that_did_it():
+    """a/CS-1 closes `done` with no commit while b/CS-1 closes with one: the
+    summary names a/CS-1 as done-without-commit, and the run counts it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("CS-1")],
+                                  "b": [base.item("CS-1")]})
+        body = DONE_IN_ITS_QUEUE.replace(
+            "open(queue + '-'",
+            "if queue == 'a':\n"
+            "    subprocess.run(cp + ['finish', queue, ident, '--status',"
+            " 'done', '--evidence', 'ok'] + repo, check=True)\n"
+            "    sys.exit(0)\n"
+            "open(queue + '-'", 1)
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                "--no-analysis"], claude_body=body)
+        out = p.stdout
+        sem = [ln for ln in out.splitlines()
+               if "a/CS-1" in ln and ("done-sem-commit" in ln or "no commit" in ln)]
+        check("a/CS-1 aparece como done sem commit no resumo", len(sem) >= 1,
+              out[-1800:])
+
+
+# Fakes for the stuck (`travado`) and stopped (`parado`) paths. Per-(queue, id)
+# attempt counter in a file next to the fake's own record, outside the worktree.
+ATTEMPT_COUNTER = (
+    "import subprocess\n"
+    "req = ARGS[1].split()\n"
+    "queue = req[1]\n"
+    "cp = [sys.executable, os.environ['FAKE_CEPA_PLAN']]\n"
+    "repo = ['--repo', os.getcwd()]\n"
+    "q = json.loads(subprocess.run(cp + ['queue', queue, '--max', '1', '--json']"
+    " + repo, capture_output=True, text=True).stdout)\n"
+    "ident = q['batch'][0]['id']\n"
+    "cnt = os.path.join(os.path.dirname(os.environ['FAKE_CHAMADAS']),"
+    " 'n-' + queue + '-' + ident)\n"
+    "n = int(open(cnt).read()) + 1 if os.path.exists(cnt) else 1\n"
+    "open(cnt, 'w').write(str(n))\n"
+    "def commit(tag):\n"
+    "    open(queue + '-' + ident + '-' + tag + '.txt', 'w').write('x')\n"
+    "    subprocess.run(['git', 'add', '-A'], check=True)\n"
+    "    subprocess.run(['git', '-c', 'user.email=t@t', '-c', 'user.name=t',\n"
+    "                    'commit', '-qm', queue + ':' + ident + ':' + tag],"
+    " check=True)\n")
+
+BLOCKED_WITH_COMMIT = ATTEMPT_COUNTER + (
+    "subprocess.run(cp + ['start', queue, ident] + repo, check=True,"
+    " capture_output=True)\n"
+    "commit('1')\n"
+    "subprocess.run(cp + ['finish', queue, ident, '--status', 'blocked',"
+    " '--evidence', 'preso', '--blocker', 'o sistema nao responde'] + repo,"
+    " check=True)\n")
+
+# Attempts 1 and 2 commit without closing; attempt 3 does nothing.
+COMMITS_TWICE_THEN_NOTHING = ATTEMPT_COUNTER + (
+    "if n == 1:\n"
+    "    subprocess.run(cp + ['start', queue, ident] + repo, check=True,"
+    " capture_output=True)\n"
+    "if n <= 2:\n"
+    "    commit(str(n))\n")
+
+
+def _side_branches(root, suffix):
+    return [b for b in _branches(root) if suffix in b]
+
+
+def _subjects_of_branch(root, b):
+    return _git(root, "log", "--format=%s", b).split()
+
+
+def test_same_id_stuck_in_two_queues_keeps_two_side_branches():
+    """a/CS-1 and b/CS-1 both close `blocked` with a commit: two distinct
+    `travado` side branches, each holding its own item's commit."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _repo(tmp, {"a": [base.item("CS-1")],
+                              "b": [base.item("CS-1")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                "--no-analysis", "--max-blocked", "10"],
+                    claude_body=BLOCKED_WITH_COMMIT)
+        side = _side_branches(root, "travado")
+        check("duas laterais travado distintas", len(side) == 2,
+              f"{side} {p.stdout[-1200:]}")
+        for q in ("a", "b"):
+            own = [b for b in side if f"-{q}-CS-1" in b]
+            subj = _subjects_of_branch(root, own[0]) if len(own) == 1 else []
+            check(f"{q}/CS-1: a lateral dele tem o commit dele",
+                  len(own) == 1 and f"{q}:CS-1:1" in subj, f"{own} {subj}")
+            other = "b" if q == "a" else "a"
+            check(f"...e nao o commit de {other}/CS-1",
+                  f"{other}:CS-1:1" not in subj, str(subj))
+
+
+def test_same_id_stopped_in_two_queues_keeps_two_side_branches_with_all_attempts():
+    """a/CS-1 and b/CS-1 each commit in attempts 1 and 2 without closing, and
+    attempt 3 moves nothing: two distinct `parado` side branches, each holding
+    the commits of BOTH of its item's attempts (the starting point of the item
+    survives between attempts)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _repo(tmp, {"a": [base.item("CS-1")],
+                              "b": [base.item("CS-1")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                "--no-analysis", "--max-failures", "10",
+                                "--attempts-per-item", "3"],
+                    claude_body=COMMITS_TWICE_THEN_NOTHING)
+        side = _side_branches(root, "parado")
+        check("duas laterais parado distintas", len(side) == 2,
+              f"{side} {p.stdout[-1500:]}")
+        for q in ("a", "b"):
+            own = [b for b in side if f"-{q}-CS-1" in b]
+            subj = _subjects_of_branch(root, own[0]) if len(own) == 1 else []
+            check(f"{q}/CS-1: a lateral dele tem os commits das duas tentativas",
+                  len(own) == 1 and f"{q}:CS-1:1" in subj
+                  and f"{q}:CS-1:2" in subj, f"{own} {subj}")
+            other = "b" if q == "a" else "a"
+            check(f"...e nada de {other}/CS-1",
+                  not any(s.startswith(f"{other}:") for s in subj), str(subj))
+
+
 def test_single_queue_dry_run_unchanged():
     with tempfile.TemporaryDirectory() as tmp:
         root, _ = _repo(tmp, {"a": [base.item("a1")]})
