@@ -370,6 +370,10 @@ _CS6_STATES = {
               "'--no-commit', '--no-ff', 'lado')", "merge", ["MERGE_HEAD"]),
     "rebase": ("os.makedirs(os.path.join(git('rev-parse', '--absolute-git-dir')"
                ".strip(), 'rebase-merge'))", "rebase", ["rebase-merge"]),
+    # `rebase-apply` is what `git am` and `git rebase --apply` leave behind.
+    "rebase-apply": ("os.makedirs(os.path.join(git('rev-parse', "
+                     "'--absolute-git-dir').strip(), 'rebase-apply'))",
+                     "rebase", ["rebase-apply"]),
     "cherry-pick": ("open(os.path.join(git('rev-parse', '--absolute-git-dir')"
                     ".strip(), 'CHERRY_PICK_HEAD'), 'w').write("
                     "git('rev-parse', 'HEAD'))", "cherry-pick",
@@ -419,6 +423,14 @@ def _cs6_checks(label, tmp, tmp_ok):
     text = reviews[0].read_text(encoding="utf-8") if reviews else ""
     check(f"CS-6 {label}: o .review.md mantém a análise e traz o motivo",
           "nada pendente" in text and word in text, text[-600:])
+    check(f"CS-6 {label}: o .review.md diz que o run não commitou, não que o git recusou",
+          "The run did not commit its records" in text
+          and "refused by git" not in text, text[-600:])
+    check(f"CS-6 {label}: o .review.md diz o que fazer antes do comando",
+          "conclude or abort" in text and bool(cmds) and cmds[0] in text,
+          text[-600:])
+    check(f"CS-6 {label}: a tela diz o que fazer antes do comando",
+          any("conclude or abort" in l for l in lines), out[-800:])
 
 
 def _cs6(label):
@@ -433,6 +445,45 @@ def test_cs6_merge_in_progress_is_left_alone():
 
 def test_cs6_rebase_in_progress_is_left_alone():
     _cs6("rebase")
+
+
+def test_cs6_rebase_apply_in_progress_is_left_alone():
+    _cs6("rebase-apply")
+
+
+def test_cs6_launch_collect_does_not_commit_mid_rebase():
+    """The collect of a dead run's loose records at launch (CS-4) goes through the
+    same guard: with a rebase in progress in the clone it commits nothing, leaves
+    the index alone, and says so without blaming git."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _scenario(tmp)
+        other = _other_queue(root)
+        _dead_run_of(other, _dead_pid(), review=True)
+        gitdir = Path(_git(root, "rev-parse", "--absolute-git-dir").strip())
+        (gitdir / "rebase-merge").mkdir()
+        before = _git(root, "rev-parse", "HEAD").strip()
+        index = _git(root, "ls-files", "-s")
+        binv = base.fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, _calls = base.run_until(root, binv, plan, ["--for", "2h"])
+        out = p.stdout + p.stderr
+        check("CS-6 recolha: nenhum commit novo",
+              _git(root, "rev-parse", "HEAD").strip() == before,
+              _git(root, "log", "--oneline", f"{before}..HEAD"))
+        check("CS-6 recolha: o índice é o de antes",
+              _git(root, "ls-files", "-s") == index)
+        check("CS-6 recolha: rebase-merge segue no lugar",
+              (gitdir / "rebase-merge").exists())
+        lines = [l for l in out.splitlines()
+                 if "did not commit the loose records of dead runs (outra)" in l]
+        check("CS-6 recolha: a largada diz por que não recolheu",
+              len(lines) == 1 and "rebase" in lines[0]
+              and "the index was not touched" in lines[0], out[-800:])
+        check("CS-6 recolha: a largada não diz que o git recusou",
+              "git refused" not in out, out[-800:])
+        check("CS-6 recolha: a largada traz o comando para o dono",
+              any("to commit by hand: " in l and "collect records of dead runs" in l
+                  for l in out.splitlines()), out[-800:])
 
 
 def test_cs6_cherry_pick_in_progress_is_left_alone():
