@@ -1,0 +1,64 @@
+schema_version: 2
+card: campo-de-resposta-CS-6
+verdict: proven
+reviewed_at: 2026-11-16T01:50:00-03:00
+base_commit: 6ed2fad
+head_commit: b65b1cd
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa), não Quarkus. Superfície = `cepa-until decide` num pseudo-terminal
+round: 1
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until::decide (ramo `if r == \"v\":` no laço interno de teclas, linhas 3628-3638: edit_in_editor com status, aviso via screen.key_error com prefixo `the editor exited with code N; `, `continue`; reuso de `typed` no ramo `elif r in (\"t\", \"v\")`, linha 3684) e ::edit_in_editor (parâmetro `status`, `status[\"rc\"] = rc`, linhas 3744-3745)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # cepa-until real em pty; só o claude falso (fronteira externa) e o editor falso (o ambiente do dono) são dublês
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbação manual em worktree descartável detached em b65b1cd (/tmp/proof-cs6-a), removido ao fim. Reprova de novo no base do cherry-pick: a prova anterior era noutro base, esta é do zero."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida em b65b1cd: os 3 testes cs6, FAILURES=[]; arquivo inteiro test_cepa_until_decide.py também verde (exit 0)."
+        - "(P1) `continue` -> `pass` (3638) -> RED: 4 checks (prompt volta ao mesmo item, aviso antes da resposta, resposta chega ao a1)."
+        - "(P2) `continue` -> `break` (3638) -> RED: os mesmos 4 checks (o item sai do menu sem resposta)."
+        - "(P3) aviso `screen.key_error(...)` removido -> RED: 6 checks (prompt volta, sessão fecha 0/1, código de saída, resposta ao a1); os testes travam até o timeout do on_tty."
+        - "(P4) prefixo do código de saída descartado (`\"\"`) -> RED: 1 check (cs6: o aviso diz o codigo de saida do editor)."
+        - "(P5) `if r == \"v\":` -> `if False:` -> RED: 12 checks nos 3 testes."
+        - "(P6) `status[\"rc\"] = rc` -> `pass` (3745) -> RED: 1 check (código de saída no aviso)."
+        - "(P7) `if code else \"\"` -> `if True else \"\"` -> RED: 1 check (editor que sai com 0 não fala de código)."
+        - "(P8) `if not typed:` -> `if typed:` -> RED: 7 checks."
+        - "(P9) reuso de `typed` (`text = (typed if r == \"v\" else` -> `(\"\" if ...`, 3684) -> os 3 testes cs6 ficam verdes porque nenhum deles salva texto; o arquivo inteiro fica RED em 3 checks do cs3 (o item volta para pending com a resposta; evidência com as duas linhas). A linha é guardada pelos testes da CS-3, não pelos da CS-6, e é guardada."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs6-a b65b1cd`; `python3 /tmp/proof-cs6-a/cs6run.py` (runner dentro do worktree: chama os test_cs6_* e imprime FAILURES; check() só acumula).
+        Baseline `TESTS 3 FAILURES []`. P1-P8 por /tmp/proof-cs6-a/perturb.sh (perl, substituição literal, 1 trecho substituído, restaurada por `git checkout`); cada uma terminou com `TESTS 3 FAILURES [...]` não vazio.
+        P9 por `python3 tests/test_cepa_until_decide.py` perturbado: exit 1, `✗ 3 falha(s)`; baseline do mesmo arquivo: exit 0, `✓ tudo verde`. Suíte completa (run-all.sh) não rodada, é do supervisor.
+    survivors: []
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem coverage ligado; todas as linhas alteradas do ramo `v` (3628-3638), do `status` (3744-3745) e do reuso de `typed` (3684) ficam vermelhas quando quebradas (P1-P9), logo são alcançadas e afirmadas."
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: >-
+      hostile.py (descartado com o worktree) reutiliza _cs6_run do teste real, em pty, com 5 editores hostis, todos sem traceback, sem `[y/N]`, queue.yaml byte a byte igual, aviso `nothing written in the editor`, sessão fecha com 0 respondidas:
+      (A) só espaços e linhas em branco -> trata como vazio; (B) só linhas `#` -> vazio;
+      (C) morto por sinal (kill -9) -> `the editor exited with code -9; nothing written...`;
+      (D) comando inexistente -> `exited with code 126` (o sh devolve 126 aqui); (E) exit 130 -> código 130.
+    observacao: "Editor morto por sinal mostra código negativo (-9), texto cru do Python; legível o bastante, sem efeito no critério."
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-6 de docs/spec/campo-de-resposta-until.md); a prova é a perturbação."
+routing_reason: >-
+  Prova refeita no b65b1cd (o conflito do cherry-pick colocou o ramo `v` no
+  laço interno; a prova anterior era noutro base). As 9 perturbações ficam
+  vermelhas na superfície real (cepa-until decide num pty): 8 pelos testes cs6
+  e o reuso de `typed` pelos testes cs3. Nenhum sobrevivente. L4 com 5 editores
+  hostis sem exceção, sem escrita na fila. PROVEN.
