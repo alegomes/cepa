@@ -309,3 +309,30 @@ def test_classify_exit_0_ran_zero_then_refine_is_empty():
     cmd, out = "python manage.py test", "Ran 0 tests in 0.000s\n\nOK"
     status, kind, _ = cbr.classify(cmd, out, 0)
     assert cbr.refine_empty(cmd, kind, status, out)[0] == "EMPTY"
+
+
+@pytest.mark.parametrize("out", [
+    "    Ran 0 tests in 0.000s\n\nOK",
+    "Found 0 test(s).\n  Ran 0 tests in 0.000s\n\nOK",
+    "\tRan 0 tests in 0.000s\n\nOK",
+    "Ran 0 test in 0.000s\n\nOK",
+])
+def test_indented_or_singular_ran_zero_with_exit_0_records_empty(tmp_path, out):
+    st = _run_hook(tmp_path, "python manage.py test", out, extra={"exit_code": 0})
+    assert st and st["status"] == "EMPTY" and st["tests_run"] == 0
+
+
+def test_ran_nonzero_without_verdict_and_exit_0_is_not_empty(tmp_path):
+    st = _run_hook(tmp_path, "python manage.py test", "Ran 3 tests in 0.1s", extra={"exit_code": 0})
+    assert st and st["status"] == "SUCCESS" and "tests_run" not in st
+
+
+def test_ran_zero_line_from_a_non_unittest_command_stays_success(tmp_path):
+    st = _run_hook(tmp_path, "pytest", "Ran 0 tests in 0.000s\n1 passed in 0.1s", extra={"exit_code": 0})
+    assert st and st["status"] == "SUCCESS" and st["kind"] == "pytest"
+
+
+def test_empty_reason_carries_the_test_label_hint(tmp_path):
+    st = _run_hook(tmp_path, "python manage.py test app.NaoExiste", "Ran 0 tests in 0.000s\n\nNO TESTS RAN")
+    assert st and st["status"] == "EMPTY"
+    assert st["reason"] and cbr.UNITTEST_EMPTY_FIX_HINT in st["reason"]
