@@ -181,21 +181,24 @@ def test_main_clone_install():
         check("CS-2: install.sh do clone principal sai 0", r.returncode == 0,
               r.stdout[-400:] + r.stderr[-400:])
 
+        calls = log.read_text() if log.exists() else ""
         adds = [l.split("marketplace add ", 1)[1].strip()
-                for l in log.read_text().splitlines() if "marketplace add " in l]
+                for l in calls.splitlines() if "marketplace add " in l]
         live = home / ".claude" / "cepa-live"
         check("CS-2: marketplace add recebe ~/.claude/cepa-live",
               adds == [str(live)], f"adds={adds}")
         check("CS-2: o caminho do clone principal não aparece em nenhuma chamada do claude",
-              str(main) not in log.read_text(), log.read_text()[-400:])
+              bool(calls) and str(main) not in calls, calls[-400:])
         check("CS-2: cepa-live/.claude-plugin/marketplace.json igual ao do clone",
               (live / ".claude-plugin" / "marketplace.json").is_file()
               and (live / ".claude-plugin" / "marketplace.json").read_bytes()
               == (main / ".claude-plugin" / "marketplace.json").read_bytes())
         for p in mk["plugins"]:
             rel = os.path.normpath(p["source"])
-            check(f"CS-2: pasta do plugin {p['name']} em cepa-live/{rel}",
-                  (live / rel / ".claude-plugin" / "plugin.json").is_file(),
+            pj = live / rel / ".claude-plugin" / "plugin.json"
+            check(f"CS-2: pasta do plugin {p['name']} em cepa-live/{rel}, com o plugin.json dele",
+                  pj.is_file() and pj.read_bytes()
+                  == (main / rel / ".claude-plugin" / "plugin.json").read_bytes(),
                   str(live / rel))
         listed = {os.path.normpath(p["source"]) for p in mk["plugins"]}
         found = {p.name for p in live.iterdir()} if live.is_dir() else set()
