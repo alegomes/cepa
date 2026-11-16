@@ -425,6 +425,25 @@ def test_cs4_quoted_mention_is_not_a_build(tmp_path, command):
     "python-m unittest",
     "python3-u -m unittest",
     "python -u-m unittest",
+    "FOO=python -m unittest",
+    "x=django-admin test",
+    "x=manage.py test",
+    "python - -m unittest",
+    "python -c x -m unittest",
+    "python -W x -m unittest",
+    "python -c 'a' && ls -m unittest",
+    "django-admin.pyc test",
+    "django-admin.sh test",
 ])
 def test_cs4_near_misses_are_not_unittest(command):
     assert cbr.classify(command, _GREEN_OUT, None)[1] != "unittest"
+
+
+@pytest.mark.parametrize("command", [
+    "python -m unittest; echo done",
+    "python -m unittest&&echo ok",
+    "django-admin test; echo done",
+    "python -m unittest | tee out.log",
+])
+def test_cs4_shell_terminator_right_after_the_word_is_unittest(command):
+    assert cbr.classify(command, _GREEN_OUT, None)[:2] == ("SUCCESS", "unittest")
