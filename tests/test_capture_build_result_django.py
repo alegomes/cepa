@@ -250,3 +250,34 @@ def test_non_string_stderr_does_not_crash_unittest(tmp_path):
 def test_non_string_stderr_does_not_crash_other_commands(tmp_path):
     st = _run_hook(tmp_path, "pytest", "something broke\n", stderr=["x"], extra={"exit_code": 1})
     assert st and st["status"] == "FAILURE" and st["kind"] == "pytest"
+
+
+@pytest.mark.parametrize("command, out", [
+    ("python manage.py test", "Ran 0 tests in 0.000s\n\nOK"),
+    ("python manage.py test app.tests.NaoExiste", "Ran 0 tests in 0.000s\n\nNO TESTS RAN"),
+    ("uv run python manage.py test app", "Found 0 test(s).\nRan 0 tests in 0.000s\n\nOK"),
+])
+def test_ran_zero_tests_records_empty(tmp_path, command, out):
+    st = _run_hook(tmp_path, command, out)
+    assert st and st["status"] == "EMPTY" and st["tests_run"] == 0
+
+
+def test_ran_zero_tests_in_stderr_records_empty(tmp_path):
+    st = _run_hook(tmp_path, "python manage.py test", "", stderr="Ran 0 tests in 0.000s\n\nNO TESTS RAN")
+    assert st and st["status"] == "EMPTY"
+
+
+def test_ran_zero_tests_does_not_hide_a_red_block(tmp_path):
+    out = "Ran 0 tests in 0.0s\n\nOK\nRan 2 tests in 0.1s\n\nFAILED (failures=1)"
+    st = _run_hook(tmp_path, "python manage.py test", out)
+    assert st and st["status"] == "FAILURE"
+
+
+def test_ran_zero_tests_does_not_hide_a_green_block(tmp_path):
+    out = "Ran 0 tests in 0.0s\n\nOK\nRan 2 tests in 0.1s\n\nOK"
+    st = _run_hook(tmp_path, "python manage.py test", out)
+    assert st and st["status"] == "SUCCESS"
+
+
+def test_ran_zero_in_a_log_line_is_not_empty(tmp_path):
+    assert _run_hook(tmp_path, "python manage.py test", "log: Ran 0 tests in 0.1s earlier") is None

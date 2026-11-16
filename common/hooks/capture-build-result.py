@@ -14,7 +14,8 @@ Patterns detected:
   - npm/yarn/pnpm test → exit code is the signal
   - pytest → exit code is the signal
   - Django manage.py test (any wrapper) → "Ran N tests" + a line `OK` alone (or `OK (...)`) = SUCCESS,
-    a line starting `FAILED (` = FAILURE; the verdict is read from stdout plus stderr
+    a line starting `FAILED (` = FAILURE; the verdict is read from stdout plus stderr;
+    "Ran 0 tests" (with or without a test label) = EMPTY
   - cargo → exit code
   - go test → exit code
   - docker build → output markers (writing image / naming to /
@@ -531,6 +532,9 @@ EMPTY_FIX_HINT = (
 )
 
 
+UNITTEST_EMPTY_FIX_HINT = "fix the test label, or check that the app has tests"
+
+
 def has_test_filter(command: str, kind: str) -> bool:
     rx = _TEST_FILTERS.get(kind)
     return bool(rx and rx.search(command))
@@ -580,9 +584,21 @@ def count_tests_run(kind: str, text: str):
     return None
 
 
+_UNITTEST_RAN_ZERO = re.compile(r"(?m)^[ \t]*Ran 0 tests? in ")
+
+
 def refine_empty(command: str, kind: str, status, text: str):
     """(status, tests_run, reason) after the zero-tests check. Only turns a
-    SUCCESS from a FILTERED command into EMPTY; everything else passes through."""
+    SUCCESS from a FILTERED command into EMPTY; everything else passes through.
+
+    Django/unittest is the deliberate exception: a "Ran 0 tests in" line records EMPTY with or
+    without a test label (a mistyped label ends "NO TESTS RAN", an unfiltered run in an app
+    with no tests ends "OK"). A real verdict (SUCCESS from another block, FAILURE) still wins."""
+    if kind == "unittest" and status is None and _UNITTEST_RAN_ZERO.search(text):
+        return "EMPTY", 0, (
+            "Django/unittest ran 0 tests (nothing executed; a mistyped test label ends in "
+            f"NO TESTS RAN); {UNITTEST_EMPTY_FIX_HINT}"
+        )
     if status != "SUCCESS" or not has_test_filter(command, kind):
         return status, None, None
     n = count_tests_run(kind, text)
