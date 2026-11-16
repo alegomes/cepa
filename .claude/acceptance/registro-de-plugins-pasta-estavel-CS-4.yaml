@@ -1,0 +1,27 @@
+schema_version: 1
+card: registro-de-plugins-pasta-estavel-CS-4
+status: complete
+audited_at: 2026-11-16T00:00:00-03:00
+covers: 09bee86..9f37dae
+criteria:
+  - id: AC1
+    text: "CS-4: copia que falha no meio deixa a pasta fixa anterior inteira. Com a versao A instalada, rodar o instalador sobre um repo em que a copia de um plugin falha (pasta sem permissao de leitura); o instalador sai diferente de zero, `cepa-live` ainda tem a versao A completa e `last-install.json` diz `in_progress` (docs/spec/registro-de-plugins-pasta-estavel.md, secao CS-4, linhas 50-52)"
+    altitude: cli
+    surface: "`sh bin/install.sh <host>` executado como subprocess real com cwd no repo descartavel, HOME temporario e um `claude` falso no PATH; a segunda execucao roda com `build-solo/agents` em chmod 0 (um plugin listado no marketplace.json). Le o codigo de saida, a arvore de ~/.claude/cepa-live (bytes) e ~/.claude/ops/last-install.json no disco."
+    demonstrated_by:
+      test: "tests/test_install_live_dir.py::test_failed_copy_leaves_previous_live_whole"
+      layer: "subprocess real de bin/install.sh duas vezes (instala A; instala B com uma pasta ilegivel); verifica saida, disco e registro"
+      evidence: verified
+      run: |
+        python3 tests/test_install_live_dir.py
+        "all ok", exit 0, head 9f37dae. Seis checagens "ok" do criterio: "CS-4: instalacao da versao A sai 0"; "versao A tem arquivos em cepa-live"; "copia que falha faz o instalador sair diferente de zero"; "cepa-live ainda tem a versao A completa, byte a byte" (snapshot de todos os arquivos/symlinks antes e depois, comparado por igualdade); "cepa-live nao ganhou arquivo da versao B"; "last-install.json diz in_progress". 0 FAIL. N > 0 (130 linhas de checagem no total do arquivo).
+    verdict: complete
+    gap: null
+supporting_tests: []
+notes:
+  - "Alegacao do implementador verificada em bin/install.sh (nao mudou em 09bee86..9f37dae; git diff --stat mostra so tests/test_install_live_dir.py, +34): (1) `set -e` na linha 35; (2) `ops_write \"in_progress\"` na linha 268, antes de qualquer copia; (3) a copia vai para `${LIVE_DIR}.new` (linhas 296-310, `rm -rf` do staging antigo e `shutil.copytree` de cada plugin); (4) o `mv`/`rm -rf` de `${LIVE_DIR}` so acontece nas linhas 311-319, depois do python3 de copia, e `set -e` encerra o script antes disso se o copytree levantar. O registro so vira `ok` mais adiante. Portanto o comportamento ja valia desde CS-1 e o criterio nao exigia mudanca no instalador."
+  - "O teste e vermelho por razao certa: a pasta ilegivel (`build-solo/agents`, existe no repo e `build-solo` esta no marketplace.json) quebra o copytree, nao outra etapa; o teste restaura chmod 755 em `finally`. Roda como usuario nao-root (alegomes), onde chmod 0 realmente bloqueia a leitura; como root o teste nao provaria nada, ressalva menor de ambiente."
+  - "Criterio satisfeito no teste sem enfraquecimento: a checagem de integridade e byte a byte (snapshot antes e depois), nao so existencia do diretorio; o `in_progress` vem do arquivo no disco, nao de saida."
+  - "Ressalva menor, nao bloqueante: o teste nao confere que a mensagem de erro do instalador cita a pasta ilegivel; o criterio nao pede isso."
+  - "Prova de execucao: rodei so `python3 tests/test_install_live_dir.py`, em primeiro plano (exit 0, 'all ok'); nao rodei a suite completa."
+  - "Fora do escopo de CS-4: CS-5 em diante e comportamento com o claude real."

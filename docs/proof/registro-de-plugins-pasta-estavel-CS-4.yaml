@@ -1,0 +1,41 @@
+schema_version: 2
+card: registro-de-plugins-pasta-estavel-CS-4
+verdict: proven
+reviewed_at: 2026-11-16T23:40:00-03:00
+base_commit: 09bee86
+head_commit: 9f37dae
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "tests/test_install_live_dir.py (test_failed_copy_leaves_previous_live_whole); guarded behavior in bin/install.sh (set -e line 35; in_progress record line 268; staging dir lines 296-298; swap lines 317-318), unchanged by this item"
+      module: bin
+      external_observable: true
+      substituted_by_double: null        # the test runs the real bin/install.sh as a subprocess with a fake HOME; only the far boundary (claude CLI) is a fake
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # shell/Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at 9f37dae (throwaway worktree /tmp/proof-cs4-a, 'git worktree add --detach /tmp/proof-cs4-a 9f37dae'): python3 tests/test_install_live_dir.py -> 'all ok', rc=0, 131 lines containing 'ok', 0 FAIL; the 6 CS-4 checks ran and passed (A installs with exit 0; A has files; failing copy makes installer exit non-zero; cepa-live byte-for-byte equal to A; no VERSION-B file in cepa-live; last-install.json says in_progress)."
+        - "Method: one line of bin/install.sh changed per run with sed in the throwaway worktree (git diff --numstat = 1/1 confirmed each time), the other tests called in __main__ stubbed to 'pass' to isolate CS-4 (still 'all ok' unperturbed, 6 CS-4 checks), run with 'timeout 90', restored with 'git checkout 9f37dae -- bin/install.sh'. Foreground only, no full suite."
+        - "KILLED (rc=1, a CS-4 check red): line 268 'ops_write \"in_progress\"' -> true: red 'CS-4: last-install.json diz in_progress' (record stays at the earlier ok); line 268 -> ops_write \"ok\": same single check red; line 296 staging dir LIVE_NEW=LIVE_DIR (copy straight into the live folder): 4 CS-4 checks red (A install exit, A has files, A complete byte for byte, no B file); line 297 'rm -rf LIVE_NEW' also removing LIVE_DIR before the copy: red 'cepa-live ainda tem a versão A completa'; line 35 'set -e' -> true: 4 red (installer exit non-zero, A complete, no B file, in_progress); line 298 python copy failure masked with '<<PYLIVE || true': 4 red (exit non-zero, A complete, no B file, in_progress)."
+        - "Discarded run, not evidence: a first masking attempt put '|| true' before the heredoc ('python3 - a b || true <<PYLIVE'), which detached the heredoc from python and made the installer wait on stdin until the 90 s timeout (rc=124). Redone with '<<PYLIVE || true' above."
+        - "GREEN under perturbation, judged not CS-4 lines: (a) line 318 'mv LIVE_NEW LIVE_DIR' -> 'cp -R' stays 'all ok': line 317 just removed LIVE_DIR, so the live folder ends with the same tree (equivalent on the result; only a leftover .new differs, and in the failing path this line is never reached); (b) line 296 staging name '.new' -> '.newx' stays green: a rename, still beside the live folder, equivalent; (c) line 317 'rm -rf LIVE_DIR' -> true stays green: it runs only on the success path (set -e makes the installer die at the copy first in CS-4's scenario), so CS-4 does not reach it; the success-path swap is guarded by the earlier tests of the same file (CS-2/CS-3), not by CS-4."
+        - "Survivors among the lines that CS-4 claims to guard (set -e, in_progress record before the copy, staging beside live, swap only after a complete copy): none."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; reachability structural: the CS-4 test runs bin/install.sh end to end twice (install A, then B with an unreadable build-solo/agents folder); every behavior line cited (35, 268, 296-298) was perturbed above and turned a CS-4 check red. Line-level precision not measured."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff is one added test; it adds no code that parses input from outside and no input-bearing module (api-rest) is touched."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is Story and the diff is test-only; the equivalent is the perturbations of lines 35, 268, 296-298 above, each turning a CS-4 check red."
+routing_reason: "CS-4 claim (copy that fails halfway: installer exits non-zero, cepa-live stays whole byte for byte with no B file, last-install.json says in_progress) is load-bearing at 9f37dae: six one-line perturbations of the installer (set -e off; in_progress record dropped or written as ok; staging dir replaced by the live folder; live folder removed before the copy; copy failure masked) each turned a CS-4 check red. Three variants stayed green and are not CS-4 lines (cp -R after rm, staging rename, rm of the live folder on the success path). Test runs the real installer; only the claude CLI is faked. Limits: no coverage tool (L2 structural); L4 n/a."
