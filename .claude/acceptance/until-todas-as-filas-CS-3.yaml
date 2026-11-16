@@ -1,0 +1,18 @@
+key: until-todas-as-filas-CS-3
+status: complete
+criteria:
+  - id: CS-3
+    text: "A ordem é fila a fila, e um item que fica pronto durante o run entra antes de passar à fila seguinte (fila a com a1 e a2, a2 espera a1, fila b com b1; após `cepa until --all --for 1h` com o claude falso, os item_start do registro aparecem na ordem a1, a2, b1)"
+    altitude: cli
+    surface: "cepa until --all --for 1h (launcher common/bin/cepa -> common/bin/cepa-until): exit code, ordem dos eventos item_start no registro .claude/queues/_all/until/*.jsonl, queue.yaml de cada fila"
+    test: "tests/test_cepa_until_all.py::test_item_that_becomes_ready_runs_before_the_next_queue (+ test_item_that_becomes_ready_in_an_earlier_queue_runs_next para a decisão sem perguntar: fila anterior)"
+    layer: "subprocess real de `cepa until` pelo launcher, repo git temporario com filas a (a1, a2 bloqueado por a1) e b (b1), claude falso que usa o cepa-plan real; assert em rc==0, item_start == [a1, a2, b1], três itens done e 3 subprocessos claude. O segundo teste abre a rota do dono de a1 durante b1 e assere b1, a1, b2"
+    evidence: verified
+    run: "python3 tests/test_cepa_until_all.py -> ok em todas as linhas dos dois testes (a1,a2,b1 e b1,a1,b2), '✓ 19 testes'"
+    status: complete
+    notes:
+      - "O teste vermelho declarado é coberto literalmente pelo primeiro teste, no registro real do run."
+      - "O comportamento de produção (query_next_ready, releitura antes de cada item) veio com CS-2; o diff do CS-3 é só de testes, o que é coerente porque o critério já era atendido e faltava o teste na superfície."
+      - "Os testes usam --no-verify e --no-analysis, que desligam só a verificação de build e a análise, não a ordem do --all."
+      - "Suíte completa (tests/run-all.sh) não rodada por instrução; fica com o supervisor."
+gap: []
