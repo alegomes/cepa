@@ -257,8 +257,8 @@ fi
 
 echo "▶ Copying marketplace to the fixed folder: ${LIVE_DIR}"
 mkdir -p "$(dirname "${LIVE_DIR}")"
-rm -rf "${LIVE_DIR}".new.*   # leftovers of a dead run
-LIVE_NEW="${LIVE_DIR}.new.$$"
+LIVE_NEW="${LIVE_DIR}.new"   # fixed name: a leftover of a dead run is simply replaced
+rm -rf "${LIVE_NEW}"
 python3 - "${REPO_DIR}" "${LIVE_NEW}" <<'PYLIVE'
 import json, os, shutil, sys
 src, dst = sys.argv[1], sys.argv[2]

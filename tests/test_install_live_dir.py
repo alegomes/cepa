@@ -103,6 +103,20 @@ def test_worktree_install():
         check("plugin.json de common é igual ao do worktree",
               pj_live.is_file() and pj_live.read_bytes()
               == (wt / "common" / ".claude-plugin" / "plugin.json").read_bytes())
+        # whole tree, every plugin: same relative files (minus __pycache__), same bytes
+        def tree(root):
+            return {str(f.relative_to(root)): f for f in root.rglob("*")
+                    if (f.is_file() or f.is_symlink())
+                    and "__pycache__" not in f.relative_to(root).parts}
+        for p in mk["plugins"]:
+            rel = os.path.normpath(p["source"])
+            a, b = tree(wt / rel), tree(live / rel)
+            diff = sorted(set(a) ^ set(b))
+            diff += sorted(k for k in set(a) & set(b)
+                           if a[k].is_symlink() != b[k].is_symlink()
+                           or (not a[k].is_symlink() and a[k].read_bytes() != b[k].read_bytes()))
+            check(f"árvore inteira de {rel} idêntica à do worktree",
+                  not diff and bool(a), f"{len(diff)} diferem, primeiros: {diff[:5]}")
         check("arquivo não commitado do worktree foi copiado",
               (live / "common" / "UNCOMMITTED.txt").is_file())
         check("sem __pycache__ em cepa-live",
@@ -117,7 +131,7 @@ def test_worktree_install():
               pj_live.is_file())
 
         # second run: stale staging from a dead run must not break the install
-        stale = home / ".claude" / f"cepa-live.new.99999"
+        stale = home / ".claude" / "cepa-live.new"
         stale.mkdir()
         (stale / "lixo").write_text("x")
         (main / "common" / "MARKER.txt").write_text("novo")
@@ -131,14 +145,11 @@ def test_worktree_install():
               (live / "common" / "MARKER.txt").is_file())
         check("arquivo só do worktree sumiu de cepa-live (substituiu, não mesclou)",
               not (live / "common" / "UNCOMMITTED.txt").exists())
-        nested = sorted(str(p.relative_to(live)) for p in live.rglob("cepa-live.new.*"))
-        check("nenhum cepa-live.new.* dentro de cepa-live (não aninhou)",
-              nested == [], str(nested))
-        check("staging velho .new.99999 foi removido pelo instalador",
+        junk = sorted(str(p.relative_to(live)) for p in live.rglob("lixo"))
+        check("o lixo do staging velho não está em cepa-live (não aninhou)",
+              junk == [], str(junk))
+        check("staging velho cepa-live.new não existe mais",
               not stale.exists(), str(stale))
-        left = sorted(p.name for p in live.parent.iterdir()
-                      if p.name.startswith("cepa-live.new."))
-        check("sem nenhum staging .new.* após reinstalar", left == [], str(left))
 
 
 if __name__ == "__main__":
