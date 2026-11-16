@@ -1,0 +1,49 @@
+schema_version: 2
+card: build-django-manage-py-test-CS-4
+verdict: unproven
+reviewed_at: 2026-11-16T07:00:00-03:00
+base_commit: c839cb4
+head_commit: 0685d91
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/hooks/capture-build-result.py (PATTERNS entry kind unittest: new alternatives 'python[\\d.]*\\s+(?:-\\S+\\s+)*-m\\s+unittest(?![\\w-])' and 'django-admin(?:\\.py)?\\s+test(?![\\w-])'; docstring/comment)", module: common/hooks, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "PRIMEIRA PASSADA (head ac9985c, UNPROVEN): BASELINE 197 passed + background ok; 28 perturbacoes, 22 vermelhas; sobreviventes P11 (?:-\\S+\\s+)*->(?:-\\S+\\s+)? e P18 -\\S+->-\\w+ (so estreitam, seguros) e P15 django-admin->django.admin, P16 \\s+->\\s* antes de test, P22 \\s+->\\s* apos python, P24 (?:-\\S+\\s+)*->(?:-\\S+\\s*)* (alargam, falso SUCCESS possivel)"
+        - "SEGUNDA PASSADA (head 95382ce, UNPROVEN), baseline 223 passed + background todos ok (197 -> 223 casos). Os 6 sobreviventes da primeira (P15, P16, P22, P24, P11, P18) ficaram vermelhos; amostra das antigas e 9 perturbacoes novas vermelhas. Sobreviventes que alargam, falso SUCCESS possivel: N7 ancora [\\s/]->[\\s/=] ('FOO=python -m unittest', 'x=django-admin test'); N12 -\\S+->-\\S* ('python - -m unittest'); N13 -\\S+->-.+ ('python -c x -m unittest', \"python -c 'a' && ls -m unittest\"); N16 (?:\\.py)?->(?:\\.\\w+)? ('django-admin.pyc test', 'django-admin.sh test'). Sem risco: N15 python->py(?:thon)? ('py -m unittest' e o launcher do Windows). So estreitam: N18 unittest(?![\\w-])->unittest(?=\\s|$) e N19 o equivalente em django-admin test (falso negativo com terminador ; ) \" . &&)"
+        - "TERCEIRA PASSADA (head 9da2687, UNPROVEN), baseline 236 passed + background todos ok (223 -> 236 casos). Os 6 sobreviventes da segunda (N7, N12, N13, N16, N18, N19) ficaram vermelhos; amostra das antigas e 8 perturbacoes novas vermelhas. Sobreviventes que bloqueavam: N3 '-m\\s+unittest'->'-\\w\\s+unittest' ('python -c unittest', 'python -u unittest', 'python -x unittest'); N8 django-admin\\s+.*test ('django-admin startapp test', 'django-admin help test', 'django-admin migrate test'); N12' ancora [\\s/]->[\\s/:] ('echo a:python -m unittest', 'img:python -m unittest'). Nao bloqueava: N4 python->\\w*python ('ipython -m unittest' roda unittest de verdade)"
+        - "QUARTA PASSADA (head 7413b9b, UNPROVEN), baseline 258 passed + background todos ok (236 -> 258 casos). Os 3 bloqueantes da terceira (R1 N3, R2 N8, R3 N12') ficaram vermelhos; amostra das antigas e 9 perturbacoes novas vermelhas (N1-N4, N6-N9, N13). Sobreviventes que bloqueavam: N5 'manage\\.py\\s+test\\b'->'manage\\.py\\s+\\w*test\\b' ('python manage.py loadtest', 'manage.py mytest', 'manage.py smoke_test'); N10 ancora [\\s/]->[\\s/]|\\) ('echo a)python -m unittest'); N11 '-m\\s+unittest'->'-m\\s+(?:unittest|test)' ('python -m test', 'python -m test -v'). Nao bloqueava: N12 ancora [\\s/;] ('echo a;python -m unittest', 'ls;django-admin test', roda unittest de verdade)"
+        - "QUINTA PASSADA, baseline em worktree descartavel detached 0685d91 (/tmp/proof-django-cs4e): python3 -m pytest tests/test_capture_build_result_django.py tests/test_capture_build_result_classify.py tests/test_capture_build_result_pytest.py -q -> 288 passed in 19.00s; python3 tests/test_capture_build_background.py -> todos ok (258 -> 288 casos; commit 0685d91 so mexe em tests/test_capture_build_result_django.py, +30 linhas de quase-acertos). Hook inalterado desde 95382ce"
+        - "Sobreviventes bloqueantes da quarta passada, agora VERMELHOS (pytest -x, cada um 1 failed): F1 (era N5) manage\\.py\\s+\\w*test\\b (221 passed antes da falha); F2 (era N10) ancora [\\s/]|\\) (228); F3 (era N11) -m\\s+(?:unittest|test) (236)"
+        - "Amostra das antigas, continuam VERMELHAS (1 failed): sem a alternativa python (76 passed antes); sem a alternativa django-admin (84); guarda do python ->\\b (170); guarda do django-admin ->\\b (178); sem o prefixo python (174); ancora [\\s/=] (190); ancora [\\s/:] (208); -m -> -\\w (199); django-admin(?:\\.py)?\\s+.*test (205)"
+        - "Perturbacoes novas VERMELHAS (1 failed): M2 ancora [\\s/-] (211); M3 ancora [\\s/.] (212); M5 guarda do python (?!\\w) (170); M8 django-admin \\s+tests? (179); M10 -m\\s*unittest (173); M11 python\\d* no lugar de python[\\d.]* (82); M14 ancora sem ^ (36); M15 python\\w* (82)"
+        - "Perturbacoes novas SOBREVIVENTES (288 passed cada; distinguidas com a regex original vs perturbada sobre 12 comandos):"
+        - "BLOQUEIA - M4 ancora [\\s/]->[\\s/\\x22] (aspas duplas coladas ao executavel): distingue 'echo \"python -m unittest\"' e 'echo \"django-admin test\"' (original: None; perturbada: unittest). O echo apenas imprime o texto; nao roda unittest. Teste a adicionar nos quase-acertos: 'echo \"python -m unittest\"'"
+        - "BLOQUEIA - M7 django-admin(?:-\\w+)?(?:\\.py)? (sufixo com hifen no executavel): distingue 'django-admin-foo test' (original: None; perturbada: unittest). E outro executavel, nao o django-admin. Teste a adicionar: 'django-admin-foo test'"
+        - "BLOQUEIA - M9 django-admin->django-?admin (hifen opcional): distingue 'djangoadmin test' (original: None; perturbada: unittest). Outro nome de executavel. Teste a adicionar: 'djangoadmin test'"
+        - "BLOQUEIA - M13 -m -> --?m ('--m'): distingue 'python --m unittest' (original: None; perturbada: unittest). '--m' nao e opcao do python (o interpretador recusa e nao roda unittest), logo nao e corrida de unittest. Teste a adicionar: 'python --m unittest'"
+        - "NAO bloqueia - M1 ancora [\\s/|]: distingue 'echo a|python -m unittest' e 'x|django-admin test' (original: None; perturbada: unittest). O pipe encadeia e o segundo comando roda unittest de verdade; alarga so para corrida real (lacuna de recurso, anotada)"
+        - "NAO bloqueia - M6 guarda (?![\\w.-]): distingue 'python -m unittest.foo' e 'python -m unittest.__main__' (original: unittest; perturbada: None). So estreita (falso negativo seguro, ninguem vira SUCCESS)"
+        - "NAO bloqueia - M12 flags (?:-\\S+\\s+){0,2} no lugar de *: distingue 'python -a -b -c -m unittest' (original: unittest; perturbada: None). So estreita; o numero de flags antes de -m nao tem teste, e inofensivo"
+        - "Sobreviventes restantes que bloqueiam: M4, M7, M9 e M13. Cada um tem comando nomeado que nao e 'python -m unittest' / 'django-admin test' / 'manage.py test' e que a regex perturbada classifica como unittest e a original nao (direcao do falso SUCCESS)"
+  l2_coverage:
+    status: gap
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; 27 rodadas (F1-F3 + S1-S9 + M1-M15), 20 vermelhas (3 + 9 + 8 novas: M2, M3, M5, M8, M10, M11, M14, M15), 7 sobrevivem (M1, M4, M6, M7, M9, M12, M13); 27 - 20 = 7. Fronteiras ainda sem teste: aspas coladas ao executavel ('echo \"python -m unittest\"'), executavel com sufixo ou grafia proxima ('django-admin-foo test', 'djangoadmin test'), '--m' no lugar de '-m' ('python --m unittest')"
+  l4_adversarial_input:
+    status: n/a
+    reason: "hook de desenvolvimento: a unica entrada e o texto do comando Bash que o proprio agente emitiu e o payload do harness; nao ha usuario externo nem modulo api-rest"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Story, nao Bug. Evidencia de vermelho no base (da primeira passada): hook de c839cb4 + testes de ac9985c -> python3 -m pytest django+classify+pytest -q -> 72 failed, 125 passed. Em 0685d91 -> 288 passed; python3 tests/test_capture_build_background.py -> todos ok"
+routing_reason: "Quinta passada: os 3 bloqueantes da quarta (N5, N10, N11) ficam vermelhos, a amostra das antigas continua vermelha e 8 perturbacoes novas tambem. Das 7 que sobrevivem (288 passed cada), 4 bloqueiam pelo criterio das passadas anteriores: M4 (aspas na ancora: 'echo \"python -m unittest\"'), M7 ('django-admin-foo test'), M9 ('djangoadmin test') e M13 ('python --m unittest'); M1, M6 e M12 so alargam para corrida real ou so estreitam. Fecha-se adicionando esses 4 comandos a test_cs4_near_misses_are_not_unittest. Observacao: o risco pratico dos 4 e minimo (comandos artificiais), mas o criterio das passadas anteriores os conta; se o dono preferir encerrar o ciclo, a sugestao de waiver e aceitar M4/M7/M9/M13 como lacuna conhecida, decisao humana, nao minha. A suite completa tests/run-all.sh nao foi rodada, por instrucao do supervisor (ele a roda ao fechar o item); rodou so django+classify+pytest (288 passed) e test_capture_build_background.py (todos ok). Todo run cita contagem de testes > 0. Worktree descartavel removido, arvore primaria so com os yaml."

@@ -1,0 +1,17 @@
+schema_version: 1
+card: build-django-manage-py-test-CS-4
+status: complete
+audited_at: 2026-11-15T23:00:00-03:00
+criteria:
+  - id: CS-4
+    text: "`python -m unittest` e `django-admin test` sao reconhecidos igual. Comandos 'python3 -m unittest discover' e 'django-admin test --settings=proj.settings' com saida 'Ran 5 tests in 0.1s\\n\\nOK' gravam status: SUCCESS. Hoje o arquivo nao e escrito. (Escopo: os tres comandos compartilham a mesma leitura: verde, vermelho 'FAILED (' e 'Ran 0 tests' EMPTY, e o mesmo kind: unittest.)"
+    altitude: cli
+    surface: "hook PostToolUse(Bash) capture-build-result.py como subprocesso: payload JSON no stdin -> .claude/last-build.json com status e kind"
+    demonstrated_by:
+      test: "tests/test_capture_build_result_django.py::test_cs4_green_writes_success (parametrizado em _NEW_CMDS, que inclui os dois comandos literais do criterio: 'python3 -m unittest discover' e 'django-admin test --settings=proj.settings')"
+      layer: "subprocesso (_run_hook) com a saida literal 'Ran 5 tests in 0.1s\\n\\nOK'; le .claude/last-build.json e afirma status == SUCCESS e kind == unittest. Reforcos no mesmo nivel e nos mesmos 12 comandos: test_cs4_red_writes_failure (FAILED ( -> FAILURE), test_cs4_ran_zero_records_empty (EMPTY, tests_run 0), test_cs4_verdict_only_in_stderr (verde e vermelho so no stderr), test_cs4_classify_kind_is_unittest; negativos: mencao entre aspas nao e build, quase-acertos (unittestfoo, testserver, test-foo, pythonx, node -m unittest) nao viram unittest"
+      evidence: verified
+      run: "python3 -m pytest tests/test_capture_build_result_django.py tests/test_capture_build_result_classify.py tests/test_capture_build_result_pytest.py -q -> 197 passed in 15.95s (HEAD ac9985c; N > 0); python3 tests/test_capture_build_background.py -> 'todos ok'"
+    verdict: complete
+    gap: null
+    note: "A frase 'hoje o arquivo nao e escrito' e o estado anterior; o diff c839cb4..ac9985c (padrao em PATTERNS de common/hooks/capture-build-result.py) e a mudanca, e os testes cs4 falhariam sem ela. Os tres comandos compartilham o mesmo padrao e o mesmo kind unittest. Suite completa (tests/run-all.sh) NAO rodada nesta auditoria por regra da run desatendida; o supervisor a roda ao fechar o item."
