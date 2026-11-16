@@ -1,0 +1,42 @@
+schema_version: 2
+card: registro-de-plugins-pasta-estavel-CS-5
+verdict: proven
+reviewed_at: 2026-11-16T23:45:00-03:00
+base_commit: a667db5
+head_commit: 15f1169
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "bin/install.sh: MAIN_CLONE block (lines 83-95: default, [ -e REPO_DIR/.git ] condition, common dir resolved absolute, basename .git guard, parent) and ops_write (line 146 env MAINC/LIVE; lines 158-159 main_clone/live_dir in the record); guarded by tests/test_install_live_dir.py::test_ops_record_says_where_copy_came_from"
+      module: bin
+      external_observable: true
+      substituted_by_double: null        # the test runs the real bin/install.sh as a subprocess with a temp HOME; only the claude CLI (far boundary) is a fake
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # shell/Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at 15f1169 (throwaway worktree /tmp/proof-cs5-a, 'git worktree add --detach /tmp/proof-cs5-a 15f1169'): test_ops_record_says_where_copy_came_from called alone through a driver script inside the worktree: 'RESULT ok 0', 23 lines with 'CS-5', 0 FAIL. Foreground, timeout 500, no full suite (tests/run-all.sh not run)."
+        - "Method: one expression of bin/install.sh replaced per run by a Python driver in the throwaway worktree (git diff --numstat = 1/1 confirmed each time), run, restored with 'git checkout 15f1169 -- bin/install.sh'. Everything re-run at 15f1169; nothing carried over from the 05cf320 run."
+        - "KILLED (a CS-5 check red): P0 new condition '[ -e REPO_DIR/.git ]' -> true: red 'CS-5: cópia sem git dentro de outro repo: main_clone == repo_dir' (this is the survivor-class hunk added in 15f1169, now guarded). P4 basename guard -> true: red 'CS-5: git dir fora de .git: main_clone == repo_dir' (the previous survivor, now killed). P3 basename guard inverted '!= .git': 2 red (worktree main_clone; git dir fora de .git). P1 MAIN_CLONE always REPO_DIR: red 'worktree: main_clone é o clone principal'. P2 MAIN_CLONE = the common dir instead of its parent: 3 red (worktree; clone principal; rollback main_clone). P10 default/fallback removed (MAIN_CLONE starts empty): 3 red (pasta sem git; cópia sem git dentro de outro repo; git dir fora de .git). P5 main_clone written from REPO: red 'worktree: main_clone'. P13 env MAINC fed from REPO_DIR: red 'worktree: main_clone'. P7 live_dir written from CACHE: 4 red (worktree, clone principal, pasta sem git, rollback live_dir). P8 live_dir written as None: same 4 red. P9 main_clone written as None: 6 red."
+        - "SURVIVORS: none among the changed behavior lines."
+        - "Test-first: the test file at 15f1169 run against the a667db5 installer ('git checkout a667db5 -- bin/install.sh' in the throwaway worktree): 'RESULT FAIL 10', all ten CS-5 (worktree main_clone and live_dir; clone principal main_clone and live_dir; pasta sem git main_clone and live_dir; cópia sem git dentro de outro repo main_clone; git dir fora de .git main_clone; rollback main_clone and live_dir). The repo_dir checks stay green."
+        - "Not re-perturbed this run: the error-masking variants of lines 92-93 (P11/P12 of the previous run, judged equivalent there because an empty or failed lookup leaves the shell in REPO_DIR, whose basename is not .git, so the fallback still fires). Not claimed as evidence here."
+      surviving_lines: []
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; reachability structural: the covering test runs the real installer from a linked worktree, the main clone, a non-git folder, a non-git copy nested in another repo, a repo made with --separate-git-dir, plus --clean and --rollback; every changed line was perturbed above and turned a CS-5 check red. Line-level precision not measured."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff adds no parser of outside input beyond the path of the folder the installer is run from, and touches no input-bearing module (api-rest)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is Story; the equivalent is the test-first run above: the CS-5 test against the a667db5 installer is RED (10 CS-5 checks failed)."
+routing_reason: "Spec claim (after 'sh bin/install.sh' from a linked worktree, last-install.json has repo_dir = worktree, main_clone = main clone, live_dir = $HOME/.claude/cepa-live) is load-bearing at 15f1169: 11 one-line perturbations (new [ -e .git ] condition, basename guard removed and inverted, main_clone always repo_dir, main_clone as the common dir, default removed, main_clone from REPO or None, live_dir from CACHE or None, env MAINC from REPO_DIR) each turned a CS-5 check red, and the test is RED (10 checks) against the a667db5 installer. The earlier survivor (basename guard -> true) is now killed by the --separate-git-dir scenario, and the new first condition is killed by the nested non-git copy scenario. Test runs the real installer; only the claude CLI is faked. Limits: no coverage tool (L2 structural); L4 n/a; the full suite was not run (supervisor runs it)."

@@ -1,0 +1,26 @@
+schema_version: 1
+card: registro-de-plugins-pasta-estavel-CS-5
+status: complete
+audited_at: 2026-11-16T00:00:00-03:00
+covers: a667db5..15f1169
+criteria:
+  - id: AC1
+    text: "CS-5: o registro operacional diz de onde veio a copia. Depois de `sh bin/install.sh` a partir de um worktree vinculado, `~/.claude/ops/last-install.json` tem `repo_dir` igual ao worktree, `main_clone` igual ao clone principal e `live_dir` igual a `$HOME/.claude/cepa-live`. Antes so existia `repo_dir` (docs/spec/registro-de-plugins-pasta-estavel.md, secao CS-5)"
+    altitude: cli
+    surface: "`sh bin/install.sh <host>` executado como subprocess real a partir de um worktree vinculado (`git worktree add`), com HOME temporario e um `claude` falso no PATH. Le ~/.claude/ops/last-install.json do disco e compara `repo_dir`, `main_clone` e `live_dir` com os caminhos esperados."
+    demonstrated_by:
+      test: "tests/test_install_live_dir.py::test_ops_record_says_where_copy_came_from"
+      layer: "subprocess real de bin/install.sh (worktree vinculado, clone principal, pasta sem git, --clean e --rollback); a verificacao e sobre o JSON no disco"
+      evidence: verified
+      run: |
+        python3 tests/test_install_live_dir.py
+        "all ok", exit 0, head 15f1169. 153 linhas "ok" no arquivo todo, 0 FAIL. Checagens do criterio: "CS-5: install do worktree sai 0"; "worktree: status ok"; "worktree: repo_dir é o worktree"; "worktree: main_clone é o clone principal"; "worktree: live_dir é ~/.claude/cepa-live". Extras: clone principal, pasta sem git, copia sem git dentro de outro repo, git dir fora de .git, --clean e rollback tambem gravam os campos. Vizinho `python3 tests/test_install_ops.py`: all green.
+    verdict: complete
+    gap: null
+supporting_tests: []
+notes:
+  - "Altitude cli respeitada: o teste roda o instalador real como subprocess e le o arquivo que o instalador escreveu; nao chama funcao interna nem usa mock. O worktree e criado por `git worktree add` de verdade, entao `main_clone != repo_dir` e o teste distingue os dois campos."
+  - "Implementacao conferida em bin/install.sh (git diff a667db5..15f1169): MAIN_CLONE vem de `git rev-parse --git-common-dir` (pai do .git compartilhado), consultado so quando REPO_DIR tem `.git` proprio (pasta no clone, arquivo no worktree; 15f1169) e o common dir e uma pasta `.git`; senao fallback para REPO_DIR. O caminho do worktree vinculado (o do criterio) continua passando por git; `ops_write` grava `main_clone` e `live_dir` (LIVE_DIR) junto de `repo_dir`. Como ops_write e a unica escrita do registro, os tres campos aparecem em todos os status."
+  - "Diff tambem toca common/commands/doctor.md e docs/harness-ops.md (documentacao dos campos); nao fazem parte do criterio e nao foram auditados alem de constar no diff."
+  - "Prova de execucao: rodei so `python3 tests/test_install_live_dir.py`, em primeiro plano (exit 0, 'all ok'); nao rodei a suite completa (o supervisor roda), nem test_install_ops.py."
+  - "HEAD 15f1169 na auditoria; os unicos itens nao rastreados sao este arquivo e docs/proof/...CS-5.yaml; nada de codigo ou teste foi editado."
