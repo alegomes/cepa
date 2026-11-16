@@ -66,7 +66,8 @@ significa que a sessão que está rodando esteja.
 O registro é **global** (`~/.claude/ops/`), porque o cache de plugins que ele
 descreve é global: uma máquina, um harness live, seja qual for o repositório em
 que você esteja. Ele guarda `repo_dir` justamente para você saber de qual clone
-veio o que está instalado.
+veio o que está instalado, `main_clone` (o clone principal, mesmo quando a
+instalação saiu de um worktree) e `live_dir` (a pasta fixa `~/.claude/cepa-live`).
 
 O `--rollback` restaura **um** passo. Não é um histórico — é a rota de saída do
 último `--clean`. O cache substituído por um rollback fica em

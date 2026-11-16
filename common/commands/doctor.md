@@ -136,4 +136,6 @@ brings all of that forward to a moment when fixing is cheap.
 - The `ops` check is the exception: it reads `~/.claude/ops/last-install.json`,
   which is **global** — it describes the machine's plugin cache, not this
   repository. That is why it applies the same in any cwd, and why it keeps
-  `repo_dir` (which clone what is installed came from).
+  `repo_dir` (which clone what is installed came from), `main_clone` (the main
+  clone, even when the install ran from a worktree) and `live_dir` (the fixed
+  `~/.claude/cepa-live` folder).

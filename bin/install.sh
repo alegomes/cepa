@@ -80,6 +80,15 @@ HOST_PROJECT_INPUT="${HOST_PROJECT_INPUT:-$(pwd)}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# The main clone: parent of git's common dir (the shared .git of every linked
+# worktree). Without git, outside a repo, or when the common dir is not a
+# ".git" folder, the repo this script ran from is the only clone known.
+MAIN_CLONE="${REPO_DIR}"
+if _common="$(cd "${REPO_DIR}" && git rev-parse --git-common-dir 2>/dev/null)" \
+   && _common="$(cd "${REPO_DIR}" && cd "${_common}" 2>/dev/null && pwd)" \
+   && [ "$(basename "${_common}")" = ".git" ]; then
+  MAIN_CLONE="$(cd "$(dirname "${_common}")" && pwd)"
+fi
 HOST_PROJECT="$(cd "${HOST_PROJECT_INPUT}" 2>/dev/null && pwd)" || {
   echo "✗ Host project path does not exist: ${HOST_PROJECT_INPUT}"
   exit 1
@@ -130,7 +139,7 @@ ops_write() {  # $1 = status, $2 = optional note
   mkdir -p "${OPS_DIR}"
   STATUS="$1" NOTE="${2:-}" \
   FROM="${OPS_FROM:-{\}}" TO="${OPS_TO:-{\}}" \
-  REPO="${REPO_DIR}" HOSTP="${HOST_PROJECT:-}" \
+  REPO="${REPO_DIR}" MAINC="${MAIN_CLONE}" LIVE="${LIVE_DIR}" HOSTP="${HOST_PROJECT:-}" \
   CACHE="${CACHE_DIR}" PREV="${PREV_CACHE_DIR}" \
   OPSF="${OPS_FILE}" STARTED="${OPS_STARTED:-}" \
   python3 - <<'PYOPS'
@@ -142,6 +151,8 @@ rec = {
     "started_at": os.environ.get("STARTED") or now,
     "finished_at": None if os.environ["STATUS"] == "in_progress" else now,
     "repo_dir": os.environ["REPO"],
+    "main_clone": os.environ["MAINC"],
+    "live_dir": os.environ["LIVE"],
     "host_project": os.environ.get("HOSTP") or None,
     "cache_dir": os.environ["CACHE"],
     "previous_cache_dir": os.environ["PREV"],
