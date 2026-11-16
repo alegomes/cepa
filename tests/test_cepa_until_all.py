@@ -650,6 +650,11 @@ def test_queue_with_its_own_live_run_is_skipped_with_a_warning():
               any("`a`" in l for l in warn) and any(run in l for l in warn),
               f"{warn} {out[-800:]}")
         check("...avisa uma vez so", len(warn) == 1, str(warn))
+        check("o aviso nomeia o pid do run vivo",
+              any(f"pid {alive.pid}" in l for l in warn), str(warn))
+        check("o aviso vai para o stderr, nao para o stdout",
+              "skipping queue" in p.stderr and "skipping queue" not in p.stdout,
+              f"err={p.stderr[-500:]} out={p.stdout[-500:]}")
         check("b1 fica done", _statuses(paths["b"]) == {"b1": "done"},
               str(_statuses(paths["b"])))
         check("a1 nao e tocado", _statuses(paths["a"]) == {"a1": "pending"},
