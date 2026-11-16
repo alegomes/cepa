@@ -200,6 +200,14 @@ def main():
         check("-Dtest sem teste executado grava EMPTY",
               (s.baseline() or {}).get("status") == "EMPTY", str(s.baseline()))
 
+        s = Session(base, "django-vazio")
+        (s.root / "manage.py").write_text("")
+        s.raises("python manage.py test", "bdjvz001")
+        s.finishes("bdjvz001", "Found 0 test(s).\nRan 0 tests in 0.000s\n\nOK", 0)
+        s.other_bash()
+        check("Django 'Ran 0 tests' com saída 0 em segundo plano grava EMPTY",
+              (s.baseline() or {}).get("status") == "EMPTY", str(s.baseline()))
+
         # ── edit after the launch discards the result ───────────────────────
         s = Session(base, "editado")
         s.raises("./mvnw verify", "bedit001")

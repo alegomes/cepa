@@ -594,7 +594,10 @@ def refine_empty(command: str, kind: str, status, text: str):
     Django/unittest is the deliberate exception: a "Ran 0 tests in" line records EMPTY with or
     without a test label (a mistyped label ends "NO TESTS RAN", an unfiltered run in an app
     with no tests ends "OK"). A real verdict (SUCCESS from another block, FAILURE) still wins."""
-    if kind == "unittest" and status is None and _UNITTEST_RAN_ZERO.search(text):
+    # status SUCCESS here can only be classify()'s "exit_code 0" fallback (a real green block
+    # needs "Ran [1-9]"), so it is accepted unless a real green block is present in the text.
+    if (kind == "unittest" and status in (None, "SUCCESS") and _UNITTEST_RAN_ZERO.search(text)
+            and not _UNITTEST_GREEN.search(text)):
         return "EMPTY", 0, (
             "Django/unittest ran 0 tests (nothing executed; a mistyped test label ends in "
             f"NO TESTS RAN); {UNITTEST_EMPTY_FIX_HINT}"

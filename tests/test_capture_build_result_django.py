@@ -281,3 +281,31 @@ def test_ran_zero_tests_does_not_hide_a_green_block(tmp_path):
 
 def test_ran_zero_in_a_log_line_is_not_empty(tmp_path):
     assert _run_hook(tmp_path, "python manage.py test", "log: Ran 0 tests in 0.1s earlier") is None
+
+
+@pytest.mark.parametrize("command, out", [
+    ("python manage.py test", "Ran 0 tests in 0.000s\n\nOK"),
+    ("python manage.py test app.tests.NaoExiste", "Ran 0 tests in 0.000s\n\nOK"),
+    ("python manage.py test app.tests.NaoExiste", "Ran 0 tests in 0.000s\n\nNO TESTS RAN"),
+])
+def test_ran_zero_tests_with_explicit_exit_0_records_empty(tmp_path, command, out):
+    st = _run_hook(tmp_path, command, out, extra={"exit_code": 0})
+    assert st and st["status"] == "EMPTY" and st["tests_run"] == 0
+
+
+def test_ran_zero_tests_with_exit_0_does_not_hide_a_green_block(tmp_path):
+    out = "Ran 0 tests in 0.0s\n\nOK\nRan 2 tests in 0.1s\n\nOK"
+    st = _run_hook(tmp_path, "python manage.py test", out, extra={"exit_code": 0})
+    assert st and st["status"] == "SUCCESS"
+
+
+def test_ran_zero_tests_with_nonzero_exit_stays_failure(tmp_path):
+    st = _run_hook(tmp_path, "python manage.py test", "Ran 0 tests in 0.000s\n\nNO TESTS RAN",
+                   extra={"exit_code": 1})
+    assert st and st["status"] == "FAILURE"
+
+
+def test_classify_exit_0_ran_zero_then_refine_is_empty():
+    cmd, out = "python manage.py test", "Ran 0 tests in 0.000s\n\nOK"
+    status, kind, _ = cbr.classify(cmd, out, 0)
+    assert cbr.refine_empty(cmd, kind, status, out)[0] == "EMPTY"
