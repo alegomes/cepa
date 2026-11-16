@@ -91,6 +91,7 @@ EXPERTISE_TARGET="${HOST_PROJECT}/.claude/expertise"
 CACHE_DIR="${HOME}/.claude/plugins/cache/${MARKETPLACE_NAME}"
 PREV_CACHE_DIR="${CACHE_DIR}.prev"
 LIVE_DIR="${HOME}/.claude/cepa-live"
+PREV_LIVE_DIR="${LIVE_DIR}.prev"
 OPS_DIR="${HOME}/.claude/ops"
 OPS_FILE="${OPS_DIR}/last-install.json"
 
@@ -171,24 +172,59 @@ fi
 # --- --rollback: restore and exit (before anything else touches state) ------
 
 if [ "${ROLLBACK}" -eq 1 ]; then
-  if [ ! -d "${PREV_CACHE_DIR}" ]; then
-    echo "✗ Nothing to roll back to: ${PREV_CACHE_DIR} does not exist."
-    echo "  A rollback point is created by --clean (it sets the old cache aside"
-    echo "  instead of deleting it). If you have never run --clean since this"
-    echo "  feature landed, there is no previous state to restore."
+  if [ ! -d "${PREV_CACHE_DIR}" ] && [ ! -d "${PREV_LIVE_DIR}" ]; then
+    echo "✗ Nothing to roll back to: neither ${PREV_CACHE_DIR}"
+    echo "  nor ${PREV_LIVE_DIR} exists."
+    echo "  A rollback point is created by --clean (it sets the old cache and the"
+    echo "  old fixed folder aside instead of deleting them). If you have never run"
+    echo "  --clean since this feature landed, there is no previous state to restore."
     exit 1
   fi
-  echo "▶ --rollback: restoring the cache set aside by the last --clean"
-  echo "    from: ${PREV_CACHE_DIR}"
-  echo "      to: ${CACHE_DIR}"
   BROKEN_CACHE_DIR="${CACHE_DIR}.rolledback"
-  rm -rf "${BROKEN_CACHE_DIR}"
-  [ -d "${CACHE_DIR}" ] && mv "${CACHE_DIR}" "${BROKEN_CACHE_DIR}"
-  mv "${PREV_CACHE_DIR}" "${CACHE_DIR}"
-  OPS_FROM="$(ops_versions "${BROKEN_CACHE_DIR}")"
-  OPS_TO="$(ops_versions "${CACHE_DIR}")"
-  ops_write "rolled_back" "restored from ${PREV_CACHE_DIR}; the cache being replaced was kept at ${BROKEN_CACHE_DIR}"
-  echo "✓ Cache restored. The replaced cache was kept at ${BROKEN_CACHE_DIR}"
+  BROKEN_LIVE_DIR="${LIVE_DIR}.rolledback"
+  RESTORED_CACHE=0
+  RESTORED_LIVE=0
+  if [ -d "${PREV_CACHE_DIR}" ]; then
+    echo "▶ --rollback: restoring the cache set aside by the last --clean"
+    echo "    from: ${PREV_CACHE_DIR}"
+    echo "      to: ${CACHE_DIR}"
+    rm -rf "${BROKEN_CACHE_DIR}"
+    [ -d "${CACHE_DIR}" ] && mv "${CACHE_DIR}" "${BROKEN_CACHE_DIR}"
+    mv "${PREV_CACHE_DIR}" "${CACHE_DIR}"
+    RESTORED_CACHE=1
+  fi
+  if [ -d "${PREV_LIVE_DIR}" ]; then
+    echo "▶ --rollback: restoring the fixed folder set aside by the last --clean"
+    echo "    from: ${PREV_LIVE_DIR}"
+    echo "      to: ${LIVE_DIR}"
+    rm -rf "${BROKEN_LIVE_DIR}"
+    [ -d "${LIVE_DIR}" ] && mv "${LIVE_DIR}" "${BROKEN_LIVE_DIR}"
+    mv "${PREV_LIVE_DIR}" "${LIVE_DIR}"
+    RESTORED_LIVE=1
+  fi
+  # The record must describe what THIS rollback replaced. ops_versions reads the
+  # cache layout (<plugin>/<version>/), not cepa-live's (<plugin>/.claude-plugin/),
+  # so when only the fixed folder was restored the versions are left empty rather
+  # than read from a stale ${BROKEN_CACHE_DIR} left by an older rollback.
+  if [ "${RESTORED_CACHE}" -eq 1 ]; then
+    OPS_FROM="$(ops_versions "${BROKEN_CACHE_DIR}")"
+    OPS_TO="$(ops_versions "${CACHE_DIR}")"
+  else
+    OPS_FROM="{}"
+    OPS_TO="{}"
+  fi
+  if [ "${RESTORED_CACHE}" -eq 1 ] && [ "${RESTORED_LIVE}" -eq 1 ]; then
+    WHAT="the cache from ${PREV_CACHE_DIR} and the fixed folder from ${PREV_LIVE_DIR}; replaced copies were kept at ${BROKEN_CACHE_DIR} and ${BROKEN_LIVE_DIR}"
+    KEPT="${BROKEN_CACHE_DIR} and ${BROKEN_LIVE_DIR}"
+  elif [ "${RESTORED_CACHE}" -eq 1 ]; then
+    WHAT="the cache from ${PREV_CACHE_DIR}; the replaced copy was kept at ${BROKEN_CACHE_DIR}"
+    KEPT="${BROKEN_CACHE_DIR}"
+  else
+    WHAT="only the fixed folder from ${PREV_LIVE_DIR} (the cache was not touched, versions not recorded); the replaced copy was kept at ${BROKEN_LIVE_DIR}"
+    KEPT="${BROKEN_LIVE_DIR}"
+  fi
+  ops_write "rolled_back" "restored ${WHAT}"
+  echo "✓ Restored. Replaced copy kept at: ${KEPT}"
   echo "  ⚠ Restart Claude Code — a running session holds the OLD hooks in memory."
   exit 0
 fi
@@ -271,6 +307,13 @@ for p in json.load(open(os.path.join(src, ".claude-plugin", "marketplace.json"))
     shutil.copytree(os.path.join(src, rel), os.path.join(dst, rel),
                     ignore=ign)
 PYLIVE
+if [ "${CLEAN}" -eq 1 ] && [ -d "${LIVE_DIR}" ]; then
+  # Set aside only now that the new copy is complete: a copy that dies above
+  # leaves the current folder where it was. A previous .prev is replaced.
+  echo "▶ --clean: setting the current fixed folder aside at ${PREV_LIVE_DIR}"
+  rm -rf "${PREV_LIVE_DIR}"
+  mv "${LIVE_DIR}" "${PREV_LIVE_DIR}"
+fi
 rm -rf "${LIVE_DIR}"
 mv "${LIVE_NEW}" "${LIVE_DIR}"
 
@@ -553,6 +596,9 @@ echo ""
 echo "✔ Done."
 if [ "${CLEAN}" -eq 1 ] && [ -d "${PREV_CACHE_DIR}" ]; then
   echo "  Rollback point: ${PREV_CACHE_DIR}  (restore with bin/install.sh --rollback)"
+fi
+if [ "${CLEAN}" -eq 1 ] && [ -d "${PREV_LIVE_DIR}" ]; then
+  echo "  Rollback point: ${PREV_LIVE_DIR}  (restore with bin/install.sh --rollback)"
 fi
 echo "  Operational record: ${OPS_FILE}  (checked by /common:doctor)"
 echo ""

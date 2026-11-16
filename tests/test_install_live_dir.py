@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CS-1 and CS-2: the installer registers the fixed folder, from a linked
+"""CS-1, CS-2 and CS-3: the installer registers the fixed folder, from a linked
 worktree (CS-1) and from the main clone (CS-2).
 
 `bin/install.sh` used to hand `claude plugin marketplace add` the folder it ran
@@ -12,6 +12,9 @@ throwaway git repo (never the real one) with a real linked worktree.
 
 CS-2 is the same claim from the main clone, on a HOME that never saw an
 install: the registry gets `~/.claude/cepa-live`, never the clone's path.
+
+CS-3: `--clean` sets the current cepa-live aside as `cepa-live.prev` and
+`--rollback` puts it back (the .prev is gone afterwards).
 
 Run: python3 tests/test_install_live_dir.py
 """
@@ -206,9 +209,118 @@ def test_main_clone_install():
               found == listed | {".claude-plugin"}, str(sorted(found)))
 
 
+def test_clean_and_rollback():
+    """CS-3: install A, --clean with B, --rollback -> A back, no cepa-live.prev."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp).resolve()
+        home = tmp / "home"
+        home.mkdir()
+        main = tmp / "main"
+        build_repo(main)
+        fakebin = tmp / "fakebin"
+        fakebin.mkdir()
+        log = tmp / "claude.log"
+        (fakebin / "claude").write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$*" >> "$FAKE_CLAUDE_LOG"\nexit 0\n')
+        (fakebin / "claude").chmod(0o755)
+        host = tmp / "host"
+        host.mkdir()
+        env = dict(os.environ, HOME=str(home), FAKE_CLAUDE_LOG=str(log),
+                   PATH=f"{fakebin}:{os.environ['PATH']}")
+        live = home / ".claude" / "cepa-live"
+        prev = home / ".claude" / "cepa-live.prev"
+        pj_main = main / "common" / ".claude-plugin" / "plugin.json"
+        pj_live = live / "common" / ".claude-plugin" / "plugin.json"
+
+        def run(*args):
+            return subprocess.run(["sh", "bin/install.sh", *args, str(host)],
+                                  capture_output=True, text=True, env=env, cwd=str(main))
+
+        def version(path):
+            return json.loads(path.read_text())["version"]
+
+        def set_version(v):
+            d = json.loads(pj_main.read_text())
+            d["version"] = v
+            pj_main.write_text(json.dumps(d))
+
+        set_version("1.0.0-A")
+        r = run()
+        check("CS-3: instalar A sai 0", r.returncode == 0, r.stdout[-400:] + r.stderr[-400:])
+        check("CS-3: cepa-live diz A", pj_live.is_file() and version(pj_live) == "1.0.0-A")
+        check("CS-3: instalar sem --clean não cria cepa-live.prev", not prev.exists())
+
+        set_version("2.0.0-B")
+        r = run("--clean")
+        check("CS-3: --clean com B sai 0", r.returncode == 0, r.stdout[-400:] + r.stderr[-400:])
+        check("CS-3: cepa-live diz B", version(pj_live) == "2.0.0-B")
+        check("CS-3: cepa-live.prev guarda A",
+              (prev / "common" / ".claude-plugin" / "plugin.json").is_file()
+              and version(prev / "common" / ".claude-plugin" / "plugin.json") == "1.0.0-A")
+
+        r = run("--rollback")
+        check("CS-3: --rollback sai 0", r.returncode == 0, r.stdout[-400:] + r.stderr[-400:])
+        check("CS-3: depois do --rollback cepa-live volta a dizer A",
+              pj_live.is_file() and version(pj_live) == "1.0.0-A")
+        check("CS-3: depois do --rollback cepa-live.prev não existe", not prev.exists())
+
+        # a second --clean replaces the previous .prev with what was live (B)
+        set_version("2.0.0-B")
+        run("--clean")
+        set_version("3.0.0-C")
+        r = run("--clean")
+        check("CS-3: segundo --clean sai 0", r.returncode == 0, r.stdout[-400:] + r.stderr[-400:])
+        check("CS-3: segundo --clean: .prev passa a guardar B (não A)",
+              version(prev / "common" / ".claude-plugin" / "plugin.json") == "2.0.0-B")
+
+        r = run("--rollback")
+        check("CS-3: --rollback depois do segundo --clean sai 0", r.returncode == 0)
+        check("CS-3: depois do --rollback cepa-live diz a versão anterior (B)",
+              pj_live.is_file() and version(pj_live) == "2.0.0-B")
+        check("CS-3: depois do --rollback cepa-live.prev não existe", not prev.exists())
+
+        r = run("--rollback")
+        check("CS-3: --rollback sem ponto de volta sai diferente de 0", r.returncode != 0)
+        check("CS-3: --rollback sem ponto de volta não mexe em cepa-live",
+              version(pj_live) == "2.0.0-B")
+
+
+def test_rollback_fixed_folder_only_ignores_stale_cache():
+    """CS-3: --rollback that only restores cepa-live must not report a stale cache.rolledback."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp).resolve()
+        home = tmp / "home"
+        main = tmp / "main"
+        build_repo(main)
+        fakebin = tmp / "fakebin"
+        fakebin.mkdir()
+        (fakebin / "claude").write_text("#!/bin/sh\nexit 0\n")
+        (fakebin / "claude").chmod(0o755)
+        host = tmp / "host"
+        host.mkdir()
+        env = dict(os.environ, HOME=str(home), PATH=f"{fakebin}:{os.environ['PATH']}")
+        claude = home / ".claude"
+        # stale leftover from an older rollback: plugin STALEat 9.9.9-STALE
+        stale = Path(str(claude / "plugins" / "cache" / "cepa") + ".rolledback")
+        (stale / "stale-plugin" / "9.9.9-STALE").mkdir(parents=True)
+        (claude / "cepa-live" / "common" / ".claude-plugin").mkdir(parents=True)
+        (claude / "cepa-live.prev" / "common" / ".claude-plugin").mkdir(parents=True)
+        r = subprocess.run(["sh", "bin/install.sh", "--rollback", str(host)],
+                           capture_output=True, text=True, env=env, cwd=str(main))
+        check("CS-3: --rollback só da pasta fixa sai 0", r.returncode == 0,
+              r.stdout[-400:] + r.stderr[-400:])
+        rec_file = claude / "ops" / "last-install.json"
+        rec = json.loads(rec_file.read_text()) if rec_file.is_file() else {}
+        check("CS-3: registro não traz versões do cache.rolledback velho",
+              "9.9.9-STALE" not in json.dumps(rec) and rec.get("versions_before") == {},
+              json.dumps(rec)[:400])
+
+
 if __name__ == "__main__":
     test_worktree_install()
     test_main_clone_install()
+    test_clean_and_rollback()
+    test_rollback_fixed_folder_only_ignores_stale_cache()
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILED")
         sys.exit(1)
