@@ -89,3 +89,26 @@ def test_testserver_is_not_matched():
 
 def test_quoted_echo_is_not_matched():
     assert cbr.classify('echo "manage.py test"', GREEN, None)[:2] == (None, None)
+
+
+_RAN = "Ran 3 tests in 0.1s\n\n"
+_GREEN_OUT = _RAN + "OK\n"
+
+
+@pytest.mark.parametrize("command", [
+    "python ./manage.py test",
+    "python3 src/manage.py test app.tests",
+    "./manage.py test",
+])
+def test_manage_py_behind_a_path_is_matched(command):
+    assert cbr.classify(command, _GREEN_OUT, None)[:2] == ("SUCCESS", "unittest")
+
+
+@pytest.mark.parametrize("tail", ["not OK\n", "OKAY\n", "OK then something\n", "OK (skipped=1\nmore)\n"])
+def test_ok_line_must_be_exactly_the_runner_verdict(tail):
+    assert cbr.classify("python manage.py test", _RAN + tail, None)[:2] == (None, "unittest")
+
+
+@pytest.mark.parametrize("noise", ["log: x FAILED (retrying)\n", "FAILED to connect to cache, retrying\n"])
+def test_failed_not_at_verdict_line_does_not_hide_green(noise):
+    assert cbr.classify("python manage.py test", noise + _GREEN_OUT, None)[:2] == ("SUCCESS", "unittest")
