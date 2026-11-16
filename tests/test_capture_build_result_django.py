@@ -112,3 +112,42 @@ def test_ok_line_must_be_exactly_the_runner_verdict(tail):
 @pytest.mark.parametrize("noise", ["log: x FAILED (retrying)\n", "FAILED to connect to cache, retrying\n"])
 def test_failed_not_at_verdict_line_does_not_hide_green(noise):
     assert cbr.classify("python manage.py test", noise + _GREEN_OUT, None)[:2] == ("SUCCESS", "unittest")
+
+
+@pytest.mark.parametrize("out", [
+    "Ran 3 tests in 0.1s\nsome log line\nOK\n",   # text between Ran and OK
+    "foo Ran 3 tests in 1s\n\nOK\n",              # Ran not at line start
+    "Ran 3 tests\n\nOK\n",                        # no ' in <time>' clause
+    "Ran 3 tests\nin 0.1s\n\nOK\n",               # Ran line split across lines
+    "Ran 3\ntests in 0.1s\n\nOK\n",
+    "Ran 3 tests in 0.1s\n\nOK (a (b))\n",        # nested parentheses
+    "Ran 3 tests in 0.1s\n\nOK(skipped=1)\n",     # no space before the parenthesis
+])
+def test_malformed_unittest_summary_is_not_success(out):
+    assert cbr.classify("python manage.py test", out, None)[:2] == (None, "unittest")
+
+
+@pytest.mark.parametrize("out", [
+    "Ran 3 tests in 0.1s\n\n\n\nOK\n",            # several blank lines tolerated
+    "Ran 3 tests in 0.1s\nOK\n",                  # zero blank lines tolerated
+])
+def test_any_number_of_blank_lines_before_ok_is_success(out):
+    assert cbr.classify("python manage.py test", out, None)[:2] == ("SUCCESS", "unittest")
+
+
+@pytest.mark.parametrize("command", [
+    "xmanage.py test",
+    "python xmanage.py test",
+    "python manage.pytest",
+    "python manageXpy test",
+])
+def test_command_must_be_manage_py_test_exactly(command):
+    assert cbr.classify(command, _GREEN_OUT, None)[:2] == (None, None)
+
+
+@pytest.mark.parametrize("command", [
+    "manage.py test",                              # at the very start of the command
+    "python manage.py  test",                      # two spaces
+])
+def test_manage_py_test_start_of_command_and_extra_spaces(command):
+    assert cbr.classify(command, _GREEN_OUT, None)[:2] == ("SUCCESS", "unittest")
