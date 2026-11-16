@@ -148,6 +148,31 @@ def test_answer_refuses_text_that_does_not_answer_the_route():
         check("...e a árvore limpa", status(root) == "", status(root))
 
 
+def test_clarification_refusal_points_to_the_question_mark_key():
+    """CS-11: a text that asks for clarification is refused (exit 6, nothing
+    written) with a hint to the `?` key of `cepa-until decide <queue>`, not with
+    "answer this question". The other refusal reasons keep the old hint."""
+    with tempfile.TemporaryDirectory() as tmp:
+        stuck = item("a1", status="blocked")
+        stuck["owner_question"] = "Fecho o card?"
+        root = build_repo(tmp, [stuck])
+        queue_file = next(Path(root).rglob("plan.yaml"))
+        before = queue_file.read_text()
+        rc, out = answer(root, "a1", "não entendi a pergunta")
+        check("recusa o pedido de esclarecimento com exit 6", rc == 6, (rc, out))
+        check("...citando a tecla ? do cepa-until decide da fila",
+              "`?`" in out and "cepa-until decide fila" in out, out)
+        check("...sem mandar responder a pergunta",
+              "responda a essa pergunta" not in out, out)
+        check("...ainda oferecendo o --force", "--force" in out, out)
+        check("...e não gravou nada", queue_file.read_text() == before
+              and status(root) == "", status(root))
+        rc, out = answer(root, "a1", "e agora?")
+        check("outra recusa (pergunta) segue com exit 6", rc == 6, (rc, out))
+        check("...e com a dica de sempre",
+              "responda a essa pergunta" in out and "cepa-until decide" not in out, out)
+
+
 def test_answer_force_writes_the_refused_text():
     with tempfile.TemporaryDirectory() as tmp:
         stuck = item("a1", status="blocked")
