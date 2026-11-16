@@ -1,0 +1,49 @@
+key: licenca-mit
+status: complete
+diff: f21d5ec..d21cb03
+audited_head: d21cb03
+note: >
+  Item da fila cepa (nao e card Jira). Lote 0 da secao 7 de docs/estrategia-lacunas-ecc.md.
+  Auditado em primeiro plano, sem rodar tests/run-all.sh sem argumentos (o supervisor roda).
+  Criterios derivados do enunciado do item. Fora de escopo (lote 4): descricao do repo, topics,
+  README, campos license do plugin.json. Nao verifiquei que o GitHub detecta a licenca (depende
+  de rede e do repositorio publicado); o texto e o OSI padrao, entao o risco e baixo.
+criteria:
+  - id: AC1
+    text: Arquivo LICENSE na raiz do repositorio com o texto MIT padrao, sem alteracao.
+    altitude: domain
+    surface: arquivo LICENSE na raiz
+    test: tests/test_license_file.py (checks "LICENSE exists", "first non-empty line is MIT License", "body equals the canonical MIT text")
+    layer: script (arquivo lido do disco)
+    evidence: verified
+    run: >
+      python3 tests/test_license_file.py -> 5 "ok", 0 FAIL, "all green", rc 0. Comparacao independente por mim:
+      diff LICENSE /opt/homebrew/lib/node_modules/mcporter/LICENSE e diff com /opt/homebrew/Cellar/llama.cpp/0.9.0/LICENSE
+      diferem somente na linha 3 (copyright). Corpo identico nas duas copias externas.
+    status: complete
+    gap: null
+  - id: AC2
+    text: Linha de copyright com titular Alexandre Gomes e ano 2026.
+    altitude: domain
+    surface: linha 3 de LICENSE
+    test: tests/test_license_file.py (check "copyright line is exact")
+    layer: script
+    evidence: verified
+    run: >
+      LICENSE linha 3 = "Copyright (c) 2026 Alexandre Gomes"; o teste exige essa linha exata e exatamente uma linha Copyright.
+      Mesma execucao: all green, rc 0.
+    status: complete
+    gap: null
+  - id: AC3
+    text: Um teste da suite fica vermelho se o arquivo sumir ou titular, ano ou corpo mudarem.
+    altitude: domain
+    surface: tests/test_license_file.py, apanhado pelo glob tests/test_*.py de tests/run-all.sh (linha 58)
+    test: tests/test_license_file.py
+    layer: script
+    evidence: verified
+    run: >
+      Mutacoes feitas em copia sob /tmp (repo intocado; o teste resolve a raiz pelo proprio caminho): sem LICENSE -> "1 failure(s)";
+      titular Gomes->Gomez -> 2 FAIL; ano 2026->2025 -> 2 FAIL; corpo "WITHOUT WARRANTY"->"WITH WARRANTY" -> 1 FAIL.
+      As quatro mutacoes ficam vermelhas; o original fica verde (N=5 checks).
+    status: complete
+    gap: null
