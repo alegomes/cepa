@@ -198,9 +198,9 @@ def test_main_clone_install():
                   (live / rel / ".claude-plugin" / "plugin.json").is_file(),
                   str(live / rel))
         listed = {os.path.normpath(p["source"]) for p in mk["plugins"]}
+        found = {p.name for p in live.iterdir()} if live.is_dir() else set()
         check("CS-2: cepa-live tem só o marketplace e as pastas dos plugins listados",
-              {p.name for p in live.iterdir()} == listed | {".claude-plugin"},
-              str(sorted(p.name for p in live.iterdir())))
+              found == listed | {".claude-plugin"}, str(sorted(found)))
 
 
 if __name__ == "__main__":
