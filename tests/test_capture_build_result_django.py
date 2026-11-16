@@ -353,6 +353,9 @@ _NEW_CMDS = [
     "django-admin test",
     "uv run django-admin test app",
     "django-admin.py test",
+    "python -u -b -m unittest",
+    "python -Wignore::DeprecationWarning -m unittest",
+    "python --foo -m unittest",
 ]
 
 
@@ -414,6 +417,14 @@ def test_cs4_quoted_mention_is_not_a_build(tmp_path, command):
     "django-admin tests",
     "xdjango-admin test",
     "django-admin makemessages",
+    "django_admin test",
+    "djangoxadmin test",
+    "django-admintest",
+    "django-admin.pytest",
+    "python-wrapper -m unittest",
+    "python-m unittest",
+    "python3-u -m unittest",
+    "python -u-m unittest",
 ])
 def test_cs4_near_misses_are_not_unittest(command):
     assert cbr.classify(command, _GREEN_OUT, None)[1] != "unittest"
