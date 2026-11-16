@@ -601,6 +601,39 @@ def test_rollback_names_both_replaced_copies():
               rec.get("note") == rollback_note(claude, True, True), note[:500])
 
 
+def test_failed_copy_leaves_previous_live_whole():
+    """CS-4: a copy that dies halfway leaves the previous cepa-live whole."""
+    with tempfile.TemporaryDirectory() as tmp:
+        claude, main, run = _scenario(tmp)
+        r = run()
+        check("CS-4: instalação da versão A sai 0", r.returncode == 0,
+              r.stdout[-400:] + r.stderr[-400:])
+        live = claude / "cepa-live"
+
+        def snap():
+            return {str(f.relative_to(live)): (f.read_bytes() if f.is_file() and not f.is_symlink() else None)
+                    for f in live.rglob("*") if f.is_file() or f.is_symlink()}
+        before = snap()
+        check("CS-4: versão A tem arquivos em cepa-live", len(before) > 0)
+        # version B of the repo, with one plugin folder the copy cannot read
+        (main / "common" / "VERSION-B.txt").write_text("b")
+        (main / "build-solo" / "agents").chmod(0)
+        try:
+            r = run()
+        finally:
+            (main / "build-solo" / "agents").chmod(0o755)
+        check("CS-4: cópia que falha faz o instalador sair diferente de zero",
+              r.returncode != 0, r.stdout[-400:] + r.stderr[-400:])
+        check("CS-4: cepa-live ainda tem a versão A completa, byte a byte",
+              live.is_dir() and snap() == before)
+        check("CS-4: cepa-live não ganhou arquivo da versão B",
+              not (live / "common" / "VERSION-B.txt").exists())
+        rec_file = claude / "ops" / "last-install.json"
+        rec = json.loads(rec_file.read_text()) if rec_file.is_file() else {}
+        check("CS-4: last-install.json diz in_progress", rec.get("status") == "in_progress",
+              json.dumps(rec)[:300])
+
+
 if __name__ == "__main__":
     test_worktree_install()
     test_main_clone_install()
@@ -613,6 +646,7 @@ if __name__ == "__main__":
     test_rollback_replaces_old_cache_rolledback_and_tolerates_missing_targets()
     test_plain_install_keeps_rollback_point()
     test_rollback_with_nothing_names_both_paths()
+    test_failed_copy_leaves_previous_live_whole()
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILED")
         sys.exit(1)
