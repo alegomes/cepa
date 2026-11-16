@@ -1,3 +1,8 @@
+---
+name: how-why-boundary
+description: Separate the HOW (extractable from code) from the WHY (elicitable from an owner, commit, ADR or tracker) and never invent rationale; a WHY with no source is a question, not a fact. Use when extracting facts, digging rationale, writing any documentation prose, or reviewing it at the gate.
+---
+
 # how-why-boundary
 
 The one discipline this whole topology exists to protect: separate the **HOW**

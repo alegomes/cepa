@@ -1,0 +1,17 @@
+schema_version: 1
+card: build-django-manage-py-test-CS-5
+status: complete
+audited_at: 2026-11-16T00:00:00-03:00
+criteria:
+  - id: CS-5
+    text: "depois de um `manage.py test` verde, a trava libera o `git commit`. Teste vermelho declarado: num repositorio git temporario com `pyproject.toml`, um `.py` alterado e `.claude/last-build.json` em STALE, rodar `capture-build-result.py` com o payload verde do CS-1 e depois `gate-advance.py` com o payload de PreToolUse de `git commit -m x` termina sem bloqueio (exit 0). Hoje o `gate-advance.py` bloqueia com \"build is STALE\"."
+    altitude: cli
+    surface: "dois hooks como subprocessos, na ordem do Claude Code: PostToolUse capture-build-result.py (payload JSON no stdin) e depois PreToolUse gate-advance.py com 'git commit -m x'; observa exit code e stderr"
+    demonstrated_by:
+      test: "tests/test_gate_advance_django_green.py::test_green_manage_py_test_releases_git_commit (parametrizado: 'python manage.py test' e 'uv run python manage.py test')"
+      layer: "subprocessos reais dos dois hooks em repo git temporario com pyproject.toml, app.py alterado e last-build.json STALE; afirma returncode == 0 e ausencia de BLOCKED no stderr. Reforcos no mesmo nivel: STALE sem rodar teste bloqueia (exit 2, 'build is STALE'); manage.py test vermelho (exit_code 1) mantem bloqueio; 'manage.py testserver' nao libera"
+      evidence: verified
+      run: "python3 -m pytest tests/test_gate_advance_django_green.py tests/test_capture_build_result_django.py -q -> 81 passed in 7.01s (HEAD 4bdc5c5; N > 0). Contrafactual: com a arvore de 02e0ea5 (pai de 34fe7f7, via git archive em diretorio temporario) + o arquivo de teste, 'python3 -m pytest tests/test_gate_advance_django_green.py -q' -> 2 failed, 3 passed (as duas variantes verdes falham; os testes de bloqueio passam)."
+    verdict: complete
+    gap: null
+    note: "O diff do item (c839cb4..4bdc5c5) adiciona so tests/test_gate_advance_django_green.py (96 linhas). O comportamento de producao veio antes, em 34fe7f7 (CS-1, capture-build-result.py); 'Hoje bloqueia' descreve o estado anterior a 34fe7f7, confirmado pela falha contrafactual. Suite completa NAO rodada por regra da run desatendida; o supervisor a roda ao fechar o item."

@@ -13,6 +13,9 @@ Patterns detected:
   - Gradle: ./gradlew or gradle  → BUILD SUCCESSFUL / BUILD FAILED
   - npm/yarn/pnpm test → exit code is the signal
   - pytest → exit code is the signal
+  - Django manage.py test (any wrapper) → "Ran N tests" + a line `OK` alone (or `OK (...)`) = SUCCESS,
+    a line starting `FAILED (` = FAILURE; the verdict is read from stdout plus stderr;
+    "Ran 0 tests" (with or without a test label) = EMPTY
   - cargo → exit code
   - go test → exit code
   - docker build → output markers (writing image / naming to /
@@ -171,6 +174,12 @@ def _maven_marker(word: str):
         r"(?m)^[ \t]*(?:\d+:)?(?:\[(?:INFO|ERROR)\][ \t]*)?BUILD " + word + r"\b")
 
 
+_UNITTEST_RED = re.compile(r"(?m)^[ \t]*FAILED \(")
+
+_UNITTEST_GREEN = re.compile(
+    r"(?m)^[ \t]*Ran [1-9]\d* tests? in [^\r\n]*\r?\n(?:[ \t]*\r?\n)*OK(?: \([^()\r\n]*\))?[ \t]*\r?$")
+
+
 PATTERNS = [
     (re.compile(r"(?:^|\s)(?:\./)?mvnw?\b.*\b(?:verify|test|package|install)\b"),
      "maven", [_maven_marker("SUCCESS")], [_maven_marker("FAILURE")]),
@@ -188,6 +197,13 @@ PATTERNS = [
     # passed" é FAILURE.
     (re.compile(r"(?:^|\s)pytest\b"),
      "pytest", [" passed"], [" failed", " error", "errors during collection", "no tests ran"]),
+    # Django `manage.py test` (any wrapper: uv, poetry, docker compose exec). The runner
+    # prints "Ran N tests in Xs" then a line with "OK" alone (or "OK (skipped=1, expected
+    # failures=1)" etc.). A bare "OK" substring is NOT a marker (any app log has it); "Ran 0
+    # tests" is not green. The failure marker (a line starting "FAILED (") is there so a green
+    # block never hides a red one in the same output (success markers run before the exit code).
+    (re.compile(r"(?:^|[\s/])manage\.py\s+test\b"),
+     "unittest", [_UNITTEST_GREEN], [_UNITTEST_RED]),
     (re.compile(r"(?:^|\s)cargo\b.*\b(?:test|build|check)\b"),
      "cargo", None, None),
     # deno: `deno task check` / `deno check` imprimem "Checked N files"; `deno test`
@@ -219,6 +235,20 @@ PATTERNS = [
 
 
 # ─── shape extraction ─────────────────────────────────────────────────
+
+def add_unittest_stderr(command: str, text: str, tool_response) -> str:
+    """unittest (so Django `manage.py test`) writes its "Ran N tests" + OK/FAILED verdict to
+    STDERR, while "Found N test(s)" and system-check lines go to stdout. extract_text() returns
+    stdout alone when it is non-empty, so for this kind only, append stderr to read the verdict."""
+    stderr = tool_response.get("stderr") if isinstance(tool_response, dict) else None
+    if not (isinstance(stderr, str) and stderr and stderr not in text):
+        return text
+    # Same rule as classify(): the first matching PATTERNS entry on the unquoted view wins,
+    # so ask classify which kind it picks (empty text, no exit code: it still returns the kind).
+    if classify(command, "", None)[1] == "unittest":
+        return f"{text}\n{stderr}" if text else stderr
+    return text
+
 
 def _flatten_content_blocks(value):
     """Common pattern: list of {type: text|tool_result, text|content: ...}."""
@@ -502,6 +532,9 @@ EMPTY_FIX_HINT = (
 )
 
 
+UNITTEST_EMPTY_FIX_HINT = "fix the test label, or check that the app has tests"
+
+
 def has_test_filter(command: str, kind: str) -> bool:
     rx = _TEST_FILTERS.get(kind)
     return bool(rx and rx.search(command))
@@ -551,9 +584,24 @@ def count_tests_run(kind: str, text: str):
     return None
 
 
+_UNITTEST_RAN_ZERO = re.compile(r"(?m)^[ \t]*Ran 0 tests? in ")
+
+
 def refine_empty(command: str, kind: str, status, text: str):
     """(status, tests_run, reason) after the zero-tests check. Only turns a
-    SUCCESS from a FILTERED command into EMPTY; everything else passes through."""
+    SUCCESS from a FILTERED command into EMPTY; everything else passes through.
+
+    Django/unittest is the deliberate exception: a "Ran 0 tests in" line records EMPTY with or
+    without a test label (a mistyped label ends "NO TESTS RAN", an unfiltered run in an app
+    with no tests ends "OK"). A real verdict (SUCCESS from another block, FAILURE) still wins."""
+    # status SUCCESS here can only be classify()'s "exit_code 0" fallback (a real green block
+    # needs "Ran [1-9]"), so it is accepted unless a real green block is present in the text.
+    if (kind == "unittest" and status in (None, "SUCCESS") and _UNITTEST_RAN_ZERO.search(text)
+            and not _UNITTEST_GREEN.search(text)):
+        return "EMPTY", 0, (
+            "Django/unittest ran 0 tests (nothing executed; a mistyped test label ends in "
+            f"NO TESTS RAN); {UNITTEST_EMPTY_FIX_HINT}"
+        )
     if status != "SUCCESS" or not has_test_filter(command, kind):
         return status, None, None
     n = count_tests_run(kind, text)
@@ -1025,7 +1073,7 @@ def main():
         sys.exit(0)
 
     tool_response = payload.get("tool_response") or {}
-    response_text = extract_text(tool_response)
+    response_text = add_unittest_stderr(command, extract_text(tool_response), tool_response)
     exit_code = extract_exit_code(tool_response)
     interrupted = is_interrupted(tool_response)
 

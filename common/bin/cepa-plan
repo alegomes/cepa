@@ -3579,6 +3579,7 @@ ASKS_FOR_CLARIFICATION = re.compile(
     r"\b(o\s+que|oq)\s+(isso\s+|ela\s+)?(quer\s+dizer|significa)\b|"
     r"\b(repet\w*|refa\w+|explic\w+)\s+(a\s+)?pergunta\b", re.I)
 DECIDE_ANSWER = re.compile(r"^(sim|n[aã]o)\s*:", re.I)
+CLARIFICATION_REASON = "o texto pede esclarecimento em vez de responder"
 
 
 def not_an_answer(text):
@@ -3589,7 +3590,7 @@ def not_an_answer(text):
     if DECIDE_ANSWER.match(clean):
         return None
     if ASKS_FOR_CLARIFICATION.search(clean):
-        return "o texto pede esclarecimento em vez de responder"
+        return CLARIFICATION_REASON
     if clean.endswith("?"):
         return "o texto é uma pergunta, não uma resposta"
     return None
@@ -3725,9 +3726,17 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
                   file=sys.stderr)
             if route_question:
                 print(f"  a rota pergunta: {route_question}", file=sys.stderr)
-            print("  responda a essa pergunta (sim/não e o porquê, numa "
-                  "linha). Se o texto é mesmo a sua resposta, repita com "
-                  "--force.", file=sys.stderr)
+            if reason == CLARIFICATION_REASON:
+                # CS-11: the way out of "I did not understand" is the `?` key.
+                print(f"  se a pergunta está mal escrita, abra `cepa-until "
+                      f"decide {name}` e aperte `?`: ela é registrada como "
+                      "mal escrita, nenhuma resposta é gravada no item e a "
+                      "pergunta é reescrita na hora. Se o texto é mesmo a sua "
+                      "resposta, repita com --force.", file=sys.stderr)
+            else:
+                print("  responda a essa pergunta (sim/não e o porquê, numa "
+                      "linha). Se o texto é mesmo a sua resposta, repita com "
+                      "--force.", file=sys.stderr)
             return 6
     today = datetime.now().strftime("%Y-%m-%d")
     previous = " ".join(str(it.get("evidence") or "").split())

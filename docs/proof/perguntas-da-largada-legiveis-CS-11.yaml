@@ -1,0 +1,47 @@
+schema_version: 2
+card: perguntas-da-largada-legiveis-CS-11
+verdict: proven
+reviewed_at: 2026-11-16T10:00:00-03:00
+base_commit: 3d1cea0
+head_commit: 4280114
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (CLARIFICATION_REASON; not_an_answer() returns it; cmd_answer prints the `?`-key hint when reason == CLARIFICATION_REASON, else the old hint)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # the covering test calls the real cepa-plan `answer` on a temp repo (build_repo); no double stands in for cepa-plan.
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at 4280114 (throwaway detached worktree /tmp/cs11-proof): python3 tests/test_cepa_plan_write_commits.py -> 114 'ok' lines, 'all green'."
+        - "P1 branch condition `if reason == CLARIFICATION_REASON:` -> `if False:` -> 2 FAIL ('...citando a tecla ? do cepa-until decide da fila', '...sem mandar responder a pergunta') (RED)."
+        - "P2 same condition -> `if True:` (other reasons take the new hint) -> 1 FAIL ('...e com a dica de sempre') (RED)."
+        - "P3 drop the queue name interpolation (`decide {name}` -> `decide`) -> 1 FAIL ('...citando a tecla ? do cepa-until decide da fila') (RED)."
+        - "P4 drop the `?` mention (' e aperte `?`:' -> ' e responda:') -> 1 FAIL (same check) (RED)."
+        - "P5 exit code of the refusal return 6 -> return 7 -> 13 FAIL, incl. the new test's 'recusa o pedido de esclarecimento com exit 6' and 'outra recusa (pergunta) segue com exit 6' (RED)."
+        - "P6 drop --force from the hints (sed hit both hints) -> 4 FAIL, incl. the new test's '...ainda oferecendo o --force' (RED). Limit: the sed changed both hints, so the new hint's --force check is red but not isolated from the old hint's."
+        - "Red at base: cepa-plan from 3d1cea0 with the HEAD test -> 2 FAIL (the `?` key citation, 'sem mandar responder a pergunta'); the exit-6, --force, nothing-written and old-hint checks pass at base, as expected for unchanged behavior."
+        - "Neighbors at 4280114: tests/test_cepa_plan_answer_waiver.py 'all green'; tests/test_cepa_plan_decisions.py 'all ok'. tests/test_cepa_until_decide.py was started and completed (exit 0) but its tail was not read; the file does not exercise the changed code, so it is not cited as evidence."
+        - "Not perturbed: the CLARIFICATION_REASON constant text itself (a pure refactor of the same string; the equality is exercised by P1/P2 through the branch). 'Writes nothing' is asserted by the test (queue file text unchanged and clean git status) but no perturbation makes the refusal write, because the diff did not change that path."
+        - "every perturbation restored with `git checkout HEAD -- common/bin/cepa-plan`; worktree status clean before removal; `git worktree remove --force /tmp/cs11-proof` done; primary tree untouched (only pre-existing untracked .claude/acceptance/perguntas-da-largada-legiveis-CS-11.yaml, not created by this review)."
+        - "full build (tests/run-all.sh) delegated to the run supervisor, per the mandatory test rule; not run here."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in the repo; both new branches (clarification hint, old hint) and the new constant are reached by the covering test and each turned it red when broken (P1, P2, P3, P4)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only changes which stderr hint is printed after a refusal already decided by the unchanged regexes in not_an_answer(); it parses no new input."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Story, not Bug. Red-at-base shown above for the new assertions (2 FAIL with cepa-plan at 3d1cea0)."
+routing_reason: "Every changed line of behavior is load-bearing at the CLI surface: breaking the branch condition (both directions), the queue name, the `?` mention, the exit code and the --force offer each turn tests/test_cepa_plan_write_commits.py red, and the new assertions are red at base. The covering file and two neighbors are green at HEAD. No surviving perturbation. Verdict proven."

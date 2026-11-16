@@ -1,0 +1,17 @@
+schema_version: 1
+card: build-django-manage-py-test-CS-3
+status: complete
+audited_at: 2026-11-15T22:30:00-03:00
+criteria:
+  - id: CS-3
+    text: "'Ran 0 tests' grava EMPTY, com ou sem rotulo no comando. Comando 'python manage.py test' com saida 'Ran 0 tests in 0.000s\\n\\nOK' e comando 'python manage.py test app.tests.NaoExiste' com saida 'Ran 0 tests in 0.000s\\n\\nNO TESTS RAN' gravam status: EMPTY nos dois casos. Antes da mudanca o arquivo (.claude/last-build.json) nao era gravado."
+    altitude: cli
+    surface: "hook PostToolUse(Bash) capture-build-result.py como subprocesso: payload JSON no stdin -> .claude/last-build.json com status EMPTY"
+    demonstrated_by:
+      test: "tests/test_capture_build_result_django.py::test_ran_zero_tests_records_empty (parametrizado: os dois comandos literais do criterio, mais uv run com 'Found 0 test(s)')"
+      layer: "subprocesso (_run_hook) com payload sem exit code; le .claude/last-build.json e afirma status == EMPTY e tests_run == 0. Reforcos no mesmo nivel: veredito so no stderr, exit code 0 explicito (3 variantes, inclusive o rotulo com NO TESTS RAN), 'Ran 0' nao esconde bloco vermelho nem verde real, exit != 0 continua FAILURE, 'Ran 0' em linha de log nao grava. Caso em segundo plano em tests/test_capture_build_background.py ('Django Ran 0 tests com saida 0 em segundo plano grava EMPTY'), que exercita o mesmo hook por sessao completa"
+      evidence: verified
+      run: "python3 -m pytest tests/test_capture_build_result_django.py tests/test_capture_build_result_classify.py tests/test_capture_build_result_pytest.py -q -> 102 passed in 5.95s (HEAD 897c64d; N > 0); python3 tests/test_capture_build_background.py -> 'todos ok', inclusive a linha 'ok  Django Ran 0 tests com saida 0 em segundo plano grava EMPTY'"
+    verdict: complete
+    gap: null
+    note: "A frase 'antes da mudanca o arquivo nao era gravado' e o estado anterior, nao um comportamento a testar; o diff 42d4bb1..897c64d (refine_empty em common/hooks/capture-build-result.py) e a mudanca, e os testes novos falhariam sem ela. Suite completa NAO rodada nesta auditoria por regra da run desatendida; o supervisor a roda ao fechar o item."

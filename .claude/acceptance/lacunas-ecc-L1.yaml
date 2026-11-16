@@ -1,0 +1,71 @@
+key: lacunas-ecc-L1
+status: complete
+diff: 7dc2878..cb628b7
+audited_head: cb628b7
+note: >
+  Item da fila cepa lacunas-ecc (nao e card Jira). Linha "1. One source for the plugin list" da secao 7 de
+  docs/estrategia-lacunas-ecc.md. Re-auditoria no head cb628b7 (a anterior, em 6662e8c, deu INCOMPLETE). Foreground.
+  NAO rodei bin/install.sh (chama o CLI claude e reinstala plugins) nem tests/run-all.sh (o supervisor roda).
+  Rodei `python3 -m pytest tests/test_plugin_summary_derived.py tests/test_install_ops.py -q` -> "10 passed in 1.42s"
+  e invocacoes diretas de bin/plugin-summary.py. Altitude do AC1: executar o bloco de resumo extraido do install.sh
+  (de `echo "Plugins installed:"` ate o proximo `echo ""`) em bash e suficiente, porque o bloco e exatamente o que
+  produz a saida sob "Plugins installed:"; REPO_DIR (L77) e MARKETPLACE_JSON (L196) sao as unicas variaveis que ele
+  usa e o teste as fornece. O que fica fora (reinstalacao de plugins pelo CLI claude) nao participa do resumo.
+criteria:
+  - id: AC1
+    text: O resumo final do instalador (bloco "Plugins installed:" de bin/install.sh) e derivado de marketplace.json, sem segunda lista a mao.
+    altitude: cli
+    surface: saida do bloco "Plugins installed:" de bin/install.sh
+    test: tests/test_plugin_summary_derived.py::test_installer_summary_block_executed_lists_the_marketplace (+ ::test_installer_has_no_hardcoded_summary_and_calls_the_script)
+    layer: trecho real do install.sh executado em bash (subprocess) contra marketplace temporario com plugin falso
+    evidence: verified
+    run: >
+      pytest tests/test_plugin_summary_derived.py tests/test_install_ops.py -q -> 10 passed in 1.42s (N=10). MUTACOES em copia
+      sob /tmp/mut (repo intocado; baseline da copia 6 passed): (M1) apaguei a chamada a plugin-summary.py mantendo o comentario
+      -> 1 failed (test_installer_summary_block_executed_lists_the_marketplace), 5 passed; (M2) troquei a chamada por um
+      printf com 2 plugins hardcoded (formato que o teste estatico nao pega) -> 1 failed, mesmo teste. A lacuna anterior esta
+      fechada. `bash -n bin/install.sh` ok.
+    status: complete
+    gap: null
+  - id: AC2
+    text: A lista de plugins de docs/getting-started.md e derivada de marketplace.json.
+    altitude: cli
+    surface: bloco entre <!-- plugins:begin --> e <!-- plugins:end --> em docs/getting-started.md, gerado por bin/plugin-summary.py --write
+    test: tests/test_plugin_summary_derived.py::test_getting_started_block_in_sync
+    layer: script CLI (subprocess --check) + leitura do arquivo real
+    evidence: verified
+    run: >
+      pytest -> 10 passed. `python3 bin/plugin-summary.py --check docs/getting-started.md; echo rc=$?` -> rc=0. O teste
+      tambem confere que os nomes do bloco, em ordem, sao os do marketplace.json. "Derivada" para markdown significa gerada
+      e conferida mecanicamente; e o que o item pede.
+    status: complete
+    gap: null
+  - id: AC3
+    text: Os 12 plugins de marketplace.json aparecem nos dois lugares, nenhum escondido.
+    altitude: cli
+    surface: saida do bloco de resumo do install.sh e bloco do getting-started.md
+    test: >
+      ::test_installer_summary_block_executed_lists_the_marketplace (igualdade exata de nomes e ordem, com o plugin falso),
+      ::test_summary_lists_exactly_marketplace_names_in_order e ::test_getting_started_block_in_sync
+    layer: bloco do install.sh executado + script CLI + arquivo real
+    evidence: verified
+    run: >
+      `python3 bin/plugin-summary.py | wc -l` -> 12 (marketplace.json tem 12); o bloco do doc tem os mesmos 12 (--check rc=0,
+      regex dos nomes == names()). 10 passed.
+    status: complete
+    gap: null
+  - id: AC4
+    text: Deriva entre marketplace.json e as duas listas e pega mecanicamente (um teste fica vermelho); substitui a checagem E5.
+    altitude: cli
+    surface: `plugin-summary.py --check` e a suite tests/test_*.py (glob de run-all.sh)
+    test: >
+      ::test_check_goes_red_on_stale_copy, ::test_getting_started_block_in_sync, ::test_summary_follows_marketplace_json,
+      ::test_installer_summary_block_executed_lists_the_marketplace
+    layer: script CLI (subprocess) + bloco do install.sh executado
+    evidence: verified
+    run: >
+      pytest -> 10 passed. Doc: copia sem a linha compass -> --check rc 1 "out of sync"; plugin falso no marketplace torna o
+      doc fresco vermelho de novo. Instalador: mutacoes M1 e M2 acima ficam vermelhas. A suite so roda via run-all.sh (glob
+      tests/test_*.py), que nao rodei conforme a regra.
+    status: complete
+    gap: null

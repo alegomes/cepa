@@ -1305,6 +1305,92 @@ def test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer():
               repr(a1.get("evidence", ""))[-300:])
 
 
+def _cs6_run(editor_body, after_warning=(("nothing written in the editor", "q"),),
+             with_a1=False):
+    """CS-6 helper: `v` at the menu with a fake editor whose body is
+    `editor_body`; then `after_warning` (default: `q` at the next menu prompt
+    that shows). Returns (rc, out, queue bytes before, queue bytes after), plus
+    the item a1 when `with_a1`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        editor = Path(tmp) / "fake-editor.sh"
+        editor.write_text(editor_body)
+        editor.chmod(0o755)
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("VISUAL", "EDITOR")}
+        env["EDITOR"] = str(editor)
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        before = Path(plan_of(root)).read_bytes()
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+             "--repo", str(root)], str(root), env=env, inputs=[
+                ("[v] write in the editor", "v"), *after_warning], timeout=60)
+        result = (rc, out, before, Path(plan_of(root)).read_bytes())
+        return result + (items_of(root)["a1"],) if with_a1 else result
+
+
+def _cs6_check(out, before, after):
+    # Asking again prints only the input line (`▸`) under the same card, like
+    # the "is not one of the options" path; the card and chips stay above.
+    warn = out.find("nothing written in the editor")
+    tail = out[warn:] if warn >= 0 else ""
+    check("cs6: sem traceback", "Traceback" not in out, out[-800:])
+    check("cs6: o menu mostra [v] write in the editor",
+          "<[v] write in the editor>" in out, out[-800:])
+    check("cs6: o aviso 'nothing written in the editor' aparece",
+          warn >= 0, out[-800:])
+    check("cs6: o prompt do menu volta depois do aviso, e e o mesmo item "
+          "(nenhum cartao novo)",
+          "<nothing written in the editor>" in out and "▸" in tail
+          and "┌─" not in tail, tail[:500])
+    check("cs6: nenhum '[y/N]' foi perguntado", "[y/N]" not in out, out[-800:])
+    check("cs6: a sessao fecha com 0 respondidas e 1 para depois",
+          "answered now 0" in out and "for later 1" in out, tail[-400:])
+    check("cs6: queue.yaml fica byte a byte igual", before == after,
+          (len(before), len(after)))
+
+
+def test_cs6_editor_exiting_with_error_writes_nothing_and_returns_to_the_menu():
+    """CS-6 (docs/spec/campo-de-resposta-until.md): the editor exits with
+    code 1; the screen warns "nothing written in the editor", the menu of the
+    same item comes back and queue.yaml does not change."""
+    rc, out, before, after = _cs6_run("#!/bin/sh\nexit 1\n")
+    _cs6_check(out, before, after)
+    check("cs6: o aviso diz o codigo de saida do editor",
+          # on_tty wraps the consumed trigger in <...>
+          "the editor exited with code 1; <nothing written in the editor>" in out,
+          out[-800:])
+
+
+def test_cs6_editor_saved_empty_writes_nothing_and_returns_to_the_menu():
+    """CS-6: the editor saves the file empty; same outcome as the error."""
+    rc, out, before, after = _cs6_run('#!/bin/sh\n: > "$1"\n')
+    _cs6_check(out, before, after)
+    check("cs6: editor que sai com 0 nao fala de codigo de saida",
+          "exited with code" not in out, out[-800:])
+
+
+def test_cs6_the_menu_that_comes_back_still_answers_the_same_item():
+    """CS-6: the prompt that comes back after the warning is the live menu of
+    the same item. After the failed editor, `t`, a typed answer and `s` land
+    the answer in a1 and send it back to `pending`."""
+    rc, out, _, _, a1 = _cs6_run("#!/bin/sh\nexit 1\n", after_warning=(
+        ("nothing written in the editor", "t"),
+        ("Your answer", "depois do editor"),
+        ("Send the item back to the queue", "s")), with_a1=True)
+    check("cs6 mesmo item: sem traceback", "Traceback" not in out, out[-800:])
+    check("cs6 mesmo item: o aviso veio antes da resposta",
+          0 <= out.find("nothing written in the editor") < out.find("Your answer"),
+          out[-800:])
+    check("cs6 mesmo item: a resposta escrita depois do aviso chega ao a1",
+          rc == 0 and a1["status"] == "pending"
+          and "depois do editor" in str(a1.get("evidence", "")),
+          (rc, a1.get("status"), repr(a1.get("evidence", ""))[-300:]))
+
+
 def _cs4_run(menu_key, follow_up_trigger, typed="v"):
     """CS-4 helper: the CS-3 fake editor, `menu_key` in the menu, then `typed` at
     the follow-up prompt that contains `follow_up_trigger`. Returns (rc, out,

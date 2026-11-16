@@ -1,0 +1,22 @@
+{
+ "claude_code_version": "2.1.325",
+ "docs_plugin": [
+  {
+   "name": "docs",
+   "path": "/tmp/skills-hdr-base/docs-topology",
+   "source": "docs@inline",
+   "version": "0.3.3"
+  }
+ ],
+ "skills_docs": [],
+ "slash_commands_docs": [
+  "docs:author",
+  "docs:checkpoint",
+  "docs:declutter",
+  "docs:diataxis-discipline",
+  "docs:finalize",
+  "docs:how-why-boundary",
+  "docs:status",
+  "docs:survey"
+ ]
+}

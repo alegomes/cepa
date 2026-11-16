@@ -1,0 +1,64 @@
+schema_version: 2
+card: lacunas-ecc-L1
+verdict: proven
+reviewed_at: 2026-11-16T14:00:00-03:00
+base_commit: 7dc2878
+head_commit: cb628b7          # 6662e8c = the change; cb628b7 = adds the executed-summary-block test
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "bin/plugin-summary.py (new: load/short/terminal/markdown/rewrite/--check/--write)"
+      module: bin
+      external_observable: true          # its stdout feeds the installer summary and the getting-started block
+      substituted_by_double: null        # tests run the real script as a subprocess
+    - class: "bin/install.sh (11 hardcoded echo lines -> call to plugin-summary.py)"
+      module: bin
+      external_observable: true          # what the person sees at the end of an install
+      substituted_by_double: null        # the summary block is extracted from the real file and executed in bash (install.sh as a whole is not run)
+    - class: "docs/getting-started.md (generated block between plugins:begin / plugins:end, 12 plugins)"
+      module: docs
+      external_observable: true
+      substituted_by_double: null
+    - class: "tests/test_plugin_summary_derived.py (new, 6 tests)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python/bash repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at cb628b7 (throwaway detached worktree /tmp/proof-lacunas-ecc-L1): python3 -m pytest tests/test_plugin_summary_derived.py -q -> 6 passed. Script emits 12 lines = the plugins in marketplace.json."
+        - "P1 load() drops the last plugin ([:-1]) -> 5 failed, 1 passed (RED): summary_lists_exactly_marketplace_names_in_order, summary_follows_marketplace_json, installer_summary_block_executed_lists_the_marketplace, getting_started_block_in_sync, check_goes_red_on_stale_copy"
+        - "P2 load() returns a hardcoded 2-plugin list -> 5 failed, 1 passed (RED), same five tests"
+        - "P3 --check always returns 0 (condition replaced by False) -> 1 failed (RED): test_check_goes_red_on_stale_copy"
+        - "P4 rewrite() is a no-op (returns text) -> 1 failed (RED): test_check_goes_red_on_stale_copy"
+        - "P5 install.sh: a hardcoded 'echo \"    common  — ...\"' line added under 'Plugins installed:' -> 2 failed (RED): test_installer_has_no_hardcoded_summary_and_calls_the_script and test_installer_summary_block_executed_lists_the_marketplace"
+        - "P5b install.sh: a hardcoded list line written with printf (printf \"    %s\\n\" \"common — gates, hooks\") -> 1 failed (RED): test_installer_summary_block_executed_lists_the_marketplace (the static echo-regex test does NOT see printf; only the executed-block test catches it)"
+        - "P6 install.sh: script name misspelled (plugin-sumary.py) -> 1 failed (RED): test_installer_summary_block_executed_lists_the_marketplace (the static test still passes because the comment line holds the right name; the executed block catches it)"
+        - "P7 getting-started.md: the compass bullet deleted from the generated block -> 1 failed (RED): test_getting_started_block_in_sync"
+        - "P8 (survived at 6662e8c) install.sh: the two-line call deleted, comment kept -> now 1 failed (RED): test_installer_summary_block_executed_lists_the_marketplace. CLOSED by cb628b7."
+        - "P9 (survived at 6662e8c) install.sh: call points at --marketplace /nonexistent -> now 1 failed (RED): same executed-block test. CLOSED by cb628b7."
+        - "P10 short() returns an empty string -> 2 failed (RED): test_summary_follows_marketplace_json, test_getting_started_block_in_sync"
+        - "P11 short() first-sentence cut disabled -> 2 failed (RED): same two tests"
+        - "P12 short() width limit raised to 7200 (no truncation) -> 1 failed (RED): test_getting_started_block_in_sync (the committed block holds the truncated text)"
+        - "NOTE, survivor P13 (cosmetic): terminal() column padding removed (n.ljust(pad) -> n) -> 6 passed. The plugin NAMES and their order are still asserted (split()[0]); the alignment of the dash column is not. Not an acceptance criterion of the item (the list being derived and complete is); recorded, not a blocker."
+        - "NOTE, survivor P15 (line not changed by this diff): install.sh line 196 MARKETPLACE_JSON=... pointed at a wrong file -> 6 passed, because the executed-block test injects REPO_DIR and MARKETPLACE_JSON through its own environment. So the real definitions of those two variables (lines 77 and 196, both before the call; unchanged by the diff) are not exercised by this item's tests. Read-only checks: bash -n bin/install.sh -> syntax-ok; set -e at line 30; REPO_DIR defined at line 77, MARKETPLACE_JSON at line 196, both before the call (~line 530). Not a blocker: the lines pre-date the item, and a wrong path would surface as the '(could not read the plugin list ...)' fallback, not an aborted install."
+        - "All perturbations restored with git checkout cb628b7 -- <file>; final run 6 passed, worktree clean, then worktree removed. Sampled: the check/write pair (P3/P4) and the install call site (P5-P9) one line each; short() four perturbations (P10-P12 plus the cosmetic P13)."
+        - "Surface used for install.sh: the test extracts the lines from 'echo \"Plugins installed:\"' to the next 'echo \"\"' of the real bin/install.sh and runs them in bash with set -e against a temp marketplace holding an extra fake plugin. bin/install.sh itself was NOT run (it calls the claude CLI and reinstalls plugins). Judged enough for the claim 'the final summary is derived from marketplace.json and complete': every line of the changed block is executed, and the test turns red when the call is deleted, misspelled, pointed elsewhere, or replaced by hardcoded echo or printf lines."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; structural: tests execute plugin-summary.py as a subprocess in all modes (default, --markdown via the doc check, --write, --check, --marketplace) and execute the installer's changed block in bash; the call line that was uncovered at 6662e8c is now reached (P8/P9/P6 go red)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff reads a repo-local marketplace.json and rewrites a repo-local doc; it parses nothing from outside the repo and touches no input-bearing api-rest module. Not verified by a run."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Every perturbation of the changed behavior turns a test red at cb628b7, including the two that survived at 6662e8c (deleting the installer's call, pointing it at a wrong marketplace) and the new printf-hardcoded list. The one survivor on a changed file (column padding) is cosmetic and outside the item's claim; the other (variable definitions at install.sh lines 77/196) is on lines this diff did not change. Limit stated plainly: bin/install.sh was never run as a whole, only its summary block, which is the changed part. No test double stands in for a changed class. L4 n/a on a diff-based claim."

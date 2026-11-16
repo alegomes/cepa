@@ -1,0 +1,39 @@
+schema_version: 2
+card: build-django-manage-py-test-CS-3
+verdict: proven
+reviewed_at: 2026-11-16T02:40:00-03:00
+base_commit: 42d4bb1
+head_commit: 7427081
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/hooks/capture-build-result.py (refine_empty: regra unittest 'Ran 0 tests in', _UNITTEST_RAN_ZERO, UNITTEST_EMPTY_FIX_HINT, docstring)", module: common/hooks, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "PRIMEIRA PASSADA (head 897c64d, UNPROVEN): 102 passed + background ok; 15 perturbacoes vermelhas (P1-P13, P20, P21); sobrevivente que contava: P16 tirar o recuo [ \\t]* de _UNITTEST_RAN_ZERO dava SUCCESS em '    Ran 0 tests in 0.000s' (exit 0); sobreviventes sem SUCCESS: P14 (Ran [0-9]+), P15 (sem ' in '), P17 (so plural), P18/P19 (motivo/dica vazios), P22 (sem kind == 'unittest')"
+        - "SEGUNDA PASSADA, baseline em worktree descartavel detached 7427081 (/tmp/proof-django-cs3b): python3 -m pytest django+classify+pytest -q -> 109 passed; python3 tests/test_capture_build_background.py -> todos ok (102 -> 109: 7 casos novos em tests/test_capture_build_result_django.py, +27 linhas, so testes)"
+        - "Sobreviventes da primeira passada, agora VERMELHOS (rodada -x, pytest django+classify+pytest): P16 sem recuo 1 failed (69 passed antes da falha); P14 'Ran [0-9]+' 1 failed; P17 so plural 1 failed; P22 sem kind 1 failed; P19 dica fora do motivo 1 failed"
+        - "Regressao, as que ja eram vermelhas continuam vermelhas: P1 kind xunittest, P2 so SUCCESS, P3 so None, P6 sem guarda _UNITTEST_GREEN, P12 sem ancora ^, P13 sem (?m): cada uma 1 failed; P20 regra desligada (False and) 1 failed"
+        - "Perturbacoes novas na regra, todas vermelhas (1 failed): sem recuo mas so tab; so espaco; recuo obrigatorio [ \\t]+; _UNITTEST_RAN_ZERO.match no lugar de .search; retorno tests_run None; retorno tests_run 1; retorno status SUCCESS no lugar de EMPTY; status qualquer (True and)"
+        - "SOBREVIVENTES RESTANTES (109 passed cada), todos sondados com bateria de 72 combinacoes (2 comandos x exit 0/None/1 x 12 saidas: Ran 0 tests com/sem recuo, com/sem 'in', NO TESTS RAN, minuscula, singular, Ran 1/3 tests, linhas em branco antes) comparando original vs perturbado: P15 sem ' in ' (12 diferencas, so 'Ran 0 tests' e 'Ran 0 tests in' sem tempo, ambos EMPTY<-SUCCESS/None; 0 casos EMPTY->SUCCESS); N7 sem espaco final apos 'in' (4 diferencas, 0 EMPTY->SUCCESS); N11 regex case-insensitive (4 diferencas em 'ran 0 tests in', 0 EMPTY->SUCCESS); N1 \\s* no lugar de [ \\t]* (0 diferencas, equivalente: ^ do (?m) ja ancora cada linha); P18 primeiro trecho da reason trocado por 'x' (0 diferencas na bateria de status; so muda o texto do motivo, a dica UNITTEST_EMPTY_FIX_HINT continua assertada)"
+        - "NENHUM sobrevivente produz falso SUCCESS: todos so ampliam a regra para EMPTY (sentido seguro) ou mudam texto. Nenhuma saida de zero testes Django vira SUCCESS sob nenhuma perturbacao testada"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; todas as ramificacoes da regra (kind, status None/SUCCESS, recuo espaco/tab, singular/plural, regex, guarda verde, retorno EMPTY/0, dica) ficam vermelhas sob perturbacao; teste novo test_ran_nonzero_without_verdict_and_exit_0_is_not_empty e test_ran_zero_line_from_a_non_unittest_command_stays_success fixam os limites"
+  l4_adversarial_input:
+    status: n/a
+    reason: "hook de desenvolvimento: a unica entrada e o texto do comando Bash que o proprio agente emitiu e o payload do harness; nao ha usuario externo nem modulo api-rest"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Story, nao Bug. Evidencia de vermelho no base: hook de 42d4bb1 + tests de 7427081 -> python3 -m pytest django+classify+pytest -q -> 13 failed, 96 passed (test_ran_zero_tests_records_empty x3, test_ran_zero_tests_in_stderr_records_empty, test_ran_zero_tests_with_explicit_exit_0_records_empty x3, test_classify_exit_0_ran_zero_then_refine_is_empty, test_indented_or_singular_ran_zero_with_exit_0_records_empty x4, test_empty_reason_carries_the_test_label_hint) e python3 tests/test_capture_build_background.py -> FAIL 'Django Ran 0 tests com saida 0 em segundo plano grava EMPTY' (status SUCCESS). Em 7427081 -> 109 passed e background todos ok"
+routing_reason: "Segunda passada: o sobrevivente que gerava falso SUCCESS na primeira (recuo da regex) agora fica vermelho, junto de P14, P17, P19 e P22; as perturbacoes antigas continuam vermelhas e 8 novas tambem. Restam 5 sobreviventes (P15, N7, N11, N1, P18), nenhum altera um verdict de zero testes para SUCCESS: so ampliam EMPTY ou mudam texto do motivo, ou sao equivalentes. O hook do base falha 13 testes novos mais 1 FAIL no script de segundo plano. A suite completa tests/run-all.sh nao foi rodada, por instrucao do supervisor (ele a roda ao fechar o item); rodou so django+classify+pytest (109 passed) e test_capture_build_background.py (todos ok). Todo run cita contagem de testes > 0. Worktree descartavel removido, arvore primaria so com o yaml."

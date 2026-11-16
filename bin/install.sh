@@ -527,17 +527,9 @@ fi
 echo "  Operational record: ${OPS_FILE}  (checked by /common:doctor)"
 echo ""
 echo "Plugins installed:"
-echo "    common       — gates, hooks, skills, modes, session tooling (required by every topology)"
-echo "    build-team   — 9-agent generic topology + /build-team:plan-build-validate"
-echo "    build-solo   — 2-agent dev/reviewer topology"
-echo "    build-hex    — 14-agent hexagonal-architecture topology + per-Task quality loop"
-echo "    discovery    — 6-agent continuous product-discovery topology"
-echo "    design       — 6-agent product-design topology (brief → build-ready spec)"
-echo "    marketing    — 5-agent content-production topology (brief → reviewed copy)"
-echo "    board-flow   — card lifecycle workflow (Jira today), pairs with any topology"
-echo "    docs         — 9-agent documentation/onboarding topology + /docs:survey ... /docs:finalize"
-echo "    review-gate  — pre-merge PR gate (open + merge doors)"
-echo "    maestro      — experimental: waves of concurrent sessions (needs herdr)"
+# Derived from marketplace.json by bin/plugin-summary.py (one line per plugin, none hidden).
+python3 "${REPO_DIR}/bin/plugin-summary.py" --marketplace "${MARKETPLACE_JSON}" \
+  || echo "    (could not read the plugin list from ${MARKETPLACE_JSON})"
 echo ""
 if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
   echo "Host project setup at ${HOST_PROJECT}:"

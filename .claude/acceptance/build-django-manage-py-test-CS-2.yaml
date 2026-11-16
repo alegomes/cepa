@@ -1,0 +1,16 @@
+schema_version: 1
+card: build-django-manage-py-test-CS-2
+status: complete
+audited_at: 2026-11-15T22:00:00-03:00
+criteria:
+  - id: CS-2
+    text: "manage.py test com teste falhando ou com erro grava FAILURE (uv run python manage.py test; python manage.py test; docker compose exec web python manage.py test; saida 'Ran 12 tests in 0.4s\\n\\nFAILED (failures=1, errors=2)', sem exit code) em .claude/last-build.json."
+    altitude: cli
+    surface: "hook PostToolUse(Bash) capture-build-result.py como subprocesso: payload JSON no stdin -> .claude/last-build.json com status FAILURE"
+    demonstrated_by:
+      test: "tests/test_capture_build_result_django.py::test_failed_manage_py_test_writes_failure (parametrizado com os 3 comandos)"
+      layer: "subprocesso (_run_hook) com payload sem exit code; le .claude/last-build.json e afirma status == FAILURE e kind == unittest. Reforcos no mesmo nivel: formas de resumo FAILED (failures / errors / skipped), veredito so no stderr (com e sem stdout falante), exit 1 sem marcador, verde so no stderr, stderr nao anexado para kinds nao-unittest e comando entre aspas"
+      evidence: verified
+      run: "python3 -m pytest tests/test_capture_build_result_django.py tests/test_capture_build_result_classify.py tests/test_capture_build_result_pytest.py -q -> 84 passed in 3.47s (HEAD d92898c; N > 0)"
+    verdict: complete
+    gap: null

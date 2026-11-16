@@ -1,0 +1,32 @@
+schema_version: 1
+card: campo-de-resposta-CS-6
+status: complete
+audited_at: 2026-11-16T00:00:00-03:00
+covers: 6ed2fad..b65b1cd
+head: b65b1cd
+criteria:
+  - id: AC1
+    text: "CS-6: com `EDITOR` apontando para um editor falso que sai com código 1 (e outro que salva o arquivo vazio), num pty o dono aperta `v`. A tela avisa 'nothing written in the editor', volta ao menu do mesmo item, e o `queue.yaml` não muda (docs/spec/campo-de-resposta-until.md)"
+    altitude: cli
+    surface: "`cepa-until decide` real num pty (on_tty): tecla `v` no menu, editor falso via EDITOR (exit 1; arquivo salvo vazio), tela, prompt que volta, bytes do queue.yaml antes/depois"
+    demonstrated_by:
+      test: "tests/test_cepa_until_decide.py::test_cs6_editor_exiting_with_error_writes_nothing_and_returns_to_the_menu, test_cs6_editor_saved_empty_writes_nothing_and_returns_to_the_menu, test_cs6_the_menu_that_comes_back_still_answers_the_same_item"
+      layer: "subprocess real de cepa-until decide num pty; compara queue.yaml byte a byte; o terceiro teste responde `t` depois do aviso e confirma que a resposta cai no mesmo item a1"
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_until_decide.py   (arquivo inteiro; a suíte completa tests/run-all.sh não foi rodada, por instrução)
+          rc=0; 492 linhas "ok", nenhuma falha; última linha "✓ tudo verde" (HEAD b65b1cd)
+          ok cs6: o aviso 'nothing written in the editor' aparece (x2, erro e vazio)
+          ok cs6: o prompt do menu volta depois do aviso, e é o mesmo item (nenhum cartão novo) (x2)
+          ok cs6: nenhum '[y/N]' foi perguntado (x2)
+          ok cs6: queue.yaml fica byte a byte igual (x2)
+          ok cs6: o aviso diz o código de saída do editor (exit 1)
+          ok cs6: editor que sai com 0 não fala de código de saída (vazio)
+          ok cs6 mesmo item: a resposta escrita depois do aviso chega ao a1
+    verdict: complete
+    gap: null
+notes:
+  - "Conferi o posicionamento do cherry-pick em common/bin/cepa-until: o bloco `if r == \"v\":` está dentro do laço interno de leitura de tecla, antes do `break`. Falha do editor faz `continue` e só repergunta o prompt do mesmo menu (mesmo caminho do 'is not one of the options'); não chega ao `[y/N]` nem a answer(), então o queue.yaml não é tocado. O `typed` só é usado no ramo `r == \"v\"` adiante, e o `r != \"?\"` / laço externo do `?` não são afetados."
+  - "Caminho `?` seguido de `v`: não há teste. Por leitura, depois da reescrita o laço externo redesenha o cartão e entra de novo no laço interno, onde o bloco `v` vale igual. Não é exigido pelo critério do CS-6, então não conta como lacuna; fica como observação."
+  - "O 'menu do mesmo item' volta como o prompt `▸` sob o mesmo cartão, sem redesenhar o cartão (o teste exige ausência de novo '┌─'). É o comportamento já existente para tecla inválida; o critério foi lido assim."
+  - "Teste vermelho (antes de 20f94ae) não rodado por mim. Suíte completa não rodada, por instrução do supervisor."

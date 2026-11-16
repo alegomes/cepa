@@ -1,0 +1,47 @@
+schema_version: 2
+card: build-django-manage-py-test-CS-5
+verdict: proven
+reviewed_at: 2026-11-16T03:10:00-03:00
+base_commit: c839cb4
+head_commit: 4bdc5c5
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "tests/test_gate_advance_django_green.py (apenas teste novo; nenhuma linha de producao mudou neste item)", module: tests, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "Baseline verde em worktree descartavel detached 4bdc5c5 (/tmp/proof-django-cs5): python3 -m pytest tests/test_gate_advance_django_green.py -q -> 5 passed; tests/test_capture_build_result_django.py -> 76 passed; python3 tests/test_gate_advance_target_repo.py -> todos os casos verdes; python3 tests/test_gate_advance_red_test_commit.py -> todos os casos verdes"
+        - "Vermelho no pre-comportamento: hooks de 02e0ea5 (pai de 34fe7f7) + teste de 4bdc5c5 -> 2 failed, 3 passed; as 2 falhas sao test_green_manage_py_test_releases_git_commit (uv run python manage.py test / python manage.py test), gate sai 2 com 'build is STALE' (2 ocorrencias na saida). Os casos de controle, red e testserver continuam verdes no base, como devem"
+        - "Cadeia real: os dois hooks rodam como subprocessos (capture-build-result.py e depois gate-advance.py) em repo git temporario com pyproject.toml, .py editado e last-build.json STALE; nenhum double na classe alterada (substituted_by_double: null)"
+        - "P1 capture sem marcador verde unittest -> 2 failed, 3 passed (os 2 casos 'green releases commit')"
+        - "P2 capture grava FAILURE no lugar de SUCCESS no marcador -> 2 failed, 3 passed"
+        - "P3 record() grava status STALE sempre -> 2 failed, 3 passed"
+        - "P4 gate-advance nao sai 0 em SUCCESS (if False) -> 2 failed, 3 passed"
+        - "P5 gate-advance libera tambem STALE -> 2 failed, 3 passed (test_stale_blocks_commit_before_any_test_run e test_command_that_is_not_a_test_run_keeps_git_commit_blocked)"
+        - "P6 gate-advance libera tambem FAILURE -> 1 failed, 4 passed (test_red_manage_py_test_keeps_git_commit_blocked)"
+        - "P7 padrao do comando sem \\b (testserver passa a casar manage.py test) -> 1 failed, 4 passed (test_command_that_is_not_a_test_run_keeps_git_commit_blocked)"
+        - "P11 gate-advance deixa de ter ramo STALE (STALEX) -> 2 failed, 3 passed (controle STALE e testserver)"
+        - "SOBREVIVENTES na suite do item (5 passed cada): P8 remover o marcador vermelho _UNITTEST_RED do capture; P9 remover o fallback FAILURE por exit_code diferente de 0; P10 regex verde aceitar 'Ran 0' (Ran \\d* no lugar de Ran [1-9]\\d*)"
+        - "P8 e P10 ficam vermelhos nos vizinhos: tests/test_capture_build_result_django.py -> P10 10 failed, 66 passed; P8 13 failed, 63 passed. Pertencem as provas CS-1/CS-2/CS-3, nao a este diff"
+        - "P9 nao deixa passar resultado errado no gate: sem o fallback o estado de um run vermelho continua STALE e o gate continua bloqueando (BLOCKED, exit 2); so o texto do motivo muda de 'FAILURE' para 'STALE'. Equivalente quanto a liberar commit"
+        - "NENHUM sobrevivente libera commit que deveria bloquear nem bloqueia um verde: P8 e P9 so mudam a rota pela qual o run vermelho e bloqueado (marcador x exit code); P10 e outra camada (zero testes), coberta pelos testes de captura"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; cada ramo que o teste afirma (green->exit 0, STALE->block 'build is STALE', red->BLOCKED, testserver->STALE) fica vermelho sob perturbacao: P1-P7 e P11 (python3 -m pytest tests/test_gate_advance_django_green.py -q, 5 testes, sempre N > 0)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "item so adiciona um teste; hooks de desenvolvimento cuja unica entrada e o comando Bash do proprio agente e o payload do harness; nenhum modulo api-rest tocado"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Story, nao Bug. Vermelho no pre-comportamento: hooks de 02e0ea5 + teste de 4bdc5c5 -> python3 -m pytest tests/test_gate_advance_django_green.py -q -> 2 failed, 3 passed (gate bloqueia 'build is STALE' apos manage.py test verde). Em 4bdc5c5 -> 5 passed"
+routing_reason: "Diff de c839cb4..4bdc5c5 e so o teste novo; o comportamento veio de 34fe7f7 (CS-1). O teste e load-bearing na superficie do gate: vermelho no pre-comportamento (2 failed, 3 passed, bloqueio 'build is STALE') e vermelho sob 8 perturbacoes da cadeia capture -> state -> gate (marcador verde, status gravado, saida 0 do gate em SUCCESS, ramo STALE, bloqueio do vermelho, padrao testserver). 3 sobreviventes (P8, P9, P10), nenhum libera ou bloqueia errado no gate; P8 e P10 sao pegos pelos testes vizinhos. Fora do escopo por regra: familia de regex do comando e do marcador unittest (ja perturbada nas provas CS-1, CS-2, CS-3, fora deste diff) e tests/run-all.sh (o supervisor roda ao fechar o item); rodei so o teste do item e os vizinhos, todos com contagem > 0. Worktree descartavel removido; arvore primaria so com este yaml."

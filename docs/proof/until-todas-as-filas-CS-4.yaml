@@ -1,0 +1,48 @@
+schema_version: 2
+card: until-todas-as-filas-CS-4
+verdict: proven               # proven | unproven | needs-human
+reviewed_at: 2026-11-16T11:00:00-03:00
+base_commit: b6e2498
+head_commit: f84ef99
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until :: query_next_ready (live_run_of_queue call, skip + once-per-queue warning) and _main (skipped_warned set shared with the next_item closure)"
+      module: common/bin
+      external_observable: true   # surface cli: stderr of `cepa until --all`, item_start events of the run record, item status in the queue files
+      substituted_by_double: null # the real `cepa until --all` runs as a process against a real temp git repo, the real `cepa-plan`, and a real live pid with a real `*.estado.json`; only `claude` is faked (far boundary)
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "Re-run at f84ef99. `git diff bfc8a98 f84ef99 -- common/bin/cepa-until` is empty (0 lines); `git show f84ef99` touches only tests/test_cepa_until_all.py (+5 lines, two added check() calls, nothing removed). Throwaway detached worktree /tmp/proof-cs4-b at f84ef99 (removed at the end). Unperturbed `python3 tests/test_cepa_until_all.py` -> '✓ 20 testes' (N=20). Each perturbation applied with sed to common/bin/cepa-until, `python3 tests/test_cepa_until_all.py` run, then `git checkout -- common/bin/cepa-until`."
+      results:
+        - "KILLED at f84ef99 (re-run) P9 pid removed from the warning text (`, pid {alive['pid']})` -> `)`): RED, 1 falha ('o aviso nomeia o pid do run vivo'). Was SURVIVED at bfc8a98."
+        - "KILLED at f84ef99 (re-run) P10 warning on stdout (`file=sys.stderr` -> `file=sys.stdout`): RED, 1 falha ('o aviso vai para o stderr, nao para o stdout'). Was SURVIVED at bfc8a98."
+        - "KILLED at f84ef99 (re-run) P1 `if alive:` -> `if False:` (never skip): RED, 7 falhas (sem aviso, a1 done, item_start ['a1','b1'], 2 subprocessos, e os dois checks novos)."
+        - "KILLED at f84ef99 (re-run) P3 `if name not in warned:` -> `if False:` (warning never printed): RED, 4 falhas (lista de avisos vazia, nos 4 checks do aviso)."
+        - "KILLED, carried from bfc8a98 (not re-run; the test diff is additive only, so a check that was red stays red) P2 `continue` after the warning removed: RED, 3 falhas"
+        - "KILLED, carried from bfc8a98, same reason: P4 queue name dropped from the warning text: RED, 1 falha"
+        - "KILLED, carried from bfc8a98, same reason: P5 run id dropped from the warning text: RED, 1 falha"
+        - "KILLED, carried from bfc8a98, same reason: P6 once-per-queue guard dropped (`warned.add(name)` removed): RED, 1 falha"
+        - "KILLED, carried from bfc8a98, same reason: P7 `next_item` calls `query_next_ready(repo)` without `skipped_warned`: RED, 1 falha"
+        - "KILLED, carried from bfc8a98, same reason: P8 first call in _main without `skipped_warned`: RED, 1 falha"
+        - "KILLED, carried from bfc8a98, same reason: P11 `live_run_of_queue(repo, \"zz\")` (wrong queue looked up): RED, 5 falhas"
+        - "BASE REGRESSION, carried from bfc8a98 (test at head, common/bin/cepa-until from b6e2498): RED, 5 falhas. Not re-run: the new f84ef99 checks only add assertions and P1 at f84ef99 already shows the test red without the skip."
+        - "Not perturbed (honest note): the default `warned = warned if warned is not None else set()` in query_next_ready. It serves callers that pass no set; both call sites of the --all run pass one (P7 and P8 are killed), so no assertion distinguishes the default from the passed set for other callers. It adds no behavior of the card's surface."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; reachability by perturbation: every changed behavior line (skip, `continue`, warning guard, queue name, run id, pid, stderr channel, both call sites, queue looked up) turns the test RED when broken (P1-P11 killed across bfc8a98 and f84ef99)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff opens no input from outside: the only new read is the local state file of a sibling run, already parsed by the existing live_run_of_queue; no input-bearing module (api-rest) is touched"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "As duas lacunas que deixaram o CS-4 como unproven no commit anterior estao fechadas. O commit f84ef99 so acrescenta duas verificacoes ao teste; o codigo de producao e identico ao de bfc8a98 (diff vazio). Apagar o numero do processo (pid) do aviso agora deixa o teste vermelho, e imprimir o aviso na saida normal em vez do canal de erro tambem. Refiz tambem 'nunca pular a fila' e 'nunca avisar' no commit novo e continuam vermelhos. As demais quebras (P2, P4-P8, P11) foram provadas no commit anterior e seguem validas porque o teste so cresceu. Suite do teste: 20 testes verdes sem perturbacao. Nenhum sobrevivente."

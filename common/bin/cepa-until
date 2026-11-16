@@ -803,13 +803,14 @@ ALL_QUEUE = "all"
 ALL_DIR = "_all"
 
 
-def query_next_ready(repo):
+def query_next_ready(repo, warned=None):
     """The next item of a `--all` run, read fresh (spec until-todas-as-filas, Q4):
     the first ready item in the order of `cepa-plan ready` (queue by queue, the
     recorded order inside a queue). Returns (queue, data, error): `data` is
     `query_queue` of that queue, so the run loop handles it like a single-queue
     round. With nothing ready anywhere, `data` has an empty batch and an
     `end-of-queue` stop, which is what ends a single-queue run too."""
+    warned = warned if warned is not None else set()
     ready, error = query_ready(repo)
     if error:
         return None, None, error
@@ -817,6 +818,15 @@ def query_next_ready(repo):
         if not q.get("prontos"):
             continue
         name = Path(str(q.get("path") or "")).parent.name or str(q["queue"])
+        alive = live_run_of_queue(repo, name)
+        if alive:
+            if name not in warned:
+                warned.add(name)
+                print(f"cepa-until: skipping queue `{name}`: it has its own run "
+                      f"in progress ({name}/{alive['run']}, pid {alive['pid']}). "
+                      "The items of that queue stay out of this run.",
+                      file=sys.stderr)
+            continue
         data, error = query_queue(name, repo)
         if error:
             return name, None, f"queue {name!r}: {error}"
@@ -3625,6 +3635,17 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                     screen.key_error(f"\"{raw.strip()}\" is not one of the options; "
                                        "to write an answer, type t first")
                     continue
+                if r == "v":
+                    # CS-6: an editor that fails or saves nothing writes nothing;
+                    # the same item's menu comes back, no answer, no "[y/N]".
+                    edit_status = {}
+                    typed = edit_in_editor(ident, question_text or route,
+                                           ad.get("title"), status=edit_status)
+                    if not typed:
+                        code = edit_status.get("rc")
+                        screen.key_error((f"the editor exited with code {code}; "
+                                          if code else "") + "nothing written in the editor")
+                        continue
                 break
             if r != "?":
                 break
@@ -3670,8 +3691,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             text = (("tarefa encerrada" if delivered else "descartado")
                     + f": {base}" + (f". {extra}" if extra else ""))
         elif r in ("t", "v"):
-            text = (edit_in_editor(ident, question_text or route, ad.get("title"))
-                    if r == "v" else
+            text = (typed if r == "v" else
                     str(question(screen.follow_up("Your answer, in one line (the "
                                                   "next run reads this): "))).strip())
             if text:
@@ -3712,14 +3732,16 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     return applied, for_later
 
 
-def edit_in_editor(ident, question_text, title=None):
+def edit_in_editor(ident, question_text, title=None, status=None):
     """CS-3 (docs/spec/campo-de-resposta-until.md): the `[v]` key. Opens the
     system editor (`$VISUAL`, then `$EDITOR`, then `vi`, git's order) on a temp
     file that starts with the item's id, title and question in `#` lines, and
     returns the saved text with the `#` lines dropped (like a git commit
     message) and the leading/trailing blank space stripped; line breaks inside
     are kept. Run through the shell so `code --wait` works. Returns "" when
-    the editor exits nonzero or nothing was written (CS-6 refines the message)."""
+    the editor exits nonzero or nothing was written; `status`, when given, gets
+    the editor's exit code under "rc" so the caller (CS-6, the menu `[v]`)
+    can say why nothing was written."""
     editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi"
     head = [f"# {ident}" + (f" - {title}" if title else "")]
     head += [f"# {l}" for l in str(question_text or "").splitlines()]
@@ -3729,6 +3751,8 @@ def edit_in_editor(ident, question_text, title=None):
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write("\n".join(head))
         rc = subprocess.run(["sh", "-c", editor + ' "$@"', editor, path]).returncode
+        if status is not None:
+            status["rc"] = rc
         if rc != 0:
             return ""
         with open(path, encoding="utf-8", errors="replace") as f:
@@ -5407,7 +5431,8 @@ def _main(argv=None):
     # next ready item belongs to in a `--all` run.
     if a.all_queues:
         a.queue = ALL_QUEUE
-        cur, data, error = query_next_ready(repo)
+        skipped_warned = set()
+        cur, data, error = query_next_ready(repo, skipped_warned)
         if error:
             print(f"cepa-until: could not read the queues — {error}",
                   file=sys.stderr)
@@ -5423,7 +5448,7 @@ def _main(argv=None):
     def next_item():
         """(queue, data, error) of the next item, read fresh."""
         if a.all_queues:
-            return query_next_ready(repo)
+            return query_next_ready(repo, skipped_warned)
         fresh, fresh_error = query_queue(a.queue, repo)
         return a.queue, fresh, fresh_error
 

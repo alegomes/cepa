@@ -1,0 +1,19 @@
+key: until-todas-as-filas-CS-4
+status: complete
+criteria:
+  - id: CS-4
+    text: "Uma fila com run próprio vivo é pulada com aviso, e as outras seguem (fila a com *.estado.json em `rodando` e pid vivo; `cepa until --all --for 1h` imprime aviso que nomeia a fila a e o run dela, não inicia item de a, e termina b1 como done)"
+    altitude: cli
+    surface: "cepa until --all --for 1h (launcher common/bin/cepa -> common/bin/cepa-until): exit code, stderr (aviso), eventos item_start no registro .claude/queues/_all/until/*.jsonl, queue.yaml de cada fila, subprocessos claude"
+    test: "tests/test_cepa_until_all.py::test_queue_with_its_own_live_run_is_skipped_with_a_warning"
+    layer: "subprocess real de `cepa until` pelo launcher, repo git temporario com filas a (a1) e b (b1); a fila a tem .estado.json `rodando` + .jsonl com run_start, pid de um processo vivo de verdade (Popen de python que dorme, argv com 'cepa-until'), host e prazo reais; claude falso. Asserts: rc==0, uma linha de aviso 'skipping queue' com `a` e o run, aviso uma vez só, b1 done, a1 segue pending, item_start == [b1], um único subprocesso claude"
+    evidence: verified
+    run: "python3 tests/test_cepa_until_all.py -> ok nas 7 linhas do teste (rc 0, aviso com fila e run, aviso uma vez, b1 done, a1 intocado, item_start == [b1], 1 subprocesso), '✓ 20 testes'"
+    status: complete
+    notes:
+      - "O teste vermelho declarado é coberto literalmente, no processo real e no registro real do run."
+      - "A produção mudou na superfície certa: query_next_ready consulta live_run_of_queue antes de pegar o lote da fila, avisa em stderr uma vez por fila (nome, run, pid) e segue para as outras; o teste exercita esse caminho de ponta a ponta."
+      - "O estado vivo é montado como o cepa-until real o deixa (pid vivo, host, prazo futuro), não por mock de live_run_of_queue."
+      - "Os testes usam --no-verify e --no-analysis, que desligam só a verificação de build e a análise, não o pulo de fila."
+      - "Suíte completa (tests/run-all.sh) não rodada por instrução; fica com o supervisor."
+gap: []
