@@ -1,0 +1,25 @@
+{
+ "claude_code_version": "2.1.325",
+ "docs_plugin": [
+  {
+   "name": "docs",
+   "path": "/Users/alegomes/cepa-worktrees/cepa-until-2026-11-15-2107/docs-topology",
+   "source": "docs@inline",
+   "version": "0.3.4"
+  }
+ ],
+ "skills_docs": [
+  "docs:diataxis-discipline",
+  "docs:how-why-boundary"
+ ],
+ "slash_commands_docs": [
+  "docs:author",
+  "docs:checkpoint",
+  "docs:declutter",
+  "docs:diataxis-discipline",
+  "docs:finalize",
+  "docs:how-why-boundary",
+  "docs:status",
+  "docs:survey"
+ ]
+}
