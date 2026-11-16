@@ -13,7 +13,8 @@ Patterns detected:
   - Gradle: ./gradlew or gradle  → BUILD SUCCESSFUL / BUILD FAILED
   - npm/yarn/pnpm test → exit code is the signal
   - pytest → exit code is the signal
-  - Django manage.py test (any wrapper) → "Ran N tests" + a line `OK` alone (or `OK (...)`)
+  - Django manage.py test (any wrapper) → "Ran N tests" + a line `OK` alone (or `OK (...)`) = SUCCESS,
+    a line starting `FAILED (` = FAILURE; the verdict is read from stdout plus stderr
   - cargo → exit code
   - go test → exit code
   - docker build → output markers (writing image / naming to /
@@ -233,6 +234,20 @@ PATTERNS = [
 
 
 # ─── shape extraction ─────────────────────────────────────────────────
+
+def add_unittest_stderr(command: str, text: str, tool_response) -> str:
+    """unittest (so Django `manage.py test`) writes its "Ran N tests" + OK/FAILED verdict to
+    STDERR, while "Found N test(s)" and system-check lines go to stdout. extract_text() returns
+    stdout alone when it is non-empty, so for this kind only, append stderr to read the verdict."""
+    stderr = tool_response.get("stderr") if isinstance(tool_response, dict) else None
+    if not (isinstance(stderr, str) and stderr and stderr not in text):
+        return text
+    # Same rule as classify(): the first matching PATTERNS entry on the unquoted view wins,
+    # so ask classify which kind it picks (empty text, no exit code: it still returns the kind).
+    if classify(command, "", None)[1] == "unittest":
+        return f"{text}\n{stderr}" if text else stderr
+    return text
+
 
 def _flatten_content_blocks(value):
     """Common pattern: list of {type: text|tool_result, text|content: ...}."""
@@ -1039,7 +1054,7 @@ def main():
         sys.exit(0)
 
     tool_response = payload.get("tool_response") or {}
-    response_text = extract_text(tool_response)
+    response_text = add_unittest_stderr(command, extract_text(tool_response), tool_response)
     exit_code = extract_exit_code(tool_response)
     interrupted = is_interrupted(tool_response)
 

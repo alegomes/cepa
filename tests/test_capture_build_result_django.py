@@ -22,7 +22,7 @@ spec.loader.exec_module(cbr)
 GREEN = "Found 12 test(s).\nRan 12 tests in 0.312s\n\nOK"
 
 
-def _run_hook(tmp_path, command, output):
+def _run_hook(tmp_path, command, output, stderr="", extra=None):
     proj = tmp_path / "proj"
     proj.mkdir()
     (proj / "manage.py").write_text("")
@@ -31,7 +31,7 @@ def _run_hook(tmp_path, command, output):
     tmp.mkdir()
     payload = {"cwd": str(proj), "session_id": "s-django", "tool_name": "Bash",
                "tool_input": {"command": command},
-               "tool_response": {"stdout": output, "stderr": "", "interrupted": False}}
+               "tool_response": {"stdout": output, "stderr": stderr, "interrupted": False, **(extra or {})}}
     subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload), text=True,
                    capture_output=True, cwd=proj, env={**os.environ, "TMPDIR": str(tmp)})
     state = proj / ".claude" / "last-build.json"
@@ -151,3 +151,74 @@ def test_command_must_be_manage_py_test_exactly(command):
 ])
 def test_manage_py_test_start_of_command_and_extra_spaces(command):
     assert cbr.classify(command, _GREEN_OUT, None)[:2] == ("SUCCESS", "unittest")
+
+
+# --- CS-2: a failing or erroring `manage.py test` records FAILURE (cli surface) ---
+
+RED = "Found 12 test(s).\nRan 12 tests in 0.4s\n\nFAILED (failures=1, errors=2)"
+
+
+@pytest.mark.parametrize("command", [
+    "uv run python manage.py test",
+    "python manage.py test",
+    "docker compose exec web python manage.py test",
+])
+def test_failed_manage_py_test_writes_failure(tmp_path, command):
+    st = _run_hook(tmp_path, command, RED)
+    assert st and st["status"] == "FAILURE" and st["kind"] == "unittest"
+
+
+@pytest.mark.parametrize("tail", [
+    "FAILED (failures=1)",
+    "FAILED (errors=2)",
+    "FAILED (failures=1, skipped=2)",
+])
+def test_each_failed_summary_shape_writes_failure(tmp_path, tail):
+    st = _run_hook(tmp_path, "python manage.py test", "Ran 5 tests in 0.1s\n\n" + tail + "\n")
+    assert st and st["status"] == "FAILURE"
+
+
+def test_failed_summary_only_in_stderr_writes_failure(tmp_path):
+    # unittest writes its summary to stderr; with empty stdout the hook falls back to it
+    st = _run_hook(tmp_path, "python manage.py test", "", stderr=RED)
+    assert st and st["status"] == "FAILURE"
+
+
+def test_failed_summary_in_stderr_with_chatty_stdout_writes_failure(tmp_path):
+    # real Django: "Found N test(s)" / system-check lines go to stdout, the verdict to stderr
+    st = _run_hook(tmp_path, "python manage.py test",
+                   "Found 12 test(s).\nSystem check identified no issues (0 silenced).\n",
+                   stderr="Ran 12 tests in 0.4s\n\nFAILED (failures=1)\n")
+    assert st and st["status"] == "FAILURE"
+
+
+def test_markerless_exit_1_writes_failure(tmp_path):
+    # e.g. a settings ImportError before the runner prints any summary: no marker, only the exit code
+    st = _run_hook(tmp_path, "python manage.py test",
+                   "Traceback (most recent call last):\nImportError: No module named 'settings'\n",
+                   extra={"exit_code": 1})
+    assert st and st["status"] == "FAILURE" and st["kind"] == "unittest"
+
+
+def test_green_verdict_only_in_stderr_writes_success(tmp_path):
+    st = _run_hook(tmp_path, "python manage.py test",
+                   "Found 12 test(s).\nSystem check identified no issues (0 silenced).\n",
+                   stderr="Ran 12 tests in 0.3s\n\nOK\n")
+    assert st and st["status"] == "SUCCESS" and st["kind"] == "unittest"
+
+
+_WARN = "DeprecationWarning: error in foo\n"
+
+
+@pytest.mark.parametrize("command", ["pytest && python manage.py test", "pytest"])
+def test_stderr_not_appended_when_kind_is_not_unittest(tmp_path, command):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    with_err = _run_hook(tmp_path / "a", command, "3 passed in 0.1s\n", stderr=_WARN)
+    without = _run_hook(tmp_path / "b", command, "3 passed in 0.1s\n")
+    assert with_err and with_err["status"] != "FAILURE"
+    assert with_err["status"] == without["status"] and with_err["kind"] == without["kind"]
+
+
+def test_quoted_manage_py_test_gets_no_stderr(tmp_path):
+    assert cbr.add_unittest_stderr('echo "manage.py test"', "out", {"stderr": "Ran 1 test\nOK"}) == "out"
