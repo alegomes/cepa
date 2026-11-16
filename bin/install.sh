@@ -6,6 +6,11 @@
 #   ./bin/install.sh [--clean] [--rollback] [--topology=NAME] [/path/to/host-project]
 #
 # Without arguments: installs plugins (idempotent), sets up cwd as host project.
+# The marketplace is registered from a FIXED folder, ~/.claude/cepa-live: the
+#   installer copies .claude-plugin/marketplace.json plus each listed plugin's
+#   folder there and registers that copy, never the folder it ran from. Run
+#   from a cepa-until worktree, the registry would otherwise point at a folder
+#   that is removed later.
 # With --clean: also uninstalls existing plugins and SETS ASIDE the marketplace
 #   plugin cache before reinstalling. Use this when you've edited plugin
 #   source without bumping versions and want CC to pick up the changes. The
@@ -85,6 +90,7 @@ EXPERTISE_SOURCE="${REPO_DIR}/common/expertise"
 EXPERTISE_TARGET="${HOST_PROJECT}/.claude/expertise"
 CACHE_DIR="${HOME}/.claude/plugins/cache/${MARKETPLACE_NAME}"
 PREV_CACHE_DIR="${CACHE_DIR}.prev"
+LIVE_DIR="${HOME}/.claude/cepa-live"
 OPS_DIR="${HOME}/.claude/ops"
 OPS_FILE="${OPS_DIR}/last-install.json"
 
@@ -244,9 +250,41 @@ fi
 
 # --- Marketplace re-registration (always: cheap, refreshes metadata) ---
 
+# The registry must never point at REPO_DIR: from a worktree that folder goes
+# away. Copy the marketplace + plugin folders (as on disk, uncommitted files
+# included, no __pycache__) to a fixed folder and register that. The copy is
+# built NEXT TO the live folder and swapped in by rename, so the registered
+# folder is never half-written.
+
+echo "▶ Copying marketplace to the fixed folder: ${LIVE_DIR}"
+mkdir -p "$(dirname "${LIVE_DIR}")"
+rm -rf "${LIVE_DIR}".new.* "${LIVE_DIR}".old.*   # leftovers of a dead run
+LIVE_NEW="${LIVE_DIR}.new.$$"
+python3 - "${REPO_DIR}" "${LIVE_NEW}" <<'PYLIVE' || {
+import json, os, shutil, sys
+src, dst = sys.argv[1], sys.argv[2]
+ign = shutil.ignore_patterns("__pycache__")
+os.makedirs(os.path.join(dst, ".claude-plugin"))
+shutil.copy2(os.path.join(src, ".claude-plugin", "marketplace.json"),
+             os.path.join(dst, ".claude-plugin", "marketplace.json"))
+for p in json.load(open(os.path.join(src, ".claude-plugin", "marketplace.json")))["plugins"]:
+    rel = os.path.normpath(p["source"])   # "./docs-topology" -> "docs-topology"
+    shutil.copytree(os.path.join(src, rel), os.path.join(dst, rel),
+                    ignore=ign, symlinks=True)
+PYLIVE
+  rm -rf "${LIVE_NEW}"
+  echo "✗ Could not copy the marketplace to ${LIVE_NEW}; ${LIVE_DIR} left untouched"
+  exit 1
+}
+if [ -e "${LIVE_DIR}" ]; then
+  mv "${LIVE_DIR}" "${LIVE_DIR}.old.$$"
+fi
+mv "${LIVE_NEW}" "${LIVE_DIR}"
+rm -rf "${LIVE_DIR}.old.$$"
+
 echo "▶ Refreshing marketplace registration: ${MARKETPLACE_NAME}"
 claude plugin marketplace remove "${MARKETPLACE_NAME}" 2>/dev/null || true
-claude plugin marketplace add "${REPO_DIR}"
+claude plugin marketplace add "${LIVE_DIR}"
 
 # --- Plugin install (order = marketplace.json order; common comes first) ---
 
