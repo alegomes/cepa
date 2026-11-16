@@ -1,3 +1,8 @@
+---
+name: diataxis-discipline
+description: Keep each document in exactly one of the four Diátaxis modes (tutorial, how-to, reference, explanation). Use when classifying existing docs, deciding where a new doc goes and how to write it, or reviewing the tree for documents that mix modes.
+---
+
 # diataxis-discipline
 
 Keep each document in **one** of the four Diátaxis modes. The documentation chaos
