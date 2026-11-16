@@ -257,6 +257,13 @@ def test_clean_and_rollback():
         check("CS-3: cepa-live.prev guarda A",
               (prev / "common" / ".claude-plugin" / "plugin.json").is_file()
               and version(prev / "common" / ".claude-plugin" / "plugin.json") == "1.0.0-A")
+        out_lines = r.stdout.splitlines()
+        check("CS-3: --clean diz que põe a pasta fixa de lado em cepa-live.prev",
+              any("setting the current fixed folder aside" in l and str(prev) in l
+                  for l in out_lines), r.stdout[-600:])
+        check("CS-3: --clean fecha com linha 'Rollback point' com o caminho de cepa-live.prev",
+              any("Rollback point" in l and str(prev) in l for l in out_lines),
+              r.stdout[-600:])
 
         r = run("--rollback")
         check("CS-3: --rollback sai 0", r.returncode == 0, r.stdout[-400:] + r.stderr[-400:])
@@ -316,11 +323,93 @@ def test_rollback_fixed_folder_only_ignores_stale_cache():
               json.dumps(rec)[:400])
 
 
+def _scenario(tmp):
+    tmp = Path(tmp).resolve()
+    home = tmp / "home"
+    home.mkdir()
+    main = tmp / "main"
+    build_repo(main)
+    fakebin = tmp / "fakebin"
+    fakebin.mkdir()
+    (fakebin / "claude").write_text("#!/bin/sh\nexit 0\n")
+    (fakebin / "claude").chmod(0o755)
+    host = tmp / "host"
+    host.mkdir()
+    env = dict(os.environ, HOME=str(home), PATH=f"{fakebin}:{os.environ['PATH']}")
+
+    def run(*args):
+        return subprocess.run(["sh", "bin/install.sh", *args, str(host)],
+                              capture_output=True, text=True, env=env, cwd=str(main))
+    return home / ".claude", main, run
+
+
+def test_clean_without_existing_live():
+    """CS-3: --clean on a HOME with no cepa-live yet installs normally, no .prev."""
+    with tempfile.TemporaryDirectory() as tmp:
+        claude, main, run = _scenario(tmp)
+        want = json.loads((main / "common" / ".claude-plugin" / "plugin.json").read_text())["version"]
+        r = run("--clean")
+        check("CS-3: --clean sem cepa-live prévio sai 0", r.returncode == 0,
+              r.stdout[-400:] + r.stderr[-400:])
+        pj = claude / "cepa-live" / "common" / ".claude-plugin" / "plugin.json"
+        check("CS-3: --clean sem cepa-live prévio cria cepa-live com a versão instalada",
+              pj.is_file() and json.loads(pj.read_text())["version"] == want)
+        check("CS-3: --clean sem cepa-live prévio não cria cepa-live.prev",
+              not (claude / "cepa-live.prev").exists())
+
+
+def test_rollback_replaces_old_rolledback():
+    """CS-3: --rollback discards an older cepa-live.rolledback instead of nesting into it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        claude, main, run = _scenario(tmp)
+        for name, ver in (("cepa-live", "B"), ("cepa-live.prev", "A"), ("cepa-live.rolledback", "OLD")):
+            d = claude / name / "common" / ".claude-plugin"
+            d.mkdir(parents=True)
+            (d / "plugin.json").write_text(json.dumps({"version": ver}))
+        (claude / "cepa-live.rolledback" / "old-marker").write_text("x")
+        r = run("--rollback")
+        check("CS-3: --rollback com .rolledback antigo sai 0", r.returncode == 0,
+              r.stdout[-400:] + r.stderr[-400:])
+        rb = claude / "cepa-live.rolledback"
+        pj = rb / "common" / ".claude-plugin" / "plugin.json"
+        check("CS-3: cepa-live.rolledback guarda a cópia substituída (B)",
+              pj.is_file() and json.loads(pj.read_text())["version"] == "B")
+        check("CS-3: cepa-live.rolledback não tem cepa-live aninhado", not (rb / "cepa-live").exists())
+        check("CS-3: marcador do .rolledback antigo sumiu", not (rb / "old-marker").exists())
+
+
+def test_rollback_names_both_replaced_copies():
+    """CS-3: when cache and fixed folder are both restored, the report names both kept copies."""
+    with tempfile.TemporaryDirectory() as tmp:
+        claude, main, run = _scenario(tmp)
+        cache = claude / "plugins" / "cache" / "cepa"
+        prev_cache = Path(str(cache) + ".prev")
+        for d in (cache / "p" / "2.0.0", prev_cache / "p" / "1.0.0",
+                  claude / "cepa-live" / "common" / ".claude-plugin",
+                  claude / "cepa-live.prev" / "common" / ".claude-plugin"):
+            d.mkdir(parents=True)
+        r = run("--rollback")
+        check("CS-3: --rollback de cache e pasta fixa sai 0", r.returncode == 0,
+              r.stdout[-400:] + r.stderr[-400:])
+        line = next((l for l in r.stdout.splitlines() if "Restored. Replaced copy kept at:" in l), "")
+        check("CS-3: linha 'Restored' cita cache.rolledback e cepa-live.rolledback",
+              str(cache) + ".rolledback" in line and str(claude / "cepa-live") + ".rolledback" in line,
+              line or r.stdout[-400:])
+        rec_file = claude / "ops" / "last-install.json"
+        note = rec_file.read_text() if rec_file.is_file() else ""
+        check("CS-3: registro cita cache.rolledback e cepa-live.rolledback",
+              str(cache) + ".rolledback" in note and str(claude / "cepa-live") + ".rolledback" in note,
+              note[:400])
+
+
 if __name__ == "__main__":
     test_worktree_install()
     test_main_clone_install()
     test_clean_and_rollback()
     test_rollback_fixed_folder_only_ignores_stale_cache()
+    test_clean_without_existing_live()
+    test_rollback_replaces_old_rolledback()
+    test_rollback_names_both_replaced_copies()
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILED")
         sys.exit(1)
