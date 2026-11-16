@@ -1,0 +1,39 @@
+schema_version: 2
+card: build-django-manage-py-test-CS-2
+verdict: proven
+reviewed_at: 2026-11-16T00:30:00-03:00
+base_commit: 22e6d63
+head_commit: c62786e
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/hooks/capture-build-result.py (add_unittest_stderr + call in main)", module: common/hooks, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline em worktree descartavel c62786e (detached, /tmp/proof-django-cs2-b): python3 -m pytest django+classify+pytest -q -> 89 passed; controle sem efeito (substituicao identica da guarda) -> 89 passed, 0 failed"
+        - "os tres que contavam na 1a passada, agora RED: P6e 'return stderr' em vez da juncao -> 3 failed/86 passed (test_verdict_in_stdout_survives_noisy_stderr x2, test_stderr_is_joined_on_its_own_line); P6 juncao f'{text}{stderr}' -> 1 failed (test_stderr_is_joined_on_its_own_line); P6b juncao f'{text} {stderr}' -> 1 failed (idem); P5 sem isinstance(stderr, str) -> 2 failed (test_non_string_stderr_does_not_crash_unittest, test_non_string_stderr_does_not_crash_other_commands); variante N20 'stderr is not None' -> 2 failed (mesmos)"
+        - "regressao, as 16 perturbacoes vermelhas listadas na 1a passada, todas re-executadas e RED: P1 sem a chamada 2 failed; P2 filtro 'if True' 3 failed; P2b 'if False' 2 failed; P3 regex no comando cru 2 failed; P3b substring 2 failed; P3c kind is not None 2 failed; P3d kind==pytest 4 failed; P4b dedupe invertido 2 failed; P5c sem guarda isinstance(dict) 1 failed; P5d chave stdout no lugar de stderr 2 failed; P6f retornar so text 2 failed; P7 retorno antecipado de stderr 20 failed; P8 command='' 2 failed; P9 tool_response={} 2 failed; P10 text='' 17 failed. P7b ('retorno final descarta o text') nao tem texto exato registrado: coberta por N4 (retorno final = stderr) 3 failed e N5 (retorno final vazio) 3 failed. Faltou so reexecutar a numeracao exata dos 19: a 1a passada lista 16 edicoes vermelhas nomeadas, todas acima"
+        - "NOVAS edicoes tentadas nesta passada, RED: N1 condicao 'if text' invertida 3 failed; N3 retorna text no unittest 2 failed; N4/N5 retorno final stderr/vazio 3 failed cada; N6/N7 primeiro retorno stderr/vazio 16 e 15 failed; N19 isinstance(dict) trocado por bool(tool_response) 1 failed; N21 classify()[0] no lugar de [1] 2 failed; N25 kind != unittest 5 failed; N27 'and' -> 'or' na guarda 2 failed; N28 guarda sem o not 2 failed. Obs: P3e da 1a passada (classify(command, text, None)) reproduzido como N22 e continua verde; a variante classify(command, None, None) desta passada fica RED (8 failed) porque classify nao aceita text None"
+        - "SOBREVIVENTES QUE NAO CONTAM (a sonda probe.py chamou add_unittest_stderr + classify em 6 entradas: verde curto, vermelho curto, vermelho com traceback longo, verde com aviso de 3000 caracteres, stderr duplicando stdout, linha Ran indentada; veredito identico ao original em todas): P4 sem dedupe (so repete o mesmo veredito); P5b sem guarda de stderr vazio (equivalente: '' in text e sempre verdadeiro); P6c juncao sempre com quebra de linha (marcadores sao (?m)); P6d stderr antes do stdout; P3e / N22 / N23 / N24 classify(...) com text, exit 0 ou exit 1 (equivalente: o kind depende so do comando); N2 dedupe 'text not in stderr' (equivalente: com text vazio o extract_text ja cai no stderr); N8 juncao CRLF, N9 linha em branco dupla, N10/N11 strip/lstrip do stderr, N12 rstrip do text, N13/N14 variantes do caminho sem text, N16/N17 cauda de 50 caracteres do stderr, N18 dedupe por stderr.strip(), N26 'or' na guarda do dedupe (igual a P4), N29/N30 variacoes de chamada (todas equivalentes: veredito igual nas 6 entradas)"
+        - "UNICO sobrevivente que perde veredito, mas nao conta: N15 truncar o stderr aos primeiros 1000 caracteres (f'{text}\\n{stderr[:1000]}'): com traceback longo (stderr > 1000 caracteres) o FAILED (...) do fim some e o hook nao grava estado. E uma edicao inventada (acrescenta um corte que o codigo nao tem), nao um mutante de operador existente, e o hook original nao trunca nada. Teste que mataria, se o dono quiser: stdout 'Found 3 test(s).' + stderr com 60 linhas de traceback seguidas de 'Ran 3 tests in 0.1s\\n\\nFAILED (failures=1)' via _run_hook, esperando FAILURE/unittest"
+        - "FALSO SUCCESS: nenhum sobrevivente produziu SUCCESS onde o original dava FAILURE nas 6 entradas da sonda"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; todas as ramificacoes de add_unittest_stderr (guarda, dedupe, filtro classify, juncao com e sem text, retorno final) e a chamada em main sao alcancadas pelas 30+ perturbacoes que ficam vermelhas"
+  l4_adversarial_input:
+    status: n/a
+    reason: "hook de desenvolvimento: a unica entrada e o texto do comando Bash que o proprio agente emitiu e o payload do harness; nao ha usuario externo nem modulo api-rest"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Story, nao Bug. Evidencia de vermelho no base: hook de 22e6d63 + tests/test_capture_build_result_django.py de c62786e -> python3 -m pytest django+classify+pytest -q -> 3 failed, 86 passed (test_failed_summary_in_stderr_with_chatty_stdout_writes_failure, test_green_verdict_only_in_stderr_writes_success, test_quoted_manage_py_test_gets_no_stderr). Os demais testes CS-2 ja passavam no base: o marcador de CS-1 le FAILED no stdout, e stderr-so cai no fallback de extract_text. Em c62786e -> 89 passed"
+routing_reason: "Os tres sobreviventes que perdiam o veredito na 1a passada (descartar o stdout, juntar sem quebra de linha ou com espaco, tirar a guarda isinstance(str)) agora ficam vermelhos com os 4 testes novos de c62786e; as 16 edicoes vermelhas da 1a passada seguem vermelhas e 10 edicoes novas tambem. Os sobreviventes restantes so repetem o veredito ou sao equivalentes (P4, P5b, P6c, P6d, P3e e as variantes N2, N8 a N14, N16 a N18, N22 a N24, N26, N29, N30). Unica ressalva honesta: N15 (truncar o stderr em 1000 caracteres) perde o veredito de um traceback longo, mas e uma edicao inventada que o codigo nao contem; o teste que a mataria esta descrito no resultado e e opcional. Vermelho no base: 3 failed. Todo run cita contagem de testes > 0. A suite completa (tests/run-all.sh) nao foi rodada, por instrucao do supervisor."
