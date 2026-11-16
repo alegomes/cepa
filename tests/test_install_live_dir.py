@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""CS-1: installing from inside a linked worktree registers the fixed folder.
+"""CS-1 and CS-2: the installer registers the fixed folder, from a linked
+worktree (CS-1) and from the main clone (CS-2).
 
 `bin/install.sh` used to hand `claude plugin marketplace add` the folder it ran
 from. From a cepa-until worktree that is a folder that later gets removed, and
@@ -8,6 +9,9 @@ marketplace + plugin folders to `~/.claude/cepa-live` and registers THAT.
 
 Hermetic: temp HOME, a fake `claude` first on PATH that logs its argv, and a
 throwaway git repo (never the real one) with a real linked worktree.
+
+CS-2 is the same claim from the main clone, on a HOME that never saw an
+install: the registry gets `~/.claude/cepa-live`, never the clone's path.
 
 Run: python3 tests/test_install_live_dir.py
 """
@@ -152,8 +156,56 @@ def test_worktree_install():
               not stale.exists(), str(stale))
 
 
+def test_main_clone_install():
+    """CS-2: same arrangement, installer run from the main clone, fresh HOME."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp).resolve()
+        home = tmp / "home"
+        home.mkdir()
+        main = tmp / "main"
+        mk = build_repo(main)
+
+        fakebin = tmp / "fakebin"
+        fakebin.mkdir()
+        log = tmp / "claude.log"
+        (fakebin / "claude").write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$*" >> "$FAKE_CLAUDE_LOG"\nexit 0\n')
+        (fakebin / "claude").chmod(0o755)
+        host = tmp / "host"
+        host.mkdir()
+
+        env = dict(os.environ, HOME=str(home), FAKE_CLAUDE_LOG=str(log),
+                   PATH=f"{fakebin}:{os.environ['PATH']}")
+        r = subprocess.run(["sh", "bin/install.sh", str(host)],
+                           capture_output=True, text=True, env=env, cwd=str(main))
+        check("CS-2: install.sh do clone principal sai 0", r.returncode == 0,
+              r.stdout[-400:] + r.stderr[-400:])
+
+        adds = [l.split("marketplace add ", 1)[1].strip()
+                for l in log.read_text().splitlines() if "marketplace add " in l]
+        live = home / ".claude" / "cepa-live"
+        check("CS-2: marketplace add recebe ~/.claude/cepa-live",
+              adds == [str(live)], f"adds={adds}")
+        check("CS-2: o caminho do clone principal não aparece em nenhuma chamada do claude",
+              str(main) not in log.read_text(), log.read_text()[-400:])
+        check("CS-2: cepa-live/.claude-plugin/marketplace.json igual ao do clone",
+              (live / ".claude-plugin" / "marketplace.json").is_file()
+              and (live / ".claude-plugin" / "marketplace.json").read_bytes()
+              == (main / ".claude-plugin" / "marketplace.json").read_bytes())
+        for p in mk["plugins"]:
+            rel = os.path.normpath(p["source"])
+            check(f"CS-2: pasta do plugin {p['name']} em cepa-live/{rel}",
+                  (live / rel / ".claude-plugin" / "plugin.json").is_file(),
+                  str(live / rel))
+        listed = {os.path.normpath(p["source"]) for p in mk["plugins"]}
+        check("CS-2: cepa-live tem só o marketplace e as pastas dos plugins listados",
+              {p.name for p in live.iterdir()} == listed | {".claude-plugin"},
+              str(sorted(p.name for p in live.iterdir())))
+
+
 if __name__ == "__main__":
     test_worktree_install()
+    test_main_clone_install()
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILED")
         sys.exit(1)
