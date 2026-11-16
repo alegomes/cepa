@@ -120,22 +120,25 @@ def test_worktree_install():
         stale = home / ".claude" / f"cepa-live.new.99999"
         stale.mkdir()
         (stale / "lixo").write_text("x")
-        stale_old = home / ".claude" / "cepa-live.old.99999"
-        stale_old.mkdir()
-        (stale_old / "lixo").write_text("x")
+        (main / "common" / "MARKER.txt").write_text("novo")
         r2 = subprocess.run(["sh", str(main / "bin" / "install.sh"), str(host)],
                             capture_output=True, text=True, env=env, cwd=str(tmp))
         check("reinstalar com staging velho sai 0", r2.returncode == 0,
               r2.stdout[-400:] + r2.stderr[-400:])
         check("cepa-live continua inteiro após a reinstalação",
-              pj_live.is_file() and not (live / "common" / "UNCOMMITTED.txt").exists())
+              pj_live.is_file())
+        check("marcador do clone principal está em cepa-live",
+              (live / "common" / "MARKER.txt").is_file())
+        check("arquivo só do worktree sumiu de cepa-live (substituiu, não mesclou)",
+              not (live / "common" / "UNCOMMITTED.txt").exists())
+        nested = sorted(str(p.relative_to(live)) for p in live.rglob("cepa-live.new.*"))
+        check("nenhum cepa-live.new.* dentro de cepa-live (não aninhou)",
+              nested == [], str(nested))
         check("staging velho .new.99999 foi removido pelo instalador",
               not stale.exists(), str(stale))
-        check("staging velho .old.99999 foi removido pelo instalador",
-              not stale_old.exists(), str(stale_old))
         left = sorted(p.name for p in live.parent.iterdir()
-                      if p.name.startswith(("cepa-live.new.", "cepa-live.old.")))
-        check("sem nenhum staging .new.*/.old.* após reinstalar", left == [], str(left))
+                      if p.name.startswith("cepa-live.new."))
+        check("sem nenhum staging .new.* após reinstalar", left == [], str(left))
 
 
 if __name__ == "__main__":

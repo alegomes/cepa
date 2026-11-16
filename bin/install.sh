@@ -253,14 +253,13 @@ fi
 # The registry must never point at REPO_DIR: from a worktree that folder goes
 # away. Copy the marketplace + plugin folders (as on disk, uncommitted files
 # included, no __pycache__) to a fixed folder and register that. The copy is
-# built NEXT TO the live folder and swapped in by rename, so the registered
-# folder is never half-written.
+# built next to the live folder, then takes its place.
 
 echo "▶ Copying marketplace to the fixed folder: ${LIVE_DIR}"
 mkdir -p "$(dirname "${LIVE_DIR}")"
-rm -rf "${LIVE_DIR}".new.* "${LIVE_DIR}".old.*   # leftovers of a dead run
+rm -rf "${LIVE_DIR}".new.*   # leftovers of a dead run
 LIVE_NEW="${LIVE_DIR}.new.$$"
-python3 - "${REPO_DIR}" "${LIVE_NEW}" <<'PYLIVE' || {
+python3 - "${REPO_DIR}" "${LIVE_NEW}" <<'PYLIVE'
 import json, os, shutil, sys
 src, dst = sys.argv[1], sys.argv[2]
 ign = shutil.ignore_patterns("__pycache__")
@@ -270,17 +269,10 @@ shutil.copy2(os.path.join(src, ".claude-plugin", "marketplace.json"),
 for p in json.load(open(os.path.join(src, ".claude-plugin", "marketplace.json")))["plugins"]:
     rel = os.path.normpath(p["source"])   # "./docs-topology" -> "docs-topology"
     shutil.copytree(os.path.join(src, rel), os.path.join(dst, rel),
-                    ignore=ign, symlinks=True)
+                    ignore=ign)
 PYLIVE
-  rm -rf "${LIVE_NEW}"
-  echo "✗ Could not copy the marketplace to ${LIVE_NEW}; ${LIVE_DIR} left untouched"
-  exit 1
-}
-if [ -e "${LIVE_DIR}" ]; then
-  mv "${LIVE_DIR}" "${LIVE_DIR}.old.$$"
-fi
+rm -rf "${LIVE_DIR}"
 mv "${LIVE_NEW}" "${LIVE_DIR}"
-rm -rf "${LIVE_DIR}.old.$$"
 
 echo "▶ Refreshing marketplace registration: ${MARKETPLACE_NAME}"
 claude plugin marketplace remove "${MARKETPLACE_NAME}" 2>/dev/null || true
