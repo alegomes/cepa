@@ -608,6 +608,57 @@ def test_item_that_becomes_ready_in_an_earlier_queue_runs_next():
               f"{_statuses(paths['a'])} {_statuses(paths['b'])}")
 
 
+def _live_run_of_queue(root, queue, pid, run="2026-11-15-0900"):
+    """The state and the record of a single-queue run of `queue` that is up:
+    `rodando`, a live pid, this host, as the real `cepa-until` leaves them."""
+    import socket
+    from datetime import datetime, timedelta
+    d = root / ".claude" / "queues" / queue / "until"
+    d.mkdir(parents=True, exist_ok=True)
+    deadline = (datetime.now() + timedelta(hours=3)).isoformat()
+    (d / f"{run}.estado.json").write_text(json.dumps(
+        {"run": run, "fila": queue, "estado": "rodando", "branch": "until/x",
+         "registro": f"{run}.jsonl", "pid": pid, "host": socket.gethostname(),
+         "prazo": deadline}), encoding="utf-8")
+    (d / f"{run}.jsonl").write_text(json.dumps(
+        {"evento": "run_start", "fila": queue, "prazo": deadline, "pid": pid})
+        + "\n", encoding="utf-8")
+    return run
+
+
+def test_queue_with_its_own_live_run_is_skipped_with_a_warning():
+    """CS-4: queue `a` has a live single-queue run: the `--all` run warns naming
+    `a` and its run, starts no item of `a`, and finishes `b1` as `done`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1")],
+                                  "b": [base.item("b1")]})
+        alive = subprocess.Popen([sys.executable, "-c",
+                                  "import time; time.sleep(120)", "cepa-until"])
+        try:
+            run = _live_run_of_queue(root, "a", alive.pid)
+            p, calls = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                        "--no-analysis"],
+                            claude_body=DONE_IN_ITS_QUEUE)
+        finally:
+            alive.kill()
+            alive.wait()
+        out = p.stdout + p.stderr
+        warn = [l for l in out.splitlines() if "skipping queue" in l]
+        check("--all sai com 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        check("avisa que pula a fila a, com o run dela",
+              any("`a`" in l for l in warn) and any(run in l for l in warn),
+              f"{warn} {out[-800:]}")
+        check("...avisa uma vez so", len(warn) == 1, str(warn))
+        check("b1 fica done", _statuses(paths["b"]) == {"b1": "done"},
+              str(_statuses(paths["b"])))
+        check("a1 nao e tocado", _statuses(paths["a"]) == {"a1": "pending"},
+              str(_statuses(paths["a"])))
+        check("nenhum item_start de a", _item_starts(root) == ["b1"],
+              str(_item_starts(root)))
+        check("um so subprocesso, o de b1", len(calls) == 1, str(calls))
+
+
 def test_single_queue_dry_run_unchanged():
     with tempfile.TemporaryDirectory() as tmp:
         root, _ = _repo(tmp, {"a": [base.item("a1")]})

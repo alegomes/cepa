@@ -803,13 +803,14 @@ ALL_QUEUE = "all"
 ALL_DIR = "_all"
 
 
-def query_next_ready(repo):
+def query_next_ready(repo, warned=None):
     """The next item of a `--all` run, read fresh (spec until-todas-as-filas, Q4):
     the first ready item in the order of `cepa-plan ready` (queue by queue, the
     recorded order inside a queue). Returns (queue, data, error): `data` is
     `query_queue` of that queue, so the run loop handles it like a single-queue
     round. With nothing ready anywhere, `data` has an empty batch and an
     `end-of-queue` stop, which is what ends a single-queue run too."""
+    warned = warned if warned is not None else set()
     ready, error = query_ready(repo)
     if error:
         return None, None, error
@@ -817,6 +818,15 @@ def query_next_ready(repo):
         if not q.get("prontos"):
             continue
         name = Path(str(q.get("path") or "")).parent.name or str(q["queue"])
+        alive = live_run_of_queue(repo, name)
+        if alive:
+            if name not in warned:
+                warned.add(name)
+                print(f"cepa-until: skipping queue `{name}`: it has its own run "
+                      f"in progress ({name}/{alive['run']}, pid {alive['pid']}). "
+                      "The items of that queue stay out of this run.",
+                      file=sys.stderr)
+            continue
         data, error = query_queue(name, repo)
         if error:
             return name, None, f"queue {name!r}: {error}"
@@ -5421,7 +5431,8 @@ def _main(argv=None):
     # next ready item belongs to in a `--all` run.
     if a.all_queues:
         a.queue = ALL_QUEUE
-        cur, data, error = query_next_ready(repo)
+        skipped_warned = set()
+        cur, data, error = query_next_ready(repo, skipped_warned)
         if error:
             print(f"cepa-until: could not read the queues — {error}",
                   file=sys.stderr)
@@ -5437,7 +5448,7 @@ def _main(argv=None):
     def next_item():
         """(queue, data, error) of the next item, read fresh."""
         if a.all_queues:
-            return query_next_ready(repo)
+            return query_next_ready(repo, skipped_warned)
         fresh, fresh_error = query_queue(a.queue, repo)
         return a.queue, fresh, fresh_error
 
