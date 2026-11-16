@@ -222,3 +222,31 @@ def test_stderr_not_appended_when_kind_is_not_unittest(tmp_path, command):
 
 def test_quoted_manage_py_test_gets_no_stderr(tmp_path):
     assert cbr.add_unittest_stderr('echo "manage.py test"', "out", {"stderr": "Ran 1 test\nOK"}) == "out"
+
+
+@pytest.mark.parametrize("out, expected", [
+    ("Ran 3 tests in 0.1s\n\nFAILED (failures=1)\n", "FAILURE"),
+    ("Ran 3 tests in 0.1s\n\nOK\n", "SUCCESS"),
+])
+def test_verdict_in_stdout_survives_noisy_stderr(tmp_path, out, expected):
+    # appending stderr must keep stdout: the verdict lives there, stderr is only a warning
+    st = _run_hook(tmp_path, "python manage.py test", out, stderr="RuntimeWarning: x\n")
+    assert st and st["status"] == expected and st["kind"] == "unittest"
+
+
+def test_stderr_is_joined_on_its_own_line(tmp_path):
+    # stdout ends without a newline: the warning must not be glued onto the OK line
+    st = _run_hook(tmp_path, "python manage.py test", "Ran 3 tests in 0.1s\n\nOK",
+                   stderr="RuntimeWarning: x\n")
+    assert st and st["status"] == "SUCCESS" and st["kind"] == "unittest"
+
+
+def test_non_string_stderr_does_not_crash_unittest(tmp_path):
+    st = _run_hook(tmp_path, "python manage.py test",
+                   "Ran 3 tests in 0.1s\n\nFAILED (failures=1)\n", stderr=["x"])
+    assert st and st["status"] == "FAILURE" and st["kind"] == "unittest"
+
+
+def test_non_string_stderr_does_not_crash_other_commands(tmp_path):
+    st = _run_hook(tmp_path, "pytest", "something broke\n", stderr=["x"], extra={"exit_code": 1})
+    assert st and st["status"] == "FAILURE" and st["kind"] == "pytest"
