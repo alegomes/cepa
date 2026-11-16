@@ -681,6 +681,33 @@ def test_ops_record_says_where_copy_came_from():
               rec.get("main_clone") == str(plain), str(rec))
         check("CS-5: pasta sem git: live_dir é ~/.claude/cepa-live", rec.get("live_dir") == live, str(rec))
 
+        # a non-git copy nested inside another git repo
+        outer = tmp / "outer"
+        outer.mkdir()
+        git(outer, "init", "-q", "-b", "main")
+        (outer / "f.txt").write_text("x")
+        git(outer, "add", "-A")
+        git(outer, "commit", "-q", "-m", "init")
+        inner = outer / "inner"
+        shutil.copytree(main, inner, ignore=shutil.ignore_patterns(".git"), symlinks=True)
+        r, rec = install_from(inner)
+        check("CS-5: cópia sem git dentro de outro repo: install sai 0",
+              r.returncode == 0, r.stdout[-400:] + r.stderr[-400:])
+        check("CS-5: cópia sem git dentro de outro repo: repo_dir é a pasta",
+              rec.get("repo_dir") == str(inner), str(rec))
+        check("CS-5: cópia sem git dentro de outro repo: main_clone == repo_dir",
+              rec.get("main_clone") == str(inner), str(rec))
+
+        # a repo whose git dir is not named .git
+        sep = tmp / "sep"
+        shutil.copytree(main, sep, ignore=shutil.ignore_patterns(".git"), symlinks=True)
+        git(sep, "init", "-q", "-b", "main", "--separate-git-dir", str(tmp / "elsewhere-gitdir"))
+        r, rec = install_from(sep)
+        check("CS-5: git dir fora de .git: install sai 0",
+              r.returncode == 0, r.stdout[-400:] + r.stderr[-400:])
+        check("CS-5: git dir fora de .git: main_clone == repo_dir",
+              rec.get("main_clone") == rec.get("repo_dir") == str(sep), str(rec))
+
         # after --rollback
         r, _ = install_from(main, "--clean")
         check("CS-5: --clean sai 0", r.returncode == 0, r.stdout[-400:] + r.stderr[-400:])

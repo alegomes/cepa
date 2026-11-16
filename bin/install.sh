@@ -81,10 +81,14 @@ HOST_PROJECT_INPUT="${HOST_PROJECT_INPUT:-$(pwd)}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # The main clone: parent of git's common dir (the shared .git of every linked
-# worktree). Without git, outside a repo, or when the common dir is not a
-# ".git" folder, the repo this script ran from is the only clone known.
+# worktree). Git is asked only when REPO_DIR is itself the top of a working
+# tree (it has its own .git: a folder in a main clone, a file in a linked
+# worktree); a plain copy nested inside another repo would otherwise report
+# that outer repo. Even then, the common dir must be a folder named ".git".
+# In every other case the repo this script ran from is the only clone known.
 MAIN_CLONE="${REPO_DIR}"
-if _common="$(cd "${REPO_DIR}" && git rev-parse --git-common-dir 2>/dev/null)" \
+if [ -e "${REPO_DIR}/.git" ] \
+   && _common="$(cd "${REPO_DIR}" && git rev-parse --git-common-dir 2>/dev/null)" \
    && _common="$(cd "${REPO_DIR}" && cd "${_common}" 2>/dev/null && pwd)" \
    && [ "$(basename "${_common}")" = ".git" ]; then
   MAIN_CLONE="$(cd "$(dirname "${_common}")" && pwd)"
