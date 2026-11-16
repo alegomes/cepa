@@ -13,6 +13,7 @@ Patterns detected:
   - Gradle: ./gradlew or gradle  → BUILD SUCCESSFUL / BUILD FAILED
   - npm/yarn/pnpm test → exit code is the signal
   - pytest → exit code is the signal
+  - Django manage.py test (any wrapper) → "Ran N tests" + a line `OK` alone (or `OK (...)`)
   - cargo → exit code
   - go test → exit code
   - docker build → output markers (writing image / naming to /
@@ -171,6 +172,12 @@ def _maven_marker(word: str):
         r"(?m)^[ \t]*(?:\d+:)?(?:\[(?:INFO|ERROR)\][ \t]*)?BUILD " + word + r"\b")
 
 
+_UNITTEST_RED = re.compile(r"(?m)^[ \t]*FAILED \(")
+
+_UNITTEST_GREEN = re.compile(
+    r"(?m)^[ \t]*Ran [1-9]\d* tests? in [^\r\n]*\r?\n(?:[ \t]*\r?\n)*OK(?: \([^()\r\n]*\))?[ \t]*\r?$")
+
+
 PATTERNS = [
     (re.compile(r"(?:^|\s)(?:\./)?mvnw?\b.*\b(?:verify|test|package|install)\b"),
      "maven", [_maven_marker("SUCCESS")], [_maven_marker("FAILURE")]),
@@ -188,6 +195,13 @@ PATTERNS = [
     # passed" é FAILURE.
     (re.compile(r"(?:^|\s)pytest\b"),
      "pytest", [" passed"], [" failed", " error", "errors during collection", "no tests ran"]),
+    # Django `manage.py test` (any wrapper: uv, poetry, docker compose exec). The runner
+    # prints "Ran N tests in Xs" then a line with "OK" alone (or "OK (skipped=1, expected
+    # failures=1)" etc.). A bare "OK" substring is NOT a marker (any app log has it); "Ran 0
+    # tests" is not green. The failure marker (a line starting "FAILED (") is there so a green
+    # block never hides a red one in the same output (success markers run before the exit code).
+    (re.compile(r"(?:^|[\s/])manage\.py\s+test\b"),
+     "unittest", [_UNITTEST_GREEN], [_UNITTEST_RED]),
     (re.compile(r"(?:^|\s)cargo\b.*\b(?:test|build|check)\b"),
      "cargo", None, None),
     # deno: `deno task check` / `deno check` imprimem "Checked N files"; `deno test`
