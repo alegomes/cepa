@@ -61,6 +61,24 @@ def test_installer_has_no_hardcoded_summary_and_calls_the_script():
         assert not re.search(rf'echo\s+"\s+{re.escape(n)}\s+—', src), f"hardcoded summary line for {n}"
 
 
+def test_installer_summary_block_executed_lists_the_marketplace():
+    """Run the installer's own summary block (not install.sh itself) against a temp marketplace."""
+    lines = INSTALL.read_text().splitlines()
+    start = next(i for i, l in enumerate(lines) if l.strip() == 'echo "Plugins installed:"')
+    end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == 'echo ""')
+    snippet = "set -e\n" + "\n".join(lines[start:end]) + "\n"
+    with tempfile.TemporaryDirectory() as tmp:
+        market = with_fake_plugin(tmp)
+        env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "REPO_DIR": str(REPO), "MARKETPLACE_JSON": str(market)}
+        r = subprocess.run(["bash", "-c", snippet], capture_output=True, text=True, timeout=60, env=env)
+        expected = [p["name"] for p in json.loads(market.read_text())["plugins"]]
+    assert r.returncode == 0, r.stderr
+    out = r.stdout.splitlines()
+    assert out and out[0] == "Plugins installed:", out
+    got = [l.split()[0] for l in out[1:] if l.strip()]
+    assert got == expected and "zz-fake-plugin" in got, (got, r.stderr)
+
+
 def test_getting_started_block_in_sync():
     r = run("--check", str(DOC))
     assert r.returncode == 0, r.stderr
