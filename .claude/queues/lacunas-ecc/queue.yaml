@@ -26,24 +26,30 @@ items:
     de lista E5: hoje o marketplace.json tem 12 plugins, o resumo do instalador
     imprime 11 e o getting-started lista 10. Posição herdada da ordem dos lotes
     no documento; ninguém priorizou os itens entre si.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-11-14: sim: Os 12 plugins do marketplace devem
-    aparecer todos, sem nenhum escondido, no resumo do instalador e no guia de primeiros
-    passos? Instrução: owner answer (2026-11-12, confirmed 2026-11-13): show all
-    12 plugins of .claude-plugin/marketplace.json, none hidden, in the installer''s
-    final summary and in docs/getting-started.md; derive both lists from marketplace.json.
-    Rota humana fechada pelo dono: O documento de estratégia diz que este lote precisa
-    antes de uma resposta do dono: quais dos 12 plugins uma pessoa que está chegando
-    agora deve ver na lista do guia de primeiros passos e no resumo do instalador..
-    Evidência anterior: Pre-read at launch found a missing pre-condition: O documento
-    de estratégia diz que este lote precisa antes de uma resposta do dono: quais
-    dos 12 plugins uma pessoa que está chegando agora deve ver na lista do guia
-    de primeiros passos e no resumo do instalador. Resposta do dono em 2026-11-12:
-    sim, mostrar os 12 plugins do marketplace.json, sem esconder nenhum. Rota humana
-    fechada pelo dono: Precondição do lote 1 no documento: o dono diz quais dos
-    12 plugins do marketplace.json um recém-chegado deve ver..'
+  evidence: 'Commits on until/2026-11-15-2107: 6662e8c (bin/plugin-summary.py reads
+    .claude-plugin/marketplace.json; bin/install.sh final summary calls it; docs/getting-started.md
+    step 2 is a generated block kept in sync by --check), cb628b7 (test executes
+    the installer''s summary block against a temp marketplace), 3d1cea0 (gate files).
+    Both lists now show all 12 plugins. pair-reviewer: OK-WITH-NOTES (fixed-count
+    assertion removed). completion-auditor: COMPLETE at cb628b7 (.claude/acceptance/lacunas-ecc-L1.yaml;
+    first pass at 6662e8c was INCOMPLETE, gap closed by cb628b7). proof-reviewer:
+    PROVEN at cb628b7 (docs/proof/lacunas-ecc-L1.yaml; 13 perturbations red; 2 noted
+    survivors outside the claim: column alignment, and the pre-existing MARKETPLACE_JSON
+    definition line). Touched tests: pytest tests/test_plugin_summary_derived.py
+    tests/test_install_ops.py = 10 passed. Full suite not run here: delegated to
+    the cepa-until supervisor. bin/install.sh itself not executed (it calls the
+    claude CLI). Left out, out of scope: docs/internals/architecture.md:140 still
+    says 11 plugins; compass description in marketplace.json is in Portuguese, so
+    its short text reads ''Mod do Claude Code''.'
+  head_commit: 3d1cea048067cf9ed4d4bc1b58fe86c9116e6f6c
+  decisions:
+  - texto: O texto curto de cada plugin no resumo do instalador e no guia é a primeira
+      frase da descrição que já existe no marketplace.json, cortada quando passa
+      de 72 caracteres; nenhum campo novo foi criado no marketplace.json
+    commit: 6662e8ce296becb0660f413b08ae83455bf853a8
 - id: L2-E3
   title: Validador de todo comando, agente e skill (E3) como teste da suíte
   why: 'Lote 2 da seção 7 de docs/estrategia-lacunas-ecc.md. Não move nenhum dos

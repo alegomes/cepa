@@ -203,18 +203,28 @@ items:
     vazio), num pty o dono aperta `v`. A tela avisa "nothing written in the editor",
     volta ao menu do mesmo item, e o `queue.yaml` não muda. Hoje a tecla `v` não
     existe.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: 'This is return 1 of 2: the item closed `done`, but the full build of
-    the run branch (`tests/run-all.sh`) exited 1, and the 2nd build exited 1. Output
-    in the `.log` of run 2026-11-14-0953. The commits of every attempt are in `until/2026-11-14-0953-vermelho-CS-6`
-    and the run branch went back to 65520c1520. The item went back to `pending`:
-    reuse the side branch (`git cherry-pick` or `git merge` inside the attempt)
-    or redo it; the supervisor''s build judges the result. Disabling or deleting
-    the failing test does not count as a fix.'
+  evidence: 'Reused the side branch until/2026-11-14-0953-vermelho-CS-6 by cherry-pick
+    onto until/2026-11-15-2107: 20f94ae (code, conflict in common/bin/cepa-until
+    resolved by hand), 4c0b865, d02c5bc, b65b1cd (tests). Gates re-run at b65b1cd:
+    completion-auditor COMPLETE (.claude/acceptance/campo-de-resposta-CS-6.yaml),
+    proof-reviewer PROVEN with 9 perturbations all RED and 5 hostile editors clean
+    (docs/proof/campo-de-resposta-CS-6.yaml). python3 tests/test_cepa_until_decide.py
+    green. Full build not run: it belongs to the supervisor. The previous red was
+    herdr checks in test_cepa_until, test_cepa_until_quota and test_cepa_prove,
+    files this item does not touch. build-solo has no validation-lead. Code is on
+    the run branch, not merged, not pushed. Not covered by a test: pressing ? and
+    then v on the same item.'
   decisions:
   - texto: quando o editor fecha com erro, o aviso diz o código de saída antes de
       'nothing written in the editor'; quando salva vazio, só o aviso; nos dois
       casos o mesmo menu volta
     commit: 587708a94574df63b88d99fcdc4044d60eb96ee5
+  - texto: 'With the new ''?'' loop around the key reading, the empty-editor check
+      sits in the inner key loop: after the warning the same prompt asks again under
+      the same card, without redrawing the card or the legend, as an invalid key
+      already did.'
+    commit: 20f94ae7ecb08bed85e21c94e3b421a3e11385b6
+  head_commit: aa1483290e0a4fd7c221eba42f341abfebbf3b57

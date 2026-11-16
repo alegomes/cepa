@@ -288,38 +288,25 @@ items:
     do CS-6 com um leitor falso que devolve outra pergunta, a tela mostra a pergunta
     nova no bloco do mesmo item e pede a resposta de novo, e o `queue.yaml` passa
     a trazer a pergunta nova; hoje não existe reescrita.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-11-14: sim: Entrego a reescrita da pergunta
-    com o filtro de palavras técnicas como está hoje? Recomendo sim: o furo é antigo
-    e vale corrigir à parte. Dispensa sem-cobertura em common/hooks/_ownertext.py:
-    aceita pelo dono. Rota humana fechada pelo dono: Aceitar ou recusar a dispensa
-    de common/hooks/_ownertext.py (sem-cobertura): o filtro de jargão deixa passar
-    caminho de pasta, nome de função e URL na pergunta reescrita. Evidência anterior:
-    Commits 30930f5 (cepa-until decide: after ?, route reader rewrites the question
-    once with UNCLEAR_READER_PROMPT, tarefa reescrever-pergunta, pergunta_mal_escrita,
-    ceiling UNCLEAR_REWRITE_SEC=60; recorded via new cepa-plan reword-route --replace;
-    same item block re-shows question + menu; second ? does not call the reader;
-    CS-6 tests set CEPA_UNTIL_LEITOR=off; docs/cepa-cli.md), ccf1da3 (tests for
-    the two proof survivors: 60 s ceiling, same-question refusal), d1da1c8 (gate
-    artifacts + waiver proposal). New test file tests/test_cepa_until_unclear_rewrite.py,
-    red at base 859b59c. pair-reviewer OK-WITH-NOTES (not applied, left out as cosmetic:
-    the kind label and the recommendation/instruction lines above the question are
-    not refreshed after the rewrite; the ''rewriting'' note shows even with the
-    reader off). completion-auditor COMPLETE .claude/acceptance/perguntas-da-largada-legiveis-CS-7.yaml.
-    proof-reviewer NEEDS-HUMAN docs/proof/perguntas-da-largada-legiveis-CS-7.yaml:
-    L3 8/8 perturbations red; L4 ran 36 hostile reader outputs + a hung reader (cut
-    at 60.7 s), queue never corrupted, no raw control chars; finding F1 (low): shared
-    jargon filter common/hooks/_ownertext.py lets a folder path without extension,
-    a snake_case function name and a URL through, so such a question gets recorded.
-    Pre-existing, not touched by CS-7. Waiver PROPOSAL .claude/waivers/sem-cobertura--common-hooks-ownertext-py.yaml
-    (status proposta) for the owner. Tests run: test_cepa_until_unclear_rewrite,
-    test_cepa_until_unclear_key, test_cepa_until_route_rewrite, test_cepa_until_route_kind_label,
-    test_cepa_until_route_rule, test_cepa_plan_finish_route, test_commands_english,
-    test_cepa_until_decide, test_commands_catalog: all green. Full suite left to
-    the supervisor. Code is on the overnight branch. Left out: CS-8 (line saying
-    the rewrite failed).'
+  evidence: 'Return after the owner''s answer of 2026-11-14 (yes: ship the rewrite
+    with the shared jargon filter as it is). No new code in this round. Code already
+    on the run branch until/2026-11-15-2107: 30930f5 (rewrite after ?), ccf1da3
+    (tests for the 60 s ceiling and same-question refusal), d1da1c8 (gate artifacts),
+    all ancestors of HEAD 3d1cea0. completion-auditor COMPLETE .claude/acceptance/perguntas-da-largada-legiveis-CS-7.yaml.
+    proof-reviewer docs/proof/perguntas-da-largada-legiveis-CS-7.yaml stays NEEDS-HUMAN
+    by its routing rule (L3 8/8 perturbations red; L4 36 hostile outputs + hung
+    reader, single low finding F1 in common/hooks/_ownertext.py), and F1 is covered
+    by the owner''s waiver .claude/waivers/sem-cobertura--common-hooks-ownertext-py.yaml
+    (autor alegomes, 2026-11-14; waivers.load lists it as in effect). Proof not
+    re-run: it would return the same F1. Re-ran on HEAD 3d1cea0, all green: test_cepa_until_unclear_rewrite,
+    test_cepa_until_unclear_key, test_cepa_until_unclear_fallback, test_cepa_until_decide,
+    test_cepa_plan_answer_waiver. Full suite left to the supervisor. Not done: hardening
+    the jargon filter against folder path, function name and URL (the waiver''s
+    revisit trigger; no queue item exists for it); pair-reviewer cosmetic notes
+    (kind label and recommendation lines not refreshed after the rewrite).'
   decisions:
   - texto: 'o segundo ponto de interrogação no mesmo item não chama o leitor de
       novo: registra e deixa o item para depois'
@@ -333,6 +320,7 @@ items:
   - texto: a reescrita substitui tipo, pergunta e o efeito do sim e do não, nunca
       o texto da pendência, o status nem a evidência
     commit: 30930f556acf54cf7442a7976eaa56d420928a96
+  head_commit: 3d1cea048067cf9ed4d4bc1b58fe86c9116e6f6c
 - id: CS-8
   title: se a reescrita falha, ou no segundo `?` do mesmo item, o item fica para
     depois e a largada segue
@@ -456,6 +444,22 @@ items:
     answer <fila> <id> --answer "não entendi a pergunta"` sai com código 6 e a mensagem
     cita a tecla `?` de `cepa-until decide <fila>`, sem a frase "responda a essa
     pergunta (sim/não e o porquê)"; hoje a mensagem traz essa frase.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commit 4280114 (common/bin/cepa-plan, tests/test_cepa_plan_write_commits.py)
+    na branch until/2026-11-15-2107; o código está na branch do run, sem merge nem
+    push. pair-reviewer: OK-WITH-NOTES, nenhuma nota obrigatória. completion-auditor:
+    COMPLETE (.claude/acceptance/perguntas-da-largada-legiveis-CS-11.yaml). proof-reviewer:
+    PROVEN (docs/proof/perguntas-da-largada-legiveis-CS-11.yaml), 6 perturbações
+    todas vermelhas, 2 checks novos vermelhos na base 3d1cea0. Teste: python3 tests/test_cepa_plan_write_commits.py
+    -> all green (rodar como script; sob pytest o check() do arquivo não falha,
+    já era assim). Suíte completa não rodada: é do supervisor. Ficou de fora: tests/test_cepa_until_decide.py
+    não foi lido pelo proof-reviewer (passou de 120 s); não exercita o código alterado.'
+  head_commit: 0f54878bac27fb5a51ae436758303c3b9119a084
+  decisions:
+  - texto: Só a recusa de texto que pede esclarecimento passou a apontar a tecla
+      ? do cepa-until decide; as recusas de texto só com pontuação e de texto que
+      é uma pergunta seguem com a dica antiga, e a dica nova continua oferecendo
+      o --force.
+    commit: 42801142bf6d1c75c15c686ddec80d5efe55a359

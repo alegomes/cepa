@@ -3066,11 +3066,36 @@ items:
     2 skills, e dois agentes do plugin mandam aplicá-las. Precondição escrita no
     documento: um teste que mostre que o Claude Code não as carrega hoje (achado
     CR10). (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits na branch until/2026-11-15-2107 (código está nela, sem merge
+    nem push): 24da38f (cabeçalho name+description nos 2 SKILL.md de docs-topology,
+    tests/test_docs_skills_header.py, plugin docs 0.3.3->0.3.4), b631432 (evidência
+    em docs/proof/evidence/skills-docs-sem-cabecalho/), f21d5ec (artefatos dos portões).
+    Precondição CR10 medida: sessão real do Claude Code 2.1.325 (claude -p --plugin-dir,
+    evento system/init) com o plugin de 24da38f^ tem skills sem nenhuma entrada
+    docs: (os 2 nomes só em slash_commands); com 24da38f lista docs:diataxis-discipline
+    e docs:how-why-boundary. Sonda refeita pelo completion-auditor e pelo proof-reviewer.
+    Veredictos: pair-reviewer OK-WITH-NOTES (2 notas aplicadas), completion-auditor
+    COMPLETE (.claude/acceptance/skills-docs-sem-cabecalho.yaml), proof-reviewer
+    PROVEN (docs/proof/skills-docs-sem-cabecalho.yaml: vermelho na base, 5 perturbações
+    todas RED). Testes rodados: só tests/test_docs_skills_header.py, test_commands_catalog.py
+    e test_marketing_topology.py (verdes); suíte completa fica com o supervisor.
+    Ficou de fora de propósito: validador de cabeçalho para o repo inteiro (lote
+    2 de docs/estrategia-lacunas-ecc.md); o teste ignora nome de skill aplicada
+    que não é diretório de docs-topology/skills (ex.: humanizer), então um nome
+    local digitado errado num agente não acusa; a prova de sessão real é sonda avulsa,
+    não teste da suíte (depende de rede e credencial). claude plugin validate docs-topology
+    ainda acusa LICENSE e ícone ausentes (LICENSE é o item licenca-mit, o próximo
+    da fila).'
   sem_epic: true
+  head_commit: f21d5ecdb36e47198c6f4ab9dfe1df87dec3bbe2
+  decisions:
+  - texto: 'A versão do plugin docs subiu só no último dígito (0.3.3 para 0.3.4),
+      como correção, e não como funcionalidade nova: os agentes já mandavam aplicar
+      as duas skills, agora isso passa a valer'
+    commit: 24da38f8a9030fdd734848657f2d88da71881b06
 - id: licenca-mit
   title: Adicionar o arquivo LICENSE com a licença MIT
   why: 'Lote 0 da seção 7 de docs/estrategia-lacunas-ecc.md, pela rota de item avulso:
@@ -3080,8 +3105,21 @@ items:
     de 2026-11-12. Precondição escrita no documento: nome do titular e ano. Resposta
     do dono em 2026-11-12: titular Alexandre Gomes, ano 2026. (ainda não priorizado:
     entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits na branch until/2026-11-15-2107: d21cb03 (LICENSE na raiz,
+    MIT padrao, ''Copyright (c) 2026 Alexandre Gomes'', + tests/test_license_file.py,
+    escrito antes e vermelho sem o arquivo) e o commit seguinte com .claude/acceptance/licenca-mit.yaml.
+    pair-reviewer: OK-WITH-NOTES (notas cosmeticas, sem correcao). completion-auditor:
+    COMPLETE (AC1-AC3 verificados). Corpo do LICENSE identico a 5 copias independentes
+    da MIT na maquina (llama.cpp, mcporter, nbytes, gifgrep, xcodegen), fora a linha
+    de copyright. Mutacoes em copia em /tmp (ano 2025, titular Gomez, paragrafo
+    truncado, WITH WARRANTY, arquivo ausente) deixam o teste vermelho. proof-reviewer
+    nao rodou: o item acrescenta um texto legal estatico, nao muda comportamento.
+    Suite completa nao rodada aqui (e do supervisor); rodado so tests/run-all.sh
+    license, verde. Fora do escopo, lote 4: descricao do repositorio, topicos, linha
+    no README, campo license dos plugin.json. Nao verificado: reconhecimento da
+    licenca pelo GitHub (depende do repositorio publicado).'
   sem_epic: true
+  head_commit: 7dc28784d0fb0fc770bc60a50f4bae17308ef2ad

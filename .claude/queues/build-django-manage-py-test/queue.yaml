@@ -26,18 +26,57 @@ items:
     manage.py test`), saída `Found 12 test(s).\nRan 12 tests in 0.312s\n\nOK` e
     sem exit code, rodar `capture-build-result.py` pela entrada padrão escreve `.claude/last-build.json`
     com `status: SUCCESS`. Hoje o arquivo não é escrito.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-15-2107: 34fe7f7 (hook common/hooks/capture-build-result.py:
+    entrada ''unittest'' em PATTERNS para manage.py test + tests/test_capture_build_result_django.py),
+    deff652 e 16456ff (testes que prendem as ancoras das regex), 22e6d63 (artefatos).
+    pair-reviewer: NEEDS-FIX na 1a passada (falso verde em saida mista verde+FAILED;
+    OK (expected failures=1) nao lido), corrigido antes do commit. completion-auditor:
+    COMPLETE (.claude/acceptance/build-django-manage-py-test-CS-1.yaml). proof-reviewer:
+    UNPROVEN em 34fe7f7 e deff652, PROVEN em 16456ff (docs/proof/build-django-manage-py-test-CS-1.yaml;
+    vermelho no base 02e0ea5: 32 failed). Testes rodados: python3 -m pytest tests/test_capture_build_result_django.py
+    tests/test_capture_build_result_classify.py tests/test_capture_build_result_pytest.py
+    -q = 71 passed; scripts test_capture_build_background, test_capture_build_result_root_install
+    e test_isolated_telemetry verdes. Build completo NAO rodado aqui: e do supervisor.
+    Fora deste item: Ran 0 tests fica sem classificar e nao grava nada (CS-3); payload
+    vermelho isolado pelo subprocesso (CS-2); django-admin test e python -m unittest
+    (CS-4); gate-advance ponta a ponta (CS-5).'
+  head_commit: 22e6d6324632bc6652ce6fa9f05e725bc4b3c839
+  decisions:
+  - texto: 'Duas escolhas alem do texto da especificacao: uma linha FAILED ( na
+      saida ja grava falha neste item, para um bloco verde nao esconder um vermelho;
+      e OK seguido de qualquer parentese do runner, como OK (expected failures=1),
+      conta como verde.'
+    commit: 34fe7f7a03ae3f362ba5dc10b6e5aec539d25fdb
 - id: CS-2
   title: '`manage.py test` com teste falhando ou com erro grava FAILURE'
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
     entre si · superfície onde se observa: cli · teste vermelho declarado: o mesmo
     payload com saída `Ran 12 tests in 0.4s\n\nFAILED (failures=1, errors=2)` grava
     `status: FAILURE`. Hoje o arquivo não é escrito.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-15-2107: d92898c (hook: add_unittest_stderr
+    + testes cli do CS-2), c62786e (5 casos que matam os 3 sobreviventes da 1a prova),
+    42d4bb1 (artefatos). pair-reviewer: OK-WITH-NOTES, as 3 notas aplicadas (anexo
+    do stderr segue classify(); teste do verde pelo stderr; teste de exit 1 sem
+    marcador). completion-auditor: COMPLETE (.claude/acceptance/build-django-manage-py-test-CS-2.yaml).
+    proof-reviewer: 1a passada UNPROVEN (3 sobreviventes), 2a passada PROVEN (docs/proof/build-django-manage-py-test-CS-2.yaml,
+    base 22e6d63, head c62786e). Testes tocados: python3 -m pytest tests/test_capture_build_result_django.py
+    tests/test_capture_build_result_classify.py tests/test_capture_build_result_pytest.py
+    -q -> 89 passed. Suite completa NAO rodada aqui: fica com o supervisor. O payload
+    do criterio (FAILED no stdout) ja gravava FAILURE desde o CS-1; o que mudou
+    de comportamento foi a leitura do stderr. Fora: CS-3, CS-4, CS-5 intocados.'
+  head_commit: 42d4bb1f1f6ad656d8c7a7c25ec0ac76147203ec
+  decisions:
+  - texto: 'Para manage.py test, o hook passa a ler tambem a saida de erro do comando,
+      porque e nela que o Django imprime o resultado dos testes; a especificacao
+      nao falava disso. Vale so para esse tipo de comando: nos outros (pytest etc.)
+      um aviso na saida de erro viraria falha falsa.'
+    commit: d92898c3ae8d42a1def627081ae77f74a9810110
 - id: CS-3
   title: '`Ran 0 tests` grava EMPTY, com ou sem rótulo no comando'
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -45,9 +84,32 @@ items:
     `python manage.py test` com saída `Ran 0 tests in 0.000s\n\nOK`, e comando `python
     manage.py test app.tests.NaoExiste` com saída `Ran 0 tests in 0.000s\n\nNO TESTS
     RAN`, gravam `status: EMPTY` nos dois casos. Hoje o arquivo não é escrito.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-15-2107: 938e154 (regra EMPTY em refine_empty
+    para kind unittest), 897c64d (exit code 0 explicito tambem grava EMPTY, nos
+    caminhos de primeiro plano e de colheita em segundo plano), 7427081 (testes
+    que matam as perturbacoes sobreviventes), c839cb4 (arquivos de prova e aceite).
+    pair-reviewer: NEEDS-FIX na 1a passada (falso SUCCESS com exit 0), OK-WITH-NOTES
+    na 2a, nenhuma nota obrigatoria. completion-auditor: COMPLETE (.claude/acceptance/build-django-manage-py-test-CS-3.yaml).
+    proof-reviewer: UNPROVEN na 1a passada (linha Ran 0 com recuo sem teste), PROVEN
+    na 2a em 7427081 (docs/proof/build-django-manage-py-test-CS-3.yaml; vermelho
+    no base 42d4bb1: 13 failed). Testes rodados: pytest django+classify+pytest 109
+    passed; tests/test_capture_build_background.py todos ok. Suite completa (tests/run-all.sh)
+    NAO rodada: fica com o supervisor. O codigo esta na branch da rodada, sem merge
+    e sem push. Ficou de fora: texto exato do inicio do motivo nao e afirmado por
+    teste (perturbacao P18, so muda texto).'
+  head_commit: c839cb4ce04dd6d8a9954828bfc525a6b2db6ee0
+  decisions:
+  - texto: 'Quando o Django roda zero testes mas o comando sai com codigo de erro,
+      o registro fica como falha, nao como vazio: o codigo de erro continua sendo
+      o sinal mais forte.'
+    commit: 897c64d98d63b7d38bd8d05b9a5977048715ff2f
+  - texto: 'Em comandos encadeados, se um trecho rodou zero testes e outro rodou
+      testes de verdade e passou, o registro fica como sucesso: o trecho vazio nao
+      e apontado.'
+    commit: 897c64d98d63b7d38bd8d05b9a5977048715ff2f
 - id: CS-4
   title: '`python -m unittest` e `django-admin test` são reconhecidos igual'
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -55,9 +117,41 @@ items:
     `python3 -m unittest discover` e `django-admin test --settings=proj.settings`
     com saída `Ran 5 tests in 0.1s\n\nOK` gravam `status: SUCCESS`. Hoje o arquivo
     não é escrito.'
-  status: pending
+  status: blocked
   blocked_by: []
   human_pending: null
+  evidence: 'Codigo e testes na branch until/2026-11-15-2107: ac9985c (hook: PATTERNS
+    unittest aceita python -m unittest e django-admin test), 95382ce, 9da2687, 7413b9b,
+    0685d91, aebc2c8 (so testes, near-misses), b233d97 (yamls). pair-reviewer OK-WITH-NOTES
+    sem fix obrigatorio. completion-auditor COMPLETE (.claude/acceptance/build-django-manage-py-test-CS-4.yaml).
+    proof-reviewer UNPROVEN em 5 passadas (docs/proof/build-django-manage-py-test-CS-4.yaml,
+    head 0685d91): cada passada deixou vermelhos todos os sobreviventes da anterior
+    e inventou 10-15 perturbacoes novas da regex, das quais 3-4 sobrevivem (passada
+    5: ancora com aspa, django-admin(?:-\w+)?, django-?admin, --?m). aebc2c8 adiciona
+    os near-misses desses 4, ainda nao reprovados (sexta passada nao rodada). Nenhum
+    sobrevivente e defeito do hook: sao variacoes hipoteticas da regex sem teste.
+    Vizinhos: pytest django+classify+pytest 294 passed; tests/test_capture_build_background.py
+    todos ok. Suite completa nao rodada (supervisor). Falsos negativos conhecidos:
+    (python -m unittest) em subshell, python -W error -m unittest, django-admin
+    --settings=x test. Se a resposta for sim: registrar a dispensa de prova e fechar
+    done sem mudar codigo; se nao: rodar sexta passada a partir de aebc2c8. [supervisor]
+    The item''s commits, which did not go through the supervisor''s build (it only
+    runs after `done`), are in `until/2026-11-15-2107-travado-build-django-manage-py-test-CS-4`;
+    the run branch went back to c839cb4ce0.'
+  owner_question: 'Aceito fechar este item com a prova incompleta, já que cinco
+    rodadas não acharam defeito real? Recomendo sim: o risco que sobra é hipotético.'
+  owner_summary:
+    pedido: fazer a trava de build reconhecer mais dois comandos de teste do Python,
+      do mesmo jeito que já reconhece o comando de teste do Django
+    pronto: os dois comandos são reconhecidos e 294 testes passam; a conferência
+      dos critérios de aceite deu completa
+    impede: a prova independente inventa variações novas da regra a cada rodada
+      e sempre acha três ou quatro sem teste; foram cinco rodadas sem convergir,
+      nenhuma apontou defeito real
+    se_sim: o trabalho fecha como está, com a dispensa de prova registrada em seu
+      nome
+    se_nao: o trabalho continua em rodadas de prova e novos testes até uma rodada
+      não achar nenhuma variação sem teste
 - id: CS-5
   title: depois de um `manage.py test` verde, a trava libera o `git commit`
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -66,6 +160,26 @@ items:
     em STALE, rodar `capture-build-result.py` com o payload verde do CS-1 e depois
     `gate-advance.py` com o payload de PreToolUse de `git commit -m x` termina sem
     bloqueio (exit 0). Hoje o `gate-advance.py` bloqueia com "build is STALE".'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Codigo na branch until/2026-11-15-2107: 4bdc5c5 (so teste: tests/test_gate_advance_django_green.py,
+    5 casos, capture-build-result.py + gate-advance.py como subprocessos em repo
+    temporario com pyproject.toml e last-build.json STALE), 6ed2fad (yamls). Nenhuma
+    linha de producao mudou: o comportamento veio de 34fe7f7 (CS-1). pair-reviewer
+    OK-WITH-NOTES sem fix obrigatorio. completion-auditor COMPLETE (.claude/acceptance/build-django-manage-py-test-CS-5.yaml).
+    proof-reviewer PROVEN (docs/proof/build-django-manage-py-test-CS-5.yaml, base
+    c839cb4, head 4bdc5c5): vermelho com hooks de 02e0ea5 (2 failed, 3 passed, gate
+    sai 2 com ''build is STALE''); 8 perturbacoes vermelhas; 3 sobreviventes (P8
+    sem _UNITTEST_RED, P9 sem fallback de exit code, P10 regex verde aceitando Ran
+    0), nenhum libera commit que devia bloquear, P8 e P10 ficam vermelhos em tests/test_capture_build_result_django.py.
+    Vizinhos: pytest gate_advance_django_green + capture_build_result_django 81
+    passed; test_gate_advance_target_repo.py e test_gate_advance_red_test_commit.py
+    todos verdes. Suite completa nao rodada (supervisor). Codigo esta na branch
+    da rodada, sem merge nem push.'
+  head_commit: 6ed2fad70be03cd8858c27c9925439acd3e29f27
+  decisions:
+  - texto: 'Fechei este criterio so com um teste de ponta a ponta, sem mudar o codigo
+      da trava: a mudanca do primeiro criterio ja fazia a trava liberar o commit
+      depois do teste verde do Django'
+    commit: 4bdc5c598c0b333b32be198498d7619548e872c6

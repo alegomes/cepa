@@ -95,9 +95,29 @@ items:
     `a` com `a1` e `a2` (`a2` espera `a1`) e fila `b` com `b1`; após `cepa until
     --all --for 1h` com o `claude` falso, os eventos `item_start` do registro aparecem
     na ordem `a1`, `a2`, `b1`; hoje o comando é recusado.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-15-2107: cc6e9b1 (tests/test_cepa_until_all.py:
+    test_item_that_becomes_ready_runs_before_the_next_queue, order a1,a2,b1 in the
+    item_start events; test_item_that_becomes_ready_in_an_earlier_queue_runs_next,
+    order b1,a1,b2 when a1''s owner route closes during b1), plus the gate artifacts
+    commit at HEAD. Tests only: the behavior was already delivered by CS-2 (query_next_ready
+    in common/bin/cepa-until re-reads ''cepa-plan ready'' before each item), so
+    no production change. pair-reviewer: OK-WITH-NOTES (no blocking note). completion-auditor:
+    COMPLETE (.claude/acceptance/until-todas-as-filas-CS-3.yaml). proof-reviewer:
+    PROVEN (docs/proof/until-todas-as-filas-CS-3.yaml, head cc6e9b1, base 0f54878;
+    4 perturbations of the queue order, all RED on the CS-3 tests: ready list read
+    once, queues reversed, sticky queue, query_queue cached). Tests run: tests/test_cepa_until_all.py
+    (19 green). Full build left to the supervisor. Out of scope, still open from
+    CS-2: item_start/item_end of a --all record carry no queue field. Code is on
+    the overnight branch, not on main.'
+  head_commit: b6e2498aa4d03ab49b1453488e4f9c90cb125d8d
+  decisions:
+  - texto: 'O CS-3 fechou só com testes: a releitura dos prontos antes de cada item
+      já tinha entrado com o CS-2, então não mudei o comando, só acrescentei os
+      dois testes de ordem que faltavam'
+    commit: cc6e9b10cc2f9ea95ef1afae60c65b36714f0398
 - id: CS-4
   title: Uma fila com run próprio vivo é pulada com aviso, e as outras seguem
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -105,9 +125,26 @@ items:
     `*.estado.json` em estado `rodando` e pid vivo na fila `a`, `cepa until --all
     --for 1h` imprime um aviso que nomeia a fila `a` e o run dela, não inicia nenhum
     item de `a` e termina `b1` como `done`; hoje o comando é recusado.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-15-2107: bfc8a98 (feat: query_next_ready
+    pula a fila com run próprio vivo e avisa no stderr com fila, run e pid), f84ef99
+    (test: asserções do pid e do canal stderr), df54916 (arquivos de prova e aceite).
+    pair-reviewer: OK. completion-auditor: COMPLETE (.claude/acceptance/until-todas-as-filas-CS-4.yaml).
+    proof-reviewer: UNPROVEN em bfc8a98 (2 sobreviventes: pid no aviso, canal stderr),
+    PROVEN em f84ef99 (docs/proof/until-todas-as-filas-CS-4.yaml; P1-P11 mortas,
+    teste vermelho contra b6e2498). Teste: tests/test_cepa_until_all.py::test_queue_with_its_own_live_run_is_skipped_with_a_warning,
+    arquivo com 20 testes verdes. Suíte completa não rodada: fica com o supervisor.
+    Fora do escopo, sem mexer: --all --dry-run não mostra a fila pulada; run all/...
+    vivo é CS-8; quando todas as filas são puladas o run termina como end-of-queue
+    sem mensagem própria (CS-9).'
+  head_commit: df5491659b304466cb132d90195dc201040823dd
+  decisions:
+  - texto: O --all confere antes de cada item se a fila tem run próprio vivo, então
+      uma fila cujo run termina no meio volta a ser atendida; o aviso sai uma vez
+      por fila, no canal de erro; o --dry-run do --all não mudou
+    commit: bfc8a98652735b4aa2b028edbde3d24c74ca3139
 - id: CS-5
   title: '`--max-blocked` itens `blocked` seguidos tiram a fila do run e ele segue
     nas outras'
