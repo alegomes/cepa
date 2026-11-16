@@ -1,0 +1,52 @@
+schema_version: 2
+card: registro-de-plugins-pasta-estavel-CS-2
+verdict: proven
+reviewed_at: 2026-11-16T17:30:00-03:00
+base_commit: f08b4c6
+head_commit: 68b1349
+issue_type: Story
+history:
+  - "Round 1 reviewed head e7b0cb1: UNPROVEN, one survivor (copy source of every plugin forced to src/common left all CS-2 checks green). 68b1349 changed the test: each plugin's plugin.json in cepa-live is now compared byte for byte with the main clone's."
+  - "Round 2 (this file): nothing carried over; every result below was re-run at 68b1349."
+scope:
+  changed_classes:
+    - class: "tests/test_install_live_dir.py::test_main_clone_install (test-only diff; the behavior lines are bin/install.sh LIVE_DIR line 93 and copy block + marketplace add lines 258-279, which arrived with CS-1 and were not touched)"
+      module: tests
+      external_observable: true
+      substituted_by_double: null        # the test runs the real bin/install.sh as a subprocess from the main clone; only the far boundary (`claude` CLI) is a fake that records arguments
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # shell/Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at 68b1349 (throwaway worktree /tmp/proof-cs2-live2): python3 tests/test_install_live_dir.py -> 'all ok', 58 checks ok, 0 FAIL, rc=0; 17 of them are CS-2 checks"
+        - "RED before CS-1: eb91124 bin/install.sh + 68b1349 test -> rc=1, 16 of 17 CS-2 checks FAIL (only 'CS-2: install.sh do clone principal sai 0' passes)"
+        - "METHOD NOTE: when the installer is perturbed, test_worktree_install (CS-1, runs first) can raise and CS-2 never runs. So every perturbation below was taken with the call to test_worktree_install() replaced by 'pass' in __main__ (edited only in the throwaway worktree). That CS-2-only run at 68b1349 is GREEN: 17 ok, 0 FAIL, rc=0."
+        - "P1 marketplace add LIVE_DIR -> REPO_DIR (line 279) -> 2 CS-2 FAIL, 15 ok (RED)"
+        - "P5 marketplace.json copy removed (lines 267-268) -> 1 CS-2 FAIL, 16 ok (RED)"
+        - "P8 delete 'mv LIVE_NEW LIVE_DIR' (line 275) -> 14 CS-2 FAIL, 3 ok (RED)"
+        - "P10 makedirs of .claude-plugin removed (line 266) -> 17 CS-2 FAIL, 0 ok (RED)"
+        - "P11 only first plugin copied (break after copytree, line 272) -> 12 CS-2 FAIL, 5 ok (RED)"
+        - "P12 copy source of every plugin forced to src/common (line 271) -> 11 CS-2 FAIL, 6 ok (RED; this survived at e7b0cb1 with 0 FAIL and is closed by the plugin.json byte comparison)"
+        - "P13 copy destination of every plugin forced to dst/common (line 271) -> 17 CS-2 FAIL (RED)"
+        - "P14 LIVE_DIR cepa-live -> cepa-live2 (line 93) -> 15 CS-2 FAIL, 2 ok (RED)"
+        - "Outside CS-2's claim (stale staging, __pycache__, replacing an older copy; a fresh HOME cannot exercise them, CS-1's checks guard them, see the CS-1 proof): P2 delete 'rm -rf LIVE_NEW' (line 261) 17 ok; P7 delete 'rm -rf LIVE_DIR' (line 274) 17 ok; P4b ignore pattern '__pycachex' (line 265) 17 ok. Not counted as survivors: the CS-2 claim is 'registers the fixed folder, with marketplace.json and one folder per plugin', and by reading none of these lines changes that on a fresh HOME."
+        - "Equivalent mutant by reading: P3 delete 'mkdir -p dirname(LIVE_DIR)' (line 259) 17 ok (ops_write already creates ~/.claude)."
+        - "Every perturbation restored with git checkout 68b1349 -- bin/install.sh; worktree removed, absent from git worktree list; primary tree untouched except this file"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; reachability established structurally: the installer runs end to end as a subprocess from the main clone (rc=0, 17 CS-2 checks) and the copy block is straight-line code; every behavior line of it (93, 266-268, 271, 275, 279) turned CS-2 checks red when broken. Line-level precision not measured."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff is test-only; it adds no code that reads anything from outside and touches no input-bearing module (no api-rest)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is Story; the equivalent is 'RED before CS-1' above: 16 of 17 CS-2 checks FAIL with eb91124's installer"
+routing_reason: "Claim proven: 17 CS-2 checks green at head, 16 of 17 FAIL with the pre-CS-1 installer. Every behavior line in the CS-2 claim (registered path, marketplace.json copy, .claude-plugin dir, move into place, plugin folder source/destination, all plugins copied, LIVE_DIR name) turned CS-2 checks red when broken: P1, P5, P8, P10, P11, P12, P13, P14. Round 1's survivor (P12) is now RED. The survivors P2, P7, P4b concern CS-1 claims (stale staging, replacing an older copy, __pycache__) that a fresh HOME cannot exercise; P3 is an equivalent mutant. No test double stands in for the changed code. Limits: no coverage tool (L2 structural); L4 n/a because the diff is test-only."
