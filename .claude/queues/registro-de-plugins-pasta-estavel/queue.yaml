@@ -1,0 +1,138 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/registro-de-plugins-pasta-estavel.md (11 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-16
+
+schema_version: 2
+mode: single-track
+queue: registro-de-plugins-pasta-estavel
+source: docs/spec/registro-de-plugins-pasta-estavel.md (11 critérios de sucesso;
+  ordem herdada do texto)
+items:
+- id: CS-1
+  title: instalar de dentro de um worktree registra a pasta fixa, e ela sobrevive
+    à remoção do worktree
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com HOME
+    temporário e um `claude` falso que grava os argumentos, rodar `sh bin/install.sh`
+    de um worktree ligado; o argumento de `claude plugin marketplace add` é `$HOME/.claude/cepa-live`,
+    `cepa-live/common/.claude-plugin/plugin.json` é igual ao do worktree, e depois
+    de `git worktree remove` o arquivo continua lá. Hoje o argumento é o caminho
+    do worktree.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: instalar do clone principal também registra a pasta fixa
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: no mesmo
+    arranjo, rodar `sh bin/install.sh` do clone principal; o argumento de `claude
+    plugin marketplace add` é `$HOME/.claude/cepa-live` e a pasta tem `.claude-plugin/marketplace.json`
+    e uma pasta por plugin listado nele. Hoje o argumento é o caminho do clone.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: '`--clean` guarda a cópia anterior e `--rollback` a devolve'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: instalar
+    a versão A, depois `sh bin/install.sh --clean` com a versão B, depois `sh bin/install.sh
+    --rollback`; `cepa-live/common/.claude-plugin/plugin.json` volta a dizer a versão
+    A e `cepa-live.prev` não existe mais. Hoje `cepa-live` não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: cópia que falha no meio deixa a pasta fixa anterior inteira
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com a
+    versão A instalada, rodar o instalador sobre um repo em que a cópia de um plugin
+    falha (pasta sem permissão de leitura); o instalador sai diferente de zero,
+    `cepa-live` ainda tem a versão A completa e `last-install.json` diz `in_progress`.
+    Hoje não há cópia.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: o registro operacional diz de onde veio a cópia
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: depois
+    de `sh bin/install.sh` de um worktree ligado, `~/.claude/ops/last-install.json`
+    tem `repo_dir` igual ao worktree, `main_clone` igual ao clone principal e `live_dir`
+    igual a `$HOME/.claude/cepa-live`. Hoje só existe `repo_dir`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: '`cepa until land --yes` instala do clone depois do build verde'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    do Cepa de teste com uma rodada pronta para aterrissar e um `bin/install.sh`
+    falso que grava de onde foi chamado, `cepa-until land <fila>/<run> --yes` chama
+    o instalador com o clone como diretório, depois do merge, e o registro da rodada
+    ganha `instalado_no_pouso`. Hoje o land não chama o instalador.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: o land não instala por cima de uma rodada viva que reinstalou
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: no mesmo
+    arranjo, com `last-install.json` dizendo `repo_dir` igual ao worktree de outra
+    rodada cujo processo está vivo, `cepa-until land <fila>/<run> --yes` aterrissa,
+    não chama o instalador, grava `instalacao_adiada` no registro e imprime em "Fica
+    com você" o pedido de rodar `bin/install.sh` no clone quando a outra rodada
+    terminar. Hoje não há nem a instalação nem o aviso.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-8
+  title: instalação que falha no pouso é desfeita e o pouso vale
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com um
+    `bin/install.sh` falso que sai 1 na instalação e 0 no `--rollback`, `cepa-until
+    land <fila>/<run> --yes` sai 0, o merge está no clone, o instalador foi chamado
+    uma segunda vez com `--rollback`, o registro ganha `reinstalacao_desfeita` e
+    a saída pede o install à mão em "Fica com você". Hoje o land não chama o instalador.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-9
+  title: o doctor falha quando o registro aponta para pasta que não existe
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com `known_marketplaces.json`
+    apontando `cepa` para um caminho inexistente e `last-install.json` com `main_clone`
+    válido, `cepa-doctor` imprime uma falha de `plugins` que nomeia o caminho inexistente
+    e oferece o conserto `install` com o `main_clone`. Hoje imprime "marketplace
+    ''cepa'' não encontrado em known_marketplaces.json", sem conserto.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-10
+  title: o doctor avisa quando o registro aponta para pasta que não é a fixa
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com `known_marketplaces.json`
+    apontando `cepa` para um worktree que existe, `cepa-doctor` imprime um aviso
+    de `plugins` dizendo que o registro está fora de `~/.claude/cepa-live` e oferece
+    o conserto `install`. Hoje não diz nada sobre o caminho.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-11
+  title: o doctor compara versões com o repo de origem, não com o caminho registrado
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com o
+    registro na pasta fixa em `common` 3.6.0 e `last-install.json` com `repo_dir`
+    num repo em `common` 3.7.0, `cepa-doctor` avisa "repo está em 3.7.0 mas o cache
+    instalado é 3.6.0". Hoje ele leria a pasta fixa como se fosse o repo e diria
+    que está tudo instalado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
