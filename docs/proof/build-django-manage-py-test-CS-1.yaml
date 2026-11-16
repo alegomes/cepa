@@ -1,0 +1,37 @@
+schema_version: 2
+card: build-django-manage-py-test-CS-1
+verdict: proven
+reviewed_at: 2026-11-15T23:30:00-03:00
+base_commit: 02e0ea5
+head_commit: 16456ff
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/hooks/capture-build-result.py", module: common/hooks, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline em worktree descartavel 16456ff (detached, /tmp/proof-django-cs1-c): python3 -m pytest django+classify+pytest -q -> 71 passed; controle sem efeito (regex reescrita identica) -> 71 passed"
+        - "3a passada, os 4 sobreviventes do lado verde, todos RED: P6e texto qualquer entre Ran e OK -> 1 failed/70 passed; P6f Ran sem ancora de inicio -> 1 failed; P6h sem clausula ' in <tempo>' -> 1 failed (variante P6h2 clausula opcional -> 1 failed); P6i linha Ran cruzando linhas ([\\s\\S]*? depois de 'in ' -> 1 failed; [\\s\\S]* entre N e 'tests? in' -> 1 failed; \\s no lugar do espaco antes de 'in' -> 1 failed)"
+        - "3a passada, menores, todos RED: P3 comando sem prefixo (casa xmanage.py) -> 2 failed; P3d prefixo '.?' (duas formas) -> 2 failed cada; P3e '\\s*' entre py e test -> 1 failed; P3f '.' no lugar de '\\.' -> 1 failed; P3g sem a alternativa ^ -> 1 failed; P3h sem \\b final -> 1 failed; P7c parentetico aceita aninhado '.*' -> 1 failed (variante [^\\r\\n]* -> 1 failed); P7e espaco opcional antes do parentese (' ?' e '[ \\t]*') -> 1 failed cada; P6a tolerancia a UMA linha em branco -> 1 failed (variantes {0,2} e '+' -> 1 failed cada); P6b OK sem ancora de inicio (.*OK) -> 1 failed"
+        - "regressao do conjunto ja vermelho, todos RED: P1 comando nunca casa 32 failed; P2 sem \\b 1; P3b sem '/' no prefixo 3; P3c sem alternativa \\s 28; P4 N>0 por \\d+ 1; P4b [1-9] 3; P4c [0-9]\\d* 1; P5 'tests' 1; P5b 'test' 16; P6 sem tolerancia a linha em branco 16; P6c sem ancora $ 5; P6c2 '.*$' 5; P7 sem parentetico 3; P7b parentetico aceita quebra de linha 1; P7d parentetico obrigatorio 14; P7g 'OK.*' 5; P8 sem \\r? antes de $ 1; P9 sem _UNITTEST_RED na entrada 2; P10 FAILED sem ^ 1; P10b FAILED sem parentese 1; P10c RED que nunca casa 2; P10d FAILED sem (?m) 2; P10h FAILED com '.*' no inicio 1; P11 sem (?m) 5"
+        - "NENHUM sobrevivente que afrouxe o lado verde ou o casamento do comando. Sobreviventes da 2a passada que seguem sem contar (nao reexecutados, mesma conclusao): P6d sem tolerancia a espaco apos OK e P6g sem tolerancia a indentacao da linha Ran (so tiram capacidade: erram para 'nao classificado', nunca para SUCCESS falso); P10e/P10f/P10g FAILED sem indentacao, espacamento livre, sem diferenca de caixa (afrouxam so o lado vermelho, direcao FAILURE, que e a segura; o runner nunca imprime essas variantes)"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; as linhas novas (_UNITTEST_RED, _UNITTEST_GREEN, entrada em PATTERNS) sao alcancadas por 70+ perturbacoes que ficam vermelhas nas 3 passadas"
+  l4_adversarial_input:
+    status: n/a
+    reason: "hook de desenvolvimento: a unica entrada e o texto do comando Bash que o proprio agente emitiu e o payload do harness; nao ha usuario externo nem modulo api-rest"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Story, nao Bug. Evidencia de vermelho no base: hook de 02e0ea5 + tests/test_capture_build_result_django.py de 16456ff -> python3 -m pytest tests/test_capture_build_result_django.py -q -> 32 failed, 6 passed (os 6 verdes sao negativos que o hook antigo ja devolve como nao classificado). Em 16456ff a suite de 3 arquivos -> 71 passed"
+routing_reason: "Os quatro sobreviventes do lado verde da 2a passada (texto entre Ran e OK, Ran no meio da linha, falta de ' in <tempo>', linha Ran cruzando linhas) e os menores (prefixo do comando, espaco, ponto, alternativa ^, parenteses aninhados, espaco antes do parentese, linha em branco unica) morreram com os testes do 16456ff. Nenhum afrouxamento que produza falso SUCCESS, verde real perdido ou comando errado casado sobrevive; os que restam so apertam ou afrouxam o lado vermelho (direcao segura). Todo run cita contagem de testes > 0."

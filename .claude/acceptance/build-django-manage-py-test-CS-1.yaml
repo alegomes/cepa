@@ -1,0 +1,16 @@
+schema_version: 1
+card: build-django-manage-py-test-CS-1
+status: complete
+audited_at: 2026-11-15T21:30:00-03:00
+criteria:
+  - id: CS-1
+    text: "manage.py test verde, em qualquer formato de comando, grava SUCCESS no .claude/last-build.json (uv run python manage.py test; python manage.py test; docker compose exec web python manage.py test; saida 'Found 12 test(s).\\nRan 12 tests in 0.312s\\n\\nOK', sem exit code)."
+    altitude: cli
+    surface: "hook PostToolUse(Bash) capture-build-result.py como subprocesso: payload JSON no stdin -> .claude/last-build.json com status SUCCESS"
+    demonstrated_by:
+      test: "tests/test_capture_build_result_django.py::test_green_manage_py_test_writes_success (parametrizado com os 3 comandos)"
+      layer: "subprocesso (_run_hook) com payload sem exit code; le .claude/last-build.json e afirma status == SUCCESS. Testes unitarios de classify() cobrem ainda Ran 1 test, OK (skipped=..), CRLF, Ran 0 tests, 'GET /health 200 OK', testserver, echo entre aspas e bloco verde seguido de FAILED"
+      evidence: verified
+      run: "python3 -m pytest tests/test_capture_build_result_django.py tests/test_capture_build_result_classify.py tests/test_capture_build_result_pytest.py -q -> 47 passed in 1.81s (HEAD 34fe7f7)"
+    verdict: complete
+    gap: null
