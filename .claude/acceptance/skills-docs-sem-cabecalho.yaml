@@ -1,0 +1,62 @@
+key: skills-docs-sem-cabecalho
+status: complete
+diff: aa14832..b631432
+audited_head: b631432
+note: >
+  Item da fila (nao e card Jira). Lote 0 da secao 7 de docs/estrategia-lacunas-ecc.md.
+  Precondicao escrita: "um teste mostrando que o Claude Code nao as carrega hoje" (CR10).
+  Auditado em primeiro plano, sem rodar tests/run-all.sh (o supervisor roda).
+  Sonda reexecutada por mim em /tmp com 'git archive' (copia simples, sem worktree), lado
+  antes (24da38f^) e lado depois (24da38f): antes skills docs: [] com os dois nomes so em
+  slash_commands; depois skills docs: [docs:diataxis-discipline, docs:how-why-boundary].
+  Altitude do AC2: a evidencia de sonda unica E suficiente para a precondicao CR10, porque
+  a precondicao pede uma demonstracao de que o Claude Code nao carrega hoje, e nao um teste
+  recorrente; ela foi produzida e reproduzida por mim nas duas pontas. O teste da suite (AC3)
+  e um proxy de forma de arquivo e nao prova carga pelo Claude Code: se o Claude Code mudar a
+  regra de carga, a suite nao percebe. Isso e um risco residual, nao uma lacuna do criterio
+  como escrito; nao vira card a menos que o dono queira uma sonda recorrente (custa um turno
+  haiku, ~20s, e depende de rede e credencial, logo nao cabe na suite offline).
+  Nao verifiquei que a sonda 'depois' inclui o 'plugin.json' bump 0.3.3->0.3.4 como causa;
+  o diff mostra apenas que o bump acompanha a mudanca.
+criteria:
+  - id: AC1
+    text: Os dois SKILL.md (docs-topology/skills/diataxis-discipline e how-why-boundary) tem bloco de cabecalho valido (name = nome do diretorio, description nao vazia), corpos inalterados.
+    altitude: domain
+    surface: arquivos docs-topology/skills/*/SKILL.md (bloco --- no topo)
+    test: tests/test_docs_skills_header.py::test_skill_headers
+    layer: script (arquivo lido do disco)
+    evidence: verified
+    run: >
+      python3 tests/test_docs_skills_header.py -> 8 linhas, 0 FAIL, "all green" (2 diretorios de skill,
+      ambos com name == diretorio e description nao vazia). git diff aa14832..b631432 -- docs-topology
+      mostra so linhas adicionadas (+5 em cada SKILL.md), nenhuma linha do corpo alterada.
+    status: complete
+    gap: null
+  - id: AC2
+    text: Uma sessao real do Claude Code oferece as duas skills ao modelo depois do conserto, e nao oferecia antes (precondicao CR10).
+    altitude: ui
+    surface: evento system/init de uma sessao real do Claude Code (lista skills), plugin carregado com --plugin-dir
+    test: docs/proof/evidence/skills-docs-sem-cabecalho/ (README.md, session-init-before.json, session-init-after.json) e sonda reexecutada na auditoria
+    layer: sessao real do Claude Code 2.1.x (claude -p ... --output-format stream-json --verbose, modelo haiku)
+    evidence: verified
+    run: >
+      Reexecutado por mim em /tmp, foreground. Antes (git archive 24da38f^ docs-topology):
+      skills docs: [] ; slash_commands docs inclui docs:diataxis-discipline e docs:how-why-boundary.
+      Depois (git archive 24da38f docs-topology): skills docs: ['docs:diataxis-discipline', 'docs:how-why-boundary'].
+      Bate com os JSONs gravados e com a nuance do README (antes os nomes so aparecem em slash_commands).
+    status: complete
+    gap: null
+  - id: AC3
+    text: Um teste da suite fica vermelho se o cabecalho sumir de novo (tests/test_docs_skills_header.py).
+    altitude: domain
+    surface: tests/test_docs_skills_header.py (checa forma do SKILL.md e que toda skill citada por "Apply `<skill>`" nos agentes do plugin resolve para uma skill com cabecalho valido)
+    test: tests/test_docs_skills_header.py::test_skill_headers e test_applied_skills_resolve
+    layer: script, apanhado pelo glob tests/test_*.py de tests/run-all.sh
+    evidence: verified
+    run: >
+      python3 tests/test_docs_skills_header.py -> all green, 0 FAIL, rc 0. Mutacao feita fora do repo
+      (copia em /tmp, removidas as 5 primeiras linhas de how-why-boundary/SKILL.md): 2 FAIL
+      ("no closed --- header block" na skill e na referencia dos agentes), saida "2 falha(s)", exit 1.
+      O teste e vermelho de verdade quando o cabecalho some.
+    status: complete
+    gap: null

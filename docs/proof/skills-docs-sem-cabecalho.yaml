@@ -1,0 +1,56 @@
+schema_version: 2
+card: skills-docs-sem-cabecalho
+verdict: proven
+reviewed_at: 2026-11-16T12:00:00-03:00
+base_commit: aa14832
+head_commit: b631432          # 24da38f = fix + test; b631432 = evidence files only
+issue_type: Bug
+scope:
+  changed_classes:
+    - class: "docs-topology/skills/diataxis-discipline/SKILL.md (+ --- header block: name, description)"
+      module: docs-topology
+      external_observable: true          # what a Claude Code session offers the model as skills
+      substituted_by_double: null        # the probe loads the real plugin dir in a real claude session
+    - class: "docs-topology/skills/how-why-boundary/SKILL.md (+ --- header block: name, description)"
+      module: docs-topology
+      external_observable: true
+      substituted_by_double: null
+    - class: "docs-topology/.claude-plugin/plugin.json (version 0.3.3 -> 0.3.4)"
+      module: docs-topology
+      external_observable: false
+      substituted_by_double: null
+    - class: "tests/test_docs_skills_header.py (new, script style)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python/markdown repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at b631432 (throwaway worktree /tmp/proof-skills-hdr): python3 tests/test_docs_skills_header.py -> 'all green', exit 0"
+        - "P1 diataxis-discipline: header lines 1-4 deleted -> 2 FAIL checks ('no closed --- header block') (RED)"
+        - "P1b how-why-boundary: header lines 1-4 deleted -> 2 FAIL checks (RED)"
+        - "P2 diataxis-discipline: name changed to 'diataxis' (directory is diataxis-discipline) -> 2 FAIL checks (RED)"
+        - "P3 how-why-boundary: description emptied ('description:') -> 2 FAIL checks ('empty description') (RED)"
+        - "P4 how-why-boundary: closing '---' blanked -> 2 FAIL checks ('no closed --- header block') (RED)"
+        - "no survivors. Each perturbation restored with git checkout b631432 -- docs-topology; final run 'all green', worktree clean. Sampled: P2/P3/P4 on one skill each, P1 on both; the same code path validates both skills, so the other combinations were not repeated."
+        - "EXTERNAL SURFACE (one-off probe, NOT a suite test; re-run in this proof, claude haiku 1 turn each, from /tmp): claude -p 'Reply with the single word: ok' --plugin-dir <docs-topology> --model haiku --max-turns 1 --output-format stream-json --verbose, system/init event, 'docs:' entries. BEFORE (docs-topology at aa14832): skills=[] ; slash_commands list docs:diataxis-discipline and docs:how-why-boundary (typable by a person, not offered to the model). AFTER (docs-topology at b631432): skills=['docs:diataxis-discipline','docs:how-why-boundary']. Matches docs/proof/evidence/skills-docs-sem-cabecalho/session-init-before.json and -after.json."
+        - "Limit stated plainly: tests/test_docs_skills_header.py checks FILE SHAPE only (closed header, name = directory, non-empty description, agents' 'Apply' targets resolve). That a real session lists the skills is proven only by the one-off probe above; no test in the suite guards it."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; structural: the test globs docs-topology/skills/*/SKILL.md and docs-topology/agents/*.md, so both changed skills are reached (2 checks each at base: header + applied-by-agents resolution, 4 FAIL lines in total)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff adds markdown header blocks, a version string and a file-shape test; it parses nothing coming from outside and touches no input-bearing api-rest module. Not verified by a run."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "git checkout aa14832 -- docs-topology (tests/test_docs_skills_header.py from head) -> python3 tests/test_docs_skills_header.py exit 1, 4 FAIL checks, exactly the two skills (diataxis-discipline, how-why-boundary), 2 checks each, all 'no closed --- header block'; head docs-topology restored -> 'all green'."
+routing_reason: "Regression is red at base on exactly the two skills (4 checks), all four header perturbations turn the test red with no survivor, and a real Claude Code session lists the two skills only with the header (probe re-run on both sides). Limit stated plainly: the session-level proof is a one-off probe, not a suite test; the suite test guards file shape as a proxy for the listing. No test double in play. L4 n/a on a diff-based claim."
