@@ -634,6 +634,63 @@ def test_failed_copy_leaves_previous_live_whole():
               json.dumps(rec)[:300])
 
 
+def test_ops_record_says_where_copy_came_from():
+    """CS-5: last-install.json carries repo_dir, main_clone and live_dir."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp).resolve()
+        claude, main, run = _scenario(tmp)
+        home = claude.parent
+        host = tmp / "host"
+        live = str(claude / "cepa-live")
+        rec_file = claude / "ops" / "last-install.json"
+        env = dict(os.environ, HOME=str(home),
+                   PATH=f"{tmp / 'fakebin'}:{os.environ['PATH']}")
+
+        def install_from(root, *args):
+            r = subprocess.run(["sh", str(root / "bin" / "install.sh"), *args, str(host)],
+                               capture_output=True, text=True, env=env, cwd=str(tmp))
+            rec = json.loads(rec_file.read_text()) if rec_file.is_file() else {}
+            return r, rec
+
+        # from a linked worktree
+        wt = tmp / "wt"
+        git(main, "worktree", "add", "-q", "-b", "until/x", str(wt))
+        r, rec = install_from(wt)
+        check("CS-5: install do worktree sai 0", r.returncode == 0, r.stdout[-400:] + r.stderr[-400:])
+        check("CS-5: worktree: status ok", rec.get("status") == "ok", str(rec))
+        check("CS-5: worktree: repo_dir é o worktree", rec.get("repo_dir") == str(wt), str(rec))
+        check("CS-5: worktree: main_clone é o clone principal",
+              rec.get("main_clone") == str(main), str(rec))
+        check("CS-5: worktree: live_dir é ~/.claude/cepa-live", rec.get("live_dir") == live, str(rec))
+
+        # from the main clone
+        r, rec = install_from(main)
+        check("CS-5: install do clone principal sai 0", r.returncode == 0, r.stdout[-400:] + r.stderr[-400:])
+        check("CS-5: clone principal: repo_dir é o clone", rec.get("repo_dir") == str(main), str(rec))
+        check("CS-5: clone principal: main_clone == repo_dir == clone",
+              rec.get("main_clone") == rec.get("repo_dir") == str(main), str(rec))
+        check("CS-5: clone principal: live_dir é ~/.claude/cepa-live", rec.get("live_dir") == live, str(rec))
+
+        # from a folder that is not a git repo
+        plain = tmp / "plain"
+        shutil.copytree(main, plain, ignore=shutil.ignore_patterns(".git"), symlinks=True)
+        r, rec = install_from(plain)
+        check("CS-5: pasta sem git: install sai 0", r.returncode == 0, r.stdout[-400:] + r.stderr[-400:])
+        check("CS-5: pasta sem git: repo_dir é a pasta", rec.get("repo_dir") == str(plain), str(rec))
+        check("CS-5: pasta sem git: main_clone == repo_dir",
+              rec.get("main_clone") == str(plain), str(rec))
+        check("CS-5: pasta sem git: live_dir é ~/.claude/cepa-live", rec.get("live_dir") == live, str(rec))
+
+        # after --rollback
+        r, _ = install_from(main, "--clean")
+        check("CS-5: --clean sai 0", r.returncode == 0, r.stdout[-400:] + r.stderr[-400:])
+        r, rec = install_from(main, "--rollback")
+        check("CS-5: --rollback sai 0", r.returncode == 0, r.stdout[-400:] + r.stderr[-400:])
+        check("CS-5: rollback: status rolled_back", rec.get("status") == "rolled_back", str(rec))
+        check("CS-5: rollback: main_clone no registro", rec.get("main_clone") == str(main), str(rec))
+        check("CS-5: rollback: live_dir no registro", rec.get("live_dir") == live, str(rec))
+
+
 if __name__ == "__main__":
     test_worktree_install()
     test_main_clone_install()
@@ -647,6 +704,7 @@ if __name__ == "__main__":
     test_plain_install_keeps_rollback_point()
     test_rollback_with_nothing_names_both_paths()
     test_failed_copy_leaves_previous_live_whole()
+    test_ops_record_says_where_copy_came_from()
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILED")
         sys.exit(1)
