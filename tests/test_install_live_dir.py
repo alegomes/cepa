@@ -209,6 +209,43 @@ def test_main_clone_install():
               found == listed | {".claude-plugin"}, str(sorted(found)))
 
 
+# Expected installer lines, compared WHOLE (== a line of stdout), never as substrings:
+# a stray character after a path must turn a check red.
+def cache_block(claude):
+    cache = str(claude / "plugins" / "cache" / "cepa")
+    return ["▶ --rollback: restoring the cache set aside by the last --clean",
+            f"    from: {cache}.prev", f"      to: {cache}"]
+
+
+def live_block(claude):
+    return ["▶ --rollback: restoring the fixed folder set aside by the last --clean",
+            f"    from: {claude / 'cepa-live.prev'}", f"      to: {claude / 'cepa-live'}"]
+
+
+def kept_cache(claude):
+    return str(claude / "plugins" / "cache" / "cepa") + ".rolledback"
+
+
+def kept_live(claude):
+    return str(claude / "cepa-live") + ".rolledback"
+
+
+def restored_line(kept):
+    return "✓ Restored. Replaced copy kept at: " + kept
+
+
+def rollback_note(claude, cache, live):
+    cp = str(claude / "plugins" / "cache" / "cepa")
+    lp = str(claude / "cepa-live")
+    if cache and live:
+        return (f"restored the cache from {cp}.prev and the fixed folder from {lp}.prev; "
+                f"replaced copies were kept at {cp}.rolledback and {lp}.rolledback")
+    if cache:
+        return f"restored the cache from {cp}.prev; the replaced copy was kept at {cp}.rolledback"
+    return (f"restored only the fixed folder from {lp}.prev (the cache was not touched, "
+            f"versions not recorded); the replaced copy was kept at {lp}.rolledback")
+
+
 def test_clean_and_rollback():
     """CS-3: install A, --clean with B, --rollback -> A back, no cepa-live.prev."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -259,10 +296,10 @@ def test_clean_and_rollback():
               and version(prev / "common" / ".claude-plugin" / "plugin.json") == "1.0.0-A")
         out_lines = r.stdout.splitlines()
         check("CS-3: --clean diz que põe a pasta fixa de lado em cepa-live.prev",
-              any("setting the current fixed folder aside" in l and str(prev) in l
-                  for l in out_lines), r.stdout[-600:])
+              "▶ --clean: setting the current fixed folder aside at " + str(prev) in out_lines,
+              r.stdout[-600:])
         check("CS-3: --clean fecha com linha 'Rollback point' com o caminho de cepa-live.prev",
-              any("Rollback point" in l and str(prev) in l for l in out_lines),
+              f"  Rollback point: {prev}  (restore with bin/install.sh --rollback)" in out_lines,
               r.stdout[-600:])
 
         r = run("--rollback")
@@ -322,19 +359,14 @@ def test_rollback_fixed_folder_only_ignores_stale_cache():
               "9.9.9-STALE" not in json.dumps(rec) and rec.get("versions_before") == {}
               and rec.get("versions_target") == {},
               json.dumps(rec)[:400])
-        outl = [l.strip() for l in r.stdout.splitlines()]
+        outl = r.stdout.splitlines()
         check("CS-3: --rollback da pasta fixa mostra 'from: cepa-live.prev' e 'to: cepa-live'",
-              f"from: {claude / 'cepa-live.prev'}" in outl and f"to: {claude / 'cepa-live'}" in outl,
-              r.stdout[-600:])
-        note = json.dumps(rec)
+              all(l in outl for l in live_block(claude)), r.stdout[-600:])
         check("CS-3: registro diz 'only the fixed folder' e cita cepa-live.rolledback, não o do cache",
-              f"only the fixed folder from {claude / 'cepa-live.prev'} " in note
-              and str(claude / "cepa-live") + ".rolledback" in note
-              and str(stale) not in note, note[:400])
-        line = next((l for l in r.stdout.splitlines() if "Restored. Replaced copy kept at:" in l), "")
+              rec.get("note") == rollback_note(claude, False, True)
+              and str(stale) not in json.dumps(rec), json.dumps(rec)[:400])
         check("CS-3: linha 'Restored' cita só cepa-live.rolledback, não o .rolledback do cache",
-              str(claude / "cepa-live") + ".rolledback" in line and str(stale) not in line,
-              line or r.stdout[-400:])
+              restored_line(kept_live(claude)) in outl, r.stdout[-400:])
 
 
 def _scenario(tmp):
@@ -396,20 +428,18 @@ def test_rollback_cache_only_leaves_fixed_folder():
         check("CS-3: --rollback só do cache não mexe em cepa-live",
               (claude / "cepa-live" / "KEEP").is_file()
               and not (claude / "cepa-live.rolledback").exists())
-        line = next((l for l in r.stdout.splitlines() if "Restored. Replaced copy kept at:" in l), "")
+        outl = r.stdout.splitlines()
         check("CS-3: linha 'Restored' do rollback só do cache cita cache.rolledback e não cepa-live.rolledback",
-              str(cache) + ".rolledback" in line and "cepa-live" not in line, line or r.stdout[-400:])
+              restored_line(kept_cache(claude)) in outl, r.stdout[-400:])
         check("CS-3: rollback só do cache anuncia a restauração do cache com origem e destino",
-              "restoring the cache set aside" in r.stdout
-              and f"from: {prev_cache}" in r.stdout and f"to: {cache}" in r.stdout, r.stdout[-600:])
+              all(l in outl for l in cache_block(claude)), r.stdout[-600:])
         check("CS-3: rollback só do cache não fala em restaurar a pasta fixa",
               "fixed folder" not in r.stdout, r.stdout[-600:])
         rec_file = claude / "ops" / "last-install.json"
         rec = json.loads(rec_file.read_text()) if rec_file.is_file() else {}
         note = json.dumps(rec)
         check("CS-3: registro do rollback só do cache descreve o cache e não a pasta fixa",
-              "the cache from" in note and str(cache) + ".rolledback" in note
-              and "fixed folder" not in note and "cepa-live" not in note, note[:500])
+              rec.get("note") == rollback_note(claude, True, False), note[:500])
         check("CS-3: registro do rollback só do cache traz as versões (antes 2.0.0, alvo 1.0.0)",
               rec.get("versions_before") == {"p": "2.0.0"} and rec.get("versions_target") == {"p": "1.0.0"},
               note[:500])
@@ -502,15 +532,19 @@ def test_rollback_with_nothing_names_both_paths():
         check("CS-3: --rollback sem ponto de volta sai 1", r.returncode == 1,
               r.stdout[-400:] + r.stderr[-400:])
         out = r.stdout
+        outl = out.splitlines()
+        cache_prev = str(claude / "plugins" / "cache" / "cepa") + ".prev"
         check("CS-3: mensagem 'Nothing to roll back' cita cepa-live.prev",
-              "Nothing to roll back" in out and str(claude / "cepa-live.prev") in out, out[-600:])
+              f"  nor {claude / 'cepa-live.prev'} exists." in outl, out[-600:])
         check("CS-3: mensagem 'Nothing to roll back' cita também o cache.prev",
-              str(claude / "plugins" / "cache" / "cepa") + ".prev" in out, out[-600:])
+              f"✗ Nothing to roll back to: neither {cache_prev}" in outl, out[-600:])
         check("CS-3: mensagem 'Nothing to roll back' explica que --clean cria o ponto de volta do cache e da pasta fixa",
-              "A rollback point is created by --clean" in out
-              and "old fixed folder aside instead of deleting them" in out, out[-600:])
+              "  A rollback point is created by --clean (it sets the old cache and the" in outl
+              and "  old fixed folder aside instead of deleting them). If you have never run" in outl,
+              out[-600:])
         check("CS-3: mensagem 'Nothing to roll back' diz o que fazer se nunca rodou --clean",
-              "If you have never run" in out and "no previous state to restore" in out, out[-600:])
+              "  --clean since this feature landed, there is no previous state to restore." in outl,
+              out[-600:])
 
 
 def test_rollback_replaces_old_rolledback():
@@ -532,9 +566,9 @@ def test_rollback_replaces_old_rolledback():
         check("CS-3: cepa-live.rolledback não tem cepa-live aninhado", not (rb / "cepa-live").exists())
         check("CS-3: marcador do .rolledback antigo sumiu", not (rb / "old-marker").exists())
         live, live_prev = claude / "cepa-live", claude / "cepa-live.prev"
+        outl = r.stdout.splitlines()
         check("CS-3: rollback só da pasta fixa anuncia a restauração da pasta fixa com origem e destino",
-              "restoring the fixed folder set aside" in r.stdout
-              and f"from: {live_prev}" in r.stdout and f"to: {live}" in r.stdout, r.stdout[-600:])
+              all(l in outl for l in live_block(claude)), r.stdout[-600:])
         check("CS-3: rollback só da pasta fixa não fala em restaurar o cache",
               "restoring the cache" not in r.stdout, r.stdout[-600:])
 
@@ -552,25 +586,19 @@ def test_rollback_names_both_replaced_copies():
         r = run("--rollback")
         check("CS-3: --rollback de cache e pasta fixa sai 0", r.returncode == 0,
               r.stdout[-400:] + r.stderr[-400:])
-        line = next((l for l in r.stdout.splitlines() if "Restored. Replaced copy kept at:" in l), "")
+        outl = r.stdout.splitlines()
         check("CS-3: linha 'Restored' cita cache.rolledback e cepa-live.rolledback",
-              str(cache) + ".rolledback" in line and str(claude / "cepa-live") + ".rolledback" in line,
-              line or r.stdout[-400:])
-        live, live_prev = claude / "cepa-live", claude / "cepa-live.prev"
+              restored_line(kept_cache(claude) + " and " + kept_live(claude)) in outl,
+              r.stdout[-400:])
         check("CS-3: rollback de cache e pasta fixa anuncia o cache com origem e destino",
-              "restoring the cache set aside" in r.stdout
-              and f"from: {prev_cache}" in r.stdout and f"to: {cache}" in r.stdout, r.stdout[-600:])
+              all(l in outl for l in cache_block(claude)), r.stdout[-600:])
         check("CS-3: rollback de cache e pasta fixa anuncia a pasta fixa com origem e destino",
-              "restoring the fixed folder set aside" in r.stdout
-              and f"from: {live_prev}" in r.stdout and f"to: {live}" in r.stdout, r.stdout[-600:])
+              all(l in outl for l in live_block(claude)), r.stdout[-600:])
         rec_file = claude / "ops" / "last-install.json"
-        note = rec_file.read_text() if rec_file.is_file() else ""
-        check("CS-3: registro cita cache.rolledback e cepa-live.rolledback",
-              str(cache) + ".rolledback" in note and str(claude / "cepa-live") + ".rolledback" in note,
-              note[:400])
-        check("CS-3: registro cita de onde vieram o cache (cache.prev) e a pasta fixa (cepa-live.prev)",
-              f"the cache from {prev_cache} and the fixed folder from {claude / 'cepa-live.prev'};" in note,
-              note[:500])
+        rec = json.loads(rec_file.read_text()) if rec_file.is_file() else {}
+        note = json.dumps(rec)
+        check("CS-3: registro cita cache.rolledback e cepa-live.rolledback, de onde vieram o cache e a pasta fixa",
+              rec.get("note") == rollback_note(claude, True, True), note[:500])
 
 
 if __name__ == "__main__":
