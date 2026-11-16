@@ -10,6 +10,11 @@ Against the real CLI (`cepa until`, through the launcher), in a temporary git
 repo with two queues, `a` and `b`, one ready item each, and a fake `claude`
 that records any call (none may happen).
 
+CS-3: the order is queue by queue, and the ready items are re-read before each
+item: an item that becomes ready during the run enters before the run moves on
+to the next queue (and an earlier queue's item that becomes ready runs next).
+Observed in the order of the `item_start` events of the run's record.
+
 Run with `python3 tests/test_cepa_until_all.py`.
 """
 
@@ -525,6 +530,81 @@ def test_all_leaves_side_branches_of_earlier_runs_alone():
         check("os itens prontos foram entregues",
               _statuses(paths["a"]).get("a1") == "done"
               and _statuses(paths["b"]) == {"b1": "done"},
+              f"{_statuses(paths['a'])} {_statuses(paths['b'])}")
+
+
+def _item_starts(root):
+    """The ids of the `item_start` events of the `--all` run's record, in the
+    order they were written."""
+    records = sorted((root / ".claude" / "queues" / "_all" / "until").glob("*.jsonl"))
+    if len(records) != 1:
+        return None
+    events = [json.loads(l) for l in records[0].read_text().splitlines() if l.strip()]
+    return [str(e["id"]) for e in events if e.get("evento") == "item_start"]
+
+
+def test_item_that_becomes_ready_runs_before_the_next_queue():
+    """CS-3: queue by queue, and the ready items are re-read before each item.
+    `a2` waits for `a1`, so at launch only `a1` and `b1` are ready; `a2` becomes
+    ready when `a1` closes and runs BEFORE the run moves on to queue `b`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        a2 = base.item("a2")
+        a2["blocked_by"] = ["a1"]
+        root, paths = _repo(tmp, {"a": [base.item("a1"), a2],
+                                  "b": [base.item("b1")]})
+        p, calls = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                    "--no-analysis"],
+                        claude_body=DONE_IN_ITS_QUEUE)
+        check("--all sai com 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        starts = _item_starts(root)
+        check("os item_start do registro vêm na ordem a1, a2, b1",
+              starts == ["a1", "a2", "b1"], f"{starts} out={p.stdout[-800:]}")
+        check("os três itens ficam done",
+              _statuses(paths["a"]) == {"a1": "done", "a2": "done"}
+              and _statuses(paths["b"]) == {"b1": "done"},
+              f"{_statuses(paths['a'])} {_statuses(paths['b'])}")
+        check("um claude por item: três subprocessos", len(calls) == 3, str(calls))
+
+
+# Same fake, but while it works on `b1` the owner's route on `a1` closes: the
+# fake clears `human_pending` of `a1` in the clone's queue file, the way an
+# answer given during the run would.
+A1_ROUTE_CLOSES_DURING_B1 = DONE_IN_ITS_QUEUE.replace(
+    "subprocess.run(cp + ['start'",
+    "if queue == 'b' and ident == 'b1':\n"
+    "    import yaml\n"
+    "    common = subprocess.run(['git', 'rev-parse', '--path-format=absolute',"
+    " '--git-common-dir'], capture_output=True, text=True).stdout.strip()\n"
+    "    qa = os.path.join(os.path.dirname(common), '.claude', 'queues', 'a',"
+    " 'queue.yaml')\n"
+    "    plan = yaml.safe_load(open(qa, encoding='utf-8'))\n"
+    "    plan['items'][0]['human_pending'] = None\n"
+    "    open(qa, 'w', encoding='utf-8').write(yaml.safe_dump(plan,"
+    " allow_unicode=True))\n"
+    "subprocess.run(cp + ['start'", 1)
+
+
+def test_item_that_becomes_ready_in_an_earlier_queue_runs_next():
+    """CS-3, the spec's "decided without asking": the run always takes the first
+    ready item in `ready` order, even when it shows up in a queue BEFORE the
+    current one. `a1` starts with an open owner route (not ready), so the run
+    starts on queue `b`; the route closes during `b1`, and `a1` runs before
+    `b2`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1", human_pending="validar à mão")],
+                                  "b": [base.item("b1"), base.item("b2")]})
+        p, calls = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                    "--no-analysis"],
+                        claude_body=A1_ROUTE_CLOSES_DURING_B1)
+        check("--all sai com 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        starts = _item_starts(root)
+        check("os item_start do registro vêm na ordem b1, a1, b2",
+              starts == ["b1", "a1", "b2"], f"{starts} out={p.stdout[-800:]}")
+        check("os três itens ficam done",
+              _statuses(paths["a"]) == {"a1": "done"}
+              and _statuses(paths["b"]) == {"b1": "done", "b2": "done"},
               f"{_statuses(paths['a'])} {_statuses(paths['b'])}")
 
 
