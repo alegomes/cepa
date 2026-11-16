@@ -13,7 +13,8 @@ Patterns detected:
   - Gradle: ./gradlew or gradle  → BUILD SUCCESSFUL / BUILD FAILED
   - npm/yarn/pnpm test → exit code is the signal
   - pytest → exit code is the signal
-  - Django manage.py test (any wrapper) → "Ran N tests" + a line `OK` alone (or `OK (...)`) = SUCCESS,
+  - Django manage.py test, `python -m unittest` and `django-admin test` (any wrapper; all three
+    record kind "unittest") → "Ran N tests" + a line `OK` alone (or `OK (...)`) = SUCCESS,
     a line starting `FAILED (` = FAILURE; the verdict is read from stdout plus stderr;
     "Ran 0 tests" (with or without a test label) = EMPTY
   - cargo → exit code
@@ -197,12 +198,17 @@ PATTERNS = [
     # passed" é FAILURE.
     (re.compile(r"(?:^|\s)pytest\b"),
      "pytest", [" passed"], [" failed", " error", "errors during collection", "no tests ran"]),
-    # Django `manage.py test` (any wrapper: uv, poetry, docker compose exec). The runner
+    # Django `manage.py test`, `python -m unittest` and `django-admin test` (any wrapper: uv,
+    # poetry, docker compose exec): same unittest runner, same kind. `-m unittest` must follow a
+    # python executable (so `pytest -m unittest` is not it); `(?![\w-])` rejects `unittestfoo`,
+    # `testserver`, `test-foo`. The runner
     # prints "Ran N tests in Xs" then a line with "OK" alone (or "OK (skipped=1, expected
     # failures=1)" etc.). A bare "OK" substring is NOT a marker (any app log has it); "Ran 0
     # tests" is not green. The failure marker (a line starting "FAILED (") is there so a green
     # block never hides a red one in the same output (success markers run before the exit code).
-    (re.compile(r"(?:^|[\s/])manage\.py\s+test\b"),
+    (re.compile(r"(?:^|[\s/])(?:manage\.py\s+test\b"
+                r"|python[\d.]*\s+(?:-\S+\s+)*-m\s+unittest(?![\w-])"
+                r"|django-admin(?:\.py)?\s+test(?![\w-]))"),
      "unittest", [_UNITTEST_GREEN], [_UNITTEST_RED]),
     (re.compile(r"(?:^|\s)cargo\b.*\b(?:test|build|check)\b"),
      "cargo", None, None),
