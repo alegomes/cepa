@@ -486,6 +486,15 @@ def test_cs4_quoted_mention_is_not_a_build(tmp_path, command):
     "django-admin TEST",
     "DJANGO-ADMIN test",
     "PYTHON -m unittest",
+    "django-admin-foo test",
+    "djangoadmin test",
+    "python --m unittest",
+    "python -m unittest-foo test",
+    # A double quote right before the word: classify() reads the unquoted view, where every quote
+    # is blanked (opening, closing, escaped, unbalanced) except the delimiter quote on a heredoc
+    # opener line, so only this input keeps a `"` in front of the word and tells `[\s/]` from `[\s/"]`.
+    'cat <<"E"python -m unittest',
+    'cat <<"E"django-admin test',
 ])
 def test_cs4_near_misses_are_not_unittest(command):
     assert cbr.classify(command, _GREEN_OUT, None)[1] != "unittest"
