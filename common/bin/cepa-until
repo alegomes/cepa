@@ -2476,7 +2476,7 @@ def _cmd_land(argv, wrote):
         # Before the run worktree goes away: a run that reinstalled left the fixed
         # folder with the content of that worktree, and an interrupted install is
         # redone by running the landing again (the merge is done, it resumes here).
-        install_on_landing(repo, path.parent, run_id, path)
+        install_on_landing(repo, path.parent, run_id)
 
     if tree and Path(tree).exists():
         r = subprocess.run([sys.executable, str(WTLIB), "rescue", tree,
@@ -2499,10 +2499,11 @@ def _cmd_land(argv, wrote):
 LAND_INSTALL = "sh bin/install.sh"
 
 
-def installed_from_live_run(repo, skip_state):
+def installed_from_live_run(repo):
     """The live run (not the one landing) whose worktree `~/.claude/ops/last-install.json`
     says the plugins were installed from, or None: missing or unreadable file, the
-    clone, a worktree of a run that is not up, or the landing run itself."""
+    clone, or a worktree of a run that is not up. The run being landed never counts:
+    only a run in `esperando-dono` can be landed and only a run in `rodando` is alive."""
     try:
         data = json.loads((Path.home() / ".claude" / "ops" / "last-install.json")
                           .read_text(encoding="utf-8"))
@@ -2516,10 +2517,10 @@ def installed_from_live_run(repo, skip_state):
             return None
     except (OSError, RuntimeError):
         return None
-    return live_run_on_worktree(repo, repo_dir, skip_state)
+    return live_run_on_worktree(repo, repo_dir)
 
 
-def install_on_landing(repo, ledger_dir, run_id, state_path=None):
+def install_on_landing(repo, ledger_dir, run_id):
     """Installs the plugins from the clone at the end of a landing in the cepa repo
     (spec `registro-de-plugins-pasta-estavel`, CS-6; owner's answer Q2, 2026-11-16).
 
@@ -2538,7 +2539,7 @@ def install_on_landing(repo, ledger_dir, run_id, state_path=None):
     run's `.jsonl` gains `instalacao_adiada` and the screen asks, under "Fica com
     você", for `sh bin/install.sh` in the clone when that run ends. Exit code
     unchanged. Returns None then."""
-    other = installed_from_live_run(repo, state_path)
+    other = installed_from_live_run(repo)
     if other:
         when = datetime.now().isoformat(timespec="seconds")
         event = {"evento": "instalacao_adiada", "repo": str(repo),
@@ -5255,18 +5256,15 @@ def live_run_of_queue(repo, queue):
     return None
 
 
-def live_run_on_worktree(repo, directory, skip_state=None):
+def live_run_on_worktree(repo, directory):
     """The live run, in ANY queue of the repo (`_all` included), whose worktree is
-    `directory` (resolved paths), or None. `skip_state` is the `.estado.json` of a
-    run that does not count (the one being landed)."""
+    `directory` (resolved paths), or None."""
     try:
         want = Path(directory).resolve()
     except (OSError, RuntimeError):
         return None
     host = socket.gethostname()
     for path in run_states(main_root(repo)):
-        if skip_state and Path(path).resolve() == Path(skip_state).resolve():
-            continue
         found = _live_run_in_state(path, host)
         if not found or not found.get("arvore"):
             continue
