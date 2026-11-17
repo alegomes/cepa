@@ -57,6 +57,10 @@ significa que a sessão que está rodando esteja.
   é um aviso; "…e o último install foi há 12 dias" é o que separa *acabei de
   editar* de *faz duas semanas que trabalho contra um harness que não é o
   instalado*.
+  O doctor compara o cache com o `repo_dir` do `last-install.json` (e, se essa pasta
+  não existe mais, com o `main_clone`), não com a pasta registrada em
+  `known_marketplaces.json`, que costuma ser a cópia `~/.claude/cepa-live` e por isso
+  sempre bate com o cache. Sem nenhum dos dois, avisa e não oferece conserto.
 - **Rollback recente.** Se o último evento foi um `--rollback`, o cache live é
   o **anterior** ao install que você tentou. É um estado legítimo e fácil de
   esquecer, então o doctor o diz em voz alta.

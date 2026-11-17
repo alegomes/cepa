@@ -241,21 +241,44 @@ def check_plugins(settings, rec=None):
         fail("plugins", "comparador de versões (_pluginver.py) não carregou — "
                         "não dá para dizer se o cache é o repo")
         return
-    for p in PV.scan(repo, enabled):
+    # The registered folder may be the fixed copy (cepa-live), which is made by the
+    # installer and so always matches the cache. The version question is asked of the
+    # ORIGIN repo (CS-11): repo_dir, else main_clone, else (registry at a checkout) the
+    # registered folder itself.
+    origin = None
+    for key in ("repo_dir", "main_clone"):
+        cand = (rec or {}).get(key)
+        if not isinstance(cand, str) or not cand:
+            continue
+        try:
+            if Path(cand).is_dir():
+                origin = Path(cand)
+                break
+        except (OSError, ValueError):
+            continue
+    if origin is None and repo.resolve() != live.resolve():
+        origin = repo
+    if origin is None:
+        warn("plugins", "sem repo de origem conhecido (nenhum repo_dir/main_clone em "
+                        "~/.claude/ops/last-install.json que ainda exista) — não dá para dizer se "
+                        "o que está instalado é o que está no repo; rode sh bin/install.sh a "
+                        "partir do clone do cepa")
+    scan_root = origin or repo
+    for p in PV.scan(scan_root, enabled):
         name, repo_v, cache_v = p["name"], p["repo_version"], p["cache_version"]
         if not p["enabled"]:
             warn("plugins", f"{name}@cepa NÃO habilitado em enabledPlugins — cards/hooks desse plugin não funcionam")
         if p["missing"]:
             fail("plugins", f"{name}: nenhuma versão no cache — rode bin/install.sh",
-                 fix={"kind": "install", "repo": str(repo)})
+                 fix={"kind": "install", "repo": str(origin)} if origin else None)
         elif p["drift"]:
             # The age of the drift is what separates "I just edited" from "I have
             # been working for two weeks against a harness that is not the installed one".
             a = age_days((rec or {}).get("finished_at") or (rec or {}).get("started_at"))
             atxt = f"; o último install foi há {a:.0f}d" if a is not None else ""
             warn("plugins", f"{name}: repo está em {repo_v} mas o cache instalado é {cache_v}{atxt} — edições não valem; rode bin/install.sh",
-                 fix={"kind": "install", "repo": str(repo)})
-        else:
+                 fix={"kind": "install", "repo": str(origin)} if origin else None)
+        elif origin is not None:
             ok("plugins", f"{name} {cache_v} instalado e habilitado")
 
 
