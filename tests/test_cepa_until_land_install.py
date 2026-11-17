@@ -210,20 +210,25 @@ def test_cs6_other_repo_lands_without_installing():
 
 
 def other_run(root, tree, pid, queue="outra", run="2026-11-16-0900",
-              estado="rodando"):
+              estado="rodando", host=None, with_arvore=True,
+              base=".claude/queues"):
     """The state and the record of ANOTHER run of the repo, in another queue, as the
-    real `cepa-until` leaves them: `arvore` in `run_start`, a pid, this host."""
+    real `cepa-until` leaves them: `arvore` in `run_start`, a pid, this host.
+    `host` is another machine name, `with_arvore=False` leaves the worktree path
+    out of the record, `base` picks the layout (`.claude/programs` is the legacy)."""
     import socket
-    d = root / ".claude" / "queues" / queue / "until"
+    d = root / base / queue / "until"
     d.mkdir(parents=True, exist_ok=True)
     Path(tree).mkdir(parents=True, exist_ok=True)
     (d / f"{run}.estado.json").write_text(json.dumps(
         {"run": run, "fila": queue, "estado": estado, "branch": f"until/{run}",
-         "registro": f"{run}.jsonl", "pid": pid, "host": socket.gethostname()}),
-        encoding="utf-8")
-    (d / f"{run}.jsonl").write_text(json.dumps(
-        {"evento": "run_start", "fila": queue, "arvore": str(tree),
-         "branch": f"until/{run}", "pid": pid}) + "\n", encoding="utf-8")
+         "registro": f"{run}.jsonl", "pid": pid,
+         "host": host or socket.gethostname()}), encoding="utf-8")
+    start = {"evento": "run_start", "fila": queue, "branch": f"until/{run}",
+             "pid": pid}
+    if with_arvore:
+        start["arvore"] = str(tree)
+    (d / f"{run}.jsonl").write_text(json.dumps(start) + "\n", encoding="utf-8")
     return run
 
 
@@ -345,6 +350,80 @@ def test_cs7_no_record_or_clone_as_repo_dir_installs_as_in_cs6():
                   and len(calls(root)) == 1, p.stdout + p.stderr)
             check(f"CS-7 ({how}): ...sem instalacao_adiada",
                   deferred_events(root) == [], str(deferred_events(root)))
+
+
+def test_cs7_the_installed_path_is_compared_resolved_not_as_written():
+    # last-install.json names the other run's worktree through a symlink.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = as_cepa_repo(build_repo(tmp, [item("a1")]))
+        run_id, _branch, _tree = night(root)
+        home = Path(tmp) / "home"
+        other_tree = Path(tmp) / "worktrees" / "outra-rodada"
+        link = Path(tmp) / "atalho"
+        alive = alive_supervisor()
+        try:
+            other_run(root, other_tree, alive.pid)
+            link.symlink_to(other_tree)
+            last_install_in(home, link)
+            p = land_with_home(root, run_id, home)
+        finally:
+            alive.kill()
+            alive.wait()
+        check("CS-7 (symlink): o pouso sai 0 e adia", p.returncode == 0
+              and len(deferred_events(root)) == 1, p.stdout + p.stderr)
+        check("CS-7 (symlink): ...o instalador não é chamado", calls(root) == [],
+              str(calls(root)))
+
+
+def test_cs7_a_live_run_that_does_not_count_lets_the_land_install():
+    # Each case: the other run is up in some way but is not a holder of the plugins.
+    for how in ("sem arvore", "outro host", "sem pid"):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = as_cepa_repo(build_repo(tmp, [item("a1")]))
+            run_id, _branch, _tree = night(root)
+            home = Path(tmp) / "home"
+            other_tree = Path(tmp) / "worktrees" / "outra-rodada"
+            alive = alive_supervisor()
+            try:
+                if how == "sem arvore":
+                    other_run(root, other_tree, alive.pid, with_arvore=False)
+                elif how == "outro host":
+                    other_run(root, other_tree, alive.pid,
+                              host="outra-maquina.example")
+                else:
+                    other_run(root, other_tree, None)
+                last_install_in(home, other_tree)
+                p = land_with_home(root, run_id, home)
+            finally:
+                alive.kill()
+                alive.wait()
+            check(f"CS-7 ({how}): o pouso sai 0 e instala", p.returncode == 0
+                  and len(calls(root)) == 1, p.stdout + p.stderr)
+            check(f"CS-7 ({how}): ...com instalado_no_pouso e sem instalacao_adiada",
+                  len(landing_events(root)) == 1 and deferred_events(root) == [],
+                  str(ledger_of(root)[-3:]))
+
+
+def test_cs7_the_live_run_is_found_in_any_queue_and_layout():
+    for how, queue, base in (("outra fila", "outra", ".claude/queues"),
+                             ("fila _all", "_all", ".claude/queues"),
+                             ("layout legado", "outra", ".claude/programs")):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = as_cepa_repo(build_repo(tmp, [item("a1")]))
+            run_id, _branch, _tree = night(root)
+            home = Path(tmp) / "home"
+            other_tree = Path(tmp) / "worktrees" / "outra-rodada"
+            alive = alive_supervisor()
+            try:
+                other_run(root, other_tree, alive.pid, queue=queue, base=base)
+                last_install_in(home, other_tree)
+                p = land_with_home(root, run_id, home)
+            finally:
+                alive.kill()
+                alive.wait()
+            check(f"CS-7 ({how}): o pouso sai 0 e adia", p.returncode == 0
+                  and len(deferred_events(root)) == 1 and calls(root) == [],
+                  p.stdout + p.stderr)
 
 
 def main():
