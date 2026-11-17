@@ -961,6 +961,233 @@ def test_max_failures_still_ends_the_whole_all_run():
               "b1" not in (_item_starts(root) or []), str(_item_starts(root)))
 
 
+
+# ── CS-6: the record lives in `_all/until/` and `pending`, `decide`, `land` and
+# `close-dead` take the target `all/<run>` ──────────────────────────────────
+
+def _all_run_id(root):
+    states = sorted((root / ".claude" / "queues" / "_all" / "until").glob(
+        "*.estado.json"))
+    return states[-1].name.replace(".estado.json", "") if states else None
+
+
+def _git(root, *args):
+    return subprocess.run(["git", *args], cwd=root, capture_output=True,
+                          text=True).stdout
+
+
+def _stuck(ident, question):
+    """An item a previous run left `blocked`, with the closed question for the
+    owner."""
+    it = base.item(ident, status="blocked")
+    it["owner_question"] = question
+    it["evidence"] = "travou no ambiente"
+    return it
+
+
+def test_cs6_record_in_all_folder_pending_lists_it_and_land_yes_lands():
+    """The spec's own script: after a `--all` run the record is
+    `.claude/queues/_all/until/<run>.jsonl`, `cepa until pending` lists
+    `all/<run>` and `cepa until land all/<run> --yes` lands the branch."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _paths = _repo(tmp, {"a": [base.item("a1")],
+                                   "b": [base.item("b1")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                "--no-analysis"], claude_body=DONE_IN_ITS_QUEUE)
+        run_id = _all_run_id(root)
+        check("o run grava o estado em _all/until", run_id is not None,
+              p.stderr[-500:])
+        if run_id is None:
+            return
+        folder = root / ".claude" / "queues" / "_all" / "until"
+        check("o registro e _all/until/<run>.jsonl",
+              (folder / f"{run_id}.jsonl").is_file(), str(sorted(folder.iterdir())))
+        check("...e nenhuma pasta `all` e criada",
+              not (root / ".claude" / "queues" / "all").exists())
+        target = f"all/{run_id}"
+        r = subprocess.run([str(CEPA), "until", "pending", "--repo", str(root)],
+                           capture_output=True, text=True, timeout=60)
+        check("`cepa until pending` lista all/<run> com o comando do land",
+              r.returncode == 0 and f"cepa-until land {target}" in r.stdout
+              and f"queue all · run {run_id}" in r.stdout,
+              f"rc={r.returncode} out={r.stdout} err={r.stderr[-300:]}")
+        r = _target_command(tmp, root, "land", target, "--yes")
+        check("`land all/<run> --yes` sai com 0", r.returncode == 0,
+              f"rc={r.returncode} out={r.stdout[-600:]} err={r.stderr[-400:]}")
+        subjects = _git(root, "log", "--format=%s", "main").splitlines()
+        check("...os commits das duas filas estao na main",
+              "a:a1" in subjects and "b:b1" in subjects, str(subjects))
+        check("...a branch do run foi removida", _branches(root) == [],
+              str(_branches(root)))
+        r = subprocess.run([str(CEPA), "until", "pending", "--repo", str(root)],
+                           capture_output=True, text=True, timeout=60)
+        check("...e o run sai do `pending`", target not in r.stdout, r.stdout)
+
+
+def test_cs6_decide_all_run_lists_what_every_queue_holds_for_the_owner():
+    """`decide all/<run>` outside a terminal lists the landing and the questions
+    of EVERY queue, each item named `queue/id`. Before, it asked `cepa-plan`
+    for a queue called `all` and printed "could not list the deferred items"."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _paths = _repo(tmp, {
+            "a": [_stuck("x1", "Fecho o card da fila a?")],
+            "b": [base.item("b1"), _stuck("x1", "Fecho o card da fila b?")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                "--no-analysis"], claude_body=DONE_IN_ITS_QUEUE)
+        run_id = _all_run_id(root)
+        check("o run termina e grava o estado", p.returncode == 0
+              and run_id is not None, p.stderr[-500:])
+        if run_id is None:
+            return
+        check("o fim do run --all lista o que espera o dono, por fila",
+              "waiting on you: 3" in p.stdout
+              and "a/x1" in p.stdout and "Fecho o card da fila a?" in p.stdout
+              and "b/x1" in p.stdout and "Fecho o card da fila b?" in p.stdout,
+              p.stdout[-1500:])
+        r = _target_command(tmp, root, "decide", f"all/{run_id}")
+        out = r.stdout + r.stderr
+        check("`decide all/<run>` sai com 0", r.returncode == 0, out[-600:])
+        check("...sem procurar uma fila chamada `all`",
+              "could not list the deferred items" not in out, out[-600:])
+        check("...conta a aterrissagem e as duas perguntas",
+              "waiting on you: 3" in out, out[-800:])
+        check("...nomeia o item da fila a com a pergunta dele",
+              "a/x1" in out and "Fecho o card da fila a?" in out, out[-800:])
+        check("...e o da fila b, mesmo id, com a dele",
+              "b/x1" in out and "Fecho o card da fila b?" in out, out[-800:])
+        check("...e manda voltar com o alvo all/<run>",
+              f"cepa-until decide all/{run_id}" in out, out[-800:])
+
+
+def test_cs6_decide_all_run_on_a_terminal_answers_each_item_in_its_queue():
+    """On a terminal, a "no" to `a/x1` and a "yes" to `b/x1` are recorded each in
+    its own queue (same id, two queues), and `decide` commits both queue files
+    under the name of the `all/<run>` run."""
+    import test_cepa_until_decide as dec
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {
+            "a": [_stuck("x1", "Fecho o card da fila a?")],
+            "b": [base.item("b1"), _stuck("x1", "Fecho o card da fila b?")]})
+        _run(tmp, root, ["--all", "--for", "1h", "--no-verify", "--no-analysis"],
+             claude_body=DONE_IN_ITS_QUEUE)
+        run_id = _all_run_id(root)
+        check("o run grava o estado", run_id is not None)
+        if run_id is None:
+            return
+        env = dict(os.environ)
+        for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH", "HC_TERMINAL_ID"):
+            env.pop(k, None)
+        env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", f"all/{run_id}",
+               "--repo", str(root)]
+        rc, out = dec.on_tty(cmd, str(root), env=env, timeout=90, inputs=[
+            ("Land now?", "n"),
+            ("[t] I write the answer", "n"), ("Anything to add", ""),
+            ("[t] I write the answer", "s"), ("Anything to add", "")])
+        check("decide all/<run> no terminal sai com 0", rc == 0, out[-1200:])
+        check("...os itens aparecem como fila/id",
+              "a/x1" in out and "b/x1" in out, out[-1500:])
+        items_a = {str(i["id"]): i for i in
+                   yaml.safe_load(paths["a"].read_text())["items"]}
+        items_b = {str(i["id"]): i for i in
+                   yaml.safe_load(paths["b"].read_text())["items"]}
+        check("o `não` fica no x1 da fila a, que segue blocked",
+              items_a["x1"]["status"] == "blocked"
+              and "não: Fecho o card da fila a?" in str(items_a["x1"]["evidence"]),
+              str(items_a["x1"]))
+        check("o `sim` devolve o x1 da fila b para a fila",
+              items_b["x1"]["status"] == "pending"
+              and "sim: Fecho o card da fila b?" in str(items_b["x1"]["evidence"]),
+              str(items_b["x1"]))
+        subject = _git(root, "log", "-1", "--format=%s").strip()
+        check("o commit leva o nome do run all/<run>",
+              subject.startswith(f"until all/{run_id} decide:"), subject)
+        files = _git(root, "show", "--name-only", "--format=", "HEAD").split()
+        check("...com o queue.yaml das duas filas",
+              ".claude/queues/a/queue.yaml" in files
+              and ".claude/queues/b/queue.yaml" in files, str(files))
+        dirty = _git(root, "status", "--short", "--", ".claude/queues/a/queue.yaml",
+                     ".claude/queues/b/queue.yaml")
+        check("...e as filas ficam sem mudanca solta", dirty.strip() == "", dirty)
+
+
+def _all_night_that_died(tmp):
+    """A real `--all` run (a1 and b1 delivered) with the state and the record
+    rewound to where a supervisor dies: `rodando`, dead pid, the record cut at
+    the `item_start` of `b1` (no `item_end`, no `run_end`)."""
+    import socket
+    import test_cepa_until_dead_supervisor as dead
+    root, paths = _repo(tmp, {"a": [base.item("a1")], "b": [base.item("b1")]})
+    _run(tmp, root, ["--all", "--for", "1h", "--no-verify", "--no-analysis"],
+         claude_body=DONE_IN_ITS_QUEUE)
+    folder = root / ".claude" / "queues" / "_all" / "until"
+    jsonl = sorted(folder.glob("*.jsonl"))[-1]
+    events = [json.loads(l) for l in jsonl.read_text().splitlines() if l.strip()]
+    cut = next(i for i, e in enumerate(events)
+               if e["evento"] == "item_start" and str(e["id"]) == "b1")
+    jsonl.write_text("".join(json.dumps(e) + "\n" for e in events[:cut + 1]))
+    state_file = sorted(folder.glob("*.estado.json"))[-1]
+    state = json.loads(state_file.read_text())
+    state.update(estado="rodando", pid=dead.dead_pid(), host=socket.gethostname())
+    for k in ("acoes", "fica_com_voce", "itens", "motivo_fim"):
+        state.pop(k, None)
+    state_file.write_text(json.dumps(state))
+    return root, paths, state_file.name.replace(".estado.json", ""), events[cut]
+
+
+def test_cs6_close_dead_all_run_closes_it_and_leaves_it_ready_to_land():
+    """A `--all` run whose supervisor died: `pending` points at
+    `close-dead all/<run>` and reads the in-flight item in ITS queue (not in a
+    queue called `all`), `close-dead all/<run> --yes` closes the record in
+    `_all/until/`, commits it, and `land all/<run> --yes` then lands."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _paths, run_id, start = _all_night_that_died(tmp)
+        target = f"all/{run_id}"
+        check("o item_start de um run --all leva a fila do item",
+              start.get("fila") == "b", str(start))
+        r = subprocess.run([sys.executable, str(CEPA_UNTIL), "pending", "--json",
+                            "--repo", str(root)], capture_output=True, text=True,
+                           timeout=60)
+        dead_ones = (json.loads(r.stdout) if r.returncode == 0 else {}).get(
+            "mortos") or []
+        check("pending acusa o run morto com o comando close-dead all/<run>",
+              len(dead_ones) == 1
+              and dead_ones[0].get("fechar") == f"cepa-until close-dead {target}",
+              r.stdout + r.stderr)
+        m = dead_ones[0] if dead_ones else {}
+        check("...o item em voo e b/b1, lido na fila b: `done`",
+              m.get("item") == "b/b1" and m.get("status") == "done", str(m))
+        r = _target_command(tmp, root, "close-dead", target)
+        check("sem --yes mostra o plano e nao muda nada",
+              r.returncode == 0 and f"close-dead {target} --yes" in r.stdout,
+              r.stdout + r.stderr)
+        r = _target_command(tmp, root, "close-dead", target, "--yes")
+        check("`close-dead all/<run> --yes` sai com 0", r.returncode == 0,
+              r.stdout + r.stderr)
+        events = _run_events(root)
+        check("...fecha o registro de _all/until com run_end",
+              events and events[-1].get("evento") == "run_end"
+              and events[-1].get("motivo") == "supervisor-morto", str(events[-2:]))
+        state = json.loads((root / ".claude" / "queues" / "_all" / "until"
+                            / f"{run_id}.estado.json").read_text())
+        check("...o estado vira esperando-dono com `land all/<run>`",
+              state.get("estado") == "esperando-dono"
+              and any(f"cepa-until land {target}" in str(x.get("comando"))
+                      for x in state.get("acoes") or []), str(state))
+        record = f".claude/queues/_all/until/{run_id}.jsonl"
+        check("...e o registro fechado entra num commit do run all/<run>",
+              _git(root, "status", "--short", "--", record).strip() == ""
+              and _git(root, "log", "-1", "--format=%s", "--", record).strip()
+              .startswith(f"until {target} close-dead:"),
+              _git(root, "status", "--short") + _git(root, "log", "-3",
+                                                      "--format=%s"))
+        r = _target_command(tmp, root, "land", target, "--yes")
+        subjects = _git(root, "log", "--format=%s", "main").splitlines()
+        check("...e `land all/<run> --yes` aterrissa o run fechado",
+              r.returncode == 0 and "a:a1" in subjects and "b:b1" in subjects,
+              f"rc={r.returncode} {r.stdout[-500:]} {r.stderr[-300:]} {subjects}")
+
+
 def main():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]
