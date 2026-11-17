@@ -32,7 +32,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-for _k in ("CEPA_ENCADEAR", "CEPA_LAUNCH_ID"):
+# CEPA_CHAIN_FROM_WORKTREE comes from the launcher when this file runs inside a
+# worktree session; inherited, it makes session-chain add `-s chain-<MMDD-HHMM>`
+# to every chained call and three cases here go red (seen on 2026-11-17).
+for _k in ("CEPA_ENCADEAR", "CEPA_LAUNCH_ID", "CEPA_CHAIN_FROM_WORKTREE"):
     os.environ.pop(_k, None)
 
 REPO = Path(__file__).resolve().parent.parent
