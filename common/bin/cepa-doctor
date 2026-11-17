@@ -250,12 +250,10 @@ def check_plugins(settings, rec=None):
         cand = (rec or {}).get(key)
         if not isinstance(cand, str) or not cand:
             continue
-        try:
-            if Path(cand).is_dir():
-                origin = Path(cand)
-                break
-        except (OSError, ValueError):
-            continue
+        # Path.is_dir() already answers False for an over-long or NUL-bearing path.
+        if Path(cand).is_dir():
+            origin = Path(cand)
+            break
     if origin is None and repo.resolve() != live.resolve():
         origin = repo
     if origin is None:

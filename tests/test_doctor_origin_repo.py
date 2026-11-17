@@ -109,6 +109,8 @@ def test_repo_dir_ahead_of_cache():
         check("não diz 'common 3.6.0 instalado e habilitado'",
               "common 3.6.0 instalado e habilitado" not in out, out)
         check("oferece o conserto install", "reinstalar os plugins" in out, out)
+        check("origem conhecida: sem aviso 'sem repo de origem'",
+              "sem repo de origem" not in out, out)
         check("sem --fix nada foi instalado", not marker.exists())
         run_doctor(home, "--fix")
         check("--fix roda o install.sh do repo_dir",
@@ -197,6 +199,89 @@ def test_same_version_is_ok():
               "repo está em" not in out, out)
 
 
+def test_empty_repo_dir_is_not_the_cwd():
+    # Path("") is the cwd (REPO here, a real checkout with plugins): an accepted "" would
+    # be scanned as the origin instead of warning.
+    with tempfile.TemporaryDirectory() as tmp:
+        home, _rd, _mc, marker = make_world(Path(tmp), record=False, repo_dir_v=None)
+        write_record(home, {"repo_dir": ""})
+        out = run_doctor(home)
+        check("repo_dir vazio: avisa 'sem repo de origem'", "sem repo de origem" in out, out)
+        check("repo_dir vazio: sem linha ok 'instalado e habilitado'",
+              "instalado e habilitado" not in out, out)
+        check("repo_dir vazio: sem Traceback", "Traceback" not in out, out)
+
+
+def test_unusable_path_strings_do_not_crash():
+    bad = {"repo_dir maior que PATH_MAX": "/" + "a" * 5000,
+           "repo_dir com NUL embutido": "a\u0000b"}
+    for label, val in bad.items():
+        with tempfile.TemporaryDirectory() as tmp:
+            home, _rd, _mc, _m = make_world(Path(tmp), record=False, repo_dir_v=None)
+            write_record(home, {"repo_dir": val})
+            out = run_doctor(home)
+            check(f"[{label}] sem Traceback", "Traceback" not in out, out)
+            check(f"[{label}] avisa 'sem repo de origem'", "sem repo de origem" in out, out)
+
+
+def test_registry_at_outside_checkout_is_the_origin():
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpp = Path(tmp)
+        home, _rd, _mc, marker = make_world(tmpp, record=False, repo_dir_v=None)
+        outside = tmpp / "outside"
+        fake_checkout(outside, "3.7.0", marker)
+        (home / ".claude" / "plugins" / "known_marketplaces.json").write_text(
+            json.dumps({"cepa": {"installLocation": str(outside)}}), encoding="utf-8")
+        out = run_doctor(home)
+        check("registro fora do cepa-live: compara com a pasta registrada",
+              "repo está em 3.7.0 mas o cache instalado é 3.6.0" in out, out)
+        check("registro fora do cepa-live: não diz 'sem repo de origem'",
+              "sem repo de origem" not in out, out)
+        run_doctor(home, "--fix")
+        check("--fix roda o install.sh da pasta registrada",
+              marker_cwds(marker) and set(marker_cwds(marker)) == {outside.resolve()},
+              str(marker_cwds(marker)))
+
+
+def test_missing_cache_with_origin():
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpp = Path(tmp)
+        home, repo_dir, _mc, marker = make_world(tmpp)
+        (home / ".claude" / "plugins" / "cache" / "cepa" / "common" / "3.6.0").rmdir()
+        out = run_doctor(home)
+        check("cache vazio: falha 'nenhuma versão no cache'",
+              "nenhuma versão no cache" in out, out)
+        check("cache vazio: oferece o conserto install", "reinstalar os plugins" in out, out)
+        check("cache vazio: sem install antes do --fix", not marker.exists())
+        run_doctor(home, "--fix")
+        check("cache vazio: --fix roda o install.sh do repo_dir",
+              marker_cwds(marker) == [repo_dir.resolve()], str(marker_cwds(marker)))
+
+
+def test_no_origin_offers_no_fix():
+    # cache empty, no origin
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpp = Path(tmp)
+        home, _rd, _mc, marker = make_world(tmpp, record=False, repo_dir_v=None)
+        (home / ".claude" / "plugins" / "cache" / "cepa" / "common" / "3.6.0").rmdir()
+        out = run_doctor(home)
+        check("sem origem + cache vazio: imprime 'nenhuma versão no cache'",
+              "nenhuma versão no cache" in out, out)
+        check("sem origem + cache vazio: não oferece conserto", "reinstalar os plugins" not in out, out)
+        run_doctor(home, "--fix")
+        check("sem origem + cache vazio: --fix não roda nada", not marker.exists())
+    # drift, no origin: cepa-live ahead of the cache, no record
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpp = Path(tmp)
+        home, _rd, _mc, marker = make_world(tmpp, live_v="3.7.0", record=False, repo_dir_v=None)
+        out = run_doctor(home)
+        check("sem origem + drift: imprime o aviso de drift",
+              "repo está em 3.7.0 mas o cache instalado é 3.6.0" in out, out)
+        check("sem origem + drift: não oferece conserto", "reinstalar os plugins" not in out, out)
+        run_doctor(home, "--fix")
+        check("sem origem + drift: --fix não roda nada", not marker.exists())
+
+
 if __name__ == "__main__":
     test_repo_dir_ahead_of_cache()
     test_repo_dir_gone_falls_back_to_main_clone()
@@ -205,6 +290,11 @@ if __name__ == "__main__":
     test_malformed_record_does_not_crash()
     test_numeric_repo_dir_falls_to_main_clone()
     test_same_version_is_ok()
+    test_empty_repo_dir_is_not_the_cwd()
+    test_unusable_path_strings_do_not_crash()
+    test_registry_at_outside_checkout_is_the_origin()
+    test_missing_cache_with_origin()
+    test_no_origin_offers_no_fix()
     print()
     if FAILURES:
         print(f"{len(FAILURES)} falha(s)")
