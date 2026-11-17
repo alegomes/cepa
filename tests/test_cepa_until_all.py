@@ -674,6 +674,50 @@ def test_single_queue_dry_run_unchanged():
         check("...e nomeia o item", "a1" in p.stdout)
 
 
+def _target_command(tmp, root, sub, target, *extra):
+    env = dict(os.environ)
+    env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
+    return subprocess.run(
+        [sys.executable, str(CEPA_UNTIL), sub, target, *extra,
+         "--repo", str(root)],
+        capture_output=True, text=True, env=env, timeout=120,
+        stdin=subprocess.DEVNULL)
+
+
+def test_target_all_run_reads_the_state_of_the_all_folder():
+    """The end-of-run report names a `--all` run `all/<run>`, and its state lives
+    in `.claude/queues/_all/until/`. On 2026-11-17 `cepa-until land
+    all/2026-11-16-1426 --yes`, copied from that report, exited 2 with "could
+    not read the run state at .claude/queues/all/until/...": `land` looked for a
+    folder named after the label. The three commands that take `<queue>/<run>`
+    have to find the state of the run the report named."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _paths = _repo(tmp, {"a": [base.item("a1")],
+                                   "b": [base.item("b1")]})
+        p, _calls = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                     "--no-analysis"],
+                         claude_body=DONE_IN_ITS_QUEUE)
+        check("--all sai com 0", p.returncode == 0, p.stderr[-500:])
+        states = sorted((root / ".claude" / "queues" / "_all" / "until").glob(
+            "*.estado.json"))
+        check("o estado do run fica em _all/until", len(states) == 1, str(states))
+        if len(states) != 1:
+            return
+        run_id = states[0].name.replace(".estado.json", "")
+        target = f"all/{run_id}"
+        check("o relatório do run manda rodar `land all/<run>`",
+              f"cepa-until land {target}" in p.stdout, p.stdout[-1500:])
+        for sub in ("land", "decide", "close-dead"):
+            r = _target_command(tmp, root, sub, target)
+            check(f"`{sub} {target}` lê o estado do run",
+                  "could not read the run state" not in r.stderr,
+                  f"rc={r.returncode} err={r.stderr[-400:]}")
+        r = _target_command(tmp, root, "land", target)
+        check("`land all/<run>` sem --yes mostra o plano e sai 0",
+              r.returncode == 0 and "nothing was done" in r.stdout,
+              f"rc={r.returncode} out={r.stdout[-600:]} err={r.stderr[-400:]}")
+
+
 def main():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]
