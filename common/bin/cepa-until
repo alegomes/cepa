@@ -198,9 +198,9 @@ gains `hooks_reinstalados` (`sha_antes`, `sha_depois`: a content digest of the i
 `hooks_sha`, the digest in force. If the install fails the supervisor runs
 `bin/install.sh --rollback` by itself and records `reinstalacao_desfeita`; the item stays
 `done` and the night goes on. If not even the rollback gives the cache back, the run ends
-with `reinstalacao-falhou`. Installing from the worktree re-points the marketplace
-registration to the worktree path: after `aterrissar`, run `bin/install.sh` from the main
-clone so it points back. Open sessions keep the old hooks in memory until restarted. Two
+with `reinstalacao-falhou`. Installing from the worktree leaves the plugins in force with
+the worktree's content: `land --yes` runs `sh bin/install.sh` from the main clone by itself,
+after the merge and the green build, and records `instalado_no_pouso`. Open sessions keep the old hooks in memory until restarted. Two
 reinstalls in one night keep only the previous cache in `.prev`. Without `--verify` there is
 no build, so no reinstall: only the warning above. With less than 120 s left in the window the supervisor does not start the install (killing it halfway would leave the cache half moved): it records `reinstalacao_adiada` and falls back to the warning. In any other repo nothing changes.
 
@@ -2232,6 +2232,10 @@ def land_parser():
             "running it again resumes where it stopped: with the merge done, it goes\n"
             "on from the build. To give up instead, `git reset --keep` to the return\n"
             "point it prints. On success it removes the run worktree and branch.\n"
+            "In the cepa repo it also runs `sh bin/install.sh` from the clone, after\n"
+            "the merge and the green build, so the plugins in force are the clone's\n"
+            "and not the copy a run installed from its worktree. A failed install\n"
+            "does not change the exit code.\n"
             "At the end, whatever way it ends, it commits the queue marks and the run\n"
             "records the clone holds for the run (only those paths, never\n"
             "--no-verify, not pushed). If git refuses, it says why and prints the\n"
@@ -2359,6 +2363,10 @@ def _cmd_land(argv, wrote):
     print("  push   : " + ("yes, to the upstream of "
                            f"`{destination}`" if has_upstream(repo) else
                            f"no (`{destination}` has no upstream)"))
+    install_here = cepa_repo(repo)
+    if install_here:
+        print(f"  install: {LAND_INSTALL} from the clone, after the "
+              + ("green build" if item_states.get("verify") else "merge"))
     if already_merged:
         print("  merge  : already done; resuming from the build")
     if not a.yes:
@@ -2461,6 +2469,12 @@ def _cmd_land(argv, wrote):
         landing_info["push"] = True
         print("pushed")
 
+    if install_here:
+        # Before the run worktree goes away: a run that reinstalled left the fixed
+        # folder with the content of that worktree, and an interrupted install is
+        # redone by running the landing again (the merge is done, it resumes here).
+        install_on_landing(repo, path.parent, run_id)
+
     if tree and Path(tree).exists():
         r = subprocess.run([sys.executable, str(WTLIB), "rescue", tree,
                             branch], capture_output=True, text=True)
@@ -2475,6 +2489,41 @@ def _cmd_land(argv, wrote):
     print(f"landed: `{branch}` is in `{destination}`; the run worktree and branch "
           "were removed")
     return 0
+
+
+# What the landing runs in the cepa repo, from the clone. No `--clean`: the copy
+# the run left is not a point worth going back to.
+LAND_INSTALL = "sh bin/install.sh"
+
+
+def install_on_landing(repo, ledger_dir, run_id):
+    """Installs the plugins from the clone at the end of a landing in the cepa repo
+    (spec `registro-de-plugins-pasta-estavel`, CS-6; owner's answer Q2, 2026-11-16).
+
+    A run that changed `hooks/` or `bin/` reinstalled from its worktree, so what is
+    in force is that worktree's copy, and the landing removes the worktree. Until
+    now the owner had to remember to run `bin/install.sh` in the clone afterwards.
+    It runs on every landing, not only when the run touched hooks: the copy in
+    force may have come from any run. The output goes to the run's `.log` and the
+    run's `.jsonl` gains `instalado_no_pouso`. A failed install does not change the
+    landing's exit code: the merge happened. Returns True when the install was
+    green."""
+    print(f"installing the plugins from the clone: {LAND_INSTALL}")
+    ok, sec, reason = run_verify(LAND_INSTALL, repo, 1800,
+                                 ledger_dir / f"{run_id}.log", label="install")
+    event = {"evento": "instalado_no_pouso", "repo": str(repo), "ok": ok,
+             "segundos": int(sec), "motivo": reason,
+             "quando": datetime.now().isoformat(timespec="seconds")}
+    with (ledger_dir / f"{run_id}.jsonl").open("a", encoding="utf-8") as f:
+        f.write(json.dumps(event, ensure_ascii=False) + "\n")
+    if ok:
+        print(f"  installed ({human(timedelta(seconds=sec))}); sessions already "
+              "open keep the previous plugins until restarted")
+    else:
+        print(f"  the install FAILED ({reason}); the landing goes on. Run "
+              f"`{LAND_INSTALL}` in {repo} by hand; the output is in "
+              f"{ledger_dir / (run_id + '.log')}")
+    return ok
 
 
 class NotAttempted(str):
