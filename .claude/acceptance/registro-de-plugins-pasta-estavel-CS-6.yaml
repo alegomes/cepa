@@ -1,0 +1,31 @@
+schema_version: 1
+card: registro-de-plugins-pasta-estavel-CS-6
+status: complete
+audited_at: 2026-11-16T00:00:00-03:00
+covers: 2da11bb..18b9f77
+criteria:
+  - id: AC1
+    text: "CS-6: `cepa until land --yes` instala do clone depois do build verde. Red test: num repo do Cepa de teste com uma rodada pronta para aterrissar e um `bin/install.sh` falso que grava de onde foi chamado, `cepa-until land <fila>/<run> --yes` chama o instalador com o clone como diretorio, depois do merge, e o registro da rodada ganha `instalado_no_pouso`. Hoje o land nao chama o instalador (docs/spec/registro-de-plugins-pasta-estavel.md, secao CS-6)"
+    altitude: cli
+    surface: "`common/bin/cepa-until land <fila>/<run> --yes` executado como subprocess real contra um repo git de teste que vira o repo do Cepa (marketplace.json chamado `cepa` e `bin/install.sh` falso). O instalador falso grava cwd, argumentos e o log do clone; o teste le esse arquivo, o arquivo de ordem (build antes de install) e o .jsonl do registro da rodada."
+    demonstrated_by:
+      test: "tests/test_cepa_until_land_install.py::test_cs6_land_installs_from_the_clone_after_merge_and_green_build"
+      layer: "subprocess real de cepa-until (noite com claude falso, depois land --yes); verificacoes sobre o que o instalador falso gravou e sobre o .jsonl em disco"
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_until_land_install.py; echo exit=$?
+        HEAD 18b9f77, rodado por mim agora em primeiro plano: 30 linhas "ok" (6 + 12 + 4 + 5 + 3 por teste), 0 FAIL, "tudo verde", exit=0. Checagens do criterio: "o pouso sai 0"; "o instalador foi chamado uma vez"; "...com o clone como diretorio"; "...e nao com a pasta da rodada"; "...sem --clean nem --rollback"; "...depois do merge (o commit do item ja estava no clone)"; "...e depois do build"; "o registro da rodada ganha instalado_no_pouso"; "...que diz que deu certo e de onde instalou"; "o estado vira aterrissado".
+    verdict: complete
+    gap: null
+supporting_tests:
+  - "tests/test_cepa_until_land_install.py::test_cs6_failed_install_does_not_change_the_landing (novo em 18b9f77)"
+  - "tests/test_cepa_until_land_install.py::test_cs6_red_build_does_not_install"
+  - "tests/test_cepa_until_land_install.py::test_cs6_plan_only_and_already_landed_do_not_install"
+  - "tests/test_cepa_until_land_install.py::test_cs6_other_repo_lands_without_installing"
+notes:
+  - "Altitude cli respeitada: o teste roda o cepa-until real como subprocess (noite e land) e observa o efeito externo (o instalador falso foi chamado de onde, quando, com que argumentos; o evento no .jsonl). Nao chama _cmd_land nem install_on_landing diretamente e nao usa mock."
+  - "Mudanca desde 454d4ac (git diff 454d4ac 18b9f77): so tests/test_cepa_until_land_install.py. O instalador falso agora termina com `exit ${FAKE_INSTALL_EXIT:-0}` (antes `exec`), e o teste novo test_cs6_failed_install_does_not_change_the_landing define FAKE_INSTALL_EXIT=1. common/bin/cepa-until nao mudou."
+  - "A nota anterior 'nenhum teste usa instalador que falha' deixou de ser verdadeira. Agora existe um: com o instalador saindo 1, o pouso ainda sai 0, o instalador foi chamado uma vez, o evento instalado_no_pouso tem ok=false e motivo contendo '1', o estado vira aterrissado, a branch da rodada e removida e a tela diz FAILED e pede `sh bin/install.sh` a mao no clone. Isso cobre a decisao 'codigo de saida nao muda quando a instalacao falha'. O desfazer da instalacao que falha continua sendo CS-8 (item separado)."
+  - "Extras de Decided without asking, todos verificados na mesma rodada: build vermelho no pouso sai 5 sem instalar nem gravar o evento; sem --yes so avisa no plano; 'already landed' nao instala de novo; repo que nao e o Cepa nao instala e nao fala de instalacao."
+  - "CS-7 (adiar quando outra rodada viva reinstalou) e CS-8 (desfazer instalacao que falha) sao itens separados e nao foram contados."
+  - "Prova de execucao: rodei so `python3 tests/test_cepa_until_land_install.py`, em primeiro plano, com o status de saida lido (exit=0). Nao rodei a suite completa (o supervisor roda). Nenhum codigo ou teste foi editado."

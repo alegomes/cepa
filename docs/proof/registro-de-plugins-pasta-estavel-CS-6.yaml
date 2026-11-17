@@ -1,0 +1,44 @@
+schema_version: 2
+card: registro-de-plugins-pasta-estavel-CS-6
+verdict: proven
+reviewed_at: 2026-11-16T22:00:00-03:00
+base_commit: 2da11bb
+head_commit: 18b9f77
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until: LAND_INSTALL, install_on_landing(), and in _cmd_land the 'install_here = cepa_repo(repo)' line, the plan line '  install: ...' and the call install_on_landing(...) after the push block; guarded by tests/test_cepa_until_land_install.py (now including test_cs6_failed_install_does_not_change_the_landing)"
+      module: common
+      external_observable: true
+      substituted_by_double: null        # the test runs the real cepa-until as a subprocess against a fake repo; only 'claude' and bin/install.sh (far boundary; now with FAKE_INSTALL_EXIT to make it fail) are fakes
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python/shell repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at 18b9f77 (throwaway worktree /tmp/proof-cs6-b, 'git worktree add --detach /tmp/proof-cs6-b 18b9f77'): 'python3 tests/test_cepa_until_land_install.py' -> 'tudo verde' (5 tests incl. the new failed-install one). Foreground, about 14 s per run; full suite (tests/run-all.sh) not run. common/bin/cepa-until is identical between 454d4ac and 18b9f77 (git diff 454d4ac 18b9f77 --stat: only the test file)."
+        - "Method: the 18b9f77 common/bin/cepa-until rewritten per run with one exact-string replacement (asserted to match exactly once; 'git diff --numstat HEAD' = 1 changed line, 2 for the 'call moved' ones), the test run, then 'git checkout 18b9f77 -- common/bin/cepa-until' (0 diff confirmed after each). All re-run at 18b9f77; nothing carried over from the 454d4ac run."
+        - "KILLED, the two previous survivors: S1 'ok' hard-coded True in the instalado_no_pouso event: RED, 1 failure ('o registro diz que a instalação não deu certo e por quê'). S2 landing returns 7 when the install fails: RED, 'instalador que falha: o pouso ainda sai 0' plus the checks after it."
+        - "KILLED, the failure branch: F1 event written only when ok: RED 'o registro diz que a instalação não deu certo e por quê' (event list empty). F2 'motivo' dropped to None: RED, same check. F3 failure message text removed ('the install FAILED' -> 'went on'): RED 'e a tela diz que falhou e pede o install à mão no clone'. F5 'repo' of the event replaced by 'x': RED 'que diz que deu certo e de onde instalou'."
+        - "KILLED, the ten from before: K1 install_here always False: RED (no call, no event, no plan line, failure checks too). K2 install_here always True: RED (3 checks in the other-repo test: installer called, event written, screen mentions install). K3 installer cwd = run worktree (call with 'tree or repo'): RED ('com o clone como diretório', 'e não com a pasta da rodada', event repo). K4 LAND_INSTALL + ' --clean': RED 'sem --clean nem --rollback'. K5 event renamed 'instalado': RED ('o registro da rodada ganha instalado_no_pouso'). K6 event not written: RED (same). K7 plan line removed (if False): RED 'mas o plano avisa que vai instalar'. K8 call moved before the merge: RED ('depois do merge', 'e depois do build', red-build 'o instalador não é chamado'). K9 call moved before the build: RED ('e depois do build' order ['install','build'], red-build checks). K10 extra call on the 'already landed' return (original call kept): RED, exactly 1 failure, 'e não instala uma segunda vez'. K11 call moved before the '--yes' gate: RED ('depois do merge', 'depois do build', 'sem --yes ... não instala')."
+        - "SURVIVED (non-gating, cosmetic): F4 the failure message hint ' in {repo} by hand' changed to ' by hand' (the clone path no longer printed in that line): suite stays 'tudo verde'. The check 'str(root.resolve()) in p.stdout' in the failed-install test is satisfied by the plan header, which already prints the clone path, so it does not guard the hint's path. The spec claim is the exit code, the record and the call, not the wording of the hint. Reported, not gating."
+        - "Not re-run (judged outside the claim last round, unchanged): S3 install call moved after record(estado='aterrissado'). The claim says 'after the merge and the green build', which S3 still satisfies; the 'before the run worktree goes away' comment is not a claim."
+        - "Test-first: tests/test_cepa_until_land_install.py at 18b9f77 against common/bin/cepa-until from 2da11bb ('git checkout 2da11bb -- common/bin/cepa-until' in the throwaway worktree): RED, '13 falha(s)' (installer not called, no event, no failure message, cwd, no flags, after merge, after build, event ok/repo, screen, plan line, no second install). 'instalador que falha: o pouso ainda sai 0' stays ok at base, as expected (nothing installs there, exit is 0)."
+      surviving_lines: []
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; reachability structural: the covering test runs the real cepa-until land with --yes, without --yes, twice (already landed), with a red build, in another repo and now with a failing installer (FAKE_INSTALL_EXIT=1), so both branches of install_on_landing (ok and FAILED) are reached; each changed line above was perturbed and turned a check red. Line-level precision not measured."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff adds no parser of outside input: it runs a fixed command string (LAND_INSTALL constant) in the clone, and touches no input-bearing module (api-rest)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is Story; the equivalent is the test-first run above: the CS-6 test file at 18b9f77 against the 2da11bb cepa-until is RED (13 checks failed)."
+routing_reason: "The CS-6 claim is load-bearing at 18b9f77. The two earlier survivors are now killed by the failing-installer test: hard-coding ok=true in the instalado_no_pouso event (S1) and making the landing return non-zero when the install fails (S2) each turn it red, as do dropping the event, 'motivo' or the failure message on failure. The ten earlier kills were re-run and each still turns a CS-6 check red (always/never install in the cepa repo, installer directory = run worktree, --clean added, event renamed or not written, plan line removed, call before the merge, before the build, on 'already landed', before the --yes gate), and the test file is RED (13 checks) against the 2da11bb cepa-until. Test runs the real cepa-until; only claude and bin/install.sh (far boundary) are fakes. One cosmetic survivor (F4: the clone path in the 'run by hand' hint is not guarded) and S3 (call after the state record) are reported, not gating. Limits: no coverage tool (L2 structural); L4 n/a; full suite not run (supervisor runs it)."
