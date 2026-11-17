@@ -1,0 +1,18 @@
+key: until-todas-as-filas-CS-6
+status: complete
+criteria:
+  - id: CS-6
+    text: "O registro fica em `.claude/queues/_all/until/` e `pending`, `decide`, `land` e `close-dead` aceitam o alvo `all/<run>` (red test: depois de um run `--all`, existe `.claude/queues/_all/until/<run>.jsonl`, `cepa until pending` lista `all/<run>` e `cepa until land all/<run> --yes` aterrissa a branch)"
+    altitude: cli
+    surface: "cepa until --all ...; cepa until pending; cepa until land all/<run> [--yes]; cepa until decide all/<run>; cepa until close-dead all/<run> [--yes] (common/bin/cepa -> common/bin/cepa-until): exit code, stdout, arquivos em .claude/queues/_all/until/, git log da main, queue.yaml de cada fila"
+    test: "tests/test_cepa_until_all.py::test_cs6_record_in_all_folder_pending_lists_it_and_land_yes_lands (o roteiro do red test), mais test_cs6_decide_all_run_lists_what_every_queue_holds_for_the_owner, test_cs6_decide_all_run_on_a_terminal_answers_each_item_in_its_queue, test_cs6_close_dead_all_run_closes_it_and_leaves_it_ready_to_land e test_target_all_run_reads_the_state_of_the_all_folder"
+    layer: "subprocess real de `cepa until` (launcher e cepa-until) em repo git temporario com cepa-plan real; so o claude e falso. decide no terminal roda num pseudo-terminal. Asserts: <run>.jsonl existe em _all/until e nenhuma pasta `all` e criada; `pending` lista `all/<run>` com o comando `cepa-until land all/<run>`; `land all/<run> --yes` sai 0, commits a:a1 e b:b1 na main, branch removida, run some do pending; decide lista a/x1 e b/x1 com as perguntas; resposta no terminal grava nao em a/x1 e sim em b/x1 cada um na sua fila e commita as duas sob `until all/<run> decide:`; close-dead fecha o registro de _all/until com run_end supervisor-morto, estado esperando-dono, commit `until all/<run> close-dead:` e o land seguinte aterrissa"
+    evidence: verified
+    run: "python3 tests/test_cepa_until_all.py (rodado em primeiro plano em ed3e872, arvore limpa) -> todos os asserts dos cinco testes 'ok', sem FAIL, '✓ 33 testes'"
+    status: complete
+    notes:
+      - "As quatro verbas do criterio (pending, decide, land, close-dead) tem cada uma teste proprio na superficie cli; o red test literal e o primeiro teste da lista."
+      - "A producao mudou na superficie certa: diff d3b75f9..HEAD em common/bin/cepa-until (+164/-26), com decide listando as filas e close-dead lendo o item na fila dele, nao numa fila chamada `all`."
+      - "Fora do texto do criterio: o bullet 'Decided without asking' (analise de fim de run /common:until-review e status no Herdr funcionam sobre all/<run>) NAO tem teste. Todos os testes de --all rodam com --no-analysis e nenhum exercita o Herdr. E decisao registrada na spec, nao criterio de aceite; o codigo chama until-review com o ledger do run (cepa-until ~2246), mas isso nao foi demonstrado por teste aqui. Fica para o humano julgar no review."
+      - "Suite completa (tests/run-all.sh) nao rodada por instrucao; fica com o supervisor."
+gap: []
