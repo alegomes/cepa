@@ -200,7 +200,7 @@ gains `hooks_reinstalados` (`sha_antes`, `sha_depois`: a content digest of the i
 `done` and the night goes on. If not even the rollback gives the cache back, the run ends
 with `reinstalacao-falhou`. Installing from the worktree leaves the plugins in force with
 the worktree's content: `land --yes` runs `sh bin/install.sh` from the main clone by itself,
-after the merge and the green build, and records `instalado_no_pouso`. Open sessions keep the old hooks in memory until restarted. Two
+after the merge and the green build, and records `instalado_no_pouso`. If `~/.claude/ops/last-install.json` says the plugins in force come from the worktree of another run that is still alive, the install is skipped instead (`instalacao_adiada` in the record, and "Fica com você" asks for `sh bin/install.sh` in the clone when that run ends); the landing's exit code is the same. Open sessions keep the old hooks in memory until restarted. Two
 reinstalls in one night keep only the previous cache in `.prev`. Without `--verify` there is
 no build, so no reinstall: only the warning above. With less than 120 s left in the window the supervisor does not start the install (killing it halfway would leave the cache half moved): it records `reinstalacao_adiada` and falls back to the warning. In any other repo nothing changes.
 
@@ -2235,7 +2235,10 @@ def land_parser():
             "In the cepa repo it also runs `sh bin/install.sh` from the clone, after\n"
             "the merge and the green build, so the plugins in force are the clone's\n"
             "and not the copy a run installed from its worktree. A failed install\n"
-            "does not change the exit code.\n"
+            "does not change the exit code. If the plugins in force come from the\n"
+            "worktree of another run that is still alive, the install is skipped\n"
+            "(`instalacao_adiada`) and it asks, under \"Fica com você\", to run\n"
+            "`sh bin/install.sh` in the clone when that run ends.\n"
             "At the end, whatever way it ends, it commits the queue marks and the run\n"
             "records the clone holds for the run (only those paths, never\n"
             "--no-verify, not pushed). If git refuses, it says why and prints the\n"
@@ -2473,7 +2476,7 @@ def _cmd_land(argv, wrote):
         # Before the run worktree goes away: a run that reinstalled left the fixed
         # folder with the content of that worktree, and an interrupted install is
         # redone by running the landing again (the merge is done, it resumes here).
-        install_on_landing(repo, path.parent, run_id)
+        install_on_landing(repo, path.parent, run_id, path)
 
     if tree and Path(tree).exists():
         r = subprocess.run([sys.executable, str(WTLIB), "rescue", tree,
@@ -2496,7 +2499,27 @@ def _cmd_land(argv, wrote):
 LAND_INSTALL = "sh bin/install.sh"
 
 
-def install_on_landing(repo, ledger_dir, run_id):
+def installed_from_live_run(repo, skip_state):
+    """The live run (not the one landing) whose worktree `~/.claude/ops/last-install.json`
+    says the plugins were installed from, or None: missing or unreadable file, the
+    clone, a worktree of a run that is not up, or the landing run itself."""
+    try:
+        data = json.loads((Path.home() / ".claude" / "ops" / "last-install.json")
+                          .read_text(encoding="utf-8"))
+        repo_dir = data["repo_dir"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(repo_dir, str) or not repo_dir:
+        return None
+    try:
+        if Path(repo_dir).resolve() == Path(repo).resolve():
+            return None
+    except (OSError, RuntimeError):
+        return None
+    return live_run_on_worktree(repo, repo_dir, skip_state)
+
+
+def install_on_landing(repo, ledger_dir, run_id, state_path=None):
     """Installs the plugins from the clone at the end of a landing in the cepa repo
     (spec `registro-de-plugins-pasta-estavel`, CS-6; owner's answer Q2, 2026-11-16).
 
@@ -2507,7 +2530,30 @@ def install_on_landing(repo, ledger_dir, run_id):
     force may have come from any run. The output goes to the run's `.log` and the
     run's `.jsonl` gains `instalado_no_pouso`. A failed install does not change the
     landing's exit code: the merge happened. Returns True when the install was
-    green."""
+    green.
+
+    CS-7 (owner's answer Q4, "skip and warn"): when `last-install.json` says the
+    plugins in force came from the worktree of ANOTHER run that is alive, installing
+    from the clone would pull the plugins from under it. The install is skipped, the
+    run's `.jsonl` gains `instalacao_adiada` and the screen asks, under "Fica com
+    você", for `sh bin/install.sh` in the clone when that run ends. Exit code
+    unchanged. Returns None then."""
+    other = installed_from_live_run(repo, state_path)
+    if other:
+        when = datetime.now().isoformat(timespec="seconds")
+        event = {"evento": "instalacao_adiada", "repo": str(repo),
+                 "outra_fila": other.get("fila"), "outra_rodada": other.get("run"),
+                 "outra_arvore": other.get("arvore"), "outro_pid": other.get("pid"),
+                 "quando": when}
+        with (ledger_dir / f"{run_id}.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps(event, ensure_ascii=False) + "\n")
+        print(f"install skipped: the plugins in force come from the worktree of the "
+              f"live run {other.get('fila')}/{other.get('run')} "
+              f"({other.get('arvore')}), and installing now would pull them from "
+              "under it")
+        print(f"Fica com você: when {other.get('fila')}/{other.get('run')} ends, run "
+              f"`{LAND_INSTALL}` in {repo}")
+        return None
     print(f"installing the plugins from the clone: {LAND_INSTALL}")
     ok, sec, reason = run_verify(LAND_INSTALL, repo, 1800,
                                  ledger_dir / f"{run_id}.log", label="install")
@@ -5158,45 +5204,77 @@ def dead_runs(repo, now=None):
     return found
 
 
+def _live_run_in_state(path, host):
+    """The liveness rule for one `*.estado.json`: state `rodando`, pid of a live
+    `cepa-until`, on this machine. A run from another host can't be checked from here
+    and counts as not alive (same rule as `dead_runs`); a run without a pid too,
+    because without a pid there is no way to tell live from dead. Returns
+    `{run, fila, pid, prazo, arvore, estado_json, iniciados}` or None; `iniciados`
+    are the ids of the items with `item_start` in the run's record."""
+    try:
+        item_states = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(item_states, dict) or item_states.get("estado") != "rodando":
+        return None
+    record_path = path.parent / (item_states.get("registro") or path.name.replace(
+        ".estado.json", ".jsonl"))
+    events = []
+    try:
+        for line in record_path.read_text(encoding="utf-8").splitlines():
+            try:
+                events.append(json.loads(line))
+            except ValueError:
+                continue
+    except OSError:
+        pass
+    start = next((e for e in events if e.get("evento") == "run_start"), {})
+    pid = item_states.get("pid") or start.get("pid")
+    owner = item_states.get("host") or start.get("host")
+    if not pid or (owner and owner != host) or not supervisor_alive(pid):
+        return None
+    return {"run": item_states.get("run"),
+            "fila": item_states.get("fila") or start.get("fila"), "pid": pid,
+            "prazo": item_states.get("prazo") or start.get("prazo"),
+            "arvore": item_states.get("arvore") or start.get("arvore"),
+            "estado_json": str(path),
+            "iniciados": {str(e.get("id")) for e in events
+                          if e.get("evento") == "item_start"}}
+
+
 def live_run_of_queue(repo, queue):
-    """The run of this queue that is up right now, or None. State `rodando`, pid
-    of a live `cepa-until`, on this machine. A run from another host can't be
-    checked from here and counts as not alive (same rule as `dead_runs`); a
-    run without a pid too, because without a pid there is no way to tell live from dead.
-    Returns `{run, pid, prazo, estado_json, iniciados}`, with `iniciados` the
-    ids of the items with `item_start` in the run's record."""
+    """The run of this queue that is up right now, or None (rule in
+    `_live_run_in_state`). Returns `{run, pid, prazo, estado_json, iniciados, ...}`."""
     root = main_root(repo)
     host = socket.gethostname()
     folder = qp.queue_dir(root, str(queue)) / "until"
     for path in sorted(folder.glob("*.estado.json")):
+        found = _live_run_in_state(path, host)
+        if found:
+            return found
+    return None
+
+
+def live_run_on_worktree(repo, directory, skip_state=None):
+    """The live run, in ANY queue of the repo (`_all` included), whose worktree is
+    `directory` (resolved paths), or None. `skip_state` is the `.estado.json` of a
+    run that does not count (the one being landed)."""
+    try:
+        want = Path(directory).resolve()
+    except (OSError, RuntimeError):
+        return None
+    host = socket.gethostname()
+    for path in run_states(main_root(repo)):
+        if skip_state and Path(path).resolve() == Path(skip_state).resolve():
+            continue
+        found = _live_run_in_state(path, host)
+        if not found or not found.get("arvore"):
+            continue
         try:
-            item_states = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+            if Path(found["arvore"]).resolve() == want:
+                return found
+        except (OSError, RuntimeError):
             continue
-        if not isinstance(item_states, dict) or item_states.get("estado") != "rodando":
-            continue
-        record_path = folder / (item_states.get("registro") or path.name.replace(
-            ".estado.json", ".jsonl"))
-        events = []
-        try:
-            for line in record_path.read_text(encoding="utf-8").splitlines():
-                try:
-                    events.append(json.loads(line))
-                except ValueError:
-                    continue
-        except OSError:
-            pass
-        start = next((e for e in events if e.get("evento") == "run_start"),
-                      {})
-        pid = item_states.get("pid") or start.get("pid")
-        owner = item_states.get("host") or start.get("host")
-        if not pid or (owner and owner != host) or not supervisor_alive(pid):
-            continue
-        return {"run": item_states.get("run"), "pid": pid,
-                "prazo": item_states.get("prazo") or start.get("prazo"),
-                "estado_json": str(path),
-                "iniciados": {str(e.get("id")) for e in events
-                              if e.get("evento") == "item_start"}}
     return None
 
 

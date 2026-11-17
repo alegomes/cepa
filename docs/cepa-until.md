@@ -203,7 +203,7 @@ gains `hooks_reinstalados` (`sha_antes`, `sha_depois`: a content digest of the i
 `done` and the night goes on. If not even the rollback gives the cache back, the run ends
 with `reinstalacao-falhou`. Installing from the worktree re-points the marketplace
 registration to the worktree path: after `aterrissar`, run `bin/install.sh` from the main
-clone so it points back. Open sessions keep the old hooks in memory until restarted. Two
+clone so it points back; `land --yes` does that by itself in the cepa repo, after the merge and the green build, and records `instalado_no_pouso`. The exception: if `~/.claude/ops/last-install.json` says `repo_dir` is the worktree of another run that is still alive (state `rodando`, live supervisor), the install is skipped so the plugins are not pulled from under that run. The landing records `instalacao_adiada` (the other run, its worktree, when), prints under "Fica com você" the request to run `sh bin/install.sh` in the clone when that run ends, and keeps its exit code. Open sessions keep the old hooks in memory until restarted. Two
 reinstalls in one night keep only the previous cache in `.prev`. Without `--verify` there is
 no build, so no reinstall: only the warning above. With less than 120 s left in the window the supervisor does not start the install (killing it halfway would leave the cache half moved): it records `reinstalacao_adiada` and falls back to the warning. In any other repo nothing changes.
 

@@ -106,6 +106,7 @@ Limites e falhas:
 - duas reinstalações na mesma noite: o `.prev` guarda só a anterior à última,
   então o `--rollback` não volta ao estado da largada;
 - sessões abertas mantêm os hooks antigos na memória até reiniciarem.
+- `cepa-until land --yes` no repo do Cepa roda `sh bin/install.sh` no clone depois do merge e do build verde e grava `instalado_no_pouso`. Se o `last-install.json` diz que o `repo_dir` é a worktree de outra rodada ainda viva, o install é pulado (grava `instalacao_adiada`) e o land pede, em "Fica com você", rodar `sh bin/install.sh` no clone quando essa rodada terminar; o código de saída do land não muda.
 - com menos de 120 s de janela o supervisor não inicia o install (matá-lo no meio deixaria o cache pela metade): grava `reinstalacao_adiada` e fica só o aviso de sempre.
 
 Fora dessas condições a regra geral se mantém: o harness live só muda com o
