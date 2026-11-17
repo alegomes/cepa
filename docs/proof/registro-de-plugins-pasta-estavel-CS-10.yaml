@@ -1,0 +1,68 @@
+schema_version: 2
+card: registro-de-plugins-pasta-estavel-CS-10
+verdict: proven
+reviewed_at: 2026-11-17T05:00:00-03:00
+base_commit: 9dd07a6
+head_commit: 8f8501d
+issue_type: Feature
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-doctor: check_plugins() new block 'registered folder exists but is outside ~/.claude/cepa-live' (resolve() comparison, main_clone-vs-registered choice with is_dir(), fix={kind: install, repo: src}, warn message) and fix_key() collapsing every install into one key; guarded by tests/test_doctor_registry_outside_live.py"
+      module: common
+      external_observable: true
+      substituted_by_double: null        # the test runs the real cepa-doctor as a subprocess under a temporary HOME; only the main_clone's bin/install.sh (far boundary) is a fake
+    - class: "common/hooks/_state.py: CATALOGUE line declaring 'cepa-live'; guarded by tests/test_state_deposits.py (check 'todo .claude/<nome> citado no código de common/ está no catálogo')"
+      module: common
+      external_observable: false
+      substituted_by_double: null        # the test scans the real source of common/ against the real CATALOGUE
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python/shell repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "Setup: throwaway worktree 'git worktree add --detach ~/cepa-worktrees/proof-cs10 8f8501d' (non-/tmp path on purpose). Each perturbation = one sed on one line of common/bin/cepa-doctor (git diff --numstat showed '1/1' each time), 'python3 tests/test_doctor_registry_outside_live.py' in the foreground, then 'git checkout 8f8501d -- common/bin/cepa-doctor'. Worktree removed with 'git worktree remove --force'; 'git worktree list' no longer shows proof-cs10. Machine's bin/install.sh never run; full suite not run. This round re-ran the perturbations of the earlier attempt (artifact at ad1f406) at the new head; the old artifact was used only as a list, not as evidence."
+        - "GREEN at 8f8501d unperturbed: tests/test_doctor_registry_outside_live.py exit 0, 25 'ok' lines, 'tudo ok'; tests/test_state_deposits.py exit 0, 'todos os testes passaram'; tests/test_doctor_registry_missing_path.py exit 0, 26 'ok', 'tudo ok'; tests/test_doctor_fix.py exit 0, 'all green'."
+        - "RED at base: test file from HEAD with common/bin/cepa-doctor from 9dd07a6 (git checkout 9dd07a6 -- common/bin/cepa-doctor): exit 1, '17 falha(s)'. Restored afterwards."
+        - "KILLED P1 comparison inverted (line 229 '!=' -> '=='): RED 18 failures."
+        - "KILLED P2a resolve() dropped on the registered side (line 229 'repo.resolve()' -> 'repo'): RED 2 failures."
+        - "KILLED P2b resolve() dropped on the fixed side (line 229 'live.resolve()' -> 'live'): RED 2 failures."
+        - "KILLED P3 always outside (line 229 -> 'if True:'): RED 2 failures."
+        - "KILLED P4 never outside (line 229 -> 'if False:'): RED 16 failures."
+        - "KILLED P5 is_dir() dropped on main_clone (line 231 -> 'if clone:'): RED 2 failures."
+        - "KILLED P6 clone branch never taken (line 231 -> 'if False:'): RED 3 failures."
+        - "KILLED P7 branches swapped (line 231 -> 'if not (clone and Path(clone).is_dir()):'): RED 7 failures."
+        - "KILLED P8 fix repo with clone -> registered path (line 232 'str(clone)' -> 'str(repo)'): RED 2 failures."
+        - "KILLED P9 fix repo without clone -> clone (line 234 'str(repo)' -> 'str(clone)'): RED 2 failures."
+        - "KILLED P10 registered path out of the message start (line 235 'registrado em {repo}, fora' -> 'registrado em , fora'): RED 3 failures."
+        - "KILLED P11a first '~/.claude/cepa-live' -> '~/.claude' (line 235): RED 2 failures."
+        - "KILLED P11b second '~/.claude/cepa-live' -> '~/.claude' (line 237): RED 1 failure."
+        - "KILLED P12 clone path out of the origin text (line 232 'o clone {clone}' -> 'o clone'): RED 1 failure."
+        - "KILLED P13 registered folder out of the origin text (line 234 'registrada {repo}' -> 'registrada'): RED 2 failures."
+        - "KILLED P14 warn -> fail (line 235): RED 11 failures."
+        - "KILLED P15 fix dropped (line 238 -> fix=None): RED 7 failures."
+        - "KILLED P16 fix kind renamed (line 238 'install' -> 'other'): RED 7 failures."
+        - "KILLED P17 early return right after the warn (line 238 appended '; return'): RED 1 failure (version checks after the warning are guarded)."
+        - "KILLED P18 fix_key collapse removed (line 1222 '== \"install\"' -> '== \"zzz\"'): RED 2 failures."
+        - "KILLED P20 wrong fixed folder name (line 228 'cepa-live' -> 'cepa-liv'): RED 2 failures."
+        - "KILLED P21 last-install record ignored (line 230 '(rec or {})' -> '({})'): RED 3 failures."
+        - "KILLED P22 fix_key keeps repo in key (line 1223 -> 'return (\"install\", str(fx.get(\"repo\")))'): RED 2 failures."
+        - "KILLED P23 catalogue line removed (common/hooks/_state.py: deleted the '\"cepa-live\": (None, ...)' line; git diff --numstat '0/1'): 'python3 tests/test_state_deposits.py' exit 1, 'FAIL todo `.claude/<nome>` citado no código de common/ está no catálogo  cepa-live (em cepa-doctor)', '1 FAILED'. Restored: exit 0."
+        - "Totals: 24 perturbations (P1, P2a, P2b, P3-P10, P11a, P11b, P12-P18, P20-P22, P23), 24 killed, 0 survived. P19 (OSError fallback) does not exist at this head: the try/except was removed in the earlier attempt as unreachable."
+      surviving_lines: []
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; reachability structural and corroborated by perturbations: the comparison (both resolve() calls), both main_clone branches, is_dir(), the fix dict, the fix_key collapse, each phrase of the warning, the code after the warning, and the catalogue line are each turned RED by a perturbation above. Line-level coverage percentage not measured."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff reads two local JSON files under HOME (known_marketplaces.json, last-install.json) that the doctor already read before and adds no parsing of outside input; the catalogue line is a static string. No input-bearing module (api-rest) is touched."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is Feature; the equivalent is the test-first run: test file from HEAD against cepa-doctor from 9dd07a6: exit 1, '17 falha(s)'."
+routing_reason: "At 8f8501d: unperturbed green (25 ok doctor_registry_outside_live, state_deposits green, 26 ok missing_path, doctor_fix all green), base red (17 failures), 24 perturbations (23 in cepa-doctor, 1 in the _state.py catalogue line) all RED, 0 survivors. The catalogue line, the cause of the previous attempt's red build, is load-bearing: removing it fails test_state_deposits. Limits: no coverage tool; the full suite was not run (the supervisor runs it)."

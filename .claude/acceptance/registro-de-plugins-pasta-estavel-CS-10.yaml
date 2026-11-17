@@ -1,0 +1,32 @@
+schema_version: 1
+card: registro-de-plugins-pasta-estavel-CS-10
+status: complete
+audited_at: 2026-11-17T00:00:00-03:00
+head_commit: 8f8501d
+covers: 9dd07a6..8f8501d
+criteria:
+  - id: AC1
+    text: "CS-10: com `known_marketplaces.json` apontando `cepa` para um worktree que existe, `cepa-doctor` imprime um aviso de `plugins` dizendo que o registro esta fora de `~/.claude/cepa-live` e oferece o conserto `install`. Antes nao dizia nada sobre o caminho."
+    altitude: cli
+    surface: "`common/bin/cepa-doctor` (e `--fix`) como subprocess real com HOME temporario, main_clone falso e pasta registrada falsa cujo `bin/install.sh` so grava o cwd num marcador; observa stdout/stderr e o marcador."
+    demonstrated_by:
+      test: "tests/test_doctor_registry_outside_live.py::test_outside_with_main_clone"
+      layer: "subprocess real do doctor; sem mock; o conserto e observado de fora (install.sh falso grava o cwd)"
+      evidence: verified
+      run: |
+        python3 tests/test_doctor_registry_outside_live.py
+        Primeiro plano, neste auditor, em 8f8501d: exit=0, 25 linhas "ok", 0 "FAIL", linha final "tudo ok". Caso principal: aviso [plugins] com marca de aviso (nao falha) nomeia o worktree e "fora de ~/.claude/cepa-live"; diz de qual clone a reinstalacao sai; anuncia "reinstalar os plugins"; sem --fix nada instala; --fix roda o install.sh do main_clone uma vez; com CEPA_DOCTOR_INSTALL=off nao roda e o aviso fica.
+    verdict: complete
+    gap: null
+supporting_tests:
+  - "test_outside_without_usable_main_clone (sem last-install ou main_clone inexistente: avisa e o --fix instala a partir da pasta registrada)"
+  - "test_registry_at_fixed_folder_is_quiet e ..._via_symlink_is_quiet (sem aviso falso)"
+  - "test_two_installs_collapse_into_one (fix_key)"
+  - "test_warning_recorded_before_drift_findings (ordem)"
+  - "tests/test_state_deposits.py: 57 ok, 0 FAIL, 'todos os testes passaram' (o check que quebrou a tentativa anterior, cepa-live no catalogo, agora passa com 8f8501d)"
+  - "tests/test_doctor_registry_missing_path.py (CS-9): 26 ok, 0 FAIL, 'tudo ok'"
+  - "tests/test_doctor_fix.py: 17 ok, 0 FAIL, 'all green' (fix_key colapsado nao regrediu)"
+notes:
+  - "Diff 9dd07a6..8f8501d: 3 arquivos (cepa-doctor, _state.py, o teste novo). Revisei o diff completo; o teste so tem asserções, nenhuma afrouxada. 8f8501d so adiciona a entrada 'cepa-live' ao CATALOGUE em common/hooks/_state.py, sem mudar comportamento do doctor."
+  - "Nao reexecutei o RED em 5f9a5bb. Nao rodei tests/run-all.sh (fica com o supervisor). Nenhum codigo ou teste foi editado; nao commitei o artefato."
+  - "Altitude cli respeitada: o caso principal chama o doctor como subprocess; os dois testes que importam o modulo sao de apoio."
