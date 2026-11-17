@@ -1,0 +1,55 @@
+schema_version: 2
+card: registro-de-plugins-pasta-estavel-CS-8
+verdict: proven
+reviewed_at: 2026-11-17T00:45:00-03:00
+base_commit: 2d910bc
+head_commit: 855cc881467c532c94395aa28ec75421c44be915
+issue_type: Feature
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until: install_on_landing() failure branch (runs LAND_ROLLBACK from the clone, appends reinstalacao_desfeita to the run's .jsonl, prints the rollback-went-through / rollback-also-failed lines and 'Fica com você') and the constant LAND_ROLLBACK; guarded by tests/test_cepa_until_land_install.py (3 CS-8 tests plus the green/no-install negatives)"
+      module: common
+      external_observable: true
+      substituted_by_double: null        # the tests run the real `cepa-until land --yes` as a subprocess; only claude and bin/install.sh (far boundary) are fakes
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python/shell repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "Pass 1 at 98ab6b4 wrote this file as UNPROVEN (P9, P11, P12, P13 survived). Commit 855cc88 changed only tests/test_cepa_until_land_install.py (git diff 98ab6b4..855cc88 --stat: 1 file, 35 insertions, 3 deletions; no production code). Pass 2 re-ran at 855cc88."
+        - "Setup pass 2: throwaway worktree 'git worktree add --detach /tmp/proof-cs8 855cc88', removed at the end with 'git worktree remove --force' (worktree list shows none left). Each perturbation = one sed on one line of common/bin/cepa-until (git diff --numstat HEAD showed '1 1' each time), covering test 'python3 tests/test_cepa_until_land_install.py' run in the foreground, then 'git checkout HEAD -- file' (0 changed files after each)."
+        - "GREEN at 855cc88 unperturbed: tests/test_cepa_until_land_install.py exit 0, '✓ tudo verde'."
+        - "RED at f089a2f (tests without the fix), from pass 1: '✗ 8 falha(s)'."
+        - "KILLED (re-run at 855cc88) P9 'motivo' of a failed rollback replaced by the install's reason (line 2591): RED 1 failure 'CS-8 (rollback falha): ...com o motivo do rollback (saiu 3), não o da instalação (saiu 1)'. Honest: the fake rollback exits 3 while the install exits 1, so only the rollback's own reason makes 'exited 3'."
+        - "KILLED (re-run at 855cc88) P11 rollback output sent to '<ledger>/x.log' instead of the run's .log (line 2588): RED 1 failure 'CS-8: ...e a saída do rollback está no .log desta rodada'. Honest: the marker 'fake-rollback-ran-here' is printed by the fake only on --rollback and is looked for in the run's own .log."
+        - "KILLED (re-run at 855cc88) P12 event written to '<run_id>x.jsonl' (line 2594): RED 1 failure 'CS-8: ...gravado no .jsonl desta rodada, não em outro arquivo'. Honest: the test reads '<run_id>.jsonl' directly and counts reinstalacao_desfeita there (0 when misrouted)."
+        - "KILLED (re-run at 855cc88) P13 'segundos' pinned to 0 (line 2592): RED 1 failure 'CS-8: ...com o tempo que o rollback levou (1,3 s dá 1 ou mais)'. Honest: the fake rollback sleeps 1.3 s, int(1.3) is 1, the check requires >= 1."
+        - "KILLED (re-run at 855cc88, confirms no loosening) P1 LAND_ROLLBACK without --rollback (line 2504): RED 7 failures (installer called twice with --rollback, ok true record, duration, rollback output in .log, 'restored', rollback-falha call check, rollback-falha motivo). Pass 1 had 4 failures; the new commit only adds."
+        - "KILLED (re-run at 855cc88, confirms no loosening) P3 'ok': True always (line 2590): RED 1 failure 'CS-8 (rollback falha): ...o registro tem reinstalacao_desfeita com ok falso' (same as pass 1)."
+        - "KILLED (carried from pass 1 at 98ab6b4, not re-run) P2 event renamed reinstalacao_x: RED 3 failures."
+        - "KILLED (carried from pass 1, not re-run) P4 'if rb_ok:' replaced by 'if True:': RED 1 failure (screen says rollback also failed, points to doctor)."
+        - "KILLED (carried from pass 1, not re-run) P5 rollback run from ledger_dir instead of the clone: RED 4 failures."
+        - "KILLED (carried from pass 1, not re-run) P6 'Fica com você' text changed in the rollback-went-through branch: RED 'a tela tem Fica com você com o install e o clone'."
+        - "KILLED (carried from pass 1, not re-run) P7 'the previous plugins were restored' shortened: RED 'diz que os plugins anteriores foram restaurados'."
+        - "KILLED (carried from pass 1, not re-run) P8 '; check /common:doctor' removed: RED 'a tela diz que o rollback também falhou ... aponta o doctor'."
+        - "KILLED (carried from pass 1, not re-run) P10 'Fica com você' text changed in the rollback-failed branch: RED 'CS-8 (rollback falha): a tela diz que o rollback também falhou ...'."
+        - "KILLED (carried from pass 1, not re-run) P14 'motivo' on success replaced by a constant: RED 'o registro ganha reinstalacao_desfeita com ok verdadeiro'."
+        - "Why the carried eight are still valid: the three deleted test lines in 855cc88 are the old fake-rollback one-liner (now echo + sleep + same exit), the install-failure call of the rollback-also-fails test (now also sets the rollback exit) and its FAKE_ROLLBACK_EXIT value (now 3). Each only adds an assertion or makes one stricter; the two re-runs of already-RED perturbations (P1, P3) stayed RED."
+      surviving_lines: []
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; reachability structural and corroborated by the perturbations: the rollback call, its log destination, both outcome branches, every field of the record (ok, motivo, segundos, file) and the three printed lines are each turned RED by a perturbation above. Line-level coverage percentage not measured."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff runs a fixed command (sh bin/install.sh --rollback) in the clone and writes a record of its own; it parses no input from outside and touches no input-bearing module (api-rest)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is Feature; the equivalent is the test-first run: tests at f089a2f against the pre-implementation cepa-until are RED with 8 failures (pass 1)."
+routing_reason: "All 14 perturbations of install_on_landing went RED at 855cc88 (6 run in pass 2: P1, P3, P9, P11, P12, P13; 8 carried from pass 1: P2, P4, P5, P6, P7, P8, P10, P14). The four survivors of pass 1 are now pinned by honest checks that fail for the perturbation's own reason. Unperturbed file is green. Limits: no coverage tool, only tests/test_cepa_until_land_install.py was run (not the full suite)."
