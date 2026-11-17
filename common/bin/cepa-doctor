@@ -223,6 +223,23 @@ def check_plugins(settings, rec=None):
             fail("plugins", f"marketplace 'cepa' registrado em {repo}, que não existe mais — "
                             f"rode bin/install.sh a partir do clone do cepa para reapontar o registro")
         return
+    # Registered folder exists, but it is not the fixed one: it works today and dies
+    # the day that folder is removed (CS-9). Warn, then keep checking versions.
+    live = CLAUDE_DIR / "cepa-live"
+    try:
+        outside = repo.resolve() != live.resolve()
+    except OSError:
+        outside = repo != live
+    if outside:
+        clone = (rec or {}).get("main_clone")
+        if clone and Path(clone).is_dir():
+            src, origin = str(clone), f"o clone {clone}"
+        else:
+            src, origin = str(repo), f"a própria pasta registrada {repo}"
+        warn("plugins", f"marketplace 'cepa' registrado em {repo}, fora de ~/.claude/cepa-live — "
+                        f"se essa pasta for removida o registro quebra; reinstalar a partir de "
+                        f"{origin} reaponta o registro para ~/.claude/cepa-live",
+             fix={"kind": "install", "repo": src})
     enabled = settings.get("enabledPlugins", {})
     if PV is None:
         fail("plugins", "comparador de versões (_pluginver.py) não carregou — "
@@ -1197,7 +1214,17 @@ FIX_LABEL = {
 
 
 def fix_key(fx):
-    """Identity of a fix — the same key used to avoid repeating it."""
+    """Identity of a fix — the same key used to avoid repeating it.
+
+    Every install is the same fix whatever its `repo`: it swaps the machine's one
+    installation, so two findings offering it from different folders (registry outside
+    cepa-live + cache drift) must run it once, the first finding's repo winning.
+    The collapse is deliberate even on failure: if the first install fails, the install
+    from the other finding's repo is NOT attempted in the same run; the failure shows
+    in the report.
+    """
+    if fx["kind"] == "install":
+        return ("install", "")
     return (fx["kind"], fx.get("path") or fx.get("repo") or fx.get("root") or "")
 
 
