@@ -411,6 +411,14 @@ USAGE_LIMIT = re.compile(
     r"|\blimit reached\b\s*[\u00b7\u2022\u2219|-]\s*resets\b",
     re.I)
 
+# The cap of ONE model, not of the account: "You've hit your Fable limit · resets
+# 4pm (America/Sao_Paulo). Switch to another model". On 2026-11-17 a run read it as
+# the account cap and slept 3h until the reset, with 9% of the week still free for
+# the other models. The generic words are the account's own windows.
+MODEL_LIMIT = re.compile(r"hit\s+your\s+([A-Za-z][\w.]*(?:\s[\w.]+)?)\s+limit\b", re.I)
+ACCOUNT_WINDOWS = {"session", "weekly", "usage", "daily", "monthly", "5-hour",
+                   "five-hour", "hourly", "rate", "spend", "spending", "plan"}
+
 # The reset time, when the message carries it — it is the datum that decides whether to reschedule the
 # window or give up the night, and it is lost if the supervisor only records "hit the limit".
 LIMIT_RESET = re.compile(r"resets?(?:\s+at)?\s+([^\n(\"]{1,40})", re.I)
@@ -682,7 +690,7 @@ _STEPS = [
     (r"^green on the 2nd", "↻", "amarelo"),
     (r"^(green|done)\b", "✓", "verde"),
     (r"^red \(", "↻", "amarelo"),
-    (r"^(RED|NO PROGRESS|NO NETWORK|ACCOUNT USAGE CAP|`done` with no|\d+ attempt)",
+    (r"^(RED|NO PROGRESS|NO NETWORK|[A-Z0-9. ]*USAGE CAP|`done` with no|\d+ attempt)",
      "✗", "vermelho"),
     (r"^(blocked|`blocked`|dropped)", "⊘", "vermelho"),
     (r"^(probing|waiting)", "⏳", "amarelo"),
@@ -946,7 +954,7 @@ CUT_RULE = (
     "them is missing, `finish` refuses and records nothing.")
 
 
-def build_command(name, branch, permissions, session_id=None, note=""):
+def build_command(name, branch, permissions, session_id=None, note="", model=None):
     # stream-json is what carries the `rate_limit_event` with the quota usage. `--verbose`
     # is required by `claude` itself for that format with `-p`.
     # `--na-branch` tells drain-plan that the tree it wakes up in IS the
@@ -966,6 +974,8 @@ def build_command(name, branch, permissions, session_id=None, note=""):
         cmd += ["--session-id", session_id]
     if not permissions:
         cmd.append("--dangerously-skip-permissions")
+    if model:
+        cmd += ["--model", model]
     return cmd
 
 
@@ -1083,6 +1093,23 @@ def usage_limit(output):
     m = LIMIT_RESET.search(text)
     reset = m.group(1).strip().rstrip(".") if m else None
     return True, reset, reset_time(text, datetime.now())
+
+
+def model_limit(output):
+    """The name of the model whose OWN cap cut this attempt ("Fable"), or None
+    when the cap is the account's (or there is no cap). Read from the text of the
+    final `result`, the only place `claude` names the model; a cap named after an
+    account window ("session", "weekly") is the account's."""
+    results = [e.get("result") for e in _json_objects(output or "", "result")
+               if isinstance(e.get("result"), str)]
+    text = results[-1] if results else (output or "")[-OUTPUT_TAIL:]
+    m = MODEL_LIMIT.search(text or "")
+    if not m:
+        return None
+    name = m.group(1).strip()
+    if name.lower() in ACCOUNT_WINDOWS or name.lower().split()[0] in ACCOUNT_WINDOWS:
+        return None
+    return name
 
 
 def item_cost(starts):
@@ -1434,13 +1461,14 @@ def herdr_release(agent="cepa-until", done=False, failure=None):
 
 
 def run_item(name, tree, branch, permissions, limit_sec, log,
-                 on_launch=None, session_id=None, on_tick=None, note=""):
+                 on_launch=None, session_id=None, on_tick=None, note="",
+                 model=None):
     """Launches ONE subprocess, with `tree` (the night worktree) as cwd.
     Returns (code, killed_by_timeout, seconds, this_attempt_output).
     `on_launch` receives the child's pid: it is what `run_interrompido` says
     was left running."""
     repo = tree
-    cmd = build_command(name, branch, permissions, session_id, note)
+    cmd = build_command(name, branch, permissions, session_id, note, model)
     start = time.monotonic()
     try:
         mark = os.path.getsize(log)
@@ -5530,6 +5558,11 @@ def _main(argv=None):
     ap.add_argument("--no-verify", "--sem-verify", action="store_true", dest="no_verify",
                     help="skips the full build after items. Only for a "
                          "repo without a build")
+    ap.add_argument("--fallback-model", default="opus", metavar="MODEL",
+                    help="when ONE model's own cap cuts an item (\"You've hit your "
+                         "Fable limit\"), the run switches the item sessions to this "
+                         "model and resumes at once instead of waiting for the reset "
+                         "(default: opus; `off` waits as before)")
     ap.add_argument("--no-analysis", "--sem-analise", action="store_true", dest="no_analysis",
                     help="skips /common:until-review at the end of the run")
     ap.add_argument("--no-resume-on-answer", "--sem-retomar-na-resposta",
@@ -6224,6 +6257,9 @@ def _main(argv=None):
     # already includes the previous item, and the waits done.
     starts, last_reading, fresh_reading = [], None, False
     waits, consecutive_waits = [], 0
+    # The model the item sessions run on: None is `claude`'s default. It changes
+    # once, to `--fallback-model`, when a model's own cap cuts an item.
+    item_model, capped_models = None, []
     # The network drops: [item, when it dropped, when it came back or None], and the
     # consecutive ones.
     drops, consecutive_drops = [], 0
@@ -6465,7 +6501,8 @@ def _main(argv=None):
         limit = (remaining + slack).total_seconds()
         code, killed, spent, output = run_item(
             cur, tree, start_branch, a.with_permissions, limit, log,
-            on_launch=launched, session_id=session_id, on_tick=tick, note=note)
+            on_launch=launched, session_id=session_id, on_tick=tick, note=note,
+            model=item_model)
         in_flight.pop("pid_filho", None)
 
         # Uncommitted leftovers don't carry over to the next item.
@@ -6881,6 +6918,24 @@ def _main(argv=None):
         # a stop, whatever happens afterwards in the output.
         if not progress:
             hit, reset, reset_at = usage_limit(output)
+            capped = model_limit(output) if hit else None
+            fallback = (a.fallback_model or "").strip()
+            if capped and fallback and fallback.lower() != "off" \
+                    and capped.lower() not in fallback.lower() \
+                    and fallback != item_model:
+                # Another model still has room: switch now instead of sleeping until
+                # the reset. The cut attempt is not the item's: gives back the turn.
+                capped_models.append(capped)
+                item_model = fallback
+                attempts[key] -= 1
+                log_event({"evento": "limite_de_modelo", "id": ident,
+                           "modelo": capped, "troca_para": fallback, "reset": reset})
+                step(f"{capped.upper()} USAGE CAP"
+                     + (f" · resets {reset}" if reset else "")
+                     + f" — only this model's cap; switching to `{fallback}` "
+                       f"and resuming {ident} now")
+                herdr_report(f"{cur}: {capped} cap, switched to {fallback}")
+                continue
             if hit:
                 limited.append((ident, reset))
                 outcome(ident, "limite-de-uso", "cut off by the account "
@@ -6896,7 +6951,7 @@ def _main(argv=None):
                 log_event({"evento": "limite_de_uso", "id": ident, "reset": reset,
                           "reset_em": reset_at.isoformat() if reset_at else None,
                           "espera": fits})
-                step(f"ACCOUNT USAGE CAP"
+                step((f"{capped.upper()} USAGE CAP" if capped else "ACCOUNT USAGE CAP")
                       + (f" · resets {reset}" if reset else "")
                       + " — not the item's fault")
                 if fits:

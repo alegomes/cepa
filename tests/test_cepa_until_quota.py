@@ -500,6 +500,128 @@ def test_herdr_keeps_working_and_says_until_when_after_hitting_the_ceiling():
                                "fila: item 1/1 a1", wake, "fila: item 1/1 a1")
 
 
+# ── the cap of ONE model is not the account's ──────────────────────────────
+
+# Real event and text of 2026-11-17 (run until-todas-as-filas/2026-11-17-1056):
+# the Fable sub-limit rejected, the week itself at 90% and still allowed.
+MODEL_EVENT = (
+    "def evento_modelo(reset):\n"
+    "    print(json.dumps({'type': 'rate_limit_event', 'rate_limit_info': {\n"
+    "        'status': 'rejected', 'resetsAt': reset,\n"
+    "        'rateLimitType': 'seven_day_overage_included', 'isUsingOverage': False,\n"
+    "        'unifiedWindows': {\n"
+    "            'seven_day': {'utilization': 0.9, 'resetsAt': reset,\n"
+    "                          'status': 'allowed_warning'},\n"
+    "            'seven_day_overage_included': {'utilization': 1, 'resetsAt': reset,\n"
+    "                                           'status': 'rejected'}}},\n"
+    "        'uuid': 'u', 'session_id': 's'}), flush=True)\n"
+)
+FABLE_TEXT = ("You've hit your Fable limit · resets 4pm (America/Sao_Paulo). "
+              "Switch to another model, or manage usage credits at "
+              "claude.ai/settings/usage")
+
+# First call: the Fable cap with the reset 1h away. Afterwards: closes the item
+# only when it runs with `--model opus`.
+FABLE_BODY = EVENT + MODEL_EVENT + (
+    "if N == 1:\n"
+    "    evento_modelo(int(time.time()) + 3600)\n"
+    f"    resultado({FABLE_TEXT!r}, True)\n"
+    "    sys.exit(1)\n"
+    "evento(0.02, int(time.time()) + 18000)\n"
+    "if '--model' in ARGS and ARGS[ARGS.index('--model') + 1] == 'opus':\n"
+    "    marca(primeiro_pendente(), status='done')\n")
+
+
+def test_model_cap_switches_to_the_fallback_model_without_waiting():
+    """2026-11-17: "You've hit your Fable limit" and the run slept until 16:02 with
+    9% of the week free for the other models. A model's own cap switches the
+    item sessions to `--fallback-model` (default opus) and resumes at once."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, FABLE_BODY)
+        start = time.monotonic()
+        p, calls = run_until(root, binv, plan_of(root),
+                             ["--for", "2h", "--attempts-per-item", "1"],
+                             extra_env=MARGIN)
+        spent = time.monotonic() - start
+        check("não dormiu até o reset de 1h", spent < 60, f"{spent:.1f}s")
+        models = [c[c.index("--model") + 1] if "--model" in c else None
+                  for c in calls]
+        check("1ª sessão no modelo padrão, as seguintes com --model opus",
+              models == [None, "opus", "opus"], str(models))
+        check("a1 e a2 fecham done; a tentativa cortada não gastou a vez do a1",
+              status(plan_of(root)) == {"a1": "done", "a2": "done"},
+              str(status(plan_of(root))))
+        ev = [e for e in ledger_of(root) if e.get("evento") == "limite_de_modelo"]
+        check("o registro diz qual modelo bateu e para qual trocou",
+              ev and ev[0].get("modelo") == "Fable"
+              and ev[0].get("troca_para") == "opus", str(ev))
+        check("a tela nomeia o limite do Fable, não o da conta",
+              "FABLE USAGE CAP" in p.stdout and "ACCOUNT USAGE CAP" not in p.stdout,
+              p.stdout[-800:])
+
+
+def test_model_cap_with_fallback_off_waits_and_names_the_model():
+    """`--fallback-model off` keeps the old behavior (wait for the reset), and the
+    screen still says which cap it was."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        body = EVENT + MODEL_EVENT + (
+            "if N == 1:\n"
+            "    evento_modelo(int(time.time()) + 2)\n"
+            f"    resultado({FABLE_TEXT!r}, True)\n"
+            "    sys.exit(1)\n"
+            "evento(0.02, int(time.time()) + 18000)\n"
+            "marca(primeiro_pendente(), status='done')\n")
+        binv = fake_claude(tmp, body)
+        start = time.monotonic()
+        p, calls = run_until(root, binv, plan_of(root),
+                             ["--for", "2h", "--fallback-model", "off"],
+                             extra_env=MARGIN)
+        spent = time.monotonic() - start
+        check("off: esperou o reset", spent >= 2, f"{spent:.1f}s")
+        check("off: nenhuma sessão com --model",
+              all("--model" not in c for c in calls), str(calls))
+        check("off: a tela diz FABLE USAGE CAP", "FABLE USAGE CAP" in p.stdout,
+              p.stdout[-800:])
+
+
+def test_fallback_model_capped_too_waits_for_the_reset():
+    """The fallback model hitting its own cap does not switch again: it waits."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        body = EVENT + MODEL_EVENT + (
+            "if N == 1:\n"
+            "    evento_modelo(int(time.time()) + 2)\n"
+            f"    resultado({FABLE_TEXT!r}, True)\n"
+            "    sys.exit(1)\n"
+            "if N == 2:\n"
+            "    evento_modelo(int(time.time()) + 2)\n"
+            "    resultado(\"You've hit your Opus limit · resets 4pm\", True)\n"
+            "    sys.exit(1)\n"
+            "evento(0.02, int(time.time()) + 18000)\n"
+            "marca(primeiro_pendente(), status='done')\n")
+        binv = fake_claude(tmp, body)
+        p, calls = run_until(root, binv, plan_of(root), ["--for", "2h"],
+                             extra_env=MARGIN)
+        trocas = [e for e in ledger_of(root) if e.get("evento") == "limite_de_modelo"]
+        esperas = [e for e in ledger_of(root) if e.get("evento") == "limite_de_uso"]
+        check("trocou uma vez só", len(trocas) == 1, str(trocas))
+        check("o limite do Opus virou espera", len(esperas) == 1, str(esperas))
+        check("a1 fechou depois", status(plan_of(root)) == {"a1": "done"},
+              str(status(plan_of(root))))
+
+
+def test_model_limit_reads_the_model_name():
+    mod = load_module()
+    res = lambda t: json.dumps({"type": "result", "result": t})  # noqa: E731
+    check("Fable", mod.model_limit(res(FABLE_TEXT)) == "Fable")
+    check("session é da conta", mod.model_limit(res(CEILING_TEXT)) is None)
+    check("weekly é da conta",
+          mod.model_limit(res("You've hit your weekly limit · resets Nov 20")) is None)
+    check("sem limite", mod.model_limit(res("all good")) is None)
+
+
 def main():
     print("cepa-until — cota de 5h da conta\n")
     for given_name, fn in sorted(globals().items()):
