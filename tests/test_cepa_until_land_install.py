@@ -61,7 +61,9 @@ def as_cepa_repo(root):
         "    f.write(json.dumps({'cwd': os.path.realpath(os.getcwd()),\n"
         "                        'args': sys.argv[1:], 'log': log}) + '\\n')\n"
         "EOF\n"
-        # FAKE_INSTALL_EXIT makes the installer fail after writing the call down.
+        # FAKE_INSTALL_EXIT makes the installer fail after writing the call down;
+        # with `--rollback` among the arguments FAKE_ROLLBACK_EXIT (default 0) rules.
+        "case \" $* \" in *\" --rollback \"*) exit ${FAKE_ROLLBACK_EXIT:-0};; esac\n"
         "exit ${FAKE_INSTALL_EXIT:-0}\n")
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
@@ -153,7 +155,8 @@ def test_cs6_failed_install_does_not_change_the_landing():
             del os.environ["FAKE_INSTALL_EXIT"]
         check("CS-6: instalador que falha: o pouso ainda sai 0",
               p.returncode == 0, p.stdout + p.stderr)
-        check("CS-6: ...o instalador foi chamado", len(calls(root)) == 1,
+        check("CS-6: ...o instalador foi chamado (a primeira chamada é a instalação)",
+              len(calls(root)) >= 1 and calls(root)[0].get("args") == [],
               str(calls(root)))
         ev = landing_events(root)
         e = ev[0] if ev else {}
@@ -424,6 +427,136 @@ def test_cs7_the_live_run_is_found_in_any_queue_and_layout():
             check(f"CS-7 ({how}): o pouso sai 0 e adia", p.returncode == 0
                   and len(deferred_events(root)) == 1 and calls(root) == [],
                   p.stdout + p.stderr)
+
+
+def undone_events(root):
+    return [e for e in ledger_of(root) if e["evento"] == "reinstalacao_desfeita"]
+
+
+def land_with_env(root, run_id, **env):
+    for k, v in env.items():
+        os.environ[k] = v
+    try:
+        return land(root, run_id, "--yes")
+    finally:
+        for k in env:
+            del os.environ[k]
+
+
+def test_cs8_failed_install_is_rolled_back_and_the_landing_stands():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = as_cepa_repo(build_repo(tmp, [item("a1")]))
+        run_id, branch, tree = night(root)
+        p = land_with_env(root, run_id, FAKE_INSTALL_EXIT="1")
+        out = p.stdout
+        check("CS-8: instalação que falha: o pouso sai 0", p.returncode == 0,
+              out + p.stderr)
+        log = subprocess.run(["git", "log", "--format=%s"], cwd=root,
+                             capture_output=True, text=True).stdout.splitlines()
+        check("CS-8: ...o merge está no clone", "a1" in log, str(log))
+        c = calls(root)
+        check("CS-8: ...o instalador foi chamado duas vezes, instalação e depois --rollback",
+              len(c) == 2 and c[0].get("args") == []
+              and c[1].get("args") == ["--rollback"], str(c))
+        check("CS-8: ...as duas com o clone como diretório",
+              all(x.get("cwd") == str(root.resolve()) for x in c), str(c))
+        ev = undone_events(root)
+        e = ev[0] if ev else {}
+        check("CS-8: ...o registro ganha reinstalacao_desfeita com ok verdadeiro",
+              len(ev) == 1 and e.get("ok") is True
+              and Path(e.get("repo") or "/x").resolve() == root.resolve()
+              and "1" in str(e.get("motivo")) and e.get("quando")
+              and "segundos" in e, str(ev))
+        names = [x["evento"] for x in ledger_of(root)]
+        inst = landing_events(root)
+        check("CS-8: ...depois do instalado_no_pouso com ok falso",
+              len(inst) == 1 and inst[0].get("ok") is False
+              and "instalado_no_pouso" in names and "reinstalacao_desfeita" in names
+              and names.index("instalado_no_pouso")
+              < names.index("reinstalacao_desfeita"), str(names))
+        check("CS-8: ...a tela tem 'Fica com você' com o install e o clone",
+              "Fica com você" in out and "sh bin/install.sh" in out
+              and str(root.resolve()) in out, out)
+        check("CS-8: ...e diz que os plugins anteriores foram restaurados",
+              "restored" in out, out)
+        check("CS-8: ...e onde está a saída (.log)", f"{run_id}.log" in out, out)
+        check("CS-8: ...o estado vira aterrissado",
+              state(root).get("estado") == "aterrissado", str(state(root)))
+        check("CS-8: ...a branch da rodada foi removida",
+              not subprocess.run(["git", "branch", "--list", branch], cwd=root,
+                                 capture_output=True, text=True).stdout.strip())
+        check("CS-8: ...e a pasta da rodada também", not Path(tree).exists(), tree)
+
+
+def test_cs8_rollback_that_also_fails_still_lands():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = as_cepa_repo(build_repo(tmp, [item("a1")]))
+        run_id, _branch, _tree = night(root)
+        p = land_with_env(root, run_id, FAKE_INSTALL_EXIT="1",
+                          FAKE_ROLLBACK_EXIT="1")
+        out = p.stdout
+        check("CS-8 (rollback falha): o pouso sai 0", p.returncode == 0,
+              out + p.stderr)
+        c = calls(root)
+        check("CS-8 (rollback falha): ...instalação e --rollback foram chamados",
+              len(c) == 2 and c[1].get("args") == ["--rollback"], str(c))
+        ev = undone_events(root)
+        check("CS-8 (rollback falha): ...o registro tem reinstalacao_desfeita com ok falso",
+              len(ev) == 1 and ev[0].get("ok") is False, str(ev))
+        check("CS-8 (rollback falha): ...a tela diz que o rollback também falhou, "
+              "que pode estar pela metade e aponta o doctor",
+              "Fica com você" in out and "rollback" in out.lower()
+              and "half" in out and "/common:doctor" in out
+              and "restored" not in out, out)
+        check("CS-8 (rollback falha): ...o estado vira aterrissado",
+              state(root).get("estado") == "aterrissado", str(state(root)))
+
+
+def test_cs8_green_install_makes_no_rollback():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = as_cepa_repo(build_repo(tmp, [item("a1")]))
+        run_id, _branch, _tree = night(root)
+        p = land(root, run_id, "--yes")
+        check("CS-8 (verde): o pouso sai 0 com uma só chamada, sem --rollback",
+              p.returncode == 0 and len(calls(root)) == 1
+              and calls(root)[0].get("args") == [], p.stdout + str(calls(root)))
+        check("CS-8 (verde): ...sem reinstalacao_desfeita",
+              undone_events(root) == [], str(undone_events(root)))
+
+
+def test_cs8_no_rollback_without_an_install_that_failed():
+    # Red build, plan-only landing and another repo: the installer never runs, so
+    # there is nothing to roll back, even with the env that would make it fail.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = as_cepa_repo(build_repo(tmp, [item("a1")]))
+        run_id, _branch, _tree = night(root)
+        commit(root, "quebra.txt", "x", "main andou")
+        p = land_with_env(root, run_id, FAKE_INSTALL_EXIT="1")
+        check("CS-8 (build vermelho): sai 5, sem chamada e sem reinstalacao_desfeita",
+              p.returncode == 5 and calls(root) == [] and undone_events(root) == [],
+              p.stdout + str(calls(root)))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = as_cepa_repo(build_repo(tmp, [item("a1")]))
+        run_id, _branch, _tree = night(root)
+        os.environ["FAKE_INSTALL_EXIT"] = "1"
+        try:
+            p = land(root, run_id)
+        finally:
+            del os.environ["FAKE_INSTALL_EXIT"]
+        check("CS-8 (só plano): sai 0, sem chamada e sem reinstalacao_desfeita",
+              p.returncode == 0 and calls(root) == [] and undone_events(root) == [],
+              p.stdout + str(calls(root)))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = as_cepa_repo(build_repo(tmp, [item("a1")]))
+        (root / ".claude-plugin" / "marketplace.json").write_text(
+            json.dumps({"name": "outro", "plugins": []}))
+        commit(root, ".claude-plugin/marketplace.json",
+               json.dumps({"name": "outro", "plugins": []}), "não é o cepa")
+        run_id, _branch, _tree = night(root)
+        p = land_with_env(root, run_id, FAKE_INSTALL_EXIT="1")
+        check("CS-8 (outro repo): sai 0, sem chamada e sem reinstalacao_desfeita",
+              p.returncode == 0 and calls(root) == [] and undone_events(root) == [],
+              p.stdout + str(calls(root)))
 
 
 def main():
