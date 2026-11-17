@@ -815,14 +815,17 @@ def until_dir(repo, queue):
     return qp.queue_dir(repo, queue) / "until"
 
 
-def query_next_ready(repo, warned=None):
+def query_next_ready(repo, warned=None, left=None):
     """The next item of a `--all` run, read fresh (spec until-todas-as-filas, Q4):
     the first ready item in the order of `cepa-plan ready` (queue by queue, the
     recorded order inside a queue). Returns (queue, data, error): `data` is
     `query_queue` of that queue, so the run loop handles it like a single-queue
     round. With nothing ready anywhere, `data` has an empty batch and an
-    `end-of-queue` stop, which is what ends a single-queue run too."""
+    `end-of-queue` stop, which is what ends a single-queue run too. `left` is
+    the set of queues that left THIS run for hitting `--max-blocked` (CS-5):
+    they are skipped, with no warning."""
     warned = warned if warned is not None else set()
+    left = left if left is not None else set()
     ready, error = query_ready(repo)
     if error:
         return None, None, error
@@ -830,6 +833,8 @@ def query_next_ready(repo, warned=None):
         if not q.get("prontos"):
             continue
         name = Path(str(q.get("path") or "")).parent.name or str(q["queue"])
+        if name in left:
+            continue
         alive = live_run_of_queue(repo, name)
         if alive:
             if name not in warned:
@@ -5502,7 +5507,9 @@ def _main(argv=None):
                     dest="max_blocked", metavar="N",
                     help=f"CONSECUTIVE `blocked` items that end the run: the queue "
                          f"is stuck on an outside cause, and going on only "
-                         f"rediscovers that cause (default {DEFAULT_MAX_BLOCKED})")
+                         f"rediscovers that cause. In a `--all` run the count is "
+                         f"per queue and the queue leaves the run instead of "
+                         f"ending it (default {DEFAULT_MAX_BLOCKED})")
     ap.add_argument("--attempts-per-item", "--tentativas-por-item", type=int,
                     default=DEFAULT_ATTEMPTS_PER_ITEM, dest="attempts_per_item", metavar="N",
                     help=f"how many subprocesses one window spends on the same "
@@ -5596,10 +5603,12 @@ def _main(argv=None):
     # under the name `all` (spec until-todas-as-filas, CS-2). `cur` is the queue
     # of the item in hand: always `a.queue` in a single-queue run, the queue the
     # next ready item belongs to in a `--all` run.
+    # Queues of a `--all` run that left it for hitting `--max-blocked` (CS-5).
+    left_queues = set()
     if a.all_queues:
         a.queue = ALL_QUEUE
         skipped_warned = set()
-        cur, data, error = query_next_ready(repo, skipped_warned)
+        cur, data, error = query_next_ready(repo, skipped_warned, left_queues)
         if error:
             print(f"cepa-until: could not read the queues — {error}",
                   file=sys.stderr)
@@ -5615,7 +5624,7 @@ def _main(argv=None):
     def next_item():
         """(queue, data, error) of the next item, read fresh."""
         if a.all_queues:
-            return query_next_ready(repo, skipped_warned)
+            return query_next_ready(repo, skipped_warned, left_queues)
         fresh, fresh_error = query_queue(a.queue, repo)
         return a.queue, fresh, fresh_error
 
@@ -6174,7 +6183,10 @@ def _main(argv=None):
     # The `blocked` of the current sequence. Only an outcome that is not `blocked`
     # (done, dropped, human route) resets it; an attempt with no progress belongs to the breaker
     # and doesn't touch this.
+    # In a `--all` run the streak is per queue (CS-5): `blocked_streaks` holds one
+    # list per queue and `consecutive_blocked` is unused.
     consecutive_blocked = []
+    blocked_streaks = {}
     done_items, failed, items = [], [], 0
     # How many times THIS window has already launched a subprocess for each item, and
     # what it took out of the way through exhaustion or the account usage ceiling.
@@ -6198,6 +6210,24 @@ def _main(argv=None):
         """What the screen and the record call an item: `queue/id` in a `--all`
         run, the bare id in a single-queue run (as it always was)."""
         return f"{k[0]}/{k[1]}" if a.all_queues else str(k[1])
+
+    def blocked_streak(queue):
+        """The list of consecutive `blocked` that `--max-blocked` counts: the one
+        of the whole run in a single-queue run, the queue's own in `--all`."""
+        if a.all_queues:
+            return blocked_streaks.setdefault(queue, [])
+        return consecutive_blocked
+
+    def queue_left_the_run(queue, streak):
+        """CS-5: in a `--all` run the queue that reached `--max-blocked` leaves
+        THIS run (only this one) and the run goes on with the others."""
+        ids = [str(k[1]) for k in streak]
+        left_queues.add(queue)
+        step(f"queue `{queue}` left the run: {len(ids)} items in a row came out "
+             f"`blocked` ({', '.join(ids)}); the other queues carry on")
+        log_event({"evento": "fila_saiu_do_run", "fila": queue, "itens": ids,
+                   "max_travados": a.max_blocked})
+        streak.clear()
 
     def in_the_middle_of(key, n_before):
         others = []
@@ -6805,8 +6835,9 @@ def _main(argv=None):
         # last return (`blocked`) also enters the stalled-queue counter.
         if back_now:
             consecutive_failures += 1
+            streak = blocked_streak(key[0])
             if run_state == "blocked":
-                consecutive_blocked.append(key)
+                streak.append(key)
             if consecutive_failures >= a.max_failures:
                 end_reason = "disjuntor"
                 end_detail = (f"{consecutive_failures} items in a row failed to close "
@@ -6814,11 +6845,14 @@ def _main(argv=None):
                                f"{ident}) — this is systemic, not bad luck; "
                                "going on would burn the window on the same problem")
                 break
-            if len(consecutive_blocked) >= a.max_blocked:
+            if len(streak) >= a.max_blocked:
+                if a.all_queues:
+                    queue_left_the_run(key[0], streak)
+                    continue
                 end_reason = "fila-travada"
                 end_detail = (
-                    f"{len(consecutive_blocked)} items in a row came out `blocked` "
-                    f"({', '.join(label(k) for k in consecutive_blocked)}); the reason for each "
+                    f"{len(streak)} items in a row came out `blocked` "
+                    f"({', '.join(label(k) for k in streak)}); the reason for each "
                     "is in the queue's `evidence`")
                 break
             continue
@@ -6937,15 +6971,18 @@ def _main(argv=None):
                 mark += f" · {n_commits} commit(s) without closing"
             step(f"{mark} ({human(timedelta(seconds=spent))})")
 
+            streak = blocked_streak(key[0])
             if run_state == "blocked":
-                consecutive_blocked.append(key)
+                streak.append(key)
             else:
-                consecutive_blocked = []
-            if len(consecutive_blocked) >= a.max_blocked:
+                streak.clear()
+            if len(streak) >= a.max_blocked and a.all_queues:
+                queue_left_the_run(key[0], streak)
+            elif len(streak) >= a.max_blocked:
                 end_reason = "fila-travada"
                 end_detail = (
-                    f"{len(consecutive_blocked)} items in a row came out `blocked` "
-                    f"({', '.join(label(k) for k in consecutive_blocked)}) — the queue is getting stuck "
+                    f"{len(streak)} items in a row came out `blocked` "
+                    f"({', '.join(label(k) for k in streak)}) — the queue is getting stuck "
                     "on an outside condition, not on the items' failures. Going on "
                     "would rediscover the same cause on every item; the reason for "
                     "each is in the queue's `evidence`")
@@ -7023,7 +7060,8 @@ def _main(argv=None):
               "quedas_de_rede": len(drops), "cota_apertada": len(tight),
               "entregues": len(delivered), "travados": len(blocked_items),
               "verify_vermelho": len(reds),
-              "done_sem_commit": len(without_commit)})
+              "done_sem_commit": len(without_commit),
+              "filas_fora": sorted(left_queues)})
 
     print()
     print(SCREEN.rule(f"ended at {datetime.now().strftime('%H:%M')} · {end_reason}"))

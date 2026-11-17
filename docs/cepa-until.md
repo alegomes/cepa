@@ -108,6 +108,13 @@ the window rediscovering it. On 2026-09-23 that was 20 rounds and US$ 14.30; on 
 7 in a row in 11 minutes. Any other outcome (`done`, `dropped`, a human route) resets the
 count; an attempt with no progress belongs to the circuit breaker and leaves it alone.
 
+In a `--all` run the limit is **per queue**: the streak of queue `a` is not touched by the
+items of queue `b`. When a queue reaches `--max-blocked` it **leaves this run** instead of
+ending it: a line names the queue and its blocked items, the run record gets a
+`fila_saiu_do_run` event (and `run_end` lists `filas_fora`), no further item of that queue
+starts, and the run carries on with the other queues. The queue is out only for this run;
+the next one picks it up again. `--max-failures` still ends the whole run.
+
 ## O que o registro grava por tentativa (`versao_registro: 2`)
 
 O `run_start` traz `versao_registro: 2`; registros sem o campo são do formato antigo e o
