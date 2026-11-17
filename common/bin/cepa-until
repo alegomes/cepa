@@ -200,7 +200,7 @@ gains `hooks_reinstalados` (`sha_antes`, `sha_depois`: a content digest of the i
 `done` and the night goes on. If not even the rollback gives the cache back, the run ends
 with `reinstalacao-falhou`. Installing from the worktree leaves the plugins in force with
 the worktree's content: `land --yes` runs `sh bin/install.sh` from the main clone by itself,
-after the merge and the green build, and records `instalado_no_pouso`. If `~/.claude/ops/last-install.json` says the plugins in force come from the worktree of another run that is still alive, the install is skipped instead (`instalacao_adiada` in the record, and "Fica com você" asks for `sh bin/install.sh` in the clone when that run ends); the landing's exit code is the same. Open sessions keep the old hooks in memory until restarted. Two
+after the merge and the green build, and records `instalado_no_pouso`. If `~/.claude/ops/last-install.json` says the plugins in force come from the worktree of another run that is still alive, the install is skipped instead (`instalacao_adiada` in the record, and "Fica com você" asks for `sh bin/install.sh` in the clone when that run ends); the landing's exit code is the same. If that install fails, the landing runs `sh bin/install.sh --rollback` from the clone, records `reinstalacao_desfeita` and asks, under "Fica com você", for `sh bin/install.sh` in the clone by hand; the landing stands and its exit code is the same. Open sessions keep the old hooks in memory until restarted. Two
 reinstalls in one night keep only the previous cache in `.prev`. Without `--verify` there is
 no build, so no reinstall: only the warning above. With less than 120 s left in the window the supervisor does not start the install (killing it halfway would leave the cache half moved): it records `reinstalacao_adiada` and falls back to the warning. In any other repo nothing changes.
 
@@ -2238,7 +2238,10 @@ def land_parser():
             "does not change the exit code. If the plugins in force come from the\n"
             "worktree of another run that is still alive, the install is skipped\n"
             "(`instalacao_adiada`) and it asks, under \"Fica com você\", to run\n"
-            "`sh bin/install.sh` in the clone when that run ends.\n"
+            "`sh bin/install.sh` in the clone when that run ends. If the install\n"
+            "fails it runs `sh bin/install.sh --rollback` from the clone, records\n"
+            "`reinstalacao_desfeita` and asks, under \"Fica com você\", for the\n"
+            "install by hand; the landing stands and the exit code is still 0.\n"
             "At the end, whatever way it ends, it commits the queue marks and the run\n"
             "records the clone holds for the run (only those paths, never\n"
             "--no-verify, not pushed). If git refuses, it says why and prints the\n"
@@ -2497,6 +2500,8 @@ def _cmd_land(argv, wrote):
 # What the landing runs in the cepa repo, from the clone. No `--clean`: the copy
 # the run left is not a point worth going back to.
 LAND_INSTALL = "sh bin/install.sh"
+# What it runs from the clone when that install fails (CS-8).
+LAND_ROLLBACK = "sh bin/install.sh --rollback"
 
 
 def installed_from_live_run(repo):
@@ -2538,7 +2543,17 @@ def install_on_landing(repo, ledger_dir, run_id):
     from the clone would pull the plugins from under it. The install is skipped, the
     run's `.jsonl` gains `instalacao_adiada` and the screen asks, under "Fica com
     você", for `sh bin/install.sh` in the clone when that run ends. Exit code
-    unchanged. Returns None then."""
+    unchanged. Returns None then.
+
+    CS-8: when the install fails, the landing runs `sh bin/install.sh --rollback` from
+    the clone (output in the same `.log`), AFTER `instalado_no_pouso` with `ok: false`.
+    The run's `.jsonl` gains `reinstalacao_desfeita` (`ok` is whether the rollback
+    exited 0, `motivo` why the install failed, or why the rollback did) and the screen
+    asks, under "Fica com você", for `sh bin/install.sh` in the clone by hand. No
+    cache-sha check as the supervisor's own rollback does: the landing has no
+    `sha_before`. The real installer exits 1 with "Nothing to roll back to" when no
+    `--clean` ever left a rollback point; then the screen says the plugins may be
+    half installed and points at `/common:doctor`. The exit code stays 0."""
     other = installed_from_live_run(repo)
     if other:
         when = datetime.now().isoformat(timespec="seconds")
@@ -2567,9 +2582,26 @@ def install_on_landing(repo, ledger_dir, run_id):
         print(f"  installed ({human(timedelta(seconds=sec))}); sessions already "
               "open keep the previous plugins until restarted")
     else:
-        print(f"  the install FAILED ({reason}); the landing goes on. Run "
-              f"`{LAND_INSTALL}` in {repo} by hand; the output is in "
-              f"{ledger_dir / (run_id + '.log')}")
+        log = ledger_dir / f"{run_id}.log"
+        print(f"  the install FAILED ({reason}); the landing goes on. Running "
+              f"`{LAND_ROLLBACK}` from the clone")
+        rb_ok, rb_sec, rb_reason = run_verify(LAND_ROLLBACK, repo, 1800, log,
+                                              label="rollback")
+        undone = {"evento": "reinstalacao_desfeita", "repo": str(repo), "ok": rb_ok,
+                  "motivo": reason if rb_ok else (rb_reason or reason),
+                  "segundos": int(rb_sec),
+                  "quando": datetime.now().isoformat(timespec="seconds")}
+        with (ledger_dir / f"{run_id}.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps(undone, ensure_ascii=False) + "\n")
+        if rb_ok:
+            print("  the rollback went through: the previous plugins were restored")
+            print(f"Fica com você: run `{LAND_INSTALL}` in {repo} by hand; the "
+                  f"output is in {log}")
+        else:
+            print(f"  the rollback ALSO failed ({rb_reason}): the plugins in force "
+                  "may be half installed; check `/common:doctor`")
+            print(f"Fica com você: run `{LAND_INSTALL}` in {repo} by hand; the "
+                  f"output is in {log}")
     return ok
 
 
