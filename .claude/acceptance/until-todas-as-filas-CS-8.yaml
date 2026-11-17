@@ -1,0 +1,18 @@
+key: until-todas-as-filas-CS-8
+status: complete
+criteria:
+  - id: CS-8
+    text: "Enquanto um run `--all` esta vivo, um segundo `--all` e um `cepa until <fila>` de qualquer fila sao recusados com o nome do run vivo (red test: com um `.claude/queues/_all/until/*.estado.json` em `rodando` e pid vivo, `cepa until --all --for 1h` e `cepa until a --for 1h` saem com 2 e citam `all/<run>`; antes da mudanca o segundo comando lancava normalmente)"
+    altitude: cli
+    surface: "cepa until --all --for 1h e cepa until a --for 1h (common/bin/cepa -> common/bin/cepa-until): exit code, stderr, subprocessos do claude, queue.yaml de cada fila"
+    head: fda4b43
+    test: "tests/test_cepa_until_all.py::test_cs8_live_all_run_refuses_a_second_all_and_a_single_queue_run (roteiro do red test), mais test_cs8_dead_all_run_does_not_refuse_a_single_queue_run"
+    layer: "subprocess real de `cepa until` em repo git temporario com cepa-plan real; so o claude e falso. Estado `_all/until/<run>.estado.json` em `rodando` com pid de um processo vivo e host desta maquina. Asserts: --all e `a` saem com 2; stderr cita `all/<run>` e `pid <vivo>`; nenhum subprocesso do claude roda; filas a e b seguem pending. Lado oposto: com pid morto, `cepa until a` sai 0 e a1 fica done."
+    evidence: verified
+    run: "python3 -c (importa tests/test_cepa_until_all.py e roda os 2 test_cs8_* em primeiro plano, head fda4b43) -> 'FAILS 0 []', 10 checks ok (8 da recusa + 2 do run morto), nenhum FAIL"
+    status: complete
+    notes:
+      - "Producao mudou na superficie certa: diff 7fb5787..fda4b43 em common/bin/cepa-until, `live_all_run` (le `_all/until` direto) e o bloco de recusa em `_main`, logo apos a recusa do run vivo de fila unica; mensagem traz `all/<run>`, pid e prazo, retorna 2."
+      - "O teste RED 1ec55b2 antecedeu o fix fda4b43, conforme declarado."
+      - "Suite completa (tests/run-all.sh) nao rodada por instrucao; fica com o supervisor."
+gap: []
