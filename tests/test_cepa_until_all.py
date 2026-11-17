@@ -758,6 +758,9 @@ def test_blocked_streak_is_counted_per_queue():
         check("a1 e a2 ficam blocked",
               _statuses(paths["a"]) == {"a1": "blocked", "a2": "blocked"},
               str(_statuses(paths["a"])))
+        ends = [e for e in _run_events(root) if e.get("evento") == "run_end"]
+        check("o run_end tem filas_fora vazio quando nenhuma fila saiu",
+              len(ends) == 1 and ends[0].get("filas_fora") == [], str(ends))
 
 
 def test_run_record_carries_the_queue_that_left():
@@ -775,6 +778,99 @@ def test_run_record_carries_the_queue_that_left():
             check("...com a fila, os itens e o limite",
                   ev[0].get("fila") == "a" and ev[0].get("itens") == ["a1", "a2"]
                   and ev[0].get("max_travados") == 2, str(ev[0]))
+        ends = [e for e in _run_events(root) if e.get("evento") == "run_end"]
+        check("o run_end lista a fila que saiu em filas_fora",
+              len(ends) == 1 and ends[0].get("filas_fora") == ["a"], str(ends))
+
+
+def test_a_done_item_resets_the_blocked_streak_of_its_queue():
+    """CS-5: in `a`, blocked, done, blocked, blocked with `--max-blocked 3`: the
+    `done` in the middle resets the streak (the streak ends at 2), so `a` does not leave, all four items start and the run does not end
+    `fila-travada`. Without the reset the streak would hit 3 at a4."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item(f"a{i}") for i in range(1, 5)],
+                                  "b": [base.item("b1")]})
+        body = _blocked_when("queue == 'a' and ident != 'a2'")
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--max-blocked", "3",
+                                "--no-verify", "--no-analysis"], claude_body=body)
+        check("--all sai com 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        check("nenhuma fila sai do run", "left the run" not in p.stdout,
+              p.stdout[-1500:])
+        check("nenhum evento fila_saiu_do_run",
+              not [e for e in _run_events(root)
+                   if e.get("evento") == "fila_saiu_do_run"])
+        check("os quatro itens de a comecam",
+              all(i in _item_starts(root) for i in ("a1", "a2", "a3", "a4")),
+              str(_item_starts(root)))
+        check("a: blocked, done, blocked, blocked",
+              _statuses(paths["a"]) == {"a1": "blocked", "a2": "done",
+                                        "a3": "blocked", "a4": "blocked"},
+              str(_statuses(paths["a"])))
+        check("o run nao termina por fila-travada",
+              "fila-travada" not in p.stdout, p.stdout[-1500:])
+
+
+# Like DONE_IN_ITS_QUEUE, but the commit of queue `a`'s items breaks the build
+# (the verify is `test ! -f quebra.txt`); queue `b`'s items stay green.
+BREAKS_BUILD_IN_A = DONE_IN_ITS_QUEUE.replace(
+    "open(queue + '-' + ident + '.txt', 'w').write('feito')\n",
+    "open(queue + '-' + ident + '.txt', 'w').write('feito')\n"
+    "if queue == 'a':\n"
+    "    open('quebra.txt', 'w').write('x')\n", 1)
+
+
+def test_red_returns_ending_blocked_count_toward_the_queue_leaving_the_run():
+    """CS-5: the items of `a` close `done`, the run's build goes red and, after
+    the returns run out, each is marked `blocked` (the `back_now` path). With
+    `--max-blocked 2` queue `a` leaves the run after a2, a3 never starts, `b1`
+    ends `done` and the run does not end `fila-travada`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1"), base.item("a2"),
+                                        base.item("a3")],
+                                  "b": [base.item("b1")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--max-blocked", "2",
+                                "--max-failures", "50", "--verify",
+                                "test ! -f quebra.txt", "--no-analysis"],
+                    claude_body=BREAKS_BUILD_IN_A)
+        check("--all sai com 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        left = [l for l in p.stdout.splitlines()
+                if "`a`" in l and "left the run" in l]
+        check("uma linha diz que a fila a saiu do run", len(left) == 1,
+              p.stdout[-1500:])
+        check("o evento fila_saiu_do_run existe",
+              len([e for e in _run_events(root)
+                   if e.get("evento") == "fila_saiu_do_run"
+                   and e.get("fila") == "a"]) == 1, str(_run_events(root)[-6:]))
+        check("a3 nunca comeca", "a3" not in _item_starts(root),
+              str(_item_starts(root)))
+        check("a1 e a2 ficam blocked, a3 pending",
+              _statuses(paths["a"]) == {"a1": "blocked", "a2": "blocked",
+                                        "a3": "pending"},
+              str(_statuses(paths["a"])))
+        check("b1 fica done", _statuses(paths["b"]) == {"b1": "done"},
+              f"{_statuses(paths['b'])} {p.stdout[-1500:]}")
+        check("o run nao termina por fila-travada",
+              "fila-travada" not in p.stdout, p.stdout[-1500:])
+
+
+def test_single_queue_red_returns_ending_blocked_end_the_run_fila_travada():
+    """CS-5: the same red-return path in a single-queue run keeps the old
+    behavior: the run ends `fila-travada` and no queue "leaves the run"."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1"), base.item("a2"),
+                                        base.item("a3")]})
+        p, _ = _run(tmp, root, ["a", "--for", "1h", "--max-blocked", "2",
+                                "--max-failures", "50", "--verify",
+                                "test ! -f quebra.txt", "--no-analysis"],
+                    claude_body=BREAKS_BUILD_IN_A)
+        check("o run termina por fila-travada", "fila-travada" in p.stdout,
+              f"rc={p.returncode} {p.stdout[-1500:]}")
+        check("nenhuma linha de saida de fila", "left the run" not in p.stdout,
+              p.stdout[-1500:])
+        check("a3 nunca comeca", _statuses(paths["a"]).get("a3") == "pending",
+              str(_statuses(paths["a"])))
 
 
 def test_single_queue_dry_run_unchanged():
