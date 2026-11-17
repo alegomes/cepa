@@ -3123,3 +3123,14 @@ items:
     licenca pelo GitHub (depende do repositorio publicado).'
   sem_epic: true
   head_commit: 7dc28784d0fb0fc770bc60a50f4bae17308ef2ad
+- id: wrapup-next-step-vermelho
+  title: 'tests/test_wrapup_next_step.py vermelho: 3 falhas no encadeamento de sessões
+    do launcher'
+  why: 'Falha no commit 287a758, antes da correção ee9585e. Build vermelho no main
+    faz cepa-until land --yes recusar o push (ainda não priorizado: entrou no fim
+    da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
