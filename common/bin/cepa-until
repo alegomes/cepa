@@ -5470,6 +5470,19 @@ def live_run_of_queue(repo, queue):
     return None
 
 
+def live_all_run(repo):
+    """The `--all` run that is up right now, or None. Reads `_all/until/` directly,
+    not `until_dir(repo, "all")`: a real queue called `all` has its own folder,
+    and a `--all` run is still recorded under `_all`."""
+    host = socket.gethostname()
+    folder = qp.queue_dir(main_root(repo), ALL_DIR) / "until"
+    for path in sorted(folder.glob("*.estado.json")):
+        found = _live_run_in_state(path, host)
+        if found:
+            return found
+    return None
+
+
 def live_run_on_worktree(repo, directory):
     """The live run, in ANY queue of the repo (`_all` included), whose worktree is
     `directory` (resolved paths), or None."""
@@ -5815,6 +5828,23 @@ def _main(argv=None):
               f"(run {alive['run']}, pid {alive['pid']}, deadline {end}). "
               "Wait for it to finish, or kill it (kill the pid) before "
               "starting another.", file=sys.stderr)
+        return 2
+    # CS-8 (spec `until-todas-as-filas`): a live `--all` run may reach any queue at
+    # any moment, because it re-reads the ready items before each one (Q4). So
+    # while it is up, a second `--all` and a run of any single queue are refused,
+    # with the name the owner reads in the `--all` report (`all/<run>`).
+    alive_all = live_all_run(repo)
+    if alive_all:
+        try:
+            end = datetime.fromisoformat(str(alive_all["prazo"])) \
+                .strftime("%d/%m %H:%M")
+        except ValueError:
+            end = "?"
+        print(f"cepa-until: a `--all` run is in progress "
+              f"({ALL_QUEUE}/{alive_all['run']}, pid {alive_all['pid']}, "
+              f"deadline {end}); it may reach any queue, so no other run starts "
+              "while it is up. Wait for it to finish, or kill it (kill the pid) "
+              "before starting another.", file=sys.stderr)
         return 2
 
     # CS-4 (spec `until-arvore-limpa`): before the dirt guard, the records a dead
