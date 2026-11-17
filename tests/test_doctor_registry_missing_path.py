@@ -102,6 +102,8 @@ def test_missing_path_with_main_clone():
               any(str(gone) in l for l in lines), out)
         check("não imprime mais 'não encontrado em known_marketplaces.json'",
               OLD_MSG not in out, out)
+        check("a mesma falha diz de qual clone a reinstalação sai",
+              any(str(gone) in l and str(clone) in l for l in lines), out)
         check("oferece o conserto install (anunciado como correção mecânica)",
               "reinstalar os plugins" in out, out)
         check("sem --fix nada foi instalado", not marker.exists())
