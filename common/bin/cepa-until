@@ -818,9 +818,35 @@ def until_dir(repo, queue):
     all/2026-11-16-1426`, copied from the end-of-run report, looked in
     `.claude/queues/all/until/` and could not read the run state. A real queue
     called `all` keeps its own folder."""
-    if queue == ALL_QUEUE and not qp.queue_file(repo, queue).exists():
+    if is_all_run(repo, queue):
         return qp.queue_dir(repo, ALL_DIR) / "until"
     return qp.queue_dir(repo, queue) / "until"
+
+
+def is_all_run(repo, queue):
+    """Is `queue` the label of a `--all` run (`all/<run>`)? A real queue called
+    `all` is still a queue."""
+    return queue == ALL_QUEUE and not qp.queue_file(repo, queue).exists()
+
+
+def all_queue_names(repo):
+    """The single-track queues a `--all` run may have touched, in the order of
+    `cepa-plan ready` (every queue is listed there, ready or not)."""
+    ready, error = query_ready(repo)
+    if not error:
+        return [Path(str(q.get("path") or "")).parent.name or str(q.get("queue"))
+                for q in ready.get("filas") or []]
+    return [n for n, _ in qp.queue_files(main_root(repo)) if n != ALL_DIR]
+
+
+def split_label(repo, queue, ident):
+    """`(queue, id)` of the item an owner question names: in a `--all` run the
+    question is called `queue/id` (two queues share ids), in a single-queue run
+    it is the bare id."""
+    if is_all_run(repo, queue) and "/" in str(ident):
+        name, bare = str(ident).split("/", 1)
+        return name, bare
+    return queue, str(ident)
 
 
 def query_next_ready(repo, warned=None, left=None):
@@ -2443,8 +2469,10 @@ def _cmd_land(argv, wrote):
     # The queue lives in the clone and the run itself updates it (`cepa-plan finish`):
     # after every run it is modified. The night branch doesn't touch it, and
     # the merge and the `reset --keep` preserve it.
-    clone_queue = (f".claude/queues/{queue}/queue.yaml",
-                     f".claude/programs/{queue}/plan.yaml")
+    clone_queue = tuple(
+        f for n in (all_queue_names(repo) if is_all_run(repo, queue) else [queue])
+        for f in (f".claude/queues/{n}/queue.yaml",
+                  f".claude/programs/{n}/plan.yaml"))
     dirty_queue = [l for l in dirty_files if l.endswith(clone_queue)]
     dirty_files = [l for l in dirty_files if l not in dirty_queue]
     if dirty_files:
@@ -2815,10 +2843,17 @@ def print_commit_refused(reason, command, skipped, what="the run records"):
 def run_record_paths(repo, queue, run_id=None):
     """The paths a subcommand may have written for a queue (and a run): the queue
     file, in whichever layout it lives, and the run's `.jsonl` and `.review.md`."""
-    qfile = qp.queue_file(main_root(repo), queue)
-    paths = [qfile]
-    if run_id:
+    root = main_root(repo)
+    if is_all_run(root, queue):
+        # A `--all` run writes the marks in every queue it took an item from or
+        # answered, and keeps its record in `_all/until/`.
+        paths = [qp.queue_file(root, n) for n in all_queue_names(repo)]
+        folder = until_dir(root, queue)
+    else:
+        qfile = qp.queue_file(root, queue)
+        paths = [qfile]
         folder = qfile.parent / "until"
+    if run_id:
         paths += [folder / f"{run_id}.jsonl", folder / f"{run_id}.review.md"]
     return paths
 
@@ -3594,8 +3629,9 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     by_item = analysis.get("itens") or {}
     if answer is None:
         def answer(ident, text, keep=False, drop=False):
+            ans_queue, ans_ident = split_label(repo, queue, ident)
             p = subprocess.run(
-                [sys.executable, str(CEPA_PLAN), "answer", queue, ident,
+                [sys.executable, str(CEPA_PLAN), "answer", ans_queue, ans_ident,
                  "--answer", text, "--repo", str(repo)]
                 + (["--keep"] if keep else [])
                 + (["--drop"] if drop else [])
@@ -3648,7 +3684,8 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 return None, error or "the pre-read is off"
             if " ".join(route["question"].split()) == " ".join(str(shown).split()):
                 return None, "the reader returned the same question"
-            error = reword_route(queue, repo, ad.get("id"), route, replace=True)
+            rw_queue, rw_ident = split_label(repo, queue, ad.get("id"))
+            error = reword_route(rw_queue, repo, rw_ident, route, replace=True)
             return (None, error) if error else (route, None)
     if land is None:
         def land():
@@ -4008,12 +4045,26 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
     state now, not the launch one) and asks, or lists without a terminal.
     Without `run_id` (`cepa-until decide <fila>`), it goes over the whole queue:
     every deferred item plus the leftover tasks of the delivered ones."""
-    data, error = query_queue(queue, repo)
-    if error:
-        print(f"\n── could not list the deferred items ({error})")
+    if is_all_run(repo, queue) and run_id:
+        # `all/<run>`: what EVERY queue holds for the owner, each item named
+        # `queue/id` (two queues share ids) and answered in its own queue.
         deferred = []
+        for name in all_queue_names(repo):
+            data, error = query_queue(name, repo)
+            if error:
+                print(f"\n── could not list the deferred items of queue {name} "
+                      f"({error})")
+                continue
+            deferred += [dict(ad, id=f"{name}/{ad.get('id')}", fila=name)
+                         for ad in (data or {}).get("deferred") or []]
+        already_asked = ()
     else:
-        deferred = (data or {}).get("deferred") or []
+        data, error = query_queue(queue, repo)
+        if error:
+            print(f"\n── could not list the deferred items ({error})")
+            deferred = []
+        else:
+            deferred = (data or {}).get("deferred") or []
     if not run_id:
         deferred = deferred + delivered_leftovers(queue, repo)
     # Asked mid-run already (the panel before closing, LL-1): asking the same
@@ -5249,17 +5300,22 @@ def dead_runs(repo, now=None):
         code, _ = git(["merge-base", "--is-ancestor", sha, "HEAD"], root)
         if code == 0:
             continue
-        in_flight = None
+        in_flight, in_flight_queue = None, None
         for e in events:
             if e.get("evento") == "item_start":
-                in_flight = e.get("id")
+                in_flight, in_flight_queue = e.get("id"), e.get("fila")
             elif e.get("evento") == "item_end":
                 in_flight = None
         queue = item_states.get("fila") or start.get("fila")
         status = None
         if in_flight:
-            it, _ = read_item(qp.queue_file(root, str(queue)), in_flight)
+            # A `--all` run reads the item in ITS queue and names it `queue/id`.
+            own_queue = in_flight_queue if is_all_run(root, str(queue)) and \
+                in_flight_queue else queue
+            it, _ = read_item(qp.queue_file(root, str(own_queue)), in_flight)
             status = str((it or {}).get("status") or "?")
+            if own_queue != queue:
+                in_flight = f"{own_queue}/{in_flight}"
         tree = item_states.get("arvore") or start.get("arvore")
         verify = item_states.get("verify") if "verify" in item_states else start.get("verify")
         command = None
@@ -6508,6 +6564,7 @@ def _main(argv=None):
         pref = None if a.all_queues else preferences.get(str(ident))
         note = preference_note(ident, pref)
         start_event = {"evento": "item_start", "id": ident, "title": item.get("title"),
+                       **({"fila": cur} if a.all_queues else {}),
                        "restante_seg": int(remaining.total_seconds()),
                        "tentativa": round_n, "twg_version": installed_twg_version(),
                        "head": before, "session_id": session_id,
@@ -7288,13 +7345,13 @@ def _main(argv=None):
             item_states = {}
         # Nobody answered the panel before closing: nobody is at the keyboard,
         # so the end lists instead of waiting another ANSWER_WAIT_SEC.
-        if a.all_queues:
-            # The end questions are per queue (`decide <queue>`); a `--all` run
-            # does not ask them yet (CS-6/CS-7).
-            return 0
+        # A `--all` run only LISTS at the end (CS-6): asking item by item there
+        # would answer into queues that ran nothing in this run, whose queue.yaml
+        # `commit_run_end` does not hold. `decide all/<run>` is where it asks.
+        silent = mid_run_silent or a.all_queues
         return close_with_owner(repo, a.queue, run_id, item_states, review,
                                wait=ANSWER_WAIT_SEC, already_asked=asked_mid_run,
-                               interactive=False if mid_run_silent else None)
+                               interactive=False if silent else None)
 
     def commit_records(result):
         # The run's last step (CS-1), after the end questions (which write answers
