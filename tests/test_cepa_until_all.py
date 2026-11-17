@@ -1520,6 +1520,75 @@ def test_cs7_without_a_terminal_the_all_launch_opens_no_panel():
               f"{_statuses(paths['a'])} {_statuses(paths['b'])}")
 
 
+def _live_all_run(root, pid, run="2026-11-17-0900"):
+    """The state and the record of a `--all` run that is up, where the real
+    `cepa-until` leaves them: `_all/until/`, `fila: all`, a live pid, this host."""
+    import socket
+    from datetime import datetime, timedelta
+    d = root / ".claude" / "queues" / "_all" / "until"
+    d.mkdir(parents=True, exist_ok=True)
+    deadline = (datetime.now() + timedelta(hours=3)).isoformat()
+    (d / f"{run}.estado.json").write_text(json.dumps(
+        {"run": run, "fila": "all", "estado": "rodando", "branch": "until/x",
+         "registro": f"{run}.jsonl", "pid": pid, "host": socket.gethostname(),
+         "prazo": deadline}), encoding="utf-8")
+    (d / f"{run}.jsonl").write_text(json.dumps(
+        {"evento": "run_start", "fila": "all", "prazo": deadline, "pid": pid})
+        + "\n", encoding="utf-8")
+    return run
+
+
+def test_cs8_live_all_run_refuses_a_second_all_and_a_single_queue_run():
+    """CS-8: with a `--all` run alive, `cepa until --all --for 1h` and
+    `cepa until a --for 1h` exit 2 naming `all/<run>`, and run nothing."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1")],
+                                  "b": [base.item("b1")]})
+        alive = subprocess.Popen([sys.executable, "-c",
+                                  "import time; time.sleep(120)", "cepa-until"])
+        try:
+            run = _live_all_run(root, alive.pid)
+            second_all, calls_all = _run(
+                tmp, root, ["--all", "--for", "1h", "--no-verify",
+                            "--no-analysis"], claude_body=DONE_IN_ITS_QUEUE)
+            single, calls_single = _run(
+                tmp, root, ["a", "--for", "1h", "--no-verify", "--no-analysis"],
+                claude_body=DONE_IN_ITS_QUEUE)
+        finally:
+            alive.kill()
+            alive.wait()
+        for label, p in (("--all", second_all), ("a", single)):
+            check(f"{label}: sai com 2", p.returncode == 2,
+                  f"rc={p.returncode} out={(p.stdout + p.stderr)[-800:]}")
+            check(f"{label}: cita all/<run> no stderr",
+                  f"all/{run}" in p.stderr, p.stderr[-800:])
+            check(f"{label}: cita o pid do run vivo",
+                  f"pid {alive.pid}" in p.stderr, p.stderr[-800:])
+        check("nenhum subprocesso roda", calls_all == [] and calls_single == [],
+              f"{calls_all} {calls_single}")
+        check("nada muda nas filas",
+              _statuses(paths["a"]) == {"a1": "pending"}
+              and _statuses(paths["b"]) == {"b1": "pending"},
+              f"{_statuses(paths['a'])} {_statuses(paths['b'])}")
+
+
+def test_cs8_dead_all_run_does_not_refuse_a_single_queue_run():
+    """CS-8, the other side: an `_all` state `rodando` whose pid died does not
+    hold the repo; `cepa until a` runs `a1`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1")]})
+        dead = subprocess.Popen([sys.executable, "-c", "pass"])
+        dead.wait()
+        _live_all_run(root, dead.pid)
+        p, calls = _run(tmp, root, ["a", "--for", "1h", "--no-verify",
+                                    "--no-analysis"],
+                        claude_body=DONE_IN_ITS_QUEUE)
+        check("a roda com 0", p.returncode == 0,
+              f"rc={p.returncode} out={(p.stdout + p.stderr)[-800:]}")
+        check("a1 fica done", _statuses(paths["a"]) == {"a1": "done"},
+              str(_statuses(paths["a"])))
+
+
 def main():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]
