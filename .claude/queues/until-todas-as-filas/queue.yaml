@@ -153,9 +153,35 @@ items:
     `a` com 3 itens que o `claude` falso devolve como `blocked` e fila `b` com 1
     item `done`, `cepa until --all --for 1h --max-blocked 3` imprime uma linha dizendo
     que a fila `a` saiu do run e termina `b1` como `done`; hoje o comando é recusado.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-17-1056 (code is on the overnight branch,
+    not merged, not pushed): 9e629b7 (tests/test_cepa_until_all.py: 4 CS-5 tests,
+    RED against d1bf3a3 with 8 failed checks), c9e52a3 (common/bin/cepa-until: query_next_ready
+    skips queues in `left`; _main keeps a blocked streak per queue in --all, queue_left_the_run
+    prints ''queue `a` left the run: N items in a row came out `blocked` (...);
+    the other queues carry on'', logs event fila_saiu_do_run, run_end gains filas_fora;
+    single-queue still ends fila-travada; docs/cepa-until.md and --max-blocked help),
+    52823e8 (3 tests + 2 checks closing proof survivors: streak reset in --all,
+    filas_fora, red-return blocked path in --all and single-queue), 9692c6d (test:
+    --max-failures still ends the whole --all run, Q8), d3b75f9 (gate artifacts).
+    Gates: pair-reviewer APPROVE at c9e52a3; proof-reviewer UNPROVEN at c9e52a3
+    (7 survivors), then PROVEN at 52823e8 (docs/proof/until-todas-as-filas-CS-5.yaml:
+    17 perturbations KILLED, 2 equivalents; 9692c6d after it is test-only and additive);
+    completion-auditor INCOMPLETE at 52823e8 (Q8 half untested), then COMPLETE at
+    9692c6d (.claude/acceptance/until-todas-as-filas-CS-5.yaml). Tests run: python3
+    tests/test_cepa_until_all.py -> 29 tests green; python3 tests/test_cepa_until.py
+    green at c9e52a3. Full suite (tests/run-all.sh) NOT run: delegated to the supervisor.
+    Left out: the end-of-run screen summary does not list the queues that left (only
+    the line at the moment and run_end.filas_fora).'
+  head_commit: d3b75f975831d905c3d6d2db7338e0d69ee3c618
+  decisions:
+  - texto: Num run --all, a fila que sai por travamento é pulada em silêncio dali
+      em diante (a linha de saída aparece uma vez), fica fora só deste run, e o
+      registro do fim do run lista as filas que saíram no campo filas_fora; o resumo
+      final na tela não mudou.
+    commit: c9e52a3205649526f2ae056a0a8fac8743cb330a
 - id: CS-6
   title: O registro fica em `.claude/queues/_all/until/` e `pending`, `decide`,
     `land` e `close-dead` aceitam o alvo `all/<run>`
@@ -165,9 +191,16 @@ items:
     pending` lista `all/<run>` e `cepa until land all/<run> --yes` aterrissa a branch;
     hoje `land` recusa o alvo com "the target is <queue>/<run>" porque não existe
     fila `all`.'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  claimed_by:
+    session_id: bf170d20-6f73-412e-ae02-ce496a6ecd4b
+    pid: 64210
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-until-2026-11-17-1056
+    branch: until/2026-11-17-1056
+    started_at: '2026-11-17T16:05:13+00:00'
 - id: CS-7
   title: Num terminal, a largada mostra um painel único com o que todas as filas
     guardam para o dono, agrupado por fila, e um "sim" faz o item rodar neste run
