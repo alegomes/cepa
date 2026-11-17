@@ -207,8 +207,21 @@ def check_ops(rec):
 
 def check_plugins(settings, rec=None):
     repo = cepa_repo_root()
-    if not repo or not repo.is_dir():
+    if not repo:
         fail("plugins", "marketplace 'cepa' não encontrado em known_marketplaces.json")
+        return
+    if not repo.is_dir():
+        # Registered, but the folder is gone (typically a worktree removed after the
+        # run that installed from it). Distinct from "not registered": name the path,
+        # and offer the install only when the main clone it would run from exists.
+        clone = (rec or {}).get("main_clone")
+        if clone and Path(clone).is_dir():
+            fail("plugins", f"marketplace 'cepa' registrado em {repo}, que não existe mais — "
+                            f"reinstalar a partir do clone {clone} reaponta o registro",
+                 fix={"kind": "install", "repo": str(clone)})
+        else:
+            fail("plugins", f"marketplace 'cepa' registrado em {repo}, que não existe mais — "
+                            f"rode bin/install.sh a partir do clone do cepa para reapontar o registro")
         return
     enabled = settings.get("enabledPlugins", {})
     if PV is None:
