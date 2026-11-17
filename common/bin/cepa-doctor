@@ -226,11 +226,7 @@ def check_plugins(settings, rec=None):
     # Registered folder exists, but it is not the fixed one: it works today and dies
     # the day that folder is removed (CS-9). Warn, then keep checking versions.
     live = CLAUDE_DIR / "cepa-live"
-    try:
-        outside = repo.resolve() != live.resolve()
-    except OSError:
-        outside = repo != live
-    if outside:
+    if repo.resolve() != live.resolve():
         clone = (rec or {}).get("main_clone")
         if clone and Path(clone).is_dir():
             src, origin = str(clone), f"o clone {clone}"

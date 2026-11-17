@@ -106,6 +106,10 @@ def test_outside_with_main_clone():
         warns = plugins_lines(out, "⚠")
         check("aviso de plugins nomeia o caminho registrado e cepa-live",
               any(str(wt) in l for l in warns), out)
+        check("o aviso diz que o registro está fora de ~/.claude/cepa-live",
+              any("fora de ~/.claude/cepa-live" in l for l in warns), out)
+        check("o aviso diz que reinstalar reaponta o registro para ~/.claude/cepa-live",
+              any("reaponta o registro para ~/.claude/cepa-live" in l for l in warns), out)
         check("é aviso (⚠), não falha (✗)", bool(warns) and not plugins_lines(out, "✗"), out)
         check("o aviso diz de qual clone a reinstalação sai",
               any(str(clone) in l for l in warns), out)
@@ -134,6 +138,8 @@ def test_outside_without_usable_main_clone():
             check(f"[{label}] avisa e oferece o install a partir da pasta registrada",
                   any(str(wt) in l for l in plugins_lines(out, "⚠"))
                   and "reinstalar os plugins" in out, out)
+            check(f"[{label}] o aviso diz que a reinstalação sai da própria pasta registrada",
+                  any(f"a própria pasta registrada {wt}" in l for l in plugins_lines(out, "⚠")), out)
             run_doctor(home, "--fix")
             check(f"[{label}] --fix roda o install.sh da pasta registrada",
                   marker_cwds(marker) == [wt.resolve()], str(marker_cwds(marker)))
@@ -221,6 +227,13 @@ def test_warning_recorded_before_drift_findings():
                   len(installs) == 1, str(installs))
             check("o install que sobrevive sai do main_clone, não da pasta registrada",
                   bool(installs) and installs[0]["repo"] == str(clone), str(installs))
+            warns = [r[2] for r in D.RESULTS if r[0] == "warn" and r[1] == "plugins"]
+            check("os dois achados ficam registrados: o aviso de fora do cepa-live",
+                  any(str(wt) in m and "fora de ~/.claude/cepa-live" in m for m in warns),
+                  " | ".join(warns))
+            check("os dois achados ficam registrados: o drift do plugin stubado",
+                  any("repo está em 2 mas o cache instalado é 1" in m for m in warns),
+                  " | ".join(warns))
     finally:
         D.RESULTS.clear()
         if saved is not None:
