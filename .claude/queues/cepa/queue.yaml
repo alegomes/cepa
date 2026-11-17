@@ -3134,3 +3134,13 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+  finish_recusado:
+  - quando: '2026-11-17T11:19:53+00:00'
+    quem:
+      session_id: 2af721eba7aa4725be4c2a183ea3e404
+      hostname: Alexandres-MacBook-Pro.local
+      pid: 59502
+    status_pedido: done
+    motivo: '`done` exige a árvore limpa e há 1 caminho(s) sem commit em /Users/alegomes/coding/cepa:
+      .claude/queues/until-arvore-limpa/until/2026-11-15-1011.laterais/2026-11-14-0954-vermelho-CS-1.patch.
+      Commite antes de fechar (desabilitar ou apagar teste não é conserto)'
