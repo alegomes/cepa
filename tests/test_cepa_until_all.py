@@ -664,6 +664,215 @@ def test_queue_with_its_own_live_run_is_skipped_with_a_warning():
         check("um so subprocesso, o de b1", len(calls) == 1, str(calls))
 
 
+def _blocked_when(cond):
+    """A fake `claude` that commits and closes the item `blocked` when `cond`
+    (a Python expression over `queue` and `ident`) holds, `done` otherwise."""
+    return ATTEMPT_COUNTER + (
+        "subprocess.run(cp + ['start', queue, ident] + repo, check=True,"
+        " capture_output=True)\n"
+        "commit('1')\n"
+        f"st = 'blocked' if ({cond}) else 'done'\n"
+        "extra = ['--blocker', 'o sistema nao responde'] if st == 'blocked'"
+        " else []\n"
+        "subprocess.run(cp + ['finish', queue, ident, '--status', st,"
+        " '--evidence', 'x'] + extra + repo, check=True)\n")
+
+
+BLOCKED_IN_A = _blocked_when("queue == 'a'")
+
+
+def _run_events(root):
+    records = sorted((root / ".claude" / "queues" / "_all" / "until").glob("*.jsonl"))
+    out = []
+    for r in records:
+        out += [json.loads(l) for l in r.read_text().splitlines() if l.strip()]
+    return out
+
+
+def test_queue_blocked_max_times_leaves_the_run_and_the_others_carry_on():
+    """CS-5: `a` has three items that close `blocked`, `b` has one that closes
+    `done`; with `--max-blocked 3` queue `a` leaves the run (a line says so) and
+    `b1` still finishes `done`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1"), base.item("a2"),
+                                        base.item("a3")],
+                                  "b": [base.item("b1")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--max-blocked", "3",
+                                "--no-verify", "--no-analysis"],
+                    claude_body=BLOCKED_IN_A)
+        check("--all sai com 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        left = [l for l in p.stdout.splitlines()
+                if "`a`" in l and "left the run" in l]
+        check("uma linha diz que a fila a saiu do run", len(left) == 1,
+              p.stdout[-1500:])
+        check("...e nomeia os itens travados",
+              len(left) == 1 and all(i in left[0] for i in ("a1", "a2", "a3")),
+              str(left))
+        check("b1 fica done", _statuses(paths["b"]) == {"b1": "done"},
+              str(_statuses(paths["b"])))
+        check("a1..a3 ficam blocked",
+              _statuses(paths["a"]) == {"a1": "blocked", "a2": "blocked",
+                                        "a3": "blocked"},
+              str(_statuses(paths["a"])))
+        check("o run nao termina por fila-travada",
+              "fila-travada" not in p.stdout, p.stdout[-1500:])
+
+
+def test_queue_that_left_the_run_starts_no_more_items():
+    """CS-5: `a` has four ready items and `--max-blocked 3`: a4 stays `pending`
+    and has no `item_start`; without the exclusion it would be the next item."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item(f"a{i}") for i in range(1, 5)],
+                                  "b": [base.item("b1")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--max-blocked", "3",
+                                "--no-verify", "--no-analysis"],
+                    claude_body=BLOCKED_IN_A)
+        check("--all sai com 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        check("a4 fica pending", _statuses(paths["a"]).get("a4") == "pending",
+              str(_statuses(paths["a"])))
+        check("nenhum item_start de a4", "a4" not in _item_starts(root),
+              str(_item_starts(root)))
+        check("b1 fica done", _statuses(paths["b"]) == {"b1": "done"},
+              str(_statuses(paths["b"])))
+
+
+def test_blocked_streak_is_counted_per_queue():
+    """CS-5: two `blocked` in `a` and one in `b` are three in the run but two
+    and one per queue: no queue leaves and the run does not end `fila-travada`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1"), base.item("a2")],
+                                  "b": [base.item("blk1"), base.item("b2")]})
+        body = _blocked_when("queue == 'a' or ident.startswith('blk')")
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--max-blocked", "3",
+                                "--no-verify", "--no-analysis"], claude_body=body)
+        check("--all sai com 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        check("nenhuma fila sai do run", "left the run" not in p.stdout,
+              p.stdout[-1500:])
+        check("o run nao termina por fila-travada",
+              "fila-travada" not in p.stdout, p.stdout[-1500:])
+        check("b2 fica done", _statuses(paths["b"]).get("b2") == "done",
+              str(_statuses(paths["b"])))
+        check("a1 e a2 ficam blocked",
+              _statuses(paths["a"]) == {"a1": "blocked", "a2": "blocked"},
+              str(_statuses(paths["a"])))
+        ends = [e for e in _run_events(root) if e.get("evento") == "run_end"]
+        check("o run_end tem filas_fora vazio quando nenhuma fila saiu",
+              len(ends) == 1 and ends[0].get("filas_fora") == [], str(ends))
+
+
+def test_run_record_carries_the_queue_that_left():
+    """CS-5: the run record has a `fila_saiu_do_run` event naming queue `a`, its
+    blocked items and the limit."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _repo(tmp, {"a": [base.item("a1"), base.item("a2")],
+                              "b": [base.item("b1")]})
+        _run(tmp, root, ["--all", "--for", "1h", "--max-blocked", "2",
+                         "--no-verify", "--no-analysis"],
+             claude_body=BLOCKED_IN_A)
+        ev = [e for e in _run_events(root) if e.get("evento") == "fila_saiu_do_run"]
+        check("um evento fila_saiu_do_run", len(ev) == 1, str(ev))
+        if len(ev) == 1:
+            check("...com a fila, os itens e o limite",
+                  ev[0].get("fila") == "a" and ev[0].get("itens") == ["a1", "a2"]
+                  and ev[0].get("max_travados") == 2, str(ev[0]))
+        ends = [e for e in _run_events(root) if e.get("evento") == "run_end"]
+        check("o run_end lista a fila que saiu em filas_fora",
+              len(ends) == 1 and ends[0].get("filas_fora") == ["a"], str(ends))
+
+
+def test_a_done_item_resets_the_blocked_streak_of_its_queue():
+    """CS-5: in `a`, blocked, done, blocked, blocked with `--max-blocked 3`: the
+    `done` in the middle resets the streak (the streak ends at 2), so `a` does not leave, all four items start and the run does not end
+    `fila-travada`. Without the reset the streak would hit 3 at a4."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item(f"a{i}") for i in range(1, 5)],
+                                  "b": [base.item("b1")]})
+        body = _blocked_when("queue == 'a' and ident != 'a2'")
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--max-blocked", "3",
+                                "--no-verify", "--no-analysis"], claude_body=body)
+        check("--all sai com 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        check("nenhuma fila sai do run", "left the run" not in p.stdout,
+              p.stdout[-1500:])
+        check("nenhum evento fila_saiu_do_run",
+              not [e for e in _run_events(root)
+                   if e.get("evento") == "fila_saiu_do_run"])
+        check("os quatro itens de a comecam",
+              all(i in _item_starts(root) for i in ("a1", "a2", "a3", "a4")),
+              str(_item_starts(root)))
+        check("a: blocked, done, blocked, blocked",
+              _statuses(paths["a"]) == {"a1": "blocked", "a2": "done",
+                                        "a3": "blocked", "a4": "blocked"},
+              str(_statuses(paths["a"])))
+        check("o run nao termina por fila-travada",
+              "fila-travada" not in p.stdout, p.stdout[-1500:])
+
+
+# Like DONE_IN_ITS_QUEUE, but the commit of queue `a`'s items breaks the build
+# (the verify is `test ! -f quebra.txt`); queue `b`'s items stay green.
+BREAKS_BUILD_IN_A = DONE_IN_ITS_QUEUE.replace(
+    "open(queue + '-' + ident + '.txt', 'w').write('feito')\n",
+    "open(queue + '-' + ident + '.txt', 'w').write('feito')\n"
+    "if queue == 'a':\n"
+    "    open('quebra.txt', 'w').write('x')\n", 1)
+
+
+def test_red_returns_ending_blocked_count_toward_the_queue_leaving_the_run():
+    """CS-5: the items of `a` close `done`, the run's build goes red and, after
+    the returns run out, each is marked `blocked` (the `back_now` path). With
+    `--max-blocked 2` queue `a` leaves the run after a2, a3 never starts, `b1`
+    ends `done` and the run does not end `fila-travada`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1"), base.item("a2"),
+                                        base.item("a3")],
+                                  "b": [base.item("b1")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--max-blocked", "2",
+                                "--max-failures", "50", "--verify",
+                                "test ! -f quebra.txt", "--no-analysis"],
+                    claude_body=BREAKS_BUILD_IN_A)
+        check("--all sai com 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        left = [l for l in p.stdout.splitlines()
+                if "`a`" in l and "left the run" in l]
+        check("uma linha diz que a fila a saiu do run", len(left) == 1,
+              p.stdout[-1500:])
+        check("o evento fila_saiu_do_run existe",
+              len([e for e in _run_events(root)
+                   if e.get("evento") == "fila_saiu_do_run"
+                   and e.get("fila") == "a"]) == 1, str(_run_events(root)[-6:]))
+        check("a3 nunca comeca", "a3" not in _item_starts(root),
+              str(_item_starts(root)))
+        check("a1 e a2 ficam blocked, a3 pending",
+              _statuses(paths["a"]) == {"a1": "blocked", "a2": "blocked",
+                                        "a3": "pending"},
+              str(_statuses(paths["a"])))
+        check("b1 fica done", _statuses(paths["b"]) == {"b1": "done"},
+              f"{_statuses(paths['b'])} {p.stdout[-1500:]}")
+        check("o run nao termina por fila-travada",
+              "fila-travada" not in p.stdout, p.stdout[-1500:])
+
+
+def test_single_queue_red_returns_ending_blocked_end_the_run_fila_travada():
+    """CS-5: the same red-return path in a single-queue run keeps the old
+    behavior: the run ends `fila-travada` and no queue "leaves the run"."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1"), base.item("a2"),
+                                        base.item("a3")]})
+        p, _ = _run(tmp, root, ["a", "--for", "1h", "--max-blocked", "2",
+                                "--max-failures", "50", "--verify",
+                                "test ! -f quebra.txt", "--no-analysis"],
+                    claude_body=BREAKS_BUILD_IN_A)
+        check("o run termina por fila-travada", "fila-travada" in p.stdout,
+              f"rc={p.returncode} {p.stdout[-1500:]}")
+        check("nenhuma linha de saida de fila", "left the run" not in p.stdout,
+              p.stdout[-1500:])
+        check("a3 nunca comeca", _statuses(paths["a"]).get("a3") == "pending",
+              str(_statuses(paths["a"])))
+
+
 def test_single_queue_dry_run_unchanged():
     with tempfile.TemporaryDirectory() as tmp:
         root, _ = _repo(tmp, {"a": [base.item("a1")]})
@@ -716,6 +925,267 @@ def test_target_all_run_reads_the_state_of_the_all_folder():
         check("`land all/<run>` sem --yes mostra o plano e sai 0",
               r.returncode == 0 and "nothing was done" in r.stdout,
               f"rc={r.returncode} out={r.stdout[-600:]} err={r.stderr[-400:]}")
+
+
+# A fake `claude` that leaves the items of queue `a` untouched (no reservation,
+# no commit, exit 0: an attempt with no progress) and delivers the others.
+NO_PROGRESS_IN_A = ("if ARGS[1].split()[1] == 'a':\n    sys.exit(0)\n"
+                    + DONE_IN_ITS_QUEUE)
+
+
+def test_max_failures_still_ends_the_whole_all_run():
+    """Q8, the other half: the per-queue limit is `--max-blocked` only. Items of
+    `a` that do not move trip the circuit breaker (`--max-failures`), which ends
+    the WHOLE `--all` run: queue `a` does not "leave", and `b1` never starts."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1"), base.item("a2"),
+                                        base.item("a3")],
+                                  "b": [base.item("b1")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--max-failures", "2",
+                                "--max-blocked", "1", "--no-verify",
+                                "--no-analysis"], claude_body=NO_PROGRESS_IN_A)
+        events = _run_events(root)
+        ends = [e for e in events if e.get("evento") == "run_end"]
+        check("o run inteiro termina por `disjuntor`",
+              len(ends) == 1 and ends[0].get("motivo") == "disjuntor",
+              f"{ends} out={p.stdout[-1200:]} err={p.stderr[-500:]}")
+        check("...nenhuma fila sai do run: sem linha e sem evento",
+              "left the run" not in p.stdout
+              and not [e for e in events if e.get("evento") == "fila_saiu_do_run"]
+              and len(ends) == 1 and ends[0].get("filas_fora") == [],
+              f"{ends} {p.stdout[-1200:]}")
+        check("...b1 segue pending: o run nao passou para a fila b",
+              _statuses(paths["b"]) == {"b1": "pending"},
+              str(_statuses(paths["b"])))
+        check("...nenhum item_start de b",
+              "b1" not in (_item_starts(root) or []), str(_item_starts(root)))
+
+
+
+# ── CS-6: the record lives in `_all/until/` and `pending`, `decide`, `land` and
+# `close-dead` take the target `all/<run>` ──────────────────────────────────
+
+def _all_run_id(root):
+    states = sorted((root / ".claude" / "queues" / "_all" / "until").glob(
+        "*.estado.json"))
+    return states[-1].name.replace(".estado.json", "") if states else None
+
+
+def _git(root, *args):
+    return subprocess.run(["git", *args], cwd=root, capture_output=True,
+                          text=True).stdout
+
+
+def _stuck(ident, question):
+    """An item a previous run left `blocked`, with the closed question for the
+    owner."""
+    it = base.item(ident, status="blocked")
+    it["owner_question"] = question
+    it["evidence"] = "travou no ambiente"
+    return it
+
+
+def test_cs6_record_in_all_folder_pending_lists_it_and_land_yes_lands():
+    """The spec's own script: after a `--all` run the record is
+    `.claude/queues/_all/until/<run>.jsonl`, `cepa until pending` lists
+    `all/<run>` and `cepa until land all/<run> --yes` lands the branch."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _paths = _repo(tmp, {"a": [base.item("a1")],
+                                   "b": [base.item("b1")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                "--no-analysis"], claude_body=DONE_IN_ITS_QUEUE)
+        run_id = _all_run_id(root)
+        check("o run grava o estado em _all/until", run_id is not None,
+              p.stderr[-500:])
+        if run_id is None:
+            return
+        folder = root / ".claude" / "queues" / "_all" / "until"
+        check("o registro e _all/until/<run>.jsonl",
+              (folder / f"{run_id}.jsonl").is_file(), str(sorted(folder.iterdir())))
+        check("...e nenhuma pasta `all` e criada",
+              not (root / ".claude" / "queues" / "all").exists())
+        target = f"all/{run_id}"
+        r = subprocess.run([str(CEPA), "until", "pending", "--repo", str(root)],
+                           capture_output=True, text=True, timeout=60)
+        check("`cepa until pending` lista all/<run> com o comando do land",
+              r.returncode == 0 and f"cepa-until land {target}" in r.stdout
+              and f"queue all · run {run_id}" in r.stdout,
+              f"rc={r.returncode} out={r.stdout} err={r.stderr[-300:]}")
+        r = _target_command(tmp, root, "land", target, "--yes")
+        check("`land all/<run> --yes` sai com 0", r.returncode == 0,
+              f"rc={r.returncode} out={r.stdout[-600:]} err={r.stderr[-400:]}")
+        subjects = _git(root, "log", "--format=%s", "main").splitlines()
+        check("...os commits das duas filas estao na main",
+              "a:a1" in subjects and "b:b1" in subjects, str(subjects))
+        check("...a branch do run foi removida", _branches(root) == [],
+              str(_branches(root)))
+        r = subprocess.run([str(CEPA), "until", "pending", "--repo", str(root)],
+                           capture_output=True, text=True, timeout=60)
+        check("...e o run sai do `pending`", target not in r.stdout, r.stdout)
+
+
+def test_cs6_decide_all_run_lists_what_every_queue_holds_for_the_owner():
+    """`decide all/<run>` outside a terminal lists the landing and the questions
+    of EVERY queue, each item named `queue/id`. Before, it asked `cepa-plan`
+    for a queue called `all` and printed "could not list the deferred items"."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _paths = _repo(tmp, {
+            "a": [_stuck("x1", "Fecho o card da fila a?")],
+            "b": [base.item("b1"), _stuck("x1", "Fecho o card da fila b?")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                "--no-analysis"], claude_body=DONE_IN_ITS_QUEUE)
+        run_id = _all_run_id(root)
+        check("o run termina e grava o estado", p.returncode == 0
+              and run_id is not None, p.stderr[-500:])
+        if run_id is None:
+            return
+        check("o fim do run --all lista o que espera o dono, por fila",
+              "waiting on you: 3" in p.stdout
+              and "a/x1" in p.stdout and "Fecho o card da fila a?" in p.stdout
+              and "b/x1" in p.stdout and "Fecho o card da fila b?" in p.stdout,
+              p.stdout[-1500:])
+        r = _target_command(tmp, root, "decide", f"all/{run_id}")
+        out = r.stdout + r.stderr
+        check("`decide all/<run>` sai com 0", r.returncode == 0, out[-600:])
+        check("...sem procurar uma fila chamada `all`",
+              "could not list the deferred items" not in out, out[-600:])
+        check("...conta a aterrissagem e as duas perguntas",
+              "waiting on you: 3" in out, out[-800:])
+        check("...nomeia o item da fila a com a pergunta dele",
+              "a/x1" in out and "Fecho o card da fila a?" in out, out[-800:])
+        check("...e o da fila b, mesmo id, com a dele",
+              "b/x1" in out and "Fecho o card da fila b?" in out, out[-800:])
+        check("...e manda voltar com o alvo all/<run>",
+              f"cepa-until decide all/{run_id}" in out, out[-800:])
+
+
+def test_cs6_decide_all_run_on_a_terminal_answers_each_item_in_its_queue():
+    """On a terminal, a "no" to `a/x1` and a "yes" to `b/x1` are recorded each in
+    its own queue (same id, two queues), and `decide` commits both queue files
+    under the name of the `all/<run>` run."""
+    import test_cepa_until_decide as dec
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {
+            "a": [_stuck("x1", "Fecho o card da fila a?")],
+            "b": [base.item("b1"), _stuck("x1", "Fecho o card da fila b?")]})
+        _run(tmp, root, ["--all", "--for", "1h", "--no-verify", "--no-analysis"],
+             claude_body=DONE_IN_ITS_QUEUE)
+        run_id = _all_run_id(root)
+        check("o run grava o estado", run_id is not None)
+        if run_id is None:
+            return
+        env = dict(os.environ)
+        for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH", "HC_TERMINAL_ID"):
+            env.pop(k, None)
+        env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", f"all/{run_id}",
+               "--repo", str(root)]
+        rc, out = dec.on_tty(cmd, str(root), env=env, timeout=90, inputs=[
+            ("Land now?", "n"),
+            ("[t] I write the answer", "n"), ("Anything to add", ""),
+            ("[t] I write the answer", "s"), ("Anything to add", "")])
+        check("decide all/<run> no terminal sai com 0", rc == 0, out[-1200:])
+        check("...os itens aparecem como fila/id",
+              "a/x1" in out and "b/x1" in out, out[-1500:])
+        items_a = {str(i["id"]): i for i in
+                   yaml.safe_load(paths["a"].read_text())["items"]}
+        items_b = {str(i["id"]): i for i in
+                   yaml.safe_load(paths["b"].read_text())["items"]}
+        check("o `não` fica no x1 da fila a, que segue blocked",
+              items_a["x1"]["status"] == "blocked"
+              and "não: Fecho o card da fila a?" in str(items_a["x1"]["evidence"]),
+              str(items_a["x1"]))
+        check("o `sim` devolve o x1 da fila b para a fila",
+              items_b["x1"]["status"] == "pending"
+              and "sim: Fecho o card da fila b?" in str(items_b["x1"]["evidence"]),
+              str(items_b["x1"]))
+        subject = _git(root, "log", "-1", "--format=%s").strip()
+        check("o commit leva o nome do run all/<run>",
+              subject.startswith(f"until all/{run_id} decide:"), subject)
+        files = _git(root, "show", "--name-only", "--format=", "HEAD").split()
+        check("...com o queue.yaml das duas filas",
+              ".claude/queues/a/queue.yaml" in files
+              and ".claude/queues/b/queue.yaml" in files, str(files))
+        dirty = _git(root, "status", "--short", "--", ".claude/queues/a/queue.yaml",
+                     ".claude/queues/b/queue.yaml")
+        check("...e as filas ficam sem mudanca solta", dirty.strip() == "", dirty)
+
+
+def _all_night_that_died(tmp):
+    """A real `--all` run (a1 and b1 delivered) with the state and the record
+    rewound to where a supervisor dies: `rodando`, dead pid, the record cut at
+    the `item_start` of `b1` (no `item_end`, no `run_end`)."""
+    import socket
+    import test_cepa_until_dead_supervisor as dead
+    root, paths = _repo(tmp, {"a": [base.item("a1")], "b": [base.item("b1")]})
+    _run(tmp, root, ["--all", "--for", "1h", "--no-verify", "--no-analysis"],
+         claude_body=DONE_IN_ITS_QUEUE)
+    folder = root / ".claude" / "queues" / "_all" / "until"
+    jsonl = sorted(folder.glob("*.jsonl"))[-1]
+    events = [json.loads(l) for l in jsonl.read_text().splitlines() if l.strip()]
+    cut = next(i for i, e in enumerate(events)
+               if e["evento"] == "item_start" and str(e["id"]) == "b1")
+    jsonl.write_text("".join(json.dumps(e) + "\n" for e in events[:cut + 1]))
+    state_file = sorted(folder.glob("*.estado.json"))[-1]
+    state = json.loads(state_file.read_text())
+    state.update(estado="rodando", pid=dead.dead_pid(), host=socket.gethostname())
+    for k in ("acoes", "fica_com_voce", "itens", "motivo_fim"):
+        state.pop(k, None)
+    state_file.write_text(json.dumps(state))
+    return root, paths, state_file.name.replace(".estado.json", ""), events[cut]
+
+
+def test_cs6_close_dead_all_run_closes_it_and_leaves_it_ready_to_land():
+    """A `--all` run whose supervisor died: `pending` points at
+    `close-dead all/<run>` and reads the in-flight item in ITS queue (not in a
+    queue called `all`), `close-dead all/<run> --yes` closes the record in
+    `_all/until/`, commits it, and `land all/<run> --yes` then lands."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _paths, run_id, start = _all_night_that_died(tmp)
+        target = f"all/{run_id}"
+        check("o item_start de um run --all leva a fila do item",
+              start.get("fila") == "b", str(start))
+        r = subprocess.run([sys.executable, str(CEPA_UNTIL), "pending", "--json",
+                            "--repo", str(root)], capture_output=True, text=True,
+                           timeout=60)
+        dead_ones = (json.loads(r.stdout) if r.returncode == 0 else {}).get(
+            "mortos") or []
+        check("pending acusa o run morto com o comando close-dead all/<run>",
+              len(dead_ones) == 1
+              and dead_ones[0].get("fechar") == f"cepa-until close-dead {target}",
+              r.stdout + r.stderr)
+        m = dead_ones[0] if dead_ones else {}
+        check("...o item em voo e b/b1, lido na fila b: `done`",
+              m.get("item") == "b/b1" and m.get("status") == "done", str(m))
+        r = _target_command(tmp, root, "close-dead", target)
+        check("sem --yes mostra o plano e nao muda nada",
+              r.returncode == 0 and f"close-dead {target} --yes" in r.stdout,
+              r.stdout + r.stderr)
+        r = _target_command(tmp, root, "close-dead", target, "--yes")
+        check("`close-dead all/<run> --yes` sai com 0", r.returncode == 0,
+              r.stdout + r.stderr)
+        events = _run_events(root)
+        check("...fecha o registro de _all/until com run_end",
+              events and events[-1].get("evento") == "run_end"
+              and events[-1].get("motivo") == "supervisor-morto", str(events[-2:]))
+        state = json.loads((root / ".claude" / "queues" / "_all" / "until"
+                            / f"{run_id}.estado.json").read_text())
+        check("...o estado vira esperando-dono com `land all/<run>`",
+              state.get("estado") == "esperando-dono"
+              and any(f"cepa-until land {target}" in str(x.get("comando"))
+                      for x in state.get("acoes") or []), str(state))
+        record = f".claude/queues/_all/until/{run_id}.jsonl"
+        check("...e o registro fechado entra num commit do run all/<run>",
+              _git(root, "status", "--short", "--", record).strip() == ""
+              and _git(root, "log", "-1", "--format=%s", "--", record).strip()
+              .startswith(f"until {target} close-dead:"),
+              _git(root, "status", "--short") + _git(root, "log", "-3",
+                                                      "--format=%s"))
+        r = _target_command(tmp, root, "land", target, "--yes")
+        subjects = _git(root, "log", "--format=%s", "main").splitlines()
+        check("...e `land all/<run> --yes` aterrissa o run fechado",
+              r.returncode == 0 and "a:a1" in subjects and "b:b1" in subjects,
+              f"rc={r.returncode} {r.stdout[-500:]} {r.stderr[-300:]} {subjects}")
 
 
 def main():
