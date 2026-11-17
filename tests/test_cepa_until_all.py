@@ -927,6 +927,40 @@ def test_target_all_run_reads_the_state_of_the_all_folder():
               f"rc={r.returncode} out={r.stdout[-600:]} err={r.stderr[-400:]}")
 
 
+# A fake `claude` that leaves the items of queue `a` untouched (no reservation,
+# no commit, exit 0: an attempt with no progress) and delivers the others.
+NO_PROGRESS_IN_A = ("if ARGS[1].split()[1] == 'a':\n    sys.exit(0)\n"
+                    + DONE_IN_ITS_QUEUE)
+
+
+def test_max_failures_still_ends_the_whole_all_run():
+    """Q8, the other half: the per-queue limit is `--max-blocked` only. Items of
+    `a` that do not move trip the circuit breaker (`--max-failures`), which ends
+    the WHOLE `--all` run: queue `a` does not "leave", and `b1` never starts."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1"), base.item("a2"),
+                                        base.item("a3")],
+                                  "b": [base.item("b1")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--max-failures", "2",
+                                "--max-blocked", "1", "--no-verify",
+                                "--no-analysis"], claude_body=NO_PROGRESS_IN_A)
+        events = _run_events(root)
+        ends = [e for e in events if e.get("evento") == "run_end"]
+        check("o run inteiro termina por `disjuntor`",
+              len(ends) == 1 and ends[0].get("motivo") == "disjuntor",
+              f"{ends} out={p.stdout[-1200:]} err={p.stderr[-500:]}")
+        check("...nenhuma fila sai do run: sem linha e sem evento",
+              "left the run" not in p.stdout
+              and not [e for e in events if e.get("evento") == "fila_saiu_do_run"]
+              and len(ends) == 1 and ends[0].get("filas_fora") == [],
+              f"{ends} {p.stdout[-1200:]}")
+        check("...b1 segue pending: o run nao passou para a fila b",
+              _statuses(paths["b"]) == {"b1": "pending"},
+              str(_statuses(paths["b"])))
+        check("...nenhum item_start de b",
+              "b1" not in (_item_starts(root) or []), str(_item_starts(root)))
+
+
 def main():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]
