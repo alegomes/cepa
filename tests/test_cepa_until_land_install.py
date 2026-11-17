@@ -15,6 +15,7 @@ only writes down where it was called from and what the clone held at that moment
 """
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -52,14 +53,16 @@ def as_cepa_repo(root):
     (root / "bin" / "install.sh").write_text(
         "#!/bin/sh\n"
         f"echo install >> '{order_file(root)}'\n"
-        f"exec '{sys.executable}' - \"$@\" <<'EOF'\n"
+        f"'{sys.executable}' - \"$@\" <<'EOF'\n"
         "import json, os, subprocess, sys\n"
         "log = subprocess.run(['git', 'log', '--format=%s'], capture_output=True,\n"
         "                     text=True).stdout.splitlines()\n"
         f"with open({str(calls_file(root))!r}, 'a') as f:\n"
         "    f.write(json.dumps({'cwd': os.path.realpath(os.getcwd()),\n"
         "                        'args': sys.argv[1:], 'log': log}) + '\\n')\n"
-        "EOF\n")
+        "EOF\n"
+        # FAKE_INSTALL_EXIT makes the installer fail after writing the call down.
+        "exit ${FAKE_INSTALL_EXIT:-0}\n")
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
                     "commit", "-qm", "repo do cepa"], cwd=root, check=True)
@@ -135,6 +138,36 @@ def test_cs6_red_build_does_not_install():
               str(calls(root)))
         check("CS-6: ...nem o registro ganha instalado_no_pouso",
               landing_events(root) == [], str(landing_events(root)))
+
+
+def test_cs6_failed_install_does_not_change_the_landing():
+    """Spec, "Decided without asking": the exit code of the landing does not
+    change when the install fails, because the landing happened."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = as_cepa_repo(build_repo(tmp, [item("a1")]))
+        run_id, branch, _tree = night(root)
+        os.environ["FAKE_INSTALL_EXIT"] = "1"
+        try:
+            p = land(root, run_id, "--yes")
+        finally:
+            del os.environ["FAKE_INSTALL_EXIT"]
+        check("CS-6: instalador que falha: o pouso ainda sai 0",
+              p.returncode == 0, p.stdout + p.stderr)
+        check("CS-6: ...o instalador foi chamado", len(calls(root)) == 1,
+              str(calls(root)))
+        ev = landing_events(root)
+        e = ev[0] if ev else {}
+        check("CS-6: ...o registro diz que a instalação não deu certo e por quê",
+              len(ev) == 1 and e.get("ok") is False
+              and "1" in str(e.get("motivo")), str(ev))
+        check("CS-6: ...o estado vira aterrissado mesmo assim",
+              state(root).get("estado") == "aterrissado", str(state(root)))
+        check("CS-6: ...a branch da rodada foi removida",
+              not subprocess.run(["git", "branch", "--list", branch], cwd=root,
+                                 capture_output=True, text=True).stdout.strip())
+        check("CS-6: ...e a tela diz que falhou e pede o install à mão no clone",
+              "FAILED" in p.stdout and "sh bin/install.sh" in p.stdout
+              and str(root.resolve()) in p.stdout, p.stdout)
 
 
 def test_cs6_plan_only_and_already_landed_do_not_install():
