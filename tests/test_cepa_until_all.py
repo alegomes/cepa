@@ -1330,6 +1330,125 @@ def test_cs6_close_dead_all_run_closes_it_and_leaves_it_ready_to_land():
               f"rc={r.returncode} {r.stdout[-500:]} {r.stderr[-300:]} {subjects}")
 
 
+def _launch_all_on_tty(tmp, root, inputs, wait="20", extra=()):
+    """`cepa-until --all` on a pseudo-terminal, with the launch panel on (no
+    `--no-pre-read`, the reader off). Returns (rc, plain output, run events)."""
+    import test_cepa_until_decide as dec
+    binv = base.fake_claude(tmp, DONE_IN_ITS_QUEUE)
+    env = _tty_env(tmp)
+    env["PATH"] = f"{binv}:{env['PATH']}"
+    env["FAKE_PLANO"] = str(Path(tmp) / "nenhum.yaml")
+    env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
+    env["CEPA_UNTIL_LEITOR"] = "off"
+    env["FAKE_CEPA_PLAN"] = str(REPO / "common" / "bin" / "cepa-plan")
+    env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+    rc, out = dec.on_tty(
+        [sys.executable, str(CEPA_UNTIL), "--all", "--for", "1h", "--no-verify",
+         "--no-analysis", "--no-resume-on-answer", *extra, "--repo", str(root)],
+        str(root), inputs=inputs, env=env, timeout=90)
+    return rc, dec.ANSI.sub("", out), _run_events(root)
+
+
+def _owner_item(ident, route, question):
+    it = base.item(ident, human_pending=route)
+    it["route_kind"] = "owner-task"
+    it["owner_question"] = question
+    return it
+
+
+def test_cs7_launch_panel_is_one_panel_grouped_by_queue_and_yes_runs_the_item():
+    """The spec's own script: queue `a` and queue `b` each hold one item with an
+    open owner route; `cepa until --all --for 1h` on a terminal shows ONE panel
+    with a section per queue, and "yes" to the item of `a` makes it run in this
+    run (`item_start` with `fila: a`), while the "no" to `b` keeps it waiting."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {
+            "a": [_owner_item("a1", "liberar o acesso da fila a",
+                              "Liberei o acesso da fila a?")],
+            "b": [_owner_item("b1", "liberar o acesso da fila b",
+                              "Liberei o acesso da fila b?")]})
+        rc, out, events = _launch_all_on_tty(tmp, root, [
+            ("[t] I write the answer", "s"), ("Anything to add", ""),
+            ("[t] I write the answer", "n"), ("Anything to add", "")])
+        check("--all com painel no terminal sai com 0", rc == 0, out[-1500:])
+        check("...um painel único com as duas perguntas",
+              out.count("question(s) for you") == 1
+              and "2 question(s) for you" in out, out[-2500:])
+        sec_a, sec_b = out.find("queue `a`"), out.find("queue `b`")
+        check("...com uma seção da fila a antes da seção da fila b",
+              0 <= sec_a < sec_b, out[-2500:])
+        qa, qb = out.find("Liberei o acesso da fila a?"), \
+            out.find("Liberei o acesso da fila b?")
+        check("...cada pergunta dentro da seção da sua fila",
+              sec_a < qa < sec_b < qb, out[-2500:])
+        starts = [(e.get("fila"), e.get("id")) for e in events
+                  if e.get("evento") == "item_start"]
+        check("o `sim` faz a1 rodar neste run", ("a", "a1") in starts,
+              str(events)[-1500:] + out[-800:])
+        check("...e o `não` deixa b1 de fora", ("b", "b1") not in starts,
+              str(starts))
+        check("a1 termina done na fila a", _statuses(paths["a"]) == {"a1": "done"},
+              paths["a"].read_text())
+        b1 = yaml.safe_load(paths["b"].read_text())["items"][0]
+        check("b1 segue esperando o dono com o `não` gravado na fila b",
+              b1.get("human_pending") and "não" in str(b1.get("evidence")),
+              str(b1))
+
+
+def test_cs7_launch_panel_without_answer_carries_on_and_says_where_to_answer():
+    """Nobody at the terminal: the panel does not hang; one line says so and
+    names `cepa-until decide` for the queues, and nothing runs."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {
+            "a": [_owner_item("a1", "liberar a", "Liberei a?")],
+            "b": [_owner_item("b1", "liberar b", "Liberei b?")]})
+        rc, out, events = _launch_all_on_tty(tmp, root, [], wait="2")
+        check("sem resposta o --all sai com 0", rc == 0, out[-1500:])
+        check("...diz que ninguém respondeu", "nobody answered" in out, out[-1500:])
+        check("...e aponta o decide da fila", "cepa-until decide a" in out,
+              out[-1500:])
+        check("...sem item_start", not any(e.get("evento") == "item_start"
+                                           for e in events), str(events))
+
+
+def test_cs7_launch_panel_skips_a_queue_with_its_own_live_run():
+    """A queue with its own live run is out of the `--all` run (CS-4), so its
+    questions are not asked in this panel either: that run already asked them."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {
+            "a": [_owner_item("a1", "liberar a", "Liberei a?")],
+            "b": [_owner_item("b1", "liberar b", "Liberei b?")]})
+        alive = subprocess.Popen([sys.executable, "-c",
+                                  "import time; time.sleep(120)", "cepa-until"])
+        try:
+            _live_run_of_queue(root, "a", alive.pid)
+            rc, out, events = _launch_all_on_tty(tmp, root, [
+                ("[t] I write the answer", "s"), ("Anything to add", "")])
+        finally:
+            alive.kill()
+            alive.wait()
+        check("sai com 0", rc == 0, out[-1500:])
+        check("...o painel não pergunta pela fila com run vivo",
+              "Liberei a?" not in out and "1 question(s) for you" in out,
+              out[-2000:])
+        starts = [(e.get("fila"), e.get("id")) for e in events
+                  if e.get("evento") == "item_start"]
+        check("...e o `sim` em b1 faz b1 rodar", ("b", "b1") in starts,
+              str(starts) + out[-800:])
+
+
+def test_cs7_no_pre_read_keeps_the_all_launch_without_panel():
+    """`--no-pre-read` skips the launch panel in `--all` too (CS-9 of the spec
+    relies on it): nothing is asked and nothing runs."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [_owner_item("a1", "liberar a", "Liberei a?")]})
+        rc, out, events = _launch_all_on_tty(tmp, root, [], wait="2",
+                                             extra=("--no-pre-read",))
+        check("sai com 0", rc == 0, out[-1500:])
+        check("...sem painel", "question(s) for you" not in out
+              and "nobody answered" not in out, out[-1500:])
+
+
 def main():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]
