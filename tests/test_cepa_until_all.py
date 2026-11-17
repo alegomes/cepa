@@ -664,6 +664,119 @@ def test_queue_with_its_own_live_run_is_skipped_with_a_warning():
         check("um so subprocesso, o de b1", len(calls) == 1, str(calls))
 
 
+def _blocked_when(cond):
+    """A fake `claude` that commits and closes the item `blocked` when `cond`
+    (a Python expression over `queue` and `ident`) holds, `done` otherwise."""
+    return ATTEMPT_COUNTER + (
+        "subprocess.run(cp + ['start', queue, ident] + repo, check=True,"
+        " capture_output=True)\n"
+        "commit('1')\n"
+        f"st = 'blocked' if ({cond}) else 'done'\n"
+        "extra = ['--blocker', 'o sistema nao responde'] if st == 'blocked'"
+        " else []\n"
+        "subprocess.run(cp + ['finish', queue, ident, '--status', st,"
+        " '--evidence', 'x'] + extra + repo, check=True)\n")
+
+
+BLOCKED_IN_A = _blocked_when("queue == 'a'")
+
+
+def _run_events(root):
+    records = sorted((root / ".claude" / "queues" / "_all" / "until").glob("*.jsonl"))
+    out = []
+    for r in records:
+        out += [json.loads(l) for l in r.read_text().splitlines() if l.strip()]
+    return out
+
+
+def test_queue_blocked_max_times_leaves_the_run_and_the_others_carry_on():
+    """CS-5: `a` has three items that close `blocked`, `b` has one that closes
+    `done`; with `--max-blocked 3` queue `a` leaves the run (a line says so) and
+    `b1` still finishes `done`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1"), base.item("a2"),
+                                        base.item("a3")],
+                                  "b": [base.item("b1")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--max-blocked", "3",
+                                "--no-verify", "--no-analysis"],
+                    claude_body=BLOCKED_IN_A)
+        check("--all sai com 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        left = [l for l in p.stdout.splitlines()
+                if "`a`" in l and "left the run" in l]
+        check("uma linha diz que a fila a saiu do run", len(left) == 1,
+              p.stdout[-1500:])
+        check("...e nomeia os itens travados",
+              len(left) == 1 and all(i in left[0] for i in ("a1", "a2", "a3")),
+              str(left))
+        check("b1 fica done", _statuses(paths["b"]) == {"b1": "done"},
+              str(_statuses(paths["b"])))
+        check("a1..a3 ficam blocked",
+              _statuses(paths["a"]) == {"a1": "blocked", "a2": "blocked",
+                                        "a3": "blocked"},
+              str(_statuses(paths["a"])))
+        check("o run nao termina por fila-travada",
+              "fila-travada" not in p.stdout, p.stdout[-1500:])
+
+
+def test_queue_that_left_the_run_starts_no_more_items():
+    """CS-5: `a` has four ready items and `--max-blocked 3`: a4 stays `pending`
+    and has no `item_start`; without the exclusion it would be the next item."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item(f"a{i}") for i in range(1, 5)],
+                                  "b": [base.item("b1")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--max-blocked", "3",
+                                "--no-verify", "--no-analysis"],
+                    claude_body=BLOCKED_IN_A)
+        check("--all sai com 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        check("a4 fica pending", _statuses(paths["a"]).get("a4") == "pending",
+              str(_statuses(paths["a"])))
+        check("nenhum item_start de a4", "a4" not in _item_starts(root),
+              str(_item_starts(root)))
+        check("b1 fica done", _statuses(paths["b"]) == {"b1": "done"},
+              str(_statuses(paths["b"])))
+
+
+def test_blocked_streak_is_counted_per_queue():
+    """CS-5: two `blocked` in `a` and one in `b` are three in the run but two
+    and one per queue: no queue leaves and the run does not end `fila-travada`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1"), base.item("a2")],
+                                  "b": [base.item("blk1"), base.item("b2")]})
+        body = _blocked_when("queue == 'a' or ident.startswith('blk')")
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--max-blocked", "3",
+                                "--no-verify", "--no-analysis"], claude_body=body)
+        check("--all sai com 0", p.returncode == 0,
+              f"rc={p.returncode} err={p.stderr[-500:]} out={p.stdout[-800:]}")
+        check("nenhuma fila sai do run", "left the run" not in p.stdout,
+              p.stdout[-1500:])
+        check("o run nao termina por fila-travada",
+              "fila-travada" not in p.stdout, p.stdout[-1500:])
+        check("b2 fica done", _statuses(paths["b"]).get("b2") == "done",
+              str(_statuses(paths["b"])))
+        check("a1 e a2 ficam blocked",
+              _statuses(paths["a"]) == {"a1": "blocked", "a2": "blocked"},
+              str(_statuses(paths["a"])))
+
+
+def test_run_record_carries_the_queue_that_left():
+    """CS-5: the run record has a `fila_saiu_do_run` event naming queue `a`, its
+    blocked items and the limit."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _repo(tmp, {"a": [base.item("a1"), base.item("a2")],
+                              "b": [base.item("b1")]})
+        _run(tmp, root, ["--all", "--for", "1h", "--max-blocked", "2",
+                         "--no-verify", "--no-analysis"],
+             claude_body=BLOCKED_IN_A)
+        ev = [e for e in _run_events(root) if e.get("evento") == "fila_saiu_do_run"]
+        check("um evento fila_saiu_do_run", len(ev) == 1, str(ev))
+        if len(ev) == 1:
+            check("...com a fila, os itens e o limite",
+                  ev[0].get("fila") == "a" and ev[0].get("itens") == ["a1", "a2"]
+                  and ev[0].get("max_travados") == 2, str(ev[0]))
+
+
 def test_single_queue_dry_run_unchanged():
     with tempfile.TemporaryDirectory() as tmp:
         root, _ = _repo(tmp, {"a": [base.item("a1")]})
