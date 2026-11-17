@@ -1,0 +1,44 @@
+schema_version: 2
+card: until-todas-as-filas-CS-9
+verdict: proven                 # proven | unproven | needs-human
+reviewed_at: 2026-11-17T19:55:00-03:00
+base_commit: 810fd01
+head_commit: c3f0bf7
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  note: "Diff is test-only (tests/test_cepa_until_all.py, test_cs9_nothing_ready_in_any_queue_exits_0_says_so_and_creates_no_branch). The behavior it pins already lives in common/bin/cepa-until: `query_next_ready` (empty batch, detail 'no queue has a ready item') and the `if not data.get('batch'):` return 0 in `_main`, before `open_run_branch`. Perturbation therefore targets that code, to prove the new test is load-bearing."
+  changed_classes:
+    - class: "tests/test_cepa_until_all.py :: test_cs9_nothing_ready_in_any_queue_exits_0_says_so_and_creates_no_branch (guards common/bin/cepa-until query_next_ready + _main empty-batch return)"
+      module: common/bin
+      external_observable: true   # surface cli: stdout text, exit code, branches, clone HEAD, run-state files
+      substituted_by_double: null # real `cepa until` launcher, real cepa-plan, real temp git repo; only `claude` is faked (far boundary), and in this scenario it must never run
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "Throwaway detached worktree /tmp/proof-cs9b at c3f0bf7 (removed at the end). Guarding test run from inside it with: python3 -c \"import sys; sys.path.insert(0,'tests'); import test_cepa_until_all as t; t.test_cs9_...(); print('FAILS', len(t.FAILURES))\" (check() does not raise). Unperturbed: 'FAILS 0'. Each perturbation applied ALONE with sed (non-empty git diff confirmed), FAILS read, then `git checkout -- common/bin/cepa-until`."
+      results:
+        - "KILLED P1 detail text 'no queue has a ready item' -> 'xx no queue': 'FAILS 1' (the message check)."
+        - "KILLED P2 `if not data.get('batch'):` -> `if False:` (run opens and closes an empty branch): 'FAILS 3' (nothing-to-do line, clone HEAD, _all/until record). This was the survivor of the pass at 677713b; the extra checks in c3f0bf7 close it."
+        - "KILLED P3 `return 0` -> `return 2` in the empty-batch block: 'FAILS 1' (exit code)."
+        - "KILLED P4 query_ready forced to return an error ('forced error'): 'FAILS 3'."
+        - "KILLED P6a `return 0` -> `return 1` in the empty-batch block: 'FAILS 1'."
+        - "KILLED P6b the empty return of query_next_ready carrying an error ('boom') as third element: 'FAILS 3'."
+    base_regression:
+      run: "common/bin/cepa-until and common/bin/cepa from c6067cc~1 (before --all existed) checked out in the worktree, same test: 'FAILS 3' (command refused, output shows the --help usage). Head: 'FAILS 0'."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; coverage of the claimed behaviors established by perturbation: the message (P1), the early return before the branch opens (P2), the exit code (P3, P6a), and the query path (P4, P6b) each turn the test red when broken."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff is test-only and opens no input from outside; no input-bearing module (api-rest) is touched"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Quando toda fila esta fechada ou esperando o dono, 'cepa until --all' agora tem um teste que acusa se a mensagem mudar, se o codigo de saida deixar de ser 0, se a rodada chegar a comecar (branch, commit no clone, registro em _all/until) ou se a consulta falhar. O sobrevivente do passe anterior (a rodada abrindo e fechando um branch vazio) agora fica vermelho. No codigo anterior ao --all o teste tambem fica vermelho."
