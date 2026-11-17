@@ -1452,6 +1452,74 @@ def test_cs7_no_pre_read_keeps_the_all_launch_without_panel():
               and "nobody answered" not in out, out[-1500:])
 
 
+def test_cs7_q_ends_the_whole_panel_not_only_the_section_of_its_queue():
+    """`q` in the section of `a` ends the panel: the question of `b` is not
+    asked, one line says how to answer later, and nothing runs."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {
+            "a": [_owner_item("a1", "liberar a", "Liberei a?")],
+            "b": [_owner_item("b1", "liberar b", "Liberei b?")]})
+        rc, out, events = _launch_all_on_tty(tmp, root, [
+            ("[t] I write the answer", "q")], wait="5")
+        launch = out.split("── ended", 1)[0]
+        check("sai com 0", rc == 0, out[-1500:])
+        check("...a pergunta de a foi feita", "Liberei a?" in launch, launch[-1500:])
+        check("...o `q` não abre a seção de b",
+              "queue `b`" not in launch and "Liberei b?" not in launch,
+              launch[-2000:])
+        check("...diz onde responder depois, nas duas filas",
+              "cepa-until decide a" in launch and "cepa-until decide b" in launch,
+              launch[-1500:])
+        check("...e nada roda", not any(e.get("evento") == "item_start"
+                                        for e in events), str(events))
+
+
+def test_cs7_a_route_already_answered_no_is_summarized_and_not_asked():
+    """A route the owner already answered "no" is not asked again in the
+    `--all` panel: one line per queue counts it and names `decide <queue>`,
+    and the panel asks only the other queue's question."""
+    with tempfile.TemporaryDirectory() as tmp:
+        old = _owner_item("a1", "liberar a", "Liberei a?")
+        old["evidence"] = "Resposta do dono em 2026-11-10: não: Liberei a?"
+        root, paths = _repo(tmp, {
+            "a": [old],
+            "b": [_owner_item("b1", "liberar b", "Liberei b?")]})
+        rc, out, events = _launch_all_on_tty(tmp, root, [
+            ("[t] I write the answer", "n"), ("Anything to add", "")], wait="5")
+        launch = out.split("── ended", 1)[0]
+        check("sai com 0", rc == 0, out[-1500:])
+        check("...uma linha resume a rota de a já respondida não",
+              "queue `a`: 1 route(s) you already answered" in launch
+              and "10/11" in launch and "cepa-until decide a" in launch,
+              launch[-2000:])
+        check("...a pergunta de a não é feita de novo",
+              "Liberei a?" not in launch.split("question(s) for you", 1)[-1],
+              launch[-2000:])
+        check("...o painel pergunta só a de b",
+              "1 question(s) for you" in launch and "Liberei b?" in launch,
+              launch[-2000:])
+
+
+def test_cs7_without_a_terminal_the_all_launch_opens_no_panel():
+    """No terminal: the `--all` launch asks nothing (the panel is for a person
+    at the terminal); the item that waits for the owner stays as it was."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {
+            "a": [_owner_item("a1", "liberar a", "Liberei a?")],
+            "b": [base.item("b1")]})
+        p, _ = _run(tmp, root, ["--all", "--for", "1h", "--no-verify",
+                                "--no-analysis"], claude_body=DONE_IN_ITS_QUEUE)
+        launch = p.stdout.split("── ended", 1)[0]
+        check("sem terminal sai com 0", p.returncode == 0, p.stderr[-800:])
+        check("...sem painel na largada",
+              "question(s) for you" not in launch and "Liberei a?" not in launch
+              and "nobody answered" not in p.stdout, launch[-1500:])
+        check("...b1 roda e a1 segue esperando",
+              _statuses(paths["b"]) == {"b1": "done"}
+              and _statuses(paths["a"]) == {"a1": "pending"},
+              f"{_statuses(paths['a'])} {_statuses(paths['b'])}")
+
+
 def main():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]
