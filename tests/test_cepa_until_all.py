@@ -1589,6 +1589,30 @@ def test_cs8_dead_all_run_does_not_refuse_a_single_queue_run():
               str(_statuses(paths["a"])))
 
 
+def test_cs9_nothing_ready_in_any_queue_exits_0_says_so_and_creates_no_branch():
+    """CS-9: every queue closed or waiting for the owner, the panel refused
+    (`--no-pre-read`): `cepa until --all --for 1h` exits 0, says no queue has a
+    ready item, runs nothing and leaves no new `until/*` branch."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {
+            "a": [base.item("a1", status="done")],
+            "b": [base.item("b1", human_pending="validar à mão")]})
+        before = {n: p.read_text() for n, p in paths.items()}
+        p, calls = _run(tmp, root, ["--all", "--for", "1h", "--no-pre-read",
+                                    "--no-verify", "--no-analysis"],
+                        claude_body=DONE_IN_ITS_QUEUE)
+        out = p.stdout + p.stderr
+        check("CS-9: --all sem pronto sai com 0", p.returncode == 0,
+              f"rc={p.returncode} out={out[-800:]}")
+        check("...diz que nenhuma fila tem item pronto",
+              "no queue has a ready item" in out, out[-800:])
+        check("...não chama o claude", not calls, str(calls))
+        check("...não cria branch until/*", not _branches(root),
+              str(_branches(root)))
+        check("...não toca nenhuma fila",
+              all(paths[n].read_text() == before[n] for n in paths))
+
+
 def main():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]
