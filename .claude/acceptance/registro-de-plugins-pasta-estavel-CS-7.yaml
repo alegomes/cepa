@@ -1,0 +1,29 @@
+schema_version: 1
+card: registro-de-plugins-pasta-estavel-CS-7
+status: complete
+audited_at: 2026-11-16T00:00:00-03:00
+covers: bc08cc0..d9b79db
+criteria:
+  - id: AC1
+    text: "CS-7: o land nao instala por cima de uma rodada viva que reinstalou. Red test: com `last-install.json` dizendo `repo_dir` igual ao worktree de outra rodada cujo processo esta vivo, `cepa-until land <fila>/<run> --yes` aterrissa, nao chama o instalador, grava `instalacao_adiada` no registro e imprime em 'Fica com voce' o pedido de rodar `bin/install.sh` no clone quando a outra rodada terminar."
+    altitude: cli
+    surface: "`common/bin/cepa-until land <fila>/<run> --yes` como subprocess real (HOME falso com ~/.claude/ops/last-install.json apontando para o worktree de outra rodada, com .estado.json rodando e pid de processo vivo); observa o instalador falso, o .jsonl da rodada, o stdout e o estado."
+    demonstrated_by:
+      test: "tests/test_cepa_until_land_install.py::test_cs7_live_run_on_the_installed_worktree_defers_the_install"
+      layer: "subprocess real de cepa-until (noite, depois land --yes); verificacoes sobre chamadas do instalador falso, .jsonl, stdout, estado e pasta da rodada"
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_until_land_install.py; echo exit=$?
+        Re-rodado em d9b79db, primeiro plano: 58 linhas "ok", 0 FAIL, "tudo verde", exit=0. Os 7 checks do caso vivo: pouso sai 0; instalador nao chamado; instalacao_adiada nomeando a outra rodada e a arvore, com `quando`; sem instalado_no_pouso; tela com "Fica com voce", bin/install.sh, o clone e a outra rodada; estado aterrissado; pasta da rodada removida.
+    verdict: complete
+    gap: null
+supporting_tests:
+  - "test_cs7_the_installed_path_is_compared_resolved_not_as_written (symlink adia)"
+  - "test_cs7_the_live_run_is_found_in_any_queue_and_layout (outra fila, _all, layout legado adiam)"
+  - "CS-7 sem arvore / outro host / sem pid instalam normalmente"
+  - "tests/test_cepa_until_land_install.py::test_cs7_dead_or_not_running_other_run_installs_as_in_cs6 (pid morto e estado encerrado instalam normalmente)"
+  - "tests/test_cepa_until_land_install.py::test_cs7_no_record_or_clone_as_repo_dir_installs_as_in_cs6 (sem last-install.json, repo_dir = clone, json ilegivel instalam normalmente)"
+notes:
+  - "Altitude cli respeitada: nenhuma chamada direta a funcoes internas nem mock; o instalador falso e o supervisor vivo (processo real) sao observados de fora."
+  - "Diff: common/bin/cepa-until, docs/cepa-until.md, docs/harness-ops.md, testes. Codigo de saida do land inalterado, conforme a spec."
+  - "Nao rodei a suite completa (o supervisor roda). Nenhum codigo ou teste foi editado."
