@@ -803,6 +803,18 @@ ALL_QUEUE = "all"
 ALL_DIR = "_all"
 
 
+def until_dir(repo, queue):
+    """The folder of a queue's run records and states. A `--all` run is named
+    `all/<run>` everywhere the owner reads it and keeps its files under `_all`,
+    so the label has to be translated here: on 2026-11-17 `cepa-until land
+    all/2026-11-16-1426`, copied from the end-of-run report, looked in
+    `.claude/queues/all/until/` and could not read the run state. A real queue
+    called `all` keeps its own folder."""
+    if queue == ALL_QUEUE and not qp.queue_file(repo, queue).exists():
+        return qp.queue_dir(repo, ALL_DIR) / "until"
+    return qp.queue_dir(repo, queue) / "until"
+
+
 def query_next_ready(repo, warned=None):
     """The next item of a `--all` run, read fresh (spec until-todas-as-filas, Q4):
     the first ready item in the order of `cepa-plan ready` (queue by queue, the
@@ -1638,7 +1650,7 @@ def touched_by_last_run(repo, queue):
     """The files the last run of this queue committed on the night branch
     (`base..branch` of the most recent `run_start`). With no record, or with the branch
     already deleted, returns empty: nothing on disk can have come from the run."""
-    d = qp.queue_dir(repo, queue) / "until"
+    d = until_dir(repo, queue)
     for reg in sorted(d.glob("*.jsonl"), reverse=True):
         start_point = None
         try:
@@ -1746,7 +1758,7 @@ def inheritance_from_previous_run(repo, queue, plan_path):
     open_items = {str(it.get("id")) for it in (plan or {}).get("items") or []
                if str(it.get("status") or "pending").strip().lower()
                not in TERMINAL_STATES}
-    d = qp.queue_dir(repo, queue) / "until"
+    d = until_dir(repo, queue)
     seen, by_branch = set(), {}
     for reg in sorted(d.glob("*.jsonl"), reverse=True):
         try:
@@ -2296,8 +2308,7 @@ def _cmd_land(argv, wrote):
         return 2
     queue, run_id = a.target.split("/", 1)
     repo = Path(a.repo).resolve()
-    path = qp.queue_dir(repo, queue) / "until" / \
-        f"{run_id}.estado.json"
+    path = until_dir(repo, queue) / f"{run_id}.estado.json"
     try:
         item_states = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
@@ -4634,7 +4645,7 @@ def cmd_decide(argv):
               "with no slashes nor `..` inside each part", file=sys.stderr)
         return 2
     repo = Path(a.repo).resolve()
-    folder = qp.queue_dir(repo, queue) / "until"
+    folder = until_dir(repo, queue)
     try:
         item_states = json.loads((folder / f"{run_id}.estado.json").read_text(
             encoding="utf-8"))
@@ -4810,8 +4821,7 @@ def _cmd_close_dead(argv, wrote):
         return 2
     queue, run_id = a.target.split("/", 1)
     repo = main_root(Path(a.repo).resolve())
-    path = qp.queue_dir(repo, queue) / "until" / \
-        f"{run_id}.estado.json"
+    path = until_dir(repo, queue) / f"{run_id}.estado.json"
     try:
         item_states = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
@@ -5118,7 +5128,7 @@ def live_run_of_queue(repo, queue):
     ids of the items with `item_start` in the run's record."""
     root = main_root(repo)
     host = socket.gethostname()
-    folder = qp.queue_dir(root, str(queue)) / "until"
+    folder = until_dir(root, str(queue))
     for path in sorted(folder.glob("*.estado.json")):
         try:
             item_states = json.loads(path.read_text(encoding="utf-8"))
@@ -5556,8 +5566,8 @@ def _main(argv=None):
               "of it.", file=sys.stderr)
         return 2
 
-    ledger_dir = qp.queue_dir(
-        repo, ALL_DIR if a.all_queues else a.queue) / "until"
+    ledger_dir = (qp.queue_dir(repo, ALL_DIR) if a.all_queues
+                  else qp.queue_dir(repo, a.queue)) / "until"
     ledger_dir.mkdir(parents=True, exist_ok=True)
     run_id = now.strftime("%Y-%m-%d-%H%M")
     ledger = ledger_dir / f"{run_id}.jsonl"
