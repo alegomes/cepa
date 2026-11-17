@@ -26,9 +26,37 @@ items:
     `cepa-live/common/.claude-plugin/plugin.json` é igual ao do worktree, e depois
     de `git worktree remove` o arquivo continua lá. Hoje o argumento é o caminho
     do worktree.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Código na branch da rodada until/2026-11-16-1426 (sem merge, sem push).
+    Commits: 97c3b7e (install.sh copia marketplace.json + pasta source de cada plugin
+    para ~/.claude/cepa-live e registra essa pasta), fa92869 (tira ramo de falha
+    da cópia, symlinks=True e a troca via .old; troca vira rm + mv), 86c2a63 (staging
+    com nome fixo cepa-live.new; teste compara a árvore de todos os plugins), f08b4c6
+    (artefatos dos portões). Teste: tests/test_install_live_dir.py, 41 checks ok
+    em 86c2a63, 35 FAIL contra o install.sh de eb91124. pair-reviewer: OK-WITH-NOTES
+    em 97c3b7e (observações, nenhuma correção exigida). completion-auditor: COMPLETE
+    em 86c2a63 (.claude/acceptance/registro-de-plugins-pasta-estavel-CS-1.yaml).
+    proof-reviewer: PROVEN em 86c2a63 na 3a rodada (docs/proof/registro-de-plugins-pasta-estavel-CS-1.yaml);
+    rodada 1 NEEDS-HUMAN em 97c3b7e (4 sobreviventes), rodada 2 UNPROVEN em fa92869
+    (2 sobreviventes), ambas respondidas por commit; 13 perturbações vermelhas,
+    2 equivalentes por leitura (mkdir -p da pasta pai, normpath); L2 pass por alcance
+    estrutural sem ferramenta de cobertura, L4 n/a. Vizinhos verdes: test_install_ops,
+    test_cepa_until_hook_reinstall, test_plugin_summary_derived, test_doctor_install_guard.
+    Build completo NÃO rodado aqui: é do supervisor. Conferido com o claude real
+    2.1.325 e CLAUDE_CONFIG_DIR de rascunho: marketplace add de pasta copiada +
+    plugin install common@cepa funcionam, registro real intocado. Fora deste item:
+    cópia que falha no meio (CS-4; hoje set -e aborta antes da troca e sobra cepa-live.new,
+    apagada no próximo install), cepa-live.prev/--rollback (CS-3), campos novos
+    do last-install.json (CS-5).'
+  head_commit: f08b4c6c6baee216063f3bc072e7fcbe833e1b16
+  decisions:
+  - texto: 'O instalador troca a pasta fixa apagando a antiga e renomeando a nova
+      (montada em cepa-live.new, nome fixo), sem guardar a antiga e sem tratamento
+      próprio para cópia que falha no meio: esses dois ficam para os itens CS-3
+      e CS-4, que trazem seus testes.'
+    commit: 86c2a63bbacb102f82cb65d61a7d1f2618c3f9c3
 - id: CS-2
   title: instalar do clone principal também registra a pasta fixa
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -36,9 +64,26 @@ items:
     arranjo, rodar `sh bin/install.sh` do clone principal; o argumento de `claude
     plugin marketplace add` é `$HOME/.claude/cepa-live` e a pasta tem `.claude-plugin/marketplace.json`
     e uma pasta por plugin listado nele. Hoje o argumento é o caminho do clone.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Test-only item: bin/install.sh already registers ~/.claude/cepa-live
+    from any folder (CS-1, 97c3b7e..86c2a63); CS-2 adds tests/test_install_live_dir.py::test_main_clone_install
+    (commits 9bb71de, e7b0cb1, 68b1349). python3 tests/test_install_live_dir.py:
+    58 ok, 0 FAIL (17 CS-2 checks); with the installer of eb91124, 16 of 17 CS-2
+    checks FAIL. Gates at 68b1349: completion-auditor COMPLETE (.claude/acceptance/registro-de-plugins-pasta-estavel-CS-2.yaml),
+    proof-reviewer PROVEN in round 2 (docs/proof/registro-de-plugins-pasta-estavel-CS-2.yaml;
+    round 1 at e7b0cb1 was UNPROVEN, survivor: copy source of every plugin forced
+    to common, closed by the per-plugin plugin.json comparison), pair-reviewer APPROVE.
+    Code is on the overnight branch until/2026-11-16-1426; full build (tests/run-all.sh)
+    not run here, it belongs to the supervisor. Left out: behavior with the real
+    claude CLI.'
+  head_commit: 5e6ce4575dea1a03d07e73665cf2f97d7aec2442
+  decisions:
+  - texto: 'CS-2 não mudou o instalador: ele já registrava a pasta fixa ao rodar
+      do clone principal desde o CS-1. O item entregou só o teste que trava esse
+      comportamento.'
+    commit: 5e6ce4575dea1a03d07e73665cf2f97d7aec2442
 - id: CS-3
   title: '`--clean` guarda a cópia anterior e `--rollback` a devolve'
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -46,9 +91,41 @@ items:
     a versão A, depois `sh bin/install.sh --clean` com a versão B, depois `sh bin/install.sh
     --rollback`; `cepa-live/common/.claude-plugin/plugin.json` volta a dizer a versão
     A e `cepa-live.prev` não existe mais. Hoje `cepa-live` não existe.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-16-1426: b5e634a (bin/install.sh +
+    teste), 62da265, 2ff6c87, 6d515af, 20c7b33 (só tests/test_install_live_dir.py),
+    09bee86 (arquivos dos portões). pair-reviewer: OK-WITH-NOTES, a nota de correção
+    (registro operacional lia cache.rolledback velho) foi aplicada em b5e634a. completion-auditor:
+    COMPLETE em 20c7b33 (.claude/acceptance/registro-de-plugins-pasta-estavel-CS-3.yaml).
+    proof-reviewer: PROVEN em 20c7b33 na rodada 5 (docs/proof/registro-de-plugins-pasta-estavel-CS-3.yaml),
+    92 perturbações, 1 equivalente (linha 315 mv->cp -R); rodadas 1-4 UNPROVEN com
+    5, 5, 1 e 10 sobreviventes, todos fechados por teste. Testes rodados: python3
+    tests/test_install_live_dir.py (all ok, 124 checks), tests/test_install_ops.py
+    (all green), pytest dos 3 arquivos de install (22 passed). Build completo NÃO
+    rodado: é do supervisor. Fora do escopo: pastas .rolledback nunca são limpas;
+    o wrapper pytest não falha quando check() acumula FAIL (só a execução direta
+    prova); --rollback não desfaz o claude plugin uninstall do --clean (já era assim
+    com o cache).'
+  head_commit: 09bee8601874e6ea96c80d6cdd800feaa16ee201
+  decisions:
+  - texto: O --rollback restaura o que existir (cache, pasta fixa ou os dois) e
+      só sai com erro quando nenhum dos dois pontos de volta existe; antes ele falhava
+      sempre que faltava o ponto de volta do cache
+    commit: b5e634aa202c21df1f16b4a6be9cbf53e280f6bc
+  - texto: 'Um segundo --clean apaga o cepa-live.prev anterior e guarda a cópia
+      que estava ativa: existe um único ponto de volta, igual ao do cache'
+    commit: b5e634aa202c21df1f16b4a6be9cbf53e280f6bc
+  - texto: A pasta que o --rollback substitui fica guardada em cepa-live.rolledback,
+      igual ao cache.rolledback, e a anterior com esse nome é apagada
+    commit: b5e634aa202c21df1f16b4a6be9cbf53e280f6bc
+  - texto: O --clean só põe cepa-live de lado depois que a cópia nova está completa,
+      e não cria cepa-live.prev quando cepa-live ainda não existe
+    commit: b5e634aa202c21df1f16b4a6be9cbf53e280f6bc
+  - texto: Quando o --rollback restaura só a pasta fixa, o registro operacional
+      fica sem versões de/para em vez de ler um cache.rolledback antigo
+    commit: b5e634aa202c21df1f16b4a6be9cbf53e280f6bc
 - id: CS-4
   title: cópia que falha no meio deixa a pasta fixa anterior inteira
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -57,9 +134,28 @@ items:
     falha (pasta sem permissão de leitura); o instalador sai diferente de zero,
     `cepa-live` ainda tem a versão A completa e `last-install.json` diz `in_progress`.
     Hoje não há cópia.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Branch until/2026-11-16-1426 (código está na branch da rodada, sem
+    merge nem push). Commits: 9f37dae (teste test_failed_copy_leaves_previous_live_whole
+    em tests/test_install_live_dir.py), a667db5 (portões). bin/install.sh não mudou:
+    o comportamento já valia desde CS-1 (cópia em cepa-live.new, troca só no fim,
+    set -e, in_progress gravado antes da cópia); o item entregou o teste que guarda
+    isso. pair-reviewer: OK-WITH-NOTES, nenhuma nota exigiu correção. completion-auditor:
+    COMPLETE (.claude/acceptance/registro-de-plugins-pasta-estavel-CS-4.yaml). proof-reviewer:
+    PROVEN (docs/proof/registro-de-plugins-pasta-estavel-CS-4.yaml), 6 perturbações
+    do instalador vermelhas, nenhum sobrevivente. Rodado só python3 tests/test_install_live_dir.py
+    (all ok); suíte completa fica com o supervisor. Fora do item: falha de cópia
+    sob --clean deixa o cache de plugins já movido para cache/cepa.prev (cepa-live
+    fica inteiro); teste não se aplica rodando como root (fica vermelho, não falso
+    verde).'
+  head_commit: a667db5b97e8be75c66f054cac8499c66af78ed9
+  decisions:
+  - texto: Quando a cópia falha no meio, a pasta de espera cepa-live.new fica no
+      disco e a próxima instalação a apaga; o instalador não limpa na hora da falha,
+      porque nenhum critério pede
+    commit: 9f37dae4c58172ac0848e660c533fd4d069a0048
 - id: CS-5
   title: o registro operacional diz de onde veio a cópia
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -67,9 +163,31 @@ items:
     de `sh bin/install.sh` de um worktree ligado, `~/.claude/ops/last-install.json`
     tem `repo_dir` igual ao worktree, `main_clone` igual ao clone principal e `live_dir`
     igual a `$HOME/.claude/cepa-live`. Hoje só existe `repo_dir`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-16-1426 (sem merge, sem push): 75309bd
+    (teste primeiro, RED com 8 checks CS-5 falhando por chave ausente), 05cf320
+    (bin/install.sh calcula MAIN_CLONE e ops_write grava main_clone e live_dir;
+    uma frase em docs/harness-ops.md e common/commands/doctor.md), 15f1169 (git
+    só é consultado quando REPO_DIR tem .git próprio; cenários de cópia sem git
+    dentro de outro repo e de git init --separate-git-dir), 2da11bb (arquivos de
+    gate). Gates em 15f1169: completion-auditor COMPLETE (.claude/acceptance/registro-de-plugins-pasta-estavel-CS-5.yaml,
+    covers a667db5..15f1169); proof-reviewer PROVEN (docs/proof/registro-de-plugins-pasta-estavel-CS-5.yaml,
+    11 perturbações todas vermelhas, nenhum sobrevivente, teste vermelho contra
+    o install.sh de a667db5). Primeira rodada de prova em 05cf320 deu UNPROVEN (guarda
+    do basename .git sem teste) e pair-reviewer achou main_clone errado em cópia
+    aninhada; os dois corrigidos em 15f1169 e pair-reviewer aprovou a segunda rodada.
+    Testes rodados: python3 tests/test_install_live_dir.py (all ok, 153 linhas ok)
+    e python3 tests/test_install_ops.py (all green). Build completo NÃO rodado:
+    é do supervisor. Fora do item: cepa-doctor ler os campos novos (CS-9 a CS-11).
+    Sem cobertura de teste: submódulo e GIT_DIR no ambiente.'
+  head_commit: 2da11bbd207ee3ca76a9d83676aeac9dfa59ead2
+  decisions:
+  - texto: Quando o instalador roda de uma pasta que não é a raiz de um repositório
+      git (cópia sem git, cópia dentro de outro repositório, pasta git com nome
+      fora do padrão), main_clone fica igual a repo_dir em vez de ficar vazio
+    commit: 15f1169a304c215c42df982d447ff03826fa7f41
 - id: CS-6
   title: '`cepa until land --yes` instala do clone depois do build verde'
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -78,9 +196,37 @@ items:
     falso que grava de onde foi chamado, `cepa-until land <fila>/<run> --yes` chama
     o instalador com o clone como diretório, depois do merge, e o registro da rodada
     ganha `instalado_no_pouso`. Hoje o land não chama o instalador.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-16-1426: a14bd25 (teste RED), 454d4ac
+    (implementação em common/bin/cepa-until: LAND_INSTALL, install_on_landing, chamada
+    em _cmd_land), 18b9f77 (cenário de instalador que falha), bc08cc0 (gates). completion-auditor:
+    COMPLETE (.claude/acceptance/registro-de-plugins-pasta-estavel-CS-6.yaml, covers
+    2da11bb..18b9f77). proof-reviewer: 1a rodada UNPROVEN em 454d4ac (sem teste
+    de instalador que falha), 2a rodada PROVEN em 18b9f77 (docs/proof/registro-de-plugins-pasta-estavel-CS-6.yaml;
+    17 perturbações mortas, teste RED contra 2da11bb com 13 falhas). pair-reviewer:
+    OK-WITH-NOTES, só achados baixos. Testes rodados: tests/test_cepa_until_land_install.py
+    verde; vizinhos verdes (land, hook_reinstall, clean_tree, english_aliases, dead_supervisor,
+    run_branch, resume_on_answer, pt_names_to_english, queue_rename, help_layout).
+    tests/test_cepa_until_decide.py falhou 2x em ''Ctrl-C: prints the interrupted
+    line'' quando rodado em paralelo com outros 4 arquivos e passou sozinho, com
+    e sem a mudança: teste de pty sensível a carga, não toca no land. Build completo:
+    delegado ao supervisor. Ficou de fora, por ser de outros itens: CS-7 (pular
+    quando outra rodada viva reinstalou) e CS-8 (rollback quando a instalação falha;
+    hoje o land só avisa e pede o install à mão). Sobreviventes sem peso na prova:
+    a posição da chamada em relação à remoção da worktree, e o trecho ''in <clone>''
+    da mensagem de falha. O resumo de fim de rodada ainda diz ''it takes effect
+    after land and bin/install.sh'' (aviso reinstalar-plugin): texto não tocado
+    aqui.'
+  head_commit: bc08cc061860343cae081398cb4760e9ba531551
+  decisions:
+  - texto: No pouso, a instalação dos plugins roda depois do merge, do build verde
+      e do envio ao remoto, e antes de apagar a pasta da rodada; se o pouso for
+      interrompido no meio da instalação, rodar o pouso de novo refaz a instalação.
+      Enquanto o item CS-8 não entra, uma instalação que falha só é avisada na tela,
+      com o comando para rodar à mão, e o pouso vale.
+    commit: 454d4ac60a8269fc919eadf87d7b436f7c63fa8a
 - id: CS-7
   title: o land não instala por cima de uma rodada viva que reinstalou
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -90,9 +236,26 @@ items:
     não chama o instalador, grava `instalacao_adiada` no registro e imprime em "Fica
     com você" o pedido de rodar `bin/install.sh` no clone quando a outra rodada
     terminar. Hoje não há nem a instalação nem o aviso.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-16-1426: 67ddc76 (teste RED), 5482736
+    (implementação), 396fc4a (testes para os sobreviventes da prova), d9b79db (remoção
+    do skip inalcançável), 2d910bc (portões). pair-reviewer: OK-WITH-NOTES, sem
+    correção pedida. completion-auditor: COMPLETE em d9b79db (.claude/acceptance/registro-de-plugins-pasta-estavel-CS-7.yaml).
+    proof-reviewer: rodada 1 UNPROVEN em 5482736 (sobreviventes A8/A9, B1, B3, C3,
+    C4), rodada 2 PROVEN em d9b79db (docs/proof/registro-de-plugins-pasta-estavel-CS-7.yaml);
+    A2 e A7 ficam como mutantes equivalentes. Testes rodados: tests/test_cepa_until_land_install.py
+    (58 ok), test_cepa_until_land.py, test_cepa_until_all.py, test_cepa_until_hook_reinstall.py
+    verdes. Suíte completa não rodada: é do supervisor. Ficou de fora: o plano sem
+    --yes não avisa que a instalação será adiada; reverter instalação que falha
+    é o CS-8. Código na branch da rodada, sem merge nem push.'
+  head_commit: 2d910bc5dafd7c95bf696ccd9c933532e55a6049
+  decisions:
+  - texto: O pouso só adia a instalação quando o last-install.json aponta para a
+      pasta de outra rodada viva; rodada viva sem essa ligação, de outra máquina
+      ou sem pid não adia, e o pouso instala.
+    commit: 54827366fab99f8850f019ad0923bfc54963000e
 - id: CS-8
   title: instalação que falha no pouso é desfeita e o pouso vale
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -101,9 +264,32 @@ items:
     land <fila>/<run> --yes` sai 0, o merge está no clone, o instalador foi chamado
     uma segunda vez com `--rollback`, o registro ganha `reinstalacao_desfeita` e
     a saída pede o install à mão em "Fica com você". Hoje o land não chama o instalador.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-16-1426: f089a2f (tests first, RED: 8 CS-8
+    checks failed), 98ab6b4 (install_on_landing runs ''sh bin/install.sh --rollback''
+    from the clone when the landing install fails, records reinstalacao_desfeita,
+    prints ''Fica com você''; docs and land help updated), 855cc88 (tests pin the
+    run''s own .jsonl and .log, the rollback''s reason and duration), plus the gates
+    commit. pair-reviewer: APPROVE. completion-auditor: COMPLETE (.claude/acceptance/registro-de-plugins-pasta-estavel-CS-8.yaml,
+    covers 2d910bc..98ab6b4; 855cc88 after it is tests-only). proof-reviewer: first
+    pass UNPROVEN at 98ab6b4 (4 of 14 perturbations survived, all test gaps), second
+    pass PROVEN at 855cc88 (14 of 14 RED; docs/proof/registro-de-plugins-pasta-estavel-CS-8.yaml).
+    Ran: tests/test_cepa_until_land_install.py green, and neighbours test_cepa_until_land,
+    test_cepa_help_layout, test_cepa_until_hook_reinstall, test_cepa_until_digest,
+    test_common_until_review green at 98ab6b4. Full suite not run: it belongs to
+    the supervisor. Code is on the overnight branch, not merged. Left out, noted
+    by the reviewer and pre-existing: the landing''s .jsonl writes are not guarded
+    against OSError.'
+  head_commit: 47152ce4307dd2a9051265bef7585b257d11c79e
+  decisions:
+  - texto: 'The landing still installs without --clean, so the rollback after a
+      failed install returns to whatever the last --clean set aside (it may be the
+      plugins from before the run), and when there is no such point the rollback
+      fails too: the landing stands with exit 0 either way, says which of the two
+      happened and asks for ''sh bin/install.sh'' in the clone by hand.'
+    commit: 98ab6b44f663a727539e11b9e5eefb493a7f9927
 - id: CS-9
   title: o doctor falha quando o registro aponta para pasta que não existe
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -112,9 +298,28 @@ items:
     válido, `cepa-doctor` imprime uma falha de `plugins` que nomeia o caminho inexistente
     e oferece o conserto `install` com o `main_clone`. Hoje imprime "marketplace
     ''cepa'' não encontrado em known_marketplaces.json", sem conserto.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-16-1426: 05ac09f (teste RED, 14 falhas
+    sem a correção), 2d6f524 (correção em check_plugins de common/bin/cepa-doctor),
+    67239db (teste passa a exigir o clone na mensagem), mais o commit dos gates.
+    pair-reviewer: APPROVE, nada obrigatório. completion-auditor: COMPLETE em 67239db
+    (.claude/acceptance/registro-de-plugins-pasta-estavel-CS-9.yaml). proof-reviewer:
+    passada 1 UNPROVEN em 2d6f524 (P10 sobreviveu: tirar o clone da mensagem), passada
+    2 PROVEN em 67239db com 12 de 12 perturbações mortas (docs/proof/registro-de-plugins-pasta-estavel-CS-9.yaml).
+    Testes rodados: tests/test_doctor_registry_missing_path.py (26 ok), test_doctor_install_guard.py,
+    test_doctor_fix.py, test_pluginver_boot.py, todos verdes; build completo fica
+    com o supervisor. Ficou de fora, por escopo: blindar last-install.json com tipo
+    inesperado (lista no lugar de objeto, main_clone não-texto), achado opcional
+    do revisor; CS-10 e CS-11.'
+  head_commit: 9dd07a698c2651a831ac7bee7b8443dd613314f4
+  decisions:
+  - texto: Quando o registro aponta para pasta que sumiu e não há clone principal
+      válido anotado no último install, o doctor falha nomeando a pasta e pede o
+      bin/install.sh à mão, sem oferecer conserto automático que não conseguiria
+      rodar. Registro ausente ou ilegível segue com a mensagem antiga.
+    commit: 2d6f524f2671a4f63502026b30731920dce2ccfc
 - id: CS-10
   title: o doctor avisa quando o registro aponta para pasta que não é a fixa
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -122,9 +327,37 @@ items:
     apontando `cepa` para um worktree que existe, `cepa-doctor` imprime um aviso
     de `plugins` dizendo que o registro está fora de `~/.claude/cepa-live` e oferece
     o conserto `install`. Hoje não diz nada sobre o caminho.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Retorno 1 de 2 resolvido. Causa do build vermelho da tentativa anterior:
+    tests/test_state_deposits.py (check ''todo .claude/<nome> citado no código de
+    common/ está no catálogo'') acusava cepa-live em cepa-doctor. Commits na branch
+    until/2026-11-16-1426: 5f9a5bb (teste RED), 8591ac7 (cepa-doctor: aviso de plugins
+    + fix_key), 72aee93 (aperto do teste), os três cherry-pick de 6cc99ea/5442b62/5031637
+    da branch lateral until/2026-11-16-1426-vermelho-registro-de-plugins-pasta-estavel-CS-10;
+    8f8501d (novo: cepa-live declarado no catálogo de common/hooks/_state.py); 14ff61b
+    (artefatos dos portões). Portões em 8f8501d: completion-auditor COMPLETE (.claude/acceptance/registro-de-plugins-pasta-estavel-CS-10.yaml),
+    proof-reviewer PROVEN (docs/proof/registro-de-plugins-pasta-estavel-CS-10.yaml;
+    23 perturbações, 23 mortas, incluindo apagar a linha do catálogo; RED na base
+    9dd07a6 com 17 falhas). Testes rodados aqui: test_state_deposits, test_doctor_*.py
+    (11 arquivos), test_install_live_dir, test_isolated_telemetry, test_pluginver_boot,
+    todos exit 0. Build completo (tests/run-all.sh) NÃO rodado: é do supervisor.
+    Código está na branch do run, sem merge nem push.'
+  decisions:
+  - texto: O conserto oferecido pelo aviso reinstala a partir do clone principal
+      quando ele existe; sem clone principal conhecido, reinstala a partir da própria
+      pasta registrada
+    commit: 5442b628f8bdff2074acf7aa86c7f9f096030d9f
+  - texto: Um doctor --fix roda a reinstalação uma vez só, mesmo quando dois achados
+      a pedem de pastas diferentes; vale a pasta do primeiro achado e, se ela falhar,
+      a outra não é tentada na mesma execução
+    commit: 5442b628f8bdff2074acf7aa86c7f9f096030d9f
+  - texto: Quando dois achados do doctor oferecem reinstalar os plugins a partir
+      de pastas diferentes, o --fix instala uma vez só, a partir da pasta do primeiro
+      achado; se essa instalação falhar, a outra não é tentada na mesma execução
+    commit: 8591ac7e82376c471d6da66d160aaefe99f1f053
+  head_commit: 14ff61be75727fce4ee38b7b49593b48c97c26f4
 - id: CS-11
   title: o doctor compara versões com o repo de origem, não com o caminho registrado
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -133,6 +366,28 @@ items:
     num repo em `common` 3.7.0, `cepa-doctor` avisa "repo está em 3.7.0 mas o cache
     instalado é 3.6.0". Hoje ele leria a pasta fixa como se fosse o repo e diria
     que está tudo instalado.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-16-1426: 90703ca (teste RED), e6cf982
+    (conserto em check_plugins de common/bin/cepa-doctor + frase em docs/harness-ops.md),
+    72a1edb (testes para 8 sobreviventes da prova; removido try/except inalcançável),
+    mais o commit dos gates. pair-reviewer: OK-WITH-NOTES, nota de conserto aplicada
+    (last-install.json malformado não derruba o doctor). completion-auditor: COMPLETE
+    em 72a1edb (.claude/acceptance/registro-de-plugins-pasta-estavel-CS-11.yaml).
+    proof-reviewer: 1a rodada UNPROVEN em e6cf982 (8 sobreviventes), 2a rodada PROVEN
+    em 72a1edb (docs/proof/registro-de-plugins-pasta-estavel-CS-11.yaml). Testes
+    rodados: tests/test_doctor_origin_repo.py (48 ok), test_doctor_registry_outside_live.py
+    (25 ok), test_doctor_registry_missing_path.py (26 ok), test_doctor_fix.py, test_doctor_install_guard.py.
+    Suíte completa NÃO rodada: fica com o supervisor. O código está na branch da
+    rodada, sem merge nem push. Ficou de fora: o aviso de abertura de sessão (_pluginver.boot_notice,
+    chamado por session-registry.py) ainda compara o cache com a pasta registrada;
+    e last_install() com JSON que não é objeto ainda derruba check_ops (já era assim
+    antes).'
+  head_commit: 94b97a7987bb867b29c0ee0600b99e07591a2922
+  decisions:
+  - texto: Sem repo de origem conhecido, o doctor avisa, não oferece conserto e
+      deixa de imprimir a linha 'instalado e habilitado'. Quando o registro aponta
+      para um checkout fora da pasta fixa e não há registro de instalação, esse
+      checkout vale como origem.
+    commit: 72a1edb4a7b284c91e6093e948a7752ac9f4293c
