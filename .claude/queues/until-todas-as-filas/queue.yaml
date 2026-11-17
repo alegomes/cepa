@@ -191,16 +191,30 @@ items:
     pending` lista `all/<run>` e `cepa until land all/<run> --yes` aterrissa a branch;
     hoje `land` recusa o alvo com "the target is <queue>/<run>" porque não existe
     fila `all`.'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  claimed_by:
-    session_id: bf170d20-6f73-412e-ae02-ce496a6ecd4b
-    pid: 64210
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-until-2026-11-17-1056
-    branch: until/2026-11-17-1056
-    started_at: '2026-11-17T16:05:13+00:00'
+  evidence: 'Retomado de reserva órfã (run anterior morreu após o teste RED 80b448a).
+    O teste ''passava'' no pytest porque check() não levanta; rodando o arquivo
+    direto havia 13 falhas nos test_cs6_*. Implementação ed3e872 (common/bin/cepa-until):
+    is_all_run/all_queue_names/split_label; item_start --all leva ''fila''; dead_runs
+    lê o item em voo na fila dele; close_with_owner e decide respondem cada item
+    na própria fila como fila/id; run_record_paths de all/<run> inclui o queue.yaml
+    de todas as filas e o registro fechado; land aceita queue.yaml sujo de qualquer
+    fila. pair-reviewer REJECT (fim de run --all num terminal podia responder em
+    fila sem commit) corrigido em ed3e872: fim de run --all só lista. Prova UNPROVEN
+    com 3 sobreviventes, fechados por testes em b72e0d7; re-prova PROVEN (11 quebras
+    mortas). Gates: .claude/acceptance/until-todas-as-filas-CS-6.yaml COMPLETE,
+    docs/proof/until-todas-as-filas-CS-6.yaml PROVEN em b72e0d7 (commit f12a703).
+    tests/test_cepa_until_all.py: ✓ 36 testes; tests/test_cepa_until.py: ✓ tudo
+    verde. Suíte completa fica com o supervisor. Fora: texto de ajuda dos subcomandos
+    ainda diz <queue>/<run>; a análise do fim do run e o status no Herdr sobre all/<run>
+    não têm teste (nota do auditor). Código na branch noturna until/2026-11-17-1431.'
+  head_commit: f12a7032f624612b3b1b2cd85e40e0d5c5ccc0f2
+  decisions:
+  - texto: No fim de um run --all, o que espera o dono só é listado, sem perguntar
+      item a item; quem pergunta é o 'cepa until decide all/<run>'
+    commit: ed3e872b56104518f422f87395ed4d3e5deeae23
 - id: CS-7
   title: Num terminal, a largada mostra um painel único com o que todas as filas
     guardam para o dono, agrupado por fila, e um "sim" faz o item rodar neste run
@@ -210,9 +224,35 @@ items:
     --for 1h` num pseudo-terminal mostra um único painel com as seções `a` e `b`;
     respondendo "sim" ao item de `a`, ele aparece com `item_start` no registro do
     run; hoje o comando é recusado.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-17-1431 (code on the overnight branch, not
+    merged, not pushed): 10a296d (tests/test_cepa_until_all.py: 4 test_cs7_* tests,
+    RED against f12a703 with 10 failed checks), 8b44058 (common/bin/cepa-until:
+    new ask_at_launch_all, one launch panel for every queue with a section per queue
+    in cepa-plan ready order, numbered across the list, each answer recorded in
+    the item''s own queue via decide(queue=<fila>); wired in _main after the header,
+    then next_item() re-read so a yes runs the item in this run; queue with own
+    live run left out; --no-pre-read still skips it; help text), 148a324 (q ends
+    the whole panel: decide sets progress[''quit'']; 3 tests: no panel without a
+    terminal, routes already answered no summarized, q cut), 7fb5787 (gate artifacts).
+    Gates: pair-reviewer OK-WITH-NOTES at 8b44058 (note 1, q did not stop between
+    sections, fixed in 148a324; note 2, header shows the pre-panel first item, cosmetic,
+    left as is); proof-reviewer UNPROVEN at 8b44058 (P7 terminal guard, P9 answered-no
+    summary survived), PROVEN at 148a324 (docs/proof/until-todas-as-filas-CS-7.yaml,
+    10 perturbations all RED); completion-auditor COMPLETE at 148a324 (.claude/acceptance/until-todas-as-filas-CS-7.yaml).
+    Tests run: python3 tests/test_cepa_until_all.py -> ✓ 43 testes at 148a324; tests/test_cepa_until.py
+    and tests/test_cepa_until_launch_measure.py green at 8b44058. Full suite delegated
+    to the supervisor. Left out: pre-read (item readers) still off in --all; launch-measure
+    telemetry (CS-13 tally) not filled for the --all panel; header line ''1st item''
+    is computed before the panel.'
+  head_commit: 7fb57875b78287b60772a8e672d147b6716e236b
+  decisions:
+  - texto: Num run --all, a largada mostra um painel só, com uma seção por fila;
+      a leitura prévia dos itens continua desligada no --all, a fila com run próprio
+      vivo fica fora do painel, e o q encerra o painel inteiro, não só a seção
+    commit: 148a3240d55b62f19a836e029c3b044967424460
 - id: CS-8
   title: Enquanto um run `--all` está vivo, um segundo `--all` e um `cepa until
     <fila>` de qualquer fila são recusados com o nome do run vivo
@@ -221,9 +261,24 @@ items:
     `.claude/queues/_all/until/*.estado.json` em estado `rodando` e pid vivo, `cepa
     until --all --for 1h` e `cepa until a --for 1h` saem com 2 e citam `all/<run>`;
     hoje o segundo comando larga normalmente.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'RED 1ec55b2 (test_cs8_* fail 8 checks: second --all and ''cepa until
+    a'' both ran items with a live _all run); fix fda4b43 (common/bin/cepa-until:
+    live_all_run reads _all/until/*.estado.json via _live_run_in_state; main refuses
+    with exit 2 naming all/<run>, pid and deadline, right after the single-queue
+    live-run refusal); gates 810fd01: acceptance COMPLETE (.claude/acceptance/until-todas-as-filas-CS-8.yaml),
+    proof PROVEN (docs/proof/until-todas-as-filas-CS-8.yaml, 6 perturbations all
+    RED, red at base FAILS 8). Neighbors run: tests/test_cepa_until_all.py 45 green,
+    tests/test_cepa_until.py green. Full build left to the supervisor. Code is on
+    the overnight branch until/2026-11-17-1431.'
+  head_commit: 810fd01de8868f281d20b169e9088d04c025e4c5
+  decisions:
+  - texto: Enquanto um run --all está vivo, a recusa vale também para --dry-run
+      e para filas que o --all nem teria itens prontos, igual à recusa que já existia
+      para um run vivo da mesma fila
+    commit: fda4b43d46933f619e9adbdba296008a7abbf547
 - id: CS-9
   title: Sem item pronto em nenhuma fila, o `--all` sai com 0, diz isso e não cria
     branch
@@ -232,6 +287,21 @@ items:
     as filas fechadas ou esperando o dono e o painel recusado (`--no-pre-read`),
     `cepa until --all --for 1h` sai com 0, imprime que nenhuma fila tem item pronto
     e `git branch --list ''until/*''` não ganha branch nova; hoje o comando é recusado.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Behavior already delivered by earlier items (query_next_ready empty-batch
+    return + _main return 0 before open_run_branch, common/bin/cepa-until ~856-893
+    and ~6172-6183); this item adds the CLI test test_cs9_nothing_ready_in_any_queue_exits_0_says_so_and_creates_no_branch
+    (677713b, strengthened in c3f0bf7 after proof-reviewer found survivor P2: run
+    opening and closing an empty branch). Gates at c3f0bf7: completion-auditor COMPLETE
+    (.claude/acceptance/until-todas-as-filas-CS-9.yaml), proof-reviewer PROVEN (docs/proof/until-todas-as-filas-CS-9.yaml,
+    6 perturbations killed, base c6067cc~1 refuses the command). Committed 1043d83
+    on the overnight branch until/2026-11-17-1431; full build left to the supervisor.
+    No production code changed.'
+  head_commit: 1043d83eed4a3a80acc0b9c15e8d5224d844f87e
+  decisions:
+  - texto: 'CS-9 não precisou de código novo: o --all já saía com 0 sem abrir rodada;
+      o item só acrescenta o teste que trava esse comportamento, inclusive que a
+      rodada nem começa'
+    commit: c3f0bf73d7e5fc149619450ef8760873a2f2a101
