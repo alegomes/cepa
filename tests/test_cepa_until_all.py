@@ -1598,6 +1598,7 @@ def test_cs9_nothing_ready_in_any_queue_exits_0_says_so_and_creates_no_branch():
             "a": [base.item("a1", status="done")],
             "b": [base.item("b1", human_pending="validar à mão")]})
         before = {n: p.read_text() for n, p in paths.items()}
+        head_before = _git(root, "rev-parse", "HEAD")
         p, calls = _run(tmp, root, ["--all", "--for", "1h", "--no-pre-read",
                                     "--no-verify", "--no-analysis"],
                         claude_body=DONE_IN_ITS_QUEUE)
@@ -1611,6 +1612,18 @@ def test_cs9_nothing_ready_in_any_queue_exits_0_says_so_and_creates_no_branch():
               str(_branches(root)))
         check("...não toca nenhuma fila",
               all(paths[n].read_text() == before[n] for n in paths))
+        # A run that opened its branch and closed it empty at the end would
+        # pass the checks above: what tells the two apart is that the run
+        # never started at all.
+        check("...diz que o run nem começa (antes de abrir branch)",
+              "nothing to do: no item runs, so the run does not start" in out,
+              out[-800:])
+        check("...o HEAD do clone não muda", _git(root, "rev-parse", "HEAD")
+              == head_before)
+        all_dir = root / ".claude" / "queues" / "_all" / "until"
+        check("...nenhum registro de run em _all/until",
+              not all_dir.exists() or not any(all_dir.iterdir()),
+              str(list(all_dir.iterdir()) if all_dir.exists() else []))
 
 
 def main():
