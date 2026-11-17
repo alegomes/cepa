@@ -1,0 +1,57 @@
+schema_version: 2
+card: registro-de-plugins-pasta-estavel-CS-1
+verdict: proven
+reviewed_at: 2026-11-16T16:00:00-03:00
+base_commit: eb91124132c03508e5dc0566a207b70621bc4114
+head_commit: 86c2a63
+issue_type: Story
+history:
+  - "Round 1 reviewed head 97c3b7e: NEEDS-HUMAN, four surviving perturbations."
+  - "Round 2 reviewed head fa92869: UNPROVEN, two survivors (every plugin copied from common/; staging name without pid suffix). 86c2a63 changed code (fixed staging name) and test (whole-tree comparison per plugin)."
+  - "Round 3 (this file): nothing carried over; every result below was re-run at 86c2a63."
+scope:
+  changed_classes:
+    - class: "bin/install.sh (LIVE_DIR, copy block PYLIVE, rm -rf/mv swap, marketplace add LIVE_DIR)"
+      module: bin
+      external_observable: true
+      substituted_by_double: null        # the test runs the real installer as a subprocess; only the far boundary (`claude` CLI) is a fake that records arguments
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # shell/Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at 86c2a63: python3 tests/test_install_live_dir.py -> 'all ok' (41 checks ok, 0 FAIL, rc=0) in throwaway worktree /tmp/proof-cs1-live3"
+        - "RED at base: eb91124 bin/install.sh + 86c2a63 test -> 35 FAIL checks, rc=1"
+        - "P1 marketplace add LIVE_DIR -> REPO_DIR (line 279) -> 2 FAIL (RED)"
+        - "P2 delete 'rm -rf LIVE_NEW' (line 261) -> 1 FAIL (RED: stale staging junk nests into cepa-live)"
+        - "P4 copytree without ignore=ign (line 272) -> 1 FAIL (RED)"
+        - "P4b ignore pattern '__pycache__' -> '__pycachex' (line 265) -> 1 FAIL (RED)"
+        - "P5 marketplace.json copy removed (lines 267-268 -> pass) -> 1 FAIL (RED)"
+        - "P7 delete 'rm -rf LIVE_DIR' before mv (line 274) -> 2 FAIL (RED)"
+        - "P8 delete 'mv LIVE_NEW LIVE_DIR' (line 275) -> 30 FAIL (RED)"
+        - "P10 makedirs of .claude-plugin removed (line 266 -> pass) -> 1 FAIL (RED)"
+        - "P11 only first plugin copied (copytree; break, line 272) -> 23 FAIL (RED)"
+        - "P12 copy source of every plugin forced to src/common (line 271) -> 11 FAIL (RED; survived at fa92869, closed by the whole-tree comparison)"
+        - "P13 copy destination of every plugin forced to dst/common (line 271) -> 1 FAIL (RED)"
+        - "P9 staging name '.new' -> '.new.$$' (line 260) -> 1 FAIL (RED: the test's stale 'cepa-live.new' is no longer removed, so the head's fixed name is load-bearing)"
+        - "P14 LIVE_DIR definition cepa-live -> cepa-live2 (line 93) -> 34 FAIL (RED)"
+        - "P3 delete 'mkdir -p dirname(LIVE_DIR)' (line 259) -> 0 FAIL. Equivalent mutant by reading: ops_write 'in_progress' (earlier, unconditional) already runs mkdir -p ~/.claude/ops, so ~/.claude exists. No observable difference."
+        - "P6 drop os.path.normpath (line 270) -> 0 FAIL. Equivalent mutant by reading: os.path.join(src, './x') names the same folder as os.path.join(src, 'x'); no observable difference."
+        - "run serially; each perturbation restored with git checkout 86c2a63 -- bin/install.sh; worktree removed, absent from git worktree list; primary tree untouched except this file"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; reachability established structurally: the installer runs end to end as a subprocess (rc=0, 41 checks), the new block is straight-line code with no branch, and every non-equivalent changed line turned a check red when broken (P1-P2, P4-P5, P7-P14); the two equivalent lines (259, 270) execute on every run. Line-level precision not measured."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff reads only .claude-plugin/marketplace.json of the repo it runs from and opens no input surface from outside (no api-rest module). Not verified by a run."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is Story; the equivalent is 'RED at base' above: 35 FAIL checks"
+routing_reason: "Criterion proven: 41 checks green at head, 35 FAIL at base. Every changed behavior line of bin/install.sh was perturbed and turns the test red (P1, P2, P4, P4b, P5, P7-P14). The two earlier survivors (P12 wrong copy source, P9 staging name) are now RED. Only P3 and P6 stay green, both equivalent mutants shown by reading the code. No test double stands in for the changed code. Limits: no coverage tool (L2 is structural, not measured); L4 is n/a on a diff-based claim, which the reviewer may overrule."

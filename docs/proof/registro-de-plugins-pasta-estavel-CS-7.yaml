@@ -1,0 +1,58 @@
+schema_version: 2
+card: registro-de-plugins-pasta-estavel-CS-7
+verdict: proven
+round: 2
+reviewed_at: 2026-11-16T23:10:00-03:00
+base_commit: bc08cc0
+head_commit: d9b79db
+issue_type: Feature
+round_1:
+  head_commit: 5482736
+  verdict: unproven
+  survivors: "A8/A9 (skip of the landing run's own state), B1 (resolved-path comparison), B3 (live run without arvore), C3 (pid from another host), C4 (run without pid); A2 and A7 judged low-risk; 'any queue' not measured"
+  closed_by: "396fc4a (tests for B1, B3, C3, C4, any queue/layout) and d9b79db (A8/A9 removed as unreachable)"
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until: installed_from_live_run() and the deferral branch of install_on_landing() (event instalacao_adiada, the two printed lines, return None), plus the call install_on_landing(repo, path.parent, run_id) in _cmd_land; guarded by tests/test_cepa_until_land_install.py (6 CS-7 tests)"
+      module: common
+      external_observable: true
+      substituted_by_double: null        # the tests run the real `cepa-until aterrissar` as a subprocess; only claude and bin/install.sh (far boundary) are fakes, plus a real throwaway process standing in for the other run's supervisor
+    - class: "common/bin/cepa-until: live_run_on_worktree() and the extraction _live_run_in_state() shared with live_run_of_queue()"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python/shell repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "Setup: throwaway worktree 'git worktree add --detach /tmp/proof-rpp-cs7-r2 d9b79db', removed at the end (worktree list shows none left; primary tree has only the two untracked CS-7 yaml files). Each perturbation = one sed line on common/bin/cepa-until (git diff --numstat HEAD showed '1 1' each time), the covering test file run in the foreground, then 'git checkout HEAD -- file' (0 changed files after each)."
+        - "GREEN at d9b79db (nothing perturbed): tests/test_cepa_until_land_install.py '✓ tudo verde' (48 s); tests/test_cepa_until_land.py '✓ tudo verde'; tests/test_cepa_until_all.py '✓ 20 testes'. Full suite not run (supervisor's)."
+        - "A8/A9 claim verified in the code, not taken on trust: _cmd_land (common/bin/cepa-until:2331) returns refuse() (exit 3) for any state other than esperando-dono (and 0 for aterrissado) BEFORE any merge or install; _live_run_in_state (:5208, check at :5214) returns None for any state other than rodando; install_on_landing is reached only after those checks (:2475-2479), and the landing's own record() writes only aterrissagem, never the state. So the landing run can never be returned as live. 'grep skip_state' on d9b79db: 0 occurrences; no leftover parameter or dead branch."
+        - "KILLED B1 resolved-path comparison replaced by str(found['arvore']) == str(directory) (:5274): RED 2 failures, 'CS-7 (symlink): o pouso sai 0 e adia' and '...o instalador não é chamado'."
+        - "KILLED B3 'or not found.get(\"arvore\")' dropped (:5271): RED 2 failures, 'CS-7 (sem arvore): o pouso sai 0 e instala' and '...com instalado_no_pouso e sem instalacao_adiada'."
+        - "KILLED C3 other-host rule removed from the liveness test (:5234): RED 2 failures, 'CS-7 (outro host)'."
+        - "KILLED C4 'not pid or' removed (:5234): RED 2 failures, 'CS-7 (sem pid)'."
+        - "KILLED any-layout: run_states scanning only qp.NEW_DIR: RED 1 failure 'CS-7 (layout legado)'; scanning only qp.LEGACY_DIR: RED 5+ failures (every CS-7 deferral check)."
+        - "KILLED any-queue: glob '*/until/*.estado.json' narrowed to the landing queue 'fila/until/...': RED 8+ failures, including 'CS-7 (outra fila)' and 'CS-7 (fila _all)'."
+        - "Round-1 sample re-killed at d9b79db: deferral branch never taken (other = None): RED, installer called, no instalacao_adiada, instalado_no_pouso written. Event renamed instalacao_adiada_x: RED 'o registro ganha instalacao_adiada nomeando a outra rodada' (+ 2 more). 'Fica com você' text changed to 'Fica': RED 'a tela tem Fica com você com o install, o clone e a outra rodada'. State check widened to also accept esperando-dono/encerrado: RED 2 failures 'CS-7 (estado encerrado)'. supervisor_alive(pid) removed: RED 2 failures 'CS-7 (pid morto)'."
+        - "SURVIVED, judged EQUIVALENT A2 (installed_from_live_run, clone == repo_dir early return replaced by 'if False'): 'tudo verde'. After the shortcut, live_run_on_worktree(clone) would only return a run whose worktree IS the clone, and a run always works in its own git worktree, never in the clone; so for any state the harness can produce the result is the same None. It is a short-circuit that saves a scan of the run states, not a behaviour. Not a survivor that matters."
+        - "SURVIVED, judged EQUIVALENT A7 (deferral branch returns True instead of None): not re-run, same as round 1 ('tudo verde'). The only call site (:2479) discards the return value and no test reads it. The docstring promise 'Returns None then' is unobserved, no behaviour depends on it. Not a survivor that matters."
+      surviving_lines: []
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; reachability structural and now corroborated by the perturbations: every changed branch of installed_from_live_run, install_on_landing (deferral and install) and live_run_on_worktree/_live_run_in_state (state, pid, host, arvore, resolved path, queue, layout) is turned RED by its own perturbation above, so each one is reached by a test. Line-level precision not measured."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff reads a local file (~/.claude/ops/last-install.json) and the run states the harness itself wrote; it parses no input from outside and touches no input-bearing module (api-rest). Unreadable or malformed JSON is already a tested case."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is Feature; the equivalent is the round-1 test-first run: the CS-7 test file against the pre-implementation cepa-until (67ddc76) was RED with 4 checks failing. Not repeated in round 2: 67ddc76 and 5482736 are unchanged and 396fc4a only added tests."
+routing_reason: "All five round-1 survivors that mattered are now killed (B1, B3, C3, C4, any queue/layout) and the round-1 sample is still RED when broken at d9b79db; A8/A9 no longer exist because the skip was removed, and the claim that it was unreachable holds in the code (land refuses anything but esperando-dono, liveness accepts only rodando). A2 and A7 survive but are equivalent: no state the harness produces tells them apart from the original. No survivors on changed lines, no double substituting a changed class. Limits: no coverage tool, full suite not run, A7 not re-run in round 2."

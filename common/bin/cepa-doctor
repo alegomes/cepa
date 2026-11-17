@@ -207,29 +207,76 @@ def check_ops(rec):
 
 def check_plugins(settings, rec=None):
     repo = cepa_repo_root()
-    if not repo or not repo.is_dir():
+    if not repo:
         fail("plugins", "marketplace 'cepa' não encontrado em known_marketplaces.json")
         return
+    if not repo.is_dir():
+        # Registered, but the folder is gone (typically a worktree removed after the
+        # run that installed from it). Distinct from "not registered": name the path,
+        # and offer the install only when the main clone it would run from exists.
+        clone = (rec or {}).get("main_clone")
+        if clone and Path(clone).is_dir():
+            fail("plugins", f"marketplace 'cepa' registrado em {repo}, que não existe mais — "
+                            f"reinstalar a partir do clone {clone} reaponta o registro",
+                 fix={"kind": "install", "repo": str(clone)})
+        else:
+            fail("plugins", f"marketplace 'cepa' registrado em {repo}, que não existe mais — "
+                            f"rode bin/install.sh a partir do clone do cepa para reapontar o registro")
+        return
+    # Registered folder exists, but it is not the fixed one: it works today and dies
+    # the day that folder is removed (CS-9). Warn, then keep checking versions.
+    live = CLAUDE_DIR / "cepa-live"
+    if repo.resolve() != live.resolve():
+        clone = (rec or {}).get("main_clone")
+        if clone and Path(clone).is_dir():
+            src, origin = str(clone), f"o clone {clone}"
+        else:
+            src, origin = str(repo), f"a própria pasta registrada {repo}"
+        warn("plugins", f"marketplace 'cepa' registrado em {repo}, fora de ~/.claude/cepa-live — "
+                        f"se essa pasta for removida o registro quebra; reinstalar a partir de "
+                        f"{origin} reaponta o registro para ~/.claude/cepa-live",
+             fix={"kind": "install", "repo": src})
     enabled = settings.get("enabledPlugins", {})
     if PV is None:
         fail("plugins", "comparador de versões (_pluginver.py) não carregou — "
                         "não dá para dizer se o cache é o repo")
         return
-    for p in PV.scan(repo, enabled):
+    # The registered folder may be the fixed copy (cepa-live), which is made by the
+    # installer and so always matches the cache. The version question is asked of the
+    # ORIGIN repo (CS-11): repo_dir, else main_clone, else (registry at a checkout) the
+    # registered folder itself.
+    origin = None
+    for key in ("repo_dir", "main_clone"):
+        cand = (rec or {}).get(key)
+        if not isinstance(cand, str) or not cand:
+            continue
+        # Path.is_dir() already answers False for an over-long or NUL-bearing path.
+        if Path(cand).is_dir():
+            origin = Path(cand)
+            break
+    if origin is None and repo.resolve() != live.resolve():
+        origin = repo
+    if origin is None:
+        warn("plugins", "sem repo de origem conhecido (nenhum repo_dir/main_clone em "
+                        "~/.claude/ops/last-install.json que ainda exista) — não dá para dizer se "
+                        "o que está instalado é o que está no repo; rode sh bin/install.sh a "
+                        "partir do clone do cepa")
+    scan_root = origin or repo
+    for p in PV.scan(scan_root, enabled):
         name, repo_v, cache_v = p["name"], p["repo_version"], p["cache_version"]
         if not p["enabled"]:
             warn("plugins", f"{name}@cepa NÃO habilitado em enabledPlugins — cards/hooks desse plugin não funcionam")
         if p["missing"]:
             fail("plugins", f"{name}: nenhuma versão no cache — rode bin/install.sh",
-                 fix={"kind": "install", "repo": str(repo)})
+                 fix={"kind": "install", "repo": str(origin)} if origin else None)
         elif p["drift"]:
             # The age of the drift is what separates "I just edited" from "I have
             # been working for two weeks against a harness that is not the installed one".
             a = age_days((rec or {}).get("finished_at") or (rec or {}).get("started_at"))
             atxt = f"; o último install foi há {a:.0f}d" if a is not None else ""
             warn("plugins", f"{name}: repo está em {repo_v} mas o cache instalado é {cache_v}{atxt} — edições não valem; rode bin/install.sh",
-                 fix={"kind": "install", "repo": str(repo)})
-        else:
+                 fix={"kind": "install", "repo": str(origin)} if origin else None)
+        elif origin is not None:
             ok("plugins", f"{name} {cache_v} instalado e habilitado")
 
 
@@ -1184,7 +1231,17 @@ FIX_LABEL = {
 
 
 def fix_key(fx):
-    """Identity of a fix — the same key used to avoid repeating it."""
+    """Identity of a fix — the same key used to avoid repeating it.
+
+    Every install is the same fix whatever its `repo`: it swaps the machine's one
+    installation, so two findings offering it from different folders (registry outside
+    cepa-live + cache drift) must run it once, the first finding's repo winning.
+    The collapse is deliberate even on failure: if the first install fails, the install
+    from the other finding's repo is NOT attempted in the same run; the failure shows
+    in the report.
+    """
+    if fx["kind"] == "install":
+        return ("install", "")
     return (fx["kind"], fx.get("path") or fx.get("repo") or fx.get("root") or "")
 
 

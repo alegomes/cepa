@@ -57,6 +57,10 @@ significa que a sessão que está rodando esteja.
   é um aviso; "…e o último install foi há 12 dias" é o que separa *acabei de
   editar* de *faz duas semanas que trabalho contra um harness que não é o
   instalado*.
+  O doctor compara o cache com o `repo_dir` do `last-install.json` (e, se essa pasta
+  não existe mais, com o `main_clone`), não com a pasta registrada em
+  `known_marketplaces.json`, que costuma ser a cópia `~/.claude/cepa-live` e por isso
+  sempre bate com o cache. Sem nenhum dos dois, avisa e não oferece conserto.
 - **Rollback recente.** Se o último evento foi um `--rollback`, o cache live é
   o **anterior** ao install que você tentou. É um estado legítimo e fácil de
   esquecer, então o doctor o diz em voz alta.
@@ -66,7 +70,8 @@ significa que a sessão que está rodando esteja.
 O registro é **global** (`~/.claude/ops/`), porque o cache de plugins que ele
 descreve é global: uma máquina, um harness live, seja qual for o repositório em
 que você esteja. Ele guarda `repo_dir` justamente para você saber de qual clone
-veio o que está instalado.
+veio o que está instalado, `main_clone` (o clone principal, mesmo quando a
+instalação saiu de um worktree) e `live_dir` (a pasta fixa `~/.claude/cepa-live`).
 
 O `--rollback` restaura **um** passo. Não é um histórico — é a rota de saída do
 último `--clean`. O cache substituído por um rollback fica em
@@ -105,6 +110,7 @@ Limites e falhas:
 - duas reinstalações na mesma noite: o `.prev` guarda só a anterior à última,
   então o `--rollback` não volta ao estado da largada;
 - sessões abertas mantêm os hooks antigos na memória até reiniciarem.
+- `cepa-until land --yes` no repo do Cepa roda `sh bin/install.sh` no clone depois do merge e do build verde e grava `instalado_no_pouso`. Se o `last-install.json` diz que o `repo_dir` é a worktree de outra rodada ainda viva, o install é pulado (grava `instalacao_adiada`) e o land pede, em "Fica com você", rodar `sh bin/install.sh` no clone quando essa rodada terminar; o código de saída do land não muda. Se o próprio install falha, o land roda `sh bin/install.sh --rollback` no clone, grava `reinstalacao_desfeita` (`ok` diz se o rollback deu certo) e pede, em "Fica com você", `sh bin/install.sh` à mão no clone; se o rollback também falha, avisa que os plugins podem ter ficado pela metade e aponta o `/common:doctor`. O merge vale e o código de saída continua 0.
 - com menos de 120 s de janela o supervisor não inicia o install (matá-lo no meio deixaria o cache pela metade): grava `reinstalacao_adiada` e fica só o aviso de sempre.
 
 Fora dessas condições a regra geral se mantém: o harness live só muda com o

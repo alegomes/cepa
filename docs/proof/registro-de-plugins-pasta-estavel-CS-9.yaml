@@ -1,0 +1,53 @@
+schema_version: 2
+card: registro-de-plugins-pasta-estavel-CS-9
+verdict: proven
+reviewed_at: 2026-11-17T02:10:00-03:00
+base_commit: 47152ce
+head_commit: 67239db563e24d3e2e6ee7cab8dbfcf55b3c58a8
+issue_type: Feature
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-doctor: check_plugins() branch 'registered but folder gone' (split from 'not registered', main_clone lookup with is_dir(), fix={kind: install, repo: clone}, the two messages); guarded by tests/test_doctor_registry_missing_path.py"
+      module: common
+      external_observable: true
+      substituted_by_double: null        # the test runs the real cepa-doctor as a subprocess; only the main_clone's bin/install.sh (far boundary) is a fake, under a temporary HOME
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python/shell repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "Pass 1 at 2d6f524 wrote this file as UNPROVEN (P10 survived, 11 of 12 killed). Commit 67239db changed only tests/test_doctor_registry_missing_path.py (git diff 2d6f524..67239db --stat: 1 file, 2 insertions; no production code): it adds the check 'a mesma falha diz de qual clone a reinstalação sai' (a [plugins] failure line containing both the vanished path and the clone path). Pass 2 re-ran all 12 at 67239db."
+        - "Setup pass 2: throwaway worktree 'git worktree add --detach ~/cepa-worktrees/proof-cs9 67239db' (a non-temp path on purpose: the doctor refuses to auto-install under /tmp and the --fix case depends on cwd). Removed at the end with 'git worktree remove --force'; 'git worktree list' no longer shows proof-cs9. Each perturbation = one sed on one line of common/bin/cepa-doctor (git diff --numstat HEAD showed '1 1' each time), 'python3 tests/test_doctor_registry_missing_path.py' run in the foreground, then 'git checkout HEAD -- common/bin/cepa-doctor' (git status clean after each). No bin/install.sh of the machine was run."
+        - "GREEN at 67239db unperturbed: tests/test_doctor_registry_missing_path.py prints 26 'ok' (pass 1 had 25; +1 is the new check) and 'tudo ok', exit 0."
+        - "RED at base, from pass 1: test file from HEAD with common/bin/cepa-doctor from 47152ce: exit 1, '14 falha(s)' (the new check only adds)."
+        - "KILLED P10 (the one that survived in pass 1) the clone's path removed from the with-clone message (line 220: 'do clone {clone} reaponta' -> 'do clone reaponta'): RED 1 failure, exactly the new check 'FAIL a mesma falha diz de qual clone a reinstalação sai', screen shown: '...que não existe mais — reinstalar a partir do clone reaponta o registro'. Honest: all other checks stayed 'ok' (including 'nomeia o caminho inexistente'), so the only thing missing was the clone's path, and that is what the new check asserts."
+        - "KILLED P1 split removed (line 213 'if not repo.is_dir():' -> 'if False:'): RED 11 failures (pass 1: 10; +1 is the new check)."
+        - "KILLED P2 is_dir() dropped on main_clone (line 218 -> 'if clone:'): RED 2 failures, '[main_clone aponta para pasta que não existe] pede bin/install.sh à mão no clone do cepa' and 'não oferece conserto que não consegue fazer' (same as pass 1)."
+        - "KILLED P3 clone branch never taken (line 218 -> 'if False:'): RED 3 failures: the new check, 'oferece o conserto install' and '--fix roda o install.sh do main_clone'."
+        - "KILLED P4 branches swapped (line 218 -> 'if not (clone and Path(clone).is_dir()):'): RED 9 failures (pass 1: 8; +1 is the new check)."
+        - "KILLED P5 fix points at the registered path instead of main_clone (line 221 str(clone) -> str(repo)): RED 1 failure '--fix roda o install.sh do main_clone'."
+        - "KILLED P6 fix dict dropped (line 221 -> fix=None): RED 2 failures 'oferece o conserto install' and '--fix roda o install.sh do main_clone'."
+        - "KILLED P7 path removed from the with-clone message (line 219 'registrado em {repo}, que' -> 'registrado em, que'): RED 3 failures: 'nomeia o caminho inexistente', the new check, and the CEPA_DOCTOR_INSTALL=off case."
+        - "KILLED P8 path removed from the without-clone message (line 223): RED 3 failures ('ainda falha nomeando o caminho' x3 cases)."
+        - "KILLED P9 'bin/install.sh' removed from the without-clone message (line 224 'rode bin/install.sh a partir' -> 'rode a partir'): RED 3 failures ('pede bin/install.sh à mão no clone do cepa' x3 cases)."
+        - "KILLED P11 fix kind renamed (line 221 '\"kind\": \"install\"' -> '\"kind\": \"other\"'): RED 2 failures 'oferece o conserto install' and '--fix roda o install.sh do main_clone'."
+        - "KILLED P12 last-install record ignored (line 217 '(rec or {})' -> '({})'): RED 3 failures (pass 1: 2; +1 is the new check)."
+        - "No loosening: the only diff of the test file is two added lines; every perturbation that was RED in pass 1 is still RED with the same failures, plus the new check where the with-clone message or branch is affected."
+      surviving_lines: []
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; reachability structural and corroborated by perturbations: both branches, the is_dir() condition, the fix dict and all four message parts (path and clone in the with-clone message, path and 'bin/install.sh' in the without-clone one) are each turned RED by a perturbation above. Line-level coverage percentage not measured."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff reads two local JSON files under HOME (known_marketplaces.json, last-install.json) that the doctor already read before, and adds no parsing of outside input; the unreadable-registry and absent-registry cases are covered by the test. No input-bearing module (api-rest) is touched."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is Feature; the equivalent is the test-first run: test at 05ac09f against the pre-fix cepa-doctor (47152ce) is RED with 14 failures (pass 1)."
+routing_reason: "All 12 perturbations of check_plugins() went RED at 67239db. P10, the only survivor of pass 1, is now killed by the new check, which fails for its own reason (the clone's path missing from the message). Unperturbed is green (26 ok), base is red. Limits: no coverage tool; only tests/test_doctor_registry_missing_path.py was run (not the full suite)."

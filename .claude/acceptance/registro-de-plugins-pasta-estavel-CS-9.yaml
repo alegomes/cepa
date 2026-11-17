@@ -1,0 +1,29 @@
+schema_version: 1
+card: registro-de-plugins-pasta-estavel-CS-9
+status: complete
+audited_at: 2026-11-17T00:00:00-03:00
+head_commit: 67239db
+covers: 47152ce..67239db
+criteria:
+  - id: AC1
+    text: "CS-9: com `known_marketplaces.json` apontando `cepa` para um caminho inexistente e `last-install.json` com `main_clone` valido, `cepa-doctor` imprime uma falha de `plugins` que nomeia o caminho inexistente e oferece o conserto `install` com o `main_clone`. Antes imprimia \"marketplace 'cepa' nao encontrado em known_marketplaces.json\", sem conserto."
+    altitude: cli
+    surface: "`common/bin/cepa-doctor` (e `--fix`) como subprocess real com HOME temporario e um main_clone falso cujo `bin/install.sh` so grava seu cwd num marcador; observa stdout/stderr e o marcador."
+    demonstrated_by:
+      test: "tests/test_doctor_registry_missing_path.py::test_missing_path_with_main_clone"
+      layer: "subprocess real do doctor; sem mock; o conserto e observado de fora (o install.sh falso roda no main_clone e grava o cwd)"
+      evidence: verified
+      run: |
+        python3 tests/test_doctor_registry_missing_path.py
+        Primeiro plano, neste auditor: exit=0, 26 linhas "ok", 0 "FAIL", linha final "tudo ok" (reauditado em 67239db). No caso principal (7 checks): falha [plugins] nomeia o caminho inexistente; a mensagem antiga nao aparece; a mesma falha traz o caminho inexistente e o clone de onde a reinstalacao sai (check novo de 67239db); anuncia "reinstalar os plugins"; sem --fix nada instala; --fix roda o install.sh do main_clone (cwd == clone); com CEPA_DOCTOR_INSTALL=off nao roda e a falha segue no relatorio.
+    verdict: complete
+    gap: null
+supporting_tests:
+  - "test_missing_path_without_usable_main_clone (sem last-install, sem main_clone, main_clone inexistente: falha nomeia o caminho, pede bin/install.sh a mao, nao oferece conserto)"
+  - "test_genuinely_absent_keeps_old_message (cepa ausente, sem installLocation, sem arquivo: mensagem antiga mantida)"
+  - "test_unreadable_registry_keeps_old_message (registro ilegivel: mensagem antiga mantida)"
+notes:
+  - "Reauditoria em 67239db: 2d6f524..67239db mexeu so em tests/test_doctor_registry_missing_path.py (+2 linhas, o check 'a mesma falha diz de qual clone a reinstalacao sai'); codigo de producao inalterado desde o fix. O check reforca o criterio (oferta com o main_clone), nao o enfraquece; nenhuma asserção removida."
+  - "Diff auditado: common/bin/cepa-doctor (check_plugins separa 'nao registrado' de 'registrado em pasta que sumiu', fix kind=install com repo=main_clone) e o teste novo. 05ac09f e o RED, 2d6f524 o fix; nao reexecutei o RED em 05ac09f."
+  - "Altitude cli respeitada: nenhuma chamada direta a check_plugins; HOME temporario e so o install.sh falso pode rodar, nunca o da maquina."
+  - "Rodei apenas test_doctor_registry_missing_path.py (nao rodei test_doctor_install_guard.py nem test_doctor_fix.py, nem a suite). Nenhum codigo ou teste foi editado; nao commitei o artefato."

@@ -1,0 +1,39 @@
+schema_version: 1
+card: registro-de-plugins-pasta-estavel-CS-3
+status: complete
+audited_at: 2026-11-16T00:00:00-03:00
+covers: 5e6ce45..20c7b33
+criteria:
+  - id: AC1
+    text: "CS-3: `--clean` guarda a copia anterior e `--rollback` a devolve. Instalar a versao A, depois `sh bin/install.sh --clean` com a versao B, depois `sh bin/install.sh --rollback`; `cepa-live/common/.claude-plugin/plugin.json` volta a dizer a versao A e `cepa-live.prev` nao existe mais (docs/spec/registro-de-plugins-pasta-estavel.md, linha 46; linha 18: com `--clean` a antiga fica em `cepa-live.prev` e `--rollback` a devolve)"
+    altitude: cli
+    surface: "`sh bin/install.sh [--clean|--rollback] <host>` executado como subprocess real com cwd no repo descartavel, HOME temporario e um `claude` falso no PATH; le plugin.json de ~/.claude/cepa-live e a existencia de ~/.claude/cepa-live.prev no disco, alem da saida do instalador."
+    demonstrated_by:
+      test: "tests/test_install_live_dir.py::test_clean_and_rollback"
+      layer: "subprocess real de bin/install.sh (instala A, --clean com B, --rollback); verifica disco e saida"
+      evidence: verified
+      run: |
+        python3 tests/test_install_live_dir.py
+        124 checagens "ok", 0 FAIL, "all ok", exit 0, head 20c7b33.
+        python3 -m pytest tests/test_install_live_dir.py tests/test_install_ops.py tests/test_doctor_install_guard.py -q
+        22 passed in 16.72s
+        Checagens do criterio em test_clean_and_rollback (inalteradas pelo 20c7b33): "CS-3: cepa-live diz A" apos instalar; "--clean com B sai 0" e "cepa-live diz B";
+        "cepa-live.prev guarda A"; "--rollback sai 0"; "depois do --rollback cepa-live volta a dizer A";
+        "depois do --rollback cepa-live.prev nao existe". As duas checagens de saida do --clean (linha "setting the current fixed folder aside at <prev>" e linha "Rollback point: <prev> (restore with ...)") agora comparam a linha inteira com `in out_lines`.
+    verdict: complete
+    gap: null
+supporting_tests:
+  - "test_rollback_fixed_folder_only_ignores_stale_cache: rollback so da pasta fixa nao relata versoes de cache.rolledback velho; bloco from/to, linha Restored e nota do registro por igualdade"
+  - "test_clean_without_existing_live: --clean sem cepa-live previo instala normal, sem .prev"
+  - "test_rollback_cache_only_leaves_fixed_folder: rollback so do cache nao mexe em cepa-live; linha Restored e nota do registro por igualdade"
+  - "test_rollback_replaces_old_cache_rolledback_and_tolerates_missing_targets: .rolledback antigo do cache e descartado; alvos ausentes tolerados"
+  - "test_plain_install_keeps_rollback_point: instalacao sem --clean preserva cepa-live.prev e nao anuncia novo ponto de volta"
+  - "test_rollback_with_nothing_names_both_paths: --rollback sem ponto de volta sai 1 e cita cepa-live.prev e cache.prev (linhas inteiras)"
+  - "test_rollback_replaces_old_rolledback: .rolledback antigo e descartado, nao aninhado"
+  - "test_rollback_names_both_replaced_copies: linha Restored e nota do registro citam cache.rolledback e cepa-live.rolledback (igualdade)"
+notes:
+  - "Auditado do zero no head 20c7b33. Desde 6d515af so mudou tests/test_install_live_dir.py (+69/-41); bin/install.sh nao mudou (git diff 5e6ce45..20c7b33 mostra a implementacao de CS-3 vinda de b5e634a). A auditoria anterior (6d515af) nao foi usada como prova."
+  - "O teste vermelho declarado (test_clean_and_rollback: A, --clean com B, --rollback, A de volta, .prev ausente) nao foi enfraquecido: o 20c7b33 so tornou mais estritas as duas checagens de saida do --clean no mesmo teste; as checagens de disco ficaram identicas."
+  - "Reescrita lida linha a linha: todas as checagens de mensagem passaram de substring (`in`/`any(... in l)`) para linha inteira (`in outl`) ou igualdade com rec['note']; nenhuma foi removida sem equivalente. A contagem foi de 125 para 124 `ok` porque duas checagens do registro em test_rollback_names_both_replaced_copies viraram uma igualdade da nota inteira, que cobre as duas condicoes. Ressalva menor: 'fixed folder' not in r.stdout e 'restoring the cache' not in r.stdout seguem como negativas de substring, de proposito."
+  - "Prova de execucao: test_install_live_dir.py rodado direto (exit 0, 0 FAIL, 124 ok), nao so pytest, porque check() so acumula falhas. N > 0. Rodei so os dois comandos autorizados, em primeiro plano; nao rodei a suite completa."
+  - "Fora do escopo de CS-3: CS-4 em diante e comportamento com o claude real."

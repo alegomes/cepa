@@ -1,0 +1,27 @@
+schema_version: 1
+card: registro-de-plugins-pasta-estavel-CS-8
+status: complete
+audited_at: 2026-11-16T00:00:00-03:00
+covers: 2d910bc..98ab6b4
+criteria:
+  - id: AC1
+    text: "CS-8: com um `bin/install.sh` falso que sai 1 na instalacao e 0 no `--rollback`, `cepa-until land <fila>/<run> --yes` sai 0, o merge esta no clone, o instalador foi chamado uma segunda vez com `--rollback`, o registro ganha `reinstalacao_desfeita` e a saida pede o install a mao em \"Fica com voce\"."
+    altitude: cli
+    surface: "`common/bin/cepa-until land <fila>/<run> --yes` como subprocess real contra um repo falso com `bin/install.sh` falso (FAKE_ROLLBACK_EXIT controla o --rollback); observa codigo de saida, git log do clone, chamadas registradas do instalador, .jsonl da rodada, stdout, estado e pasta/branch da rodada."
+    demonstrated_by:
+      test: "tests/test_cepa_until_land_install.py::test_cs8_failed_install_is_rolled_back_and_the_landing_stands"
+      layer: "subprocess real de cepa-until (noite, depois land --yes); verificacoes sobre o merge no clone, as duas chamadas do instalador falso, o registro, o stdout e o estado"
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_until_land_install.py
+        Primeiro plano, neste auditor: todos os "ok", sem FAIL, "tudo verde". Os 12 checks de CS-8 do caso principal: pouso sai 0; merge no clone; instalador chamado 2 vezes (instalacao, depois args == ["--rollback"]); ambas com o clone como diretorio; reinstalacao_desfeita com ok verdadeiro; ordem instalado_no_pouso(ok falso) antes de reinstalacao_desfeita; tela com "Fica com voce", `sh bin/install.sh` e o clone; diz que os plugins anteriores foram restaurados; aponta o .log; estado aterrissado; branch e pasta da rodada removidas.
+        Observacao: nao capturei o exit code do script nem a contagem total; a evidencia e a lista de checks "ok" por teste e a linha final "tudo verde".
+    verdict: complete
+    gap: null
+supporting_tests:
+  - "test_cs8_rollback_that_also_fails_still_lands (rollback que tambem falha: pouso sai 0, reinstalacao_desfeita com ok falso, tela avisa e aponta o doctor, estado aterrissado)"
+  - "test_cs8_green_install_makes_no_rollback (instalacao verde: uma so chamada, sem --rollback, sem reinstalacao_desfeita)"
+  - "test_cs8_no_rollback_without_an_install_that_failed (build vermelho sai 5, so plano, outro repo: sem chamada e sem reinstalacao_desfeita)"
+notes:
+  - "Altitude cli respeitada: nenhum mock nem chamada direta a install_on_landing; so o instalador falso e observado de fora."
+  - "Nao rodei a suite completa (o supervisor roda). Nenhum codigo ou teste foi editado; nao commitei o artefato."

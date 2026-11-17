@@ -104,6 +104,7 @@ CATALOGUE = {
     "keybindings.json": (None, "configuração do Claude Code"),
     "hooks": (None, "hooks instalados"),
     "plugins": (None, "plugins instalados (home)"),
+    "cepa-live": (None, "bin/install.sh (pasta fixa de onde os plugins são servidos, em ~/.claude; lida por cepa-doctor)"),
     "projects": (None, "memória por projeto do Claude Code (home)"),
     "cepa-report-style": (None, "report-style-lint.py (medições do formato do relatório, em ~/.claude)"),
     "cepa-telemetry": (None, "telemetria do cepa (home)"),

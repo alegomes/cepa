@@ -1,0 +1,27 @@
+schema_version: 1
+card: registro-de-plugins-pasta-estavel-CS-1
+status: complete
+audited_at: 2026-11-16T00:00:00-03:00
+covers: eb91124..86c2a63
+criteria:
+  - id: AC1
+    text: "CS-1: installing from inside a worktree registers the fixed folder, and it survives the removal of the worktree (docs/spec/registro-de-plugins-pasta-estavel.md)"
+    altitude: cli
+    surface: "`sh bin/install.sh <host>` executado de dentro de um worktree git ligado real, com HOME temporario e um `claude` falso no PATH que grava o argv; argumento de `claude plugin marketplace add`, conteudo de ~/.claude/cepa-live e sua sobrevivencia a `git worktree remove`."
+    demonstrated_by:
+      test: "tests/test_install_live_dir.py::test_worktree_install"
+      layer: "subprocess real de bin/install.sh (copiado para repo descartavel com worktree ligado); le o log do claude falso e o disco"
+      evidence: verified
+      run: |
+        python3 tests/test_install_live_dir.py
+        41 checagens "ok", 0 FAIL, "all ok" (exit 0). Inclui: "marketplace add recebe ~/.claude/cepa-live",
+        "nenhum marketplace add recebe o caminho do worktree", "plugin.json de common é igual ao do worktree",
+        "árvore inteira de cada plugin idêntica à do worktree", "o worktree foi removido",
+        "depois de remover o worktree, plugin.json continua em cepa-live", "reinstalar com staging velho sai 0".
+    verdict: complete
+    gap: null
+notes:
+  - "Auditado do zero no head 86c2a63 (diff eb91124..86c2a63: bin/install.sh e tests/test_install_live_dir.py); o arquivo da auditoria anterior (fa92869) nao foi usado como prova."
+  - "install.sh copia marketplace.json + pasta de cada plugin listado para ~/.claude/cepa-live.new (nome fixo, apagado antes) e faz mv para cepa-live; registra cepa-live. O 86c2a63 trocou o nome do staging para fixo e o teste agora compara a arvore inteira de todos os plugins e cobre staging velho."
+  - "Rodei so o teste do criterio, em primeiro plano; nao rodei tests/run-all.sh por regra da run."
+  - "Fora do escopo de CS-1 (CS-2..CS-11 sao outros itens): comportamento com o claude real."

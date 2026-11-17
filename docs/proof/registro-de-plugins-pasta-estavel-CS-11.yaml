@@ -1,0 +1,56 @@
+schema_version: 2
+card: registro-de-plugins-pasta-estavel-CS-11
+verdict: proven
+reviewed_at: 2026-11-17T07:00:00-03:00
+base_commit: 14ff61be75727fce4ee38b7b49593b48c97c26f4
+head_commit: 72a1edb4a7b284c91e6093e948a7752ac9f4293c
+issue_type: Feature
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-doctor: check_plugins() origin-repo resolution (repo_dir, then main_clone, then the registered folder when it is not ~/.claude/cepa-live, else none), guard for a malformed record (non-string/empty value), the 'sem repo de origem conhecido' warning, PV.scan(origin or repo), install fix carrying the origin (or no fix without origin), ok line only with an origin; guarded by tests/test_doctor_origin_repo.py"
+      module: common
+      external_observable: true
+      substituted_by_double: null        # the test runs the real cepa-doctor as a subprocess under a temporary HOME; only bin/install.sh of the fake checkouts (far boundary) is a fake
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python/shell repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "Setup: throwaway worktree 'git worktree add --detach ~/cepa-worktrees/proof-cs11b 72a1edb'. Each perturbation = one sed on one line of common/bin/cepa-doctor (git diff --numstat showed '1/1' each time), 'python3 tests/test_doctor_origin_repo.py' in the foreground (about 17 s), then 'git checkout -- common/bin/cepa-doctor'; at most 3 per command, nothing in the background. Worktree removed with 'git worktree remove --force'; 'git worktree list' no longer shows it. Machine's bin/install.sh never run; full suite not run. Line numbers are those of 72a1edb."
+        - "GREEN at 72a1edb unperturbed: tests/test_doctor_origin_repo.py 'tudo ok'; tests/test_doctor_registry_outside_live.py 'tudo ok'; tests/test_doctor_registry_missing_path.py 'tudo ok'."
+        - "RED at base: test file from HEAD with common/bin/cepa-doctor from 14ff61b: '23 falha(s)'. Restored afterwards."
+        - "RE-RUN AT 72a1edb, former survivors, all now KILLED:"
+        - "KILLED S1 empty-string guard dropped (line 251 ' or not cand' removed): RED 2 failures (test_empty_repo_dir_is_not_the_cwd)."
+        - "KILLED S3 registered-checkout fallback never taken (line 257 -> 'if False:'): RED 1 failure, \"registro fora do cepa-live: não diz 'sem repo de origem'\" (test_registry_at_outside_checkout_is_the_origin)."
+        - "KILLED S4 same fallback yields no origin (line 258 'origin = repo' -> 'origin = None'): RED 1 failure, same check."
+        - "KILLED S5 warning emitted with a known origin (line 259 'if origin is None:' -> 'if True:'): RED 2 failures, \"origem conhecida: sem aviso 'sem repo de origem'\" and the registry-outside check."
+        - "KILLED S6 missing-cache fix carries the registered folder (line 271 'str(origin)' -> 'str(repo)'): RED 1 failure, 'cache vazio: --fix roda o install.sh do repo_dir' (test_missing_cache_with_origin)."
+        - "KILLED S7 missing-cache fix dropped (line 271 -> 'fix=None'): RED 2 failures, 'cache vazio: oferece o conserto install' and '--fix roda o install.sh do repo_dir'."
+        - "KILLED S8a fix built without origin, missing branch (line 271 ' if origin else None' -> ' if True else None'): RED 1 failure, 'sem origem + cache vazio: não oferece conserto' (test_no_origin_offers_no_fix)."
+        - "KILLED S8b fix built without origin, drift branch (line 278, same edit): RED 1 failure, 'sem origem + drift: não oferece conserto'."
+        - "S2 GONE: the try/except (OSError, ValueError) no longer exists. 'sed -n 240,262p' finds 0 'try:'/'except' and 'grep -c \"OSError, ValueError\"' returns 0 in common/bin/cepa-doctor at 72a1edb (commit 72a1edb deleted it as unreachable; Path.is_dir() answers False for over-long and NUL paths). Nothing to perturb. test_unusable_path_strings_do_not_crash keeps both inputs ('/' + 5000 'a', 'a\\u0000b') from crashing the doctor and asserts the 'sem repo de origem' warning; it is green."
+        - "RE-RUN AT 72a1edb, lines re-indented by 72a1edb:"
+        - "KILLED P6 is_dir dropped (line 254 -> 'if True:'): RED 5 failures."
+        - "KILLED P7 break removed (line 256 'break' -> 'pass'): RED 2 failures, 'a mensagem mostra a versão do repo_dir' and '--fix roda do repo_dir, não do main_clone'."
+        - "RE-RUN as a spot check (line unchanged by 72a1edb): KILLED P1 isinstance guard dropped (line 251 'not isinstance(cand, str) or ' removed): RED 8 failures."
+        - "CARRIED OVER from the round at e6cf982 (artifact of that round, run on the same lines, which 72a1edb did not touch; not re-run here): P3 key order swapped (RED 2), P4 repo_dir dropped (RED 6), P5 main_clone dropped (RED 3), P11 comparison '!=' -> '==' (RED 7), P12/P13 resolve() dropped on either side (RED 7 each), P15 fallback without the not-live condition (RED 7), P17 warning never emitted (RED 5), P19 warn -> fail (RED 2), P20 scan of the registered folder (RED 9), P24 drift fix carries the registered folder (RED 2), P26 drift fix dropped (RED 4), P27 ok line also without origin (RED 2), P28 ok line never printed (RED 1). Only their line numbers moved by -2 (the try/except removal); the diff e6cf982..72a1edb in common/bin/cepa-doctor is exactly the 6 removed/4 added lines of the try/except, read in full."
+        - "NEW LINES in 72a1edb: only the explanatory comment above 'if Path(cand).is_dir():' (no behavior) and the de-indentation of the is_dir/break lines (re-run as P6/P7). No other new behavior."
+        - "Totals at 72a1edb: 8 former survivor perturbations (S1, S3, S4, S5, S6, S7, S8a, S8b) re-run, 0 survived; P6, P7, P1 re-run, 0 survived; 13 carried over from e6cf982; S2 removed. 0 survivors."
+      surviving_lines: []
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; reachability structural and corroborated by perturbations: the fallback to the registered checkout (257-258), the missing-cache branch (271), the no-origin drift branch (278) and the empty-string guard (251) were the lines uncovered at e6cf982 and are now each turned RED by a perturbation above. Line-level coverage percentage not measured."
+  l4_adversarial_input:
+    status: clean
+    findings: []
+    run: "malformed last-install.json values exercised by the test file against the real doctor: empty string (test_empty_repo_dir_is_not_the_cwd, green), path over PATH_MAX and string with embedded NUL (test_unusable_path_strings_do_not_crash, green: no Traceback, 'sem repo de origem' warning shown); non-string value covered by the isinstance guard, whose removal (P1) turns 8 checks RED. Observed with 'python3 tests/test_doctor_origin_repo.py' -> 'tudo ok'."
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is Feature; the equivalent is the test-first run: test file from HEAD against cepa-doctor from 14ff61b: '23 falha(s)'."
+routing_reason: "At 72a1edb: three test files green, base red (23 failures), the 8 survivor groups of e6cf982 re-run: seven killed by the test cases added in 72a1edb, S2 no longer exists as code (try/except removed, confirmed by grep). The re-indented lines (is_dir, break) re-run RED; the other 13 perturbations of e6cf982 carried over, declared above with the commit they ran at. 0 survivors. Limits: no coverage tool; the full suite was not run (the supervisor runs it); 13 perturbations carried over rather than re-run."

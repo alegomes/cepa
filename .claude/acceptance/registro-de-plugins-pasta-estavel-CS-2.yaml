@@ -1,0 +1,28 @@
+schema_version: 1
+card: registro-de-plugins-pasta-estavel-CS-2
+status: complete
+audited_at: 2026-11-16T00:00:00-03:00
+covers: f08b4c6..68b1349
+criteria:
+  - id: AC1
+    text: "CS-2: instalar do clone principal tambem registra a pasta fixa. Rodar `sh bin/install.sh` do clone principal; o argumento de `claude plugin marketplace add` e `$HOME/.claude/cepa-live` e a pasta tem `.claude-plugin/marketplace.json` e uma pasta por plugin listado nele (docs/spec/registro-de-plugins-pasta-estavel.md)"
+    altitude: cli
+    surface: "`sh bin/install.sh <host>` executado com cwd no clone principal (repo git descartavel, sem worktree), HOME temporario sem instalacao previa e um `claude` falso no PATH que grava o argv; argumento de `claude plugin marketplace add` e conteudo de ~/.claude/cepa-live."
+    demonstrated_by:
+      test: "tests/test_install_live_dir.py::test_main_clone_install"
+      layer: "subprocess real de bin/install.sh a partir do clone principal; le o log do claude falso e o disco"
+      evidence: verified
+      run: |
+        python3 tests/test_install_live_dir.py
+        58 checagens "ok", 0 FAIL, "all ok" (exit 0), head 68b1349. Das de CS-2: "install.sh do clone principal sai 0",
+        "marketplace add recebe ~/.claude/cepa-live" (adds == [live], exatamente uma chamada),
+        "o caminho do clone principal nao aparece em nenhuma chamada do claude" (exige log nao vazio),
+        "marketplace.json igual ao do clone" (byte a byte), uma checagem por plugin (11 plugins, inclusive docs -> docs-topology)
+        com plugin.json byte a byte igual ao do clone, "cepa-live tem so o marketplace e as pastas dos plugins listados".
+    verdict: complete
+    gap: null
+notes:
+  - "Auditado do zero no head 68b1349 (diff f08b4c6..68b1349: so tests/test_install_live_dir.py, test-only); o arquivo da auditoria anterior (e7b0cb1) nao foi usado como prova. O codigo do instalador veio com CS-1 e e o mesmo bin/install.sh copiado pelo teste."
+  - "Altitude: criterio nomeia a CLI do instalador; o teste executa o script real por subprocess, nao um teste de unidade. Ressalva menor: o log do claude falso so e lido se existir; se nao existir, `adds` fica vazio e a checagem `adds == [live]` falha, entao nao ha falso verde."
+  - "Rodei so `python3 tests/test_install_live_dir.py`, em primeiro plano, N > 0 (58 ok); nao rodei tests/run-all.sh por regra da run."
+  - "Fora do escopo de CS-2: comportamento com o claude real."

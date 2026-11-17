@@ -6,6 +6,11 @@
 #   ./bin/install.sh [--clean] [--rollback] [--topology=NAME] [/path/to/host-project]
 #
 # Without arguments: installs plugins (idempotent), sets up cwd as host project.
+# The marketplace is registered from a FIXED folder, ~/.claude/cepa-live: the
+#   installer copies .claude-plugin/marketplace.json plus each listed plugin's
+#   folder there and registers that copy, never the folder it ran from. Run
+#   from a cepa-until worktree, the registry would otherwise point at a folder
+#   that is removed later.
 # With --clean: also uninstalls existing plugins and SETS ASIDE the marketplace
 #   plugin cache before reinstalling. Use this when you've edited plugin
 #   source without bumping versions and want CC to pick up the changes. The
@@ -75,6 +80,19 @@ HOST_PROJECT_INPUT="${HOST_PROJECT_INPUT:-$(pwd)}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# The main clone: parent of git's common dir (the shared .git of every linked
+# worktree). Git is asked only when REPO_DIR is itself the top of a working
+# tree (it has its own .git: a folder in a main clone, a file in a linked
+# worktree); a plain copy nested inside another repo would otherwise report
+# that outer repo. Even then, the common dir must be a folder named ".git".
+# In every other case the repo this script ran from is the only clone known.
+MAIN_CLONE="${REPO_DIR}"
+if [ -e "${REPO_DIR}/.git" ] \
+   && _common="$(cd "${REPO_DIR}" && git rev-parse --git-common-dir 2>/dev/null)" \
+   && _common="$(cd "${REPO_DIR}" && cd "${_common}" 2>/dev/null && pwd)" \
+   && [ "$(basename "${_common}")" = ".git" ]; then
+  MAIN_CLONE="$(cd "$(dirname "${_common}")" && pwd)"
+fi
 HOST_PROJECT="$(cd "${HOST_PROJECT_INPUT}" 2>/dev/null && pwd)" || {
   echo "✗ Host project path does not exist: ${HOST_PROJECT_INPUT}"
   exit 1
@@ -85,6 +103,8 @@ EXPERTISE_SOURCE="${REPO_DIR}/common/expertise"
 EXPERTISE_TARGET="${HOST_PROJECT}/.claude/expertise"
 CACHE_DIR="${HOME}/.claude/plugins/cache/${MARKETPLACE_NAME}"
 PREV_CACHE_DIR="${CACHE_DIR}.prev"
+LIVE_DIR="${HOME}/.claude/cepa-live"
+PREV_LIVE_DIR="${LIVE_DIR}.prev"
 OPS_DIR="${HOME}/.claude/ops"
 OPS_FILE="${OPS_DIR}/last-install.json"
 
@@ -123,7 +143,7 @@ ops_write() {  # $1 = status, $2 = optional note
   mkdir -p "${OPS_DIR}"
   STATUS="$1" NOTE="${2:-}" \
   FROM="${OPS_FROM:-{\}}" TO="${OPS_TO:-{\}}" \
-  REPO="${REPO_DIR}" HOSTP="${HOST_PROJECT:-}" \
+  REPO="${REPO_DIR}" MAINC="${MAIN_CLONE}" LIVE="${LIVE_DIR}" HOSTP="${HOST_PROJECT:-}" \
   CACHE="${CACHE_DIR}" PREV="${PREV_CACHE_DIR}" \
   OPSF="${OPS_FILE}" STARTED="${OPS_STARTED:-}" \
   python3 - <<'PYOPS'
@@ -135,6 +155,8 @@ rec = {
     "started_at": os.environ.get("STARTED") or now,
     "finished_at": None if os.environ["STATUS"] == "in_progress" else now,
     "repo_dir": os.environ["REPO"],
+    "main_clone": os.environ["MAINC"],
+    "live_dir": os.environ["LIVE"],
     "host_project": os.environ.get("HOSTP") or None,
     "cache_dir": os.environ["CACHE"],
     "previous_cache_dir": os.environ["PREV"],
@@ -165,24 +187,59 @@ fi
 # --- --rollback: restore and exit (before anything else touches state) ------
 
 if [ "${ROLLBACK}" -eq 1 ]; then
-  if [ ! -d "${PREV_CACHE_DIR}" ]; then
-    echo "✗ Nothing to roll back to: ${PREV_CACHE_DIR} does not exist."
-    echo "  A rollback point is created by --clean (it sets the old cache aside"
-    echo "  instead of deleting it). If you have never run --clean since this"
-    echo "  feature landed, there is no previous state to restore."
+  if [ ! -d "${PREV_CACHE_DIR}" ] && [ ! -d "${PREV_LIVE_DIR}" ]; then
+    echo "✗ Nothing to roll back to: neither ${PREV_CACHE_DIR}"
+    echo "  nor ${PREV_LIVE_DIR} exists."
+    echo "  A rollback point is created by --clean (it sets the old cache and the"
+    echo "  old fixed folder aside instead of deleting them). If you have never run"
+    echo "  --clean since this feature landed, there is no previous state to restore."
     exit 1
   fi
-  echo "▶ --rollback: restoring the cache set aside by the last --clean"
-  echo "    from: ${PREV_CACHE_DIR}"
-  echo "      to: ${CACHE_DIR}"
   BROKEN_CACHE_DIR="${CACHE_DIR}.rolledback"
-  rm -rf "${BROKEN_CACHE_DIR}"
-  [ -d "${CACHE_DIR}" ] && mv "${CACHE_DIR}" "${BROKEN_CACHE_DIR}"
-  mv "${PREV_CACHE_DIR}" "${CACHE_DIR}"
-  OPS_FROM="$(ops_versions "${BROKEN_CACHE_DIR}")"
-  OPS_TO="$(ops_versions "${CACHE_DIR}")"
-  ops_write "rolled_back" "restored from ${PREV_CACHE_DIR}; the cache being replaced was kept at ${BROKEN_CACHE_DIR}"
-  echo "✓ Cache restored. The replaced cache was kept at ${BROKEN_CACHE_DIR}"
+  BROKEN_LIVE_DIR="${LIVE_DIR}.rolledback"
+  RESTORED_CACHE=0
+  RESTORED_LIVE=0
+  if [ -d "${PREV_CACHE_DIR}" ]; then
+    echo "▶ --rollback: restoring the cache set aside by the last --clean"
+    echo "    from: ${PREV_CACHE_DIR}"
+    echo "      to: ${CACHE_DIR}"
+    rm -rf "${BROKEN_CACHE_DIR}"
+    [ -d "${CACHE_DIR}" ] && mv "${CACHE_DIR}" "${BROKEN_CACHE_DIR}"
+    mv "${PREV_CACHE_DIR}" "${CACHE_DIR}"
+    RESTORED_CACHE=1
+  fi
+  if [ -d "${PREV_LIVE_DIR}" ]; then
+    echo "▶ --rollback: restoring the fixed folder set aside by the last --clean"
+    echo "    from: ${PREV_LIVE_DIR}"
+    echo "      to: ${LIVE_DIR}"
+    rm -rf "${BROKEN_LIVE_DIR}"
+    [ -d "${LIVE_DIR}" ] && mv "${LIVE_DIR}" "${BROKEN_LIVE_DIR}"
+    mv "${PREV_LIVE_DIR}" "${LIVE_DIR}"
+    RESTORED_LIVE=1
+  fi
+  # The record must describe what THIS rollback replaced. ops_versions reads the
+  # cache layout (<plugin>/<version>/), not cepa-live's (<plugin>/.claude-plugin/),
+  # so when only the fixed folder was restored the versions are left empty rather
+  # than read from a stale ${BROKEN_CACHE_DIR} left by an older rollback.
+  if [ "${RESTORED_CACHE}" -eq 1 ]; then
+    OPS_FROM="$(ops_versions "${BROKEN_CACHE_DIR}")"
+    OPS_TO="$(ops_versions "${CACHE_DIR}")"
+  else
+    OPS_FROM="{}"
+    OPS_TO="{}"
+  fi
+  if [ "${RESTORED_CACHE}" -eq 1 ] && [ "${RESTORED_LIVE}" -eq 1 ]; then
+    WHAT="the cache from ${PREV_CACHE_DIR} and the fixed folder from ${PREV_LIVE_DIR}; replaced copies were kept at ${BROKEN_CACHE_DIR} and ${BROKEN_LIVE_DIR}"
+    KEPT="${BROKEN_CACHE_DIR} and ${BROKEN_LIVE_DIR}"
+  elif [ "${RESTORED_CACHE}" -eq 1 ]; then
+    WHAT="the cache from ${PREV_CACHE_DIR}; the replaced copy was kept at ${BROKEN_CACHE_DIR}"
+    KEPT="${BROKEN_CACHE_DIR}"
+  else
+    WHAT="only the fixed folder from ${PREV_LIVE_DIR} (the cache was not touched, versions not recorded); the replaced copy was kept at ${BROKEN_LIVE_DIR}"
+    KEPT="${BROKEN_LIVE_DIR}"
+  fi
+  ops_write "rolled_back" "restored ${WHAT}"
+  echo "✓ Restored. Replaced copy kept at: ${KEPT}"
   echo "  ⚠ Restart Claude Code — a running session holds the OLD hooks in memory."
   exit 0
 fi
@@ -244,9 +301,40 @@ fi
 
 # --- Marketplace re-registration (always: cheap, refreshes metadata) ---
 
+# The registry must never point at REPO_DIR: from a worktree that folder goes
+# away. Copy the marketplace + plugin folders (as on disk, uncommitted files
+# included, no __pycache__) to a fixed folder and register that. The copy is
+# built next to the live folder, then takes its place.
+
+echo "▶ Copying marketplace to the fixed folder: ${LIVE_DIR}"
+mkdir -p "$(dirname "${LIVE_DIR}")"
+LIVE_NEW="${LIVE_DIR}.new"   # fixed name: a leftover of a dead run is simply replaced
+rm -rf "${LIVE_NEW}"
+python3 - "${REPO_DIR}" "${LIVE_NEW}" <<'PYLIVE'
+import json, os, shutil, sys
+src, dst = sys.argv[1], sys.argv[2]
+ign = shutil.ignore_patterns("__pycache__")
+os.makedirs(os.path.join(dst, ".claude-plugin"))
+shutil.copy2(os.path.join(src, ".claude-plugin", "marketplace.json"),
+             os.path.join(dst, ".claude-plugin", "marketplace.json"))
+for p in json.load(open(os.path.join(src, ".claude-plugin", "marketplace.json")))["plugins"]:
+    rel = os.path.normpath(p["source"])   # "./docs-topology" -> "docs-topology"
+    shutil.copytree(os.path.join(src, rel), os.path.join(dst, rel),
+                    ignore=ign)
+PYLIVE
+if [ "${CLEAN}" -eq 1 ] && [ -d "${LIVE_DIR}" ]; then
+  # Set aside only now that the new copy is complete: a copy that dies above
+  # leaves the current folder where it was. A previous .prev is replaced.
+  echo "▶ --clean: setting the current fixed folder aside at ${PREV_LIVE_DIR}"
+  rm -rf "${PREV_LIVE_DIR}"
+  mv "${LIVE_DIR}" "${PREV_LIVE_DIR}"
+fi
+rm -rf "${LIVE_DIR}"
+mv "${LIVE_NEW}" "${LIVE_DIR}"
+
 echo "▶ Refreshing marketplace registration: ${MARKETPLACE_NAME}"
 claude plugin marketplace remove "${MARKETPLACE_NAME}" 2>/dev/null || true
-claude plugin marketplace add "${REPO_DIR}"
+claude plugin marketplace add "${LIVE_DIR}"
 
 # --- Plugin install (order = marketplace.json order; common comes first) ---
 
@@ -523,6 +611,9 @@ echo ""
 echo "✔ Done."
 if [ "${CLEAN}" -eq 1 ] && [ -d "${PREV_CACHE_DIR}" ]; then
   echo "  Rollback point: ${PREV_CACHE_DIR}  (restore with bin/install.sh --rollback)"
+fi
+if [ "${CLEAN}" -eq 1 ] && [ -d "${PREV_LIVE_DIR}" ]; then
+  echo "  Rollback point: ${PREV_LIVE_DIR}  (restore with bin/install.sh --rollback)"
 fi
 echo "  Operational record: ${OPS_FILE}  (checked by /common:doctor)"
 echo ""
