@@ -1428,9 +1428,12 @@ def test_cs7_launch_panel_skips_a_queue_with_its_own_live_run():
             alive.kill()
             alive.wait()
         check("sai com 0", rc == 0, out[-1500:])
+        # The end of the run lists what still waits (CS-6); only the launch,
+        # up to the first item, is the panel.
+        launch = out.split("item 1", 1)[0]
         check("...o painel não pergunta pela fila com run vivo",
-              "Liberei a?" not in out and "1 question(s) for you" in out,
-              out[-2000:])
+              "Liberei a?" not in launch and "1 question(s) for you" in launch,
+              launch[-2000:])
         starts = [(e.get("fila"), e.get("id")) for e in events
                   if e.get("evento") == "item_start"]
         check("...e o `sim` em b1 faz b1 rodar", ("b", "b1") in starts,

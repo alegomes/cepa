@@ -217,6 +217,10 @@ Without a terminal the pre-read still runs (a missing pre-condition defers the i
 and its findings are printed as text, with nothing waiting for input.
 `--no-pre-read` skips both the pre-read and the launch panel: the forecast line
 stays, nothing is read and nothing is asked.
+A `--all` run on a terminal shows ONE panel for every queue, a section per queue
+in the order of `cepa plan ready`; each answer is recorded in the item's own
+queue and a "yes" runs the item in this run. A queue with its own live run is
+left out of the panel. The pre-read does not run in a `--all` run.
 
 ## After the end
 
@@ -4793,6 +4797,81 @@ def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False, skip=
     return data if error or not fresh else fresh
 
 
+def ask_at_launch_all(repo, left=None):
+    """The launch panel of a `--all` run (spec until-todas-as-filas, CS-7): ONE
+    panel with what every queue holds for the owner, a section per queue in the
+    order of `cepa-plan ready`, numbered across the whole list. Each answer is
+    recorded in the item's own queue (`decide` on that queue), so a "yes" sends
+    the item back to its queue and the next `query_next_ready` runs it in THIS
+    run. A queue with its own live run is left out (CS-4: that run already asked
+    its questions and its items stay out of this run), and so is a queue in
+    `left`. What was answered "no" before is summarized per queue, as in
+    `ask_at_launch`. No answer within the wait, EOF or Ctrl-C: one line naming
+    `cepa-until decide <queue>` for the queues still holding questions, and the
+    run carries on. With nothing waiting, prints nothing."""
+    left = left if left is not None else set()
+    ready, error = query_ready(repo)
+    if error:
+        return
+    sections = []
+    for q in ready.get("filas") or []:
+        name = Path(str(q.get("path") or "")).parent.name or str(q.get("queue"))
+        if not name or name == ALL_DIR or name in left \
+                or live_run_of_queue(repo, name):
+            continue
+        whole, _ = query_queue(name, repo, max_items=10 ** 6)
+        to_ask, answered_no = [], []
+        for ad in (whole or {}).get("deferred") or []:
+            if reason_alias(ad.get("reason")) not in OWNER_REASON:
+                continue
+            date = last_owner_no(ad.get("evidence"))
+            (answered_no if date else to_ask).append(date or ad)
+        if answered_no:
+            latest = max(answered_no)
+            print(f"\n── queue `{name}`: {len(answered_no)} route(s) you already "
+                  f"answered \"no\" (last on {latest[8:10]}/{latest[5:7]}): not asked "
+                  f"again here; to revisit them: cepa-until decide {name}")
+        if to_ask:
+            sections.append((name, to_ask))
+    total = sum(len(items) for _, items in sections)
+    if not total:
+        return
+    screen = Panel(SCREEN, print)
+    screen.open_panel(total)
+    tally, applied, for_later, unanswered = {}, [], [], []
+    cut = None
+    for i, (name, items) in enumerate(sections):
+        if cut:
+            unanswered.append(name)
+            continue
+        screen.continue_panel(f"queue `{name}` · {len(items)} question(s)")
+        shown = tally.get("shown", 0)
+        tally["shown"] = shown + len(items)
+        try:
+            got, later = decide(repo, name, None, {}, items, {},
+                                wait=ANSWER_WAIT_SEC, progress=tally,
+                                first=shown + 1, of=total, opened=True,
+                                close=False)
+        except NoAnswer:
+            cut = (f"nobody answered in {ANSWER_WAIT_SEC / 60:g} min; the run goes "
+                   "on without.")
+            unanswered.append(name)
+            continue
+        except (EOFError, KeyboardInterrupt):
+            cut = "questions interrupted; the run goes on without."
+            unanswered.append(name)
+            continue
+        applied += [f"{name}/{x}" for x in got]
+        for_later += [f"{name}/{x}" for x in later]
+        if later:
+            unanswered.append(name)
+    back = " · ".join(f"cepa-until decide {n}" for n in unanswered)
+    if cut:
+        print(f"\n   {cut} To answer later: {back}")
+        return
+    screen.close_panel([], applied, for_later, back)
+
+
 def cmd_decide(argv):
     """`cepa-until decide <queue>/<run>`: the end-of-run questions, again,
     for when the owner wasn't there or left some for later.
@@ -5872,13 +5951,15 @@ def _main(argv=None):
     runs = waits = None
     if a.all_queues:
         # No single queue to count: the ready list of every queue is the forecast.
-        # No pre-read and no panel in a `--all` run for now (CS-7).
         whole = None
         ready_all, _ready_err = query_ready(repo)
         runs = sum(len(q.get("prontos") or [])
                    for q in (ready_all or {}).get("filas") or [])
         waits = 0
         forecast = f" · start: {runs} ready in every queue"
+        # The pre-read stays off in a `--all` run; the launch panel is its own
+        # (CS-7, `ask_at_launch_all` below), and `--no-pre-read` skips it too.
+        all_panel = not a.no_pre_read
         a.no_pre_read = True
     else:
         whole, whole_err = query_queue(a.queue, repo, max_items=10 ** 6)
@@ -5917,6 +5998,15 @@ def _main(argv=None):
     # run behaves as if it had no terminal and no reader; the forecast is above.
     on_terminal = (sys.stdin.isatty() and sys.stdout.isatty()) and not a.no_pre_read
     rows, opened_ids, reading, tally = None, set(), None, {}
+    if a.all_queues and all_panel and sys.stdin.isatty() and sys.stdout.isatty():
+        # CS-7: one panel for every queue; a "yes" puts the item back in its queue,
+        # so the fresh read below already has it as the next ready item.
+        ask_at_launch_all(repo, left_queues)
+        fresh_cur, fresh, fresh_error = next_item()
+        if not fresh_error and fresh is not None:
+            cur, data = fresh_cur, fresh
+            if data.get("path") and data.get("path") not in run_queue_paths:
+                run_queue_paths.append(data.get("path"))
     # CS-4 (perguntas-da-largada-legiveis): old routes (an open `human_pending` with no
     # closed question or no kind) are rewritten by the route reader, with or without a
     # terminal and even when no item runs. On a terminal the ones the owner is asked
