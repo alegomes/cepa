@@ -1,0 +1,36 @@
+schema_version: 1
+card: registro-de-plugins-pasta-estavel-CS-11
+status: complete
+audited_at: 2026-11-17T00:00:00-03:00
+head_commit: 72a1edb
+covers: 14ff61b..72a1edb
+criteria:
+  - id: AC1
+    text: "CS-11: o doctor compara versoes com o repo de origem, nao com o caminho registrado. Com o registro na pasta fixa em `common` 3.6.0 e `last-install.json` com `repo_dir` num repo em `common` 3.7.0, `cepa-doctor` avisa 'repo esta em 3.7.0 mas o cache instalado e 3.6.0'. Antes lia a pasta fixa como se fosse o repo e dizia que estava tudo instalado. Regra decidida: repo_dir, se sumiu main_clone, sem nenhum diz o comando e nao oferece conserto automatico."
+    altitude: cli
+    surface: "`common/bin/cepa-doctor` (e `--fix`) como subprocess real com HOME temporario, registro em ~/.claude/cepa-live (3.6.0), cache 3.6.0, last-install.json com repo_dir/main_clone falsos cujo `bin/install.sh` so grava o cwd; observa stdout/stderr e o marcador."
+    demonstrated_by:
+      test: "tests/test_doctor_origin_repo.py::test_repo_dir_ahead_of_cache"
+      layer: "subprocess real do doctor; sem mock; o conserto e observado de fora (install.sh falso grava o cwd)"
+      evidence: verified
+      run: |
+        python3 tests/test_doctor_origin_repo.py
+        Primeiro plano, neste auditor, em 72a1edb: exit=0, 48 linhas "ok", 0 "FAIL", linha final "tudo ok" (N > 0). Caso principal: avisa "repo está em 3.7.0 mas o cache instalado é 3.6.0", nao diz "common 3.6.0 instalado e habilitado", oferece "reinstalar os plugins", sem --fix nada instala, --fix roda o install.sh do repo_dir.
+    verdict: complete
+    gap: null
+supporting_tests:
+  - "test_repo_dir_gone_falls_back_to_main_clone (repo_dir sumiu: compara com main_clone e --fix instala dele)"
+  - "test_repo_dir_wins_over_main_clone (repo_dir tem precedencia)"
+  - "test_no_origin_known e test_no_origin_offers_no_fix (sem origem: aviso 'sem repo de origem' nomeando o comando, sem conserto, --fix nao roda nada; vale tambem com cache vazio e com drift)"
+  - "test_empty_repo_dir_is_not_the_cwd (repo_dir vazio nao vira o cwd)"
+  - "test_unusable_path_strings_do_not_crash (repo_dir maior que PATH_MAX e com NUL: sem Traceback, cai em 'sem repo de origem'; cobre a remocao do try/except)"
+  - "test_registry_at_outside_checkout_is_the_origin (registro fora do cepa-live serve de origem; --fix roda o install.sh dele)"
+  - "test_missing_cache_with_origin (cache vazio com origem: oferece install, --fix roda do repo_dir)"
+  - "test_malformed_record_does_not_crash, test_numeric_repo_dir_falls_to_main_clone, test_same_version_is_ok"
+  - "tests/test_doctor_registry_outside_live.py (CS-10): 25 ok, 0 FAIL, 'tudo ok' em 72a1edb"
+  - "tests/test_doctor_registry_missing_path.py (CS-9): 26 ok, 0 FAIL, 'tudo ok' em 72a1edb"
+notes:
+  - "Diff e6cf982..72a1edb: cepa-doctor (so remove o try/except em volta de Path(cand).is_dir(), com comentario) e +90 linhas no teste, 0 linhas removidas, portanto nenhuma asserção afrouxada. Os casos de PATH_MAX e NUL passam sem o try/except, o que confirma que is_dir() devolve False nesses casos (rodei, nao assumi)."
+  - "A ordem repo_dir, main_clone, pasta registrada (so se nao for a fixa) e a ausencia de conserto sem origem batem com a regra decidida da spec."
+  - "Nao reexecutei o RED em 90703ca. Nao rodei tests/run-all.sh (fica com o supervisor). Nenhum codigo ou teste foi editado; nao commitei o artefato."
+  - "Altitude cli respeitada: todos os casos chamam o doctor como subprocess."
