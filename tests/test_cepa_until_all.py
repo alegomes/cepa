@@ -1111,6 +1111,148 @@ def test_cs6_decide_all_run_on_a_terminal_answers_each_item_in_its_queue():
         check("...e as filas ficam sem mudanca solta", dirty.strip() == "", dirty)
 
 
+def test_cs6_land_all_run_keeps_the_queue_files_the_clone_has_modified():
+    """`land all/<run> --yes` knows the queue files of EVERY queue of the run are
+    the run's own marks: with `a` and `b` both modified (uncommitted) in the
+    clone, it lands anyway and the modifications are still there afterwards."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1")], "b": [base.item("b1")]})
+        _run(tmp, root, ["--all", "--for", "1h", "--no-verify", "--no-analysis"],
+             claude_body=DONE_IN_ITS_QUEUE)
+        run_id = _all_run_id(root)
+        check("o run grava o estado", run_id is not None)
+        if run_id is None:
+            return
+        mark = "# alteracao local nao commitada\n"
+        for q in ("a", "b"):
+            f = root / ".claude" / "queues" / q / "queue.yaml"
+            f.write_text(f.read_text() + mark)
+        r = _target_command(tmp, root, "land", f"all/{run_id}", "--yes")
+        check("`land all/<run> --yes` com as duas filas modificadas sai com 0",
+              r.returncode == 0,
+              f"rc={r.returncode} out={r.stdout[-600:]} err={r.stderr[-400:]}")
+        subjects = _git(root, "log", "--format=%s", "main").splitlines()
+        check("...aterrissa os commits das duas filas",
+              "a:a1" in subjects and "b:b1" in subjects, str(subjects))
+        for q in ("a", "b"):
+            f = root / ".claude" / "queues" / q / "queue.yaml"
+            check(f"...e a modificacao da fila {q} continua no clone",
+                  f.read_text().endswith(mark), f.read_text()[-200:])
+
+
+def _tty_env(tmp):
+    env = dict(os.environ)
+    for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH", "HC_TERMINAL_ID"):
+        env.pop(k, None)
+    env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
+    return env
+
+
+def test_cs6_all_run_on_a_terminal_only_lists_at_the_end_and_never_asks():
+    """A `--all` run with a terminal and an item waiting on the owner: the end
+    LISTS the question and points to `decide all/<run>`; it does not open the
+    panel (which would answer into queues the run did not commit). Bounded: a
+    prompt that waits is killed by `on_tty` at its timeout and counts as a
+    failure, the answer wait is 20 s."""
+    import time
+    import test_cepa_until_decide as dec
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {
+            "a": [_stuck("x1", "Fecho o card da fila a?")],
+            "b": [base.item("b1")]})
+        binv = base.fake_claude(tmp, DONE_IN_ITS_QUEUE)
+        env = _tty_env(tmp)
+        env["PATH"] = f"{binv}:{env['PATH']}"
+        env["FAKE_PLANO"] = str(Path(tmp) / "nenhum.yaml")
+        env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
+        env["CEPA_UNTIL_LEITOR"] = "off"
+        env["FAKE_CEPA_PLAN"] = str(REPO / "common" / "bin" / "cepa-plan")
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "20"
+        t0 = time.time()
+        rc, out = dec.on_tty(
+            [sys.executable, str(CEPA_UNTIL), "--all", "--for", "1h",
+             "--no-verify", "--no-analysis", "--no-pre-read",
+             "--no-resume-on-answer", "--repo", str(root)], str(root),
+            inputs=[], env=env, timeout=45)
+        took = time.time() - t0
+        plain = dec.ANSI.sub("", out)
+        check("--all no terminal sai com 0 sem esperar resposta",
+              rc == 0 and "on_tty: no answer" not in plain, plain[-1500:])
+        check("...termina logo, sem esperar o dono (<15 s de espera)",
+              took < 40, f"{took:.0f}s")
+        check("...lista a pergunta da fila a",
+              "Fecho o card da fila a?" in plain, plain[-1500:])
+        run_id = _all_run_id(root)
+        check("...e manda voltar com `decide all/<run>`",
+              run_id is not None and f"cepa-until decide all/{run_id}" in plain,
+              plain[-1500:])
+        check("...sem abrir o painel de perguntas",
+              "[t] I write the answer" not in plain
+              and "Land now?" not in plain and "nobody answered" not in plain,
+              plain[-1500:])
+        check("...e o item segue como estava",
+              _statuses(paths["a"]) == {"x1": "blocked"}
+              and "travou no ambiente" in paths["a"].read_text(),
+              paths["a"].read_text())
+
+
+def test_cs6_decide_all_run_reword_lands_in_the_queue_of_the_item():
+    """On a terminal, `?` on the question of `b/x1` (same id as `a/x1`) has the
+    reader reword it and the new question is recorded in queue `b`'s item, not
+    in a queue called `all` and not in `a`."""
+    import test_cepa_until_decide as dec
+    new_q = "Você já fechou o card da fila b no Jira?"
+    with tempfile.TemporaryDirectory() as tmp:
+        def routed(ident, question):
+            it = _stuck(ident, question)
+            it["human_pending"] = "fechar o card"
+            it["route_kind"] = "external-block"
+            return it
+        root, paths = _repo(tmp, {"a": [routed("x1", "Fecho o card da fila a?")],
+                                  "b": [base.item("b1"),
+                                        routed("x1", "Fecho o card da fila b?")]})
+        _run(tmp, root, ["--all", "--for", "1h", "--no-verify", "--no-analysis"],
+             claude_body=DONE_IN_ITS_QUEUE)
+        run_id = _all_run_id(root)
+        check("o run grava o estado", run_id is not None)
+        if run_id is None:
+            return
+        reader = Path(tmp) / "leitor.py"
+        reader.write_text(
+            f"#!{sys.executable}\n"
+            "import json, sys\n"
+            "it = json.load(sys.stdin)\n"
+            "if it.get('tarefa') == 'reescrever-pergunta':\n"
+            f"    print(json.dumps({{'route_kind': 'owner-task', 'question': {new_q!r},\n"
+            "        'if_yes': 'O item volta para a fila.',\n"
+            "        'if_no': 'O item continua esperando.'}))\n"
+            "else:\n"
+            "    print(json.dumps({'tipo': None}))\n")
+        reader.chmod(0o755)
+        env = _tty_env(tmp)
+        env["CEPA_UNTIL_LEITOR"] = str(reader)
+        env["CEPA_FEEDBACK_DIR"] = str(Path(tmp) / "feedback")
+        before_a = paths["a"].read_text()
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", f"all/{run_id}",
+               "--repo", str(root)]
+        rc, out = dec.on_tty(cmd, str(root), env=env, timeout=90, inputs=[
+            ("Land now?", "n"),
+            ("[t] I write the answer", ""),
+            ("[t] I write the answer", "?"),
+            ("[t] I write the answer", "")])
+        plain = dec.ANSI.sub("", out)
+        check("decide all/<run> com `?` sai com 0", rc == 0, plain[-1500:])
+        items_b = {str(i["id"]): i for i in
+                   yaml.safe_load(paths["b"].read_text())["items"]}
+        check("a pergunta reescrita fica no x1 da fila b",
+              items_b["x1"].get("owner_question") == new_q,
+              str(items_b["x1"]) + plain[-1200:])
+        check("...e a fila a nao mudou",
+              paths["a"].read_text() == before_a, paths["a"].read_text())
+        check("...nenhuma fila `all` foi criada",
+              not (root / ".claude" / "queues" / "all").exists())
+
+
 def _all_night_that_died(tmp):
     """A real `--all` run (a1 and b1 delivered) with the state and the record
     rewound to where a supervisor dies: `rodando`, dead pid, the record cut at
