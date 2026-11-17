@@ -3129,10 +3129,12 @@ items:
   why: 'Falha no commit 287a758, antes da correção ee9585e. Build vermelho no main
     faz cepa-until land --yes recusar o push (ainda não priorizado: entrou no fim
     da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'b7ae90e: o teste limpava CEPA_ENCADEAR e CEPA_LAUNCH_ID mas herdava
+    CEPA_CHAIN_FROM_WORKTREE de sessão em worktree; com a variável limpa, ''todos
+    ok'' com e sem ela no ambiente'
   sem_epic: true
   finish_recusado:
   - quando: '2026-11-17T11:19:53+00:00'
@@ -3144,3 +3146,4 @@ items:
     motivo: '`done` exige a árvore limpa e há 1 caminho(s) sem commit em /Users/alegomes/coding/cepa:
       .claude/queues/until-arvore-limpa/until/2026-11-15-1011.laterais/2026-11-14-0954-vermelho-CS-1.patch.
       Commite antes de fechar (desabilitar ou apagar teste não é conserto)'
+  head_commit: b7ae90e4e58e925bf3e35ce528e4b37d32e352dd
