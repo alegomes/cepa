@@ -28,6 +28,15 @@ from test_cepa_until_run_branch import WORKS, plan_of  # noqa: E402
 from test_cepa_until_land import commit, land, state  # noqa: E402
 
 
+# What the fake installer prints on `--rollback`, and nowhere else.
+ROLLBACK_MARK = "fake-rollback-ran-here"
+
+
+def run_file(root, run_id, ext):
+    """The `.jsonl` or `.log` of THIS run, and no other file of the folder."""
+    return root / ".claude" / "programs" / "fila" / "until" / f"{run_id}.{ext}"
+
+
 def calls_file(root):
     return root.parent / "install-calls.jsonl"
 
@@ -63,7 +72,13 @@ def as_cepa_repo(root):
         "EOF\n"
         # FAKE_INSTALL_EXIT makes the installer fail after writing the call down;
         # with `--rollback` among the arguments FAKE_ROLLBACK_EXIT (default 0) rules.
-        "case \" $* \" in *\" --rollback \"*) exit ${FAKE_ROLLBACK_EXIT:-0};; esac\n"
+        # The rollback says a line of its own (it must reach the run's `.log`) and
+        # may take FAKE_ROLLBACK_SLEEP seconds (the event records how long it took).
+        "case \" $* \" in *\" --rollback \"*)\n"
+        f"  echo '{ROLLBACK_MARK}'\n"
+        "  sleep ${FAKE_ROLLBACK_SLEEP:-0}\n"
+        "  exit ${FAKE_ROLLBACK_EXIT:-0};;\n"
+        "esac\n"
         "exit ${FAKE_INSTALL_EXIT:-0}\n")
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
@@ -447,7 +462,8 @@ def test_cs8_failed_install_is_rolled_back_and_the_landing_stands():
     with tempfile.TemporaryDirectory() as tmp:
         root = as_cepa_repo(build_repo(tmp, [item("a1")]))
         run_id, branch, tree = night(root)
-        p = land_with_env(root, run_id, FAKE_INSTALL_EXIT="1")
+        p = land_with_env(root, run_id, FAKE_INSTALL_EXIT="1",
+                          FAKE_ROLLBACK_SLEEP="1.3")
         out = p.stdout
         check("CS-8: instalação que falha: o pouso sai 0", p.returncode == 0,
               out + p.stderr)
@@ -467,6 +483,19 @@ def test_cs8_failed_install_is_rolled_back_and_the_landing_stands():
               and Path(e.get("repo") or "/x").resolve() == root.resolve()
               and "1" in str(e.get("motivo")) and e.get("quando")
               and "segundos" in e, str(ev))
+        check("CS-8: ...com o tempo que o rollback levou (1,3 s dá 1 ou mais)",
+              isinstance(e.get("segundos"), int) and e.get("segundos") >= 1,
+              str(e))
+        own = run_file(root, run_id, "jsonl")
+        in_own = [json.loads(l) for l in own.read_text().splitlines()
+                  if l.strip()] if own.exists() else []
+        check("CS-8: ...gravado no .jsonl desta rodada, não em outro arquivo",
+              [x["evento"] for x in in_own].count("reinstalacao_desfeita") == 1,
+              str([x["evento"] for x in in_own]))
+        runlog = run_file(root, run_id, "log")
+        check("CS-8: ...e a saída do rollback está no .log desta rodada",
+              runlog.exists() and ROLLBACK_MARK in runlog.read_text(),
+              str(runlog))
         names = [x["evento"] for x in ledger_of(root)]
         inst = landing_events(root)
         check("CS-8: ...depois do instalado_no_pouso com ok falso",
@@ -493,7 +522,7 @@ def test_cs8_rollback_that_also_fails_still_lands():
         root = as_cepa_repo(build_repo(tmp, [item("a1")]))
         run_id, _branch, _tree = night(root)
         p = land_with_env(root, run_id, FAKE_INSTALL_EXIT="1",
-                          FAKE_ROLLBACK_EXIT="1")
+                          FAKE_ROLLBACK_EXIT="3")
         out = p.stdout
         check("CS-8 (rollback falha): o pouso sai 0", p.returncode == 0,
               out + p.stderr)
@@ -503,6 +532,9 @@ def test_cs8_rollback_that_also_fails_still_lands():
         ev = undone_events(root)
         check("CS-8 (rollback falha): ...o registro tem reinstalacao_desfeita com ok falso",
               len(ev) == 1 and ev[0].get("ok") is False, str(ev))
+        check("CS-8 (rollback falha): ...com o motivo do rollback (saiu 3), "
+              "não o da instalação (saiu 1)",
+              bool(ev) and str(ev[0].get("motivo")) == "exited 3", str(ev))
         check("CS-8 (rollback falha): ...a tela diz que o rollback também falhou, "
               "que pode estar pela metade e aponta o doctor",
               "Fica com você" in out and "rollback" in out.lower()
