@@ -243,6 +243,24 @@ def test_reword_route_title_with_code_is_refused():
         check("nada gravado", queue_file(d).read_bytes() == before)
 
 
+def test_reword_route_bad_title_is_refused_even_when_the_item_already_declares():
+    # The given title must pass the lay-text rules whether or not a declaration is stored.
+    with tempfile.TemporaryDirectory() as base:
+        d = make_repo(base, "r9b")
+        plan = yaml.safe_load(queue_file(d).read_text())
+        plan["items"][0]["human_pending"] = ROUTE
+        queue_file(d).write_text(yaml.safe_dump(plan, allow_unicode=True), encoding="utf-8")
+        r = reword(d, "--if-no-item", "Registrar o limite")
+        check("declaração guardada antes", r.returncode == 0, r.stderr)
+        before = queue_file(d).read_bytes()
+        for bad in ("Ver o commit 3fa9c21", "Editar o arquivo cepa-plan.py"):
+            for extra in ((), ("--replace",)):
+                r = reword(d, *extra, "--if-no-item", bad)
+                check(f"título ruim {bad!r} {extra}: recusa (2)",
+                      r.returncode == 2 and "--if-no-item" in r.stderr, r.stderr)
+        check("nada gravado", queue_file(d).read_bytes() == before)
+
+
 def test_finish_without_route_does_not_ask_for_declarations():
     with tempfile.TemporaryDirectory() as base:
         d = make_repo(base, "r10")

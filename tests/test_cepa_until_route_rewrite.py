@@ -64,9 +64,12 @@ def _route_reader(tmp, mode="ok"):
         "    print(json.dumps({'tipo': None}))\n"
         "elif mode in ('ok', 'itemslow'):\n"
         f"    print(json.dumps({{'route_kind': 'external-block', 'question': {QUESTION!r},\n"
-        f"        'if_yes': {IF_YES!r}, 'if_no': {IF_NO!r}}}))\n"
+        f"        'if_yes': {IF_YES!r}, 'if_no': {IF_NO!r}, 'item_se_nao': 'nenhum'}}))\n"
         "elif mode == 'slow':\n"
         "    import time; time.sleep(3)\n"
+        f"    print(json.dumps({{'route_kind': 'external-block', 'question': {QUESTION!r},\n"
+        f"        'if_yes': {IF_YES!r}, 'if_no': {IF_NO!r}, 'item_se_nao': 'nenhum'}}))\n"
+        "elif mode == 'nodecl':\n"
         f"    print(json.dumps({{'route_kind': 'external-block', 'question': {QUESTION!r},\n"
         f"        'if_yes': {IF_YES!r}, 'if_no': {IF_NO!r}}}))\n"
         "elif mode == 'garbage':\n"
@@ -151,6 +154,20 @@ def test_launch_without_terminal_records_the_rewrite_and_asks_nothing():
           "1 route" in out and "rewritten" in out, out[-1500:])
     check("no tty: the other item still ran", after["y1"]["status"] == "done",
           str(after["y1"]))
+
+
+def test_a_reader_without_an_item_declaration_leaves_the_queue_unchanged():
+    # CS-1: no silent "nenhum"; the old route stays, a warning names the command.
+    for tty in (False, True):
+        label = "nodecl " + ("tty" if tty else "no tty")
+        rc, out, before, after, calls = _launch([old_route(), item("y1")], mode="nodecl",
+                                                tty=tty, inputs=[("homologação?", "")])
+        check(f"{label}: the launch exits 0", rc == 0, out[-1500:])
+        check(f"{label}: r1 is unchanged", after["r1"] == before["r1"],
+              f"{before['r1']!r} -> {after['r1']!r}")
+        check(f"{label}: the reader was asked", "r1 reescrever-rota" in calls, str(calls))
+        check(f"{label}: a warning names reword-route", "reword-route" in out
+              and "NOT recorded" in out, out[-1500:])
 
 
 def test_a_reader_that_prints_garbage_or_fails_changes_nothing():
