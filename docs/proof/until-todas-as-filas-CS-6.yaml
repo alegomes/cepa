@@ -1,0 +1,50 @@
+schema_version: 2
+card: until-todas-as-filas-CS-6
+verdict: proven               # proven | unproven | needs-human
+reviewed_at: 2026-11-17T17:00:00-03:00
+base_commit: d3b75f9
+head_commit: b72e0d7
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  note: "Scope is `git diff 1c82c7b ed3e872 -- common/bin/cepa-until`; 1c82c7b is a merge carrying the unrelated fallback-model fix 25b4463, excluded. `git diff ed3e872 b72e0d7` touches only tests/test_cepa_until_all.py, so production code is identical and the eight KILLED results of the previous round (head ed3e872) carry over."
+  changed_classes:
+    - class: "common/bin/cepa-until :: is_all_run, all_queue_names, split_label (new); until_dir; _cmd_land (clone_queue); run_record_paths; decide (answer, reword); close_with_owner (all/<run> branch); dead_runs (in_flight_queue, queue/id); _main (item_start `fila`, end of run lists)"
+      module: common/bin
+      external_observable: true   # surface cli: stdout, queue files, run record in .claude/queues/_all/until/
+      substituted_by_double: null # the real `cepa until --all` and subcommands run as a process against a real temp git repo and the real `cepa-plan`; only `claude` is faked (far boundary)
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "Throwaway detached worktree /tmp/proof-cs6b at b72e0d7 (removed at the end). Unperturbed `python3 tests/test_cepa_until_all.py` -> '✓ 36 testes' (N=36). Each of the three previously surviving perturbations applied ALONE with sed, `python3 tests/test_cepa_until_all.py` run, final line read (check() does not raise, so pytest is not used), then `git checkout -- common/bin/cepa-until`. Line numbers refer to common/bin/cepa-until at b72e0d7 (same as ed3e872). Each perturbation confirmed applied by a non-empty git diff."
+      results:
+        - "KILLED at b72e0d7 (was SURVIVED at ed3e872) P1 line 2473 (`_cmd_land`) `if is_all_run(repo, queue) else [queue]` -> `if False else [queue]`: '✗ 2 falha(s)'."
+        - "KILLED at b72e0d7 (was SURVIVED at ed3e872) P7 line 7351 (`_main` end of run) `silent = mid_run_silent or a.all_queues` -> `silent = mid_run_silent`: '✗ 2 falha(s)'."
+        - "KILLED at b72e0d7 (was SURVIVED at ed3e872) P8 line 3687 (`decide`, reword route) `split_label(repo, queue, ad.get(\"id\"))` -> `(queue, str(ad.get(\"id\")))`: '✗ 1 falha(s)'."
+        - "KILLED (carried from ed3e872; production code unchanged) P2 line 2850 (`run_record_paths`) `all_queue_names(repo)` -> `[queue]`: RED, 3 falhas."
+        - "KILLED (carried) P3 line 3632 (`decide` answer) `split_label(repo, queue, ident)` -> `(queue, str(ident))`: RED, 4 falhas."
+        - "KILLED (carried) P4 line 4048 (`close_with_owner`) `if is_all_run(repo, queue) and run_id:` -> `if False:`: RED, 10 falhas."
+        - "KILLED (carried) P5 line 4058 (`close_with_owner`) item label `f\"{name}/{ad.get('id')}\"` -> bare id: RED, 8 falhas."
+        - "KILLED (carried) P6 line 6567 (`_main` item_start) `**({\"fila\": cur} if a.all_queues else {})` -> `**{}`: RED, 2 falhas."
+        - "KILLED (carried) P9 line 5306 (`dead_runs`) `e.get(\"fila\")` -> `None`: RED, 1 falha."
+        - "KILLED (carried) P10 line 5318 (`dead_runs`) `in_flight = f\"{own_queue}/{in_flight}\"` -> `pass`: RED, 1 falha."
+        - "KILLED (carried) P11 line 821 (`until_dir`) `if is_all_run(repo, queue):` -> `if False:`: RED, 25 falhas."
+        - "Not perturbed (sampling, logged): `all_queue_names` fallback branch (when `cepa-plan ready` errors), `is_all_run` body (covered indirectly by P11), `already_asked = ()` at line 4060."
+    base_regression:
+      run: "Tests of 80b448a against cepa-until of 1c82c7b (`git checkout 1c82c7b -- common/bin/cepa-until` in the throwaway worktree, previous round): '✗ 13 falha(s)' (RED by ordering). Carried: production code unchanged since."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; reachability shown by perturbation: lines 2473, 7351 and 3687 each turned the suite red at b72e0d7 ('✗ 2', '✗ 2', '✗ 1 falha(s)'), so tests of the right altitude exercise them."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff opens no input from outside: it changes how `cepa-until` names, locates and commits items from local queue files and run records it already reads; the owner's answer text was already accepted before; no input-bearing module (api-rest) is touched"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "As tres quebras que sobreviveram na rodada anterior (land de all/<run> reconhecendo as filas do run, fim de run --all so listando com terminal, reescrita de pergunta na fila do item) agora deixam a suite vermelha em b72e0d7, e a suite sem quebra passa com 36 testes. Junto com as oito quebras ja mortas e a base 1c82c7b vermelha, todo trecho amostrado do CS-6 tem teste que o protege."

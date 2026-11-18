@@ -217,6 +217,10 @@ Without a terminal the pre-read still runs (a missing pre-condition defers the i
 and its findings are printed as text, with nothing waiting for input.
 `--no-pre-read` skips both the pre-read and the launch panel: the forecast line
 stays, nothing is read and nothing is asked.
+A `--all` run on a terminal shows ONE panel for every queue, a section per queue
+in the order of `cepa plan ready`; each answer is recorded in the item's own
+queue and a "yes" runs the item in this run. A queue with its own live run is
+left out of the panel. The pre-read does not run in a `--all` run.
 
 ## After the end
 
@@ -818,19 +822,48 @@ def until_dir(repo, queue):
     all/2026-11-16-1426`, copied from the end-of-run report, looked in
     `.claude/queues/all/until/` and could not read the run state. A real queue
     called `all` keeps its own folder."""
-    if queue == ALL_QUEUE and not qp.queue_file(repo, queue).exists():
+    if is_all_run(repo, queue):
         return qp.queue_dir(repo, ALL_DIR) / "until"
     return qp.queue_dir(repo, queue) / "until"
 
 
-def query_next_ready(repo, warned=None):
+def is_all_run(repo, queue):
+    """Is `queue` the label of a `--all` run (`all/<run>`)? A real queue called
+    `all` is still a queue."""
+    return queue == ALL_QUEUE and not qp.queue_file(repo, queue).exists()
+
+
+def all_queue_names(repo):
+    """The single-track queues a `--all` run may have touched, in the order of
+    `cepa-plan ready` (every queue is listed there, ready or not)."""
+    ready, error = query_ready(repo)
+    if not error:
+        return [Path(str(q.get("path") or "")).parent.name or str(q.get("queue"))
+                for q in ready.get("filas") or []]
+    return [n for n, _ in qp.queue_files(main_root(repo)) if n != ALL_DIR]
+
+
+def split_label(repo, queue, ident):
+    """`(queue, id)` of the item an owner question names: in a `--all` run the
+    question is called `queue/id` (two queues share ids), in a single-queue run
+    it is the bare id."""
+    if is_all_run(repo, queue) and "/" in str(ident):
+        name, bare = str(ident).split("/", 1)
+        return name, bare
+    return queue, str(ident)
+
+
+def query_next_ready(repo, warned=None, left=None):
     """The next item of a `--all` run, read fresh (spec until-todas-as-filas, Q4):
     the first ready item in the order of `cepa-plan ready` (queue by queue, the
     recorded order inside a queue). Returns (queue, data, error): `data` is
     `query_queue` of that queue, so the run loop handles it like a single-queue
     round. With nothing ready anywhere, `data` has an empty batch and an
-    `end-of-queue` stop, which is what ends a single-queue run too."""
+    `end-of-queue` stop, which is what ends a single-queue run too. `left` is
+    the set of queues that left THIS run for hitting `--max-blocked` (CS-5):
+    they are skipped, with no warning."""
     warned = warned if warned is not None else set()
+    left = left if left is not None else set()
     ready, error = query_ready(repo)
     if error:
         return None, None, error
@@ -838,6 +871,8 @@ def query_next_ready(repo, warned=None):
         if not q.get("prontos"):
             continue
         name = Path(str(q.get("path") or "")).parent.name or str(q["queue"])
+        if name in left:
+            continue
         alive = live_run_of_queue(repo, name)
         if alive:
             if name not in warned:
@@ -2438,8 +2473,10 @@ def _cmd_land(argv, wrote):
     # The queue lives in the clone and the run itself updates it (`cepa-plan finish`):
     # after every run it is modified. The night branch doesn't touch it, and
     # the merge and the `reset --keep` preserve it.
-    clone_queue = (f".claude/queues/{queue}/queue.yaml",
-                     f".claude/programs/{queue}/plan.yaml")
+    clone_queue = tuple(
+        f for n in (all_queue_names(repo) if is_all_run(repo, queue) else [queue])
+        for f in (f".claude/queues/{n}/queue.yaml",
+                  f".claude/programs/{n}/plan.yaml"))
     dirty_queue = [l for l in dirty_files if l.endswith(clone_queue)]
     dirty_files = [l for l in dirty_files if l not in dirty_queue]
     if dirty_files:
@@ -2810,10 +2847,17 @@ def print_commit_refused(reason, command, skipped, what="the run records"):
 def run_record_paths(repo, queue, run_id=None):
     """The paths a subcommand may have written for a queue (and a run): the queue
     file, in whichever layout it lives, and the run's `.jsonl` and `.review.md`."""
-    qfile = qp.queue_file(main_root(repo), queue)
-    paths = [qfile]
-    if run_id:
+    root = main_root(repo)
+    if is_all_run(root, queue):
+        # A `--all` run writes the marks in every queue it took an item from or
+        # answered, and keeps its record in `_all/until/`.
+        paths = [qp.queue_file(root, n) for n in all_queue_names(repo)]
+        folder = until_dir(root, queue)
+    else:
+        qfile = qp.queue_file(root, queue)
+        paths = [qfile]
         folder = qfile.parent / "until"
+    if run_id:
         paths += [folder / f"{run_id}.jsonl", folder / f"{run_id}.review.md"]
     return paths
 
@@ -3589,8 +3633,9 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     by_item = analysis.get("itens") or {}
     if answer is None:
         def answer(ident, text, keep=False, drop=False):
+            ans_queue, ans_ident = split_label(repo, queue, ident)
             p = subprocess.run(
-                [sys.executable, str(CEPA_PLAN), "answer", queue, ident,
+                [sys.executable, str(CEPA_PLAN), "answer", ans_queue, ans_ident,
                  "--answer", text, "--repo", str(repo)]
                 + (["--keep"] if keep else [])
                 + (["--drop"] if drop else [])
@@ -3643,7 +3688,8 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 return None, error or "the pre-read is off"
             if " ".join(route["question"].split()) == " ".join(str(shown).split()):
                 return None, "the reader returned the same question"
-            error = reword_route(queue, repo, ad.get("id"), route, replace=True)
+            rw_queue, rw_ident = split_label(repo, queue, ad.get("id"))
+            error = reword_route(rw_queue, repo, rw_ident, route, replace=True)
             return (None, error) if error else (route, None)
     if land is None:
         def land():
@@ -3892,6 +3938,10 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         for_later.append(f"{ident}: {OWNER_REASON[reason_alias(ad['reason'])]}")
         screen.end()
 
+    if stopped:
+        # CS-7: the caller of a panel in sections (`ask_at_launch_all`) needs to know
+        # the owner quit, or the next section would ask again.
+        progress["quit"] = True
     if close:
         screen.close_panel([f"{ad.get('id')} "
                             f"({NO_OWNER_REASON[reason_alias(ad['reason'])]})"
@@ -4003,12 +4053,26 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
     state now, not the launch one) and asks, or lists without a terminal.
     Without `run_id` (`cepa-until decide <fila>`), it goes over the whole queue:
     every deferred item plus the leftover tasks of the delivered ones."""
-    data, error = query_queue(queue, repo)
-    if error:
-        print(f"\n── could not list the deferred items ({error})")
+    if is_all_run(repo, queue) and run_id:
+        # `all/<run>`: what EVERY queue holds for the owner, each item named
+        # `queue/id` (two queues share ids) and answered in its own queue.
         deferred = []
+        for name in all_queue_names(repo):
+            data, error = query_queue(name, repo)
+            if error:
+                print(f"\n── could not list the deferred items of queue {name} "
+                      f"({error})")
+                continue
+            deferred += [dict(ad, id=f"{name}/{ad.get('id')}", fila=name)
+                         for ad in (data or {}).get("deferred") or []]
+        already_asked = ()
     else:
-        deferred = (data or {}).get("deferred") or []
+        data, error = query_queue(queue, repo)
+        if error:
+            print(f"\n── could not list the deferred items ({error})")
+            deferred = []
+        else:
+            deferred = (data or {}).get("deferred") or []
     if not run_id:
         deferred = deferred + delivered_leftovers(queue, repo)
     # Asked mid-run already (the panel before closing, LL-1): asking the same
@@ -4737,6 +4801,81 @@ def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False, skip=
     return data if error or not fresh else fresh
 
 
+def ask_at_launch_all(repo):
+    """The launch panel of a `--all` run (spec until-todas-as-filas, CS-7): ONE
+    panel with what every queue holds for the owner, a section per queue in the
+    order of `cepa-plan ready`, numbered across the whole list. Each answer is
+    recorded in the item's own queue (`decide` on that queue), so a "yes" sends
+    the item back to its queue and the next `query_next_ready` runs it in THIS
+    run. A queue with its own live run is left out (CS-4: that run already asked
+    its questions and its items stay out of this run), and so is a queue in
+    `left`. What was answered "no" before is summarized per queue, as in
+    `ask_at_launch`. No answer within the wait, EOF or Ctrl-C: one line naming
+    `cepa-until decide <queue>` for the queues still holding questions, and the
+    run carries on. With nothing waiting, prints nothing."""
+    ready, error = query_ready(repo)
+    if error:
+        return
+    sections = []
+    for q in ready.get("filas") or []:
+        name = Path(str(q.get("path") or "")).parent.name or str(q.get("queue"))
+        if not name or name == ALL_DIR or live_run_of_queue(repo, name):
+            continue
+        whole, _ = query_queue(name, repo, max_items=10 ** 6)
+        to_ask, answered_no = [], []
+        for ad in (whole or {}).get("deferred") or []:
+            if reason_alias(ad.get("reason")) not in OWNER_REASON:
+                continue
+            date = last_owner_no(ad.get("evidence"))
+            (answered_no if date else to_ask).append(date or ad)
+        if answered_no:
+            latest = max(answered_no)
+            print(f"\n── queue `{name}`: {len(answered_no)} route(s) you already "
+                  f"answered \"no\" (last on {latest[8:10]}/{latest[5:7]}): not asked "
+                  f"again here; to revisit them: cepa-until decide {name}")
+        if to_ask:
+            sections.append((name, to_ask))
+    total = sum(len(items) for _, items in sections)
+    if not total:
+        return
+    screen = Panel(SCREEN, print)
+    screen.open_panel(total)
+    tally, applied, for_later, unanswered = {}, [], [], []
+    cut = None
+    for i, (name, items) in enumerate(sections):
+        if cut:
+            unanswered.append(name)
+            continue
+        screen.continue_panel(f"queue `{name}` · {len(items)} question(s)")
+        shown = tally.get("shown", 0)
+        tally["shown"] = shown + len(items)
+        try:
+            got, later = decide(repo, name, None, {}, items, {},
+                                wait=ANSWER_WAIT_SEC, progress=tally,
+                                first=shown + 1, of=total, opened=True,
+                                close=False)
+        except NoAnswer:
+            cut = (f"nobody answered in {ANSWER_WAIT_SEC / 60:g} min; the run goes "
+                   "on without.")
+            unanswered.append(name)
+            continue
+        except (EOFError, KeyboardInterrupt):
+            cut = "questions interrupted; the run goes on without."
+            unanswered.append(name)
+            continue
+        applied += [f"{name}/{x}" for x in got]
+        for_later += [f"{name}/{x}" for x in later]
+        if later:
+            unanswered.append(name)
+        if tally.get("quit"):
+            cut = "questions stopped with q; the run goes on without."
+    back = " · ".join(f"cepa-until decide {n}" for n in unanswered)
+    if cut:
+        print(f"\n   {cut} To answer later: {back}")
+        return
+    screen.close_panel([], applied, for_later, back)
+
+
 def cmd_decide(argv):
     """`cepa-until decide <queue>/<run>`: the end-of-run questions, again,
     for when the owner wasn't there or left some for later.
@@ -5244,17 +5383,22 @@ def dead_runs(repo, now=None):
         code, _ = git(["merge-base", "--is-ancestor", sha, "HEAD"], root)
         if code == 0:
             continue
-        in_flight = None
+        in_flight, in_flight_queue = None, None
         for e in events:
             if e.get("evento") == "item_start":
-                in_flight = e.get("id")
+                in_flight, in_flight_queue = e.get("id"), e.get("fila")
             elif e.get("evento") == "item_end":
                 in_flight = None
         queue = item_states.get("fila") or start.get("fila")
         status = None
         if in_flight:
-            it, _ = read_item(qp.queue_file(root, str(queue)), in_flight)
+            # A `--all` run reads the item in ITS queue and names it `queue/id`.
+            own_queue = in_flight_queue if is_all_run(root, str(queue)) and \
+                in_flight_queue else queue
+            it, _ = read_item(qp.queue_file(root, str(own_queue)), in_flight)
             status = str((it or {}).get("status") or "?")
+            if own_queue != queue:
+                in_flight = f"{own_queue}/{in_flight}"
         tree = item_states.get("arvore") or start.get("arvore")
         verify = item_states.get("verify") if "verify" in item_states else start.get("verify")
         command = None
@@ -5319,6 +5463,19 @@ def live_run_of_queue(repo, queue):
     root = main_root(repo)
     host = socket.gethostname()
     folder = until_dir(root, str(queue))
+    for path in sorted(folder.glob("*.estado.json")):
+        found = _live_run_in_state(path, host)
+        if found:
+            return found
+    return None
+
+
+def live_all_run(repo):
+    """The `--all` run that is up right now, or None. Reads `_all/until/` directly,
+    not `until_dir(repo, "all")`: a real queue called `all` has its own folder,
+    and a `--all` run is still recorded under `_all`."""
+    host = socket.gethostname()
+    folder = qp.queue_dir(main_root(repo), ALL_DIR) / "until"
     for path in sorted(folder.glob("*.estado.json")):
         found = _live_run_in_state(path, host)
         if found:
@@ -5530,7 +5687,9 @@ def _main(argv=None):
                     dest="max_blocked", metavar="N",
                     help=f"CONSECUTIVE `blocked` items that end the run: the queue "
                          f"is stuck on an outside cause, and going on only "
-                         f"rediscovers that cause (default {DEFAULT_MAX_BLOCKED})")
+                         f"rediscovers that cause. In a `--all` run the count is "
+                         f"per queue and the queue leaves the run instead of "
+                         f"ending it (default {DEFAULT_MAX_BLOCKED})")
     ap.add_argument("--attempts-per-item", "--tentativas-por-item", type=int,
                     default=DEFAULT_ATTEMPTS_PER_ITEM, dest="attempts_per_item", metavar="N",
                     help=f"how many subprocesses one window spends on the same "
@@ -5629,10 +5788,12 @@ def _main(argv=None):
     # under the name `all` (spec until-todas-as-filas, CS-2). `cur` is the queue
     # of the item in hand: always `a.queue` in a single-queue run, the queue the
     # next ready item belongs to in a `--all` run.
+    # Queues of a `--all` run that left it for hitting `--max-blocked` (CS-5).
+    left_queues = set()
     if a.all_queues:
         a.queue = ALL_QUEUE
         skipped_warned = set()
-        cur, data, error = query_next_ready(repo, skipped_warned)
+        cur, data, error = query_next_ready(repo, skipped_warned, left_queues)
         if error:
             print(f"cepa-until: could not read the queues — {error}",
                   file=sys.stderr)
@@ -5648,7 +5809,7 @@ def _main(argv=None):
     def next_item():
         """(queue, data, error) of the next item, read fresh."""
         if a.all_queues:
-            return query_next_ready(repo, skipped_warned)
+            return query_next_ready(repo, skipped_warned, left_queues)
         fresh, fresh_error = query_queue(a.queue, repo)
         return a.queue, fresh, fresh_error
 
@@ -5667,6 +5828,23 @@ def _main(argv=None):
               f"(run {alive['run']}, pid {alive['pid']}, deadline {end}). "
               "Wait for it to finish, or kill it (kill the pid) before "
               "starting another.", file=sys.stderr)
+        return 2
+    # CS-8 (spec `until-todas-as-filas`): a live `--all` run may reach any queue at
+    # any moment, because it re-reads the ready items before each one (Q4). So
+    # while it is up, a second `--all` and a run of any single queue are refused,
+    # with the name the owner reads in the `--all` report (`all/<run>`).
+    alive_all = live_all_run(repo)
+    if alive_all:
+        try:
+            end = datetime.fromisoformat(str(alive_all["prazo"])) \
+                .strftime("%d/%m %H:%M")
+        except ValueError:
+            end = "?"
+        print(f"cepa-until: a `--all` run is in progress "
+              f"({ALL_QUEUE}/{alive_all['run']}, pid {alive_all['pid']}, "
+              f"deadline {end}); it may reach any queue, so no other run starts "
+              "while it is up. Wait for it to finish, or kill it (kill the pid) "
+              "before starting another.", file=sys.stderr)
         return 2
 
     # CS-4 (spec `until-arvore-limpa`): before the dirt guard, the records a dead
@@ -5807,13 +5985,15 @@ def _main(argv=None):
     runs = waits = None
     if a.all_queues:
         # No single queue to count: the ready list of every queue is the forecast.
-        # No pre-read and no panel in a `--all` run for now (CS-7).
         whole = None
         ready_all, _ready_err = query_ready(repo)
         runs = sum(len(q.get("prontos") or [])
                    for q in (ready_all or {}).get("filas") or [])
         waits = 0
         forecast = f" · start: {runs} ready in every queue"
+        # The pre-read stays off in a `--all` run; the launch panel is its own
+        # (CS-7, `ask_at_launch_all` below), and `--no-pre-read` skips it too.
+        all_panel = not a.no_pre_read
         a.no_pre_read = True
     else:
         whole, whole_err = query_queue(a.queue, repo, max_items=10 ** 6)
@@ -5852,6 +6032,15 @@ def _main(argv=None):
     # run behaves as if it had no terminal and no reader; the forecast is above.
     on_terminal = (sys.stdin.isatty() and sys.stdout.isatty()) and not a.no_pre_read
     rows, opened_ids, reading, tally = None, set(), None, {}
+    if a.all_queues and all_panel and sys.stdin.isatty() and sys.stdout.isatty():
+        # CS-7: one panel for every queue; a "yes" puts the item back in its queue,
+        # so the fresh read below already has it as the next ready item.
+        ask_at_launch_all(repo)
+        fresh_cur, fresh, fresh_error = next_item()
+        if not fresh_error and fresh is not None:
+            cur, data = fresh_cur, fresh
+            if data.get("path") and data.get("path") not in run_queue_paths:
+                run_queue_paths.append(data.get("path"))
     # CS-4 (perguntas-da-largada-legiveis): old routes (an open `human_pending` with no
     # closed question or no kind) are rewritten by the route reader, with or without a
     # terminal and even when no item runs. On a terminal the ones the owner is asked
@@ -6207,7 +6396,10 @@ def _main(argv=None):
     # The `blocked` of the current sequence. Only an outcome that is not `blocked`
     # (done, dropped, human route) resets it; an attempt with no progress belongs to the breaker
     # and doesn't touch this.
+    # In a `--all` run the streak is per queue (CS-5): `blocked_streaks` holds one
+    # list per queue and `consecutive_blocked` is unused.
     consecutive_blocked = []
+    blocked_streaks = {}
     done_items, failed, items = [], [], 0
     # How many times THIS window has already launched a subprocess for each item, and
     # what it took out of the way through exhaustion or the account usage ceiling.
@@ -6231,6 +6423,24 @@ def _main(argv=None):
         """What the screen and the record call an item: `queue/id` in a `--all`
         run, the bare id in a single-queue run (as it always was)."""
         return f"{k[0]}/{k[1]}" if a.all_queues else str(k[1])
+
+    def blocked_streak(queue):
+        """The list of consecutive `blocked` that `--max-blocked` counts: the one
+        of the whole run in a single-queue run, the queue's own in `--all`."""
+        if a.all_queues:
+            return blocked_streaks.setdefault(queue, [])
+        return consecutive_blocked
+
+    def queue_left_the_run(queue, streak):
+        """CS-5: in a `--all` run the queue that reached `--max-blocked` leaves
+        THIS run (only this one) and the run goes on with the others."""
+        ids = [str(k[1]) for k in streak]
+        left_queues.add(queue)
+        step(f"queue `{queue}` left the run: {len(ids)} items in a row came out "
+             f"`blocked` ({', '.join(ids)}); the other queues carry on")
+        log_event({"evento": "fila_saiu_do_run", "fila": queue, "itens": ids,
+                   "max_travados": a.max_blocked})
+        streak.clear()
 
     def in_the_middle_of(key, n_before):
         others = []
@@ -6478,6 +6688,7 @@ def _main(argv=None):
         pref = None if a.all_queues else preferences.get(str(ident))
         note = preference_note(ident, pref)
         start_event = {"evento": "item_start", "id": ident, "title": item.get("title"),
+                       **({"fila": cur} if a.all_queues else {}),
                        "restante_seg": int(remaining.total_seconds()),
                        "tentativa": round_n, "twg_version": installed_twg_version(),
                        "head": before, "session_id": session_id,
@@ -6842,8 +7053,9 @@ def _main(argv=None):
         # last return (`blocked`) also enters the stalled-queue counter.
         if back_now:
             consecutive_failures += 1
+            streak = blocked_streak(key[0])
             if run_state == "blocked":
-                consecutive_blocked.append(key)
+                streak.append(key)
             if consecutive_failures >= a.max_failures:
                 end_reason = "disjuntor"
                 end_detail = (f"{consecutive_failures} items in a row failed to close "
@@ -6851,11 +7063,14 @@ def _main(argv=None):
                                f"{ident}) — this is systemic, not bad luck; "
                                "going on would burn the window on the same problem")
                 break
-            if len(consecutive_blocked) >= a.max_blocked:
+            if len(streak) >= a.max_blocked:
+                if a.all_queues:
+                    queue_left_the_run(key[0], streak)
+                    continue
                 end_reason = "fila-travada"
                 end_detail = (
-                    f"{len(consecutive_blocked)} items in a row came out `blocked` "
-                    f"({', '.join(label(k) for k in consecutive_blocked)}); the reason for each "
+                    f"{len(streak)} items in a row came out `blocked` "
+                    f"({', '.join(label(k) for k in streak)}); the reason for each "
                     "is in the queue's `evidence`")
                 break
             continue
@@ -6992,15 +7207,18 @@ def _main(argv=None):
                 mark += f" · {n_commits} commit(s) without closing"
             step(f"{mark} ({human(timedelta(seconds=spent))})")
 
+            streak = blocked_streak(key[0])
             if run_state == "blocked":
-                consecutive_blocked.append(key)
+                streak.append(key)
             else:
-                consecutive_blocked = []
-            if len(consecutive_blocked) >= a.max_blocked:
+                streak.clear()
+            if len(streak) >= a.max_blocked and a.all_queues:
+                queue_left_the_run(key[0], streak)
+            elif len(streak) >= a.max_blocked:
                 end_reason = "fila-travada"
                 end_detail = (
-                    f"{len(consecutive_blocked)} items in a row came out `blocked` "
-                    f"({', '.join(label(k) for k in consecutive_blocked)}) — the queue is getting stuck "
+                    f"{len(streak)} items in a row came out `blocked` "
+                    f"({', '.join(label(k) for k in streak)}) — the queue is getting stuck "
                     "on an outside condition, not on the items' failures. Going on "
                     "would rediscover the same cause on every item; the reason for "
                     "each is in the queue's `evidence`")
@@ -7078,7 +7296,8 @@ def _main(argv=None):
               "quedas_de_rede": len(drops), "cota_apertada": len(tight),
               "entregues": len(delivered), "travados": len(blocked_items),
               "verify_vermelho": len(reds),
-              "done_sem_commit": len(without_commit)})
+              "done_sem_commit": len(without_commit),
+              "filas_fora": sorted(left_queues)})
 
     print()
     print(SCREEN.rule(f"ended at {datetime.now().strftime('%H:%M')} · {end_reason}"))
@@ -7250,13 +7469,13 @@ def _main(argv=None):
             item_states = {}
         # Nobody answered the panel before closing: nobody is at the keyboard,
         # so the end lists instead of waiting another ANSWER_WAIT_SEC.
-        if a.all_queues:
-            # The end questions are per queue (`decide <queue>`); a `--all` run
-            # does not ask them yet (CS-6/CS-7).
-            return 0
+        # A `--all` run only LISTS at the end (CS-6): asking item by item there
+        # would answer into queues that ran nothing in this run, whose queue.yaml
+        # `commit_run_end` does not hold. `decide all/<run>` is where it asks.
+        silent = mid_run_silent or a.all_queues
         return close_with_owner(repo, a.queue, run_id, item_states, review,
                                wait=ANSWER_WAIT_SEC, already_asked=asked_mid_run,
-                               interactive=False if mid_run_silent else None)
+                               interactive=False if silent else None)
 
     def commit_records(result):
         # The run's last step (CS-1), after the end questions (which write answers

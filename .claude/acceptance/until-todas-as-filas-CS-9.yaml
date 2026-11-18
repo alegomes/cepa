@@ -1,0 +1,18 @@
+key: until-todas-as-filas-CS-9
+status: complete
+criteria:
+  - id: CS-9
+    text: "Sem item pronto em nenhuma fila, o `--all` sai com 0, diz isso e nao cria branch (red test: com toda fila fechada ou esperando o dono e o painel recusado (`--no-pre-read`), `cepa until --all --for 1h` sai com 0, imprime que nenhuma fila tem item pronto e `git branch --list 'until/*'` nao ganha branch)"
+    altitude: cli
+    surface: "cepa until --all --for 1h --no-pre-read (common/bin/cepa -> common/bin/cepa-until): exit code, stdout/stderr, chamadas ao claude, refs/heads/until/, queue.yaml de cada fila"
+    head: 677713b
+    test: "tests/test_cepa_until_all.py::test_cs9_nothing_ready_in_any_queue_exits_0_says_so_and_creates_no_branch"
+    layer: "subprocess real via launcher common/bin/cepa (_run via_launcher=True) em repo git temporario com cepa-plan real; so o claude e falso. Fila a com item done, fila b com item human_pending. Asserts: rc 0; saida contem 'no queue has a ready item'; nenhuma chamada ao claude; for-each-ref refs/heads/until/ vazio; queue.yaml das filas inalterados."
+    evidence: verified
+    run: "python3 -c (importa tests/test_cepa_until_all.py e roda o test_cs9_* em primeiro plano, head 677713b) -> 'FAILS 0 []', 5 checks ok, nenhum FAIL"
+    status: complete
+    notes:
+      - "Sem mudanca de producao no commit 677713b (so teste, verde de saida): comportamento ja entregue por itens anteriores. Verificado no codigo: query_next_ready devolve lote vazio com detail 'no queue has a ready item' (common/bin/cepa-until:892) e _main retorna 0 antes de open_run_branch (~6172-6183); a mensagem chega a saida (assert sobre stdout+stderr passou)."
+      - "Teste nao e vacuo: falha se a mensagem faltar, se rc != 0, se houver chamada ao claude ou branch until/*."
+      - "Suite completa nao rodada por instrucao; fica com o supervisor."
+gap: []

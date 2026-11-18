@@ -1,0 +1,49 @@
+schema_version: 2
+card: until-todas-as-filas-CS-7
+verdict: proven                 # proven | unproven | needs-human
+reviewed_at: 2026-11-17T19:00:00-03:00
+base_commit: f12a703
+head_commit: 148a324
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  note: "Scope is `git diff f12a703 148a324 -- common/bin/cepa-until`: new `ask_at_launch_all`, its call in `_main` (after `rows, opened_ids, reading, tally = ...`), the `all_panel` flag, help text, and (round 2) `progress[\"quit\"] = True` in `decide` plus the `tally.get(\"quit\")` cut in `ask_at_launch_all`."
+  changed_classes:
+    - class: "common/bin/cepa-until :: ask_at_launch_all (new); decide (quit flag); _main (all_panel, call + fresh read of next item)"
+      module: common/bin
+      external_observable: true   # surface cli: stdout panel, queue files, run record
+      substituted_by_double: null # real `cepa until --all`, real cepa-plan, real temp git repo; only `claude` is faked (far boundary)
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      run: "Throwaway detached worktree /tmp/proof-cs7b at 148a324 (removed at the end). Unperturbed: the 7 test_cs7_* functions (short snippet importing tests/test_cepa_until_all.py, FAILURES counted since check() does not raise) -> 'N= 7 FAIL= 0'. Each perturbation applied ALONE with sed (non-empty git diff confirmed), the 7 test_cs7_* run, FAIL read, then `git checkout -- common/bin/cepa-until`."
+      results:
+        - "KILLED P7 (round-1 survivor) `and sys.stdin.isatty() and sys.stdout.isatty()` removed from the --all panel guard in _main: 'N= 7 FAIL= 1' (test_cs7_without_a_terminal_the_all_launch_opens_no_panel)."
+        - "KILLED P9 (round-1 survivor) `(answered_no if date else to_ask).append(date or ad)` -> `to_ask.append(date or ad)`: 'N= 7 FAIL= 3' (test_cs7_a_route_already_answered_no_is_summarized_and_not_asked)."
+        - "KILLED Q1 drop `progress[\"quit\"] = True` in decide: 'N= 7 FAIL= 1' (test_cs7_q_ends_the_whole_panel_not_only_the_section_of_its_queue)."
+        - "KILLED Q2 `if tally.get(\"quit\"):` -> `if False:` in ask_at_launch_all: 'N= 7 FAIL= 1'."
+        - "KILLED P1 call `ask_at_launch_all(repo)` -> `pass`: 'N= 7 FAIL= 14'."
+        - "KILLED P2 `all_panel = not a.no_pre_read` -> `True`: 'N= 7 FAIL= 1'."
+        - "KILLED P3 `or live_run_of_queue(repo, name)` -> `or False`: 'N= 7 FAIL= 2'."
+        - "KILLED P5 `decide(repo, name, ...)` -> `decide(repo, \"wrong\", ...)`: 'N= 7 FAIL= 4'."
+        - "KILLED P6 fresh read after the panel replaced by an error result (a yes no longer runs in this run): 'N= 7 FAIL= 3'."
+        - "KILLED P8 `screen.open_panel(total)` -> `open_panel(1)`: 'N= 7 FAIL= 1'."
+        - "Not re-applied: the `left` parameter mutant (equivalent in round 1) no longer exists, the parameter was removed in 148a324."
+    base_regression:
+      run: "Tests of 10a296d against cepa-until of f12a703: RED with 10 failed checks (round 1; P1 here also removes the call and goes RED)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; coverage of the changed behaviors established by perturbation: terminal guard (P7), answered-no skip/summary (P9), q cut (Q1, Q2), call, no-pre-read, live-run skip, queue routing, fresh read, numbering all turn a test_cs7_* red when broken."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff opens no input from outside: it reads queue files and run records `cepa-until` already reads; the owner's answers go through the existing `decide` path; no input-bearing module (api-rest) is touched"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Os dois pontos que ficaram sem teste na rodada anterior (painel sem terminal e rota ja respondida 'nao') agora tem teste que fica vermelho ao quebrar, e o novo caminho do 'q' (marcar a saida e cortar as secoes restantes) tambem. As demais quebras anteriores continuam vermelhas. Nada sobrou vivo."

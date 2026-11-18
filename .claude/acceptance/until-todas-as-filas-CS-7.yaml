@@ -1,0 +1,19 @@
+key: until-todas-as-filas-CS-7
+status: complete
+criteria:
+  - id: CS-7
+    text: "Num terminal, a largada mostra um painel único com o que todas as filas guardam para o dono, agrupado por fila, e um \"sim\" faz o item rodar neste run (red test: fila `a` com um item com `human_pending` e fila `b` com outro, `cepa until --all --for 1h` num pseudo-terminal mostra um único painel com as seções `a` e `b`; respondendo \"sim\" ao item de `a`, ele aparece com `item_start` no registro do run)"
+    altitude: cli
+    surface: "cepa until --all --for 1h num pseudo-terminal (common/bin/cepa -> common/bin/cepa-until): exit code, saída do painel, registro do run (item_start), queue.yaml de cada fila"
+    head: 148a324
+    test: "tests/test_cepa_until_all.py::test_cs7_launch_panel_is_one_panel_grouped_by_queue_and_yes_runs_the_item (o roteiro do red test), mais test_cs7_launch_panel_without_answer_carries_on_and_says_where_to_answer e test_cs7_launch_panel_skips_a_queue_with_its_own_live_run"
+    layer: "subprocess real de `cepa until` num pty, repo git temporario com cepa-plan real; so o claude e falso. Asserts: sai 0; um unico '2 question(s) for you'; secoes `a` antes de `b` com cada pergunta na secao da sua fila; 'sim' em a1 gera item_start fila a/a1 no registro e a1 termina done; 'nao' deixa b1 fora de item_start e grava o nao em b1 na fila b; sem resposta o run segue e aponta o decide; fila com run vivo fica fora do painel"
+    evidence: verified
+    run: "python3 -I (snippet que importa tests/test_cepa_until_all.py e roda os 7 test_cs7_* em primeiro plano, head 148a324) -> FAILURES [] com N=7 testes executados, nenhum FAIL; o dono reportou '✓ 43 testes' da suite do arquivo em 148a324"
+    status: complete
+    notes:
+      - "Producao mudou na superficie certa: diff f12a703..8b44058 em common/bin/cepa-until (+91/-1), o painel da largada do --all."
+      - "Teste de aceite do criterio roda o roteiro literal do red test com duas filas e respostas sim/nao no pty."
+      - "Re-auditoria em 148a324: diff 8b44058..148a324 mexe em common/bin/cepa-until (decide marca progress[quit]; ask_at_launch_all para no q) e em 3 testes novos (q encerra o painel inteiro, rota ja respondida nao, sem terminal sem painel). O roteiro do criterio (sim em a1 gera item_start) segue coberto e verde no cli."
+      - "Suite completa (tests/run-all.sh) nao rodada por instrucao; fica com o supervisor."
+gap: []

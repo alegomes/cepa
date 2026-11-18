@@ -1,0 +1,33 @@
+key: until-todas-as-filas-CS-5
+status: complete
+criteria:
+  - id: CS-5
+    text: "`--max-blocked` itens `blocked` seguidos tiram a fila do run e ele segue nas outras (fila a com 3 itens que o claude falso devolve como blocked e fila b com 1 item done; `cepa until --all --for 1h --max-blocked 3` imprime uma linha dizendo que a fila a saiu do run e termina b1 como done; antes o comando era recusado)"
+    altitude: cli
+    surface: "cepa until --all --for 1h --max-blocked 3 (launcher common/bin/cepa -> common/bin/cepa-until): exit code, stdout (linha 'queue `a` left the run'), queue.yaml de a e b, eventos fila_saiu_do_run / item_start / run_end.filas_fora no registro .claude/queues/_all/until/*.jsonl"
+    test: "tests/test_cepa_until_all.py::test_queue_blocked_max_times_leaves_the_run_and_the_others_carry_on"
+    layer: "subprocess real de `cepa until` pelo launcher, repo git temporario com cepa-plan real; só o claude é falso. Asserts: rc==0, exatamente uma linha com a fila `a` e 'left the run' que nomeia a1, a2, a3, b1 done, a1..a3 blocked, run sem 'fila-travada'"
+    evidence: verified
+    run: "python3 tests/test_cepa_until_all.py (rodado de novo em 9692c6d) -> todos os asserts 'ok' do teste, sem FAIL, '✓ 29 testes'"
+    status: complete
+    notes:
+      - "Reconferido em 9692c6d: o diff d1bf3a3..9692c6d só acrescenta teste desde a passada anterior; produção e docs não mudaram depois de 52823e8."
+      - "Testes de apoio no mesmo nível (todos verdes na mesma execução): a4 de uma fila que saiu nunca começa; contagem por fila (2 em a + 1 em b não tira ninguém); evento fila_saiu_do_run e run_end.filas_fora; done no meio zera a sequência; caminho de retorno vermelho (back_now) também conta; fila única segue terminando em fila-travada."
+      - "A produção mudou na superfície certa: query_next_ready ganhou `left`, blocked_streak por fila e queue_left_the_run no _main, nos dois pontos de contagem de blocked."
+      - "docs/cepa-until.md atualizado."
+      - "Suíte completa (tests/run-all.sh) não rodada por instrução; fica com o supervisor."
+  - id: CS-5-Q8
+    text: "Q8: o limite é por fila; `--max-failures` continua encerrando o run inteiro"
+    altitude: cli
+    surface: "cepa until --all --max-failures N: run_end com motivo disjuntor mesmo havendo outras filas com itens prontos"
+    test: "tests/test_cepa_until_all.py::test_max_failures_still_ends_the_whole_all_run"
+    layer: "subprocess real de `cepa until --all --for 1h --max-failures 2 --max-blocked 1 --no-verify --no-analysis` pelo launcher; fila a com a1..a3 que o claude falso deixa sem mexer (exit 0, sem progresso), fila b com b1 pronto. Asserts: um único run_end com motivo `disjuntor`; sem 'left the run' no stdout, sem evento fila_saiu_do_run e filas_fora == []; b1 segue pending; nenhum item_start de b1. --max-blocked 1 é o valor que, se o disjuntor não valesse, tiraria a fila do run; o teste prova que o disjuntor continua vindo primeiro e encerra tudo."
+    evidence: verified
+    run: "python3 tests/test_cepa_until_all.py -> 4 linhas 'ok' do teste (disjuntor; nenhuma fila sai; b1 pending; nenhum item_start de b), '✓ 29 testes'"
+    status: complete
+    notes:
+      - "Julgamento: demonstra a metade do Q8 na superfície cli, no processo real e no registro real do run. A primeira passada apontou exatamente este teste como o que faltava."
+      - "O ramo é o certo: consecutive_failures >= max_failures vem antes da checagem de blocked e dá break com end_reason disjuntor; o teste prende essa ordem."
+      - "A metade 'por fila' do Q8 segue coberta por test_blocked_streak_is_counted_per_queue."
+      - "Suíte completa (tests/run-all.sh) não rodada por instrução; fica com o supervisor."
+gap: []
