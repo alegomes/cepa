@@ -22,3 +22,4 @@
 {"evento": "verify", "id": "CS-9", "verde": true, "segundos": 2690, "motivo": null, "quando": "2026-11-17T20:20:05"}
 {"evento": "run_end", "motivo": "end-of-queue", "detalhe": "a fila acabou — nenhum item pendente sobrou", "itens": 4, "com_progresso": 4, "sem_progresso": 0, "esgotados": 0, "limite_de_uso": 0, "esperas_de_cota": 0, "quedas_de_rede": 0, "cota_apertada": 0, "entregues": 4, "travados": 0, "verify_vermelho": 0, "done_sem_commit": 0, "quando": "2026-11-17T20:20:05"}
 {"evento": "analise", "feita": true, "arquivo": "/Users/alegomes/coding/cepa/.claude/queues/until-todas-as-filas/until/2026-11-17-1431.review.md", "erro": null, "quando": "2026-11-17T20:22:09"}
+{"evento": "instalado_no_pouso", "repo": "/Users/alegomes/coding/cepa", "ok": true, "segundos": 16, "motivo": null, "quando": "2026-11-18T15:15:18"}
