@@ -77,3 +77,54 @@ def problems(text, limit=WORDS_PER_FIELD):
     if n > limit:
         out.append(f"{n} palavras, o limite é {limit}")
     return out + jargon(text)
+
+
+# ── the item each "no-return" answer creates (docs/spec/resposta-do-decide-vira-trabalho.md, CS-1) ──
+#
+# A route's answer either returns the item to the queue or it does not. The ones
+# that do not (the "sim" of a route on a `done` item, the "não" of any route) must
+# say which queue item they create, or say "nenhum" on purpose. The declaration is
+# stored in `owner_summary` under `item_se_sim` / `item_se_nao`, as the string
+# "nenhum" or as {"titulo": str, "precisa_do_dono": bool}. `cepa-plan answer`
+# (CS-2/CS-3) reads it; this module only validates and shapes it.
+ITEM_KEYS = (
+    # (key in owner_summary, title flag, needs-owner flag, answer it belongs to)
+    ("item_se_sim", "--if-yes-item", "--if-yes-item-needs-owner", "sim"),
+    ("item_se_nao", "--if-no-item", "--if-no-item-needs-owner", "não"),
+)
+NONE_WORDS = ("nenhum", "nenhuma", "none")
+NONE_VALUE = "nenhum"
+WORDS_PER_ITEM_TITLE = 20
+
+
+def item_declaration(key, text, needs_owner=False):
+    """(stored value, error) for ONE declaration. `text` is the title or "nenhum";
+    `needs_owner` is the "precisa do dono" flag. (None, None) when nothing was given."""
+    flag, flag_owner = next((f, o) for k, f, o, _ in ITEM_KEYS if k == key)[:2]
+    title = " ".join(str(text or "").split())
+    if not title:
+        if needs_owner:
+            return None, f"{flag_owner} sem {flag}: falta o título do item"
+        return None, None
+    if title.lower() in NONE_WORDS:
+        if needs_owner:
+            return None, f"{flag_owner} não combina com `nenhum` em {flag}"
+        return NONE_VALUE, None
+    found = problems(title, WORDS_PER_ITEM_TITLE)
+    if found:
+        return None, f"{flag}: {'; '.join(found)}"
+    return {"titulo": title, "precisa_do_dono": bool(needs_owner)}, None
+
+
+def item_flags(summary):
+    """CLI flags that carry the declarations of an `owner_summary` into `cepa-plan`."""
+    out = []
+    for key, flag, flag_owner, _ in ITEM_KEYS:
+        v = (summary or {}).get(key)
+        if isinstance(v, dict) and str(v.get("titulo") or "").strip():
+            out += [flag, str(v["titulo"])]
+            if v.get("precisa_do_dono"):
+                out.append(flag_owner)
+        elif isinstance(v, str) and v.strip().lower() in NONE_WORDS:
+            out += [flag, NONE_VALUE]
+    return out

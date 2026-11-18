@@ -87,7 +87,8 @@ def finish(d, *extra):
 
 
 FULL = ["--route-kind", "external-block", "--question", QUESTION,
-        "--if-yes", "o item volta para a fila", "--if-no", "o item continua parado"]
+        "--if-yes", "o item volta para a fila", "--if-no", "o item continua parado",
+        "--if-no-item", "nenhum"]
 
 
 def test_red_test_without_question_is_refused_and_writes_nothing():
@@ -109,7 +110,8 @@ def test_each_missing_piece_is_named_alone():
         pieces = {"--route-kind": ["--route-kind", "external-block"],
                   "--question": ["--question", QUESTION],
                   "--if-yes": ["--if-yes", "volta para a fila"],
-                  "--if-no": ["--if-no", "continua parado"]}
+                  "--if-no": ["--if-no", "continua parado"],
+                  "--if-no-item": ["--if-no-item", "nenhum"]}
         for missing in pieces:
             args = [a for flag, part in pieces.items() if flag != missing
                     for a in part]
@@ -120,7 +122,8 @@ def test_each_missing_piece_is_named_alone():
                   f"`{missing}`" in r.stderr
                   and not any(f"`{o}`" in r.stderr for o in others), r.stderr)
         r = finish(d, "--route-kind", "external-block", "--question",
-                   "O acesso já existe, certo", "--if-yes", "a", "--if-no", "b")
+                   "O acesso já existe, certo", "--if-yes", "a", "--if-no", "b",
+                   "--if-no-item", "nenhum")
         check("pergunta sem `?` recusada", r.returncode == 2
               and "`--question`" in r.stderr, r.stderr)
         check("nada gravado", queue_file(d).read_bytes() == before)
@@ -160,7 +163,7 @@ def test_invalid_route_kind_is_rejected_by_argparse():
         d = make_repo(base, "r5")
         before = queue_file(d).read_bytes()
         r = finish(d, "--route-kind", "whatever", "--question", QUESTION,
-                   "--if-yes", "a", "--if-no", "b")
+                   "--if-yes", "a", "--if-no", "b", "--if-no-item", "nenhum")
         check("valor fora dos três recusado", r.returncode == 2
               and "route-kind" in r.stderr, r.stderr)
         check("nada gravado", queue_file(d).read_bytes() == before)

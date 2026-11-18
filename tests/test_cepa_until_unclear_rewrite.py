@@ -209,7 +209,8 @@ def test_reword_route_replace_overwrites_question_and_keeps_the_route():
         qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
         base = [sys.executable, str(CEPA_PLAN), "reword-route", "fila", "b1",
                 "--route-kind", "owner-task", "--question", NEW_Q,
-                "--if-yes", NEW_YES, "--if-no", NEW_NO, "--repo", str(root)]
+                "--if-yes", NEW_YES, "--if-no", NEW_NO, "--if-no-item", "nenhum",
+                "--repo", str(root)]
         p = subprocess.run(base, capture_output=True, text=True)
         check("reword-route without --replace: exit 0", p.returncode == 0, p.stderr)
         check("reword-route without --replace: question kept",

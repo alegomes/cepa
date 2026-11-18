@@ -3166,7 +3166,21 @@ def blocked_reason(line):
     return first_sentence(line["evidence"]) if line.get("evidence") else ""
 
 
-def human_section_refusal(status, owner, question):
+def declared_items(raw):
+    """({key: stored declaration}, [errors]) from the CLI's `{key: (title, needs_owner)}`.
+    Only what was given is returned; the rule that it must be there is `route_refusal`."""
+    stored, errors = {}, []
+    for key, flag, flag_owner, _ in _ownertext.ITEM_KEYS:
+        text, needs = (raw or {}).get(key) or (None, False)
+        value, error = _ownertext.item_declaration(key, text, needs)
+        if error:
+            errors.append(error)
+        elif value is not None:
+            stored[key] = value
+    return stored, errors
+
+
+def human_section_refusal(status, owner, question, item_errors=()):
     """Why `finish` refuses the human section, as text, or None.
 
     `evidence` is for agents and keeps its codes. `owner_summary` and the
@@ -3188,6 +3202,7 @@ def human_section_refusal(status, owner, question):
         found = _ownertext.problems(question, limit=25)
         if found:
             bad.append(f"--question: {'; '.join(found)}")
+    bad.extend(item_errors)
     if bad:
         return ("a seção humana é lida por quem nunca abriu o card, e estes "
                 "campos fogem da regra: " + " | ".join(bad) + ". Reescreva "
@@ -3199,12 +3214,20 @@ def human_section_refusal(status, owner, question):
 ROUTE_KINDS = ("owner-task", "external-block", "open-question")
 
 
-def route_refusal(human_pending, route_kind, question, owner):
+def route_refusal(human_pending, route_kind, question, owner, status=None,
+                  items=None):
     """Why `finish --human-pending` refuses to OPEN a route, as text, or None.
 
     A route the owner cannot read is not a route: it needs a kind, a closed
     question, and what yes and no do to the work. Lists ALL that is missing in
-    one message so the agent fixes it and calls `finish` again."""
+    one message so the agent fixes it and calls `finish` again.
+
+    CS-1 of docs/spec/resposta-do-decide-vira-trabalho.md: also the item each
+    answer that does NOT return the item to the queue creates (`items`, the
+    stored declarations: a title or "nenhum"). Those answers are the "não" of any
+    route and the "sim" of a route on a `done` item; the "sim" of a `pending` or
+    `blocked` item sends it back to the queue, so it asks for nothing there.
+    `status=None` (unknown) asks for both."""
     if human_pending is None or not str(human_pending).strip():
         return None  # the empty route has its own refusal (only the owner closes)
     missing = []
@@ -3224,11 +3247,24 @@ def route_refusal(human_pending, route_kind, question, owner):
     if not str(owner.get("se_nao") or "").strip():
         missing.append("`--if-no` (o que acontece com o trabalho se o dono "
                        "responder não)")
+    items = items or {}
+    needed = [(k, f, a) for k, f, _, a in _ownertext.ITEM_KEYS
+              if k == "item_se_nao" or status in (None, "done")]
+    for key, flag, answer in needed:
+        if key not in items:
+            missing.append(f"`{flag}` (o título do item que o {answer} do dono "
+                           "cria na fila, em palavras leigas, ou `nenhum`)")
     if not missing:
         return None
+    declared = (" Cada resposta que não devolve o item à fila precisa declarar "
+                "o trabalho que cria (o título do item; junte a flag `...-item-needs-owner` "
+                "da mesma resposta se o item novo também espera o dono), senão a resposta do dono fecha a "
+                "pendência e o trabalho prometido nunca nasce. Se a resposta "
+                "realmente não cria trabalho, escreva `nenhum`."
+                if any("-item`" in m for m in missing) else "")
     return ("abrir uma rota para o dono exige que ela seja legível sem abrir o "
-            "card, e faltou: " + "; ".join(missing) + ". Complete e chame "
-            "`finish` de novo; nada foi gravado.")
+            "card, e faltou: " + "; ".join(missing) + "." + declared + " Complete "
+            "e chame de novo; nada foi gravado.")
 
 
 # ── finish: who may close the item, and on what commit (DUR-2) ───────────────
@@ -3377,7 +3413,7 @@ def resolve_decisions(repo, texts, sha):
 
 
 def cmd_reword_route(root, name, ident, route_kind, question, if_yes, if_no,
-                     replace=False):
+                     replace=False, items=None):
     """CS-4 of docs/spec/perguntas-da-largada-legiveis.md: records the rewrite of an OLD
     route (an open `human_pending` written before the kind and the closed question
     existed). Fills ONLY what the item lacks (`route_kind`, `owner_question`,
@@ -3388,9 +3424,15 @@ def cmd_reword_route(root, name, ident, route_kind, question, if_yes, if_no,
     `finish` applies. Does not commit (the supervisor's `finish` calls do not either).
     CS-7: `replace` overwrites the kind, the question and both effects even when the
     item has them (the owner pressed `?` on that question: it was unclear). It still
-    never touches `human_pending`, `status` nor `evidence`."""
+    never touches `human_pending`, `status` nor `evidence`.
+    CS-1 of docs/spec/resposta-do-decide-vira-trabalho.md: the item the "não" creates
+    (`items`, the CLI's `{key: (title, needs_owner)}`) is required, as in `finish`
+    (the "sim" of a `pending`/`blocked` item returns it to the queue, so it is
+    optional here). It fills what is missing; with `replace` it overwrites. A call
+    without it passes when the item already carries one."""
     owner = {k: " ".join(str(v).split()) for k, v in
              (("se_sim", if_yes), ("se_nao", if_no)) if v is not None and str(v).strip()}
+    given, item_errors = declared_items(items)
     target, plan, by_id, rc = open_plan_for_marking(root, name)
     if rc:
         return rc
@@ -3410,13 +3452,16 @@ def cmd_reword_route(root, name, ident, route_kind, question, if_yes, if_no,
               "gravado.", file=sys.stderr)
         return 2
     # "pending": the blocked-needs-a-blocker rule is about `finish`, not about this.
-    refusal = human_section_refusal("pending", owner, question) \
-        or route_refusal(route, route_kind, question, owner)
+    summary = it.get("owner_summary")
+    summary = dict(summary) if isinstance(summary, dict) else {}
+    stored = {k: summary[k] for k in (k for k, *_ in _ownertext.ITEM_KEYS)
+              if summary.get(k)}
+    refusal = human_section_refusal("pending", owner, question, item_errors) \
+        or route_refusal(route, route_kind, question, owner, "pending",
+                         {**stored, **given})
     if refusal:
         print(f"`reword-route` recusado para {ident}: {refusal}", file=sys.stderr)
         return 2
-    summary = it.get("owner_summary")
-    summary = dict(summary) if isinstance(summary, dict) else {}
     changed = []
     if replace or not it.get("route_kind"):
         if it.get("route_kind") != route_kind:
@@ -3432,6 +3477,10 @@ def cmd_reword_route(root, name, ident, route_kind, question, if_yes, if_no,
                 or not str(summary.get(key) or "").strip():
             summary[key] = owner[key]
             changed.append(label)
+    for key, flag, _, _ in _ownertext.ITEM_KEYS:
+        if key in given and (replace or key not in stored) and summary.get(key) != given[key]:
+            summary[key] = given[key]
+            changed.append(flag.lstrip("-"))
     if not changed:
         print(f"{ident}: nothing changed (the route already has kind, question and "
               "both effects)")
@@ -3444,18 +3493,20 @@ def cmd_reword_route(root, name, ident, route_kind, question, if_yes, if_no,
 
 def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
                question=None, commit=False, owner=None, supervisor=False,
-               decisions=None, decision_commit=None, route_kind=None):
+               decisions=None, decision_commit=None, route_kind=None, items=None):
     owner = {k: " ".join(str(v).split()) for k, v in (owner or {}).items()
              if v is not None and str(v).strip()}
+    declared, item_errors = declared_items(items)
     new_decisions, why_not = resolve_decisions(repo, decisions, decision_commit)
     if why_not:
         print(f"`{status}` recusado para {ident}: {why_not}", file=sys.stderr)
         return 2
-    refusal = human_section_refusal(status, owner, question)
+    refusal = human_section_refusal(status, owner, question, item_errors)
     if refusal:
         print(f"`{status}` recusado para {ident}: {refusal}", file=sys.stderr)
         return 2
-    refusal = route_refusal(human_pending, route_kind, question, owner)
+    refusal = route_refusal(human_pending, route_kind, question, owner, status,
+                            declared)
     if refusal:
         print(f"`{status}` recusado para {ident}: {refusal}", file=sys.stderr)
         return 2
@@ -3520,6 +3571,7 @@ def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
     elif status in ("done", "pending"):
         # The question belonged to the jam; the item moved on, and it no longer applies.
         it.pop("owner_question", None)
+    owner = {**owner, **declared}
     if owner:
         it["owner_summary"] = owner
     elif status in ("done", "pending"):
@@ -5069,6 +5121,25 @@ def cmd_migrate(root, name, all_queues, dry_run):
     return 3 if refused else 0
 
 
+def _item_help(answer, cmd):
+    required = ("required when the route opens on a `done` item; optional on "
+                "`pending`/`blocked` (that yes returns the item to the queue)"
+                if answer == "sim" and cmd == "finish" else
+                "optional here (a yes on a `pending`/`blocked` item returns it to the "
+                "queue)" if answer == "sim" else
+                "required: the \"no\" leaves the item as it is, so it must say what "
+                "work it creates")
+    return (f"the queue item the owner's {answer} creates, as a lay title (up to 20 "
+            f"words, no codes), or `nenhum` when the answer creates no work. {required}. "
+            "The declaration is recorded on the item so that `answer` can create "
+            "it at the end of this queue (once that lands; today it only stores it)")
+
+
+def _cli_items(a):
+    return {key: (getattr(a, f"item_{key}", None), getattr(a, f"item_{key}_dono", False))
+            for key, *_ in _ownertext.ITEM_KEYS}
+
+
 def main(argv=None):
     repo_help = "repository root (default: the current directory)"
     json_help = "JSON output, for code"
@@ -5433,8 +5504,12 @@ def main(argv=None):
             "--human-pending OPENS a route only the human closes; closing it (empty)\n"
             "is refused, because only whoever ran the route knows whether it passed.\n"
             "Opening a route is also refused (nothing written) unless the call carries\n"
-            "--route-kind, a closed --question (with `?`), --if-yes and --if-no; the\n"
-            "message lists everything missing at once.\n"
+            "--route-kind, a closed --question (with `?`), --if-yes and --if-no, and the\n"
+            "queue item each answer that does not return the item to the queue creates:\n"
+            "--if-no-item always, --if-yes-item too on `--status done` (a title in lay\n"
+            "words, or `nenhum` when the answer creates no work; add\n"
+            "--if-yes-item-needs-owner / --if-no-item-needs-owner when the new item\n"
+            "also waits for the owner). The message lists everything missing at once.\n"
             "`--status done` is refused when:\n"
             "  - the .claude/last-build.json of the --repo session is EMPTY (a test\n"
             "    filter that matched zero tests): green without a test closes nothing\n"
@@ -5460,7 +5535,8 @@ def main(argv=None):
                     (2, f"invalid usage, {not_git}, {no_queue}, unknown item id, "
                         "empty --evidence or --human-pending, missing human section, "
                         "--human-pending without --route-kind, closed --question, "
-                        "--if-yes or --if-no, "
+                        "--if-yes or --if-no, missing --if-yes-item (on `done`) or "
+                        "--if-no-item, "
                         "`done` refused (empty build, missing validation, dirty tree, "
                         "no git), item already terminal, item held by another "
                         "session"),
@@ -5510,6 +5586,12 @@ def main(argv=None):
                         metavar="TEXT",
                         help=owner_help[key] + ". Up to 30 words, no card, "
                              "commit, file or verdict")
+    for key, flag, flag_owner, answer in _ownertext.ITEM_KEYS:
+        fi.add_argument(flag, dest=f"item_{key}", metavar="TITLE|nenhum",
+                        help=_item_help(answer, "finish"))
+        fi.add_argument(flag_owner, dest=f"item_{key}_dono", action="store_true",
+                        help=f"the item the owner's {answer} creates also waits "
+                             "for the owner (it is born with an open route)")
     # CS-11 of docs/spec/perguntar-antes-do-run.md (owner's answer to Q7): a
     # behavior choice the agent already committed is recorded, not asked.
     fi.add_argument("--decision", "--decisao", dest="decision", action="append",
@@ -5540,11 +5622,13 @@ def main(argv=None):
             "`human_pending`, `status` nor `evidence`: only the human closes a route.\n"
             "Refused (nothing written) when the item has no open route, is not\n"
             "`pending` or `blocked`, or the text breaks the rules `finish` applies.\n"
+            "It also needs --if-no-item (title or `nenhum`) unless the item already\n"
+            "carries one; --replace overwrites it when given.\n"
             "Does not commit."),
         examples=[('cepa plan reword-route wego WEGO-123 --route-kind external-block '
                    '--question "Did the staging access arrive?" '
                    '--if-yes "The item goes back to the queue." '
-                   '--if-no "The item keeps waiting."',
+                   '--if-no "The item keeps waiting." --if-no-item nenhum',
                    "record the reworded route")],
         exit_codes=[(0, "recorded, or nothing was missing"),
                     (2, f"invalid usage, {not_git}, {no_queue}, unknown item id, item "
@@ -5560,9 +5644,15 @@ def main(argv=None):
                     help="what happens to the work if the owner answers yes")
     rw.add_argument("--if-no", dest="if_no", required=True, metavar="TEXT",
                     help="what happens to the work if the owner answers no")
+    for key, flag, flag_owner, answer in _ownertext.ITEM_KEYS:
+        rw.add_argument(flag, dest=f"item_{key}", metavar="TITLE|nenhum",
+                        help=_item_help(answer, "reword-route"))
+        rw.add_argument(flag_owner, dest=f"item_{key}_dono", action="store_true",
+                        help=f"the item the owner's {answer} creates also waits "
+                             "for the owner")
     rw.add_argument("--replace", action="store_true",
-                    help="overwrite the kind, question and effects already there "
-                         "(the owner pressed `?` on that question)")
+                    help="overwrite the kind, question, effects and declared items "
+                         "already there (the owner pressed `?` on that question)")
     rw.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
     rs = sub.add_parser(
@@ -5885,10 +5975,10 @@ def main(argv=None):
                           {key: getattr(a, f"owner_{key}")
                            for key, _, _ in _ownertext.FIELDS},
                           a.supervisor, a.decision, a.decision_commit,
-                          a.route_kind)
+                          a.route_kind, _cli_items(a))
     if a.cmd == "reword-route":
         return cmd_reword_route(root, a.name, a.id, a.route_kind, a.question,
-                                a.if_yes, a.if_no, a.replace)
+                                a.if_yes, a.if_no, a.replace, _cli_items(a))
     if a.cmd == "answer":
         return cmd_answer(root, a.name, a.id, a.answer, a.keep,
                             a.force, not a.no_commit, a.repo, a.author, a.drop,

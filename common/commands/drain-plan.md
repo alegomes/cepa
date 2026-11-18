@@ -425,7 +425,16 @@ For each item of the batch, in order:
      `--human-pending "<the route, verbatim>"` — that is how it survives the
      session. The route opens only with `--route-kind` (`owner-task`,
      `external-block` or `open-question`), a closed `--question` (yes or no,
-     with `?`), `--if-yes` and `--if-no`; without any of them `finish` refuses,
+     with `?`), `--if-yes` and `--if-no`, **and the queue item each answer that
+     does not send the item back to the queue creates**: `--if-no-item "<lay
+     title>"` always (a "no" leaves the item as it is) and `--if-yes-item "<lay
+     title>"` too when you close the item `done` (a "yes" on a `pending` or
+     `blocked` item returns it to the queue, so it asks nothing). Write `nenhum`
+     when the answer creates no work; add `--if-yes-item-needs-owner` /
+     `--if-no-item-needs-owner` when the new item also waits for the owner. If
+     the question promises work ("Do I put an item on the queue to ...?"), the
+     title is that work: without it the owner's "yes" only closes the route and
+     the promised item is never born. Without any of these `finish` refuses,
      lists what is missing and writes nothing. **Never close a route**: only whoever ran it knows whether it
      passed, and the command refuses.
 
@@ -434,7 +443,9 @@ For each item of the batch, in order:
      `status: proposta`, with `fila=`/`item=`), open it as `--human-pending
      "Aceitar ou recusar a dispensa de <escopo> (<motivo>)"` with `--question
      "Aceito a dispensa de <escopo> por <razão>? Recomendo <sim/não>: <porquê>"`
-     and `--route-kind open-question`, `--if-yes`, `--if-no`
+     and `--route-kind open-question`, `--if-yes`, `--if-no`, `--if-no-item
+     nenhum` (and `--if-yes-item nenhum` on a `done` item; the waiver is
+     recorded by `answer`, it creates no queue item)
      (both owner-facing, in pt-BR: "Accept or refuse the waiver of <scope>
      (<reason>)" / "Do I accept the waiver of <scope> for <reason>? I recommend
      <yes/no>: <why>"). The owner's `cepa-plan answer ... "sim: ..."` turns
@@ -507,7 +518,8 @@ For each item of the batch, in order:
 
      Along with it, record `--question "<the closed question that unblocks the
      item, with your recommendation>"`, and do the same when opening a
-     `--human-pending`. The question is shown to the owner, so write it in pt-BR.
+     `--human-pending` (which also needs `--if-no-item`, and `--if-yes-item` on
+     `done`: see step 3.e). The question is shown to the owner, so write it in pt-BR.
      E.g.: `--question "Fecho o card como 'medir depois do go-live' ou movo a
      medição para o checklist do primeiro deploy? Recomendo o checklist: a
      pergunta sobrevive sem travar a fila"` (Do I close the card as "measure

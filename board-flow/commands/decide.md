@@ -219,7 +219,8 @@ Per accepted group:
   blocked|pending --human-pending "Aceitar ou recusar a dispensa de <escopo>
   (<motivo>)" --question "Aceito a dispensa de <escopo> por <razão>? Recomendo
   <sim/não>: <porquê>" --route-kind open-question --if-yes "<o que o sim faz
-  ao trabalho>" --if-no "<o que o não faz>"`. Only the owner's `cepa-plan answer <fila> <id> --answer "sim:
+  ao trabalho>" --if-no "<o que o não faz>" --if-no-item nenhum` (com `--if-yes-item nenhum`
+  quando o item fecha `done`: a dispensa é gravada pelo `answer`, não cria item na fila). Only the owner's `cepa-plan answer <fila> <id> --answer "sim:
   ..."`, in a terminal, converts the proposal into a waiver (fb-20261014-3).
 - **don't accept** → create the card for the missing test (one per real gap,
   not one per stuck card) and send the cards back with `**Reason:**` **per
