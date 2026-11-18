@@ -1,0 +1,94 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/resposta-do-decide-vira-trabalho.md (7 critérios de sucesso; ordem herdada do texto; CS-2 depende de CS-1 por decisão do dono em 2026-11-18)
+# Escrito em: 2026-11-18
+
+schema_version: 2
+mode: single-track
+queue: resposta-do-decide
+source: docs/spec/resposta-do-decide-vira-trabalho.md (7 critérios de sucesso; ordem
+  herdada do texto; CS-2 depende de CS-1 por decisão do dono em 2026-11-18)
+items:
+- id: CS-1
+  title: o `cepa-plan finish` recusa pergunta ao dono sem o item de cada resposta
+    sem retorno
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: `cepa-plan
+    finish <fila> <id> --status done --human-pending "..." --route-kind open-question
+    --question "Ponho na fila um item para X?" --if-yes "..." --if-no "..."`, sem
+    declarar item, sai com código 2 e a fila fica igual byte a byte; hoje sai 0
+    e grava a rota.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: o "sim" a uma pergunta com item declarado cria esse item no fim da mesma
+    fila
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: numa
+    fila com item `done` cuja rota declara o item "calibrar X" para o "sim", `cepa-plan
+    answer <fila> <id> --answer "sim: ..."` deixa a fila com um item a mais, no
+    fim, `pending`, título "calibrar X" e evidência citando `<id>`; hoje a fila
+    sai com o mesmo número de itens.'
+  status: pending
+  blocked_by:
+  - CS-1
+  human_pending: null
+- id: CS-3
+  title: o item declarado "precisa do dono" nasce com pendência humana aberta e
+    aparece como ação do dono
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com a
+    declaração marcada "precisa do dono", depois do `answer` o item novo tem `human_pending`
+    preenchido e `cepa-plan queue <fila> --json` o lista entre os adiados com motivo
+    `human_pending`; hoje o item nem existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: a próxima rodada encontra o trabalho criado pela resposta
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: depois
+    do `answer` do CS-2, `cepa-plan queue <fila> --max 1` devolve o item novo no
+    lote; hoje, no cenário do print (só itens `done` e uma pendência), responde
+    lote vazio.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: resposta sem retorno em rota antiga, sem item declarado, avisa em vez de
+    calar
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: `cepa-plan
+    answer` num item `done` com rota antiga sem declaração imprime a linha "esta
+    resposta não cria trabalho" e um `cepa-plan add`; hoje imprime só "rota humana
+    fechada".'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: a resposta guarda na evidência o que cada opção prometia
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: depois
+    de `cepa-plan answer ... --answer "sim: ..."`, a evidência do item contém o
+    texto do `se_sim`; hoje não contém.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: o fechamento do `cepa-until decide` lista os itens criados pelas respostas
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: um `cepa-until
+    decide <fila>` com uma resposta que cria item termina com uma linha "itens criados
+    pelas suas respostas:" seguida do id e do título; hoje o fechamento não tem
+    essa linha.'
+  status: pending
+  blocked_by: []
+  human_pending: null
