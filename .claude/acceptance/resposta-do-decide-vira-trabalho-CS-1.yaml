@@ -1,0 +1,37 @@
+schema_version: 1
+card: resposta-do-decide-vira-trabalho-CS-1
+status: complete
+audited_at: 2026-11-18
+covers: 70e75a9
+note: "Re-auditoria apos 70e75a9. Nao grava em CS-1.yaml: esse arquivo e rastreado e pertence a outro card."
+criteria:
+  - id: AC1a
+    text: "Rota aberta em item `done` sem item declarado para o 'sim', ou qualquer rota sem item declarado para o 'nao', sai com codigo 2 e nada e gravado; 'nenhum' explicito e aceito (cepa-plan finish)"
+    altitude: cli
+    surface: "cepa-plan finish --human-pending ... --route-kind open-question, como subprocesso"
+    test: "tests/test_cepa_plan_route_item_declaration.py (red test: rota em done sem declaracao recusada, byte a byte)"
+    layer: cli (subprocess)
+    evidence: verified
+    run: "python3 -m pytest -q tests/test_until_review_item_declaration.py tests/test_cepa_plan_route_item_declaration.py tests/test_cepa_until_route_rewrite.py tests/test_cepa_plan_finish_route.py -> 40 passed"
+    status: complete
+    gap: ""
+  - id: AC1b
+    text: "A mesma regra vale para `reword-route`"
+    altitude: cli
+    surface: "cepa-plan reword-route, como subprocesso"
+    test: "tests/test_cepa_plan_route_item_declaration.py::test_reword_route_requires_the_no_declaration; tests/test_cepa_until_route_rewrite.py::test_reword_route_refuses_and_writes_nothing"
+    layer: cli (subprocess, byte a byte)
+    evidence: verified
+    run: "mesma execucao pytest (40 passed); python3 tests/test_cepa_until_unclear_rewrite.py -> tudo verde"
+    status: complete
+    gap: ""
+  - id: AC1c
+    text: "A mesma regra vale para o bloco `cepa-decisoes` do `/common:until-review`"
+    altitude: "contrato documentado lido por agente (until-review.md) + caminho do leitor em cepa-until reword_route"
+    surface: "common/commands/until-review.md (bloco cepa-decisoes); cepa-until decide -> reword_route"
+    test: "tests/test_until_review_item_declaration.py (3 testes: clausula obrigatorio, exemplo JSON com item_se_nao, drain-plan); tests/test_cepa_until_unclear_rewrite.py::test_reader_without_item_declaration_records_nothing_and_warns (ponta a ponta via TTY, fila inalterada byte a byte, aviso nomeia o comando, sem 'nenhum' silencioso) e ::test_reword_route_keeps_an_item_declaration_already_stored"
+    layer: "doc fixada por teste de contrato + cli ponta a ponta"
+    evidence: verified
+    run: "pytest tests/test_until_review_item_declaration.py -> 3 passed; python3 tests/test_cepa_until_unclear_rewrite.py -> tudo verde (36 ok, 0 FAIL); test_cepa_until_unclear_fallback.py -> tudo verde; test_common_drain_plan.py -> all green"
+    status: complete
+    gap: ""
