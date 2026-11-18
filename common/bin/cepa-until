@@ -4280,7 +4280,7 @@ def parse_route(text):
     route = {"route_kind": body["route_kind"], **flat}
     # CS-1 of resposta-do-decide-vira-trabalho: the optional declaration of the item
     # each answer creates, `"nenhum"` or {"titulo", "precisa_do_dono"}. Anything else
-    # is dropped (the route stays valid; `reword_route` supplies "nenhum" and warns).
+    # is dropped (the route stays valid; `reword_route` records it only if the item already declares one).
     for key, *_ in _ownertext.ITEM_KEYS:
         raw = body.get(key)
         if isinstance(raw, dict):
@@ -4757,29 +4757,25 @@ def reword_route(queue, repo, ident, route, replace=False):
            "--repo", str(repo)] + (["--replace"] if replace else [])
     # CS-1 of resposta-do-decide-vira-trabalho: `reword-route` needs the item the "no"
     # creates (or "nenhum"). The reader may declare it (`item_se_sim`/`item_se_nao`).
-    # Without one, the call goes without it first (it passes when the item already
-    # carries one); refused, it goes again with "nenhum" and a warning, so the
-    # rewritten question is not lost.
+    # Without one the call goes without it and passes only when the item already
+    # carries a declaration; refused, the rewrite is NOT recorded (the old route stays
+    # answerable) and a warning names the command that fixes it. There is no silent
+    # "nenhum": it would hide work the owner's "no" may promise.
     cmd += _ownertext.item_flags({k: route.get(k) for k, *_ in _ownertext.ITEM_KEYS})
     env = {k: v for k, v in os.environ.items()
            if k not in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")}
-    declared = "--if-no-item" in cmd
-    attempts = [cmd] if declared else [cmd, cmd + ["--if-no-item", "nenhum"]]
-    for n, attempt in enumerate(attempts):
-        try:
-            p = subprocess.run(attempt, capture_output=True, text=True, timeout=60,
-                               env=env)
-        except (subprocess.TimeoutExpired, OSError, ValueError) as e:  # UnicodeError is a ValueError
-            return f"`cepa-plan reword-route` did not answer: {e}"
-        if p.returncode == 0:
-            if attempt is not cmd:
-                print(f"   warning: the reader declared no item for the \"no\" of "
-                      f"{ident}; recorded as `nenhum` (the answer creates no work). "
-                      f"If it should, `cepa-plan reword-route {queue} {ident} "
-                      "--replace ... --if-no-item \"<title>\"` fixes it")
-            return None
-        if n == 0 and len(attempts) > 1 and "--if-no-item" not in (p.stderr or ""):
-            break  # refused for another reason: "nenhum" would not fix it
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=env)
+    except (subprocess.TimeoutExpired, OSError, ValueError) as e:  # UnicodeError is a ValueError
+        return f"`cepa-plan reword-route` did not answer: {e}"
+    if p.returncode == 0:
+        return None
+    if "--if-no-item" not in cmd and "--if-no-item" in (p.stderr or ""):
+        print(f"   warning: the route reader declared no item for the \"no\" of "
+              f"{ident}, so the rewritten question was NOT recorded (the old route "
+              f"stays). To record it: `cepa-plan reword-route {queue} {ident} "
+              f"--route-kind {route['route_kind']} --question \"...\" --if-yes \"...\" "
+              f"--if-no \"...\" --if-no-item \"<title>|nenhum\"{' --replace' if replace else ''}`")
     return (p.stderr or p.stdout or "").strip() or \
         f"`cepa-plan reword-route` exited {p.returncode}"
 
