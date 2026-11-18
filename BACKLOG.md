@@ -5,6 +5,33 @@ e onde provavelmente mora. Sem ordem de prioridade fixa.
 
 ---
 
+## `cepa-plan landed` não acha o commit quando o YAML lê o `head_commit` como número
+
+Registrado em 2026-11-18 a pedido do dono, depois de uma falha avulsa de
+`tests/test_cepa_plan_landed.py` na suíte.
+
+### Problema
+
+Uma prova em `docs/proof/<KEY>.yaml` grava `head_commit: <sha curto>` sem aspas. Quando
+o SHA curto é só de dígitos e começa com zero (por exemplo `0123456`), o PyYAML o lê
+como número octal (`42798`). `cepa-plan landed`, o comando que lista os cards de Review
+prontos para Done, faz `str(proof.get("head_commit"))`, pergunta ao git se `42798` está
+na `main`, recebe não e retém o card com "ainda não está em main". Um SHA só de dígitos
+sem zero à esquerda escapa, porque `str(1234567)` devolve o mesmo texto. No teste isso
+aparece de vez em quando, porque o SHA do repo temporário muda a cada rodada: 1 falha
+na suíte de 2026-11-18, 0 em 60 rodadas isoladas.
+
+### Esboço de solução
+
+Ler o `head_commit` sem deixar o YAML converter o valor (ou gravar sempre entre aspas
+onde a prova nasce, e aceitar as provas antigas), com um teste que fixa um
+`head_commit` octal em vez de depender do SHA sorteado.
+**Lar:** `common/bin/cepa-plan` (função que decide pronto/retido, perto de
+`head = str(proof.get("head_commit")...)`), quem escreve `docs/proof/*.yaml`,
+`tests/test_cepa_plan_landed.py`.
+
+---
+
 ## Registrar desvios do objetivo da sessão (refazer o trabalho da `session/gtd`)
 
 Registrado em 2026-11-15 a pedido do dono, ao desistir do merge da `session/gtd`.
