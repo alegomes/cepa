@@ -2450,18 +2450,28 @@ def _cmd_land(argv, wrote):
                 "run ended did not go through the supervisor's build; check it "
                 "and start a new run, or reset the branch to the proposed SHA")
 
-    print(f"land `{branch}` on `{destination}` ({repo})")
-    print(f"  effect : {action.get('frase')}")
-    print(f"  build  : {item_states.get('verify') or 'none (the run waived the build)'}")
-    print("  push   : " + ("yes, to the upstream of "
-                           f"`{destination}`" if has_upstream(repo) else
-                           f"no (`{destination}` has no upstream)"))
+    # The header (CS-7 of fim-do-until-sem-espera): what goes where, how many
+    # commits, whether `destination` moved since the run, and the return point,
+    # before anything runs.
+    return_point = (landing_info.get("retorno") if already_merged
+                    else head_of(repo))
+    print(f"land `{branch}` → `{destination}` ({repo})")
+    commits = land_commits_line(repo, sha, destination, return_point,
+                                already_merged, f"until {queue}/{run_id}:")
+    print(f"  commits     : {commits}")
+    print("  return point: " + (f"`{destination}` at {return_point[:10]}"
+                                if return_point else "unknown"))
+    print(f"  effect      : {action.get('frase')}")
+    print(f"  build       : {item_states.get('verify') or 'none (the run waived the build)'}")
+    print("  push        : " + ("yes, to the upstream of "
+                                f"`{destination}`" if has_upstream(repo) else
+                                f"no (`{destination}` has no upstream)"))
     install_here = cepa_repo(repo)
     if install_here:
-        print(f"  install: {LAND_INSTALL} from the clone, after the "
+        print(f"  install     : {LAND_INSTALL} from the clone, after the "
               + ("green build" if item_states.get("verify") else "merge"))
     if already_merged:
-        print("  merge  : already done; resuming from the build")
+        print("  merge       : already done; resuming from the build")
     if not a.yes:
         print(f"\nnothing was done. To execute: cepa-until land "
               f"{a.target} --yes")
@@ -2501,19 +2511,21 @@ def _cmd_land(argv, wrote):
     # From here the landing runs: whatever way it ends, `cmd_land` commits the
     # queue marks and the records the clone holds for the run.
     wrote.update(repo=repo, queue=queue, run=run_id)
+    print()
     if not already_merged:
         return_value = head_of(repo)
         landing_info.update({"retorno": return_value, "destino": destination})
         record(aterrissagem=landing_info)
-        print(f"\nreturn point: `{destination}` at {return_value[:10]}")
+        started = time.monotonic()
         code, output = git(["merge", "--no-ff", "--no-edit", branch], repo)
+        took = step_duration(time.monotonic() - started)
         if code != 0:
             conflicts = git(["diff", "--name-only", "--diff-filter=U"],
                             repo)[1].splitlines()
             if conflicts:
                 landing_info["parou"] = "conflito"
                 record(aterrissagem=landing_info)
-                print("CONFLICT in the merge, in these files:")
+                print(land_step(1, "merge", f"CONFLICT ({took}), in these files:"))
                 for c in conflicts:
                     print(f"  {c}")
                 print("resolve, `git add`, `git commit` to conclude the merge, "
@@ -2521,14 +2533,20 @@ def _cmd_land(argv, wrote):
                       "it resumes from the build")
                 return 4
             git(["merge", "--abort"], repo)
+            print(land_step(1, "merge", f"failed ({took})"))
             return refuse(f"the merge failed: {output}")
+        print(land_step(1, "merge", f"done: {head_of(repo)[:10]} ({took})"))
+    else:
+        print(land_step(1, "merge", f"already done: {head_of(repo)[:10]}; "
+                                    "resuming from the build"))
     landing_info["merge"] = head_of(repo)
     landing_info.pop("parou", None)
     record(aterrissagem=landing_info)
 
     verify = item_states.get("verify")
+    if not verify:
+        print(land_step(2, "full build", "skipped: the run waived the build"))
     if verify:
-        print(f"full build: {verify}")
         log = path.parent / f"{run_id}.log"
         green, sec, reason = run_verify(verify, repo, 4 * 3600, log)
         if not green:
@@ -2541,6 +2559,8 @@ def _cmd_land(argv, wrote):
             return_value = landing_info.get("retorno")
             landing_info.update({"parou": "build-vermelho", "motivo": reason})
             record(aterrissagem=landing_info)
+            print(land_step(2, "full build", f"RED ({step_duration(sec)}): {verify}"))
+            print(land_step(3, "push", "not run"))
             print(f"RED BUILD after the merge ({reason}); nothing was pushed. "
                   f"The output is in {log}")
             print(f"the merge stays in `{destination}` "
@@ -2551,18 +2571,23 @@ def _cmd_land(argv, wrote):
                 print(f"to give up the landing instead: git reset --keep "
                       f"{return_value[:10]} (the return point)")
             return 5
-        print(f"  green ({human(timedelta(seconds=sec))})")
+        print(land_step(2, "full build", f"green ({step_duration(sec)}): {verify}"))
 
     if has_upstream(repo):
+        started = time.monotonic()
         code, output = git(["push"], repo, timeout=300)
+        took = step_duration(time.monotonic() - started)
         if code != 0:
             landing_info["parou"] = "push"
             record(aterrissagem=landing_info)
+            print(land_step(3, "push", f"FAILED ({took})"))
             print(f"push failed ({output}); the merge and the green build stay. "
                   f"Run `cepa-until land {a.target} --yes` again")
             return 6
         landing_info["push"] = True
-        print("pushed")
+        print(land_step(3, "push", f"done: `{destination}` sent to its upstream ({took})"))
+    else:
+        print(land_step(3, "push", f"skipped: `{destination}` has no upstream"))
 
     if install_here:
         # Before the run worktree goes away: a run that reinstalled left the fixed
@@ -2573,17 +2598,92 @@ def _cmd_land(argv, wrote):
     if tree and Path(tree).exists():
         r = subprocess.run([sys.executable, str(WTLIB), "rescue", tree,
                             branch], capture_output=True, text=True)
-        if (r.stdout or "").strip():
-            print(r.stdout.strip())
+        for line in rescued_files_block(repo, branch, r.stdout or ""):
+            print(line)
         git(["worktree", "remove", tree], repo)
     code, output = git(["branch", "-d", branch], repo)
     if code != 0:
         print(f"warning: did not delete `{branch}` ({output})")
-    landing_info["quando"] = datetime.now().isoformat(timespec="seconds")
+    ended = datetime.now()
+    landing_info["quando"] = ended.isoformat(timespec="seconds")
     record(estado="aterrissado", aterrissagem=landing_info)
-    print(f"landed: `{branch}` is in `{destination}`; the run worktree and branch "
-          "were removed")
+    print(f"landed at {ended:%H:%M}: `{branch}` is in `{destination}`; "
+          "run worktree and branch removed")
     return 0
+
+
+def land_step(n, name, result):
+    """One numbered line of the landing (CS-7): `[n/3] <step>  <result>`."""
+    return f"[{n}/3] {name:<10}  {result}"
+
+
+def step_duration(sec):
+    """Duration of one landing step: seconds under a minute, `human` above it."""
+    sec = max(int(round(sec)), 0)
+    if sec < 60:
+        return f"{sec}s"
+    return human(timedelta(seconds=sec))
+
+
+def land_commits_line(repo, sha, destination, return_point, already_merged,
+                      own_prefix=""):
+    """The header's `commits` line: how many commits the run branch brings, and
+    whether `destination` moved since the run (fast-forward or not). After the merge,
+    counted against the return point, which is `destination` before the merge.
+
+    The run's own records commit (`until <queue>/<run>: ...`, made on the clone's
+    branch at the end of every run) does not count as `destination` moving: it
+    only holds the queue marks and the run's records, and without this every
+    landing would read "not a fast-forward"."""
+    base = return_point if already_merged else "HEAD"
+    if not base:
+        return "unknown (no return point recorded)"
+    code, count = git(["rev-list", "--count", f"{base}..{sha}"], repo)
+    count = count.strip() if code == 0 else "?"
+    code, moved = git(["log", "--format=%s", f"{sha}..{base}"], repo)
+    if code != 0:
+        return f"{count}, fast-forward unknown (git log failed)"
+    subjects = [l for l in moved.splitlines() if l.strip()]
+    others = [l for l in subjects if not (own_prefix and l.startswith(own_prefix))]
+    if not subjects:
+        return f"{count}, fast-forward (`{destination}` did not move since the run)"
+    if not others:
+        return (f"{count}, fast-forward (`{destination}` only got this run's "
+                "records commit)")
+    return (f"{count}, not a fast-forward (`{destination}` has {len(others)} other "
+            "commit(s) since the run)")
+
+
+def rescued_files_block(repo, branch, rescue_output):
+    """The files outside git that the run worktree held, with where each goes (CS-7).
+
+    Reads the `_wtlib.py rescue` output (`rescued N artifact(s) into <dir>:` and one
+    `  <path>` per file). Each copy sits in `.claude/rescued/<slug>/` and its real
+    place is the same path in the clone: missing there, `move to` it; already there
+    with the same bytes, `delete` the copy; there and different, compare first."""
+    rels = [l.strip() for l in rescue_output.splitlines()
+            if l.startswith("  ") and l.strip().startswith(".claude/")]
+    if not rels:
+        return []
+    root = Path(repo)
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", branch or "unknown").strip("-") or "unknown"
+    saved_dir = Path(".claude") / "rescued" / slug
+    lines = [f"{len(rels)} file(s) outside git were in the run worktree, saved in "
+             f"{saved_dir}/:"]
+    for rel in rels:
+        copy = root / saved_dir / rel[len(".claude/"):]
+        target = root / rel
+        if not target.exists():
+            hint = f"move to {rel}"
+        else:
+            try:
+                same = copy.read_bytes() == target.read_bytes()
+            except OSError:
+                same = False
+            hint = (f"delete (same as {rel})" if same else
+                    f"compare with {rel}, then move to it or delete")
+        lines.append(f"  {rel}: {hint}")
+    return lines
 
 
 # What the landing runs in the cepa repo, from the clone. No `--clean`: the copy

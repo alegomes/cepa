@@ -215,6 +215,21 @@ no longer needed. `sim` always means "back to the queue", so it cannot stand for
 on the owner or on another item; readiness is derived from the same rule the run uses, never
 stored.
 
+## What `cepa-until land --yes` prints
+
+A header first: `land <run branch> → <destination>`, then `commits` (how many the run branch
+brings, and whether it is a fast-forward: the run's own records commit, `until <queue>/<run>:
+...`, does not count as the destination moving), `return point` (the destination's commit
+before the merge, the one `git reset --keep` goes back to), and the effect, build, push and
+install lines. Then three numbered steps, each with its result and duration: `[1/3] merge`
+(`done: <sha> (Ns)`, `CONFLICT`, or `already done` when resuming), `[2/3] full build`
+(`green`, `RED`, or `skipped` when the run waived the build) and `[3/3] push` (`done`,
+`FAILED`, `not run` after a red build, or `skipped` with no upstream). When the run worktree
+held files outside git, they are listed with where each goes: `move to <path>` when the clone
+lacks it, `delete (same as <path>)` when the clone has the same bytes, or `compare with
+<path>` when it differs; the copies wait in `.claude/rescued/<branch>/`. The last line is
+`landed at HH:MM: ... run worktree and branch removed`.
+
 ## Hook that only counts after reinstalling
 
 Hooks and plugin `bin/` run from the plugin cache, a copy of the clone at the last install, not from the night branch. By default the supervisor only warns (`hook_so_apos_reinstalar`) and charges `reinstalar-plugin` at the end.
