@@ -3773,7 +3773,7 @@ def owner_task_route(title):
 NO_WORK_WARNING = "esta resposta não cria trabalho"
 
 
-def answer_without_work(it, st, route, answer, keep, drop, created):
+def answer_without_work(it, st, route, answer, keep, drop):
     """True when the owner's answer closes an old route that declares no item.
 
     CS-5 of docs/spec/resposta-do-decide-vira-trabalho.md: on a `done` item the
@@ -3781,16 +3781,19 @@ def answer_without_work(it, st, route, answer, keep, drop, created):
     for exists only if a queue item is born. A route written before CS-1 says
     neither the item of the "sim" (`item_se_sim`) nor of the "não"
     (`item_se_nao`): nothing is created, and the owner is told so instead of
-    reading only "rota humana fechada". `nenhum` declared, an item created,
-    `--keep` (the question stays open) and `--drop` (the owner gave the leftover
-    up) are accounted for and stay silent."""
-    if keep or drop or route is None or st != "done" or created is not None:
+    reading only "rota humana fechada". Declared means `nenhum` or a title that
+    is not blank (the one `answer_creates` turns into an item); anything else,
+    a blank title included, creates nothing and warns. `--keep` (the question
+    stays open) and `--drop` (the owner gave the leftover up) stay silent."""
+    if keep or drop or route is None or st != "done":
         return False
     summary = it.get("owner_summary")
     key = ("item_se_nao" if re.match(r"^n(ã|a)o\b", answer, re.IGNORECASE)
            else "item_se_sim")
     decl = summary.get(key) if isinstance(summary, dict) else None
-    return decl is None or (isinstance(decl, str) and not decl.strip())
+    if isinstance(decl, dict):
+        return not str(decl.get("titulo") or "").strip()
+    return str(decl or "").strip().lower() != _ownertext.NONE_VALUE
 
 
 def no_work_add_command(name, ident, route, by_id):
@@ -3921,7 +3924,7 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
                      + (", esperando o dono." if decl.get("precisa_do_dono") else "."))
     # Decided before `owner_summary` is dropped below: the declaration lives there.
     no_work_cmd = (no_work_add_command(name, ident, route, by_id)
-                   if answer_without_work(it, st, route, answer, keep, drop, created)
+                   if answer_without_work(it, st, route, answer, keep, drop)
                    else None)
     if no_work_cmd:
         parts.append("A resposta não criou item: a rota não declarava o item "

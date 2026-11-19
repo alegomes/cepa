@@ -98,6 +98,8 @@ def test_red_test_old_route_yes_warns_with_the_add_command():
         check("a resposta é gravada e a rota fecha",
               "sim: pode calibrar" in str(a1.get("evidence"))
               and a1["human_pending"] is None and a1["status"] == "done", a1)
+        check("a evidência registra que a resposta não criou item",
+              "A resposta não criou item" in str(a1.get("evidence")), a1)
         check("a saída diz que a resposta não cria trabalho", WARNING in out, out)
         line = add_line(out)
         check("a saída traz um `cepa-plan add` da mesma fila",
@@ -115,8 +117,9 @@ def test_red_test_old_route_yes_warns_with_the_add_command():
               len(items) == 3 and items[-1]["status"] == "pending", items[-1:])
         check("...com o título da rota, que o dono edita se quiser",
               items[-1].get("title") == ROUTE, items[-1])
-        check("...e o `why` cita o item respondido",
-              "a1" in str(items[-1].get("why")), items[-1])
+        check("...e o `why` diz que veio da resposta ao item respondido",
+              "pedido pela resposta do dono a a1" in str(items[-1].get("why")),
+              items[-1])
 
 
 def test_route_without_owner_summary_also_warns():
@@ -133,6 +136,19 @@ def test_no_that_closes_an_old_route_also_warns():
         rc, out = answer(root, "a1", "não: deixa assim")
         check("'não' sem item declarado para o 'não': avisa",
               rc == 0 and WARNING in out, out)
+
+
+def test_blank_declaration_counts_as_none_declared():
+    """A blank declaration creates nothing (`answer_creates` wants a title), so
+    it warns like an absent one: as a blank string and as a blank title."""
+    for name, decl in (("texto em branco", "   "),
+                       ("título em branco", {"titulo": "  ", "precisa_do_dono": False})):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = build_repo(tmp, [old_route("a1", yes_item=decl, no_item="nenhum")])
+            rc, out = answer(root, "a1", "sim: ok")
+            check(f"declaração com {name}: nada é criado e avisa",
+                  rc == 0 and len(ordered(root)) == 1 and WARNING in out
+                  and add_line(out) is not None, out)
 
 
 def test_no_warning_when_the_answer_is_accounted_for():
