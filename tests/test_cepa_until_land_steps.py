@@ -125,13 +125,35 @@ def test_run_without_build_skips_step_two():
               sorted(s) == ["1", "2", "3"], p.stdout)
 
 
-def test_step_duration_switches_to_minutes():
+def cepa_until_module():
     import importlib.machinery
     import importlib.util
     loader = importlib.machinery.SourceFileLoader("cepa_until_mod", str(CEPA_UNTIL))
     spec = importlib.util.spec_from_loader("cepa_until_mod", loader)
     mod = importlib.util.module_from_spec(spec)
     loader.exec_module(mod)
+    return mod
+
+
+def test_newest_rescued_copy_takes_the_highest_suffix():
+    """`rescue_artifacts` adds `.1`, `.2`, ... on collision: the copy of THIS
+    landing is the highest number, not the first, the last listed, nor the
+    lexicographically greatest (`.2` > `.10` as text)."""
+    mod = cepa_until_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        for name in ("plano.md.2", "plano.md", "plano.md.10", "plano.md.1",
+                     "plano.md.x", "plano.mdx.99", "outro.md.50"):
+            (d / name).write_text(name)
+        got = mod.newest_rescued_copy(d / "plano.md")
+        check("a cópia de maior número vence (.10)", got.name == "plano.md.10", got.name)
+        (d / "solo.md").write_text("x")
+        got = mod.newest_rescued_copy(d / "solo.md")
+        check("sem cópias numeradas, o próprio nome", got.name == "solo.md", got.name)
+
+
+def test_step_duration_switches_to_minutes():
+    mod = cepa_until_module()
     check("abaixo de um minuto, em segundos", mod.step_duration(42) == "42s",
           mod.step_duration(42))
     check("de um minuto em diante, em minutos", mod.step_duration(75) == "1min",
