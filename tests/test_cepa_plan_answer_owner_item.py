@@ -72,6 +72,10 @@ def test_red_test_needs_owner_item_is_born_with_an_open_route():
               and summary.get("item_se_nao") == "nenhum", summary)
         check("a saída diz que o item novo espera o dono",
               str(new["id"]) in out and "esperando você" in out, out)
+        origin_ev = str(items_of(root)["a1"].get("evidence") or "")
+        check("a evidência do item de origem diz que o item novo espera o dono",
+              f"{new['id']} no fim da fila: {TITLE}, esperando o dono." in origin_ev,
+              origin_ev)
         rc, data, err = queue_json(root)
         check("a fila continua válida (`queue` sai 0)", rc == 0, err)
         deferred = {d.get("id"): d for d in data.get("deferred", [])}
@@ -108,6 +112,10 @@ def test_without_the_mark_no_route():
               and "route_kind" not in new and "owner_summary" not in new, new)
         check("sem a marca, a saída não diz que espera o dono",
               "esperando você" not in out, out)
+        origin_ev = str(items_of(root)["a1"].get("evidence") or "")
+        check("sem a marca, a evidência de origem não diz que espera o dono",
+              f"no fim da fila: {TITLE}." in origin_ev
+              and "esperando o dono" not in origin_ev, origin_ev)
 
 
 def main():
