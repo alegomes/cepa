@@ -55,7 +55,7 @@ def _on_80_cols(cmd, cwd, env, answer_after, timeout=90):
         fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 24, COLS, 0, 0))
         os.chdir(cwd)
         os.execve(cmd[0], cmd, env)
-    out, answered, end = "", False, time.time() + timeout
+    out, answered, asked_auto, end = "", False, False, time.time() + timeout
     while time.time() < end:
         r, _, _ = select.select([fd], [], [], 0.5)
         if r:
@@ -66,6 +66,9 @@ def _on_80_cols(cmd, cwd, env, answer_after, timeout=90):
             if not data:
                 break
             out += data.decode(errors="replace")
+        if "Enter means no]:" in out and not asked_auto:
+            asked_auto = True  # CS-3 of fim-do-until: keep the default, no
+            os.write(fd, b"\n")
         if not answered and answer_after in out:
             answered = True
             os.write(fd, b"\n")

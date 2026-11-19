@@ -162,6 +162,21 @@ def _decide_pure(deferred_ones, analysis, state_dict):
     return screen
 
 
+AUTO_LAND_PROMPT = "Enter means no]:"
+
+
+def answer_auto_land_prompt(fd, seen, text, inputs):
+    """CS-3 of fim-do-until: a launch on a terminal without `--auto-land` asks the
+    pre-authorization before the first item. A test that is not about it keeps the
+    default (Enter, no); one that lists the prompt in `inputs` answers it itself.
+    Returns the new `seen`."""
+    if (not seen and AUTO_LAND_PROMPT in text
+            and not any(AUTO_LAND_PROMPT in t for t, _ in inputs)):
+        os.write(fd, b"\n")
+        return True
+    return seen
+
+
 def on_tty(cmd, cwd, inputs=(), env=None, timeout=120):
     """Runs `cmd` in a pseudo-terminal and answers each question when it
     appears: `inputs` is a list of (excerpt the screen shows, answer)."""
@@ -170,6 +185,7 @@ def on_tty(cmd, cwd, inputs=(), env=None, timeout=120):
         os.chdir(cwd)
         os.execve(cmd[0], cmd, env or dict(os.environ))
     out_text, queue, end = "", list(inputs), time.time() + timeout
+    auto_seen = False
     while time.time() < end:
         r, _, _ = select.select([fd], [], [], 0.5)
         if r:
@@ -180,6 +196,7 @@ def on_tty(cmd, cwd, inputs=(), env=None, timeout=120):
             if not datum:
                 break
             out_text += datum.decode(errors="replace")
+        auto_seen = answer_auto_land_prompt(fd, auto_seen, out_text, inputs)
         while queue and queue[0][0] in out_text:
             trigger, reply = queue.pop(0)
             # Consumes the trigger so the next equal question does not match on it.
@@ -2845,6 +2862,7 @@ def on_tty_calls(cmd, cwd, inputs=(), env=None, timeout=120):
         os.chdir(cwd)
         os.execve(cmd[0], cmd, env or dict(os.environ))
     out_text, queue, end = "", list(wrapped), time.time() + timeout
+    auto_seen = False
     while time.time() < end:
         r, _, _ = select.select([fd], [], [], 0.5)
         if r:
@@ -2855,6 +2873,7 @@ def on_tty_calls(cmd, cwd, inputs=(), env=None, timeout=120):
             if not datum:
                 break
             out_text += datum.decode(errors="replace")
+        auto_seen = answer_auto_land_prompt(fd, auto_seen, out_text, inputs)
         while queue and queue[0][0] in out_text:
             trigger, reply = queue.pop(0)
             out_text = out_text.replace(trigger, f"<{trigger}>", 1)
