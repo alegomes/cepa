@@ -3731,6 +3731,35 @@ def decide_waivers(proposals, answer, keep, today, author):
     return output, sentences
 
 
+def answer_creates(it, st, route, answer, keep, drop):
+    """The declaration the owner's answer turns into a new queue item, or None.
+
+    CS-2 of docs/spec/resposta-do-decide-vira-trabalho.md: only the "sim" of an
+    open route on a `done` item. The "sim" of a `pending`/`blocked` item returns
+    the item itself to the queue, `--keep` leaves the route open (the question is
+    asked again) and `--drop` gives the leftover task up. The "não" reaches
+    `answer` as `--keep` from `cepa-until decide`, so creating its item here would
+    create it again at every re-ask; it stays out of this item."""
+    if keep or drop or route is None or st != "done":
+        return None
+    if not re.match(r"^sim\b", answer, re.IGNORECASE):
+        return None
+    summary = it.get("owner_summary")
+    decl = summary.get("item_se_sim") if isinstance(summary, dict) else None
+    if isinstance(decl, dict) and str(decl.get("titulo") or "").strip():
+        return decl
+    return None
+
+
+def answer_item_id(ident, by_id):
+    """`<origin>-sim`, then `<origin>-sim-2`, ...: never an id the queue has."""
+    base = f"{ident}-sim"
+    new, n = base, 2
+    while new in by_id:
+        new, n = f"{base}-{n}", n + 1
+    return new
+
+
 def cmd_answer(root, name, ident, answer, keep=False, force=False,
                  commit=True, repo=".", author=None, drop=False,
                  multiline=False):
@@ -3822,6 +3851,19 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
         elif st == "blocked":
             it["status"] = "pending"
             parts.append("O item voltou de `blocked` para `pending`.")
+    created = None
+    decl = answer_creates(it, st, route, answer, keep, drop)
+    if decl is not None:
+        new_id = answer_item_id(str(ident), by_id)
+        title = " ".join(str(decl["titulo"]).split())
+        created = normalize({
+            "id": new_id, "title": title,
+            "why": f"criado pela resposta do dono a {ident} ({NOT_PRIORITIZED_PHRASE})",
+            "status": "pending", "blocked_by": [], "human_pending": None,
+            "evidence": (f"Criado em {today} pela resposta do dono ao item {ident}. "
+                         f"Pergunta: {route_question} Resposta: {answer}"),
+            "sem_epic": True})
+        parts.append(f"A resposta criou o item {new_id} no fim da fila: {title}.")
     if previous:
         parts.append(f"Evidência anterior: {previous}")
     it["evidence"] = " ".join(parts)
@@ -3830,12 +3872,25 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
         it.pop("owner_question", None)
         it.pop("owner_summary", None)
     it.pop("claimed_by", None)
-    write_body(target, plan, plan.get("items") or [])
+    items = list(plan.get("items") or [])
+    if created is not None:
+        items.append(created)
+        gaps = validate_plan({**plan, "items": items})
+        if gaps:
+            print(f"resposta recusada para {ident}: o item que ela cria deixaria "
+                  f"a fila inválida; nada foi gravado.", file=sys.stderr)
+            for f in gaps:
+                print(f"  - {f}", file=sys.stderr)
+            return 2
+    write_body(target, plan, items)
     if keep:
         print(f"{ident} continua `{st}` em {target} · resposta gravada")
     else:
         print(f"{ident} → `{status_of(it)}` em {target}"
               + (" · rota humana fechada" if route is not None else ""))
+    if created is not None:
+        print(f"  item novo criado pela resposta: {created['id']} — "
+              f"{created['title']} (no fim da fila, `pending`)")
     for line in waiver_lines:
         print(line)
     close_write(root, target, f"queue {name}: owner's answer to {ident} "
@@ -5664,6 +5719,9 @@ def main(argv=None):
             "evidence, where the next run reads it. Refuses a text that does not\n"
             "look like an answer (a request for clarification, a question) unless\n"
             "--force. Runs only on a terminal: an agent cannot answer for the owner.\n"
+            "A \"sim\" to a route on a `done` item whose route declares an item for\n"
+            "the yes (`--if-yes-item` in `finish`) creates that item at the end of\n"
+            "the same queue, `pending`, and prints its id.\n"
             "By default commits only the queue in the same step."),
         examples=[('cepa plan answer wego WEGO-124 --answer "yes, close it"',
                    "unblock with the answer"),
@@ -5674,7 +5732,7 @@ def main(argv=None):
         exit_codes=[(0, "recorded"),
                     (2, f"invalid usage, not a terminal, empty answer, --keep with "
                         f"--drop, {not_git}, {no_queue}, unknown item id, item not "
-                        "deferred"),
+                        "deferred, the item the answer creates would not validate"),
                     (3, waves),
                     (6, "the text does not look like an answer (repeat with --force)")])
     rs.add_argument("name", metavar="name", help="queue name")
