@@ -3431,6 +3431,7 @@ class Panel:
                 self.output(f"     ○ {later_names(for_later)}")
             if for_later:
                 self.output(f"   To come back to these questions: {back}")
+            self._created(applied)
             return
         self.output("")
         self.output(t.rule("closing"))
@@ -3451,6 +3452,18 @@ class Panel:
         if for_later:
             self.output("   " + t.c("cinza", "to come back to these questions: ")
                        + t.c("ciano", back))
+        self._created(applied)
+
+    def _created(self, applied):
+        """CS-7 (resposta-do-decide-vira-trabalho): the closing ends with the items
+        the answers put on the queue, so the owner sees the work a "sim" created
+        without opening the queue. No item created, no line."""
+        created = created_items(applied)
+        if not created:
+            return
+        self.output("   " + self.t.c("verde", CREATED_HEADER))
+        for x in created:
+            self.output("     " + x)
 
     # ── aterrissar ──────────────────────────────────────────────────────
 
@@ -3617,6 +3630,30 @@ def later_names(for_later):
     later by its id only (`b1, b2`); the reason beside it is the generic label the
     item block already replaced with the lay one."""
     return ", ".join(str(x).split(":", 1)[0] for x in for_later)
+
+
+# CS-7 (resposta-do-decide-vira-trabalho): the line `cepa-plan answer` prints for the
+# item an answer created, and the closing line that lists them all.
+CREATED_LINE = re.compile(r"^\s*item novo criado pela resposta: (\S+) — (.*?)"
+                          r" \(no fim da fila, `pending`(, esperando você)?\)\s*$")
+CREATED_HEADER = "itens criados pelas suas respostas:"
+
+
+def created_items(applied):
+    """CS-7: the items the owner's answers created, in answer order, as
+    `<id> — <title>` (plus `(esperando você)` when the item waits on the owner),
+    read from each answer's output in `applied`. An entry of the `--all` panel
+    (`<queue>/<id>: ...`) prefixes the id with its queue."""
+    found = []
+    for entry in applied:
+        head = str(entry).split(":", 1)[0]
+        prefix = head.rsplit("/", 1)[0] + "/" if "/" in head else ""
+        for line in str(entry).splitlines():
+            m = CREATED_LINE.match(line)
+            if m:
+                found.append(f"{prefix}{m.group(1)} — {m.group(2)}"
+                             + (" (esperando você)" if m.group(3) else ""))
+    return found
 
 
 def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,

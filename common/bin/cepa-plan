@@ -3986,9 +3986,11 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
         print(f"{ident} → `{status_of(it)}` em {target}"
               + (" · rota humana fechada" if route is not None else ""))
     if created is not None:
-        print(f"  item novo criado pela resposta: {created['id']} — "
-              f"{created['title']} (no fim da fila, `pending`"
-              + (", esperando você)" if created.get("human_pending") else ")"))
+        # One line, never wrapped: the closing of `cepa-until decide` reads it back
+        # to list the items the answers created (CS-7).
+        _tui.verbatim(f"  item novo criado pela resposta: {created['id']} — "
+                      f"{created['title']} (no fim da fila, `pending`"
+                      + (", esperando você)" if created.get("human_pending") else ")"))
     if no_work_cmd:
         print(f"  {NO_WORK_WARNING}: a pergunta de {ident} é de antes da regra que "
               "declara o item de cada resposta, e nenhum item foi criado. Se ela "
