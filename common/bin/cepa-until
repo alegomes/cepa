@@ -230,6 +230,12 @@ the owner needs to do, in closed questions. It doesn't run when the run stopped 
 the quota (the analysis would hit the same ceiling) nor with `--no-analysis`; in both
 cases the command is run by hand afterwards.
 
+The end never asks "Land now?" (CS-4 of docs/spec/fim-do-until-sem-espera.md): a run
+that did not merge by itself (`--auto-land` off, or on but the run not clean) prints
+`cepa-until land <queue>/<run> --yes` and exits, without waiting. The owner-item
+questions still come at the end, on a terminal. `cepa-until decide <queue>/<run>`,
+run by hand later, keeps offering the landing.
+
 Usage:
     cepa-until my-queue --for 12h
     cepa-until my-queue --until 07:00
@@ -3802,9 +3808,12 @@ def created_items(applied):
 def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
            output=print, answer=None, land=None, wait=None, first=1, of=None,
            opened=False, note=None, close=True, progress=None, unclear=None,
-           rewrite=None):
+           rewrite=None, ask_land=True):
     """Goes through what only the owner unblocks and applies each answer. Returns
     (applied, for_later), as text, for the closing.
+    CS-4 (fim-do-until-sem-espera): `ask_land=False` (the end of a run) never offers
+    the landing: it does not count in the panel, is never asked, and a panel with only
+    the landing to show does not open. `cepa-until decide` keeps it True.
     CS-8 (the launch panel in two parts): `first`/`of` number the questions inside a
     longer list, `opened` skips the opening (the list is already on screen), `note`
     is a line under the opening and `close=False` leaves the closing to the caller.
@@ -3897,10 +3906,11 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     applied, for_later = [], []
     owner_items = [ad for ad in deferred if reason_alias(ad.get("reason")) in OWNER_REASON]
     without_owner = [ad for ad in deferred if reason_alias(ad.get("reason")) in NO_OWNER_REASON]
-    action = pending_action(item_states)
+    action = pending_action(item_states) if ask_land else None
     total = (1 if action else 0) + len(owner_items)
     if not total:
-        screen.nothing()
+        if ask_land:
+            screen.nothing()
         return applied, for_later
 
     if not opened:
@@ -4237,7 +4247,7 @@ def ask_mid_run(stop_reason, remaining, reserve, interactive, disabled, question
 
 
 def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=None,
-                     wait=None, already_asked=()):
+                     wait=None, already_asked=(), ask_land=True):
     """The closing of the run and of `cepa-until decide`: queries the queue again (its
     state now, not the launch one) and asks, or lists without a terminal.
     Without `run_id` (`cepa-until decide <fila>`), it goes over the whole queue:
@@ -4286,7 +4296,8 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
         pending_as_text(queue, run_id, item_states, deferred, analysis)
         return 0
     try:
-        decide(repo, queue, run_id, item_states, deferred, analysis, wait=wait)
+        decide(repo, queue, run_id, item_states, deferred, analysis, wait=wait,
+               ask_land=ask_land)
     except NoAnswer:
         print(f"\n   nobody answered in {wait / 60:g} min; the run ends here. "
               f"To answer later: cepa-until decide {queue}"
@@ -7744,7 +7755,8 @@ def _main(argv=None):
         silent = mid_run_silent or a.all_queues
         return close_with_owner(repo, a.queue, run_id, item_states, review,
                                wait=ANSWER_WAIT_SEC, already_asked=asked_mid_run,
-                               interactive=False if silent else None)
+                               interactive=False if silent else None,
+                               ask_land=False)
 
     def commit_records(result):
         # `--auto-land` (CS-1 of docs/spec/fim-do-until-sem-espera.md): after the
@@ -7759,6 +7771,16 @@ def _main(argv=None):
             except Exception as e:  # noqa: BLE001
                 print(f"\n   not merged: the automatic merge failed ({e}). "
                       f"To merge by hand: cepa-until land {a.queue}/{run_id}")
+        # CS-4: the end never asks "Land now?". A run that did not merge by itself
+        # prints the command and goes on; the owner merges when he chooses.
+        try:
+            left_over = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            left_over = {}
+        pending = pending_action(left_over)
+        if pending:
+            print(f"\n   to merge into `{pending.get('destino')}`: "
+                  f"cepa-until land {a.queue}/{run_id} --yes")
         # The run's last step (CS-1), after the end questions (which write answers
         # into the queue through `cepa-plan answer`) and after the `.review.md`:
         # committing earlier would leave the queue dirty again.

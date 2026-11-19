@@ -485,8 +485,7 @@ def test_launch_on_terminal_enter_or_n_keeps_auto_land_false():
         with tempfile.TemporaryDirectory() as tmp:
             root = build_repo(tmp, [item("a1")])
             with_origin(root)
-            rc, out = launch_on_tty(root, [("Enter means no]:", reply),
-                                           ("Land now?", "n")])
+            rc, out = launch_on_tty(root, [("Enter means no]:", reply)])
             check(f"resposta {reply!r}: a pergunta foi feita",
                   "without asking?" in out, out[-1200:])
             check(f"resposta {reply!r}: auto_land fica false",
@@ -499,7 +498,7 @@ def test_launch_with_the_flag_or_without_terminal_never_asks():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
         with_origin(root)
-        rc, out = launch_on_tty(root, [("Land now?", "n")], "--auto-land")
+        rc, out = launch_on_tty(root, [], "--auto-land")
         check("com --auto-land a pergunta não aparece", "without asking?" not in out,
               out[-1200:])
         check("...e o estado grava true", state(root).get("auto_land") is True,
@@ -514,17 +513,102 @@ def test_launch_with_the_flag_or_without_terminal_never_asks():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
         with_origin(root)
-        rc, out = launch_on_tty(root, [("Land now?", "n")], "--no-auto-land")
+        rc, out = launch_on_tty(root, [], "--no-auto-land")
         check("com --no-auto-land a pergunta não aparece", "without asking?" not in out,
               out[-1200:])
         check("...e vale não", state(root).get("auto_land") is False, str(state(root)))
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
         with_origin(root)
-        rc, out = launch_on_tty(root, [("Land now?", "n")], "--no-pre-read")
+        rc, out = launch_on_tty(root, [], "--no-pre-read")
         check("com --no-pre-read a pergunta não aparece (CS-9: como sem terminal)",
               "without asking?" not in out, out[-1200:])
         check("...e vale não", state(root).get("auto_land") is False, str(state(root)))
+
+
+def test_end_of_run_on_terminal_never_asks_land_now_and_prints_the_command():
+    """CS-4: a clean run without pre-authorization, on a terminal, ends right after
+    the report: no `Land now?`, the merge command on the screen, nothing waiting.
+    The wait is set far above the bound, so a question would blow it."""
+    import time
+    for label, extra in (("no to the launch question", ()),
+                         ("--no-auto-land", ("--no-auto-land",))):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = build_repo(tmp, [item("a1")])
+            remote = with_origin(root)
+            origin_before = git(remote, "rev-parse", "main")
+            main_before = git(root, "rev-parse", "HEAD")
+            t0 = time.time()
+            rc, out = launch_on_tty(root, [], *extra, wait="1000")
+            took = time.time() - t0
+            plain = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", out)
+            st = state(root)
+            check(f"{label}: sai 0", rc == 0, out[-1500:])
+            check(f"{label}: termina bem antes da espera (<150s, espera=1000s)",
+                  took < 150, f"{took:.0f}s")
+            check(f"{label}: a tela não pergunta Land now?",
+                  "Land now?" not in plain, plain[-1500:])
+            check(f"{label}: a tela traz o comando do merge",
+                  re.search(r"to merge into `\S+`: cepa-until land fila/\S+ --yes",
+                            plain) is not None, plain[-1500:])
+            check(f"{label}: o estado fica esperando-dono",
+                  st.get("estado") == "esperando-dono", str(st))
+            check(f"{label}: a main e o origin não mexeram",
+                  "a1" not in git(root, "log", "--format=%s", "HEAD").splitlines()
+                  and git(remote, "rev-parse", "main") == origin_before, plain[-800:])
+
+
+def test_end_of_run_with_an_owner_item_still_asks_it_but_not_the_landing():
+    from test_cepa_until_resume_on_answer import (
+        BLOCKS_A1_COMMITS_A2, QUESTION as OWNER_Q)
+    from test_cepa_until_decide import on_tty, env_do_run, CEPA_UNTIL
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        with_origin(root)
+        env = env_do_run(tmp, root, fake_claude(tmp, BLOCKS_A1_COMMITS_A2))
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "1000"
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis", "--no-resume-on-answer"],
+            str(root), inputs=[("[s] yes", "n"), ("Anything to add", "")],
+            env=env, timeout=180)
+        plain = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", out)
+        check("com item do dono: sai 0", rc == 0, plain[-1500:])
+        check("a pergunta do dono continua aparecendo", OWNER_Q in plain, plain[-1500:])
+        check("...e o fim não pergunta Land now?", "Land now?" not in plain,
+              plain[-1500:])
+        check("...e traz o comando do merge",
+              "cepa-until land fila/" in plain and "--yes" in plain, plain[-1500:])
+        check("...com a questão numerada como 1/1 (o merge não conta)",
+              "── 1 question(s) for you" in plain and "┌─ 1/1 · a1" in plain,
+              plain[-1500:])
+
+
+def test_auto_land_clean_run_merges_and_prints_no_merge_command():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        with_origin(root)
+        p, _ = night(root, "--auto-land")
+        out = p.stdout + p.stderr
+        check("--auto-land: o estado é aterrissado",
+              state(root).get("estado") == "aterrissado", out[-1200:])
+        check("--auto-land: a tela não traz a linha 'to merge into'",
+              "to merge into" not in out, out[-1500:])
+
+
+def test_decide_by_hand_still_asks_land_now():
+    from test_cepa_until_decide import on_tty, env_do_run, CEPA_UNTIL
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        with_origin(root)
+        night(root)
+        run_id = Path(next((root / ".claude/programs/fila/until").glob(
+            "*.estado.json"))).name.removesuffix(".estado.json")
+        env = env_do_run(tmp, root, fake_claude(tmp, WORKS))
+        rc, out = on_tty([sys.executable, str(CEPA_UNTIL), "decide",
+                          f"fila/{run_id}", "--repo", str(root)], str(root),
+                         inputs=[("Land now?", "n")], env=env, timeout=120)
+        check("decide à mão: ainda pergunta Land now?", "Land now?" in out, out[-1200:])
 
 
 NO_ANSWER_LINE = "no answer: the run will not merge by itself"
@@ -540,8 +624,7 @@ def test_no_answer_to_the_pre_authorization_means_no():
             root = build_repo(tmp, [item("a1")])
             remote = with_origin(root)
             origin_before = git(remote, "rev-parse", "main")
-            rc, out = launch_on_tty(root, [("Enter means no]:", reply),
-                                           ("Land now?", "n")], wait=wait)
+            rc, out = launch_on_tty(root, [("Enter means no]:", reply)], wait=wait)
             flat = " ".join(re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", out).split())
             check(f"{label}: a pergunta apareceu", QUESTION in flat, out[-1200:])
             check(f"{label}: a tela diz que sem resposta a run não funde sozinha",

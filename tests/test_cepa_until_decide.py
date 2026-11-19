@@ -861,21 +861,32 @@ def env_do_run(tmp, root, binv):
     return env
 
 
-def test_run_on_terminal_asks_to_land_and_lands_with_s():
-    """AC1: `s` at the end-of-run prompt really lands."""
+def test_decide_on_terminal_asks_to_land_and_lands_with_s():
+    """AC1: `s` at the `decide` prompt really lands. CS-4 of fim-do-until-sem-espera:
+    the END OF THE RUN no longer asks it; `cepa-until decide <fila>/<run>`, by hand,
+    still does."""
     from test_cepa_until_land import with_origin, state
     from test_cepa_until_run_branch import WORKS, VERIFY, git
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
         with_origin(root)
         binv = fake_claude(tmp, WORKS)
+        env = env_do_run(tmp, root, binv)
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--verify", VERIFY, "--no-analysis"], str(root),
-            inputs=[("Land now?", "s")],
-            env=env_do_run(tmp, root, binv), timeout=240)
+            env=env, timeout=240)
         check("o run sai 0", rc == 0, out[-1500:])
-        check("o fim pergunta se aterrissa", "Land now?" in out,
+        check("o fim da run não pergunta se aterrissa", "Land now?" not in out,
+              out[-1500:])
+        run_id = next((root / ".claude/programs/fila/until").glob(
+            "*.estado.json")).name.removesuffix(".estado.json")
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+             "--repo", str(root)], str(root),
+            inputs=[("Land now?", "s")], env=env, timeout=240)
+        check("decide sai 0", rc == 0, out[-1500:])
+        check("decide pergunta se aterrissa", "Land now?" in out,
               out[-1500:])
         log = git(root, "log", "--format=%s", "HEAD").splitlines()
         check("com s, o commit do item chega à main", "a1" in log, str(log))
