@@ -3023,6 +3023,98 @@ def land_action(repo, tree, queue, run_id, n):
         "arvore": str(tree)}
 
 
+def last_verify_green(ledger):
+    """Did the run's LAST full build (the last `verify` event of the `.jsonl`) go
+    green? None when the run recorded no full build at all."""
+    last = None
+    try:
+        lines = Path(ledger).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(e, dict) and e.get("evento") == "verify":
+            last = bool(e.get("verde"))
+    return last
+
+
+# A clean run delivered every item it touched. An allowlist and not a list of the
+# bad outcomes: an outcome added later (`volta-vermelha`, `sem-rede` came that way)
+# must not turn a run clean by omission.
+CLEAN_OUTCOME = "entregue"
+STUCK_OUTCOMES = ("travado", "sem-progresso", "done-sem-commit", "dropped")
+
+
+def not_clean_reason(repo, queue, item_states, ledger):
+    """Why the run is NOT clean for `--auto-land`, or None when it is. Computed
+    here, from git, the `.jsonl`, the state and the queue, and not read from the
+    `.review.md`: the analysis can fail or run out of quota (spec
+    fim-do-until-sem-espera, "Decided without asking")."""
+    st = item_states or {}
+    if is_all_run(repo, queue):
+        return "a --all run is merged by hand (`cepa-until land`)"
+    if st.get("estado") != "esperando-dono":
+        return f"the run is `{st.get('estado')}`, with nothing to merge"
+    action = pending_action(st)
+    if not action:
+        return "the run branch has no commit to merge"
+    destination, sha = action.get("destino"), action.get("sha")
+    if current_branch(repo) != destination:
+        return (f"the clone is on `{current_branch(repo)}`, not on "
+                f"`{destination}`")
+    if git(["merge-base", "--is-ancestor", "HEAD", sha], repo)[0] != 0:
+        return (f"`{destination}` moved since the run started (no fast-forward)")
+    if not st.get("verify"):
+        return "the run ran no full build (--no-verify)"
+    if not last_verify_green(ledger):
+        return "the last full build of the run branch is not green"
+    for it in st.get("itens") or []:
+        kind = it.get("desfecho")
+        if kind == CLEAN_OUTCOME:
+            continue
+        if kind in STUCK_OUTCOMES:
+            return f"{it.get('id')} is stuck"
+        if kind == "rota-humana":
+            return f"{it.get('id')} is waiting on you"
+        return f"{it.get('id')} did not finish ({kind})"
+    others = [f.get("id") for f in st.get("fica_com_voce") or []
+              if f.get("id") not in {i.get("id") for i in st.get("itens") or []}
+              and f.get("id") not in ("reinstalar-plugin",)]
+    if others:
+        return f"{others[0]} is left with you"
+    data, error = query_queue(queue, repo)
+    if error:
+        return f"could not read the queue to see who waits on you ({error})"
+    waiting = owner_questions((data or {}).get("deferred"))
+    if waiting:
+        return f"{waiting[0].get('id')} is waiting on you"
+    return None
+
+
+def auto_land(repo, queue, run_id, state_path, ledger):
+    """`--auto-land`: when the run is clean, does exactly what
+    `cepa-until land <queue>/<run> --yes` does (same code, same guards, same
+    return point and records). Returns the exit code of the landing, or None
+    when it did not start."""
+    try:
+        item_states = json.loads(Path(state_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"\n   not merged: could not read the run state ({e})")
+        return None
+    if item_states.get("estado") == "aterrissado":
+        return 0
+    reason = not_clean_reason(repo, queue, item_states, ledger)
+    if reason:
+        print(f"\n   not merged: {reason}")
+        return None
+    print(f"\n   the run is clean and --auto-land is on: merging into "
+          f"`{pending_action(item_states).get('destino')}`")
+    return cmd_land([f"{queue}/{run_id}", "--repo", str(repo), "--yes"])
+
+
 # ── decidir: the end of the run asks, instead of just counting ──────────────
 #
 # The end of the run used to say "14 were deferred (each with its reason, in the report)"
@@ -5810,6 +5902,13 @@ def _main(argv=None):
                          "Fable limit\"), the run switches the item sessions to this "
                          "model and resumes at once instead of waiting for the reset "
                          "(default: opus; `off` waits as before)")
+    ap.add_argument("--auto-land", action="store_true", dest="auto_land",
+                    help="when the run ends clean (the clone's branch did not move "
+                         "since the run started, the last full build of the run "
+                         "branch is green, and nothing is stuck or waiting on you), "
+                         "the run itself does what `cepa-until land --yes` does: "
+                         "merge, full build and push. Otherwise it only says why "
+                         "not, and the landing stays for you")
     ap.add_argument("--no-analysis", "--sem-analise", action="store_true", dest="no_analysis",
                     help="skips /common:until-review at the end of the run")
     ap.add_argument("--no-resume-on-answer", "--sem-retomar-na-resposta",
@@ -6336,6 +6435,7 @@ def _main(argv=None):
                  "branch": start_branch, "registro": ledger.name,
                  "verify": verify, "pid": pid, "host": host,
                  "arvore": str(tree), "prazo": deadline.isoformat(),
+                 "auto_land": bool(a.auto_land),
                  "atualizado": datetime.now().isoformat(timespec="seconds")}
         # Liveness proof for readers on other hosts (pid can't be probed there).
         # With the UTC offset: a reader on another host (cepa-plan) must not guess the zone.
@@ -7566,6 +7666,17 @@ def _main(argv=None):
                                interactive=False if silent else None)
 
     def commit_records(result):
+        # `--auto-land` (CS-1 of docs/spec/fim-do-until-sem-espera.md): after the
+        # analysis and the end questions, as the last step before the records'
+        # commit. A yes to a question has already sent its item back by now.
+        if a.auto_land:
+            # Never at the cost of the records' commit below: an error here is a
+            # landing that did not happen, not a run that lost its records.
+            try:
+                auto_land(repo, a.queue, run_id, state_path, ledger)
+            except Exception as e:  # noqa: BLE001
+                print(f"\n   not merged: the automatic merge failed ({e}). "
+                      f"To merge by hand: cepa-until land {a.queue}/{run_id}")
         # The run's last step (CS-1), after the end questions (which write answers
         # into the queue through `cepa-plan answer`) and after the `.review.md`:
         # committing earlier would leave the queue dirty again.
