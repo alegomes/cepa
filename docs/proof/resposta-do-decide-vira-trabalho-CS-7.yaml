@@ -1,0 +1,60 @@
+schema_version: 2
+card: resposta-do-decide-vira-trabalho-CS-7
+verdict: proven
+reviewed_at: 2026-11-19T06:00:00-03:00
+base_commit: db5c367
+head_commit: db89d6b
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until (CREATED_LINE, CREATED_HEADER, created_items, Panel.close_panel calls in both branches, Panel._created)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # tests/test_cepa_until_decide_created_items.py runs the real decide and the real `cepa-plan answer` under a PTY (only the `cepa-plan answer` subprocess.run is routed through the PTY helper, same binary)
+    - class: "common/bin/cepa-plan (cmd_answer prints the 'item novo criado pela resposta' line through _tui.verbatim)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+method_note: >
+  Throwaway detached worktree /tmp/proof-cs7 (git worktree add --detach at db89d6b), one sed edit at a time, restored with
+  git checkout db89d6b -- <file> after each, strictly sequential, all foreground. Each perturbation re-ran
+  tests/test_cepa_until_decide_created_items.py; RED = FAIL lines printed (count shown). Worktree removed (git worktree
+  remove --force + prune; absent from git worktree list). Primary tree untouched except this yaml. Full suite not run:
+  build: delegated-to-supervisor.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "BASELINE (db89d6b): test_cepa_until_decide_created_items.py -> 'all ok'; test_cepa_plan_answer_creates_item.py -> 'tudo ok'; test_cepa_plan_answer_owner_item.py -> 'tudo ok'; test_cepa_until_decide.py -> 'tudo verde'."
+        - "P1 CREATED_HEADER 'itens criados' -> 'itens xx' = 5 FAIL. KILLED."
+        - "P2 plain-branch `self._created(applied)` -> pass = 4 FAIL. KILLED."
+        - "P3 colored-branch `self._created(applied)` -> pass = 1 FAIL. KILLED."
+        - "P4 `if not created:` -> `if False:` (header printed with nothing created) = 1 FAIL. KILLED."
+        - "P5 --all queue prefix dropped (`if \"/\" in head` -> `if False`) = 1 FAIL. KILLED."
+        - "P6 '(esperando você)' mark dropped (`if m.group(3)` -> `if False`) = 1 FAIL. KILLED."
+        - "P7 id/title separator ' — ' -> ' - ' in created_items = 4 FAIL. KILLED."
+        - "P8 answer order reversed (found.append -> found.insert(0, ...)) = 1 FAIL. KILLED."
+        - "P11 CREATED_LINE title group tail broken = 4 FAIL. KILLED."
+        - "P12 CREATED_LINE waiting group '(, esperando você)?' -> '(, xx)?' = 1 FAIL. KILLED."
+        - "P13 CREATED_LINE label 'pela resposta:' -> 'pela xx:' = 5 FAIL. KILLED."
+        - "P14 cepa-plan `_tui.verbatim(` -> `print(` for the created line (wraps at terminal width) = 1 FAIL in test_cepa_until_decide_created_items.py (test_cepa_plan_answer_creates_item.py stays at 0 FAIL: only the new decide test pins the no-wrap). KILLED."
+        - "Whole-diff revert: common/bin/cepa-until and common/bin/cepa-plan checked out at db5c367 -> 5 FAIL; restored to db89d6b -> 'all ok'."
+        - "SURVIVED, cosmetic, not counted: P9 indent of each listed item ('     ' + x -> x) = 0 FAIL; P10 indent of the header ('   ' + -> none) = 0 FAIL. The test reads the lines stripped (listed() uses l.strip()), so leading spaces are asserted by nothing. The criterion names the line, the id and the title, not their indentation; same treatment as CS-6 gave the help text. Also not perturbed: the 'verde' colour of the header (ANSI stripped by the test), cosmetic."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; per the CS-1..CS-6 standard every changed behavior hunk (header, regex, created_items prefix/mark/order/separator, both close_panel calls, the skip when nothing was created, the verbatim print) was perturbed and went RED at the real CLI, 12 perturbations plus whole-diff revert; the only survivors are the two indentation edits above"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff adds no argument, flag or file format: it only reads back, from the output of `cepa-plan answer` already produced in the same run, the line naming the created item and prints it in the closing."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type Story, not Bug. Equivalent check: cepa-until and cepa-plan checked out at db5c367 in the worktree -> test_cepa_until_decide_created_items.py 5 FAIL; at db89d6b -> all ok."
+routing_reason: "PROVEN. The test runs the real decide and the real `cepa-plan answer` under a PTY; breaking the header, the regex, either close_panel call, the empty-skip, the queue prefix, the waiting mark, the separator, the order or the no-wrap print each turns it RED, and reverting the whole diff gives 5 FAIL. Only the leading-space indentation of the header and of the items survives, which the criterion does not specify. Neighbor tests are green at baseline. The full suite is delegated to the supervisor."
