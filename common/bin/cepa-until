@@ -3094,6 +3094,13 @@ def not_clean_reason(repo, queue, item_states, ledger):
     return None
 
 
+def state_auto_land(item_states):
+    """Is the run pre-authorized to merge by itself? Read from the run state, the
+    one place the answer lives (the flag today, the launch question of CS-3
+    later). A state written before the field existed reads as no."""
+    return (item_states or {}).get("auto_land") is True
+
+
 def auto_land(repo, queue, run_id, state_path, ledger):
     """`--auto-land`: when the run is clean, does exactly what
     `cepa-until land <queue>/<run> --yes` does (same code, same guards, same
@@ -3103,6 +3110,8 @@ def auto_land(repo, queue, run_id, state_path, ledger):
         item_states = json.loads(Path(state_path).read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         print(f"\n   not merged: could not read the run state ({e})")
+        return None
+    if not state_auto_land(item_states):
         return None
     if item_states.get("estado") == "aterrissado":
         return 0

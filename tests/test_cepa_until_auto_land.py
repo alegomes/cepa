@@ -143,6 +143,37 @@ def test_red_last_build_is_not_clean():
         check("...e diz por quê", "not merged:" in out, out[-2000:])
 
 
+def _module():
+    from importlib.machinery import SourceFileLoader
+    from importlib.util import module_from_spec, spec_from_loader
+    from test_cepa_until import CEPA_UNTIL
+    loader = SourceFileLoader("cepa_until", str(CEPA_UNTIL))
+    mod = module_from_spec(spec_from_loader("cepa_until", loader))
+    loader.exec_module(mod)
+    return mod
+
+
+def test_old_state_without_the_field_reads_as_no():
+    """Spec, "Estado e migração": a state written before `auto_land` existed reads
+    as false, and the automatic merge never starts from it, even if the run is
+    otherwise clean."""
+    mod = _module()
+    check("estado sem o campo vale não", mod.state_auto_land({"estado":
+                                                               "esperando-dono"})
+          is False)
+    check("estado com true vale sim", mod.state_auto_land({"auto_land": True}))
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "r.estado.json"
+        path.write_text(json.dumps({"estado": "esperando-dono", "acoes": [
+            {"id": "aterrissar", "destino": "main", "sha": "x"}]}))
+        called = []
+        mod.cmd_land = lambda argv: called.append(argv) or 0
+        mod.not_clean_reason = lambda *a: None  # clean on every other condition
+        r = mod.auto_land(Path(tmp), "fila", "r", path, Path(tmp) / "r.jsonl")
+        check("...e o merge automático não começa a partir dele",
+              r is None and not called, str(called))
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
