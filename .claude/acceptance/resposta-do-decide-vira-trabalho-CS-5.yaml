@@ -1,0 +1,20 @@
+schema_version: 1
+card: resposta-do-decide-vira-trabalho-CS-5
+key: resposta-do-decide-vira-trabalho-CS-5
+status: complete
+audited_at: 2026-11-19
+covers: 9994bf6..31e28f5
+criteria:
+  - id: CS-5
+    text: "A resposta e gravada, nada e criado, e a saida imprime 'esta resposta nao cria trabalho' com o comando `cepa-plan add <fila> ...` pronto para copiar. O fechamento do `cepa-until decide` repete o aviso para cada item nessa situacao."
+    altitude: cli
+    surface: "`cepa-plan answer fila <id> --answer 'sim: ...'` num item done com rota antiga sem item declarado (PTY, repo git real); e o fechamento (`Answered now`) de `cepa-until decide`, com o `cepa-plan answer` real por tras"
+    test: "tests/test_cepa_plan_answer_no_work_warning.py::test_red_test_old_route_yes_warns_with_the_add_command (+ test_route_without_owner_summary_also_warns, test_no_that_closes_an_old_route_also_warns, test_no_warning_when_the_answer_is_accounted_for, test_decide_closing_repeats_the_warning_for_each_item)"
+    layer: "subprocessos reais de common/bin/cepa-plan sob PTY, sem mock; a linha `cepa-plan add` impressa e executada como esta e adiciona item valido (pending, fim da fila, titulo da rota, why cita a origem). Para o fechamento do decide: cepa-until.decide real com o cepa-plan answer real (so o subprocess.run e envolvido para dar TTY ao answer, sem alterar a saida); o fechamento lista o aviso e um `cepa-plan add` para a1 e a2 e nada para a3 (declarou nenhum)."
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_answer_no_work_warning.py -> 24 linhas 'ok', 'all ok' (HEAD 31e28f5). Vizinhos: test_cepa_plan_answer_creates_item.py 'tudo ok'; test_cepa_plan_answer_owner_item.py 'tudo ok'; test_cepa_plan_answer_next_round.py '0 falha(s)'; test_cepa_plan_answer_waiver.py 'all green'; test_cepa_until_decide.py 'tudo verde'. Red previo relatado pelo implementador: 7 FAIL antes do codigo (nao reproduzido por mim)."
+    status: complete
+    gap: ""
+    neighbors:
+      - "tests/test_cepa_plan_answer_creates_item.py (CS-2), owner_item (CS-3), next_round (CS-4), waiver, test_cepa_until_decide.py: verdes"
+note: "Julgamento da metade do decide: sem mudanca em cepa-until, o fechamento herda o aviso porque applied recebe `ident: msg` com a saida inteira do answer (cepa-until ~L3941 -> close_panel). O teste roda decide de verdade com o answer real sob PTY e le o texto do fechamento (`Answered now`), entao demonstra a metade na superficie dela. Ressalvas, nao bloqueios: (1) o teste de fechamento exercita o caminho sem cor (CEPA_UNTIL_COR=nunca, close_panel enabled=False); o ramo colorido de close_panel imprime o mesmo `x` de applied, mas nao e exercitado; (2) o wrapper de subprocess.run no teste so injeta o PTY. Red previo nao reproduzido por mim. Suite completa nao rodada, por regra."

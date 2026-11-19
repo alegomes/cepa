@@ -380,6 +380,7 @@ def test_finish_opens_debt_but_never_closes(base):
             "--question", "A recusa em /admin/devolucoes já foi conferida? Recomendo sim.",
             "--if-yes", "o item segue como entregue",
             "--if-no", "o item volta para a fila",
+            "--if-yes-item", "nenhum", "--if-no-item", "nenhum",
             "--repo", ".")
     check("o desfecho pode ABRIR uma rota humana", r.returncode == 0, r.stderr)
     check("a rota fica no item",

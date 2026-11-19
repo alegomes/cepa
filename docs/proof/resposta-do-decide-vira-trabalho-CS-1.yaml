@@ -1,0 +1,70 @@
+schema_version: 2
+card: resposta-do-decide-vira-trabalho-CS-1
+verdict: proven
+reviewed_at: 2026-11-18T19:29:43-03:00
+base_commit: d2201c2e884f235efc5f7ea74d5ac9c23e6b38c4
+head_commit: 3dbef08fe391768bac15dcd6507e2cc845ee71be
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (declared_items, human_section_refusal item_errors, route_refusal status/items, cmd_reword_route stored/given/replace, cmd_finish declared stored on owner_summary, --if-yes-item/--if-no-item/--*-needs-owner flags, _cli_items)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # tests run the real CLI as subprocess
+    - class: "common/hooks/_ownertext.py (ITEM_KEYS, NONE_WORDS, WORDS_PER_ITEM_TITLE, item_declaration, item_flags)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # reached through the real cepa-plan / cepa-until
+    - class: "common/bin/cepa-until (CUT_RULE text, finish_item forwards item flags, owner_summary_of filters declarations, route-reader prompts ask item_se_nao, parse_route reads item_se_sim/item_se_nao, open_precondition_route default --if-no-item nenhum, reword_route forwards declaration + warning)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # only the route reader (claude) is faked, via CEPA_UNTIL_LEITOR
+  base_commit_resolved: true
+  note: "Code is unchanged between 70e75a9 and 3dbef08 (3dbef08 touches tests only: tests/test_cepa_until_route_rewrite.py fake reader, new tests/test_cepa_until_item_declaration.py, one case added to tests/test_cepa_plan_route_item_declaration.py). The perturbation results recorded at 70e75a9 for unchanged code and unchanged tests remain valid; this review re-ran the previous survivors and 4 previous RED ones."
+method_note: >
+  Every covering file was judged by `python3 tests/<file>.py` exit code (pytest hides
+  check() failures in the older files). All runs in a throwaway worktree
+  /tmp/proof-cs1-r (git worktree add --detach at 3dbef08), removed afterwards; primary
+  tree untouched except this file. tests/test_cepa_until_decide.py was not rerun here
+  (orchestrator ran it by python3 at 3dbef08: exit 0, "tudo verde").
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "HEAD BASELINE (3dbef08, python3 exit code): test_cepa_until_route_rewrite rc=0 'tudo verde' (was rc=1, 11 FAIL at 70e75a9); test_cepa_until_item_declaration rc=0; test_cepa_until_unclear_rewrite rc=0; test_cepa_plan_finish_route rc=0; test_cepa_plan_route_item_declaration rc=0; test_until_review_item_declaration rc=0; test_common_drain_plan rc=0 'all green'. 0 FAIL lines in all seven."
+        - "P12 reword-route drops item_errors from human_section_refusal -> RED (a rc=1, 4 FAIL: 'título ruim 'Ver o commit 3fa9c21' (): recusa (2)', the new case with a stored declaration)"
+        - "O1 NONE_WORDS reduced to ('nenhum',) -> RED (i: \"'Nenhuma' is none\")"
+        - "O7 item_flags drops --*-item-needs-owner -> RED (i: 'item_flags forwards titles and the needs-owner marker only where set')"
+        - "O9 item_flags drops titled declarations -> RED (i: same check)"
+        - "U1 finish_item does not forward declarations -> RED (i: \"the stored declaration survives the supervisor's re-finish\")"
+        - "U2a owner_summary_of back to the base filter (any non-empty value) -> RED (i: 'no item_* key reaches the screen')"
+        - "U2b owner_summary_of keeps only the isinstance(str) filter, no ITEM_KEYS exclusion (so 'nenhum' would show) -> RED (i: same check)"
+        - "U5 parse_route accepts control characters in the title -> RED (i: \"title 'Registrar\\x07 o acesso': the route stays valid but the declaration is dropped\")"
+        - "U6 open_precondition_route without the default --if-no-item nenhum -> RED (i: 'route opened without a declaration')"
+        - "U7 open_precondition_route always nenhum, ignoring the item's own declaration -> RED (i: \"the item's own declaration is kept, not overwritten by `nenhum`\")"
+        - "SPOT-CHECK of previous RED: P13 finish drops item_errors -> RED (a 'marca sem título: recusa'); O4 title lay-text rules skipped -> RED (a, 12 FAIL lines); U8 reword_route does not forward the reader's declaration -> RED (u 'CS-7 pty: the new question shows after the `?`'). All three still RED as at 70e75a9."
+        - "P7 refusal message drops 'Se a resposta realmente não cria trabalho, escreva `nenhum`.' -> SURVIVED (all five files rc=0). NON-BEHAVIORAL TEXT: the refusal still happens (exit 2, queue untouched, asserted), and the per-flag missing line still says '... ou `nenhum`'; only one explanatory sentence of the message changes."
+        - "U11 CUT_RULE stops naming --if-no-item/--if-yes-item -> SURVIVED (all five files rc=0). NON-BEHAVIORAL TEXT: prompt guidance to the building agent; the rule itself is enforced by `cepa-plan finish`, which refuses a route without the declaration (P4/P5/P6 RED)."
+        - "U10 route-reader prompts stop asking item_se_nao -> not rerun (prompt text, the fake reader ignores it; SURVIVED at 70e75a9). NON-BEHAVIORAL TEXT: if a real reader stops declaring, reword_route sends no declaration, cepa-plan refuses, the old route stays and the warning is printed, all of which is asserted (U8/U9 RED); nothing is written silently."
+        - "summary of this pass: 15 perturbations run (10 previous survivors incl. U2 in two variants, 3 previous RED spot-checks, 2 wording); 13 RED, 2 SURVIVED (P7, U11), both wording; U10 wording by reading. Across both passes: 36 perturbations, 33 RED, 3 non-behavioral text survivors (P7, U10, U11)."
+        - "test letters: a=test_cepa_plan_route_item_declaration.py f=test_cepa_plan_finish_route.py u=test_cepa_until_unclear_rewrite.py i=test_cepa_until_item_declaration.py r=test_cepa_until_route_rewrite.py (r, 83 s, run only when the four fast files stayed green)"
+        - "each perturbation applied by exact single-occurrence string replace in /tmp/proof-cs1-r, run, restored with git checkout; worktree verified clean after each batch; worktree removed with git worktree remove + prune"
+  l2_coverage:
+    status: pass
+    uncovered_lines:
+      - "common/bin/cepa-plan route_refusal: explanatory sentence of the refusal message (P7, text only)"
+      - "common/bin/cepa-until CUT_RULE and the two route-reader prompt texts (U10, U11, text only)"
+    run: "no coverage tool in repo; uncovered = the hunks whose perturbation survived, all message/prompt wording"
+  l4_adversarial_input:
+    status: n/a
+    reason: "NOT verified by a dedicated adversarial run. The new CLI input (--if-yes-item/--if-no-item, needs-owner flags) is validated by _ownertext.item_declaration; covering tests exercise missing, code-bearing, file-name-bearing, over-long and control-character titles, the needs-owner marker without title or with nenhum, and the bad title on an item that already declares. No api-rest module in the diff."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "Story, but the spec's red test was checked at the previous pass: d2201c2 code + tests/test_cepa_plan_route_item_declaration.py test_red_test_done_route_without_declaration_is_refused -> 4 FAIL at base, green at head. Code unchanged since, the test passes at 3dbef08 (a rc=0)."
+routing_reason: "PROVEN. At 3dbef08 all seven covering files are green by python3 exit code (test_cepa_until_route_rewrite back to green after its fake reader was taught item_se_nao), and test_cepa_until_decide is green per the orchestrator. Every previous behavioral survivor (P12, O1, O7, O9, U1, U2, U5, U6, U7) is now RED under the new tests, and 3 previous RED spot-checks stay RED. The only survivors are P7, U10 and U11, which change message or prompt wording and neither a refusal nor a write; the refusals they describe are themselves load-bearing."

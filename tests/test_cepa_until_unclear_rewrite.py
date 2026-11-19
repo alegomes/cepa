@@ -28,7 +28,7 @@ NEW_NO = "O item continua esperando a senha."
 ROUTE = "falta a chave do cofre"
 
 
-def _reader(tmp):
+def _reader(tmp, declare=True):
     """A fake reader: for the unclear-question job it answers a new closed question
     and logs the payload's bad question; anything else gets no finding."""
     script = Path(tmp) / "leitor.py"
@@ -41,7 +41,8 @@ def _reader(tmp):
         "    + str(it.get('pergunta_mal_escrita')) + '\\n')\n"
         "if it.get('tarefa') == 'reescrever-pergunta':\n"
         f"    print(json.dumps({{'route_kind': 'owner-task', 'question': {NEW_Q!r},\n"
-        f"        'if_yes': {NEW_YES!r}, 'if_no': {NEW_NO!r}}}))\n"
+        f"        'if_yes': {NEW_YES!r}, 'if_no': {NEW_NO!r}"
+        + (", 'item_se_nao': 'nenhum'" if declare else "") + "}))\n"
         "else:\n"
         "    print(json.dumps({'tipo': None}))\n")
     script.chmod(0o755)
@@ -92,6 +93,56 @@ def test_question_mark_rewrites_in_the_same_block_and_asks_again():
                   for k in ("human_pending", "status", "evidence")), (before, now))
         check("CS-7 pty: left for later, nothing answered",
               "answered now 0" in plain and "for later 1" in plain, plain[-1500:])
+
+
+def test_reader_without_item_declaration_records_nothing_and_warns():
+    """CS-1 of resposta-do-decide-vira-trabalho: the reader returns a rewritten
+    question without `item_se_nao` and the item stores no declaration: no silent
+    "nenhum". queue.yaml stays byte for byte, the warning names the item and the
+    `cepa-plan reword-route ... --if-no-item "<title>|nenhum"` command, and the
+    owner's panel does not crash (the item stays for later)."""
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        it = item("b1", status="pending", human_pending=ROUTE)
+        it["owner_question"] = OLD_Q
+        it["route_kind"] = "external-block"
+        it["evidence"] = "evidência original"
+        root = build_repo(tmp, [it])
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        before = qfile.read_bytes()
+        reader, _ = _reader(tmp, declare=False)
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_UNTIL_LEITOR=str(reader))
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env,
+                         inputs=[("[t] I write the answer", "?"),
+                                 ("[t] I write the answer", "")], timeout=90)
+        plain = ANSI.sub("", out)
+        check("CS-1 reader: decide exits 0 (no crash)", rc == 0, plain[-1500:])
+        check("CS-1 reader: queue file unchanged, byte for byte",
+              qfile.read_bytes() == before, _items(qfile))
+        check("CS-1 reader: the warning names the item and the command",
+              "cepa-plan reword-route fila b1" in plain
+              and "--if-no-item" in plain and "nenhum" in plain, plain[-2000:])
+        check("CS-1 reader: no silent `nenhum` was recorded",
+              "item_se_nao" not in str((_items(qfile)["b1"].get("owner_summary") or {})),
+              _items(qfile))
+
+
+def test_reword_route_keeps_an_item_declaration_already_stored():
+    """The same reader output passes when the item already carries a declaration."""
+    m = load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        it = item("b1", status="pending", human_pending=ROUTE)
+        it["owner_question"] = OLD_Q
+        it["route_kind"] = "external-block"
+        it["owner_summary"] = {"item_se_nao": "nenhum"}
+        root = build_repo(tmp, [it])
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        route = {"route_kind": "owner-task", "question": NEW_Q, "if_yes": NEW_YES,
+                 "if_no": NEW_NO}
+        error = m.reword_route("fila", root, "b1", route, replace=True)
+        check("CS-1 stored: recorded without error", error is None, error)
+        check("CS-1 stored: new question in the queue",
+              _items(qfile)["b1"].get("owner_question") == NEW_Q, _items(qfile))
 
 
 def test_new_question_answered_records_the_new_text():
@@ -209,7 +260,8 @@ def test_reword_route_replace_overwrites_question_and_keeps_the_route():
         qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
         base = [sys.executable, str(CEPA_PLAN), "reword-route", "fila", "b1",
                 "--route-kind", "owner-task", "--question", NEW_Q,
-                "--if-yes", NEW_YES, "--if-no", NEW_NO, "--repo", str(root)]
+                "--if-yes", NEW_YES, "--if-no", NEW_NO, "--if-no-item", "nenhum",
+                "--repo", str(root)]
         p = subprocess.run(base, capture_output=True, text=True)
         check("reword-route without --replace: exit 0", p.returncode == 0, p.stderr)
         check("reword-route without --replace: question kept",

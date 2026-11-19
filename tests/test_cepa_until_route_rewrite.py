@@ -64,9 +64,12 @@ def _route_reader(tmp, mode="ok"):
         "    print(json.dumps({'tipo': None}))\n"
         "elif mode in ('ok', 'itemslow'):\n"
         f"    print(json.dumps({{'route_kind': 'external-block', 'question': {QUESTION!r},\n"
-        f"        'if_yes': {IF_YES!r}, 'if_no': {IF_NO!r}}}))\n"
+        f"        'if_yes': {IF_YES!r}, 'if_no': {IF_NO!r}, 'item_se_nao': 'nenhum'}}))\n"
         "elif mode == 'slow':\n"
         "    import time; time.sleep(3)\n"
+        f"    print(json.dumps({{'route_kind': 'external-block', 'question': {QUESTION!r},\n"
+        f"        'if_yes': {IF_YES!r}, 'if_no': {IF_NO!r}, 'item_se_nao': 'nenhum'}}))\n"
+        "elif mode == 'nodecl':\n"
         f"    print(json.dumps({{'route_kind': 'external-block', 'question': {QUESTION!r},\n"
         f"        'if_yes': {IF_YES!r}, 'if_no': {IF_NO!r}}}))\n"
         "elif mode == 'garbage':\n"
@@ -151,6 +154,20 @@ def test_launch_without_terminal_records_the_rewrite_and_asks_nothing():
           "1 route" in out and "rewritten" in out, out[-1500:])
     check("no tty: the other item still ran", after["y1"]["status"] == "done",
           str(after["y1"]))
+
+
+def test_a_reader_without_an_item_declaration_leaves_the_queue_unchanged():
+    # CS-1: no silent "nenhum"; the old route stays, a warning names the command.
+    for tty in (False, True):
+        label = "nodecl " + ("tty" if tty else "no tty")
+        rc, out, before, after, calls = _launch([old_route(), item("y1")], mode="nodecl",
+                                                tty=tty, inputs=[("homologação?", "")])
+        check(f"{label}: the launch exits 0", rc == 0, out[-1500:])
+        check(f"{label}: r1 is unchanged", after["r1"] == before["r1"],
+              f"{before['r1']!r} -> {after['r1']!r}")
+        check(f"{label}: the reader was asked", "r1 reescrever-rota" in calls, str(calls))
+        check(f"{label}: a warning names reword-route", "reword-route" in out
+              and "NOT recorded" in out, out[-1500:])
 
 
 def test_a_reader_that_prints_garbage_or_fails_changes_nothing():
@@ -283,6 +300,16 @@ def test_a_reader_with_nul_or_a_lone_surrogate_does_not_kill_the_launch():
               str(after["y1"]))
 
 
+def test_parse_route_needs_owner_only_for_a_real_true():
+    mod = base.load_module()
+    head = '{"route_kind":"external-block","question":"a?","if_yes":"b","if_no":"c",'
+    for raw, want in (('true', True), ('"false"', False), ('"true"', False), ('1', False)):
+        r = mod.parse_route(head + '"item_se_nao":{"titulo":"Fazer X","precisa_do_dono":'
+                            + raw + '}}')
+        check(f"parse_route: precisa_do_dono {raw} -> {want}",
+              r is not None and r["item_se_nao"]["precisa_do_dono"] is want, str(r))
+
+
 def test_parse_route_rejects_bad_characters_and_non_strings():
     mod = base.load_module()
     for label, bad in (("NUL", "a\x00b?"), ("lone surrogate", "a\ud800b?"),
@@ -381,10 +408,11 @@ def test_is_old_route_selects_only_open_human_pending_routes():
 # ── cepa-plan reword-route ───────────────────────────────────────────────────
 
 def _reword(root, ident, kind="external-block", question=QUESTION, if_yes=IF_YES,
-            if_no=IF_NO):
+            if_no=IF_NO, no_item="nenhum"):
     cmd = [sys.executable, str(CEPA_PLAN), "reword-route", "fila", ident,
            "--route-kind", kind, "--repo", str(root)]
-    for flag, val in (("--question", question), ("--if-yes", if_yes), ("--if-no", if_no)):
+    for flag, val in (("--question", question), ("--if-yes", if_yes), ("--if-no", if_no),
+                      ("--if-no-item", no_item)):
         if val is not None:
             cmd += [flag, val]
     return subprocess.run(cmd, capture_output=True, text=True)
@@ -407,6 +435,7 @@ def test_reword_route_refuses_and_writes_nothing():
             "no question mark": _reword(root, "r1", question="Sem interrogação"),
             "no if-yes": _reword(root, "r1", if_yes=None),
             "no if-no": _reword(root, "r1", if_no=None),
+            "no if-no-item (CS-1 of resposta-do-decide)": _reword(root, "r1", no_item=None),
             "done item": _reword(root, "d1"),
             "no human_pending": _reword(root, "n1"),
             "unknown item": _reword(root, "zz"),
@@ -435,7 +464,8 @@ def test_reword_route_fills_only_what_is_missing():
         check("bare route gets kind, question and both effects",
               r1.get("route_kind") == "external-block"
               and r1.get("owner_question") == QUESTION
-              and r1["owner_summary"] == {"se_sim": IF_YES, "se_nao": IF_NO}, str(r1))
+              and r1["owner_summary"] == {"se_sim": IF_YES, "se_nao": IF_NO,
+                                          "item_se_nao": "nenhum"}, str(r1))
         _same_core("bare", old_route(), r1)
         p = _reword(root, "h1")
         check("fills a half route: exit 0", p.returncode == 0, p.stderr)

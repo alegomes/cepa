@@ -1,0 +1,20 @@
+schema_version: 1
+card: resposta-do-decide-vira-trabalho-CS-7
+key: resposta-do-decide-vira-trabalho-CS-7
+status: complete
+audited_at: 2026-11-19
+covers: db5c367..db89d6b
+criteria:
+  - id: CS-7
+    text: "o fechamento do `cepa-until decide` lista os itens criados pelas respostas. Red: um `cepa-until decide <fila>` com uma resposta que cria item termina com uma linha \"itens criados pelas suas respostas:\" seguida do id e do titulo; hoje o fechamento nao tem essa linha."
+    altitude: cli
+    surface: "`cepa-until decide <fila>` sob PTY, repo git real, com o `cepa-plan answer` real por tras; ultimas linhas do fechamento"
+    test: "tests/test_cepa_until_decide_created_items.py (red test: uma resposta que cria item; dois itens na ordem das respostas, o segundo esperando o dono; nenhuma resposta cria item -> sem a linha; terminal colorido CEPA_UNTIL_COR=sempre; painel de --all com o nome da fila)"
+    layer: "subprocesso real de common/bin/cepa-until sob PTY, sem mock; o id e o titulo esperados sao lidos da fila gravada."
+    evidence: verified
+    run: "python3 tests/test_cepa_until_decide_created_items.py -> todos 'ok', 'all ok' (HEAD db89d6b). RED em db5c367 (worktree descartavel, so o teste novo copiado): 5 FAIL. Vizinhos em HEAD: test_cepa_until_decide.py 'tudo verde'; test_cepa_plan_answer_creates_item.py 'tudo ok'; test_cepa_plan_answer_keeps_promises.py 'all ok'; test_cepa_plan_answer_no_work_warning.py 'all ok'."
+    status: complete
+    gap: ""
+    neighbors:
+      - "test_cepa_until_decide.py, creates_item (CS-2), keeps_promises (CS-6), no_work_warning (CS-5): verdes"
+note: "A linha cepa-plan 'item novo criado pela resposta' agora sai por _tui.verbatim; coberta pelos vizinhos verdes. Suite completa nao rodada, por regra da run. Worktree temporario removido."

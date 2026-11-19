@@ -203,6 +203,8 @@ reads it as data (and shows it as "Recommend yes/no"):
     "instrucao": "resume from until/2026-10-15-1128-vermelho-WEGO-2336 and give ink above the cut to the textless fixture of PipelineMultimodalSemVazamentoNoLogTest, like the other 4",
     "se_sim": "the code goes to the main branch and the 20-batch round becomes the next task",
     "se_nao": "the code stays on the side branch and the item stays stuck",
+    "item_se_sim": "nenhum",
+    "item_se_nao": {"titulo": "Calibrate the 20-batch round after the merge", "precisa_do_dono": false},
     "recomendo": "sim",
     "porque": "the round is only possible after the merge, and the red test is a fixture the agent foresaw and knows how to fix"}
  ]}
@@ -241,7 +243,20 @@ asked "o que diabos isso quer dizer?" — "what the hell does that mean?"):
   words ("o trabalho vai para revisão"), not to the queue: the terminal
   already says the item returns to the queue on yes. Up to 30 words each,
   with no code. The terminal shows them in the menu legend.
-- The lay fields (`contexto`, `pergunta`, `se_sim`, `se_nao`, `porque`) carry
+- `item_se_sim` and `item_se_nao` declare the queue item each answer creates, and
+  are **mandatory** for every answer that does not send the item back to the
+  queue: the `item_se_nao` of every item, and the `item_se_sim` of an item that
+  was delivered (reason `pos-entrega`, status `done`). The "sim" of a `blocked`
+  or `pending` item returns it to the queue and needs none (accepted if given).
+  Each is `"nenhum"` (the answer creates no work, on purpose) or
+  `{"titulo": "<lay title, up to 20 words>", "precisa_do_dono": true|false}`
+  (`true` when the new item also waits for the owner). A question that promises
+  work ("Do I put an item on the queue to ...?") MUST declare that work here, or
+  the owner's "sim" only closes the route and the promised item is never born.
+  The same rule applies to `cepa-plan finish --human-pending` and
+  `cepa-plan reword-route` (`--if-yes-item`, `--if-no-item`).
+- The lay fields (`contexto`, `pergunta`, `se_sim`, `se_nao`, `porque`, and the
+  `titulo` of `item_se_sim`/`item_se_nao`) carry
   no card key, commit hash, gate name (`completion-auditor`,
   `proof-reviewer`...) or verdict (`INCOMPLETE`, `PROVEN`...). Those belong to
   `instrucao` and the evidence, which are the agents' section.

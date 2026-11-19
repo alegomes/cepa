@@ -1,0 +1,50 @@
+schema_version: 2
+card: resposta-do-decide-vira-trabalho-CS-3
+verdict: proven
+reviewed_at: 2026-11-18T23:59:00-03:00
+base_commit: 83b566d
+head_commit: 429a5b3
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (owner_task_route, cmd_answer creation block: route applied, origin-evidence suffix, printed line; answer help text)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # tests/test_cepa_plan_answer_owner_item.py runs the real CLI in a PTY
+  base_commit_resolved: true
+method_note: >
+  Second pass (the first, at 0fe75fc, was UNPROVEN with survivors J and M). Perturbations ran in a fresh
+  throwaway detached worktree /tmp/proof-cs3c (git worktree add --detach at 429a5b3), one edit at a time,
+  restored with git checkout between runs; worktree removed with git worktree remove --force + prune.
+  Each perturbation re-ran tests/test_cepa_plan_answer_owner_item.py and the neighbor
+  tests/test_cepa_plan_answer_creates_item.py. Help text is non-behavioral, not perturbed. Full suite not run
+  (the supervisor runs it). Only 5 of the 13 prior perturbations were re-run (J, M plus spot-checks A, B, D);
+  C, E to I, K, L were red in the first pass and the test file only gained assertions since.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "BASELINE (429a5b3): python3 tests/test_cepa_plan_answer_owner_item.py -> 'tudo ok'; python3 tests/test_cepa_plan_answer_creates_item.py -> 'tudo ok'."
+        - "J (origin-evidence suffix ', esperando o dono.' replaced by '.', line 3888): owner_item RED, 1 falha(s) (assertion on the origin evidence); neighbor green."
+        - "M (suffix made unconditional): owner_item RED, 1 falha(s): 'FAIL sem a marca, a evidência de origem não diz que espera o dono'; neighbor green."
+        - "A (created.update(owner_task_route(title)) -> pass): owner_item RED, 11 falha(s); neighbor green."
+        - "B (gate `if decl.get('precisa_do_dono')` -> `if True`): owner_item RED, 2 falha(s) (sem a marca, o item novo nasce sem rota; a saída não diz que espera o dono); neighbor RED, 2 falha(s)."
+        - "D (route_kind 'owner-task' -> 'other'): owner_item RED, 4 falha(s); neighbor green."
+        - "Survivors: 0 of 5 re-run perturbations."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; the previously uncovered line (origin-evidence suffix) now has both a positive and a negative assertion, shown by J and M going RED."
+  l4_adversarial_input:
+    status: n/a
+    reason: "CS-3 adds no new input parsing: the route text is built from the already-declared title, which CS-2's hostile-text test and 39 adversarial cases already exercise through yaml.dump; the diff adds no argument, flag or file format."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type Story, not Bug. Equivalent check: git checkout 83b566d -- common/bin/cepa-plan in the worktree, python3 tests/test_cepa_plan_answer_owner_item.py -> rc 1, 12 falha(s) (RED), as the spec's red test requires."
+routing_reason: "PROVEN. The two survivors of the first pass (J, M on the origin-evidence suffix) now turn the real-CLI test RED, spot-checks of route application, owner-mark gate and route_kind stay RED, and the new test is RED (12 falhas) against the base code. Neighbor test stays green except for the gate perturbation, as expected."

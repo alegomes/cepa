@@ -1225,7 +1225,7 @@ def test_cs6_decide_all_run_reword_lands_in_the_queue_of_the_item():
             "if it.get('tarefa') == 'reescrever-pergunta':\n"
             f"    print(json.dumps({{'route_kind': 'owner-task', 'question': {new_q!r},\n"
             "        'if_yes': 'O item volta para a fila.',\n"
-            "        'if_no': 'O item continua esperando.'}))\n"
+            "        'if_no': 'O item continua esperando.', 'item_se_nao': 'nenhum'}))\n"
             "else:\n"
             "    print(json.dumps({'tipo': None}))\n")
         reader.chmod(0o755)

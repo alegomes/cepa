@@ -212,6 +212,18 @@ class Filter:
 SCREEN = Screen()
 
 
+def verbatim(line):
+    """Print one line as it is, never wrapped nor colored: a command the owner
+    copies (the `cepa-plan add` of an answer that creates no work) broken at the
+    terminal width stops being a command."""
+    out = sys.stdout
+    if isinstance(out, Filter):
+        out.flush()
+        out = out._stream
+    out.write(line + "\n")
+    out.flush()
+
+
 def install():
     """Decorate the command's stdout when it is a terminal. JSON output
     (`--json`) and an explicit request for plain text (`--no-color`, or the

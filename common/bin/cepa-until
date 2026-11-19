@@ -985,8 +985,13 @@ CUT_RULE = (
     "repository), `external-block` (something outside has to exist, not an owner "
     "decision) or `open-question` (a doubt the owner answers); `--question` with a "
     "closed yes-or-no question, with a `?` (your recommendation may follow it); and "
-    "`--if-yes` and `--if-no` saying what each answer does to the work. If any of "
-    "them is missing, `finish` refuses and records nothing.")
+    "`--if-yes` and `--if-no` saying what each answer does to the work; and the queue "
+    "item each answer that does not send the item back to the queue creates: "
+    "`--if-no-item \"<lay title>\"` always, and `--if-yes-item` too when you close "
+    "the item `done` (use `nenhum` when the answer creates no work; add "
+    "`--if-yes-item-needs-owner`/`--if-no-item-needs-owner` when the new item also "
+    "waits for the owner). If any of them is missing, `finish` refuses and records "
+    "nothing.")
 
 
 def build_command(name, branch, permissions, session_id=None, note="", model=None):
@@ -2229,6 +2234,7 @@ def finish_item(name, repo, ident, status, evidence, impede=None, owner=None):
     for key, flag, _ in _ownertext.FIELDS:
         if str(owner.get(key) or "").strip():
             flags += [flag, str(owner[key])]
+    flags += _ownertext.item_flags(owner)
     try:
         p = subprocess.run(
             [sys.executable, str(CEPA_PLAN), "finish", name, str(ident),
@@ -3128,9 +3134,12 @@ def owner_summary_of(ad, d):
     """The human section of a deferred item: what the agent wrote with
     `finish`, completed by the analysis's `se_sim`/`se_nao`. Only text."""
     raw = ad.get("owner_summary")
+    # Only text: the declared items (`item_se_sim`/`item_se_nao`, a dict or "nenhum")
+    # are for `cepa-plan answer`, not for this screen.
     summary = {k: " ".join(str(v).split()) for k, v in
                (raw.items() if isinstance(raw, dict) else ())
-               if v is not None and str(v).strip()}
+               if isinstance(v, str) and v.strip()
+               and k not in {x[0] for x in _ownertext.ITEM_KEYS}}
     for key in ("se_sim", "se_nao"):
         if not summary.get(key) and str((d or {}).get(key) or "").strip():
             summary[key] = " ".join(str(d[key]).split())
@@ -3422,6 +3431,7 @@ class Panel:
                 self.output(f"     ○ {later_names(for_later)}")
             if for_later:
                 self.output(f"   To come back to these questions: {back}")
+            self._created(applied)
             return
         self.output("")
         self.output(t.rule("closing"))
@@ -3442,6 +3452,18 @@ class Panel:
         if for_later:
             self.output("   " + t.c("cinza", "to come back to these questions: ")
                        + t.c("ciano", back))
+        self._created(applied)
+
+    def _created(self, applied):
+        """CS-7 (resposta-do-decide-vira-trabalho): the closing ends with the items
+        the answers put on the queue, so the owner sees the work a "sim" created
+        without opening the queue. No item created, no line."""
+        created = created_items(applied)
+        if not created:
+            return
+        self.output("   " + self.t.c("verde", CREATED_HEADER))
+        for x in created:
+            self.output("     " + x)
 
     # ── aterrissar ──────────────────────────────────────────────────────
 
@@ -3608,6 +3630,30 @@ def later_names(for_later):
     later by its id only (`b1, b2`); the reason beside it is the generic label the
     item block already replaced with the lay one."""
     return ", ".join(str(x).split(":", 1)[0] for x in for_later)
+
+
+# CS-7 (resposta-do-decide-vira-trabalho): the line `cepa-plan answer` prints for the
+# item an answer created, and the closing line that lists them all.
+CREATED_LINE = re.compile(r"^\s*item novo criado pela resposta: (\S+) — (.*?)"
+                          r" \(no fim da fila, `pending`(, esperando você)?\)\s*$")
+CREATED_HEADER = "itens criados pelas suas respostas:"
+
+
+def created_items(applied):
+    """CS-7: the items the owner's answers created, in answer order, as
+    `<id> — <title>` (plus `(esperando você)` when the item waits on the owner),
+    read from each answer's output in `applied`. An entry of the `--all` panel
+    (`<queue>/<id>: ...`) prefixes the id with its queue."""
+    found = []
+    for entry in applied:
+        head = str(entry).split(":", 1)[0]
+        prefix = head.rsplit("/", 1)[0] + "/" if "/" in head else ""
+        for line in str(entry).splitlines():
+            m = CREATED_LINE.match(line)
+            if m:
+                found.append(f"{prefix}{m.group(1)} — {m.group(2)}"
+                             + (" (esperando você)" if m.group(3) else ""))
+    return found
 
 
 def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
@@ -4164,10 +4210,13 @@ and Grep; change nothing) and decide:
 a "?", in lay words: no codes, file names, commit hashes or card ids;
 - if_yes: what a "yes" does to the WORK, in Brazilian Portuguese, up to 30 words, lay \
 words (a "yes" sends the item back to the queue for the next run);
-- if_no: what a "no" does to the WORK, same rules (a "no" leaves the item waiting).
+- if_no: what a "no" does to the WORK, same rules (a "no" leaves the item waiting);
+- item_se_nao: the queue item a "no" creates, as {{"titulo": "<lay title, up to 20 \
+words>", "precisa_do_dono": false}}, or "nenhum" when a "no" creates no work.
 
 Answer with ONLY one JSON object, no prose, no code fence:
-{{"route_kind": "...", "question": "...", "if_yes": "...", "if_no": "..."}}
+{{"route_kind": "...", "question": "...", "if_yes": "...", "if_no": "...", \
+"item_se_nao": "nenhum"}}
 
 Item:
 {item}
@@ -4196,10 +4245,13 @@ a "?", in lay words: no codes, file names, commit hashes or card ids, and NOT th
 words as `pergunta_mal_escrita`;
 - if_yes: what a "yes" does to the WORK, in Brazilian Portuguese, up to 30 words, lay \
 words (a "yes" sends the item back to the queue for the next run);
-- if_no: what a "no" does to the WORK, same rules (a "no" leaves the item waiting).
+- if_no: what a "no" does to the WORK, same rules (a "no" leaves the item waiting);
+- item_se_nao: the queue item a "no" creates, as {{"titulo": "<lay title, up to 20 \
+words>", "precisa_do_dono": false}}, or "nenhum" when a "no" creates no work.
 
 Answer with ONLY one JSON object, no prose, no code fence:
-{{"route_kind": "...", "question": "...", "if_yes": "...", "if_no": "..."}}
+{{"route_kind": "...", "question": "...", "if_yes": "...", "if_no": "...", \
+"item_se_nao": "nenhum"}}
 
 Item:
 {item}
@@ -4262,7 +4314,24 @@ def parse_route(text):
         return None
     if "?" not in flat["question"] or not flat["if_yes"] or not flat["if_no"]:
         return None
-    return {"route_kind": body["route_kind"], **flat}
+    route = {"route_kind": body["route_kind"], **flat}
+    # CS-1 of resposta-do-decide-vira-trabalho: the optional declaration of the item
+    # each answer creates, `"nenhum"` or {"titulo", "precisa_do_dono"}. Anything else
+    # is dropped (the route stays valid; `reword_route` records it only if the item already declares one).
+    for key, *_ in _ownertext.ITEM_KEYS:
+        raw = body.get(key)
+        if isinstance(raw, dict):
+            # Only a real JSON `true` needs the owner: the string "false" is not it.
+            title, needs = raw.get("titulo"), raw.get("precisa_do_dono") is True
+        else:
+            title, needs = raw, False
+        if isinstance(title, str):
+            value, error = _ownertext.item_declaration(key, title, needs)
+            if value is not None and not error \
+                    and not any(unicodedata.category(ch) in ("Cc", "Cf", "Cs")
+                                for ch in title):
+                route[key] = value
+    return route
 
 
 def parse_finding(text):
@@ -4665,6 +4734,12 @@ def open_precondition_route(queue, repo, row):
         text = str(summary.get(key) or "").strip() or defaults.get(key, "")
         if text:
             cmd += [flag, text]
+    # CS-1 of resposta-do-decide-vira-trabalho: the item each answer without return
+    # creates. The route is on a `pending` item (its "yes" returns it to the queue),
+    # so only the "no" needs one; the pre-condition route creates no work, so
+    # "nenhum" is the honest default when the item carries no declaration.
+    declared = _ownertext.item_flags(summary)
+    cmd += declared if "--if-no-item" in declared else declared + ["--if-no-item", "nenhum"]
     # The outer session did not build this item: with its id in the environment,
     # `finish --status pending` would flag THAT session as owing a validation.
     env = {k: v for k, v in os.environ.items()
@@ -4717,6 +4792,13 @@ def reword_route(queue, repo, ident, route, replace=False):
            "--route-kind", route["route_kind"], "--question", route["question"],
            "--if-yes", route["if_yes"], "--if-no", route["if_no"],
            "--repo", str(repo)] + (["--replace"] if replace else [])
+    # CS-1 of resposta-do-decide-vira-trabalho: `reword-route` needs the item the "no"
+    # creates (or "nenhum"). The reader may declare it (`item_se_sim`/`item_se_nao`).
+    # Without one the call goes without it and passes only when the item already
+    # carries a declaration; refused, the rewrite is NOT recorded (the old route stays
+    # answerable) and a warning names the command that fixes it. There is no silent
+    # "nenhum": it would hide work the owner's "no" may promise.
+    cmd += _ownertext.item_flags({k: route.get(k) for k, *_ in _ownertext.ITEM_KEYS})
     env = {k: v for k, v in os.environ.items()
            if k not in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")}
     try:
@@ -4725,6 +4807,12 @@ def reword_route(queue, repo, ident, route, replace=False):
         return f"`cepa-plan reword-route` did not answer: {e}"
     if p.returncode == 0:
         return None
+    if "--if-no-item" not in cmd and "--if-no-item" in (p.stderr or ""):
+        print(f"   warning: the route reader declared no item for the \"no\" of "
+              f"{ident}, so the rewritten question was NOT recorded (the old route "
+              f"stays). To record it: `cepa-plan reword-route {queue} {ident} "
+              f"--route-kind {route['route_kind']} --question \"...\" --if-yes \"...\" "
+              f"--if-no \"...\" --if-no-item \"<title>|nenhum\"{' --replace' if replace else ''}`")
     return (p.stderr or p.stdout or "").strip() or \
         f"`cepa-plan reword-route` exited {p.returncode}"
 
