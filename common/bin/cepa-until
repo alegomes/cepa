@@ -4197,6 +4197,16 @@ def edit_in_editor(ident, question_text, title=None, status=None):
             pass
 
 
+def owner_question_of(ad, by_item):
+    """`(why it waits on the owner, the question)` of a deferred item: the one the
+    agent recorded, else the analysis' wording, else the item's own evidence."""
+    d = (by_item or {}).get(str(ad.get("id"))) or {}
+    q = ad.get("question") or d.get("pergunta") or ad.get("human_pending") \
+        or summarize_reason(ad.get("evidence") or "")
+    why = owner_summary_of(ad, d).get("impede") or OWNER_REASON[reason_alias(ad["reason"])]
+    return why, q
+
+
 def pending_as_text(queue, run_id, item_states, deferred, analysis, output=print):
     """Without a terminal (the run launched by `nohup`, or read by another program):
     the same list, without asking."""
@@ -4210,10 +4220,7 @@ def pending_as_text(queue, run_id, item_states, deferred, analysis, output=print
     if action:
         output(f"   - {action_label(action)}: {action.get('frase')}")
     for ad in owner_items:
-        d = by_item.get(str(ad.get("id"))) or {}
-        q = ad.get("question") or d.get("pergunta") or ad.get("human_pending") \
-            or summarize_reason(ad.get("evidence") or "")
-        why = owner_summary_of(ad, d).get("impede") or OWNER_REASON[reason_alias(ad["reason"])]
+        why, q = owner_question_of(ad, by_item)
         output(f"   - {ad.get('id')} ({why}): {q}")
     output(f"   To answer them one by one, in a terminal: cepa-until decide "
           f"{queue}" + (f"/{run_id}" if run_id else ""))
@@ -4326,6 +4333,7 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
     if not interactive:
         if report is not None:
             report["deferred"] = everything
+            report["analysis"] = analysis
         else:
             pending_as_text(queue, run_id, item_states, deferred, analysis)
         return 0
@@ -4342,6 +4350,7 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
     if report is not None:
         # What the questions left open, read from the queue again.
         report["deferred"] = owner_deferred(repo, queue, run_id, quiet=True)
+        report["analysis"] = analysis
     return 0
 
 
@@ -4425,6 +4434,11 @@ def paths_line(entries, room):
     return fit(full, room)
 
 
+# How many owner questions the "Next" panel spells out, one row each; the rest is
+# counted and left to `cepa-until decide`.
+NEXT_QUESTIONS_SHOWN = 5
+
+
 def next_rows(repo, queue, run_id, state, ledger, report, left=None):
     """The rows of the "Next" panel: the merge (named here and nowhere else in the
     end of the run), the owner's questions, then what the run state leaves with the
@@ -4459,8 +4473,15 @@ def next_rows(repo, queue, run_id, state, ledger, report, left=None):
     owner = owner_questions((report or {}).get("deferred"))
     if owner:
         n += 1
-        rows.append([("negrito", f"{n}. {len(owner)} question(s) for you: "),
+        rows.append([("negrito", f"{n}. {len(owner)} owner question(s): "),
                      (None, ", ".join(str(ad.get("id")) for ad in owner), True)])
+        by_item = ((report or {}).get("analysis") or {}).get("itens") or {}
+        for ad in owner[:NEXT_QUESTIONS_SHOWN]:
+            rows.append([(None, "   "), ("negrito", f"{ad.get('id')}: "),
+                         ("cinza", owner_question_of(ad, by_item)[1], True)])
+        if len(owner) > NEXT_QUESTIONS_SHOWN:
+            rows.append([(None, "   "), ("cinza", f"... and {len(owner) - NEXT_QUESTIONS_SHOWN}"
+                                        " more, all in `decide`")])
         rows.append([(None, "   "), ("ciano", f"cepa-until decide {queue}/{run_id}"),
                      ("cinza", " (one by one, in a terminal)")])
     asked = (report or {}).get("asked")
@@ -7899,7 +7920,7 @@ def _main(argv=None):
     groups = {}
     for fkey, pref in followed.items():
         who = ("your answer at the launch" if pref["fonte"] == "dono"
-               else "the agent's default, nobody answered")
+               else "the agent's default")
         groups.setdefault(label(fkey), []).append(
             [("amarelo", "followed "), (None, f"{pref['escolha']} ({who}) · "
                                            f"{pref['texto']}", True)])

@@ -1042,6 +1042,8 @@ def test_cs6_decide_all_run_lists_what_every_queue_holds_for_the_owner():
         nxt = p.stdout.split("── Next", 1)[-1]
         check("o fim do run --all lista o que espera o dono, por fila",
               "── Next" in p.stdout and "2 owner question(s): a/x1, b/x1" in nxt
+              and "a/x1: Fecho o card da fila a?" in nxt
+              and "b/x1: Fecho o card da fila b?" in nxt
               and "merge into" in nxt
               and f"cepa-until decide all/{run_id}" in nxt, p.stdout[-1500:])
         r = _target_command(tmp, root, "decide", f"all/{run_id}")
@@ -1183,8 +1185,8 @@ def test_cs6_all_run_on_a_terminal_only_lists_at_the_end_and_never_asks():
         # CS-6: the end of the run names the owner items in the "Next" panel (ids
         # and the `decide` command); the question text is `decide`'s to show.
         check("...lista o item da fila a no painel Next",
-              "── Next" in plain.replace("┌─ Next", "── Next")
-              and "owner question(s): a/x1" in plain, plain[-1500:])
+              "Next" in plain and "owner question(s): a/x1" in plain
+              and "Fecho o card da fila a?" in plain, plain[-1500:])
         run_id = _all_run_id(root)
         check("...e manda voltar com `decide all/<run>`",
               run_id is not None and f"cepa-until decide all/{run_id}" in plain,

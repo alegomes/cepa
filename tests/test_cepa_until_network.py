@@ -147,7 +147,7 @@ def test_network_drop_waits_for_the_return_and_resumes_the_same_item():
               run_end(root)["motivo"] == "end-of-queue"
               and run_end(root)["quedas_de_rede"] == 1, str(run_end(root)))
         check("o relatório lista a queda como não-falha",
-              "Network drops (1)" in p.stdout and "NO NETWORK" in p.stdout,
+              "network drops (1," in p.stdout and "NO NETWORK" in p.stdout,
               p.stdout[-800:])
 
 
@@ -234,7 +234,7 @@ def test_network_that_does_not_return_within_the_window_stops_the_run():
         check("run_end conta a queda da qual a rede não voltou",
               end["quedas_de_rede"] == 1, str(end))
         check("o resumo do fim lista a queda sem volta",
-              "not back" in p.stdout and "Network drops (1)" in p.stdout,
+              "not back" in p.stdout and "network drops (1," in p.stdout,
               p.stdout[-600:])
 
 

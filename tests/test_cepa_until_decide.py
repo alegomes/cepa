@@ -770,11 +770,11 @@ def test_run_without_terminal_lists_the_pending_and_the_command():
         root = build_repo(tmp, [item("a1"), item("a2")])
         binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
         p, _ = run_until(root, binv, plan_of(root), ["--for", "2h"])
-        check("o fim lista o que espera o dono",
-              "waiting on you" in p.stdout, p.stdout[-1500:])
+        nxt = p.stdout.split("── Next")[-1]
+        check("o fim lista o que espera o dono, no painel Next",
+              "── Next" in p.stdout and "1 owner question(s): a1" in nxt, p.stdout[-1500:])
         check("...com a pergunta do item, não a evidência",
-              "Fecho o card como medir depois do go-live?" in p.stdout,
-              p.stdout[-1500:])
+              "a1: Fecho o card como medir depois do go-live?" in nxt, p.stdout[-1500:])
         check("...e o comando para responder",
               "cepa-until decide fila/" in p.stdout, p.stdout[-800:])
 
@@ -1012,9 +1012,9 @@ def test_end_with_analysis_asks_with_the_block_wording():
             "evidence='evidência crua longa')\n")
         binv = fake_claude(tmp, body)
         p, _ = run_until(root, binv, plan_of(root), ["--for", "2h", "--com-analise"])
-        end = p.stdout.split("── waiting on you")[-1]
+        end = p.stdout.split("── Next")[-1]
         check("com análise, o fim lista o que espera o dono",
-              "── waiting on you" in p.stdout, p.stdout[-1200:])
+              "── Next" in p.stdout and "1 owner question(s): a1" in end, p.stdout[-1200:])
         check("...com a pergunta redigida pela análise",
               "Movo a medição para o checklist?" in end, end)
 
@@ -1036,8 +1036,8 @@ def test_end_stopped_by_quota_also_asks():
         end = [e for e in ledger_of(root) if e["evento"] == "run_end"][0]
         check("o run parou pela cota", end["motivo"] == "limite-de-uso", str(end))
         check("...e mesmo assim termina perguntando",
-              "── waiting on you" in p.stdout
-              and "Fecho o card?" in p.stdout, p.stdout[-1200:])
+              "── Next" in p.stdout and "a1: Fecho o card?" in p.stdout,
+              p.stdout[-1200:])
 
 
 def test_list_without_terminal_filters_what_is_not_the_owners():
@@ -2721,8 +2721,9 @@ def test_pre_read_cs6_without_answer_the_prompt_carries_the_default_and_the_summ
           str(reqs))
     tail = out[out.find("ended at"):]
     check("cs6 default: the end summary lists the choice",
-          "Choices the pre-read found (1)" in tail
-          and "x1: usar o formato curto (the agent's default" in tail, tail[-1500:])
+          "── Decisions (1)" in tail
+          and "x1  followed usar o formato curto (the agent's default)" in tail,
+          tail[-1500:])
     check("cs6 default: the summary line carries what the choice was about",
           "Há duas formas de mostrar a data." in tail, tail[-1500:])
     start = [e for e in events if e.get("evento") == "item_start" and e.get("id") == "x1"]
@@ -2751,7 +2752,7 @@ def test_pre_read_cs6_answer_typed_in_the_launch_panel_goes_into_the_prompt():
           "the owner's answer at the launch" in reqs.get("x1", ""), str(reqs))
     tail = out[out.find("ended at"):]
     check("cs6 answer: the summary says it was the owner's answer",
-          "x1: mostrar a data por extenso (your answer at the launch)" in tail,
+          "x1  followed mostrar a data por extenso (your answer at the launch)" in tail,
           tail[-1500:])
     start = [e for e in events if e.get("evento") == "item_start" and e.get("id") == "x1"]
     check("cs6 answer: item_start records fonte dono",
@@ -2780,7 +2781,7 @@ def test_pre_read_cs6_preference_without_default_is_no_finding():
     check("cs6 no default: the event says no finding",
           reads and all(r["tipo"] is None for r in reads[0]["itens"]), str(reads))
     check("cs6 no default: the summary has no choices block",
-          "Choices the pre-read found" not in out, out[-800:])
+          "  followed " not in out and "── Decisions" not in out, out[-800:])
 
 
 def test_pre_read_cs6_note_and_command_units():
