@@ -11,6 +11,7 @@ Run with `python3 tests/test_cepa_until_screen_english.py`.
 
 import importlib.machinery
 import importlib.util
+import json
 import os
 import re
 import subprocess
@@ -95,6 +96,21 @@ def test_every_other_site_that_prints_the_action():
               for x in after), after)
 
 
+def test_decide_card_on_a_terminal_carries_the_destination_branch():
+    """With the decoration on, the card title is the label of THIS action, not the
+    default of `land_card`."""
+    m = load_module(color="sempre")
+    screen = []
+    state_dict = {"estado": "fim", "acoes": [
+        {"id": "aterrissar", "frase": "leva 3", "destino": "main"}]}
+    m.decide(Path("/nao/existe"), "fila", "run1", state_dict, [], {},
+             question=lambda _p: "n", output=screen.append,
+             answer=lambda i, t, keep=False: (0, "ok"), land=lambda: 0)
+    text = ANSI.sub("", "\n".join(screen))
+    check("no terminal, o título do cartão é merge into `main`",
+          "┌─ merge into `main` ─" in text and "aterrissar" not in text, text)
+
+
 def test_land_refusal_does_not_print_the_id():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
@@ -102,6 +118,52 @@ def test_land_refusal_does_not_print_the_id():
                            cwd=str(root), capture_output=True, text=True)
         check("land de run inexistente não imprime aterrissar",
               "aterrissar" not in p.stdout + p.stderr, p.stdout + p.stderr)
+
+
+def test_land_of_a_run_that_proposed_no_merge_says_so_in_english():
+    """A run waiting for the owner whose state has no landing action: the refusal
+    names the merge, not the stored id."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        binv = fake_claude(root.parent, WORKS)
+        run_until(root, binv, plan_of(root),
+                  ["--for", "2h", "--verify", VERIFY, "--no-analysis"])
+        path = sorted((root / ".claude").rglob("*.estado.json"))[-1]
+        state_dict = json.loads(path.read_text())
+        state_dict.update(estado="esperando-dono", acoes=[])
+        path.write_text(json.dumps(state_dict))
+        run_id = path.name[:-len(".estado.json")]
+        p = subprocess.run([sys.executable, str(CEPA_UNTIL), "land", f"fila/{run_id}",
+                            "--repo", str(root)],
+                           cwd=str(root), capture_output=True, text=True, timeout=60)
+        out = p.stdout + p.stderr
+        check("land recusa a run sem a ação", p.returncode == 3, out)
+        check("...dizendo que a run não propôs o merge",
+              "did not propose the merge" in out and "aterrissar" not in out, out)
+
+
+def test_help_of_decide_and_close_dead_has_no_portuguese_id():
+    for sub in ("decide", "close-dead"):
+        p = subprocess.run([sys.executable, str(CEPA_UNTIL), sub, "--help"],
+                           capture_output=True, text=True, timeout=60)
+        out = p.stdout + p.stderr
+        check(f"{sub} --help sai 0", p.returncode == 0, out[-500:])
+        check(f"{sub} --help não diz aterrissar", "aterrissar" not in out, out)
+    check("decide --help fala do merge", "the merge and each deferred item" in
+          " ".join(subprocess.run([sys.executable, str(CEPA_UNTIL), "decide", "--help"],
+                                  capture_output=True, text=True,
+                                  timeout=60).stdout.split()))
+
+
+def test_close_dead_plan_names_the_merge_action():
+    from test_cepa_until_dead_supervisor import night_that_died, closes, run_of
+    with tempfile.TemporaryDirectory() as tmp:
+        root, start = night_that_died(tmp)
+        p = closes(root, run_of(start))
+        out = p.stdout + p.stderr
+        check("o plano do close-dead sai 0", p.returncode == 0, out)
+        check("...e diz merge action, não aterrissar",
+              "with the merge action" in out and "aterrissar" not in out, out)
 
 
 def test_cepa_plan_stop_details_are_in_english():
