@@ -3770,6 +3770,38 @@ def owner_task_route(title):
     }
 
 
+def answer_promises(it, answer):
+    """The evidence sentence that keeps what the answered question promised.
+
+    CS-6 of docs/spec/resposta-do-decide-vira-trabalho.md: `answer` drops the
+    owner section (`owner_question`, `owner_summary`) once the route closes, and
+    the "se sim"/"se não" texts went with it, so a later reader of "Resposta do
+    dono: sim" could not tell what that "sim" agreed to. Both options are kept
+    (the owner chose between them) and the chosen one is named; an answer that
+    is neither "sim" nor "não" (`--force`) names none. Only the question when
+    the route has no `owner_summary`; None when there is nothing to keep."""
+    def clean(v):
+        return " ".join(str(v or "").split()).rstrip(" .")
+    question = " ".join(str(it.get("owner_question") or "").split())
+    summary = it.get("owner_summary")
+    summary = summary if isinstance(summary, dict) else {}
+    if_yes, if_no = clean(summary.get("se_sim")), clean(summary.get("se_nao"))
+    parts = []
+    if question:
+        parts.append(f"Pergunta respondida: {question}"
+                     + ("" if question[-1] in ".?!" else "."))
+    options = [f"se sim, {if_yes}" if if_yes else "",
+               f"se não, {if_no}" if if_no else ""]
+    options = [o for o in options if o]
+    if options:
+        parts.append("O que cada opção prometia: " + "; ".join(options) + ".")
+        if re.match(r"^sim\b", answer, re.IGNORECASE) and if_yes:
+            parts.append('O dono escolheu o "sim".')
+        elif re.match(r"^n(ã|a)o\b", answer, re.IGNORECASE) and if_no:
+            parts.append('O dono escolheu o "não".')
+    return " ".join(parts) or None
+
+
 NO_WORK_WARNING = "esta resposta não cria trabalho"
 
 
@@ -3906,6 +3938,11 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
         elif st == "blocked":
             it["status"] = "pending"
             parts.append("O item voltou de `blocked` para `pending`.")
+    if not keep:
+        # Kept, the owner section stays in the item and there is nothing to copy.
+        promises = answer_promises(it, answer)
+        if promises:
+            parts.append(promises)
     created = None
     decl = answer_creates(it, st, route, answer, keep, drop)
     if decl is not None:
@@ -5791,6 +5828,8 @@ def main(argv=None):
             "it is born with an open owner-task route. An old route that declares\n"
             "no item for the answer creates nothing and prints \"esta resposta não\n"
             "cria trabalho\" with a `cepa-plan add` line ready to copy.\n"
+            "Before the owner section leaves the item, the evidence keeps the\n"
+            "question, what the yes and the no promised and which one was chosen.\n"
             "By default commits only the queue in the same step."),
         examples=[('cepa plan answer wego WEGO-124 --answer "yes, close it"',
                    "unblock with the answer"),
