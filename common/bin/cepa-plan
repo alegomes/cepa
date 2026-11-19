@@ -3751,6 +3751,25 @@ def answer_creates(it, st, route, answer, keep, drop):
     return None
 
 
+def owner_task_route(title):
+    """The open route of an item born "precisa do dono" (CS-3).
+
+    The spec decided it without asking: `route_kind: owner-task`, the declared
+    title as the pending text, and "nenhum" for both of its own answers, so a
+    declaration never asks for another declaration. The item is `pending`, so its
+    "sim" returns it to the queue with the owner's answer."""
+    none = _ownertext.NONE_VALUE
+    return {
+        "human_pending": title,
+        "route_kind": "owner-task",
+        "owner_question": f"Dou como feito por você: {title}?",
+        "owner_summary": {
+            "se_sim": "o item volta para a fila com a sua resposta",
+            "se_nao": "o item continua esperando você",
+            "item_se_sim": none, "item_se_nao": none},
+    }
+
+
 def answer_item_id(ident, by_id):
     """`<origin>-sim`, then `<origin>-sim-2`, ...: never an id the queue has."""
     base = f"{ident}-sim"
@@ -3863,7 +3882,10 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
             "evidence": (f"Criado em {today} pela resposta do dono ao item {ident}. "
                          f"Pergunta: {route_question} Resposta: {answer}"),
             "sem_epic": True})
-        parts.append(f"A resposta criou o item {new_id} no fim da fila: {title}.")
+        if decl.get("precisa_do_dono"):
+            created.update(owner_task_route(title))
+        parts.append(f"A resposta criou o item {new_id} no fim da fila: {title}"
+                     + (", esperando o dono." if decl.get("precisa_do_dono") else "."))
     if previous:
         parts.append(f"Evidência anterior: {previous}")
     it["evidence"] = " ".join(parts)
@@ -3885,7 +3907,8 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
               + (" · rota humana fechada" if route is not None else ""))
     if created is not None:
         print(f"  item novo criado pela resposta: {created['id']} — "
-              f"{created['title']} (no fim da fila, `pending`)")
+              f"{created['title']} (no fim da fila, `pending`"
+              + (", esperando você)" if created.get("human_pending") else ")"))
     for line in waiver_lines:
         print(line)
     close_write(root, target, f"queue {name}: owner's answer to {ident} "
@@ -5716,7 +5739,8 @@ def main(argv=None):
             "--force. Runs only on a terminal: an agent cannot answer for the owner.\n"
             "A \"sim\" to a route on a `done` item whose route declares an item for\n"
             "the yes (`--if-yes-item` in `finish`) creates that item at the end of\n"
-            "the same queue, `pending`, and prints its id.\n"
+            "the same queue, `pending`, and prints its id; declared needs-owner,\n"
+            "it is born with an open owner-task route.\n"
             "By default commits only the queue in the same step."),
         examples=[('cepa plan answer wego WEGO-124 --answer "yes, close it"',
                    "unblock with the answer"),
