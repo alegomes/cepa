@@ -357,6 +357,92 @@ def test_window_that_fits_the_last_build_has_no_reason():
               str(called))
 
 
+def test_run_whose_window_ended_before_the_build_did_not_merge():
+    """End to end: a run clean on every other condition, but its last full build
+    (a `sleep 12`) took longer than the whole window (`--for 0.15m`, 9 s), so when
+    the run closes the window left is negative. The build is the clock: 12 s of
+    build against 9 s of window holds whatever the machine's speed. The wiring in
+    `commit_records` (`left=deadline - now`) is what this pins."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        remote = with_origin(root)
+        binv = fake_claude(root.parent, WORKS)
+        p, _ = run_until(root, binv, plan_of(root),
+                         ["--for", "0.15m", "--min-reserve", "0.01m",
+                          "--verify", "sleep 12; " + VERIFY, "--no-analysis",
+                          "--auto-land"], timeout=90)
+        out = p.stdout + p.stderr
+        start = [e for e in ledger_of(root) if e["evento"] == "run_start"][0]
+        built = [e for e in ledger_of(root) if e["evento"] == "verify"]
+        check("o item foi entregue e o build completo (>= 12s) rodou e ficou verde",
+              len(built) == 1 and built[0]["verde"] and built[0]["segundos"] >= 12,
+              str(built))
+        st = state(root)
+        check("a linha diz que a janela acaba antes do build",
+              "not merged: the window ends in" in out, out[-2000:])
+        check("o estado é esperando-dono, não aterrissado",
+              st.get("estado") == "esperando-dono", str(st.get("estado")))
+        check("o commit do item não está na main do clone",
+              "a1" not in git(root, "log", "--format=%s", "HEAD").splitlines())
+        pushed = subprocess.run(["git", "--git-dir", str(remote), "log",
+                                 "--format=%s", "HEAD"], capture_output=True,
+                                text=True).stdout.splitlines()
+        check("...nem no origin", "a1" not in pushed, str(pushed))
+        check("...e a branch da run continua", git(root, "branch", "--list",
+                                                    start["branch"]), out[-800:])
+
+
+def test_run_with_a_slow_build_that_fits_the_window_merges():
+    """The other side: the build takes a measurable time (>= 2 s) and the window
+    (2h) comfortably holds it, so the run still merges. A `commit_records` that
+    passed a zero window would refuse here."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        remote = with_origin(root)
+        binv = fake_claude(root.parent, WORKS)
+        p, _ = run_until(root, binv, plan_of(root),
+                         ["--for", "2h", "--verify", "sleep 2; " + VERIFY,
+                          "--no-analysis", "--auto-land"])
+        out = p.stdout + p.stderr
+        built = [e for e in ledger_of(root) if e["evento"] == "verify"]
+        check("o build completo da run levou >= 2s",
+              bool(built) and built[0]["segundos"] >= 2, str(built))
+        check("a janela folgada não recusa", "not merged" not in out, out[-2000:])
+        check("o estado termina aterrissado", state(root).get("estado") ==
+              "aterrissado", str(state(root).get("estado")))
+        pushed = subprocess.run(["git", "--git-dir", str(remote), "log",
+                                 "--format=%s", "HEAD"], capture_output=True,
+                                text=True).stdout.splitlines()
+        check("o commit do item chegou ao origin", "a1" in pushed, str(pushed))
+
+
+def test_left_none_skips_the_window_guard():
+    """Contract: `left=None` (no deadline known) skips the window guard, even over
+    a ledger whose last full build was long."""
+    mod = _module()
+    with tempfile.TemporaryDirectory() as tmp:
+        called = []
+        mod.cmd_land = lambda argv: called.append(argv) or 0
+        mod.not_clean_reason = lambda *a: None
+        path = Path(tmp) / "r.estado.json"
+        path.write_text(json.dumps({"auto_land": True, "estado":
+                                    "esperando-dono", "acoes": [
+            {"id": "aterrissar", "destino": "main", "sha": "x"}]}))
+        buf = io.StringIO()
+        error = None
+        try:
+            with contextlib.redirect_stdout(buf):
+                mod.auto_land(Path(tmp), "fila", "r", path,
+                              _ledger_with_build(tmp, 15 * 60), left=None)
+        except Exception as e:  # noqa: BLE001
+            error = e
+        check("left=None não levanta erro", error is None, repr(error))
+        check("left=None: o merge começa apesar do build longo no ledger",
+              len(called) == 1, str(called))
+        check("...e nenhuma linha not merged", "not merged" not in buf.getvalue(),
+              buf.getvalue())
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
