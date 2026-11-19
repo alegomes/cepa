@@ -1,0 +1,20 @@
+schema_version: 1
+card: resposta-do-decide-vira-trabalho-CS-6
+key: resposta-do-decide-vira-trabalho-CS-6
+status: complete
+audited_at: 2026-11-19
+covers: b4f0590..6f08562
+criteria:
+  - id: CS-6
+    text: "O `answer` deixa de apagar sem registro o texto \"se sim\"/\"se nao\": antes de remover a secao do dono, copia a pergunta e o efeito escolhido para a evidencia. Red: depois de `cepa-plan answer ... --answer \"sim: ...\"`, a evidencia do item contem o texto do `se_sim`."
+    altitude: cli
+    surface: "`cepa-plan answer fila <id> --answer 'sim: ...'` (PTY, repo git real) e a evidencia do item na fila resultante"
+    test: "tests/test_cepa_plan_answer_keeps_promises.py::test_red_test_yes_keeps_the_promise_of_yes (+ no_marks_the_promise_of_no, nao_without_accent, blocked_yes, free_answer_keeps_both_and_marks_none, keep_leaves_the_owner_section, route_without_summary_keeps_the_question)"
+    layer: "subprocesso real de common/bin/cepa-plan sob PTY, sem mock; le a fila gravada e confere que owner_summary/owner_question sairam e a evidencia traz se_sim, pergunta, se_nao e a escolha."
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_answer_keeps_promises.py -> 21 linhas 'ok', 'all ok' (HEAD 6f08562). Vizinhos: test_cepa_plan_answer_no_work_warning.py 'all ok'; test_cepa_plan_answer_creates_item.py 'tudo ok'; test_cepa_until_decide.py 'tudo verde'."
+    status: complete
+    gap: ""
+    neighbors:
+      - "tests/test_cepa_plan_answer_no_work_warning.py (CS-5), creates_item (CS-2), test_cepa_until_decide.py: verdes"
+note: "Escolhas do implementador (ambas as opcoes copiadas, a escolhida nomeada; resposta livre nao nomeia; --keep nao copia) cobertas por teste. Red previo (sem o codigo) nao reproduzido por mim. Suite completa nao rodada, por regra da run."
