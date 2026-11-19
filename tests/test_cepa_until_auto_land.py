@@ -12,6 +12,7 @@ Every case runs a real `cepa-until` against a fake repo with a fake `claude`.
 import contextlib
 import io
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -441,6 +442,78 @@ def test_left_none_skips_the_window_guard():
               len(called) == 1, str(called))
         check("...e nenhuma linha not merged", "not merged" not in buf.getvalue(),
               buf.getvalue())
+
+
+QUESTION = ("If the run ends clean (fast-forward, green build, nothing waiting on "
+            "you), merge into `main` and push without asking?")
+
+
+def launch_on_tty(root, answers, *extra):
+    """A real `cepa-until` in a pseudo-terminal; `answers` is a list of (excerpt the
+    screen shows, reply). Returns (exit code, screen text)."""
+    from test_cepa_until_decide import on_tty, env_do_run, CEPA_UNTIL
+    tmp = str(root.parent)
+    env = env_do_run(tmp, root, fake_claude(root.parent, WORKS))
+    env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "20"
+    return on_tty([sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+                   "--for", "2h", "--verify", VERIFY, "--no-analysis", *extra],
+                  str(root), inputs=answers, env=env, timeout=240)
+
+
+def test_launch_on_terminal_asks_the_pre_authorization_and_y_records_it():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        with_origin(root)
+        rc, out = launch_on_tty(root, [("without asking?", "y")])
+        flat = " ".join(re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", out).split())
+        check("a pergunta aparece na largada", QUESTION in flat, out[-1500:])
+        check("...antes do primeiro item", QUESTION in flat and
+              "▶ claude" not in flat.split(QUESTION)[0], flat[:1500])
+        check("responder y grava auto_land true no estado",
+              state(root).get("auto_land") is True, str(state(root)))
+        check("...e a run limpa aterrissa sozinha (sem Land now?)",
+              "Land now?" not in out and state(root).get("estado") == "aterrissado",
+              out[-1200:])
+
+
+def test_launch_on_terminal_enter_or_n_keeps_auto_land_false():
+    for reply in ("", "n"):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = build_repo(tmp, [item("a1")])
+            with_origin(root)
+            rc, out = launch_on_tty(root, [("without asking?", reply),
+                                           ("Land now?", "n")])
+            check(f"resposta {reply!r}: a pergunta foi feita",
+                  "without asking?" in out, out[-1200:])
+            check(f"resposta {reply!r}: auto_land fica false",
+                  state(root).get("auto_land") is False, str(state(root)))
+            check(f"resposta {reply!r}: nada aterrissa sozinho",
+                  state(root).get("estado") != "aterrissado", str(state(root)))
+
+
+def test_launch_with_the_flag_or_without_terminal_never_asks():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        with_origin(root)
+        rc, out = launch_on_tty(root, [], "--auto-land")
+        check("com --auto-land a pergunta não aparece", "without asking?" not in out,
+              out[-1200:])
+        check("...e o estado grava true", state(root).get("auto_land") is True,
+              str(state(root)))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        with_origin(root)
+        p, _ = night(root)
+        check("sem terminal a pergunta não aparece",
+              "without asking?" not in p.stdout + p.stderr, p.stdout[-800:])
+        check("...e vale não", state(root).get("auto_land") is False, str(state(root)))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        with_origin(root)
+        rc, out = launch_on_tty(root, [("Land now?", "n")], "--no-auto-land")
+        check("com --no-auto-land a pergunta não aparece", "without asking?" not in out,
+              out[-1200:])
+        check("...e vale não", state(root).get("auto_land") is False, str(state(root)))
 
 
 if __name__ == "__main__":
