@@ -145,9 +145,30 @@ avisa quando algum `item_end` veio sem `session_id` ou `motivo_fim`.
 
 ## When it ends: the questions
 
-The end-of-run summary only counts. Right after it, when the run is attached to a terminal,
-`cepa-until` asks the owner, one at a time, about everything that waits on them: whether to
-land the night branch (`aterrissar`), and every deferred item that only the owner unblocks
+The end of the run is a report of four panels and one line, in this order:
+
+1. **Header** (`── ended at HH:MM · <reason>`): the stop reason and its detail, the window
+   with its progress bar, one totals line (attempts, delivered, stuck, no progress, items for
+   you, commits, cost), the run branch, and one row each for run-wide facts (inherited branch,
+   usage cap, 5h quota waits, tight quota, network drops).
+2. **Items (N)**: one row per item, with an icon, the id in an aligned column and the reason cut
+   to the terminal width (the whole reason stays in the `.review.md` and in the `.estado.json`).
+3. **Decisions (N)**, only when there are any: the choices the pre-read handed to the agent
+   (`followed`) and the choices committed without asking (`decided`, with the commit), together
+   and grouped by item.
+4. **Next**, always last and numbered: the merge (`merge into <branch>` with its command, and
+   "not recommended: <why>" when the run is not clean; or "merged ... by this run" after
+   `--auto-land`), then the owner questions (ids, the first five questions, and the
+   `cepa-until decide <queue>/<run>` command), then what the run state leaves with the owner
+   (the plugin reinstall).
+5. One dim line with the paths of the record, the log and the analysis.
+
+The merge is named once, in Next. On a terminal the panels are cards with box-drawing borders
+in the usual palette; without one (or with `NO_COLOR`) they are `── title` and indented rows.
+
+The first three panels print as the run ends and Next after the analysis and the questions,
+so it shows what is still open. On a terminal, between them, `cepa-until` asks the owner, one at a time, about everything that waits on them:
+every deferred item that only the owner unblocks
 (`blocked` from an outside condition, open `human_pending` route). Each item shows the closed
 question the agent recorded with `cepa-plan finish --question` (or the one the
 `/common:until-review` analysis wrote in its `cepa-decisoes` block), with the recommendation.
