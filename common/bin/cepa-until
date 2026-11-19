@@ -3023,9 +3023,9 @@ def land_action(repo, tree, queue, run_id, n):
         "arvore": str(tree)}
 
 
-def last_verify_green(ledger):
-    """Did the run's LAST full build (the last `verify` event of the `.jsonl`) go
-    green? None when the run recorded no full build at all."""
+def last_verify_event(ledger):
+    """The run's LAST full build: the last `verify` event of the `.jsonl`, or None
+    when the run recorded none (or the ledger cannot be read)."""
     last = None
     try:
         lines = Path(ledger).read_text(encoding="utf-8").splitlines()
@@ -3037,8 +3037,35 @@ def last_verify_green(ledger):
         except ValueError:
             continue
         if isinstance(e, dict) and e.get("evento") == "verify":
-            last = bool(e.get("verde"))
+            last = e
     return last
+
+
+def last_verify_green(ledger):
+    """Did the run's LAST full build go green? None when the run recorded no full
+    build at all."""
+    last = last_verify_event(ledger)
+    return None if last is None else bool(last.get("verde"))
+
+
+def window_reason(left, ledger):
+    """Why the window does not fit the automatic merge, or None when it does.
+    `left` is the time (a timedelta) until the run's deadline, passed in so the
+    clock is read in one place only. The merge runs the full build again, so a
+    window shorter than the last build's duration would cut it halfway through
+    main. The `--slack` does NOT count: it is for an item already running, not
+    for starting a merge."""
+    last = last_verify_event(ledger)
+    if last is None:
+        return None  # no build recorded: `not_clean_reason` already refuses
+    try:
+        took = timedelta(seconds=float(last.get("segundos") or 0))
+    except (TypeError, ValueError):
+        return None
+    if left >= took:
+        return None
+    return (f"the window ends in {human(left)} and the last full build took "
+            f"{human(took)}")
 
 
 # A clean run delivered every item it touched. An allowlist and not a list of the
@@ -3046,6 +3073,14 @@ def last_verify_green(ledger):
 # must not turn a run clean by omission.
 CLEAN_OUTCOME = "entregue"
 STUCK_OUTCOMES = ("travado", "sem-progresso", "done-sem-commit", "dropped")
+# Outcomes that are neither a delivery nor stuck, each with the condition named in
+# English: the ids stored in the state are Portuguese and must not reach the screen.
+UNFINISHED_OUTCOME_PHRASES = {
+    "volta-vermelha": "went back to the queue after a red build",
+    "sem-rede": "was cut by a network drop",
+    "limite-de-uso": "stopped on the usage limit",
+    "em-andamento": "was still running",
+}
 
 
 def not_clean_reason(repo, queue, item_states, ledger):
@@ -3079,7 +3114,9 @@ def not_clean_reason(repo, queue, item_states, ledger):
             return f"{it.get('id')} is stuck"
         if kind == "rota-humana":
             return f"{it.get('id')} is waiting on you"
-        return f"{it.get('id')} did not finish ({kind})"
+        phrase = UNFINISHED_OUTCOME_PHRASES.get(
+            kind, "ended in a way this version does not recognize")
+        return f"{it.get('id')} {phrase}"
     others = [f.get("id") for f in st.get("fica_com_voce") or []
               if f.get("id") not in {i.get("id") for i in st.get("itens") or []}
               and f.get("id") not in ("reinstalar-plugin",)]
@@ -3101,11 +3138,12 @@ def state_auto_land(item_states):
     return (item_states or {}).get("auto_land") is True
 
 
-def auto_land(repo, queue, run_id, state_path, ledger):
+def auto_land(repo, queue, run_id, state_path, ledger, left=None):
     """`--auto-land`: when the run is clean, does exactly what
     `cepa-until land <queue>/<run> --yes` does (same code, same guards, same
     return point and records). Returns the exit code of the landing, or None
-    when it did not start."""
+    when it did not start. `left` is the time until the run's deadline (None
+    skips the window guard)."""
     try:
         item_states = json.loads(Path(state_path).read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
@@ -3116,6 +3154,10 @@ def auto_land(repo, queue, run_id, state_path, ledger):
     if item_states.get("estado") == "aterrissado":
         return 0
     reason = not_clean_reason(repo, queue, item_states, ledger)
+    if reason:
+        print(f"\n   not merged: {reason}")
+        return None
+    reason = window_reason(left, ledger) if left is not None else None
     if reason:
         print(f"\n   not merged: {reason}")
         return None
@@ -7682,7 +7724,8 @@ def _main(argv=None):
             # Never at the cost of the records' commit below: an error here is a
             # landing that did not happen, not a run that lost its records.
             try:
-                auto_land(repo, a.queue, run_id, state_path, ledger)
+                auto_land(repo, a.queue, run_id, state_path, ledger,
+                          left=deadline - datetime.now())
             except Exception as e:  # noqa: BLE001
                 print(f"\n   not merged: the automatic merge failed ({e}). "
                       f"To merge by hand: cepa-until land {a.queue}/{run_id}")

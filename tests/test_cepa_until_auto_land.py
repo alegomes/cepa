@@ -9,10 +9,13 @@ push, return point recorded, and the state ends `aterrissado`.
 Every case runs a real `cepa-until` against a fake repo with a fake `claude`.
 """
 
+import contextlib
+import io
 import json
 import subprocess
 import sys
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -104,24 +107,31 @@ def test_main_moved_during_the_run_is_not_clean():
 
 def test_stuck_item_is_not_clean():
     """One item delivers green, the other ends `blocked`: the run does not merge,
-    `main` stays as it was, and the line names the item."""
+    `main` stays as it was, and the line names the item (spec CS-2, red test)."""
     body = ("ident = primeiro_pendente()\n"
             "if ident == 'a2':\n"
             "    marca(ident, status='blocked', evidence='falta credencial')\n"
             "    sys.exit(0)\n" + WORKS)
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1"), item("a2")])
-        with_origin(root)
+        remote = with_origin(root)
         binv = fake_claude(root.parent, body)
         p, _ = run_until(root, binv, plan_of(root),
                          ["--for", "2h", "--verify", VERIFY, "--no-analysis",
                           "--auto-land"])
         out = p.stdout + p.stderr
+        start = [e for e in ledger_of(root) if e["evento"] == "run_start"][0]
         st = state(root)
-        check("item travado: a run não faz o merge",
+        check("item travado: a run termina esperando-dono",
               st.get("estado") == "esperando-dono", out[-2000:])
-        check("...o código do item entregue não está na main",
+        check("...o código do item entregue não está na main do clone",
               "a1" not in git(root, "log", "--format=%s", "HEAD").splitlines())
+        pushed = subprocess.run(["git", "--git-dir", str(remote), "log",
+                                 "--format=%s", "HEAD"], capture_output=True,
+                                text=True).stdout.splitlines()
+        check("...nem no origin", "a1" not in pushed, str(pushed))
+        check("...e a branch da run continua", git(root, "branch", "--list",
+                                                    start["branch"]), out[-800:])
         check("...e a linha nomeia o item travado",
               "not merged: a2 is stuck" in out, out[-2000:])
 
@@ -140,7 +150,9 @@ def test_red_last_build_is_not_clean():
         st = state(root)
         check("build vermelho por último: a run não faz o merge",
               st.get("estado") != "aterrissado", out[-2000:])
-        check("...e diz por quê", "not merged:" in out, out[-2000:])
+        check("...e diz a condição: o último build não está verde",
+              "not merged: the last full build of the run branch is not green"
+              in out, out[-2000:])
 
 
 def _module():
@@ -174,7 +186,7 @@ def test_old_state_without_the_field_reads_as_no():
               r is None and not called, str(called))
 
 
-def _clean_world(mod, tmp, verdes=(True,), deferred=()):
+def _clean_world(mod, tmp, verdes=(True,), deferred=(), itens=None):
     """`not_clean_reason` over a run that is clean on every condition but the one
     under test: git says fast-forward, the clone is on `main`, every item delivered,
     and the queue holds `deferred`. The ledger's `verify` events are `verdes`."""
@@ -188,7 +200,8 @@ def _clean_world(mod, tmp, verdes=(True,), deferred=()):
                               for v in verdes))
     st = {"estado": "esperando-dono", "verify": "true",
           "acoes": [{"id": "aterrissar", "destino": "main", "sha": "x"}],
-          "itens": [{"id": "a1", "desfecho": "entregue", "texto": "ok"}],
+          "itens": itens or [{"id": "a1", "desfecho": "entregue",
+                              "texto": "ok"}],
           "fica_com_voce": []}
     return mod.not_clean_reason(Path(tmp), "fila", st, ledger)
 
@@ -225,6 +238,123 @@ def test_explicit_false_in_the_state_reads_as_no():
           mod.state_auto_land({"auto_land": False}) is False)
     check("auto_land com valor que não é true vale não",
           mod.state_auto_land({"auto_land": "yes"}) is False)
+
+
+def test_unfinished_outcomes_are_named_in_english():
+    """Each outcome that is not a delivery names the condition in English, never the
+    id stored in the state; an outcome this version does not know still refuses."""
+    expected = {
+        "volta-vermelha": "a2 went back to the queue after a red build",
+        "sem-rede": "a2 was cut by a network drop",
+        "limite-de-uso": "a2 stopped on the usage limit",
+        "em-andamento": "a2 was still running",
+    }
+    for kind, phrase in expected.items():
+        with tempfile.TemporaryDirectory() as tmp:
+            r = _clean_world(_module(), tmp, itens=[
+                {"id": "a1", "desfecho": "entregue", "texto": "ok"},
+                {"id": "a2", "desfecho": kind, "texto": "x"}])
+            check(f"desfecho {kind}: o motivo é a frase em inglês", r == phrase,
+                  str(r))
+            check(f"...e o id {kind} não aparece na tela", kind not in (r or ""),
+                  str(r))
+    with tempfile.TemporaryDirectory() as tmp:
+        r = _clean_world(_module(), tmp, itens=[
+            {"id": "a2", "desfecho": "inventado-depois", "texto": "x"}])
+        check("desfecho desconhecido ainda recusa o merge, nomeando o item",
+              r is not None and "a2" in r, str(r))
+        check("...sem imprimir o id cru do desfecho",
+              "inventado-depois" not in (r or ""), str(r))
+
+
+def _ledger_with_build(tmp, seconds):
+    ledger = Path(tmp) / "r.jsonl"
+    ledger.write_text(
+        json.dumps({"evento": "verify", "verde": True, "segundos": 5}) + "\n"
+        + json.dumps({"evento": "verify", "verde": True, "segundos": seconds})
+        + "\n")
+    return ledger
+
+
+def test_window_shorter_than_the_last_build_refuses():
+    mod = _module()
+    with tempfile.TemporaryDirectory() as tmp:
+        r = mod.window_reason(timedelta(minutes=4),
+                              _ledger_with_build(tmp, 15 * 60))
+        check("janela de 4min e build de 15min: recusa nomeando as duas durações",
+              r == "the window ends in 4min and the last full build took 15min",
+              str(r))
+        # The slack is for an item already running, so it never counts here.
+        called = []
+        mod.cmd_land = lambda argv: called.append(argv) or 0
+        mod.not_clean_reason = lambda *a: None
+        path = Path(tmp) / "r.estado.json"
+        path.write_text(json.dumps({"auto_land": True, "estado":
+                                    "esperando-dono", "acoes": [
+            {"id": "aterrissar", "destino": "main", "sha": "x"}]}))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            ret = mod.auto_land(Path(tmp), "fila", "r", path,
+                                _ledger_with_build(tmp, 15 * 60),
+                                left=timedelta(minutes=4))
+        check("auto_land: o merge não começa", ret is None and not called,
+              str(called))
+        check("...e a linha not merged diz a janela",
+              "not merged: the window ends in 4min and the last full build "
+              "took 15min" in buf.getvalue(), buf.getvalue())
+
+
+def test_expired_window_refuses():
+    """A window already at zero, or past the deadline (a run that ended on it),
+    is shorter than any build and must refuse without starting the merge."""
+    mod = _module()
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = _ledger_with_build(tmp, 15 * 60)
+        for label, left in (("zerada", timedelta(0)),
+                            ("negativa (run terminou no prazo)",
+                             timedelta(minutes=-3))):
+            r = mod.window_reason(left, ledger)
+            check(f"janela {label}: window_reason recusa", r is not None, str(r))
+            called = []
+            mod.cmd_land = lambda argv, called=called: called.append(argv) or 0
+            mod.not_clean_reason = lambda *a: None
+            path = Path(tmp) / "r.estado.json"
+            path.write_text(json.dumps({"auto_land": True, "estado":
+                                        "esperando-dono", "acoes": [
+                {"id": "aterrissar", "destino": "main", "sha": "x"}]}))
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                ret = mod.auto_land(Path(tmp), "fila", "r", path, ledger,
+                                    left=left)
+            check(f"janela {label}: auto_land não chama cmd_land",
+                  ret is None and not called, str(called))
+            check(f"janela {label}: a linha not merged é impressa",
+                  "not merged:" in buf.getvalue(), buf.getvalue())
+
+
+def test_window_that_fits_the_last_build_has_no_reason():
+    mod = _module()
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = _ledger_with_build(tmp, 15 * 60)
+        check("janela de 20min e build de 15min: nenhum motivo",
+              mod.window_reason(timedelta(minutes=20), ledger) is None)
+        check("janela exatamente igual ao build: cabe",
+              mod.window_reason(timedelta(minutes=15), ledger) is None)
+        check("sem build no ledger a janela não recusa (o outro motivo já cobre)",
+              mod.window_reason(timedelta(minutes=1),
+                                Path(tmp) / "nao-existe.jsonl") is None)
+        called = []
+        mod.cmd_land = lambda argv: called.append(argv) or 0
+        mod.not_clean_reason = lambda *a: None
+        path = Path(tmp) / "r.estado.json"
+        path.write_text(json.dumps({"auto_land": True, "estado":
+                                    "esperando-dono", "acoes": [
+            {"id": "aterrissar", "destino": "main", "sha": "x"}]}))
+        with contextlib.redirect_stdout(io.StringIO()):
+            mod.auto_land(Path(tmp), "fila", "r", path, ledger,
+                          left=timedelta(minutes=20))
+        check("auto_land com a janela folgada: o merge começa", len(called) == 1,
+              str(called))
 
 
 if __name__ == "__main__":
