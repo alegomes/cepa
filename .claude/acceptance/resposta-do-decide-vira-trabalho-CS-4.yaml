@@ -1,0 +1,21 @@
+schema_version: 1
+card: resposta-do-decide-vira-trabalho-CS-4
+key: resposta-do-decide-vira-trabalho-CS-4
+status: complete
+audited_at: 2026-11-18
+covers: 0fe75fc..2212708
+criteria:
+  - id: CS-4
+    text: "a proxima rodada encontra o trabalho criado pela resposta (red test: depois do `answer` do CS-2, `cepa-plan queue <fila> --max 1` devolve o item novo no lote; hoje, no cenario do print (so itens `done` e uma pendencia), responde lote vazio)"
+    altitude: cli
+    surface: "`cepa-plan queue fila --max 1 --json` antes e depois de `cepa-plan answer fila a2 --answer 'sim: ...'` (PTY, repo git real); tambem `cepa-plan ready --json` e `cepa-until fila --dry-run`"
+    test: "tests/test_cepa_plan_answer_next_round.py::test_red_test_next_round_finds_the_created_item (+ test_item_that_needs_the_owner_is_not_handed_to_the_run)"
+    layer: "subprocessos reais de common/bin/cepa-plan e cepa-until, sem mock, repo git real; antes: lote vazio e stop end-of-queue; depois: lote = [item criado] com titulo declarado, fora dos adiados; ready lista so o item; cepa-until --dry-run nomeia o item como 1st item e nao dispara nada; com 'precisa do dono' o lote fica vazio e o item vai para adiados com human_pending"
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_answer_next_round.py -> 18 linhas 'ok', '0 falha(s)' (HEAD 2212708). Red independente: git archive 5d6d928 + o teste novo -> 6 FAIL (a resposta nao cria item, lote [], ready [], cepa-until '1st item: (none — queue has no executable item)')"
+    status: complete
+    gap: ""
+    neighbors:
+      - "python3 tests/test_cepa_plan_answer_creates_item.py -> 'tudo ok' (CS-2)"
+      - "python3 tests/test_cepa_plan_answer_owner_item.py -> 'tudo ok' (CS-3)"
+note: "Observacao, nao bloqueio: o run `cepa-until --all` e coberto pelo `cepa-plan ready` que ele le, nao por `cepa-until --all --dry-run` em si; e nenhum teste dispara uma rodada real (nao-dry-run) sobre o item criado. O criterio literal (queue --max 1) esta demonstrado na superficie dele. Rc do shell nao capturado (pipe); veredito pela linha '0 falha(s)'. Suite completa nao rodada, por regra."
