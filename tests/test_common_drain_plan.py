@@ -137,7 +137,7 @@ def test_done_or_dropped_item_does_not_enter_and_does_not_stop(base):
     _, out = queue(d)
     check("item já fechado não volta para o lote",
           [i["id"] for i in out["batch"]] == ["C"], out)
-    check("a fila acabou é um desfecho nomeado",
+    check("o fim da fila é um desfecho nomeado",
           out["stop"]["reason"] == "end-of-queue", out["stop"])
 
 

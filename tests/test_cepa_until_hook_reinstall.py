@@ -246,7 +246,7 @@ def test_warned_hook_that_left_is_not_charged_in_a_run_with_something_to_land():
         check("o hook da 1ª tentativa do a1 foi avisado",
               [e["id"] for e in warnings(root)] == ["a1"], str(warnings(root)))
         check("há o que aterrissar (o a0 ficou na branch)",
-              "aterrissar" in p.stdout.split("── ended at")[-1], p.stdout[-1200:])
+              "merge into" in p.stdout.split("── ended at")[-1], p.stdout[-1200:])
         check("o fim não cobra o hook que saiu",
               "reinstalar-plugin" not in p.stdout
               and all(f["id"] != "reinstalar-plugin" for f in

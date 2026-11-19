@@ -2423,7 +2423,7 @@ def _cmd_land(argv, wrote):
     action = next((x for x in item_states.get("acoes") or []
                  if x.get("id") == "aterrissar"), None)
     if not action:
-        return refuse(f"run {run_id} did not propose `aterrissar` (the run "
+        return refuse(f"run {run_id} did not propose the merge (the run "
                       "branch ended with no commit)")
     branch, destination = item_states.get("branch"), action.get("destino")
     sha, tree = action.get("sha"), action.get("arvore")
@@ -3334,6 +3334,18 @@ def legend_lines(chips, summary, delivered=False):
     return [f"{key} = {effect[key]}" for key, _ in chips if key in effect]
 
 
+def action_label(action):
+    """What the screen calls an action. The landing is stored with the id `aterrissar`
+    (old states depend on it), but on screen it is "merge into `<branch>`"; a state
+    from before `destino` was recorded falls back to "the clone's branch"."""
+    action = action or {}
+    if action.get("id") != "aterrissar":
+        return str(action.get("id"))
+    destination = action.get("destino")
+    return (f"merge into `{destination}`" if destination
+            else "merge into the clone's branch")
+
+
 def pending_action(item_states):
     """The `aterrissar` action of the state, if it still needs doing. `aterrissar`
     records `aterrissado` in the state and leaves the action in the list, as a record."""
@@ -3616,14 +3628,14 @@ class Panel:
 
     # ── aterrissar ──────────────────────────────────────────────────────
 
-    def land_card(self, phrase, rec):
+    def land_card(self, phrase, rec, label="merge into the clone's branch"):
         if not self.enabled:
             self.output(f"\n   Land: {phrase}")
             if rec:
                 self.output(indented(rec, "   "))
             return "   Land now? [y/N/q] "
         self.output("")
-        self._top("aterrissar")
+        self._top(label)
         for l in self._wrap(phrase, 2):
             self._border(l)
         if rec:
@@ -3921,17 +3933,18 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
 
     if action:
         prompt = screen.land_card(action.get("frase"),
-                                 recommendation_line(analysis.get("aterrissar")))
+                                 recommendation_line(analysis.get("aterrissar")),
+                                 action_label(action))
         r = question(prompt)
         if str(r).strip().lower() == "q":
             stopped = True
         elif is_yes(r):
             rc = land()
             (applied if rc == 0 else for_later).append(
-                "aterrissar" + ("" if rc == 0 else
+                action_label(action) + ("" if rc == 0 else
                                 f" (stopped with code {rc}; the output is above)"))
         if not is_yes(r):
-            for_later.append(f"aterrissar: cepa-until land "
+            for_later.append(f"{action_label(action)}: cepa-until land "
                                f"{queue}/{run_id} --yes")
         screen.end()
 
@@ -4194,7 +4207,7 @@ def pending_as_text(queue, run_id, item_states, deferred, analysis, output=print
         return
     output(f"\n── waiting on you: {(1 if action else 0) + len(owner_items)}")
     if action:
-        output(f"   - aterrissar: {action.get('frase')}")
+        output(f"   - {action_label(action)}: {action.get('frase')}")
     for ad in owner_items:
         d = by_item.get(str(ad.get("id"))) or {}
         q = ad.get("question") or d.get("pergunta") or ad.get("human_pending") \
@@ -5148,7 +5161,7 @@ def cmd_decide(argv):
             "The end-of-run questions again, for when the owner was not there or\n"
             "left some for later. With <queue>, everything the queue holds for the\n"
             "owner, from any run, including the leftover tasks of delivered items.\n"
-            "With <queue>/<run>, the landing (aterrissar) and each deferred item of\n"
+            "With <queue>/<run>, the merge and each deferred item of\n"
             "that run.\n"
             "\n"
             "Each question is closed, with a recommendation, and the answer is\n"
@@ -5334,7 +5347,7 @@ def _cmd_close_dead(argv, wrote):
             "is gone).\n"
             "\n"
             "Green: it records `run_end` and leaves the run waiting for the owner,\n"
-            "ready for aterrissar. Red: nothing changes, and cepa doctor keeps\n"
+            "ready to merge. Red: nothing changes, and cepa doctor keeps\n"
             "pointing at the run. It refuses while the supervisor or the child\n"
             "process of the item in flight is still alive.\n"
             "At the end it commits the run's `.jsonl` and the queue marks the dead run\n"
@@ -5418,7 +5431,7 @@ def _cmd_close_dead(argv, wrote):
           + (f" (gone; recreated from `{branch}`)" if recreate else ""))
     print(f"  build      : {verify or 'none (the run skipped the build)'}")
     print("  green      : records `run_end` and leaves the run `esperando-dono` with the "
-          "`aterrissar` action")
+          "merge action")
     print("  red        : changes nothing; the doctor keeps pointing at the run")
     if not a.yes:
         print(f"\nnothing was done. To execute: cepa-until close-dead "
@@ -7711,7 +7724,7 @@ def _main(argv=None):
     if actions:
         print("\n   " + SCREEN.c("negrito", "Actions:"))
         for i, action in enumerate(actions, 1):
-            print(f"     {i}. " + SCREEN.c("negrito", action['id']) + f": {action['frase']}")
+            print(f"     {i}. " + SCREEN.c("negrito", action_label(action)) + f": {action['frase']}")
             print(f"        how: " + SCREEN.c("ciano", action['comando']))
     if stays:
         # The items already have a line under "Itens"; here only the name, so the same item

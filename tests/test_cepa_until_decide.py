@@ -115,7 +115,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
     check("régua de abertura com a contagem",
           "── 3 question(s) for you ─" in plain_text, plain_text)
     check("cartão de aterrissar com a recomendação marcada",
-          "┌─ aterrissar ─" in plain_text and "│  ✦ Recommend yes: build verde"
+          "┌─ merge into the clone's branch ─" in plain_text and "│  ✦ Recommend yes: build verde"
           in plain_text, plain_text)
     check("um cartão por item, com i/n e id na régua",
           "┌─ 1/2 · W-1 ─" in plain_text and "┌─ 2/2 · W-2 ─" in plain_text, plain_text)
@@ -597,7 +597,7 @@ def test_decide_asks_and_applies_each_answer():
     check("o fecho diz como voltar",
           "cepa-until decide fila/run1" in plain_text, plain_text)
     check("aplicados listam aterrissar e W-1",
-          applied == ["aterrissar", "W-1: W-1 ok"], applied)
+          applied == ["merge into the clone's branch", "W-1: W-1 ok"], applied)
 
 
 def test_decide_s_and_n_answer_the_drafted_question():
@@ -1051,7 +1051,7 @@ def test_list_without_terminal_filters_what_is_not_the_owners():
          {"id": "W-3", "reason": "depende-de-adiado", "detail": "de W-1"}],
         {}, output=screen.append)
     plain_text = "\n".join(screen)
-    check("sem terminal, lista aterrissar", "aterrissar: leva 3" in plain_text,
+    check("sem terminal, lista aterrissar", "merge into the clone's branch: leva 3" in plain_text,
           plain_text)
     check("...e a rota humana verbatim", "rode o login real" in plain_text, plain_text)
     check("...contando 2, sem reservado nem cascata",

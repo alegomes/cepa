@@ -817,7 +817,7 @@ def test_2_run_state_running_then_waiting_owner_before_the_analysis():
               any(f.get("id") == "a2" and "Keycloak" in (f.get("texto") or "")
                   for f in stays), str(stays))
         check("o terminal imprime a ação numerada",
-              "1. aterrissar" in p.stdout, p.stdout[-900:])
+              "1. merge into `main`" in p.stdout, p.stdout[-900:])
         check("...e o bloco 'Left with you'",
               "Left with you" in p.stdout, p.stdout[-900:])
         check("o resumo não sugere o /common:worktree-merge",
