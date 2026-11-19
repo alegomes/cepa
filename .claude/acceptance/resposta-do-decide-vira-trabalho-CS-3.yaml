@@ -1,0 +1,20 @@
+schema_version: 1
+card: resposta-do-decide-vira-trabalho-CS-3
+key: resposta-do-decide-vira-trabalho-CS-3
+status: complete
+audited_at: 2026-11-18
+covers: 83b566d..0fe75fc
+criteria:
+  - id: CS-3
+    text: "o item declarado 'precisa do dono' nasce com pendencia humana aberta e aparece como acao do dono (red test: human_pending preenchido e `cepa-plan queue <fila> --json` o lista entre os adiados com motivo human_pending; Decided without asking: route_kind owner-task, human_pending com o texto declarado, 'nenhum' para as proprias respostas)"
+    altitude: cli
+    surface: "cepa-plan answer <fila> <id> --answer 'sim: ...' como subprocesso num PTY, repo git real; plan.yaml resultante, stdout e `cepa-plan queue fila --json`"
+    test: "tests/test_cepa_plan_answer_owner_item.py::test_red_test_needs_owner_item_is_born_with_an_open_route (+ test_without_the_mark_no_route)"
+    layer: "subprocess real de common/bin/cepa-plan, sem mock; afirma item novo pending com human_pending = titulo declarado, route_kind owner-task, pergunta fechada, owner_summary com item_se_sim/item_se_nao = nenhum, saida 'esperando voce', queue --json lista o id em deferred com reason human_pending e fora do batch; sim posterior fecha a rota e o item entra no lote sem criar outro; sem a marca nasce sem rota"
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_answer_owner_item.py -> 20 linhas 'ok', 0 FAIL, 'tudo ok' (HEAD 0fe75fc)"
+    status: complete
+    gap: ""
+    neighbors:
+      - "python3 tests/test_cepa_plan_answer_creates_item.py -> 'tudo ok' (CS-2 sem regressao)"
+note: "O rc do shell nao foi capturado (pipe com tail); o veredito vem da linha final 'tudo ok' e da ausencia de FAIL. Nao rodei o build completo, por regra da run. Fora de escopo: CS-4 (lote ja coberto parcialmente), CS-5, CS-6, CS-7."
