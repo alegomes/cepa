@@ -256,6 +256,7 @@ import select
 import subprocess
 import sys
 import tempfile
+import textwrap
 import threading
 import time
 import unicodedata
@@ -4259,41 +4260,58 @@ def ask_mid_run(stop_reason, remaining, reserve, interactive, disabled, question
             and remaining >= reserve and bool(questions))
 
 
-def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=None,
-                     wait=None, already_asked=(), ask_land=True):
-    """The closing of the run and of `cepa-until decide`: queries the queue again (its
-    state now, not the launch one) and asks, or lists without a terminal.
-    Without `run_id` (`cepa-until decide <fila>`), it goes over the whole queue:
-    every deferred item plus the leftover tasks of the delivered ones."""
+def owner_deferred(repo, queue, run_id, quiet=False):
+    """The deferred items of the queue now (its state, not the launch one). An
+    `all/<run>` run gathers EVERY queue's items, each named `queue/id` (two queues
+    share ids) and answered in its own queue. Without `run_id` the leftover tasks
+    of the delivered items come along. `quiet` leaves the read errors unprinted
+    (the final report asks a second time, after the questions)."""
     if is_all_run(repo, queue) and run_id:
-        # `all/<run>`: what EVERY queue holds for the owner, each item named
-        # `queue/id` (two queues share ids) and answered in its own queue.
         deferred = []
         for name in all_queue_names(repo):
             data, error = query_queue(name, repo)
             if error:
-                print(f"\n── could not list the deferred items of queue {name} "
-                      f"({error})")
+                if not quiet:
+                    print(f"\n── could not list the deferred items of queue {name} "
+                          f"({error})")
                 continue
             deferred += [dict(ad, id=f"{name}/{ad.get('id')}", fila=name)
                          for ad in (data or {}).get("deferred") or []]
-        already_asked = ()
-    else:
-        data, error = query_queue(queue, repo)
-        if error:
+        return deferred
+    data, error = query_queue(queue, repo)
+    if error:
+        if not quiet:
             print(f"\n── could not list the deferred items ({error})")
-            deferred = []
-        else:
-            deferred = (data or {}).get("deferred") or []
+        deferred = []
+    else:
+        deferred = (data or {}).get("deferred") or []
     if not run_id:
         deferred = deferred + delivered_leftovers(queue, repo)
+    return deferred
+
+
+def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=None,
+                     wait=None, already_asked=(), ask_land=True, report=None):
+    """The closing of the run and of `cepa-until decide`: queries the queue again (its
+    state now, not the launch one) and asks, or lists without a terminal.
+    Without `run_id` (`cepa-until decide <fila>`), it goes over the whole queue:
+    every deferred item plus the leftover tasks of the delivered ones.
+    `report` (a dict) is the run end's: the questions are not printed here, they
+    are handed back in `report["deferred"]` (the owner items still open after the
+    questions) and `report["asked"]` for the "Next" panel of the final report."""
+    deferred = owner_deferred(repo, queue, run_id)
+    if is_all_run(repo, queue) and run_id:
+        already_asked = ()
     # Asked mid-run already (the panel before closing, LL-1): asking the same
     # question twice in one run is the ping-pong the panel exists to avoid.
     asked = {str(x) for x in already_asked}
+    everything = list(deferred)
     if asked:
         repeated = [str(ad.get("id")) for ad in deferred if str(ad.get("id")) in asked]
         deferred = [ad for ad in deferred if str(ad.get("id")) not in asked]
-        if repeated:
+        if repeated and report is not None:
+            report["asked"] = repeated
+        elif repeated:
             print(f"\n   already asked in this run: {', '.join(repeated)}. To answer "
                   f"again: cepa-until decide {queue}" + (f"/{run_id}" if run_id else ""))
     analysis = {}
@@ -4306,7 +4324,10 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
     if interactive is None:
         interactive = sys.stdin.isatty() and sys.stdout.isatty()
     if not interactive:
-        pending_as_text(queue, run_id, item_states, deferred, analysis)
+        if report is not None:
+            report["deferred"] = everything
+        else:
+            pending_as_text(queue, run_id, item_states, deferred, analysis)
         return 0
     try:
         decide(repo, queue, run_id, item_states, deferred, analysis, wait=wait,
@@ -4318,7 +4339,152 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
     except (EOFError, KeyboardInterrupt):
         print("\n   questions interrupted; come back with: cepa-until decide "
               f"{queue}" + (f"/{run_id}" if run_id else ""))
+    if report is not None:
+        # What the questions left open, read from the queue again.
+        report["deferred"] = owner_deferred(repo, queue, run_id, quiet=True)
     return 0
+
+
+# ── the final report (CS-6) ─────────────────────────────────────────────────
+#
+# The end of the run is a set of panels (header, Items, Decisions, Next) and one
+# dim line with the paths. Nothing wraps: a row is cut to the terminal width, and
+# what is cut stays whole in the run state and in the `.review.md`. On a terminal
+# a panel is a card with box-drawing borders; without one (or with NO_COLOR) it is
+# `── title` and rows indented by three spaces, the text the tests and a `nohup`'s
+# `.log` keep.
+
+def panel_room():
+    """Columns left for a row's text: three are the indent (plain) or `│ `."""
+    return max(SCREEN.width() - 3, 20)
+
+
+def fit(text, room):
+    """`text` in at most `room` columns, with an ellipsis in the MIDDLE: a long
+    reason ends with what the owner has to run, so the tail is kept."""
+    text = re.sub(r"\s+", " ", str(text))
+    if len(text) <= room:
+        return text
+    if room <= 2:
+        return "…"[:room]
+    head = (room - 1) * 2 // 3
+    tail = room - 1 - head
+    return text[:head] + "…" + text[-tail:]
+
+
+def paint(color, text):
+    return SCREEN.c(color, text) if color else text
+
+
+def fit_row(segments, room):
+    """A row is a list of `(color, text)`; a `(color, text, True)` segment is the
+    elastic one that gives way to the rest. Returns the row within `room`."""
+    fixed = sum(len(sg[1]) for sg in segments if len(sg) < 3)
+    row, used = [], 0
+    for sg in segments:
+        color, text = sg[0], sg[1]
+        if len(sg) == 3:
+            text = fit(text, max(room - fixed, 8))
+        if used + len(text) > room:
+            text = fit(text, max(room - used, 0)) if room > used else ""
+        used += len(text)
+        row.append((color, text))
+    return row
+
+
+def report_panel(title, rows, out=print):
+    """One panel of the final report; `rows` is a list of rows (see `fit_row`)."""
+    room = panel_room()
+    body = [fit_row(r, room) for r in rows]
+    out("")
+    if SCREEN.enabled:
+        card = Panel(SCREEN, out)
+        card._top(title)
+        for r in body:
+            card._border(" " + "".join(paint(c, t) for c, t in r))
+        card.end()
+        return
+    out(f"── {title}")
+    for r in body:
+        out("   " + "".join(t for _c, t in r))
+
+
+def paths_line(entries, room):
+    """`record, log, analysis: <dir>/<stem>.{jsonl,log,review.md}` when the files
+    share a directory and a stem (they do), otherwise each path in full; cut to
+    `room` either way."""
+    full = " · ".join(f"{name}: {path}" for name, path in entries)
+    if len(full) <= room:
+        return full
+    paths = [Path(path) for _n, path in entries]
+    stems = {pp.name.split(".")[0] for pp in paths}
+    if len(paths) > 1 and len({pp.parent for pp in paths}) == 1 and len(stems) == 1:
+        exts = ",".join(pp.name.split(".", 1)[1] for pp in paths)
+        return fit(", ".join(n for n, _p in entries) + ": "
+                   + f"{paths[0].parent}/{stems.pop()}.{{{exts}}}", room)
+    return fit(full, room)
+
+
+def next_rows(repo, queue, run_id, state, ledger, report, left=None):
+    """The rows of the "Next" panel: the merge (named here and nowhere else in the
+    end of the run), the owner's questions, then what the run state leaves with the
+    owner (the plugin reinstall...). Numbered, in that order."""
+    state = state or {}
+    rows, n = [], 0
+    shown = {i.get("id") for i in state.get("itens") or []}
+    action = pending_action(state)
+    if state.get("estado") == "aterrissado":
+        landed = next((x for x in state.get("acoes") or []
+                       if isinstance(x, dict) and x.get("id") == "aterrissar"), {})
+        n += 1
+        rows.append([("negrito", f"{n}. "),
+                     ("verde", f"merged into `{landed.get('destino')}` by this run "
+                      "(--auto-land): nothing to do", True)])
+    elif action:
+        n += 1
+        dest = action.get("destino")
+        rows.append([("negrito", f"{n}. "), ("negrito", action_label(action)),
+                     (None, ": "), ("ciano", f"cepa-until land {queue}/{run_id} --yes", True)])
+        rows.append([(None, "   "), ("cinza", f"build + push: takes the run branch to "
+                                        f"`{dest}`, runs the full build, pushes", True)])
+        why = not_clean_reason(repo, queue, state, ledger)
+        if not why and state_auto_land(state) and left is not None:
+            why = window_reason(left, ledger)
+        if why:
+            rows.append([(None, "   "), ("amarelo", "not recommended: "), (None, why, True)])
+        else:
+            rows.append([(None, "   "), ("verde", "recommended: "),
+                         (None, "the run is clean (fast-forward, green build, nothing "
+                          "waiting)", True)])
+    owner = owner_questions((report or {}).get("deferred"))
+    if owner:
+        n += 1
+        rows.append([("negrito", f"{n}. {len(owner)} question(s) for you: "),
+                     (None, ", ".join(str(ad.get("id")) for ad in owner), True)])
+        rows.append([(None, "   "), ("ciano", f"cepa-until decide {queue}/{run_id}"),
+                     ("cinza", " (one by one, in a terminal)")])
+    asked = (report or {}).get("asked")
+    if asked:
+        rows.append([(None, "   "), ("cinza", f"already asked in this run: "
+                                      f"{', '.join(asked)}", True)])
+    for stay in state.get("fica_com_voce") or []:
+        if stay.get("id") in shown:
+            continue
+        n += 1
+        if stay.get("id") == "reinstalar-plugin":
+            rows.append([("negrito", f"{n}. after the merge, run `bin/install.sh` from "
+                          "the main clone"), ])
+            rows.append([(None, "   "), ("cinza", "the run branch changes plugin hooks; "
+                                        "`bin/install.sh --rollback` is the way back")])
+        elif stay.get("id") == "reinstalacao-falhou":
+            rows.append([("negrito", f"{n}. the hook reinstall failed: "),
+                         (None, stay.get("texto") or "", True)])
+        else:
+            rows.append([("negrito", f"{n}. {stay.get('id')}: "),
+                         (None, stay.get("texto") or "", True)])
+    if not rows:
+        rows.append([("verde", "nothing left for you")])
+    return rows
 
 
 # ── the pre-read (CS-5) ─────────────────────────────────────────────────────
@@ -7592,92 +7758,25 @@ def _main(argv=None):
               "done_sem_commit": len(without_commit),
               "filas_fora": sorted(left_queues)})
 
-    print()
-    print(SCREEN.rule(f"ended at {datetime.now().strftime('%H:%M')} · {end_reason}"))
-    print(f"   {end_detail}")
-    if SCREEN.enabled:
-        window_total = max((deadline - now).total_seconds(), 1)
-        window_spent = (datetime.now() - now).total_seconds() / window_total
-        print(SCREEN.c("cinza", "   window ") + f"{now.strftime('%H:%M')} → "
-              f"{deadline.strftime('%H:%M')}  " + SCREEN.bar(window_spent, 24)
-              + SCREEN.c("cinza", f"  {min(window_spent, 1):.0%}"))
-    paint = lambda n, color: SCREEN.c(color, str(n)) if n else str(n)  # noqa: E731
-    print(f"   {items} attempt(s) · {paint(len(delivered), 'verde')} delivered · "
-          f"{paint(len(blocked_items), 'vermelho')} stuck · "
-          f"{paint(len(failed), 'vermelho')} no progress"
-          + (f" · {len(limited)} cut off by the account usage cap"
-             if limited else ""))
-    if outcomes:
-        print("\n   " + SCREEN.c("negrito", f"Items ({len(outcomes)}):"))
-        for okey, (kind, text) in outcomes.items():
-            ident = label(okey)
-            if SCREEN.enabled:
-                glyph = OUTCOME_GLYPHS.get(kind, ("·", "cinza"))
-                print("     " + SCREEN.c(glyph[1], glyph[0]) + " "
-                      + SCREEN.c("negrito", ident) + SCREEN.c("cinza", f": {text}"))
-            else:
-                print(f"     - {ident}: {text}")
-    if limited:
-        print(f"\n   Account usage cap ({len(limited)}) — not the item's "
-              "fault:")
-        for ident, reset in limited:
-            print(f"     - {ident}: hit the limit"
-                  + (f", resets {reset}" if reset else
-                     " (`claude` did not say when it resets)"))
-    if waits:
-        print(f"\n   Waits for the 5h quota ({len(waits)}):")
-        for when, ident, reset in waits:
-            print(f"     - {when} ({ident}): waited for the "
-                  f"{reset.strftime('%H:%M')} reset")
-    if tight:
-        print(f"\n   Started with the quota tight ({len(tight)}) — the reset "
-              "did not fit in the window, so I went on instead of stopping:")
-        for ident, usage, reset in tight:
-            print(f"     - {ident}: quota at {usage:.0%}, reset at "
-                  f"{reset.strftime('%H:%M')}")
-    if followed:
-        print(f"\n   Choices the pre-read found ({len(followed)}) — the agent was told "
-              "to follow them:")
-        for fkey, pref in followed.items():
-            ident = label(fkey)
-            who = ("your answer at the launch" if pref["fonte"] == "dono"
-                   else "the agent's default, nobody answered")
-            print(f"     - {ident}: {pref['escolha']} ({who}) · {pref['texto']}")
     # CS-11: only the choices whose commit is still on the run branch; a red
     # build takes the item's commits off, and with them the choice.
     decided = [(i, d) for i, d in decided
                if git(["merge-base", "--is-ancestor", d["commit"], "HEAD"], tree)[0] == 0]
-    if decided:
-        print(f"\n   Decided for you ({len(decided)}) — already committed on the run "
-              "branch, nobody was asked; undoing one is a `git revert`:")
-        for ident, dec in decided:
-            print(f"     - {ident}: {dec['texto']} · commit {dec['commit'][:10]}")
-    if drops:
-        print(f"\n   Network drops ({len(drops)}) — not the item's fault:")
-        for ident, dropped_at, returned in drops:
-            if returned is None:
-                print(f"     - during {ident}: no network since "
-                      f"{dropped_at.strftime('%H:%M')}, and it did not come back in time")
-                continue
-            print(f"     - during {ident}: no network from "
-                  f"{dropped_at.strftime('%H:%M')} to {returned.strftime('%H:%M')}, "
-                  "then I resumed the item")
     cost = round(sum(costs.values()), 2)
     # The list of actions is closed (R2): after Revision 3 only
     # `aterrissar` remains. What no command executes goes to "fica com você".
     actions = []
+    commits = 0
     if close_empty_branch(repo, tree, start_branch, run_base):
-        print(f"\n   run branch: no commits — removed `{start_branch}` "
-              "and its worktree")
+        branch_row = [("cinza", "run branch: "), (None, f"no commits, removed "
+                       f"`{start_branch}` and its worktree", True)]
     else:
         c, n = git(["rev-list", "--count", f"{run_base}..HEAD"], tree)
         n = n if c == 0 else "?"
-        print("\n   run branch: " + SCREEN.c("ciano", f"`{start_branch}`")
-              + f" ({n} commit(s) over the start), at {short_path(tree, repo)}")
+        commits = n
+        branch_row = [("cinza", "run branch: "), ("ciano", f"`{start_branch}`"),
+                      (None, f" ({n} commit(s)) at {short_path(tree, repo)}", True)]
         actions.append(land_action(repo, tree, a.queue, run_id, n))
-        for h in inheritance:
-            print(f"   it already contains `{h['branch']}` (inherited at the start): "
-                  "merging the run branch brings both")
     shown = {label(okey): v for okey, v in outcomes.items()}
     stays = [{"id": label(okey), "texto": text}
             for okey, (kind, text) in outcomes.items()
@@ -7721,22 +7820,104 @@ def _main(argv=None):
             f"the hook reinstall after {f_id} failed ({f_reason}). "
             "Check the cache with `/common:doctor`; `bin/install.sh --rollback` "
             "restores the previous version")})
-    if actions:
-        print("\n   " + SCREEN.c("negrito", "Actions:"))
-        for i, action in enumerate(actions, 1):
-            print(f"     {i}. " + SCREEN.c("negrito", action_label(action)) + f": {action['frase']}")
-            print(f"        how: " + SCREEN.c("ciano", action['comando']))
-    if stays:
-        # The items already have a line under "Itens"; here only the name, so the same item
-        # doesn't show up as two problems (A4).
-        of_items = [f_["id"] for f_ in stays if f_["id"] in shown]
-        print("\n   " + SCREEN.c("negrito", f"Left with you ({len(stays)}):"))
-        if of_items:
-            print(f"     {', '.join(of_items)} (each one's question comes "
-                  "at the end, under \"waiting on you\")")
-        for f_ in stays:
-            if f_["id"] not in shown:
-                print(f"     - {f_['id']}: {f_['texto']}")
+
+    # ── panel 1: the header ──────────────────────────────────────────────
+    room = panel_room()
+    head_rows = [[(None, line)] for line in textwrap.wrap(str(end_detail), room)
+                 or [""]]
+    window_total = max((deadline - now).total_seconds(), 1)
+    window_spent = (datetime.now() - now).total_seconds() / window_total
+    spent_cells = round(max(0.0, min(1.0, window_spent)) * 24)
+    head_rows.append([("cinza", "window "),
+                      (None, f"{now.strftime('%H:%M')} → {deadline.strftime('%H:%M')}  "),
+                      ("ciano", "▰" * spent_cells), ("cinza", "▱" * (24 - spent_cells)),
+                      ("cinza", f"  {min(window_spent, 1):.0%}")])
+    for_you = len([s_ for s_ in stays if s_["id"] in shown])
+    colored = lambda n_, color: (color if n_ else None)  # noqa: E731
+    head_rows.append([
+        (None, f"{items} attempt(s) · "),
+        (colored(len(delivered), "verde"), f"{len(delivered)} delivered"),
+        (None, " · "), (colored(len(blocked_items), "vermelho"),
+                        f"{len(blocked_items)} stuck"),
+        (None, " · "), (colored(len(failed), "vermelho"), f"{len(failed)} no progress"),
+        (None, " · "), (colored(for_you, "amarelo"), f"{for_you} for you"),
+        (None, f" · {commits} commit(s)"),
+    ] + ([(None, " · "), ("negrito", "US$ " + f"{cost:.2f}".replace(".", ","))]
+         if costs else []))
+    if costs:
+        br = lambda v: f"{v:.2f}".replace(".", ",")  # noqa: E731
+        head_rows.append([("cinza", f"cost: sum of `total_cost_usd` over {len(costs)} "
+                           f"round(s): {' + '.join(br(v) for v in costs.values())}",
+                           True)])
+    head_rows.append(branch_row)
+    for h in inheritance:
+        head_rows.append([("cinza", f"inherited at the start: `{h['branch']}`; "
+                           "merging the run branch brings both", True)])
+    if limited:
+        head_rows.append([("amarelo", "usage cap "), (None, "(not the item's fault): "
+            + "; ".join(f"{ident} hit the limit" + (f", resets {reset}" if reset else
+                        ", `claude` did not say when it resets")
+                        for ident, reset in limited), True)])
+    if waits:
+        head_rows.append([("amarelo", "5h quota waits "), (None, f"({len(waits)}): "
+            + "; ".join(f"{when} ({ident}) waited for the {reset.strftime('%H:%M')} reset"
+                        for when, ident, reset in waits), True)])
+    if tight:
+        head_rows.append([("amarelo", "quota tight at the start "), (None,
+            f"({len(tight)}, the reset did not fit the window): "
+            + "; ".join(f"{ident} at {usage:.0%}, reset {reset.strftime('%H:%M')}"
+                        for ident, usage, reset in tight), True)])
+    if drops:
+        head_rows.append([("amarelo", "network drops "), (None,
+            f"({len(drops)}, not the item's fault): "
+            + "; ".join(
+                (f"during {ident}: none since {dropped_at.strftime('%H:%M')}, did "
+                 "not come back in time" if returned is None else
+                 f"during {ident}: {dropped_at.strftime('%H:%M')} to "
+                 f"{returned.strftime('%H:%M')}, resumed")
+                for ident, dropped_at, returned in drops), True)])
+    print()
+    report_panel(f"ended at {datetime.now().strftime('%H:%M')} · {end_reason}",
+                 head_rows)
+
+    # ── panel 2: the items ───────────────────────────────────────────────
+    if outcomes:
+        width = max(len(label(okey)) for okey in outcomes)
+        rows = []
+        for okey, (kind, text) in outcomes.items():
+            ident = label(okey)
+            if SCREEN.enabled:
+                glyph = OUTCOME_GLYPHS.get(kind, ("·", "cinza"))
+                lead = [(glyph[1], glyph[0]), (None, " "),
+                        ("negrito", f"{ident:<{width}}"), (None, "  ")]
+            else:
+                lead = [(None, f"- {ident + ':':<{width + 1}} ")]
+            rows.append(lead + [("cinza" if SCREEN.enabled else None, text, True)])
+        report_panel(f"Items ({len(outcomes)})", rows)
+
+    # ── panel 3: the decisions ───────────────────────────────────────────
+    groups = {}
+    for fkey, pref in followed.items():
+        who = ("your answer at the launch" if pref["fonte"] == "dono"
+               else "the agent's default, nobody answered")
+        groups.setdefault(label(fkey), []).append(
+            [("amarelo", "followed "), (None, f"{pref['escolha']} ({who}) · "
+                                           f"{pref['texto']}", True)])
+    for ident, dec in decided:
+        groups.setdefault(ident, []).append(
+            [("verde", "decided "), (None, dec["texto"], True),
+             ("cinza", f" · commit {dec['commit'][:10]}")])
+    if groups:
+        width = max(len(g) for g in groups)
+        rows = []
+        for ident, group in groups.items():
+            for k, row in enumerate(group):
+                rows.append([("negrito", f"{ident if k == 0 else '':<{width}}"),
+                             (None, "  ")] + row)
+        if decided:
+            rows.append([("cinza", "decided = already committed on the run branch, "
+                          "nobody was asked; undoing one is a `git revert`", True)])
+        report_panel(f"Decisions ({sum(len(g) for g in groups.values())})", rows)
     save_state("esperando-dono" if actions or stays else "encerrado",
                  motivo_fim=end_reason,
                  itens=[{"id": i, "desfecho": t, "texto": x}
@@ -7747,12 +7928,8 @@ def _main(argv=None):
     # without switching the state to `interrompido`.
     closed[0] = True
     final_state[0] = True
-    if costs:
-        br = lambda v: f"{v:.2f}".replace(".", ",")  # noqa: E731
-        print(f"\n   cost: US$ {br(cost)} (sum of `total_cost_usd` over "
-              f"{len(costs)} round(s): {' + '.join(br(v) for v in costs.values())})")
-    print(SCREEN.c("cinza", f"\n   record: {short_path(ledger, repo)}"))
-    print(SCREEN.c("cinza", f"   claude output: {short_path(log, repo)}"))
+
+    owner_report = {}
 
     def ask_owner(review=None):
         # The summary above only counts; here each pending item becomes a question (09/30).
@@ -7769,9 +7946,9 @@ def _main(argv=None):
         return close_with_owner(repo, a.queue, run_id, item_states, review,
                                wait=ANSWER_WAIT_SEC, already_asked=asked_mid_run,
                                interactive=False if silent else None,
-                               ask_land=False)
+                               ask_land=False, report=owner_report)
 
-    def commit_records(result):
+    def commit_records(result, review=None):
         # `--auto-land` (CS-1 of docs/spec/fim-do-until-sem-espera.md): after the
         # analysis and the end questions, as the last step before the records'
         # commit. A yes to a question has already sent its item back by now.
@@ -7784,20 +7961,27 @@ def _main(argv=None):
             except Exception as e:  # noqa: BLE001
                 print(f"\n   not merged: the automatic merge failed ({e}). "
                       f"To merge by hand: cepa-until land {a.queue}/{run_id}")
-        # CS-4: the end never asks "Land now?". A run that did not merge by itself
-        # prints the command and goes on; the owner merges when he chooses.
+        # CS-6: the "Next" panel is worked out BEFORE the records' commit: that
+        # commit moves the clone's branch, and the merge's "is it clean?" asks
+        # whether the branch still fast-forwards from where the run started. It is
+        # printed after, as the last thing on the screen. Only now is it known
+        # whether the merge is still pending (`--auto-land` may have done it),
+        # what the questions left open and where the analysis went.
         try:
             left_over = json.loads(state_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             left_over = {}
-        pending = pending_action(left_over)
-        if pending:
-            print(f"\n   to merge into `{pending.get('destino')}`: "
-                  f"cepa-until land {a.queue}/{run_id} --yes")
+        next_panel = next_rows(repo, a.queue, run_id, left_over, ledger,
+                               owner_report, left=deadline - datetime.now())
         # The run's last step (CS-1), after the end questions (which write answers
         # into the queue through `cepa-plan answer`) and after the `.review.md`:
         # committing earlier would leave the queue dirty again.
         commit_run_end()
+        report_panel("Next", next_panel)
+        entries = [("record", short_path(ledger, repo)), ("log", short_path(log, repo))]
+        if review:
+            entries.append(("analysis", short_path(review, repo)))
+        print(SCREEN.c("cinza", "\n   " + paths_line(entries, panel_room())))
         return result
 
     # The analysis spends quota: stopping on the quota and then analyzing hits the
@@ -7815,12 +7999,10 @@ def _main(argv=None):
                                       ledger, a.with_permissions)
     log_event({"evento": "analise", "feita": review is not None,
               "arquivo": str(review) if review else None, "erro": review_error})
-    if review:
-        print(f"   analysis: {short_path(review, repo)}")
-    else:
+    if not review:
         print(f"   analysis: failed ({review_error}) — run `/common:until-review "
               f"{short_path(ledger, repo)}` by hand")
-    return commit_records(ask_owner(review))
+    return commit_records(ask_owner(review), review)
 
 
 if __name__ == "__main__":
