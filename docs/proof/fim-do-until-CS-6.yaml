@@ -1,0 +1,52 @@
+schema_version: 2
+card: fim-do-until-CS-6
+verdict: proven
+reviewed_at: 2026-11-19T20:30:00-03:00
+base_commit: 468a9c6
+head_commit: 0460939de889d480d4ef8f11f8e72874af3eaeb1
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: "Python CLI repo, no Quarkus/PIT. The tests run the real script as a subprocess; only the claude binary is faked (far boundary). First pass at head b11cd84 in throwaway worktrees /tmp/proof-cs6-a and /tmp/proof-cs6-base; second pass at head 0460939 in /tmp/proof-cs6-c. All removed."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN first at HEAD b11cd84: final_report rc=0 (56 ok); test_cepa_until.py rc=0 263 ok; test_cepa_until_decide.py rc=0 494 ok; all rc=0 226 ok; auto_land, hook_reinstall, network, quota, run_branch, screen_english, test_cepa_plan_finish_decision.py all rc=0."
+        - "P1 fit(): never cut (if True) -> final_report RED: 'nenhuma linha do fim passa da largura' (COLUMNS=60 and 120), 'nenhuma linha passa de 100 colunas', 'o motivo longo é cortado com reticências e o fim fica', 'o estado grava o motivo sem corte'."
+        - "P1c panel_room() unbounded -> final_report RED: same width checks, plus 'a última linha traz os caminhos'."
+        - "P1d fit_row second cut (used+len>room) removed -> final_report RED: 'COLUMNS=60: nenhuma linha do fim passa da largura'."
+        - "P1e fit ellipsis char changed to '..' -> test_cepa_until.py RED: 'a evidence longa é cortada, não despejada inteira'."
+        - "P1b first pass SURVIVED at b11cd84: fit_row elastic segment no longer yields (text = fit(text, room - fixed) replaced by pass) -> final_report rc=0, 56 ok, no FAIL (the fixed tail `· commit <hash>` of a Decisions row was unguarded)."
+        - "P1b SECOND PASS at head 0460939 (git diff --stat b11cd84..0460939 touches only tests/test_cepa_until_final_report.py, +28 lines, so the first-pass results on common/bin/cepa-until still hold): GREEN first, python3 tests/test_cepa_until_final_report.py rc=0, 60 ok. Perturbation common/bin/cepa-until:4401 'text = fit(text, max(room - fixed, 8))' -> 'pass': rc=1, 59 ok, FAIL 'o commit continua inteiro no fim da linha  c7a13652cd [   a1  decided escolhi o caminho mais longo …longo possivel ]'. The survivor is now killed by test_a_long_decision_is_cut_but_its_commit_stays_whole. Honesty of that test: it runs the real cepa-until as a subprocess at COLUMNS=60 (only the claude binary is faked), the expected sha comes from an independent git log --grep in the repo (not from the script output), and it requires one row of at most 60 columns, with the ellipsis, ending in '· commit <sha10>'. Not a tautology."
+        - "P2 single merge mention: extra 'merge into' in the build+push row -> final_report RED: 'o merge aparece uma vez' (COLUMNS=60/120, with color), 'merge into aparece exatamente uma vez 2x'."
+        - "P3a Next panel titled 'Left with you' -> final_report RED (panel Next missing; IndexError); P3b title 'Next · Actions:' -> RED 'a tela não traz Actions:'; P3c title 'Next, waiting on you' -> RED 'a tela não traz waiting on you'; P3d 'Left with you' in the owner row -> RED 'a tela não traz Left with you'."
+        - "P4 panel order: Next printed after the paths line -> final_report RED 'a última linha traz os caminhos'; Items printed after Decisions -> RED 'o painel Decisions (4) existe entre Items e Next' and others."
+        - "P5 borders: report_panel never boxed (if False) -> RED 'com cor sempre: ┌─ ...' (4 FAIL); always boxed (if True) -> RED 'com NO_COLOR: texto simples, sem borda nem cor'."
+        - "P6 Decisions: id repeated on every row -> RED 'o id aparece só na primeira linha de cada item'; commit suffix removed -> RED 'quatro linhas, uma por decisão'; commit replaced by literal ' · commit' -> test_cepa_plan_finish_decision.py RED 'o resumo do fim lista a decisão com o commit'; '(who)' literal in followed rows -> test_cepa_until_decide.py RED 'cs6 answer: the summary says it was the owner's answer', 'cs6 default: the end summary lists the choice'."
+        - "P7 Next numbering/order: reinstall inserted first -> RED 'três itens numerados, na ordem merge, perguntas, reinstalação' (+2); merge row bullet '- ' instead of number -> RED (4 FAIL); owner row without ': ' -> final_report RED (3), test_cepa_until_run_branch.py RED '...o painel Next, com o merge primeiro e a pergunta do a2 depois', test_cepa_until_all.py RED (2); more than 5 questions spelled out (limit 50) -> RED 'as oito perguntas são contadas e só cinco aparecem por extenso'."
+        - "P8 not_clean_reason forced to None -> RED 'run não limpa: a linha diz por que não recomenda' + 'o motivo de não recomendar vem sob o merge'; 'recommended: ' renamed -> RED 'run limpa: recomenda, sem not recommended'."
+        - "P9 merged-by-itself row disabled (estado aterrissado) -> RED 'o Next diz que a run fundiu sozinha', 'run que fundiu sozinha diz isso e não oferece o comando'."
+        - "P10 already asked: owner branch disabled -> RED 'com outra pergunta aberta: uma linha a mais, sem repetir a pergunta do a1'; only-asked branch disabled -> RED 'só perguntado: item numerado com o comando para responder de novo'."
+        - "P11 paths line removed -> RED 'a última linha traz os caminhos do registro e do log'; braced form disabled -> RED 'não cabendo, a pasta e o nome saem uma vez, com as extensões em chaves'."
+        - "Readers: header 'network drops' renamed -> test_cepa_until_network.py RED (2); '5h quota waits' renamed -> test_cepa_until_quota.py RED; reinstall row text changed -> test_cepa_until_hook_reinstall.py RED; merge row label replaced -> test_cepa_until_auto_land.py RED (2)."
+        - "Sampled out (logged): test_cepa_until_screen_english.py (only the folded-whitespace read changed, no perturbation shown RED); the Quarkus-style double check is n/a, the script runs real."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in this repo; every changed behavior (fit, panel_room, report_panel, paths_line, next_rows branches, Decisions grouping, fit_row elastic cut) was reached by a test and turned it RED when perturbed (P1-P11); the elastic-yield line of fit_row (P1b) was killed in the second pass: python3 tests/test_cepa_until_final_report.py with the line replaced by pass -> rc=1, FAIL 'o commit continua inteiro no fim da linha'."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff only changes how the end-of-run report is printed (layout, width, wording); it parses no input from outside and opens no new input surface."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "3cd3861 (RED commit; differs from base 468a9c6 only by tests/test_cepa_until_final_report.py) at /tmp/proof-cs6-base: rc=1; FAIL 'nenhuma linha do fim passa de 100 colunas', 'merge into aparece exatamente uma vez 3x', 'a tela não traz Actions:', '...Left with you', '...waiting on you'. HEAD b11cd84: rc=0, 56 ok. HEAD 0460939: rc=0, 60 ok."
+routing_reason: "Second pass at head 0460939: the single survivor of the first pass (P1b, the elastic cut in fit_row that keeps the `· commit <sha>` tail whole) is now RED under the new test (FAIL 'o commit continua inteiro no fim da linha'), after a green baseline (rc=0, 60 ok). Every other perturbation of the first pass went RED and the RED commit 3cd3861 is red at base for the declared reasons. Nothing is skipped, assumed or surviving. Worktrees /tmp/proof-cs6-a, /tmp/proof-cs6-base and /tmp/proof-cs6-c removed."
