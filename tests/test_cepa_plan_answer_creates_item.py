@@ -95,6 +95,9 @@ def test_red_test_yes_creates_the_declared_item_at_the_end():
         check("a evidência cita a pergunta", QUESTION in ev, ev)
         check("a evidência cita a resposta", "sim: pode calibrar" in ev, ev)
         check("a saída imprime o id do item novo", str(new["id"]) in out, out)
+        check("o `why` do item novo diz que ele ainda não foi priorizado",
+              "ainda não priorizado" in str(new.get("why")), new)
+        check("o item novo leva a marca de item sem Epic", new.get("sem_epic") is True, new)
         check("o id novo não repete nenhum id da fila",
               len({str(i["id"]) for i in items}) == 3, [i["id"] for i in items])
         origin = items_of(root)["a1"]
@@ -140,6 +143,8 @@ def test_answers_that_create_nothing():
                     "sim: pode seguir")
     creates_nothing("--keep", routed("a1", yes_item=declared), "sim: depois", "--keep")
     creates_nothing("--drop", routed("a1", yes_item=declared), "encerrada: não vale", "--drop")
+    creates_nothing("--drop com resposta que começa por sim",
+                    routed("a1", yes_item=declared), "sim, mas encerra", "--drop")
     creates_nothing("não em rota com sim declarado", routed("a1", yes_item=declared),
                     "não: deixa assim")
     creates_nothing("sim em item `blocked` (o próprio item volta à fila)",

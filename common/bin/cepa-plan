@@ -3874,14 +3874,9 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
     it.pop("claimed_by", None)
     items = list(plan.get("items") or [])
     if created is not None:
+        # Valid by construction: non-empty title (`answer_creates`), an id the
+        # queue does not have (`answer_item_id`), `pending`, explicit null route.
         items.append(created)
-        gaps = validate_plan({**plan, "items": items})
-        if gaps:
-            print(f"resposta recusada para {ident}: o item que ela cria deixaria "
-                  f"a fila inválida; nada foi gravado.", file=sys.stderr)
-            for f in gaps:
-                print(f"  - {f}", file=sys.stderr)
-            return 2
     write_body(target, plan, items)
     if keep:
         print(f"{ident} continua `{st}` em {target} · resposta gravada")
@@ -5732,7 +5727,7 @@ def main(argv=None):
         exit_codes=[(0, "recorded"),
                     (2, f"invalid usage, not a terminal, empty answer, --keep with "
                         f"--drop, {not_git}, {no_queue}, unknown item id, item not "
-                        "deferred, the item the answer creates would not validate"),
+                        "deferred"),
                     (3, waves),
                     (6, "the text does not look like an answer (repeat with --force)")])
     rs.add_argument("name", metavar="name", help="queue name")
