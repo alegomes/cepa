@@ -153,6 +153,65 @@ def test_route_without_summary_keeps_the_question():
               "prometia" not in ev, ev)
 
 
+def test_the_whole_sentence_is_pinned():
+    """Labels, order, separator and punctuation: the reader months later reads
+    this sentence, not loose fragments (proof survivors S1-S4)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [routed("a1"), routed("a2")])
+        answer(root, "a1", "sim: pode calibrar")
+        answer(root, "a2", "não: deixa")
+        options = (f"O que cada opção prometia: se sim, {IF_YES}; "
+                   f"se não, {IF_NO}.")
+        check("sim: a frase inteira",
+              f"Pergunta respondida: {QUESTION} {options} "
+              'O dono escolheu o "sim".' in evidence(root, "a1"),
+              evidence(root, "a1"))
+        check("não: a frase inteira",
+              f"Pergunta respondida: {QUESTION} {options} "
+              'O dono escolheu o "não".' in evidence(root, "a2"),
+              evidence(root, "a2"))
+
+
+def test_punctuation_is_not_doubled():
+    """A question without `?` gets one `.`; one with `?` gets none; an effect
+    that already ends in `.` is not doubled (proof survivors S5-S6)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        plain = routed("a1")
+        plain["owner_question"] = "Calibro X agora"
+        plain["owner_summary"]["se_sim"] = "X é calibrado."
+        plain["owner_summary"]["se_nao"] = "X fica."
+        root = build_repo(tmp, [plain, routed("a2")])
+        answer(root, "a1", "sim: calibra")
+        answer(root, "a2", "sim: calibra")
+        ev1, ev2 = evidence(root, "a1"), evidence(root, "a2")
+        check("pergunta sem `?` ganha um ponto",
+              "Pergunta respondida: Calibro X agora. O que" in ev1, ev1)
+        check("efeito terminado em ponto não vira `..`",
+              "se sim, X é calibrado; se não, X fica. O dono" in ev1, ev1)
+        check("pergunta com `?` não ganha `?.`",
+              f"{QUESTION} O que" in ev2 and "?." not in ev2, ev2)
+
+
+def test_one_sided_summary_names_no_choice_it_did_not_keep():
+    """A summary with only one side: the answer for the missing side does not
+    claim the owner chose it (proof survivor S7)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        only_no = routed("a1")
+        del only_no["owner_summary"]["se_sim"]
+        only_yes = routed("a2")
+        del only_yes["owner_summary"]["se_nao"]
+        root = build_repo(tmp, [only_no, only_yes])
+        answer(root, "a1", "sim: pode")
+        answer(root, "a2", "não: deixa")
+        ev1, ev2 = evidence(root, "a1"), evidence(root, "a2")
+        check("só se_não, resposta sim: guarda o não e não diz que escolheu o sim",
+              f"O que cada opção prometia: se não, {IF_NO}." in ev1
+              and "O dono escolheu" not in ev1, ev1)
+        check("só se_sim, resposta não: guarda o sim e não diz que escolheu o não",
+              f"O que cada opção prometia: se sim, {IF_YES}." in ev2
+              and "O dono escolheu" not in ev2, ev2)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):
