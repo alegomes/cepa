@@ -6004,6 +6004,10 @@ def _main(argv=None):
         print(f"cepa-until: --all takes the place of the queue name; pass "
               f"either {a.queue!r} or --all, not both", file=sys.stderr)
         return 2
+    if a.auto_land and a.no_auto_land:
+        print("cepa-until: --auto-land and --no-auto-land contradict each other; "
+              "pass one or the other, not both", file=sys.stderr)
+        return 2
     if not a.all_queues and not a.queue:
         print("cepa-until: missing the queue name (or --all, for every queue). "
               "`cepa plan ready` lists the queues with ready items",

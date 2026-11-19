@@ -467,8 +467,13 @@ def test_launch_on_terminal_asks_the_pre_authorization_and_y_records_it():
         rc, out = launch_on_tty(root, [("Enter means no]:", "y")])
         flat = " ".join(re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", out).split())
         check("a pergunta aparece na largada", QUESTION in flat, out[-1500:])
-        check("...antes do primeiro item", QUESTION in flat and
-              "▶ claude" not in flat.split(QUESTION)[0], flat[:1500])
+        # `▶ claude rodando` is the live line cepa-until prints while the item runs;
+        # it must be on screen AFTER the question (so the check cannot pass vacuously).
+        marker = "▶ claude rodando"
+        check("...antes do primeiro item: a linha do item aparece depois da pergunta",
+              QUESTION in flat and marker in flat
+              and flat.index(QUESTION) < flat.index(marker)
+              and marker not in flat.split(QUESTION)[0], flat[:1500])
         check("responder y grava auto_land true no estado",
               state(root).get("auto_land") is True, str(state(root)))
         check("...e a run limpa aterrissa sozinha",
@@ -513,6 +518,21 @@ def test_launch_with_the_flag_or_without_terminal_never_asks():
         check("com --no-auto-land a pergunta não aparece", "without asking?" not in out,
               out[-1200:])
         check("...e vale não", state(root).get("auto_land") is False, str(state(root)))
+
+
+def test_auto_land_together_with_no_auto_land_is_refused():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        with_origin(root)
+        binv = fake_claude(root.parent, WORKS)
+        p, _ = run_until(root, binv, plan_of(root),
+                         ["--for", "2h", "--verify", VERIFY, "--no-analysis",
+                          "--auto-land", "--no-auto-land"])
+        check("o par sai com 2", p.returncode == 2, f"{p.returncode} {p.stderr[-500:]}")
+        check("...dizendo que um exclui o outro",
+              "--auto-land" in p.stderr and "--no-auto-land" in p.stderr
+              and "not both" in p.stderr, p.stderr[-500:])
+        check("...e nenhum run comecou", not ledger_of(root), str(ledger_of(root)))
 
 
 if __name__ == "__main__":
