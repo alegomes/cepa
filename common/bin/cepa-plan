@@ -3770,6 +3770,39 @@ def owner_task_route(title):
     }
 
 
+NO_WORK_WARNING = "esta resposta não cria trabalho"
+
+
+def answer_without_work(it, st, route, answer, keep, drop, created):
+    """True when the owner's answer closes an old route that declares no item.
+
+    CS-5 of docs/spec/resposta-do-decide-vira-trabalho.md: on a `done` item the
+    answer does not send the item back to the queue, so whatever work it asked
+    for exists only if a queue item is born. A route written before CS-1 says
+    neither the item of the "sim" (`item_se_sim`) nor of the "não"
+    (`item_se_nao`): nothing is created, and the owner is told so instead of
+    reading only "rota humana fechada". `nenhum` declared, an item created,
+    `--keep` (the question stays open) and `--drop` (the owner gave the leftover
+    up) are accounted for and stay silent."""
+    if keep or drop or route is None or st != "done" or created is not None:
+        return False
+    summary = it.get("owner_summary")
+    key = ("item_se_nao" if re.match(r"^n(ã|a)o\b", answer, re.IGNORECASE)
+           else "item_se_sim")
+    decl = summary.get(key) if isinstance(summary, dict) else None
+    return decl is None or (isinstance(decl, str) and not decl.strip())
+
+
+def no_work_add_command(name, ident, route, by_id):
+    """The `cepa-plan add` line the warning prints, ready to copy: the next free
+    `<id>-sim`, the route text as title (the owner edits it if the work is other)
+    and a `why` naming the answered item."""
+    title = " ".join(str(route or "").split()) or f"trabalho pedido pela resposta a {ident}"
+    return ("cepa-plan add " + " ".join(shlex.quote(x) for x in (
+        name, answer_item_id(str(ident), by_id), "--title", title,
+        "--why", f"pedido pela resposta do dono a {ident}")))
+
+
 def answer_item_id(ident, by_id):
     """`<origin>-sim`, then `<origin>-sim-2`, ...: never an id the queue has."""
     base = f"{ident}-sim"
@@ -3886,6 +3919,13 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
             created.update(owner_task_route(title))
         parts.append(f"A resposta criou o item {new_id} no fim da fila: {title}"
                      + (", esperando o dono." if decl.get("precisa_do_dono") else "."))
+    # Decided before `owner_summary` is dropped below: the declaration lives there.
+    no_work_cmd = (no_work_add_command(name, ident, route, by_id)
+                   if answer_without_work(it, st, route, answer, keep, drop, created)
+                   else None)
+    if no_work_cmd:
+        parts.append("A resposta não criou item: a rota não declarava o item "
+                      "que esta resposta cria.")
     if previous:
         parts.append(f"Evidência anterior: {previous}")
     it["evidence"] = " ".join(parts)
@@ -3909,6 +3949,11 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
         print(f"  item novo criado pela resposta: {created['id']} — "
               f"{created['title']} (no fim da fila, `pending`"
               + (", esperando você)" if created.get("human_pending") else ")"))
+    if no_work_cmd:
+        print(f"  {NO_WORK_WARNING}: a pergunta de {ident} é de antes da regra que "
+              "declara o item de cada resposta, e nenhum item foi criado. Se ela "
+              "pediu trabalho, ponha na fila (ajuste o título se quiser):")
+        _tui.verbatim(f"    {no_work_cmd}")
     for line in waiver_lines:
         print(line)
     close_write(root, target, f"queue {name}: owner's answer to {ident} "
@@ -5740,7 +5785,9 @@ def main(argv=None):
             "A \"sim\" to a route on a `done` item whose route declares an item for\n"
             "the yes (`--if-yes-item` in `finish`) creates that item at the end of\n"
             "the same queue, `pending`, and prints its id; declared needs-owner,\n"
-            "it is born with an open owner-task route.\n"
+            "it is born with an open owner-task route. An old route that declares\n"
+            "no item for the answer creates nothing and prints \"esta resposta não\n"
+            "cria trabalho\" with a `cepa-plan add` line ready to copy.\n"
             "By default commits only the queue in the same step."),
         examples=[('cepa plan answer wego WEGO-124 --answer "yes, close it"',
                    "unblock with the answer"),
