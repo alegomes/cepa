@@ -174,6 +174,59 @@ def test_old_state_without_the_field_reads_as_no():
               r is None and not called, str(called))
 
 
+def _clean_world(mod, tmp, verdes=(True,), deferred=()):
+    """`not_clean_reason` over a run that is clean on every condition but the one
+    under test: git says fast-forward, the clone is on `main`, every item delivered,
+    and the queue holds `deferred`. The ledger's `verify` events are `verdes`."""
+    mod.current_branch = lambda repo: "main"
+    mod.git = lambda args, cwd, timeout=120: (0, "")
+    mod.is_all_run = lambda repo, queue: False
+    mod.query_queue = lambda name, repo, max_items=1: (
+        {"deferred": list(deferred)}, None)
+    ledger = Path(tmp) / "r.jsonl"
+    ledger.write_text("".join(json.dumps({"evento": "verify", "verde": v}) + "\n"
+                              for v in verdes))
+    st = {"estado": "esperando-dono", "verify": "true",
+          "acoes": [{"id": "aterrissar", "destino": "main", "sha": "x"}],
+          "itens": [{"id": "a1", "desfecho": "entregue", "texto": "ok"}],
+          "fica_com_voce": []}
+    return mod.not_clean_reason(Path(tmp), "fila", st, ledger)
+
+
+def test_clean_reference_has_no_reason():
+    with tempfile.TemporaryDirectory() as tmp:
+        r = _clean_world(_module(), tmp)
+        check("referência limpa: nenhum motivo para não fazer o merge", r is None,
+              str(r))
+
+
+def test_red_last_build_alone_is_not_clean():
+    """Every item delivered, and the LAST full build went red (an earlier one was
+    green): not clean, and the reason is the build."""
+    with tempfile.TemporaryDirectory() as tmp:
+        r = _clean_world(_module(), tmp, verdes=(True, False))
+        check("último build vermelho, tudo entregue: não está limpa",
+              r is not None and "not green" in r, str(r))
+
+
+def test_owner_question_alone_is_not_clean():
+    """Every item delivered and the build green, but the queue holds an item
+    waiting on the owner: not clean, and the reason names that item."""
+    with tempfile.TemporaryDirectory() as tmp:
+        r = _clean_world(_module(), tmp, deferred=[
+            {"id": "b9", "reason": "human_pending", "detail": "credencial"}])
+        check("pergunta pendente com o dono: não está limpa",
+              r is not None and "b9" in r and "waiting on you" in r, str(r))
+
+
+def test_explicit_false_in_the_state_reads_as_no():
+    mod = _module()
+    check("auto_land false no estado vale não",
+          mod.state_auto_land({"auto_land": False}) is False)
+    check("auto_land com valor que não é true vale não",
+          mod.state_auto_land({"auto_land": "yes"}) is False)
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
