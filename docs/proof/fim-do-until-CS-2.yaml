@@ -1,0 +1,41 @@
+schema_version: 2
+card: fim-do-until-CS-2
+verdict: proven
+reviewed_at: 2026-11-19T11:00:00-03:00
+base_commit: cf81357
+head_commit: 14fef730f8694001188dcb96b6d2df29f15b1881
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until (window_reason, auto_land `left` guard, commit_records call passing left, UNFINISHED_OUTCOME_PHRASES + fallback in not_clean_reason, last_verify_event, last_verify_green)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  note: "Python CLI, not Quarkus. External surface = real cepa-until run end-to-end against a temp git repo with a fake `claude` (fake stands in for the far boundary only). Judged by running tests/test_cepa_until_auto_land.py as a script (exit code + FAIL lines). Unit-level window tests call the real window_reason/auto_land with cmd_land and not_clean_reason stubbed (stubs replace collaborators, not the changed code). Re-proof of the 08f68a9 UNPROVEN: the three survivors were re-run, not assumed."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline at 14fef73 (detached throwaway worktree /tmp/proof-cs2b): python3 tests/test_cepa_until_auto_land.py -> exit 0, 0 FAIL, 66 ok"
+        - "RED  (former survivor 1) commit_records passes `left=None` (line 7728): exit 1, 5 FAIL (a linha diz que a janela acaba antes do build; o estado e esperando-dono, nao aterrissado; commit do item nao esta na main; ... nem no origin; ... branch da run continua), 61 ok"
+        - "RED  (former survivor 2) commit_records passes `left=timedelta(0)`: exit 1, 3 FAIL (a janela folgada nao recusa; o estado termina aterrissado; o commit do item chegou ao origin), 63 ok"
+        - "RED  (former survivor 3) `left is not None` guard removed in auto_land (line 3160 -> window_reason(left, ledger)): exit 1, 2 FAIL (left=None nao levanta erro: TypeError; left=None: o merge comeca apesar do build longo no ledger), 64 ok"
+        - "RED  window guard removed in auto_land (line 3160 -> reason = None): exit 1, 11 FAIL (janela zerada/negativa: auto_land chama cmd_land; a linha not merged nao e impressa; ...), 55 ok"
+        - "RED  window_reason `left >= took` -> `left > took` (equality must fit): exit 1, FAIL 'janela exatamente igual ao build: cabe', 65 ok"
+        - "RED  not_clean_reason fallback prints the raw outcome id (`did not finish ({kind})`): exit 1, 4+ FAIL (desfecho volta-vermelha / sem-rede: o motivo e a frase em ingles; o id cru nao aparece na tela), 57 ok"
+        - "Each run executed the file with N>0 assertions (ok count above). One perturbation at a time, restored with git checkout between runs; worktree removed at the end. The remaining 08f68a9 REDs (ignore `segundos`, last_verify_event first-vs-last, last_verify_green always True, phrase edits) were not re-run: this diff did not touch those lines' logic (14fef73 changed only tests plus the commit_records call and auto_land guard path already measured), and the sample above covers window rule, guard, wiring and fallback; sampled, not exhaustive."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; structural reading: the value `left=deadline - datetime.now()` at line 7728 is now asserted by the CLI end-to-end tests (left=None and left=timedelta(0) both turn them RED, see perturbation results)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff reads the run's own ledger and clock and prints a line; no network/HTTP input is parsed and no api-rest module exists."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is not Bug"
+routing_reason: "The three mutants that survived at 08f68a9 (commit_records passing left=None, passing left=timedelta(0), and the `left is not None` guard removed) all go RED at 14fef73, and the sampled already-RED ones (window guard removed, `>=` -> `>`, fallback printing the raw id) stay RED. Baseline is green with 66 ok and 0 FAIL. The real cepa-until runs end to end in the tests (no double on the changed code), including a run whose window ends before the last build and one whose window fits."

@@ -1,0 +1,51 @@
+key: fim-do-until-CS-2
+status: complete
+diff: cf81357..14fef73
+criteria:
+  - id: AC1
+    text: >
+      CS-2: uma run nao limpa com `--auto-land` nao faz o merge e diz qual
+      condicao falhou. Red test: item termina travado, estado `esperando-dono`,
+      `main` intocado e uma linha que nomeia a condicao ("not merged: X is stuck").
+    altitude: cli
+    surface: >
+      real `cepa-until` process against a fake repo with origin and fake claude,
+      with `--auto-land`; asserts state, main log, origin log, run branch and the
+      `not merged:` line on stdout.
+    test: tests/test_cepa_until_auto_land.py::test_stuck_item_is_not_clean
+    layer: cli (subprocess of common/bin/cepa-until)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_auto_land.py -> exit 0, 66 ok lines, 0 FAIL
+      lines (check() only records, so judged by exit code + FAIL count + ok count).
+      Stuck case: estado esperando-dono, a1 not in main nor origin, run branch
+      kept, "not merged: a2 is stuck" in output. Sibling cli cases: red last
+      build, main moved, no flag.
+    gap: null
+  - id: AC2
+    text: >
+      Riscos (in scope): when the window does not fit the duration of the last
+      full build, the merge does not start and says why (refusal + `not merged:`
+      line only; the "Next" panel is CS-6, out of scope).
+    altitude: cli
+    surface: >
+      end of a real `cepa-until --auto-land` run whose remaining window
+      (deadline - now) is shorter than the last `verify` event's `segundos`.
+    test: >
+      tests/test_cepa_until_auto_land.py::test_run_whose_window_ended_before_the_build_did_not_merge
+      (cli subprocess; --for 0.15m = 9s window, verify `sleep 12`); counter-case
+      ::test_run_with_a_slow_build_that_fits_the_window_merges (cli, 2h window,
+      sleep 2, merges); contract ::test_left_none_skips_the_window_guard; unit
+      ::test_window_shorter_than_the_last_build_refuses, ::test_expired_window_refuses,
+      ::test_window_that_fits_the_last_build_has_no_reason
+    layer: cli (subprocess of common/bin/cepa-until)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_auto_land.py -> exit 0, 66 ok, 0 FAIL.
+      Real-CLI refusal case: verify event green with segundos >= 12, output has
+      "not merged: the window ends in", estado esperando-dono, a1 absent from
+      clone main and origin, run branch kept. Wiring confirmed in source:
+      common/bin/cepa-until:7728 `left=deadline - datetime.now()`. The fits-the-window
+      counter-case (slow build, wide window, state aterrissado, a1 in origin)
+      would fail if left were None-then-refusing or zero.
+    gap: null
