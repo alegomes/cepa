@@ -2654,6 +2654,22 @@ def land_commits_line(repo, sha, destination, return_point, already_merged,
             "commit(s) since the run)")
 
 
+def newest_rescued_copy(path):
+    """The copy this landing saved. `rescue_artifacts` never writes over an older
+    copy: it adds `.1`, `.2`, ... to the name, so on a second rescue of the same
+    branch the plain name is the OLD copy and the highest suffix is this one."""
+    best, best_n = path, 0
+    try:
+        siblings = list(path.parent.iterdir())
+    except OSError:
+        return path
+    for sib in siblings:
+        tail = sib.name[len(path.name) + 1:] if sib.name.startswith(path.name + ".") else ""
+        if tail.isdigit() and int(tail) > best_n:
+            best, best_n = sib, int(tail)
+    return best
+
+
 def rescued_files_block(repo, branch, rescue_output):
     """The files outside git that the run worktree held, with where each goes (CS-7).
 
@@ -2671,7 +2687,7 @@ def rescued_files_block(repo, branch, rescue_output):
     lines = [f"{len(rels)} file(s) outside git were in the run worktree, saved in "
              f"{saved_dir}/:"]
     for rel in rels:
-        copy = root / saved_dir / rel[len(".claude/"):]
+        copy = newest_rescued_copy(root / saved_dir / rel[len(".claude/"):])
         target = root / rel
         if not target.exists():
             hint = f"move to {rel}"

@@ -17,9 +17,10 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_cepa_until import FAILURES, check, item, build_repo  # noqa: E402
+from test_cepa_until import (  # noqa: E402
+    CEPA_UNTIL, FAILURES, check, fake_claude, item, ledger_of, build_repo, run_until)
 from test_cepa_until_land import night, land, with_origin, commit  # noqa: E402
-from test_cepa_until_run_branch import git  # noqa: E402
+from test_cepa_until_run_branch import WORKS, git, plan_of  # noqa: E402
 
 STEP = re.compile(r"^\[(\d)/3\] (merge|full build|push)\s+(\S.*)$")
 
@@ -38,12 +39,19 @@ def test_green_landing_numbers_the_three_steps():
         # already has with the same bytes. Ignored, as `.claude/` is in a client
         # repo: an untracked file that is not ignored makes the landing refuse.
         with open(root / ".git" / "info" / "exclude", "a") as f:
-            f.write(".claude/notas/\n")
+            f.write(".claude/notas/\n.claude/rescued/\n")
         (Path(tree) / ".claude" / "notas").mkdir(parents=True, exist_ok=True)
         (Path(tree) / ".claude" / "notas" / "nova.md").write_text("só na árvore")
         (root / ".claude" / "notas").mkdir(parents=True, exist_ok=True)
         (root / ".claude" / "notas" / "igual.md").write_text("mesmo conteúdo")
         (Path(tree) / ".claude" / "notas" / "igual.md").write_text("mesmo conteúdo")
+        (root / ".claude" / "notas" / "outra.md").write_text("versão do clone")
+        (Path(tree) / ".claude" / "notas" / "outra.md").write_text("versão da run")
+        # A copy left by an earlier rescue of the same branch: this landing's copy
+        # gets `.1`, and the hint must read that one, not the old one.
+        old_copy = (root / ".claude" / "rescued" / branch.replace("/", "-") / "notas")
+        old_copy.mkdir(parents=True, exist_ok=True)
+        (old_copy / "igual.md").write_text("cópia antiga, diferente")
         p = land(root, run_id, "--yes")
         out = p.stdout
         check("aterrissa com saída 0", p.returncode == 0, p.stderr + out)
@@ -68,6 +76,9 @@ def test_green_landing_numbers_the_three_steps():
               ".claude/notas/nova.md: move to .claude/notas/nova.md" in out, out)
         check("o arquivo igual ao do clone pode ser apagado",
               ".claude/notas/igual.md: delete (same as .claude/notas/igual.md)" in out,
+              out)
+        check("o arquivo diferente do clone pede comparação, não apagar",
+              ".claude/notas/outra.md: compare with .claude/notas/outra.md" in out,
               out)
         check("...e o bloco diz onde estão as cópias",
               ".claude/rescued/" in out, out)
@@ -96,6 +107,37 @@ def test_no_upstream_and_moved_destination():
               and "no upstream" in s.get("3", ""), out)
         check("sem arquivos fora do git, não há bloco de arquivos",
               "outside git" not in out, out)
+
+
+def test_run_without_build_skips_step_two():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        binv = fake_claude(Path(tmp), WORKS)
+        run_until(root, binv, plan_of(root), ["--for", "2h", "--no-verify"])
+        start = [e for e in ledger_of(root) if e["evento"] == "run_start"][0]
+        run_id = start["branch"].split("/", 1)[1]
+        p = land(root, run_id, "--yes")
+        check("aterrissa com saída 0", p.returncode == 0, p.stderr + p.stdout)
+        s = steps(p.stdout)
+        check("[2/3] full build pulado, dizendo que a run dispensou o build",
+              s.get("2") == "skipped: the run waived the build", p.stdout)
+        check("...e as três etapas continuam numeradas",
+              sorted(s) == ["1", "2", "3"], p.stdout)
+
+
+def test_step_duration_switches_to_minutes():
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader("cepa_until_mod", str(CEPA_UNTIL))
+    spec = importlib.util.spec_from_loader("cepa_until_mod", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    check("abaixo de um minuto, em segundos", mod.step_duration(42) == "42s",
+          mod.step_duration(42))
+    check("de um minuto em diante, em minutos", mod.step_duration(75) == "1min",
+          mod.step_duration(75))
+    check("acima de uma hora, em horas", mod.step_duration(3900) == "1h05",
+          mod.step_duration(3900))
 
 
 def test_red_build_numbers_the_steps_and_skips_the_push():
