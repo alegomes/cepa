@@ -4316,9 +4316,7 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
     if asked:
         repeated = [str(ad.get("id")) for ad in deferred if str(ad.get("id")) in asked]
         deferred = [ad for ad in deferred if str(ad.get("id")) not in asked]
-        if repeated and report is not None:
-            report["asked"] = repeated
-        elif repeated:
+        if repeated and report is None:
             print(f"\n   already asked in this run: {', '.join(repeated)}. To answer "
                   f"again: cepa-until decide {queue}" + (f"/{run_id}" if run_id else ""))
     analysis = {}
@@ -4328,12 +4326,20 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
                 Path(review).read_text(encoding="utf-8"))
         except OSError:
             analysis = {}
+    def hand_back(still_open):
+        """The run end's report gets what is still open, the items already asked
+        in this run apart: the "Next" panel names them but does not ask again."""
+        report["analysis"] = analysis
+        report["asked"] = [str(ad.get("id")) for ad in still_open
+                           if str(ad.get("id")) in asked]
+        report["deferred"] = [ad for ad in still_open
+                              if str(ad.get("id")) not in asked]
+
     if interactive is None:
         interactive = sys.stdin.isatty() and sys.stdout.isatty()
     if not interactive:
         if report is not None:
-            report["deferred"] = everything
-            report["analysis"] = analysis
+            hand_back(everything)
         else:
             pending_as_text(queue, run_id, item_states, deferred, analysis)
         return 0
@@ -4349,8 +4355,7 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
               f"{queue}" + (f"/{run_id}" if run_id else ""))
     if report is not None:
         # What the questions left open, read from the queue again.
-        report["deferred"] = owner_deferred(repo, queue, run_id, quiet=True)
-        report["analysis"] = analysis
+        hand_back(owner_deferred(repo, queue, run_id, quiet=True))
     return 0
 
 
@@ -4485,9 +4490,15 @@ def next_rows(repo, queue, run_id, state, ledger, report, left=None):
         rows.append([(None, "   "), ("ciano", f"cepa-until decide {queue}/{run_id}"),
                      ("cinza", " (one by one, in a terminal)")])
     asked = (report or {}).get("asked")
-    if asked:
+    if asked and owner:
         rows.append([(None, "   "), ("cinza", f"already asked in this run: "
                                       f"{', '.join(asked)}", True)])
+    elif asked:
+        n += 1
+        rows.append([("negrito", f"{n}. already asked in this run, still open: "),
+                     (None, ", ".join(asked), True)])
+        rows.append([(None, "   "), ("ciano", f"cepa-until decide {queue}/{run_id}"),
+                     ("cinza", " (to answer again)")])
     for stay in state.get("fica_com_voce") or []:
         if stay.get("id") in shown:
             continue

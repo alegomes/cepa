@@ -300,6 +300,25 @@ def test_paths_line_is_whole_when_it_fits_and_braced_when_it_does_not():
     check("e nunca passa da largura", len(m.paths_line(entries, 40)) <= 40)
 
 
+def test_an_item_already_asked_in_this_run_is_named_but_its_question_is_not_repeated():
+    m = load_module()
+    asked_only = {"deferred": [], "asked": ["a1"]}
+    lines = ["".join(sg[1] for sg in r) for r in
+             m.next_rows(Path("/nao/existe"), "fila", "r1", {"estado": "encerrado"},
+                         "/nao/existe", asked_only)]
+    check("só perguntado: item numerado com o comando para responder de novo",
+          lines[0] == "1. already asked in this run, still open: a1"
+          and lines[1] == "   cepa-until decide fila/r1 (to answer again)", "\n".join(lines))
+    both = {"deferred": [{"id": "b2", "reason": "human_pending", "question": "Libero?"}],
+            "asked": ["a1"]}
+    lines = ["".join(sg[1] for sg in r) for r in
+             m.next_rows(Path("/nao/existe"), "fila", "r1", {"estado": "encerrado"},
+                         "/nao/existe", both)]
+    check("com outra pergunta aberta: uma linha a mais, sem repetir a pergunta do a1",
+          "   already asked in this run: a1" in lines
+          and lines[0].startswith("1. 1 owner question(s): b2"), "\n".join(lines))
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
