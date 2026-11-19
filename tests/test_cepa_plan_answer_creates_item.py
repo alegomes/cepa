@@ -127,6 +127,28 @@ def test_new_id_skips_an_existing_one():
         check("o id novo é outro", items[-1]["id"] != "a1-sim", items[-1])
 
 
+def test_hostile_text_survives_the_yaml_round_trip():
+    """Answer and title with what breaks a hand-built YAML line: colon-space,
+    `#`, quotes, a leading dash, and a line break (`--multiline`)."""
+    title = 'calibrar X: "o limite" # de 5% - e o \'resto\''
+    text = 'sim: pode: "sim" # mesmo\n- segunda linha: com \'aspas\''
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [routed("a1", yes_item={"titulo": title,
+                                                        "precisa_do_dono": False})])
+        rc, out = answer(root, "a1", text, "--multiline")
+        check("texto hostil: answer sai 0", rc == 0, out)
+        items = ordered(root)
+        new = items[-1] if len(items) == 2 else {}
+        check("texto hostil: o título volta igual do YAML", new.get("title") == title, new)
+        ev = str(new.get("evidence") or "")
+        check("texto hostil: a evidência guarda as duas linhas da resposta",
+              'pode: "sim" # mesmo' in ev and "- segunda linha: com 'aspas'" in ev, ev)
+        q = subprocess.run([sys.executable, str(CEPA_PLAN), "queue", "fila",
+                            "--repo", str(root), "--json"],
+                           capture_output=True, text=True, env=ENV)
+        check("texto hostil: a fila continua válida", q.returncode == 0, q.stderr)
+
+
 def creates_nothing(name, it, text, *extra):
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [it, item("a2")])
@@ -155,6 +177,7 @@ def test_answers_that_create_nothing():
 def main():
     test_red_test_yes_creates_the_declared_item_at_the_end()
     test_new_id_skips_an_existing_one()
+    test_hostile_text_survives_the_yaml_round_trip()
     test_answers_that_create_nothing()
     if FAILURES:
         print(f"\n{len(FAILURES)} falha(s)")
