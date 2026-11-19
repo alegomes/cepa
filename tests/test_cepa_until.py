@@ -395,7 +395,7 @@ def test_blocked_item_does_not_jam_the_night_behind_it():
         check("o run termina por end-of-queue, não por `blocked-before`",
               end["motivo"] == "end-of-queue", str(end))
         check("...e a razão do fim cita os adiados",
-              "adiado" in (end.get("detalhe") or "").lower(), str(end))
+              "1 were deferred" in (end.get("detalhe") or "").lower(), str(end))
         # Without these two, taking `blocked` out of the progress count went
         # unnoticed: the three items ran the same, but the stuck one began to
         # count as a FAILURE and, on a night with several `blocked` in a row, the
