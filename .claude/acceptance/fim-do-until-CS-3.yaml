@@ -1,0 +1,89 @@
+key: fim-do-until-CS-3
+status: complete
+diff: 0727c77..3a670e6
+criteria:
+  - id: AC1
+    text: >
+      CS-3 red test: in a pseudo-terminal, launching without `--auto-land` shows
+      the question before the first item, and answering `y` records
+      `"auto_land": true` in the run state.
+    altitude: cli
+    surface: >
+      real `cepa-until` process in a pty (`launch_on_tty` -> `on_tty`), question text
+      on screen, ordered before the live item line, state file read afterwards.
+    test: tests/test_cepa_until_auto_land.py::test_launch_on_terminal_asks_the_pre_authorization_and_y_records_it
+    layer: cli (pty subprocess of common/bin/cepa-until)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_auto_land.py -> exit 0, 109 ok lines, 0 FAIL
+      lines (check() only records, judged by exit code + FAIL count + ok count).
+      4 ok in this test: question verbatim on screen; it precedes the "claude
+      rodando" line; state auto_land is True; run lands.
+    gap: null
+  - id: AC2
+    text: >
+      `--no-auto-land` skips the question; `--auto-land` already answers it; a run
+      without a terminal never asks and reads as no; `--auto-land` with
+      `--no-auto-land` is refused (extra, contradicts nothing in the card).
+    altitude: cli
+    surface: >
+      real `cepa-until` in a pty with each flag; real `cepa-until` without a
+      terminal (subprocess); state `auto_land` read after each; exit code 2 for the
+      contradictory pair. `--no-pre-read` on a terminal (reads as no terminal, CS-9)
+      also skips the question, now covered.
+    test: >
+      tests/test_cepa_until_auto_land.py::test_launch_with_the_flag_or_without_terminal_never_asks
+      (now includes the --no-pre-read block),
+      ::test_auto_land_together_with_no_auto_land_is_refused,
+      ::test_launch_on_terminal_enter_or_n_keeps_auto_land_false (Enter / n = false);
+      tests/test_cepa_until_all.py::test_all_launch_on_a_terminal_does_not_ask_the_auto_land_question
+    layer: cli (pty and plain subprocesses of common/bin/cepa-until)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_auto_land.py -> exit 0, 109 ok, 0 FAIL.
+      Includes "com --no-pre-read a pergunta nao aparece (CS-9: como sem terminal)"
+      and "...e vale nao". The --all test from the previous audit was run once
+      (2 ok, FAILURES []); its source is unchanged apart from the helper.
+    gap: null
+  - id: AC3
+    text: "No answer means no (the question times out, or EOF / Ctrl-C)."
+    altitude: cli
+    surface: >
+      real `cepa-until` in a pty where the question appears and nobody answers
+      within CEPA_UNTIL_ESPERA_RESPOSTA (or EOF, or Ctrl-C), then state
+      `auto_land` is false and nothing merges.
+    test: >
+      tests/test_cepa_until_auto_land.py::test_no_answer_to_the_pre_authorization_means_no
+      (three real pty cases: nobody answers with CEPA_UNTIL_ESPERA_RESPOSTA=2 and
+      on_tty reply None, which sends nothing and suppresses the helper's default
+      Enter because the prompt is listed in `inputs`; EOF via ^D; Ctrl-C via ^C)
+    layer: cli (pty subprocess of common/bin/cepa-until; exercises the
+      NoAnswer/EOFError/KeyboardInterrupt branch of ask_auto_land)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_auto_land.py -> exit 0, 109 ok, 0 FAIL.
+      6 ok per case x 3 cases (18 ok): question on screen; "no answer: the run
+      will not merge by itself" on screen and before the "claude rodando" line;
+      item_start for a1 in the ledger; state auto_land is False; run branch not
+      an ancestor of main, state not aterrissado, origin main unchanged.
+    gap: null
+  - id: AC4
+    text: >
+      "asks the pre-authorization once, together with the other launch questions".
+    altitude: cli
+    surface: >
+      real `cepa-until` in a pty on a queue whose pre-read raises a preference
+      question: the screen shows that question, then the pre-authorization exactly
+      once, before the first item.
+    test: >
+      tests/test_cepa_until_auto_land.py::test_the_question_comes_once_after_the_other_launch_questions
+      (via test_cepa_until_decide._pref_launch on a pty with the fake reader)
+    layer: cli (pty subprocess of common/bin/cepa-until)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_auto_land.py -> exit 0, 109 ok, 0 FAIL.
+      4 ok: the pre-read question ("Posso usar o formato curto?") appeared; the
+      auto-land QUESTION index is after it; before the "claude rodando" line;
+      flat.count(QUESTION) == 1. Source placement confirmed: the ask sits in _main
+      after the pre-read/preference questions and before the first item.
+    gap: null
