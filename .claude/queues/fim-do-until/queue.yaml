@@ -1,0 +1,90 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/fim-do-until-sem-espera.md (7 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-19
+
+schema_version: 2
+mode: single-track
+queue: fim-do-until
+source: docs/spec/fim-do-until-sem-espera.md (7 critérios de sucesso; ordem herdada
+  do texto)
+items:
+- id: CS-1
+  title: '`--auto-land` faz uma run limpa fazer o merge sozinha no fim'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: uma run
+    com `--auto-land` sobre uma fila cujo único item entrega verde, com o `main`
+    do clone intocado, termina com o commit da branch da run no `main` e o estado
+    `aterrissado`; hoje a flag não existe e o argparse sai com 2.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: uma run não limpa com `--auto-land` não faz o merge e diz qual condição
+    falhou
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: uma run
+    com `--auto-land` em que um item termina travado acaba com estado `esperando-dono`,
+    `main` intocado e uma linha que nomeia a condição que falhou ("not merged: WEGO-2542
+    is stuck"); hoje a flag não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: sem a flag, a largada pergunta a pré-autorização uma vez, junto com as
+    outras perguntas da largada
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
+    lançar sem `--auto-land` mostra essa pergunta antes do primeiro item, e responder
+    `y` grava `"auto_land": true` no estado da run; hoje a pergunta não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: o fim da run nunca pergunta "Land now?"
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
+    uma run limpa sem pré-autorização sai segundos depois do relatório e a saída
+    não contém "Land now?"; hoje imprime "Land now? [y/N/q]" e espera `CEPA_UNTIL_ESPERA_RESPOSTA`
+    segundos.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: nada de português na tela do fim
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: a saída
+    do fim de uma run com um item adiado não contém "aterrissar" nem "a fila acabou";
+    hoje contém os dois.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: o relatório final é um conjunto de painéis TUI, e o merge aparece uma vez
+    só
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com `COLUMNS=100`,
+    a saída do fim de uma run com um item travado cujo motivo tem 400 caracteres
+    não tem linha com mais de 100 colunas, contém "merge into" exatamente uma vez
+    e não contém "Actions:", "Left with you" nem "waiting on you"; hoje o motivo
+    quebra em várias linhas e o merge aparece duas vezes.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: '`cepa-until land --yes` imprime etapas numeradas com resultado e duração'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: `cepa-until
+    land <fila>/<run> --yes` numa run de fixture imprime linhas começando com `[1/3]`,
+    `[2/3]` e `[3/3]`, e o bloco dos arquivos guardados contém "move to" ou "delete";
+    hoje imprime "full build:" e "pushed" sem número de etapa.'
+  status: pending
+  blocked_by: []
+  human_pending: null
