@@ -1,0 +1,47 @@
+schema_version: 2
+card: resposta-do-decide-vira-trabalho-CS-2
+verdict: proven
+reviewed_at: 2026-11-18T23:00:00-03:00
+base_commit: 5d6d928
+head_commit: 03aa047
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (answer_creates, answer_item_id, cmd_answer creation block, answer help text)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # tests/test_cepa_plan_answer_creates_item.py runs the real CLI in a PTY
+  base_commit_resolved: true
+method_note: >
+  common/bin/cepa-plan is byte-identical between 6df6305 and 03aa047 (git diff --stat empty);
+  only tests/test_cepa_plan_answer_creates_item.py changed, so the 11 perturbations of the
+  6df6305 run are reused. New perturbations ran in a throwaway detached worktree
+  /tmp/proof-cs2-h (git worktree add --detach at 03aa047), restored with git checkout after
+  each, worktree removed with git worktree remove --force + prune. Primary tree untouched
+  except this file. Full build not run (supervisor's).
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "BASELINE (03aa047): python3 tests/test_cepa_plan_answer_creates_item.py -> 'tudo ok', 0 FAIL, includes the 3 'texto hostil' lines."
+        - "Reused from 6df6305 (code under test unchanged): 11 perturbations (A drop guard, B st != done, C keep guard, D sim regex, E sem_epic, F not-prioritized phrase, G E+F, H item at front, I id collision loop, J origin evidence names new item, K printed id): 11 RED, 0 survived."
+        - "New, on the hostile-text test: (P1) answer in the evidence cut to its first line (`answer.splitlines()[0]`) -> RED, 'texto hostil: a evidência guarda as duas linhas da resposta'. (P2) title cut at the first colon (`.split(':')[0]`) -> RED, 'texto hostil: o título volta igual do YAML'. The new test is therefore capable of failing on both guarantees it claims."
+        - "Observation, outside this diff: replacing the --multiline join (`'\\n'.join` -> `' '.join`, code from campo-de-resposta CS-3, not touched by 5d6d928..03aa047) stays green: the hostile test checks that both lines survive, not that the line break itself survives. Not a CS-2 hunk; named, not counted."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in repo; uncovered = the hunks whose perturbation survived (same standard as docs/proof/resposta-do-decide-vira-trabalho-CS-1.yaml); 13 perturbations of CS-2 hunks, 0 survived"
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: "tests/test_cepa_plan_answer_creates_item.py::test_hostile_text_survives_the_yaml_round_trip passes; plus an ad-hoc driver against the real CLI in a PTY (answer + queue --json, helpers of test_cepa_until_decide.on_tty): 39 cases, 0 bad. Titles: *alias, !!python/object tag, &anchor, {a: b}, [x, y], @ ` %, tab, embedded newline, CJK+emoji, 3000 chars, '- - -', '---', '...', '? k', null, 123, yes, '|' and '>' block scalars, lone quotes, backslash-n, BEL. Answers (with and without --multiline): 'SIM' uppercase, embedded '---' document marker, shell/format placeholders ({{x}}, $(id), %s, %(x)s), 5000 chars, mixed quote/backslash/#/:/- chars, tabs, CJK+emoji. Every case: answer rc 0, queue gains exactly one item, title equals whitespace-normalized declared title, `queue` exits 0."
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type Story, not Bug"
+routing_reason: "PROVEN. 13 perturbations of CS-2 behavior (11 reused from 6df6305, 2 new on the hostile-text test) all turn the real-CLI test red; the creation path runs the real CLI in a PTY with no double. L4: the new hostile-text test passes and 39 extra adversarial cases against the real CLI (YAML special titles, document markers, placeholders, huge and unicode text) all round-trip and keep the queue valid, because the item is written through yaml.dump in write_body. L2 recorded under the repo's no-coverage-tool standard, consistent with CS-1. One side note: the --multiline line-break join (pre-existing, not in this diff) is not pinned by this card's tests."

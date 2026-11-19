@@ -1,0 +1,21 @@
+schema_version: 1
+card: resposta-do-decide-vira-trabalho-CS-2
+key: resposta-do-decide-vira-trabalho-CS-2
+status: complete
+audited_at: 2026-11-18
+covers: 5d6d928..3ef0486
+criteria:
+  - id: CS-2
+    text: "O 'sim' do dono a uma rota em item `done` que declara item para o sim (owner_summary.item_se_sim = {titulo, precisa_do_dono}) cria esse item no FIM da mesma fila, `pending`, com o titulo declarado e evidencia citando item de origem, data, pergunta e resposta; a saida de `answer` imprime o id do item novo."
+    altitude: cli
+    surface: "cepa-plan answer <fila> <id> --answer 'sim: ...' como subprocesso num PTY (answer so roda em terminal), repo git real; plan.yaml resultante e stdout"
+    test: "tests/test_cepa_plan_answer_creates_item.py::test_red_test_yes_creates_the_declared_item_at_the_end (+ test_new_id_skips_an_existing_one, test_answers_that_create_nothing)"
+    layer: "subprocess real de common/bin/cepa-plan no PTY, sem mock; afirma 3 itens (era 2), novo no fim, title 'calibrar X', status pending, human_pending nulo, evidencia com origem a1 + data + pergunta + resposta, id impresso na saida, ids unicos, origem segue done com rota fechada, `cepa-plan queue` sai 0 e devolve o novo no lote"
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_answer_creates_item.py -> rc=0, 28 linhas 'ok', 0 FAIL, 'tudo ok' (HEAD 3ef0486)"
+    status: complete
+    gap: ""
+    neighbors:
+      - "python3 tests/test_cepa_plan_answer_waiver.py -> 'all green'"
+      - "python3 tests/test_cepa_plan_route_item_declaration.py -> 'tudo verde'"
+note: "Casos que nao criam nada tambem cobertos: `nenhum` no sim, --keep, --drop, 'nao' e 'sim' em item blocked. Fora de escopo (outros itens): CS-3, CS-5, CS-6, CS-7 e item para a resposta 'nao'. Nao rodei o build completo, por regra da run. A fila antes tem 2 itens e depois 3, entao a contagem 'antes igual' do teste vermelho e verificada pela asserção len==3 e pelos casos sem criacao (['a1','a2'])."
