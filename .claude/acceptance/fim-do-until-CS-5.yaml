@@ -1,0 +1,55 @@
+key: fim-do-until-CS-5
+status: complete
+diff: b4a4189..36d6a15
+criteria:
+  - id: AC1
+    text: >
+      CS-5 red test: the output of the end of a run with one deferred item contains
+      neither "aterrissar" nor "a fila acabou"; before the change it contained both.
+    altitude: cli
+    surface: >
+      real `cepa-until` subprocess (run_until, fake claude), queue a1 done + a2 deferred
+      (human_pending); ANSI-stripped stdout+stderr of the end screen.
+    test: tests/test_cepa_until_screen_english.py::test_end_of_a_run_with_one_deferred_item_has_no_portuguese
+    layer: cli (subprocess of common/bin/cepa-until)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_screen_english.py -> exit 0, 25 ok lines, 0 FAIL.
+      Asserts no "aterrissar", no "a fila acabou", "merge into `<branch>`" present, and the
+      full English stop detail with count 1. RED commit a5c0d59 precedes implementation 25cb078.
+    gap: null
+  - id: AC2
+    text: The action shows as "merge into `<branch>`" everywhere it appears.
+    altitude: cli
+    surface: >
+      action_label, pending_as_text, decide card, applied list, for-later list (with the
+      land command), land refusal, decide/close-dead help, close-dead plan.
+    test: >
+      tests/test_cepa_until_screen_english.py (test_every_other_site_that_prints_the_action,
+      test_help_of_decide_and_close_dead_has_no_portuguese_id, test_land_refusal_*,
+      test_close_dead_plan_names_the_merge_action, test_decide_card_on_a_terminal_*);
+      updated assertions in tests/test_cepa_until_decide.py
+    layer: cli (module-level calls with injected output, plus subprocess)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_screen_english.py -> exit 0, 0 FAIL;
+      python3 tests/test_cepa_until_decide.py -> exit 0, 494 ok, 0 FAIL (no pty flake this run).
+      Remaining "aterrissar" is the stored id, the `land|aterrissar` alias and comments (spec out of scope).
+    gap: null
+  - id: AC3
+    text: >
+      The cepa-plan stop detail says "the queue is finished: no runnable item is left, and N
+      were deferred (each with its reason in the report)".
+    altitude: cli
+    surface: stop["detail"] from cepa-plan build_batch, and the same text on the real end screen and in the run_end ledger event.
+    test: >
+      tests/test_cepa_until_screen_english.py::test_cepa_plan_stop_details_are_in_english;
+      tests/test_cepa_until.py::test_blocked_item_does_not_jam_the_night_behind_it
+    layer: cli
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until.py -> exit 0, 263 ok, 0 FAIL (includes "...e a razão do fim
+      cita os adiados"). Assertion change 36d6a15 (Portuguese 'adiado' -> '1 were deferred') does
+      not weaken: it pins the English text from cepa-plan and additionally the count (1) of
+      deferred items; the motivo == end-of-queue check just above is unchanged.
+    gap: null
