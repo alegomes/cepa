@@ -448,13 +448,13 @@ QUESTION = ("If the run ends clean (fast-forward, green build, nothing waiting o
             "you), merge into `main` and push without asking?")
 
 
-def launch_on_tty(root, answers, *extra):
+def launch_on_tty(root, answers, *extra, wait="20"):
     """A real `cepa-until` in a pseudo-terminal; `answers` is a list of (excerpt the
     screen shows, reply). Returns (exit code, screen text)."""
     from test_cepa_until_decide import on_tty, env_do_run, CEPA_UNTIL
     tmp = str(root.parent)
     env = env_do_run(tmp, root, fake_claude(root.parent, WORKS))
-    env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "20"
+    env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
     return on_tty([sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
                    "--for", "2h", "--verify", VERIFY, "--no-analysis", *extra],
                   str(root), inputs=answers, env=env, timeout=240)
@@ -518,6 +518,71 @@ def test_launch_with_the_flag_or_without_terminal_never_asks():
         check("com --no-auto-land a pergunta não aparece", "without asking?" not in out,
               out[-1200:])
         check("...e vale não", state(root).get("auto_land") is False, str(state(root)))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        with_origin(root)
+        rc, out = launch_on_tty(root, [("Land now?", "n")], "--no-pre-read")
+        check("com --no-pre-read a pergunta não aparece (CS-9: como sem terminal)",
+              "without asking?" not in out, out[-1200:])
+        check("...e vale não", state(root).get("auto_land") is False, str(state(root)))
+
+
+NO_ANSWER_LINE = "no answer: the run will not merge by itself"
+
+
+def test_no_answer_to_the_pre_authorization_means_no():
+    """Nobody answers, EOF and Ctrl-C all end in the same place: the one line, the run
+    goes on to its first item, `auto_land` false and nothing lands."""
+    cases = (("nobody answers", None, "2"), ("EOF", "\x04", "20"),
+             ("Ctrl-C", "\x03", "20"))
+    for label, reply, wait in cases:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = build_repo(tmp, [item("a1")])
+            remote = with_origin(root)
+            origin_before = git(remote, "rev-parse", "main")
+            rc, out = launch_on_tty(root, [("Enter means no]:", reply),
+                                           ("Land now?", "n")], wait=wait)
+            flat = " ".join(re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", out).split())
+            check(f"{label}: a pergunta apareceu", QUESTION in flat, out[-1200:])
+            check(f"{label}: a tela diz que sem resposta a run não funde sozinha",
+                  NO_ANSWER_LINE in flat, out[-1200:])
+            marker = "▶ claude rodando"
+            check(f"{label}: a run segue para o primeiro item, depois da linha",
+                  NO_ANSWER_LINE in flat and marker in flat
+                  and flat.index(NO_ANSWER_LINE) < flat.index(marker), flat[:1500])
+            events = ledger_of(root)
+            check(f"{label}: o primeiro item começou",
+                  any(e.get("evento") == "item_start" and e.get("id") == "a1"
+                      for e in events), str(events)[-800:])
+            check(f"{label}: o estado grava auto_land false",
+                  state(root).get("auto_land") is False, str(state(root)))
+            check(f"{label}: nada aterrissou (o branch da run não está em main, origin igual)",
+                  state(root).get("estado") != "aterrissado"
+                  and subprocess.run(["git", "merge-base", "--is-ancestor",
+                                      f"until/{state(root)['run']}", "main"], cwd=root
+                                     ).returncode != 0
+                  and git(remote, "rev-parse", "main") == origin_before,
+                  f"{state(root)} {out[-600:]}")
+
+
+def test_the_question_comes_once_after_the_other_launch_questions():
+    """A launch with a pre-read preference question: the owner answers it first, then
+    the pre-authorization is asked once, and only then does the first item run."""
+    from test_cepa_until_decide import _pref_launch
+    out, events, reqs = _pref_launch(
+        tty_inputs=[("Your choice, in one line", ""), ("Enter means no]:", "n")],
+        wait="20")
+    flat = " ".join(out.split())
+    other = flat.find("Posso usar o formato curto?")
+    ask = flat.find(QUESTION)
+    item_line = flat.find("▶ claude rodando")
+    check("a pergunta da pre-leitura apareceu", other >= 0, out[-1500:])
+    check("a pergunta do auto-land aparece depois da outra", other >= 0 and ask > other,
+          out[-1500:])
+    check("...e antes da linha do primeiro item", ask >= 0 and item_line > ask,
+          out[-1500:])
+    check("...e o texto da pergunta ocorre uma vez só na tela", flat.count(QUESTION) == 1,
+          str(flat.count(QUESTION)))
 
 
 def test_auto_land_together_with_no_auto_land_is_refused():

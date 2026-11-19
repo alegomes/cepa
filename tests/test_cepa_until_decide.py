@@ -179,7 +179,8 @@ def answer_auto_land_prompt(fd, seen, text, inputs):
 
 def on_tty(cmd, cwd, inputs=(), env=None, timeout=120):
     """Runs `cmd` in a pseudo-terminal and answers each question when it
-    appears: `inputs` is a list of (excerpt the screen shows, answer)."""
+    appears: `inputs` is a list of (excerpt the screen shows, answer); an answer of
+    None consumes the excerpt and sends nothing (a question left unanswered)."""
     pid, fd = pty.fork()
     if pid == 0:
         os.chdir(cwd)
@@ -201,6 +202,8 @@ def on_tty(cmd, cwd, inputs=(), env=None, timeout=120):
             trigger, reply = queue.pop(0)
             # Consumes the trigger so the next equal question does not match on it.
             out_text = out_text.replace(trigger, f"<{trigger}>", 1)
+            if reply is None:  # the trigger was seen; the test sends nothing
+                continue
             if isinstance(reply, str):
                 reply = reply.encode()
             os.write(fd, reply + b"\n")
