@@ -4517,6 +4517,22 @@ def pre_read_as_text(queue, rows, prefs, output=print):
         output(f"   To answer the deferred ones, in a terminal: cepa-until decide {queue}")
 
 
+def ask_auto_land(wait=None, question=None):
+    """The launch question of `--auto-land` (CS-3 of
+    docs/spec/fim-do-until-sem-espera.md). True only on an explicit yes."""
+    if question is None:
+        def question(prompt):
+            return read_line(prompt, print, wait)
+    print("\n── pre-authorization")
+    print("   If the run ends clean (fast-forward, green build, nothing waiting on "
+          "you), merge into `main` and push without asking?")
+    try:
+        return is_yes(question("   ▸ [y/N, Enter means no]: "))
+    except (NoAnswer, EOFError, KeyboardInterrupt):
+        print("\n   no answer: the run will not merge by itself")
+        return False
+
+
 def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
     """CS-6, on a terminal at the launch: each preference the pre-read found, as one
     closed question with the agent's default. CS-10 (perguntas-da-largada-legiveis):
@@ -5960,6 +5976,9 @@ def _main(argv=None):
                          "the run itself does what `cepa-until land --yes` does: "
                          "merge, full build and push. Otherwise it only says why "
                          "not, and the landing stays for you")
+    ap.add_argument("--no-auto-land", action="store_true", dest="no_auto_land",
+                    help="does not ask, at the launch, whether the run may merge by "
+                         "itself when it ends clean (the answer is no)")
     ap.add_argument("--no-analysis", "--sem-analise", action="store_true", dest="no_analysis",
                     help="skips /common:until-review at the end of the run")
     ap.add_argument("--no-resume-on-answer", "--sem-retomar-na-resposta",
@@ -6419,6 +6438,13 @@ def _main(argv=None):
         if waiting:
             print(f"{len(waiting)} item(s) wait for you: cepa-until decide {a.queue}")
         return 0
+
+    # CS-3 of docs/spec/fim-do-until-sem-espera.md: without `--auto-land`, on a
+    # terminal, the pre-authorization is asked once, after the other launch
+    # questions and before the first item. No answer, EOF, Ctrl-C and anything but
+    # a yes read as no. `--auto-land` already answered; `--no-auto-land` skips it.
+    if on_terminal and not a.auto_land and not a.no_auto_land:
+        a.auto_land = ask_auto_land(wait=ANSWER_WAIT_SEC)
 
     # A closed terminal tab sends SIGHUP to the terminal's group. `claude`
     # runs in its own session and survives; the supervisor used to die silently in the middle
