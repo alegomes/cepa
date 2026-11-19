@@ -176,6 +176,34 @@ def test_decisions_are_grouped_by_item_with_the_commit():
               "decisoes" not in state(root), str(sorted(state(root))))
 
 
+def test_a_long_decision_is_cut_but_its_commit_stays_whole():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        body = WORKS.replace(
+            "marca(ident, status='done', evidence='ok')\n",
+            "sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], "
+            "text=True).strip()\n"
+            "marca(ident, status='done', evidence='ok', decisions=[\n"
+            "    {'texto': 'escolhi o caminho mais longo possivel ' * 12, "
+            "'commit': sha}])\n")
+        binv = fake_claude(tmp, body)
+        p, _ = run_until(root, binv, plan_of(root),
+                         ["--for", "2h", "--verify", VERIFY, "--no-analysis"],
+                         extra_env={"COLUMNS": "60"})
+        out = ANSI.sub("", p.stdout)
+        panel = end_of(out).split("── Decisions")[1].split("── Next")[0]
+        rows = [l for l in panel.splitlines() if l.startswith("   a1 ") and "decided" in l]
+        sha = subprocess.run(["git", "log", "--format=%H", "-n", "1", "--grep", "^a1$",
+                              "--all"], cwd=root, capture_output=True, text=True).stdout.strip()
+        check("uma linha de decisão", len(rows) == 1, str(rows))
+        check("a linha cabe em 60 colunas", all(len(r) <= 60 for r in rows), str(rows))
+        check("o texto foi cortado (tinha mais de 400 caracteres)",
+              all("…" in r for r in rows), str(rows))
+        check("o commit continua inteiro no fim da linha",
+              bool(sha) and all(r.endswith("· commit " + sha[:10]) for r in rows),
+              f"{sha[:10]} {rows}")
+
+
 def test_next_says_why_the_merge_is_not_recommended_and_only_a_clean_run_recommends():
     with tempfile.TemporaryDirectory() as tmp:
         _, _, out = stuck_run(tmp)
