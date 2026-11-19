@@ -1411,6 +1411,21 @@ def test_cs7_launch_panel_without_answer_carries_on_and_says_where_to_answer():
                                            for e in events), str(events))
 
 
+def test_all_launch_on_a_terminal_does_not_ask_the_auto_land_question():
+    """A `--all` run is merged by hand (`not_clean_reason`), so the `--auto-land`
+    pre-authorization is not asked there: a `y` would be recorded and ignored."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1")]})
+        rc, out, events = _launch_all_on_tty(
+            tmp, root, [("Enter means no]:", "y")], wait="3")
+        check("--all no terminal: a pergunta do --auto-land nao aparece",
+              "without asking?" not in out and "pre-authorization" not in out,
+              out[-1500:])
+        check("...e o run segue (item_start)",
+              any(e.get("evento") == "item_start" for e in events),
+              out[-800:] + str(events)[-600:])
+
+
 def test_cs7_launch_panel_skips_a_queue_with_its_own_live_run():
     """A queue with its own live run is out of the `--all` run (CS-4), so its
     questions are not asked in this panel either: that run already asked them."""
