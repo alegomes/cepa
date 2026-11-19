@@ -142,7 +142,8 @@ def test_blank_declaration_counts_as_none_declared():
     """A blank declaration creates nothing (`answer_creates` wants a title), so
     it warns like an absent one: as a blank string and as a blank title."""
     for name, decl in (("texto em branco", "   "),
-                       ("título em branco", {"titulo": "  ", "precisa_do_dono": False})):
+                       ("título em branco", {"titulo": "  ", "precisa_do_dono": False}),
+                       ("título nulo", {"titulo": None, "precisa_do_dono": False})):
         with tempfile.TemporaryDirectory() as tmp:
             root = build_repo(tmp, [old_route("a1", yes_item=decl, no_item="nenhum")])
             rc, out = answer(root, "a1", "sim: ok")
@@ -151,9 +152,32 @@ def test_blank_declaration_counts_as_none_declared():
                   and add_line(out) is not None, out)
 
 
+def test_suggested_id_skips_one_the_queue_has():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [old_route("a1"), item("a1-sim")])
+        rc, out = answer(root, "a1", "sim: pode calibrar")
+        line = add_line(out) or ""
+        check("com a1-sim ocupado, o comando sugere a1-sim-2",
+              rc == 0 and shlex.split(line)[3:4] == ["a1-sim-2"], out)
+
+
+def test_blank_route_gets_a_title_that_names_the_item():
+    with tempfile.TemporaryDirectory() as tmp:
+        it = old_route("a1")
+        it["human_pending"] = "   "
+        root = build_repo(tmp, [it])
+        rc, out = answer(root, "a1", "sim: ok")
+        argv = shlex.split(add_line(out) or "x")
+        title = argv[argv.index("--title") + 1] if "--title" in argv else None
+        check("rota em branco: o título do comando cita o item respondido",
+              rc == 0 and title == "trabalho pedido pela resposta a a1", out)
+
+
 def test_no_warning_when_the_answer_is_accounted_for():
     cases = [
         ("`nenhum` declarado", old_route("a1", yes_item="nenhum", no_item="nenhum"),
+         "sim: ok", ()),
+        ("`Nenhum ` editado à mão", old_route("a1", yes_item=" Nenhum ", no_item="nenhum"),
          "sim: ok", ()),
         ("item declarado e criado",
          old_route("a1", yes_item={"titulo": "calibrar X", "precisa_do_dono": False},
