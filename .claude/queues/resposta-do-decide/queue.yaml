@@ -25,9 +25,31 @@ items:
     --question "Ponho na fila um item para X?" --if-yes "..." --if-no "..."`, sem
     declarar item, sai com código 2 e a fila fica igual byte a byte; hoje sai 0
     e grava a rota.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Reused side branch until/2026-11-18-1731-vermelho-CS-1 (fast-forward:
+    185e1f6, 70e75a9, 3dbef08, ce5d9dd; acceptance COMPLETE + proof PROVEN in ce5d9dd).
+    Fixed the two reds of the run build in 5d6d928: test_commands_english (Portuguese
+    clause in board-flow/commands/decide.md rewritten in English) and test_cepa_until_all
+    (fake --all rewrite reader now returns item_se_nao=''nenhum'', as 3dbef08 did
+    for test_cepa_until_route_rewrite). No test disabled. Ran green: test_cepa_until_all,
+    test_commands_english, test_cepa_until_unclear_fallback, test_cepa_plan_route_item_declaration,
+    test_cepa_plan_finish_route, test_cepa_until_item_declaration, test_cepa_until_route_rewrite,
+    test_cepa_until_unclear_rewrite, test_common_drain_plan, test_until_review_item_declaration,
+    test_common_until_review, test_cepa_until_cut_rule, test_cepa_until_route_rule.
+    Full build left to the supervisor. Code is on the run branch until/2026-11-18-1731.'
+  decisions:
+  - texto: 'Quando o leitor de rotas reescreve uma pergunta antiga sem dizer que
+      item o ''não'' cria, a reescrita não é gravada: a pergunta antiga fica e o
+      aviso mostra o comando para corrigir. A rota que o próprio supervisor abre
+      por falta de pré-condição declara ''nenhum'', porque o ''sim'' só devolve
+      o item à fila.'
+    commit: 70e75a936db0b8aadaa822659875f6da5176020c
+  - texto: 'Os comandos em inglês continuam só em inglês: a explicação de que a
+      dispensa não cria item foi escrita em inglês no guia do decide.'
+    commit: 5d6d9288db8e7063e9f1f6c12f1ea96fcff7b814
+  head_commit: 5d6d9288db8e7063e9f1f6c12f1ea96fcff7b814
 - id: CS-2
   title: o "sim" a uma pergunta com item declarado cria esse item no fim da mesma
     fila
@@ -37,10 +59,40 @@ items:
     answer <fila> <id> --answer "sim: ..."` deixa a fila com um item a mais, no
     fim, `pending`, título "calibrar X" e evidência citando `<id>`; hoje a fila
     sai com o mesmo número de itens.'
-  status: pending
+  status: done
   blocked_by:
   - CS-1
   human_pending: null
+  evidence: 'Commits 3ef0486 (cepa-plan answer: answer_creates + answer_item_id;
+    the owner''s ''sim'' to an open route on a done item whose owner_summary.item_se_sim
+    declares a title appends a pending item at the end of the same queue, id <origin>-sim
+    then -sim-2..., why with the not-prioritized phrase, sem_epic true, evidence
+    citing origin id, date, question and answer; origin evidence names it; output
+    prints the new id; help text), 6df6305 (tests for --drop with a yes answer and
+    the not-prioritized mark; unreachable validate_plan guard removed), 03aa047
+    (hostile text test: colons, #, quotes, leading dash, line break). Red first:
+    tests/test_cepa_plan_answer_creates_item.py had 11 FAIL at 5d6d928 code, green
+    after. Gates: completion-auditor COMPLETE (.claude/acceptance/resposta-do-decide-vira-trabalho-CS-2.yaml);
+    proof-reviewer PROVEN at 03aa047 (docs/proof/resposta-do-decide-vira-trabalho-CS-2.yaml;
+    first pass UNPROVEN with 3 survivors, second NEEDS-HUMAN for L4/L2, closed by
+    the hostile-text test and the CS-1 L2 standard; 13 perturbations all RED, 39
+    adversarial inputs clean), committed in 83b566d. Ran green: test_cepa_plan_answer_creates_item,
+    test_cepa_plan_answer_waiver, test_cepa_plan_route_item_declaration, test_cepa_until_item_declaration,
+    test_cepa_until_resume_on_answer, test_cepa_until_decide (295 s), test_cepa_help_layout,
+    test_commands_english, test_pt_names_to_english. Left out (other queue items):
+    CS-3 needs-owner human_pending, CS-5 warning, CS-6 owner_summary copy, CS-7
+    decide closing line. Proof note outside this diff: the --multiline join (campo-de-resposta
+    CS-3) is not guarded on keeping the line break itself. Full build left to the
+    supervisor. Code is on the run branch until/2026-11-18-1731.'
+  head_commit: 83b566d611381760173abea322e61c13e7b4ff98
+  decisions:
+  - texto: Só o 'sim' cria o item nesta entrega. O 'não' chega ao comando como 'manter
+      como está', e a mesma pergunta volta na rodada seguinte; criar o item ali
+      o criaria de novo a cada vez.
+    commit: 3ef0486f2976ec45b3b6597ca43c805a8efe8aa3
+  - texto: O item criado recebe o nome do item de origem seguido de '-sim' (e '-sim-2'
+      se esse nome já existir), e entra no fim da fila marcado como ainda não priorizado.
+    commit: 3ef0486f2976ec45b3b6597ca43c805a8efe8aa3
 - id: CS-3
   title: o item declarado "precisa do dono" nasce com pendência humana aberta e
     aparece como ação do dono
@@ -49,9 +101,31 @@ items:
     declaração marcada "precisa do dono", depois do `answer` o item novo tem `human_pending`
     preenchido e `cepa-plan queue <fila> --json` o lista entre os adiados com motivo
     `human_pending`; hoje o item nem existe.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 0fe75fc (cepa-plan: owner_task_route(); cmd_answer gives the
+    item created by a ''sim'' whose item_se_sim declares precisa_do_dono an open
+    route: human_pending = declared title, route_kind owner-task, owner_question
+    ''Dou como feito por você: <título>?'', owner_summary se_sim/se_nao and item_se_sim/item_se_nao
+    ''nenhum''; origin evidence and output say it waits for the owner; help text),
+    429a5b3 (origin-evidence assertions closing proof survivors J/M), a12af41 (gate
+    artifacts). Red first: tests/test_cepa_plan_answer_owner_item.py 11 FAIL at
+    83b566d code (12 after 429a5b3), green after. Gates: completion-auditor COMPLETE
+    (.claude/acceptance/resposta-do-decide-vira-trabalho-CS-3.yaml, at 0fe75fc;
+    later commit only adds assertions); proof-reviewer PROVEN at 429a5b3 (docs/proof/resposta-do-decide-vira-trabalho-CS-3.yaml;
+    first pass UNPROVEN with 2 survivors on the origin-evidence suffix, closed by
+    429a5b3). Ran green: test_cepa_plan_answer_owner_item, test_cepa_plan_answer_creates_item,
+    test_cepa_plan_answer_waiver, test_cepa_plan_route_item_declaration, test_cepa_plan_finish_route,
+    test_cepa_until_item_declaration, test_cepa_until_decide, test_common_drain_plan,
+    test_commands_english. Out of scope: the ''não'' item stays uncreated (CS-2
+    decision). Full build left to the supervisor; code is on the run branch until/2026-11-18-1731.'
+  head_commit: a12af41b490075267402d7c90e7e3f497547340f
+  decisions:
+  - texto: 'Quando o sim do dono cria um item que também precisa dele, a pergunta
+      desse item novo é ''Dou como feito por você: <título>?''; o sim devolve o
+      item à fila para um agente seguir, o não deixa esperando.'
+    commit: 0fe75fc7556f787bf1a6d9de3d726c686b3733f8
 - id: CS-4
   title: a próxima rodada encontra o trabalho criado pela resposta
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -59,9 +133,33 @@ items:
     do `answer` do CS-2, `cepa-plan queue <fila> --max 1` devolve o item novo no
     lote; hoje, no cenário do print (só itens `done` e uma pendência), responde
     lote vazio.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 2212708 (tests/test_cepa_plan_answer_next_round.py: the owner''s
+    print scenario, only done items and one open route whose ''sim'' declares ''calibrar
+    X''; before the answer cepa-plan queue --max 1 is an empty batch stopping at
+    end-of-queue; after cepa-plan answer ''sim: ...'' the batch is only the created
+    item; cepa-plan ready --json, what a cepa-until --all run reads, lists it; cepa-until
+    fila --dry-run names it as ''1st item''; an item declared precisa_do_dono stays
+    out of the batch, deferred with human_pending) and 9994bf6 (acceptance artifact).
+    No code change: CS-2 (3ef0486) and CS-3 (0fe75fc) already deliver the behavior.
+    Red: same test run on a git archive of 5d6d928 (before CS-2) failed 6 checks,
+    including ''1st item: (none — queue has no executable item)''; green 18/18 at
+    HEAD. Gates: completion-auditor COMPLETE (.claude/acceptance/resposta-do-decide-vira-trabalho-CS-4.yaml,
+    red confirmed independently); proof-reviewer not run because this item changed
+    no behavior (diff is test-only; the behavior was proven PROVEN in CS-2 and CS-3).
+    Ran green: test_cepa_plan_answer_next_round, test_cepa_plan_answer_creates_item,
+    test_cepa_plan_answer_owner_item. Auditor notes, not gaps: no test runs cepa-until
+    --all --dry-run itself (covered through cepa-plan ready), and no non-dry run
+    on the created item. Full build left to the supervisor. Code is on the run branch
+    until/2026-11-18-1731.'
+  head_commit: 9994bf6d78b2b665ffbc3e603728f9be060fc37a
+  decisions:
+  - texto: 'O item só ganhou teste, sem mudança de código: a criação do item pela
+      resposta, entregue antes, já faz a rodada seguinte encontrá-lo. Por isso a
+      prova independente não rodou de novo.'
+    commit: 22127084b6c75f9a831fe4d7b970d37f55cd227e
 - id: CS-5
   title: resposta sem retorno em rota antiga, sem item declarado, avisa em vez de
     calar
@@ -70,18 +168,76 @@ items:
     answer` num item `done` com rota antiga sem declaração imprime a linha "esta
     resposta não cria trabalho" e um `cepa-plan add`; hoje imprime só "rota humana
     fechada".'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 31e28f5 (cepa-plan: answer_without_work + no_work_add_command;
+    cmd_answer on a done item whose old route declares no item for the answer —
+    item_se_sim for a yes, item_se_nao for a não — records the answer, creates nothing,
+    adds ''A resposta não criou item'' to the evidence and prints ''esta resposta
+    não cria trabalho'' plus a ready ''cepa-plan add <fila> <id>-sim --title <route>
+    --why ...'' line through the new common/hooks/_tui.py verbatim(), so a terminal
+    never wraps it; answer help text), 41335cc (declared = ''nenhum'' or a non-blank
+    titulo; blank string, blank or null title warn), da8324c (tests for the proof
+    survivors S1-S4), b4f0590 (gate artifacts). No change to common/bin/cepa-until:
+    the decide closing prints each applied answer''s full output, so it repeats
+    the warning per item (test_decide_closing_repeats_the_warning_for_each_item
+    runs decide with the real answer under a PTY). Red first: tests/test_cepa_plan_answer_no_work_warning.py
+    7 FAIL at 9994bf6 code (11 counted by the proof reviewer), green after. Gates:
+    completion-auditor COMPLETE (.claude/acceptance/resposta-do-decide-vira-trabalho-CS-5.yaml,
+    at 31e28f5; later commits only tighten the rule and add assertions); proof-reviewer
+    PROVEN at da8324c (docs/proof/resposta-do-decide-vira-trabalho-CS-5.yaml; pass
+    1 UNPROVEN with 2 survivors, pass 2 UNPROVEN with S1-S4, pass 3 NEEDS-HUMAN
+    only for L2 ''assumed'', rewritten to pass under the CS-1/CS-2/CS-3 no-coverage-tool
+    standard by the reviewer itself). Ran green: test_cepa_plan_answer_no_work_warning,
+    test_cepa_plan_answer_creates_item, test_cepa_plan_answer_owner_item, test_cepa_plan_answer_next_round,
+    test_cepa_plan_answer_waiver, test_cepa_plan_route_item_declaration, test_cepa_until_resume_on_answer,
+    test_cepa_until_decide, test_tui, test_cepa_help_layout, test_commands_english.
+    Left out: a declared item_se_nao on a não that closes the route is still not
+    created (CS-2 decision), and it does not warn either. Full build left to the
+    supervisor. Code is on the run branch until/2026-11-18-1731.'
+  head_commit: b4f0590dbc68550c447399b135ffbf401c68a44b
+  decisions:
+  - texto: Quando a resposta do dono não cria trabalho numa pergunta antiga, o comando
+      sugerido para pôr na fila usa o texto da pendência como título e o nome do
+      item seguido de '-sim'; o dono ajusta o título se o trabalho for outro. O
+      fechamento do decide repete o aviso porque já mostra a saída inteira de cada
+      resposta, sem mudança nele.
+    commit: 31e28f56c9a2c8019c18ed8d8769ba9599da9d38
 - id: CS-6
   title: a resposta guarda na evidência o que cada opção prometia
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
     entre si · superfície onde se observa: cli · teste vermelho declarado: depois
     de `cepa-plan answer ... --answer "sim: ..."`, a evidência do item contém o
     texto do `se_sim`; hoje não contém.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 6f08562 (cepa-plan: answer_promises + call in cmd_answer under
+    ''if not keep'', after the status sentence; before the owner section leaves
+    the item the evidence gets ''Pergunta respondida: <owner_question>'', ''O que
+    cada opção prometia: se sim, <se_sim>; se não, <se_nao>.'' and ''O dono escolheu
+    o "sim"/"não".''; answer help text), a346298 (tests pinning the whole sentence,
+    punctuation and a one-sided summary: proof survivors S1-S7), db5c367 (gate artifacts).
+    Red first: tests/test_cepa_plan_answer_keeps_promises.py 10 FAIL at b4f0590
+    code, green after. Gates: completion-auditor COMPLETE (.claude/acceptance/resposta-do-decide-vira-trabalho-CS-6.yaml,
+    at 6f08562); proof-reviewer PROVEN at a346298 (docs/proof/resposta-do-decide-vira-trabalho-CS-6.yaml;
+    pass 1 UNPROVEN with S1-S7, pass 2 all RED; one pass-2 attempt stopped mid-way
+    because it ran in the background, its /tmp/proof-cs6b worktree removed, redone
+    in the foreground in /tmp/proof-cs6c, also removed). Ran green: test_cepa_plan_answer_keeps_promises,
+    test_cepa_plan_answer_no_work_warning, test_cepa_plan_answer_creates_item, test_cepa_plan_answer_owner_item,
+    test_cepa_plan_answer_next_round, test_cepa_plan_answer_waiver, test_cepa_until_resume_on_answer,
+    test_cepa_until_decide, test_cepa_plan_route_item_declaration, test_commands_english,
+    test_cepa_help_layout. Left out: nothing is copied on --keep (the owner section
+    stays in the item, so the decide ''não'', which reaches answer as --keep, loses
+    nothing). Full build left to the supervisor. Code is on the run branch until/2026-11-18-1731.'
+  head_commit: db5c367edf2ef577c50e48abd2c2e1f842d7bfe0
+  decisions:
+  - texto: Quando o dono responde, a evidência guarda a pergunta e as duas opções,
+      dizendo qual ele escolheu; numa resposta livre, nenhuma é marcada; quando
+      a pergunta fica aberta para ser refeita, nada é copiado, porque o texto continua
+      no item.
+    commit: 6f08562ea3d0462149aa4b7be53db3ed488b1b6c
 - id: CS-7
   title: o fechamento do `cepa-until decide` lista os itens criados pelas respostas
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -89,6 +245,32 @@ items:
     decide <fila>` com uma resposta que cria item termina com uma linha "itens criados
     pelas suas respostas:" seguida do id e do título; hoje o fechamento não tem
     essa linha.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits db89d6b (cepa-until: CREATED_LINE, CREATED_HEADER, created_items();
+    Panel.close_panel ends, in the plain and the colored branch, with ''itens criados
+    pelas suas respostas:'' and one ''<id> — <title>'' line per item the answers
+    created, ''(esperando você)'' when it waits on the owner, ''<queue>/'' prefix
+    on the --all panel, no line when nothing was created; cepa-plan answer prints
+    its ''item novo criado pela resposta'' line through _tui.verbatim, because under
+    a terminal a long title wrapped and the closing missed it), a9f7ed2 (acceptance
+    artifact), 1c2a451 (proof artifact). Red first: tests/test_cepa_until_decide_created_items.py
+    5 FAIL at db5c367 code, green after (runs real decide + real cepa-plan answer
+    under a PTY). Gates: completion-auditor COMPLETE (.claude/acceptance/resposta-do-decide-vira-trabalho-CS-7.yaml,
+    red at base confirmed independently); proof-reviewer PROVEN at db89d6b (docs/proof/resposta-do-decide-vira-trabalho-CS-7.yaml;
+    15 perturbations RED, 2 cosmetic survivors on line indentation, which the criterion
+    does not state). Ran green: test_cepa_until_decide_created_items, test_cepa_until_decide,
+    test_cepa_plan_answer_creates_item, test_cepa_plan_answer_owner_item, test_cepa_plan_answer_next_round,
+    test_cepa_plan_answer_no_work_warning, test_cepa_plan_answer_keeps_promises,
+    test_cepa_plan_answer_waiver, test_cepa_until_unclear_fallback, test_cepa_queue_ready_and_decide_queue,
+    test_cepa_until_resume_on_answer, test_cepa_until_all, test_tui, test_cepa_help_layout,
+    test_commands_english, test_cepa_until_english_aliases. Full build left to the
+    supervisor. Code is on the run branch until/2026-11-18-1731.'
+  head_commit: 1c2a451f66dd53fe8c910a425e4052c6d6633f18
+  decisions:
+  - texto: O fechamento do decide descobre os itens criados lendo a linha que o
+      cepa-plan answer já imprime para cada item novo; essa linha passou a sair
+      inteira, sem quebra na largura do terminal, para o fechamento não perder um
+      item de título longo.
+    commit: db89d6bd7aea1fb7c99209d2cea29adc3c44cc8e
