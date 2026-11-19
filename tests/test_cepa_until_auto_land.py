@@ -551,7 +551,7 @@ def test_end_of_run_on_terminal_never_asks_land_now_and_prints_the_command():
             check(f"{label}: a tela não diz que nada espera pelo dono (o merge espera)",
                   "nothing is waiting on you" not in plain, plain[-1500:])
             check(f"{label}: a tela traz o comando do merge",
-                  re.search(r"to merge into `\S+`: cepa-until land fila/\S+ --yes",
+                  re.search(r"merge into `\S+`: cepa-until land fila/\S+ --yes",
                             plain) is not None, plain[-1500:])
             check(f"{label}: o estado fica esperando-dono",
                   st.get("estado") == "esperando-dono", str(st))

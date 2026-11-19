@@ -50,9 +50,12 @@ def test_end_of_a_run_with_one_deferred_item_has_no_portuguese():
         check("a tela não diz a fila acabou", "a fila acabou" not in out, out[-1500:])
         check("a ação aparece como merge into `<branch>`",
               re.search(r"merge into `\S+`", out) is not None, out[-1500:])
+        # The header panel wraps the stop detail at the terminal width (CS-6), so
+        # the sentence is read with its line breaks folded.
         check("o detalhe de parada está em inglês, com a contagem",
               "the queue is finished: no runnable item is left, and 1 were "
-              "deferred (each with its reason in the report)" in out, out[-1500:])
+              "deferred (each with its reason in the report)" in " ".join(out.split()),
+              out[-1500:])
 
 
 def test_every_other_site_that_prints_the_action():

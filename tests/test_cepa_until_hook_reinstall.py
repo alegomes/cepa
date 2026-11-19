@@ -21,6 +21,7 @@ or `<plugin>/bin/**` (DUR-3); anywhere else it keeps the warning.
 
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -105,8 +106,12 @@ def test_item_that_changes_plugin_hook_is_warned_at_once_and_at_the_end():
               "reinstalar-plugin" in stays
               and "meuplug/hooks/trava.py" in stays["reinstalar-plugin"],
               str(stays))
-        check("o resumo do fim traz a reinstalação em Left with you",
-              "- reinstalar-plugin:" in out.split("── ended at")[-1], out[-1200:])
+        # CS-6: the reinstall is item 2 of the "Next" panel, with the command; the full
+        # text stays in the state (checked above), the screen has one row.
+        next_panel = out.split("── Next")[-1]
+        check("o resumo do fim traz a reinstalação no painel Next, com o comando",
+              "── Next" in out and re.search(r"\d\. after the merge, run `bin/install.sh`",
+                                             next_panel) is not None, out[-1200:])
 
 
 def test_hooks_outside_plugin_does_not_warn():
@@ -484,7 +489,10 @@ def test_rollback_that_fails_ends_the_run_with_reinstalacao_falhou():
         root, p, env = cepa_run(tmp, [item("a1"), item("a2")],
                                 "a1=meuplug/hooks/trava.py",
                                 extra={"FAKE_INSTALL_FALHA": "1",
-                                       "FAKE_ROLLBACK_FALHA": "1"})
+                                       "FAKE_ROLLBACK_FALHA": "1",
+                                       # The Items row is cut to the terminal width
+                                       # (CS-6): 120 is the widest the screen draws.
+                                       "COLUMNS": "120"})
         undone = of_kind(root, "reinstalacao_desfeita")
         check("reinstalacao_desfeita com ok falso",
               len(undone) == 1 and undone[0]["ok"] is False, str(undone))
