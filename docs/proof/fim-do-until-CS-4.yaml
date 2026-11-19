@@ -1,0 +1,39 @@
+schema_version: 2
+card: fim-do-until-CS-4
+verdict: proven
+reviewed_at: 2026-11-19T14:10:00-03:00
+base_commit: 13a922d
+head_commit: da73cc5
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until (decide(): ask_land parameter, `action = pending_action(item_states) if ask_land else None`, `if ask_land: screen.nothing()` guard; close_with_owner(): ask_land parameter forwarded to decide; _main end-of-run call `ask_land=False`; commit_records: 'to merge into' line from pending_action(left_over))", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  note: "Python CLI, not Quarkus. External surface = the real cepa-until run in a pseudo-terminal against a temp git repo with a fake `claude` (the fake stands in for the far boundary only). No double replaces decide, close_with_owner, _main or commit_records. Re-proof at da73cc5 of the 64fc482 proof (which was UNPROVEN with one survivor, the `if ask_land:` guard). Production diff 64fc482..da73cc5 is EMPTY (`git diff 64fc482..da73cc5 --stat -- . ':!tests'` printed nothing; the only change is 2 lines in tests/test_cepa_until_auto_land.py), so the REDs of the 64fc482 proof that are not re-run here carry over (same method as fim-do-until-CS-3.yaml). New perturbations ran in a detached throwaway worktree /tmp/proof-cs4b at da73cc5 (removed at the end), one at a time, file restored with `git checkout da73cc5 -- common/bin/cepa-until` after each. NFAIL = new entries in the FAILURES list of the test module after calling the test function alone; any NFAIL > 0 is RED."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline at da73cc5, unperturbed: test_end_of_run_on_terminal_never_asks_land_now_and_prints_the_command called alone: NFAIL 0 (checks ok, including the new one at tests/test_cepa_until_auto_land.py:552 `\"nothing is waiting on you\" not in plain`)"
+        - "RED  2 (former survivor). common/bin/cepa-until:3912 `if ask_land:` -> `if True:`: NFAIL 2 ('no to the launch question: a tela não diz que nada espera pelo dono (o merge espera)' and '--no-auto-land: a tela não diz que nada espera pelo dono (o merge espera)'). Restored."
+        - "RED  2b. same guard inverted, `if ask_land:` -> `if not ask_land:`: NFAIL 2 (same two checks). Restored."
+        - "SURVIVED, NOT on a changed line (informational): 3914 `return applied, for_later` -> `pass` (early return of `if not total:` removed): NFAIL 0. The line is pre-existing (unchanged by 13a922d..da73cc5: only the `if ask_land:` guard above it was added). Reading the code, with the return gone the end of a run would fall into open_panel and print `0 question(s) for you`; no test asserts that line is absent. Does not gate this card; see report."
+        - "carried over from 64fc482 (production diff empty): baseline of the 5 covering tests NFAIL 0; new tests RED at base_commit 13a922d (end-of-run test NFAIL 8, owner-item test NFAIL 4, decide_on_terminal 2 FAIL lines); RED 1 decide ignores ask_land (NFAIL 8); RED 3 close_with_owner stops forwarding ask_land (NFAIL 4); RED 4 _main end call ask_land=True (NFAIL 4); RED 5a merge-command print dropped (NFAIL 2); RED 5b merge-command printed when nothing pending (auto_land_clean_run test NFAIL 1); RED 6 default flipped to ask_land=False (decide_by_hand test NFAIL 1)."
+        - "Not run: the full suite (belongs to the supervisor)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; the guard at common/bin/cepa-until:3912 is now observed: perturbations 2 and 2b turn test_end_of_run_on_terminal_never_asks_land_now_and_prints_the_command RED (NFAIL 2 each)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff removes a terminal question and prints one line; it parses no new input, no network/HTTP input and no api-rest module exists. The answers still asked (owner items, decide by hand) are unchanged and covered by the tests above."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is not Bug (the red-at-base of the new tests is carried over in l3 above)"
+routing_reason: "The only survivor of the 64fc482 proof (the `if ask_land:` guard around screen.nothing()) is now killed: `if True:` and `if not ask_land:` each turn the end-of-run test RED (NFAIL 2). Production code is unchanged since 64fc482, so the other seven REDs carry over. PROVEN. Informational only: removing the pre-existing early return at line 3914 stays green (unchanged line, outside this card's diff)."
