@@ -103,3 +103,15 @@ items:
     tem o template (o why apontava para ele por engano); endurecer jira-create-fields-gate
     contra Team como {id} continua fora, como no fechamento original. Build completo
     e do supervisor.'
+- id: leads-build-hex-acordam-na-sessao-interativa
+  title: Leads do build-hex não ficam parados na sessão interativa quando o aviso
+    do worker em segundo plano chega à sessão principal
+  why: 'Episódio fb-20261110-5 (2026-11-10) prova que leads-build-hex-nao-encerram-turno-dentro-do-claude-p
+    (done) não cobriu o caso; BACKLOG.md § Leads do `build-hex` encerram o turno
+    à espera de worker, e dentro do `claude -p` ninguém os acorda (ainda não priorizado:
+    entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
