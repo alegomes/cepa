@@ -25,9 +25,25 @@ items:
     que roda o Python real com `-S` (opção que desliga as bibliotecas instaladas),
     `common/bin/cepa-plan ready` sai com código 0 e mostra o item. Hoje sai com
     código 2 e "cepa-plan precisa de PyYAML".'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  finish_recusado:
+  - quando: '2026-11-20T13:25:36+00:00'
+    quem:
+      session_id: bb8fc199-2805-480b-b0b9-2166f998182d
+      hostname: Alexandres-MacBook-Pro.local
+      pid: 71347
+    status_pedido: done
+    motivo: '`done` exige a árvore limpa e há 1 caminho(s) sem commit em /Users/alegomes/cepa-worktrees/cepa-cs-1:
+      .claude/acceptance/CS-1.yaml. Commite antes de fechar (desabilitar ou apagar
+      teste não é conserto)'
+  evidence: 'commit ac956f9 (common/_vendor/yaml com PyYAML 6.0.3, import em common/bin/cepa-plan,
+    tests/test_cepa_runs_without_pyyaml.py); pair-reviewer OK-WITH-NOTES sem correção
+    exigida; tests/run-all.sh 215 de 215 verdes; completion-auditor COMPLETE (.claude/acceptance/CS-1.yaml);
+    proof-reviewer PROVEN (docs/proof/CS-1.yaml): vermelho em 09cc73b e em duas
+    perturbações. Código na branch session/cs-1, sem merge.'
+  head_commit: 9f8658d070db9f0aac25d4dcbd143bc2af036309
 - id: CS-2
   title: os outros 11 executáveis e scripts da lista rodam com o mesmo `python3`
     sem PyYAML
@@ -39,9 +55,17 @@ items:
     de exemplo e termina sem a palavra "PyYAML" no stderr. Hoje `cepa-dor`, `cepa-until`
     e os cinco `maestro-*` saem com "precisa de PyYAML", e o `board-flow-fleet-validate.sh`
     sai com "PyYAML missing".'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commit 5a1737a (11 executáveis importam de <plugin>/_vendor; maestro/_vendor/yaml
+    e board-flow/_vendor/yaml copiadas de common; cs2() em tests/test_cepa_runs_without_pyyaml.py);
+    pair-reviewer OK-WITH-NOTES sem correção exigida; tests/run-all.sh 215 de 215
+    verdes; completion-auditor COMPLETE (.claude/acceptance/CS-2.yaml); proof-reviewer
+    PROVEN (docs/proof/CS-2.yaml): 21 falhas em 9f8658d e vermelho em cada uma das
+    11 perturbações. Ficou de fora: fleet-validate só é exercitado até a leitura
+    do board-flow.yaml (sem Jira). Código na branch session/cs-1, sem merge.'
+  head_commit: a9bead9a9cb2b6fe95f6098ce634c9a77f291425
 - id: CS-3
   title: os hooks leem o YAML de verdade quando o `python3` não tem PyYAML
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -51,9 +75,20 @@ items:
     do arquivo de exemplo, e `proof-verdict-guard.py` lê o veredito de uma prova
     de exemplo. Hoje as três primeiras devolvem vazio e a quarta levanta erro de
     import.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 50b4a6b (9 hooks inserem <plugin>/_vendor; build-hex/_vendor/yaml;
+    cs3() no teste) e 738a16b (o teste isola a telemetria); pair-reviewer OK-WITH-NOTES
+    com 1 correção de teste aplicada (casos de acceptance-gate e merge-truth-gate
+    isolados de _jiramut); tests/run-all.sh em 50b4a6b: 214 de 215 verdes, o vermelho
+    era tests/test_isolated_telemetry.py, corrigido em 738a16b e re-rodado verde,
+    suíte inteira não re-rodada; completion-auditor COMPLETE (.claude/acceptance/CS-3.yaml);
+    proof-reviewer PROVEN (docs/proof/CS-3.yaml): 11 falhas em 5a1737a e vermelho
+    em cada uma das 9 perturbações. Ficou de fora: 6 casos são por função, não por
+    evento; eventos de ensaio UNIQ gravados em ~/.claude/cepa-telemetry antes de
+    738a16b. Código na branch session/cs-1, sem merge.'
+  head_commit: b52f407e46a572dff964d55ae54b5b8ebfebdb0e
 - id: CS-4
   title: um hook que não consegue carregar a cópia avisa em uma linha e não bloqueia
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -62,9 +97,31 @@ items:
     sem bibliotecas instaladas, `acceptance-gate.py` recebe um evento de exemplo,
     sai com código 0 e escreve no stderr uma linha com o nome do hook e o motivo.
     Hoje sai com código 0 e stderr vazio.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
+  human_pending: Decidir se o caso raro em que um hook sai com código 120, e não
+    0, é aceito como está
+  evidence: 'commits d2e880b (common/hooks/_yamlwarn.py, aviso nos 9 hooks, jira-create-fields-gate
+    sem ''pip install'', cs4() no teste) e e520470 (o teste exige o erro de import
+    e a variante pt na linha); pair-reviewer OK-WITH-NOTES sem correção exigida;
+    tests/run-all.sh 215 de 215 verdes em d2e880b; completion-auditor COMPLETE (.claude/acceptance/CS-4.yaml);
+    proof-reviewer UNPROVEN em d2e880b (motivo e variante pt sem asserção) e PROVEN
+    em e520470 (docs/proof/CS-4.yaml). Notas: o aviso alcança 13 hooks, os 9 da
+    spec mais jira-write-lock, bounce-reason-gate, bitbucket-decision-lock e summary-nulls-gate,
+    que importam _jiramut/_autonomy; com stderr ligado a pipe sem leitor e a cópia
+    ausente o hook sai 120 em vez de 0 (flush do stderr no encerramento), não medido
+    em 738a16b. Código na branch session/cs-1, sem merge.'
+  head_commit: efe370916b4d130a5b01fb8b3a8ec4f2f97c6285
+  route_kind: open-question
+  owner_question: Aceito o caso raro em que o hook termina com erro se a cópia falta
+    e ninguém lê o aviso? Recomendo sim.
+  owner_summary:
+    se_sim: nada muda, o caso fica registrado como conhecido
+    se_nao: entra um item novo para o hook terminar limpo também nesse caso
+    item_se_sim: nenhum
+    item_se_nao:
+      titulo: O hook termina sem erro mesmo quando ninguém lê o aviso
+      precisa_do_dono: false
 - id: CS-5
   title: as quatro cópias são idênticas e o desvio é acusado
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -72,9 +129,20 @@ items:
     bin/gen-vendor.py --check` sai com código 0 com as quatro cópias iguais, e sai
     diferente de 0 nomeando o arquivo quando um byte de `maestro/_vendor/yaml/scanner.py`
     é alterado. Hoje o script e as cópias não existem.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 8f5cd2d (bin/gen-vendor.py com --check/--write/--root e tests/test_vendor_copies_drift.py)
+    e 4d117f4 (recusa de link quebrado na origem, código morto removido, casos de
+    __pycache__ e de links); pair-reviewer OK-WITH-NOTES, notas aplicadas (recusa
+    de pasta-link, link dentro da cópia conta como desvio); tests/run-all.sh 216
+    de 216 verdes na primeira versão dos dois arquivos, depois só eles mudaram e
+    o teste de desvio foi re-rodado verde; completion-auditor COMPLETE (.claude/acceptance/CS-5.yaml);
+    proof-reviewer UNPROVEN em 8f5cd2d (regra de __pycache__ e duas condições de
+    link sem teste) e PROVEN em 4d117f4 (docs/proof/CS-5.yaml). Ficou de fora: --diff;
+    teste que acuse uma quinta pasta _vendor/yaml desconhecida do script. Código
+    na branch session/cs-1, sem merge.'
+  head_commit: f9f147777942951473ddbb2ffad685a1c982812c
 - id: CS-6
   title: a cópia do Cepa vale mesmo quando o Python tem outro PyYAML instalado
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -82,6 +150,46 @@ items:
     apontando para uma pasta que tem um `yaml/__init__.py` falso que levanta erro
     ao ser importado, `common/bin/cepa-plan ready` sai com código 0 no repo temporário
     do CS-1. Hoje o falso é importado e o comando quebra.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
+  human_pending: Decidir se os treze arquivos sem teste de precedência ganham um
+    caso cada
+  finish_recusado:
+  - quando: '2026-11-20T17:28:14+00:00'
+    quem:
+      session_id: 3583ee8c44874261bd4aa51e77fc9a29
+      hostname: Alexandres-MacBook-Pro.local
+      pid: 57658
+    status_pedido: done
+    motivo: CS-6 está reservado por bb8fc199-2805-480b-b0b9-2166f998182d (host Alexandres-MacBook-Pro.local,
+      pid 71347, cwd /Users/alegomes/cepa-worktrees/cepa-cs-1) e quem chamou foi
+      3583ee8c44874261bd4aa51e77fc9a29 (host Alexandres-MacBook-Pro.local, pid 57658,
+      cwd /Users/alegomes/cepa-worktrees/cepa-cs-1). S
+  evidence: 'commit c014776, só tests/test_cepa_runs_without_pyyaml.py (cs6(): yaml
+    falso no PYTHONPATH, cepa-plan e mais sete representantes, variantes real e
+    -S, guarda condicional para máquina sem PyYAML); nenhum arquivo de código mudou,
+    a ordem vale desde ac956f9/5a1737a/50b4a6b; pair-reviewer OK-WITH-NOTES com
+    1 correção de teste aplicada; tests/run-all.sh 216 de 216 verdes, depois só
+    o arquivo de teste mudou e foi re-rodado verde; completion-auditor COMPLETE
+    (.claude/acceptance/CS-6.yaml); proof-reviewer PROVEN (docs/proof/CS-6.yaml):
+    insert->append vermelho nos 8 arquivos com caso, vermelho em 09cc73b. Notas
+    do proof-reviewer: 13 dos 21 arquivos sobrevivem a insert->append sem teste
+    vermelho (cepa-until, cepa-until-digest, maestro-fork-settings, maestro-programs,
+    maestro-wave-state, maestro-prune, waivers.py, merge-truth-gate, _autonomy,
+    ui-proof-verdict-guard, jira-create-fields-gate, reflection-gate, expertise-append);
+    a guarda do yaml falso não cobre run_event. Código na branch session/cs-1, sem
+    merge.'
+  head_commit: cf20161b45d2e908e0c7cc515f62814533d469ba
+  route_kind: open-question
+  owner_question: 'Crio um item para testar nos outros treze arquivos que a cópia
+    do Cepa vence outro PyYAML? Recomendo sim: custo baixo.'
+  owner_summary:
+    se_sim: os treze arquivos ganham um teste cada, e a ordem deles fica protegida
+      contra regressão
+    se_nao: os treze seguem corretos hoje, mas uma troca de ordem neles passaria
+      sem teste vermelho
+    item_se_sim:
+      titulo: Os outros treze arquivos têm teste de que a cópia do Cepa vence outro
+        PyYAML
+      precisa_do_dono: false
+    item_se_nao: nenhum
