@@ -4877,9 +4877,9 @@ def ask_auto_land(wait=None, question=None):
 def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
     """CS-6, on a terminal at the launch: each preference the pre-read found, as one
     closed question with the agent's default. CS-10 (perguntas-da-largada-legiveis):
-    the answer is a key, as in the route cards. `s` accepts the default (`fonte`
+    the answer is a key, as in the route cards. `y` accepts the default (`fonte`
     "dono"); Enter keeps it (`fonte` stays "padrao"); `n` asks for one line saying
-    what to do instead and records "não: <question>. Em vez disso: <line>"; `t`
+    what to do instead and records "não: <question>. Em vez disso: <line>"; `w`
     records a free line. An empty follow-up line, or loose text at the menu, goes back
     to the menu with nothing recorded: loose text used to become the whole choice, and
     a bare "Não" reached the item's agent without saying what to do instead. No answer
@@ -4896,11 +4896,11 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
     total = of or len(prefs)
     if panel.enabled:
         panel.continue_panel(f"{len(prefs)} choice(s) the pre-read found")
-        panel.panel_note("s accepts the agent's default, n says what to do instead, "
-                         "t writes a free answer")
+        panel.panel_note("y accepts the agent's default, n says what to do instead, "
+                         "w writes a free answer")
     else:
-        print(f"\n── {len(prefs)} choice(s) the pre-read found: s accepts the agent's "
-              "default, n says what to do instead, t writes a free answer")
+        print(f"\n── {len(prefs)} choice(s) the pre-read found: y accepts the agent's "
+              "default, n says what to do instead, w writes a free answer")
 
     def stop(message):
         if panel.enabled:
@@ -4918,9 +4918,9 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
     def follow(text):
         return panel.follow_up(text) if panel.enabled else f"       {text}"
 
-    chips = [("s", "yes, go with the agent's default"),
+    chips = [("y", "yes, go with the agent's default"),
              ("n", "no, I say what to do instead"),
-             ("t", "I write the answer"),
+             ("w", "I write the answer"),
              ("Enter", "keep the agent's default")]
     for i, (ident, pref) in enumerate(prefs.items(), first):
         if panel.enabled:
@@ -4935,26 +4935,26 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
             # menu() prints the chips; the prompt it returns is not used, because
             # this screen keeps the "Your choice, in one line" anchor (pty tests).
             panel.menu(chips, "Enter")
-            prompt = panel._prompt("Your choice, in one line [s/n/t, Enter keeps "
+            prompt = panel._prompt("Your choice, in one line [y/n/w, Enter keeps "
                                    "the default]: ")
         else:
             if pref.get("pergunta"):
                 print(f"   {pref['pergunta']}")
             print(f"   If nobody answers, the agent goes with: {pref['padrao']}")
-            print("       [s] yes, go with the default · [n] no, I say what to do "
-                  "instead · [t] I write the answer")
-            prompt = ("   ▸ Your choice, in one line [s/n/t, Enter keeps the "
+            print("       [y] yes, go with the default · [n] no, I say what to do "
+                  "instead · [w] I write the answer")
+            prompt = ("   ▸ Your choice, in one line [y/n/w, Enter keeps the "
                       "default]: ")
         shown += 1
         try:
             while True:
                 raw = " ".join(str(question(prompt) or "").split())
                 key = raw.lower()
-                key = {"sim": "s", "yes": "s", "y": "s",
+                key = {"sim": "y", "yes": "y", "s": "y", "t": "w",
                        "não": "n", "nao": "n", "no": "n"}.get(key, key)
                 if key == "":
                     break
-                if key == "s":
+                if key == "y":
                     pref.update(escolha=pref["padrao"], fonte="dono")
                     break
                 if key == "n":
@@ -4968,7 +4968,7 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
                     pref.update(escolha=f"não: {base}. Em vez disso: {line}",
                                 fonte="dono")
                     break
-                if key == "t":
+                if key == "w":
                     line = " ".join(str(question(follow(
                         "Your answer, in one line (the item's agent reads this) "
                         "[Enter goes back to the menu]: ")) or "").split())
@@ -4978,7 +4978,7 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
                     pref.update(escolha=line, fonte="dono")
                     break
                 say(f"\"{raw}\" is not one of the options; to write an answer, "
-                    "type t first")
+                    "type w first")
         except NoAnswer:
             stop(f"nobody answered in {(wait or 0) / 60:g} min; the remaining "
                  "choice(s) run with the agent's default")

@@ -1603,7 +1603,7 @@ def test_cs2_arrows_and_home_end_edit_your_choice_of_the_pre_read():
     perguntas-da-largada-legiveis CS-10 the menu takes a key, so the free text
     goes after `t`."""
     out, events, reqs = _pref_launch(
-        tty_inputs=[("Your choice, in one line", "t"),
+        tty_inputs=[("Your choice, in one line", "w"),
                     ("Your answer, in one line", CS2_KEYS)])
     start = [e for e in events if e.get("evento") == "item_start" and e.get("id") == "x1"]
     choice = (start[0].get("preferencia") or {}).get("escolha") if start else None
@@ -2739,7 +2739,7 @@ def test_pre_read_cs6_without_answer_the_prompt_carries_the_default_and_the_summ
 
 def test_pre_read_cs6_answer_typed_in_the_launch_panel_goes_into_the_prompt():
     out, events, reqs = _pref_launch(
-        tty_inputs=[("Your choice, in one line", "t"),
+        tty_inputs=[("Your choice, in one line", "w"),
                     ("Your answer, in one line", "mostrar a data por extenso")])
     check("cs6 answer: the panel showed the question and the default",
           "Posso usar o formato curto?" in out

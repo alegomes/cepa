@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """CS-10 of docs/spec/perguntas-da-largada-legiveis.md: in the pre-read's choice at
-the launch, `s` or Enter accepts the agent's default, `n` asks for one line saying
-what to do instead (an empty line goes back to the menu, nothing recorded), `t`
+the launch, `y` or Enter accepts the agent's default, `n` asks for one line saying
+what to do instead (an empty line goes back to the menu, nothing recorded), `w`
 records a free answer. Loose text is no longer the whole choice. The owner's choice
 is recorded in the `largada` event of the run's ledger, with `fonte` "dono".
 
@@ -57,11 +57,11 @@ def test_cs10_n_with_an_empty_line_goes_back_to_the_menu_without_recording():
           f"Go with: {DEFAULT}" in reqs.get("x1", ""), str(reqs))
 
 
-def test_cs10_t_records_a_free_answer():
-    out, events, reqs = _pref_launch(tty_inputs=[(MENU, "t"),
+def test_cs10_w_records_a_free_answer():
+    out, events, reqs = _pref_launch(tty_inputs=[(MENU, "w"),
                                                  ("Your answer, in one line", "mostrar a data por extenso")])
     choice = _largada_choice(events)
-    check("cs10 t: the free answer is the choice", choice is not None
+    check("cs10 w: the free answer is the choice", choice is not None
           and choice.get("escolha") == "mostrar a data por extenso"
           and choice.get("fonte") == "dono", str(choice) + out[-1500:])
 
@@ -95,11 +95,11 @@ def _in_process(answers, panel):
 def test_cs10_in_process_each_key_on_both_screens():
     for panel in (True, False):
         tag = "panel" if panel else "plain"
-        got, _, _ = _in_process(["s"], panel)
-        check(f"cs10 {tag} s: the default, answered by the owner",
+        got, _, _ = _in_process(["y"], panel)
+        check(f"cs10 {tag} y: the default, answered by the owner",
               got["escolha"] == DEFAULT and got["fonte"] == "dono", str(got))
-        got, _, _ = _in_process(["sim"], panel)
-        check(f"cs10 {tag} sim: same as s", got["fonte"] == "dono", str(got))
+        got, _, _ = _in_process(["yes"], panel)
+        check(f"cs10 {tag} yes: same as y", got["fonte"] == "dono", str(got))
         got, _, _ = _in_process([""], panel)
         check(f"cs10 {tag} Enter: the default, fonte stays padrao",
               got["escolha"] == DEFAULT and got["fonte"] == "padrao", str(got))
@@ -107,18 +107,62 @@ def test_cs10_in_process_each_key_on_both_screens():
         check(f"cs10 {tag} n: não + question + instead",
               got["escolha"] == f"não: {QUESTION}. Em vez disso: usar a data da guia"
               and got["fonte"] == "dono", str(got))
-        got, prompts, _ = _in_process(["n", "  ", "t", "", "x", ""], panel)
-        check(f"cs10 {tag} n/t empty and loose: back to the menu each time",
+        got, prompts, _ = _in_process(["n", "  ", "w", "", "x", ""], panel)
+        check(f"cs10 {tag} n/w empty and loose: back to the menu each time",
               got["fonte"] == "padrao" and got["escolha"] == DEFAULT
               and sum(MENU in p for p in prompts) == 4, str(got) + str(prompts))
-        got, _, _ = _in_process(["t", "outra   coisa"], panel)
-        check(f"cs10 {tag} t: the free line, spaces collapsed",
+        got, _, _ = _in_process(["w", "outra   coisa"], panel)
+        check(f"cs10 {tag} w: the free line, spaces collapsed",
               got["escolha"] == "outra coisa" and got["fonte"] == "dono", str(got))
     _, _, screen = _in_process([""], True)
-    check("cs10 panel: the menu shows s, n and t",
-          all(k in screen for k in ("[s] ", "[n] ", "[t] ")), screen)
+    check("cs10 panel: the menu shows y, n and w",
+          all(k in screen for k in ("[y] ", "[n] ", "[w] ")), screen)
     check("cs10 panel: Enter still keeps the default (CS-9's chip)",
           "[Enter] keep the agent's default (recommended)" in screen, screen)
+
+
+def test_cs1_the_launch_screen_shows_y_n_w_and_not_s_t():
+    tty = [(MENU, "")]
+    full, _, _ = _pref_launch(tty_inputs=tty)
+    # Only the launch preference screen: later cards of the run are CS-2's scope.
+    start = full.find("choice(s) the pre-read found")
+    end = full.find("Enter keeps the default]", start)
+    out = full[start:end + 30] if start >= 0 and end >= 0 else full
+    check("cs1 screen: [y] chip", "[y] yes, go with the agent's default" in out, out[-1500:])
+    check("cs1 screen: [w] chip", "[w] I write the answer" in out, out[-1500:])
+    check("cs1 screen: the prompt", "[y/n/w, Enter keeps the default]" in out, out[-1500:])
+    check("cs1 screen: no [s], [t] nor s/n/t",
+          "[s]" not in out and "[t]" not in out and "s/n/t" not in out, out[-1500:])
+
+
+def test_cs1_typing_y_records_the_default_with_fonte_dono():
+    out, events, reqs = _pref_launch(tty_inputs=[(MENU, "y")])
+    choice = _largada_choice(events)
+    check("cs1 y: the choice is the agent's default, fonte dono", choice is not None
+          and choice.get("escolha") == DEFAULT and choice.get("fonte") == "dono",
+          str(choice) + out[-1500:])
+
+
+def test_cs1_typing_w_and_a_line_records_that_line():
+    out, events, reqs = _pref_launch(tty_inputs=[(MENU, "w"),
+                                                 ("Your answer, in one line", "mostrar a data por extenso")])
+    choice = _largada_choice(events)
+    check("cs1 w: the line is the choice", choice is not None
+          and choice.get("escolha") == "mostrar a data por extenso"
+          and choice.get("fonte") == "dono", str(choice) + out[-1500:])
+    check("cs1 w: no invalid-option message", "is not one of the options" not in out, out[-1500:])
+
+
+def test_cs1_plain_screen_menu_line_uses_y_and_w():
+    _, _, screen = _in_process([""], False)
+    check("cs1 plain: menu line", "[y] yes, go with the default" in screen
+          and "[w] I write the answer" in screen and "[s]" not in screen
+          and "[t]" not in screen, screen)
+
+
+def test_cs1_invalid_option_message_says_type_w_first():
+    _, _, screen = _in_process(["blah", ""], False)
+    check("cs1 invalid: type w first", "type w first" in screen and "type t first" not in screen, screen)
 
 
 def test_cs10_without_question_n_uses_the_choice_text():
