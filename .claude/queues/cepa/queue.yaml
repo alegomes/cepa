@@ -3169,3 +3169,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: sondagem-l4-nao-grava-last-build
+  title: As sondagens L4 do `proof-reviewer` gravam EMPTY no `last-build.json` do
+    worktree principal
+  why: 'Origem: feedback fb-20261106-3 (2026-11-06); BACKLOG.md § As sondagens L4
+    do `proof-reviewer` gravam EMPTY no `last-build.json` do worktree principal
+    (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
