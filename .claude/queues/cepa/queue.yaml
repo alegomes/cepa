@@ -3213,3 +3213,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: lista-de-decisoes-substituida-declarada
+  title: Dois blocos de decisões numeradas na mesma conversa, sem dizer qual substitui
+    qual
+  why: 'Origem: feedback fb-20261110-2 (2026-11-10); BACKLOG.md § Dois blocos de
+    decisões numeradas na mesma conversa, sem dizer qual substitui qual (ainda não
+    priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
