@@ -152,7 +152,7 @@ def test_new_question_answered_records_the_new_text():
     deferred = [{"id": "b1", "title": "t", "reason": "human_pending",
                  "human_pending": ROUTE, "question": OLD_Q, "evidence": "x",
                  "route_kind": "external-block"}]
-    replies = iter(["?", "s", ""])
+    replies = iter(["?", "y", ""])
     new = {"route_kind": "owner-task", "question": NEW_Q, "if_yes": NEW_YES,
            "if_no": NEW_NO}
     m.decide(Path("/nao/existe"), "fila", None, {}, deferred, {},
