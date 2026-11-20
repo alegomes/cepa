@@ -1,0 +1,60 @@
+schema_version: 1
+card: L2-TAG
+status: complete
+audited_at: 2026-11-13T10:00:00-03:00
+criteria:
+  - id: AC1
+    text: "Uma tag do repositório a cada fila aterrissada (docs/estrategia-lacunas-ecc.md §7 lote 2; decisão D4 do painel de 2026-11-12)."
+    altitude: cli
+    surface: "cepa-until land <fila>/<run> --yes contra um repositório git real (com origin)"
+    demonstrated_by:
+      test: "tests/test_cepa_until_land.py::test_l2_tag_landing_tags_the_landed_commit_locally (e test_l2_tag_red_build_leaves_no_tag_and_the_fix_gets_it)"
+      layer: teste de integração que roda o binário common/bin/cepa-until em subprocesso sobre repo git temporário com origin bare
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_until_land.py -> todos os "ok" (inclui os três test_l2_tag_*), "✓ tudo verde", exit 0 (cerca de 42 s).
+        Build vermelho sai 5 e não cria tag; ao rodar de novo e ficar verde, a tag aparece. A saída e o estado (aterrissagem.tag) registram a tag.
+    verdict: complete
+    gap: null
+
+  - id: AC2
+    text: "A tag é o ponto de retorno: no commit aterrissado, e sobrevive à remoção da branch da noite."
+    altitude: cli
+    surface: "git rev-parse landed/<fila>/<run> depois de cepa-until land --yes terminar (que apaga a branch e a worktree do run)"
+    demonstrated_by:
+      test: "tests/test_cepa_until_land.py::test_l2_tag_landing_tags_the_landed_commit_locally"
+      layer: teste de integração (CLI)
+      evidence: verified
+      run: |
+        A checagem de que a tag aponta para o HEAD aterrissado roda DEPOIS do land completo (que faz git branch -d e remove a worktree), então a tag sobreviveu. No caso do conserto após build vermelho a tag fica no commit do conserto (o aterrissado). Mesma rodada verde acima.
+    verdict: complete
+    gap: null
+
+  - id: AC3
+    text: "Padrão reversível da pré-leitura seguido: nome = fila + data, só local, sem push."
+    altitude: cli
+    surface: "nome da tag e git tag --list do origin depois do land com push"
+    demonstrated_by:
+      test: "tests/test_cepa_until_land.py::test_l2_tag_landing_tags_the_landed_commit_locally e test_l2_tag_existing_tag_elsewhere_is_not_moved"
+      layer: teste de integração (CLI)
+      evidence: verified
+      run: |
+        Nome landed/<fila>/<run_id>, com run_id = YYYY-MM-DD-HHMM (fila + data e hora). O teste confere que o origin bare fica sem nenhuma tag depois do "pushed" (tag leve; git push sem --tags não a envia). Tag de mesmo nome em outro commit não é movida e gera aviso. Mesma rodada verde.
+    verdict: complete
+    gap: null
+
+  - id: AC4
+    text: "Nenhum CHANGELOG.md escrito à mão e versionamento por plugin intocado (docs/versionamento.md)."
+    altitude: cli (diff)
+    surface: "git diff 42fe0a3..7f97b70 --name-only; git ls-files | grep -i changelog"
+    demonstrated_by:
+      test: "inspeção do diff (não há teste para ausência)"
+      layer: diff
+      evidence: verified
+      run: |
+        git diff 42fe0a3..7f97b70 --name-only -> common/bin/cepa-until, docs/cepa-cli.md, docs/cepa-until.md, tests/test_cepa_until_land.py. Nenhum plugin.json, nenhum docs/versionamento.md.
+        git ls-files | grep -i changelog -> vazio.
+    verdict: complete
+    gap: null
+
+notes: "Não executei a suíte completa (é do supervisor). Não fiz perturbação em worktree descartável: os testes já provam o vermelho (sem tag) e a tag preexistente (não movida). Observação: a tag é criada antes do push; se o push falhar (saída 6), a tag já existe e rodar de novo a reaproveita sem aviso (mesmo commit), comportamento coerente. Nome e 'só local' continuam sendo padrão reversível não respondido pelo dono."

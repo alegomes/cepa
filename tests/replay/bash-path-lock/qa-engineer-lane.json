@@ -1,0 +1,55 @@
+{
+  "hook": "build-hex/hooks/bash-path-lock.py",
+  "description": "qa-engineer may write only under src/test/.",
+  "setup": {
+    "git": false,
+    "files": {
+      "domain/src/main/java/Foo.java": "class Foo {}\n",
+      "infrastructure/src/main/java/Bar.java": "class Bar {}\n",
+      "api-rest/src/main/java/Baz.java": "class Baz {}\n",
+      "pom.xml": "<project>\n  <artifactId>root</artifactId>\n  <modules>\n    <module>domain</module>\n    <module>bootstrap</module>\n  </modules>\n</project>\n"
+    }
+  },
+  "env": {},
+  "calls": [
+    {
+      "name": "redirect-into-test-tree",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo 'x' > domain/src/test/java/FooTest.java"
+        },
+        "cwd": "{root}",
+        "agent_type": "build-hex:qa-engineer"
+      },
+      "expect": "allow"
+    },
+    {
+      "name": "redirect-into-main-tree",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo 'x' > domain/src/main/java/Foo.java"
+        },
+        "cwd": "{root}",
+        "agent_type": "build-hex:qa-engineer"
+      },
+      "expect": "deny",
+      "must_deny": true,
+      "note": "a test agent patching production code"
+    },
+    {
+      "name": "redirect-into-main-tree-retried",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo 'x' > domain/src/main/java/Foo.java"
+        },
+        "cwd": "{root}",
+        "agent_type": "build-hex:qa-engineer"
+      },
+      "expect": "deny",
+      "redundant": true
+    }
+  ]
+}

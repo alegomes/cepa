@@ -1,0 +1,24 @@
+{
+  "hook": "common/hooks/maven-reactor-guard.py",
+  "description": "Single-module repo is never blocked.",
+  "setup": {
+    "git": false,
+    "files": {
+      "pom.xml": "<project>\n  <artifactId>solo</artifactId>\n</project>\n"
+    }
+  },
+  "env": {},
+  "calls": [
+    {
+      "name": "pl-in-single-module",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "./mvnw test -pl whatever"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow"
+    }
+  ]
+}

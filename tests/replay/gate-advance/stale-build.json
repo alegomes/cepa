@@ -1,0 +1,51 @@
+{
+  "hook": "common/hooks/gate-advance.py",
+  "description": "Baseline is STALE (source edited after the last green).",
+  "setup": {
+    "git": true,
+    "files": {
+      "pom.xml": "<project/>",
+      "README.md": "demo\n",
+      ".claude/last-build.json": "{\"status\": \"STALE\", \"at\": \"2026-11-01T10:00:00+00:00\", \"command\": \"./mvnw verify\", \"kind\": \"maven\", \"after_edit_to\": \"domain/src/main/java/Foo.java\", \"since\": \"2026-11-01T11:00:00+00:00\"}"
+    }
+  },
+  "env": {},
+  "calls": [
+    {
+      "name": "commit-on-stale",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git commit -m 'change'"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "deny",
+      "must_deny": true
+    },
+    {
+      "name": "commit-on-stale-retried",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git commit -m 'change'"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "deny",
+      "redundant": true
+    },
+    {
+      "name": "pr-on-stale",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "gh pr create --title x --body y"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "deny",
+      "must_deny": true
+    }
+  ]
+}

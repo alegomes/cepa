@@ -352,6 +352,71 @@ def test_5_cost_counts_once_per_session_not_per_result_block():
               state(root).get("custo_usd") == 50.25, str(state(root)))
 
 
+def remote_tags(remote):
+    return subprocess.run(["git", "--git-dir", str(remote), "tag", "--list"],
+                          capture_output=True, text=True).stdout.strip()
+
+
+def test_l2_tag_landing_tags_the_landed_commit_locally():
+    """L2-TAG (lacunas-ecc, D4 of the 2026-11-12 panel): every landed queue
+    leaves a repository tag, the point to return to before a lot that touches
+    a hook. Name: queue plus the run's date; the tag stays local (not pushed)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        remote = with_origin(root)
+        # With followTags a plain `git push` sends annotated tags: only a
+        # lightweight tag stays local, and this is what tells them apart.
+        git(root, "config", "push.followTags", "true")
+        run_id, _, _ = night(root)
+        p = land(root, run_id, "--yes")
+        check("aterrissa", p.returncode == 0, p.stdout + p.stderr)
+        tag = f"landed/fila/{run_id}"
+        check("a tag existe no clone, no commit aterrissado",
+              git(root, "rev-parse", f"{tag}^{{commit}}")
+              == git(root, "rev-parse", "HEAD"),
+              git(root, "tag", "--list"))
+        check("...a saída nomeia a tag", tag in p.stdout, p.stdout)
+        check("...o estado registra a tag",
+              (state(root).get("aterrissagem") or {}).get("tag") == tag,
+              str(state(root)))
+        check("...e o push não leva a tag ao origin", remote_tags(remote) == "",
+              remote_tags(remote))
+
+
+def test_l2_tag_red_build_leaves_no_tag_and_the_fix_gets_it():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        with_origin(root)
+        run_id, _, _ = night(root)
+        commit(root, "quebra.txt", "x", "main andou")
+        git(root, "push", "-q")
+        p = land(root, run_id, "--yes")
+        check("build vermelho sai 5", p.returncode == 5, p.stdout + p.stderr)
+        check("...e não cria tag", git(root, "tag", "--list") == "",
+              git(root, "tag", "--list"))
+        git(root, "rm", "-q", "quebra.txt")
+        git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
+            "conserto do vizinho")
+        p = land(root, run_id, "--yes")
+        check("rodar de novo aterrissa", p.returncode == 0, p.stdout + p.stderr)
+        check("...e a tag fica no commit do conserto (o que foi aterrissado)",
+              git(root, "rev-parse", f"landed/fila/{run_id}^{{commit}}")
+              == git(root, "rev-parse", "HEAD"), git(root, "tag", "--list"))
+
+
+def test_l2_tag_existing_tag_elsewhere_is_not_moved():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        run_id, _, _ = night(root)
+        old = git(root, "rev-parse", "HEAD")
+        git(root, "tag", f"landed/fila/{run_id}", old)
+        p = land(root, run_id, "--yes")
+        check("aterrissa mesmo assim", p.returncode == 0, p.stdout + p.stderr)
+        check("...sem mover a tag que já existia",
+              git(root, "rev-parse", f"landed/fila/{run_id}^{{commit}}") == old)
+        check("...e avisa", "warning" in p.stdout and "tag" in p.stdout, p.stdout)
+
+
 def main():
     print("cepa-until aterrissar\n")
     for name, fn in sorted(globals().items()):

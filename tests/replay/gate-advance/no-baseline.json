@@ -1,0 +1,50 @@
+{
+  "hook": "common/hooks/gate-advance.py",
+  "description": "No last-build.json: local commit warns, sharing is denied when a build manifest exists.",
+  "setup": {
+    "git": true,
+    "files": {
+      "pom.xml": "<project/>",
+      "README.md": "demo\n"
+    }
+  },
+  "env": {},
+  "calls": [
+    {
+      "name": "local-commit-no-baseline",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git commit -m 'first'"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "allow",
+      "note": "fail-open with warning"
+    },
+    {
+      "name": "push-no-baseline",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git push origin main"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "deny",
+      "must_deny": true
+    },
+    {
+      "name": "push-no-baseline-retried",
+      "payload": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git push origin main"
+        },
+        "cwd": "{root}"
+      },
+      "expect": "deny",
+      "redundant": true
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+schema_version: 2
+card: L3
+verdict: proven
+reviewed_at: 2026-11-13T12:00:00-03:00
+base_commit: 0ba9ae1
+head_commit: 7a58f09
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "tests/replay/run.py (executor: scrub de env e GIT_*, isolamento de telemetria, decisao allow/deny/error1/error2/missing, summarize: denials/redundant/holes/mismatches/tokens/ms, materialize de ref, diffs entre versoes)", module: tests-replay, external_observable: true, substituted_by_double: null }
+    - { class: "tests/test_hook_replay.py (rotulos no worktree, regra enfraquecida em repo scratch, higiene R3, test_runner_mechanics)", module: tests, external_observable: true, substituted_by_double: null }
+    - { class: "tests/replay/<hook>/*.json (9 cenarios, 45 chamadas, 3 hooks)", module: tests-replay, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo Python (harness cepa), nao Quarkus: sem Maven/PIT. A superficie externa
+    e o CLI `python3 tests/replay/run.py` rodado como subprocesso pelo
+    tests/test_hook_replay.py e, para o corpus e a mecanica, run.py importado
+    como modulo (run_scenario roda os hooks reais, ou uma sonda, como
+    subprocesso). Nenhum double no lugar do codigo alterado. Rodada 2: depois de
+    7a58f09 (test_runner_mechanics + asserts mais fortes em
+    test_comparison_shows_a_changed_rule). Tecnica: perturbacao em worktree
+    descartavel --detach (/tmp/proof-l3b em 7a58f09), removido ao final. Diff
+    desde 0281f93 e so de testes (nenhum hook alterado).
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+        - "baseline (7a58f09): `python3 tests/test_hook_replay.py` -> exit 0, 82 checks 'ok', 0 FAIL, 'ok' final"
+        - "P1 RED (antes sobrevivia): SCRUBBED_ENV neutralizado -> 1 FAIL 'every hook-altering env var is scrubbed' (lista as 11 variaveis vazadas)"
+        - "P2 RED (antes sobrevivia): scrub de GIT_* removido -> 1 FAIL 'GIT_* is scrubbed' ['GIT_EDITOR','GIT_DIR','GIT_WORK_TREE']"
+        - "P3 RED (antes sobrevivia): ramo error2 removido -> 2 FAIL ('python's own exit 2 (can't open file) is an error, not a denial' e 'errors are counted, not denials')"
+        - "P4 RED (antes sobrevivia): exit != 0 contado como deny -> 2 FAIL ('a hook that exits 1 is an error, not a denial' e 'errors are counted')"
+        - "P5 RED (antes sobrevivia): CEPA_TELEMETRY_DIR nao definido por run.py -> 1 FAIL 'telemetry goes to the replay's own dir' (hook viu /real-ledger-must-not-be-used)"
+        - "P7 RED (antes sobrevivia): redundant_denials += 0 -> 2 FAIL ('intact hook: redundant column equals redundant labels', 'weakened hook loses its redundant denials')"
+        - "P9 RED (antes sobrevivia): deny_tokens_est = 0 -> 2 FAIL ('intact hook: denial tokens are counted', 'weakened hook: denial tokens drop')"
+        - "P6 RED (re-check): holes += 0 -> 1 FAIL 'weakened hook has holes the old one lacked'"
+        - "P8 RED (re-check): mismatches += 0 -> 1 FAIL 'weakened hook has more mismatches'"
+        - "P10 RED (re-check): lista de diffs entre versoes suprimida -> 1 FAIL 'decision diffs name only the changed hook'"
+        - "P11 RED (re-check): ramo 'hook file missing' desligado -> 1 FAIL 'missing hook counted'"
+        - "P12 RED (re-check): substituicao de {root} removida -> FAIL 'all 45 corpus calls match their label' (gate-advance/no-baseline.json :: push-no-base) + 2 FAIL do hook enfraquecido"
+        - "P13 RED (re-check): materialize extrai sempre HEAD em vez do ref -> 4+ FAIL ('weakened hook denies less', 'more mismatches', 'holes the old one lacked', 'intact hook: denials equal deny labels')"
+        - "P14 RED (re-check): sys.exit(0) no inicio de main() em common/hooks/maven-reactor-guard.py -> FAIL 'all 45 corpus calls match their label' (multi-module.json :: pl-without-am) + 'weakened hook denies less'"
+        - "P14b RED (re-check): mesmo em common/hooks/gate-advance.py -> FAIL 'all 45 corpus calls match their label' (no-baseline.json :: push-no-baseline)"
+        - "P14c RED (re-check): mesmo em build-hex/hooks/bash-path-lock.py -> FAIL 'all 45 corpus calls match their label' (domain-dev-lane.json :: redirect-into-adapter-lane)"
+        - "R3 RED (amostra: 1 de 7 injecoes da rodada 1): palavra 'Wego' em gate-advance/green-build.json -> FAIL 'gate-advance/green-build.json: no client names'. As outras 6 injecoes de R3 (session_id, transcript_path, UUID, kodez, /Users/, .claude/projects) nao foram refeitas: o trecho de test_corpus_hygiene nao mudou em 7a58f09 (diff so adiciona test_runner_mechanics e asserts em test_comparison_shows_a_changed_rule); ficam como resultado da rodada anterior."
+      run: "worktree /tmp/proof-l3b (`git worktree add --detach /tmp/proof-l3b 7a58f09`); para cada perturbacao: `git -C /tmp/proof-l3b checkout -q -- <arquivo>`, `sed -i ''` na linha alvo, `cd /tmp/proof-l3b && python3 tests/test_hook_replay.py | grep -E 'FAIL|^ok$'` (~20s, 'ok' = verde, 'N FAILED' = vermelho). Restaurado entre rodadas; worktree removido com `git worktree remove --force /tmp/proof-l3b`; arvore principal limpa. Nao rodei tests/run-all.sh."
+    pit:
+      status: n/a
+      results:
+        - "pitest nao se aplica: repo Python, sem Maven."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "Sem ferramenta de cobertura no repo. Cobertura determinada por perturbacao: as 7 linhas que a rodada 1 mostrou executadas sem asserto (P1-P5, P7, P9) agora derrubam pelo menos 1 check cada (ver l3_load_bearing); P6/P8/P10-P14 seguem vermelhos; baseline 82 ok / 0 FAIL."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff so adiciona um executor de teste e corpus escrito a mao; nao abre superficie de entrada nova no produto (nenhum hook foi alterado). Os argumentos do CLI run.py (--hook, --ref, --repo) sao usados por quem roda o teste, nao por entrada externa. Nenhuma classe mudada esta em modulo de entrada (api-rest; o repo nao tem)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+base_regression_note: "feature nova, nao Bug."
+routing_reason: "Os 7 sobreviventes da rodada 1 (P1 scrub de env, P2 scrub de GIT_*, P3 error2, P4 exit 1, P5 isolamento de telemetria, P7 coluna redundant, P9 coluna tokens) agora ficam vermelhos com os novos testes (test_runner_mechanics e asserts em test_comparison_shows_a_changed_rule), e todos os pontos centrais (holes, mismatches, diffs, hook ausente, {root}, ref, regra enfraquecida nos 3 hooks, regex de higiene amostrada) continuam vermelhos. Nenhuma perturbacao sobreviveu. PROVEN."

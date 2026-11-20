@@ -1,0 +1,52 @@
+schema_version: 2
+card: L2-TAG
+verdict: proven
+reviewed_at: 2026-11-13T10:00:00-03:00
+base_commit: 42fe0a39fbd9a9ec9e716693ae7972cdc412a8ea
+head_commit: fe07d7109d7cee79aeaa7125ef78924516694d4d
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until (landing_tag: nome landed/<queue>/<run_id>)", module: "common-bin", external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until (tag_landing: tag leve em HEAD, aviso se a tag existe em outro commit, landing_info[tag])", module: "common-bin", external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until (cmd_land: chamada de tag_landing apos o build verde e antes do push)", module: "common-bin", external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo Python (harness cepa), nao Quarkus: sem Maven/PIT. A superficie
+    externa e o CLI `common/bin/cepa-until land` rodado como subprocesso contra
+    um repo git temporario real, exatamente como tests/test_cepa_until_land.py
+    faz. Nenhum double no lugar do codigo alterado. Tecnica: perturbacao em
+    worktree descartavel --detach (/tmp/proof-l2tag3 no re-teste do P6;
+    /tmp/proof-l2tag na rodada anterior), removida ao final.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+        - "baseline (head fe07d71): `python3 tests/test_cepa_until_land.py` -> '✓ tudo verde' (exit 0)"
+        - "P1 RED (re-rodado em fe07d71): chamada tag_landing() em cmd_land removida -> exit 1, '✗ 5 falha(s)' (tag existe no clone, no commit aterrissado, saida nomeia a tag, estado registra a tag, tag no commit do conserto, e avisa)"
+        - "P2 RED (rodada 7f97b70): `git tag <tag> head` trocado por HEAD~1 -> 2 falhas (tag no commit aterrissado; tag no commit do conserto)"
+        - "P3 RED (rodada 7f97b70): tag existente sobrescrita (`tag -f`, sem o retorno antecipado) -> 2 falhas (sem mover a tag existente; e avisa)"
+        - "P4 RED (rodada 7f97b70): removido landing_info[tag] -> 1 falha (estado registra a tag)"
+        - "P5 RED (rodada 7f97b70): chamada movida para antes do build -> 2 falhas (build vermelho nao cria tag; tag no commit do conserto)"
+        - "P6 RED (re-rodado em fe07d71, antes SURVIVED): tag leve trocada por anotada (`[\"tag\", \"-a\", \"-m\", \"x\", tag, head]`) -> exit 1, '✗ 1 falha(s): ...e o push nao leva a tag ao origin'. O commit fe07d71 liga push.followTags no clone do teste, entao a tag anotada chega ao origin e o assert remote_tags(remote)==\"\" falha."
+        - "P7 RED (rodada 7f97b70): tag empurrada ao origin (`git push origin <tag>`) -> 1 falha (push nao leva a tag ao origin)"
+        - "P8 RED (rodada 7f97b70): aviso 'warning: tag ... already exists' suprimido -> 1 falha (e avisa)"
+      run: "Re-rodado em fe07d71 (worktree /tmp/proof-l2tag3): baseline, P1 e P6 com sed -i na linha alvo, `python3 tests/test_cepa_until_land.py` (~40s), `git checkout -- common/bin/cepa-until` para restaurar. P2-P5, P7, P8 vieram da rodada anterior em 7f97b70; o commit fe07d71 so mexe no arquivo de teste (adiciona `git config push.followTags true`), sem alterar common/bin/cepa-until, entao essas continuam validas; nao foram re-rodadas."
+    pit:
+      status: n/a
+      results:
+        - "pitest nao se aplica: repo Python, sem Maven."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "Todas as linhas do diff de comportamento (nome, criacao, leve-vs-anotada, aviso, registro de estado, posicao da chamada) foram perturbadas; cada uma derrubou ao menos um teste test_l2_tag_*. Baseline em fe07d71: '✓ tudo verde'."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff nao abre superficie de entrada nova: o nome da tag vem de queue e run_id ja lidos do estado do proprio harness, e nenhum argumento de CLI novo foi criado. Nenhuma classe mudada esta em modulo de entrada (api-rest; o repo nao tem)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+base_regression_note: "feature nova, nao Bug. Na rodada anterior, testes do head contra o codigo do base 42fe0a3: '✗ 5 falha(s)' (RED); no head, verde."
+routing_reason: "As 8 perturbacoes viram RED. A unica que sobrevivia (tag leve trocada por anotada, P6) agora derruba o teste, porque fe07d71 liga push.followTags no clone do teste. Baseline verde em fe07d71. Ressalva de honestidade: P2-P5, P7, P8 nao foram re-rodadas em fe07d71; dependem de o commit fe07d71 nao ter tocado common/bin/cepa-until (so o teste mudou)."

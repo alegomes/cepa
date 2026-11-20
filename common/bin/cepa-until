@@ -2322,7 +2322,9 @@ def land_parser():
             "it (the red is usually a neighbouring test, not the run's code), and\n"
             "running it again resumes where it stopped: with the merge done, it goes\n"
             "on from the build. To give up instead, `git reset --keep` to the return\n"
-            "point it prints. On success it removes the run worktree and branch.\n"
+            "point it prints. On success it tags the landed commit\n"
+            "landed/<queue>/<run> in the clone only (never pushed), the point to\n"
+            "return to, and removes the run worktree and branch.\n"
             "In the cepa repo it also runs `sh bin/install.sh` from the clone, after\n"
             "the merge and the green build, so the plugins in force are the clone's\n"
             "and not the copy a run installed from its worktree. A failed install\n"
@@ -2575,6 +2577,9 @@ def _cmd_land(argv, wrote):
                       f"{return_value[:10]} (the return point)")
             return 5
         print(land_step(2, "full build", f"green ({step_duration(sec)}): {verify}"))
+
+    tag_landing(repo, queue, run_id, landing_info)
+    record(aterrissagem=landing_info)
 
     if has_upstream(repo):
         started = time.monotonic()
@@ -3132,6 +3137,36 @@ def loose_records_of_dead_runs(repo):
             continue
         found[queue] = sorted(paths["queue"] + paths["records"])
     return found
+
+
+def landing_tag(queue, run_id):
+    """The repository tag of a landed queue (L2-TAG of `lacunas-ecc`, owner's
+    decision on D4 of docs/reviews/2026-11-12-painel-lacunas-ecc.md): the point to
+    return to before a lot that touches a hook. Name: the queue plus the run's
+    date (the run id is `YYYY-MM-DD-HHMM`, so two landings on one day differ)."""
+    return f"landed/{queue}/{run_id}"
+
+
+def tag_landing(repo, queue, run_id, landing_info):
+    """Tags the landed commit, only in the clone: `git push` without `--tags`
+    does not send a lightweight tag, even with `push.followTags`. Runs after the green build, so a red landing has no tag.
+    A tag of the same name on another commit is never moved: it warns."""
+    tag = landing_tag(queue, run_id)
+    head = head_of(repo)
+    code, existing = git(["rev-parse", "-q", "--verify", f"{tag}^{{commit}}"], repo)
+    if code == 0 and existing != head:
+        print(f"warning: tag `{tag}` already exists on {existing[:10]}; "
+              f"did not move it to {head[:10]}")
+        return
+    if code != 0:
+        # Lightweight on purpose: `push.followTags` sends annotated tags along
+        # with a plain `git push`, and this one stays in the clone.
+        code, output = git(["tag", tag, head], repo)
+        if code != 0:
+            print(f"warning: could not create tag `{tag}` ({output})")
+            return
+    landing_info["tag"] = tag
+    print(f"tag: `{tag}` on {head[:10]} (local only, not pushed)")
 
 
 def land_action(repo, tree, queue, run_id, n):
