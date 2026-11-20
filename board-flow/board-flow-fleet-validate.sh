@@ -60,12 +60,15 @@ if [[ -z "$PROJECT_KEY" || -z "$TODO_STATUS" ]]; then
     echo "          PROJECT_KEY=WEGO TODO_STATUS='A fazer' $(basename "$0") $REPO_PATH" >&2
     exit 1
   fi
-  resolved="$(python3 - "$cfg" <<'PY'
+  vendor="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_vendor"
+  resolved="$(python3 - "$cfg" "$vendor" <<'PY'
 import sys
+# The PyYAML copy that ships with this plugin goes FIRST (wins over an installed one).
+sys.path.insert(0, sys.argv[2])
 try:
     import yaml
 except ImportError:
-    sys.exit("PyYAML missing: cannot read board-flow.yaml (pip install pyyaml, or pass PROJECT_KEY/TODO_STATUS)")
+    sys.exit(f"could not find the PyYAML copy at {sys.argv[2]}/yaml: cannot read board-flow.yaml (or pass PROJECT_KEY/TODO_STATUS)")
 try:
     d = (yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}).get("defaults") or {}
 except Exception as e:

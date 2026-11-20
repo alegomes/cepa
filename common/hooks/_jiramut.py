@@ -62,6 +62,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _shellscan as S  # noqa: E402
+import _yamlwarn as _YW  # noqa: E402
+# The plugin's own PyYAML copy goes FIRST so it wins over any installed one
+# (docs/spec/cepa-roda-sem-pyyaml-instalado.md).
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "_vendor"))
 
 _split_segments = S._split_segments
 
@@ -157,7 +161,11 @@ def logical_status(name, cwd):
         if not os.path.isfile(path):
             continue
         try:
-            import yaml  # noqa: deferred, absence falls to the normalized path
+            try:
+                import yaml  # noqa: deferred, absence falls to the normalized path
+            except ImportError as exc:
+                _YW.warn(exc, "_jiramut")
+                raise
             with open(path, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
             smap = (data.get("defaults") or {}).get("status_map") or {}

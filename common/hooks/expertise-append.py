@@ -45,11 +45,17 @@ import fcntl
 import os
 import re
 import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _yamlwarn as _YW  # noqa: E402
+# The plugin's own PyYAML copy goes FIRST so it wins over any installed one
+# (docs/spec/cepa-roda-sem-pyyaml-instalado.md).
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "_vendor"))
 
 try:
     import yaml
     _HAVE_YAML = True
-except ImportError:  # degrade gracefully — append still works, prune is skipped
+except ImportError as _exc:  # degrade gracefully — append still works, prune is skipped
+    _YW.warn(_exc, "expertise-append")
     _HAVE_YAML = False
 
 

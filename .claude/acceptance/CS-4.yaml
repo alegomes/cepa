@@ -1,27 +1,15 @@
-schema_version: 1
 card: CS-4
+queue: pyyaml
 status: complete
-audited_at: 2026-10-08T00:00:00-03:00
 criteria:
   - id: AC1
-    text: "Dado um handoff com a linha `**Próximo:** repo=/Users/alegomes/coding/wego/wego-product modo=descoberta comando=/common:epic contratos-e-regras` na zona NOTE, o passo L7 do /common:wrap-up escreve .claude/sessions/<id>.next.json com os três campos e o brief igual ao parágrafo 'Próximo passo'."
-    altitude: application
-    surface: "common/hooks/session-next.py (script que o L7 de common/commands/wrap-up.md manda rodar); wrap-up é prosa, a superfície mecânica é o script"
-    demonstrated_by:
-      test: "tests/test_wrapup_proximo_passo.py (seções 'com a linha', 'a linha do critério, verbatim', 'ordem das chaves trocada', 'o arquivo escrito é aceito pelo encadeamento do launcher (CS-3)', 'o wrap-up e o handoff conhecem a linha')"
-      layer: "subprocesso do session-next.py contra handoff real em disco; o JSON gravado é consumido pelo session-chain.py (CS-3) de verdade"
-      evidence: verified
-      run: "python3 tests/test_wrapup_proximo_passo.py -> 49 linhas 'ok', 0 FAIL, 'todos ok' (inclui 'ok literal: campos' com o repo real /Users/alegomes/coding/wego/wego-product, que existe nesta máquina); python3 tests/test_cepa_encadeamento.py -> 38 'ok', 'OK'"
-    verdict: complete
-    gap: null
-  - id: AC2
-    text: "Sem a linha, não escreve nada e diz isso no relatório."
-    altitude: application
-    surface: "session-next.py (exit 0, primeira linha do stdout 'próximo passo não gravado: ...') + L8 do wrap-up.md que leva essa linha ao relatório"
-    demonstrated_by:
-      test: "tests/test_wrapup_proximo_passo.py ('sem a linha: não escreve e diz', 'linha só no AUTO não conta', 8 casos 'inutilizável', checagem de que o L8 cita Próximo passo)"
-      layer: "subprocesso + leitura do texto do wrap-up.md"
-      evidence: verified
-      run: "mesma execução: 49 ok, 0 FAIL, 'todos ok'"
-    verdict: complete
-    gap: "Observação, não bloqueante: o trecho em prosa do L7/L8 (o modelo de fato rodar o script e copiar a linha) só é verificado por busca de texto em wrap-up.md, não por execução do comando; isso é inerente a um comando em prosa."
+    text: "CS-4: a hook that cannot load the copy warns in one line and does not block."
+    altitude: event
+    surface: "PreToolUse event on stdin to common/hooks/acceptance-gate.py (temp copy of common without _vendor/yaml, python3 -S)"
+    test: "tests/test_cepa_runs_without_pyyaml.py::cs4 (acceptance-gate, merge-truth-gate, ui-proof-verdict-guard, build-hex/proof-verdict-guard at event level; 5 more at function level; mirror cases with copy present; malformed YAML case)"
+    layer: event
+    evidence: verified
+    run: "python3 tests/test_cepa_runs_without_pyyaml.py -> all 'CS-4' lines ok, ends 'cepa runs without PyYAML'. Independent repro: temp copy without _vendor/yaml, python3 -S, acceptance-gate.py with a jira_transition_issue event and a board-flow.yaml in cwd: exit 0, stderr = 1 line '[acceptance-gate] could not load PyYAML (ModuleNotFoundError: ...); expected the plugin copy at <path>/_vendor/yaml'. Same setup at 738a16b: exit 0, empty stderr."
+    status: complete
+    note: "The warning fires only where the hook reaches its import yaml site (a board-flow.yaml exists); without one yaml is never needed and no warning is due. jira-create-fields-gate keeps exit 2 (it blocked before when it could not read the rules, by design, fail closed); the warning adds a line and does not change the exit code. Reading accepted as consistent with the criterion."
+gaps: []

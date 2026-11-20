@@ -48,6 +48,10 @@ import sys
 from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _jiramut as J  # noqa: E402
+import _yamlwarn as _YW  # noqa: E402
+# The plugin's own PyYAML copy goes FIRST so it wins over any installed one
+# (docs/spec/cepa-roda-sem-pyyaml-instalado.md).
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "_vendor"))
 
 KEY_FIELDS = ("issueIdOrKey", "issueKey", "issue_key", "issueId", "issue_id",
               "issue", "key")
@@ -90,7 +94,11 @@ def transition_map(cwd: Path) -> dict:
         if not path.is_file():
             continue
         try:
-            import yaml  # noqa: deferred so absence falls back instead of crashing
+            try:
+                import yaml  # noqa: deferred so absence falls back instead of crashing
+            except ImportError as exc:
+                _YW.warn(exc, "merge-truth-gate")
+                raise
 
             data = yaml.safe_load(path.read_text(encoding="utf-8"))
             raw = (data.get("defaults") or {}).get("transition_ids")

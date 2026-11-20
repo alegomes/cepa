@@ -38,6 +38,11 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _yamlwarn as _YW  # noqa: E402
+# The plugin's own PyYAML copy goes FIRST so it wins over any installed one
+# (docs/spec/cepa-roda-sem-pyyaml-instalado.md).
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "_vendor"))
 
 
 def _t_emit(event: str, cwd: str = None, **fields) -> None:
@@ -104,7 +109,11 @@ def is_legacy_destination(file_path: str) -> bool:
 def parse_with_yaml(content: str):
     """Return (verdict, forbidding, unproven_seen) using pyyaml.
     Raises if unavailable/invalid."""
-    import yaml  # noqa: deferred so absence falls back instead of crashing
+    try:
+        import yaml  # noqa: deferred so absence falls back instead of crashing
+    except ImportError as exc:
+        _YW.warn(exc, "ui-proof-verdict-guard")
+        raise
     data = yaml.safe_load(content)
     if not isinstance(data, dict):
         raise ValueError("ui-proof artifact is not a YAML mapping")

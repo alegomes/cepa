@@ -31,10 +31,14 @@ import sys
 import time
 from pathlib import Path
 
+# The plugin's own PyYAML copy goes FIRST so it wins over any installed one.
+_VENDOR = Path(__file__).resolve().parent.parent / "_vendor"
+sys.path.insert(0, str(_VENDOR))
 try:
     import yaml
 except ImportError:
-    print("maestro-poll precisa de PyYAML", file=sys.stderr)
+    print(f"maestro-poll não achou a cópia do PyYAML em {_VENDOR / 'yaml'}",
+          file=sys.stderr)
     sys.exit(2)
 
 EXIT_RE = re.compile(r"MAESTRO-EXIT:(ESCALATED:(\S+)|(\d+))")

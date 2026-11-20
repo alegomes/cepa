@@ -1,43 +1,47 @@
 schema_version: 2
 card: CS-5
 verdict: proven
-reviewed_at: 2026-10-09T01:00:00-03:00
-base_commit: cadafbc
-head_commit: 4b08570
+reviewed_at: 2026-11-20T15:00:00-03:00
+base_commit: 8f5cd2d^
+head_commit: 4d117f4
 issue_type: Task
 scope:
   changed_classes:
-    - { class: "common/hooks/spec-readiness-gate.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/hooks/report-style-lint.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/hooks/_modos.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/commands/epic.md", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "docs/commands.md + .claude-plugin/marketplace.json", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "bin/gen-vendor.py", module: bin, external_observable: true, substituted_by_double: null }
+    - { class: "tests/test_vendor_copies_drift.py", module: tests, external_observable: false, substituted_by_double: null }
   base_commit_resolved: true
-  notes: "Os hooks rodam como subprocesso real (python3 hook.py com JSON no stdin); sem duble da classe alterada. epic.md e prosa: guardada por presenca de trechos em tests/test_epic_readiness_gate.py (mesma regua do CS-4). A parte conversacional e provada por docs/proof/CS-5-transcricao.md (existe; rodada 5: recusa de pronta em voz alta e gate liberando o Epic completo; rodadas 6 e 7 depois dos ajustes). Historico da prova: 61b71db, d21e45b, 65908ee, 2149350 e agora 4b08570 (HEAD). Os hooks nao mudam desde c9d8ee1 e o unico commit desde a ultima passada (4b08570) so mexeu em tests/test_epic_readiness_gate.py."
 levels:
   l3_load_bearing:
     technique: perturbation
     pit:
       status: n/a
-      results: []
+      results:
+        - "Python repo: no PIT; perturbation in throwaway detached worktrees (8f5cd2d round 1, 4d117f4 round 2), both removed"
     perturbation:
       status: pass
       results:
-        - "green em 4b08570 (worktree descartavel /tmp/proof-CS-5d): python3 tests/test_epic_readiness_gate.py -> OK; test_report_style_lint -> all report-style tests passed; test_spec_readiness_gate -> all green; test_catalogo_comandos -> tudo ok (66); test_marketplace_descricao_common -> tudo ok (29); test_modo_escrita_gate -> tudo verde"
-        - "RED nas cinco do ultimo commit (4b08570), cada uma com git diff --numstat=1 e arquivo restaurado: S17a 'Se a intencao veio no' removido -> FAIL 'com a intencao no argumento, turno 1 pergunta so o que se faz hoje'; S17b 'grave-a e pergunte so' -> o mesmo FAIL; S17c 'o que doi nesse caminho' -> o mesmo FAIL; campo gate de _modos.MODOS sem docs/epics -> FAIL 'o gate da descoberta cita docs/epics'; bullet de /common:epic em docs/commands.md removido -> FAIL 'o cenario ideia vaga do catalogo cita /common:epic'"
-        - "RED em 2149350, reaplicados um a um: S1 a S14 (pronta-para-construir, checkbox nas invariantes, e_vazio nas abertas, celula ausente, excesso de perguntas, endswith da barra, lower do VAZIO_EPIC, bullet do Status, return escreveu, rows[inicio:], isSidechain, ancora do caminho, MultiEdit/NotebookEdit, merge/push); marcadores PRA_VOCE, TECNICO e PASSOS isolados; S15 'Intencao em dois turnos' e S16 'grava pronta no mesmo turno'"
-        - "RED em 2149350, amostra das linhas centrais: e_epic desligado (32 FAIL); VAZIO_EPIC desligado (4); split sem respeitar \\| (33); turno_de_entrevista desligado no on_stop (3); volta do docs/spec no lint (1); docs/epics/** fora de _modos.MODOS (1); /epic fora do marketplace (rc=1); linha /common:epic fora de docs/commands.md (test_catalogo_comandos rc=1); 'recuse em voz alta' removida (1)"
-        - "RED em d21e45b/65908ee (codigo dos hooks inalterado desde c9d8ee1, nao refeito em 4b08570): caminho docs/epics (1); titulo Epic (24); fim de secao (4); startswith (4); cabecalho sem lower (7); guarda das tres colunas (10); e_vazio por celula (7); itens de invariante (4); secao Decidido (3); abertas[:5] (2); primeira palavra do Status (26); problemas ignorados (26); exit 2->1 (18); rascunho invertido (28); zero ciclos (1); sem escada (1); sem invariantes (2); regua da especificacao (2 no epic, 3 no spec); lint: pergunta no ultimo paragrafo, subdiretorio, alvo fora da pista, commit; 19 de 19 trechos da prosa; 'releia a pergunta' e 'corte o segundo'"
-        - "sobreviventes: nenhum conhecido. Perturbacoes nao refeitas em 4b08570 estao listadas acima como carregadas de passadas anteriores, sem mudanca de codigo desde entao."
+        - "ROUND 2 at 4d117f4 (re-measured). Baseline: tests/test_vendor_copies_drift.py all green; tests/test_lock_copies_drift.py all green"
+        - "criterion at the CLI, 4d117f4: unperturbed `python3 bin/gen-vendor.py --check` rc 0; one byte of maestro/_vendor/yaml/scanner.py changed -> rc 1 with 'difere    maestro/_vendor/yaml/scanner.py'; the test then FAILs (a),(e) naming the file"
+        - "RED S1 `__pycache__` folder rule removed: (g) FAIL 'sobrando maestro/_vendor/yaml/__pycache__/.DS_Store' (former survivor 5b, now killed)"
+        - "RED S1b `.pyc` suffix rule alone removed: (g) FAIL 'sobrando maestro/_vendor/yaml/stray.pyc', incl. new '.pyc fora de __pycache__ e ignorado e fica'"
+        - "RED S2 `or p.is_symlink()` removed from files_of: (p) FAIL broken link not reported, not removed (former survivor E3, now killed)"
+        - "RED S3 `and not t.is_symlink()` removed from the --write refusal: (q) FAIL (refused instead of replacing the link) (former survivor E7, now killed)"
+        - "RED R1 refusal of a non-file link in the SOURCE removed: (r) FAIL, --check and --write exit 1 instead of 2"
+        - "RED R1a broken-link half removed (only folder links refused): (r) FAIL"
+        - "RED R1b folder-link half removed (only broken links refused): (r) FAIL"
+        - "RED sanity 1a names only, 1b sizes only: (b) FAIL; 2 maestro dropped from COPIES: (b) FAIL; 4 exit forced 0: (b),(c) FAIL; 6b skip removing extras: (e) FAIL; 7f refusal after first write: (i),(k) FAIL. Attribution unchanged after the dead-code removal"
+        - "CARRIED from 8f5cd2d (not re-run at 4d117f4): 2a/2c other copies dropped; 3a ausente, 3b sobrando, 3c path omitted from line; 5a full bytecode filter; 6a skip copy, 6c skip mkdir, 6d no unlink of symlink; 7a missing source, 7b empty source, 7c copy symlink, 7d source symlink, 7e dir-for-file refusal; 8 rglob->glob; exit 2 -> 1; skip-identical ignoring symlink. All were RED at 8f5cd2d"
+        - "CARRIED from 8f5cd2d: 9 real tree with one byte changed RED (re-confirmed at 4d117f4 via the criterion run above); 10 base 8f5cd2d^ RED, script absent"
+        - "the two former equivalent survivors (dead `e pasta` branch, files_of is_dir guard) no longer exist in the code"
   l2_coverage:
     status: pass
     uncovered_lines: []
-    run: "sem ferramenta de cobertura; todos os hunks de codigo e as frases de prosa alteradas foram alcancados por perturbacao vermelha (ver l3). Ramos nao perturbados: nenhum conhecido alem de erros de E/S dos hooks (JSON invalido no stdin), que nao foram tocados."
+    run: "no coverage tool in the repo; each changed branch of gen-vendor.py was removed one at a time and a test case went RED (see l3), which proves the branch is executed by the test. Measured by perturbation, not by a coverage report."
   l4_adversarial_input:
-    status: n/a
-    reason: "o diff so le o conteudo que o proprio agente esta gravando em um .md local e o transcript local da sessao; sem rede, sem api-rest, sem chamador externo. A validacao do documento (colunas, celulas vazias, barra escapada, status) e a unica fronteira e foi perturbada acima."
+    status: clean
+    reason: ""
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-    run: "o item e uma funcionalidade nova (Task), nao um Bug; tests/test_epic_readiness_gate.py nao existe em cadafbc"
-routing_reason: "PROVEN: seis testes verdes em 4b08570; as cinco ultimas lacunas (as tres expressoes da regra do turno 1, o campo gate de _modos e o bullet de docs/commands.md) ficaram vermelhas quando quebradas, somando-se aos S1 a S16 e aos marcadores isolados ja vermelhos em 2149350. Nenhum sobrevivente conhecido. Ressalva honesta: as perturbacoes das linhas centrais dos hooks listadas em d21e45b/65908ee nao foram reaplicadas em 4b08570 porque o codigo nao mudou; a parte conversacional repousa na transcricao docs/proof/CS-5-transcricao.md."
+    run: "issue type is Task, not Bug; base check recorded in l3 (carried: script absent at base, test RED)."
+routing_reason: "All three survivors of the first round are killed by the new cases (g), (p), (q); the new source-link refusal and both halves are guarded by (r); the dead code is gone; sanity perturbations keep their attribution; the CLI criterion holds. The earlier L4 finding (broken link in the source crashing --write) is closed by the new refusal, and the file-where-subfolder case was shown safe in round 1. Rounds are marked: re-measured at 4d117f4 vs carried from 8f5cd2d."

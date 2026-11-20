@@ -25,6 +25,11 @@ import os
 import re
 import sys
 
+# The plugin's own PyYAML copy goes FIRST so it wins over any installed one
+# (the lazy `import yaml` in `_main` finds it, also when this file is imported).
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "_vendor"))
+
 REASONS = {
     "nao-rodou": "A prova não chegou a rodar",
     "teste-cego": "O teste não consegue enxergar essa mudança",

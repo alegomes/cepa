@@ -1,14 +1,21 @@
 key: CS-1
 status: complete
+diff_range: 09cc73b..ac956f9
 criteria:
-  - id: AC1
-    text: "cepa-plan aceita o campo demonstra: no cabecalho de uma fila single-track (validate OK, show imprime o texto)"
+  - id: CS-1
     altitude: cli
-    surface: "common/bin/cepa-plan validate e show, executados como subprocesso"
-    test: tests/test_cepa_plan_demonstra.py (test_validate_aceita_demonstra, test_show_imprime_o_texto)
-    layer: cli (subprocess)
+    surface: >
+      common/bin/cepa-plan ready executado diretamente pelo shebang
+      (#!/usr/bin/env python3), num repo git temporario com uma fila de um
+      item pending, com um shim python3 na frente do PATH que roda o
+      interpretador real com -S (sem site-packages, sem PyYAML).
+    test: tests/test_cepa_runs_without_pyyaml.py (main, bloco "CS-1")
+    layer: cli/subprocess via shebang, sem importar yaml no proprio teste
     evidence: verified
-    run: "python3 tests/test_cepa_plan_demonstra.py -> 'all green' (checks ok, 0 falhas)"
-    status: complete
-    gap: ""
-note: "Spec dizia que validate recusava o campo; o implementador reportou que ja aceitava. Vermelho real era show inexistente, write apagando o campo e validate aceitando valor vazio/nao-texto. Criterio literal coberto."
+    run: "python3 tests/test_cepa_runs_without_pyyaml.py -> 'ok shim: this
+      python3 really has no PyYAML', 'ok CS-1 cepa-plan ready exit 0 without
+      PyYAML', 'ok CS-1 cepa-plan ready lists the ready item', 'ok CS-1 no
+      PyYAML on stderr' -> '✓ cepa runs without PyYAML' (exit 0, 4 checks
+      executados). Pre-mudanca: 09cc73b:common/bin/cepa-plan linha 260 saia
+      com 'cepa-plan precisa de PyYAML' e exit 2."
+    gap: null

@@ -40,6 +40,9 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+# The plugin's own PyYAML copy goes FIRST so it wins over any installed one
+# (docs/spec/cepa-roda-sem-pyyaml-instalado.md).
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "_vendor"))
 
 
 def _t_emit(event: str, cwd: str = None, **fields) -> None:
@@ -260,11 +263,29 @@ def has_waiver(data) -> bool:
     return isinstance(data, dict) and any(data.get(k) for k in WAIVER_KEYS)
 
 
+def _warn_no_yaml(exc) -> None:
+    """One stderr line when the plugin's vendored PyYAML cannot load
+    (docs/spec/cepa-roda-sem-pyyaml-instalado.md, CS-4). Never raises."""
+    try:
+        name = os.path.splitext(os.path.basename(sys.argv[0] or ""))[0] or "proof-verdict-guard"
+        vendor = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                              "_vendor", "yaml")
+        why = " ".join(f"{type(exc).__name__}: {exc}".split())
+        print(f"[{name}] could not load PyYAML ({why}); expected the plugin's copy at "
+              f"{vendor}. Carrying on the way it always does.", file=sys.stderr)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def parse_with_yaml(content: str):
     """Return (verdict, [(path, status)], [doubles], [l4 n/a violations],
     [levels with a name outside the closed set], proposed waiver?).
     Raises if invalid."""
-    import yaml  # noqa: deferred so absence falls back instead of crashing
+    try:
+        import yaml  # noqa: deferred so absence falls back instead of crashing
+    except ImportError as exc:
+        _warn_no_yaml(exc)
+        raise
     data = yaml.safe_load(content)
     if not isinstance(data, dict):
         raise ValueError("proof artifact is not a YAML mapping")

@@ -1,40 +1,28 @@
 schema_version: 1
 card: CS-5
-queue: tres-portas-c1
+queue: pyyaml
 status: complete
-audited_at: 2026-11-06T00:00:00-03:00
+audited_at: 2026-11-20T00:00:00-03:00
 criteria:
   - id: AC1
-    text: "CS-5 (docs/spec/tres-portas-spec-epic.md): o doctor mostra a area decisoes com aviso e o total de decisoes sem veredito nas specs e Epics fora de draft/rascunho, um arquivo por linha com o comando que abre o veto. Red test: spec ready-to-build (2 decisoes, 1 mantida), spec draft (3) e Epic rascunho (1); cepa-doctor --project sai com 1, mostra '[decisoes] 1 decisao sem veredito' com caminho e /common:spec --continuar <slug>, nao cita os rascunhos, repete em 'Precisa de voce', --brief conta o aviso."
+    text: "CS-5: as quatro copias sao identicas e o desvio e reportado. Red test: python3 bin/gen-vendor.py --check sai 0 com as quatro copias iguais, e sai != 0 nomeando o arquivo quando um byte de maestro/_vendor/yaml/scanner.py muda. Antes da mudanca o script e as copias nao existiam."
     altitude: cli
-    surface: "cepa-doctor --project [--brief] (subprocesso, stdout e codigo de saida)"
+    surface: "python3 bin/gen-vendor.py --check (subprocesso, saida e codigo de saida)"
     demonstrated_by:
-      test: "tests/test_doctor_decisions.py::test_ready_spec_with_pending_decision_warns"
-      layer: "subprocesso do cepa-doctor em repo git temporario"
+      test: "tests/test_vendor_copies_drift.py (a) arvore real; (b) byte alterado em maestro/_vendor/yaml/scanner.py, sai != 0 e nomeia o caminho"
+      layer: "subprocesso do script sobre copia temporaria via --root; (a) sobre a arvore real, incondicional"
       evidence: verified
-      run: "python3 tests/test_doctor_decisions.py -> 15 linhas 'ok', 0 FAIL, 'todos ok'"
+      run: "python3 tests/test_vendor_copies_drift.py -> 77 linhas 'ok', 0 FAIL, 'all green'. Reproducao propria em copia de scratch: troquei 1 byte de maestro/_vendor/yaml/scanner.py; --check saiu 1 com 'difere    maestro/_vendor/yaml/scanner.py'. Arvore real: --check saiu 0 ('as 3 copias sao identicas'); diff -r das 3 copias contra common identico."
     verdict: complete
     gap: null
   - id: AC2
-    text: "Decisoes do item 5: Epic sai com /common:epic <nome>, um arquivo por linha; zero pendencia mostra check com o zero (sem virar aviso); sem docs/spec nem docs/epics nao ha area; sem conserto automatico no --fix; vale com --project."
+    text: "Escopo: --write regenera as copias de board-flow, maestro e build-hex a partir de common; um teste em tests/ chama --check."
     altitude: cli
-    surface: "cepa-doctor --project"
+    surface: "python3 bin/gen-vendor.py --write"
     demonstrated_by:
-      test: "tests/test_doctor_decisions.py (test_ready_epic_points_at_the_epic_command, test_zero_pending_shows_ok_with_zero, test_without_spec_or_epic_dirs_is_silent, test_no_automatic_fix)"
-      layer: "subprocesso do cepa-doctor"
+      test: "tests/test_vendor_copies_drift.py (e) --write repara byte/arquivo apagado/arquivo sobrando; (f) propaga mudanca da origem; (l) recria pasta ausente"
+      layer: "subprocesso do script sobre copia temporaria via --root"
       evidence: verified
-      run: "mesma execucao: todos ok. Vizinhos: test_doctor_fix.py 'all green'; test_doctor_dirty_tree.py e test_doctor_queue_divergence.py '✓ tudo verde'"
+      run: "mesma execucao: all green, 77 ok. Reproducao propria: --write na copia de scratch imprimiu 'regenerado maestro/_vendor/yaml/scanner.py' e o --check seguinte saiu 0. Nada foi escrito na arvore real (git status limpo)."
     verdict: complete
-    gap: "Observacao nao bloqueante: pytest reporta '5 passed' mas as funcoes usam check() que nao levanta excecao; so a execucao direta do script prova. Rodei o script."
-  - id: AC3
-    text: "Clausula 'no repo do Cepa de 2026-11-06 o total seria 5 (3 cepa-espiral-c1 + 2 planejador-de-lotes-paralelos; Epic cepa-em-espiral em rascunho)'."
-    altitude: cli
-    surface: "cepa-doctor --project neste repo"
-    demonstrated_by:
-      test: "execucao real: python3 common/bin/cepa-doctor --project"
-      layer: "cli contra o repo real"
-      evidence: verified
-      run: "imprime 19 = 3 cepa-espiral-c1 + 2 planejador-de-lotes-paralelos + 14 tres-portas-spec-epic; cepa-em-espiral (rascunho) fora"
-    verdict: complete
-    gap: "Cumprida no espirito: as parcelas 3 e 2 batem exatas e o Epic em rascunho esta excluido; os 14 a mais vem da propria spec tres-portas-spec-epic, que ficou ready-to-build depois do texto. O numero 5 era previsao datada, nao criterio de comportamento; o teste de fixture cobre a regra."
-deferral: []
+    gap: null
