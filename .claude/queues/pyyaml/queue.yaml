@@ -1,0 +1,87 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/cepa-roda-sem-pyyaml-instalado.md (6 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-20
+
+schema_version: 2
+mode: single-track
+queue: pyyaml
+source: docs/spec/cepa-roda-sem-pyyaml-instalado.md (6 critérios de sucesso; ordem
+  herdada do texto)
+items:
+- id: CS-1
+  title: '`cepa plan ready` lista os itens prontos num repo cujo `python3` não tem
+    PyYAML'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    temporário com uma fila de um item pronto, e com um `python3` na frente do PATH
+    que roda o Python real com `-S` (opção que desliga as bibliotecas instaladas),
+    `common/bin/cepa-plan ready` sai com código 0 e mostra o item. Hoje sai com
+    código 2 e "cepa-plan precisa de PyYAML".'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: os outros 11 executáveis e scripts da lista rodam com o mesmo `python3`
+    sem PyYAML
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com o
+    mesmo `python3` sem bibliotecas instaladas no PATH, cada um dos 11 (`cepa-dor`,
+    `cepa-until`, `cepa-until-digest`, os cinco `maestro-*`, `waivers.py`, `classify_needs_human.py`,
+    `board-flow-fleet-validate.sh` lendo um `board-flow.yaml`) lê um arquivo YAML
+    de exemplo e termina sem a palavra "PyYAML" no stderr. Hoje `cepa-dor`, `cepa-until`
+    e os cinco `maestro-*` saem com "precisa de PyYAML", e o `board-flow-fleet-validate.sh`
+    sai com "PyYAML missing".'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: os hooks leem o YAML de verdade quando o `python3` não tem PyYAML
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: event · teste vermelho declarado: com
+    o `python3` sem bibliotecas instaladas, a leitura do `board-flow.yaml` feita
+    por `acceptance-gate.py`, `merge-truth-gate.py` e `_jiramut.py` devolve o conteúdo
+    do arquivo de exemplo, e `proof-verdict-guard.py` lê o veredito de uma prova
+    de exemplo. Hoje as três primeiras devolvem vazio e a quarta levanta erro de
+    import.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: um hook que não consegue carregar a cópia avisa em uma linha e não bloqueia
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: event · teste vermelho declarado: numa
+    cópia temporária do plugin `common` sem a pasta `_vendor/yaml`, e com o `python3`
+    sem bibliotecas instaladas, `acceptance-gate.py` recebe um evento de exemplo,
+    sai com código 0 e escreve no stderr uma linha com o nome do hook e o motivo.
+    Hoje sai com código 0 e stderr vazio.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: as quatro cópias são idênticas e o desvio é acusado
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: `python3
+    bin/gen-vendor.py --check` sai com código 0 com as quatro cópias iguais, e sai
+    diferente de 0 nomeando o arquivo quando um byte de `maestro/_vendor/yaml/scanner.py`
+    é alterado. Hoje o script e as cópias não existem.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: a cópia do Cepa vale mesmo quando o Python tem outro PyYAML instalado
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com `PYTHONPATH`
+    apontando para uma pasta que tem um `yaml/__init__.py` falso que levanta erro
+    ao ser importado, `common/bin/cepa-plan ready` sai com código 0 no repo temporário
+    do CS-1. Hoje o falso é importado e o comando quebra.'
+  status: pending
+  blocked_by: []
+  human_pending: null
