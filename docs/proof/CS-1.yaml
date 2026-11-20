@@ -1,40 +1,37 @@
 schema_version: 2
 card: CS-1
 verdict: proven
-reviewed_at: 2026-10-08T21:00:00-03:00
-base_commit: 06d7dd503d6f2ecd6a62afd92dda199bd1a876f1
-head_commit: 2c469ef
+reviewed_at: 2026-11-20T00:00:00-03:00
+base_commit: 09cc73b
+head_commit: ac956f9
 issue_type: Task
 scope:
   changed_classes:
-    - { class: "common/bin/cepa-plan (valida_plano, serializa, cmd_write, cmd_show, main)", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-plan", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/_vendor/yaml (PyYAML 6.0.3, verbatim third-party)", module: cli, external_observable: true, substituted_by_double: null }
   base_commit_resolved: true
+  notes: "Not Quarkus: Python CLI harness. Perturbation in throwaway detached worktrees. The test runs the real cepa-plan through its shebang; only python3 is shimmed (-S, no site-packages), which is the simulated environment, not a double of the changed code."
 levels:
   l3_load_bearing:
     technique: perturbation
     pit:
       status: n/a
-      results:
-        - "repo Python sem pitest; perturbação manual em worktree descartável"
+      results: []
     perturbation:
       status: pass
       results:
-        - "baseline HEAD: python3 tests/test_cepa_plan_demonstra.py -> all green"
-        - "P1 valida_plano sem checagem de demonstra (if False and ...) -> RED (validate recusa lista/vazio)"
-        - "P2 cmd_write descarta demonstra_antigo (= None) -> RED (nao apaga o demonstra do disco; start/finish)"
-        - "P3 cmd_show omite demonstra (demonstra = None) -> RED (show imprime o texto; show --json)"
-        - "P4 serializa nunca grava demonstra (if False) -> RED (nao apaga do disco; start/finish)"
-        - "P5 cmd_show --json sem a chave demonstra -> RED (show --json traz o campo)"
-        - "restaurado: git status limpo na worktree; teste de novo -> all green"
+        - "green at head ac956f9: python3 tests/test_cepa_runs_without_pyyaml.py -> 4 ok lines, '✓ cepa runs without PyYAML'; neighbor tests/test_cepa_plan_ready.py -> '✓ cepa-plan ready'"
+        - "perturbation A, rm -rf common/_vendor/yaml: RED, 3 FAIL, 'exit 2: cepa-plan não achou a cópia do PyYAML em .../common/_vendor/yaml' (vendored copy is the code being loaded; new exit-2 branch also exercised)"
+        - "perturbation B, delete the sys.path.insert of _vendor in cepa-plan: RED, same 3 FAIL"
   l2_coverage:
     status: pass
     uncovered_lines: []
-    run: "sem ferramenta de cobertura; os 5 hunks alterados (valida_plano, serializa, cmd_write, cmd_show texto/json) foram todos alcancados pelo teste coberto, provado por P1-P5 vermelhos"
+    run: "no coverage tool in this repo; the three changed hunks in cepa-plan (path insert, import, error branch) were each reached by the perturbation runs above (A reached the error branch, B the import path, green run the happy path)"
   l4_adversarial_input:
     status: n/a
-    reason: "o diff nao abre entrada externa (sem rede, sem api-rest); o unico dado novo e um campo de YAML local, e a propria validacao alterada o recusa quando nao-string ou vazio (P1 prova)"
+    reason: "The diff only changes where the import of an already used YAML library is resolved from; no new parsing of outside input and no input-bearing module (no api-rest) is touched."
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-    run: "item nao e Bug"
-routing_reason: "Cada comportamento alterado (validacao, show texto/json, preservacao na reescrita) ficou vermelho ao ser quebrado e verde ao restaurar. Vizinho: python3 tests/test_common_plan.py -> all green. Ressalva: a documentacao em common/plan-schema.yaml nao tem teste que a quebre."
+    run: "not a Bug card; as extra check the covering test copied into a detached worktree at 09cc73b is RED: 'exit 2: cepa-plan precisa de PyYAML (pip install pyyaml)', 3 FAIL, '✗ 3 falha(s)'"
+routing_reason: "Criterion (no-PyYAML python3, cepa-plan ready exits 0 and lists the item) holds at the cli surface; breaking the vendored folder or the sys.path line turns the covering test RED, and it is RED at the base commit. No double stands in for the changed code. Limits: vendored library not mutated line by line (verbatim third-party); the shim removes site-packages with -S, not a machine that truly lacks PyYAML."
