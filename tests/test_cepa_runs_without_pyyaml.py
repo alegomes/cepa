@@ -33,6 +33,12 @@ import sys
 import tempfile
 from pathlib import Path
 
+# The hooks run below emit telemetry: send it to a disposable ledger, before any
+# subprocess (see tests/_isolated_telemetry.py). The helpers build their env
+# from os.environ, so they inherit CEPA_TELEMETRY_DIR.
+from _isolated_telemetry import isolate
+isolate()
+
 REPO = Path(__file__).resolve().parent.parent
 CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
 BIN = REPO / "common" / "bin"
