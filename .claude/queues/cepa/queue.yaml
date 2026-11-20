@@ -3158,3 +3158,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: classificador-nh-le-campo-de-motivo
+  title: '`classify_needs_human.py` casa frase de comentário e ignora o motivo que
+    o artefato de prova já grav'
+  why: 'Origem: feedback fb-20261106-2 (2026-11-06); BACKLOG.md § `classify_needs_human.py`
+    casa frase de comentário e ignora o motivo que o artefato de prova já grava
+    (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
