@@ -1,0 +1,25 @@
+key: fim-do-until-CS-7
+status: complete
+diff: 1cca1ea..861322e
+criteria:
+  - id: AC1
+    text: >
+      `cepa-until land --yes` prints numbered steps with result and duration: header (run branch ->
+      destination, commit count, fast-forward or not, return point), then `[1/3] merge`,
+      `[2/3] full build`, `[3/3] push`, each with result and duration; lists files outside git with
+      where to move them or that they can be deleted; closes with end time and
+      "run worktree and branch removed".
+    altitude: cli
+    surface: >
+      real `cepa-until` subprocess: a night on a fake repo, then `land <run> --yes`; asserts on
+      stdout lines (header, [n/3] lines, "move to"/"delete" block, closing line).
+    test: tests/test_cepa_until_land_steps.py (cases: green landing incl. compare-with hint, no upstream/moved destination, run without build and step_duration s/min/h, red build, rerun)
+    layer: cli (subprocess of common/bin/cepa-until)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_land_steps.py (at 861322e) -> exit 0, 29 "ok" lines, final "ok", 0 FAIL
+      (header, [1/3]/[2/3]/[3/3] with duration, "move to"/"delete"/compare block with copy locations,
+      closing "landed at HH:MM: ... run worktree and branch removed", old unnumbered texts absent,
+      build skipped numbered, durations in s/min/h, red build skips push, rerun says merge already done).
+      Delta 7e4dfde..861322e: helper newest_rescued_copy in common/bin/cepa-until plus tests; criterion unchanged.
+    gap: null
