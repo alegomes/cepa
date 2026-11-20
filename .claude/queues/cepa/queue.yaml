@@ -3256,3 +3256,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: plan-answer-aceita-resposta-do-chat
+  title: cepa-plan answer grava a resposta que o dono já deu no chat, sem exigir
+    terminal fora do Claude Code
+  why: 'Origem: feedback fb-20261109-3 (2026-11-09); BACKLOG.md § `cepa-plan responde`
+    só aceita resposta digitada num terminal fora do Claude Code (ainda não priorizado:
+    entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
