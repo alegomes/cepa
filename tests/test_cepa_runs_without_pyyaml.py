@@ -429,7 +429,8 @@ def one_warning(label, r, hook):
     """Exactly one non-empty stderr line, naming the hook and the reason."""
     lines = [l for l in r.stderr.splitlines() if l.strip()]
     ok = (len(lines) == 1 and hook in lines[0] and "PyYAML" in lines[0]
-          and "yaml" in lines[0] and "_vendor" in lines[0])
+          and "yaml" in lines[0] and "_vendor" in lines[0]
+          and "No module named" in lines[0])
     check(f"{label}: one stderr line with the hook name and the reason",
           ok, repr(r.stderr[-400:]))
 
@@ -519,7 +520,8 @@ def cs4(tmp, shim):
     rc_ui = r.returncode
     ui_lines = warning_lines(r.stderr, "ui-proof-verdict-guard")
     check("CS-4 ui-proof-verdict-guard without the copy: exactly one warning line",
-          len(ui_lines) == 1 and "_vendor" in ui_lines[0], repr(r.stderr[-400:]))
+          len(ui_lines) == 1 and "_vendor" in ui_lines[0]
+          and "No module named" in ui_lines[0], repr(r.stderr[-400:]))
     r = run_event(HOOKS / "ui-proof-verdict-guard.py", ev, ui, shim)
     check("CS-4 ui-proof-verdict-guard WITH the copy: no warning, same exit",
           not warning_lines(r.stderr, "ui-proof-verdict-guard")
@@ -535,7 +537,8 @@ def cs4(tmp, shim):
         r = call_fn(shim, nov / f"{hook}.py", expr, fn, *args)
         got = warning_lines(r.stderr, hook)
         check(f"CS-4 {hook} without the copy: exactly one warning line",
-              len(got) == 1 and "_vendor" in got[0], repr(r.stderr[-400:]))
+              len(got) == 1 and "_vendor" in got[0]
+              and "No module named" in got[0], repr(r.stderr[-400:]))
         return r
 
     fn_case("_jiramut", "m.logical_status('Em Revisao Uniq', a[0])", str(fn))
@@ -544,6 +547,9 @@ def cs4(tmp, shim):
     fn_case("expertise-append", "m._HAVE_YAML")
     fn_case("reflection-gate", "m.load(a[0])", "uniq: 1\n")
     r = fn_case("jira-create-fields-gate", "m._load_rules(a[0])", str(fn))
+    pt = warning_lines(r.stderr, "jira-create-fields-gate")
+    check("CS-4 jira-create-fields-gate warns in Portuguese",
+          len(pt) == 1 and "não consegui carregar" in pt[0], repr(r.stderr[-400:]))
     check("CS-4 jira-create-fields-gate without the copy: no 'pip install' advice",
           "pip install" not in r.stdout + r.stderr, repr(r.stderr[-400:]))
     # the module is loaded twice in one process: still one line per run is the
