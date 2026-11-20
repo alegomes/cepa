@@ -147,6 +147,20 @@ def test_newest_rescued_copy_takes_the_highest_suffix():
             (d / name).write_text(name)
         got = mod.newest_rescued_copy(d / "plano.md")
         check("a cópia de maior número vence (.10)", got.name == "plano.md.10", got.name)
+        # Independent of the order the disk lists them: with the numbered copies
+        # listed ascending and descending, neither "first" nor "last" wins.
+        import pathlib
+        real_iterdir = pathlib.Path.iterdir
+        numbered = ["plano.md.1", "plano.md.2", "plano.md.10"]
+        for label, order in (("crescente", numbered), ("decrescente", numbered[::-1])):
+            listing = [d / n for n in ["plano.md", *order, "plano.md.x"]]
+            pathlib.Path.iterdir = lambda self, _l=listing: iter(_l)
+            try:
+                got = mod.newest_rescued_copy(d / "plano.md")
+            finally:
+                pathlib.Path.iterdir = real_iterdir
+            check(f"listagem em ordem {label}: ainda vence a .10",
+                  got.name == "plano.md.10", got.name)
         (d / "solo.md").write_text("x")
         got = mod.newest_rescued_copy(d / "solo.md")
         check("sem cópias numeradas, o próprio nome", got.name == "solo.md", got.name)
