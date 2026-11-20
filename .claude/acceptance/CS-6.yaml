@@ -1,18 +1,16 @@
-schema_version: 1
-card: CS-6
+key: CS-6
+queue: pyyaml
 status: complete
-audited_at: 2026-10-08T00:00:00-03:00
-note: "Auditoria sobre 8dc6d13..81a2421. Rodei o comando do criterio no Epic real e os testes do item e vizinhos."
 criteria:
   - id: AC1
-    text: "Sobre docs/epics/cepa-em-espiral.md, '/common:plan cepa-espiral-c2 --from-epic ... --ciclo 2 --dry-run' imprime fila cujo cabecalho tem demonstra: igual ao roteiro do ciclo 2 e um item por frase de 'o que atravessa', cada item com criterio de aceite e superficie, na ordem do texto."
+    text: "Cepa's copy wins even when the Python has another PyYAML installed (cli; red test: fake yaml on PYTHONPATH, common/bin/cepa-plan ready exits 0)"
     altitude: cli
-    surface: "common/bin/cepa-plan write <nome> --from-epic <arq> --ciclo N --dry-run (stdout) + common/commands/plan.md"
-    demonstrated_by:
-      test: "tests/test_cepa_plan_from_epic.py (inclui test_epic_real_ciclo_2 sobre o Epic real)"
-      layer: "subprocesso do binario cepa-plan"
-      evidence: verified
-      run: "python3 tests/test_cepa_plan_from_epic.py -> todas as linhas ok, termina em 'tudo ok'. Rodei tambem o comando do criterio: imprime demonstra: igual a celula do roteiro do ciclo 2, 2 itens (C2-1, C2-2) na ordem do texto, cada why com criterio de aceite (roteiro) e superficie ('nao declarada no Epic'), mais 3 avisos em stderr. Vizinhos: test_cepa_plan_demonstra, test_cepa_plan_fila_unica, test_common_plan, test_plan_anchor_root -> all green; test_board_flow_cepa_plan_shim rc=0."
-    verdict: complete
-    gap: null
-    observacao: "Decisoes (frase = ate '.' ou ';'; aceite = roteiro do ciclo; superficie 'nao declarada' no Epic real) sao interpretacoes do implementador, nao inventam conteudo. Criterio e superficie ficam dentro do campo why, sem campos proprios no schema. Julgamento humano: no Epic real a superficie nao esta declarada, entao o criterio 'com superficie' e atendido so de forma literal. pytest puro da erro de fixture no arquivo (o teste e script, roda por python3), sem relacao com o criterio."
+    surface: "common/bin/cepa-plan ready run as a process with PYTHONPATH pointing at a raising fake yaml"
+    test: "tests/test_cepa_runs_without_pyyaml.py::cs6 (cepa-plan ready, real interpreter and -S shim)"
+    layer: cli-subprocess
+    evidence: verified
+    run: "python3 tests/test_cepa_runs_without_pyyaml.py -> 'cepa runs without PyYAML', 37 CS-6 ok lines, no fail, no skip (this machine has PyYAML in site-packages: pyenv 3.14.0rc1). Own repro: PYTHONPATH=<fake> common/bin/cepa-plan ready -> exit 0, X-1 listed; same env on cepa-plan of 09cc73b -> exit 1, 'RuntimeError: fake yaml imported'; 09cc73b without fake -> exit 0 (so red is caused by the fake); HEAD with -S shim + fake -> exit 0."
+    readings:
+      pythonpath_yaml: "demonstrated directly (the declared red test, red before, green after)"
+      site_packages_pyyaml: "demonstrated by transitivity, not by a direct assertion: sys.path puts PYTHONPATH ahead of site-packages, and the copy beats PYTHONPATH, so it beats site-packages. The test never asserts yaml.__file__ is the vendored copy; a mutation that put the copy after site-packages but before nothing would still be caught only via the fake."
+gap: null

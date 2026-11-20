@@ -1,39 +1,58 @@
 schema_version: 2
 card: CS-6
 verdict: proven
-reviewed_at: 2026-10-09T03:00:00-03:00
-base_commit: 8dc6d13
-head_commit: d57490f
+reviewed_at: 2026-11-20T15:00:00-03:00
+base_commit: 09cc73b
+head_commit: c014776
 issue_type: Task
+queue: pyyaml
 scope:
   changed_classes:
-    - { class: "common/bin/cepa-plan (itens_de_epic, frases_de, celulas_da_linha, le_epic, cmd_from_epic, ramo --from-epic do cmd_write, parser, checagem --from-epic/--ciclo no main)", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/commands/plan.md (prosa)", module: common, external_observable: true, substituted_by_double: null }
+    - class: "tests/test_cepa_runs_without_pyyaml.py (cs6, make_shim name/flags, run_event extra_env)"
+      module: tests
+      external_observable: true
+      substituted_by_double: null   # the real scripts run through their shebang; only the far boundary (a fake twg for Jira) is a double
   base_commit_resolved: true
-  notes: "Segunda volta. d57490f so mexeu em tests/test_cepa_plan_from_epic.py e numa frase de plan.md; common/bin/cepa-plan e identico ao de 81a2421. A superficie e a CLI: o teste chama common/bin/cepa-plan como subprocesso real, sem duble da classe alterada. Prosa de plan.md so tem duas presencas de trecho como guarda (argument-hint e 'cepa-plan from-epic'); ela descreve comportamento que o codigo ja prova."
+  note: "Test-only diff. The behavior under proof (sys.path.insert(0, <plugin>/_vendor) before import yaml in 21 files) was added earlier on this branch; perturbation targets that ordering, the test is the instrument."
 levels:
   l3_load_bearing:
     technique: perturbation
     pit:
       status: n/a
-      results: []
+      results:
+        - "Python repo, no PIT"
     perturbation:
       status: pass
       results:
-        - "green em d57490f (worktree descartavel /tmp/proof-CS-6b): python3 tests/test_cepa_plan_from_epic.py -> 'tudo ok', rc=0, 43 linhas 'ok'. Dry-run real: cepa-plan from-epic docs/epics/cepa-em-espiral.md --ciclo 2 -> demonstra = roteiro do ciclo 2 'Conduzir', itens C2-1 e C2-2 na ordem do texto, cada um com criterio de aceite e superficie no why."
-        - "9 sobreviventes da 1a volta, todos agora RED (cada um confirmado por git diff --numstat 1/1 na linha certa): :769 'if abertas'->'if False' (1 FAIL); :794 'if faltam'->'if False' (2 FAIL); :783 'if not linhas'->'if False' (FAIL, Traceback); :715 OBRIGATORIAS_DA_FILA=('ciclo',) (2 FAIL); :2770 required=False (FAIL); :741 sem 'and not em_crase' (FAIL); :742 isspace->True (FAIL); :727 sem 'not endswith(\\\\|)' (FAIL, apos reaplicar: a 1a tentativa de sed nao aplicou e foi descartada); :703 HERDADO_EPIC, tanto 'herdado da ordem do texto da coluna' quanto 'ninguem priorizou as pecas entre si' trocados por XX (FAIL em C2-1 e C2-2)."
-        - "amostra de 8 das 25 que ja eram vermelhas, todas RED: :2949 checagem --from-epic/--ciclo no main (2 FAIL); :2619 ramo elif a.from_epic (4 FAIL); :2944 return cmd_from_epic (9 FAIL); blocked_by (3 FAIL); id C{ciclo}-{k} (3 FAIL); ciclo == N invertido (14 FAIL); status != pronta (1 FAIL); criterio de aceite {roteiro} (2 FAIL)."
-        - "worktree removida com git worktree remove --force; git worktree list sem /tmp/proof-CS-6b; arvore principal intocada alem deste arquivo."
-    base_regression: "1a volta: base 8dc6d13 (cepa-plan e plan.md da base + teste de HEAD) -> 12 FAIL"
+        - "baseline c014776 (throwaway detached worktree): python3 tests/test_cepa_runs_without_pyyaml.py -> exit 0, 105 ok, 0 FAIL, 37 CS-6 lines"
+        - "cepa-plan:257 insert(0)->append: exit 1, 6 FAIL, all CS-6 cepa-plan, in [real] and [-S] (exit 0 / lists item / fake never imported)"
+        - "cepa-plan:257 line removed: exit 1, 9 FAIL: the same 6 CS-6 plus CS-1 x3"
+        - "cepa-dor:59 append: 4 FAIL, CS-6 [real]+[-S] 'cepa-dor read the plan' and 'fake yaml never imported'"
+        - "maestro-poll:36 append: 4 FAIL, CS-6 [real]+[-S] 'maestro-poll read wave-state.yaml' and 'fake never imported'"
+        - "classify_needs_human.py:30 append: 4 FAIL, CS-6 [real]+[-S] x2"
+        - "board-flow-fleet-validate.sh:67 (inline python) append: 4 FAIL, CS-6 [real]+[-S] x2"
+        - "acceptance-gate.py:84 append: 2 FAIL, CS-6 [real]+[-S] 'acceptance-gate read board-flow.yaml' (exit 2)"
+        - "build-hex proof-verdict-guard.py:45 append: 2 FAIL, CS-6 [real]+[-S] 'parsed with yaml (blocks)' (exit 0)"
+        - "_jiramut.py:68 append: 5 FAIL, CS-6 [real]+[-S] 'logical_status resolved the status_map name' (None) plus CS-3 isolation x3 (side effect of the line the test strips by exact match)"
+        - "test guard 3a (fixture fake yaml made an empty __init__.py): exit 1, 2 FAIL, 'CS-6 guard (real interpreter)' and 'CS-6 guard (-S shim)': PYTHONPATH makes import yaml hit the fake"
+        - "test guard 3b (run_direct drops PYTHONPATH from extra_env): exit 1, 2 FAIL, the same two guards"
+        - "test guard 3c (run_event drops PYTHONPATH): exit 0, 105 ok, 0 FAIL -> guard does NOT see run_event; acceptance-gate and proof-verdict-guard cases are not protected against vacuity by the guard (they are by the append perturbations above, RED)"
+        - "survivors of append on the 13 files with no fake-PYTHONPATH case (cepa-until, cepa-until-digest, maestro-fork-settings, maestro-programs, maestro-wave-state, maestro-prune, waivers.py, merge-truth-gate, _autonomy, ui-proof-verdict-guard, jira-create-fields-gate, reflection-gate, expertise-append): every one exit 0, 105 ok, 0 FAIL in the covering file; _autonomy also green on tests/test_autonomy_yaml.py. No test goes RED."
   l2_coverage:
     status: pass
     uncovered_lines: []
-    run: "sem ferramenta de cobertura; as quatro linhas que a 1a volta apontou sem guarda (:769, :783, :794, :2770) agora ficam vermelhas ao serem desligadas (python3 tests/test_cepa_plan_from_epic.py -> FAIL em cada uma)"
+    run: "baseline run prints 37 CS-6 checks at head, and each of the 8 representative files turned a CS-6 check RED under perturbation, so the lines are reached at the cli altitude"
   l4_adversarial_input:
     status: n/a
-    reason: "o diff so le um .md local passado pelo proprio operador via CLI; sem rede, sem api-rest, sem chamador externo. As fronteiras de validacao (ciclo inexistente, escada ausente, escada sem tabela, coluna obrigatoria ausente, roteiro vazio, atravessa vazio, --ciclo sem --from-epic, crase, barra escapada) estao perturbadas acima."
+    reason: "the diff is a test file only; it opens no input surface (no parser of external data, no api-rest module)"
     findings: []
   bugfix_regression_red_at_base:
-    status: n/a
-    run: "Task (funcionalidade nova), nao Bug; verificado na 1a volta: teste de HEAD contra cepa-plan/plan.md de 8dc6d13 -> 12 FAIL."
-routing_reason: "PROVEN: as 9 linhas que sobreviviam na 1a volta agora quebram o teste, e a amostra de 8 das 25 ja vermelhas continua vermelha. O criterio (demonstra = roteiro do ciclo 2, um item por frase de 'o que atravessa', na ordem, com criterio de aceite e superficie) esta guardado contra o CLI real. Ressalva nao bloqueante: no Epic atual o ciclo 2 nao declara 'Efeito em tela/backend', entao a superficie de cada item sai como 'nao declarada no Epic' (com aviso); e o comportamento correto, mas a superficie concreta depende do Epic ser completado."
+    status: pass
+    run: "09cc73b has no common/_vendor, so the head file crashes at CS-3 (FileNotFoundError on common/_vendor) before cs6 runs (0 CS-6 lines, 13 ok, 23 FAIL). Driving only the CS-6 cepa-plan call with the head helpers (tests/drv_cs6_plan.py, throwaway): real exit 1, 'RuntimeError: fake yaml imported'; -S exit 1, same. At c014776 the same call exits 0."
+notes:
+  - "no-PyYAML interpreter (scratch venv): python3 tests/test_cepa_runs_without_pyyaml.py -> exit 0, 104 ok, prints 'skip  CS-6 real interpreter has no PyYAML ...', fake-yaml guards still pass; with PyYAML present: 'ok CS-6 guard: the real interpreter has PyYAML installed (no PYTHONPATH)' (site-packages asserted)"
+  - "neighbors at c014776: tests/test_cepa_plan_ready.py exit 0 ('cepa-plan ready'), tests/test_isolated_telemetry.py exit 0"
+  - "13 of the 21 files import the vendored copy with insert(0) with no test turning RED if it becomes append (see survivors). The CS-6 criterion names cepa-plan ready only, so this is a NOTE on the wider scope line, not a reason for UNPROVEN."
+  - "Guard gap: the 'CS-6 guard' checks use run_direct only; run_event (acceptance-gate, proof-verdict-guard cases) can drop PYTHONPATH and stay green."
+  - ".claude/acceptance/CS-6.yaml shows as modified in the primary worktree; not touched by this review."
+routing_reason: "cepa-plan ready with a raising fake yaml on PYTHONPATH: insert(0)->append and removal turn the CS-6 cepa-plan cases RED in both the real interpreter and -S, and the test's guards for run_direct and the fake are live; base fails with 'fake yaml imported'. Seven further representatives each go RED under the same perturbation. Survivors and the run_event guard gap are notes outside the criterion. PROVEN."
