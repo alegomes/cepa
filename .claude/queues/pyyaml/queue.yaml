@@ -190,19 +190,22 @@ items:
   title: Os outros treze arquivos têm teste de que a cópia do Cepa vence outro PyYAML
   why: 'criado pela resposta do dono a CS-6 (ainda não priorizado: entrou no fim
     da fila)'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: 'Criado em 2026-11-20 pela resposta do dono ao item CS-6. Pergunta:
-    Crio um item para testar nos outros treze arquivos que a cópia do Cepa vence
-    outro PyYAML? Recomendo sim: custo baixo. Resposta: sim: Crio um item para testar
-    nos outros treze arquivos que a cópia do Cepa vence outro PyYAML? Recomendo
-    sim: custo baixo.'
+  evidence: 'commits 09abd10 (tests/test_cepa_runs_without_pyyaml.py: cs6 ganhou
+    um caso por arquivo para os 13 sobreviventes de docs/proof/CS-6.yaml, yaml falso
+    no PYTHONPATH, variantes real e -S; call_fn com extra_env; guarda nova de que
+    run_event repassa PYTHONPATH, fecha a lacuna 3c) e 3c6354a (artefatos). Nenhum
+    código de produção mudou. pair-reviewer OK-WITH-NOTES sem correção exigida;
+    testes do item e vizinhos verdes: test_cepa_runs_without_pyyaml 160 ok (era
+    105), test_cepa_plan_ready 32 ok, test_autonomy_yaml 118 ok; tests/run-all.sh
+    fica com o supervisor. completion-auditor COMPLETE (.claude/acceptance/CS-6-sim.yaml);
+    proof-reviewer PROVEN (docs/proof/CS-6-sim.yaml): insert(0)->append vermelho
+    nos 13 arquivos (2 a 4 FAIL cada), guarda do run_event vermelha, os 8 representantes
+    originais seguem vermelhos; remoção da linha testada em 4 dos 13. Notas: em
+    merge-truth-gate e reflection-gate só o check funcional pega (eles engolem o
+    erro); expertise-append depende do falso levantar RuntimeError, não ImportError.
+    Código na branch until/2026-11-20-1609, sem merge.'
   sem_epic: true
-  claimed_by:
-    session_id: 67794533-80e9-435c-8d3d-d9eeb24e9432
-    pid: 49101
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-until-2026-11-20-1609
-    branch: until/2026-11-20-1609
-    started_at: '2026-11-20T19:09:51+00:00'
+  head_commit: 3c6354a7f1fa37407baa995239bb1c10808a7e38
