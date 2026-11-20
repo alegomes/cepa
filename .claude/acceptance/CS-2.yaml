@@ -1,22 +1,42 @@
 key: CS-2
 status: complete
+diff_range: 9f8658d..5a1737a
 criteria:
-  - id: AC1
-    text: "`cepa-metrics scorecard` sobre um diretório de telemetria imprime três linhas (turnos após rotina por sessão, builds vermelhos, sessões no repo cepa), cada uma com numerador, denominador e resultado, para os últimos 7 dias e desde o início; antes o subcomando não existia."
+  - id: CS-2
+    text: "the other 11 executables and scripts run with the same python3 without PyYAML (cepa-dor, cepa-until, cepa-until-digest, five maestro-*, waivers.py, classify_needs_human.py, board-flow-fleet-validate.sh reading a board-flow.yaml)"
     altitude: cli
-    surface: "subprocesso `python3 common/bin/cepa-metrics scorecard` com CEPA_TELEMETRY_DIR apontando para ledger sintético; stdout e exit code"
-    test: tests/test_cepa_metrics_scorecard.py::test_texto (+ test_json, test_ledger_vazio, test_relatorio_antigo_intacto)
-    layer: cli
+    surface: >
+      Each of the 11 run through its shebang (or through the python3 shim for the two
+      board-flow modules) in a subprocess, with a python3 shim at the front of PATH that
+      execs the real interpreter with -S (no site-packages). Asserts: no "PyYAML" and no
+      ImportError/ModuleNotFoundError on stderr, plus a marker on stdout that exists only
+      inside the example YAML (proves a real read, not --help).
+    test: tests/test_cepa_runs_without_pyyaml.py (function cs2)
+    layer: cli/subprocess
     evidence: verified
-    run: "python3 tests/test_cepa_metrics_scorecard.py -> 22 checks ok, 0 FAIL, linha final 'ok' (N=22 > 0)"
+    run: >
+      python3 tests/test_cepa_runs_without_pyyaml.py -> 37 "ok" lines, 0 failures
+      (the only grep hit for FAIL is the test name "keeps the FAIL slice"), last line
+      "cepa runs without PyYAML", exit 0. Probe check "shim: this python3 really has no PyYAML" ok.
+    per_executable:
+      cepa-dor: "plan YAML read; stdout names 'single-track' mode"
+      cepa-until: "--dry-run on queue.yaml; output names item X-1"
+      cepa-until-digest: "stdout shows 'uniq-status-digest' from plan.yaml"
+      maestro-poll: "wave-state.yaml; stdout has uniq-slice and DONE"
+      maestro-fork-settings: "plan.yaml; stdout has 'uniq-surface'"
+      maestro-programs: "plan + wave-state; stdout has uniq-prog and uniq-slice"
+      maestro-wave-state: "get --json; stdout has uniq-slice"
+      maestro-prune: "--dry-run on wave-state.yaml; stdout has uniq-slice"
+      waivers.py: "load() returns 'uniq-escopo' from the waiver YAML"
+      classify_needs_human.py: "lists UNIQ-9 from docs/proof YAML"
+      board-flow-fleet-validate.sh: "board-flow.yaml read with a fake twg; output carries UNIQKEY, which only exists in the YAML"
     status: complete
     notes: >
-      Valores esperados contados à mão (3.0 e 4.0 turnos; 25.0% e 42.9% builds; 25.0% e 50.0% sessões cepa)
-      conferem com as contas F3/F8/F10 da estratégia (última rotina, EMPTY no denominador, session_start).
-      Fontes: o implementado lê só o ledger (CEPA_TELEMETRY_DIR); "transcrições" não é lida. Isso é consistente
-      com "Decidido sem perguntar" da spec (mesmas fontes do cepa-metrics) e os eventos prompt(kind,session),
-      build_result e session_start(repo) existem nos produtores reais (session-log.py, capture-build-result.py,
-      session-registry.py via _telemetry.emit). O teste não fornece diretório de transcrições, então a
-      expressão literal "e de transcrições de teste" do critério não é exercida; é decisão da spec, sinalizada
-      para o humano.
+      Fleet-validate limit judged: the criterion says "reading a board-flow.yaml", and the
+      script's YAML read (python3 heredoc, before any Jira call) is the unit that used to
+      print "PyYAML missing". UNIQKEY reaching the output proves the read succeeded under -S.
+      The Jira calls that follow are not the criterion. Vendored copies in maestro/_vendor/yaml
+      and board-flow/_vendor/yaml are byte-identical to common/_vendor/yaml (diff -r).
+      Minor fragility, not a gap: the fleet-validate case inherits os.environ, so a
+      PROJECT_KEY/TODO_STATUS exported in the runner would skip the YAML read.
     gap: ""
