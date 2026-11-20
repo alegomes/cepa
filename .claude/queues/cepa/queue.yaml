@@ -3147,3 +3147,14 @@ items:
       .claude/queues/until-arvore-limpa/until/2026-11-15-1011.laterais/2026-11-14-0954-vermelho-CS-1.patch.
       Commite antes de fechar (desabilitar ou apagar teste não é conserto)'
   head_commit: b7ae90e4e58e925bf3e35ce528e4b37d32e352dd
+- id: until-lateral-casa-pela-fila
+  title: cepa-until e cepa-plan casam a branch lateral com o item pela fila do run,
+    não só pelo id (clean_side_branches apagou 3 branches de outras filas)
+  why: 'Origem: feedback fb-20261120-2 (2026-11-20); BACKLOG.md § Branch lateral
+    de um run é casada com o item de outra fila que tem o mesmo id (ainda não priorizado:
+    entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
