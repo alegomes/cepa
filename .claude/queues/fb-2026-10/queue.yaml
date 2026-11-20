@@ -115,3 +115,13 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: agents-do-herdr-mesmo-nome-por-sessao
+  title: A lista Agents do herdr mostra o mesmo nome para todas as sessões do Cepa
+  why: 'Origem: feedback fb-20261120-4 (2026-11-20); BACKLOG.md § A lista Agents
+    do herdr mostra o mesmo nome para todas as sessões do Cepa (ainda não priorizado:
+    entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
