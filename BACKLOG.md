@@ -5417,3 +5417,47 @@ No herdr-mobile, projeto Flutter, nenhuma rodada verde limpa o STALE do `last-bu
 ### Esboço
 
 Padrão para `flutter test` com os marcadores `All tests passed!` e `Some tests failed.`, e para script de verificação do repo que termina em `OK` declarado no manifesto do projeto. Teste que falta: saída real de `flutter test` verde grava SUCCESS e a vermelha grava FAILURE.
+
+---
+
+## A lista Agents do herdr mostra o mesmo nome para todas as sessões do Cepa
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa`, o launcher que abre a sessão) · **Origem:** feedback `fb-20261120-4`, 2026-11-20, `fb-20261120-6`, 2026-11-20
+
+### Problema
+
+Quatro sessões do Cepa abertas no mesmo Space do herdr aparecem na lista Agents com o mesmo nome, e o dono não sabe qual é qual. O contexto gravado pelo agente no registro diz que a lista mostra o nome do Space, herdado da primeira sessão aberta nele, e que o launcher não emite título nem rótulo por sessão. Essa causa ainda não foi reproduzida.
+
+### Palavras do dono
+
+> Mesmo nome de sessao em todos os agentes. [Contexto do agente: a lista Agents do herdr mostra o nome do space herdr, nao o da sessao. As 4 sessoes cepa (t23, t2f, t2g, t2j) estao no space 'cepa-divergencia', nome herdado da primeira sessao aberta nele, entao aparecem todas como cepa-divergencia. O launcher common/bin/cepa nao emite titulo nem label por sessao.]
+>
+> `fb-20261120-4`, 2026-11-20 · cepa · session/session_name · discovery · `herdr agents list / cepa launcher`
+
+> Complemento de fb-20261120-4 com a correcao pronta, bloqueada pelo gate do modo discovery: em run_claude, se o branch for session/<slice> e o dono nao passou -n/--name, chamar $CLAUDE_BIN --name <slice>. Motivo: a lista Agents do herdr (defaults/mods/agents/main.js, visao Priority) mostra 'nome do space · titulo da sessao'. O space sem nome herda a pasta do primeiro terminal (src/model.rs space_name), e o titulo vem do primeiro prompt, que e o mesmo menu do modo para toda sessao cepa. claude --name fixa o titulo do terminal. Testar com fake claude como em tests/test_cepa_slice_isolation.py.
+>
+> `fb-20261120-6`, 2026-11-20 · cepa · session/session_name · discovery · `common/bin/cepa run_claude`
+
+### Esboço
+
+O launcher informa ao herdr um nome por sessão (o slug da worktree ou o propósito gravado na intenção). Teste que falta: duas sessões no mesmo Space aparecem com nomes diferentes em `hc get`.
+
+---
+
+## O cabeçalho do `cepa plan ready` diz "0 itens" com item pendente na fila, e o dono lê "nada pendente"
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-plan`, `cmd_ready`) · **Origem:** feedback `fb-20261120-5`, 2026-11-20
+
+### Problema
+
+O cabeçalho `prontos para construir · 2 filas · 0 itens` conta só os itens que o agente pode construir sozinho agora. O painel Filas do mod conta, na coluna `pend`, todo item com `status: pending`. Na fila kairos-etapa-1 do wego-digitacao-backend o `queue.yaml` tinha 1 `pending` (C1-34, com ação humana) e 1 `blocked` (C1-54): o comando mostrou "0 itens" e o mod mostrou 1 pendente e 1 bloqueado. Os dois números estão certos, mas o dono leu divergência. A linha da fila ("0 de 1 pendentes prontos, esperam você: C1-34, C1-54") traz a explicação, só que abaixo do cabeçalho e com dois ids para 1 pendente, porque a lista de quem espera o dono soma o bloqueado.
+
+### Palavras do dono
+
+> A linha de comando está divergindo do mod. cepa plan diz que não há item pendente. mod diz que há 1 pendente na fila kairos-etapa-1
+>
+> `fb-20261120-5`, 2026-11-20 · cepa · session/divergencia · discovery · `cepa-plan ready`
+
+### Esboço
+
+O cabeçalho passa a dizer também quantos itens esperam o dono, com as mesmas palavras do painel do mod (pendentes, bloqueados). Teste que falta: fila com 1 pendente com ação humana e 1 bloqueado, o cabeçalho não pode ser lido como fila vazia.
