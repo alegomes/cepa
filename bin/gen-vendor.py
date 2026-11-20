@@ -45,7 +45,8 @@ that downloads anything.
 `--check` exits 0 when equal, 1 on drift, 2 when it refuses to run.
 
 It refuses (exit 2, before reading, copying or deleting anything in ANY copy)
-when the source is missing or empty, when a copy folder or the source does not
+when the source is missing or empty, when the source holds a symlink that does
+not lead to a file (broken, or to a folder), when a copy folder or the source does not
 resolve to exactly `<root>/<folder>` (a symlink in the path would make `--write`
 delete files outside the root), or, for `--write`, when a directory sits where a
 file is expected (the directory is never deleted). A symlinked file inside a
@@ -67,8 +68,6 @@ COPIES = ["board-flow/_vendor/yaml", "maestro/_vendor/yaml", "build-hex/_vendor/
 
 def files_of(folder: Path) -> set:
     """Relative paths of every file under `folder`, minus bytecode leftovers."""
-    if not folder.is_dir():
-        return set()
     return {
         p.relative_to(folder)
         for p in folder.rglob("*")
@@ -90,8 +89,6 @@ def drift(root: Path, copy: str) -> list:
             out.append(("sobrando", shown))
         elif (dst / rel).is_symlink():
             out.append(("difere", shown))
-        elif (dst / rel).is_dir():
-            out.append(("é pasta", shown))
         elif (src / rel).read_bytes() != (dst / rel).read_bytes():
             out.append(("difere", shown))
     return out
@@ -123,6 +120,10 @@ def refusal(root: Path, writing: bool):
             return f"✗ {folder} não resolve para dentro de {root} (link simbólico?); recusado"
     if not files_of(root / SOURCE):
         return f"✗ origem ausente ou vazia: {SOURCE}"
+    for rel in sorted(files_of(root / SOURCE)):
+        s = root / SOURCE / rel
+        if s.is_symlink() and not s.is_file():  # broken link, or link to a folder
+            return f"✗ {SOURCE}/{rel.as_posix()} é um link simbólico que não leva a um arquivo; recusado (nada foi tocado)"
     if writing:
         for copy in COPIES:
             for rel in sorted(files_of(root / SOURCE)):

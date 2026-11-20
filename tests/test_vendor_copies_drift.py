@@ -27,6 +27,9 @@ Cases:
   (l) a whole copy folder missing: `ausente` for its files; --write recreates it
   (m) a nested subfolder in the source is reported missing in the 3 copies and created
   (n) the `removido` line names the extra file and the file is gone
+  (p) broken symlink / symlink to a folder inside a copy: drift, named; --write removes
+  (q) symlink to a folder where a file is expected: replaced by a real file, target intact
+  (r) broken symlink (or link to a folder) in the SOURCE: exit 2 up front, nothing touched
   (o) a directory named like an expected file: clean non-zero exit naming it
       (--write also refuses to delete the directory)
 
@@ -178,8 +181,17 @@ def test_pycache_ignored():
         (tmp / "maestro/_vendor/yaml/stray.pyc").write_bytes(b"\x00")
         code, out = run("--check", tmp)
         check("(g) __pycache__ e .pyc não são desvio", code == 0, out.strip()[:300])
+        # A non-.pyc file inside __pycache__ is ignored because of the folder, not the suffix.
+        store = cache / ".DS_Store"
+        store.write_bytes(b"finder")
+        code, out = run("--check", tmp)
+        check("(g) arquivo não-.pyc dentro de __pycache__ não é desvio", code == 0,
+              out.strip()[:300])
         run("--write", tmp)
         check("(g) --write não mexe no __pycache__", (cache / "scanner.cpython-312.pyc").exists())
+        check("(g) --write deixa o .DS_Store de __pycache__ onde está", store.exists())
+        # A .pyc OUTSIDE __pycache__ is ignored too (suffix rule), and --write leaves it.
+        check("(g) .pyc fora de __pycache__ é ignorado e fica", (tmp / "maestro/_vendor/yaml/stray.pyc").exists())
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -364,6 +376,75 @@ def test_directory_named_like_a_file():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_stray_links_in_copy():
+    for kind in ("quebrado", "para pasta"):
+        tmp = temp_tree()
+        outside = Path(tempfile.mkdtemp(prefix="vendor-outside-"))
+        try:
+            (outside / "keep.txt").write_text("keep\n")
+            link = tmp / "maestro/_vendor/yaml/stray_link"
+            os.symlink(outside / "nope" if kind == "quebrado" else outside, link)
+            code, out = run("--check", tmp)
+            check(f"(p) link {kind} na cópia: sai != 0", code != 0, f"code={code}")
+            check(f"(p) link {kind}: nomeia maestro/_vendor/yaml/stray_link",
+                  "maestro/_vendor/yaml/stray_link" in out, out.strip()[:300])
+            code, out = run("--write", tmp)
+            check(f"(p) link {kind}: --write sai 0", code == 0, out.strip()[:300])
+            check(f"(p) link {kind}: --write removeu o link", not link.is_symlink())
+            check(f"(p) link {kind}: o alvo do link está intacto",
+                  (outside / "keep.txt").read_text() == "keep\n")
+            check(f"(p) link {kind}: depois do --write, --check sai 0", run("--check", tmp)[0] == 0)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+            shutil.rmtree(outside, ignore_errors=True)
+
+
+def test_dir_link_where_file_expected():
+    tmp = temp_tree()
+    outside = Path(tempfile.mkdtemp(prefix="vendor-outside-"))
+    try:
+        (outside / "keep.txt").write_text("keep\n")
+        reader = tmp / "maestro/_vendor/yaml/reader.py"
+        reader.unlink()
+        os.symlink(outside, reader)
+        src_bytes = (tmp / "common/_vendor/yaml/reader.py").read_bytes()
+        code, out = run("--check", tmp)
+        check("(q) link para pasta no lugar de arquivo: --check sai != 0 e nomeia",
+              code != 0 and "maestro/_vendor/yaml/reader.py" in out, out.strip()[:300])
+        code, out = run("--write", tmp)
+        check("(q) --write sai 0 (o link não é pasta de verdade)", code == 0, out.strip()[:300])
+        check("(q) virou arquivo real com os bytes da origem",
+              reader.is_file() and not reader.is_symlink() and reader.read_bytes() == src_bytes)
+        check("(q) nada foi escrito através do link",
+              sorted(p.name for p in outside.iterdir()) == ["keep.txt"])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+        shutil.rmtree(outside, ignore_errors=True)
+
+
+def test_broken_link_in_source():
+    for kind in ("quebrado", "para pasta"):
+        tmp = temp_tree()
+        outside = Path(tempfile.mkdtemp(prefix="vendor-outside-"))
+        try:
+            link = tmp / "common/_vendor/yaml/zz_link.py"
+            os.symlink(outside / "nope" if kind == "quebrado" else outside, link)
+            before = snapshot(tmp)
+            flip_byte(tmp / "board-flow/_vendor/yaml/reader.py")  # drift a --write would fix
+            before = snapshot(tmp)
+            for mode in ("--check", "--write"):
+                code, out = run(mode, tmp)
+                check(f"(r) link {kind} na origem, {mode}: sai 2", code == 2,
+                      f"code={code} {out.strip()[:200]}")
+                check(f"(r) {mode}: sem traceback e nomeia common/_vendor/yaml/zz_link.py",
+                      "Traceback" not in out and "common/_vendor/yaml/zz_link.py" in out,
+                      out.strip()[-300:])
+            check(f"(r) link {kind}: nada foi tocado", snapshot(tmp) == before)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+            shutil.rmtree(outside, ignore_errors=True)
+
+
 def main():
     test_real_tree()
     test_byte_changed()
@@ -381,6 +462,9 @@ def main():
     test_nested_subfolder()
     test_removido_line()
     test_directory_named_like_a_file()
+    test_stray_links_in_copy()
+    test_dir_link_where_file_expected()
+    test_broken_link_in_source()
     print()
     if FAILURES:
         print(f"{len(FAILURES)} falha(s):")
