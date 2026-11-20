@@ -1,0 +1,142 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/decisoes-de-todas-as-filas.md (11 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-20
+
+schema_version: 2
+mode: single-track
+queue: decisoes-de-todas-as-filas
+source: docs/spec/decisoes-de-todas-as-filas.md (11 critérios de sucesso; ordem
+  herdada do texto)
+items:
+- id: CS-1
+  title: '`cepa plan waiting` lista, agrupados por fila, os itens que esperam o
+    dono em todas as filas, cada um com id, motivo e pergunta'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    de teste com a fila `a` (item `a1` `blocked` com `owner_question` "Rodo X à
+    mão?") e a fila `b` (item `b1` `done` com `human_pending` "Rotacionar o segredo"),
+    `cepa plan waiting` sai com 0 e a saída traz a seção `a` antes de `b`, com `a1`,
+    o motivo "item travado" e "Rodo X à mão?", e `b1`, o motivo "tarefa que sobrou
+    em item concluído" e "Rotacionar o segredo"; hoje sai com 2 porque o subcomando
+    `waiting` não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: '`cepa plan waiting` mostra, numa seção à parte, os runs que esperam o
+    dono, cada um com o comando que o resolve'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com um
+    registro de run da fila `a` esperando aterrissar (o mesmo que faz `cepa until
+    pending` listar `a/<run>`), `cepa plan waiting` imprime uma seção de runs com
+    `a/<run>` e `cepa-until land a/<run>`; hoje o subcomando não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: Rotas já respondidas "não" aparecem só contadas por fila, com a data e
+    o comando para revisitar
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com o
+    item `a1` cuja evidência traz uma resposta "não" do dono em 2026-11-18, `cepa
+    plan waiting` não lista `a1` como linha e imprime "1 que você já respondeu \"não\"
+    (última em 18/11)" junto com `cepa until decide a`; hoje o subcomando não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: Sem nada esperando, `cepa plan waiting` diz isso em uma linha e sai com
+    0; sem nenhuma fila, sai com 2
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    com uma fila só de itens `done` sem rota e nenhum run pendente, `cepa plan waiting`
+    imprime "nada espera você" e sai com 0; num repo sem `.claude/queues/`, sai
+    com 2; hoje sai com 2 nos dois casos porque o subcomando não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: '`cepa plan waiting --json` devolve filas, itens, runs e totais em JSON
+    válido'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: no repo
+    do CS-1, `cepa plan waiting --json` sai com 0 e o JSON tem `filas[0].itens[0].id
+    == "a1"`, `total_itens == 2` e a chave `runs`; hoje o subcomando não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: '`cepa plan ready` avisa quando uma fila fechada tem tarefa sobrando em
+    item concluído'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com a
+    fila `p` cujos itens estão todos `done`, dois deles com `human_pending` aberto,
+    `cepa plan ready` imprime "fila fechada, 2 tarefas esperam você (cepa until
+    decide p)" e não imprime "tudo concluído ou descartado" para `p`; hoje imprime
+    "fila fechada: tudo concluído ou descartado".'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: Num terminal, `cepa until decide --all` faz as perguntas de todas as filas
+    num painel único e grava cada resposta na fila do item
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com a
+    fila `a` tendo `a1` com rota aberta e a fila `b` tendo `b1` com rota aberta,
+    `cepa until decide --all` num pseudo-terminal mostra um painel com as seções
+    `a` e `b` numeradas 1 e 2; respondendo `y` às duas, `a1` e `b1` ficam com `human_pending:
+    null` nos respectivos `queue.yaml` e o último commit toca os dois arquivos;
+    hoje o comando sai com 2 recusando a fila `''--all''`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-8
+  title: '`cepa until decide` sem argumento faz o mesmo que `--all`'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: no repo
+    do CS-7, `cepa until decide` num pseudo-terminal mostra o mesmo painel com as
+    seções `a` e `b`; hoje sai com 2 por falta do argumento obrigatório.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-9
+  title: Na decisão em lote, rotas já respondidas "não" não são perguntadas e uma
+    fila com run vivo fica fora com aviso
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com `a1`
+    já respondido "não" em 2026-11-18, a fila `c` com um run vivo (`*.estado.json`
+    `rodando`, pid vivo) e `b1` com rota aberta, `cepa until decide --all` num pseudo-terminal
+    pergunta só `b1`, imprime a linha das negadas de `a` com `cepa until decide
+    a` e uma linha nomeando a fila `c` e o run dela; hoje o comando é recusado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-10
+  title: Fora de um terminal, `cepa until decide --all` imprime as perguntas pendentes
+    de todas as filas como texto e não commita nada
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: no repo
+    do CS-7 com stdin que não é TTY, `cepa until decide --all` sai com 0, imprime
+    as perguntas de `a1` e `b1` e o `git log` não ganha commit; hoje o comando é
+    recusado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-11
+  title: Sem nada esperando, `cepa until decide --all` diz isso em uma linha e sai
+    com 0
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    cujas filas não têm rota aberta, `cepa until decide --all` imprime "nada espera
+    você" e sai com 0 sem commitar; hoje o comando é recusado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
