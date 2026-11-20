@@ -26,16 +26,26 @@ items:
     grava no evento `largada` do registro a escolha igual ao padrão do agente com
     `fonte` "dono"; digitar `w` e uma linha grava essa linha. Hoje a tela mostra
     `[s]`, `[t]` e `s/n/t`, e `w` cai em opção inválida.'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  claimed_by:
-    session_id: 8a8b0df8-d793-415c-91bd-2573086cdf00
-    pid: 11678
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-until-2026-11-20-1544
-    branch: until/2026-11-20-1544
-    started_at: '2026-11-20T18:50:27+00:00'
+  evidence: 'Commits 61e3db5 (ask_preferences in common/bin/cepa-until: note, chips,
+    plain menu line and prompts show y/n/w; y/yes record the default with fonte
+    dono, w opens the free line, invalid message says ''type w first''; tests adjusted
+    in test_cepa_until_preference_keys/launch_measure/decide) and 6b09f08 (test
+    asserts the opening note names y and w, RED when reverted; docs/proof/CS-1.yaml
+    PROVEN at 61e3db5 with 7 perturbations all RED; .claude/acceptance/CS-1.yaml
+    COMPLETE). pair-reviewer OK-WITH-NOTES (notes for CS-2: Panel docstring line
+    3619 still cites [t]). Ran green: test_cepa_until_preference_keys, preference_panel,
+    launch_measure, decide. Full suite delegated to the supervisor. Left out by
+    design: s/t/sim still map silently to y/w (CS-3), route panel (CS-2), [y/N]
+    confirmations (CS-4). Code is on the overnight branch until/2026-11-20-1544.'
+  head_commit: 6b09f08fa5dce94869befa4183e1dc3ae381ede5
+  decisions:
+  - texto: Na tela das escolhas da largada, as teclas antigas s e t continuam funcionando
+      em silêncio até o próximo item da fila (CS-3), que as transforma em erro com
+      aviso da tecla nova
+    commit: 61e3db5db31617a94ef5c343fb3fc13e34ef1206
 - id: CS-2
   title: o painel das rotas mostra e aceita `y` e `w`
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -46,9 +56,28 @@ items:
     `[t]`, `s = ` nem `t = `. Digitar `y` e Enter devolve o item à fila com o texto
     "sim: ..." no `evidence`; digitar `w`, uma linha e `y` devolve o item com essa
     linha. Hoje o painel mostra `[s] yes` e `[t]`, e `w` cai em opção inválida.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-20-1544: 86c7df7 (cepa-until decide panel:
+    chips, legend, recommended mark, valid set, ''type w first'', w/y branches;
+    new tests/test_cepa_until_decide_keys.py; screen anchors updated in 12 existing
+    test files) and the gate-artifact commit at HEAD. pair-reviewer APPROVE. completion-auditor
+    COMPLETE (.claude/acceptance/CS-2.yaml). proof-reviewer PROVEN (docs/proof/CS-2.yaml,
+    10 perturbations all RED; one survivor: the alias dict sim/yes/s/t is not guarded
+    by any CS-2 check, CS-3 scope). RED before the change: 15 checks of the new
+    file failed. Tests run: the new file plus decide, preference_keys, screen_english,
+    legend_per_key, all, clean_tree, queue_ready_and_decide_queue, launch_measure,
+    resume_on_answer, unclear_key/fallback/rewrite, route_kind_label, auto_land,
+    all green; full build delegated to the supervisor. Left out on purpose: s/sim/t
+    errors (CS-3) and is_yes (CS-4). Both gate files overwrote the CS-2 files of
+    the pyyaml queue, as CS-1 did.'
+  head_commit: 2a4289fc3eea0b5b3940e03d3eb03b6ba6a617cd
+  decisions:
+  - texto: No painel das rotas, s, sim e t continuam aceitos em silêncio (viram
+      y e w) até o CS-3 transformá-los em erro, igual ao que o CS-1 fez na tela
+      da largada
+    commit: 86c7df73cfc173330075975f18c2b2a5ad48cc2a
 - id: CS-3
   title: a tecla antiga recebe uma linha com a tecla nova e não grava nada
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -59,9 +88,16 @@ items:
     com "type w first". O mesmo vale para `s`, `t` e `sim` na tela das escolhas
     da leitura prévia, onde a preferência fica com `fonte` "padrao". Hoje `s` e
     `sim` devolvem o item à fila e `t` abre a linha de resposta.'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  claimed_by:
+    session_id: 0dce0369-0367-4fe4-8e60-488cf685f687
+    pid: 19248
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-until-2026-11-20-1544
+    branch: until/2026-11-20-1544
+    started_at: '2026-11-20T21:11:31+00:00'
 - id: CS-4
   title: nas confirmações `[y/N]`, `s` e `sim` contam como no
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
