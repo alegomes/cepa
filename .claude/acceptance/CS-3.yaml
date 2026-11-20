@@ -1,18 +1,19 @@
 key: CS-3
+queue: teclas-em-ingles
 status: complete
 criteria:
   - id: AC1
-    text: "os hooks leem o YAML de verdade quando o python3 não tem PyYAML: com python3 real sem bibliotecas (-S), a leitura do board-flow.yaml feita por acceptance-gate.py, merge-truth-gate.py e _jiramut.py devolve o conteúdo do arquivo de exemplo, e proof-verdict-guard.py lê o veredito de uma prova de exemplo. Antes, os três primeiros devolviam vazio e o quarto levantava erro de import."
-    altitude: event
-    surface: "hook executado como `python3 <hook>` (shim -S) com JSON de evento no stdin: acceptance-gate (transition 31), merge-truth-gate (transition 51), build-hex/proof-verdict-guard (Write de proof). _jiramut é módulo sem entrada de evento: nível função."
-    test: "tests/test_cepa_runs_without_pyyaml.py cs3() (3 casos de evento + 6 de função: _jiramut.logical_status, _autonomy._read_yaml, ui-proof-verdict-guard.parse_with_yaml, expertise-append._HAVE_YAML, reflection-gate.load, jira-create-fields-gate._load_rules)"
-    layer: event
+    text: "the old key gets a line naming the new key and records nothing (cli): in a pseudo-terminal, typing `s` in the menu of `cepa-until decide <fila>` shows a line with 's is now y', queue.yaml does not change and the menu asks again; `t` shows 't is now w' the same way; `sim` shows the invalid-option message with 'type w first'. The same for s, t and sim on the pre-read choices screen (launch preference screen), where the preference stays with fonte 'padrao'."
+    altitude: cli
+    surface: "common/bin/cepa-until decide (real process in a pty, on_tty with scripted inputs s, t, sim, q) and the launch preference screen (ask_preferences, pty via _pref_launch with inputs s, t, sim, empty)"
+    test: "tests/test_cepa_until_decide_keys.py::test_cs3_old_keys_get_a_line_naming_the_new_key_and_record_nothing; tests/test_cepa_until_preference_keys.py::test_cs3_old_keys_get_a_line_naming_the_new_key_and_record_nothing (pty) and test_cs3_in_process_old_keys_record_nothing_on_both_screens (panel and plain)"
+    layer: cli-pty
     evidence: verified
-    run: "python3 tests/test_cepa_runs_without_pyyaml.py -> 'ok' em todos os 12 casos CS-3 (3 de evento, 6 de função, 3 de isolamento), 0 falhas, linha final '✓ cepa runs without PyYAML'. Rodei eu mesmo, em primeiro plano. N > 0 (12 linhas 'ok' CS-3)."
-    status: complete
-    notes: >
-      (a) _jiramut: aceito em nível função. Não tem entrada de evento; o caso chama logical_status por um python3 -S e lê status_map do board-flow.yaml, o que exercita a linha _vendor do próprio módulo. Os eventos de acceptance-gate e merge-truth-gate rodam numa cópia com a linha _vendor do _jiramut removida (o teste falha alto se a linha sumir), então cada hook só passa por causa da sua linha própria. Nível mais alto que existe para esse arquivo.
-      (b) proof-verdict-guard: o caso usa um nível fora do conjunto fechado (uniq_bogus_level) com verdict: proven; só o parse YAML real vê nome de nível. Conferi por mutação: o mesmo hook sem a linha _vendor, sob python3 -S, sai 0 (fallback de linha deixa passar); com a linha, sai 2 e a mensagem cita uniq_bogus_level. Logo o veredito/níveis vêm do parse real, não do fallback.
-      Os seis casos de função (_autonomy, ui-proof-verdict-guard, expertise-append, reflection-gate, jira-create-fields-gate, _jiramut) vão além do critério declarado (quatro hooks); a justificativa do implementador (fallback dá o mesmo desfecho de evento com ou sem YAML) é coerente.
-      Suíte: 738a16b alterou apenas tests/test_cepa_runs_without_pyyaml.py (+6 linhas, isolamento de telemetria); re-rodei tests/test_isolated_telemetry.py (verde). Os 215 arquivos rodaram em 50b4a6b com um vermelho, que era o próprio teste novo; o delta posterior é só teste, então reexecutar a suíte inteira não é necessário.
-    gap: ""
+    run: "python3 tests/test_cepa_until_decide_keys.py -> six 'ok  cs3 ...' lines (s line, t line, sim 'type w first', menu asked again, queue bytes unchanged, no answer line opened), '✓ tudo verde'. python3 tests/test_cepa_until_preference_keys.py -> 6 pty cs3 ok lines (incl. fonte padrao, escolha DEFAULT) plus 6 in-process cs3 ok lines (panel and plain), '✓ tudo verde'"
+    readings:
+      code: "Diff of common/bin/cepa-until: OLD_KEY_NOW map; decide() and ask_preferences() now `continue` on s/t after showing the line, and the old silent s/sim/t to y/w mapping was removed, so `sim` falls to the invalid-option path."
+      queue_unchanged: "decide test compares plan_of(root).read_bytes() before and after the pty session; byte-equal."
+      menu_asks_again: "In decide, on_tty consumes each anchor it answers and rc 0 with no 'no answer within' shows the prompt reappeared after each old key; preference pty test counts MENU >= 4."
+      old_behavior: "The spec's 'before' behavior (s and sim returned the item, t opened the answer line) is the removed mapping; tests assert 'Your answer' never appears."
+      neighbors: "Neighbor tests were edited in the same commit to stop using s/t; not re-run by the auditor (the supervisor runs the full suite)."
+gap: null
