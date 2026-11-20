@@ -125,3 +125,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: ready-cabecalho-zero-itens-com-pendente
+  title: O cabeçalho do `cepa plan ready` diz "0 itens" com item pendente na fila,
+    e o dono lê "nada pendente
+  why: 'Origem: feedback fb-20261120-5 (2026-11-20); BACKLOG.md § O cabeçalho do
+    `cepa plan ready` diz "0 itens" com item pendente na fila, e o dono lê "nada
+    pendente" (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
