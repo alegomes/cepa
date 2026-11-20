@@ -91,22 +91,23 @@ items:
   status: done
   blocked_by: []
   human_pending: null
-  evidence: 'commits 3cfbb7e (change) and d86287a (gate files) on until/2026-11-20-1544.
-    pair-reviewer: OK-WITH-NOTES, no fix required. completion-auditor: COMPLETE
-    (.claude/acceptance/CS-3.yaml). proof-reviewer: PROVEN (docs/proof/CS-3.yaml,
-    6 perturbations red, cs3 tests red against cepa-until of 2a4289f). Tests run
-    here: test_cepa_until_decide_keys.py, test_cepa_until_preference_keys.py, test_cepa_until_decide.py,
-    test_cepa_until_all.py, test_cepa_until_clean_tree.py, test_cepa_queue_ready_and_decide_queue.py,
-    test_cepa_until_resume_on_answer.py, all green; full build left to the supervisor.
-    Left out: the [y/N] confirmation prompts still accept s/sim through is_yes (not
-    the two menus this item names).'
-  head_commit: d86287a2d78c9a5eb2fa0930f13431dc4c959866
+  evidence: 'Retry after red build (return 1). Cherry-picked side-branch commits
+    3cfbb7e->46c54bf (cepa-until: old keys s/t print a line naming y/w, record nothing;
+    ''sim'' invalid with ''type w first'') and d86287a->72113f6 (docs/proof/CS-3.yaml
+    PROVEN at 3cfbb7e, .claude/acceptance/CS-3.yaml COMPLETE). Cause of red: tests/test_cepa_plan_answer_no_work_warning.py,
+    test_cepa_until_decide_created_items.py and test_cepa_until_unclear_rewrite.py
+    still answered the decide menu with ''s''; fixed in 2e2e4f4 by typing ''y''
+    (test inputs only, no behavior change, so proof and acceptance from the first
+    attempt still cover the code, which is byte-identical). Ran green: those 3 plus
+    decide_keys, preference_keys, decide, resume_on_answer, queue_ready_and_decide_queue.
+    Full suite delegated to the supervisor. Code is on the overnight branch until/2026-11-20-1544.'
   decisions:
   - texto: 'A linha mostrada para a tecla antiga traz o significado entre parênteses:
       ''s is now y (yes)'' e ''t is now w (you write the answer)''. As perguntas
       de confirmação [y/N] continuam aceitando s e sim, porque o item cobre só os
       dois menus.'
     commit: 3cfbb7e8c64d3cc3de51d792d030de4fc51786a0
+  head_commit: 2e2e4f410952111b46500b203df84c53197fc40e
 - id: CS-4
   title: nas confirmações `[y/N]`, `s` e `sim` contam como no
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
