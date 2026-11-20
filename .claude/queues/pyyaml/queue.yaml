@@ -190,7 +190,7 @@ items:
   title: Os outros treze arquivos têm teste de que a cópia do Cepa vence outro PyYAML
   why: 'criado pela resposta do dono a CS-6 (ainda não priorizado: entrou no fim
     da fila)'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
   evidence: 'Criado em 2026-11-20 pela resposta do dono ao item CS-6. Pergunta:
@@ -199,3 +199,10 @@ items:
     nos outros treze arquivos que a cópia do Cepa vence outro PyYAML? Recomendo
     sim: custo baixo.'
   sem_epic: true
+  claimed_by:
+    session_id: 67794533-80e9-435c-8d3d-d9eeb24e9432
+    pid: 49101
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-until-2026-11-20-1609
+    branch: until/2026-11-20-1609
+    started_at: '2026-11-20T19:09:51+00:00'

@@ -26,9 +26,16 @@ items:
     grava no evento `largada` do registro a escolha igual ao padrão do agente com
     `fonte` "dono"; digitar `w` e uma linha grava essa linha. Hoje a tela mostra
     `[s]`, `[t]` e `s/n/t`, e `w` cai em opção inválida.'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  claimed_by:
+    session_id: 8a8b0df8-d793-415c-91bd-2573086cdf00
+    pid: 11678
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-until-2026-11-20-1544
+    branch: until/2026-11-20-1544
+    started_at: '2026-11-20T18:50:27+00:00'
 - id: CS-2
   title: o painel das rotas mostra e aceita `y` e `w`
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
