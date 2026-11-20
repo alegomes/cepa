@@ -127,6 +127,18 @@ As filas reusam ids (`CS-1`, `CS-3`), e o nome da branch lateral (`until/<run>-v
 
 Casar a branch com o item pelo run, não pelo id. O run é o `<run>` do nome da branch, e o `.jsonl` de cada run fica na pasta da própria fila. Uma branch só pertence a uma fila se `.claude/queues/<fila>/until/<run>.jsonl` existe. Outra opção é pôr o nome da fila no nome da branch lateral. **Lar:** `common/bin/cepa-until` (`clean_side_branches`) e `common/bin/cepa-plan` (`code_location`).
 
+### Episódio de 2026-11-20 (o caso previsto aconteceu)
+
+O run `2026-11-20-1609` da fila `pyyaml` apagou na largada três branches laterais de outras filas: `until/2026-11-14-0953-vermelho-CS-6` (`campo-de-resposta`), `until/2026-11-14-0956-vermelho-CS-6` (`perguntas-da-largada-legiveis`) e `until/2026-11-18-1731-vermelho-CS-1` (`resposta-do-decide`). Nada se perdeu porque os três itens de origem estão `done`, o código já está na `main` e o patch ficou em `.claude/queues/pyyaml/until/2026-11-20-1609.laterais/` (a pasta da fila errada, como o texto acima previa).
+
+> cepa until pyyaml apagou 3 branches laterais de OUTRAS filas (...) porque clean_side_branches casa só o id do item (CS-6, CS-1) com o status da fila atual. Desta vez sem perda (...). Com outro id repetido, apagaria a branch de um item ainda aberto de outra fila.
+>
+> `fb-20261120-2`, 2026-11-20 · cepa · main · discovery · `cepa-until clean_side_branches`
+
+> O cepa-until apagou três branches laterais (branches onde ele guarda o código de um item que deu vermelho) que pertenciam a outras filas. Registre um feedback sobre isso. Dessa vez, nada se perdeu, mas poderia ter se perdido.
+>
+> `fb-20261120-3`, 2026-11-20 · cepa · main · discovery · `cepa-until clean_side_branches`
+
 ---
 
 ## `cepa-until land` refaz a checagem de conflito antes do merge
@@ -4675,6 +4687,15 @@ run", como o bullet novo do `drain-plan` manda; o lead sem essa frase não foi m
 ainda não existe é a contagem num run real do `cepa-until` de um repo `build-hex`: o próximo
 run diz, pelo número de `SendMessage` do orquestrador a leads (zero esperado).
 
+
+### Episódio de 2026-11-10: a sessão interativa também para
+
+A correção de 2026-10-19 cobriu o `claude -p` do `cepa-until`. Na sessão interativa do C1-18 (wego-faturamento-backend) o `engineering-lead` delegou qa e dev em segundo plano e encerrou o turno esperando o aviso de término. O aviso chegou na sessão principal, não no lead, e o lead ficou parado até a sessão principal retomá-lo com `SendMessage`. Foram 3 paradas no mesmo dia. O lead não tem `Monitor`, e o `no-busy-wait` barra o laço de espera.
+
+> engineering-lead delega qa/dev em segundo plano e encerra o turno esperando o aviso de término, mas o aviso do worker chega na sessão principal, não no lead; o lead fica parado até a sessão principal retomá-lo com SendMessage (3 paradas no C1-18 em 2026-11-10). O lead também não tem Monitor e o no-busy-wait bloqueia laço de espera
+>
+> `fb-20261110-5`, 2026-11-10 · wego-faturamento-backend · session/C1-18 · construction · `build-hex:engineering-lead`
+
 ---
 
 ## `planning-lead` do `build-hex` chama os workers sem o prefixo do plugin, e as três chamadas falham
@@ -4897,6 +4918,10 @@ O `answer`/`responde` recusa quem não tem stdin em terminal (`common/bin/cepa-p
 > O dono rodou 'cepa-plan responde WEGO WEGO-2351 ...' pelo prefixo '!' do Claude Code e o guarda de TTY (sys.stdin.isatty) recusou com a mesma mensagem dada ao agente: o '!' nao anexa stdin a um terminal. O unico caminho que o guarda aceita e um terminal fora do Claude Code; o agente nao tem como distinguir o dono digitando '!' de si mesmo. Ideia: aceitar uma variavel que o '!' do Claude Code exporta (ou um --eu-sou-o-dono interativo que pede confirmacao por outro canal), ou documentar na mensagem de recusa que o '!' do Claude Code nao conta como terminal.
 >
 > `fb-20261028-1`, 2026-10-28 · wego-acessos-backend · main · construcao · cepa-plan
+
+> se você não é capaz de registrar as respostas, por que insiste em me perguntar?
+>
+> `fb-20261109-3`, 2026-11-09 · wego-digitacao-backend · feat/c1-17-leitura-lote-servico-interno · construction · `cepa-plan answer`
 
 ## A dispensa de cobertura aceita pelo dono não é lida pelo esquema de prova e volta como NEEDS-HUMAN
 
@@ -5212,3 +5237,183 @@ Cada hook tem um identificador (`pre:bash:commit-quality`) num arquivo ao lado d
 ### Esboço
 
 (1) Identificador por hook, derivado do nome do arquivo (`gate-advance`, `no-busy-wait`). A telemetria hoje grava o nome do evento (`busy_wait_block`), não o do hook, então o evento passa a levar também o identificador. (2) Um helper único consultado no início de cada hook: `CEPA_DISABLED_HOOKS=id1,id2` desliga pela lista, `CEPA_HOOK_PROFILE` escolhe o conjunto. (3) Lista fechada de hooks que nenhum interruptor desliga (os que protegem contra perda: `worktree-remove-guard`, `worktree-guard`, `jira-write-lock`). (4) Todo desligamento grava um evento de telemetria, para o scorecard não comparar sessões com conjuntos diferentes sem saber. Aceite: `CEPA_DISABLED_HOOKS=no-busy-wait` faz o hook sair com 0 sem avaliar, o evento aparece em `cepa-metrics`, e a mesma variável com `worktree-remove-guard` é ignorada com aviso.
+
+---
+
+## `classify_needs_human.py` casa frase de comentário e ignora o motivo que o artefato de prova já grava
+
+**Status:** pendente · **Lar provável:** board-flow (`board-flow/bin/classify_needs_human.py`, função `classify`) · **Origem:** feedback `fb-20261106-2`, 2026-11-06
+
+### Problema
+
+O classificador monta um texto único com as notas dos níveis e procura frases nele. Em 12 cards do Review do wego-acessos-backend, 6 saíram como `nao-rodou` ou `sem-motivo` sem a prova ter falhado. A frase "commit-base não resolvido" casou com o comentário "`.claude/cards/<KEY>.yaml` nao existe" ao lado de um `base_commit` derivado. A frase "trava do próprio harness" casou com um nível SKIPPED por `bash-path-lock` numa prova que rodou. Um artefato `verdict: proven` com `done_transition_held` virou `sem-motivo`. Os artefatos já trazem o motivo em campos próprios (`motivo_needs_human`, `needs_human_motivo`, `routing_reason`), e hoje só o `routing_reason` entra, e entra como texto solto.
+
+### Palavras do dono
+
+> classify_needs_human.py classificou 6 de 12 cards do Review do wego-acessos-backend como nao-rodou ou sem-motivo sem a prova ter falhado: 'commit-base não resolvido' casa com o comentário '.claude/cards/<KEY>.yaml nao existe' ao lado de um base_commit derivado (2357, 2368, 2369); 'trava do próprio harness' casa com um nível SKIPPED por bash-path-lock em prova que rodou (2044, 2416); artefato verdict=proven com done_transition_held vira sem-motivo (2355). Os artefatos têm motivo_needs_human/needs_human_motivo/routing_reason que o classificador ignora.
+>
+> `fb-20261106-2`, 2026-11-06 · wego-acessos-backend · session/decide · construction
+
+### Esboço
+
+Ler primeiro o campo de motivo do artefato, com os três nomes, e só cair na busca por frase quando ele falta. Teste que falta: os 6 artefatos do episódio como fixtures em `tests/fixtures/needs-human/`, cada um com o motivo esperado.
+
+---
+
+## As sondagens L4 do `proof-reviewer` gravam EMPTY no `last-build.json` do worktree principal
+
+**Status:** pendente · **Lar provável:** common (`common/hooks/capture-build-result.py`, escolha do `state_path`) e build-hex (`build-hex/agents/proof-reviewer.md`, L4) · **Origem:** feedback `fb-20261106-3`, 2026-11-06
+
+### Problema
+
+O `capture-build-result` já grava fora da árvore quando o build roda em outro diretório (commit `56befb1`, 2026-07-16). Mesmo assim, no `/board-flow:prove-drain` de 2026-11-03 no wego-assinatura-backend, as sondagens adversariais (L4) rodaram Maven numa worktree descartável em `/tmp` e o registro EMPTY de 0 testes caiu no `.claude/last-build.json` do worktree principal. O `acceptance-gate` então barrou o Done do WEGO-1984 até alguém rodar um build real. A forma do comando da L4 escapa da detecção de diretório.
+
+### Palavras do dono
+
+> As sondagens adversariais (L4) do proof-reviewer rodam maven em worktree descartável em /tmp e sobrescrevem .claude/last-build.json do worktree principal com um registro EMPTY de 0 testes. O acceptance-gate então bloqueia a transição para Done do próximo card até alguém rodar um build real. Visto no /board-flow:prove-drain de 2026-11-03 no wego-assinatura-backend: bloqueou o Done do WEGO-1984. Esperado: build de sondagem não grava o registro de último build, ou grava separado.
+>
+> `fb-20261106-3`, 2026-11-06 · wego-assinatura-backend · session/review · construction · `proof-reviewer`
+
+### Esboço
+
+Reproduzir com o comando exato que a L4 usa e fazer o `capture-build-result` resolver o diretório do build por ele. Teste que falta: build com 0 testes numa worktree em `/tmp`, disparado da forma da L4, não muda o `last-build.json` da sessão.
+
+---
+
+## O cursor da intenção só anda quando o agente lembra, e o `cepa-intent close` não fecha o último passo
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-intent`, `close_session`; `/common:wrap-up` passo 0) · **Origem:** feedback `fb-20261109-1`, 2026-11-09
+
+### Problema
+
+O painel Sessão mostrou passo 2 de 4 em andamento havia 2 horas depois de o NEG-1 estar feito, mesclado e publicado e de o wrap-up terminar. O cursor só anda quando o agente roda `cepa-intent --step N`. O hook lembrava a cada prompt e o agente rodou uma vez. No fim, `cepa-intent close` viu o cursor no passo 2 de 4, respondeu "fora do último, nada registrado" e seguiu. O painel afirma um estado falso justamente no fim da sessão.
+
+### Palavras do dono
+
+> Dono, 2026-11-09: 'se estamos no fim, por que este mod não foi atualizado?' O painel Sessão (mod) mostrava passo 2/4, com 'responder as perguntas de dinheiro' em andamento há 2 h, depois de o NEG-1 estar done, mergeado e publicado e de o wrap-up ter terminado. Causa verificada na sessão: o cursor só anda quando o agente roda 'cepa-intent --step N'; o hook lembrava a cada prompt ('Ao concluir o passo, rode cepa-intent --step 3') e o agente rodou só uma vez. O wrap-up também não atualiza: 'cepa-intent close' viu o cursor no passo 2 de 4, respondeu 'fora do último, nada registrado' e seguiu. Efeito: o painel afirma um estado falso justamente no fim da sessão.
+>
+> `fb-20261109-1`, 2026-11-09 · wego-product · session/neg1 · exploration · `cepa-intent`
+
+### Esboço
+
+O wrap-up que termina com merge e push avança o cursor até o último passo (ou pergunta uma vez qual passo ficou de fora). Teste que falta: intenção de 4 passos com cursor no 2, wrap-up completo, cursor termina em 4 e o evento `intent.finished_at_last_step` é gravado.
+
+---
+
+## `gate-advance` aceita build verde de um teste só para liberar commit que deixa outro teste vermelho
+
+**Status:** pendente · **Lar provável:** common (`common/hooks/gate-advance.py`, leitura do `last-build.json`) · **Origem:** feedback `fb-20261109-2`, 2026-11-09
+
+### Problema
+
+No C1-17 do wego-digitacao-backend um agente rodou `verify` só de `OpenApiFechadoParaAnonimoE2ETest` e o verde liberou o commit `08a623f`, com `ContratoDaLeituraPublicadoTest` vermelho. O gate só olha o status do último build, não o que ele cobriu.
+
+### Palavras do dono
+
+> A trava gate-advance aceita build verde de outro escopo: no C1-17 um agente rodou verify so de OpenApiFechadoParaAnonimoE2ETest para liberar o commit 08a623f com ContratoDaLeituraPublicadoTest vermelho. Ela deveria exigir que o build cubra os arquivos alterados.
+>
+> `fb-20261109-2`, 2026-11-09 · wego-digitacao-backend · feat/c1-17-leitura-lote-servico-interno · construction · `gate-advance`
+
+### Esboço
+
+Gravar no `last-build.json` o filtro do build (`-Dtest=`, `-pl`, `-k`) e o gate recusar commit cujos arquivos alterados ficam fora desse filtro, ou exigir build sem filtro para liberar. Teste que falta: build verde com `-Dtest=A` e commit que altera o código coberto por `B` é recusado.
+
+---
+
+## `cepa-plan status` diz que o item está pronto e a pergunta sobre o desbloqueio revela pendências que nunca apareceram
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-plan status`, `queue.yaml`; `/common:epic` e `/common:spec`) · **Origem:** feedback `fb-20261110-1`, 2026-11-10
+
+### Problema
+
+O dono perguntou quais eram os passos para desbloquear o C1-18 e recebeu várias pendências que não estavam em lugar nenhum, com o `cepa plan` dizendo que tudo estava pronto. São dois problemas: decisões que ficaram fora do detalhamento do Epic ou da spec, e um relatório de status em que o dono não pode confiar.
+
+### Palavras do dono
+
+> Perguntei quais eram os passos para desbloquear um item C1-18 e, como resultado, fui apresentado a várias pendências que não haviam sido expostas em momento algum, apesar de o cepa plan dizer que estava tudo pronto. Duas coisas me incomodam aqui: a quantidade de decisões que ficaram de fora do detalhamento do Epic ou da Spec; a insegurança que poder confiar no relatório de status dos itens da fila.
+>
+> `fb-20261110-1`, 2026-11-10 · cepa · session/false-done · exploration · `cepa-plan status / queue.yaml / common:epic`
+
+### Esboço
+
+Investigar o episódio (artefatos em `.claude/rescued/session-false-done/`): de onde vieram as pendências e por que nenhuma virou campo do item. A fila `resposta-do-decide` já fez a resposta do dono virar item; o que falta é o item declarado pronto carregar as pendências que o agente descobre depois. Teste que falta: item com pendência descoberta durante a execução não aparece como pronto em `cepa plan status`.
+
+---
+
+## Dois blocos de decisões numeradas na mesma conversa, sem dizer qual substitui qual
+
+**Status:** pendente · **Lar provável:** common (`common/hooks/report-style-lint.py`, Stop hook; `common/skills/plain-report`) · **Origem:** feedback `fb-20261110-2`, 2026-11-10
+
+### Problema
+
+O Stop hook `report-style-lint` reescreveu o relatório e, no turno seguinte, uma mensagem de outra sessão gerou uma nova lista numerada. O agente não declarou a primeira lista como substituída. O dono respondeu às duas com números que se sobrepõem, e a resposta ficou ambígua.
+
+### Palavras do dono
+
+> Por que você me mandou dois blocos de decisões separados? Isso gera ambiguidade na resposta. Registre o feedback ao Cepa. [contexto do agente: o Stop hook report-style-lint reescreveu o relatório e, no turno seguinte, uma mensagem de outra sessão gerou nova lista numerada; o agente não declarou a primeira lista como substituída, e o dono respondeu às duas com números que se sobrepõem]
+>
+> `fb-20261110-2`, 2026-11-10 · wego-faturamento-backend · session/C1-18 · construction · `report-style-lint.py (Stop hook) + plain-report`
+
+### Esboço
+
+Quando um turno abre uma lista de decisões e a anterior ainda não foi respondida, o relatório diz em uma linha que a lista anterior foi substituída e repete nela o que continua valendo, com numeração que não colide. Teste que falta: transcript com duas listas seguidas sem resposta entre elas faz o lint pedir a linha de substituição.
+
+---
+
+## `cepa plan finish` não deixa corrigir a evidência de um item done que ficou falsa
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-plan`, `finish` e um subcomando novo de anotação) · **Origem:** feedback `fb-20261110-3`, 2026-11-10
+
+### Problema
+
+O C1-17 do wego-digitacao-backend tinha a evidência "sem merge e sem push" depois do merge `eb31cd5`. O `finish` recusa mexer em item done e não existe subcomando para anotar evidência obsoleta. O texto velho fez outro agente afirmar que o C1-17 não estava mesclado.
+
+### Palavras do dono
+
+> cepa plan finish recusa corrigir a evidência de um item done (C1-17 do wego-digitacao-backend dizia 'sem merge e sem push' depois do merge eb31cd5); não há subcomando para anotar evidência obsoleta, e o texto velho induziu outro agente a afirmar que o C1-17 não estava mesclado
+>
+> `fb-20261110-3`, 2026-11-10 · wego-faturamento-backend · session/C1-18 · construction · `cepa plan finish`
+
+### Esboço
+
+Subcomando que acrescenta uma linha datada à evidência de um item done, sem apagar a original (o registro continua só crescendo). Teste que falta: anotar um item done grava a linha nova com data e autor, e `cepa plan show` mostra as duas.
+
+---
+
+## A trava de caminhos aplica as regras do repo da sessão a um arquivo de outro repo
+
+**Status:** pendente · **Lar provável:** build-hex (`build-hex/hooks/path-lock.py` e `bash-path-lock.py`, `project_root` lido do `cwd` do payload) · **Origem:** feedback `fb-20261110-6`, 2026-11-10
+
+### Problema
+
+A sessão foi aberta no wego-faturamento-backend e o worker de adapter escrevia na worktree do wego-digitacao-backend (C1-20). A trava leu as regras do repo da sessão, o worker não conseguiu escrever e um Bash com heredoc foi negado. O `path-lock.py` tira do `cwd` do payload a raiz do projeto, e escrita fora dela deveria passar, então o caminho que barrou ainda precisa ser reproduzido.
+
+### Palavras do dono
+
+> a trava de caminhos leu as regras do repositório onde a sessão foi aberta (wego-faturamento-backend) e não do repositório onde o arquivo era escrito (worktree do wego-digitacao-backend, C1-20); o worker de adapter não conseguiu escrever e um Bash com heredoc foi negado
+>
+> `fb-20261110-6`, 2026-11-10 · wego-faturamento-backend · session/C1-18 · construction · `hook de path-lock (trava de caminhos)`
+
+### Esboço
+
+Resolver a raiz pelo `git rev-parse --show-toplevel` do diretório do arquivo escrito e ler o `build-hex.yaml` desse repo. Teste que falta: sessão no repo A, Write de worker em arquivo do repo B, as regras de B decidem.
+
+---
+
+## `capture-build-result` não reconhece `flutter test` nem `tool/check.sh`
+
+**Status:** pendente · **Lar provável:** common (`common/hooks/capture-build-result.py`, padrões de build) · **Origem:** feedback `fb-20261115-1`, 2026-11-15
+
+### Problema
+
+No herdr-mobile, projeto Flutter, nenhuma rodada verde limpa o STALE do `last-build.json`, porque o hook não tem padrão para `flutter test` nem para `tool/check.sh`. O `gate-advance` fica travado para sempre no repo, e a única saída é `.claude/no-build`, que desliga a trava inteira. O gate também barrou o próprio registro deste feedback porque o texto citava o comando de commit.
+
+### Palavras do dono
+
+> capture-build-result não tem padrão para flutter test nem para tool/check.sh (projeto Flutter): nenhuma rodada verde limpa o STALE do last-build.json, então o gate-advance trava para sempre neste repo; a única saída é .claude/no-build, que desliga a trava inteira. Sugestão: padrão para 'flutter test' (marcadores 'All tests passed!' / 'Some tests failed.') e para check.sh que termina em OK. Detalhe: o gate também barrou este registro de feedback quando o texto citava o comando de gravar no git.
+>
+> `fb-20261115-1`, 2026-11-15 · herdr-mobile · fix/load-flaky-tests · sem modo · `capture-build-result`
+
+### Esboço
+
+Padrão para `flutter test` com os marcadores `All tests passed!` e `Some tests failed.`, e para script de verificação do repo que termina em `OK` declarado no manifesto do projeto. Teste que falta: saída real de `flutter test` verde grava SUCCESS e a vermelha grava FAILURE.
