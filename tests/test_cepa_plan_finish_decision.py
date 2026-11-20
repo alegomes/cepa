@@ -229,8 +229,9 @@ def test_run_summary_lists_the_decision_with_its_commit_and_decide_skips_it():
               str(its["a1"]))
         out = p.stdout
         check("o resumo do fim lista a decisão com o commit",
-              "Decided for you (1)" in out
-              and f"a1: {DECISION} · commit {dec.get('commit', '?')[:10]}" in out,
+              "── Decisions (1)" in out
+              and f"a1  decided {DECISION} · commit {dec.get('commit', '?')[:10]}"
+              in out,
               out[-1500:])
         check("o resumo não lista a escolha cujo commit saiu da branch",
               "escolha fora da branch" not in out, out[-1500:])
@@ -239,7 +240,7 @@ def test_run_summary_lists_the_decision_with_its_commit_and_decide_skips_it():
         check("o resumo não lista a decisão antiga de um item que rodou neste run",
               its["a3"].get("decisions") and "escolha antiga em item relançado"
               not in out, out[-1500:])
-        waiting = out.split("waiting on you", 1)[-1] if "waiting on you" in out else ""
+        waiting = out.split("── Next", 1)[-1] if "── Next" in out else ""
         check("a decisão não vira rota no resumo",
               "- a1" not in waiting and DECISION not in waiting
               and "a1: `done`, waiting on you" not in out, out[-1500:])

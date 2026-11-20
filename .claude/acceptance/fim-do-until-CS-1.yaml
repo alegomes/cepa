@@ -1,0 +1,38 @@
+key: fim-do-until-CS-1
+status: complete
+diff: 29ab80a4163ef677e2f9d543aefe33bfd8f9f69f..f95f7b9e6e09b620e5febb98aa819b7fd2207ab4
+criteria:
+  - id: AC1
+    text: >
+      `--auto-land` makes a clean run (destination branch did not move,
+      last full build green, nothing stuck/waiting) merge by itself at the
+      end, doing what `cepa-until land --yes` does; state ends `aterrissado`.
+    altitude: cli
+    surface: >
+      real `cepa-until` process run against a fake repo with a fake claude,
+      with `--auto-land`; asserts main log, origin push, state, return point.
+    test: tests/test_cepa_until_auto_land.py::test_clean_run_with_auto_land_merges_by_itself
+    layer: cli (subprocess of common/bin/cepa-until)
+    evidence: verified
+    run: >
+      python3 -m pytest tests/test_cepa_until_auto_land.py -q -> "6 passed".
+      Because check() only records failures (does not raise), also ran
+      python3 tests/test_cepa_until_auto_land.py -> exit 0, zero FAIL lines,
+      N ok lines > 0. Negative cases (main moved, stuck item, red build,
+      no flag) also covered by sibling tests.
+    gap: null
+  - id: AC2
+    text: >
+      Run state gains `auto_land` (true/false); an old state without the
+      field is read as false.
+    altitude: cli
+    surface: >
+      state file written by the CLI (auto_land true/false asserted in the
+      state after real runs) and state_auto_land / auto_land reading it.
+    test: >
+      tests/test_cepa_until_auto_land.py::test_without_the_flag_nothing_lands_and_state_says_false,
+      ::test_old_state_without_the_field_reads_as_no
+    layer: cli subprocess (writer) + module-level unit (old-state reader)
+    evidence: verified
+    run: same run as AC1 (6 passed; script run exit 0, no FAIL)
+    gap: null

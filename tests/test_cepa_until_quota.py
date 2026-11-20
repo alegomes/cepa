@@ -126,7 +126,7 @@ def test_hit_the_ceiling_waits_for_the_reset_and_resumes_the_same_item():
               end["motivo"] == "end-of-queue" and end["sem_progresso"] == 1
               and end["esperas_de_cota"] == 1, str(end))
         check("...o relatório lista a espera",
-              "Waits for the 5h quota (1)" in p.stdout, p.stdout[-600:])
+              "5h quota waits (1)" in p.stdout, p.stdout[-600:])
 
 
 def test_reset_outside_the_window_stops_instead_of_waiting():
@@ -305,7 +305,7 @@ def test_pause_that_does_not_fit_the_window_starts_anyway():
               and tight[0]["uso"] == 0.8, str(tight))
         check("...a tela avisou antes e listou no fim",
               "starting anyway" in p.stdout
-              and "Started with the quota tight (1)" in p.stdout,
+              and "quota tight at the start (1," in p.stdout,
               p.stdout[-600:])
         check("...e o a3 fechou", status(plan_of(root))["a3"] == "done")
 

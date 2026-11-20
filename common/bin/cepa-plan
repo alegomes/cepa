@@ -1494,7 +1494,7 @@ def build_batch(items, max_items, reservation_state=reservation_of):
 
     batch, stop = [], {"reason": "end-of-queue", "reason_pt": "fim-da-fila",
                         "item": None, "detail":
-                        "a fila acabou — nenhum item pendente sobrou"}
+                        "the queue is finished: no pending item is left"}
     for it in items:
         if not isinstance(it, dict):
             continue
@@ -1560,8 +1560,8 @@ def build_batch(items, max_items, reservation_state=reservation_of):
 
     if reason_alias(stop["reason"]) == "end-of-queue" and deferred:
         stop["detail"] = (
-            f"a fila acabou — nenhum item executável sobrou, e {len(deferred)} "
-            "ficaram adiados (cada um com o motivo, no relatório)")
+            f"the queue is finished: no runnable item is left, and {len(deferred)} "
+            "were deferred (each with its reason in the report)")
     return batch, stop, warnings, deferred
 
 

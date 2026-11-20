@@ -1,0 +1,44 @@
+schema_version: 2
+card: fim-do-until-CS-5
+verdict: proven
+reviewed_at: 2026-11-19T16:40:00-03:00
+base_commit: b4a4189
+head_commit: 36d6a15db0d4a39b02277ae49b04f3bf644d8e06
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-plan", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: "Python CLI repo, no Quarkus/PIT. The tests run the real scripts as subprocesses (run_until) or load them as modules; only the claude binary is faked (far boundary), never the changed code."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN first at HEAD 36d6a15 (throwaway worktree /tmp/proof-cs5-b): tests/test_cepa_until_screen_english.py rc=0, 25 ok, 0 FAIL; tests/test_cepa_until.py rc=0, 263 ok, 0 FAIL; tests/test_cepa_until_decide.py rc=0, 494 ok, 0 FAIL; run_branch rc=0 116 ok; hook_reinstall rc=0 68 ok; resume_on_answer rc=0 37 ok; test_common_drain_plan.py rc=0 192 ok."
+        - "P1 cepa-plan reverted to base (git checkout b4a4189 -- common/bin/cepa-plan): screen_english RED rc=1 (21 ok, 4 FAIL: 'com adiado: o detalhe em inglês', 'sem adiado: o detalhe em inglês', 'a tela não diz a fila acabou', 'o detalhe de parada está em inglês, com a contagem')."
+        - "P1b same perturbation, tests/test_cepa_until.py (the file that broke the supervisor's build): RED rc=1, 262 ok, exactly 1 FAIL '...e a razão do fim cita os adiados' (the assertion '1 were deferred' of HEAD 36d6a15 line 398 now guards the English deferred detail)."
+        - "P2 cepa-until reverted to base: screen_english RED rc=1 (7 ok; FAIL 'a tela não diz aterrissar', 'no terminal, o título do cartão é merge into `main`', '...diz merge action, não aterrissar'; then AttributeError: no attribute action_label)."
+        - "P3 Panel.land_card header back to 'aterrissar' (self._top('aterrissar')): screen_english RED, FAIL 'no terminal, o título do cartão é merge into `main`'."
+        - "P4 land refusal text back to 'did not propose `aterrissar`': screen_english RED, FAIL '...dizendo que a run não propôs o merge'."
+        - "P5 pending_as_text line back to '- aterrissar:': screen_english RED, FAIL 'a tela não diz aterrissar' and 'pending_as_text mostra merge into e não aterrissar'."
+        - "P6 decide() applied list back to the literal 'aterrissar': tests/test_cepa_until_decide.py RED rc=1 (493 ok, 1 FAIL 'aplicados listam aterrissar e W-1')."
+        - "Not perturbed (sampled out, logged): the --help texts of decide/close-dead and the close-dead plan line; they are covered by their own screen_english tests that were green at HEAD, but no green-to-red was shown for them. test_common_drain_plan.py: the only touched line is a check label rename, no behavior; it stays green under P1 (rc=0, 192 ok) so it is not a guard for the stop detail, which test_cepa_until_screen_english.py and test_cepa_until.py guard."
+    note: "The three short files (run_branch, hook_reinstall, resume_on_answer) were issued in one tool block and may have overlapped in time; all green, each in its own temp repo, so no effect on the result."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in this repo; every changed behavior line (action_label, land_card header, decide applied/for_later, pending_as_text, _main Actions list, land refusal, plan stop details) was reached by a test and turned that test RED when perturbed (P1-P6); help/close-dead strings are asserted by test_help_of_decide_and_close_dead_has_no_portuguese_id and test_close_dead_plan_names_the_merge_action."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff only renames text printed on screen and in help; it parses no input from outside and opens no new input surface."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "base b4a4189 + tests/test_cepa_until_screen_english.py from a5c0d59 (the RED test commit): rc=1, 2 ok, FAIL 'com adiado/sem adiado: o detalhe em inglês', 'a tela não diz aterrissar', 'a tela não diz a fila acabou', 'o detalhe de parada está em inglês, com a contagem', then AttributeError: no attribute action_label. HEAD: rc=0, 25 ok."
+routing_reason: "Declared red test (end of a run with one deferred item shows neither `aterrissar` nor `a fila acabou`) is RED at base and GREEN at HEAD; each changed behavior line turns its covering test RED when reverted, including the assertion '1 were deferred' in tests/test_cepa_until.py that broke the first build. Throwaway worktrees /tmp/proof-cs5-b and /tmp/proof-cs5-base removed; the earlier /tmp/proof-cs5 did not exist."

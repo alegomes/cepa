@@ -189,7 +189,7 @@ def test_nobody_answers_closes_and_the_end_does_not_wait_again():
               out.count("nobody answered") == 1, out[-2000:])
         check("o fim não pergunta de novo (nem a aterrissagem): lista",
               "Land now?" not in out and "waiting on you" in out
-              and "aterrissar" in out, out[-2000:])
+              and "merge into" in out, out[-2000:])
         events = ledger_of(root)
         panel = [e for e in events if e.get("evento") == "painel_antes_de_fechar"]
         check("o registro marca o painel com o item perguntado",

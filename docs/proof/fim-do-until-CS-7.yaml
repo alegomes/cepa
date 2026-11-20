@@ -1,0 +1,43 @@
+schema_version: 2
+card: fim-do-until-CS-7
+verdict: proven
+reviewed_at: 2026-11-19T22:40:00-03:00
+base_commit: 1cca1ea
+head_commit: ea9ced4
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::_cmd_land", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::land_step", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::step_duration", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::land_commits_line", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::rescued_files_block", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::newest_rescued_copy", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "green first at ea9ced4 in detached worktree /tmp/proof-CS-7 (removed): python3 tests/test_cepa_until_land_steps.py -> exit 0, 33 ok, 0 FAIL (real cepa-until subprocess, no doubles)"
+        - "RED (earlier rounds, production code unchanged since 861322e, not re-run): P4, P17, P20, N1, N2, N3 and 18 others"
+        - "RED at ea9ced4 N5: `int(tail) > best_n` -> `int(tail) >= 0` (last listed wins) -> exit 1, FAIL 'listagem em ordem decrescente: ainda vence a .10' (got plano.md.1); previously surviving, now closed"
+        - "RED at ea9ced4 N6: lexicographic `tail > str(best_n)` -> exit 1, FAIL 'a copia de maior numero vence (.10)', ascending and descending listing FAILs too (got plano.md.2)"
+        - "RED at ea9ced4 N4: first numbered sibling wins (`; break`) -> exit 1, 2 FAIL ('a copia de maior numero vence (.10)', 'listagem em ordem crescente', got plano.md.1/.2)"
+        - "test_newest_rescued_copy_takes_the_highest_suffix now patches pathlib.Path.iterdir to list copies ascending and descending, so the result no longer depends on disk order"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool; the `> best_n` comparison is pinned by N4/N5/N6 all RED (python3 tests/test_cepa_until_land_steps.py exit 1 each)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only changes what `land --yes` prints (header, numbered steps, files block, final line); argv parsing and the inputs read are unchanged, and no input-bearing module (api-rest) is touched"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug; covering test at base 1cca1ea (previous round): exit 1, 17 FAIL"
+routing_reason: "N5 (last listed wins), the only survivor of the previous round, is now RED because the test lists the rescued copies in both orders; N4 and N6 stay RED. Every changed behavior was perturbed against the real CLI via subprocess with no doubles. PROVEN."

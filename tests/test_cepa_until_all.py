@@ -1039,11 +1039,13 @@ def test_cs6_decide_all_run_lists_what_every_queue_holds_for_the_owner():
               and run_id is not None, p.stderr[-500:])
         if run_id is None:
             return
+        nxt = p.stdout.split("── Next", 1)[-1]
         check("o fim do run --all lista o que espera o dono, por fila",
-              "waiting on you: 3" in p.stdout
-              and "a/x1" in p.stdout and "Fecho o card da fila a?" in p.stdout
-              and "b/x1" in p.stdout and "Fecho o card da fila b?" in p.stdout,
-              p.stdout[-1500:])
+              "── Next" in p.stdout and "2 owner question(s): a/x1, b/x1" in nxt
+              and "a/x1: Fecho o card da fila a?" in nxt
+              and "b/x1: Fecho o card da fila b?" in nxt
+              and "merge into" in nxt
+              and f"cepa-until decide all/{run_id}" in nxt, p.stdout[-1500:])
         r = _target_command(tmp, root, "decide", f"all/{run_id}")
         out = r.stdout + r.stderr
         check("`decide all/<run>` sai com 0", r.returncode == 0, out[-600:])
@@ -1180,8 +1182,11 @@ def test_cs6_all_run_on_a_terminal_only_lists_at_the_end_and_never_asks():
               rc == 0 and "on_tty: no answer" not in plain, plain[-1500:])
         check("...termina logo, sem esperar o dono (<15 s de espera)",
               took < 40, f"{took:.0f}s")
-        check("...lista a pergunta da fila a",
-              "Fecho o card da fila a?" in plain, plain[-1500:])
+        # CS-6: the end of the run names the owner items in the "Next" panel (ids
+        # and the `decide` command); the question text is `decide`'s to show.
+        check("...lista o item da fila a no painel Next",
+              "Next" in plain and "owner question(s): a/x1" in plain
+              and "Fecho o card da fila a?" in plain, plain[-1500:])
         run_id = _all_run_id(root)
         check("...e manda voltar com `decide all/<run>`",
               run_id is not None and f"cepa-until decide all/{run_id}" in plain,
@@ -1409,6 +1414,21 @@ def test_cs7_launch_panel_without_answer_carries_on_and_says_where_to_answer():
               out[-1500:])
         check("...sem item_start", not any(e.get("evento") == "item_start"
                                            for e in events), str(events))
+
+
+def test_all_launch_on_a_terminal_does_not_ask_the_auto_land_question():
+    """A `--all` run is merged by hand (`not_clean_reason`), so the `--auto-land`
+    pre-authorization is not asked there: a `y` would be recorded and ignored."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _repo(tmp, {"a": [base.item("a1")]})
+        rc, out, events = _launch_all_on_tty(
+            tmp, root, [("Enter means no]:", "y")], wait="3")
+        check("--all no terminal: a pergunta do --auto-land nao aparece",
+              "without asking?" not in out and "pre-authorization" not in out,
+              out[-1500:])
+        check("...e o run segue (item_start)",
+              any(e.get("evento") == "item_start" for e in events),
+              out[-800:] + str(events)[-600:])
 
 
 def test_cs7_launch_panel_skips_a_queue_with_its_own_live_run():

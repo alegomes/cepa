@@ -1,0 +1,42 @@
+schema_version: 2
+card: fim-do-until-CS-1
+verdict: proven
+reviewed_at: 2026-11-19T07:55:00-03:00
+base_commit: 29ab80a4163ef677e2f9d543aefe33bfd8f9f69f
+head_commit: a491265efba032b9b0afab9640ed30e9d7cb7a0a
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until (--auto-land, state_auto_land, last_verify_green, not_clean_reason, auto_land, call in commit_records)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  note: "Python CLI, not Quarkus. External surface = real cepa-until run end-to-end against a temp git repo with a fake `claude` (the fake stands in for the far boundary only; cepa-until itself runs for real). Judged by running tests/test_cepa_until_auto_land.py as a script (exit code + FAIL lines), not pytest."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline at a491265 (detached throwaway worktree): python3 tests/test_cepa_until_auto_land.py -> exit 0, 0 FAIL, 28 ok"
+        - "P1 last_verify_green always True (line 3029 -> return True): exit 1, FAIL 'ultimo build vermelho, tudo entregue: nao esta limpa'"
+        - "P2 `if not last_verify_green(ledger)` removed (line 3072 -> if False): exit 1, FAIL 'ultimo build vermelho, tudo entregue: nao esta limpa' (re-run alone, sequentially)"
+        - "P3 `if waiting:` removed (line 3092 -> if False): exit 1, FAIL 'pergunta pendente com o dono: nao esta limpa'"
+        - "P4 state_auto_land `is True` -> `is not None`: exit 1, FAIL 'auto_land false no estado vale nao' and 'auto_land com valor que nao e true vale nao'"
+        - "P5 auto_land call in commit_records removed (line 7685 -> pass): exit 1, 8 FAIL (commit do item nao esta na main, push nao levou o commit, estado nao termina aterrissado, ...)"
+        - "P6 fast-forward check removed (line 3068 -> if False): exit 1, FAIL 'main andou: a run nao faz o merge' and '...diz que nao houve fast-forward'"
+        - "P7 stuck-item check removed (line 3078 -> if False): exit 1, FAIL '...a linha nomeia o item travado' (the run still did not merge, via the generic 'did not finish' branch; only the named reason was lost, and the test caught that)"
+        - "All 7 perturbations restored with git checkout; worktree removed. Each run executed the 28-assertion file (N>0). Two perturbations (P2, P3) were first launched in parallel in the same worktree by mistake; both were re-run alone in sequence and gave the same RED."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; reachability shown structurally: every one of the 7 changed hunks turned the end-to-end/unit tests RED when broken, so each is exercised at its altitude"
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff adds a boolean CLI flag and reads one boolean field from the run's own state file; no network/HTTP input is parsed and no api-rest module exists. Non-true values of auto_land (false, non-boolean) are covered by tests in the file and by P4."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is not Bug"
+routing_reason: "All four mutants that survived at f95f7b9 (last_verify_green always True, last_verify_green check removed, `if waiting` removed, `is True` -> `is not None`) now go RED at a491265, and the three that were already red (call removed, fast-forward check removed, stuck-item check removed) stay red. Baseline is green with 28 assertions and 0 FAIL. The real cepa-until runs in the tests (no double on the changed code)."

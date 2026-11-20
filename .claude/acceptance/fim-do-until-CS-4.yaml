@@ -1,0 +1,77 @@
+key: fim-do-until-CS-4
+status: complete
+diff: 13a922d..64fc482
+criteria:
+  - id: AC1
+    text: >
+      CS-4 red test: in a pseudo-terminal, a clean run without pre-authorization
+      exits seconds after the report and the output does not contain "Land now?";
+      before, it printed "Land now? [y/N/q]" and waited CEPA_UNTIL_ESPERA_RESPOSTA seconds.
+    altitude: cli
+    surface: >
+      real `cepa-until` process in a pty (`launch_on_tty`), wait set to 1000s,
+      clean run with the launch question answered no (default) and with
+      `--no-auto-land`; ANSI-stripped screen, wall-clock duration, state file,
+      main and origin refs read afterwards.
+    test: >
+      tests/test_cepa_until_auto_land.py::test_end_of_run_on_terminal_never_asks_land_now_and_prints_the_command
+    layer: cli (pty subprocess of common/bin/cepa-until)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_auto_land.py -> exit 0, 129 ok lines, 0 FAIL
+      lines (check() only records, judged by exit code + FAIL count + ok count).
+      6 ok per case x 2 cases: exit 0; ends in under 150s with wait=1000s; screen
+      has no "Land now?"; screen has "to merge into `<branch>`: cepa-until land
+      fila/<run> --yes"; state esperando-dono; main and origin untouched.
+    gap: null
+  - id: AC2
+    text: >
+      "Quando a run nao faz o merge sozinha, o fim imprime o comando e encerra, sem esperar."
+    altitude: cli
+    surface: >
+      real `cepa-until` end screen in a pty: the merge command line on screen
+      when not merged by itself; absent when `--auto-land` merged the run.
+    test: >
+      same test as AC1 (command line on screen, both cases);
+      tests/test_cepa_until_auto_land.py::test_auto_land_clean_run_merges_and_prints_no_merge_command
+    layer: cli (pty and plain subprocess of common/bin/cepa-until)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_auto_land.py -> exit 0, 129 ok, 0 FAIL. The
+      --auto-land test: state aterrissado and no "to merge into" line on screen.
+    gap: null
+  - id: AC3
+    text: "As perguntas dos itens do dono continuam como hoje."
+    altitude: cli
+    surface: >
+      real `cepa-until` in a pty on a queue where item a1 blocks with an owner
+      question; the question still appears at the end, numbered 1/1 (the landing
+      does not count), and the end still does not ask "Land now?".
+    test: >
+      tests/test_cepa_until_auto_land.py::test_end_of_run_with_an_owner_item_still_asks_it_but_not_the_landing;
+      tests/test_cepa_until_decide.py (494 ok, owner-item and decide panels unchanged)
+    layer: cli (pty subprocess of common/bin/cepa-until)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_auto_land.py -> exit 0, 129 ok, 0 FAIL (5 ok
+      in this test). python3 tests/test_cepa_until_decide.py -> exit 0, 494 ok,
+      0 FAIL, final line "tudo verde".
+    gap: null
+  - id: AC4
+    text: >
+      Side effect pinned: `cepa-until decide <queue>/<run>` run by hand keeps
+      offering the landing (the old end-of-run test was moved there, not weakened).
+    altitude: cli
+    surface: >
+      real `cepa-until decide fila/<run>` in a pty: "Land now?" appears and `s`
+      lands the commit on main.
+    test: >
+      tests/test_cepa_until_decide.py::test_decide_on_terminal_asks_to_land_and_lands_with_s;
+      tests/test_cepa_until_auto_land.py::test_decide_by_hand_still_asks_land_now
+    layer: cli (pty subprocess of common/bin/cepa-until)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_decide.py -> exit 0, 494 ok, 0 FAIL;
+      python3 tests/test_cepa_until_auto_land.py -> exit 0, 129 ok, 0 FAIL
+      ("decide à mão: ainda pergunta Land now?" ok).
+    gap: null

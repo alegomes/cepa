@@ -21,6 +21,7 @@ The cases below pin the fix:
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -817,9 +818,12 @@ def test_2_run_state_running_then_waiting_owner_before_the_analysis():
               any(f.get("id") == "a2" and "Keycloak" in (f.get("texto") or "")
                   for f in stays), str(stays))
         check("o terminal imprime a ação numerada",
-              "1. aterrissar" in p.stdout, p.stdout[-900:])
-        check("...e o bloco 'Left with you'",
-              "Left with you" in p.stdout, p.stdout[-900:])
+              "1. merge into `main`" in p.stdout, p.stdout[-900:])
+        check("...e o painel Next, com o merge primeiro e a pergunta do a2 depois",
+              "── Next" in p.stdout
+              and re.search(r"1\. merge into `main`.*\n(.*\n)*?\s*2\. 1 owner "
+                            r"question\(s\): a2", p.stdout.split("── Next")[-1]),
+              p.stdout[-900:])
         check("o resumo não sugere o /common:worktree-merge",
               "worktree-merge" not in p.stdout, p.stdout[-900:])
 
@@ -832,7 +836,9 @@ def test_2_each_item_appears_once_in_the_summary():
         binv = fake_claude(tmp, WORKS)
         p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", VERIFY],
-                    extra_env={"FAKE_QUEBRA": "a2"})
+                    # The Items row is cut to the terminal width (CS-6); 120 is the
+                    # widest the screen draws, and holds the side branch's name.
+                    extra_env={"FAKE_QUEBRA": "a2", "COLUMNS": "120"})
         end = p.stdout[p.stdout.find("── ended at"):]
         for ident in ("a1", "a2", "a3"):
             check(f"{ident} aparece uma vez na lista de itens do fim",

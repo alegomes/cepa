@@ -115,7 +115,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
     check("régua de abertura com a contagem",
           "── 3 question(s) for you ─" in plain_text, plain_text)
     check("cartão de aterrissar com a recomendação marcada",
-          "┌─ aterrissar ─" in plain_text and "│  ✦ Recommend yes: build verde"
+          "┌─ merge into the clone's branch ─" in plain_text and "│  ✦ Recommend yes: build verde"
           in plain_text, plain_text)
     check("um cartão por item, com i/n e id na régua",
           "┌─ 1/2 · W-1 ─" in plain_text and "┌─ 2/2 · W-2 ─" in plain_text, plain_text)
@@ -162,14 +162,31 @@ def _decide_pure(deferred_ones, analysis, state_dict):
     return screen
 
 
+AUTO_LAND_PROMPT = "Enter means no]:"
+
+
+def answer_auto_land_prompt(fd, seen, text, inputs):
+    """CS-3 of fim-do-until: a launch on a terminal without `--auto-land` asks the
+    pre-authorization before the first item. A test that is not about it keeps the
+    default (Enter, no); one that lists the prompt in `inputs` answers it itself.
+    Returns the new `seen`."""
+    if (not seen and AUTO_LAND_PROMPT in text
+            and not any(AUTO_LAND_PROMPT in t for t, _ in inputs)):
+        os.write(fd, b"\n")
+        return True
+    return seen
+
+
 def on_tty(cmd, cwd, inputs=(), env=None, timeout=120):
     """Runs `cmd` in a pseudo-terminal and answers each question when it
-    appears: `inputs` is a list of (excerpt the screen shows, answer)."""
+    appears: `inputs` is a list of (excerpt the screen shows, answer); an answer of
+    None consumes the excerpt and sends nothing (a question left unanswered)."""
     pid, fd = pty.fork()
     if pid == 0:
         os.chdir(cwd)
         os.execve(cmd[0], cmd, env or dict(os.environ))
     out_text, queue, end = "", list(inputs), time.time() + timeout
+    auto_seen = False
     while time.time() < end:
         r, _, _ = select.select([fd], [], [], 0.5)
         if r:
@@ -180,10 +197,13 @@ def on_tty(cmd, cwd, inputs=(), env=None, timeout=120):
             if not datum:
                 break
             out_text += datum.decode(errors="replace")
+        auto_seen = answer_auto_land_prompt(fd, auto_seen, out_text, inputs)
         while queue and queue[0][0] in out_text:
             trigger, reply = queue.pop(0)
             # Consumes the trigger so the next equal question does not match on it.
             out_text = out_text.replace(trigger, f"<{trigger}>", 1)
+            if reply is None:  # the trigger was seen; the test sends nothing
+                continue
             if isinstance(reply, str):
                 reply = reply.encode()
             os.write(fd, reply + b"\n")
@@ -577,7 +597,7 @@ def test_decide_asks_and_applies_each_answer():
     check("o fecho diz como voltar",
           "cepa-until decide fila/run1" in plain_text, plain_text)
     check("aplicados listam aterrissar e W-1",
-          applied == ["aterrissar", "W-1: W-1 ok"], applied)
+          applied == ["merge into the clone's branch", "W-1: W-1 ok"], applied)
 
 
 def test_decide_s_and_n_answer_the_drafted_question():
@@ -750,11 +770,11 @@ def test_run_without_terminal_lists_the_pending_and_the_command():
         root = build_repo(tmp, [item("a1"), item("a2")])
         binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
         p, _ = run_until(root, binv, plan_of(root), ["--for", "2h"])
-        check("o fim lista o que espera o dono",
-              "waiting on you" in p.stdout, p.stdout[-1500:])
+        nxt = p.stdout.split("── Next")[-1]
+        check("o fim lista o que espera o dono, no painel Next",
+              "── Next" in p.stdout and "1 owner question(s): a1" in nxt, p.stdout[-1500:])
         check("...com a pergunta do item, não a evidência",
-              "Fecho o card como medir depois do go-live?" in p.stdout,
-              p.stdout[-1500:])
+              "a1: Fecho o card como medir depois do go-live?" in nxt, p.stdout[-1500:])
         check("...e o comando para responder",
               "cepa-until decide fila/" in p.stdout, p.stdout[-800:])
 
@@ -841,21 +861,32 @@ def env_do_run(tmp, root, binv):
     return env
 
 
-def test_run_on_terminal_asks_to_land_and_lands_with_s():
-    """AC1: `s` at the end-of-run prompt really lands."""
+def test_decide_on_terminal_asks_to_land_and_lands_with_s():
+    """AC1: `s` at the `decide` prompt really lands. CS-4 of fim-do-until-sem-espera:
+    the END OF THE RUN no longer asks it; `cepa-until decide <fila>/<run>`, by hand,
+    still does."""
     from test_cepa_until_land import with_origin, state
     from test_cepa_until_run_branch import WORKS, VERIFY, git
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
         with_origin(root)
         binv = fake_claude(tmp, WORKS)
+        env = env_do_run(tmp, root, binv)
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--verify", VERIFY, "--no-analysis"], str(root),
-            inputs=[("Land now?", "s")],
-            env=env_do_run(tmp, root, binv), timeout=240)
+            env=env, timeout=240)
         check("o run sai 0", rc == 0, out[-1500:])
-        check("o fim pergunta se aterrissa", "Land now?" in out,
+        check("o fim da run não pergunta se aterrissa", "Land now?" not in out,
+              out[-1500:])
+        run_id = next((root / ".claude/programs/fila/until").glob(
+            "*.estado.json")).name.removesuffix(".estado.json")
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+             "--repo", str(root)], str(root),
+            inputs=[("Land now?", "s")], env=env, timeout=240)
+        check("decide sai 0", rc == 0, out[-1500:])
+        check("decide pergunta se aterrissa", "Land now?" in out,
               out[-1500:])
         log = git(root, "log", "--format=%s", "HEAD").splitlines()
         check("com s, o commit do item chega à main", "a1" in log, str(log))
@@ -981,9 +1012,9 @@ def test_end_with_analysis_asks_with_the_block_wording():
             "evidence='evidência crua longa')\n")
         binv = fake_claude(tmp, body)
         p, _ = run_until(root, binv, plan_of(root), ["--for", "2h", "--com-analise"])
-        end = p.stdout.split("── waiting on you")[-1]
+        end = p.stdout.split("── Next")[-1]
         check("com análise, o fim lista o que espera o dono",
-              "── waiting on you" in p.stdout, p.stdout[-1200:])
+              "── Next" in p.stdout and "1 owner question(s): a1" in end, p.stdout[-1200:])
         check("...com a pergunta redigida pela análise",
               "Movo a medição para o checklist?" in end, end)
 
@@ -1005,8 +1036,8 @@ def test_end_stopped_by_quota_also_asks():
         end = [e for e in ledger_of(root) if e["evento"] == "run_end"][0]
         check("o run parou pela cota", end["motivo"] == "limite-de-uso", str(end))
         check("...e mesmo assim termina perguntando",
-              "── waiting on you" in p.stdout
-              and "Fecho o card?" in p.stdout, p.stdout[-1200:])
+              "── Next" in p.stdout and "a1: Fecho o card?" in p.stdout,
+              p.stdout[-1200:])
 
 
 def test_list_without_terminal_filters_what_is_not_the_owners():
@@ -1020,7 +1051,7 @@ def test_list_without_terminal_filters_what_is_not_the_owners():
          {"id": "W-3", "reason": "depende-de-adiado", "detail": "de W-1"}],
         {}, output=screen.append)
     plain_text = "\n".join(screen)
-    check("sem terminal, lista aterrissar", "aterrissar: leva 3" in plain_text,
+    check("sem terminal, lista aterrissar", "merge into the clone's branch: leva 3" in plain_text,
           plain_text)
     check("...e a rota humana verbatim", "rode o login real" in plain_text, plain_text)
     check("...contando 2, sem reservado nem cascata",
@@ -2690,8 +2721,9 @@ def test_pre_read_cs6_without_answer_the_prompt_carries_the_default_and_the_summ
           str(reqs))
     tail = out[out.find("ended at"):]
     check("cs6 default: the end summary lists the choice",
-          "Choices the pre-read found (1)" in tail
-          and "x1: usar o formato curto (the agent's default" in tail, tail[-1500:])
+          "── Decisions (1)" in tail
+          and "x1  followed usar o formato curto (the agent's default)" in tail,
+          tail[-1500:])
     check("cs6 default: the summary line carries what the choice was about",
           "Há duas formas de mostrar a data." in tail, tail[-1500:])
     start = [e for e in events if e.get("evento") == "item_start" and e.get("id") == "x1"]
@@ -2720,7 +2752,7 @@ def test_pre_read_cs6_answer_typed_in_the_launch_panel_goes_into_the_prompt():
           "the owner's answer at the launch" in reqs.get("x1", ""), str(reqs))
     tail = out[out.find("ended at"):]
     check("cs6 answer: the summary says it was the owner's answer",
-          "x1: mostrar a data por extenso (your answer at the launch)" in tail,
+          "x1  followed mostrar a data por extenso (your answer at the launch)" in tail,
           tail[-1500:])
     start = [e for e in events if e.get("evento") == "item_start" and e.get("id") == "x1"]
     check("cs6 answer: item_start records fonte dono",
@@ -2749,7 +2781,7 @@ def test_pre_read_cs6_preference_without_default_is_no_finding():
     check("cs6 no default: the event says no finding",
           reads and all(r["tipo"] is None for r in reads[0]["itens"]), str(reads))
     check("cs6 no default: the summary has no choices block",
-          "Choices the pre-read found" not in out, out[-800:])
+          "  followed " not in out and "── Decisions" not in out, out[-800:])
 
 
 def test_pre_read_cs6_note_and_command_units():
@@ -2845,6 +2877,7 @@ def on_tty_calls(cmd, cwd, inputs=(), env=None, timeout=120):
         os.chdir(cwd)
         os.execve(cmd[0], cmd, env or dict(os.environ))
     out_text, queue, end = "", list(wrapped), time.time() + timeout
+    auto_seen = False
     while time.time() < end:
         r, _, _ = select.select([fd], [], [], 0.5)
         if r:
@@ -2855,6 +2888,7 @@ def on_tty_calls(cmd, cwd, inputs=(), env=None, timeout=120):
             if not datum:
                 break
             out_text += datum.decode(errors="replace")
+        auto_seen = answer_auto_land_prompt(fd, auto_seen, out_text, inputs)
         while queue and queue[0][0] in out_text:
             trigger, reply = queue.pop(0)
             out_text = out_text.replace(trigger, f"<{trigger}>", 1)

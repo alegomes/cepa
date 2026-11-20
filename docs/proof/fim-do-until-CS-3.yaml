@@ -1,0 +1,48 @@
+schema_version: 2
+card: fim-do-until-CS-3
+verdict: proven
+reviewed_at: 2026-11-19T13:00:00-03:00
+base_commit: 0727c77
+head_commit: 3a670e6
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until (ask_auto_land, --no-auto-land argument, refusal of --auto-land with --no-auto-land, condition + call `if on_terminal and not a.auto_land and not a.no_auto_land: a.auto_land = ask_auto_land(wait=ANSWER_WAIT_SEC)` in _main)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  note: "Python CLI, not Quarkus. External surface = the real cepa-until run in a pseudo-terminal (launch_on_tty) against a temp git repo with a fake `claude` (the fake stands in for the far boundary only). No double replaces ask_auto_land or _main. Re-proof at 3a670e6 of the 6292705 proof (which was UNPROVEN with one survivor). Production diff 6292705..3a670e6 is EMPTY (`git diff 6292705..3a670e6 --stat -- . ':!tests'` printed nothing; only tests/test_cepa_until_auto_land.py and tests/test_cepa_until_decide.py changed), so the previous REDs that are not re-run here carry over. Perturbations ran in a detached throwaway worktree /tmp/proof-cs3b at 3a670e6 (removed at the end), one at a time, file restored after each run (git status clean between runs). NFAIL = new entries in the shared FAILURES list; any NFAIL > 0 (or an exception from a traceback in the child) is RED."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline at 3a670e6: the 6 CS-3 tests of tests/test_cepa_until_auto_land.py plus tests/test_cepa_until_all.py::test_all_launch_on_a_terminal_does_not_ask_the_auto_land_question, unperturbed -> TOTAL FAIL 0, every check printed ok"
+        - "RED  1. FORMER SURVIVOR, except branch returns True (`return False` -> `return True` after the 'no answer' line): test_no_answer_to_the_pre_authorization_means_no NFAIL 6 (nobody answers / EOF / Ctrl-C each: auto_land false and nothing lands both fail); the other 6 tests stay green. The survivor is dead."
+        - "RED  2a. NoAnswer dropped from the except tuple: NFAIL 4 (nobody-answers case: traceback, no 'no answer' line, no item_start, no state)"
+        - "RED  2b. EOFError dropped: NFAIL 4 (EOF case: traceback, same four failures)"
+        - "RED  2c. KeyboardInterrupt dropped: NFAIL 4 (Ctrl-C case: traceback, same four failures)"
+        - "RED  3. ask_auto_land called twice in a row: NFAIL 3 over the 7 tests (test_the_question_comes_once...: 'o texto da pergunta ocorre uma vez so na tela'; test_launch_on_terminal_asks...: y no longer records true and the run does not land, because the second question is left unanswered)"
+        - "RED  4a. call moved to just before ask_preferences (after the queue questions, before the pre-read preference questions): test_the_question_comes_once_after_the_other_launch_questions NFAIL 1 ('a pergunta do auto-land aparece depois da outra'); test_launch_on_terminal_asks... stays green, as it should (no preference question there)"
+        - "RED  4b. call moved to the very start, right after `rows, opened_ids, reading, tally = ...`, before every launch question: same test NFAIL 1 (same check); the order is pinned only by that one test, and it holds"
+        - "RED  5a. wait=None instead of ANSWER_WAIT_SEC: test_no_answer_to_the_pre_authorization_means_no NFAIL 4 (the nobody-answers case never times out, the 2 s CEPA_UNTIL_ESPERA_RESPOSTA is ignored, the run does not reach item_start)"
+        - "RED  5b. wait=10**6: same test NFAIL 4 (same four failures)"
+        - "RED  --no-auto-land argument definition removed (renamed to --zzz-never): test_launch_with_the_flag_or_without_terminal_never_asks and test_auto_land_together_with_no_auto_land_is_refused NFAIL 1 each (unknown flag exits with an error, the pair is no longer refused with the right message). NOTE: renaming to `--no-auto-land-x` first was a false perturbation, NFAIL 0, because argparse accepts the prefix `--no-auto-land` as an abbreviation of it; that is an equivalent mutant, not a survivor, and was replaced by the rename above."
+        - "RED  6a. spot re-check, drop the call (`a.auto_land = ask_auto_land(...)` -> pass): NFAIL 18 over 6 tests (question never appears, y records nothing, no-answer line absent, etc.)"
+        - "RED  6b. spot re-check, drop the `on_terminal` guard: test_launch_with_the_flag_or_without_terminal_never_asks NFAIL 2 ('sem terminal a pergunta nao aparece' and 'com --no-pre-read a pergunta nao aparece'); the new --no-pre-read block also guards it"
+        - "CARRIED OVER from 6292705 (production diff 6292705..3a670e6 empty, tests only added): answer always False RED (NFAIL 4); answer always True RED (NFAIL 8); drop guard `not a.auto_land` RED (NFAIL 4); drop guard `not a.no_auto_land` RED (NFAIL 2); move call after the first item RED (NFAIL 3); non-yes answer reads as yes RED (NFAIL 2); answer inverted RED (NFAIL 6); drop the pair refusal RED (NFAIL 3). The tests that caught them were only added to, never loosened (git diff 6292705..3a670e6 adds 71 lines, removes 3, all in the decide.py `on_tty` signature/None-reply and the new tests)."
+        - "Not run again: the full suite (tests/run-all.sh, belongs to the supervisor) and the other 15 tests of tests/test_cepa_until_auto_land.py, which cover the landing logic of earlier cards and are not changed by this diff. Perturbations 2b/2c/5b were run only against the test that guards them (test_no_answer_to_the_pre_authorization_means_no), named in each line."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool wired; structural reading plus perturbation: the `except (NoAnswer, EOFError, KeyboardInterrupt)` handler, previously unreached, is now driven by the pty test test_no_answer_to_the_pre_authorization_means_no (nobody answers with CEPA_UNTIL_ESPERA_RESPOSTA=2, EOF \\x04, Ctrl-C \\x03) and perturbations 1, 2a, 2b, 2c turn it RED. Every other changed line (guard, call, argument definition, pair refusal) is turned RED by a perturbation above."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff reads one line from the owner's terminal and a command-line flag; no network/HTTP input is parsed and no api-rest module exists. The terminal-input edge cases (no answer, EOF, Ctrl-C, any non-yes text) are covered by the load-bearing tests above."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue type is not Bug"
+routing_reason: "Every perturbation goes RED at 3a670e6, including the one survivor of the previous proof (the no-answer / EOF / Ctrl-C branch returning True), each exception dropped from the tuple separately, the question asked twice, the call moved before the other launch questions, the wait removed or made huge, and the --no-auto-land definition removed. The two items the previous proof left out of the sample are now sampled. The spot re-checks (drop the call, drop the on_terminal guard) stay RED, and the production diff 6292705..3a670e6 is empty, so the earlier REDs carry over. No level is assumed or skipped. PROVEN."

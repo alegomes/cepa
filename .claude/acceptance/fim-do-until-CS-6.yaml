@@ -1,0 +1,90 @@
+key: fim-do-until-CS-6
+status: complete
+diff: 468a9c6..HEAD
+criteria:
+  - id: AC1
+    text: >
+      CS-6 red test: with COLUMNS=100, the end of a run with a stuck item whose reason has 400
+      characters has no line over 100 columns, contains "merge into" exactly once, and contains
+      neither "Actions:", "Left with you" nor "waiting on you".
+    altitude: cli
+    surface: >
+      real `cepa-until` subprocess (run_until, fake claude), queue a1 done + a2 blocked with a
+      400-character reason, COLUMNS=100; ANSI-stripped stdout+stderr from "ended at" on.
+    test: tests/test_cepa_until_final_report.py::test_the_end_of_a_run_with_a_long_reason_fits_the_terminal_and_names_the_merge_once
+    layer: cli (subprocess of common/bin/cepa-until)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_final_report.py -> exit 0, 56 ok lines, 0 FAIL (the 8 ok lines
+      of this test included). RED commit 3cd3861 precedes implementation 399044f (git
+      merge-base --is-ancestor confirmed).
+    gap: null
+  - id: AC2
+    text: >
+      Five-part layout in order: header panel (end time, stop reason, window with progress bar,
+      totals line), Items panel (one line per item, icon, aligned id column, reason cut to the
+      terminal width), Decisions panel (pre-read choices and "decided for you" commits grouped by
+      item, one line each with the commit), Next panel last, one dim line with record/log paths.
+    altitude: cli
+    surface: >
+      real subprocess end screen: panel order, header content (end-of-queue, "window HH:MM → HH:MM"
+      + 24-cell bar, totals line), Items rows aligned and cut with ellipsis while state keeps the
+      full reason, Decisions (4) between Items and Next with id only on the first line of each
+      item and "· commit <sha10>", last line "record, log: {jsonl,log}" within 100 columns.
+    test: >
+      tests/test_cepa_until_final_report.py::test_panels_come_in_order_and_the_paths_line_closes_the_report,
+      test_header_has_the_window_the_totals_and_no_waiting_on_you_wording,
+      test_items_panel_aligns_the_id_column_and_cuts_the_reason_but_not_the_state,
+      test_decisions_are_grouped_by_item_with_the_commit,
+      test_paths_line_is_whole_when_it_fits_and_braced_when_it_does_not,
+      test_a_long_item_id_and_wide_terminal_values_still_fit
+    layer: cli (subprocess of common/bin/cepa-until)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_final_report.py -> exit 0, 56 ok, 0 FAIL.
+    gap: null
+  - id: AC3
+    text: >
+      Next panel, numbered: merge with command and why-not-recommended when the run is not clean,
+      then owner questions with ids and the `decide` command, then plugin reinstall when it applies.
+    altitude: cli
+    surface: >
+      Next panel on the real end screen ("1. merge into `main`: cepa-until land fila/<run> --yes",
+      "not recommended: a2 is stuck"; clean run says "recommended: the run is clean", no owner
+      question; auto-landed run says so with no second merge) and the reinstall row on the end
+      screen of a real run.
+    test: >
+      tests/test_cepa_until_final_report.py::test_next_says_why_the_merge_is_not_recommended_and_only_a_clean_run_recommends,
+      test_auto_landed_run_says_so_in_next_and_names_no_second_merge,
+      test_an_item_already_asked_in_this_run_is_named_but_its_question_is_not_repeated;
+      tests/test_cepa_until_hook_reinstall.py (end screen "N. after the merge, run `bin/install.sh`" under "── Next");
+      module-level for the full ordering: test_next_is_numbered_merge_then_owner_questions_then_reinstall,
+      test_more_than_five_owner_questions_are_counted_not_spelled_out (next_rows, injected state)
+    layer: cli (subprocess for merge/why-not/auto-land/reinstall; module-level next_rows for the three-part order and the five-question cap)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_final_report.py -> exit 0, 56 ok, 0 FAIL;
+      python3 tests/test_cepa_until_hook_reinstall.py -> exit 0, 68 ok, 0 FAIL.
+      Note (not a gap): the merge-then-questions-then-reinstall order together is pinned at
+      next_rows level, not in one subprocess run; each part is pinned on the real screen separately.
+    gap: null
+  - id: AC4
+    text: >
+      Panels use box-drawing borders with title and the existing palette; fall back to plain text
+      without color when stdout is not a terminal or NO_COLOR is set.
+    altitude: cli
+    surface: >
+      subprocess with stdout piped (not a terminal): no "┌", "│" or ANSI, "── Items (2)" titles;
+      CEPA_UNTIL_COR=sempre: "┌─ ended at", "┌─ Items (2)", "┌─ Next", three "└─", "│ ", ANSI in
+      raw output, no line over 100 columns; NO_COLOR=1: plain text.
+    test: >
+      tests/test_cepa_until_final_report.py::test_borders_exist_with_color_always_and_not_with_no_color
+      and test_panels_come_in_order_and_the_paths_line_closes_the_report (piped fallback)
+    layer: cli (subprocess of common/bin/cepa-until)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_final_report.py -> exit 0, 56 ok, 0 FAIL.
+      Note (not a gap): the "is a terminal" branch is exercised through the product's own forcing
+      switch CEPA_UNTIL_COR=sempre (the isatty detection is at common/bin/cepa-until ~l.649), not
+      through a real pty; the piped branch is real.
+    gap: null

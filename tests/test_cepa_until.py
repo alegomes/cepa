@@ -395,7 +395,7 @@ def test_blocked_item_does_not_jam_the_night_behind_it():
         check("o run termina por end-of-queue, não por `blocked-before`",
               end["motivo"] == "end-of-queue", str(end))
         check("...e a razão do fim cita os adiados",
-              "adiado" in (end.get("detalhe") or "").lower(), str(end))
+              "1 were deferred" in (end.get("detalhe") or "").lower(), str(end))
         # Without these two, taking `blocked` out of the progress count went
         # unnoticed: the three items ran the same, but the stuck one began to
         # count as a FAILURE and, on a night with several `blocked` in a row, the
@@ -429,13 +429,13 @@ def test_end_summary_says_why_each_item_got_stuck():
         # question, no longer one more list of the same problem. Rule A4 holds from the
         # list of items up to that block.
         summary = p.stdout[p.stdout.find("Items ("):]
-        summary = summary.split("── waiting on you")[0]
+        summary = summary.split("── Next")[0]
         check("o resumo dos travados existe", "Items (2)" in summary,
               p.stdout[-800:])
         check("o comando no FIM de uma evidence longa chega ao resumo",
               "rodar-par-head.sh" in summary, summary[:900])
         check("...e a evidence longa é cortada, não despejada inteira",
-              "[...]" in summary and summary.count("EXIT=124") < 30, summary[:900])
+              "…" in summary and summary.count("EXIT=124") < 30, summary[:900])
         check("travado sem evidence mostra a rota, uma vez só",
               summary.count("aprove o PR 12 na interface") == 1, summary[:900])
 
