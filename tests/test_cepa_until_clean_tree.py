@@ -1283,7 +1283,7 @@ def test_cs7_decide_commits_the_waiver_the_answer_converted():
         _git_ok(root, "add", "outro.txt")
         before = _git(root, "rev-parse", "HEAD").strip()
         rc, out = dec.on_tty(_decide_cmd(root, f"fila/{run_id}"), str(root), inputs=[
-            ("[w] I write the answer", "s"), ("Anything to add", "")],
+            (("[w] I write the answer", "y")), ("Anything to add", "")],
             env=dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
                      GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t"))
         check("CS-7 decide dispensa: a proposta virou dispensa",

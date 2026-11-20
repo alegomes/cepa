@@ -83,7 +83,7 @@ def test_yes_in_the_panel_resumes_the_same_run():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1"), item("a2")])
         rc, out = run_on_tty(tmp, root, inputs=[
-            ("[y] yes", "s"), ("Anything to add", "")])
+            (("[y] yes", "y")), ("Anything to add", "")])
         check("o run sai 0", rc == 0, out[-2000:])
         a1 = items_of(root)["a1"]
         check("a resposta devolve o item e o mesmo run o fecha",
@@ -123,7 +123,7 @@ def test_switch_off_keeps_the_old_end():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1"), item("a2")])
         rc, out = run_on_tty(tmp, root, extra=["--no-resume-on-answer"], inputs=[
-            ("[y] yes", "s"), ("Anything to add", "")])
+            (("[y] yes", "y")), ("Anything to add", "")])
         check("o run sai 0", rc == 0, out[-2000:])
         kinds = [e.get("evento") for e in ledger_of(root)]
         check("sem retomada com a chave desligada",
@@ -220,7 +220,7 @@ def test_window_under_the_reserve_ends_by_deadline_and_asks_at_the_end():
         # a2 pending: with nothing runnable the launcher exits before the loop.
         root = build_repo(tmp, [stuck, item("a2")])
         rc, out = run_on_tty(tmp, root, extra=["--min-reserve", "3h"], inputs=[
-            ("[y] yes", "s"), ("Anything to add", "")])
+            (("[y] yes", "y")), ("Anything to add", "")])
         check("o run sai 0", rc == 0, out[-2000:])
         events = ledger_of(root)
         end = [e for e in events if e.get("evento") == "run_end"]

@@ -98,6 +98,35 @@ def test_cs2_plain_rendering_uses_y_and_w():
           and any(l.strip().startswith("w = ") for l in text.splitlines()), text)
 
 
+def test_cs3_old_keys_get_a_line_naming_the_new_key_and_record_nothing():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        until = root / ".claude" / "programs" / "fila" / "until"
+        run_id = sorted(until.glob("*.estado.json"))[-1].name.split(".")[0]
+        (until / f"{run_id}.review.md").write_text(REVIEW, encoding="utf-8")
+        before = plan_of(root).read_bytes()
+        rc, out = on_tty([sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+                          "--repo", str(root)], str(root),
+                         inputs=[(ANCHOR, "s"), (ANCHOR, "t"), (ANCHOR, "sim"),
+                                 (ANCHOR, "q")], timeout=90)
+        out = ANSI.sub("", out)
+        check("cs3 s: the line says `s is now y`", "s is now y" in out, out[-1500:])
+        check("cs3 t: the line says `t is now w`", "t is now w" in out, out[-1500:])
+        check("cs3 sim: the invalid-option message says `type w first`",
+              '"sim" is not one of the options' in out and "type w first" in out,
+              out[-1500:])
+        # on_tty consumes each anchor it answers; a prompt left unanswered would
+        # show up as "no answer within", so rc 0 means the menu asked again each time.
+        check("cs3: the menu asked again after each old key",
+              rc == 0 and "no answer within" not in out, (rc, out[-1500:]))
+        check("cs3: the queue did not change", plan_of(root).read_bytes() == before,
+              items_of(root))
+        check("cs3: no answer line was opened by `t`", "Your answer" not in out,
+              out[-1500:])
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

@@ -3381,6 +3381,11 @@ def _yes_no(v):
     return {"sim": "yes", "não": "no", "nao": "no"}.get(r, str(v))
 
 
+# CS-3 of teclas-em-ingles: the Portuguese keys the English menus used to take.
+# Typing one shows this line, records nothing and asks again.
+OLD_KEY_NOW = {"s": "s is now y (yes)", "t": "t is now w (you write the answer)"}
+
+
 def recommended_letter(d):
     """The menu letter that the analysis recommendation points to: `y` or `n`."""
     r = str((d or {}).get("recomendo") or "").strip().lower()
@@ -4169,10 +4174,12 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             while True:
                 raw = str(question(prompt))
                 r = raw.strip().lower()
-                # `s`, `sim` and `t` still map silently to the new keys until
-                # CS-3 of teclas-em-ingles turns them into errors.
-                r = {"sim": "y", "yes": "y", "s": "y", "t": "w",
-                     "não": "n", "nao": "n", "no": "n"}.get(r, r)
+                # CS-3 of teclas-em-ingles: the old keys are not answers. `s` and
+                # `t` get a line naming the new key; `sim` is just invalid.
+                if r in OLD_KEY_NOW:
+                    screen.key_error(OLD_KEY_NOW[r])
+                    continue
+                r = {"yes": "y", "não": "n", "nao": "n", "no": "n"}.get(r, r)
                 if r == "e" and show:
                     screen.evidence(ad.get("evidence"))
                     continue
@@ -4952,8 +4959,10 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
             while True:
                 raw = " ".join(str(question(prompt) or "").split())
                 key = raw.lower()
-                key = {"sim": "y", "yes": "y", "s": "y", "t": "w",
-                       "não": "n", "nao": "n", "no": "n"}.get(key, key)
+                if key in OLD_KEY_NOW:
+                    say(OLD_KEY_NOW[key])
+                    continue
+                key = {"yes": "y", "não": "n", "nao": "n", "no": "n"}.get(key, key)
                 if key == "":
                     break
                 if key == "y":

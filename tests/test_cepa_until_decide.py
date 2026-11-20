@@ -527,7 +527,7 @@ def test_decide_offers_to_keep_stuck():
         {"id": "W-2", "title": "flag", "reason": "human_pending",
          "question": None, "human_pending": "ligue a flag", "evidence": None},
     ]
-    answers = iter(["t", "mantenha", "", "t", "não liguei", ""])
+    answers = iter(["w", "mantenha", "", "w", "não liguei", ""])
     screen, answered, questions = [], [], []
 
     def question_text(p_):
@@ -570,7 +570,7 @@ def test_decide_asks_and_applies_each_answer():
           analysis["itens"]["W-1"]["pergunta"] == "Movo para o checklist?",
           analysis)
     state_dict = {"acoes": [{"id": "aterrissar", "frase": "leva 5 commits"}]}
-    answers = iter(["s", "t", "vira checklist", "s", "", "e", "q"])
+    answers = iter(["s", "w", "vira checklist", "s", "", "e", "q"])
     screen, answered, landed = [], [], []
     applied, after = m.decide(
         Path("/nao/existe"), "fila", "run1", state_dict, deferred_ones, analysis,
@@ -615,7 +615,7 @@ def test_decide_s_and_n_answer_the_drafted_question():
          "question": None, "human_pending": None, "evidence": "sem produção"},
     ]
     analysis = {"itens": {"W-1": {"recomendo": "sim", "porque": "só após merge"}}}
-    answers = iter(["sim", "", "n", "por enquanto não", "s", "ligue a flag"])
+    answers = iter(["y", "", "n", "por enquanto não", "y", "ligue a flag"])
     screen, answered, questions = [], [], []
 
     def question_text(p_):
@@ -700,7 +700,7 @@ def test_decide_shows_context_instruction_and_warns_question_outside_the_rules()
                "recomendo": "sim", "porque": "a rodada só é possível após "
                                              "o merge"},
         "S6": {"pergunta": long_, "recomendo": "sim", "porque": "p"}}}
-    answers = iter(["s", "", "s", ""])
+    answers = iter(["y", "", "y", ""])
     screen, answered = [], []
     m.decide(Path("/nao/existe"), "fila", "run1", {}, deferred_ones, analysis,
              question=lambda _p: next(answers), output=screen.append,
@@ -797,7 +797,7 @@ def test_run_on_terminal_ends_asking_and_applies():
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis",
              "--no-resume-on-answer"], str(root),
-            inputs=[("[w] I write the answer", "t"),
+            inputs=[(("[w] I write the answer", "w")),
                       ("Your answer", "vira item do checklist"),
                       ("Send the item back to the queue", "s")], env=env)
         check("o run sai 0", rc == 0, out[-1500:])
@@ -936,9 +936,9 @@ def test_decidir_as_process_with_and_without_terminal():
         check("...sem mexer na fila",
               items_of(root)["a1"]["status"] == "blocked")
         rc, out = on_tty(cmd, str(root), inputs=[
-            ("[w] I write the answer", "t"), ("Your answer", "vira checklist"),
+            (("[w] I write the answer", "w")), ("Your answer", "vira checklist"),
             ("Send the item back to the queue", "s"),
-            ("[w] I write the answer", "s"), ("Anything to add", "login ok")])
+            (("[w] I write the answer", "y")), ("Anything to add", "login ok")])
         a1, a2 = items_of(root)["a1"], items_of(root)["a2"]
         check("no terminal, decidir aplica o blocked",
               rc == 0 and a1["status"] == "pending"
@@ -1161,7 +1161,7 @@ def test_decidir_s_and_n_on_terminal_reach_the_plan():
                "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), inputs=[
             ("[w] I write the answer", "n"), ("Anything to add", ""),
-            ("[w] I write the answer", "s"), ("Anything to add", "vi ok")])
+            (("[w] I write the answer", "y")), ("Anything to add", "vi ok")])
         a1, a2 = items_of(root)["a1"], items_of(root)["a2"]
         check("n no terminal: o blocked continua blocked",
               rc == 0 and a1["status"] == "blocked", (rc, a1, out[-1200:]))
@@ -1172,7 +1172,7 @@ def test_decidir_s_and_n_on_terminal_reach_the_plan():
         check("...com 'sim: <rota>. <acréscimo>' na evidência",
               "sim: valide o login real. vi ok" in a2["evidence"], a2)
         rc, out = on_tty(cmd, str(root), inputs=[
-            ("[w] I write the answer", "s"),
+            (("[w] I write the answer", "y")),
             ("Anything to add", "mas só depois do deploy")])
         a1 = items_of(root)["a1"]
         check("s no blocked com pergunta: volta para pending, com o comentário",
@@ -1195,7 +1195,7 @@ def _cs5_run(confirm_inputs):
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), inputs=[
-                ("[w] I write the answer", "t"),
+                (("[w] I write the answer", "w")),
                 ("Your answer", b"n\xcb\xc3\xa3o vira checklist"),
                 *confirm_inputs])
         return rc, out, items_of(root)["a1"]
@@ -1283,7 +1283,7 @@ def test_cs1_long_pasted_answer_with_accents_reaches_the_item():
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), inputs=[
-                ("[w] I write the answer", "s"),
+                (("[w] I write the answer", "y")),
                 ("Anything to add", long_text)], timeout=60)
         a1 = items_of(root)["a1"]
         check("cs1: sem traceback nem 'half-way'",
@@ -1406,10 +1406,10 @@ def test_cs6_editor_saved_empty_writes_nothing_and_returns_to_the_menu():
 
 def test_cs6_the_menu_that_comes_back_still_answers_the_same_item():
     """CS-6: the prompt that comes back after the warning is the live menu of
-    the same item. After the failed editor, `t`, a typed answer and `s` land
+    the same item. After the failed editor, `w`, a typed answer and `y` land
     the answer in a1 and send it back to `pending`."""
     rc, out, _, _, a1 = _cs6_run("#!/bin/sh\nexit 1\n", after_warning=(
-        ("nothing written in the editor", "t"),
+        (("nothing written in the editor", "w")),
         ("Your answer", "depois do editor"),
         ("Send the item back to the queue", "s")), with_a1=True)
     check("cs6 mesmo item: sem traceback", "Traceback" not in out, out[-800:])
@@ -1450,7 +1450,7 @@ def test_cs4_v_in_anything_to_add_opens_the_editor():
     """CS-4 (docs/spec/campo-de-resposta-until.md): typing only `v` at
     "Anything to add" opens the editor; the saved text, with its line break,
     is the comment, not the letter."""
-    rc, out, a1 = _cs4_run("s", "Anything to add")
+    rc, out, a1 = _cs4_run("y", "Anything to add")
     ev = str(a1.get("evidence", ""))
     check("cs4: sem traceback", "Traceback" not in out, out[-800:])
     check("cs4: o item volta para pending",
@@ -1587,7 +1587,7 @@ def test_cs2_arrows_and_home_end_edit_anything_to_add():
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), inputs=[
-                ("[w] I write the answer", "s"),
+                (("[w] I write the answer", "y")),
                 ("Anything to add", CS2_KEYS)], timeout=60)
         evidence = str(items_of(root)["a1"].get("evidence", ""))
         check("cs2: a evidência termina com '>abcd!'",
@@ -1668,7 +1668,7 @@ def test_loose_text_at_options_prompt_does_not_vanish():
     to later and the text vanished without warning. It has to warn and ask
     again."""
     m = load_module()
-    answers = iter(["eu não faço ideia de como resolver isso", "t",
+    answers = iter(["eu não faço ideia de como resolver isso", "w",
                       "não sei", "s"])
     screen, answered = [], []
     m.decide(Path("/nao/existe"), "fila", "run1", {},

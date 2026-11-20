@@ -186,6 +186,34 @@ def test_cs10_without_question_n_uses_the_choice_text():
           str(prefs))
 
 
+def test_cs3_old_keys_get_a_line_naming_the_new_key_and_record_nothing():
+    out, events, reqs = _pref_launch(tty_inputs=[(MENU, "s"), (MENU, "t"),
+                                                 (MENU, "sim"), (MENU, "")])
+    check("cs3 s: the line says `s is now y`", "s is now y" in out, out[-1500:])
+    check("cs3 t: the line says `t is now w`", "t is now w" in out, out[-1500:])
+    check("cs3 sim: the invalid-option message says `type w first`",
+          '"sim" is not one of the options' in out and "type w first" in out, out[-1500:])
+    check("cs3: the menu asked again after each old key", out.count(MENU) >= 4, out[-1500:])
+    check("cs3: `t` did not open the answer line", "Your answer, in one line" not in out,
+          out[-1500:])
+    choice = _largada_choice(events)
+    check("cs3: nothing recorded, fonte stays padrao", choice is not None
+          and choice.get("fonte") == "padrao" and choice.get("escolha") == DEFAULT,
+          str(choice) + out[-1500:])
+
+
+def test_cs3_in_process_old_keys_record_nothing_on_both_screens():
+    for panel in (True, False):
+        tag = "panel" if panel else "plain"
+        got, prompts, screen = _in_process(["s", "t", "sim", ""], panel)
+        check(f"cs3 {tag}: fonte stays padrao", got["fonte"] == "padrao"
+              and got["escolha"] == DEFAULT, str(got))
+        check(f"cs3 {tag}: the lines name the new keys",
+              "s is now y" in screen and "t is now w" in screen, screen)
+        check(f"cs3 {tag}: the menu asked four times",
+              sum(MENU in p for p in prompts) == 4, str(prompts))
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

@@ -1085,7 +1085,7 @@ def test_cs6_decide_all_run_on_a_terminal_answers_each_item_in_its_queue():
         rc, out = dec.on_tty(cmd, str(root), env=env, timeout=90, inputs=[
             ("Land now?", "n"),
             ("[w] I write the answer", "n"), ("Anything to add", ""),
-            ("[w] I write the answer", "s"), ("Anything to add", "")])
+            (("[w] I write the answer", "y")), ("Anything to add", "")])
         check("decide all/<run> no terminal sai com 0", rc == 0, out[-1200:])
         check("...os itens aparecem como fila/id",
               "a/x1" in out and "b/x1" in out, out[-1500:])
@@ -1373,7 +1373,7 @@ def test_cs7_launch_panel_is_one_panel_grouped_by_queue_and_yes_runs_the_item():
             "b": [_owner_item("b1", "liberar o acesso da fila b",
                               "Liberei o acesso da fila b?")]})
         rc, out, events = _launch_all_on_tty(tmp, root, [
-            ("[w] I write the answer", "s"), ("Anything to add", ""),
+            (("[w] I write the answer", "y")), ("Anything to add", ""),
             ("[w] I write the answer", "n"), ("Anything to add", "")])
         check("--all com painel no terminal sai com 0", rc == 0, out[-1500:])
         check("...um painel único com as duas perguntas",
@@ -1443,7 +1443,7 @@ def test_cs7_launch_panel_skips_a_queue_with_its_own_live_run():
         try:
             _live_run_of_queue(root, "a", alive.pid)
             rc, out, events = _launch_all_on_tty(tmp, root, [
-                ("[w] I write the answer", "s"), ("Anything to add", "")])
+                (("[w] I write the answer", "y")), ("Anything to add", "")])
         finally:
             alive.kill()
             alive.wait()

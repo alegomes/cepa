@@ -152,9 +152,9 @@ def test_decide_queue_mode_as_process():
         check("...e não pergunta sobre o pendente pronto nem o done limpo",
               "- p1" not in out and "- d2" not in out, out)
         rc, out = on_tty(cmd, str(root), inputs=[
-            ("[w] I write the answer", "s"), ("Anything to add", ""),
+            (("[w] I write the answer", "y")), ("Anything to add", ""),
             ("[w] I write the answer", "n"), ("Anything to add", ""),
-            ("[w] I write the answer", "s"), ("Anything to add", "feito")])
+            (("[w] I write the answer", "y")), ("Anything to add", "feito")])
         its = items_of(root)
         check("no terminal, sim fecha a tarefa do concluído",
               its["d1"]["human_pending"] is None and its["d1"]["status"] == "done"
