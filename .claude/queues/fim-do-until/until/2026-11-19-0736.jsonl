@@ -37,3 +37,4 @@
 {"evento": "hooks_reinstalados", "id": "CS-7", "arquivos": ["common/bin/cepa-until"], "sha_antes": "c9bf684da0cd", "sha_depois": "b741b75f5634", "ok": true, "segundos": 40, "motivo": null, "quando": "2026-11-19T21:44:11"}
 {"evento": "run_end", "motivo": "end-of-queue", "detalhe": "a fila acabou — nenhum item pendente sobrou", "itens": 8, "com_progresso": 7, "sem_progresso": 0, "esgotados": 0, "limite_de_uso": 0, "esperas_de_cota": 0, "quedas_de_rede": 0, "cota_apertada": 0, "entregues": 7, "travados": 0, "verify_vermelho": 1, "done_sem_commit": 0, "filas_fora": [], "quando": "2026-11-19T21:44:12"}
 {"evento": "analise", "feita": true, "arquivo": "/Users/alegomes/coding/cepa/.claude/queues/fim-do-until/until/2026-11-19-0736.review.md", "erro": null, "quando": "2026-11-19T21:45:22"}
+{"evento": "instalado_no_pouso", "repo": "/Users/alegomes/coding/cepa", "ok": true, "segundos": 14, "motivo": null, "quando": "2026-11-20T10:03:10"}
