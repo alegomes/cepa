@@ -1,42 +1,18 @@
 key: CS-2
+queue: teclas-em-ingles
 status: complete
-diff_range: 9f8658d..5a1737a
 criteria:
-  - id: CS-2
-    text: "the other 11 executables and scripts run with the same python3 without PyYAML (cepa-dor, cepa-until, cepa-until-digest, five maestro-*, waivers.py, classify_needs_human.py, board-flow-fleet-validate.sh reading a board-flow.yaml)"
+  - id: AC1
+    text: "docs/spec/teclas-em-ingles.md CS-2 (cli): in a pseudo-terminal `cepa-until decide <queue>` over an item with an open route and an analysis with recomendo: sim shows '[y] yes (recommended)' and '[w] I write the answer'; the legend has a line starting with 'y = ' and another with 'w = '; the output contains none of '[s]', '[t]', 's = ', 't = '. Typing y and Enter returns the item to the queue with 'sim: ...' in the evidence; typing w, one line and y returns the item with that line."
     altitude: cli
-    surface: >
-      Each of the 11 run through its shebang (or through the python3 shim for the two
-      board-flow modules) in a subprocess, with a python3 shim at the front of PATH that
-      execs the real interpreter with -S (no site-packages). Asserts: no "PyYAML" and no
-      ImportError/ModuleNotFoundError on stderr, plus a marker on stdout that exists only
-      inside the example YAML (proves a real read, not --help).
-    test: tests/test_cepa_runs_without_pyyaml.py (function cs2)
-    layer: cli/subprocess
+    surface: "common/bin/cepa-until decide, run as a real process in a pty (on_tty with scripted inputs) over a queue built by build_repo, with a fake claude and a review.md carrying recomendo: sim"
+    test: "tests/test_cepa_until_decide_keys.py::test_cs2_panel_shows_y_and_w_and_none_of_the_old_keys, test_cs2_y_returns_the_item_to_the_queue_with_sim_in_the_evidence, test_cs2_w_then_a_line_then_y_returns_the_item_with_that_line (plus test_cs2_invalid_option_says_type_w_first and in-process test_cs2_plain_rendering_uses_y_and_w)"
+    layer: cli-pty
     evidence: verified
-    run: >
-      python3 tests/test_cepa_runs_without_pyyaml.py -> 37 "ok" lines, 0 failures
-      (the only grep hit for FAIL is the test name "keeps the FAIL slice"), last line
-      "cepa runs without PyYAML", exit 0. Probe check "shim: this python3 really has no PyYAML" ok.
-    per_executable:
-      cepa-dor: "plan YAML read; stdout names 'single-track' mode"
-      cepa-until: "--dry-run on queue.yaml; output names item X-1"
-      cepa-until-digest: "stdout shows 'uniq-status-digest' from plan.yaml"
-      maestro-poll: "wave-state.yaml; stdout has uniq-slice and DONE"
-      maestro-fork-settings: "plan.yaml; stdout has 'uniq-surface'"
-      maestro-programs: "plan + wave-state; stdout has uniq-prog and uniq-slice"
-      maestro-wave-state: "get --json; stdout has uniq-slice"
-      maestro-prune: "--dry-run on wave-state.yaml; stdout has uniq-slice"
-      waivers.py: "load() returns 'uniq-escopo' from the waiver YAML"
-      classify_needs_human.py: "lists UNIQ-9 from docs/proof YAML"
-      board-flow-fleet-validate.sh: "board-flow.yaml read with a fake twg; output carries UNIQKEY, which only exists in the YAML"
-    status: complete
-    notes: >
-      Fleet-validate limit judged: the criterion says "reading a board-flow.yaml", and the
-      script's YAML read (python3 heredoc, before any Jira call) is the unit that used to
-      print "PyYAML missing". UNIQKEY reaching the output proves the read succeeded under -S.
-      The Jira calls that follow are not the criterion. Vendored copies in maestro/_vendor/yaml
-      and board-flow/_vendor/yaml are byte-identical to common/_vendor/yaml (diff -r).
-      Minor fragility, not a gap: the fleet-validate case inherits os.environ, so a
-      PROJECT_KEY/TODO_STATUS exported in the runner would skip the YAML read.
-    gap: ""
+    run: "python3 tests/test_cepa_until_decide_keys.py -> 18 'ok' lines (all 4 chips/legend/absence checks, y and w flows, invalid-option 'type w first', plain rendering), no failures, '✓ tudo verde'"
+    readings:
+      y_flow: "Asserts status == pending and f'sim: {QUESTION}' in evidence after typing y; the text stays Portuguese as the spec's Q4 requires."
+      w_flow: "Types w, 'vira checklist', then y at 'Send the item back to the queue'; asserts status pending and the line in the evidence."
+      old_keys: "s, sim and t are still silently mapped to y/w in decide (diff line key map). Intentional: CS-3 and CS-4 own turning them into errors and the [y/N] confirmations."
+      neighbors: "Ten-odd neighbor tests had screen anchors renamed in the same commit; not re-run by the auditor (the supervisor runs the full suite)."
+gap: null
