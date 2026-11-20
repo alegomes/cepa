@@ -31,6 +31,13 @@ Cases:
         Event level: acceptance-gate, merge-truth-gate, build-hex
         proof-verdict-guard, ui-proof-verdict-guard. Function level: _jiramut,
         _autonomy, expertise-append, reflection-gate, jira-create-fields-gate.
+  CS-6  the plugin's vendored copy wins over any other PyYAML: with PYTHONPATH on
+        a folder whose `yaml/__init__.py` raises "fake yaml imported", cepa-plan
+        ready still exits 0 (real interpreter, with PyYAML if installed, and -S), and
+        so does one representative per plugin and kind (cepa-dor, maestro-poll,
+        classify_needs_human.py, board-flow-fleet-validate.sh, acceptance-gate,
+        build-hex proof-verdict-guard), plus _jiramut.logical_status
+        (function level, where a wrong order would be swallowed by its try/except)
 
 Run with `python3 tests/test_cepa_runs_without_pyyaml.py`.
 """
@@ -61,12 +68,13 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-def make_shim(tmp):
-    """Dir with an executable `python3` that runs the real one with -S."""
-    d = Path(tmp) / "shim"
+def make_shim(tmp, name="shim", flags="-S"):
+    """Dir with an executable `python3` that runs the real one with -S (or with
+    `flags`; empty = the plain interpreter, site-packages and all)."""
+    d = Path(tmp) / name
     d.mkdir()
     shim = d / "python3"
-    shim.write_text(f'#!/bin/sh\nexec "{sys.executable}" -S "$@"\n',
+    shim.write_text(f'#!/bin/sh\nexec "{sys.executable}" {flags} "$@"\n',
                     encoding="utf-8")
     shim.chmod(0o755)
     return d
@@ -262,13 +270,15 @@ BOARD_FLOW_YAML = (
     "  required_fields:\n  - id: customfield_uniq\n    name: UniqField\n")
 
 
-def run_event(script, payload, cwd, shim):
+def run_event(script, payload, cwd, shim, extra_env=None):
     """Run a hook the way the harness does: `python3 <script>` (hooks are not
     executable files), JSON on stdin, the shim python3 first on PATH."""
     import json
     env = dict(os.environ)
     env["PATH"] = f"{shim}{os.pathsep}{env.get('PATH', '')}"
     env.pop("PYTHONPATH", None)
+    if extra_env:
+        env.update(extra_env)
     return subprocess.run([str(shim / "python3"), str(script)],
                           input=json.dumps(payload),
                           capture_output=True, text=True, cwd=str(cwd), env=env)
@@ -562,6 +572,147 @@ def cs4(tmp, shim):
           repr(r.stderr[-400:]))
 
 
+FAKE_MSG = "fake yaml imported"
+
+
+def cs6(tmp, shim, real):
+    """`shim` = python3 -S, `real` = python3 with site-packages. PYTHONPATH points
+    at a fake `yaml` that raises when imported; the plugin copy must win."""
+    tmp = Path(tmp) / "cs6"
+    tmp.mkdir()
+    fake = tmp / "fake"
+    write(fake / "yaml" / "__init__.py", f'raise RuntimeError("{FAKE_MSG}")\n')
+    env = {"PYTHONPATH": str(fake)}
+
+    def clean(label, r):
+        check(f"{label}: the fake yaml was never imported",
+              FAKE_MSG not in r.stderr + r.stdout, (r.stdout + r.stderr)[-400:])
+
+    # Guard: the fake really is what `import yaml` finds in each environment, so
+    # the cases below cannot pass because PYTHONPATH was not applied (-S keeps it).
+    for label, sh in (("real interpreter", real), ("-S shim", shim)):
+        r = run_direct(sh / "python3", ["-c", "import yaml"], tmp, sh,
+                       extra_env=env)
+        check(f"CS-6 guard ({label}): PYTHONPATH makes `import yaml` hit the fake",
+              r.returncode != 0 and FAKE_MSG in r.stderr, r.stdout + r.stderr)
+    r = run_direct(real / "python3", ["-c", "import yaml; print(yaml.__file__)"],
+                   tmp, real)
+    if r.returncode == 0:
+        check("CS-6 guard: the real interpreter has PyYAML installed "
+              "(no PYTHONPATH)", "site-packages" in r.stdout, r.stdout + r.stderr)
+    else:
+        # This file needs no PyYAML: on a machine without it the "installed
+        # PyYAML loses" precedence is simply not exercised. The [real] cases
+        # below stay valid (the copy answers, the fake is never imported).
+        print("  skip  CS-6 real interpreter has no PyYAML: the installed-PyYAML "
+              "precedence is not exercised here")
+
+    root = make_repo(tmp)
+    (tmp / "m").mkdir()
+    mroot = make_repo(tmp / "m", queue="mq")
+    plan = write(tmp / "plans" / "dor.yaml",
+                 "schema_version: 2\nmode: single-track\nprogram: uniq-dor\n")
+    pdir = mroot / ".claude" / "programs" / "uniq-prog"
+    write(pdir / "wave-state.yaml",
+          "program: uniq-prog\nwave: 1\ntimeout_min_default: 45\n"
+          "slices:\n  uniq-slice:\n    status: running\n    started_epoch: 1000\n")
+    write(pdir / "slices" / "uniq-slice" / "resultado.txt", "MAESTRO-EXIT:0\n")
+    croot = tmp / "c"
+    write(croot / "docs" / "proof" / "UNIQ-9.yaml",
+          "card: UNIQ-9\nverdict: needs-human\n")
+    frepo = tmp / "f"
+    write(frepo / "board-flow.yaml",
+          "defaults:\n  project_key: UNIQKEY\n  status_map:\n    to_do: A fazer\n")
+    twg = write(tmp / "twgdir" / "twg",
+                "#!/bin/sh\n"
+                'case "$*" in\n'
+                '  *doctor*) echo \'{"data":{"connectivity":{"ok":true}}}\' ;;\n'
+                '  *) echo "fake twg: $*"; exit 1 ;;\n'
+                "esac\n")
+    twg.chmod(0o755)
+    acc = tmp / "acc"
+    write(acc / "board-flow.yaml", BOARD_FLOW_YAML)
+    write(acc / ".claude" / "acceptance" / "UNIQ-1.yaml",
+          "key: UNIQ-1\nstatus: incomplete\ncriteria:\n  - id: AC1\n    gap: x\n")
+    acc_ev = {"tool_name": "mcp__mcp-atlassian__jira_transition_issue",
+              "tool_input": {"issue_key": "UNIQ-1", "transition_id": "31"},
+              "cwd": str(acc)}
+    # _jiramut's own _vendor line is stripped (as in CS-3), so acceptance-gate's
+    # OWN line is the only thing that can put the copy ahead of the fake.
+    iso = isolated_common(tmp, "iso-acc")
+    pv = tmp / "pv"
+    pv.mkdir()
+    pv_ev = {"tool_name": "Write",
+             "tool_input": {"file_path": str(pv / "docs" / "proof" / "UNIQ-3.yaml"),
+                            "content": "card: UNIQ-3\nverdict: proven\nlevels:\n"
+                                       "  uniq_bogus_level:\n    status: pass\n"},
+             "cwd": str(pv)}
+
+    jm = tmp / "jm"
+    write(jm / "board-flow.yaml", BOARD_FLOW_YAML)
+    JM_CODE = ("import importlib.util, sys\n"
+               "spec = importlib.util.spec_from_file_location('hookmod', sys.argv[1])\n"
+               "m = importlib.util.module_from_spec(spec)\n"
+               "spec.loader.exec_module(m)\n"
+               "print(repr(m.logical_status('Em Revisao Uniq', sys.argv[2])))\n")
+
+    for label, sh in (("real", real), ("-S", shim)):
+        n = f"CS-6 [{label}]"
+        r = run_direct(CEPA_PLAN, ["ready"], root, sh, extra_env=env)
+        check(f"{n} cepa-plan ready exit 0 with a fake yaml on PYTHONPATH",
+              r.returncode == 0, f"exit {r.returncode}: {r.stderr.strip()[-400:]}")
+        check(f"{n} cepa-plan ready lists the ready item", "X-1" in r.stdout,
+              r.stdout)
+        clean(f"{n} cepa-plan", r)
+
+        r = run_direct(BIN / "cepa-dor", [str(plan)], root, sh, extra_env=env)
+        check(f"{n} cepa-dor read the plan",
+              "single-track" in r.stdout and "ilegível" not in r.stdout,
+              r.stdout + r.stderr[-300:])
+        clean(f"{n} cepa-dor", r)
+
+        r = run_direct(MAESTRO / "maestro-poll", [str(pdir), "--now", "2000"],
+                       mroot, sh, extra_env=env)
+        check(f"{n} maestro-poll read wave-state.yaml",
+              "uniq-slice" in r.stdout and '"DONE"' in r.stdout,
+              r.stdout + r.stderr[-300:])
+        clean(f"{n} maestro-poll", r)
+
+        r = run_direct(sh / "python3",
+                       [str(BOARD_FLOW / "bin" / "classify_needs_human.py"),
+                        str(croot)], root, sh, extra_env=env)
+        check(f"{n} classify_needs_human.py read the proof YAML",
+              "UNIQ-9" in r.stdout, r.stdout + r.stderr[-300:])
+        clean(f"{n} classify_needs_human.py", r)
+
+        r = run_direct(BOARD_FLOW / "board-flow-fleet-validate.sh", [str(frepo)],
+                       root, sh, extra_env={**env, "TWG_BIN": str(twg)})
+        check(f"{n} board-flow-fleet-validate.sh resolved project_key",
+              "UNIQKEY" in r.stdout + r.stderr, r.stdout + r.stderr[-300:])
+        clean(f"{n} board-flow-fleet-validate.sh", r)
+
+        r = run_event(iso / "acceptance-gate.py", acc_ev, acc, sh, extra_env=env)
+        check(f"{n} acceptance-gate read board-flow.yaml (31 -> in_progress passes)",
+              r.returncode == 0, f"exit {r.returncode}: {r.stderr.strip()[-300:]}")
+        clean(f"{n} acceptance-gate", r)
+
+        r = run_event(REPO / "build-hex" / "hooks" / "proof-verdict-guard.py",
+                      pv_ev, pv, sh, extra_env=env)
+        check(f"{n} build-hex proof-verdict-guard parsed with yaml (blocks)",
+              r.returncode == 2 and "uniq_bogus_level" in r.stderr,
+              f"exit {r.returncode}: {r.stderr.strip()[-300:]}")
+        clean(f"{n} proof-verdict-guard", r)
+
+        # _jiramut imports yaml inside `try ... except Exception: smap = {}`, so a
+        # wrong order would be swallowed: only the RESULT tells. Real tree, its
+        # own _vendor line intact.
+        r = run_direct(sh / "python3", ["-c", JM_CODE, str(HOOKS / "_jiramut.py"),
+                                        str(jm)], jm, sh, extra_env=env)
+        check(f"{n} _jiramut.logical_status resolved the status_map name",
+              r.stdout.strip() == "'in_review'", r.stdout + r.stderr[-300:])
+        clean(f"{n} _jiramut.logical_status", r)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         shim = make_shim(tmp)
@@ -585,6 +736,7 @@ def main():
         cs2(tmp, shim)
         cs3(tmp, shim)
         cs4(tmp, shim)
+        cs6(tmp, shim, make_shim(tmp, "realshim", ""))
 
     print()
     if FAILURES:
