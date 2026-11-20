@@ -3246,3 +3246,13 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: capture-build-result-flutter
+  title: '`capture-build-result` não reconhece `flutter test` nem `tool/check.sh`'
+  why: 'Origem: feedback fb-20261115-1 (2026-11-15); BACKLOG.md § `capture-build-result`
+    não reconhece `flutter test` nem `tool/check.sh` (ainda não priorizado: entrou
+    no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
