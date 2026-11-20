@@ -99,29 +99,26 @@ items:
     Hoje sai com código 0 e stderr vazio.'
   status: done
   blocked_by: []
-  human_pending: Decidir se o caso raro em que um hook sai com código 120, e não
-    0, é aceito como está
-  evidence: 'commits d2e880b (common/hooks/_yamlwarn.py, aviso nos 9 hooks, jira-create-fields-gate
-    sem ''pip install'', cs4() no teste) e e520470 (o teste exige o erro de import
-    e a variante pt na linha); pair-reviewer OK-WITH-NOTES sem correção exigida;
-    tests/run-all.sh 215 de 215 verdes em d2e880b; completion-auditor COMPLETE (.claude/acceptance/CS-4.yaml);
-    proof-reviewer UNPROVEN em d2e880b (motivo e variante pt sem asserção) e PROVEN
-    em e520470 (docs/proof/CS-4.yaml). Notas: o aviso alcança 13 hooks, os 9 da
-    spec mais jira-write-lock, bounce-reason-gate, bitbucket-decision-lock e summary-nulls-gate,
-    que importam _jiramut/_autonomy; com stderr ligado a pipe sem leitor e a cópia
-    ausente o hook sai 120 em vez de 0 (flush do stderr no encerramento), não medido
-    em 738a16b. Código na branch session/cs-1, sem merge.'
+  human_pending: null
+  evidence: 'Resposta do dono em 2026-11-20: sim: Aceito o caso raro em que o hook
+    termina com erro se a cópia falta e ninguém lê o aviso? Recomendo sim.. Rota
+    humana fechada pelo dono: Decidir se o caso raro em que um hook sai com código
+    120, e não 0, é aceito como está. Pergunta respondida: Aceito o caso raro em
+    que o hook termina com erro se a cópia falta e ninguém lê o aviso? Recomendo
+    sim. O que cada opção prometia: se sim, nada muda, o caso fica registrado como
+    conhecido; se não, entra um item novo para o hook terminar limpo também nesse
+    caso. O dono escolheu o "sim". Evidência anterior: commits d2e880b (common/hooks/_yamlwarn.py,
+    aviso nos 9 hooks, jira-create-fields-gate sem ''pip install'', cs4() no teste)
+    e e520470 (o teste exige o erro de import e a variante pt na linha); pair-reviewer
+    OK-WITH-NOTES sem correção exigida; tests/run-all.sh 215 de 215 verdes em d2e880b;
+    completion-auditor COMPLETE (.claude/acceptance/CS-4.yaml); proof-reviewer UNPROVEN
+    em d2e880b (motivo e variante pt sem asserção) e PROVEN em e520470 (docs/proof/CS-4.yaml).
+    Notas: o aviso alcança 13 hooks, os 9 da spec mais jira-write-lock, bounce-reason-gate,
+    bitbucket-decision-lock e summary-nulls-gate, que importam _jiramut/_autonomy;
+    com stderr ligado a pipe sem leitor e a cópia ausente o hook sai 120 em vez
+    de 0 (flush do stderr no encerramento), não medido em 738a16b. Código na branch
+    session/cs-1, sem merge.'
   head_commit: efe370916b4d130a5b01fb8b3a8ec4f2f97c6285
-  route_kind: open-question
-  owner_question: Aceito o caso raro em que o hook termina com erro se a cópia falta
-    e ninguém lê o aviso? Recomendo sim.
-  owner_summary:
-    se_sim: nada muda, o caso fica registrado como conhecido
-    se_nao: entra um item novo para o hook terminar limpo também nesse caso
-    item_se_sim: nenhum
-    item_se_nao:
-      titulo: O hook termina sem erro mesmo quando ninguém lê o aviso
-      precisa_do_dono: false
 - id: CS-5
   title: as quatro cópias são idênticas e o desvio é acusado
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -152,8 +149,7 @@ items:
     do CS-1. Hoje o falso é importado e o comando quebra.'
   status: done
   blocked_by: []
-  human_pending: Decidir se os treze arquivos sem teste de precedência ganham um
-    caso cada
+  human_pending: null
   finish_recusado:
   - quando: '2026-11-20T17:28:14+00:00'
     quem:
@@ -165,12 +161,22 @@ items:
       pid 71347, cwd /Users/alegomes/cepa-worktrees/cepa-cs-1) e quem chamou foi
       3583ee8c44874261bd4aa51e77fc9a29 (host Alexandres-MacBook-Pro.local, pid 57658,
       cwd /Users/alegomes/cepa-worktrees/cepa-cs-1). S
-  evidence: 'commit c014776, só tests/test_cepa_runs_without_pyyaml.py (cs6(): yaml
-    falso no PYTHONPATH, cepa-plan e mais sete representantes, variantes real e
-    -S, guarda condicional para máquina sem PyYAML); nenhum arquivo de código mudou,
-    a ordem vale desde ac956f9/5a1737a/50b4a6b; pair-reviewer OK-WITH-NOTES com
-    1 correção de teste aplicada; tests/run-all.sh 216 de 216 verdes, depois só
-    o arquivo de teste mudou e foi re-rodado verde; completion-auditor COMPLETE
+  evidence: 'Resposta do dono em 2026-11-20: sim: Crio um item para testar nos outros
+    treze arquivos que a cópia do Cepa vence outro PyYAML? Recomendo sim: custo
+    baixo.. Rota humana fechada pelo dono: Decidir se os treze arquivos sem teste
+    de precedência ganham um caso cada. Pergunta respondida: Crio um item para testar
+    nos outros treze arquivos que a cópia do Cepa vence outro PyYAML? Recomendo
+    sim: custo baixo. O que cada opção prometia: se sim, os treze arquivos ganham
+    um teste cada, e a ordem deles fica protegida contra regressão; se não, os treze
+    seguem corretos hoje, mas uma troca de ordem neles passaria sem teste vermelho.
+    O dono escolheu o "sim". A resposta criou o item CS-6-sim no fim da fila: Os
+    outros treze arquivos têm teste de que a cópia do Cepa vence outro PyYAML. Evidência
+    anterior: commit c014776, só tests/test_cepa_runs_without_pyyaml.py (cs6():
+    yaml falso no PYTHONPATH, cepa-plan e mais sete representantes, variantes real
+    e -S, guarda condicional para máquina sem PyYAML); nenhum arquivo de código
+    mudou, a ordem vale desde ac956f9/5a1737a/50b4a6b; pair-reviewer OK-WITH-NOTES
+    com 1 correção de teste aplicada; tests/run-all.sh 216 de 216 verdes, depois
+    só o arquivo de teste mudou e foi re-rodado verde; completion-auditor COMPLETE
     (.claude/acceptance/CS-6.yaml); proof-reviewer PROVEN (docs/proof/CS-6.yaml):
     insert->append vermelho nos 8 arquivos com caso, vermelho em 09cc73b. Notas
     do proof-reviewer: 13 dos 21 arquivos sobrevivem a insert->append sem teste
@@ -180,16 +186,16 @@ items:
     a guarda do yaml falso não cobre run_event. Código na branch session/cs-1, sem
     merge.'
   head_commit: cf20161b45d2e908e0c7cc515f62814533d469ba
-  route_kind: open-question
-  owner_question: 'Crio um item para testar nos outros treze arquivos que a cópia
-    do Cepa vence outro PyYAML? Recomendo sim: custo baixo.'
-  owner_summary:
-    se_sim: os treze arquivos ganham um teste cada, e a ordem deles fica protegida
-      contra regressão
-    se_nao: os treze seguem corretos hoje, mas uma troca de ordem neles passaria
-      sem teste vermelho
-    item_se_sim:
-      titulo: Os outros treze arquivos têm teste de que a cópia do Cepa vence outro
-        PyYAML
-      precisa_do_dono: false
-    item_se_nao: nenhum
+- id: CS-6-sim
+  title: Os outros treze arquivos têm teste de que a cópia do Cepa vence outro PyYAML
+  why: 'criado pela resposta do dono a CS-6 (ainda não priorizado: entrou no fim
+    da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: 'Criado em 2026-11-20 pela resposta do dono ao item CS-6. Pergunta:
+    Crio um item para testar nos outros treze arquivos que a cópia do Cepa vence
+    outro PyYAML? Recomendo sim: custo baixo. Resposta: sim: Crio um item para testar
+    nos outros treze arquivos que a cópia do Cepa vence outro PyYAML? Recomendo
+    sim: custo baixo.'
+  sem_epic: true
