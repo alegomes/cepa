@@ -3235,3 +3235,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: path-lock-le-regras-do-repo-do-arquivo
+  title: A trava de caminhos aplica as regras do repo da sessão a um arquivo de
+    outro repo
+  why: 'Origem: feedback fb-20261110-6 (2026-11-10); BACKLOG.md § A trava de caminhos
+    aplica as regras do repo da sessão a um arquivo de outro repo (ainda não priorizado:
+    entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
