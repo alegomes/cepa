@@ -3224,3 +3224,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: plan-anota-evidencia-de-item-done
+  title: '`cepa plan finish` não deixa corrigir a evidência de um item done que
+    ficou falsa'
+  why: 'Origem: feedback fb-20261110-3 (2026-11-10); BACKLOG.md § `cepa plan finish`
+    não deixa corrigir a evidência de um item done que ficou falsa (ainda não priorizado:
+    entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
