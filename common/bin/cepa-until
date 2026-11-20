@@ -3382,9 +3382,9 @@ def _yes_no(v):
 
 
 def recommended_letter(d):
-    """The menu letter that the analysis recommendation points to: `s` or `n`."""
+    """The menu letter that the analysis recommendation points to: `y` or `n`."""
     r = str((d or {}).get("recomendo") or "").strip().lower()
-    return {"sim": "s", "não": "n", "nao": "n"}.get(r)
+    return {"sim": "y", "não": "n", "nao": "n"}.get(r)
 
 
 WORDS_IN_QUESTION = 25
@@ -3426,7 +3426,7 @@ ROUTE_KIND_LABEL = {"owner-task": "Task for you",
 
 def legend_lines(chips, summary, delivered=False):
     """One line per key of the menu, in the menu's order: what each key does.
-    The mechanics never change (`s` returns the item to the queue, `n` keeps it);
+    The mechanics never change (`y` returns the item to the queue, `n` keeps it);
     what the owner needs is what that means for the WORK, which only the agent
     knows (WEGO-2381: "libero o In Review?" next to "sim = o item volta para a
     fila"). CS-3 (perguntas-da-largada-legiveis): the legend used to be a single
@@ -3436,15 +3436,15 @@ def legend_lines(chips, summary, delivered=False):
     yes = summary.get("se_sim")
     no = summary.get("se_nao")
     if delivered:
-        effect = {"s": "the task closes; the delivered work stays as it is",
+        effect = {"y": "the task closes; the delivered work stays as it is",
                   "n": "the task stays open and I only record what you say",
                   "d": "the task no longer applies and closes without being done"}
     else:
-        effect = {"s": (f"{yes}. The item goes back to the queue with your answer"
+        effect = {"y": (f"{yes}. The item goes back to the queue with your answer"
                         if yes else "the item goes back to the queue with your answer"),
                   "n": no or "it stays as it is and I only record what you say",
                   "d": "the item leaves the queue"}
-    effect.update({"t": "you write the answer in one line; the next run reads it",
+    effect.update({"w": "you write the answer in one line; the next run reads it",
                    "v": "you write the answer in the editor; the next run reads it",
                    "e": "shows the technical detail, written for agents",
                    "?": "I did not understand the question: it is recorded as "
@@ -3616,8 +3616,8 @@ class Panel:
     7-space indent. On a terminal each question becomes a card with a left
     border, labels dimmed in a single column, the question in bold, the
     recommendation in color and the menu in chips with the recommended key in green.
-    The phrases that the keys answer (`Aterrisso agora?`, `[t] escrevo a
-    resposta`, `Quer acrescentar algo`) stay whole in a single color: it is
+    The phrases that the keys answer (`Land now?`, `[w] I write the
+    answer`, `Anything to add`) stay whole in a single color: it is
     by them that the pty tests know when to answer."""
 
     LABEL_WIDTH = 15
@@ -4155,7 +4155,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             # `d` exists because "sim" always means "back to the queue": on
             # 2026-11-02 the owner said sim to "descarto este pedido?" (WEGO-2463)
             # and the item went back to `pending`, for the next run to redo.
-            chips = [("s", "yes"), ("n", "no"), ("t", "I write the answer"),
+            chips = [("y", "yes"), ("n", "no"), ("w", "I write the answer"),
                      ("v", "write in the editor"),
                      ("d", "the task no longer applies" if delivered
                       else "discard the item")]
@@ -4165,11 +4165,13 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             screen.blank()
             screen.legend(legend_lines(chips, summary, delivered))
             prompt = screen.menu(chips, recommended_letter(d))
-            valid = {"s", "n", "t", "v", "d", "", "q", "?"} | ({"e"} if show else set())
+            valid = {"y", "n", "w", "v", "d", "", "q", "?"} | ({"e"} if show else set())
             while True:
                 raw = str(question(prompt))
                 r = raw.strip().lower()
-                r = {"sim": "s", "yes": "s", "y": "s",
+                # `s`, `sim` and `t` still map silently to the new keys until
+                # CS-3 of teclas-em-ingles turns them into errors.
+                r = {"sim": "y", "yes": "y", "s": "y", "t": "w",
                      "não": "n", "nao": "n", "no": "n"}.get(r, r)
                 if r == "e" and show:
                     screen.evidence(ad.get("evidence"))
@@ -4178,7 +4180,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                     # Loose text here used to go to later silently, and the answer
                     # the owner wrote vanished (decidir WEGO 2026-09-29-2059).
                     screen.key_error(f"\"{raw.strip()}\" is not one of the options; "
-                                       "to write an answer, type t first")
+                                       "to write an answer, type w first")
                     continue
                 if r == "v":
                     # CS-6: an editor that fails or saves nothing writes nothing;
@@ -4235,17 +4237,17 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 extra = edit_in_editor(ident, question_text or route, ad.get("title"))
             text = (("tarefa encerrada" if delivered else "descartado")
                     + f": {base}" + (f". {extra}" if extra else ""))
-        elif r in ("t", "v"):
+        elif r in ("w", "v"):
             text = (typed if r == "v" else
                     str(question(screen.follow_up("Your answer, in one line (the "
                                                   "next run reads this): "))).strip())
             if text:
                 give_back = is_yes(question(screen.follow_up(
                     "Send the item back to the queue with that answer? [y/N] ")))
-        elif r in ("s", "n"):
-            give_back = r == "s"
+        elif r in ("y", "n"):
+            give_back = r == "y"
             base = question_text or route or "unblock the item"
-            # There is always room for a comment, also on `s` with a
+            # There is always room for a comment, also on `y` with a
             # written question: the owner wanted to say something beyond yes/no and
             # the next run reads what he wrote (10/15).
             extra = str(question(screen.follow_up(

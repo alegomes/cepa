@@ -44,7 +44,7 @@ def _launch(tty, mode="pref", pref_answer=""):
             # r1's route: "y" (answered); the preference on x1: Enter (default kept,
             # not answered by the owner).
             rc, out = on_tty(cmd, str(root), env=env, timeout=120, inputs=[
-                ("[t] I write the answer", "y"), ("Anything to add", ""),
+                ("[w] I write the answer", "y"), ("Anything to add", ""),
                 ("Your choice, in one line", pref_answer)])
         else:
             p = subprocess.run(cmd, capture_output=True, text=True, env=env,
@@ -119,7 +119,7 @@ def test_launch_measure_cs13_panel_cut_after_the_first_answer():
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"], str(root), env=env,
-            timeout=120, inputs=[("[t] I write the answer", "y"), ("Anything to add", "")])
+            timeout=120, inputs=[("[w] I write the answer", "y"), ("Anything to add", "")])
         events = _launch_events(root)
     ev = _the_event("cs13 cut", rc, out, events)
     if not ev:

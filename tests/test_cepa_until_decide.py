@@ -130,7 +130,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
     check("recomendação do item com ✦", "│  ✦ Recommend no: duplica" in plain_text,
           plain_text)
     check("menu em chips dentro do cartão, com a recomendada marcada",
-          "│  [s] yes · [n] no (recommended) · [t] I write the answer · "
+          "│  [y] yes · [n] no (recommended) · [w] I write the answer · "
           "[v] write in the editor\n│  [d] discard the item" in plain_text
           and "[e] technical detail" in plain_text, plain_text)
     check("o prompt fica dentro do cartão e o cartão fecha",
@@ -142,7 +142,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
           "── closing ─" in plain_text and "answered now 2" in plain_text
           and "for later 1" in plain_text
           and "cepa-until decide fila/run1" in plain_text, plain_text)
-    triggers = ("Land now? [y/N/q] ", "[t] I write the answer",
+    triggers = ("Land now? [y/N/q] ", "[w] I write the answer",
                 "Anything to add, in one line? [Enter skips, v opens the editor] ")
     all_ = raw + "\n".join(prompts)
     check("as frases que o pty responde ficam inteiras, sem cor no meio",
@@ -243,7 +243,7 @@ def test_decide_on_an_hc_terminal_reports_needs_you_while_it_asks():
         env["HC_TERMINAL_ID"] = "t9"
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), env=env, inputs=[
-            ("[t] I write the answer", "n"), ("Anything to add", "")])
+            ("[w] I write the answer", "n"), ("Anything to add", "")])
         blocked = seq("state=blocked:kind=question:app=cepa-until",
                       "fila: waiting for your answer")
         working = seq("state=working:app=cepa-until", "fila: applying your answer")
@@ -266,7 +266,7 @@ def test_decide_on_an_hc_terminal_reports_needs_you_while_it_asks():
         root = build_repo(tmp, [stuck])
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), env=env, inputs=[
-            ("[t] I write the answer", "n"), ("Anything to add", "")])
+            ("[w] I write the answer", "n"), ("Anything to add", "")])
         check("decide fora do Herdr desktop: nenhuma sequência 7501 nem título",
               rc == 0 and "]7501;" not in out and "\033]2;" not in out, repr(out[-200:]))
 
@@ -538,10 +538,10 @@ def test_decide_offers_to_keep_stuck():
         question=question_text, output=screen.append,
         answer=lambda i, t, keep=False: (
             answered.append((i, t, keep)), (0, f"{i} ok"))[1])
-    check("as opções oferecem [n] no e [t] escrevo",
-          all("[n] no" in p_ and "[t] I write" in p_
+    check("as opções oferecem [n] no e [w] write",
+          all("[n] no" in p_ and "[w] I write" in p_
               for p_ in questions if "[Enter]" in p_), questions)
-    check("[t] + N no 'devolvo?' chama o responde com keep=True",
+    check("[w] + N no 'devolvo?' chama o responde com keep=True",
           answered == [("W-1", "mantenha", True),
                           ("W-2", "não liguei", True)], answered)
     check("...e conta como respondido", len(applied) == 2, applied)
@@ -630,9 +630,9 @@ def test_decide_s_and_n_answer_the_drafted_question():
     check("o título sai inteiro (cortado em 60, o dono respondia a uma "
           "pergunta que via pela metade; 15/10)", "t" * 90 in plain_text, plain_text)
     check("a recomendação marca a letra no menu",
-          any("[s] yes (recommended)" in p_ for p_ in questions), questions)
+          any("[y] yes (recommended)" in p_ for p_ in questions), questions)
     check("a legenda diz o que sim e não fazem",
-          "s = the item goes back to the queue" in plain_text, plain_text)
+          "y = the item goes back to the queue" in plain_text, plain_text)
     check("sem pergunta redigida, o terminal faz a padrão",
           "unblock the item and send it back to the queue?" in plain_text
           and "The agent stopped because: sem produção" in plain_text, plain_text)
@@ -645,8 +645,8 @@ def test_decide_s_and_n_answer_the_drafted_question():
     check("os três contam como respondidos", len(applied) == 3, applied)
     menus = [p_ for p_ in questions if "[Enter]" in p_]
     check("o menu completo, com evidência: s, n, t, e, Enter, q",
-          menus and all("[s] yes" in p_ and "[n] no" in p_
-                        and "[t] I write the answer" in p_
+          menus and all("[y] yes" in p_ and "[n] no" in p_
+                        and "[w] I write the answer" in p_
                         and "[e] technical detail" in p_
                         and "[Enter] later" in p_ and "[q] quit" in p_
                         for p_ in menus), menus)
@@ -727,7 +727,7 @@ def test_decide_shows_context_instruction_and_warns_question_outside_the_rules()
               "Question:", "If yes,", "Recommend yes")), block_s5)
     check("linha em branco antes da pergunta e antes da legenda do menu",
           "\n\n       Question:" in block_s5
-          and "\n\n       s = the item goes back" in block_s5, block_s5)
+          and "\n\n       y = the item goes back" in block_s5, block_s5)
     check("a pergunta dentro das regras não ganha aviso",
           "outside the rules" not in block_s5, block_s5)
     check("o sim grava a pergunta E a instrução, para o próximo run",
@@ -797,7 +797,7 @@ def test_run_on_terminal_ends_asking_and_applies():
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis",
              "--no-resume-on-answer"], str(root),
-            inputs=[("[t] I write the answer", "t"),
+            inputs=[("[w] I write the answer", "t"),
                       ("Your answer", "vira item do checklist"),
                       ("Send the item back to the queue", "s")], env=env)
         check("o run sai 0", rc == 0, out[-1500:])
@@ -936,9 +936,9 @@ def test_decidir_as_process_with_and_without_terminal():
         check("...sem mexer na fila",
               items_of(root)["a1"]["status"] == "blocked")
         rc, out = on_tty(cmd, str(root), inputs=[
-            ("[t] I write the answer", "t"), ("Your answer", "vira checklist"),
+            ("[w] I write the answer", "t"), ("Your answer", "vira checklist"),
             ("Send the item back to the queue", "s"),
-            ("[t] I write the answer", "s"), ("Anything to add", "login ok")])
+            ("[w] I write the answer", "s"), ("Anything to add", "login ok")])
         a1, a2 = items_of(root)["a1"], items_of(root)["a2"]
         check("no terminal, decidir aplica o blocked",
               rc == 0 and a1["status"] == "pending"
@@ -1160,8 +1160,8 @@ def test_decidir_s_and_n_on_terminal_reach_the_plan():
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
                "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), inputs=[
-            ("[t] I write the answer", "n"), ("Anything to add", ""),
-            ("[t] I write the answer", "s"), ("Anything to add", "vi ok")])
+            ("[w] I write the answer", "n"), ("Anything to add", ""),
+            ("[w] I write the answer", "s"), ("Anything to add", "vi ok")])
         a1, a2 = items_of(root)["a1"], items_of(root)["a2"]
         check("n no terminal: o blocked continua blocked",
               rc == 0 and a1["status"] == "blocked", (rc, a1, out[-1200:]))
@@ -1172,7 +1172,7 @@ def test_decidir_s_and_n_on_terminal_reach_the_plan():
         check("...com 'sim: <rota>. <acréscimo>' na evidência",
               "sim: valide o login real. vi ok" in a2["evidence"], a2)
         rc, out = on_tty(cmd, str(root), inputs=[
-            ("[t] I write the answer", "s"),
+            ("[w] I write the answer", "s"),
             ("Anything to add", "mas só depois do deploy")])
         a1 = items_of(root)["a1"]
         check("s no blocked com pergunta: volta para pending, com o comentário",
@@ -1195,7 +1195,7 @@ def _cs5_run(confirm_inputs):
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), inputs=[
-                ("[t] I write the answer", "t"),
+                ("[w] I write the answer", "t"),
                 ("Your answer", b"n\xcb\xc3\xa3o vira checklist"),
                 *confirm_inputs])
         return rc, out, items_of(root)["a1"]
@@ -1283,7 +1283,7 @@ def test_cs1_long_pasted_answer_with_accents_reaches_the_item():
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), inputs=[
-                ("[t] I write the answer", "s"),
+                ("[w] I write the answer", "s"),
                 ("Anything to add", long_text)], timeout=60)
         a1 = items_of(root)["a1"]
         check("cs1: sem traceback nem 'half-way'",
@@ -1441,7 +1441,7 @@ def _cs4_run(menu_key, follow_up_trigger, typed="v"):
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), env=env, inputs=[
-                ("[t] I write the answer", menu_key),
+                ("[w] I write the answer", menu_key),
                 (follow_up_trigger, typed)], timeout=60)
         return rc, out, items_of(root)["a1"]
 
@@ -1587,7 +1587,7 @@ def test_cs2_arrows_and_home_end_edit_anything_to_add():
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), inputs=[
-                ("[t] I write the answer", "s"),
+                ("[w] I write the answer", "s"),
                 ("Anything to add", CS2_KEYS)], timeout=60)
         evidence = str(items_of(root)["a1"].get("evidence", ""))
         check("cs2: a evidência termina com '>abcd!'",
@@ -1696,12 +1696,12 @@ def test_loose_text_on_terminal_warns_and_still_writes():
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), inputs=[
-                ("[t] I write the answer", "eu não faço ideia"),
-                ("type t first", "t"),
+                ("[w] I write the answer", "eu não faço ideia"),
+                ("type w first", "w"),
                 ("Your answer", "não sei ainda"),
                 ("Send the item back to the queue", "s")])
         check("avisa que o texto solto não é opção",
-              "is not one of the options" in out and "type t first" in out,
+              "is not one of the options" in out and "type w first" in out,
               out[-1500:])
         a1 = items_of(root)["a1"]
         check("...e a resposta dada depois do r chega ao plano",
@@ -1820,7 +1820,7 @@ def test_decide_shows_human_section_and_what_each_answer_does():
         "Was meant to: testar a parte",
         "Already done: 136 de 154",
         "Question: Entrego com os 18 casos",
-        "s = o trabalho vai para revisão. The item goes back to the queue",
+        "y = o trabalho vai para revisão. The item goes back to the queue",
         "n = o trabalho espera o defeito ser corrigido")]
     check("motivo, pedido, pronto, pergunta e legenda, nesta ordem",
           -1 not in order and order == sorted(order), text)
@@ -1908,7 +1908,7 @@ def test_launch_on_terminal_asks_and_yes_runs_the_item_in_the_same_run():
     """CS-2 (spec perguntar-antes-do-run): the route of an open item is asked BEFORE
     the first item and "y" makes the item run in this very run."""
     rc, out, events, _ = _launch_on_tty(
-        [("[t] I write the answer", "y"), ("Anything to add", "")], wait="2")
+        [("[w] I write the answer", "y"), ("Anything to add", "")], wait="2")
     starts = [e for e in events if e.get("evento") == "item_start"]
     check("the run exits 0", rc == 0, out[-1500:])
     check("the question shows up at the launch", "provision the Keycloak role" in out, out[:1500])
@@ -1917,13 +1917,13 @@ def test_launch_on_terminal_asks_and_yes_runs_the_item_in_the_same_run():
 
 def test_launch_on_terminal_no_or_enter_leaves_the_item_without_item_start():
     for reply in ("n", ""):
-        trig = [("[t] I write the answer", reply)] + (
+        trig = [("[w] I write the answer", reply)] + (
             [("Anything to add", "")] if reply else [])
         rc, out, events, items = _launch_on_tty(trig)
         check(f"answer {reply!r}: no item_start", not any(
             "item_start" in json.dumps(e) for e in events), str(events) + out[-1000:])
         check(f"answer {reply!r}: run exits 0", rc == 0, out[-1000:])
-        check(f"answer {reply!r}: the question was asked", "[t] I write the answer" in out,
+        check(f"answer {reply!r}: the question was asked", "[w] I write the answer" in out,
               out[-1000:])
         check(f"answer {reply!r}: a1 keeps its open route",
               items["a1"].get("human_pending"), str(items["a1"]))
@@ -1961,7 +1961,7 @@ def test_launch_without_terminal_keeps_ending_with_no_item_start():
         check("no terminal: nothing to do, as today",
               "nothing to do" in p.stdout, p.stdout[-1000:])
         check("no terminal: the launch panel did not appear", not any(
-            m in p.stdout for m in ("[t] I write the answer", "question(s) for you",
+            m in p.stdout for m in ("[w] I write the answer", "question(s) for you",
                                     "questions interrupted")), p.stdout[-1000:])
         check("no terminal: no item_start", not any(
             "item_start" in json.dumps(e) for e in _launch_events(root)))
@@ -1973,7 +1973,7 @@ def test_launch_dry_run_on_terminal_does_not_ask():
     rc, out, events, items = _launch_on_tty([], wait="2", extra=("--dry-run",))
     check("dry-run exits 0", rc == 0, out[-1500:])
     check("dry-run: no question panel", "question(s) for you" not in out
-          and "[t] I write the answer" not in out, out[-1500:])
+          and "[w] I write the answer" not in out, out[-1500:])
     check("dry-run: says nothing was executed", "nothing was executed" in out, out[-1500:])
     check("dry-run: a1 keeps its open route", items["a1"].get("human_pending"), str(items))
 
@@ -1985,7 +1985,7 @@ def test_launch_asks_only_owner_items_not_those_deferred_for_another_reason():
     a3["blocked_by"] = ["a2"]
     a3["title"] = "item a3 dependent"
     rc, out, events, items = _launch_on_tty(
-        [("[t] I write the answer", "n"), ("Anything to add", "")], wait="5",
+        [("[w] I write the answer", "n"), ("Anything to add", "")], wait="5",
         items=[item("a1"), item("a2", human_pending="provision the Keycloak role"), a3])
     check("the run exits 0", rc == 0, out[-1500:])
     check("the panel says 1 question", "1 question(s) for you" in out, out[-1500:])
@@ -2000,7 +2000,7 @@ def test_launch_does_not_ask_about_delivered_items():
     panel (`delivered_leftovers` is not added): total 1, its route text absent."""
     done = item("d1", status="done", human_pending="delivered leftover route text")
     rc, out, events, items = _launch_on_tty(
-        [("[t] I write the answer", "n")], wait="5",
+        [("[w] I write the answer", "n")], wait="5",
         items=[done, item("a1", human_pending="provision the Keycloak role")])
     check("the run exits 0", rc == 0, out[-1500:])
     check("the panel says 1 question", "1 question(s) for you" in out, out[-1500:])
@@ -2040,7 +2040,7 @@ def test_launch_cs3_panel_before_the_first_item_leaves_the_delivered_route_out()
     and the delivered one never shows up before the pending item starts."""
     done = item("d1", status="done", human_pending="delivered leftover route text")
     rc, out, events, _ = _launch_on_tty(
-        [("[t] I write the answer", "n"), ("Anything to add", "")], wait="5",
+        [("[w] I write the answer", "n"), ("Anything to add", "")], wait="5",
         items=[done, item("a1", human_pending="provision the Keycloak role"), item("a2")])
     starts = [e.get("id") for e in events if e.get("evento") == "item_start"]
     before = _before_first_item(out) or ""
@@ -2121,7 +2121,7 @@ def test_launch_cs4_answered_no_routes_become_one_line_not_questions():
     check("one summary line with the count and the date",
           len(line) == 1 and "2 route(s)" in line[0] and "02/11" in line[0], before)
     check("neither route is asked",
-          "[t] I write the answer" not in (before or "")
+          "[w] I write the answer" not in (before or "")
           and "question(s) for you" not in (before or "")
           and "first route text" not in (before or ""), (before or "")[-1500:])
 
@@ -2179,7 +2179,7 @@ def test_launch_cs10_wait_count_leaves_out_items_deferred_for_another_reason():
 
 def test_launch_cs10_route_answered_no_in_the_panel_the_run_does_not_start():
     _cs10_check("cs10 panel n", [item("a1", human_pending="provision the Keycloak role")],
-                [("[t] I write the answer", "n")], 1)
+                [("[w] I write the answer", "n")], 1)
 
 
 def test_launch_cs4_decide_on_the_queue_still_asks_both():
@@ -2187,8 +2187,8 @@ def test_launch_cs4_decide_on_the_queue_still_asks_both():
         root = build_repo(tmp, _no_routes())
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), inputs=[
-            ("[t] I write the answer", "n"), ("Anything to add", ""),
-            ("[t] I write the answer", "n"), ("Anything to add", "")])
+            ("[w] I write the answer", "n"), ("Anything to add", ""),
+            ("[w] I write the answer", "n"), ("Anything to add", "")])
         check("decide exits 0", rc == 0, out[-1500:])
         check("decide says 2 questions", "2 question(s) for you" in out, out[-1500:])
         check("both routes are asked",
@@ -2199,7 +2199,7 @@ def test_launch_cs4_mixed_asks_only_the_unanswered_route():
     no = item("a1", human_pending="first route text")
     no["evidence"] = _answered("2026-11-02")
     rc, out, events, _ = _launch_on_tty(
-        [("[t] I write the answer", "n"), ("Anything to add", "")], wait="5",
+        [("[w] I write the answer", "n"), ("Anything to add", "")], wait="5",
         items=[no, item("a2", human_pending="second route text"), item("a3")])
     before = _before_first_item(out) or ""
     line = [l for l in before.splitlines() if "already answered" in l]
@@ -2216,7 +2216,7 @@ def test_launch_cs4_latest_answer_wins_over_an_older_no():
     a1["evidence"] = _answered("2026-11-05", "sim: Fecho o card?",
                                old=_answered("2026-11-02"))
     rc, out, events, _ = _launch_on_tty(
-        [("[t] I write the answer", "n"), ("Anything to add", "")], wait="5",
+        [("[w] I write the answer", "n"), ("Anything to add", "")], wait="5",
         items=[a1, item("a2")])
     before = _before_first_item(out) or ""
     check("the run exits 0", rc == 0, out[-1500:])
@@ -2229,8 +2229,8 @@ def test_launch_asks_every_owner_item_not_only_the_first():
     """CS-2: the read is uncapped: 2 owner-route items behind 2 runnable ones, 2 questions,
     "y" to both."""
     rc, out, events, _ = _launch_on_tty(
-        [("[t] I write the answer", "y"), ("Anything to add", ""),
-         ("[t] I write the answer", "y"), ("Anything to add", "")], wait="2",
+        [("[w] I write the answer", "y"), ("Anything to add", ""),
+         ("[w] I write the answer", "y"), ("Anything to add", "")], wait="2",
         # p1 and p2 run: a read capped at `--max 1` stops at the cap (p2 is next)
         # and never reaches a1 and a2, which only the uncapped read sees.
         items=[item("p1"), item("p2"),
@@ -2246,7 +2246,7 @@ def test_launch_asks_every_owner_item_not_only_the_first():
 
 def test_launch_interrupt_at_the_question_prints_one_line_and_carries_on():
     for name, byte in (("Ctrl-C", "\x03"), ("EOF", "\x04")):
-        rc, out, events, items = _launch_on_tty([("[t] I write the answer", byte)])
+        rc, out, events, items = _launch_on_tty([("[w] I write the answer", byte)])
         check(f"{name}: exits 0", rc == 0, out[-1500:])
         check(f"{name}: prints the interrupted line", "questions interrupted" in out,
               out[-1500:])
@@ -2258,7 +2258,7 @@ def test_launch_interrupt_at_the_question_prints_one_line_and_carries_on():
 def test_launch_guard_needs_both_stdin_and_stdout_on_a_terminal():
     """CS-2: stdin on a pty with stdout on a pipe, and stdin DEVNULL with stdout on a
     pty: the panel does not appear in either."""
-    markers = ("question(s) for you", "[t] I write the answer", "questions interrupted",
+    markers = ("question(s) for you", "[w] I write the answer", "questions interrupted",
                "nobody answered")
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1", human_pending="provision the Keycloak role")])
@@ -2858,8 +2858,8 @@ def _cs8_launch(items, mode="pre", inputs=None, wait="5", delay=2):
             seen["reader_done"] = done.exists()
             return b""
         replies = inputs if inputs is not None else [
-            ("[t] I write the answer", first_answer),
-            ("[t] I write the answer", b"")]
+            ("[w] I write the answer", first_answer),
+            ("[w] I write the answer", b"")]
         rc, out = on_tty_calls(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"], str(root),
@@ -2944,7 +2944,7 @@ def test_launch_cs8_queue_route_comes_before_the_pre_read_question_and_the_total
 def test_launch_cs8_without_queue_routes_the_pre_read_opens_the_panel_itself():
     """No route in the queue: the pre-read's question opens a normal panel (1/1)."""
     out, events, items, _ = _cs8_launch(
-        [item("x1"), item("y1")], inputs=[("[t] I write the answer", "")])
+        [item("x1"), item("y1")], inputs=[("[w] I write the answer", "")])
     check("cs8 alone: one question for you", "1 question(s) for you" in out, out[-2500:])
     check("cs8 alone: not announced as still reading",
           "the pre-read is still reading" not in out, out[-2500:])
@@ -2956,7 +2956,7 @@ def test_launch_cs8_preference_counts_in_the_total_after_the_queue_route():
     the total; Enter keeps the default and the item runs."""
     out, events, items, _ = _cs8_launch(
         [_written_route("r1", "provision the Keycloak role"), item("x1")],
-        mode="pref", inputs=[("[t] I write the answer", ""),
+        mode="pref", inputs=[("[w] I write the answer", ""),
                              ("Your choice, in one line", "")])
     route = out.find("provision the Keycloak role")
     pref = out.find("Posso usar o formato curto?")
@@ -3012,7 +3012,7 @@ def test_launch_cs8_empty_queue_route_and_preference_from_the_pre_read_share_one
         _, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"], str(root),
-            inputs=[("[t] I write the answer", ""), ("Your choice, in one line", "")],
+            inputs=[("[w] I write the answer", ""), ("Your choice, in one line", "")],
             env=env, timeout=90)
         out = ANSI.sub("", out)
     launch = out[:out.find("── closing")]
@@ -3081,7 +3081,7 @@ def test_launch_cs9_option_on_terminal_skips_the_pre_read_and_the_panel():
           plain[-2500:])
     check("cs9 option: nothing is asked before the first item",
           launch is not None and not any(m in launch for m in (
-              "[t] I write the answer", "question(s) for you", "Your choice",
+              "[w] I write the answer", "question(s) for you", "Your choice",
               "pre-read")), (launch or plain)[-2500:])
     check("cs9 option: the CS-1 forecast line is there",
           "start: 2 run, 1 wait for the owner" in plain, plain[:2500])
@@ -3158,7 +3158,7 @@ def test_launch_cs9_without_terminal_reads_and_lists_the_questions_as_text():
     check("cs9 no terminal: the listing says where to answer",
           "cepa-until decide fila" in out, out[-2500:])
     check("cs9 no terminal: no panel prompt",
-          not any(m in out for m in ("[t] I write the answer", "question(s) for you",
+          not any(m in out for m in ("[w] I write the answer", "question(s) for you",
                                      "Your choice", "nobody answered in")), out[-2500:])
     check("cs9 no terminal: x1 deferred by the route, y1 runs",
           "x1" not in _started(events) and "y1" in _started(events)

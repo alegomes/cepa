@@ -572,7 +572,7 @@ def test_end_of_run_with_an_owner_item_still_asks_it_but_not_the_landing():
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis", "--no-resume-on-answer"],
-            str(root), inputs=[("[s] yes", "n"), ("Anything to add", "")],
+            str(root), inputs=[("[y] yes", "n"), ("Anything to add", "")],
             env=env, timeout=180)
         plain = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", out)
         check("com item do dono: sai 0", rc == 0, plain[-1500:])

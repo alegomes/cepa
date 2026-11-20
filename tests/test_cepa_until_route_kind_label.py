@@ -48,8 +48,8 @@ def test_decide_on_terminal_labels_each_route_by_its_kind():
         ])
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), inputs=[
-            ("[t] I write the answer", ""), ("[t] I write the answer", ""),
-            ("[t] I write the answer", ""), ("[t] I write the answer", "")])
+            ("[w] I write the answer", ""), ("[w] I write the answer", ""),
+            ("[w] I write the answer", ""), ("[w] I write the answer", "")])
         plain = ANSI.sub("", out)
         lines = plain.splitlines()
 

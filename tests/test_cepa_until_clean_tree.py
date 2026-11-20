@@ -998,7 +998,7 @@ def test_cs7_decide_commits_the_answer_it_wrote_to_the_queue():
         (root / "solto.txt").write_text("x\n")
         before = _git(root, "rev-parse", "HEAD").strip()
         rc, out = dec.on_tty(_decide_cmd(root, f"fila/{run_id}"), str(root), inputs=[
-            ("[t] I write the answer", "n"), ("Anything to add", "")])
+            ("[w] I write the answer", "n"), ("Anything to add", "")])
         check("CS-7 decide: a resposta foi aplicada na fila",
               "não: Fecho o card?" in (yaml.safe_load(
                   (root / ".claude/programs/fila/plan.yaml").read_text())
@@ -1028,7 +1028,7 @@ def test_cs7_decide_on_a_whole_queue_commits_only_the_queue():
         root, run_id, _p = _blocked_run(tmp)
         before = _git(root, "rev-parse", "HEAD").strip()
         rc, out = dec.on_tty(_decide_cmd(root, "fila"), str(root), inputs=[
-            ("[t] I write the answer", "n"), ("Anything to add", "")])
+            ("[w] I write the answer", "n"), ("Anything to add", "")])
         check("CS-7 decide <fila>: sai 0", rc == 0, out[-400:])
         check("CS-7 decide <fila>: git status vazio",
               _git(root, "status", "--porcelain", "--untracked-files=all") == "",
@@ -1062,7 +1062,7 @@ def test_cs7_decide_mid_merge_does_not_commit_and_says_why():
             _git(root, "rev-parse", "HEAD"))
         before = _git(root, "rev-parse", "HEAD").strip()
         rc, out = dec.on_tty(_decide_cmd(root, f"fila/{run_id}"), str(root), inputs=[
-            ("[t] I write the answer", "n"), ("Anything to add", "")])
+            ("[w] I write the answer", "n"), ("Anything to add", "")])
         check("CS-7 decide merge: o código de saída não muda (0)", rc == 0,
               out[-400:])
         check("CS-7 decide merge: nenhum commit",
@@ -1283,7 +1283,7 @@ def test_cs7_decide_commits_the_waiver_the_answer_converted():
         _git_ok(root, "add", "outro.txt")
         before = _git(root, "rev-parse", "HEAD").strip()
         rc, out = dec.on_tty(_decide_cmd(root, f"fila/{run_id}"), str(root), inputs=[
-            ("[t] I write the answer", "s"), ("Anything to add", "")],
+            ("[w] I write the answer", "s"), ("Anything to add", "")],
             env=dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
                      GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t"))
         check("CS-7 decide dispensa: a proposta virou dispensa",
@@ -1365,15 +1365,15 @@ def test_cs7_decide_killed_by_sigterm_or_sighup_after_an_answer_commits_it():
                     if not data:
                         break
                     text += data.decode(errors="replace")
-                if step == 0 and "[t] I write the answer" in text:
-                    text = text.replace("[t] I write the answer", "<q1>", 1)
+                if step == 0 and "[w] I write the answer" in text:
+                    text = text.replace("[w] I write the answer", "<q1>", 1)
                     os.write(fd, b"n\n")
                     step = 1
                 elif step == 1 and "Anything to add" in text:
                     text = text.replace("Anything to add", "<add>", 1)
                     os.write(fd, b"\n")
                     step = 2
-                elif step == 2 and "[t] I write the answer" in text:
+                elif step == 2 and "[w] I write the answer" in text:
                     os.kill(pid, sig)   # second question on screen: first is answered
                     step, sent_at = 3, time.time()
                     end = min(end, time.time() + 30)
@@ -1599,15 +1599,15 @@ def test_cs7_decide_second_signal_while_ending_does_not_cut_the_commit():
                     if not data:
                         break
                     text += data.decode(errors="replace")
-                if step == 0 and "[t] I write the answer" in text:
-                    text = text.replace("[t] I write the answer", "<q1>", 1)
+                if step == 0 and "[w] I write the answer" in text:
+                    text = text.replace("[w] I write the answer", "<q1>", 1)
                     os.write(fd, b"n\n")
                     step = 1
                 elif step == 1 and "Anything to add" in text:
                     text = text.replace("Anything to add", "<add>", 1)
                     os.write(fd, b"\n")
                     step = 2
-                elif step == 2 and "[t] I write the answer" in text:
+                elif step == 2 and "[w] I write the answer" in text:
                     gate.set()
                     os.kill(pid, signal.SIGTERM)
                     step, sent_at = 3, time.time()

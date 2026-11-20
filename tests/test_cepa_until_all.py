@@ -1084,8 +1084,8 @@ def test_cs6_decide_all_run_on_a_terminal_answers_each_item_in_its_queue():
                "--repo", str(root)]
         rc, out = dec.on_tty(cmd, str(root), env=env, timeout=90, inputs=[
             ("Land now?", "n"),
-            ("[t] I write the answer", "n"), ("Anything to add", ""),
-            ("[t] I write the answer", "s"), ("Anything to add", "")])
+            ("[w] I write the answer", "n"), ("Anything to add", ""),
+            ("[w] I write the answer", "s"), ("Anything to add", "")])
         check("decide all/<run> no terminal sai com 0", rc == 0, out[-1200:])
         check("...os itens aparecem como fila/id",
               "a/x1" in out and "b/x1" in out, out[-1500:])
@@ -1192,7 +1192,7 @@ def test_cs6_all_run_on_a_terminal_only_lists_at_the_end_and_never_asks():
               run_id is not None and f"cepa-until decide all/{run_id}" in plain,
               plain[-1500:])
         check("...sem abrir o painel de perguntas",
-              "[t] I write the answer" not in plain
+              "[w] I write the answer" not in plain
               and "Land now?" not in plain and "nobody answered" not in plain,
               plain[-1500:])
         check("...e o item segue como estava",
@@ -1242,9 +1242,9 @@ def test_cs6_decide_all_run_reword_lands_in_the_queue_of_the_item():
                "--repo", str(root)]
         rc, out = dec.on_tty(cmd, str(root), env=env, timeout=90, inputs=[
             ("Land now?", "n"),
-            ("[t] I write the answer", ""),
-            ("[t] I write the answer", "?"),
-            ("[t] I write the answer", "")])
+            ("[w] I write the answer", ""),
+            ("[w] I write the answer", "?"),
+            ("[w] I write the answer", "")])
         plain = dec.ANSI.sub("", out)
         check("decide all/<run> com `?` sai com 0", rc == 0, plain[-1500:])
         items_b = {str(i["id"]): i for i in
@@ -1373,8 +1373,8 @@ def test_cs7_launch_panel_is_one_panel_grouped_by_queue_and_yes_runs_the_item():
             "b": [_owner_item("b1", "liberar o acesso da fila b",
                               "Liberei o acesso da fila b?")]})
         rc, out, events = _launch_all_on_tty(tmp, root, [
-            ("[t] I write the answer", "s"), ("Anything to add", ""),
-            ("[t] I write the answer", "n"), ("Anything to add", "")])
+            ("[w] I write the answer", "s"), ("Anything to add", ""),
+            ("[w] I write the answer", "n"), ("Anything to add", "")])
         check("--all com painel no terminal sai com 0", rc == 0, out[-1500:])
         check("...um painel único com as duas perguntas",
               out.count("question(s) for you") == 1
@@ -1443,7 +1443,7 @@ def test_cs7_launch_panel_skips_a_queue_with_its_own_live_run():
         try:
             _live_run_of_queue(root, "a", alive.pid)
             rc, out, events = _launch_all_on_tty(tmp, root, [
-                ("[t] I write the answer", "s"), ("Anything to add", "")])
+                ("[w] I write the answer", "s"), ("Anything to add", "")])
         finally:
             alive.kill()
             alive.wait()
@@ -1480,7 +1480,7 @@ def test_cs7_q_ends_the_whole_panel_not_only_the_section_of_its_queue():
             "a": [_owner_item("a1", "liberar a", "Liberei a?")],
             "b": [_owner_item("b1", "liberar b", "Liberei b?")]})
         rc, out, events = _launch_all_on_tty(tmp, root, [
-            ("[t] I write the answer", "q")], wait="5")
+            ("[w] I write the answer", "q")], wait="5")
         launch = out.split("── ended", 1)[0]
         check("sai com 0", rc == 0, out[-1500:])
         check("...a pergunta de a foi feita", "Liberei a?" in launch, launch[-1500:])
@@ -1505,7 +1505,7 @@ def test_cs7_a_route_already_answered_no_is_summarized_and_not_asked():
             "a": [old],
             "b": [_owner_item("b1", "liberar b", "Liberei b?")]})
         rc, out, events = _launch_all_on_tty(tmp, root, [
-            ("[t] I write the answer", "n"), ("Anything to add", "")], wait="5")
+            ("[w] I write the answer", "n"), ("Anything to add", "")], wait="5")
         launch = out.split("── ended", 1)[0]
         check("sai com 0", rc == 0, out[-1500:])
         check("...uma linha resume a rota de a já respondida não",
