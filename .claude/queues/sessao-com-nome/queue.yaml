@@ -1,0 +1,31 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/sessao-com-nome.md (1 critério de sucesso)
+# Escrito em: 2026-11-20
+
+schema_version: 2
+mode: single-track
+queue: sessao-com-nome
+source: docs/spec/sessao-com-nome.md (1 critério de sucesso)
+items:
+- id: CS-1
+  title: sessão aberta num worktree `session/<slice>` chega ao claude com `--name
+    <slice>`
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com um
+    claude falso (via `CLAUDE_WT_CLAUDE_BIN`, como em `tests/test_cepa_slice_isolation.py`)
+    que grava seus argumentos, `cepa -s foo` num repo de teste resulta em argumentos
+    que contêm `--name foo`. Na mesma bateria, `cepa -s foo --name bar` resulta
+    em exatamente um `--name`, com valor `bar`, e `cepa` no checkout principal (branch
+    `main`) resulta em argumentos sem `--name`. Hoje o primeiro caso falha: os argumentos
+    não têm `--name`.'
+  status: pending
+  blocked_by: []
+  human_pending: null

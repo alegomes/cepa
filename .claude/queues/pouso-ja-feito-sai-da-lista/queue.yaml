@@ -1,0 +1,132 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/pouso-ja-feito-sai-da-lista.md (9 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-20
+
+schema_version: 2
+mode: single-track
+queue: pouso-ja-feito-sai-da-lista
+source: docs/spec/pouso-ja-feito-sai-da-lista.md (9 critérios de sucesso; ordem
+  herdada do texto)
+items:
+- id: CS-1
+  title: O run com build vermelho cujo merge já está no upstream sai da lista e
+    vira `aterrissado`, sem build
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    de teste com remoto, o run `a/r1` está em `esperando-dono` com `aterrissagem.parou:
+    build-vermelho` e o branch contido em `origin/main`, e o run `a/r2` está na
+    mesma situação mas com o merge só no `main` local. O `verify` dos dois é um
+    script que grava um arquivo marcador. Depois de `cepa-until pending`, o teste
+    exige: nenhuma linha de espera para `a/r1`, `estado: aterrissado` no registro
+    de `a/r1`, arquivo marcador ausente, e a linha "merged in `main` with a red
+    build" ainda presente para `a/r2`. Hoje a linha de espera aparece para os dois
+    e o registro de `a/r1` segue `esperando-dono`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: Ao fechar o run, a lista remove o branch e a worktree dele e guarda os
+    arquivos ignorados pelo git
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com o
+    run `a/r1` do CS-1 tendo uma worktree com um arquivo ignorado pelo git, depois
+    de `cepa-until pending` o teste exige `git branch --list until/r1` vazio, a
+    pasta da worktree ausente e o arquivo ignorado presente sob `.claude/rescued/`.
+    Hoje branch, worktree e arquivo ficam onde estavam.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: O run que nunca passou por `land` até o fim, mas cujo branch já está no
+    upstream, também é fechado
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    de teste com remoto, um run em `esperando-dono` com `aterrissagem: null` e outro
+    com `aterrissagem.parou: conflito`, ambos com o branch contido em `origin/main`.
+    Depois de `cepa-until pending`, o teste exige `estado: aterrissado` nos dois
+    registros e os dois branches removidos. Hoje a lista pula os dois e os registros
+    seguem `esperando-dono`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: O registro em `esperando-dono` sem branch é fechado pelo commit gravado
+    nele
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: dois
+    runs em `esperando-dono` cujo branch foi apagado: o commit gravado na ação `aterrissar`
+    de `a/r3` está em `origin/main`, o de `a/r4` não está. Depois de `cepa-until
+    pending`, o teste exige `estado: aterrissado` em `a/r3` e `estado: descartado`
+    em `a/r4`. Hoje os dois seguem `esperando-dono`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: A lista diz o que fechou, em uma linha por run, separada das linhas de
+    espera
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com os
+    runs do CS-1 e do CS-4, a saída de `cepa-until pending` traz uma linha que começa
+    com `closed:` para `a/r1`, `a/r3` e `a/r4`, cada uma com fila, run e o desfecho
+    (`landed` ou `discarded`), e `cepa-until pending --json` traz a chave `fechados`
+    com os três. Uma segunda chamada não imprime nenhuma linha `closed:`. Hoje não
+    existe linha `closed:` nem a chave `fechados`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: No repo cepa, fechar o run reinstala os plugins com a mesma regra e as
+    mesmas travas do `land`
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    de teste reconhecido como repo cepa, com um `bin/install.sh` falso, `cepa-until
+    pending` fecha o run `a/r1` e o `.jsonl` do run ganha o evento `instalado_no_pouso`.
+    Com o registro da última instalação apontando para a worktree de outro run vivo,
+    o `.jsonl` ganha `instalacao_adiada` e o `install.sh` falso não roda. Hoje `pending`
+    não escreve evento nenhum.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: O que o fechamento escreve nos registros versionados entra num commit,
+    e a árvore do clone fica limpa
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: depois
+    do fechamento do CS-6, o teste exige `git status --porcelain` vazio no clone
+    e um commit no topo com a mensagem `until a/r1 pending: ...` que contém só o
+    `.jsonl` do run. Hoje não há commit com essa mensagem.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-8
+  title: O run cuja worktree tem mudança rastreada sem commit não é fechado, e a
+    linha dele diz por quê
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com o
+    run `a/r1` do CS-1 e um arquivo rastreado modificado sem commit na worktree
+    dele, `cepa-until pending` mantém o registro em `esperando-dono`, mantém branch
+    e worktree, e imprime para `a/r1` uma linha que nomeia a worktree e diz que
+    há mudança sem commit. Hoje a linha impressa é "merged in `main` with a red
+    build, not pushed".'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-9
+  title: '`/common:next` mostra as linhas `closed:` fora de "Pendente com você"'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: um teste
+    lê `common/commands/next.md` e exige a instrução de que linha de `cepa-until
+    pending` iniciada por `closed:` é relatada como fechamento, fora da seção "Pendente
+    com você". Hoje o arquivo manda listar cada linha da saída sob "Pendente com
+    você".'
+  status: pending
+  blocked_by: []
+  human_pending: null
