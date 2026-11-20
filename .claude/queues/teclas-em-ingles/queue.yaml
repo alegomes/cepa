@@ -1,0 +1,69 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/teclas-em-ingles.md (4 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-20
+
+schema_version: 2
+mode: single-track
+queue: teclas-em-ingles
+source: docs/spec/teclas-em-ingles.md (4 critérios de sucesso; ordem herdada do
+  texto)
+items:
+- id: CS-1
+  title: a tela das escolhas da leitura prévia mostra e aceita `y`, `n` e `w`
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
+    com um leitor falso que devolve uma preferência, a largada do `cepa-until` mostra
+    `[y] yes, go with the agent''s default`, `[w] I write the answer` e `[y/n/w,
+    Enter keeps the default]`, e não mostra `[s]`, `[t]` nem `s/n/t`. Digitar `y`
+    grava no evento `largada` do registro a escolha igual ao padrão do agente com
+    `fonte` "dono"; digitar `w` e uma linha grava essa linha. Hoje a tela mostra
+    `[s]`, `[t]` e `s/n/t`, e `w` cai em opção inválida.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: o painel das rotas mostra e aceita `y` e `w`
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
+    `cepa-until decide <fila>` sobre um item com rota aberta e análise com `recomendo:
+    sim` mostra `[y] yes (recommended)` e `[w] I write the answer`, a legenda tem
+    uma linha começando com `y = ` e outra com `w = `, e a saída não contém `[s]`,
+    `[t]`, `s = ` nem `t = `. Digitar `y` e Enter devolve o item à fila com o texto
+    "sim: ..." no `evidence`; digitar `w`, uma linha e `y` devolve o item com essa
+    linha. Hoje o painel mostra `[s] yes` e `[t]`, e `w` cai em opção inválida.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: a tecla antiga recebe uma linha com a tecla nova e não grava nada
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
+    digitar `s` no menu do `cepa-until decide <fila>` mostra uma linha com "s is
+    now y", o `queue.yaml` não muda e o menu pergunta de novo; digitar `t` mostra
+    "t is now w" do mesmo jeito; digitar `sim` mostra a mensagem de opção inválida
+    com "type w first". O mesmo vale para `s`, `t` e `sim` na tela das escolhas
+    da leitura prévia, onde a preferência fica com `fonte` "padrao". Hoje `s` e
+    `sim` devolvem o item à fila e `t` abre a linha de resposta.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: nas confirmações `[y/N]`, `s` e `sim` contam como no
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
+    em `cepa-until decide <fila>` o dono digita `w`, uma linha, e responde `s` em
+    "Send the item back to the queue with that answer? [y/N]": o item continua fora
+    da fila, com a linha gravada. No fim de uma run com integração pendente, responder
+    `sim` em "Land now?" não integra a branch. Hoje, nos dois casos, `s` e `sim`
+    valem como yes.'
+  status: pending
+  blocked_by: []
+  human_pending: null
