@@ -3191,3 +3191,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: gate-advance-exige-build-que-cobre-o-commit
+  title: '`gate-advance` aceita build verde de um teste só para liberar commit que
+    deixa outro teste vermelho'
+  why: 'Origem: feedback fb-20261109-2 (2026-11-09); BACKLOG.md § `gate-advance`
+    aceita build verde de um teste só para liberar commit que deixa outro teste
+    vermelho (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
