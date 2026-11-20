@@ -1,37 +1,53 @@
 schema_version: 2
 card: CS-1
 verdict: proven
-reviewed_at: 2026-11-20T00:00:00-03:00
-base_commit: 09cc73b
-head_commit: ac956f9
+reviewed_at: 2026-11-20T16:10:00-03:00
+base_commit: 21756ff
+head_commit: 61e3db5
 issue_type: Task
+queue: teclas-em-ingles
 scope:
   changed_classes:
-    - { class: "common/bin/cepa-plan", module: cli, external_observable: true, substituted_by_double: null }
-    - { class: "common/_vendor/yaml (PyYAML 6.0.3, verbatim third-party)", module: cli, external_observable: true, substituted_by_double: null }
+    - class: "common/bin/cepa-until ask_preferences (launch preference screen: chips, prompt, y/w branches, key mapping, invalid-option message)"
+      module: common
+      external_observable: true
+      substituted_by_double: null   # the real cepa-until runs in a pty; only the far boundary (fake reader returning one preference) is a double
   base_commit_resolved: true
-  notes: "Not Quarkus: Python CLI harness. Perturbation in throwaway detached worktrees. The test runs the real cepa-plan through its shebang; only python3 is shimmed (-S, no site-packages), which is the simulated environment, not a double of the changed code."
+  note: "Out of scope by instruction: s/t still silently accepted (CS-3, a later item)."
 levels:
   l3_load_bearing:
     technique: perturbation
     pit:
       status: n/a
-      results: []
+      results:
+        - "Python repo, no PIT"
     perturbation:
       status: pass
       results:
-        - "green at head ac956f9: python3 tests/test_cepa_runs_without_pyyaml.py -> 4 ok lines, '✓ cepa runs without PyYAML'; neighbor tests/test_cepa_plan_ready.py -> '✓ cepa-plan ready'"
-        - "perturbation A, rm -rf common/_vendor/yaml: RED, 3 FAIL, 'exit 2: cepa-plan não achou a cópia do PyYAML em .../common/_vendor/yaml' (vendored copy is the code being loaded; new exit-2 branch also exercised)"
-        - "perturbation B, delete the sys.path.insert of _vendor in cepa-plan: RED, same 3 FAIL"
+        - "baseline 61e3db5 (throwaway detached worktree /tmp/proof-tei-CS-1): python3 tests/test_cepa_until_preference_keys.py -> exit 0, 'tudo verde', cs1 checks 9 ok (about 60 s)"
+        - "P1 panel chip ('y' -> 's'): 3 FAIL: 'cs1 screen: [y] chip', 'cs1 screen: no [s], [t] nor s/n/t', 'cs10 panel: the menu shows y, n and w'"
+        - "P2 panel chip ('w' -> 't'): 3 FAIL: 'cs1 screen: [w] chip', 'cs1 screen: no [s], [t] nor s/n/t', 'cs10 panel: ...'"
+        - "P3 plain menu line '[y] yes, go with the default' -> '[s]': 1 FAIL 'cs1 plain: menu line'"
+        - "P4 prompt text '[y/n/w, Enter keeps' -> '[s/n/t, ...' (both panel and plain prompts, 2 lines): 2 FAIL 'cs1 screen: the prompt', 'cs1 screen: no [s], [t] nor s/n/t'"
+        - "P5 y branch (if key == 'y' -> 'zz'): full file exit 1 (IndexError, menu loops forever in test_cs10 in-process); with the file restricted to test_cs1_* in the throwaway worktree: 1 FAIL 'cs1 y: the choice is the agent's default, fonte dono' (fonte stays padrao)"
+        - "P6 w branch (if key == 'w' -> 'zz'): full file exit 1 (IndexError in test_cs10); test_cs1_* only: 2 FAIL 'cs1 w: the line is the choice', 'cs1 w: no invalid-option message'"
+        - "P7 invalid-option message 'type w first' -> 'type t first': 1 FAIL 'cs1 invalid: type w first'"
+        - "SURVIVED (not RED), test_cs1_* only: P8 mapping alias 'yes' -> 's' (exit 0, tudo verde); P9 mapping alias 't' -> 't' (exit 0); P10 header sentence 'w writes a free answer' -> 't writes ...' (exit 0); P11 header sentence 'y accepts the agent's default' -> 's accepts ...' in plain header and panel_note (2 lines, exit 0)"
   l2_coverage:
     status: pass
     uncovered_lines: []
-    run: "no coverage tool in this repo; the three changed hunks in cepa-plan (path insert, import, error branch) were each reached by the perturbation runs above (A reached the error branch, B the import path, green run the happy path)"
+    run: "every changed line of the criterion (chips, prompt, y/w branches, invalid-option message) turned a test_cs1_* check RED under perturbation, so they are reached at the cli altitude (pty); the survivors are outside the criterion (see notes)"
   l4_adversarial_input:
     status: n/a
-    reason: "The diff only changes where the import of an already used YAML library is resolved from; no new parsing of outside input and no input-bearing module (no api-rest) is touched."
+    reason: "the diff swaps the letters of a closed menu in a local CLI; it opens no new input surface (no parser of external data, no api-rest module), and the legacy keys are CS-3's scope"
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-    run: "not a Bug card; as extra check the covering test copied into a detached worktree at 09cc73b is RED: 'exit 2: cepa-plan precisa de PyYAML (pip install pyyaml)', 3 FAIL, '✗ 3 falha(s)'"
-routing_reason: "Criterion (no-PyYAML python3, cepa-plan ready exits 0 and lists the item) holds at the cli surface; breaking the vendored folder or the sys.path line turns the covering test RED, and it is RED at the base commit. No double stands in for the changed code. Limits: vendored library not mutated line by line (verbatim third-party); the shim removes site-packages with -S, not a machine that truly lacks PyYAML."
+    run: "issue type Task, not Bug"
+notes:
+  - "P8/P9: the mapping aliases 'yes' and 't' are not named by the CS-1 criterion ('t' is the legacy key, CS-3 will turn it into a 'now w' line); nothing guards them, so a later change to them is not caught by CS-1."
+  - "P10/P11: the one-line explanation printed above the first question ('y accepts the agent's default, n says ..., w writes ...') can say the wrong letter and every CS-1 check stays green. The criterion lists chips, prompt, y and w behavior, not this sentence, so it is a note, not a reason for UNPROVEN (same treatment as the CS-6 survivors). A one-line assertion on 'y accepts' / 'w writes' in test_cs1_the_launch_screen_shows_y_n_w_and_not_s_t would close it."
+  - "In test_cs1_the_launch_screen_shows_y_n_w_and_not_s_t the slice checked ends at the prompt, so the header sentence is outside the 'no [s]' check."
+  - "P5/P6 turn the whole file red through the in-process test_cs10_* (menu never advances, feed exhausted) before the pty tests run; the test_cs1_* pty tests alone were also shown RED under the same perturbations."
+  - ".claude/acceptance/CS-1.yaml shows as modified in the primary worktree before this review; not touched by this review."
+routing_reason: "Every changed behavior in the criterion (chips y/w, prompt [y/n/w], y records the default with fonte dono, w records the line, invalid-option message 'type w first') goes RED in the pty tests when broken, and the test is green at head with 9 checks. Survivors are the header sentence and legacy aliases, outside the criterion, listed as notes. PROVEN."

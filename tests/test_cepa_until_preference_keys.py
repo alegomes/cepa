@@ -133,6 +133,11 @@ def test_cs1_the_launch_screen_shows_y_n_w_and_not_s_t():
     check("cs1 screen: the prompt", "[y/n/w, Enter keeps the default]" in out, out[-1500:])
     check("cs1 screen: no [s], [t] nor s/n/t",
           "[s]" not in out and "[t]" not in out and "s/n/t" not in out, out[-1500:])
+    note = " ".join(re.sub(r"[│┃|]", " ", out).split())  # the note may wrap in the frame
+    check("cs1 screen: the opening note names y and w",
+          "y accepts the agent's default" in note and "w writes a free answer" in note, note[:600])
+    check("cs1 screen: the opening note no longer names s or t",
+          "s accepts" not in note and "t writes" not in note, note[:600])
 
 
 def test_cs1_typing_y_records_the_default_with_fonte_dono():
@@ -158,6 +163,10 @@ def test_cs1_plain_screen_menu_line_uses_y_and_w():
     check("cs1 plain: menu line", "[y] yes, go with the default" in screen
           and "[w] I write the answer" in screen and "[s]" not in screen
           and "[t]" not in screen, screen)
+    check("cs1 plain: the opening note names y and w",
+          "y accepts the agent's default" in screen and "w writes a free answer" in screen, screen)
+    check("cs1 plain: the opening note no longer names s or t",
+          "s accepts" not in screen and "t writes" not in screen, screen)
 
 
 def test_cs1_invalid_option_message_says_type_w_first():
