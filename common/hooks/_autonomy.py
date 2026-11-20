@@ -38,6 +38,8 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _yamlwarn as _YW  # noqa: E402
 # The plugin's own PyYAML copy goes FIRST so it wins over any installed one
 # (docs/spec/cepa-roda-sem-pyyaml-instalado.md).
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "_vendor"))
@@ -80,7 +82,11 @@ def plugin_yaml_path() -> Path:
 
 
 def _read_yaml(path: Path):
-    import yaml
+    try:
+        import yaml
+    except ImportError as exc:
+        _YW.warn(exc, "_autonomy")
+        raise
 
     try:
         with open(path, encoding="utf-8") as fh:

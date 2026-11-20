@@ -24,6 +24,13 @@ Cases:
         hook is loaded by path and its reading function called): _jiramut,
         _autonomy, ui-proof-verdict-guard, expertise-append, reflection-gate,
         jira-create-fields-gate.
+  CS-4  a hook that cannot load the vendored PyYAML copy (temp copy of its plugin
+        WITHOUT `_vendor/yaml`, under the shim) writes ONE stderr line naming the
+        hook and the reason, and keeps its exit code; with the copy present the
+        line is absent, and a malformed board-flow.yaml does not trigger it.
+        Event level: acceptance-gate, merge-truth-gate, build-hex
+        proof-verdict-guard, ui-proof-verdict-guard. Function level: _jiramut,
+        _autonomy, expertise-append, reflection-gate, jira-create-fields-gate.
 
 Run with `python3 tests/test_cepa_runs_without_pyyaml.py`.
 """
@@ -401,6 +408,154 @@ def cs3(tmp, shim):
           r.stdout.strip() == "'UNIQ'", r.stdout + r.stderr[-300:])
 
 
+def plugin_without_yaml(tmp, name, plugin="common"):
+    """Copy of `<plugin>/hooks` + `<plugin>/_vendor` MINUS `_vendor/yaml`."""
+    import shutil
+    dest = Path(tmp) / name
+    shutil.copytree(REPO / plugin / "hooks", dest / "hooks",
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(REPO / plugin / "_vendor", dest / "_vendor",
+                    ignore=shutil.ignore_patterns("__pycache__", "yaml"))
+    return dest / "hooks"
+
+
+def warning_lines(stderr, hook):
+    """Stderr lines that are the CS-4 warning of `hook`."""
+    return [l for l in stderr.splitlines()
+            if l.startswith(f"[{hook}]") and "PyYAML" in l]
+
+
+def one_warning(label, r, hook):
+    """Exactly one non-empty stderr line, naming the hook and the reason."""
+    lines = [l for l in r.stderr.splitlines() if l.strip()]
+    ok = (len(lines) == 1 and hook in lines[0] and "PyYAML" in lines[0]
+          and "yaml" in lines[0] and "_vendor" in lines[0])
+    check(f"{label}: one stderr line with the hook name and the reason",
+          ok, repr(r.stderr[-400:]))
+
+
+def cs4(tmp, shim):
+    tmp = Path(tmp) / "cs4"
+    tmp.mkdir()
+
+    # acceptance-gate: no artifact for the card + transition id 31 -> exit 0
+    # whether or not board-flow.yaml was read (unresolved target is allowed when
+    # there is no artifact), and the read of board-flow.yaml is reached.
+    acc = tmp / "acc"
+    write(acc / "board-flow.yaml", BOARD_FLOW_YAML)
+    ev = {"tool_name": "mcp__mcp-atlassian__jira_transition_issue",
+          "tool_input": {"issue_key": "UNIQ-1", "transition_id": "31"},
+          "cwd": str(acc)}
+    nov = plugin_without_yaml(tmp, "nov-acc")
+    r = run_event(nov / "acceptance-gate.py", ev, acc, shim)
+    check("CS-4 acceptance-gate without the copy keeps exit 0",
+          r.returncode == 0, f"exit {r.returncode}: {r.stderr[-300:]}")
+    one_warning("CS-4 acceptance-gate without the copy", r, "acceptance-gate")
+
+    r = run_event(HOOKS / "acceptance-gate.py", ev, acc, shim)
+    check("CS-4 acceptance-gate WITH the copy: exit 0, no warning line",
+          r.returncode == 0 and not warning_lines(r.stderr, "acceptance-gate")
+          and r.stderr.strip() == "", f"exit {r.returncode}: {r.stderr[-300:]}")
+
+    # a malformed board-flow.yaml with the copy present is NOT a missing copy.
+    bad = tmp / "bad"
+    write(bad / "board-flow.yaml", "defaults: [unclosed\n  transition_ids: {\n")
+    ev_bad = dict(ev, cwd=str(bad))
+    r = run_event(HOOKS / "acceptance-gate.py", ev_bad, bad, shim)
+    check("CS-4 malformed board-flow.yaml with the copy: no PyYAML warning",
+          r.returncode == 0 and "PyYAML" not in r.stderr,
+          f"exit {r.returncode}: {r.stderr[-300:]}")
+
+    # merge-truth-gate: a key with no side-branch commit and id 51.
+    mt = tmp / "mt"
+    mt.mkdir()
+    def sh(*a):
+        subprocess.run(list(a), cwd=mt, capture_output=True, check=True)
+    sh("git", "init", "-q", "-b", "main")
+    sh("git", "config", "user.email", "t@t")
+    sh("git", "config", "user.name", "t")
+    write(mt / "board-flow.yaml", BOARD_FLOW_YAML)
+    sh("git", "add", "-A")
+    sh("git", "commit", "-qm", "seed")
+    ev = {"tool_name": "mcp__mcp-atlassian__jira_transition_issue",
+          "tool_input": {"issue_key": "UNIQ-8", "transition_id": "51"},
+          "cwd": str(mt)}
+    nov = plugin_without_yaml(tmp, "nov-mt")
+    r = run_event(nov / "merge-truth-gate.py", ev, mt, shim)
+    rc_without = r.returncode
+    one_warning("CS-4 merge-truth-gate without the copy", r, "merge-truth-gate")
+    r = run_event(HOOKS / "merge-truth-gate.py", ev, mt, shim)
+    check("CS-4 merge-truth-gate WITH the copy: no warning line; same exit",
+          not warning_lines(r.stderr, "merge-truth-gate")
+          and r.returncode == rc_without,
+          f"exit {r.returncode} vs {rc_without}: {r.stderr[-300:]}")
+
+    # build-hex proof-verdict-guard: temp copy of build-hex without the copy.
+    pv = tmp / "pv"
+    pv.mkdir()
+    ev = {"tool_name": "Write",
+          "tool_input": {"file_path": str(pv / "docs" / "proof" / "UNIQ-3.yaml"),
+                         "content": "card: UNIQ-3\nverdict: needs-human\n"},
+          "cwd": str(pv)}
+    nov = plugin_without_yaml(tmp, "nov-bh", plugin="build-hex")
+    r = run_event(nov / "proof-verdict-guard.py", ev, pv, shim)
+    check("CS-4 build-hex proof-verdict-guard without the copy keeps exit 0",
+          r.returncode == 0, f"exit {r.returncode}: {r.stderr[-300:]}")
+    one_warning("CS-4 build-hex proof-verdict-guard without the copy", r,
+                "proof-verdict-guard")
+    r = run_event(REPO / "build-hex" / "hooks" / "proof-verdict-guard.py", ev, pv, shim)
+    check("CS-4 build-hex proof-verdict-guard WITH the copy: no warning",
+          r.returncode == 0 and r.stderr.strip() == "", r.stderr[-300:])
+
+    # ui-proof-verdict-guard: event-level, a non-legacy ui proof write.
+    ui = tmp / "ui"
+    ui.mkdir()
+    ev = {"tool_name": "Write",
+          "tool_input": {"file_path": str(ui / "docs" / "proof" / "ui-UNIQ-4.yaml"),
+                         "content": "card: UNIQ-4\nverdict: needs-human\n"},
+          "cwd": str(ui)}
+    nov = plugin_without_yaml(tmp, "nov-ui")
+    r = run_event(nov / "ui-proof-verdict-guard.py", ev, ui, shim)
+    rc_ui = r.returncode
+    ui_lines = warning_lines(r.stderr, "ui-proof-verdict-guard")
+    check("CS-4 ui-proof-verdict-guard without the copy: exactly one warning line",
+          len(ui_lines) == 1 and "_vendor" in ui_lines[0], repr(r.stderr[-400:]))
+    r = run_event(HOOKS / "ui-proof-verdict-guard.py", ev, ui, shim)
+    check("CS-4 ui-proof-verdict-guard WITH the copy: no warning, same exit",
+          not warning_lines(r.stderr, "ui-proof-verdict-guard")
+          and r.returncode == rc_ui, f"{r.returncode} vs {rc_ui}: {r.stderr[-300:]}")
+
+    # ---- function level: copy without yaml, module loaded by path ----------
+    fn = tmp / "fn"
+    write(fn / "board-flow.yaml", BOARD_FLOW_YAML)
+    write(fn / "aut.yaml", "uniq_key: 1\n")
+    nov = plugin_without_yaml(tmp, "nov-fn")
+
+    def fn_case(hook, expr, *args):
+        r = call_fn(shim, nov / f"{hook}.py", expr, fn, *args)
+        got = warning_lines(r.stderr, hook)
+        check(f"CS-4 {hook} without the copy: exactly one warning line",
+              len(got) == 1 and "_vendor" in got[0], repr(r.stderr[-400:]))
+        return r
+
+    fn_case("_jiramut", "m.logical_status('Em Revisao Uniq', a[0])", str(fn))
+    fn_case("_autonomy",
+            "m._read_yaml(__import__('pathlib').Path(a[0]))", str(fn / "aut.yaml"))
+    fn_case("expertise-append", "m._HAVE_YAML")
+    fn_case("reflection-gate", "m.load(a[0])", "uniq: 1\n")
+    r = fn_case("jira-create-fields-gate", "m._load_rules(a[0])", str(fn))
+    check("CS-4 jira-create-fields-gate without the copy: no 'pip install' advice",
+          "pip install" not in r.stdout + r.stderr, repr(r.stderr[-400:]))
+    # the module is loaded twice in one process: still one line per run is the
+    # job of the entry script, so the shared helper warns once per process.
+    r = call_fn(shim, nov / "acceptance-gate.py",
+                "(m.transition_map(__import__('pathlib').Path(a[0])), "
+                "m.transition_map(__import__('pathlib').Path(a[0])))", fn, str(fn))
+    check("CS-4 two reads of the YAML in one run: still one warning line",
+          len([l for l in r.stderr.splitlines() if "PyYAML" in l]) == 1,
+          repr(r.stderr[-400:]))
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         shim = make_shim(tmp)
@@ -423,6 +578,7 @@ def main():
 
         cs2(tmp, shim)
         cs3(tmp, shim)
+        cs4(tmp, shim)
 
     print()
     if FAILURES:

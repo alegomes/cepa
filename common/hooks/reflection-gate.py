@@ -29,6 +29,8 @@ import json
 import os
 import re
 import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _yamlwarn as _YW  # noqa: E402
 # The plugin's own PyYAML copy goes FIRST so it wins over any installed one
 # (docs/spec/cepa-roda-sem-pyyaml-instalado.md).
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "_vendor"))
@@ -48,7 +50,11 @@ def is_report(file_path):
 
 def load(text):
     try:
-        import yaml  # noqa: PLC0415
+        try:
+            import yaml  # noqa: PLC0415
+        except ImportError as exc:
+            _YW.warn(exc, "reflection-gate")
+            raise
         return yaml.safe_load(text)
     except Exception:  # noqa: BLE001
         return None
