@@ -38,6 +38,9 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+# The plugin's own PyYAML copy goes FIRST so it wins over any installed one
+# (docs/spec/cepa-roda-sem-pyyaml-instalado.md).
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "_vendor"))
 
 
 def _t_emit(event: str, cwd: str = None, **fields) -> None:

@@ -35,7 +35,12 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from pathlib import Path
+
+# The plugin's own PyYAML copy goes FIRST so it wins over any installed one
+# (docs/spec/cepa-roda-sem-pyyaml-instalado.md).
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "_vendor"))
 
 BANDS = ("executa_e_reporta", "sempre_pergunta")
 BAND_AUTOMATIC, BAND_ASK = BANDS
