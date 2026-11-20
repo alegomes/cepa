@@ -14,6 +14,10 @@ here, reusing `make_shim`, `make_repo` and `run_direct`.
 
 Cases:
   CS-1  `cepa-plan ready` lists the ready item, exit 0, no "PyYAML" on stderr
+  CS-2  the other 11 (cepa-dor, cepa-until, cepa-until-digest, five maestro-*,
+        waivers.py, classify_needs_human.py, board-flow-fleet-validate.sh) each
+        reach a real YAML read: no "PyYAML" / yaml ImportError on stderr and the
+        output carries a marker that only exists in the example YAML
 
 Run with `python3 tests/test_cepa_runs_without_pyyaml.py`.
 """
@@ -25,6 +29,9 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+BIN = REPO / "common" / "bin"
+MAESTRO = REPO / "maestro" / "bin"
+BOARD_FLOW = REPO / "board-flow"
 FAILURES = []
 
 
@@ -80,6 +87,153 @@ def run_direct(script, args, cwd, shim_dir, extra_env=None):
                           text=True, cwd=str(cwd), env=env)
 
 
+def write(path, text):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def no_yaml_complaint(name, r):
+    """The shared negative checks of CS-2: the missing-yaml symptoms are gone."""
+    check(f"{name}: no 'PyYAML' on stderr", "PyYAML" not in r.stderr, r.stderr)
+    bad = ("ModuleNotFoundError" in r.stderr or "ImportError" in r.stderr
+           or "No module named" in r.stderr)
+    check(f"{name}: no yaml import error on stderr", not bad, r.stderr)
+
+
+def cs2(tmp, shim):
+    tmp = Path(tmp) / "cs2"
+    (tmp / "m").mkdir(parents=True)
+    root = make_repo(tmp)                     # git repo, queue q, item X-1
+    plan_dir = Path(tmp) / "plans"
+
+    # cepa-dor: a v2 single-track plan is refused with a message that names the
+    # mode, which only exists inside the YAML.
+    plan = write(plan_dir / "dor.yaml",
+                 "schema_version: 2\nmode: single-track\nprogram: uniq-dor\n")
+    r = run_direct(BIN / "cepa-dor", [str(plan)], root, shim)
+    no_yaml_complaint("CS-2 cepa-dor", r)
+    check("CS-2 cepa-dor read the plan (names its single-track mode)",
+          "single-track" in r.stdout and "ilegível" not in r.stdout,
+          r.stdout + r.stderr)
+
+    # cepa-until: --dry-run prints the run plan from the queue, no claude.
+    r = run_direct(BIN / "cepa-until", ["q", "--for", "1h", "--dry-run", "--dirty-ok",
+                                  "--no-verify"],
+                   root, shim)
+    no_yaml_complaint("CS-2 cepa-until", r)
+    check("CS-2 cepa-until dry-run read the queue (names item X-1)",
+          "X-1" in r.stdout + r.stderr, r.stdout + r.stderr)
+
+    # cepa-until-digest: the touched item's CURRENT status comes from the queue.
+    prog = Path(tmp) / "digest" / ".claude" / "programs" / "F"
+    write(prog / "plan.yaml",
+          "items:\n- id: A1\n  status: uniq-status-digest\n  blocked_by: []\n")
+    ledger = write(prog / "until" / "r.jsonl",
+                   '{"evento": "run_start", "fila": "F", "branch": "until/r"}\n'
+                   '{"evento": "item_start", "id": "A1", "title": "um"}\n'
+                   '{"evento": "run_end", "motivo": "end-of-queue"}\n')
+    write(prog / "until" / "r.log", "")
+    r = run_direct(BIN / "cepa-until-digest", [str(ledger)], root, shim)
+    no_yaml_complaint("CS-2 cepa-until-digest", r)
+    check("CS-2 cepa-until-digest shows the item status read from the YAML",
+          "uniq-status-digest" in r.stdout, r.stdout + r.stderr)
+
+    # maestro-* : one program dir with a wave-state and a plan.
+    wave_state = ("program: uniq-prog\nwave: 1\ntimeout_min_default: 45\n"
+                  "slices:\n  uniq-slice:\n    status: running\n"
+                  "    started_epoch: 1000\n")
+    mroot = make_repo(Path(tmp) / "m", queue="mq")
+    pdir = mroot / ".claude" / "programs" / "uniq-prog"
+    write(pdir / "wave-state.yaml", wave_state)
+    write(pdir / "slices" / "uniq-slice" / "resultado.txt", "MAESTRO-EXIT:0\n")
+    r = run_direct(MAESTRO / "maestro-poll", [str(pdir), "--now", "2000"],
+                   mroot, shim)
+    no_yaml_complaint("CS-2 maestro-poll", r)
+    check("CS-2 maestro-poll reports the slice from wave-state.yaml",
+          "uniq-slice" in r.stdout and '"DONE"' in r.stdout, r.stdout + r.stderr)
+
+    mplan = write(plan_dir / "maestro.yaml",
+                  "schema_version: 2\nmode: parallel-waves\nprogram: uniq-prog\n"
+                  "slices:\n  s1:\n    surface: [uniq-surface/**]\n"
+                  "waves:\n- id: 1\n  slices: [s1]\n")
+    r = run_direct(MAESTRO / "maestro-fork-settings", [str(mplan), "s1"],
+                   mroot, shim)
+    no_yaml_complaint("CS-2 maestro-fork-settings", r)
+    check("CS-2 maestro-fork-settings emits the slice surface from the plan",
+          "uniq-surface" in r.stdout, r.stdout + r.stderr)
+
+    write(pdir / "plan.yaml",
+          "schema_version: 2\nmode: parallel-waves\nprogram: uniq-prog\n"
+          "slices:\n  uniq-slice:\n    surface: [x/**]\n"
+          "waves:\n- id: 1\n  slices: [uniq-slice]\n")
+    r = run_direct(MAESTRO / "maestro-programs", [str(mroot), "--json"],
+                   mroot, shim)
+    no_yaml_complaint("CS-2 maestro-programs", r)
+    check("CS-2 maestro-programs lists the program and its wave-state slice",
+          "uniq-prog" in r.stdout and "uniq-slice" in r.stdout,
+          r.stdout + r.stderr)
+
+    r = run_direct(MAESTRO / "maestro-wave-state",
+                   ["get", str(pdir), "--json"], mroot, shim)
+    no_yaml_complaint("CS-2 maestro-wave-state", r)
+    check("CS-2 maestro-wave-state get returns the file content",
+          "uniq-slice" in r.stdout, r.stdout + r.stderr)
+
+    write(pdir / "wave-state.yaml",
+          "program: uniq-prog\nwave: 1\nslices:\n  uniq-slice:\n"
+          "    status: FAIL\n")
+    r = run_direct(MAESTRO / "maestro-prune",
+                   [str(pdir), "--repo", str(mroot), "--dry-run"], mroot, shim)
+    no_yaml_complaint("CS-2 maestro-prune", r)
+    check("CS-2 maestro-prune read the wave-state (keeps the FAIL slice)",
+          "uniq-slice" in r.stdout, r.stdout + r.stderr)
+
+    # board-flow python modules, run through the python3 shim.
+    wroot = Path(tmp) / "w"
+    write(wroot / ".claude" / "waivers" / "teste-cego--uniq.yaml",
+          "motivo: teste-cego\nescopo: uniq-escopo\nrazao: porque\n"
+          "autor: alguem\ncriado_em: 2026-01-01\nrevisit_trigger: 2099-01-01\n")
+    code = ("import sys; sys.path.insert(0, sys.argv[1]); import waivers; "
+            "print([w['escopo'] for w in waivers.load(sys.argv[2])])")
+    r = run_direct(shim / "python3",
+                   ["-c", code, str(BOARD_FLOW / "bin"), str(wroot)], root, shim)
+    no_yaml_complaint("CS-2 waivers.py", r)
+    check("CS-2 waivers.py load() returns the waiver from the YAML",
+          "uniq-escopo" in r.stdout, r.stdout + r.stderr)
+
+    croot = Path(tmp) / "c"
+    write(croot / "docs" / "proof" / "UNIQ-9.yaml",
+          "card: UNIQ-9\nverdict: needs-human\n")
+    r = run_direct(shim / "python3",
+                   [str(BOARD_FLOW / "bin" / "classify_needs_human.py"),
+                    str(croot)], root, shim)
+    no_yaml_complaint("CS-2 classify_needs_human.py", r)
+    check("CS-2 classify_needs_human.py lists the card from the proof YAML",
+          "UNIQ-9" in r.stdout, r.stdout + r.stderr)
+
+    # board-flow-fleet-validate.sh: a fake `twg` passes the preflight and logs
+    # the project key; the script has resolved it from board-flow.yaml by then.
+    # The real Jira calls are NOT exercised, only the YAML read that precedes.
+    frepo = Path(tmp) / "f"
+    write(frepo / "board-flow.yaml",
+          "defaults:\n  project_key: UNIQKEY\n  status_map:\n    to_do: A fazer\n")
+    twg = write(Path(tmp) / "fake" / "twg",
+                "#!/bin/sh\n"
+                'case "$*" in\n'
+                '  *doctor*) echo \'{"data":{"connectivity":{"ok":true}}}\' ;;\n'
+                '  *) echo "fake twg: $*"; exit 1 ;;\n'
+                "esac\n")
+    twg.chmod(0o755)
+    env = {"TWG_BIN": str(twg)}
+    r = run_direct(BOARD_FLOW / "board-flow-fleet-validate.sh", [str(frepo)],
+                   root, shim, extra_env=env)
+    no_yaml_complaint("CS-2 board-flow-fleet-validate.sh", r)
+    check("CS-2 board-flow-fleet-validate.sh resolved project_key from the YAML",
+          "UNIQKEY" in r.stdout + r.stderr, r.stdout + r.stderr)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         shim = make_shim(tmp)
@@ -99,6 +253,8 @@ def main():
         check("CS-1 cepa-plan ready lists the ready item",
               "X-1" in r.stdout, r.stdout)
         check("CS-1 no 'PyYAML' on stderr", "PyYAML" not in r.stderr, r.stderr)
+
+        cs2(tmp, shim)
 
     print()
     if FAILURES:

@@ -264,13 +264,16 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
+HERE = Path(__file__).resolve().parent
+# The plugin's own PyYAML copy goes FIRST so it wins over any installed one.
+sys.path.insert(0, str(HERE.parent / "_vendor"))
 try:
     import yaml
 except ImportError:
-    print("cepa-until needs PyYAML (pip install pyyaml)", file=sys.stderr)
+    print(f"cepa-until could not find the PyYAML copy at {HERE.parent / '_vendor' / 'yaml'}",
+          file=sys.stderr)
     sys.exit(2)
 
-HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "hooks"))
 import _queuepath as qp  # noqa: E402  (the queue lives in two layouts during the transition)
 import _ownertext  # noqa: E402  (the human section of a blocked item)

@@ -36,6 +36,8 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+# The plugin's own PyYAML copy goes FIRST so it wins over any installed one.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "_vendor"))
 import _tui  # noqa: E402
 import _clihelp  # noqa: E402
 import _state  # noqa: E402  (the run liveness rule: one copy)

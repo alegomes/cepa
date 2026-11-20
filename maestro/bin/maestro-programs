@@ -47,10 +47,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+# The plugin's own PyYAML copy goes FIRST so it wins over any installed one.
+_VENDOR = Path(__file__).resolve().parent.parent / "_vendor"
+sys.path.insert(0, str(_VENDOR))
 try:
     import yaml
 except ImportError:
-    print("maestro-programs precisa de PyYAML", file=sys.stderr)
+    print(f"maestro-programs não achou a cópia do PyYAML em {_VENDOR / 'yaml'}",
+          file=sys.stderr)
     sys.exit(2)
 
 def _wave_state_mod():

@@ -53,14 +53,18 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+_PLUGIN = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_PLUGIN / "hooks"))
+# The plugin's own PyYAML copy goes FIRST so it wins over any installed one.
+sys.path.insert(0, str(_PLUGIN / "_vendor"))
 import _tui  # noqa: E402
 import _clihelp  # noqa: E402
 
 try:
     import yaml
 except ImportError:
-    print("✗ cepa-dor precisa de PyYAML (pip install pyyaml)", file=sys.stderr)
+    print(f"✗ cepa-dor não achou a cópia do PyYAML em {_PLUGIN / '_vendor' / 'yaml'}",
+          file=sys.stderr)
     sys.exit(2)
 
 # plan.yaml versions this binary can read. v1 = legacy (waves only, no

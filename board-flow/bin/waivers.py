@@ -29,7 +29,14 @@ from __future__ import annotations
 import glob
 import os
 import re
+import sys
 from datetime import date
+
+# The plugin's own PyYAML copy goes FIRST so it wins over any installed one.
+# Done at import time: the lazy `import yaml` inside the functions below, and
+# any hook or test that imports this module, find the copy.
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "_vendor"))
 
 DIR = ".claude/waivers"
 
