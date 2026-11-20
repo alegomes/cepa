@@ -3180,3 +3180,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: wrap-up-fecha-cursor-da-intencao
+  title: O cursor da intenção só anda quando o agente lembra, e o `cepa-intent close`
+    não fecha o último pass
+  why: 'Origem: feedback fb-20261109-1 (2026-11-09); BACKLOG.md § O cursor da intenção
+    só anda quando o agente lembra, e o `cepa-intent close` não fecha o último passo
+    (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
