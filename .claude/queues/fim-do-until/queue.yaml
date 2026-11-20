@@ -23,9 +23,36 @@ items:
     com `--auto-land` sobre uma fila cujo único item entrega verde, com o `main`
     do clone intocado, termina com o commit da branch da run no `main` e o estado
     `aterrissado`; hoje a flag não existe e o argparse sai com 2.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-19-0736: 9774c03 (flag --auto-land,
+    campo auto_land no estado, not_clean_reason/last_verify_green/auto_land, chamada
+    em commit_records antes de commit_run_end, protegida por try/except), f95f7b9
+    (state_auto_land: o estado é a fonte; estado antigo sem o campo vale não), a491265
+    (testes que isolam build vermelho, pergunta do dono e auto_land false), cf81357
+    (artefatos dos portões). Teste: tests/test_cepa_until_auto_land.py, 10 testes,
+    28 checks verdes; vermelho na base 29ab80a (a run não começa: a flag não existe).
+    Vizinhos verdes: test_cepa_until_land, test_cepa_until_land_install, test_cepa_until_dead_supervisor,
+    test_cepa_until_english_aliases, test_cepa_help_layout. pair-reviewer: CHANGES-REQUESTED
+    com 4 achados, os 4 corrigidos. completion-auditor: COMPLETE em .claude/acceptance/fim-do-until-CS-1.yaml
+    (auditado em f95f7b9; a491265 só acrescenta testes). proof-reviewer: PROVEN
+    em docs/proof/fim-do-until-CS-1.yaml (head a491265, 7 perturbações, todas vermelhas).
+    Chave dos artefatos é fim-do-until-CS-1 porque .claude/acceptance/CS-1.yaml
+    e docs/proof/CS-1.yaml já pertencem a outra especificação (campo demonstra:);
+    o auditor tinha sobrescrito o de aceite, restaurei. Fica para os próximos itens:
+    a linha ''not merged: <motivo>'' já existe mas o formato do CS-2 não foi testado;
+    a pergunta da largada (CS-3), o fim sem ''Land now?'' (CS-4) e o caso ''a janela
+    não comporta o build'' (seção Riscos) não foram feitos. O código está na branch
+    da run, não na main.'
+  head_commit: cf8135707d80687b4e706e7b201fdbce597fde47
+  decisions:
+  - texto: Com --auto-land, a run só conta como limpa se todos os itens que tocou
+      saíram entregues (qualquer outro desfecho, inclusive um que venha a existir,
+      impede o merge), se rodou build completo (uma run com --no-verify nunca faz
+      o merge sozinha), e nunca numa run de todas as filas (--all); o aviso de reinstalar
+      o plugin não impede, porque o próprio land reinstala
+    commit: 9774c0338aabda8401888f13f1beac00b4fd49a2
 - id: CS-2
   title: uma run não limpa com `--auto-land` não faz o merge e diz qual condição
     falhou
@@ -34,9 +61,36 @@ items:
     com `--auto-land` em que um item termina travado acaba com estado `esperando-dono`,
     `main` intocado e uma linha que nomeia a condição que falhou ("not merged: WEGO-2542
     is stuck"); hoje a flag não existe.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Code on the overnight branch until/2026-11-19-0736 (no merge, no push;
+    full build delegated to the supervisor). Commits: 08f68a9 (window guard window_reason
+    + English phrases per outcome in not_clean_reason + stronger tests), 14fef73
+    (end-to-end tests pinning left=deadline-now in commit_records), 0727c77 (gate
+    artifacts). Most of the refusal itself came from CS-1 (9774c03..a491265). pair-reviewer:
+    OK-WITH-NOTES (note about expired window turned into test_expired_window_refuses).
+    completion-auditor: first INCOMPLETE (window guard only tested at function level),
+    COMPLETE at 14fef73 (.claude/acceptance/fim-do-until-CS-2.yaml). proof-reviewer:
+    first UNPROVEN at 08f68a9 (3 surviving perturbations on the commit_records wiring),
+    PROVEN at 14fef73 (docs/proof/fim-do-until-CS-2.yaml; 6 perturbations re-run,
+    all RED; the other 4 of the first review were RED at 08f68a9 and not re-run).
+    Tests run: python3 tests/test_cepa_until_auto_land.py exit 0, 66 ok, 0 FAIL
+    (~35 s); python3 tests/test_cepa_until_land.py exit 0 at 08f68a9. Full suite
+    NOT run here. Left out: the ''Next'' panel text for the window refusal (CS-6).'
+  head_commit: 0727c772a5c2f222c2cf80ad5978c0b03de776f0
+  decisions:
+  - texto: The automatic merge does not start when what is left of the window is
+      shorter than the last full build took, so a run that ended on the deadline
+      never merges by itself; this rule came from the spec's risks section and was
+      built inside this item
+    commit: 08f68a97ba25449cd83db73df01d0eee4997903f
+  - texto: The extra time allowed to an item already running (--slack) does not
+      count as window for the automatic merge
+    commit: 08f68a97ba25449cd83db73df01d0eee4997903f
+  - texto: The 'not merged' line names each unfinished outcome in English, and an
+      outcome this version does not know still refuses the merge
+    commit: 08f68a97ba25449cd83db73df01d0eee4997903f
 - id: CS-3
   title: sem a flag, a largada pergunta a pré-autorização uma vez, junto com as
     outras perguntas da largada
@@ -44,9 +98,36 @@ items:
     entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
     lançar sem `--auto-land` mostra essa pergunta antes do primeiro item, e responder
     `y` grava `"auto_land": true` no estado da run; hoje a pergunta não existe.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits on until/2026-11-19-0736: 003231c (red tests), 72030b5 (ask_auto_land
+    + --no-auto-land + call in _main), 375b264 (shared pty helpers answer the new
+    prompt with Enter), 766db9a (pin: --all on a terminal never asks), 6292705 (refuse
+    --auto-land with --no-auto-land; ''before the first item'' check uses the real
+    marker), 3a670e6 (tests: no answer/EOF/Ctrl-C mean no; asked once after the
+    other launch questions; --no-pre-read skips), 13a922d (gate files). pair-reviewer:
+    OK-WITH-NOTES, fixes applied; its claim that --all asks was false (on_terminal
+    is off in --all), pinned by test. completion-auditor: INCOMPLETE at 6292705,
+    COMPLETE at 3a670e6 (.claude/acceptance/fim-do-until-CS-3.yaml). proof-reviewer:
+    UNPROVEN at 6292705 (except branch returning True survived), PROVEN at 3a670e6,
+    12 perturbations RED (docs/proof/fim-do-until-CS-3.yaml). Tests run: test_cepa_until_auto_land.py
+    exit 0, 109 ok, 0 FAIL; test_cepa_until_all, _clean_tree, _dead_supervisor,
+    _resume_on_answer, _route_rewrite, test_cepa_until exit 0; test_cepa_until_decide.py
+    exit 0 alone (322s) but showed one different timing FAIL in each of two runs
+    under parallel load (Ctrl-C interrupted line; cs7 mixed pre-read), both 3/3
+    green alone and on paths that do not reach the new code. Full build not run:
+    delegated to the supervisor. Left out: at the end of a run with auto_land true,
+    ''Land now?'' is still asked before the automatic merge (CS-4).'
+  head_commit: 13a922dc21d2057cff171db873dd2e4b7ccf0a90
+  decisions:
+  - texto: Passing --auto-land together with --no-auto-land is refused with exit
+      2 before any run starts, instead of one flag silently winning
+    commit: 62927054a6c7696163a5a5eb2f6b643a49dfb75a
+  - texto: The pre-authorization question is asked only when the launch will run
+      at least one item, and is skipped with --no-pre-read and in --all runs, which
+      behave as launches without a terminal
+    commit: 62927054a6c7696163a5a5eb2f6b643a49dfb75a
 - id: CS-4
   title: o fim da run nunca pergunta "Land now?"
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -54,18 +135,74 @@ items:
     uma run limpa sem pré-autorização sai segundos depois do relatório e a saída
     não contém "Land now?"; hoje imprime "Land now? [y/N/q]" e espera `CEPA_UNTIL_ESPERA_RESPOSTA`
     segundos.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'CS-4 on branch until/2026-11-19-0736 (not merged, not pushed; the full
+    build is the supervisor''s). Commits: 64fc482 (decide()/close_with_owner() gain
+    ask_land; the run end passes ask_land=False; commit_records prints ''to merge
+    into <dest>: cepa-until land <queue>/<run> --yes'' when the landing is still
+    pending), da73cc5 (test pins that the end does not say ''nothing is waiting
+    on you'' above the merge command), b4a4189 (gate files). pair-reviewer: OK-WITH-NOTES,
+    dead test code removed. completion-auditor: COMPLETE (.claude/acceptance/fim-do-until-CS-4.yaml,
+    4 criteria at cli altitude, pty). proof-reviewer: first UNPROVEN at 64fc482
+    (one survivor: guard ''if ask_land: screen.nothing()''), re-proof PROVEN at
+    da73cc5 (docs/proof/fim-do-until-CS-4.yaml; 9 perturbations RED, new tests RED
+    at base 13a922d). Tests run: python3 tests/test_cepa_until_auto_land.py exit
+    0, 0 FAIL; python3 tests/test_cepa_until_decide.py exit 0, 494 ok, 0 FAIL; pair-dev
+    also ran test_cepa_until_resume_on_answer, _all, _clean_tree green at 64fc482.
+    Left out: a pre-existing ''return applied, for_later'' in decide() (not in this
+    diff) has no test for ''0 question(s) for you'' on the run-end path; without
+    a terminal or in --all the merge shows twice (''waiting on you: aterrissar''
+    plus the new line), which CS-5/CS-6 rewrite.'
+  head_commit: b4a41893594fc9811757692f84b4adaaa044d7db
+  decisions:
+  - texto: cepa-until decide <fila>/<run>, rodado à mão, continua perguntando 'Land
+      now?'; só o fim da run deixou de perguntar
+    commit: 64fc48290b61d9125c06f665541ea4c869d8dc24
+  - texto: em run sem terminal ou --all o merge aparece duas vezes no fim (na lista
+      'waiting on you' e na linha nova com o comando) até o CS-6 redesenhar o relatório
+    commit: 64fc48290b61d9125c06f665541ea4c869d8dc24
 - id: CS-5
   title: nada de português na tela do fim
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
     entre si · superfície onde se observa: cli · teste vermelho declarado: a saída
     do fim de uma run com um item adiado não contém "aterrissar" nem "a fila acabou";
     hoje contém os dois.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Return 1 of 2 resolved. Reused side branch until/2026-11-19-0736-vermelho-CS-5
+    by cherry-pick: a5c0d59 (RED test), 25cb078 (cepa-until screen says ''merge
+    into <branch>''; cepa-plan stop details in English), 70ebca3 (extra pins). New:
+    36d6a15 fixes the only red file of the supervisor''s build, tests/test_cepa_until.py,
+    whose run_end assertion expected the Portuguese ''adiado'' and now pins ''1
+    were deferred''; 468a9c6 gate artifacts. Gates on HEAD 36d6a15: completion-auditor
+    COMPLETE (.claude/acceptance/fim-do-until-CS-5.yaml), proof-reviewer PROVEN
+    (docs/proof/fim-do-until-CS-5.yaml; RED at base b4a4189; 6 perturbations all
+    RED, P1 turns test_cepa_until.py red with exactly 1 FAIL). Touched tests green
+    one by one: screen_english 25 ok, test_cepa_until 263 ok, decide 494 ok, run_branch
+    116, hook_reinstall 68, resume_on_answer 37, common_drain_plan 192. Full build
+    not run here: it belongs to the supervisor; code is on the run branch, no merge,
+    no push. Left out: --help texts of decide/close-dead and the close-dead plan
+    line have green tests but no own perturbation. Note: two pty Ctrl-C cases in
+    test_cepa_until_decide.py failed once under load in this session and passed
+    on 3 later runs and in both supervisor builds.'
+  decisions:
+  - texto: estado antigo sem a branch de destino gravada mostra a ação como 'merge
+      into the clone's branch'
+    commit: 3a44bc6559d4896e90c9a6218e85aef05143c746
+  - texto: 'fila que acaba sem item adiado diz ''the queue is finished: no pending
+      item is left'' (a especificação só ditava o texto com adiados)'
+    commit: 3a44bc6559d4896e90c9a6218e85aef05143c746
+  - texto: com um item adiado a tela diz '1 were deferred', no texto literal da
+      especificação, sem ajustar o singular
+    commit: 3a44bc6559d4896e90c9a6218e85aef05143c746
+  - texto: 'Only what the owner reads on screen changed: the end-of-run screen says
+      ''merge into <branch>''. The id ''aterrissar'' stays in the saved run state
+      and as an alias of the ''land'' command, so older runs keep working.'
+    commit: 25cb078bef408de7ddafabb298047ccb7d0621c6
+  head_commit: 468a9c626611b64e7347e7fbff8be5ac2e85455f
 - id: CS-6
   title: o relatório final é um conjunto de painéis TUI, e o merge aparece uma vez
     só
@@ -75,9 +212,39 @@ items:
     não tem linha com mais de 100 colunas, contém "merge into" exatamente uma vez
     e não contém "Actions:", "Left with you" nem "waiting on you"; hoje o motivo
     quebra em várias linhas e o merge aparece duas vezes.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Code on the overnight branch until/2026-11-19-0736 (no merge, no push;
+    full build delegated to the supervisor). Commits 3cd3861 (RED test) 399044f
+    e89542f 3da7d54 244c72c 7d86618 b11cd84 0460939 (extra test asked by the proof
+    gate) 1cca1ea (gate artifacts). pair-reviewer: APPROVE, nits only (width uses
+    len() not display width for CJK/emoji; panel title not cut; Next drops the ''why''
+    of each owner question; a failed second queue read makes Next say ''nothing
+    left for you''). completion-auditor: COMPLETE (.claude/acceptance/fim-do-until-CS-6.yaml).
+    proof-reviewer: first pass UNPROVEN (one survivor in fit_row), second pass PROVEN
+    at 0460939 (docs/proof/fim-do-until-CS-6.yaml). Targeted tests green one by
+    one: final_report, test_cepa_until, decide, all, auto_land, hook_reinstall,
+    network, quota, run_branch, screen_english, test_cepa_plan_finish_decision.
+    Known: the Ctrl-C launch-question case in decide/auto_land failed only when
+    several test files ran in parallel, passed alone 2x. Left out: the ''commit:
+    <sha> on the clone''s branch'' line of commit_run_end stays loose between Decisions
+    and Next (not in the CS-6 layout).'
+  head_commit: 1cca1ea702fec9abdbcd6e056bf0b7a2ce9d04f1
+  decisions:
+  - texto: The header, Items and Decisions panels print right when the run ends;
+      the Next panel and the paths line print last, after the analysis, the owner
+      questions and the automatic merge.
+    commit: 3da7d5492fa17a1c0c6014fa90adb35aeda9ac2c
+  - texto: A reason too long for the line is cut in the middle with an ellipsis,
+      keeping its end, where the command the owner needs usually is.
+    commit: 3da7d5492fa17a1c0c6014fa90adb35aeda9ac2c
+  - texto: The Next panel spells out up to five owner questions and then says how
+      many more are in decide, instead of listing only ids.
+    commit: 3da7d5492fa17a1c0c6014fa90adb35aeda9ac2c
+  - texto: When the record, log and analysis paths do not fit on one line, they
+      are printed as one path with the three extensions in braces.
+    commit: 3da7d5492fa17a1c0c6014fa90adb35aeda9ac2c
 - id: CS-7
   title: '`cepa-until land --yes` imprime etapas numeradas com resultado e duração'
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -85,6 +252,37 @@ items:
     land <fila>/<run> --yes` numa run de fixture imprime linhas começando com `[1/3]`,
     `[2/3]` e `[3/3]`, e o bloco dos arquivos guardados contém "move to" ou "delete";
     hoje imprime "full build:" e "pushed" sem número de etapa.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Code on the overnight branch until/2026-11-19-0736 (no merge, no push;
+    full build delegated to the supervisor). Commits: 7e4dfde (_cmd_land header
+    with commits/fast-forward/return point, [1/3] merge, [2/3] full build, [3/3]
+    push with result and duration on every exit path, rescued_files_block with move
+    to / delete (same as) / compare with, closing ''landed at HH:MM: ... run worktree
+    and branch removed''; doc section in docs/cepa-until.md; tests/test_cepa_until_land_steps.py),
+    861322e (newest_rescued_copy: the hint reads the highest .N rescued copy; tests
+    for compare-with, a --no-verify run and step_duration minutes), 20d1185 + ea9ced4
+    (tests pinning the highest .N copy independent of listing order), 2f663f7 (gate
+    artifacts). pair-reviewer: OK-WITH-NOTES (the .N note fixed in 861322e; slug
+    regex duplicates _wtlib.rescue_slug, left as is). completion-auditor: COMPLETE
+    at 861322e (.claude/acceptance/fim-do-until-CS-7.yaml; later commits tests only).
+    proof-reviewer: UNPROVEN at 7e4dfde (3 survivors), UNPROVEN at 861322e (N4,N5),
+    UNPROVEN at 20d1185 (N5), PROVEN at ea9ced4 (docs/proof/fim-do-until-CS-7.yaml;
+    covering test red at base 1cca1ea with 17 FAIL). Tests run: test_cepa_until_land_steps
+    exit 0 (33 ok), test_cepa_until_land exit 0, test_cepa_until_land_install exit
+    0, test_cepa_until_auto_land exit 0 (131 ok; one parallel run had 2 Ctrl-C PTY
+    timing FAILs that passed in isolation at base and head), test_cepa_until_decide
+    exit 0, test_cepa_until_decide_created_items exit 0, test_cepa_help_layout exit
+    0. Full suite NOT run here. Left out: install_on_landing stays unnumbered between
+    [3/3] and the closing line.'
+  head_commit: 2f663f71eaf54c90f4305357d3b6292baa3cce7c
+  decisions:
+  - texto: 'No cabeçalho do land, o commit de registros que a própria run grava
+      na main (until <fila>/<run>: ...) não conta como a main ter andado: sem isso
+      todo land diria ''not a fast-forward'''
+    commit: 7e4dfde4f4d70d7a1e1e8a9ca88f8d1790f24e35
+  - texto: 'As três etapas saem como linhas simples começando em [1/3], [2/3] e
+      [3/3], não dentro de um painel com borda: é o que o teste declarado lê, e
+      a saída do land aparece aos poucos enquanto o build roda'
+    commit: 7e4dfde4f4d70d7a1e1e8a9ca88f8d1790f24e35
