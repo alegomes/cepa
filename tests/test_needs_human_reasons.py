@@ -314,3 +314,23 @@ def test_l4_finding_still_beats_a_declared_reason():
     d["levels"]["l4_adversarial_input"] = {"status": "findings",
                                            "findings": ["NUL derruba a API"]}
     assert classify(d)[0] == "sem-cobertura"
+
+
+def test_declared_slug_must_be_a_whole_token():
+    """A slug glued to a prefix ("xx-teste-cego") is not a declaration."""
+    for value in ("xx-teste-cego", "pre_teste-cego", "teste-cego-xx"):
+        assert classify(_synthetic(needs_human_motivo=value))[0] == "nao-rodou", value
+
+
+def test_declared_field_must_be_a_scalar():
+    """A nested value that merely contains a slug does not declare it."""
+    for value in ({"slug": "teste-cego"}, ["teste-cego"]):
+        assert classify(_synthetic(needs_human_motivo=value))[0] == "nao-rodou", value
+
+
+def test_bare_declared_slug_shows_a_readable_evidence():
+    """The evidence is read by the owner; a bare slug becomes a sentence."""
+    assert classify(_synthetic(needs_human_motivo="teste-cego")) == (
+        "teste-cego", "motivo declarado no próprio artefato de prova")
+    long_value = "teste-cego (motivo 2): o dublê engole o sinal"
+    assert classify(_synthetic(needs_human_motivo=long_value)) == ("teste-cego", long_value)
