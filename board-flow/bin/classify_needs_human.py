@@ -12,7 +12,7 @@ comes out as `sem-motivo`, and `/board-flow:decide` stops and warns — it never
 invents an eighth reason at run time, because an invented reason is what makes
 a recorded waiver later match the wrong card.
 
-The regression suite is tests/test_needs_human_reasons.py, built on 39 real
+The regression suite is tests/test_needs_human_reasons.py, built on 43 real
 artifacts from wego-assinatura-backend, wego-tasy-gateway and wego-acessos-backend.
 
 Usage as a script (read-only, writes nothing):
