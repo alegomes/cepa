@@ -276,7 +276,8 @@ reescrita é "reenvie a mesma lista com o bloco `Legenda:`".
 If your report opens a numbered decision list and the previous one in the
 conversation was never answered (no real message from the owner came in between,
 only a task notification, another session's message or a hook message), put one
-line in the new list saying it replaces the previous list, for example "This
+line in the closing "Decisions and next steps" section (not in the technical
+detail) saying the new list replaces the previous list, for example "This
 list replaces the previous one" / "Esta lista substitui a anterior", and repeat
 in it the items that still hold. Otherwise the owner may answer both lists with
 overlapping numbers and the answer becomes ambiguous (2026-11-21, feedback

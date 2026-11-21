@@ -951,8 +951,10 @@ NADA = ("O trabalho terminou e não sobrou nada para você decidir agora. " * 4
         + "\n\n### Decisões e próximos passos\nNada pendente.\n")
 check("(f) mensagem anterior com 'Nada pendente.' não conta como lista → não pede",
       not has_subst(subst(text(NADA), NOTIF, text(GOOD), session="s-sub-f")))
-check("(g) turno só de lista (sem Edit nem commit) com lista anterior sem resposta → bloqueia",
-      has_subst(subst(text(GOOD), NOTIF, text(GOOD), session="s-sub-g")))
+READ_ONLY = msg("assistant", [{"type": "tool_use", "name": "Bash",
+                               "input": {"command": "ls docs"}}])
+check("(g) turno só de lista, com leitura (Bash só de leitura) no turno → bloqueia",
+      has_subst(subst(text(GOOD), NOTIF, READ_ONLY, text(GOOD), session="s-sub-g")))
 check("(h) linha isMeta entre as listas não é resposta → bloqueia",
       has_subst(subst(text(GOOD), msg("user", "corpo de skill injetado",
                                       mtype="user", meta=True),
@@ -969,6 +971,44 @@ check("(j) primeira lista da conversa → nada a fazer",
       not has_subst(subst(text(GOOD), session="s-sub-j")))
 check("(k) com Edit no turno também bloqueia",
       has_subst(subst(text(GOOD), NOTIF, EDIT, text(GOOD), session="s-sub-k")))
+# review fixes: the list-only gate keeps the old measurements untouched
+LISTONLY = ("Separei os pontos que dependem de você e deixei cada um como uma "
+            "pergunta curta, para a resposta caber em uma palavra só. " * 3
+            + "\n\n**Pra você:** 2 perguntas.\n\n### Detalhe técnico\n"
+            + "Nada foi alterado neste turno; só reuni o que estava aberto. " * 8
+            + "\n\n### Decisões e próximos passos\n"
+            "1. Mato o PR8 e o E1 antigos?\n"
+            "2. Apago o branch E3?\n")
+check("(m) lista sem recomendação, sem lista anterior → nenhum bloqueio",
+      block_reason(run("Stop", transcript(user("o que falta?"), text(LISTONLY)),
+                       session="s-sub-m").stdout) == "")
+reason_m2 = subst(text(GOOD), NOTIF, text(LISTONLY), session="s-sub-m2")
+check("(m2) lista sem recomendação sobre lista anterior sem resposta → só a categoria nova",
+      has_subst(reason_m2) and "legenda" not in reason_m2
+      and "código de referência" not in reason_m2, repr(reason_m2[:300]))
+
+# review fixes: the replacement line must be in the closing section
+IN_DETAIL = GOOD.replace("### Detalhe técnico\n", "### Detalhe técnico\n"
+                         "O novo parser substitui o anterior. ")
+assert IN_DETAIL != GOOD
+check("(n) 'substitui o anterior' só no detalhe técnico → continua bloqueando",
+      has_subst(subst(text(GOOD), NOTIF, text(IN_DETAIL), session="s-sub-n")))
+
+# review fixes: an owner's slash command lands as <command-message>
+CMD_ROW = msg("user", "<command-message>common:next</command-message>\n"
+              "<command-name>/common:next</command-name>", mtype="user")
+check("(o) comando do dono (<command-message>) entre as listas é resposta → não pede",
+      not has_subst(subst(text(GOOD), CMD_ROW, text(GOOD), session="s-sub-o")))
+
+# review fixes: closed session (wrap-up) never gets the new category
+rows_p = [msg("user", CMD_WRAP, mtype="user"),
+          msg("assistant", [{"type": "tool_use", "name": "Bash",
+                             "input": {"command": "git commit -m x"}}]),
+          text(GOOD), text(END_WRAP), TOOL_RESULT, text(GOOD)]
+check("(p) sessão fechada pelo wrap-up + nova lista → categoria nova não aparece",
+      not has_subst(block_reason(run("Stop", transcript(*rows_p),
+                                     session="s-sub-p").stdout)))
+
 r = run("Stop", transcript(user("faça a coisa"), text(GOOD), NOTIF, text(GOOD)),
         session="s-sub-tel")
 check("(l) telemetria carrega a categoria em tipos",

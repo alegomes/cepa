@@ -114,9 +114,11 @@ ambiguous. New category `lista-substituida-sem-aviso`: when the report has a
 decision list (the closing heading plus a numbered item with `?`; "Nada
 pendente." is not one) and the previous assistant message in the main thread
 also had one, and no real owner prompt came between them, the report must say in
-one line that it replaces the previous list (`replaced_list_deviation`). Not the
+one line, inside the closing "Decisions and next steps" section, that it
+replaces the previous list (`replaced_list_deviation`). Not the
 owner: `isMeta` rows, "Stop hook feedback:", tool results, and text that is only
-`<task-notification>`, `<system-reminder>` or a `<...-message>` tag. Exemption:
+`<task-notification>`, `<system-reminder>` or a `<...-message>` tag (but
+`<command-message>`, how the owner's slash command lands, is the owner). Exemption:
 the rewrite after this hook's own block (the block reason orders "do not explain
 the rewrite"), provided nothing else that is not the owner arrived in between.
 Applies in the list-only turn too (no edit, no commit), not when the session is
@@ -821,7 +823,8 @@ def measure(report: str, jargon: list, abstractions: list = (),
 HOOK_BLOCK_MARKERS = ("saiu do formato `plain-report`",
                       "Sua lista de decisões usa código de referência")
 MACHINE_TAG = re.compile(
-    r"^(?:<task-notification\b|<system-reminder\b|<[\w-]*-message\b)")
+    r"^(?:<task-notification\b|<system-reminder\b"
+    r"|<(?!command-message\b)[\w-]*-message\b)")
 REPLACES_LINE = re.compile(
     r"substitu(?:i|iu)\s+(?:a|o|as)\s+(?:(?:lista|bloco|numeracao)\s+"
     r"(?:de\s+decisoes\s+)?)?anterior"
@@ -894,7 +897,8 @@ def replaced_list_deviation(rows, report: str):
               and _user_text(r).strip()]
     if blocks and not others:
         return None   # the corrected rewrite of the same list
-    if REPLACES_LINE.search(_plain(report)):
+    m = STEPS_MARKER.search(report)
+    if REPLACES_LINE.search(_plain(report[m.end():])):
         return None
     return ("lista-substituida-sem-aviso",
             "a lista de decisões anterior não foi respondida e esta é uma "
@@ -924,8 +928,8 @@ def on_stop(payload):
     # no edit, no commit -- still carries codes the owner has to answer by
     # number. The batch of eight questions with `PR8`, `E1`, `E3` undefined
     # went out through this door. Only the code measurements apply here.
-    listed = decision_list(report) or has_decision_list(report)
-    if not changed and not closed and not listed:
+    listed = decision_list(report)
+    if not changed and not closed and not listed and not has_decision_list(report):
         return None
 
     if count_words(report) < MIN_WORDS_TO_MEASURE:
@@ -939,8 +943,10 @@ def on_stop(payload):
     elif closed:
         d = post_wrap_up_deviation(report)
         deviations = [d] if d else []
-    else:
+    elif listed:
         deviations = code_deviations(report)
+    else:
+        deviations = []   # list without recommendation: only the replaced-list check
     if not closed:
         d = replaced_list_deviation(rows, report)
         if d:
