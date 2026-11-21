@@ -1109,6 +1109,52 @@ check("(S11b) só códigos sem legenda → texto de código, pede o bloco `Legen
       and "Reenvie a MESMA lista com um bloco `Legenda:`" in reason_s11b
       and "saiu do formato" not in reason_s11b, repr(reason_s11b[:500]))
 
+# ── second-round proof survivors N1..N7 ────────────────────────────────────
+def with_line(line):
+    return GOOD.replace(HEAD_STEPS, HEAD_STEPS + line + "\n")
+
+
+# N1: the previous list is the NEAREST one, not the oldest
+check("(N1) lista1, resposta do dono, lista2, notificação, lista3 sem a linha → bloqueia",
+      has_subst(subst(text(GOOD), user("1. sim"), text(GOOD), NOTIF, text(GOOD),
+                      session="s-sub-n1")))
+
+# N2: ONE owner answer between is enough, other non-owner rows do not undo it
+check("(N2) lista, resposta do dono, notificação, lista sem a linha → não pede",
+      not has_subst(subst(text(GOOD), user("1. sim"), NOTIF, text(GOOD),
+                          session="s-sub-n2")))
+
+# N3: an assistant row between our block and the rewrite is not an "other" user row
+check("(N3) lista, bloqueio, fala do assistente, reescrita → isenta",
+      not has_subst(subst(text(GOOD), HOOK_BLOCK,
+                          text("Vou reescrever a lista agora, corrigindo o formato."),
+                          text(GOOD), session="s-sub-n3")))
+
+# N4: a user row shaped like a decision list is not a previous assistant list
+USER_LIST = msg("user", [{"type": "text", "text": GOOD}], mtype="user", meta=True)
+check("(N4) linha de usuário com texto de lista não é lista anterior → não pede",
+      not has_subst(subst(text(NADA), USER_LIST, text(GOOD), session="s-sub-n4")))
+
+# N5: the replacement line is matched case-insensitively
+for n, phrase in enumerate(("Esta lista Substitui a anterior.",
+                            "ESTA LISTA SUBSTITUI A ANTERIOR.")):
+    check(f"(N5.{n}) linha de substituição em maiúsculas é aceita: {phrase!r}",
+          not has_subst(subst(text(GOOD), NOTIF, text(with_line(phrase)),
+                              session=f"s-sub-n5-{n}")))
+
+# N6: English "previous list is replaced/superseded"
+for n, phrase in enumerate(("The previous list is superseded by this one.",
+                            "The previous decision list was replaced.")):
+    check(f"(N6.{n}) linha em inglês aceita: {phrase!r}",
+          not has_subst(subst(text(GOOD), NOTIF, text(with_line(phrase)),
+                              session=f"s-sub-n6-{n}")))
+
+# N7: only a real `Stop hook feedback:` row is our block, not a quote of it
+QUOTE_ROW = msg("user", "<task-notification>\nO agente citou: Seu relatório final "
+                "saiu do formato `plain-report`\n</task-notification>", mtype="user")
+check("(N7) notificação que cita o texto do bloqueio não isenta → bloqueia",
+      has_subst(subst(text(GOOD), QUOTE_ROW, text(GOOD), session="s-sub-n7")))
+
 print()
 if FAILURES:
     print(f"{len(FAILURES)} failure(s): {FAILURES}")
