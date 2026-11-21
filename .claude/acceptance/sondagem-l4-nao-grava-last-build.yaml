@@ -1,0 +1,49 @@
+key: sondagem-l4-nao-grava-last-build
+status: complete
+diff: 9f112d3..28aff57
+criteria:
+  - id: AC1
+    text: >
+      "build de sondagem não grava o registro de último build, ou grava separado"
+      (BACKLOG.md, palavras do dono, fb-20261106-3): um build Maven disparado na
+      forma da L4 (cd <worktree /tmp> && (timeout ... ./mvnw ... | grep | head))
+      não escreve no .claude/last-build.json da sessão; o registro vai para a
+      worktree do build.
+    altitude: subprocess
+    surface: >
+      payload JSON de PostToolUse (Bash) em stdin de common/hooks/capture-build-result.py;
+      efeito observado no sistema de arquivos (last-build.json da sessão x da worktree).
+    test: tests/test_capture_build_result_classify.py::test_perturbation_l4_probe_in_subshell_does_not_touch_main_state
+    layer: subprocess (hook binary, git init real, TMPDIR isolado)
+    evidence: verified
+    run: >
+      python3 -m pytest -q tests/test_capture_build_result_classify.py -> "31 passed in 1.18s".
+      Além disso, rodei o hook como subprocesso com o comando LITERAL da L4
+      (cd /tmp/proof-WEGO-2005x && (timeout 580 ./mvnw -q -o -pl application -am test
+      -Dtest='Wego2005AdversarialL4Test#timing' -Dsurefire.failIfNoSpecifiedTests=false 2>&1
+      | grep -E "L4-|Tests run|BUILD|ERROR|falha" | head -100)) com cwd num repo git:
+      stderr "build ran outside the session tree ... main baseline untouched", ausente
+      /tmp/projx/.claude, presente /tmp/proof-WEGO-2005x/.claude/last-build.json
+      (status EMPTY, tests_run 0). Vizinhos: root_install, pytest, django, background
+      -> "265 passed in 15.06s".
+    gap: null
+  - id: AC2
+    text: >
+      Teste que falta (esboço): build com 0 testes numa worktree em /tmp, disparado da
+      forma da L4, não muda o last-build.json da sessão.
+    altitude: subprocess
+    surface: o mesmo de AC1, mais effective_build_dir para as variantes de agrupamento de shell
+    test: >
+      test_perturbation_l4_probe_in_subshell_does_not_touch_main_state (0 testes, EMPTY na
+      worktree, nada na sessão) e test_effective_build_dir_sees_build_inside_shell_grouping
+      (7 formas: subshell, time, função, chaves, for/do)
+    layer: subprocess (hook binary) / função pública do hook
+    evidence: verified
+    run: "mesma execução de AC1: 31 passed (N > 0); o teste de perturbação foi escrito vermelho antes do fix (commit 502db49 antes de 28aff57)"
+    gap: null
+report:
+  summary: >
+    Os dois critérios estão demonstrados na altitude declarada (hook como subprocesso, efeito
+    nos arquivos last-build.json) e rodaram verdes, inclusive com o comando literal da L4.
+    Limite: o comando real do Maven não rodou (o hook foi alimentado com payload sintético,
+    stdout vazio, o que é o cenário EMPTY descrito no card). Sem gaps.
