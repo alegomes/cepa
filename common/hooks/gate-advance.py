@@ -55,8 +55,8 @@ A green that ran only some tests (fb-20261109-2, 2026-11-21): when the SUCCESS
 baseline carries `test_filter` (capture-build-result records the Maven
 `-Dtest=` / `-Dit.test=` patterns), a LOCAL `git commit` is BLOCKED if a JVM
 test the filter did not run covers the commit: a test file in the commit, or a
-test that names (whole word, `git grep -w`) the class of a JVM production file
-in the commit. Seen on C1-17: `-Dtest=OpenApiFechadoParaAnonimoE2ETest` went
+test that names (whole word, `git grep -w`) the class of any other JVM file
+in the commit (production code or a helper under the test tree). Seen on C1-17: `-Dtest=OpenApiFechadoParaAnonimoE2ETest` went
 green and released a commit with `ContratoDaLeituraPublicadoTest` red. Only
 surefire/failsafe default names count as tests (Test*, *Test, *Tests,
 *TestCase, *IT); helpers under the test tree do not. Left out: pytest -k,
@@ -563,8 +563,8 @@ def filtered_green_gaps(command: str, repo_dir: str, session_cwd, test_filter: l
             gaps.append((f, f))
     for f in files:
         name = _jvm_name(f)
-        if not name or is_test_path(f):
-            continue
+        if not name or is_runnable_test(f):
+            continue  # a runnable test covers itself (first loop); a helper is code
         r = subprocess.run(
             ["git", "-C", repo_dir, "grep", "-l", "-w", "-F", "--untracked", "-e", name,
              "--"] + [f"*{e}" for e in JVM_EXT],

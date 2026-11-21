@@ -65,7 +65,7 @@ def make_repo(path):
         PROD: "package app; public class LeituraLote { }",
         OTHER_PROD: "package app; public class Isolada { }",
         E2E: "package app; class OpenApiFechadoParaAnonimoE2ETest { void t() { } }",
-        CONTRATO: "package app; class ContratoDaLeituraPublicadoTest { LeituraLote l; }",
+        CONTRATO: "package app; class ContratoDaLeituraPublicadoTest { LeituraLote l; LeituraFixtures f; }",
         # a helper under the test tree is not a test surefire runs
         HELPER: "package app; class LeituraFixtures { LeituraLote l; }",
     }
@@ -236,6 +236,25 @@ with tempfile.TemporaryDirectory() as tmp:
     check("k: sugere -Dtest com o teste que falta",
           "-Dtest=OpenApiFechadoParaAnonimoE2ETest,ContratoDaLeituraPublicadoTest" in res.stderr,
           res.stderr[:700])
+
+    print("\n# o. helper do diretório de teste alterado cobra os testes que o usam")
+    r = make_repo(tmp / "o")
+    baseline(r, test_filter=["OpenApiFechadoParaAnonimoE2ETest"])
+    edit(r, HELPER, "package app; class LeituraFixtures { LeituraLote l; int y; }")
+    res = gate('git commit -m "test: fixtures"', r)
+    check("o: exit 2", res.returncode == 2, f"exit={res.returncode} {res.stderr[:300]}")
+    check("o: nomeia o teste que usa o helper",
+          "ContratoDaLeituraPublicadoTest" in res.stderr, res.stderr[:400])
+
+    print("\n# p. teste novo, ainda fora do git, que usa a classe alterada também conta")
+    r = make_repo(tmp / "p")
+    baseline(r, test_filter=["OpenApiFechadoParaAnonimoE2ETest", "ContratoDaLeituraPublicadoTest"])
+    (r / "src/test/java/app/LeituraNovaTest.java").write_text(
+        "package app; class LeituraNovaTest { LeituraLote l; }", encoding="utf-8")
+    edit(r, PROD, "package app; public class LeituraLote { int x; }")
+    res = gate('git commit -m "feat"', r)
+    check("p: exit 2", res.returncode == 2, f"exit={res.returncode} {res.stderr[:300]}")
+    check("p: nomeia o teste fora do git", "LeituraNovaTest" in res.stderr, res.stderr[:400])
 
 if FAILURES:
     print(f"\n{len(FAILURES)} falha(s): {', '.join(FAILURES)}")
