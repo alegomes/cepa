@@ -51,6 +51,19 @@ What does NOT get gated:
     keep the block, as do a production file, an unknown file list, STALE/EMPTY,
     a compile failure and every SHARING operation (push / PR / deploy).
 
+A green that ran only some tests (fb-20261109-2, 2026-11-21): when the SUCCESS
+baseline carries `test_filter` (capture-build-result records the Maven
+`-Dtest=` / `-Dit.test=` patterns), a LOCAL `git commit` is BLOCKED if a JVM
+test the filter did not run covers the commit: a test file in the commit, or a
+test that names (whole word, `git grep -w`) the class of a JVM production file
+in the commit. Seen on C1-17: `-Dtest=OpenApiFechadoParaAnonimoE2ETest` went
+green and released a commit with `ContratoDaLeituraPublicadoTest` red. Only
+surefire/failsafe default names count as tests (Test*, *Test, *Tests,
+*TestCase, *IT); helpers under the test tree do not. Left out: pytest -k,
+go -run, jest -t, `-pl` scoping and SHARING operations (the commit already
+went through this check). Unknown file lists (-a, --amend) fall back to the
+diff against HEAD; any error in the check allows (as a SUCCESS did before).
+
 Which repo is judged: the one that RECEIVES the commit/push, not the one the
 session runs in. `cd X && git commit` / `git -C X push` read `.claude/no-build`,
 `last-build.json` and the build manifest at X's repo root. Seen 2026-10-10: a
@@ -477,6 +490,95 @@ def commit_files(command: str, repo_dir: str, session_cwd=None):
         return None
 
 
+# ─── Filtered green (fb-20261109-2) ─────────────────────────────────────
+# A SUCCESS from `-Dtest=A` says A passed, nothing about B. capture-build-result
+# records the Maven filter as `test_filter`; a LOCAL commit is refused when a test
+# the filter did not run covers it: a JVM test file in the commit, or a JVM test
+# that names (whole word) the class of a JVM production file in the commit.
+JVM_EXT = (".java", ".kt", ".scala", ".groovy")
+# surefire/failsafe default includes: Test*, *Test, *Tests, *TestCase, *IT
+RUNNABLE_TEST = re.compile(r"^(?:Test\w*|\w*(?:Test|Tests|TestCase|IT))$")
+
+
+def _jvm_name(path: str):
+    base = path.replace("\\", "/").rsplit("/", 1)[-1]
+    for ext in JVM_EXT:
+        if base.endswith(ext):
+            return base[: -len(ext)]
+    return None
+
+
+def is_runnable_test(path: str) -> bool:
+    name = _jvm_name(path)
+    return bool(name and is_test_path(path) and RUNNABLE_TEST.match(name))
+
+
+def _pattern_matches(pattern: str, path: str) -> bool:
+    import fnmatch
+    p = pattern.split("#", 1)[0].strip()
+    for ext in JVM_EXT + (".class",):
+        if p.endswith(ext):
+            p = p[: -len(ext)]
+    if not p:
+        return False
+    name = _jvm_name(path) or ""
+    if "/" not in p and "." not in p:
+        return fnmatch.fnmatchcase(name, p)
+    p = p.replace(".", "/").replace("**/", "*").replace("**", "*")
+    noext = os.path.splitext(path)[0]
+    return fnmatch.fnmatchcase(noext, p) or fnmatch.fnmatchcase(noext, "*/" + p)
+
+
+def filter_runs(test_filter: list, path: str) -> bool:
+    """Would surefire/failsafe run the test at `path` under `test_filter`?"""
+    includes = [p for p in test_filter if not p.startswith("!")]
+    excludes = [p[1:] for p in test_filter if p.startswith("!")]
+    if any(_pattern_matches(p, path) for p in excludes):
+        return False
+    return not includes or any(_pattern_matches(p, path) for p in includes)
+
+
+def _changed_files_fallback(repo_dir: str) -> list:
+    """Over-inclusive file list when the commit's own list is unknowable (-a, --amend)."""
+    files = set(_git_lines(repo_dir, ["diff", "--cached", "--no-renames", "--name-only"]))
+    try:
+        files |= set(_git_lines(repo_dir, ["diff", "HEAD", "--no-renames", "--name-only"]))
+    except RuntimeError:
+        pass  # no HEAD yet
+    return sorted(files)
+
+
+def filtered_green_gaps(command: str, repo_dir: str, session_cwd, test_filter: list):
+    """[(test, commit file it covers)] the filtered green did not run."""
+    files = commit_files(command, repo_dir, session_cwd)
+    if not files:
+        files = _changed_files_fallback(repo_dir)
+        if "--amend" in command:
+            files = sorted(set(files) | set(_git_lines(
+                repo_dir, ["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"])))
+    gaps, seen = [], set()
+    for f in files:
+        if is_runnable_test(f) and not filter_runs(test_filter, f) and f not in seen:
+            seen.add(f)
+            gaps.append((f, f))
+    for f in files:
+        name = _jvm_name(f)
+        if not name or is_test_path(f):
+            continue
+        r = subprocess.run(
+            ["git", "-C", repo_dir, "grep", "-l", "-w", "-F", "--untracked", "-e", name,
+             "--"] + [f"*{e}" for e in JVM_EXT],
+            capture_output=True, text=True, timeout=15)
+        if r.returncode not in (0, 1):
+            raise RuntimeError(r.stderr.strip())
+        for t in r.stdout.splitlines():
+            if t and t != f and is_runnable_test(t) and not filter_runs(test_filter, t) \
+                    and t not in seen:
+                seen.add(t)
+                gaps.append((t, f))
+    return gaps
+
+
 def main():
     raw = sys.stdin.read()
     try:
@@ -598,6 +700,38 @@ def main():
     status = state.get("status", "UNKNOWN")
     extra_note = ""
     if status == "SUCCESS":
+        test_filter = state.get("test_filter")
+        if tier == "local" and isinstance(test_filter, list) and test_filter:
+            try:
+                gaps = filtered_green_gaps(command, str(cwd), session_cwd, test_filter)
+            except Exception as e:
+                print(f"[gate-advance] could not check the filtered green ({e}); allowing",
+                      file=sys.stderr)
+                gaps = []
+            if gaps:
+                shown = "\n".join(
+                    f"    {_jvm_name(t)} ({t})" + ("" if t == f else f" covers {f}")
+                    for t, f in gaps[:5]) + ("\n    ..." if len(gaps) > 5 else "")
+                missing = []
+                for t, _f in gaps:
+                    n = _jvm_name(t)
+                    if n not in missing:
+                        missing.append(n)
+                wider = ",".join([p for p in test_filter] + missing)
+                print(
+                    "[gate-advance] BLOCKED: the green baseline ran only the tests of "
+                    f"`-Dtest={','.join(test_filter)}`, and this commit is covered by "
+                    f"tests that filter did not run:\n{shown}\n"
+                    f"  Command: {command[:200]}\n"
+                    f"  Suggestion: re-run with those tests in the filter "
+                    f"(-Dtest={wider}), or without the filter, then retry. A green of "
+                    f"one test says nothing about the others.\n"
+                    f"  State file: {state_path}",
+                    file=sys.stderr,
+                )
+                T.emit("gate_block", cwd=str(cwd), tier=tier, reason="filtered-green",
+                       tests=len(gaps))
+                sys.exit(2)
         sys.exit(0)
 
     age = baseline_age_days(state)

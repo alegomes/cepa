@@ -541,6 +541,25 @@ EMPTY_FIX_HINT = (
 UNITTEST_EMPTY_FIX_HINT = "fix the test label, or check that the app has tests"
 
 
+def maven_test_filter(command: str):
+    """The patterns of every `-Dtest=` / `-Dit.test=` in `command`, as typed
+    (comma-split, `!exclusion` and `Class#method` kept), or None without a filter.
+
+    Recorded in last-build.json as `test_filter`, from the FULL command (the
+    `command` field is cut at 200 chars): gate-advance reads it to refuse a commit
+    that a test outside the filter covers (fb-20261109-2)."""
+    try:
+        toks = shlex.split(command)
+    except ValueError:
+        toks = command.split()
+    out = []
+    for t in toks:
+        m = re.match(r"^-D(?:it\.)?test=(.*)$", t)
+        if m:
+            out += [x.strip() for x in m.group(1).split(",") if x.strip()]
+    return out or None
+
+
 def has_test_filter(command: str, kind: str) -> bool:
     rx = _TEST_FILTERS.get(kind)
     return bool(rx and rx.search(command))
@@ -799,6 +818,9 @@ def record(command, kind, status, text, tests_run, empty_reason,
     }
     if tests_run is not None:
         new_state["tests_run"] = tests_run
+    test_filter = maven_test_filter(command) if kind == "maven" else None
+    if test_filter:
+        new_state["test_filter"] = test_filter
     if empty_reason:
         new_state["reason"] = empty_reason
         if status == "EMPTY":

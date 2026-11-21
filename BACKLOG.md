@@ -5314,7 +5314,7 @@ O wrap-up que termina com merge e push avança o cursor até o último passo (ou
 
 ## `gate-advance` aceita build verde de um teste só para liberar commit que deixa outro teste vermelho
 
-**Status:** pendente · **Lar provável:** common (`common/hooks/gate-advance.py`, leitura do `last-build.json`) · **Origem:** feedback `fb-20261109-2`, 2026-11-09
+**Status:** feito em 2026-11-21 para Maven (`-Dtest=` / `-Dit.test=`): o `last-build.json` grava `test_filter` e o commit é recusado quando um teste JVM fora do filtro está no commit ou nomeia a classe de produção alterada (`tests/test_gate_advance_filtered_green.py`). Ficaram de fora `pytest -k`, `go -run`, jest `-t` e o escopo `-pl` · **Lar provável:** common (`common/hooks/gate-advance.py`, leitura do `last-build.json`) · **Origem:** feedback `fb-20261109-2`, 2026-11-09
 
 ### Problema
 
