@@ -1018,6 +1018,97 @@ r = run("Stop", transcript(user("faça a coisa"), text(GOOD), NOTIF, text(GOOD))
 check("(l) telemetria carrega a categoria em tipos",
       CAT_SUBST in json.dumps([e.get("tipos") for e in report_events()]))
 
+# ── proof survivors S1..S11 of the replaced-decision-list rule ─────────────
+# S1: a numbered `?` list with NO closing heading is not a decision list
+FILLER = "O trabalho segue e o resto está registrado no documento de apoio. " * 12
+NOHEAD = (FILLER + "\n\n1. Você roda o instalador agora?\n"
+          "   Recomendo **sim** — sem isso a mudança não vale.\n")
+check("(S1a) lista anterior sem o título de fechamento não conta → não pede a linha",
+      not has_subst(subst(text(NOHEAD), NOTIF, text(GOOD), session="s-sub-s1a")))
+check("(S1b) lista atual sem o título de fechamento não é lista de decisões → não pede",
+      not has_subst(subst(text(GOOD), NOTIF, text(NOHEAD), session="s-sub-s1b")))
+
+# S2: items without `?` are not decisions
+NOQ = GOOD.replace("1. **Você roda `bin/install.sh --clean` agora?**",
+                   "1. **Rode `bin/install.sh --clean` agora.**")
+assert NOQ != GOOD
+check("(S2) lista anterior com itens numerados sem `?` não conta → não pede a linha",
+      not has_subst(subst(text(NOQ), NOTIF, text(GOOD), session="s-sub-s2")))
+
+# S3: a <system-reminder> row is the machine, not the owner
+SYSREM = msg("user", "<system-reminder>\nlembrete injetado pelo harness\n"
+             "</system-reminder>", mtype="user")
+check("(S3) <system-reminder> entre as listas não é resposta → bloqueia",
+      has_subst(subst(text(GOOD), SYSREM, text(GOOD), session="s-sub-s3")))
+
+# S4: feedback from ANOTHER hook is not our block
+OTHER_HOOK = msg("user", "Stop hook feedback:\nOutro hook: faltou rodar os "
+                 "testes antes de encerrar.", mtype="user")
+check("(S4) feedback de OUTRO hook entre as listas não isenta → bloqueia",
+      has_subst(subst(text(GOOD), OTHER_HOOK, text(GOOD), session="s-sub-s4")))
+
+# S5: the block about codes without legend is also ours
+CODES_BLOCK = msg("user", "Stop hook feedback:\nSua lista de decisões usa "
+                  "código de referência que o leitor não consegue resolver:\n"
+                  "  - código de referência sem legenda nesta mensagem: E1\n"
+                  "Reenvie a MESMA lista com um bloco `Legenda:`.", mtype="user")
+check("(S5) bloqueio de código sem legenda + reescrita da lista → isenta",
+      not has_subst(subst(text(GOOD), CODES_BLOCK, text(GOOD), session="s-sub-s5")))
+
+# S6: a tool_result (empty text) between our block and the rewrite is no owner
+check("(S6) bloqueio, tool_result sem texto, reescrita → isenta",
+      not has_subst(subst(text(GOOD), HOOK_BLOCK, TOOL_RESULT, text(GOOD),
+                          session="s-sub-s6")))
+
+# S7: the replacement line is matched without accents
+for n, phrase in enumerate(("Esta lista substituí a anterior.",
+                            "A lista anterior está substituída por esta.")):
+    check(f"(S7.{n}) linha de substituição com acento é aceita: {phrase!r}",
+          not has_subst(subst(text(GOOD), NOTIF, text(GOOD.replace(
+              HEAD_STEPS, HEAD_STEPS + phrase + "\n")),
+              session=f"s-sub-s7-{n}")))
+
+# S8: an "owner-like" row from a subagent (sidechain) is not the owner
+SIDE_OWNER = msg("user", [{"type": "text", "text": "1. sim"}], sidechain=True,
+                 mtype="user")
+check("(S8) linha de subagente (sidechain) parecida com resposta não é o dono → bloqueia",
+      has_subst(subst(text(GOOD), SIDE_OWNER, NOTIF, text(GOOD), session="s-sub-s8")))
+check("(S8b) bloqueio do hook + linha de subagente com texto + reescrita → isenta "
+      "(a linha de subagente nem entra na conta)",
+      not has_subst(subst(text(GOOD), HOOK_BLOCK, SIDE_OWNER, text(GOOD),
+                          session="s-sub-s8b")))
+
+# S9: a final report that is not a decision list never gets the new category
+reason_s9 = subst(text(GOOD), NOTIF, EDIT, text(NADA), session="s-sub-s9")
+check("(S9) relatório de trabalho sem lista de decisões sobre lista anterior → sem a categoria nova",
+      not has_subst(reason_s9), repr(reason_s9[:300]))
+
+# S10: the wording of the list-only block vs the full-report block
+reason_s10a = subst(text(GOOD), NOTIF, text(GOOD), session="s-sub-s10a")
+check("(S10a) turno só de lista → texto de lista, 'Reenvie a MESMA lista'",
+      "Sua lista de decisões saiu do formato `plain-report`" in reason_s10a
+      and "Reenvie a MESMA lista corrigindo só isso" in reason_s10a
+      and "Reescreva o relatório inteiro" not in reason_s10a,
+      repr(reason_s10a[:300]))
+reason_s10b = subst(text(GOOD), NOTIF, EDIT, text(GOOD), session="s-sub-s10b")
+check("(S10b) turno com edição → texto do relatório inteiro",
+      "Reescreva o relatório inteiro" in reason_s10b
+      and "Reenvie a MESMA lista" not in reason_s10b, repr(reason_s10b[:300]))
+
+# S11: codes_only means ALL deviations are code ones
+BATCH_LIST = BATCH + ("\n\n### Decisões e próximos passos\n"
+                     "1. Mantenho E2 como base da proposta? Recomendo sim.\n")
+reason_s11a = subst(text(GOOD), NOTIF, text(BATCH_LIST), session="s-sub-s11a")
+check("(S11a) códigos sem legenda + lista substituída → texto de lista com as duas queixas",
+      "Sua lista de decisões saiu do formato `plain-report`" in reason_s11a
+      and "sem legenda" in reason_s11a and has_subst(reason_s11a)
+      and "usa código de referência" not in reason_s11a, repr(reason_s11a[:500]))
+reason_s11b = subst(text(BATCH), session="s-sub-s11b")
+check("(S11b) só códigos sem legenda → texto de código, pede o bloco `Legenda:`",
+      "usa código de referência" in reason_s11b
+      and "Reenvie a MESMA lista com um bloco `Legenda:`" in reason_s11b
+      and "saiu do formato" not in reason_s11b, repr(reason_s11b[:500]))
+
 print()
 if FAILURES:
     print(f"{len(FAILURES)} failure(s): {FAILURES}")
