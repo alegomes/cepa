@@ -2165,16 +2165,8 @@ def red_returns(ledger_dir, ident, queue=None):
     return n
 
 
-# The side branches the supervisor creates: `until/<run>-vermelho-<id>[-v<n>]` on a
-# red build, `until/<run>-parado-<id>` on the item that spent its attempts and
-# `until/<run>-travado-<id>` on the item the agent closed `blocked` with commits.
-SIDE_BRANCH = re.compile(
-    r"^until/\d{4}-\d{2}-\d{2}-\d{4}-(?:vermelho|parado|travado)-(.+?)"
-    r"(?:-v\d+)?$")
-
-
-def clean_side_branches(repo, plan_path, destination, run_branch):
-    """Deletes the side branches of `done` or `dropped` items, but only after
+def clean_side_branches(repo, queue, plan_path, destination, run_branch):
+    """Deletes the side branches of `done` or `dropped` items of `queue`, but only after
     writing to `destination` the `git format-patch` of the commits that the night branch
     doesn't have (Revision 3, 4f). Without the patch on disk, the branch stays: the owner asked
     not to have anything to remember, and not to lose code.
@@ -2193,8 +2185,12 @@ def clean_side_branches(repo, plan_path, destination, run_branch):
               for it in items if isinstance(it, dict)}
     done_items = []
     for branch in output.splitlines():
-        m = SIDE_BRANCH.match(branch.strip())
-        if not m or status.get(m.group(1)) not in ("done", "dropped"):
+        branch = branch.strip()
+        # The item is found by the run in the branch name, not by the id alone:
+        # the run 2026-11-20-1609 of `pyyaml` deleted three branches of other
+        # queues whose ids (CS-6, CS-1) were `done` in `pyyaml` (fb-20261120-2).
+        ident = qp.side_branch_item(repo, queue, branch)
+        if ident is None or status.get(ident) not in ("done", "dropped"):
             continue
         file_path = destination / (branch[len("until/"):] + ".patch")
         try:
@@ -7031,7 +7027,7 @@ def _main(argv=None):
     # A `--all` run leaves them for now: the cleanup reads ONE queue's item ids,
     # and ids can repeat across queues.
     for side, patch, side_error in ([] if a.all_queues else clean_side_branches(
-            repo, data.get("path"), ledger_dir / f"{run_id}.laterais",
+            repo, a.queue, data.get("path"), ledger_dir / f"{run_id}.laterais",
             start_branch)):
         if patch:
             log_event({"evento": "lateral_apagada", "branch": side,

@@ -698,6 +698,14 @@ def old_side_branch(root, given_name, file):
     git(root, "checkout", "-q", "-")
 
 
+def old_run_ledger(root, run="2026-01-01-0000"):
+    """The `.jsonl` the run that made the side branch left in this queue's folder:
+    without it the branch is another queue's (fb-20261120-2) and stays."""
+    d = root / ".claude" / "programs" / "fila" / "until"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{run}.jsonl").write_text("")
+
+
 def test_4f_side_branch_of_closed_item_becomes_patch_before_vanishing():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1", status="dropped"), item("a2"),
@@ -706,6 +714,7 @@ def test_4f_side_branch_of_closed_item_becomes_patch_before_vanishing():
         old_side_branch(root, "until/2026-01-01-0000-vermelho-a1-v2", "l1b.txt")
         old_side_branch(root, "until/2026-01-01-0000-parado-a3", "l3.txt")
         old_side_branch(root, "until/2026-01-01-0000-travado-a1", "l1c.txt")
+        old_run_ledger(root)  # after: old_side_branch commits with `add -A`
         binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
         run_until(root, binv, plan_of(root), ["--for", "2h"])
         d = root / ".claude" / "programs" / "fila" / "until"
@@ -735,6 +744,7 @@ def test_4f_without_patch_the_side_branch_stays():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1", status="done"), item("a2")])
         old_side_branch(root, "until/2026-01-01-0000-vermelho-a1", "l1.txt")
+        old_run_ledger(root)
         binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
         fake_one = binv / "git"
         fake_one.write_text(

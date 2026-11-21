@@ -1703,21 +1703,32 @@ def _unmerged(root, ref, head, limit=None):
     return sum(1 for line in out.splitlines() if line.startswith("+"))
 
 
-def code_location(root, it, ref, branches):
+def _branch_of_item(root, queue, ident, branch):
+    """The branch name carries the item id. A side branch of `cepa-until` is
+    matched by the run that made it, because ids repeat across queues: the
+    queue `until-arvore-limpa`, just born, listed the CS-1 and CS-3 red
+    branches of two other queues as its own (fb-20261120-2)."""
+    if qp.SIDE_BRANCH.match(branch):
+        return bool(queue) and qp.side_branch_item(root, queue, branch) == ident
+    return _id_in(ident, branch)
+
+
+def code_location(root, it, ref, branches, queue=None):
     """{"ref", "fora", "no_main"} for the commits and branches the item points
     at, or None when it points at nothing that exists in this repo.
 
     Cited: a commit in `evidence`, `owner_summary` or `head_commit`; a branch
     named in that text, the reservation's branch, or a local branch whose name
     carries the item id as a whole token (the C1-18 branch the queue never
-    named). A branch counts as outside main when it has commits main lacks."""
+    named); a `cepa-until` side branch only when its run is this `queue`'s.
+    A branch counts as outside main when it has commits main lacks."""
     text = " ".join(str(it.get(k) or "") for k in ("evidence", "owner_summary"))
     ident = str(it.get("id") or "")
     claimed = (it.get("claimed_by") or {}).get("branch")
     base = ref.split("/")[-1]
     cited = [b for b in branches
              if b not in (ref, base, "main", "master")
-             and (b == claimed or _id_in(ident, b)
+             and (b == claimed or _branch_of_item(root, queue, ident, b)
                   or re.search(rf"(?<![\w/.-]){re.escape(b)}(?![\w/-])", text))]
     fora, no_main, off_branches = [], [], []
     for b in cited:
@@ -1846,7 +1857,7 @@ def cmd_status(root, name, status_filter, as_json, item_id=None, via_show=False)
             "pronto": str(it.get("id")) in ready_ids and not sem_epic(it),
             "pegavel": str(it.get("id")) in ready_ids,
             "sem_epic": sem_epic(it),
-            "codigo": (code_location(root, it, ref, branches)
+            "codigo": (code_location(root, it, ref, branches, name)
                        if ref and status_of(it) != "dropped" else None),
             "posicao": pos, "id": it.get("id"), "title": it.get("title"),
             "status": status_of(it), "why": it.get("why"),
