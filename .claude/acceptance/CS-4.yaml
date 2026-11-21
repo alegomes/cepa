@@ -1,15 +1,49 @@
-card: CS-4
-queue: pyyaml
+key: CS-4
 status: complete
+diff: 2e2e4f4..3f2b8cb
+audited_head: 3f2b8cb
+note: >
+  Rodado em primeiro plano. Fonte: docs/spec/teclas-em-ingles.md secao CS-4.
+  Mudanca de producao: is_yes() em common/bin/cepa-until aceita so y/yes.
 criteria:
   - id: AC1
-    text: "CS-4: a hook that cannot load the copy warns in one line and does not block."
-    altitude: event
-    surface: "PreToolUse event on stdin to common/hooks/acceptance-gate.py (temp copy of common without _vendor/yaml, python3 -S)"
-    test: "tests/test_cepa_runs_without_pyyaml.py::cs4 (acceptance-gate, merge-truth-gate, ui-proof-verdict-guard, build-hex/proof-verdict-guard at event level; 5 more at function level; mirror cases with copy present; malformed YAML case)"
-    layer: event
+    text: >
+      Num pseudo-terminal, em `cepa-until decide <fila>` o dono digita `w`, uma linha,
+      e responde `s` em "Send the item back to the queue with that answer? [y/N]":
+      o item continua fora da fila, com a linha gravada.
+    altitude: cli
+    surface: cepa-until decide <fila> real, num pty, prompt "[y/N]" de devolver o item
+    test: tests/test_cepa_until_decide_keys.py::test_cs4_s_at_send_back_counts_as_no_and_keeps_the_line
+    layer: subprocesso real em pty (on_tty)
     evidence: verified
-    run: "python3 tests/test_cepa_runs_without_pyyaml.py -> all 'CS-4' lines ok, ends 'cepa runs without PyYAML'. Independent repro: temp copy without _vendor/yaml, python3 -S, acceptance-gate.py with a jira_transition_issue event and a board-flow.yaml in cwd: exit 0, stderr = 1 line '[acceptance-gate] could not load PyYAML (ModuleNotFoundError: ...); expected the plugin copy at <path>/_vendor/yaml'. Same setup at 738a16b: exit 0, empty stderr."
+    run: >
+      python3 tests/test_cepa_until_decide_keys.py -> "ok cs4 s at [y/N]: the item stays out
+      of the queue", "ok cs4 s at [y/N]: the line is recorded", "tudo verde";
+      pytest tests/test_cepa_until_decide_keys.py -k cs4 -> 3 passed
     status: complete
-    note: "The warning fires only where the hook reaches its import yaml site (a board-flow.yaml exists); without one yaml is never needed and no warning is due. jira-create-fields-gate keeps exit 2 (it blocked before when it could not read the rules, by design, fail closed); the warning adds a line and does not change the exit code. Reading accepted as consistent with the criterion."
-gaps: []
+    gap: null
+  - id: AC2
+    text: >
+      No fim de uma run com integracao pendente, responder `sim` em "Land now?" nao
+      integra a branch.
+    altitude: cli
+    surface: cepa-until decide <fila> real, num pty, prompt "Land now?" com integracao pendente (repo com origin)
+    test: tests/test_cepa_until_decide_keys.py::test_cs4_sim_at_land_now_does_not_land
+    layer: subprocesso real em pty (run real + decide real)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_decide_keys.py -> "ok cs4 sim at Land now?: the prompt was
+      shown", "the item's commit does not reach main", "the run is not landed", "tudo verde";
+      pytest -k cs4 -> 3 passed
+    status: complete
+    gap: null
+  - id: AC3
+    text: "Antes, `s` e `sim` valiam como yes nos dois casos (a regra de decisao agora so aceita y/yes)."
+    altitude: application
+    surface: is_yes() em common/bin/cepa-until
+    test: tests/test_cepa_until_decide_keys.py::test_cs4_is_yes_takes_only_y_and_yes (complementa AC1/AC2, que ja exercem a superficie cli)
+    layer: unidade
+    evidence: verified
+    run: python3 tests/test_cepa_until_decide_keys.py -> 13 checks "cs4 is_yes(...)" ok, 0 falhas
+    status: complete
+    gap: null

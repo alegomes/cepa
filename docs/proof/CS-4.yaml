@@ -1,57 +1,42 @@
 schema_version: 2
 card: CS-4
 verdict: proven
-reviewed_at: 2026-11-20T14:10:00-03:00
-base_commit: 738a16b
-head_commit: e520470
+reviewed_at: 2026-11-20T21:30:00-03:00
+base_commit: 2e2e4f410952111b46500b203df84c53197fc40e
+head_commit: 1cc3836
 issue_type: Task
 scope:
-  queue: pyyaml
   changed_classes:
-    - { class: "common/hooks/_yamlwarn.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/hooks/acceptance-gate.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/hooks/merge-truth-gate.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/hooks/ui-proof-verdict-guard.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/hooks/jira-create-fields-gate.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/hooks/reflection-gate.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/hooks/expertise-append.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/hooks/_jiramut.py", module: common, external_observable: false, substituted_by_double: null }
-    - { class: "common/hooks/_autonomy.py", module: common, external_observable: false, substituted_by_double: null }
-    - { class: "build-hex/hooks/proof-verdict-guard.py", module: build-hex, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::is_yes", module: cli, external_observable: true, substituted_by_double: null }
   base_commit_resolved: true
-  notes: "Not a Quarkus repo: plain-script tests, no PIT/Maven. Perturbation in throwaway detached worktrees (removed at the end). The only double is the python3 shim (real interpreter with -S, so no PyYAML): it is the environment under test, not a stand-in for a changed class. e520470 changed only tests/test_cepa_runs_without_pyyaml.py (hooks unchanged since d2e880b). Items 1 (all nine), 2a, 2b, 5, 7 and the neighbor runs were measured at d2e880b and carried; items 1 (sample), 2c, 2e, 3, 4, 6 were re-measured at e520470."
 levels:
   l3_load_bearing:
     technique: perturbation
     pit:
       status: n/a
-      results:
-        - "no PIT/Maven in this repo; perturbation used instead"
+      results: []
     perturbation:
       status: pass
       results:
-        - "GREEN at e520470: python3 tests/test_cepa_runs_without_pyyaml.py -> '✓ cepa runs without PyYAML', exit 0"
-        - "1. (measured at d2e880b, all nine) warn call removed per hook, each RED on its own case: _autonomy, _jiramut, acceptance-gate (+ two reads in one run), expertise-append, jira-create-fields-gate, merge-truth-gate, reflection-gate, ui-proof-verdict-guard, build-hex proof-verdict-guard. acceptance-gate and merge-truth-gate do not stay green through _jiramut. Re-sampled at e520470: merge-truth-gate (event), reflection-gate (function), build-hex proof-verdict-guard (event) each RED on exactly its own case, attribution intact."
-        - "2a (d2e880b) once-per-process lock removed: RED 'two reads of the YAML in one run: still one warning line'"
-        - "2b (d2e880b) hook name replaced by constant: RED on 8 cases"
-        - "2c (e520470, was SURVIVED) error text replaced by 'boom' in _yamlwarn.warn: RED on 8 cases (acceptance-gate, merge-truth-gate, ui-proof-verdict-guard, _jiramut, _autonomy, expertise-append, reflection-gate, jira-create-fields-gate); replaced by '' : the same 8 RED; 'boom' in build-hex _warn_no_yaml: RED 'CS-4 build-hex proof-verdict-guard without the copy: one stderr line with the hook name and the reason'"
-        - "2e (e520470, was SURVIVED) lang='pt' ignored: RED on the new case 'CS-4 jira-create-fields-gate warns in Portuguese'"
-        - "2d (kept as classified at d2e880b) never-raises guard removed: green; equivalent at the event surface. Probe, not a case: acceptance-gate event in a no-yaml copy with stderr a pipe whose reader is closed exits 120 with the guard and 120 without it; the failure surfaces at interpreter-shutdown flush, past what the guard covers. NOTE (open question for the owner, not a verdict input): with a dead stderr pipe the hook exits 120 where the card says the warning never changes an exit code; not measured at base (expected 0 since nothing is written there)."
-        - "3 (e520470) warn also on YAML parse error in acceptance-gate: RED 'CS-4 malformed board-flow.yaml with the copy: no PyYAML warning'"
-        - "4 (e520470) acceptance-gate warn path sys.exit(2): RED 'CS-4 acceptance-gate without the copy keeps exit 0' (exit 2)"
-        - "5 (d2e880b) 'pip install' advice restored: RED \"jira-create-fields-gate without the copy: no 'pip install' advice\""
-        - "6 (e520470 re-sampled ui-proof-verdict-guard; d2e880b for the other three) warn fired unconditionally at import: ui-proof-verdict-guard RED (2 cases); acceptance-gate, merge-truth-gate, build-hex proof-verdict-guard RED on their 'WITH the copy, no warning' cases"
-        - "7 (d2e880b, test file unchanged in substance for base purposes) head test copied into detached worktree at base 738a16b: 11 CS-4 cases RED"
-        - "Neighbors at d2e880b, all green (hooks and neighbor tests untouched by e520470): test_acceptance_gate.py, test_merge_truth_gate.py, test_jira_create_fields_gate.py, test_isolated_telemetry.py"
+        - "GREEN at head 1cc3836: python3 tests/test_cepa_until_auto_land.py exit=0; python3 tests/test_cepa_until_decide_keys.py tudo verde"
+        - "perturbation A, is_yes accepts 's', decide_keys: 3 FAIL (is_yes('s'), is_yes('S'), 's' at Send back sent the item back) -> RED"
+        - "perturbation B, is_yes accepts 'sim', decide_keys: 4 FAIL (is_yes('sim'), is_yes('Sim'), 'sim' at Land now? landed the run) -> RED"
+        - "perturbation A, auto_land pre-authorization, python3 tests/test_cepa_until_auto_land.py: exit=1, FAIL resposta 's': auto_land fica false; FAIL resposta 's': nada aterrissa sozinho (estado aterrissado) -> RED"
+        - "perturbation B, same file: exit=1, FAIL resposta 'sim': auto_land fica false; FAIL resposta 'sim': nada aterrissa sozinho -> RED"
+        - "restored after each; throwaway worktree removed"
   l2_coverage:
     status: pass
     uncovered_lines: []
-    run: "no coverage tool for plain-script tests; reachability shown by perturbation: removing each of the nine warn calls turned its own case RED (item 1)"
+    run: "commit 1cc3836 extends test_launch_on_terminal_enter_n_s_or_sim_keeps_auto_land_false to answer s and sim at the real --auto-land pre-authorization prompt in a pty; it goes RED under the perturbations above, so the line at cepa-until:4882 is reached and guarded"
   l4_adversarial_input:
     status: n/a
-    reason: "the diff adds only a stderr line on an existing import-failure path and tightens test assertions; it parses no new input, and no changed class is in an input-bearing api-rest module (no api-rest module in this repo)"
+    reason: "the diff changes only how a typed y/N answer is interpreted in a local CLI; no HTTP/API input surface and no api-rest module"
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-    run: "issue type Task; base check is item 7 (11 CS-4 cases RED at 738a16b)"
-routing_reason: "At e520470 both earlier survivors are closed: dropping or replacing the error text now turns 8 cases RED (plus the build-hex case), and ignoring lang=pt turns the new Portuguese case RED. Every hook's warn call, the once-per-process lock, the hook name, the malformed-YAML separation, exit-code preservation, the no-pip-advice text and the 'copy present, no warning' mirrors are load-bearing, and the new cases are RED at base. The never-raises guard is equivalent at the event surface; the exit 120 under a dead stderr pipe is recorded as a note for the owner."
+    run: "not a Bug; extra evidence from the first round: at base_commit 2e2e4f4 the decide_keys file gives 7 FAIL -> RED"
+notes: |
+  Harness caveat: the tests use check()/FAILURES, not assert, so under pytest they are
+  vacuously green. All runs here executed each file as a script (exit 1 on failure).
+  The supervisor must run them the same way.
+routing_reason: "All three surfaces (send-back, Land now?, --auto-land pre-authorization) go RED when s or sim is re-added to is_yes, and the decide_keys tests are RED at base. No gap left."
