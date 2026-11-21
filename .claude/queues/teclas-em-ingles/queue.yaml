@@ -117,6 +117,22 @@ items:
     da fila, com a linha gravada. No fim de uma run com integração pendente, responder
     `sim` em "Land now?" não integra a branch. Hoje, nos dois casos, `s` e `sim`
     valem como yes.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Retry after red supervisor build. Cherry-picked the side branch until/2026-11-20-1544-vermelho-CS-4
+    (3f2b8cb,1cc3836,20acb60 -> 9677d3a,3892a71,956a0e3): is_yes in common/bin/cepa-until
+    takes only y/yes; s and sim count as no. Root cause of the red build: tests/test_cepa_until_screen_english.py:81
+    still answered ''s'' to the land confirmation; fixed to ''y'' in a3142fe (test
+    input only, no behavior change). Gates: proof PROVEN (docs/proof/CS-4.yaml,
+    head_commit 1cc3836 = same code as 3892a71), acceptance COMPLETE (.claude/acceptance/CS-4.yaml).
+    Ran green here: test_cepa_until_{screen_english,decide,decide_keys,auto_land,clean_tree,decide_created_items,land,resume_on_answer}.py.
+    Grepped tests/ for other s/sim answers at [y/N] prompts: none left (preference_keys
+    s/sim are deliberate old-key cases). Full build left to the supervisor; code
+    is on the run branch.'
+  decisions:
+  - texto: A pergunta de pré-autorização do --auto-land (a que pergunta, na largada,
+      se a run pode integrar sozinha) também passou a aceitar só y e yes, porque
+      usa a mesma regra das outras confirmações [y/N]; s e sim ali contam como não
+    commit: 3f2b8cbd53b399bbf5bfafe314b1d4d018efa6d0
+  head_commit: a3142fef1c02f5d3b8174e7201ae595014b0ff5f
