@@ -1,0 +1,62 @@
+key: until-lateral-casa-pela-fila
+status: complete
+diff_range: 82d00f1..4dae01b
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      cepa-until no início do run (chamada a clean_side_branches em _main,
+      common/bin/cepa-until): só apaga lateral cujo run pertence à fila do
+      run; lateral de outra fila com id done/dropped aqui sobrevive e nenhum
+      patch cai na pasta da fila errada.
+    test: >
+      tests/test_cepa_until_run_branch.py
+      test_4f_side_branch_of_another_queue_with_the_same_id_stays (run ponta a
+      ponta de cepa-until: a1 done na fila `fila`, lateral
+      until/2026-01-02-0000-vermelho-a1 com ledger só em
+      .claude/queues/outra/until/; afirma branch sobrevive, sem patch no
+      .laterais da fila, sem evento lateral_apagada) e test_4f_side_branch_of_closed_item_becomes_patch_before_vanishing
+      (lateral própria some com patch); complemento de unidade em
+      tests/test_side_branch_belongs_to_queue.py
+    layer: cli (cepa-until como subprocesso com claude falso)
+    evidence: verified
+    run: >
+      timeout 570 python3 tests/test_cepa_until_run_branch.py -> 119 linhas
+      "ok", incluindo as 3 do test_4f_..._another_queue_with_the_same_id_stays,
+      "✓ tudo verde" (exit 0). O coordenador reporta que contra 82d00f1 as 3
+      checagens falham (não reverifiquei isso).
+  - id: AC2
+    altitude: cli
+    surface: >
+      `cepa-plan status --json` (code_location): a lateral de outra fila não
+      entra em "código fora do main" do item; a lateral da própria fila
+      continua listada.
+    test: >
+      tests/test_side_branch_belongs_to_queue.py (bloco "cepa-plan status",
+      roda cepa-plan status como subprocesso: "CS-1 does not take the other
+      queue's red branch" e "CS-3 still lists its own run's red branch")
+    layer: cli/subprocess
+    evidence: verified
+    run: >
+      python3 tests/test_side_branch_belongs_to_queue.py -> "ok status runs",
+      "ok CS-1 does not take the other queue's red branch", "ok CS-3 still
+      lists its own run's red branch", "tudo ok" (exit 0);
+      python3 tests/test_cepa_plan_status_code_and_epic.py -> "tudo verde"
+  - id: AC3
+    altitude: cli
+    surface: >
+      Comportamento existente: lateral própria de item done/dropped continua
+      virando patch e sumindo; branch que não é lateral continua casando por
+      token de id (_id_in).
+    test: >
+      tests/test_cepa_until_run_branch.py test_4f_* (run ponta a ponta,
+      fixture agora grava o ledger do run) e
+      tests/test_cepa_plan_status_code_and_epic.py (casamento por token de id)
+    layer: cli/subprocess
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_run_branch.py -> "✓ tudo verde" (exit 0);
+      python3 tests/test_cepa_plan_status_code_and_epic.py -> "tudo verde".
+      Observação: a saída do loop foi cortada por tail, então as linhas "ok"
+      individuais do test_4f não foram vistas; a evidência é o resumo verde
+      do arquivo todo.
