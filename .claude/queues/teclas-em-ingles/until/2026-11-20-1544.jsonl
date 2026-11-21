@@ -31,3 +31,4 @@
 {"evento": "hooks_reinstalados", "id": "CS-4", "arquivos": ["common/bin/cepa-until"], "sha_antes": "7f6e10f39513", "sha_depois": "b26cc66c29b1", "ok": true, "segundos": 48, "motivo": null, "quando": "2026-11-20T23:37:16"}
 {"evento": "run_end", "motivo": "end-of-queue", "detalhe": "the queue is finished: no pending item is left", "itens": 6, "com_progresso": 4, "sem_progresso": 0, "esgotados": 0, "limite_de_uso": 0, "esperas_de_cota": 0, "quedas_de_rede": 0, "cota_apertada": 0, "entregues": 4, "travados": 0, "verify_vermelho": 2, "done_sem_commit": 0, "filas_fora": [], "quando": "2026-11-20T23:37:17"}
 {"evento": "analise", "feita": true, "arquivo": "/Users/alegomes/coding/cepa/.claude/queues/teclas-em-ingles/until/2026-11-20-1544.review.md", "erro": null, "quando": "2026-11-20T23:38:53"}
+{"evento": "instalado_no_pouso", "repo": "/Users/alegomes/coding/cepa", "ok": true, "segundos": 28, "motivo": null, "quando": "2026-11-21T07:09:09"}
