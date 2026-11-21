@@ -230,3 +230,52 @@ def test_perturbation_build_after_git_dash_c_does_not_touch_main_state(tmp_path)
     assert not (proj / ".claude" / "last-build.json").exists()
     st = json.loads((wt / ".claude" / "last-build.json").read_text())
     assert st["status"] == "FAILURE"
+
+
+# fb-20261106-3: the proof-reviewer wraps Maven in shell grouping, so the build segment
+# started with `(`, `{`, `do` or `run(){` and was not recognised; the L4 probe result
+# (EMPTY) was recorded on the session tree. Real shapes from the 2026-11-03 prove-drain.
+_MVN = "./mvnw -q -pl application -am test -Dtest=T -Dsurefire.failIfNoSpecifiedTests=false"
+_GROUPED_BUILDS = {
+    "subshell_after_semicolon": (
+        "git worktree add @WT@ HEAD -f >/dev/null 2>&1; cd @WT@ && git checkout Y -- a; "
+        f"({_MVN} 2>&1 | grep -E \"Tests run:\" | head -8)"),
+    "l4_probe_timeout_in_subshell": (
+        f"cd @WT@ && (timeout 580 {_MVN} 2>&1 | grep -E \"Tests run\" | head -100)"),
+    "time_in_subshell": f"cd @WT@ && (time {_MVN} 2>&1 | grep Tests)",
+    "function_no_space": (
+        f"cd @WT@ && F=a/B.java\nrun(){{ {_MVN} >/dev/null 2>&1; grep -h \"Tests run\" x; }}"),
+    "function_with_space": (
+        f"cd @WT@ && F=a/B.java\nrun() {{ {_MVN} >/dev/null 2>&1; grep -h \"Tests run\" x; }}"),
+    "brace_group": "cd @WT@ && { ./mvnw test; }",
+    "for_loop_do_cd": "for t in A B; do cd @WT@ && ./mvnw test -Dtest=$t; done",
+}
+
+
+def test_effective_build_dir_sees_build_inside_shell_grouping(tmp_path):
+    wt = (tmp_path / "wt").resolve()
+    wt.mkdir()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for name, tmpl in _GROUPED_BUILDS.items():
+        assert cbr.effective_build_dir(tmpl.replace("@WT@", str(wt)), repo) == wt, name
+
+
+def test_perturbation_l4_probe_in_subshell_does_not_touch_main_state(tmp_path):
+    wt = (tmp_path / "wt").resolve()
+    wt.mkdir()
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    tmp = tmp_path / "tmp"
+    tmp.mkdir()
+    cmd = _GROUPED_BUILDS["l4_probe_timeout_in_subshell"].replace("@WT@", str(wt))
+    payload = {"cwd": str(proj), "session_id": "s-l4", "tool_name": "Bash",
+               "tool_input": {"command": cmd},
+               "tool_response": {"stdout": "", "stderr": "", "interrupted": False,
+                                 "exit_code": 0}}
+    subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload), text=True,
+                   capture_output=True, cwd=proj, env={**os.environ, "TMPDIR": str(tmp)})
+    assert not (proj / ".claude" / "last-build.json").exists()
+    st = json.loads((wt / ".claude" / "last-build.json").read_text())
+    assert st["status"] == "EMPTY"
