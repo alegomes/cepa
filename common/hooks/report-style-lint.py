@@ -951,6 +951,11 @@ def on_stop(payload):
         d = replaced_list_deviation(rows, report)
         if d:
             deviations.append(d)
+    if not changed and not closed and not listed and not deviations:
+        # A list without a recommendation was never measured before this
+        # rule: no telemetry event for it either, or the count of measured
+        # reports in /common:metrics would grow.
+        return None
     cwd = payload.get("cwd") or os.getcwd()
 
     # Anti-loop lock: this stop is already the consequence of a block by this hook.

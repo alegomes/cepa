@@ -979,9 +979,13 @@ LISTONLY = ("Separei os pontos que dependem de você e deixei cada um como uma "
             + "\n\n### Decisões e próximos passos\n"
             "1. Mato o PR8 e o E1 antigos?\n"
             "2. Apago o branch E3?\n")
+_ev_before_m = len(report_events())
 check("(m) lista sem recomendação, sem lista anterior → nenhum bloqueio",
       block_reason(run("Stop", transcript(user("o que falta?"), text(LISTONLY)),
                        session="s-sub-m").stdout) == "")
+check("(m1) ... e nenhum evento de telemetria (turno que nunca foi medido)",
+      len(report_events()) == _ev_before_m,
+      f"{len(report_events()) - _ev_before_m} evento(s) novo(s)")
 reason_m2 = subst(text(GOOD), NOTIF, text(LISTONLY), session="s-sub-m2")
 check("(m2) lista sem recomendação sobre lista anterior sem resposta → só a categoria nova",
       has_subst(reason_m2) and "legenda" not in reason_m2
