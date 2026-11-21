@@ -436,7 +436,7 @@ def real_maven_args(command: str):
     (verify|test|package|install), or None. Text that merely mentions Maven
     (`echo "./mvnw verify"`, `grep verify`) is not one."""
     for seg in S._split_segments(command):
-        args = M.maven_args(seg.strip())
+        args = M.maven_args(S._strip_group_prefix(seg))
         if args is not None and _MAVEN_PHASES & set(M.goals(args)):
             return args
     return None
@@ -711,7 +711,7 @@ def redirected_output(command: str, build_dir: Path) -> str:
     (`> f`, `>> f`, `&> f`), resolved against build_dir; "" when there is none.
     /dev/null, `>&2` and `2>` are ignored. `| tee f` is not handled: with tee
     the output still reaches the hook."""
-    segs = [s.strip() for s in S._split_segments(command)]
+    segs = [S._strip_group_prefix(s) for s in S._split_segments(command)]
     ordered = ([s for s in reversed(segs) if M.maven_args(s) is not None]
                + [s for s in reversed(segs) if M.maven_args(s) is None])
     for seg in ordered:
@@ -759,7 +759,7 @@ def runs_root_install(command: str, build_dir: Path, marker_root: Path) -> bool:
         o ramo com `-f` comparava contra a raiz."""
     root_pom = (marker_root / "pom.xml").resolve()
     for seg in S._split_segments(command):
-        seg = seg.strip()
+        seg = S._strip_group_prefix(seg)
         if not seg:
             continue
         args = M.maven_args(seg)

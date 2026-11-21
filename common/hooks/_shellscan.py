@@ -434,6 +434,29 @@ def _git_dash_c(segment: str):
     return out
 
 
+# Shell-grouping prefixes that sit in front of a command without changing what it
+# is or where it runs: `(` / `{` open a subshell or group, `!` negates, the
+# keywords come from `for ...; do cmd`, `if ...; then cmd`, and a function header
+# is `name()` / `name(){` / `name() {`. Without stripping, `(./mvnw test)`,
+# `{ ./mvnw test; }`, `do cd /x` and `run(){ ./mvnw test; }` start with a token
+# that is not the command, so the build / the `cd` goes unrecognised
+# (fb-20261106-3: the proof-reviewer's L4 probe, `cd wt && (timeout 580 ./mvnw
+# ... | grep ...)`, was recorded on the session tree).
+_GROUP_PREFIX_RE = re.compile(
+    r"^(?:[(!{]|(?:do|then|else|elif)(?![\w./-])|[A-Za-z_][\w-]*\s*\(\s*\)\s*\{?)\s*"
+)
+
+
+def _strip_group_prefix(segment: str) -> str:
+    """Removes leading grouping prefixes (see _GROUP_PREFIX_RE) from a segment."""
+    segment = segment.strip()
+    while True:
+        m = _GROUP_PREFIX_RE.match(segment)
+        if not m or not m.end():
+            return segment
+        segment = segment[m.end():]
+
+
 def segment_dirs(command: str, cwd: str) -> list:
     """`[(segment, directory, explicit)]` for each segment that is NOT a `cd`.
 
@@ -448,7 +471,7 @@ def segment_dirs(command: str, cwd: str) -> list:
     explicit = False
     out = []
     for seg in _split_segments(command):
-        seg = seg.strip()
+        seg = _strip_group_prefix(seg)
         if not seg:
             continue
         cd_dir = _cd_target(seg)
