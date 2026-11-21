@@ -105,6 +105,23 @@ turn is dead on arrival: the report is read on its own. Short allowlist for
 names that look like codes and are not (S3, MD5, UTF8, L0..L4 of the glossary,
 H1..H6).
 
+Replaced decision list without notice (2026-11-21, feedback fb-20261110-2). A
+report carried a numbered decision list; before the owner answered it, a later
+turn -- woken by a message that was not the owner (a task notification, another
+session's message) -- wrote a NEW numbered list without saying the first was
+replaced. The owner answered both with overlapping numbers and the answer became
+ambiguous. New category `lista-substituida-sem-aviso`: when the report has a
+decision list (the closing heading plus a numbered item with `?`; "Nada
+pendente." is not one) and the previous assistant message in the main thread
+also had one, and no real owner prompt came between them, the report must say in
+one line that it replaces the previous list (`replaced_list_deviation`). Not the
+owner: `isMeta` rows, "Stop hook feedback:", tool results, and text that is only
+`<task-notification>`, `<system-reminder>` or a `<...-message>` tag. Exemption:
+the rewrite after this hook's own block (the block reason orders "do not explain
+the rewrite"), provided nothing else that is not the owner arrived in between.
+Applies in the list-only turn too (no edit, no commit), not when the session is
+closed.
+
 Output: always exit 0. The block travels in the stdout JSON, not in the exit
 code -- the hook never takes the turn down over its own error.
 """
@@ -113,6 +130,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -799,6 +817,92 @@ def measure(report: str, jargon: list, abstractions: list = (),
     return deviations
 
 
+# ── replaced decision list (2026-11-21, fb-20261110-2) ─────────────────────────
+HOOK_BLOCK_MARKERS = ("saiu do formato `plain-report`",
+                      "Sua lista de decisões usa código de referência")
+MACHINE_TAG = re.compile(
+    r"^(?:<task-notification\b|<system-reminder\b|<[\w-]*-message\b)")
+REPLACES_LINE = re.compile(
+    r"substitu(?:i|iu)\s+(?:a|o|as)\s+(?:(?:lista|bloco|numeracao)\s+"
+    r"(?:de\s+decisoes\s+)?)?anterior"
+    r"|(?:lista|bloco|numeracao)\s+anterior\s+(?:fica|esta|foi|ficou)\s+"
+    r"(?:substituid|superad)"
+    r"|(?:replaces?|supersedes?)\s+the\s+(?:previous|prior|earlier)\s+"
+    r"(?:decision\s+)?(?:list|one|block)"
+    r"|(?:previous|prior|earlier)\s+(?:decision\s+)?(?:list|one)\s+"
+    r"(?:is|was|stays|gets)\s+(?:replaced|superseded)")
+
+
+def has_decision_list(text: str) -> bool:
+    """The closing heading plus at least one numbered item that asks (`?`)."""
+    m = STEPS_MARKER.search(text or "")
+    if not m:
+        return False
+    return any("?" in item for item in list_items(text[m.end():]))
+
+
+def _plain(text: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", text.lower())
+                   if not unicodedata.combining(c))
+
+
+def _is_owner_prompt(row) -> bool:
+    if not _is_user_prompt(row) or row.get("isMeta"):
+        return False
+    text = _user_text(row).strip()
+    if not text or text.startswith("Stop hook feedback:"):
+        return False
+    return not MACHINE_TAG.match(text)
+
+
+def _is_hook_block(row) -> bool:
+    text = _user_text(row).lstrip()
+    return text.startswith("Stop hook feedback:") and any(
+        m in text for m in HOOK_BLOCK_MARKERS)
+
+
+def replaced_list_deviation(rows, report: str):
+    """(category, message) when `report` opens a decision list over an
+    unanswered previous one without saying it replaces it; else None."""
+    if not has_decision_list(report):
+        return None
+    texts = []   # (row index, joined text) of main-thread assistant text rows
+    for i, row in enumerate(rows):
+        if row.get("type") != "assistant" or row.get("isSidechain"):
+            continue
+        content = (row.get("message") or {}).get("content")
+        if not isinstance(content, list):
+            continue
+        joined = "\n".join(b.get("text", "") for b in content
+                           if isinstance(b, dict) and b.get("type") == "text"
+                           and b.get("text", "").strip())
+        if joined.strip():
+            texts.append((i, joined))
+    if len(texts) < 2:
+        return None
+    cur = texts[-1][0]
+    prev = next((i for i, t in reversed(texts[:-1]) if has_decision_list(t)),
+                None)
+    if prev is None:
+        return None
+    between = [r for r in rows[prev + 1:cur]
+               if r.get("type") == "user" and not r.get("isSidechain")]
+    if any(_is_owner_prompt(r) for r in between):
+        return None
+    blocks = [r for r in between if _is_hook_block(r)]
+    others = [r for r in between if not _is_hook_block(r)
+              and _user_text(r).strip()]
+    if blocks and not others:
+        return None   # the corrected rewrite of the same list
+    if REPLACES_LINE.search(_plain(report)):
+        return None
+    return ("lista-substituida-sem-aviso",
+            "a lista de decisões anterior não foi respondida e esta é uma "
+            "nova: diga em uma linha que ela substitui a anterior (`Esta "
+            "lista substitui a anterior`) e repita nela os itens que ainda "
+            "valem, para o dono responder uma numeração só")
+
+
 # ── pending item between turns ──────────────────────────────────────────────────
 def pending_path(session_id: str) -> Path:
     slug = re.sub(r"[^A-Za-z0-9_-]", "_", session_id or "sem-sessao")
@@ -820,7 +924,7 @@ def on_stop(payload):
     # no edit, no commit -- still carries codes the owner has to answer by
     # number. The batch of eight questions with `PR8`, `E1`, `E3` undefined
     # went out through this door. Only the code measurements apply here.
-    listed = decision_list(report)
+    listed = decision_list(report) or has_decision_list(report)
     if not changed and not closed and not listed:
         return None
 
@@ -837,6 +941,10 @@ def on_stop(payload):
         deviations = [d] if d else []
     else:
         deviations = code_deviations(report)
+    if not closed:
+        d = replaced_list_deviation(rows, report)
+        if d:
+            deviations.append(d)
     cwd = payload.get("cwd") or os.getcwd()
 
     # Anti-loop lock: this stop is already the consequence of a block by this hook.
@@ -862,7 +970,10 @@ def on_stop(payload):
         # next turn, otherwise the user gets the warning for an already fixed text.
         p.unlink(missing_ok=True)
         return block_reason([m for _, m in deviations], closed,
-                            codes_only=not changed and not closed)
+                            codes_only=(not changed and not closed
+                                        and all(c in CODE_CATEGORIES
+                                                for c, _ in deviations)),
+                            list_only=not changed and not closed)
 
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -883,8 +994,17 @@ CLOSED_FORMAT = (
     "(BACKLOG.md, item de fila ou `cepa-feedback add`) e o relatório diz onde.")
 
 
+CODE_CATEGORIES = ("codigo-sem-legenda", "legenda-inline")
+
+
 def block_reason(deviations, closed: bool = False,
-                 codes_only: bool = False) -> str:
+                 codes_only: bool = False, list_only: bool = False) -> str:
+    if list_only and not codes_only:
+        return ("Sua lista de decisões saiu do formato `plain-report`:\n" +
+                "".join(f"  - {d}\n" for d in deviations) +
+                "Reenvie a MESMA lista corrigindo só isso. Não mude o resto, "
+                "não peça desculpa e não explique a reescrita \u2014 só a "
+                "linha que diz que ela substitui a anterior, quando for o caso.")
     if codes_only:
         return ("Sua lista de decisões usa código de referência que o leitor "
                 "não consegue resolver:\n" +
