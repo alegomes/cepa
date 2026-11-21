@@ -5322,7 +5322,7 @@ Gravar no `last-build.json` o filtro do build (`-Dtest=`, `-pl`, `-k`) e o gate 
 
 ## `cepa-plan status` diz que o item está pronto e a pergunta sobre o desbloqueio revela pendências que nunca apareceram
 
-**Status:** pendente · **Lar provável:** common (`common/bin/cepa-plan status`, `queue.yaml`; `/common:epic` e `/common:spec`) · **Origem:** feedback `fb-20261110-1`, 2026-11-10
+**Status:** feito nesta branch (2026-11-21): `cepa-plan finish --pendencia` grava a pendência descoberta no item; com uma aberta, `status` não mostra o item como pronto, e `status`, `show`, `queue` e `start` a imprimem; `--resolve-pendencia N` fecha (teste `tests/test_cepa_plan_discovered_pending.py`). A outra metade, decisões que ficaram fora do Epic, já tinha o aviso "sem Epic" · **Lar provável:** common (`common/bin/cepa-plan status`, `queue.yaml`; `/common:epic` e `/common:spec`) · **Origem:** feedback `fb-20261110-1`, 2026-11-10
 
 ### Problema
 

@@ -120,6 +120,7 @@ Subcommands:
 
   cepa-plan finish <nome> <id> --status done|blocked|pending --evidence TEXTO
                    [--human-pending ROTA] [--decision TEXTO [--decision-commit SHA]]
+                   [--pendencia TEXTO] [--resolve-pendencia N]
       Records the outcome. `--evidence` is mandatory: `done` without what
       happened is just a word, and this repo's queue keeps the evidence of each
       closed item. `--human-pending` OPENS a route only the human closes;
@@ -131,6 +132,13 @@ Subcommands:
       with the commit, and undoing it is a `git revert` (CS-11 of
       docs/spec/perguntar-antes-do-run.md). A proof waiver, a card to Done and a
       task outside the repo stay `--human-pending` (owner's answer to Q7).
+      `--pendencia TEXTO` (repeatable) records a pending point DISCOVERED while
+      running the item (a validation caveat, a decision nobody took, a proof not
+      run) in the item key `pendencias`, open; `--resolve-pendencia N` closes the
+      Nth open one with `--evidence` as how. While one is open the item is never
+      `pronto` in `status`, and `status`, `show`, `queue` and `start` print it
+      (fb-20261110-1: C1-18 went back to `pending` "pronto" with its caveats
+      buried in the prose of `evidence`).
       `--status done` is refused when the `.claude/last-build.json` at the
       root of the `--repo` session is EMPTY (a test filter that matched zero
       tests): green without a test does not close an item.
@@ -1561,7 +1569,8 @@ def build_batch(items, max_items, reservation_state=reservation_of):
                       "próximo"}
             break
         batch.append({"id": ident, "title": it.get("title"), "why": it.get("why"),
-                     "blocked_by": [str(b) for b in (it.get("blocked_by") or [])]})
+                     "blocked_by": [str(b) for b in (it.get("blocked_by") or [])],
+                     "pendencias": open_points(it)})
 
     if reason_alias(stop["reason"]) == "end-of-queue" and deferred:
         stop["detail"] = (
@@ -1771,8 +1780,31 @@ def sem_epic(it):
     return it.get("sem_epic") is True or NOT_PRIORITIZED_PHRASE in str(it.get("why") or "")
 
 
+def open_points(it):
+    """The texts of the item's discovered pending points still open, in the
+    order they were recorded (owner, 2026-11-10, fb-20261110-1: C1-18 went back
+    to `pending` after the owner's "sim" and `status` said "pronto", with the
+    validation caveats and two owner decisions buried in the prose of
+    `evidence`). `finish --pendencia` opens one, `--resolve-pendencia` closes
+    it; an item with one open is never `pronto`, but stays `pegavel`: the run
+    that takes it is the one that resolves them."""
+    return [str(p.get("texto")) for p in (it.get("pendencias") or [])
+            if isinstance(p, dict) and p.get("texto") and not p.get("resolvida_em")]
+
+
 SEM_EPIC_LINE = "sem Epic: entrou por cepa-plan add, as decisões de domínio não passaram pelo /common:epic"
 PEGAVEL_LINE = "pegável: não conta como pronto, mas o próximo cepa-until pega mesmo sem Epic"
+
+
+def pegavel_line(l):
+    """The "pegável" line naming why the item is not ready: no Epic, an open
+    discovered pending point, or both."""
+    why = [w for w, on in (("sem Epic", l.get("sem_epic")),
+                           ("com pendência aberta", l.get("pendencias"))) if on]
+    if not why or why == ["sem Epic"]:
+        return PEGAVEL_LINE
+    return ("pegável: não conta como pronto, mas o próximo cepa-until pega "
+            "mesmo " + " e ".join(why))
 
 
 def first_sentence(text, limit=160):
@@ -1790,10 +1822,19 @@ def owner_lines(lines, queue):
     pending = [l for l in lines if l["status"] == "pending"]
     ready = [l for l in pending if l["pronto"]]
     loose = [l for l in pending if l["sem_epic"]]
+    discovered = [l for l in pending if l.get("pendencias") and l.get("pegavel")
+                  and not l["sem_epic"]]
     out = [f"{len(ready)} de {len(pending)} pendentes prontos para o agente"
            + (": " + ", ".join(str(l["id"]) for l in ready) if ready else "")
            + ("; os outros esperam você ou outro item"
-              if len(ready) + len(loose) < len(pending) else "")]
+              if len(ready) + len(loose) + len(discovered) < len(pending)
+              else "")]
+    if discovered:
+        out.append(f"{len(discovered)} com pendência descoberta à parte: "
+                   + ", ".join(f"{l['id']} ({len(l['pendencias'])})"
+                               for l in discovered)
+                   + " (o cepa-until pega, mas o item só fica pronto quando "
+                   "cada pendência fechar)")
     if loose:
         out.append(f"{len(loose)} sem Epic à parte: "
                    + ", ".join(str(l["id"]) for l in loose)
@@ -1854,9 +1895,13 @@ def cmd_status(root, name, status_filter, as_json, item_id=None, via_show=False)
         lines.append({
             # `pronto` leaves out the items with no Epic (owner, 2026-11-10);
             # `pegavel` is still what build_batch hands a run, Epic or not.
-            "pronto": str(it.get("id")) in ready_ids and not sem_epic(it),
+            # ... nor the items with a discovered pending point still open
+            # (fb-20261110-1): a run takes them, and resolves them.
+            "pronto": (str(it.get("id")) in ready_ids and not sem_epic(it)
+                       and not open_points(it)),
             "pegavel": str(it.get("id")) in ready_ids,
             "sem_epic": sem_epic(it),
+            "pendencias": open_points(it),
             "codigo": (code_location(root, it, ref, branches, name)
                        if ref and status_of(it) != "dropped" else None),
             "posicao": pos, "id": it.get("id"), "title": it.get("title"),
@@ -1927,13 +1972,15 @@ def cmd_status(root, name, status_filter, as_json, item_id=None, via_show=False)
             if l["sem_epic"]:
                 print(f"       {SEM_EPIC_LINE}")
             if l["pegavel"] and not l["pronto"]:
-                print(f"       {PEGAVEL_LINE}")
+                print(f"       {pegavel_line(l)}")
             if l["claimed_by"]:
                 c = l["claimed_by"]
                 print(f"       reservado: sessão {c['session_id'] or '?'}"
                       f" desde {c['started_at'] or '?'}")
             if l["pronto"]:
                 print("       pronto: o próximo cepa-until pega")
+            for n, text in enumerate(l["pendencias"], 1):
+                print(f"       pendência descoberta {n}: {text}")
             if l["blocked_by"]:
                 print(f"       espera: {', '.join(map(str, l['blocked_by']))}")
             if l["human_pending"] is not None:
@@ -2191,7 +2238,7 @@ def item_detail(program, target, l, as_json, plan=None, root=None):
     fields = [
         ("status", [f"{l['status']} ({label})"
                     + (" · pronto: o próximo cepa-until pega" if l["pronto"]
-                       else " · " + PEGAVEL_LINE if l.get("pegavel") else "")]),
+                       else " · " + pegavel_line(l) if l.get("pegavel") else "")]),
         ("título", [l["title"]]),
         ("fonte", source_lines),
         ("por que nesta posição", why_parts(l["why"])),
@@ -2201,6 +2248,8 @@ def item_detail(program, target, l, as_json, plan=None, root=None):
                     else [f"no {l['codigo']['ref']}: " + ", ".join(l["codigo"]["no_main"])]
                     if l.get("codigo") else [])),
         ("sem Epic", [SEM_EPIC_LINE.split(": ", 1)[1]] if l.get("sem_epic") else []),
+        ("pendências descobertas (abertas; feche com finish --resolve-pendencia N)",
+         [f"{n}. {text}" for n, text in enumerate(l.get("pendencias") or [], 1)]),
         ("evidência" + (" (mais recente primeiro)" if len(ev) > 1 else ""), ev),
         ("resumo para o dono", [l["owner_summary"]] if l["owner_summary"] else []),
         ("reservado", [f"sessão {c['session_id'] or '?'} na branch "
@@ -2307,7 +2356,7 @@ def status_on_screen(program, target, lines, counts, visible):
             if l["sem_epic"]:
                 details.append(("sem Epic", SEM_EPIC_LINE.split(": ", 1)[1], "amarelo"))
             if l["pegavel"] and not l["pronto"]:
-                details.append(("pegável", PEGAVEL_LINE.split(": ", 1)[1], "amarelo"))
+                details.append(("pegável", pegavel_line(l).split(": ", 1)[1], "amarelo"))
             if code_line(l["codigo"]):
                 details.append(("código", code_line(l["codigo"]).split("código ", 1)[1],
                                 "vermelho"))
@@ -2315,6 +2364,8 @@ def status_on_screen(program, target, lines, counts, visible):
                 c = l["claimed_by"]
                 details.append(("reservado", f"sessão {c['session_id'] or '?'}"
                                  f" desde {c['started_at'] or '?'}", "ciano"))
+            for n, text in enumerate(l["pendencias"], 1):
+                details.append((f"pendência descoberta {n}", text, "amarelo"))
             if l["blocked_by"]:
                 details.append(("espera", ", ".join(map(str, l["blocked_by"])),
                                  "amarelo"))
@@ -3029,6 +3080,12 @@ def cmd_start(root, name, ident, cwd=".", commit=False):
         print("  evidence anterior (leia antes de começar):")
         for line in previous.splitlines():
             print(f"    {line}")
+    still = open_points(it)
+    if still:
+        print("  pendências descobertas ainda abertas (feche cada uma com "
+              "`finish --resolve-pendencia N` ou diga por que segue aberta):")
+        for n, text in enumerate(still, 1):
+            print(f"    {n}. {text}")
     close_write(root, target, f"queue {name}: start {ident}", commit)
     return 0
 
@@ -3507,9 +3564,45 @@ def cmd_reword_route(root, name, ident, route_kind, question, if_yes, if_no,
     return 0
 
 
+def resolve_points(it, new_texts, resolve_numbers, evidence, today):
+    """(pendencias, opened, closed, None) or (None, None, None, refusal).
+
+    `resolve_numbers` are 1-based among the OPEN points, as `status` and `show`
+    number them, and are applied before `new_texts` are appended, so a number
+    never lands on a point opened in the same call."""
+    flat = [" ".join(str(t or "").split()) for t in (new_texts or [])]
+    if any(not t for t in flat):
+        return None, None, None, ("`--pendencia` vazio: diga o que ficou pendente "
+                                  "em palavras simples")
+    points = [dict(p) for p in (it.get("pendencias") or []) if isinstance(p, dict)]
+    open_idx = [i for i, p in enumerate(points)
+                if p.get("texto") and not p.get("resolvida_em")]
+    closed = []
+    for n in resolve_numbers or []:
+        if n < 1 or n > len(open_idx):
+            return None, None, None, (
+                f"`--resolve-pendencia {n}` não existe: o item tem "
+                f"{len(open_idx)} pendência(s) aberta(s), numeradas de 1 a "
+                f"{len(open_idx)} como o `cepa plan show` mostra")
+    for n in sorted(set(resolve_numbers or [])):
+        p = points[open_idx[n - 1]]
+        p["resolvida_em"] = today
+        p["como"] = " ".join(str(evidence or "").split())
+        closed.append(p["texto"])
+    known = {p.get("texto") for p in points if not p.get("resolvida_em")}
+    opened = []
+    for t in flat:
+        if t not in known:
+            points.append({"texto": t, "aberta_em": today, "resolvida_em": None})
+            known.add(t)
+            opened.append(t)
+    return points, opened, closed, None
+
+
 def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
                question=None, commit=False, owner=None, supervisor=False,
-               decisions=None, decision_commit=None, route_kind=None, items=None):
+               decisions=None, decision_commit=None, route_kind=None, items=None,
+               points=None, resolve_points_n=None):
     owner = {k: " ".join(str(v).split()) for k, v in (owner or {}).items()
              if v is not None and str(v).strip()}
     declared, item_errors = declared_items(items)
@@ -3566,8 +3659,15 @@ def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
               "vereditos, o que travou). Todo item `done` desta fila carrega a "
               "dele.", file=sys.stderr)
         return 2
+    new_points, opened, closed, why_not = resolve_points(
+        it, points, resolve_points_n, evidence, datetime.now().strftime("%Y-%m-%d"))
+    if why_not:
+        print(f"`{status}` recusado para {ident}: {why_not}", file=sys.stderr)
+        return 2
     it["status"] = status
     it["evidence"] = evidence
+    if new_points:
+        it["pendencias"] = new_points
     it.pop("claimed_by", None)
     if status == "done":
         _, head, _ = _git(session_root(repo), "rev-parse", "HEAD")
@@ -3603,6 +3703,15 @@ def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
     for d in new_decisions:
         print(f"  decisão registrada, sem rota para o dono: {d['texto']} "
               f"(commit {d['commit'][:10]})")
+    for t in closed:
+        print(f"  pendência resolvida: {t}")
+    for t in opened:
+        print(f"  pendência descoberta registrada: {t}")
+    still = open_points(it)
+    if still:
+        print(f"  {len(still)} pendência(s) aberta(s): o `cepa plan status` não "
+              "mostra o item como pronto até cada uma fechar com "
+              "--resolve-pendencia N")
     if status in ("done", "blocked"):
         clear_validation_owed(name, ident)
     elif status == "pending":
@@ -5785,6 +5894,24 @@ def main(argv=None):
                          "HEAD of --repo). Must be on the current branch. Not "
                          "`--commit`, which already means \"commit the queue "
                          "file\"")
+    fi.add_argument("--pendencia", "--open-point", dest="points", action="append",
+                    metavar="TEXT",
+                    help="a pending point you DISCOVERED while running the item "
+                         "and that is still open (a validation caveat, a "
+                         "decision nobody took, a proof not run), in plain "
+                         "words. Recorded in the item's `pendencias`; while one "
+                         "is open `cepa plan status` never shows the item as "
+                         "ready, and `status`, `show`, `queue` and `start` print "
+                         "it. Repeatable; the same text open twice is kept once. "
+                         "It opens no route: an owner decision still goes in "
+                         "--question / --human-pending too")
+    fi.add_argument("--resolve-pendencia", "--resolve-point", dest="resolve_points",
+                    action="append", type=int, metavar="N",
+                    help="closes open pending point N (1-based among the OPEN "
+                         "ones, as `cepa plan show` numbers them), with "
+                         "--evidence as how it was resolved. Repeatable; a "
+                         "number that does not exist is refused and nothing is "
+                         "written")
     fi.add_argument("--commit", action="store_true", help=commit_help)
     fi.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
@@ -6159,7 +6286,8 @@ def main(argv=None):
                           {key: getattr(a, f"owner_{key}")
                            for key, _, _ in _ownertext.FIELDS},
                           a.supervisor, a.decision, a.decision_commit,
-                          a.route_kind, _cli_items(a))
+                          a.route_kind, _cli_items(a), a.points,
+                          a.resolve_points)
     if a.cmd == "reword-route":
         return cmd_reword_route(root, a.name, a.id, a.route_kind, a.question,
                                 a.if_yes, a.if_no, a.replace, _cli_items(a))
