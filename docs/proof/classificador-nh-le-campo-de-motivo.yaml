@@ -1,9 +1,9 @@
 schema_version: 2
 card: classificador-nh-le-campo-de-motivo
-verdict: unproven
-reviewed_at: 2026-11-21T13:30:00-03:00
+verdict: needs-human
+reviewed_at: 2026-11-21T14:10:00-03:00
 base_commit: c176092
-head_commit: 347969e
+head_commit: 991d998
 issue_type: Task
 scope:
   base_commit_resolved: true
@@ -19,33 +19,33 @@ levels:
       status: absent
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "GREEN at HEAD: python3 -m pytest tests/test_needs_human_reasons.py tests/test_cepa_runs_without_pyyaml.py -q -> 55 passed"
-        - "RED at base (classify_needs_human.py from c176092): tests/test_needs_human_reasons.py -> 8 failed, 47 passed"
-        - "KILLED (RED) drop path needs_human_motivo -> 1 failed, 54 passed"
+        - "GREEN at HEAD 991d998 (detached worktree): python3 -m pytest tests/test_needs_human_reasons.py tests/test_cepa_runs_without_pyyaml.py -q -> 58 passed"
+        - "RED at base (classify_needs_human.py from c176092): same command -> 9 failed, 49 passed"
+        - "KILLED _SLUG_RE lookbehind (?<![\\w-]) removed -> 1 failed, 57 passed (test_declared_slug_must_be_a_whole_token)"
+        - "KILLED both isinstance(value, (dict, list)) guards -> False -> 1 failed, 57 passed (test_declared_field_must_be_a_scalar)"
+        - "KILLED fixed evidence sentence replaced by text[:200] -> 1 failed, 57 passed (test_bare_declared_slug_shows_a_readable_evidence)"
+        - "KILLED drop path needs_human_motivo -> 2 failed"
         - "KILLED drop path motivo_needs_human -> 1 failed"
         - "KILLED drop path inspection.motivo_needs_human -> 1 failed"
         - "KILLED drop path done_transition_held.reason -> 2 failed"
         - "KILLED routing_reason block disabled (m = None) -> 2 failed"
         - "KILLED routing anchor 'motivo' removed from _ROUTING_RE -> 1 failed"
         - "KILLED routing optional digit group (motivo N) removed -> 1 failed"
-        - "KILLED accept sem-motivo (DECLARED_SLUGS includes it) -> 1 failed"
-        - "KILLED declared check call neutralised (if False) -> 8 failed"
-        - "KILLED declared reason placed before L4 findings (l4 and not declared) -> 1 failed (test_l4_finding_still_beats_a_declared_reason)"
+        - "KILLED accept sem-motivo (DECLARED_SLUGS = list(REASONS)) -> 1 failed"
+        - "KILLED declared check neutralised (if False) -> 9 failed"
         - "KILLED L4 findings check disabled -> 8 failed"
-        - "SURVIVED _SLUG_RE lookbehind (?<![\\w-]) removed -> 55 passed. A slug glued to a prefix (xx-sem-cobertura) would be accepted as declared; no test covers it. classify_needs_human.py:_SLUG_RE"
-        - "SURVIVED dict/list guard in _declared_reason removed (isinstance(value, (dict, list)) -> False) -> 55 passed. A nested value whose str() contains a slug would be accepted; no test covers it."
-        - "SURVIVED evidence text for an exact-slug field replaced by text[:200] -> 55 passed. The fixed evidence sentence 'motivo declarado no proprio artefato de prova' is never asserted."
+        - "KILLED declared reason placed before L4 findings (l4 and not declared) -> 1 failed"
   l2_coverage:
     status: assumed
     uncovered_lines: []
-    run: "no coverage tool run; the three survivors above are the lines/branches no assertion reaches"
+    run: "pytest --cov -> 'unrecognized arguments' (no pytest-cov / coverage tool wired). Coverage precision not measured; structurally every changed branch was perturbed in l3 and went RED."
   l4_adversarial_input:
-    status: skipped
-    reason: "not run; the changed code parses free text from artifacts on disk, adversarial inputs were not generated in this pass"
+    status: n/a
+    reason: "Pure function over an artifact dict already read from disk; the diff touches board-flow/bin, docs and tests only, with no HTTP endpoint or external input boundary and no api-rest module. Malformed values (dict, list, glued slug, unknown slug) are exercised by the new tests."
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-    run: "issue_type is Task; red-at-base shown anyway in l3 (8 failed at c176092 classifier)"
-routing_reason: "Perturbation proves the field paths, the routing_reason anchor, the closed list and the precedence over L4 are load-bearing. Three small changed behaviors survive: the slug word-boundary on the left, the dict/list guard, and the fixed evidence sentence. Each needs one assertion in tests/test_needs_human_reasons.py. UNPROVEN."
+    run: "issue_type is Task; red-at-base shown anyway in l3 (9 failed at c176092 classifier)"
+routing_reason: "All 16 perturbations (13 from the previous pass plus the 3 earlier survivors) go RED against the real classify(); red at base, green at head (58 passed). The three earlier survivors are now killed by the tests added in 991d998. Only blocker: L2 coverage is assumed because no coverage tool is wired in this Python harness, and an assumed level makes proven structurally unavailable. Suggested waiver for the human: accept all-branch perturbation as the L2 substitute for this repo. NEEDS-HUMAN."
