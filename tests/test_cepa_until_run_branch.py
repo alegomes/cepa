@@ -739,6 +739,30 @@ def test_4f_side_branch_of_closed_item_becomes_patch_before_vanishing():
                   for e in ledger_of(root)), str(ledger_of(root)))
 
 
+def test_4f_side_branch_of_another_queue_with_the_same_id_stays():
+    """fb-20261120-2: the run 2026-11-20-1609 of `pyyaml` deleted three side
+    branches of other queues because their ids (CS-6, CS-1) were done in it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1", status="done"), item("a2")])
+        other = "until/2026-01-02-0000-vermelho-a1"
+        old_side_branch(root, other, "outra.txt")
+        d = root / ".claude" / "queues" / "outra" / "until"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "2026-01-02-0000.jsonl").write_text("")
+        binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        mine = root / ".claude" / "programs" / "fila" / "until"
+        check("a lateral de outra fila com o mesmo id done aqui fica",
+              git(root, "branch", "--list", other),
+              git(root, "branch", "--list", "until/*"))
+        check("...sem patch na pasta desta fila",
+              not list(mine.glob("*.laterais/*.patch")),
+              str(list(mine.glob("*.laterais/*"))))
+        check("...e o registro não diz que apagou",
+              not any(e["evento"] == "lateral_apagada" for e in ledger_of(root)),
+              str([e for e in ledger_of(root) if "lateral" in e["evento"]]))
+
+
 def test_4f_without_patch_the_side_branch_stays():
     import shutil
     with tempfile.TemporaryDirectory() as tmp:
