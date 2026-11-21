@@ -1,0 +1,50 @@
+schema_version: 2
+card: sondagem-l4-nao-grava-last-build
+verdict: unproven
+reviewed_at: 2026-11-21T15:00:00-03:00
+base_commit: 9f112d3
+head_commit: 28aff57
+issue_type: Bug
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/hooks/_shellscan.py (_GROUP_PREFIX_RE, _strip_group_prefix, call in segment_dirs)"
+      module: common-hooks
+      external_observable: true       # surface = hook CLI: stdin JSON payload -> .claude/last-build.json
+      substituted_by_double: null     # tests run the real hook script via subprocess
+    - class: "common/hooks/capture-build-result.py (real_maven_args, redirected_output, runs_root_install call sites)"
+      module: common-hooks
+      external_observable: true
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: absent
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "GREEN at HEAD 28aff57 (detached worktree): pytest tests/test_capture_build_*.py tests/test_gate_advance_target_repo.py tests/test_multiline_quoted_shell.py -q -> 296 passed"
+        - "KILLED _shellscan.py:474 segment_dirs call reverted to seg.strip() -> 2 failed, 294 passed"
+        - "KILLED capture-build-result.py:439 real_maven_args call reverted to seg.strip() -> 1 failed (test_perturbation_l4_probe_in_subshell_does_not_touch_main_state), 295 passed"
+        - "SURVIVED capture-build-result.py:714 redirected_output call reverted to s.strip() -> 296 passed (no test sends a grouped build with output redirection)"
+        - "SURVIVED capture-build-result.py:762 runs_root_install call reverted to seg.strip() -> 296 passed (no test sends a grouped root install)"
+        - "KILLED regex prefix '(' and '{' removed (only '!' left) -> 2 failed"
+        - "SURVIVED regex prefix '!' removed -> 296 passed (no test uses negation)"
+        - "KILLED regex keyword 'do' replaced (then/else/elif/do all disabled) -> 1 failed"
+        - "SURVIVED regex keywords then/else/elif removed (only 'do' kept) -> 296 passed (only the for-loop 'do' shape is tested)"
+        - "KILLED regex function-header alternative removed -> 1 failed (test_effective_build_dir_sees_build_inside_shell_grouping)"
+        - "KILLED _strip_group_prefix loop 'while True' -> 'if True' (single pass) -> 2 failed"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired in this Python harness; lines 714 and 762 are reached only through the perturbation survivors above, which shows they are not guarded at the hook surface"
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff touches hook parsing of a command string already received from the harness, plus tests; no HTTP endpoint, no api-rest module, no new external input boundary."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "hooks from 9f112d3 with tests from 28aff57: pytest tests/test_capture_build_result_classify.py -q -> 2 failed, 29 passed (test_effective_build_dir_sees_build_inside_shell_grouping, test_perturbation_l4_probe_in_subshell_does_not_touch_main_state); head -> 296 passed"
+routing_reason: "The bug fix itself is real: both regression tests are RED at base and GREEN at head, and the main path (segment_dirs and real_maven_args) is load-bearing. But four changed pieces survive reversion with the suite still green: the call in redirected_output (line 714), the call in runs_root_install (line 762), the '!' prefix, and the then/else/elif prefixes. Those changed lines are not guarded by any test at the hook surface, so UNPROVEN, sent back to close with tests."
