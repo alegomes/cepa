@@ -899,6 +899,81 @@ r = subprocess.run([sys.executable, str(HOOK)], input="{lixo",
                    capture_output=True, text=True)
 check("payload ilegível → rc=0", r.returncode == 0, f"rc={r.returncode}")
 
+# ── a new decision list over an unanswered one must say it replaces it ───
+# (2026-11-21, feedback fb-20261110-2, lista-de-decisoes-substituida-declarada)
+CAT_SUBST = "lista-substituida-sem-aviso"
+HEAD_STEPS = "### Decisões e próximos passos\n"
+GOOD_SUBST = GOOD.replace(
+    HEAD_STEPS, HEAD_STEPS + "Esta lista substitui a anterior; vale o "
+    "item 1, que continua o mesmo.\n")
+assert GOOD_SUBST != GOOD
+NOTIF = msg("user", "<task-notification>\n<task-id>abc</task-id>\n"
+            "<status>completed</status>\n</task-notification>", mtype="user")
+XSESSION = msg("user", [{"type": "text", "text":
+               '<cross-session-message from="outra">terminei o item</cross-session-message>'}],
+               mtype="user")
+HOOK_BLOCK = msg("user", "Stop hook feedback:\nSeu relatório final saiu do "
+                 "formato `plain-report`:\n  - falta a linha `**For you:**`\n"
+                 "Reescreva o relatório inteiro.", mtype="user")
+TOOL_RESULT = msg("user", [{"type": "tool_result", "tool_use_id": "t1",
+                            "content": "ok"}], mtype="user")
+
+
+def subst(*rows, session):
+    r = run("Stop", transcript(user("faça a coisa"), *rows), session=session)
+    return block_reason(r.stdout)
+
+
+def has_subst(reason):
+    return "substitui" in reason and "anterior" in reason
+
+
+check("(a) lista, notificação, lista sem a linha → bloqueia pedindo a linha",
+      has_subst(subst(text(GOOD), NOTIF, text(GOOD), session="s-sub-a")))
+check("(a2) lista, mensagem de outra sessão, lista sem a linha → bloqueia",
+      has_subst(subst(text(GOOD), XSESSION, text(GOOD), session="s-sub-a2")))
+check("(a3) tool_result entre as listas não é resposta → bloqueia",
+      has_subst(subst(text(GOOD), TOOL_RESULT, text(GOOD), session="s-sub-a3")))
+check("(b) mesma situação com 'Esta lista substitui a anterior' → não pede a linha",
+      not has_subst(subst(text(GOOD), NOTIF, text(GOOD_SUBST), session="s-sub-b")))
+check("(c) lista, resposta real do dono, lista → não pede a linha",
+      not has_subst(subst(text(GOOD), user("1. sim"), text(GOOD), session="s-sub-c")))
+check("(d) lista, só o bloqueio do próprio hook, reescrita → isenta",
+      not has_subst(subst(text(GOOD), HOOK_BLOCK, text(GOOD), session="s-sub-d")))
+check("(e) lista, bloqueio, reescrita, notificação, lista sem a linha → bloqueia",
+      has_subst(subst(text(GOOD), HOOK_BLOCK, text(GOOD), NOTIF, text(GOOD),
+                      session="s-sub-e")))
+check("(e2) lista, notificação, bloqueio, reescrita → não isenta (houve não-dono)",
+      has_subst(subst(text(GOOD), NOTIF, HOOK_BLOCK, text(GOOD), session="s-sub-e2")))
+NADA = ("O trabalho terminou e não sobrou nada para você decidir agora. " * 4
+        + "\n\n**Pra você:** nada.\n\n### Detalhe técnico\n"
+        + "Tudo foi conferido com os testes do próprio módulo. " * 12
+        + "\n\n### Decisões e próximos passos\nNada pendente.\n")
+check("(f) mensagem anterior com 'Nada pendente.' não conta como lista → não pede",
+      not has_subst(subst(text(NADA), NOTIF, text(GOOD), session="s-sub-f")))
+check("(g) turno só de lista (sem Edit nem commit) com lista anterior sem resposta → bloqueia",
+      has_subst(subst(text(GOOD), NOTIF, text(GOOD), session="s-sub-g")))
+check("(h) linha isMeta entre as listas não é resposta → bloqueia",
+      has_subst(subst(text(GOOD), msg("user", "corpo de skill injetado",
+                                      mtype="user", meta=True),
+                      text(GOOD), session="s-sub-h")))
+check("(i) 'This list replaces the previous one' é aceito",
+      not has_subst(subst(text(GOOD), NOTIF, text(GOOD.replace(
+          HEAD_STEPS, HEAD_STEPS + "This list replaces the previous one.\n")),
+          session="s-sub-i")))
+check("(i2) 'replaces the previous list' é aceito",
+      not has_subst(subst(text(GOOD), NOTIF, text(GOOD.replace(
+          HEAD_STEPS, HEAD_STEPS + "Note: replaces the previous list.\n")),
+          session="s-sub-i2")))
+check("(j) primeira lista da conversa → nada a fazer",
+      not has_subst(subst(text(GOOD), session="s-sub-j")))
+check("(k) com Edit no turno também bloqueia",
+      has_subst(subst(text(GOOD), NOTIF, EDIT, text(GOOD), session="s-sub-k")))
+r = run("Stop", transcript(user("faça a coisa"), text(GOOD), NOTIF, text(GOOD)),
+        session="s-sub-tel")
+check("(l) telemetria carrega a categoria em tipos",
+      CAT_SUBST in json.dumps([e.get("tipos") for e in report_events()]))
+
 print()
 if FAILURES:
     print(f"{len(FAILURES)} failure(s): {FAILURES}")
