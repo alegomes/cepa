@@ -480,8 +480,10 @@ def test_launch_on_terminal_asks_the_pre_authorization_and_y_records_it():
               state(root).get("estado") == "aterrissado", out[-1200:])
 
 
-def test_launch_on_terminal_enter_or_n_keeps_auto_land_false():
-    for reply in ("", "n"):
+def test_launch_on_terminal_enter_n_s_or_sim_keeps_auto_land_false():
+    # `s` and `sim` count as no at a [y/N] confirmation (CS-4 of
+    # docs/spec/teclas-em-ingles.md).
+    for reply in ("", "n", "s", "sim"):
         with tempfile.TemporaryDirectory() as tmp:
             root = build_repo(tmp, [item("a1")])
             with_origin(root)
