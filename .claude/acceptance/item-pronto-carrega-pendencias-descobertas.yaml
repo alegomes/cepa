@@ -1,0 +1,55 @@
+key: item-pronto-carrega-pendencias-descobertas
+status: complete
+diff_range: 8c1cb0a..HEAD
+source: >
+  BACKLOG.md, section "`cepa-plan status` diz que o item esta pronto e a
+  pergunta sobre o desbloqueio revela pendencias que nunca apareceram"
+  (feedback fb-20261110-1). No explicit AC list; derived from the sketch:
+  "item com pendencia descoberta durante a execucao nao aparece como pronto
+  em `cepa plan status`" plus "o item declarado pronto carrega as pendencias
+  que o agente descobre depois".
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      `cepa-plan status <queue>` (text and --json) on an item that went
+      through `finish --status blocked --pendencia ...` and then `answer`
+      (real PTY): the item is not shown as pronto, still pegavel, and
+      lists each open pending point; ready count excludes it; an item
+      without pending points stays pronto.
+    test: tests/test_cepa_plan_discovered_pending.py::test_point_survives_the_answer_and_item_is_not_ready
+    layer: cli, real CLI subprocess in temp git repos, answer in a PTY
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_discovered_pending.py -> 26 'ok' lines, 0 failures, exit 0"
+  - id: AC2
+    altitude: cli
+    surface: >
+      The same points are carried by `show`, `queue --json` and `start`
+      output (whoever reserves the item sees them), and
+      `finish --resolve-pendencia N` closes a point with the finish
+      evidence, refuses a bad number without writing, numbers only open
+      points, and the item returns to pronto when none is open.
+    test: tests/test_cepa_plan_discovered_pending.py (same file, both test functions)
+    layer: cli
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_discovered_pending.py -> 26 ok, exit 0 (includes 'sem pendencia aberta, o item volta a ser pronto')"
+  - id: AC3
+    altitude: cli
+    surface: >
+      Scope cut: the other half of the complaint (decisions left out of the
+      Epic/Spec) is covered by the pre-existing "sem Epic" flag in
+      `cepa-plan status`. Judged a fair cut: the card's own sketch names
+      only the discovered-pending test as what is missing, and the
+      neighbor test passes.
+    test: tests/test_cepa_plan_status_code_and_epic.py
+    layer: cli
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_status_code_and_epic.py -> 'tudo verde' (sem Epic counted and marked, 'pronto' only on item with Epic)"
+neighbors:
+  - "python3 tests/test_cepa_plan_finish_decision.py -> all ok, exit green (finish path not regressed)"
+notes: >
+  Full suite not run, by instruction (supervisor runs it after finish).
+  Red-at-base was not re-run by me; commit c8cdeb9 is the red test and
+  69e85b9 the fix. Not covered by a test: the prose change to
+  common/commands/drain-plan.md step 3.e (an instruction to the agent,
+  not a surface the criterion names).
