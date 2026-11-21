@@ -1,9 +1,9 @@
 schema_version: 2
 card: sondagem-l4-nao-grava-last-build
-verdict: unproven
-reviewed_at: 2026-11-21T15:40:00-03:00
+verdict: needs-human
+reviewed_at: 2026-11-21T16:20:00-03:00
 base_commit: 9f112d3
-head_commit: 600428c
+head_commit: 1ac0cfc
 issue_type: Bug
 scope:
   base_commit_resolved: true
@@ -23,30 +23,31 @@ levels:
       status: absent
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "GREEN at HEAD 600428c (detached worktree): pytest tests/test_capture_build_*.py tests/test_gate_advance_target_repo.py tests/test_multiline_quoted_shell.py -q -> 299 passed (source unchanged since 28aff57; only tests added)"
-        - "KILLED _shellscan.py:474 segment_dirs call reverted to seg.strip() -> 3 failed, 296 passed"
-        - "KILLED capture-build-result.py:439 real_maven_args call reverted to seg.strip() -> 1 failed, 298 passed"
-        - "KILLED capture-build-result.py:714 redirected_output call reverted (earlier survivor) -> 1 failed (test_redirected_output_reads_log_of_grouped_build), 298 passed"
-        - "KILLED capture-build-result.py:762 runs_root_install call reverted (earlier survivor) -> 1 failed (test_runs_root_install_sees_grouped_install), 298 passed"
-        - "KILLED regex prefixes '(' and '{' removed (only '!' left) -> 4 failed, 295 passed"
-        - "KILLED regex prefix '!' removed (earlier survivor) -> 1 failed (test_effective_build_dir_sees_build_after_bang_then_else_elif), 298 passed"
-        - "KILLED regex keyword 'then' removed -> 1 failed, 298 passed"
-        - "KILLED regex keyword 'else' removed -> 1 failed, 298 passed"
-        - "SURVIVED regex keyword 'elif' removed (do|then|else kept) -> 299 passed. The only elif test shape is 'elif true; then cd WT && ./mvnw test', where the segment starting 'elif true' is a condition and 'then' already strips; no test has the build as the elif condition itself (elif ./mvnw test; then ...)"
-        - "KILLED regex keyword 'do' removed -> 1 failed, 298 passed"
-        - "KILLED regex function-header alternative removed -> 1 failed, 298 passed"
-        - "KILLED _strip_group_prefix loop 'while True' -> 'if True' (single pass) -> 5 failed, 294 passed"
+        - "GREEN at HEAD 1ac0cfc (detached worktree): pytest tests/test_capture_build_*.py tests/test_gate_advance_target_repo.py tests/test_multiline_quoted_shell.py -q -> 299 passed (hooks source identical to 28aff57; only tests added since)"
+        - "KILLED 1/13 regex keyword 'elif' removed (do|then|else kept) -> 1 failed, 298 passed (the last survivor of the previous pass)"
+        - "KILLED 2/13 _shellscan.py:474 segment_dirs call reverted to seg.strip() -> 3 failed, 296 passed"
+        - "KILLED 3/13 capture-build-result.py:439 real_maven_args call reverted -> 1 failed, 298 passed"
+        - "KILLED 4/13 capture-build-result.py:714 redirected_output call reverted -> 1 failed, 298 passed"
+        - "KILLED 5/13 capture-build-result.py:762 runs_root_install call reverted -> 1 failed, 298 passed"
+        - "KILLED 6/13 regex prefixes '(' and '{' removed (only '!' left) -> 4 failed, 295 passed"
+        - "KILLED 7/13 regex prefix '!' removed -> 1 failed, 298 passed"
+        - "KILLED 8/13 regex prefix '{' removed ('(' and '!' kept) -> 3 failed, 296 passed"
+        - "KILLED 9/13 regex keyword 'then' removed -> 1 failed, 298 passed"
+        - "KILLED 10/13 regex keyword 'else' removed -> 1 failed, 298 passed"
+        - "KILLED 11/13 regex keyword 'do' removed -> 1 failed, 298 passed"
+        - "KILLED 12/13 regex function-header alternative removed -> 1 failed, 298 passed"
+        - "KILLED 13/13 _strip_group_prefix loop 'while True' -> 'if True' (single pass) -> 5 failed, 294 passed"
   l2_coverage:
     status: assumed
     uncovered_lines: []
-    run: "no coverage tool wired in this Python harness; structurally every changed branch was perturbed in l3 and all but the 'elif' keyword went RED"
+    run: "no coverage tool wired in this Python harness (pytest-cov absent); precision not measured. Structurally every changed branch was perturbed in l3 and all 13 went RED."
   l4_adversarial_input:
     status: n/a
     reason: "The diff touches hook parsing of a command string already received from the harness, plus tests; no HTTP endpoint, no api-rest module, no new external input boundary."
     findings: []
   bugfix_regression_red_at_base:
     status: pass
-    run: "hooks from 9f112d3 with tests from 600428c: pytest tests/test_capture_build_result_classify.py -q -> 5 failed, 29 passed (grouping, L4 probe in subshell, bang/then/else/elif, redirected_output, runs_root_install); head -> 299 passed"
-routing_reason: "Three of the four earlier survivors (redirected_output call, runs_root_install call, '!' prefix) and the then/else keywords are now killed, and the fix is red at base and green at head (299 passed). One changed piece still survives reversion: the 'elif' keyword in _GROUP_PREFIX_RE; no test puts the build itself in the elif condition. It is a narrow case, but a survivor on a changed line is UNPROVEN under the routing rules (and L2 is assumed anyway); I do not waive it."
+    run: "hooks from 9f112d3 with tests from 1ac0cfc: pytest tests/test_capture_build_result_classify.py -q -> 5 failed, 29 passed; head -> 299 passed"
+routing_reason: "Bug fix red at base (5 failed), green at head (299 passed), and all 13 perturbations of the changed lines go RED against the real hook run as a subprocess; no survivors. The only blocker is L2 coverage, which is assumed because no coverage tool is wired in this harness, and an assumed level makes proven structurally unavailable. Suggested waiver for the human: accept all-branch perturbation as the L2 substitute for this repo (same suggestion as classificador-nh-le-campo-de-motivo). NEEDS-HUMAN."
