@@ -279,3 +279,39 @@ def test_perturbation_l4_probe_in_subshell_does_not_touch_main_state(tmp_path):
     assert not (proj / ".claude" / "last-build.json").exists()
     st = json.loads((wt / ".claude" / "last-build.json").read_text())
     assert st["status"] == "EMPTY"
+
+
+# Survivors of the proof gate for sondagem-l4-nao-grava-last-build: `!`, then/else/elif,
+# and the two call sites that read a segment after `cd` (log redirect, root-install marker).
+_PREFIXED_BUILDS = {
+    "bang": "cd @WT@ && ! ./mvnw test",
+    "then": "if true; then cd @WT@ && ./mvnw test; fi",
+    "else": "if false; then echo a; else cd @WT@ && ./mvnw test; fi",
+    "elif": "if false; then echo a; elif true; then cd @WT@ && ./mvnw test; fi",
+}
+
+
+def test_effective_build_dir_sees_build_after_bang_then_else_elif(tmp_path):
+    wt = (tmp_path / "wt").resolve()
+    wt.mkdir()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for name, tmpl in _PREFIXED_BUILDS.items():
+        assert cbr.effective_build_dir(tmpl.replace("@WT@", str(wt)), repo) == wt, name
+
+
+def test_redirected_output_reads_log_of_grouped_build(tmp_path):
+    (tmp_path / "out.log").write_text("[INFO] BUILD SUCCESS\n")
+    (tmp_path / "other.txt").write_text("unrelated\n")
+    # the Maven segment must be preferred over the later `echo > other.txt`; unstripped,
+    # `{ ./mvnw` is not recognised as Maven and the unrelated redirect wins.
+    cmd = "cd /tmp/wt && { ./mvnw test > out.log 2>&1; }; echo x > other.txt"
+    assert "BUILD SUCCESS" in cbr.redirected_output(cmd, tmp_path)
+
+
+def test_runs_root_install_sees_grouped_install(tmp_path):
+    tmp_path = tmp_path.resolve()
+    # brace group: the closing `)` of a subshell stays glued to the last token
+    # (`install)`), which is a separate, unhandled shape.
+    assert cbr.runs_root_install("cd /tmp/wt && { ./mvnw install; }", tmp_path, tmp_path)
+    assert not cbr.runs_root_install("cd /tmp/wt && { ./mvnw -pl a install; }", tmp_path, tmp_path)
