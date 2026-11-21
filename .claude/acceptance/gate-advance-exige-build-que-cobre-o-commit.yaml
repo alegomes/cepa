@@ -1,0 +1,44 @@
+key: gate-advance-exige-build-que-cobre-o-commit
+status: incomplete
+diff_range: 8c1cb0a..eb978e7
+note: >
+  O cartão não tem critérios numerados; derivados da fala do dono (fb-20261109-2)
+  e do esboço do BACKLOG. Verde de -Dtest=A não pode liberar commit coberto por B.
+criteria:
+  - id: AC1
+    criterion: "build verde com -Dtest=A e commit que altera o código coberto por B é recusado (teste nomeado no BACKLOG)"
+    altitude: cli
+    surface: >
+      common/hooks/gate-advance.py invocado como subprocesso com payload JSON
+      de PreToolUse (git commit) sobre repo git real e last-build.json com test_filter.
+    test: tests/test_gate_advance_filtered_green.py (blocos b, c, d, e, f, g, h, i, j, k)
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_gate_advance_filtered_green.py -> todos 'ok' (b: exit 2 e nomeia o teste que não rodou; c: filtro com B libera; d: !B recusa; e: sem filtro libera) -> 'ok'; python3 tests/test_gate_advance_red_test_commit.py -> 'todos os casos verdes'"
+    status: complete
+  - id: AC2
+    criterion: "o filtro do build fica gravado no last-build.json"
+    altitude: cli
+    surface: common/hooks/capture-build-result.py invocado como subprocesso (PostToolUse) gravando test_filter.
+    test: tests/test_gate_advance_filtered_green.py (bloco a)
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_gate_advance_filtered_green.py -> 'ok a: SUCCESS', 'ok a: test_filter com os três padrões, como digitados', 'ok a: build sem filtro não grava test_filter'; python3 -m pytest -q tests/test_capture_build_result_classify.py -> 34 passed"
+    status: complete
+  - id: AC3
+    criterion: "o gate exige que o build cubra os arquivos alterados (fala do dono, geral; esboço original cita -Dtest=, -pl, -k)"
+    altitude: cli
+    surface: gate-advance.py para pytest -k, go -run, jest -t e escopo -pl.
+    test: nenhum (o item separado "gate-advance aceita verde de pytest -k, go -run, jest -t ou -pl..." está pendente no BACKLOG, com teste que falta nomeado)
+    layer: ausente
+    evidence: missing
+    status: incomplete
+    gap: >
+      O recorte foi separado em outro item do BACKLOG (confirmado em BACKLOG.md,
+      status pendente) e o incidente C1-17 e o teste nomeado eram -Dtest, o que
+      sustenta a divisão. Mas quem separou foi o implementador/coordenador ao
+      reescrever a seção do próprio cartão; a fala do dono é geral e nenhum
+      critério do cartão aceita cenário bloqueado com bug vinculado. Pela regra
+      do adiamento nomeado, continua incomplete: aceitar a divisão é decisão do
+      dono. Se o dono aceitar, AC3 passa a pertencer ao item separado e este
+      fecha como complete sem mudança de código.

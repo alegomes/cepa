@@ -1,0 +1,37 @@
+schema_version: 2
+card: gate-advance-exige-build-que-cobre-o-commit
+verdict: needs-human
+reviewed_at: 2026-11-21T20:40:00-03:00
+base_commit: 8c1cb0a
+head_commit: cf58961
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/hooks/capture-build-result.py", module: hooks, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/gate-advance.py", module: hooks, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  note: "Python hooks, no Maven. The covering test runs both hooks as subprocesses with a JSON payload (the real surface); no double stands in for the changed code. Behavior code is unchanged between 4dc4df2 and cf58961; cf58961 adds case q only."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "Round 4 (cf58961, throwaway worktree /tmp/proof-gate4, removed): head test run -> 'ok', zero FAIL. P10b (second-loop skip reduced to `if not name:`) -> KILLED, FAIL q (exit 0 expected, got 2). Re-confirmed killed: P10' (skip back to is_test_path) -> FAIL o; P5 (--untracked dropped) -> FAIL p."
+        - "Round 3 (4dc4df2, same behavior code): 19 of 21 perturbations killed: P5, P10', P4, P6, P17, P20, P21, P1, P11, P18, P7, P8, P2, P3, P14, P15, P16, P12, P13. Across rounds all real behavior perturbations are killed."
+        - "Remaining survivors are argued equivalent, not killed: P9 `t != f` dropped (a helper is not runnable and a runnable test is skipped by the loop, so t == f cannot reach the gap list); P19 isinstance/list guard dropped (None falls into the except and allows, same outcome); P22 kind=='maven' guard dropped (only maven commands carry -Dtest). P19 and P22 were not re-run at cf58961."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python hooks; not measured"
+  l4_adversarial_input:
+    status: skipped
+    reason: "not run: the hook parses a free-text git command from the agent; adversarial command shapes were not fuzzed"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "hooks reverted to 8c1cb0a with the cf58961 test: python3 tests/test_gate_advance_filtered_green.py -> FAIL a, b(x3), d, g(x2), h, i, k, m, n, o(x2), p(x2); at cf58961 -> 'ok'. Neighbors at cf58961: test_gate_advance_red_test_commit.py 'todos os casos verdes', test_gate_advance_target_repo.py 'todos os casos verdes', pytest tests/test_capture_build_result_classify.py -> 34 passed"
+routing_reason: "Regression red at base and green at head; every real perturbation is killed. Nothing left to bounce, but two levels cannot be measured here: line coverage (no tool for the Python hooks) and adversarial command shapes (not fuzzed). NEEDS-HUMAN. Suggested decision for the human: accept the contract test as sufficient evidence for L2 and L4 on this card."
