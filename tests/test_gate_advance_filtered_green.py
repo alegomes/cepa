@@ -256,6 +256,16 @@ with tempfile.TemporaryDirectory() as tmp:
     check("p: exit 2", res.returncode == 2, f"exit={res.returncode} {res.stderr[:300]}")
     check("p: nomeia o teste fora do git", "LeituraNovaTest" in res.stderr, res.stderr[:400])
 
+    print("\n# q. teste alterado que está no filtro não cobra quem só cita o nome dele")
+    r = make_repo(tmp / "q")
+    edit(r, "src/test/java/app/IndiceTest.java",
+         "package app; class IndiceTest { /* ver ContratoDaLeituraPublicadoTest */ }")
+    git(["commit", "-qm", "indice"], r)
+    baseline(r, test_filter=["ContratoDaLeituraPublicadoTest"])
+    edit(r, CONTRATO, "package app; class ContratoDaLeituraPublicadoTest { int z; }")
+    res = gate('git commit -m "test"', r)
+    check("q: exit 0", res.returncode == 0, f"exit={res.returncode} {res.stderr[:300]}")
+
 if FAILURES:
     print(f"\n{len(FAILURES)} falha(s): {', '.join(FAILURES)}")
     sys.exit(1)
