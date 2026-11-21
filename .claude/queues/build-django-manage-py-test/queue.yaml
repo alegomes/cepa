@@ -117,16 +117,25 @@ items:
     `python3 -m unittest discover` e `django-admin test --settings=proj.settings`
     com saída `Ran 5 tests in 0.1s\n\nOK` gravam `status: SUCCESS`. Hoje o arquivo
     não é escrito.'
-  status: blocked
+  status: pending
   blocked_by: []
   human_pending: null
-  evidence: 'Codigo e testes na branch until/2026-11-15-2107: ac9985c (hook: PATTERNS
-    unittest aceita python -m unittest e django-admin test), 95382ce, 9da2687, 7413b9b,
-    0685d91, aebc2c8 (so testes, near-misses), b233d97 (yamls). pair-reviewer OK-WITH-NOTES
-    sem fix obrigatorio. completion-auditor COMPLETE (.claude/acceptance/build-django-manage-py-test-CS-4.yaml).
-    proof-reviewer UNPROVEN em 5 passadas (docs/proof/build-django-manage-py-test-CS-4.yaml,
-    head 0685d91): cada passada deixou vermelhos todos os sobreviventes da anterior
-    e inventou 10-15 perturbacoes novas da regex, das quais 3-4 sobrevivem (passada
+  evidence: 'Resposta do dono em 2026-11-21: sim: Aceito fechar este item com a
+    prova incompleta, já que cinco rodadas não acharam defeito real? Recomendo sim:
+    o risco que sobra é hipotético.. O item voltou de `blocked` para `pending`.
+    Pergunta respondida: Aceito fechar este item com a prova incompleta, já que
+    cinco rodadas não acharam defeito real? Recomendo sim: o risco que sobra é hipotético.
+    O que cada opção prometia: se sim, o trabalho fecha como está, com a dispensa
+    de prova registrada em seu nome; se não, o trabalho continua em rodadas de prova
+    e novos testes até uma rodada não achar nenhuma variação sem teste. O dono escolheu
+    o "sim". Evidência anterior: Codigo e testes na branch until/2026-11-15-2107:
+    ac9985c (hook: PATTERNS unittest aceita python -m unittest e django-admin test),
+    95382ce, 9da2687, 7413b9b, 0685d91, aebc2c8 (so testes, near-misses), b233d97
+    (yamls). pair-reviewer OK-WITH-NOTES sem fix obrigatorio. completion-auditor
+    COMPLETE (.claude/acceptance/build-django-manage-py-test-CS-4.yaml). proof-reviewer
+    UNPROVEN em 5 passadas (docs/proof/build-django-manage-py-test-CS-4.yaml, head
+    0685d91): cada passada deixou vermelhos todos os sobreviventes da anterior e
+    inventou 10-15 perturbacoes novas da regex, das quais 3-4 sobrevivem (passada
     5: ancora com aspa, django-admin(?:-\w+)?, django-?admin, --?m). aebc2c8 adiciona
     os near-misses desses 4, ainda nao reprovados (sexta passada nao rodada). Nenhum
     sobrevivente e defeito do hook: sao variacoes hipoteticas da regex sem teste.
@@ -138,20 +147,6 @@ items:
     The item''s commits, which did not go through the supervisor''s build (it only
     runs after `done`), are in `until/2026-11-15-2107-travado-build-django-manage-py-test-CS-4`;
     the run branch went back to c839cb4ce0.'
-  owner_question: 'Aceito fechar este item com a prova incompleta, já que cinco
-    rodadas não acharam defeito real? Recomendo sim: o risco que sobra é hipotético.'
-  owner_summary:
-    pedido: fazer a trava de build reconhecer mais dois comandos de teste do Python,
-      do mesmo jeito que já reconhece o comando de teste do Django
-    pronto: os dois comandos são reconhecidos e 294 testes passam; a conferência
-      dos critérios de aceite deu completa
-    impede: a prova independente inventa variações novas da regra a cada rodada
-      e sempre acha três ou quatro sem teste; foram cinco rodadas sem convergir,
-      nenhuma apontou defeito real
-    se_sim: o trabalho fecha como está, com a dispensa de prova registrada em seu
-      nome
-    se_nao: o trabalho continua em rodadas de prova e novos testes até uma rodada
-      não achar nenhuma variação sem teste
 - id: CS-5
   title: depois de um `manage.py test` verde, a trava libera o `git commit`
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
