@@ -14,3 +14,4 @@
 {"evento": "painel_antes_de_fechar", "itens": ["L1"], "quando": "2026-11-13T10:43:26"}
 {"evento": "run_end", "motivo": "end-of-queue", "detalhe": "a fila acabou — nenhum item executável sobrou, e 1 ficaram adiados (cada um com o motivo, no relatório)", "itens": 3, "com_progresso": 3, "sem_progresso": 0, "esgotados": 0, "limite_de_uso": 0, "esperas_de_cota": 0, "quedas_de_rede": 0, "cota_apertada": 0, "entregues": 3, "travados": 0, "verify_vermelho": 0, "done_sem_commit": 0, "quando": "2026-11-13T10:53:26"}
 {"evento": "analise", "feita": true, "arquivo": "/Users/alegomes/coding/cepa/.claude/queues/lacunas-ecc/until/2026-11-13-0800.review.md", "erro": null, "quando": "2026-11-13T10:54:35"}
+{"evento": "instalado_no_pouso", "repo": "/Users/alegomes/coding/cepa", "ok": true, "segundos": 26, "motivo": null, "quando": "2026-11-21T08:09:15"}
