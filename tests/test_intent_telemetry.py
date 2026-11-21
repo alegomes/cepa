@@ -182,6 +182,11 @@ check("close --landed sem intenção: sai 0, não cria arquivo, não emite",
       and not landed_events(), r.stdout + r.stderr)
 cli(rl, "write", "--purpose", "entregar o NEG-1", "--by-when", "hoje",
     "--plan", "levantar", "responder as perguntas de dinheiro", "implementar", "publicar")
+r = cli(rl, "write", "--purpose", "entregar o NEG-1 publicado", "--by-when", "hoje",
+        "--plan", "levantar", "responder as perguntas de dinheiro", "implementar", "publicar",
+        "--reason", "o dono reformulou o propósito")
+check("intenção regravada: o histórico tem a versão anterior",
+      r.returncode == 0 and "o dono reformulou" in intent_of(rl), intent_of(rl) + r.stderr)
 cli(rl, "--step", "2")
 r = cli(rl, "close")
 check("close sem --landed continua só lendo: cursor segue no passo 2",
@@ -200,7 +205,14 @@ check("o evento diz de onde o cursor saiu (de=2) e o total (passos=4)",
 check("close --landed NÃO emite intent.cursor_advanced (a métrica 'nunca avançou' segue honesta)",
       advanced_count() == adv_before, str(advanced_count() - adv_before))
 check("a saída diz que o cursor andou e de onde", "2" in r.stdout and "4/4" in r.stdout, r.stdout)
+check("close --landed preserva o histórico da intenção",
+      "o dono reformulou o propósito" in intent_of(rl), intent_of(rl))
+after_first = intent_of(rl)
 r = cli(rl, "close", "--landed")
+check("close --landed com o plano já cumprido não reescreve o arquivo",
+      intent_of(rl) == after_first, intent_of(rl))
+check("close --landed com o plano já cumprido diz que já estava cumprido",
+      "plano já cumprido (4/4)" in r.stdout, r.stdout)
 check("close --landed de novo, plano já cumprido: não reescreve, emite de novo sem 'de' mudado",
       r.returncode == 0 and "plano cumprido 4/4" in intent_of(rl)
       and len(landed_events()) == 2 and landed_events()[-1].get("de") == 5, str(landed_events()))
@@ -360,6 +372,19 @@ check("wrap-up.md: a tela de confirmação mostra o cursor da intenção",
       "intent" in WRAP[PLAN_AT:PLAN_END] and "plano cumprido" in WRAP[PLAN_AT:PLAN_END])
 check("wrap-up.md: passo que ficou de fora vira `cepa-intent --step N`, não `--landed`",
       'bin/cepa-intent" --step' in WRAP)
+STEP0_AT = WRAP.find("### 0. Read the situation")
+check("wrap-up.md: o passo 0 lê o cursor com `cepa-intent state` (só leitura)",
+      'bin/cepa-intent" state' in WRAP[STEP0_AT:PLAN_AT] and "opening:" in WRAP[STEP0_AT:PLAN_AT])
+check("wrap-up.md: o passo 0 não move o cursor (nenhum `close` antes do merge)",
+      'cepa-intent" close' not in WRAP[STEP0_AT:L6_AT])
+L6B = WRAP[WRAP.find("### L6b."):L7_AT]
+check("wrap-up.md: L6b só roda depois de L5 e L6 terem dado certo",
+      "only after L5 and L6 succeeded" in L6B)
+check("wrap-up.md: conflito no merge (L5) impede o L6b",
+      "Merge conflict in L5" in L6B and "does not run" in L6B)
+DISCARD_AT = WRAP.find("## Discard path")
+check("wrap-up.md: o caminho de descarte não roda `close --landed`",
+      DISCARD_AT > 0 and "close --landed" not in WRAP[DISCARD_AT:], str(DISCARD_AT))
 METRICS_MD = (REPO / "common" / "commands" / "metrics.md").read_text(encoding="utf-8")
 check("metrics.md descreve a seção Intenção da sessão",
       "**Intenção da sessão**" in METRICS_MD and "intent.*" in METRICS_MD)
