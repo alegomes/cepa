@@ -5314,7 +5314,7 @@ O wrap-up que termina com merge e push avança o cursor até o último passo (ou
 
 ## `gate-advance` aceita build verde de um teste só para liberar commit que deixa outro teste vermelho
 
-**Status:** feito em 2026-11-21 para Maven (`-Dtest=` / `-Dit.test=`): o `last-build.json` grava `test_filter` e o commit é recusado quando um teste JVM fora do filtro está no commit ou nomeia a classe de produção alterada (`tests/test_gate_advance_filtered_green.py`). Ficaram de fora `pytest -k`, `go -run`, jest `-t` e o escopo `-pl` · **Lar provável:** common (`common/hooks/gate-advance.py`, leitura do `last-build.json`) · **Origem:** feedback `fb-20261109-2`, 2026-11-09
+**Status:** feito em 2026-11-21 para Maven (`-Dtest=` / `-Dit.test=`): o `last-build.json` grava `test_filter` e o commit é recusado quando um teste JVM fora do filtro está no commit ou nomeia a classe de produção alterada (`tests/test_gate_advance_filtered_green.py`). O resto (`pytest -k`, `go -run`, jest `-t` e o escopo `-pl`) virou o item seguinte deste arquivo · **Lar provável:** common (`common/hooks/gate-advance.py`, leitura do `last-build.json`) · **Origem:** feedback `fb-20261109-2`, 2026-11-09
 
 ### Problema
 
@@ -5329,6 +5329,20 @@ No C1-17 do wego-digitacao-backend um agente rodou `verify` só de `OpenApiFecha
 ### Esboço
 
 Gravar no `last-build.json` o filtro do build (`-Dtest=`, `-pl`, `-k`) e o gate recusar commit cujos arquivos alterados ficam fora desse filtro, ou exigir build sem filtro para liberar. Teste que falta: build verde com `-Dtest=A` e commit que altera o código coberto por `B` é recusado.
+
+---
+
+## `gate-advance` aceita verde de `pytest -k`, `go -run`, jest `-t` ou `-pl` para liberar commit fora desse escopo
+
+**Status:** pendente · **Lar provável:** common (`common/hooks/gate-advance.py`, `capture-build-result.py`) · **Origem:** resto do item acima (fb-20261109-2), separado em 2026-11-21
+
+### Problema
+
+O item acima fechou só o filtro Maven `-Dtest=` / `-Dit.test=`, que foi o do incidente C1-17. Os outros filtros de teste e o escopo de módulo continuam liberando commit com o verde de uma parte: `pytest -k`, `go test -run` e jest `-t` escolhem testes por nome de função ou título, não por arquivo, e `./mvnw -pl X verify` verde libera commit que altera o módulo Y.
+
+### Esboço
+
+Para `-pl`: gravar os módulos do build e recusar commit com arquivo fora deles (e fora do `-am`). Para `-k`/`-run`/`-t`: decidir antes se vale casar nome de teste com o código alterado ou se basta exigir build sem filtro. Teste que falta: `./mvnw -pl a verify` verde e commit que altera `b/src/main` é recusado.
 
 ---
 
