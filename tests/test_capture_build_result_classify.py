@@ -288,6 +288,8 @@ _PREFIXED_BUILDS = {
     "then": "if true; then cd @WT@ && ./mvnw test; fi",
     "else": "if false; then echo a; else cd @WT@ && ./mvnw test; fi",
     "elif": "if false; then echo a; elif true; then cd @WT@ && ./mvnw test; fi",
+    # the build IS the elif condition: only the `elif` prefix exposes it (not `then`)
+    "elif_condition": "cd @WT@ && if false; then :; elif ./mvnw test; then :; fi",
 }
 
 
