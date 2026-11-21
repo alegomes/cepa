@@ -9,3 +9,4 @@
 {"evento": "verify", "id": "CS-6-sim", "verde": true, "segundos": 2388, "motivo": null, "quando": "2026-11-20T17:01:42"}
 {"evento": "run_end", "motivo": "end-of-queue", "detalhe": "the queue is finished: no pending item is left", "itens": 1, "com_progresso": 1, "sem_progresso": 0, "esgotados": 0, "limite_de_uso": 0, "esperas_de_cota": 0, "quedas_de_rede": 0, "cota_apertada": 0, "entregues": 1, "travados": 0, "verify_vermelho": 0, "done_sem_commit": 0, "filas_fora": [], "quando": "2026-11-20T17:01:42"}
 {"evento": "analise", "feita": true, "arquivo": "/Users/alegomes/coding/cepa/.claude/queues/pyyaml/until/2026-11-20-1609.review.md", "erro": null, "quando": "2026-11-20T17:03:07"}
+{"evento": "instalado_no_pouso", "repo": "/Users/alegomes/coding/cepa", "ok": true, "segundos": 29, "motivo": null, "quando": "2026-11-21T09:26:43"}
