@@ -104,6 +104,23 @@ EXPECTED = {
     "WEGO-1683": "sem-cobertura",
     # Depends on someone outside
     "WEGO-1757": "fora-do-alcance",  # schedule in Bitbucket + Tecnospeed quota
+    # The six of fb-20261106-2 (wego-acessos-backend Review, 2026-11-06). Each
+    # artifact already NAMED its reason in a field of its own, and the
+    # classifier ignored the field and matched loose phrases instead:
+    #   2357, 2368, 2369: a derived base_commit (`base_commit_resolved: false`,
+    #     comment ".claude/cards/<KEY>.yaml nao existe") came out `nao-rodou`
+    #     while `motivo_needs_human` says nada-a-provar / teste-cego;
+    #   2044, 2416: a level SKIPPED by `bash-path-lock` in a proof that ran
+    #     came out `nao-rodou` ("trava do próprio harness"), while
+    #     `routing_reason` / `needs_human_motivo` name the reason;
+    #   2355: `verdict: proven` held before Done (`done_transition_held.reason`)
+    #     came out `sem-motivo`.
+    "WEGO-2357": "nada-a-provar",    # motivo_needs_human (under inspection)
+    "WEGO-2368": "nada-a-provar",    # motivo_needs_human (under inspection)
+    "WEGO-2369": "teste-cego",       # motivo_needs_human (under inspection)
+    "WEGO-2044": "fora-do-alcance",  # routing_reason: 'motivo "fora-do-alcance"'
+    "WEGO-2416": "nada-a-provar",    # needs_human_motivo (top level)
+    "WEGO-2355": "fora-do-alcance",  # done_transition_held.reason
 }
 
 
@@ -240,3 +257,60 @@ def test_unknown_case_does_not_invent_a_reason():
     }
     slug, _ = classify(unknown)
     assert slug == "sem-motivo"
+
+
+def _synthetic(**extra):
+    """A NEEDS-HUMAN artifact whose prose would match `nao-rodou` by itself."""
+    d = {
+        "card": "X-5", "verdict": "needs-human", "base_commit": "abc1234",
+        "scope": {"base_commit_resolved": True},
+        "levels": {"l2_coverage": {"status": "skipped",
+                                   "note": "negado pelo bash-path-lock"}},
+    }
+    d.update(extra)
+    return d
+
+
+def test_declared_reason_field_beats_phrase_matching():
+    """fb-20261106-2: the artifact's own reason field is read before any phrase.
+
+    Without the field the prose ("bash-path-lock") routes the card to
+    `nao-rodou`, the only reason that spares the human. Each of the three
+    field names, and the nested `inspection.motivo_needs_human`, has to win.
+    """
+    assert classify(_synthetic())[0] == "nao-rodou", "the case lost its phrase"
+    for case in (
+        _synthetic(needs_human_motivo="teste-cego"),
+        _synthetic(motivo_needs_human="teste-cego (motivo 2): o dublê engole"),
+        _synthetic(inspection={"motivo_needs_human": "teste-cego: sem guarda"}),
+        _synthetic(routing_reason="NEEDS-HUMAN motivo 2 (teste-cego). Sem guarda."),
+        _synthetic(routing_reason='NEEDS-HUMAN, motivo "teste-cego" do documento.'),
+    ):
+        slug, evidence = classify(case)
+        assert slug == "teste-cego", case
+        assert evidence
+
+
+def test_declared_reason_accepts_only_the_closed_list():
+    """A field naming a reason outside the seven does not invent an eighth."""
+    for value in ("motivo-inventado", "sem-motivo", ""):
+        assert classify(_synthetic(needs_human_motivo=value))[0] == "nao-rodou"
+
+
+def test_routing_reason_counts_only_after_the_word_motivo():
+    """Loose prose that merely mentions a slug is not a declaration.
+
+    `routing_reason` is free text: a slug cited in passing ("não é
+    nada-a-provar") must not route the card. Only "motivo <slug>",
+    "motivo N (<slug>)" or 'motivo "<slug>"' declares it.
+    """
+    loose = _synthetic(routing_reason="não é nada-a-provar, a prova não rodou")
+    assert classify(loose)[0] == "nao-rodou"
+
+
+def test_l4_finding_still_beats_a_declared_reason():
+    """The fact beats the text, including a declared field (WEGO-1894/1897)."""
+    d = _synthetic(needs_human_motivo="nada-a-provar")
+    d["levels"]["l4_adversarial_input"] = {"status": "findings",
+                                           "findings": ["NUL derruba a API"]}
+    assert classify(d)[0] == "sem-cobertura"

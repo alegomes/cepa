@@ -1,0 +1,51 @@
+schema_version: 2
+card: WEGO-2416
+verdict: needs-human
+needs_human_motivo: nada-a-provar   # + fora-do-alcance (parte de infra); ver routing_reason
+reviewed_at: 2026-11-06T13:00:00-03:00
+base_commit: c9cd6533   # resolvido do git (pai de 9a7f4252); nao ha .claude/cards/WEGO-2416.yaml
+head_commit: 1dc5ca63
+issue_type: Task
+scope:
+  # git diff --name-only c9cd6533 1dc5ca63 | grep -E 'src/|pom.xml|scripts|cli' -> vazio (verificado no worktree descartavel /tmp/proof-WEGO-2416 em 1dc5ca63)
+  changed_classes: []
+  changed_files:
+    - .claude/acceptance/WEGO-2416.yaml
+    - docs/deploy.md
+    - docs/implantacao-producao.md
+    - docs/pendencias.md
+    - docs/tasks/wego-2416/CARD.md
+    - docs/tasks/wego-2416/RESULT.md
+    - docs/validation/WEGO-2416.yaml
+  base_commit_resolved: true
+  nota: "A entrega real do card (ConfigMap/ExternalSecret de dev no clinic-manager-gitops e chaves do Vault) vive fora deste repositorio."
+levels:
+  l3_load_bearing:
+    technique: none
+    pit:
+      status: n/a
+      results:
+        - "n/a: diff sem classe de producao nem de teste; nada a mutar."
+    perturbation:
+      status: skipped
+      results:
+        - "skipped: nao ha codigo neste repo para quebrar. A mudanca que o card entrega (nomes WEGO_ACESSOS_* no gitops e no Vault) nao e alcancavel por perturbacao aqui; a prova seria no cluster, fora do alcance e proibida nesta rodada (sem escrita, sem sessao GEAP)."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "n/a por construcao (zero linhas de codigo no diff); registrado como assumed porque o enum do nivel nao oferece n/a. Leituras de apoio, somente leitura: git -C clinic-manager-gitops grep de nomes antigos em origin/main:dev/wego-acessos-backend -> 0 linhas (controle positivo: WEGO_ACESSOS_ aparece 9x no ConfigMap, 12x no ExternalSecret, 1x no Deployment); origin/main = 640702052506 (igual ao citado no Implementation Summary); ConfigMap tem WEGO_ACESSOS_SWAGGER_ENABLED, _CORS_ORIGINS, _KEYCLOAK_ADMIN_CLIENT_ID, _KEYCLOAK_AUDIENCE; ExternalSecret tem secretKey/property WEGO_ACESSOS_KEYCLOAK_ADMIN_CLIENT_SECRET. curl https://wego-acessos-backend.dev.wego.com.vc/q/health -> HTTP 200, status UP (check 'Database connections health check' UP). kubectl bloqueado pelo bash-path-lock (verbo fora da lista); nao foi possivel listar chaves do Secret no cluster nem o env do pod, entao o 'sem nome antigo no pod' fica por conta do relato do Implementation Summary (assumed)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff (7 arquivos, todos docs/aceite/validacao) nao abre superficie de entrada: nenhum src/main, nenhuma classe de api-rest, nenhum parser de dado externo."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Task, nao Bug"
+verificacoes_do_diff:
+  - "Duble na classe alterada: sem classe alterada (substituted_by_double nao se aplica)."
+  - "Consistencia dos docs vivos em 1dc5ca63: git grep -n 2416 1dc5ca63 -- docs -> as notas 'ate a WEGO-2416' foram removidas de docs/deploy.md (3 trechos), docs/implantacao-producao.md (1) e docs/pendencias.md (2); os textos agora dizem 'prefixo desde a WEGO-2416, 2026-11-02'. grep 'ate a WEGO-2416' nesses 3 arquivos -> 0. Restam 'ate a WEGO-2416' apenas em docs/tasks/wego-2360-prefixo-nos-ambientes/T3-RESULT.md e T3-docs-vivos.md, que sao registros historicos de tarefa (descrevem o estado da epoca), nao docs vivos: aceitavel."
+  - "WEGO-2417 (remover o fallback de nome antigo) e outro card, mais adiante na mesma branch; nao avaliado aqui."
+  - "Consistencia interna: RESULT.md, validation/WEGO-2416.yaml e a acceptance local (.claude/acceptance/WEGO-2416.yaml, complete 3/3) citam a mesma sessaoId c6173227-... e a mesma janela 2026-11-02; sem divergencia encontrada."
+  - "Dividas declaradas no card (nao decididas aqui): credencial GEAP real inativa no cofre de dev sem rota de exclusao; WEGO_ACESSOS_SMOKE_SENHA no Secret montado pelo pod."
+  - "Worktree /tmp/proof-WEGO-2416 removido (worktree remove --force + prune); worktree list = main + until/2026-11-05-2031. Arvore primaria intocada. Nenhum Maven rodado (diff so docs)."
+routing_reason: "Nada a provar neste repo: o diff tem zero codigo de producao e zero teste (nada a quebrar, L3 sem objeto, L4 n/a, bug n/a). A entrega do card (gitops + Vault + pod) esta fora do repo e fora do alcance desta rodada sem escrita nem sessao GEAP; o que pude reler somente-leitura confere com o relato (gitops sem nomes antigos, /q/health UP), mas login de admin e sessao GEAP (AC2) e o env do pod seguem apenas no relato do Implementation Summary. Como ha niveis assumed/skipped, proven e estruturalmente indisponivel: NEEDS-HUMAN, motivo nada-a-provar (com fora-do-alcance para a parte de infra). Sugestao de decisao para o dono (nao e waiver): aceitar a evidencia operacional do RESULT.md (completion-auditor COMPLETE 3/3) e mover para Done."

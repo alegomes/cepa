@@ -1,0 +1,68 @@
+# Prova (Proof Reviewer) para WEGO-2044 - "Empacotar e distribuir a extensao por politica empresarial" (ADR 0003).
+# Rodada de 2026-11-05 (prove-drain, claim wego-acessos-backend-78c43dc9). Diff inteiro no repo da extensao
+# (/Users/alegomes/coding/wego/wego-acessos-extension, JS, node --test, sem Maven).
+# Perturbacoes feitas em worktree descartavel /tmp/proof-w2044-1105 (3787938), removida ao fim.
+schema_version: 2
+card: WEGO-2044
+verdict: needs-human            # proven | unproven | needs-human
+reviewed_at: 2026-11-05T20:45:00-03:00
+base_commit: 0847747^           # repo da extensao; o card nao tem diff no backend
+head_commit: 3787938            # extensao, origin/main (git diff --stat 3787938 origin/main = vazio)
+issue_type: Story
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - { class: "src/background.js:backendGerenciado/getBackend", module: "service worker", external_observable: true, substituted_by_double: null }
+    - { class: "manifest.json (storage.managed_schema, update_url, key)", module: "manifesto MV3", external_observable: true, substituted_by_double: null }
+    - { class: "managed-schema.json", module: "esquema de politica", external_observable: true, substituted_by_double: null }
+    - { class: "scripts/empacotar.sh (inclui o guarda de update_url)", module: "ferramenta de release", external_observable: true, substituted_by_double: null }
+    - { class: "popup.js (campo readOnly sob politica)", module: "popup", external_observable: true, substituted_by_double: null }
+  double_substitution_note: >
+    test/stub-chrome.js dubla so a fronteira chrome.storage.managed/local (equivalente ao WireMock do vendor);
+    backendGerenciado/getBackend rodam reais. test/update-url.test.js le o manifest.json real, sem dubles.
+    Nada novo desde a rodada de 2026-11-04: origin/main continua 3787938 (git diff --stat 3787938 origin/main vazio).
+levels:
+  l3_load_bearing:
+    technique: perturbation       # JS: sem pitest
+    pit:
+      status: n/a
+      results:
+        - "projeto JS sem Maven/pitest"
+    perturbation:
+      status: skipped             # misto: passes abaixo + partes nao executaveis; nao gravo 'pass'
+      results:
+        - "update_url (criterio 3, linha do manifest) - PASS, executado hoje. VERDE: `node --test test/update-url.test.js test/backend-por-politica.test.js` em 3787938 -> tests 10, pass 10, fail 0. PERTURBACAO: `git -C /tmp/proof-w2044-1105 checkout 91a27f4 -- manifest.json` (sem update_url, 0.4.0) -> `node --test test/update-url.test.js` tests 2, pass 0, fail 2. RESTAURADO (`checkout 3787938 -- manifest.json`) -> tests 2, pass 2, fail 0. Limite: teste estatico (compara a string do manifest com o endereco do balde e da doc); nao prova que um Chrome gerenciado atualiza."
+        - "backendGerenciado/getBackend (criterio 2) - PASS, executado hoje. VERDE 8/8 (`node --test test/backend-por-politica.test.js`). PERTURBACAO: leitura da politica neutralizada (`const m = {};` no lugar de `chrome.storage.managed.get`) -> tests 8, pass 5, fail 3 ('com politica, ela ganha do popup', 'com politica e sem popup, vale a politica', 'a barra final e removida'). RESTAURADO: suite completa tests 65, pass 65, fail 0."
+        - "SUITE COMPLETA em 3787938: `node --test` -> tests 65, pass 65, fail 0, cancelled 0, skipped 0."
+        - "GUARDA DE update_url EM scripts/empacotar.sh - SKIPPED. Executar o script e NEGADO pelo bash-path-lock e ele usa a chave de producao em ~/.wego/keys; nao contornei. Nao ha teste node que cubra o guarda; sem green->red."
+        - "CRITERIO 3, metade mecanica de empacotar/assinar/recusar identidade errada - nao refeita (script nao executavel por mim); ultima prova green->red->green e de 2026-09-25 e o script cresceu desde entao (guarda +13 linhas)."
+        - "CRITERIO 3, hospedagem - RECONFERIDO hoje (curl anonimo no update_url do manifest): HTTP 200, appid='bkbbiaeffgabpocmghcdbhbhhoeljean', version='0.4.1', codebase='.../wego-acessos-extension-0.4.1.crx'. manifest.json version = 0.4.1 (bate). Nao baixei o .crx; assinatura NAO verificada."
+        - "CRITERIO 1 (instalacao forcada sem prompt, nao removivel) e a metade do CRITERIO 3 que depende de um Chrome gerenciado consultando updates.xml - SKIPPED. Exige maquina gerenciada real (Chrome Enterprise Core / Cloud Identity da WeGo, ainda inexistente). Decisao do dono de 2026-08-18: nao simular ambiente gerenciado localmente."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: >
+      Sem ferramenta de cobertura neste repo JS. Alcance estrutural: test/backend-por-politica.test.js chama
+      backendGerenciado/getBackend reais; test/update-url.test.js le o manifest.json real (as perturbacoes acima
+      provam as linhas alcancadas). scripts/empacotar.sh nao e alcancado por nenhum teste automatizado.
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: >
+      Superficie: valor de chrome.storage.managed (fronteira nao confiavel). Os testes adversariais existentes foram
+      provados nao-vacuos hoje por perturbacao: (a) removendo `typeof ... === "string"` e `.trim()` em
+      backendGerenciado -> tests 8, pass 6, fail 2 ('politica em branco ou so espacos nao conta como politica',
+      'politica com tipo errado e ignorada'); (b) trocando o `catch` por rethrow -> 'storage.managed que lanca nao
+      derruba a extensao' vermelho (tests 8, pass 7, fail 1). Restaurado, suite 65/65. Sem entrada adversarial nova
+      alem do conjunto existente; o diff nao abriu superficie nova desde 2026-11-04.
+  bugfix_regression_red_at_base:
+    status: n/a                 # Story
+routing_reason: >
+  NEEDS-HUMAN, motivo "fora-do-alcance" (docs/needs-human-motivos.md). Sem mudanca de codigo desde 2026-11-04.
+  Provado hoje com green->red->green: update_url, backendGerenciado/getBackend e os testes adversariais da fronteira
+  de politica; suite 65/65; updates.xml publico anuncia 0.4.1 igual ao manifest. Continuam sem prova: (a) criterio 1
+  e a atualizacao automatica real numa maquina gerenciada, que dependem do ambiente Chrome Enterprise Core/Cloud
+  Identity que o dono ainda vai criar (e decidiu nao simular); (b) o guarda de update_url em empacotar.sh, nao
+  executavel por mim (hook + chave de producao) e sem teste automatizado; (c) assinatura do .crx 0.4.1 nao verificada.
+  Nao ha trabalho de codigo pendente.

@@ -1,0 +1,59 @@
+schema_version: 2
+card: WEGO-2369
+verdict: needs-human            # proven | unproven | needs-human
+reviewed_at: 2026-11-05T23:40:00-03:00
+base_commit: 8b6ba257           # derivado (pai de edffb8c7, primeiro commit do card); .claude/cards/WEGO-2369.yaml nao existe
+head_commit: f1ba8f8a           # ultimo commit do card; main HEAD f91e9076
+issue_type: Task
+scope:
+  base_commit_resolved: false   # derivado, nao capturado em baseline
+  # diff = 8b6ba257..f1ba8f8a (13 commits) ∩ arquivos tocados. Varios arquivos tocados mudaram DEPOIS (outros cards: AdminTagsResource,
+  # HabilitacaoPortalJpaAdapter, HabilitarOperadorService, specs/e2e-assertions.md...), por isso as corridas foram feitas no worktree em f1ba8f8a, nao em main HEAD.
+  # Classificacao dos hunks de src/main: 100% comentario/javadoc, EXCETO (a) a delecao de GrupoNaoEstaDesativadoException.java e (b) uma string @Schema(description) em RemoverCredenciaisDoGrupoRequest.motivo.
+  changed_classes:
+    - class: "com.wego.acesso.domain.exception.GrupoNaoEstaDesativadoException"
+      module: domain
+      external_observable: false   # deletada; nenhum codigo de producao a lancava (grep em f1ba8f8a: zero referencia em .java)
+      substituted_by_double: null
+    - class: "com.wego.acesso.api.rest.dto.RemoverCredenciaisDoGrupoRequest"
+      module: api-rest
+      external_observable: true    # a descricao aparece em /q/openapi
+      substituted_by_double: null
+    - class: "demais 20 classes de api-rest/application/domain/infrastructure (somente javadoc/comentario)"
+      module: multi
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "PIT nao usado: os dois hunks nao-comentario sao guardados por teste de documento/OpenAPI, nao por teste unitario instrumentavel"
+    perturbation:
+      status: survived
+      results:
+        - "GREEN antes de perturbar, worktree f1ba8f8a: ./mvnw -pl bootstrap -am test -Dtest=EspecificacaoE2EAlinhadaAoCodigoTest -Dsurefire.failIfNoSpecifiedTests=false -> Tests run: 10, Failures: 0, Errors: 0, Skipped: 0; BUILD SUCCESS"
+        - "P1 (delecao da GrupoNaoEstaDesativadoException, restaurada de 8b6ba257 via git checkout): mesma corrida -> Tests run: 10, Failures: 4; BUILD FAILURE. 'domain: prosa diz 41, o codigo tem 42'; 'tabela tem 52 linha(s) e o codigo tem 53 implementacao(oes) de WegoException'; distribuicao de status 409=13 vs 409=14; cadaCodigoDaTabelaExisteNoCodigoEViceVersa. RED: a delecao e a taxonomia (52/41) estao travadas contra o codigo. Observacao: isto prova a CONSISTENCIA doc-codigo; que a excecao 'nao e lancada por ninguem' e verificado por grep (zero referencia a GrupoNaoEstaDesativadoException/GRUPO_NAO_ESTA_DESATIVADO em .java de f1ba8f8a), nao por teste."
+        - "P2 (@Schema de RemoverCredenciaisDoGrupoRequest.motivo revertido a 'Hoje nao fica registrado na trilha...', via git checkout 8b6ba257 -- <arquivo>): ./mvnw -pl bootstrap -am test -Dtest='DocumentoOpenApi*E2ETest,GrupoRemocaoDeCredenciaisE2ETest,OpenApiVariantesFechadasE2ETest,ExposicaoOpenApiESwaggerE2ETest' -Dsurefire.failIfNoSpecifiedTests=false -> Tests run: 120, Failures: 0, Errors: 0, Skipped: 0; BUILD SUCCESS. SOBREVIVEU: nenhum teste le o texto da descricao desse campo (grep em bootstrap/src/test: nenhuma ocorrencia de 'registrado na trilha'). O texto de /q/openapi pode voltar a dizer 'nao fica registrado' sem nada acusar."
+        - "Demais hunks (javadoc em 20 classes e docs/spec): nao perturbaveis, comentario nao muda comportamento nem artefato lido por teste. O unico teste tocado, ConcessaoRecusaPessoaE2ETest, teve so javadoc alterado (diff sem linha de codigo/assercao)."
+        - "worktree descartavel /tmp/proof-WEGO-2369 removido; arvore primaria intocada; Maven sequencial; as corridas bootaram de primeira, sem retry."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "sem quarkus-jacoco rodado; o diff nao tem linha executavel de producao (so comentario, uma string de anotacao e uma classe deletada). Alcance estrutural: a string @Schema e servida por /q/openapi (testes DocumentoOpenApi*E2ETest passam por ela) mas nenhum asserta o seu conteudo (ver P2)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff nao muda parse nem validacao de entrada: apenas comentarios, uma descricao de anotacao @Schema e a remocao de uma excecao nao lancada. Nenhuma superficie de entrada nova ou alterada, apesar de tocar classes de api-rest (so texto)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a                 # Task, nao Bug
+inspection:
+  double_substitution_check: "Nenhuma classe do card e substituida por dublê nos testes citados. EspecificacaoE2EAlinhadaAoCodigoTest e puro JUnit que varre o FONTE e o markdown (sem Quarkus, sem dublê). Os testes OpenAPI rodam @QuarkusTest contra o app real; a classe alterada (DTO) e carregada de verdade. Dublês so existem nas bordas (WireMock) e nao tocam o diff."
+  ac1: "Textos: o Implementation Summary confere com o diff (FUNCIONARIO_RECUSADO/FUNCIONARIO_JA_HABILITADO nos javadocs, taxonomia 53->52, domain 42->41). Excecao sem uso removida do codigo e da taxonomia: P1 prova que a taxonomia esta travada. A afirmacao 'motivo e gravado na trilha' do @Schema nao esta travada por teste (P2)."
+  ac2: "./mvnw verify completo nao foi rodado aqui (suite inteira em primeiro plano estoura o limite); evidencia parcial: EspecificacaoE2EAlinhadaAoCodigoTest 10/10 e 120 testes OpenAPI/remocao verdes em f1ba8f8a. O resumo do card relata o mesmo teste de 3 falhas para 10/10."
+  motivo_needs_human: "teste-cego (motivo 2 de docs/needs-human-motivos.md): a unica mudanca de texto observavel em /q/openapi sobrevive a reversao. Mesmo encoding de WEGO-2363 (perturbation survived + needs-human). Nao e UNPROVEN porque o hunk e prosa de documentacao sem efeito de comportamento, e exigir teste que fixe uma frase seria ruido."
+  sugestao_de_decisao_para_humano: "Nao e waiver. Sugestao: dispensar o P2 sob a politica (a), registrando que a descricao e texto de documentacao e que a travada util (taxonomia 52/41) esta provada. Recomendo sim."
+routing_reason: "NEEDS-HUMAN motivo 2 (teste-cego). O card so muda comentario, uma frase de @Schema e apaga uma excecao nao lancada. A delecao esta travada: restaurar a excecao deixa EspecificacaoE2EAlinhadaAoCodigoTest vermelho (10 testes, 4 falhas: 52 vs 53 excecoes, 41 vs 42 em domain, 409=13 vs 14), verde sem a perturbacao. A frase do @Schema ('Fica registrado na trilha de concessoes') sobrevive: voltar ao texto antigo deixa 120 testes OpenAPI/remocao verdes, entao a descricao publicada em /q/openapi nao tem guarda. L2 assumed, L4 n/a, regressao n/a (Task). proven fica indisponivel pela perturbacao sobrevivente. ./mvnw verify completo nao rodado por esta prova. Base_commit derivado (8b6ba257), nao capturado."
+waiver_proposto: docs/waivers/teste-cego--wego-2369-descricao-schema-do-campo-motivo-de-remover-credenciais-do-grupo-request-em-q-openapi-sem-guarda-de-teste.yaml   # proposta (status: proposta, autor: null) gravada pelo orquestrador do prove-drain em 2026-11-05 via waivers.propose, sob a politica (a) da rodada desatendida. Conversao em dispensa e a transicao para Done sao atos do dono.
+stale_statements_in_implementation_summary: "'Onde esta o codigo: branch noturna until/2026-10-26-2039' esta defasado: os 13 commits (edffb8c7..f1ba8f8a) estao em main (HEAD f91e9076 em 2026-11-05) e a branch nao existe mais localmente. 'Prova nao se aplica' tambem: a delecao da excecao e provavel e foi provada (P1 RED)."
