@@ -28,6 +28,7 @@ pergunta sobre o desbloqueio revela pendências que nunca apareceram):
 Run: python3 tests/test_cepa_plan_discovered_pending.py
 """
 import json
+import re
 import os
 import subprocess
 import sys
@@ -142,9 +143,28 @@ def test_point_survives_the_answer_and_item_is_not_ready():
               "pendência descoberta" in text.split("\n\n", 1)[0]
               and "a1" in text.split("\n\n", 1)[0], text.split("\n\n", 1)[0])
 
+        check("status texto: a linha pegável diz o motivo real",
+              "mesmo com pendência aberta" in a1_block, a1_block)
+
+        screen = subprocess.run(
+            [sys.executable, str(CEPA_PLAN), "status", "fila", "--repo", str(root)],
+            capture_output=True, text=True, cwd=root, timeout=60,
+            env={k: v for k, v in dict(ENV, CEPA_COR="sempre", COLUMNS="200").items()
+                 if k != "NO_COLOR"})
+        flat = re.sub(r"\x1b\[[0-9;]*m", "", screen.stdout)
+        a1_screen = flat.split("a1", 1)[-1].split("a2", 1)[0]
+        check("tela do terminal: a1 lista cada pendência descoberta",
+              "pendência descoberta 1" in a1_screen and P1 in a1_screen
+              and "pendência descoberta 2" in a1_screen, flat)
+        check("tela do terminal: a1 não diz pronto, diz pegável com pendência",
+              "pronto: o próximo" not in a1_screen
+              and "mesmo com pendência aberta" in a1_screen, a1_screen)
+
         shown = cli(root, "show", "fila", "a1").stdout
         check("show lista as pendências abertas", "pendências descobertas" in shown
               and P1 in shown and P2 in shown, shown)
+        check("show: o status diz pegável com pendência aberta",
+              "mesmo com pendência aberta" in shown, shown)
 
         q = cli(root, "queue", "fila", "--max", "5", "--json")
         batch = {b["id"]: b for b in json.loads(q.stdout)["batch"]}
