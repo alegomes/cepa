@@ -1,0 +1,31 @@
+schema_version: 1
+card: CS-6-sim
+queue: pyyaml
+status: complete
+audited_at: 2026-11-20T16:30:00-03:00
+diff: d29ded2..09abd10 (so tests/test_cepa_runs_without_pyyaml.py)
+criteria:
+  - id: AC1
+    text: "Os outros treze arquivos tem teste de que a copia do Cepa vence outro PyYAML (cepa-until, cepa-until-digest, maestro-fork-settings, maestro-programs, maestro-wave-state, maestro-prune, waivers.py, merge-truth-gate, _autonomy, ui-proof-verdict-guard, jira-create-fields-gate, reflection-gate, expertise-append). Efeito prometido: a ordem deles fica protegida contra regressao."
+    altitude: cli
+    surface: "cada script executado como os hooks o executam (subprocesso; hooks por stdin JSON via run_event, funcoes dos hooks carregadas por caminho sob o python3 do shim) com um yaml falso que levanta RuntimeError em PYTHONPATH, no interpretador real e no shim -S"
+    demonstrated_by:
+      test: "tests/test_cepa_runs_without_pyyaml.py, funcao cs6, bloco 'CS-6 sim' (um caso de leitura real + um 'fake yaml never imported' por arquivo, em [real] e [-S]); mais guarda de run_event que prova que PYTHONPATH chega ao hook"
+      layer: "subprocesso do proprio script/hook; fixtures reais de YAML; so o twg/Jira de fundo e dublado"
+      evidence: verified
+      run: >-
+        python3 tests/test_cepa_runs_without_pyyaml.py -> exit 0, 160 linhas 'ok', 0 FAIL, 'cepa runs without PyYAML'.
+        Perturbacao propria em copia de scratch em /tmp (sem .git, apagada depois): em cada um dos 13 arquivos troquei
+        sys.path.insert(0, ...) por sys.path.insert(len(sys.path), ...) e rodei o teste:
+        cepa-until rc=1 FAIL=4; cepa-until-digest rc=1 FAIL=4; maestro-fork-settings rc=1 FAIL=4; maestro-programs rc=1 FAIL=4;
+        maestro-wave-state rc=1 FAIL=4; maestro-prune rc=1 FAIL=4; waivers.py rc=1 FAIL=4; merge-truth-gate rc=1 FAIL=2;
+        _autonomy rc=1 FAIL=4; ui-proof-verdict-guard rc=1 FAIL=4; jira-create-fields-gate rc=1 FAIL=4;
+        reflection-gate rc=1 FAIL=2; expertise-append rc=1 FAIL=4. Todos os FAIL com prefixo CS-6, nenhum fora de CS-6.
+        Exemplo (maestro-prune): 'RuntimeError: fake yaml imported' em 'import yaml'. Baseline da copia: rc=0.
+        N>0: 160 casos ok executados.
+    verdict: complete
+    gap: null
+notes:
+  - "merge-truth-gate e reflection-gate ficam com 2 FAIL (uma variante de interpretador por arquivo vira RED, nao quatro); ainda RED, nao e lacuna do criterio."
+  - "A guarda nova de run_event (diff) fecha a lacuna apontada em docs/proof/CS-6.yaml (guard 3c): agora PYTHONPATH solto em run_event derruba 'CS-6 guard (..., run_event)'."
+  - "Mutacao so em copia de scratch fora do repo; arvore do worktree intacta (git status limpo antes de escrever este artefato)."

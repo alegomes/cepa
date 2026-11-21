@@ -37,7 +37,11 @@ Cases:
         so does one representative per plugin and kind (cepa-dor, maestro-poll,
         classify_needs_human.py, board-flow-fleet-validate.sh, acceptance-gate,
         build-hex proof-verdict-guard), plus _jiramut.logical_status
-        (function level, where a wrong order would be swallowed by its try/except)
+        (function level, where a wrong order would be swallowed by its try/except);
+        CS-6 sim: the other thirteen files too (cepa-until, cepa-until-digest,
+        maestro-fork-settings, -programs, -wave-state, -prune, waivers.py,
+        merge-truth-gate, _autonomy, ui-proof-verdict-guard, expertise-append,
+        reflection-gate, jira-create-fields-gate), each on the path that imports yaml
 
 Run with `python3 tests/test_cepa_runs_without_pyyaml.py`.
 """
@@ -284,7 +288,7 @@ def run_event(script, payload, cwd, shim, extra_env=None):
                           capture_output=True, text=True, cwd=str(cwd), env=env)
 
 
-def call_fn(shim, hook, expr, cwd, *args):
+def call_fn(shim, hook, expr, cwd, *args, extra_env=None):
     """Load `hook` by path under the shim python3 and print repr(expr).
     `expr` sees `m` (the module) and `a` (the extra args)."""
     code = ("import importlib.util, sys\n"
@@ -294,7 +298,7 @@ def call_fn(shim, hook, expr, cwd, *args):
             "a = sys.argv[2:]\n"
             f"print(repr({expr}))\n")
     return run_direct(shim / "python3", ["-c", code, str(hook)] + list(args),
-                      cwd, shim)
+                      cwd, shim, extra_env=extra_env)
 
 
 VENDOR_LINE = ('sys.path.insert(0, os.path.join(os.path.dirname('
@@ -595,6 +599,14 @@ def cs6(tmp, shim, real):
                        extra_env=env)
         check(f"CS-6 guard ({label}): PYTHONPATH makes `import yaml` hit the fake",
               r.returncode != 0 and FAKE_MSG in r.stderr, r.stdout + r.stderr)
+    # run_event builds its own env: guard it too, or the two event-level cases
+    # (and merge-truth-gate) could drop PYTHONPATH and stay green.
+    probe = write(tmp / "probe_import_yaml.py", "import yaml\n")
+    for label, sh in (("real interpreter", real), ("-S shim", shim)):
+        r = run_event(probe, {}, tmp, sh, extra_env=env)
+        check(f"CS-6 guard ({label}, run_event): PYTHONPATH makes `import yaml` "
+              "hit the fake", r.returncode != 0 and FAKE_MSG in r.stderr,
+              r.stdout + r.stderr)
     r = run_direct(real / "python3", ["-c", "import yaml; print(yaml.__file__)"],
                    tmp, real)
     if r.returncode == 0:
@@ -647,6 +659,82 @@ def cs6(tmp, shim, real):
                             "content": "card: UNIQ-3\nverdict: proven\nlevels:\n"
                                        "  uniq_bogus_level:\n    status: pass\n"},
              "cwd": str(pv)}
+
+    # CS-6 sim: the other thirteen files. Fixtures first.
+    # cepa-until-digest: status of the touched item comes from the plan YAML.
+    dprog = root / ".claude" / "programs" / "F"
+    write(dprog / "plan.yaml",
+          "items:\n- id: A1\n  status: uniq-status-digest\n  blocked_by: []\n")
+    dledger = write(dprog / "until" / "r.jsonl",
+                    '{"evento": "run_start", "fila": "F", "branch": "until/r"}\n'
+                    '{"evento": "item_start", "id": "A1", "title": "um"}\n'
+                    '{"evento": "run_end", "motivo": "end-of-queue"}\n')
+    write(dprog / "until" / "r.log", "")
+    # maestro-fork-settings: the slice surface comes from the plan YAML.
+    mplan = write(tmp / "plans" / "maestro.yaml",
+                  "schema_version: 2\nmode: parallel-waves\nprogram: uniq-prog\n"
+                  "slices:\n  s1:\n    surface: [uniq-surface/**]\n"
+                  "waves:\n- id: 1\n  slices: [s1]\n")
+    # maestro-programs / maestro-prune read a plan.yaml and a wave-state in
+    # their own program dir (prune: a FAIL slice is kept).
+    pdir2 = mroot / ".claude" / "programs" / "uniq-prog2"
+    write(pdir2 / "plan.yaml",
+          "schema_version: 2\nmode: parallel-waves\nprogram: uniq-prog2\n"
+          "slices:\n  uniq-slice2:\n    surface: [x/**]\n"
+          "waves:\n- id: 1\n  slices: [uniq-slice2]\n")
+    write(pdir2 / "wave-state.yaml",
+          "program: uniq-prog2\nwave: 1\nslices:\n  uniq-slice2:\n"
+          "    status: FAIL\n")
+    # waivers.py
+    wroot = tmp / "w"
+    write(wroot / ".claude" / "waivers" / "teste-cego--uniq.yaml",
+          "motivo: teste-cego\nescopo: uniq-escopo\nrazao: porque\n"
+          "autor: alguem\ncriado_em: 2026-01-01\nrevisit_trigger: 2099-01-01\n")
+    W_CODE = ("import sys; sys.path.insert(0, sys.argv[1]); import waivers; "
+              "print([w['escopo'] for w in waivers.load(sys.argv[2])])")
+    # merge-truth-gate: a closing transition (51 -> done) of a key whose code
+    # lives only on a side branch is blocked (exit 2) ONLY if the YAML was read.
+    mt = tmp / "mt"
+    mt.mkdir()
+    def git_mt(*a):
+        subprocess.run(list(a), cwd=mt, capture_output=True, check=True)
+    git_mt("git", "init", "-q", "-b", "main")
+    git_mt("git", "config", "user.email", "t@t")
+    git_mt("git", "config", "user.name", "t")
+    write(mt / "seed.txt", "seed\n")
+    git_mt("git", "add", "-A")
+    git_mt("git", "commit", "-qm", "seed")
+    write(mt / "board-flow.yaml", BOARD_FLOW_YAML)
+    git_mt("git", "add", "-A")
+    git_mt("git", "commit", "-qm", "config")
+    git_mt("git", "checkout", "-q", "-b", "feature/x")
+    write(mt / "f.txt", "x\n")
+    git_mt("git", "add", "-A")
+    git_mt("git", "commit", "-qm", "UNIQ-7 work only on a side branch")
+    git_mt("git", "checkout", "-q", "main")
+    mt_ev = {"tool_name": "mcp__mcp-atlassian__jira_transition_issue",
+             "tool_input": {"issue_key": "UNIQ-7", "transition_id": "51"},
+             "cwd": str(mt)}
+    iso_mt = isolated_common(tmp, "iso-mt")
+    # function-level hooks, loaded by path
+    fn = tmp / "fn"
+    write(fn / "board-flow.yaml", BOARD_FLOW_YAML)
+    write(fn / "aut.yaml", "uniq_key: 1\n")
+    # expertise-append: _HAVE_YAML is True only when the import did not raise
+    # ImportError; a fake that raises RuntimeError would crash the load instead.
+    fn_cases = [
+        ("_autonomy._read_yaml", HOOKS / "_autonomy.py",
+         "m._read_yaml(__import__('pathlib').Path(a[0]))",
+         [str(fn / "aut.yaml")], "{'uniq_key': 1}"),
+        ("ui-proof-verdict-guard.parse_with_yaml", HOOKS / "ui-proof-verdict-guard.py",
+         "m.parse_with_yaml(a[0])[0]", ["verdict: uniq-verdict\n"], "'uniq-verdict'"),
+        ("expertise-append _HAVE_YAML", HOOKS / "expertise-append.py",
+         "m._HAVE_YAML", [], "True"),
+        ("reflection-gate.load", HOOKS / "reflection-gate.py",
+         "m.load(a[0])", ["uniq: 1\n"], "{'uniq': 1}"),
+        ("jira-create-fields-gate._load_rules", HOOKS / "jira-create-fields-gate.py",
+         "m._load_rules(a[0])[0]", [str(fn)], "'UNIQ'"),
+    ]
 
     jm = tmp / "jm"
     write(jm / "board-flow.yaml", BOARD_FLOW_YAML)
@@ -711,6 +799,64 @@ def cs6(tmp, shim, real):
         check(f"{n} _jiramut.logical_status resolved the status_map name",
               r.stdout.strip() == "'in_review'", r.stdout + r.stderr[-300:])
         clean(f"{n} _jiramut.logical_status", r)
+
+        # ---- CS-6 sim: the other thirteen files ----
+        r = run_direct(BIN / "cepa-until", ["q", "--for", "1h", "--dry-run",
+                                            "--dirty-ok", "--no-verify"],
+                       root, sh, extra_env=env)
+        check(f"{n} cepa-until dry-run read the queue (names item X-1)",
+              r.returncode == 0 and "X-1" in r.stdout + r.stderr,
+              f"exit {r.returncode}: {(r.stdout + r.stderr)[-300:]}")
+        clean(f"{n} cepa-until", r)
+
+        r = run_direct(BIN / "cepa-until-digest", [str(dledger)], root, sh,
+                       extra_env=env)
+        check(f"{n} cepa-until-digest shows the item status read from the YAML",
+              "uniq-status-digest" in r.stdout, r.stdout + r.stderr[-300:])
+        clean(f"{n} cepa-until-digest", r)
+
+        r = run_direct(MAESTRO / "maestro-fork-settings", [str(mplan), "s1"],
+                       mroot, sh, extra_env=env)
+        check(f"{n} maestro-fork-settings emits the slice surface from the plan",
+              "uniq-surface" in r.stdout, r.stdout + r.stderr[-300:])
+        clean(f"{n} maestro-fork-settings", r)
+
+        r = run_direct(MAESTRO / "maestro-programs", [str(mroot), "--json"],
+                       mroot, sh, extra_env=env)
+        check(f"{n} maestro-programs lists the program and its wave-state slice",
+              "uniq-prog2" in r.stdout and "uniq-slice2" in r.stdout,
+              r.stdout + r.stderr[-300:])
+        clean(f"{n} maestro-programs", r)
+
+        r = run_direct(MAESTRO / "maestro-wave-state", ["get", str(pdir), "--json"],
+                       mroot, sh, extra_env=env)
+        check(f"{n} maestro-wave-state get returns the file content",
+              "uniq-slice" in r.stdout, r.stdout + r.stderr[-300:])
+        clean(f"{n} maestro-wave-state", r)
+
+        r = run_direct(MAESTRO / "maestro-prune",
+                       [str(pdir2), "--repo", str(mroot), "--dry-run"], mroot, sh,
+                       extra_env=env)
+        check(f"{n} maestro-prune read the wave-state (keeps the FAIL slice)",
+              "uniq-slice2" in r.stdout, r.stdout + r.stderr[-300:])
+        clean(f"{n} maestro-prune", r)
+
+        r = run_direct(sh / "python3", ["-c", W_CODE, str(BOARD_FLOW / "bin"),
+                                        str(wroot)], root, sh, extra_env=env)
+        check(f"{n} waivers.py load() returns the waiver from the YAML",
+              "uniq-escopo" in r.stdout, r.stdout + r.stderr[-300:])
+        clean(f"{n} waivers.py", r)
+
+        r = run_event(iso_mt / "merge-truth-gate.py", mt_ev, mt, sh, extra_env=env)
+        check(f"{n} merge-truth-gate read board-flow.yaml (51 -> done is blocked)",
+              r.returncode == 2, f"exit {r.returncode}: {r.stderr.strip()[-300:]}")
+        clean(f"{n} merge-truth-gate", r)
+
+        for name, hook, expr, args, want in fn_cases:
+            r = call_fn(sh, hook, expr, fn, *args, extra_env=env)
+            check(f"{n} {name} through the vendored copy",
+                  r.stdout.strip() == want, r.stdout + r.stderr[-300:])
+            clean(f"{n} {name}", r)
 
 
 def main():

@@ -1,0 +1,61 @@
+schema_version: 2
+card: CS-6-sim
+verdict: proven
+reviewed_at: 2026-11-20T16:40:00-03:00
+base_commit: d29ded2
+head_commit: 09abd10
+issue_type: Task
+queue: pyyaml
+scope:
+  changed_classes:
+    - class: "tests/test_cepa_runs_without_pyyaml.py (cs6 sim cases for 13 files, call_fn extra_env, run_event guard)"
+      module: tests
+      external_observable: true
+      substituted_by_double: null   # the real scripts run; only the YAML library is a fake raising on PYTHONPATH (the thing under test is the import order, not the double)
+  base_commit_resolved: true
+  note: "Test-only diff. The behavior under proof (sys.path.insert(0, <plugin>/_vendor) before import yaml) predates this diff; perturbation targets that ordering and the test is the instrument. Closes the 13 survivors and gap 3c listed in docs/proof/CS-6.yaml."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "Python repo, no PIT"
+    perturbation:
+      status: pass
+      results:
+        - "baseline 09abd10 (throwaway detached worktree): python3 tests/test_cepa_runs_without_pyyaml.py -> exit 0, 160 ok, 0 FAIL lines (the 3 grep hits for 'FAIL' were the check name 'keeps the FAIL slice')"
+        - "13 files, insert(0, ...) -> append(...), each run exit 1 and each turns RED the CS-6 [real] and [-S] pair 'read the YAML' + 'fake yaml was never imported' (4 FAIL each unless noted):"
+        - "cepa-until:269 -> 4 FAIL ('dry-run read the queue')"
+        - "cepa-until-digest:40 -> 4 FAIL ('shows the item status read from the YAML')"
+        - "maestro-fork-settings:47 -> 4 FAIL"
+        - "maestro-programs:52 -> 4 FAIL"
+        - "maestro-wave-state:39 -> 4 FAIL"
+        - "maestro-prune:63 -> 4 FAIL"
+        - "waivers.py:38 -> 4 FAIL"
+        - "merge-truth-gate.py:54 -> 2 FAIL ('read board-flow.yaml (51 -> done is blocked)', exit 0 instead of 2, [real] and [-S])"
+        - "_autonomy.py:45 -> 4 FAIL"
+        - "ui-proof-verdict-guard.py:45 -> 4 FAIL"
+        - "jira-create-fields-gate.py:66 -> 4 FAIL"
+        - "reflection-gate.py:36 -> 2 FAIL ('load through the vendored copy' returns None, [real] and [-S])"
+        - "expertise-append.py:52 -> 4 FAIL"
+        - "line removal (sampled, 4 of 13, no silent cap: the rest were exercised by append only): cepa-until-digest:40 -> exit 1, 5 FAIL; merge-truth-gate:54 -> exit 1, FAIL in CS-3 + CS-6 [real] + [-S]; reflection-gate:36 -> exit 1, CS-3 + CS-6 x2; maestro-prune:63 -> exit 1, CS-2 + CS-6"
+        - "run_event guard: tests/test_cepa_runs_without_pyyaml.py:285 env.update(extra_env) -> pass (run_event drops PYTHONPATH): exit 1, 2 FAIL, 'CS-6 guard (real interpreter, run_event)' and 'CS-6 guard (-S shim, run_event)'. In docs/proof/CS-6.yaml the same perturbation was green (gap 3c); now closed."
+        - "8 original representatives, insert(0)->append, still RED: cepa-plan:257 -> 10 FAIL; cepa-dor:59 -> 4; maestro-poll:36 -> 4; classify_needs_human.py:30 -> 4; board-flow-fleet-validate.sh:67 -> 4; acceptance-gate.py:84 -> 2; build-hex proof-verdict-guard.py:45 -> 2; _jiramut.py:68 -> 6 FAIL (2 of them CS-6)"
+        - "every perturbation reverted with git checkout of the single file; worktree /tmp/cs6sim-proof removed with git worktree remove --force"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "each of the 13 import lines plus the 8 representatives turned a CS-6 check RED under perturbation, so every line is reached at the cli/hook altitude; test run prints the CS-6 sim cases at head (160 ok, 0 FAIL)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff is a test file only; it opens no input surface (no parser of external data, no api-rest module)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+notes:
+  - "Remaining limits, not blocking: removal of the import line was sampled on 4 of the 13 files; the other 9 were proven by the append perturbation only. The run_event guard was proven by dropping the whole extra_env, not PYTHONPATH alone, but PYTHONPATH is the only key the cs6 callers pass through run_event."
+  - "merge-truth-gate and reflection-gate go RED on the functional check only (no 'fake never imported' RED), because the former runs as an event hook and the latter swallows the failure; both are still caught."
+  - "Neighbors (tests/test_cepa_plan_ready.py, tests/test_isolated_telemetry.py) not re-run: diff touches only the test file; tests/run-all.sh left to the supervisor as instructed."
+  - ".claude/acceptance/CS-6-sim.yaml shows as untracked in the primary tree; not touched by this review."
+routing_reason: "All 13 files that survived append in docs/proof/CS-6.yaml now turn at least one CS-6 check RED under insert(0)->append (and removal on the sample), run_event dropping PYTHONPATH turns the new guard RED (it was green before), and the 8 original representatives remain RED. Baseline 160 ok, 0 FAIL. PROVEN."
