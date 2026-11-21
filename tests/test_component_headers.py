@@ -42,10 +42,6 @@ REPO = Path(__file__).resolve().parent.parent
 # Repo-relative path → why it is still broken. The ratchet fails as soon as the
 # file passes, which is the cue to delete the line.
 KNOWN_BROKEN = {
-    "docs-topology/skills/diataxis-discipline/SKILL.md":
-        "defeito do lote 0 de docs/estrategia-lacunas-ecc.md, consertado pela rota de item único",
-    "docs-topology/skills/how-why-boundary/SKILL.md":
-        "defeito do lote 0 de docs/estrategia-lacunas-ecc.md, consertado pela rota de item único",
 }
 
 # "plugin:name" → why citing it while it does not exist is on purpose.
