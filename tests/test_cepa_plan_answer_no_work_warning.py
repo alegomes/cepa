@@ -223,7 +223,7 @@ def test_decide_closing_repeats_the_warning_for_each_item():
                      "question": "Ponho na fila um item para calibrar X?",
                      "human_pending": ROUTE, "evidence": None}
                     for i in ("a1", "a2", "a3")]
-        answers = iter(["s", "", "s", "", "s", ""])
+        answers = iter(["y", "", "y", "", "y", ""])
         screen = []
         # `cepa-plan answer` needs a TTY: run decide's own subprocess under one.
         orig_run = m.subprocess.run

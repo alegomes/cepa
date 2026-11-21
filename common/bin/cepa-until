@@ -3416,10 +3416,15 @@ def _yes_no(v):
     return {"sim": "yes", "não": "no", "nao": "no"}.get(r, str(v))
 
 
+# CS-3 of teclas-em-ingles: the Portuguese keys the English menus used to take.
+# Typing one shows this line, records nothing and asks again.
+OLD_KEY_NOW = {"s": "s is now y (yes)", "t": "t is now w (you write the answer)"}
+
+
 def recommended_letter(d):
-    """The menu letter that the analysis recommendation points to: `s` or `n`."""
+    """The menu letter that the analysis recommendation points to: `y` or `n`."""
     r = str((d or {}).get("recomendo") or "").strip().lower()
-    return {"sim": "s", "não": "n", "nao": "n"}.get(r)
+    return {"sim": "y", "não": "n", "nao": "n"}.get(r)
 
 
 WORDS_IN_QUESTION = 25
@@ -3461,7 +3466,7 @@ ROUTE_KIND_LABEL = {"owner-task": "Task for you",
 
 def legend_lines(chips, summary, delivered=False):
     """One line per key of the menu, in the menu's order: what each key does.
-    The mechanics never change (`s` returns the item to the queue, `n` keeps it);
+    The mechanics never change (`y` returns the item to the queue, `n` keeps it);
     what the owner needs is what that means for the WORK, which only the agent
     knows (WEGO-2381: "libero o In Review?" next to "sim = o item volta para a
     fila"). CS-3 (perguntas-da-largada-legiveis): the legend used to be a single
@@ -3471,15 +3476,15 @@ def legend_lines(chips, summary, delivered=False):
     yes = summary.get("se_sim")
     no = summary.get("se_nao")
     if delivered:
-        effect = {"s": "the task closes; the delivered work stays as it is",
+        effect = {"y": "the task closes; the delivered work stays as it is",
                   "n": "the task stays open and I only record what you say",
                   "d": "the task no longer applies and closes without being done"}
     else:
-        effect = {"s": (f"{yes}. The item goes back to the queue with your answer"
+        effect = {"y": (f"{yes}. The item goes back to the queue with your answer"
                         if yes else "the item goes back to the queue with your answer"),
                   "n": no or "it stays as it is and I only record what you say",
                   "d": "the item leaves the queue"}
-    effect.update({"t": "you write the answer in one line; the next run reads it",
+    effect.update({"w": "you write the answer in one line; the next run reads it",
                    "v": "you write the answer in the editor; the next run reads it",
                    "e": "shows the technical detail, written for agents",
                    "?": "I did not understand the question: it is recorded as "
@@ -3511,7 +3516,9 @@ def pending_action(item_states):
 
 
 def is_yes(r):
-    return str(r or "").strip().lower() in ("s", "sim", "y", "yes")
+    """Yes at a `[y/N]` confirmation: only `y` or `yes` (CS-4 of
+    docs/spec/teclas-em-ingles.md). `s` and `sim` count as no, like any other text."""
+    return str(r or "").strip().lower() in ("y", "yes")
 
 
 class NoAnswer(TimeoutError):
@@ -3651,8 +3658,8 @@ class Panel:
     7-space indent. On a terminal each question becomes a card with a left
     border, labels dimmed in a single column, the question in bold, the
     recommendation in color and the menu in chips with the recommended key in green.
-    The phrases that the keys answer (`Aterrisso agora?`, `[t] escrevo a
-    resposta`, `Quer acrescentar algo`) stay whole in a single color: it is
+    The phrases that the keys answer (`Land now?`, `[w] I write the
+    answer`, `Anything to add`) stay whole in a single color: it is
     by them that the pty tests know when to answer."""
 
     LABEL_WIDTH = 15
@@ -4190,7 +4197,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             # `d` exists because "sim" always means "back to the queue": on
             # 2026-11-02 the owner said sim to "descarto este pedido?" (WEGO-2463)
             # and the item went back to `pending`, for the next run to redo.
-            chips = [("s", "yes"), ("n", "no"), ("t", "I write the answer"),
+            chips = [("y", "yes"), ("n", "no"), ("w", "I write the answer"),
                      ("v", "write in the editor"),
                      ("d", "the task no longer applies" if delivered
                       else "discard the item")]
@@ -4200,12 +4207,16 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             screen.blank()
             screen.legend(legend_lines(chips, summary, delivered))
             prompt = screen.menu(chips, recommended_letter(d))
-            valid = {"s", "n", "t", "v", "d", "", "q", "?"} | ({"e"} if show else set())
+            valid = {"y", "n", "w", "v", "d", "", "q", "?"} | ({"e"} if show else set())
             while True:
                 raw = str(question(prompt))
                 r = raw.strip().lower()
-                r = {"sim": "s", "yes": "s", "y": "s",
-                     "não": "n", "nao": "n", "no": "n"}.get(r, r)
+                # CS-3 of teclas-em-ingles: the old keys are not answers. `s` and
+                # `t` get a line naming the new key; `sim` is just invalid.
+                if r in OLD_KEY_NOW:
+                    screen.key_error(OLD_KEY_NOW[r])
+                    continue
+                r = {"yes": "y", "não": "n", "nao": "n", "no": "n"}.get(r, r)
                 if r == "e" and show:
                     screen.evidence(ad.get("evidence"))
                     continue
@@ -4213,7 +4224,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                     # Loose text here used to go to later silently, and the answer
                     # the owner wrote vanished (decidir WEGO 2026-09-29-2059).
                     screen.key_error(f"\"{raw.strip()}\" is not one of the options; "
-                                       "to write an answer, type t first")
+                                       "to write an answer, type w first")
                     continue
                 if r == "v":
                     # CS-6: an editor that fails or saves nothing writes nothing;
@@ -4270,17 +4281,17 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 extra = edit_in_editor(ident, question_text or route, ad.get("title"))
             text = (("tarefa encerrada" if delivered else "descartado")
                     + f": {base}" + (f". {extra}" if extra else ""))
-        elif r in ("t", "v"):
+        elif r in ("w", "v"):
             text = (typed if r == "v" else
                     str(question(screen.follow_up("Your answer, in one line (the "
                                                   "next run reads this): "))).strip())
             if text:
                 give_back = is_yes(question(screen.follow_up(
                     "Send the item back to the queue with that answer? [y/N] ")))
-        elif r in ("s", "n"):
-            give_back = r == "s"
+        elif r in ("y", "n"):
+            give_back = r == "y"
             base = question_text or route or "unblock the item"
-            # There is always room for a comment, also on `s` with a
+            # There is always room for a comment, also on `y` with a
             # written question: the owner wanted to say something beyond yes/no and
             # the next run reads what he wrote (10/15).
             extra = str(question(screen.follow_up(
@@ -4912,9 +4923,9 @@ def ask_auto_land(wait=None, question=None):
 def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
     """CS-6, on a terminal at the launch: each preference the pre-read found, as one
     closed question with the agent's default. CS-10 (perguntas-da-largada-legiveis):
-    the answer is a key, as in the route cards. `s` accepts the default (`fonte`
+    the answer is a key, as in the route cards. `y` accepts the default (`fonte`
     "dono"); Enter keeps it (`fonte` stays "padrao"); `n` asks for one line saying
-    what to do instead and records "não: <question>. Em vez disso: <line>"; `t`
+    what to do instead and records "não: <question>. Em vez disso: <line>"; `w`
     records a free line. An empty follow-up line, or loose text at the menu, goes back
     to the menu with nothing recorded: loose text used to become the whole choice, and
     a bare "Não" reached the item's agent without saying what to do instead. No answer
@@ -4931,11 +4942,11 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
     total = of or len(prefs)
     if panel.enabled:
         panel.continue_panel(f"{len(prefs)} choice(s) the pre-read found")
-        panel.panel_note("s accepts the agent's default, n says what to do instead, "
-                         "t writes a free answer")
+        panel.panel_note("y accepts the agent's default, n says what to do instead, "
+                         "w writes a free answer")
     else:
-        print(f"\n── {len(prefs)} choice(s) the pre-read found: s accepts the agent's "
-              "default, n says what to do instead, t writes a free answer")
+        print(f"\n── {len(prefs)} choice(s) the pre-read found: y accepts the agent's "
+              "default, n says what to do instead, w writes a free answer")
 
     def stop(message):
         if panel.enabled:
@@ -4953,9 +4964,9 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
     def follow(text):
         return panel.follow_up(text) if panel.enabled else f"       {text}"
 
-    chips = [("s", "yes, go with the agent's default"),
+    chips = [("y", "yes, go with the agent's default"),
              ("n", "no, I say what to do instead"),
-             ("t", "I write the answer"),
+             ("w", "I write the answer"),
              ("Enter", "keep the agent's default")]
     for i, (ident, pref) in enumerate(prefs.items(), first):
         if panel.enabled:
@@ -4970,26 +4981,28 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
             # menu() prints the chips; the prompt it returns is not used, because
             # this screen keeps the "Your choice, in one line" anchor (pty tests).
             panel.menu(chips, "Enter")
-            prompt = panel._prompt("Your choice, in one line [s/n/t, Enter keeps "
+            prompt = panel._prompt("Your choice, in one line [y/n/w, Enter keeps "
                                    "the default]: ")
         else:
             if pref.get("pergunta"):
                 print(f"   {pref['pergunta']}")
             print(f"   If nobody answers, the agent goes with: {pref['padrao']}")
-            print("       [s] yes, go with the default · [n] no, I say what to do "
-                  "instead · [t] I write the answer")
-            prompt = ("   ▸ Your choice, in one line [s/n/t, Enter keeps the "
+            print("       [y] yes, go with the default · [n] no, I say what to do "
+                  "instead · [w] I write the answer")
+            prompt = ("   ▸ Your choice, in one line [y/n/w, Enter keeps the "
                       "default]: ")
         shown += 1
         try:
             while True:
                 raw = " ".join(str(question(prompt) or "").split())
                 key = raw.lower()
-                key = {"sim": "s", "yes": "s", "y": "s",
-                       "não": "n", "nao": "n", "no": "n"}.get(key, key)
+                if key in OLD_KEY_NOW:
+                    say(OLD_KEY_NOW[key])
+                    continue
+                key = {"yes": "y", "não": "n", "nao": "n", "no": "n"}.get(key, key)
                 if key == "":
                     break
-                if key == "s":
+                if key == "y":
                     pref.update(escolha=pref["padrao"], fonte="dono")
                     break
                 if key == "n":
@@ -5003,7 +5016,7 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
                     pref.update(escolha=f"não: {base}. Em vez disso: {line}",
                                 fonte="dono")
                     break
-                if key == "t":
+                if key == "w":
                     line = " ".join(str(question(follow(
                         "Your answer, in one line (the item's agent reads this) "
                         "[Enter goes back to the menu]: ")) or "").split())
@@ -5013,7 +5026,7 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
                     pref.update(escolha=line, fonte="dono")
                     break
                 say(f"\"{raw}\" is not one of the options; to write an answer, "
-                    "type t first")
+                    "type w first")
         except NoAnswer:
             stop(f"nobody answered in {(wait or 0) / 60:g} min; the remaining "
                  "choice(s) run with the agent's default")

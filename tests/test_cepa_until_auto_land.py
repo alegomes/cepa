@@ -480,8 +480,10 @@ def test_launch_on_terminal_asks_the_pre_authorization_and_y_records_it():
               state(root).get("estado") == "aterrissado", out[-1200:])
 
 
-def test_launch_on_terminal_enter_or_n_keeps_auto_land_false():
-    for reply in ("", "n"):
+def test_launch_on_terminal_enter_n_s_or_sim_keeps_auto_land_false():
+    # `s` and `sim` count as no at a [y/N] confirmation (CS-4 of
+    # docs/spec/teclas-em-ingles.md).
+    for reply in ("", "n", "s", "sim"):
         with tempfile.TemporaryDirectory() as tmp:
             root = build_repo(tmp, [item("a1")])
             with_origin(root)
@@ -572,7 +574,7 @@ def test_end_of_run_with_an_owner_item_still_asks_it_but_not_the_landing():
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis", "--no-resume-on-answer"],
-            str(root), inputs=[("[s] yes", "n"), ("Anything to add", "")],
+            str(root), inputs=[("[y] yes", "n"), ("Anything to add", "")],
             env=env, timeout=180)
         plain = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", out)
         check("com item do dono: sai 0", rc == 0, plain[-1500:])

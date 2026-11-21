@@ -128,7 +128,7 @@ def listed(lines):
 def test_red_test_one_created_item_ends_the_closing():
     lines, after = run_decide(
         [route("a1", {"titulo": "calibrar X", "precisa_do_dono": False})],
-        ["s", ""])
+        ["y", ""])
     created = [it for it in after if it["id"] not in ("a1",)]
     check("a resposta criou um item na fila", len(created) == 1, after)
     new_id = created[0]["id"] if created else "?"
@@ -143,7 +143,7 @@ def test_two_items_in_answer_order_and_the_waiting_one_marked():
     lines, after = run_decide(
         [route("a1", {"titulo": "calibrar X", "precisa_do_dono": False}),
          route("a2", {"titulo": "criar a credencial Y", "precisa_do_dono": True})],
-        ["s", "", "s", ""])
+        ["y", "", "y", ""])
     ids = [it["id"] for it in after if it["id"] not in ("a1", "a2")]
     check("as duas respostas criaram item", len(ids) == 2, ids)
     got = listed(lines)
@@ -157,7 +157,7 @@ def test_no_line_when_no_answer_creates_an_item():
     lines, after = run_decide(
         [route("a1", "nenhum"), route("a2", {"titulo": "calibrar X",
                                               "precisa_do_dono": False})],
-        ["s", "", "n", ""])
+        ["y", "", "n", ""])
     check("nenhum item novo na fila", len(after) == 2, [it["id"] for it in after])
     check("o fechamento existe", bool(lines), lines)
     check("...e não tem a linha de itens criados",
@@ -167,7 +167,7 @@ def test_no_line_when_no_answer_creates_an_item():
 def test_colored_terminal_has_the_same_line():
     lines, after = run_decide(
         [route("a1", {"titulo": "calibrar X", "precisa_do_dono": False})],
-        ["s", ""], color="sempre")
+        ["y", ""], color="sempre")
     new_id = next((it["id"] for it in after if it["id"] != "a1"), "?")
     check("no terminal colorido o fechamento também termina com o item criado",
           listed(lines) == [f"{new_id} — calibrar X"], "\n".join(lines))

@@ -67,8 +67,8 @@ def test_question_mark_rewrites_in_the_same_block_and_asks_again():
         env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_UNTIL_LEITOR=str(reader))
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), env=env,
-                         inputs=[("[t] I write the answer", "?"),
-                                 ("[t] I write the answer", "")], timeout=90)
+                         inputs=[("[w] I write the answer", "?"),
+                                 ("[w] I write the answer", "")], timeout=90)
         plain = ANSI.sub("", out)
         check("CS-7 pty: decide exits 0", rc == 0, plain[-1500:])
         check("CS-7 pty: the reader got the unclear-question job with the old question",
@@ -80,7 +80,7 @@ def test_question_mark_rewrites_in_the_same_block_and_asks_again():
         check("CS-7 pty: same block, the item header shows once",
               plain.count("· b1") == 1, plain)
         check("CS-7 pty: the panel asks for the answer again",
-              "[t] I write the answer" in after_mark, after_mark)
+              "[w] I write the answer" in after_mark, after_mark)
         now = _items(qfile)["b1"]
         check("CS-7 pty: queue.yaml carries the new question",
               now.get("owner_question") == NEW_Q, now)
@@ -113,8 +113,8 @@ def test_reader_without_item_declaration_records_nothing_and_warns():
         env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_UNTIL_LEITOR=str(reader))
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), env=env,
-                         inputs=[("[t] I write the answer", "?"),
-                                 ("[t] I write the answer", "")], timeout=90)
+                         inputs=[("[w] I write the answer", "?"),
+                                 ("[w] I write the answer", "")], timeout=90)
         plain = ANSI.sub("", out)
         check("CS-1 reader: decide exits 0 (no crash)", rc == 0, plain[-1500:])
         check("CS-1 reader: queue file unchanged, byte for byte",
@@ -152,7 +152,7 @@ def test_new_question_answered_records_the_new_text():
     deferred = [{"id": "b1", "title": "t", "reason": "human_pending",
                  "human_pending": ROUTE, "question": OLD_Q, "evidence": "x",
                  "route_kind": "external-block"}]
-    replies = iter(["?", "s", ""])
+    replies = iter(["?", "y", ""])
     new = {"route_kind": "owner-task", "question": NEW_Q, "if_yes": NEW_YES,
            "if_no": NEW_NO}
     m.decide(Path("/nao/existe"), "fila", None, {}, deferred, {},

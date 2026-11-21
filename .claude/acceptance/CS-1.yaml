@@ -1,21 +1,16 @@
 key: CS-1
+queue: teclas-em-ingles
 status: complete
-diff_range: 09cc73b..ac956f9
 criteria:
-  - id: CS-1
+  - id: AC1
+    text: "docs/spec/teclas-em-ingles.md CS-1 (cli): in a pseudo-terminal the cepa-until launch shows '[y] yes, go with the agent's default', '[w] I write the answer' and '[y/n/w, Enter keeps the default]', and no '[s]', '[t]' nor 's/n/t'; typing y records the agent's default with fonte 'dono' in the largada event; typing w and a line records that line"
     altitude: cli
-    surface: >
-      common/bin/cepa-plan ready executado diretamente pelo shebang
-      (#!/usr/bin/env python3), num repo git temporario com uma fila de um
-      item pending, com um shim python3 na frente do PATH que roda o
-      interpretador real com -S (sem site-packages, sem PyYAML).
-    test: tests/test_cepa_runs_without_pyyaml.py (main, bloco "CS-1")
-    layer: cli/subprocess via shebang, sem importar yaml no proprio teste
+    surface: "common/bin/cepa-until launch preference screen, run as a process through _pref_launch with tty_inputs (pty) and a fake reader"
+    test: "tests/test_cepa_until_preference_keys.py::test_cs1_the_launch_screen_shows_y_n_w_and_not_s_t, test_cs1_typing_y_records_the_default_with_fonte_dono, test_cs1_typing_w_and_a_line_records_that_line (plus in-process test_cs1_plain_screen_menu_line_uses_y_and_w and test_cs1_invalid_option_message_says_type_w_first for the non-panel screen)"
+    layer: cli-pty
     evidence: verified
-    run: "python3 tests/test_cepa_runs_without_pyyaml.py -> 'ok shim: this
-      python3 really has no PyYAML', 'ok CS-1 cepa-plan ready exit 0 without
-      PyYAML', 'ok CS-1 cepa-plan ready lists the ready item', 'ok CS-1 no
-      PyYAML on stderr' -> '✓ cepa runs without PyYAML' (exit 0, 4 checks
-      executados). Pre-mudanca: 09cc73b:common/bin/cepa-plan linha 260 saia
-      com 'cepa-plan precisa de PyYAML' e exit 2."
-    gap: null
+    run: "python3 tests/test_cepa_until_preference_keys.py -> 34 'ok' lines, no fail/skip, '✓ tudo verde'; python3 tests/test_cepa_until_launch_measure.py -> '✓ tudo verde' (adjusted to type y). test_cepa_until_decide.py not re-run by the auditor (per instruction; reported green by the supervisor)."
+    readings:
+      scope_of_absence_check: "The 'no [s]/[t]/s/n/t' assertion is applied to the slice of the output from 'choice(s) the pre-read found' to 'Enter keeps the default]', i.e. only the preference screen, deliberately excluding route cards (CS-2 scope). This matches the CS-1 surface."
+      old_keys: "s, t and sim are still silently mapped to y/w in ask_preferences (diff line key map). Intentional for CS-1; CS-3 and CS-4 own that behavior."
+gap: null

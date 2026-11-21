@@ -78,7 +78,7 @@ def test_every_other_site_that_prints_the_action():
 
     screen = []
     state_dict = {"estado": "fim", "acoes": [action]}
-    answers = iter(["s"])
+    answers = iter(["y"])
     applied, after = m.decide(
         Path("/nao/existe"), "fila", "run1", state_dict, [], {},
         question=lambda _p: next(answers), output=screen.append,

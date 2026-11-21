@@ -1,55 +1,55 @@
 schema_version: 2
 card: CS-2
 verdict: proven
-reviewed_at: 2026-11-20T12:00:00-03:00
-base_commit: 9f8658d
-head_commit: 5a1737a
+reviewed_at: 2026-11-20T17:10:00-03:00
+base_commit: 6b09f08
+head_commit: 86c7df7
 issue_type: Task
+queue: teclas-em-ingles
 scope:
-  base_commit_resolved: true
-  claimed_surface: cli
   changed_classes:
-    - { class: "common/bin/cepa-dor", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/bin/cepa-until", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/bin/cepa-until-digest", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "maestro/bin/maestro-poll", module: maestro, external_observable: true, substituted_by_double: null }
-    - { class: "maestro/bin/maestro-fork-settings", module: maestro, external_observable: true, substituted_by_double: null }
-    - { class: "maestro/bin/maestro-programs", module: maestro, external_observable: true, substituted_by_double: null }
-    - { class: "maestro/bin/maestro-wave-state", module: maestro, external_observable: true, substituted_by_double: null }
-    - { class: "maestro/bin/maestro-prune", module: maestro, external_observable: true, substituted_by_double: null }
-    - { class: "board-flow/bin/waivers.py", module: board-flow, external_observable: true, substituted_by_double: null }
-    - { class: "board-flow/bin/classify_needs_human.py", module: board-flow, external_observable: true, substituted_by_double: null }
-    - { class: "board-flow/board-flow-fleet-validate.sh", module: board-flow, external_observable: true, substituted_by_double: null }
+    - class: "common/bin/cepa-until recommended_letter, legend_lines and the decide menu loop (chips, valid set, alias dict, 'type w first' message, ('w','v') and ('y','n') branches, give_back = r == 'y')"
+      module: common
+      external_observable: true
+      substituted_by_double: null   # the real cepa-until decide runs in a pty; the only double is the fake claude binary at the far boundary. The plain-rendering check calls decide() in-process with a fake reader, which is the same code
+  base_commit_resolved: true
+  note: "Out of scope by instruction: s/sim/t still silently aliased to the new keys, is_yes untouched (CS-3/CS-4, later items)."
 levels:
   l3_load_bearing:
     technique: perturbation
     pit:
       status: n/a
       results:
-        - "Python CLI repo, no PIT/Maven"
+        - "Python repo, no PIT"
     perturbation:
       status: pass
       results:
-        - "baseline @5a1737a: python3 tests/test_cepa_runs_without_pyyaml.py -> exit 0, all cases ok (GREEN first)"
-        - "cepa-dor: sed line 59 (vendor insert) -> pass: 2 FAIL (no 'PyYAML' on stderr; read the plan)"
-        - "cepa-until line 269 -> 2 FAIL (stderr; dry-run read the queue)"
-        - "cepa-until-digest line 40 -> 1 FAIL (digest shows item status from the YAML). Its 'no PyYAML' stderr check stays ok because the script degrades silently; the content check is what guards it"
-        - "maestro-poll line 36 -> 2 FAIL; maestro-fork-settings line 47 -> 2 FAIL; maestro-prune line 63 -> 2 FAIL"
-        - "maestro-programs alone (line 52) -> 2 FAIL; maestro-wave-state alone (line 39) -> 2 FAIL; both together -> 4 FAIL. Not an equivalent mutant: each insert is independently load-bearing"
-        - "waivers.py lines 38-39 -> 2 FAIL; classify_needs_human.py lines 30-31 -> 2 FAIL; board-flow-fleet-validate.sh line 67 (sys.path.insert(0, sys.argv[2])) -> 2 FAIL"
-        - "vendor identity: git ls-files blob hashes of common/_vendor/yaml == maestro/_vendor/yaml == board-flow/_vendor/yaml (18 files each, BLOBS_IDENTICAL)"
-        - "mv maestro/_vendor/yaml away -> exactly the 10 maestro cases FAIL (5 scripts x 2), nothing else"
-        - "mv board-flow/_vendor/yaml away -> exactly the 6 board-flow cases FAIL (3 files x 2), nothing else"
-        - "each run in a throwaway detached worktree under mktemp, restored with git checkout between runs, removed at the end"
+        - "baseline 86c7df7 (throwaway detached worktree /tmp/proof-tei-CS-2): python3 tests/test_cepa_until_decide_keys.py -> exit 0, 'tudo verde', 17 checks ok (about 10 s)"
+        - "P1 recommended_letter ('sim' -> 's'): 2 FAIL 'cs2 chips: [y] yes (recommended)', 'cs2 plain: [y] yes (recommended) and [w] chips'"
+        - "P2 legend_lines effect key 'y' -> 's': 2 FAIL 'cs2 legend: a line starting with `y = `', 'cs2 plain: legend lines y = and w ='"
+        - "P3 legend_lines effect key 'w' -> 't': 2 FAIL 'cs2 legend: a line starting with `w = `', 'cs2 plain: legend lines ...'"
+        - "P4 chip ('y','yes') -> ('s','yes'): 6 FAIL (chip [y], legend y =, no [s], and the 3 plain checks)"
+        - "P5 chip ('w', ...) -> ('t', ...): 6 FAIL (chip [w], legend w =, no [t], and the 3 plain checks)"
+        - "P6 valid set 'y' -> 'zz': 2 FAIL 'cs2 y: the item went back to the queue', 'cs2 y: the evidence says sim: ...' (y reported as not an option; the pty waited the 90 s test timeout, then the check failed)"
+        - "P7 message 'type w first' -> 'type t first': 2 FAIL 'cs2 invalid: says type w first', 'cs2 invalid: no type t first'"
+        - "P8 branch ('w','v') -> ('t','v'): 2 FAIL 'cs2 w: the item went back to the queue', 'cs2 w: the evidence holds the line'"
+        - "P9 branch ('y','n') -> ('s','n'): 2 FAIL 'cs2 y: the item went back to the queue', 'cs2 y: the evidence says sim: ...'"
+        - "P10 give_back = r == 'y' -> r == 's': 2 FAIL 'cs2 y: the item went back to the queue' (evidence became 'não: ...'), 'cs2 y: the evidence says sim: ...'"
+        - "SURVIVED (not RED), out of scope by instruction: S1 alias dict {'sim','yes','s','t'} remapped to 'n' (exit 0, tudo verde)"
   l2_coverage:
     status: pass
     uncovered_lines: []
-    run: "no coverage tool; structural: each of the 11 inserts is reached by its own cs2() case, and removing it turned that case RED (see perturbation results)"
+    run: "every changed line named by the criterion (recommended letter, legend keys, chips, valid set, y/w branches, give_back, invalid-option message) turned a test_cs2_* check RED when broken, so each is reached at the cli altitude (pty) and the plain rendering"
   l4_adversarial_input:
     status: n/a
-    reason: "the diff only changes where the yaml library is loaded from (sys.path order); it parses no new input and changes no parsing logic, and no api-rest module is touched"
+    reason: "the diff swaps the letters of a closed menu in a local CLI; it opens no new input surface (no parser of external data, no api-rest module); legacy keys are CS-3's scope"
     findings: []
   bugfix_regression_red_at_base:
-    status: pass
-    run: "detached worktree at 9f8658d + test file from 5a1737a: python3 tests/test_cepa_runs_without_pyyaml.py -> 21 FAIL (2 per file, 1 for cepa-until-digest), 'CS-2 ...' all 11 files RED at base; the CS-1 cases stay ok"
-routing_reason: "All 11 vendor path inserts are load-bearing: removing any one turns that file's case RED, removing the maestro or board-flow vendor copy turns exactly that plugin's cases RED, and all 11 cases are RED at base. No test double replaces a changed script (the shim only hides the system PyYAML). PROVEN."
+    status: n/a
+    run: "issue type Task, not Bug"
+notes:
+  - "S1: the legacy aliases (s, sim, yes, t) are guarded by no CS-2 check. They are out of scope (CS-3 will turn s/t into errors); a note, not UNPROVEN. Whoever does CS-3 must add the check that closes them."
+  - "P6 is RED through a 90 s pty timeout inside the test (on_tty reports no answer), not through an exit code from a hang of the whole run; no outer alarm fired."
+  - "The optional tests/test_cepa_until_legend_per_key.py was not run; the full suite belongs to the supervisor."
+  - "P3/P4 were launched concurrently on the same throwaway worktree by mistake; each result is consistent with its own perturbation (P3 only w-legend failures, P4 only y failures), and all later perturbations ran one at a time."
+routing_reason: "Every changed behavior in the criterion (recommended letter y, legend lines y = and w =, chips [y] yes (recommended) and [w] I write the answer, no [s]/[t]/s =/t =, y returns the item with 'sim: ...', w plus a line plus y returns it with that line, 'type w first') goes RED in the pty and plain-rendering checks when broken, and the test is green at head with 17 checks. The only survivor is the legacy alias dict, out of scope by instruction. PROVEN."

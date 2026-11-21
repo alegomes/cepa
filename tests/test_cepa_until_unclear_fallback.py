@@ -58,8 +58,8 @@ def test_hung_reader_leaves_the_item_for_later_and_the_panel_goes_on():
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         start = time.monotonic()
         rc, out = on_tty(cmd, str(root), env=env,
-                         inputs=[("[t] I write the answer", "?"),
-                                 ("[t] I write the answer", "")], timeout=120)
+                         inputs=[("[w] I write the answer", "?"),
+                                 ("[w] I write the answer", "")], timeout=120)
         took = time.monotonic() - start
         plain = ANSI.sub("", out)
         check("CS-8 pty: decide exits 0", rc == 0, plain[-1500:])

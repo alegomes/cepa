@@ -1,64 +1,49 @@
 schema_version: 2
 card: CS-3
 verdict: proven
-reviewed_at: 2026-11-20T12:30:00-03:00
-base_commit: 5a1737a
-head_commit: 738a16b
+reviewed_at: 2026-11-20T18:00:00-03:00
+base_commit: 2a4289f
+head_commit: 3cfbb7e
 issue_type: Task
+queue: teclas-em-ingles
 scope:
-  queue: pyyaml
   changed_classes:
-    - { class: "common/hooks/merge-truth-gate.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/hooks/acceptance-gate.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "build-hex/hooks/proof-verdict-guard.py", module: build-hex, external_observable: true, substituted_by_double: null }
-    - { class: "common/hooks/_jiramut.py", module: common, external_observable: false, substituted_by_double: null }
-    - { class: "common/hooks/_autonomy.py", module: common, external_observable: false, substituted_by_double: null }
-    - { class: "common/hooks/ui-proof-verdict-guard.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/hooks/jira-create-fields-gate.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/hooks/reflection-gate.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "common/hooks/expertise-append.py", module: common, external_observable: true, substituted_by_double: null }
-    - { class: "build-hex/_vendor/yaml (verbatim copy of common/_vendor/yaml, third-party)", module: build-hex, external_observable: false, substituted_by_double: null }
+    - class: "common/bin/cepa-until OLD_KEY_NOW, the `if r in OLD_KEY_NOW` branch in decide, the `if key in OLD_KEY_NOW` branch in ask_preferences, and the removal of sim/s/t from the two alias dicts"
+      module: common
+      external_observable: true
+      substituted_by_double: null   # the real cepa-until decide / ask_preferences run in a pty and in-process with a fake reader; the only double is the fake claude binary at the far boundary
   base_commit_resolved: true
-  notes: "Not a Quarkus repo: tests are plain scripts, no PIT. Perturbation in throwaway detached worktrees under the scratchpad (removed at the end). The only double is the python3 shim (execs the real interpreter with -S, so no PyYAML): it is the environment under test, not a stand-in for any changed class. acceptance-gate and merge-truth-gate cases run from a temp copy of common with _jiramut's insertion stripped, so their path can only come from their own line."
 levels:
   l3_load_bearing:
     technique: perturbation
     pit:
       status: n/a
       results:
-        - "no PIT/Maven in this repo; perturbation used instead"
+        - "Python repo, no PIT"
     perturbation:
       status: pass
       results:
-        - "baseline head 738a16b: python3 tests/test_cepa_runs_without_pyyaml.py -> '✓ cepa runs without PyYAML', all 12 CS-3 lines ok"
-        - "strip merge-truth-gate line -> RED only 'CS-3 merge-truth-gate read board-flow.yaml (51 -> done is blocked)' (exit 0 instead of 2)"
-        - "strip acceptance-gate line -> RED only 'CS-3 acceptance-gate read board-flow.yaml (31 -> in_progress passes)' (blocked, exit 2)"
-        - "strip build-hex/hooks/proof-verdict-guard line -> RED only 'CS-3 build-hex proof-verdict-guard parsed the proof with yaml (blocks)' (exit 0)"
-        - "strip _jiramut line -> RED 'CS-3 _jiramut.logical_status reads status_map from board-flow.yaml' (plus the two isolation guards, expected: they assert the line exists). The two event cases strip this line on purpose; its own line is covered by the logical_status case"
-        - "strip _autonomy line -> RED only 'CS-3 _autonomy._read_yaml returns the file content'"
-        - "remove 'import sys' from _autonomy.py (line 38, added by the diff) -> RED only 'CS-3 _autonomy._read_yaml returns the file content' (NameError on sys); the import is load-bearing"
-        - "strip ui-proof-verdict-guard line -> RED only 'CS-3 ui-proof-verdict-guard.parse_with_yaml reads the verdict'"
-        - "strip jira-create-fields-gate line -> RED only 'CS-3 jira-create-fields-gate._load_rules reads required_fields'"
-        - "strip reflection-gate line -> RED only 'CS-3 reflection-gate.load parses YAML'"
-        - "strip expertise-append line -> RED only 'CS-3 expertise-append sees yaml (_HAVE_YAML)'"
-        - "rm -rf build-hex/_vendor -> RED only 'CS-3 build-hex proof-verdict-guard parsed the proof with yaml (blocks)'; diff -r build-hex/_vendor/yaml common/_vendor/yaml -> identical (verbatim copy, not mutated line by line)"
-        - "9 line perturbations + 1 import perturbation + 1 folder removal, all attributed to the matching case; none left green"
-        - "NOTE (not a gap): six cases are function-level (_jiramut, _autonomy, ui-proof-verdict-guard, expertise-append, reflection-gate, jira-create-fields-gate). Event-level would be feasible for ui-proof-verdict-guard, jira-create-fields-gate, reflection-gate and expertise-append; _jiramut and _autonomy are libraries with no event. The four hooks named by the criterion (acceptance-gate, merge-truth-gate, _jiramut via the two event cases + its own function case, proof-verdict-guard) have event-level or equivalent proof, so this does not block."
+        - "baseline 3cfbb7e (throwaway detached worktree /tmp/proof-tei-CS-3): python3 tests/test_cepa_until_decide_keys.py -> exit 0, 'tudo verde', 23 ok checks; python3 tests/test_cepa_until_preference_keys.py -> exit 0, 'tudo verde', 50 ok checks"
+        - "P1 OLD_KEY_NOW key 's' -> 'x': RED in both files: 'cs3 s: the line says `s is now y`', 'cs3 panel/plain: the lines name the new keys'"
+        - "P2 OLD_KEY_NOW key 't' -> 'x': RED in both files: 'cs3 t: the line says `t is now w`', 'cs3 panel/plain: the lines name the new keys'"
+        - "P3 decide branch disabled (`if False and r in OLD_KEY_NOW`): decide file RED ('cs3 s: the line says s is now y', 'cs3 t: ...'); preference file stays green, as expected (separate branch)"
+        - "P4 ask_preferences branch disabled (`if False and key in OLD_KEY_NOW`): preference file RED ('cs3 panel/plain: the lines name the new keys', 'cs3 s', 'cs3 t'); decide file stays green, as expected"
+        - "P5 'sim' alias restored in the decide dict: RED 'cs3 sim: the invalid-option message says `type w first`', 'cs3: the queue did not change' (sim returned the item to the queue)"
+        - "P6 'sim' alias restored in the ask_preferences dict: RED 7 FAIL ('cs3 panel/plain: fonte stays padrao', 'the menu asked four times', 'cs3 sim: ... type w first', 'cs3: the menu asked again after each old key', 'cs3: nothing recorded, fonte stays padrao')"
+        - "SURVIVED (equivalent, not RED): restoring 's' or 't' in the alias dicts is shadowed by the OLD_KEY_NOW branch that runs first, so behavior cannot change; not perturbed, noted below"
+    # Each perturbation ran one at a time on the throwaway worktree and was restored with git checkout before the next.
   l2_coverage:
     status: pass
     uncovered_lines: []
-    run: "each changed production line is one module-level statement executed on import; stripping each one turned a case RED (see perturbation results), which proves it is reached by the covering test. No coverage tool wired; reachability shown by perturbation."
+    run: "every changed behavior line (constant keys s and t, both branches, sim now invalid in both menus) turned a cs3 check RED when broken, so each is reached at the cli altitude (pty) and the plain rendering"
   l4_adversarial_input:
     status: n/a
-    reason: "the diff only adds a sys.path.insert line (and import sys) to existing hooks and a vendored library copy; it parses no new input and changes no input handling. No api-rest module is touched."
+    reason: "the diff only changes which letters of a closed local menu are accepted; it opens no new input surface (no parser of external data, no api-rest module)"
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-    run: "issue type is Task, not Bug; red-at-base was still checked: head test file copied into detached worktree at 5a1737a (no build-hex/_vendor there) -> '✗ 11 falha(s)': all 9 hook cases RED plus the 2 isolation guards, no CS-3 case green at base"
-neighbors:
-  - "python3 tests/test_acceptance_gate.py -> all acceptance-gate tests passed (exit 0)"
-  - "python3 tests/test_merge_truth_gate.py -> all merge-truth-gate tests passed (exit 0)"
-  - "python3 tests/test_isolated_telemetry.py -> all telemetria-isolada tests passed (exit 0)"
-  - "python3 tests/test_cepa_runs_without_pyyaml.py -> ✓ cepa runs without PyYAML (exit 0)"
-  - "every run used CEPA_TELEMETRY_DIR pointing at a scratchpad folder"
-routing_reason: "Every added insertion line, the added 'import sys' in _autonomy and the build-hex/_vendor copy each turn exactly their own case RED when removed, and the whole CS-3 set is RED at base 5a1737a and green at head. The criterion's hooks (acceptance-gate, merge-truth-gate, proof-verdict-guard) are proven at event level with the real hook and no double for any changed class. PROVEN."
+    run: "issue type Task, not Bug. Behavior check at base: with common/bin/cepa-until from 2a4289f and the cs3 tests from 3cfbb7e, decide file -> 4 FAIL (s line, t line, sim 'type w first', 'queue did not change'); preference file -> 11 FAIL (panel/plain fonte, lines, asked four times; s, t, sim lines; asked again; nothing recorded). The old behavior (s/sim returned the item, t opened the answer line) is therefore what the cs3 tests reject"
+notes:
+  - "Removing 's' and 't' from the alias dicts is not independently perturbable: the OLD_KEY_NOW branch runs before the dict lookup, so restoring them is dead code. The 'sim' removal is the only dict change with an effect, and it is proven (P5, P6)."
+  - "Only the two covering files were run; the full suite belongs to the supervisor. Other test files in the diff only swap answers s->y, t->w and were not perturbed."
+routing_reason: "Every changed behavior line (the s and t entries of OLD_KEY_NOW, the decide branch, the ask_preferences branch, sim no longer an alias in either menu) goes RED in its covering cs3 test when broken, both files are green at head (23 and 50 checks), and the cs3 tests are red at the base code (4 and 11 FAIL). The only survivors are dead-code equivalents. PROVEN."

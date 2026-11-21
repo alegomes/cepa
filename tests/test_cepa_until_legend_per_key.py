@@ -23,7 +23,7 @@ from test_cepa_until import CEPA_UNTIL, build_repo, item  # noqa: E402
 from test_cepa_until_decide import (  # noqa: E402
     ANSI, FAILURES, check, load_module, on_tty)
 
-LEGEND_LINE = re.compile(r"^(s|n|t|v|d|e|Enter|q) = \S")
+LEGEND_LINE = re.compile(r"^(y|n|w|v|d|e|Enter|q) = \S")
 
 
 def _legend_keys(block_lines):
@@ -37,10 +37,10 @@ def _legend_keys(block_lines):
 
 
 def _menu_keys(block_lines):
-    """The keys of the menu chips (`[s] yes · [n] no · ...`)."""
+    """The keys of the menu chips (`[y] yes · [n] no · ...`)."""
     keys = []
     for l in block_lines:
-        if "[q] quit" in l or "[Enter] later" in l or "[s] yes" in l:
+        if "[q] quit" in l or "[Enter] later" in l or "[y] yes" in l:
             keys += re.findall(r"\[(\w+)\]", l)
     return keys
 
@@ -70,7 +70,7 @@ def test_decide_on_terminal_has_no_done_already_and_one_legend_line_per_key():
         root = build_repo(tmp, [x1, d1])
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), inputs=[
-            ("[t] I write the answer", ""), ("[t] I write the answer", "")])
+            ("[w] I write the answer", ""), ("[w] I write the answer", "")])
         plain = ANSI.sub("", out)
         flat = " ".join(plain.split())
         check("CS-3 pty: decide exits 0", rc == 0, plain[-1500:])
@@ -134,19 +134,19 @@ def test_decide_without_terminal_legend_is_one_line_per_key():
               _legend_keys(block) == menu, (block, prompts[n]))
     w1 = text.split("] w1\n")[1]
     check("CS-3 text: the yes line says what yes does to the work",
-          "s = o trabalho vai para revisão" in w1, w1)
+          "y = o trabalho vai para revisão" in w1, w1)
     check("CS-3 text: the no line says what no does to the work",
           "n = o trabalho espera o defeito" in w1, w1)
     d1 = text.split("] d1\n")[1]
     check("CS-3 text: a delivered route's legend speaks of the task, not the item "
           "(proof survivor P7)",
-          "s = the task closes; the delivered work stays as it is" in d1
+          "y = the task closes; the delivered work stays as it is" in d1
           and "n = the task stays open and I only record what you say" in d1
           and "d = the task no longer applies and closes without being done" in d1
           and "the item leaves the queue" not in d1, d1)
     x1 = text.split("] x1\n")[1].split("━━ [")[0]
     check("CS-3 text: an open route's legend speaks of the item",
-          "s = the item goes back to the queue with your answer" in x1
+          "y = the item goes back to the queue with your answer" in x1
           and "d = the item leaves the queue" in x1
           and "e = shows the technical detail" in x1, x1)
 
@@ -167,7 +167,7 @@ def test_decide_on_terminal_wraps_a_long_legend_line_under_its_own_text():
              question=lambda _p: "", output=screen.append,
              answer=lambda i, t, keep=False, drop=False: (0, "ok"))
     lines = ANSI.sub("", "\n".join(screen)).splitlines()
-    first = next((i for i, l in enumerate(lines) if l.startswith("│  s = ")), None)
+    first = next((i for i, l in enumerate(lines) if l.startswith("│  y = ")), None)
     check("CS-3 card: the s line opens at the key column", first is not None, lines)
     rest = []
     for l in lines[(first or 0) + 1:]:
