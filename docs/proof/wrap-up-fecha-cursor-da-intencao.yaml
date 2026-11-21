@@ -1,0 +1,67 @@
+schema_version: 2
+card: wrap-up-fecha-cursor-da-intencao
+verdict: needs-human
+reviewed_at: 2026-11-21T17:45:00-03:00
+base_commit: e618340
+head_commit: 7290d1b
+issue_type: Story
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-intent (close_session landed branch, land_session, --landed flag + refusals)"
+      module: common-bin
+      external_observable: true       # surface = CLI: argv -> .claude/session-intent + telemetry ledger
+      substituted_by_double: null     # tests run the real script via subprocess
+    - class: "common/commands/wrap-up.md (step 0 state read, confirm-screen intent line, L6b)"
+      module: common-commands
+      external_observable: true       # surface = the instruction text the wrap-up agent follows; tested by string/ordering checks
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: absent
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at HEAD 7290d1b (detached worktree /tmp/proof-wuf, removed): python3 tests/test_intent_telemetry.py -> exit 0, 'all intent telemetria tests passed' (97 ok lines); python3 tests/test_cepa_intent.py -> exit 0, 'tudo ok'"
+        - "All perturbations restore the two files from 7290d1b after each run; each run executes both test files."
+        - "KILLED P1 close_session `if landed:` -> `if False:` -> exit 1, 7 FAIL"
+        - "KILLED P2 cursor write m+1 -> step -> exit 1, 4 FAIL"
+        - "KILLED P3 write_intent(root, d) -> pass -> exit 1, 4 FAIL"
+        - "KILLED P4 event via=wrap-up -> x -> exit 1, 3 FAIL"
+        - "KILLED P5 event de=step -> de=m -> exit 1, 2 FAIL"
+        - "KILLED P6 event passo=m+1 -> passo=m -> exit 1, 1 FAIL"
+        - "KILLED P7 fulfilled = False (previous survivor) -> exit 1, 1 FAIL"
+        - "KILLED P7b fulfilled = True -> exit 1, 4 FAIL"
+        - "KILLED P8 refusal of --landed outside close removed (`if a.step ... :` -> `if False:`) -> exit 1/1, 2 FAIL"
+        - "KILLED P9 main() passes landed=False -> exit 1, 7 FAIL"
+        - "KILLED P10 emitted event name changed -> exit 1, 3 FAIL"
+        - "KILLED P11 land_session history copy -> `d[\"history\"] = []` (previous survivor) -> exit 1, 1 FAIL"
+        - "KILLED P12 close refusal of --step removed from the condition -> exit 1/1, 2 FAIL"
+        - "KILLED W1 wrap-up.md: `close --landed` -> `close` -> exit 1, 1 FAIL"
+        - "KILLED W2 wrap-up.md step 0: `cepa-intent\" state` -> `show` (previous survivor) -> exit 1, 1 FAIL"
+        - "KILLED W3 wrap-up.md: confirm-screen `intent:` line removed -> exit 1, 1 FAIL"
+        - "KILLED W4 wrap-up.md: `cepa-intent\" --step` path -> `show` -> exit 1, 1 FAIL"
+        - "KILLED W5 wrap-up.md: L7 heading renamed (L6b unbounded) -> exit 1, 1 FAIL"
+        - "KILLED W6 wrap-up.md: L6b gate `only after L5 and L6 succeeded` weakened -> exit 1, 1 FAIL"
+        - "KILLED W7 wrap-up.md: `Merge conflict in L5` text altered -> exit 1, 1 FAIL"
+        - "KILLED W8 wrap-up.md: `does not run` -> `may run` -> exit 1, 1 FAIL"
+        - "KILLED W9 wrap-up.md: step 0 heading renamed -> exit 1, 1 FAIL"
+        - "KILLED W10 wrap-up.md: `close --landed` inserted in the Discard path -> exit 1, 1 FAIL"
+        - "KILLED W11 wrap-up.md: left-out-step command `--step <N>` -> `close` -> exit 1, 1 FAIL"
+        - "KILLED W12 wrap-up.md: step 0 `opening:` marker renamed -> exit 1, 1 FAIL"
+        - "21 + 5 = 26 perturbations, 26 killed, 0 survived. The three previous survivors (P11, W2, P7) are now killed."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool exists in this Python harness (same as docs/proof/sondagem-l4-nao-grava-last-build.yaml); line coverage not measured. All-branch perturbation above is structural evidence only."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff adds one boolean CLI flag to a local script run by the wrap-up agent and edits markdown instructions; no HTTP endpoint, no api-rest module, no new external input boundary. Flag misuse (--landed outside close, with --step) is refused and covered (P8, P12 killed)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "HEAD tests/test_intent_telemetry.py against base cepa-intent + wrap-up.md (git checkout e618340 -- those two files in a detached worktree at 7290d1b): exit 1, 18 output lines containing FAIL; at HEAD: exit 0, 97 ok lines"
+routing_reason: "Red at base (exit 1, 18 FAIL lines), green at head (exit 0 on both test files), and all 26 perturbations go RED, including the three earlier survivors (history copy, step-0 state read, already-fulfilled guard). The only open item is L2 line coverage, which cannot be measured because the repo has no coverage tool; an assumed level makes proven unavailable, so the verdict is needs-human. Suggested decision for the human: accept all-branch perturbation (26/26 killed) as the L2 substitute in this repo, as proposed for sondagem-l4-nao-grava-last-build."
