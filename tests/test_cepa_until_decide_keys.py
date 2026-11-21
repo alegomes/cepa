@@ -127,6 +127,52 @@ def test_cs3_old_keys_get_a_line_naming_the_new_key_and_record_nothing():
               out[-1500:])
 
 
+def test_cs4_s_at_send_back_counts_as_no_and_keeps_the_line():
+    """CS-4: `w`, a line, then `s` at "Send the item back to the queue with that
+    answer? [y/N]" does not send the item back; the line is still recorded."""
+    rc, out, a1 = _decide([(ANCHOR, "w"), ("Your answer", "vira checklist"),
+                           ("Send the item back to the queue", "s")])
+    check("cs4 s at [y/N]: the item stays out of the queue",
+          rc == 0 and a1["status"] != "pending", (rc, a1, out[-1200:]))
+    check("cs4 s at [y/N]: the line is recorded", "vira checklist" in a1["evidence"], a1)
+
+
+def test_cs4_sim_at_land_now_does_not_land():
+    """CS-4: with a landing pending, `sim` at "Land now?" does not land the branch."""
+    from test_cepa_until_land import with_origin, state
+    from test_cepa_until_run_branch import WORKS, VERIFY, git
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1")])
+        with_origin(root)
+        binv = fake_claude(tmp, WORKS)
+        env = base.env_do_run(tmp, root, binv)
+        rc, out = base.on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--verify", VERIFY, "--no-analysis"], str(root),
+            env=env, timeout=240)
+        run_id = next((root / ".claude/programs/fila/until").glob(
+            "*.estado.json")).name.removesuffix(".estado.json")
+        rc, out = base.on_tty(
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
+             "--repo", str(root)], str(root),
+            inputs=[("Land now?", "sim")], env=env, timeout=240)
+        check("cs4 sim at Land now?: the prompt was shown", "Land now?" in ANSI.sub("", out),
+              out[-1500:])
+        log = git(root, "log", "--format=%s", "HEAD").splitlines()
+        check("cs4 sim at Land now?: the item's commit does not reach main",
+              "a1" not in log, str(log))
+        check("cs4 sim at Land now?: the run is not landed",
+              state(root).get("estado") != "aterrissado", str(state(root)))
+
+
+def test_cs4_is_yes_takes_only_y_and_yes():
+    m = base.load_module()
+    for r in ("y", "Y", " yes ", "YES"):
+        check(f"cs4 is_yes({r!r}) is yes", m.is_yes(r))
+    for r in ("s", "S", "sim", "Sim", "", "n", "no", "não", None):
+        check(f"cs4 is_yes({r!r}) is no", not m.is_yes(r))
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

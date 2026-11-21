@@ -1312,7 +1312,7 @@ def test_cs7_decide_that_lands_commits_the_run_paths_already_dirty():
         before = _git(root, "rev-parse", "HEAD").strip()
         env = dict(os.environ, CEPA_WORKTREE_HOME=str(root.parent / "worktrees"))
         rc, out = dec.on_tty(_decide_cmd(root, f"fila/{run_id}"), str(root),
-                             inputs=[("Land now?", "s")], env=env, timeout=180)
+                             inputs=[("Land now?", "y")], env=env, timeout=180)
         check("CS-7 decide aterrissa: sai 0", rc == 0, out[-600:])
         check("CS-7 decide aterrissa: o run foi aterrissado",
               _git(root, "rev-list", "--count", f"{before}..HEAD").strip() != "0",
@@ -1412,7 +1412,7 @@ def test_cs7_decide_that_lands_makes_exactly_one_records_commit():
         before = _git(root, "rev-parse", "HEAD").strip()
         env = dict(os.environ, CEPA_WORKTREE_HOME=str(root.parent / "worktrees"))
         rc, out = dec.on_tty(_decide_cmd(root, f"fila/{run_id}"), str(root),
-                             inputs=[("Land now?", "s")], env=env, timeout=180)
+                             inputs=[("Land now?", "y")], env=env, timeout=180)
         check("CS-7 decide 1 commit: sai 0", rc == 0, out[-600:])
         subjects = _git(root, "log", "--format=%s", f"{before}..HEAD").splitlines()
         mine = [x for x in subjects if x.startswith(f"until fila/{run_id} ")]

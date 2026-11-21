@@ -104,7 +104,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
 
     def question_text(p):
         prompts.append(p)
-        return {1: "s", 2: "n", 3: "", 4: ""}.get(len(prompts), "")
+        return {1: "y", 2: "n", 3: "", 4: ""}.get(len(prompts), "")
     m.decide(Path("/nao/existe"), "fila", "run1", state_dict, deferred_ones, analysis,
              question=question_text, output=screen.append,
              answer=lambda i, t, keep=False: (0, f"{i} voltou"),
@@ -154,7 +154,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
 def _decide_pure(deferred_ones, analysis, state_dict):
     m = load_module()
     screen = []
-    answers = iter(["s", "n", "", ""])
+    answers = iter(["y", "n", "", ""])
     m.decide(Path("/nao/existe"), "fila", "run1", state_dict, deferred_ones, analysis,
              question=lambda _p: next(answers, ""), output=screen.append,
              answer=lambda i, t, keep=False: (0, "ok"),
@@ -570,7 +570,7 @@ def test_decide_asks_and_applies_each_answer():
           analysis["itens"]["W-1"]["pergunta"] == "Movo para o checklist?",
           analysis)
     state_dict = {"acoes": [{"id": "aterrissar", "frase": "leva 5 commits"}]}
-    answers = iter(["s", "w", "vira checklist", "s", "", "e", "q"])
+    answers = iter(["y", "w", "vira checklist", "y", "", "e", "q"])
     screen, answered, landed = [], [], []
     applied, after = m.decide(
         Path("/nao/existe"), "fila", "run1", state_dict, deferred_ones, analysis,
@@ -578,7 +578,7 @@ def test_decide_asks_and_applies_each_answer():
         answer=lambda i, t: (answered.append((i, t)), (0, f"{i} ok"))[1],
         land=lambda: landed.append(1) or 0)
     plain_text = "\n".join(screen)
-    check("pergunta aterrissar e aterrissa com s", landed == [1], plain_text)
+    check("pergunta aterrissar e aterrissa com y", landed == [1], plain_text)
     check("...mostrando a recomendação da análise",
           "Recommend yes: build verde" in plain_text, plain_text)
     check("a pergunta da análise aparece no lugar da evidência",
@@ -799,7 +799,7 @@ def test_run_on_terminal_ends_asking_and_applies():
              "--no-resume-on-answer"], str(root),
             inputs=[(("[w] I write the answer", "w")),
                       ("Your answer", "vira item do checklist"),
-                      ("Send the item back to the queue", "s")], env=env)
+                      ("Send the item back to the queue", "y")], env=env)
         check("o run sai 0", rc == 0, out[-1500:])
         check("pergunta o item travado com a pergunta gravada",
               "Fecho o card como medir depois do go-live?" in out, out[-1500:])
@@ -861,8 +861,8 @@ def env_do_run(tmp, root, binv):
     return env
 
 
-def test_decide_on_terminal_asks_to_land_and_lands_with_s():
-    """AC1: `s` at the `decide` prompt really lands. CS-4 of fim-do-until-sem-espera:
+def test_decide_on_terminal_asks_to_land_and_lands_with_y():
+    """AC1: `y` at the `decide` prompt really lands. CS-4 of fim-do-until-sem-espera:
     the END OF THE RUN no longer asks it; `cepa-until decide <fila>/<run>`, by hand,
     still does."""
     from test_cepa_until_land import with_origin, state
@@ -884,12 +884,12 @@ def test_decide_on_terminal_asks_to_land_and_lands_with_s():
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root),
-            inputs=[("Land now?", "s")], env=env, timeout=240)
+            inputs=[("Land now?", "y")], env=env, timeout=240)
         check("decide sai 0", rc == 0, out[-1500:])
         check("decide pergunta se aterrissa", "Land now?" in out,
               out[-1500:])
         log = git(root, "log", "--format=%s", "HEAD").splitlines()
-        check("com s, o commit do item chega à main", "a1" in log, str(log))
+        check("com y, o commit do item chega à main", "a1" in log, str(log))
         check("...e o estado do run vira aterrissado",
               state(root).get("estado") == "aterrissado", str(state(root)))
 
@@ -937,7 +937,7 @@ def test_decidir_as_process_with_and_without_terminal():
               items_of(root)["a1"]["status"] == "blocked")
         rc, out = on_tty(cmd, str(root), inputs=[
             (("[w] I write the answer", "w")), ("Your answer", "vira checklist"),
-            ("Send the item back to the queue", "s"),
+            ("Send the item back to the queue", "y"),
             (("[w] I write the answer", "y")), ("Anything to add", "login ok")])
         a1, a2 = items_of(root)["a1"], items_of(root)["a2"]
         check("no terminal, decidir aplica o blocked",
@@ -1206,7 +1206,7 @@ def test_cs5_unreadable_byte_is_shown_as_question_mark_and_enter_keeps_it():
     unreadable byte is not lost. The stray byte becomes `?`, the screen shows
     the text read and asks "Use this text? [Y/n]"; Enter keeps it."""
     rc, out, a1 = _cs5_run([("Use this text? [Y/n]", ""),
-                            ("Send the item back to the queue", "s")])
+                            ("Send the item back to the queue", "y")])
     check("cs5: sem traceback", "Traceback" not in out, out[-1500:])
     check("cs5: a tela mostra o texto lido com ?",
           "n?ão vira checklist" in out, out[-1500:])
@@ -1222,7 +1222,7 @@ def test_cs5_n_at_the_confirmation_asks_the_field_again():
     and the text read is not applied."""
     rc, out, a1 = _cs5_run([("Use this text? [Y/n]", "n"),
                             ("type it again", "vira checklist"),
-                            ("Send the item back to the queue", "s")])
+                            ("Send the item back to the queue", "y")])
     check("cs5 n: sem traceback", "Traceback" not in out, out[-1500:])
     check("cs5 n: o campo é pedido de novo",
           out.count("in one line (the next run reads this)") == 2, out[-1500:])
@@ -1235,7 +1235,7 @@ def test_cs5_n_at_the_confirmation_asks_the_field_again():
 def _cs5_refusal_asks_again(refusal):
     rc, out, a1 = _cs5_run([("Use this text? [Y/n]", refusal),
                             ("type it again", "vira checklist"),
-                            ("Send the item back to the queue", "s")])
+                            ("Send the item back to the queue", "y")])
     check(f"cs5 {refusal}: o campo é pedido de novo",
           out.count("in one line (the next run reads this)") == 2, out[-1500:])
     check(f"cs5 {refusal}: a resposta recusada não é aplicada",
@@ -1321,7 +1321,7 @@ def test_cs3_v_key_opens_the_editor_and_the_saved_text_becomes_the_answer():
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), env=env, inputs=[
                 ("[v] write in the editor", "v"),
-                ("Send the item back to the queue", "s")], timeout=60)
+                ("Send the item back to the queue", "y")], timeout=60)
         a1 = items_of(root)["a1"]
         check("cs3: sem traceback", "Traceback" not in out, out[-800:])
         # `on_tty` wraps a trigger in <...> only once the screen showed it;
@@ -1411,7 +1411,7 @@ def test_cs6_the_menu_that_comes_back_still_answers_the_same_item():
     rc, out, _, _, a1 = _cs6_run("#!/bin/sh\nexit 1\n", after_warning=(
         (("nothing written in the editor", "w")),
         ("Your answer", "depois do editor"),
-        ("Send the item back to the queue", "s")), with_a1=True)
+        ("Send the item back to the queue", "y")), with_a1=True)
     check("cs6 mesmo item: sem traceback", "Traceback" not in out, out[-800:])
     check("cs6 mesmo item: o aviso veio antes da resposta",
           0 <= out.find("nothing written in the editor") < out.find("Your answer"),
@@ -1525,7 +1525,7 @@ def test_cs3_the_editor_header_lines_do_not_reach_the_answer():
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(root)], str(root), env=env, inputs=[
                 ("[v] write in the editor", "v"),
-                ("Send the item back to the queue", "s")], timeout=60)
+                ("Send the item back to the queue", "y")], timeout=60)
         a1 = items_of(root)["a1"]
         ev = str(a1.get("evidence", ""))
         check("cs3 cabeçalho: o item volta para pending com a resposta",
@@ -1669,7 +1669,7 @@ def test_loose_text_at_options_prompt_does_not_vanish():
     again."""
     m = load_module()
     answers = iter(["eu não faço ideia de como resolver isso", "w",
-                      "não sei", "s"])
+                      "não sei", "y"])
     screen, answered = [], []
     m.decide(Path("/nao/existe"), "fila", "run1", {},
              [{"id": "W-1", "title": "t", "reason": "blocked-before",
@@ -1699,7 +1699,7 @@ def test_loose_text_on_terminal_warns_and_still_writes():
                 ("[w] I write the answer", "eu não faço ideia"),
                 ("type w first", "w"),
                 ("Your answer", "não sei ainda"),
-                ("Send the item back to the queue", "s")])
+                ("Send the item back to the queue", "y")])
         check("avisa que o texto solto não é opção",
               "is not one of the options" in out and "type w first" in out,
               out[-1500:])

@@ -3481,7 +3481,9 @@ def pending_action(item_states):
 
 
 def is_yes(r):
-    return str(r or "").strip().lower() in ("s", "sim", "y", "yes")
+    """Yes at a `[y/N]` confirmation: only `y` or `yes` (CS-4 of
+    docs/spec/teclas-em-ingles.md). `s` and `sim` count as no, like any other text."""
+    return str(r or "").strip().lower() in ("y", "yes")
 
 
 class NoAnswer(TimeoutError):
