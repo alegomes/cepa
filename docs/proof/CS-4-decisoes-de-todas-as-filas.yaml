@@ -1,0 +1,44 @@
+schema_version: 2
+card: CS-4-decisoes-de-todas-as-filas
+verdict: unproven
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: e3bcd97
+head_commit: fb10032
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan (cmd_waiting 'nada espera você' branch, waiting help exit code 0 text)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "Baseline at fb10032 in a detached worktree (git worktree add --detach /tmp/cs4-proof fb10032, removed at the end): tests/test_cepa_plan_waiting_nothing.py -> 'tudo passou'; test_cepa_plan_waiting.py, _runs.py -> 'tudo passou'; _answered_no.py -> 'todos passaram'."
+        - "M1 drop 'not shown' from the condition -> RED, '2 falha(s)'."
+        - "M2 drop 'not runs' -> the covering test stays GREEN ('tudo passou'), but the neighbor tests/test_cepa_plan_waiting_runs.py goes RED ('8 falha(s)'): killed by the neighbor."
+        - "M3 drop 'not unreadable' -> RED, '1 falha(s)'."
+        - "M4 drop 'not run_warning' -> RED, '1 falha(s)'."
+        - "M5 message 'nada espera você' -> 'nada espera voce' -> RED, '2 falha(s)'."
+        - "M6 return 0 -> return 1 in the new branch -> RED, '2 falha(s)'."
+        - "M7 return 0 -> return 2 in the new branch -> RED, '2 falha(s)'."
+        - "M8 branch removed (condition -> 'if False:') -> RED, '2 falha(s)'."
+        - "M9 branch always taken ('if True:') -> RED, '4 falha(s)'."
+        - "M11 no-queue-at-all guard removed ('if not queues and not unreadable:' -> 'if False:') -> RED, '3 falha(s)' (criterion: no queue file exits 2)."
+        - "SURVIVOR M10: help exit-code text for 0 reverted to the base wording '(0, \"shown (even with nothing waiting)\")' (cepa-plan ~5889) -> tests/test_cepa_plan_waiting_nothing.py GREEN, _waiting.py GREEN, _runs.py GREEN, _answered_no.py GREEN. No test reads the exit-code section of `waiting --help`; the changed help line is not load-bearing."
+        - "Total: 11 perturbations, 10 RED (M2 only via a neighbor test), 1 survivor (M10). Mutations applied one at a time with sed in the throwaway worktree and reverted with git checkout; all runs in the foreground, each under 3 s."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI; reachability inferred from the perturbation results (the new branch lines turned tests red; the help line is reached by argparse but no test asserts it)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the subcommand only reads local queue YAML and run state written by the owner's own tooling; it opens no external input surface and no changed module is input-bearing (api-rest)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "The behavior the card claims (one line 'nada espera você', exit 0; no queue at all exits 2) is load-bearing: every perturbation of the four conjuncts, the message, the return code and the branch itself turns a test red (the 'not runs' conjunct only through test_cepa_plan_waiting_runs.py, not the covering test). One changed line survives: the help text for exit code 0 can be reverted to its old wording and all four waiting test files stay green. A surviving perturbation on a changed line is UNPROVEN. Fix: assert in tests/test_cepa_plan_waiting_nothing.py that `cepa-plan waiting --help` mentions 'nada espera você' in its exit codes section. L2 coverage stays assumed (no coverage tool), which would alone give needs-human."
