@@ -876,6 +876,10 @@ def _expand(ctx, raw, cwds):
         return _UNKNOWN if v is None else v
 
     val = _SUB_MARK_RE.sub(sub, raw)
+    if re.match(r"~[-+]", val):
+        # `~-` is $OLDPWD and `~+` is $PWD for the shell; the hook does not
+        # know them for this line (pair review of path-lock-le-regras-do-repo-do-arquivo)
+        return _Arg(raw, _UNKNOWN + val[2:])
     val = val.replace("__CEPAARITH__", "0")
     val = _VAR_RE.sub(var, val)
     return _Arg(raw, val)

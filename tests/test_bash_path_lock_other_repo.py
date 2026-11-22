@@ -103,7 +103,7 @@ def plugin_of(hook: Path) -> str:
                       .read_text(encoding="utf-8"))["name"]
 
 
-def run(hook, agent_type, command, cwd, proc_cwd=None):
+def run(hook, agent_type, command, cwd, proc_cwd=None, env_extra=None):
     payload = {
         "tool_name": "Bash",
         "tool_input": {"command": command},
@@ -112,6 +112,7 @@ def run(hook, agent_type, command, cwd, proc_cwd=None):
     }
     env = dict(os.environ)
     env.pop("CEPA_BASHLOCK_ENFORCE", None)
+    env.update(env_extra or {})
     p = subprocess.run([sys.executable, str(hook)], input=json.dumps(payload),
                        capture_output=True, text=True, env=env, timeout=60,
                        cwd=str(proc_cwd) if proc_cwd else None)
@@ -208,6 +209,10 @@ def main():
          f"cd {b}\ncat > toA/evil.txt <<'E'\nx\nE"),
         ("link em B que aponta para A, depois de &&",
          f"cd {b} && cat > toA/evil.txt <<'E'\nx\nE"),
+        ("cd ~- volta para a raiz", f"cd {b}; cd ~-; touch x"),
+        ("~-/x é a raiz", f"cd {b}; touch ~-/x"),
+        ("valor de flag --out= por um link para A",
+         f"cd {b}; python3 tool.py --out=toA/evil.txt"),
         ("cd dentro de $(...) não move a linha",
          f"echo $(cd {b}); cat > Y.java <<'E'\nx\nE"),
         ("linha que cita a raiz da sessão nunca é balde 3",
@@ -228,11 +233,16 @@ def main():
     for hook in HOOKS:
         top = hook.parent.parent.name
         agent_type = f"{plugin_of(hook)}:{AGENTS[top]}"
-        cases = [(0, label, cmd, a, None) for label, cmd in allow]
-        cases += [(2, label, cmd, a, None) for label, cmd in deny]
-        cases += [(2, label, cmd, root, pc) for label, cmd, root, pc in deny_other_roots]
-        for want, label, cmd, root, pc in cases:
-            rc, err = run(hook, agent_type, cmd, root, pc)
+        cases = [(0, label, cmd, a, None, None) for label, cmd in allow]
+        cases += [(2, label, cmd, a, None, None) for label, cmd in deny]
+        cases += [(2, label, cmd, root, pc, None) for label, cmd, root, pc in deny_other_roots]
+        # the hook's environment may carry an OLDPWD pointing at B: it must not
+        # be taken as the line's previous directory
+        cases.append((2, "cd $OLDPWD com OLDPWD=<B> no ambiente do hook",
+                      f"cd {b}\ncd $OLDPWD\ncat > evil.txt <<'E'\nx\nE", a, None,
+                      {"OLDPWD": str(b)}))
+        for want, label, cmd, root, pc, env_extra in cases:
+            rc, err = run(hook, agent_type, cmd, root, pc, env_extra)
             verb = "libera" if want == 0 else "nega"
             check(f"[{top:13}] {verb}: {label}",
                   rc == want and "erro interno" not in err,

@@ -5408,6 +5408,20 @@ Ficou de fora, de propósito: aplicar as regras de B (o `build-hex.yaml` de B) �
 
 ---
 
+## Fora da raiz, a trava do Bash só confere o texto: link, glob e valor colado na opção ainda alcançam a raiz
+
+**Status:** pendente · **Lar provável:** `common/hooks/_templates/bash-path-lock.py.tmpl` (`_refs_root`, balde 3) · **Origem:** revisão de par do item `path-lock-le-regras-do-repo-do-arquivo`, 2026-11-22
+
+### Problema
+
+Uma linha que roda fora da raiz da sessão (balde 3) passa inteira se o texto não citar a raiz. A revisão achou formas de escrever na raiz assim, todas já possíveis com `cd <B> && ...` antes daquele item: valor colado na opção (`sort -otoA/x`, `cp -ttoA`, `dd of=toA/x`, com `B/toA` apontando para a raiz), glob que o shell expande para o link (`cp f t*/`), caminho com maiúsculas diferentes no disco do macOS, e `python3 -c "open('toA/x','w')"`. O próprio comentário de `_refs_root` declara o resíduo de checagem por texto.
+
+### Esboço
+
+Em `_refs_root`, resolver também o trecho depois de `-X` colado e de `chave=`; tratar `*`, `?` e `[` como possível alcance da raiz quando algum diretório da linha tem link para dentro dela; comparar caminhos com `os.path.samefile` em vez de texto. Teste: um caso de negação para cada forma acima, com `&&` e com `;`.
+
+---
+
 ## `capture-build-result` não reconhece `flutter test` nem `tool/check.sh`
 
 **Status:** pendente · **Lar provável:** common (`common/hooks/capture-build-result.py`, padrões de build) · **Origem:** feedback `fb-20261115-1`, 2026-11-15
