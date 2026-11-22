@@ -16,6 +16,10 @@ Against the real CLI, in a temporary git repo:
   - a run merged with a red build says so and offers `land ... --yes`
   - a run whose supervisor died offers `cepa-until close-dead a/<run>`
   - with no run waiting, the section is not printed
+  - the fields of each run in --json (alvo, fila, run, como, comando)
+  - the "Fica com você" count is shown only when the run left items
+  - when `cepa until pending` fails (exit, not JSON, not an object), the
+    command still exits 0, warns on stderr and lists no run
 
 Run with `python3 tests/test_cepa_plan_waiting_runs.py`.
 """
@@ -125,14 +129,28 @@ def red_test():
               any(f"a/{RUN}" in l and f"cepa-until land a/{RUN}" in l
                   and "espera aterrissar em `main`" in l for l in sec[1:]),
               p.stdout)
-        check("a seção vem depois das filas",
-              p.stdout.find("esperam você ·") < p.stdout.find("runs que esperam"),
+        check("a seção vem depois das filas, separada por linha em branco",
+              "\n\nruns que esperam você · 1\n" in p.stdout
+              and p.stdout.find("esperam você ·") < p.stdout.find("runs que esperam"),
               p.stdout)
+        check("a linha abre com o alvo e não diz \"Fica com você\" sem itens",
+              sec[1:] == [f"  a/{RUN} — espera aterrissar em `main` — "
+                          f"cepa-until land a/{RUN}"], sec)
+        check("sem falha do pending, nenhum aviso de runs",
+              "aviso: runs" not in p.stderr + p.stdout, p.stderr)
         j = run(root, "waiting", "--json")
         data = json.loads(j.stdout)
-        check("--json traz o run em `runs`",
-              [(r["alvo"], r["comando"]) for r in data.get("runs", [])]
-              == [(f"a/{RUN}", f"cepa-until land a/{RUN}")], j.stdout)
+        check("--json traz o run em `runs`, com todos os campos",
+              data.get("runs") == [{"alvo": f"a/{RUN}", "fila": "a", "run": RUN,
+                                    "como": "espera aterrissar em `main`",
+                                    "comando": f"cepa-until land a/{RUN}"}],
+              j.stdout)
+        write_state(root, fica_com_voce=[{"id": "a1"}, {"id": "a2"}], **LAND)
+        p = run(root, "waiting")
+        check("com itens em \"Fica com você\", a linha diz quantos",
+              f"a/{RUN} — espera aterrissar em `main` (2 item(ns) em "
+              f"\"Fica com você\") — cepa-until land a/{RUN}" in p.stdout,
+              p.stdout)
 
 
 def landed_red_and_dead():
@@ -149,9 +167,13 @@ def landed_red_and_dead():
         p = run(root, "waiting")
         sec = runs_section(p.stdout) or []
         check("supervisor morto: listado com `cepa-until close-dead a/<run>`",
-              any(f"a/{RUN}" in l and "o supervisor morreu" in l
-                  and f"cepa-until close-dead a/{RUN}" in l for l in sec),
-              p.stdout)
+              sec[1:] == [f"  a/{RUN} — o supervisor morreu no meio do run — "
+                          f"cepa-until close-dead a/{RUN}"], p.stdout)
+        j = json.loads(run(root, "waiting", "--json").stdout)
+        check("supervisor morto: campos no --json",
+              j.get("runs") == [{"alvo": f"a/{RUN}", "fila": "a", "run": RUN,
+                                 "como": "o supervisor morreu no meio do run",
+                                 "comando": f"cepa-until close-dead a/{RUN}"}], j)
 
         git(root, "merge", "-q", "--no-ff", "-m", "land", f"until/{RUN}")
         write_state(root, aterrissagem={"parou": "build-vermelho"}, **LAND)
@@ -160,9 +182,9 @@ def landed_red_and_dead():
         p = run(root, "waiting")
         sec = runs_section(p.stdout) or []
         check("build vermelho: diz isso e oferece `land ... --yes`",
-              any(f"a/{RUN}" in l and "build vermelho" in l
-                  and f"cepa-until land a/{RUN} --yes" in l for l in sec),
-              p.stdout)
+              sec[1:] == [f"  a/{RUN} — entrou em `main` com build vermelho, "
+                          "sem push: commite o conserto e rode de novo — "
+                          f"cepa-until land a/{RUN} --yes"], p.stdout)
 
         write_state(root, **LAND)
         check("já aterrissado: o `pending` não lista", pending(root)["runs"] == [])
@@ -171,9 +193,53 @@ def landed_red_and_dead():
               runs_section(p.stdout) is None, p.stdout)
 
 
+def plugin_with_fake_until(tmp, body):
+    """A copy of cepa-plan whose sibling `cepa-until` is `body`: the only way
+    to make the real `pending` fail on demand."""
+    plugin = Path(tmp) / "plugin"
+    (plugin / "bin").mkdir(parents=True)
+    for d in ("hooks", "_vendor"):
+        (plugin / d).symlink_to(REPO / "common" / d)
+    (plugin / "bin" / "cepa-plan").write_text(CEPA_PLAN.read_text())
+    (plugin / "bin" / "cepa-until").write_text(body)
+    return plugin / "bin" / "cepa-plan"
+
+
+def pending_fails():
+    print("quando o `cepa until pending` falha")
+    cases = [
+        ("sai com 1", "import sys\nsys.stderr.write('boom')\nsys.exit(1)\n",
+         "cepa-until pending falhou (saiu com 1): boom"),
+        ("saída que não é JSON", "print('não é json')\n",
+         "cepa-until pending falhou ("),
+        ("JSON que não é objeto", "print('[]')\n",
+         "cepa-until pending falhou (saiu com 0)"),
+    ]
+    for name, body, warning in cases:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = repo_with_night(tmp)
+            write_state(root, **LAND)
+            plan = plugin_with_fake_until(tmp, body)
+            p = subprocess.run([sys.executable, str(plan), "waiting"],
+                               capture_output=True, text=True, cwd=str(root))
+            check(f"{name}: sai com 0 e lista as filas",
+                  p.returncode == 0 and "esperam você ·" in p.stdout, p.stderr)
+            check(f"{name}: avisa no stderr, com o motivo",
+                  f"aviso: runs fora da lista: {warning}" in p.stderr, p.stderr)
+            check(f"{name}: o aviso não vai para o stdout, e nenhum run aparece",
+                  "aviso" not in p.stdout and runs_section(p.stdout) is None,
+                  p.stdout)
+            j = subprocess.run([sys.executable, str(plan), "waiting", "--json"],
+                               capture_output=True, text=True, cwd=str(root))
+            check(f"{name}: --json continua válido, com `runs` vazio",
+                  j.returncode == 0 and json.loads(j.stdout).get("runs") == [],
+                  j.stdout)
+
+
 if __name__ == "__main__":
     red_test()
     landed_red_and_dead()
+    pending_fails()
     if FAILURES:
         print(f"\n✗ {len(FAILURES)} falha(s)")
         sys.exit(1)

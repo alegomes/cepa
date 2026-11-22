@@ -1,0 +1,30 @@
+key: CS-2-decisoes-de-todas-as-filas
+status: complete
+diff_range: f0efa4e..f90e091
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      `cepa-plan waiting` (texto e --json) invocado como subprocesso num repo
+      git de teste com a fila `a` e um run `until/<run>` esperando aterrissar
+      (estado `esperando-dono`, ação `aterrissar`, o mesmo que faz
+      `cepa until pending` listar `a/<run>`); stdout traz a seção
+      "runs que esperam você" com `a/<run>` e `cepa-until land a/<run>`.
+    test: tests/test_cepa_plan_waiting_runs.py, função red_test (CS-2) e
+      landed_red_and_dead (build vermelho, supervisor morto, já aterrissado,
+      nenhum run)
+    layer: cli/subprocess sobre repo git real em diretório temporário
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_waiting_runs.py -> 13 checks 'ok', 0 FAIL
+      (sai com 0, seção de runs com contagem, a/<run> com `cepa-until land
+      a/<run>`, seção depois das filas, --json em `runs`, seção ausente sem
+      run, close-dead para supervisor morto, build vermelho com `land --yes`,
+      já aterrissado não listado) -> '✓ tudo passou'. Vizinho: python3
+      tests/test_cepa_plan_waiting.py -> '✓ tudo passou'."
+    note: >
+      "Mesma fonte do pending": waiting_runs_of chama `cepa-until pending
+      --json` (sem regra própria) e o teste confere, em cada fixture, que o
+      próprio `pending` lista (ou não) o run. O teste chama cepa-plan
+      diretamente; o lançador `cepa plan waiting` foi coberto como idêntico no
+      teste do CS-1.
+deferral: []
