@@ -1,9 +1,9 @@
 schema_version: 2
 card: plan-anota-evidencia-de-item-done
-verdict: unproven
-reviewed_at: 2026-11-21T13:30:00-03:00
+verdict: needs-human
+reviewed_at: 2026-11-21T14:10:00-03:00
 base_commit: 94fcd74
-head_commit: fcce21a
+head_commit: 56472de
 issue_type: Task
 scope:
   changed_classes:
@@ -16,22 +16,22 @@ levels:
       status: n/a
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "killed (RED) 13 of 17: P1 status json drops anotacoes -> 6 falha(s); P2 text-status line off -> 1; P3 show field emptied -> 3; P4 finish refusal stops naming annotate -> 1; P5 open item accepted -> 3; P6 empty note accepted -> 2; P7 notes overwritten instead of appended -> 7; P8 evidence overwritten by the note -> 4; P9 write_body skipped -> 9; P10 date blanked -> 1; P12 dropped refused -> 1; P14 --author ignored -> 2; P15 unknown id accepted -> 1"
-        - "SURVIVED P11 (cepa-plan:3593): `text = str(note or '').strip()` instead of collapsing inner whitespace/newlines; test only passes a note with outer spaces, so multi-line or double-spaced notes are unguarded -> `ok`"
-        - "SURVIVED P13b (cepa-plan:3582): annotations_of stops dropping notes with blank `texto` -> `ok`"
-        - "SURVIVED P13c (cepa-plan:3582): annotations_of stops dropping non-dict entries -> `ok`"
-        - "SURVIVED P16 (cepa-plan:1973): the text-status line prints `0` instead of the note count -> `ok`"
+        - "run (throwaway worktree /tmp/proof-pa2 at 56472de, production file identical to fcce21a): `python3 tests/test_cepa_plan_annotate.py` unperturbed -> 34 `ok` lines, final `ok` (GREEN, N>0)"
+        - "all 17 perturbations of the changed lines KILLED (test exits non-zero): P1 status json drops anotacoes -> 10 falha(s); P2 text-status line off -> 3; P3 show field emptied -> 4; P4 finish refusal stops naming annotate -> 1; P5 open item accepted -> 3; P6 empty note accepted -> 2; P7 notes overwritten -> 8; P8 evidence overwritten by the note -> 4; P9 write_body skipped -> 11; P10 date blanked -> 1; P11 strip instead of collapsing inner whitespace -> 1; P12 dropped refused -> 1; P13b annotations_of keeps blank texto -> 2; P13c annotations_of keeps non-dict entries -> 3; P14 --author ignored -> 2; P15 unknown id accepted (refusal exits 0 -> 1 falha; unknown id treated as empty done item -> 1 falha); P16 text status prints 0 instead of the count -> 2"
+        - "previous survivors P11, P13b, P13c, P16 are now killed by the cases added in 56472de"
+        - "note on P15: a first crude variant (`if False:` on the unknown-id branch) stayed green because the resulting crash still exits 2, an equivalent mutant; the two behavior-faithful variants above are both RED"
+        - "neighbors at head, all green: test_cepa_plan_finish_route, status_code_and_epic, discovered_pending, finish_owner, decisions, verdict, finish_decision"
   l2_coverage:
     status: assumed
     uncovered_lines: []
-    run: "no coverage tool wired for this Python CLI; reachability judged from the perturbation results above (the four survivors are the lines the test does not reach with a discriminating assertion)"
+    run: "no coverage tool wired for this Python CLI (`python3 -m coverage` -> No module named coverage; not provisioned, that is a project-setup decision); reachability inferred from the 17/17 perturbation kills"
   l4_adversarial_input:
-    status: skipped
-    reason: "the diff adds a free-text `--note` argument; adversarial inputs (newlines, very long text, non-dict entries hand-edited into the queue file) not run in this pass, only visible through survivors P11 and P13"
+    status: n/a
+    reason: "the free-text `--note` is the only new input; multi-line / extra-space notes and hand-edited malformed queue entries (blank texto, non-dict) are now asserted by the test (P11, P13b, P13c killed); it is a local CLI argument written to a local queue file, not a parsed external surface, and no api-rest module is touched"
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-    run: "not a Bug card; red-at-base was still checked: `git checkout 94fcd74 -- common/bin/cepa-plan` in /tmp/proof-pa, `python3 tests/test_cepa_plan_annotate.py` -> `14 falha(s)` (RED); at fcce21a -> 28 `ok` lines and final `ok` (GREEN). Neighbors at head: test_cepa_plan_finish_route, status_code_and_epic, discovered_pending, finish_owner, decisions, verdict all green."
-routing_reason: "O comando annotate funciona e o teste dele fica vermelho sem a mudança (14 falhas) e verde com ela. Mas 4 de 17 quebras deliberadas de linhas alteradas passaram sem nenhum teste reclamar: texto da nota com várias linhas ou espaços internos, filtro de notas em branco ou malformadas na leitura, e a contagem na linha de status em texto. UNPROVEN: devolver ao worker para cobrir esses quatro pontos."
+    run: "not a Bug card; red-at-base checked anyway: `git -C /tmp/proof-pa2 checkout 94fcd74 -- common/bin/cepa-plan` then `python3 tests/test_cepa_plan_annotate.py` -> `20 falha(s)` (RED); at 56472de -> 34 ok, final `ok` (GREEN)"
+routing_reason: "O comando annotate funciona: sem a mudança o teste fica vermelho (20 falhas) e com ela verde (34 verificações), e as 17 quebras deliberadas foram todas pegas, inclusive as 4 sobreviventes da rodada anterior. O único ponto em aberto é a medição de cobertura (L2), que não existe neste projeto Python e ficou como assumida; por regra mecânica isso impede PROVEN e leva a NEEDS-HUMAN. Sugestão ao humano: aceitar L2 assumida, pois a perturbação de todas as linhas alteradas já substitui a cobertura."
