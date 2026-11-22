@@ -2042,6 +2042,12 @@ def ready_of_queue(root, name, target=None):
             "abertos": sum(1 for it in items
                            if status_of(it) not in ("done", "dropped")),
             "esperam_dono": waiting,
+            # fb-20261120-5: counts for the header; a blocked item counts once.
+            "esperam_dono_pendentes": sum(
+                1 for it in items if status_of(it) == "pending"
+                and it.get("human_pending") is not None),
+            "esperam_dono_bloqueados": sum(
+                1 for it in items if status_of(it) == "blocked"),
             "adiados": [{"id": d["id"], "reason": reason_alias(d["reason"])}
                         for d in deferred],
             }, warnings, None
@@ -2068,11 +2074,25 @@ def cmd_ready(root, as_json):
               "/common:queue", file=sys.stderr)
         return 2
     total = sum(len(q["prontos"]) for q in queues)
+    wait_p = sum(q["esperam_dono_pendentes"] for q in queues)
+    wait_b = sum(q["esperam_dono_bloqueados"] for q in queues)
     if as_json:
         print(json.dumps({"root": str(root), "filas": queues,
-                          "total_prontos": total}, ensure_ascii=False, indent=2))
+                          "total_prontos": total,
+                          "total_esperam_dono": {"pendentes": wait_p,
+                                                 "bloqueados": wait_b}},
+                         ensure_ascii=False, indent=2))
         return 0
-    print(f"prontos para construir · {len(queues)} filas · {total} itens")
+    header = f"prontos para construir · {len(queues)} filas · {total} itens"
+    # fb-20261120-5: "0 itens" alone read as "nothing pending".
+    parts = []
+    if wait_p:
+        parts.append(f"{wait_p} pendente{'' if wait_p == 1 else 's'}")
+    if wait_b:
+        parts.append(f"{wait_b} bloqueado{'' if wait_b == 1 else 's'}")
+    if parts:
+        header += " · esperam você: " + " e ".join(parts)
+    print(header)
     for q in queues:
         ready = q["prontos"]
         head = f"\nfila {q['queue']} · {len(ready)} de {q['pendentes']} pendentes prontos"

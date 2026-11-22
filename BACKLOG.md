@@ -5480,7 +5480,7 @@ O launcher informa ao herdr um nome por sessão (o slug da worktree ou o propós
 
 ## O cabeçalho do `cepa plan ready` diz "0 itens" com item pendente na fila, e o dono lê "nada pendente"
 
-**Status:** pendente · **Lar provável:** common (`common/bin/cepa-plan`, `cmd_ready`) · **Origem:** feedback `fb-20261120-5`, 2026-11-20
+**Status:** feito nesta branch (2026-11-22, fila `fb-2026-10`): com item esperando o dono, o cabeçalho do `cepa-plan ready` termina em `· esperam você: 1 pendente e 1 bloqueado` (pendente = `pending` com ação humana aberta; bloqueado = `blocked`, contado uma vez), somando todas as filas; sem ninguém esperando, o cabeçalho fica como era. O `--json` ganhou `total_esperam_dono` e os dois contadores por fila. Teste: `tests/test_cepa_plan_ready_header_waiting.py`. Não mexido: a linha de cada fila, que ainda lista o id do bloqueado junto do pendente em "esperam você" · **Lar:** common (`common/bin/cepa-plan`, `cmd_ready`) · **Origem:** feedback `fb-20261120-5`, 2026-11-20
 
 ### Problema
 
