@@ -2997,7 +2997,7 @@ def run_record_paths(repo, queue, run_id=None):
 
 def commit_subcommand_records(repo, queue, run_id, verb, summary,
                               what="the queue marks and the run records",
-                              extra_paths=()):
+                              extra_paths=(), paths=None):
     """CS-7: `decide`, `close-dead` and `land` commit what they wrote to the queue
     and to the run's records, like the run's end does: the same
     `commit_run_records` (only these paths, `--only`, never `--no-verify`, no empty
@@ -3005,8 +3005,10 @@ def commit_subcommand_records(repo, queue, run_id, verb, summary,
     because of it. The message is `until <queue>/<run> <verb>: <summary>`, or
     `until <queue> <verb>: <summary>` when the command has no run. SIGINT and
     SIGTERM are ignored while git runs, so a Ctrl+C cannot kill `git commit`
-    halfway and leave `.git/index.lock` behind."""
-    paths = run_record_paths(repo, queue, run_id) + list(extra_paths)
+    halfway and leave `.git/index.lock` behind. `paths`, when given, replaces the
+    queue's and the run's paths (`decide --all`: the queue files an answer changed)."""
+    paths = list(run_record_paths(repo, queue, run_id) if paths is None
+                 else paths) + list(extra_paths)
     target = f"{queue}/{run_id}" if run_id else queue
     message = f"until {target} {verb}: {summary}"
     saved = {}
@@ -5424,7 +5426,8 @@ def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False, skip=
     return data if error or not fresh else fresh
 
 
-def ask_at_launch_all(repo):
+def ask_at_launch_all(repo, wait=ANSWER_WAIT_SEC, leftovers=False,
+                      goes_on="the run goes on without."):
     """The launch panel of a `--all` run (spec until-todas-as-filas, CS-7): ONE
     panel with what every queue holds for the owner, a section per queue in the
     order of `cepa-plan ready`, numbered across the whole list. Each answer is
@@ -5435,7 +5438,11 @@ def ask_at_launch_all(repo):
     `left`. What was answered "no" before is summarized per queue, as in
     `ask_at_launch`. No answer within the wait, EOF or Ctrl-C: one line naming
     `cepa-until decide <queue>` for the queues still holding questions, and the
-    run carries on. With nothing waiting, prints nothing."""
+    run carries on. With nothing waiting, prints nothing.
+    `cepa until decide --all` asks through this same panel (spec
+    decisoes-de-todas-as-filas, CS-7): `wait=None` (the owner is at the terminal on
+    purpose), `leftovers` adds the tasks a delivered item left for the owner, as
+    `cepa until decide <fila>` does, and `goes_on` ends the line of a cut panel."""
     ready, error = query_ready(repo)
     if error:
         return
@@ -5446,7 +5453,10 @@ def ask_at_launch_all(repo):
             continue
         whole, _ = query_queue(name, repo, max_items=10 ** 6)
         to_ask, answered_no = [], []
-        for ad in (whole or {}).get("deferred") or []:
+        held = list((whole or {}).get("deferred") or [])
+        if leftovers:
+            held += delivered_leftovers(name, repo)
+        for ad in held:
             if reason_alias(ad.get("reason")) not in OWNER_REASON:
                 continue
             date = last_owner_no(ad.get("evidence"))
@@ -5474,16 +5484,15 @@ def ask_at_launch_all(repo):
         tally["shown"] = shown + len(items)
         try:
             got, later = decide(repo, name, None, {}, items, {},
-                                wait=ANSWER_WAIT_SEC, progress=tally,
+                                wait=wait, progress=tally,
                                 first=shown + 1, of=total, opened=True,
                                 close=False)
         except NoAnswer:
-            cut = (f"nobody answered in {ANSWER_WAIT_SEC / 60:g} min; the run goes "
-                   "on without.")
+            cut = f"nobody answered in {(wait or 0) / 60:g} min; {goes_on}"
             unanswered.append(name)
             continue
         except (EOFError, KeyboardInterrupt):
-            cut = "questions interrupted; the run goes on without."
+            cut = f"questions interrupted; {goes_on}"
             unanswered.append(name)
             continue
         applied += [f"{name}/{x}" for x in got]
@@ -5491,7 +5500,7 @@ def ask_at_launch_all(repo):
         if later:
             unanswered.append(name)
         if tally.get("quit"):
-            cut = "questions stopped with q; the run goes on without."
+            cut = f"questions stopped with q; {goes_on}"
     back = " · ".join(f"cepa-until decide {n}" for n in unanswered)
     if cut:
         print(f"\n   {cut} To answer later: {back}")
@@ -5514,7 +5523,10 @@ def cmd_decide(argv):
             "left some for later. With <queue>, everything the queue holds for the\n"
             "owner, from any run, including the leftover tasks of delivered items.\n"
             "With <queue>/<run>, the merge and each deferred item of\n"
-            "that run.\n"
+            "that run. With --all, the questions of every queue in one panel, a\n"
+            "section per queue in the order of `cepa plan ready`, numbered across\n"
+            "the queues; each answer is recorded in the queue of its item and one\n"
+            "commit at the end holds every queue file an answer changed.\n"
             "\n"
             "Each question is closed, with a recommendation, and the answer is\n"
             "applied right away (cepa plan answer). When it ends, whatever the way\n"
@@ -5524,6 +5536,7 @@ def cmd_decide(argv):
             "exit code does not change. Outside a terminal it prints the pending\n"
             "questions as text instead of asking, and commits nothing."),
         examples=[
+            ("cepa until decide --all", "every question of every queue, in one panel"),
             ("cepa until decide wego", "every question the queue holds for you"),
             ("cepa until decide wego/2026-11-03-2210", "the questions of one run"),
         ],
@@ -5534,11 +5547,28 @@ def cmd_decide(argv):
         ],
         see_also=["cepa until pending: which runs are waiting for you",
                   "cepa plan answer: what applies each answer"])
-    ap.add_argument("target", metavar="QUEUE[/RUN]",
+    ap.add_argument("target", metavar="QUEUE[/RUN]", nargs="?",
                     help="the whole queue, or one run as the run summary prints it")
+    ap.add_argument("--all", action="store_true",
+                    help="the questions of every queue, in one panel")
     ap.add_argument("--repo", default=".", metavar="DIR",
                     help="repository root (default: the current directory)")
     a = ap.parse_args(argv)
+    if a.all and a.target:
+        print(f"cepa-until decide: a queue ({a.target!r}) and --all do not go "
+              "together; --all already asks every queue", file=sys.stderr)
+        return 2
+    if a.all:
+        repo = Path(a.repo).resolve()
+        return _decide_reporting("all", lambda: commit_after_decide(
+            repo, ALL_QUEUE, None, lambda: ask_at_launch_all(
+                repo, wait=None, leftovers=True,
+                goes_on="to answer later:") or 0,
+            every_queue=True))
+    if not a.target:
+        print("cepa-until decide: the following arguments are required: "
+              "QUEUE[/RUN] (or --all)", file=sys.stderr)
+        return 2
     if "/" not in a.target:
         if not (re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", a.target)
                 and ".." not in a.target):
@@ -5589,7 +5619,13 @@ def _waiver_files(repo):
     return sorted({p for folder in folders for p in folder.glob("*.yaml")})
 
 
-def commit_after_decide(repo, queue, run_id, ask):
+def every_queue_file(repo):
+    """The queue file of every queue of the main clone, `_all` (the record folder
+    of `--all` runs) aside: what `cepa until decide --all` may write."""
+    return [p for n, p in qp.queue_files(main_root(repo)) if n != ALL_DIR]
+
+
+def commit_after_decide(repo, queue, run_id, ask, every_queue=False):
     """Runs `ask` (the questions) and, on every way out, commits what the answers
     wrote (CS-7): the queue, the waiver files an answer changed and, with a run, its
     records. Compares the paths before and after, so listing the questions without a
@@ -5599,9 +5635,14 @@ def commit_after_decide(repo, queue, run_id, ask):
     closed terminal): they end the questions through the same `finally`, with the
     exit status 128 + the signal number, as the run's own `interrupt` does. When
     `decide` landed the run, the run's paths are committed even if no answer changed
-    them (as `land --yes` does)."""
+    them (as `land --yes` does).
+    `every_queue` (`cepa until decide --all`, CS-7 of decisoes-de-todas-as-filas):
+    the paths are every queue's file, and only the ones whose content an answer
+    changed go into the one commit, so a queue the owner left modified and no
+    answer touched is not swept in."""
     global _answer_commit, _decide_landed
-    paths = run_record_paths(repo, queue, run_id)
+    paths = (every_queue_file(repo) if every_queue
+             else run_record_paths(repo, queue, run_id))
     before = _content_snapshot(paths)
     waivers_before = _content_snapshot(_waiver_files(repo))
     _answer_commit = False
@@ -5632,7 +5673,16 @@ def commit_after_decide(repo, queue, run_id, ask):
             # answer, the previous evidence) in the same step that converts the
             # waiver, so the queue snapshot has changed whenever a waiver has. The
             # waivers only ride along in the paths of that commit.
-            if _content_snapshot(paths) != before or _decide_landed:
+            after = _content_snapshot(paths)
+            if every_queue:
+                changed = [Path(p) for p in after if after[p] != before.get(p)]
+                if changed:
+                    commit_subcommand_records(
+                        repo, "--all", None, "decide",
+                        f"owner answers recorded in {len(changed)} queue(s)",
+                        what="the owner's answers",
+                        extra_paths=changed_waivers, paths=changed)
+            elif after != before or _decide_landed:
                 commit_subcommand_records(
                     repo, queue, run_id, "decide",
                     "owner answers recorded in the queue",
