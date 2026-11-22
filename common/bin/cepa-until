@@ -5523,7 +5523,7 @@ def cmd_decide(argv):
             "left some for later. With <queue>, everything the queue holds for the\n"
             "owner, from any run, including the leftover tasks of delivered items.\n"
             "With <queue>/<run>, the merge and each deferred item of\n"
-            "that run. With --all, the questions of every queue in one panel, a\n"
+            "that run. With no target (or --all), the questions of every queue in one panel, a\n"
             "section per queue in the order of `cepa plan ready`, numbered across\n"
             "the queues; each answer is recorded in the queue of its item and one\n"
             "commit at the end holds every queue file an answer changed.\n"
@@ -5536,7 +5536,8 @@ def cmd_decide(argv):
             "exit code does not change. Outside a terminal it prints the pending\n"
             "questions as text instead of asking, and commits nothing."),
         examples=[
-            ("cepa until decide --all", "every question of every queue, in one panel"),
+            ("cepa until decide", "every question of every queue, in one panel"),
+            ("cepa until decide --all", "the same, said out loud"),
             ("cepa until decide wego", "every question the queue holds for you"),
             ("cepa until decide wego/2026-11-03-2210", "the questions of one run"),
         ],
@@ -5548,9 +5549,10 @@ def cmd_decide(argv):
         see_also=["cepa until pending: which runs are waiting for you",
                   "cepa plan answer: what applies each answer"])
     ap.add_argument("target", metavar="QUEUE[/RUN]", nargs="?",
-                    help="the whole queue, or one run as the run summary prints it")
+                    help="the whole queue, or one run as the run summary prints it; "
+                         "without it, every queue (as --all)")
     ap.add_argument("--all", action="store_true",
-                    help="the questions of every queue, in one panel")
+                    help="the questions of every queue, in one panel (the same as no target)")
     ap.add_argument("--repo", default=".", metavar="DIR",
                     help="repository root (default: the current directory)")
     a = ap.parse_args(argv)
@@ -5558,17 +5560,15 @@ def cmd_decide(argv):
         print(f"cepa-until decide: a queue ({a.target!r}) and --all do not go "
               "together; --all already asks every queue", file=sys.stderr)
         return 2
-    if a.all:
+    # CS-8 (decisoes-de-todas-as-filas, Q6): no target means every queue, and
+    # `--all` is its synonym.
+    if a.all or not a.target:
         repo = Path(a.repo).resolve()
         return _decide_reporting("all", lambda: commit_after_decide(
             repo, ALL_QUEUE, None, lambda: ask_at_launch_all(
                 repo, wait=None, leftovers=True,
                 goes_on="nothing else is asked.") or 0,
             every_queue=True))
-    if not a.target:
-        print("cepa-until decide: the following arguments are required: "
-              "QUEUE[/RUN] (or --all)", file=sys.stderr)
-        return 2
     if "/" not in a.target:
         if not (re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", a.target)
                 and ".." not in a.target):

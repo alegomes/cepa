@@ -9,6 +9,8 @@ changed. Before it, the command exited 2 refusing the queue `'--all'`, and the
 owner had to run `cepa until decide <fila>` once per queue, guessing which
 queues held a question.
 
+CS-8: `cepa until decide` with no argument does the same as `--all`.
+
 Against the real CLI (`cepa-until decide --all`) in a pseudo-terminal, in a
 temporary git repo with two queues, `a` and `b`, each holding one item with an
 open owner route.
@@ -326,17 +328,70 @@ def test_cs7_decide_all_commits_the_waiver_the_answer_converted():
         check("dispensa: nada fica solto", st.strip() == "", st)
 
 
-def test_cs7_decide_without_queue_nor_all_is_still_a_usage_error():
-    """Until CS-8 makes the bare `decide` mean `--all`, a call with neither a
-    queue nor `--all` is a usage error: exit 2, naming both ways."""
+def test_cs8_bare_decide_on_a_terminal_is_the_all_panel():
+    """CS-8: `cepa until decide` with no argument does what `--all` does. The
+    CS-7 repo, on a terminal: one panel with sections `a` and `b` numbered 1
+    and 2, each answer in its own queue file, one commit touching both. Before
+    CS-8 the bare call exited 2 for the missing argument."""
     with tempfile.TemporaryDirectory() as tmp:
-        root, _ = al._repo(tmp, {"a": [_owner_item("a1", "x", "X?")]})
-        p = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide",
-                            "--repo", str(root)], capture_output=True, text=True,
-                           stdin=subprocess.DEVNULL, timeout=60)
-        check("decide sem nada sai com 2", p.returncode == 2, p.stdout + p.stderr)
-        check("...pedindo a fila ou --all",
-              "QUEUE[/RUN]" in p.stderr and "--all" in p.stderr, p.stderr)
+        root, paths = al._repo(tmp, {
+            "b": [_owner_item("b1", "liberar o acesso da fila b",
+                              "Liberei o acesso da fila b?")],
+            "a": [_owner_item("a1", "liberar o acesso da fila a",
+                              "Liberei o acesso da fila a?")]})
+        head_before = al._git(root, "rev-parse", "HEAD").strip()
+        rc, out = _decide_all_on_tty(tmp, root, [
+            ("[w] I write the answer", "y"), ("Anything to add", ""),
+            ("[w] I write the answer", "y"), ("Anything to add", "")], args=())
+        check("decide sem argumento no terminal sai com 0", rc == 0, out[-1500:])
+        check("...não pede o argumento", "required" not in out, out[-800:])
+        check("...um painel único com as duas perguntas",
+              out.count("question(s) for you") == 1
+              and "2 question(s) for you" in out, out[-2500:])
+        sec_a, sec_b = out.find("queue `a`"), out.find("queue `b`")
+        qa = out.find("Liberei o acesso da fila a?")
+        qb = out.find("Liberei o acesso da fila b?")
+        check("...seções a e b, cada pergunta na sua",
+              0 <= sec_a < qa < sec_b < qb, out[-2500:])
+        check("...numeradas 1 e 2 entre as filas",
+              re.search(r"1/2\]? ·? ?a1", out) and re.search(r"2/2\]? ·? ?b1", out),
+              out[-2500:])
+        a1, b1 = _item_of(paths["a"], "a1"), _item_of(paths["b"], "b1")
+        check("a1 e b1 ficam com human_pending: null nas suas filas",
+              a1.get("human_pending") is None and b1.get("human_pending") is None,
+              (a1, b1))
+        files = al._git(root, "show", "--name-only", "--format=", "HEAD").split()
+        check("...e o último commit toca os dois queue.yaml",
+              al._git(root, "rev-parse", "HEAD").strip() != head_before
+              and ".claude/queues/a/queue.yaml" in files
+              and ".claude/queues/b/queue.yaml" in files, str(files))
+        subject = al._git(root, "log", "-1", "--format=%s").strip()
+        check("...com a mesma mensagem do decide --all",
+              subject == "until --all decide: owner answers recorded in 2 queue(s)",
+              subject)
+
+
+def test_cs8_bare_decide_off_a_terminal_is_the_same_as_all():
+    """Off a terminal the bare call is still `--all`: same exit code, same
+    output, and not the usage error it used to be. What `--all` itself prints
+    there is CS-10's to settle; CS-8 only says the two are one command."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = al._repo(tmp, {
+            "a": [_owner_item("a1", "liberar a", "Liberei a fila a?")],
+            "b": [_owner_item("b1", "liberar b", "Liberei a fila b?")]})
+        outs = []
+        for args in ((), ("--all",)):
+            p = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide", *args,
+                                "--repo", str(root)], capture_output=True,
+                               text=True, stdin=subprocess.DEVNULL, timeout=60)
+            outs.append((p.returncode, p.stdout, p.stderr))
+        (rc, out, err), bare_all = outs[0], outs[1]
+        check("fora do terminal: decide sem argumento não é erro de uso",
+              rc != 2 and "required" not in err, err)
+        check("...e mostra a primeira pergunta do painel",
+              "queue `a`" in out and "Liberei a fila a?" in out, out[-1500:])
+        check("...igual ao decide --all (código, saída e erro)",
+              outs[0] == bare_all, (outs[0][1][-600:], bare_all[1][-600:]))
 
 
 def test_cs7_launch_panel_of_all_still_leaves_out_the_leftover_tasks():
