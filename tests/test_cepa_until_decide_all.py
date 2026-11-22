@@ -17,16 +17,21 @@ Run with `python3 tests/test_cepa_until_decide_all.py`.
 """
 
 import os
+import pty
 import re
+import select
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_cepa_until as base  # noqa: E402
 import test_cepa_until_all as al  # noqa: E402
 import test_cepa_until_decide as dec  # noqa: E402
+import test_cepa_until_clean_tree as ct  # noqa: E402
 
 import yaml  # noqa: E402
 
@@ -103,6 +108,10 @@ def test_cs7_decide_all_asks_every_queue_in_one_panel_and_records_each_answer():
         dirty = al._git(root, "status", "--short", "--",
                         ".claude/queues/a/queue.yaml", ".claude/queues/b/queue.yaml")
         check("...e as filas ficam sem mudança solta", dirty.strip() == "", dirty)
+        subject = al._git(root, "log", "-1", "--format=%s").strip()
+        check("...com a mensagem do decide --all",
+              subject == "until --all decide: owner answers recorded in 2 queue(s)",
+              subject)
 
 
 def test_cs7_decide_all_asks_the_leftover_task_of_a_delivered_item():
@@ -158,6 +167,167 @@ def test_cs7_queue_and_all_together_are_refused():
         check("decide <fila> --all sai com 2", p.returncode == 2,
               p.stdout + p.stderr)
         check("...dizendo que não combinam", "--all" in p.stderr, p.stderr)
+
+
+def _pty_session(cmd, cwd, env, steps, timeout=90):
+    """Like `on_tty`, but each step is (excerpt, reply, pause): after the excerpt
+    shows, wait `pause` seconds and record the screen at that instant, then send
+    the reply. Returns (rc, plain output, screens seen right before each reply)."""
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.chdir(cwd)
+        os.execve(cmd[0], cmd, env)
+    out, steps, seen, end = "", list(steps), [], time.time() + timeout
+
+    def pump(limit):
+        nonlocal out
+        stop = time.time() + limit
+        while time.time() < stop:
+            r, _, _ = select.select([fd], [], [], 0.2)
+            if not r:
+                continue
+            try:
+                data = os.read(fd, 4096)
+            except OSError:
+                return False
+            if not data:
+                return False
+            out += data.decode(errors="replace")
+        return True
+
+    alive = True
+    while alive and time.time() < end:
+        alive = pump(0.3)
+        if steps and steps[0][0] in out:
+            trigger, reply, pause = steps.pop(0)
+            out = out.replace(trigger, f"<{trigger}>", 1)
+            if pause:
+                alive = pump(pause)
+            seen.append(dec.ANSI.sub("", out))
+            if reply is not None:
+                os.write(fd, reply.encode() + (b"" if reply in ("\x03",) else b"\n"))
+        elif not steps:
+            alive = pump(1)
+            break
+    if time.time() >= end:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+    while pump(0.5):
+        if time.time() >= end:
+            break
+    _, st = os.waitpid(pid, 0)
+    return os.waitstatus_to_exitcode(st), dec.ANSI.sub("", out), seen
+
+
+def _decide_all_env(tmp, wait="1"):
+    env = al._tty_env(tmp)
+    env["CEPA_UNTIL_LEITOR"] = "off"
+    env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+    return env
+
+
+def test_cs7_decide_all_waits_for_the_owner_with_no_time_limit():
+    """The spec decided it (Decided without asking): whoever calls `decide --all`
+    is at the terminal on purpose, so the panel has no wait limit. With the
+    launch's wait at 1 s, a question left 4 s unanswered is still asked, and the
+    late "y" is recorded."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = al._repo(tmp, {"a": [_owner_item("a1", "liberar a",
+                                                       "Liberei a?")]})
+        rc, out, seen = _pty_session(
+            [sys.executable, str(CEPA_UNTIL), "decide", "--all", "--repo", str(root)],
+            str(root), _decide_all_env(tmp, "1"),
+            [("[w] I write the answer", "y", 4), ("Anything to add", "", 0)])
+        check("sem limite: 4 s depois a pergunta segue esperando",
+              seen and "nobody answered" not in seen[0], (seen or [""])[0][-800:])
+        a1 = _item_of(paths["a"], "a1")
+        check("...e o sim tardio é gravado",
+              rc == 0 and a1.get("human_pending") is None, (rc, a1, out[-800:]))
+
+
+def test_cs7_ctrl_c_keeps_what_was_answered_and_says_where_to_answer_the_rest():
+    """Ctrl-C at the second question: the first answer stays recorded and
+    committed, and the line says nothing else is asked and names the queue still
+    holding a question. No run exists here, so it never says "the run goes on"."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = al._repo(tmp, {
+            "a": [_owner_item("a1", "liberar a", "Liberei a?")],
+            "b": [_owner_item("b1", "liberar b", "Liberei b?")]})
+        rc, out, _ = _pty_session(
+            [sys.executable, str(CEPA_UNTIL), "decide", "--all", "--repo", str(root)],
+            str(root), _decide_all_env(tmp, "600"),
+            [("[w] I write the answer", "y", 0), ("Anything to add", "", 0),
+             ("[w] I write the answer", "\x03", 0)])
+        check("Ctrl-C: sai com 0", rc == 0, out[-1200:])
+        check("...a linha diz que nada mais é perguntado",
+              "questions interrupted; nothing else is asked." in out, out[-1200:])
+        check("...nomeia o decide da fila que sobrou",
+              "To answer later: cepa-until decide b" in out, out[-1200:])
+        check("...sem falar de run", "the run goes on" not in out, out[-1200:])
+        check("...sem repetir 'to answer later'",
+              out.lower().count("to answer later") == 1, out[-1200:])
+        a1, b1 = _item_of(paths["a"], "a1"), _item_of(paths["b"], "b1")
+        files = al._git(root, "show", "--name-only", "--format=", "HEAD").split()
+        check("...a1 respondido fica gravado e commitado",
+              a1.get("human_pending") is None
+              and ".claude/queues/a/queue.yaml" in files
+              and ".claude/queues/b/queue.yaml" not in files, (a1, files))
+        check("...b1 segue esperando", b1.get("human_pending") == "liberar b", str(b1))
+
+
+def test_cs7_decide_all_commits_the_waiver_the_answer_converted():
+    """A "yes" to a proposed waiver turns it into a waiver (`cepa plan answer`);
+    the one commit of `decide --all` carries that file with the queue, as the
+    commit of `decide <fila>` does."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = al._repo(tmp, {"a": [_owner_item(
+            "a1", "Aceitar ou recusar a dispensa de teste-cego",
+            "Aceito a dispensa de teste-cego?")]})
+        waiver = ct._proposed_waiver(root, queue="a", item="a1")
+        rel = str(waiver.relative_to(root))
+        rc, out = _decide_all_on_tty(tmp, root, [
+            ("[w] I write the answer", "y"), ("Anything to add", "")])
+        check("dispensa: a proposta virou dispensa",
+              "status" not in yaml.safe_load(waiver.read_text()), waiver.read_text())
+        files = al._git(root, "show", "--name-only", "--format=", "HEAD").split()
+        check("dispensa: o commit leva a fila e a dispensa",
+              rc == 0 and rel in files and ".claude/queues/a/queue.yaml" in files,
+              (files, out[-800:]))
+        st = al._git(root, "status", "--porcelain", "--untracked-files=all")
+        check("dispensa: nada fica solto", st.strip() == "", st)
+
+
+def test_cs7_decide_without_queue_nor_all_is_still_a_usage_error():
+    """Until CS-8 makes the bare `decide` mean `--all`, a call with neither a
+    queue nor `--all` is a usage error: exit 2, naming both ways."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = al._repo(tmp, {"a": [_owner_item("a1", "x", "X?")]})
+        p = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide",
+                            "--repo", str(root)], capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL, timeout=60)
+        check("decide sem nada sai com 2", p.returncode == 2, p.stdout + p.stderr)
+        check("...pedindo a fila ou --all",
+              "QUEUE[/RUN]" in p.stderr and "--all" in p.stderr, p.stderr)
+
+
+def test_cs7_launch_panel_of_all_still_leaves_out_the_leftover_tasks():
+    """The launch panel of `cepa until --all` shares the function: a task left on a
+    delivered item holds no run back, so it is still not asked there (only
+    `decide --all` asks it), and a cut panel still says the run goes on."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = al._repo(tmp, {
+            "a": [_owner_item("a1", "rotacionar o segredo",
+                              "Rotacionei o segredo?", status="done")],
+            "b": [_owner_item("b1", "liberar b", "Liberei b?")]})
+        rc, out, _ = al._launch_all_on_tty(tmp, root, [], wait="2")
+        check("largada: uma pergunta só, a do b1",
+              "1 question(s) for you" in out and "Liberei b?" in out
+              and "Rotacionei o segredo?" not in out, out[-1500:])
+        check("...e o corte diz que o run segue",
+              "nobody answered in" in out and "the run goes on without." in out,
+              out[-1500:])
 
 
 def main():

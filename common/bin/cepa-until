@@ -5563,7 +5563,7 @@ def cmd_decide(argv):
         return _decide_reporting("all", lambda: commit_after_decide(
             repo, ALL_QUEUE, None, lambda: ask_at_launch_all(
                 repo, wait=None, leftovers=True,
-                goes_on="to answer later:") or 0,
+                goes_on="nothing else is asked.") or 0,
             every_queue=True))
     if not a.target:
         print("cepa-until decide: the following arguments are required: "
