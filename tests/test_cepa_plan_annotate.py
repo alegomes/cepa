@@ -133,6 +133,41 @@ def test_note_is_appended_and_evidence_kept():
         txt = cli(root, "status", "fila").stdout
         line = [l for l in txt.splitlines() if "anotaç" in l]
         check("text status flags the annotated done item", bool(line), txt)
+        check("text status counts the notes of d1",
+              any(l.strip().startswith("2 anotaç") and "fila d1" in l for l in line),
+              txt)
+
+
+def test_note_whitespace_is_collapsed():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = fixture(tmp)
+        p = cli(root, "annotate", "fila", "d1", "--note", "mesclado\n  pelo\teb31cd5")
+        check("multi-line note accepted", p.returncode == 0, p.stderr)
+        notes = item_of(root).get("anotacoes") or []
+        check("internal whitespace and newlines collapsed",
+              [n.get("texto") for n in notes] == ["mesclado pelo eb31cd5"], str(notes))
+
+
+def test_malformed_notes_are_hidden():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = fixture(tmp)
+        plan = yaml.safe_load(plan_file(root).read_text())
+        for it in plan["items"]:
+            if it["id"] == "d1":
+                it["anotacoes"] = ["texto solto", {"texto": "   ", "em": "x"},
+                                   {"texto": NOTE1, "em": "2026-11-12", "autor": "a"}]
+        plan_file(root).write_text(yaml.safe_dump(plan, allow_unicode=True))
+        sj = cli(root, "show", "fila", "d1", "--json")
+        data = json.loads(sj.stdout) if sj.returncode == 0 else {}
+        check("show --json keeps only well-formed notes",
+              [n.get("texto") for n in data.get("item", {}).get("anotacoes") or []]
+              == [NOTE1], sj.stdout + sj.stderr)
+        out = cli(root, "show", "fila", "d1").stdout
+        check("show text hides the malformed notes",
+              "texto solto" not in out and NOTE1 in out, out)
+        txt = cli(root, "status", "fila").stdout
+        check("text status counts only well-formed notes",
+              any(l.strip().startswith("1 anotaç") for l in txt.splitlines()), txt)
 
 
 def test_refusals_write_nothing():
@@ -155,7 +190,8 @@ def test_refusals_write_nothing():
 
 
 def main():
-    for t in (test_note_is_appended_and_evidence_kept, test_refusals_write_nothing):
+    for t in (test_note_is_appended_and_evidence_kept, test_refusals_write_nothing,
+              test_note_whitespace_is_collapsed, test_malformed_notes_are_hidden):
         print(t.__name__)
         t()
     if FAILURES:
