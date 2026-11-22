@@ -39,7 +39,7 @@ back in A) — the last two were bypasses found in the pair review.
 
 The decision recorded with this item: outside the session root the lock has
 no jurisdiction, for the Write tool too, and B's `build-hex.yaml` is not read.
-`test_write_in_sibling_repo` pins that with a real repo B whose config would
+`check_write_in_sibling_repo` pins that with a real repo B whose config would
 deny the file.
 
 The cases run against every generated copy of the hook, as a subprocess.
@@ -103,7 +103,7 @@ def plugin_of(hook: Path) -> str:
                       .read_text(encoding="utf-8"))["name"]
 
 
-def run(hook, agent_type, command, cwd):
+def run(hook, agent_type, command, cwd, proc_cwd=None):
     payload = {
         "tool_name": "Bash",
         "tool_input": {"command": command},
@@ -113,11 +113,12 @@ def run(hook, agent_type, command, cwd):
     env = dict(os.environ)
     env.pop("CEPA_BASHLOCK_ENFORCE", None)
     p = subprocess.run([sys.executable, str(hook)], input=json.dumps(payload),
-                       capture_output=True, text=True, env=env, timeout=60)
+                       capture_output=True, text=True, env=env, timeout=60,
+                       cwd=str(proc_cwd) if proc_cwd else None)
     return p.returncode, p.stderr
 
 
-def test_write_in_sibling_repo(a):
+def check_write_in_sibling_repo(a):
     """Write tool, session in A, file in a real sibling repo B: out of A's
     jurisdiction, and B's committed build-hex.yaml is NOT applied (the item's
     recorded decision). The file is outside the qa-engineer's lanes in both
@@ -161,6 +162,15 @@ def main():
     tmp = Path(tempfile.mkdtemp(prefix="bpl-tmp-")).resolve()   # not a repo
     (b / "x").mkdir()
     (a / "link").symlink_to(b / "x")   # logical `..` through it lands in A
+    (b / "toA").symlink_to(a)          # a relative path in B that reaches A
+    # A session root nested inside another repo P (root = P/N).
+    p_repo = make_repo("bpl-repo-p-")
+    n_root = p_repo / "N"
+    n_root.mkdir()
+    git("init", "-q", cwd=n_root)
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q",
+        "--allow-empty", "-m", "init", cwd=n_root)
+    plain = Path(tempfile.mkdtemp(prefix="bpl-plain-")).resolve()   # root outside git
 
     heredocs = ("cat > Base.java <<'EOF'\nclass Base {}\nEOF\n"
                 "cat > MultimodalTest.java <<'EOF'\nclass MultimodalTest {}\nEOF")
@@ -192,22 +202,43 @@ def main():
         ("cd em segundo plano não muda o diretório",
          f"cd {b} &\ncat > Y.java <<'EOF'\nx\nEOF"),
         ("cd & escrita na mesma linha", f"cd {b} & cat > Y.java <<'EOF'\nx\nEOF"),
+        ("cd $OLDPWD volta para a raiz",
+         f"cd {b}\ncd $OLDPWD\ncat > evil.txt <<'E'\nx\nE"),
+        ("link em B que aponta para A, depois de ;",
+         f"cd {b}\ncat > toA/evil.txt <<'E'\nx\nE"),
+        ("link em B que aponta para A, depois de &&",
+         f"cd {b} && cat > toA/evil.txt <<'E'\nx\nE"),
+        ("cd dentro de $(...) não move a linha",
+         f"echo $(cd {b}); cat > Y.java <<'E'\nx\nE"),
         ("linha que cita a raiz da sessão nunca é balde 3",
          f"cd {b}; python3 -c \"open('{a}/src/main/X.java','w')\""),
+    ]
+
+    # (label, command, session root, hook process cwd)
+    deny_other_roots = [
+        ("raiz aninhada no destino: cd no repo pai, escrita relativa",
+         f"cd {p_repo}\ncat > N/evil.txt <<'E'\nx\nE", n_root, None),
+        ("raiz aninhada no destino: cd no repo pai nunca é certo",
+         f"cd {p_repo}; python3 -c 1", n_root, None),
+        ("raiz fora de git: na dúvida, conservador", f"cd {b}; python3 -c 1", plain, None),
+        ("cd relativo sem .. pode seguir o CDPATH",
+         f"cd {b.name}; python3 -c 1", a, b.parent),
     ]
 
     for hook in HOOKS:
         top = hook.parent.parent.name
         agent_type = f"{plugin_of(hook)}:{AGENTS[top]}"
-        for want, cases in ((0, allow), (2, deny)):
-            for label, cmd in cases:
-                rc, err = run(hook, agent_type, cmd, a)
-                verb = "libera" if want == 0 else "nega"
-                check(f"[{top:13}] {verb}: {label}",
-                      rc == want and "erro interno" not in err,
-                      f"exit={rc} (esperado {want}) stderr={err.strip()[:300]!r}")
+        cases = [(0, label, cmd, a, None) for label, cmd in allow]
+        cases += [(2, label, cmd, a, None) for label, cmd in deny]
+        cases += [(2, label, cmd, root, pc) for label, cmd, root, pc in deny_other_roots]
+        for want, label, cmd, root, pc in cases:
+            rc, err = run(hook, agent_type, cmd, root, pc)
+            verb = "libera" if want == 0 else "nega"
+            check(f"[{top:13}] {verb}: {label}",
+                  rc == want and "erro interno" not in err,
+                  f"exit={rc} (esperado {want}) stderr={err.strip()[:300]!r}")
 
-    test_write_in_sibling_repo(a)
+    check_write_in_sibling_repo(a)
 
     if FAILURES:
         print(f"\n{len(FAILURES)} falha(s)")

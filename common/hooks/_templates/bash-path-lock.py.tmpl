@@ -880,6 +880,11 @@ def _expand(ctx, raw, cwds):
             return _UNKNOWN if v is None else v
         if name == "PWD" and len(cwds) == 1:
             return str(next(iter(cwds)))
+        if name == "OLDPWD":
+            # the hook's own environment says nothing about the line's previous
+            # `cd`: `cd <B>; cd $OLDPWD` goes back to the root (pair review of
+            # path-lock-le-regras-do-repo-do-arquivo)
+            return _UNKNOWN
         v = os.environ.get(name)
         return _UNKNOWN if v is None else v
 
@@ -945,7 +950,9 @@ def _cd_cannot_fail(ctx, d):
     Fail-silent: any doubt (git error, timeout) returns False, which is the
     old conservative reading.
     """
-    if d is None or _inside(d, ctx.root):
+    # a root nested in the destination (`cd <P>` with the root at `<P>/N`)
+    # keeps the root reachable from there: never certain.
+    if d is None or _inside(d, ctx.root) or _inside(ctx.root, d):
         return False
     try:
         if not d.is_dir() or not os.access(str(d), os.X_OK):
@@ -953,9 +960,10 @@ def _cd_cannot_fail(ctx, d):
     except OSError:
         return False
     theirs = _git_common_dir(d)
-    if theirs is None:
+    ours = _git_common_dir(ctx.root)
+    if theirs is None or ours is None:
         return False
-    return theirs != _git_common_dir(ctx.root)
+    return theirs != ours
 
 
 def _worktrees(ctx):
@@ -992,6 +1000,13 @@ def _refs_root(ctx, text, args, cwds):
     A string check, declared as such: a path assembled at runtime
     (`$(echo L3Jvb3Q= | base64 -d)`) escapes. The design accepts that
     residue — obfuscating after a deny is willful, not discovery.
+
+    Every known argument is also resolved against the line's directories,
+    not only the ones with `~`, `..` or `/`: a relative path can reach the
+    root through a symlink (`cd <B> && cat > toA/x` with `B/toA -> <root>`)
+    or because the root is nested in the directory (`cd <P> && cat > N/x`
+    with the root at `<P>/N`). Both were found in the pair review of
+    path-lock-le-regras-do-repo-do-arquivo.
     """
     root_s = str(ctx.root)
     if root_s in text:
@@ -1002,10 +1017,16 @@ def _refs_root(ctx, text, args, cwds):
         v = a.value
         if root_s in v:
             return True
+        v = v.split("=", 1)[-1] if v.startswith("-") else v
         if v.startswith("~") or ".." in v or os.path.isabs(v):
-            for p in _resolve_all(v.split("=", 1)[-1] if v.startswith("-") else v, cwds):
-                if _inside(p, ctx.root):
-                    return True
+            where = cwds
+        else:
+            # a plain relative path trivially lands in the root from a
+            # directory inside it: that is not citing the root.
+            where = [c for c in cwds if not _inside(c, ctx.root)]
+        for p in _resolve_all(v, where):
+            if _inside(p, ctx.root):
+                return True
     return False
 
 
