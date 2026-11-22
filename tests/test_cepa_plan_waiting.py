@@ -195,6 +195,15 @@ def output_shape():
               [f.get("queue") for f in filas] == ["a", "b"], j.stdout)
         check("--json traz o total de itens", data.get("total_itens") == 3,
               j.stdout)
+        check("--json traz root e o caminho de cada fila",
+              data.get("root") == str(root.resolve())
+              and filas and filas[0].get("path", "").endswith(
+                  "/.claude/queues/a/queue.yaml"), j.stdout)
+        check("--json guarda os acentos como texto",
+              "tarefa que sobrou em item concluído" in j.stdout, j.stdout)
+        sec = lines_after(out, "fila a") or []
+        check("itens na ordem da fila",
+              [l.split()[1] for l in sec] == ["a2", "a3"], out)
         check("--json traz id, posição, motivo e pergunta",
               filas and filas[0]["itens"][0] == {
                   "posicao": 3, "id": "a2", "motivo": "item travado",
@@ -208,6 +217,18 @@ def no_queue_and_unreadable():
         p = run(root, "waiting")
         check("sem .claude/queues sai com 2", p.returncode == 2,
               p.stdout + p.stderr)
+        check("sem fila diz quem escreve a fila",
+              "nenhuma fila em" in p.stderr and "/common:queue" in p.stderr,
+              p.stderr)
+        only_bad = root / ".claude" / "queues" / "so-quebrada"
+        only_bad.mkdir(parents=True)
+        (only_bad / "queue.yaml").write_text("items: [: ::\n", encoding="utf-8")
+        p = run(root, "waiting")
+        check("só filas ilegíveis: avisa e sai com 0, não com 2",
+              p.returncode == 0 and "aviso: fila so-quebrada ilegível" in p.stderr
+              and "nenhuma fila em" not in p.stderr, p.stdout + p.stderr)
+        import shutil
+        shutil.rmtree(only_bad)
         write_queue(root, "boa", [item("g1", status="blocked",
                                        owner_question="Destravo g1?")])
         bad = root / ".claude" / "queues" / "quebrada"

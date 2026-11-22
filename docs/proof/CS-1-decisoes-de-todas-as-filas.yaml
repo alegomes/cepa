@@ -3,7 +3,7 @@ card: CS-1-decisoes-de-todas-as-filas
 verdict: unproven
 reviewed_at: 2026-11-22T00:00:00-03:00
 base_commit: 42bc4df~1
-head_commit: 42bc4df
+head_commit: 1d5c5da
 issue_type: Task
 scope:
   changed_classes:
@@ -18,22 +18,18 @@ levels:
     perturbation:
       status: survived
       results:
-        - "24 perturbations in a detached worktree (git worktree add --detach /tmp/cs1-proof 42bc4df), covering test tests/test_cepa_plan_waiting.py (script-style, run with python3), baseline green (tests/test_cepa_plan_ready.py also green)"
-        - "RED (12 of 24): three reason labels, WAITING_LIMIT cut, dropped ignored, blocked branch, question fallback to blocked reason, route-none guard, done vs open reason swap, owner_question precedence on open route, dispatch of `waiting`"
-        - "SURVIVED: question fallback owner_question -> human_pending on blocked item (c2 always has owner_question)"
-        - "SURVIVED: final fallback 'sem motivo registrado' (no test with no reason at all)"
-        - "SURVIVED: position numbering base 1 -> 0 (tests never assert the number)"
-        - "SURVIVED: waves-plan filter (mode_of != MODE) removed (no test with a waves plan)"
-        - "SURVIVED: stderr warning for unreadable queue removed (no test with a broken queue file)"
-        - "SURVIVED: exit 2 with no queue file changed to exit 0 (no test for the empty repo)"
-        - "SURVIVED: queues with nothing waiting hidden from output (shown = queues)"
-        - "SURVIVED: total items count forced to 0"
-        - "SURVIVED: --json branch disabled, and total_itens forced to 0 (no test calls --json)"
-        - "SURVIVED: non-dict item guard removed"
-        - "SURVIVED: header text 'esperam você' and line format (id — motivo: pergunta) changed (only substrings asserted)"
+        - "54 perturbations in a detached worktree (git worktree add --detach /tmp/cs1-proof2 1d5c5da, removed at the end), perturbations scoped to the waiting block of common/bin/cepa-plan (a first unscoped run hit the same text in cmd_ready and was discarded); covering test tests/test_cepa_plan_waiting.py run with python3. Baseline: waiting test green (27 ok lines, 'tudo passou'), tests/test_cepa_plan_ready.py green"
+        - "ALL 12 survivors of the previous pass (42bc4df) are now RED: blocked question fallback to human_pending, 'sem motivo registrado', positions base 0, waves-plan filter, unreadable-queue stderr warning, exit 2 with no queue, hiding empty queues, header total, --json branch, total_itens, non-dict guard, header text and line format"
+        - "RED (46 of 54), including reasons, WAITING_LIMIT, dropped, blocked branch, route-none guard, done/open swap, owner_question precedence, positions 0 and 2, waves filter removed and inverted, json return code, json filas, header filas count, line prefix/separator/width, queue name, id, motivo, pergunta, posicao, dispatch (removed, json forced, json ignored), parser --json dest"
+        - "SURVIVED (real, new, finer than the previous set): cmd_waiting `unreadable += 1` removed (and `not queues and not unreadable` -> `not queues`): with every queue file unreadable the command should print the warnings and exit 0, mutated it exits 2 with 'nenhuma fila' and no test notices (tests/test_cepa_plan_waiting.py has no all-unreadable case; test_cepa_plan_ready.py has one for `ready`)"
+        - "SURVIVED (real): order of items inside a queue (reversed(q['itens']) in the text output) - no test with two waiting items in one queue asserts their order"
+        - "SURVIVED (real): --json field `root` blanked, and --json `path` of each queue blanked - fields never asserted"
+        - "SURVIVED (real): --json ensure_ascii False->True - no assertion on raw accented output"
+        - "SURVIVED (real, minor): stderr text of the 'nenhuma fila em ...' message changed - only the exit code is asserted"
+        - "SURVIVED (equivalent, no action): dropping `continue` after the unreadable warning (summary is None on error, so nothing is appended); total summed over queues instead of shown (empty queues add 0)"
   l2_coverage:
     status: assumed
-    uncovered_lines: ["cmd_waiting --json branch", "cmd_waiting exit 2 branch", "unreadable-queue warning", "waves-plan skip in waiting_of_queue", "non-dict item guard"]
+    uncovered_lines: ["cmd_waiting: all-queues-unreadable path (`and not unreadable`)", "cmd_waiting --json: root and path fields", "cmd_waiting: text output order within a queue"]
     run: "no coverage tool run; uncovered branches inferred from the surviving perturbations above"
   l4_adversarial_input:
     status: n/a
@@ -41,4 +37,4 @@ levels:
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-routing_reason: "Survivors on externally observable behavior of the CLI (exit code 2, --json output and total, header and line format, queue numbering, unreadable-queue warning, waves-plan skip): breaking each leaves tests/test_cepa_plan_waiting.py green. Main path (reasons, question fallbacks, cut, dropped, dispatch) is load-bearing. UNPROVEN: add tests for these branches."
+routing_reason: "The 12 earlier survivors are dead. A finer perturbation set found 5 real survivors on observable behavior of the new command: the exit code when every queue is unreadable (0 vs 2), item order inside a queue, the --json fields root and path, ensure_ascii, and the stderr text of the empty-repo message. Breaking each leaves tests/test_cepa_plan_waiting.py green. UNPROVEN until tests cover them (the first, the exit code with every queue unreadable, is the one with real weight)."
