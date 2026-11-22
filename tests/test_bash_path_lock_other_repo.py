@@ -211,6 +211,8 @@ def main():
          f"cd {b} && cat > toA/evil.txt <<'E'\nx\nE"),
         ("cd ~- volta para a raiz", f"cd {b}; cd ~-; touch x"),
         ("~-/x é a raiz", f"cd {b}; touch ~-/x"),
+        ("~+ é o diretório atual: ~+/toA alcança a raiz por link",
+         f"cd {b}; touch ~+/toA/evil.txt"),
         ("valor de flag --out= por um link para A",
          f"cd {b}; python3 tool.py --out=toA/evil.txt"),
         ("cd dentro de $(...) não move a linha",
