@@ -15,6 +15,9 @@ CS-9: in that panel a route already answered "no" is not asked (one line per
 queue counts them), and a queue with its own live run is left out with one line
 naming the queue and its run.
 
+CS-10: off a terminal, `cepa until decide --all` prints the pending questions of
+every queue as text, asks nothing and commits nothing.
+
 Against the real CLI (`cepa-until decide --all`) in a pseudo-terminal, in a
 temporary git repo with two queues, `a` and `b`, each holding one item with an
 open owner route.
@@ -514,6 +517,57 @@ def test_cs9_the_launch_panel_of_all_keeps_its_live_queue_silent():
               "left out of this panel" not in out and f"c/{run}" not in launch,
               launch[-1500:])
         check("...e não pergunta c1", "Liberei c?" not in launch, launch[-1500:])
+
+
+def test_cs10_decide_all_off_a_terminal_lists_every_question_and_commits_nothing():
+    """The spec's script: the CS-7 repo with a stdin that is not a TTY. Exit 0,
+    the questions of `a1` and `b1` printed as text, no prompt, and `git log`
+    gains no commit (the queue files stay as they were)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = al._repo(tmp, {
+            "b": [_owner_item("b1", "liberar o acesso da fila b",
+                              "Liberei o acesso da fila b?")],
+            "a": [_owner_item("a1", "liberar o acesso da fila a",
+                              "Liberei o acesso da fila a?")]})
+        head_before = al._git(root, "rev-parse", "HEAD").strip()
+        queues_before = {q: p.read_text() for q, p in paths.items()}
+        p = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide", "--all",
+                            "--repo", str(root)], capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL, timeout=60)
+        out = p.stdout
+        check("fora do terminal: decide --all sai com 0", p.returncode == 0,
+              out[-1500:] + p.stderr[-800:])
+        check("...imprime a pergunta de a1",
+              re.search(r"a1 \(.*\): Liberei o acesso da fila a\?", out), out)
+        check("...e a pergunta de b1",
+              re.search(r"b1 \(.*\): Liberei o acesso da fila b\?", out), out)
+        check("...na ordem das filas, cada uma na sua seção",
+              0 <= out.find("queue `a`") < out.find("a1 (")
+              < out.find("queue `b`") < out.find("b1 ("), out)
+        check("...conta as duas perguntas", "waiting on you: 2" in out, out)
+        check("...não pergunta nada (sem o menu de resposta)",
+              "[y] yes" not in out and "questions interrupted" not in out, out)
+        check("...diz onde responder, num terminal",
+              "in a terminal: cepa-until decide --all" in out, out)
+        head = al._git(root, "rev-parse", "HEAD").strip()
+        check("...e o git log não ganha commit", head == head_before, head)
+        check("...e as filas ficam como estavam",
+              {q: p.read_text() for q, p in paths.items()} == queues_before,
+              "fila mudou")
+
+
+def test_cs10_bare_decide_off_a_terminal_also_lists_as_text():
+    """CS-8 says the bare call is `--all`; off a terminal it lists the same text."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = al._repo(tmp, {
+            "a": [_owner_item("a1", "liberar a", "Liberei a fila a?")]})
+        p = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide",
+                            "--repo", str(root)], capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL, timeout=60)
+        check("decide sem argumento fora do terminal lista a1 como texto",
+              p.returncode == 0 and "a1 (" in p.stdout
+              and "Liberei a fila a?" in p.stdout and "[y] yes" not in p.stdout,
+              p.stdout[-1200:])
 
 
 def main():
