@@ -1155,6 +1155,50 @@ QUOTE_ROW = msg("user", "<task-notification>\nO agente citou: Seu relatório fin
 check("(N7) notificação que cita o texto do bloqueio não isenta → bloqueia",
       has_subst(subst(text(GOOD), QUOTE_ROW, text(GOOD), session="s-sub-n7")))
 
+# ── third proof round (X survivors) ────────────────────────────────────────
+# X30: a numbered `?` BEFORE the closing heading is not a decision list; only
+# the closing section counts. The previous report asks in the technical
+# detail and closes with "Nada pendente." -> nothing to replace.
+ASKS_IN_DETAIL = GOOD.split(HEAD_STEPS)[0].replace(
+    "### Detalhe técnico\n", "### Detalhe técnico\n"
+    "1. Por que o portão aceitava digitação errada?\n"
+    "2. Quem chamava o verificador?\n\n") + HEAD_STEPS + "Nada pendente.\n"
+assert "?" in ASKS_IN_DETAIL.split(HEAD_STEPS)[0]
+check("(X30) pergunta numerada só antes do título final não é lista → não pede",
+      not has_subst(subst(text(ASKS_IN_DETAIL), NOTIF, text(GOOD),
+                          session="s-sub-x30")))
+
+# X10..X18: every wording REPLACES_LINE promises is accepted in the closing section
+for i, phrase in enumerate([
+        "Substitui o bloco anterior.",                       # o + bloco
+        "Esta lista substituiu as anteriores.",              # substituiu + as
+        "Esta lista substitui a lista de decisões anterior.",  # de decisões
+        "A lista anterior fica superada por esta.",          # superad
+        "This list supersedes the previous one.",            # supersedes
+        "This replaces the previous decision block.",        # block
+        ]):
+    check(f"(X.{i}) {phrase!r} na seção final é aceita",
+          not has_subst(subst(text(GOOD), NOTIF, text(GOOD.replace(
+              HEAD_STEPS, HEAD_STEPS + phrase + "\n")), session=f"s-sub-x{i}")))
+
+# X7: our block feedback with leading whitespace is still our block -> exempt
+check("(X7) bloqueio do hook com espaço no começo ainda isenta a reescrita",
+      not has_subst(subst(text(GOOD), msg("user", "\n  " + HOOK_BLOCK["message"]
+                                          ["content"], mtype="user"),
+                          text(GOOD), session="s-sub-x7")))
+# X8: a user row with only whitespace is not the owner answering
+check("(X8) linha de usuário só com espaços não é resposta → bloqueia",
+      has_subst(subst(text(GOOD), msg("user", [{"type": "text", "text": "  \n "}],
+                                      mtype="user"), NOTIF, text(GOOD),
+                      session="s-sub-x8")))
+# X4: a message's text blocks join with a newline, so a closing heading that
+# opens the second block still starts a line
+_top, _tail = GOOD.split(HEAD_STEPS)
+SPLIT_PREV = msg("assistant", [{"type": "text", "text": _top.rstrip()},
+                               {"type": "text", "text": HEAD_STEPS + _tail}])
+check("(X4) lista anterior em dois blocos de texto ainda é lista → bloqueia",
+      has_subst(subst(SPLIT_PREV, NOTIF, text(GOOD), session="s-sub-x4")))
+
 print()
 if FAILURES:
     print(f"{len(FAILURES)} failure(s): {FAILURES}")
