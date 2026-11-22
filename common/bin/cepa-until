@@ -5304,17 +5304,9 @@ def open_precondition_route(queue, repo, row):
     return error
 
 
-_OWNER_NO = re.compile(r"Resposta do dono em (\d{4})-(\d{2})-(\d{2}): n(?:ão|ao)\b",
-                       re.I)
-
-
-def last_owner_no(evidence):
-    """The date (`YYYY-MM-DD`) of the owner's LAST answer when it was "não", else None.
-    `cepa-plan answer` prepends each answer to the evidence, so the last one is the
-    text's start: a later "sim" or free text, or an older "não" further down, does
-    not count."""
-    m = _OWNER_NO.match((evidence or "").lstrip())
-    return f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else None
+# One reader of "the owner's last answer was no", shared with `cepa-plan waiting`.
+_OWNER_NO = _ownertext.OWNER_NO
+last_owner_no = _ownertext.last_owner_no
 
 
 def is_old_route(ad):

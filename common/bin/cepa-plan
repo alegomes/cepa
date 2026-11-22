@@ -2132,17 +2132,28 @@ def waiting_of_queue(root, name, target=None):
         return None, error
     if not isinstance(plan, dict) or mode_of(plan) != MODE:
         return None, None
-    rows = []
+    rows, answered_no = [], []
     for pos, it in enumerate((plan.get("items") or []), 1):
         if not isinstance(it, dict):
             continue
         found = waiting_of_item(it)
-        if found:
-            rows.append({"posicao": pos, "id": str(it.get("id")),
-                         "motivo": WAITING_REASON[found[0]],
-                         "pergunta": found[1]})
-    return {"queue": qp.queue_name_of(plan, name), "path": str(target),
-            "itens": rows}, None
+        if not found:
+            continue
+        # CS-3 (Q4): a route whose last owner answer was "não" is not a line,
+        # only counted, by the same reader `cepa-until decide` uses to not ask
+        # it again.
+        date = _ownertext.last_owner_no(it.get("evidence"))
+        if date:
+            answered_no.append(date)
+            continue
+        rows.append({"posicao": pos, "id": str(it.get("id")),
+                     "motivo": WAITING_REASON[found[0]],
+                     "pergunta": found[1]})
+    queue = qp.queue_name_of(plan, name)
+    no = ({"total": len(answered_no), "ultima": max(answered_no),
+           "comando": f"cepa until decide {queue}"} if answered_no else None)
+    return {"queue": queue, "path": str(target), "itens": rows,
+            "respondidas_nao": no}, None
 
 
 def waiting_runs_of(root):
@@ -2202,7 +2213,7 @@ def cmd_waiting(root, as_json):
         print(f"nenhuma fila em {root / qp.NEW_DIR} — quem escreve é o "
               "/common:queue", file=sys.stderr)
         return 2
-    shown = [q for q in queues if q["itens"]]
+    shown = [q for q in queues if q["itens"] or q["respondidas_nao"]]
     total = sum(len(q["itens"]) for q in shown)
     # CS-2: the runs waiting on the owner, in a section of their own, each
     # with the command that resolves it.
@@ -2219,6 +2230,11 @@ def cmd_waiting(root, as_json):
         print(f"\nfila {q['queue']}")
         for r in q["itens"]:
             print(f"  {r['posicao']:>3}. {r['id']} — {r['motivo']}: {r['pergunta']}")
+        no = q["respondidas_nao"]
+        if no:
+            last = no["ultima"]
+            print(f"  {no['total']} que você já respondeu \"não\" (última em "
+                  f"{last[8:10]}/{last[5:7]}): para revisitar, {no['comando']}")
     if runs:
         print(f"\nruns que esperam você · {len(runs)}")
         for r in runs:
@@ -5854,6 +5870,10 @@ def main(argv=None):
             "sua) and a route left on a `done` item (tarefa que sobrou em item\n"
             "concluído). Each line: id, reason, the question cut to one line.\n"
             "To answer them: cepa until decide <fila>.\n"
+            "\n"
+            "A route whose last answer was \"não\" is not a line: the queue only\n"
+            "counts them, with the date of the last one and the command that\n"
+            "revisits them (`respondidas_nao` in --json).\n"
             "\n"
             "A section of its own lists the runs waiting on you (the same ones\n"
             "`cepa until pending` lists: ready to land, merged with a red build,\n"
