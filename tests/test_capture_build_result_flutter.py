@@ -252,3 +252,35 @@ def test_background_check_script_is_harvested_with_the_manifest(tmp_path):
     bash("ls", {"stdout": "pubspec.yaml", "stderr": "", "interrupted": False})
     state = json.loads((proj / ".claude" / "last-build.json").read_text())
     assert state["status"] == "SUCCESS" and state["kind"] == "check-script"
+
+
+def test_check_script_run_outside_the_session_tree_records_there(tmp_path):
+    # `cd ../wt && tool/check.sh` (a proof worktree): the result describes wt, so it lands in
+    # wt/.claude/last-build.json and the session baseline stays untouched (same rule as Maven)
+    proj = _project(tmp_path, DECLARED)
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    assert _run_hook(proj, tmp_path, "cd ../wt && tool/check.sh", CHECK_GREEN) is None
+    state = json.loads((wt / ".claude" / "last-build.json").read_text())
+    assert state["status"] == "SUCCESS" and state["kind"] == "check-script"
+
+
+def test_effective_build_dir_follows_cd_to_a_declared_check_script(tmp_path):
+    proj = _project(tmp_path, DECLARED)
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    assert cbr.effective_build_dir("cd ../wt && tool/check.sh", proj.resolve()) == wt.resolve()
+    # quoted mention is not running it: no build segment, falls back to the session root
+    assert cbr.effective_build_dir('cd ../wt && echo "tool/check.sh"', proj.resolve()) == proj.resolve()
+    assert cbr.effective_build_dir('cd ../wt && echo "x; tool/check.sh x"', proj.resolve()) == proj.resolve()
+
+
+def test_check_script_declared_with_dot_slash_matches_both_spellings(tmp_path):
+    proj = _project(tmp_path, {"scripts": [{"command": "./tool/check.sh"}]})
+    for command in ("tool/check.sh", "./tool/check.sh"):
+        assert cbr.classify(command, CHECK_GREEN, None, root=proj)[:2] == ("SUCCESS", "check-script")
+
+
+def test_negative_exit_code_is_failure(tmp_path):
+    proj = _project(tmp_path, DECLARED)
+    assert cbr.classify("tool/check.sh", CHECK_GREEN, -9, root=proj)[0] == "FAILURE"
