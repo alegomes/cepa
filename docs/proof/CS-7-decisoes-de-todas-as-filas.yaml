@@ -3,7 +3,7 @@ card: CS-7-decisoes-de-todas-as-filas
 verdict: unproven
 reviewed_at: 2026-11-22T00:00:00-03:00
 base_commit: 765b7fa
-head_commit: be6072b
+head_commit: 6538bf7
 issue_type: Task
 scope:
   changed_classes:
@@ -21,26 +21,23 @@ levels:
     perturbation:
       status: survived
       results:
-        - "GREEN at head be6072b in detached worktree /tmp/proof-cs7-a (removed afterwards): python3 tests/test_cepa_until_decide_all.py -> '4 testes' ok; the 3 test_cs7_launch_panel_* functions of tests/test_cepa_until_all.py -> 'FAILS 0'."
-        - "29 perturbations applied (string substitutions on common/bin/cepa-until, each alone, both covering suites re-run, file restored after each; git diff --quiet confirmed clean). M10 skipped: pattern matched 2 places."
-        - "KILLED (13): M02 leftovers branch off; M03 leftovers not added; M04 --all passes leftovers=False; M11 refusal disabled; M12 refusal exit 2->1; M14 every_queue=False; M16 changed = all paths; M18 commit paths=None; M20 paths override ignored; M23 nargs='?' removed; M25 ask result 'or 0'->'or 1'; M26 --all branch disabled; M29 changed compares only new files."
-        - "SURVIVED, real (behavior changes, no test turns red): M01 cepa-until:5487 `wait=wait` -> `wait=ANSWER_WAIT_SEC` (the batch panel would time out after 5 min; the spec decided 'sem tempo limite'); M05 cepa-until:5565 `wait=None` -> default wait (same defect from the --all side); M06 cepa-until:5566 `goes_on=` dropped (cut-panel line says 'the run goes on without' in `decide --all`, which has no run); M07 cepa-until:5495 and M08 cepa-until:5503 goes_on hardcoded (same); M19 cepa-until:5684 `extra_paths=changed_waivers` dropped (a waiver file an answer changed is left out of the --all commit); M21 cepa-until:5682 commit summary text; M22 cepa-until:5681 commit target '--all' -> queue (message prefix); M24 cepa-until:5570-5571 missing-target refusal exit 2 -> 0; M27 cepa-until:5429 launch default leftovers False -> True (launch panel would start asking leftover tasks of delivered items); M28 cepa-until:5430 launch default goes_on text; M13 cepa-until:5558 refusal message hint."
-        - "SURVIVED, equivalent (no observable difference): M15 cepa-until:5625 and M30 cepa-until:5644 (run_record_paths(ALL_QUEUE) already returns every queue file, so every_queue_file is redundant); M17 cepa-until:5679 (commit_run_records returns without committing when no path is dirty); M09 cepa-until:5491 (NoAnswer cannot occur with wait=None, and for launch the hardcoded text equals the default)."
+        - "GREEN at head 6538bf7 in detached worktree /tmp/proof-cs7-2 (removed afterwards): python3 tests/test_cepa_until_decide_all.py -> '9 testes' ok (16 s); the 3 test_cs7_launch_panel_* functions of tests/test_cepa_until_all.py -> 'FAILS 0'."
+        - "31 perturbations (the 29 of the previous pass re-adjusted to head, M10 now unambiguous, plus M31 = the new goes_on text reverted to 'the run goes on without.'), each alone as a string substitution on common/bin/cepa-until, both covering suites re-run (launch functions only when the decide-all suite stayed green), file restored after each; worktree clean at the end. An 8-way parallel attempt timed out (the pty tests do not run in parallel) and was discarded; the results below are from the sequential run."
+        - "KILLED (25): M01 wait=wait -> ANSWER_WAIT_SEC (the suite fails: the helper loses the child early with an Input/output error, so it is red by crash, not by a named check); M02 leftovers branch off; M03 leftovers not added; M04 leftovers=False; M05 wait default (same crash form as M01); M06 goes_on dropped; M07 q-less EOF cut text hardcoded; M10 'To answer later' dropped; M11 refusal disabled; M12 refusal exit 2->1; M14 every_queue=False; M16 changed = every path; M18 paths=None; M19 waiver files dropped from the commit; M20 paths override ignored; M21 commit summary text; M22 commit target '--all'; M23 nargs='?' removed; M24 missing-target exit 2->0; M25 ask result 'or 0'->'or 1'; M26 --all branch disabled; M27 launch default leftovers True; M28 launch default goes_on text; M29 changed compares only new files; M31 goes_on reverted to the old text."
+        - "SURVIVED, real: M08 common/bin/cepa-until:5503 (`cut = f\"questions stopped with q; {goes_on}\"` hardcoded to 'the run goes on without.': in `decide --all` a q at the panel would say the run goes on, and no test sends q to the --all panel); M13 common/bin/cepa-until:5559 (hint of the refusal message 'together; --all already asks every queue' reworded: the tests only match 'não combinam'-style words of the first half; cosmetic)."
+        - "SURVIVED, equivalent (no observable difference): M09 :5491 (NoAnswer cannot occur with wait=None, and for the launch panel the hardcoded text equals the default); M15 :5625 and M30 :5644 (run_record_paths(ALL_QUEUE) already returns every queue file, so every_queue_file is redundant); M17 :5679 (commit_run_records returns without committing when no path is dirty)."
+        - "Compared with the previous pass (13 killed, 12 real survivors at be6072b): the 10 behavior survivors (no wait limit, cut-panel text on EOF, waiver files in the commit, bare decide exit 2, launch leftovers default, launch goes_on default, commit text, commit target) are now killed; two real survivors remain."
     survivors:
-      - "common/bin/cepa-until:5487 and :5565 (no wait limit in decide --all, spec 'Decided without asking')"
-      - "common/bin/cepa-until:5566, :5495, :5503 (goes_on of the cut panel)"
-      - "common/bin/cepa-until:5684 (waiver files in the --all commit)"
-      - "common/bin/cepa-until:5570-5571 (exit 2 without target and without --all)"
-      - "common/bin/cepa-until:5429 and :5430 (launch-panel defaults leftovers=False, goes_on)"
-      - "common/bin/cepa-until:5681-5682, :5558 (commit message, refusal hint; cosmetic)"
+      - "common/bin/cepa-until:5503 (goes_on text of the cut panel after q in decide --all)"
+      - "common/bin/cepa-until:5559 (second half of the refusal message; cosmetic)"
   l2_coverage:
     status: assumed
     uncovered_lines: []
-    run: "no coverage tool wired for the Python CLI; the survivors above are the lines no test reaches with a discriminating assertion"
+    run: "no coverage tool wired for the Python CLI; the surviving line 5503 is the one changed line no test reaches (no test sends q to the --all panel)"
   l4_adversarial_input:
     status: n/a
     reason: "the diff only changes how `cepa until decide --all` reads local queue YAML written by the owner's own tooling and the owner's typed answers at a terminal; no external input surface and no api-rest module"
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-routing_reason: "29 perturbations run, 13 killed, 4 equivalent, 12 real survivors named by line. The main one is the missing wait limit of decide --all (5487, 5565), a behavior the spec decided and no test observes. Tests that would close it: a test of decide --all with the wait lowered (or observing the wait argument) that keeps asking after it; a test with EOF/q in the --all panel asserting 'to answer later:' and not 'the run goes on'; a test with a changed waiver file asserting it is in the --all commit; a test of `decide` with no argument and no --all exiting 2; a launch-panel test with a delivered item's leftover asserting it is not asked. l2_coverage is also assumed."
+routing_reason: "31 perturbations, 25 killed, 4 equivalent, 2 real survivors. Big progress: the missing wait limit, the cut text on EOF, the waiver files in the commit, the exit 2 of bare decide and the launch panel defaults are now observed by tests. What is left: (1) the cut line after typing q in decide --all is built from the same goes_on, but no test presses q in that panel (5503); (2) the refusal message's second half (5559) is not asserted (cosmetic). Closing 5503: a pty test of decide --all where the owner types q, asserting 'questions stopped with q; nothing else is asked.' and not 'the run goes on'. l2_coverage stays assumed (no tool for this CLI)."
