@@ -18,6 +18,10 @@ naming the queue and its run.
 CS-10: off a terminal, `cepa until decide --all` prints the pending questions of
 every queue as text, asks nothing and commits nothing.
 
+CS-11: with no open route in any queue, `cepa until decide --all` says "nada
+espera você" in one line and exits 0 without committing; before, it printed
+nothing at all, and the owner could not tell "nothing waits" from "it broke".
+
 Against the real CLI (`cepa-until decide --all`) in a pseudo-terminal, in a
 temporary git repo with two queues, `a` and `b`, each holding one item with an
 open owner route.
@@ -631,6 +635,106 @@ def test_cs10_stdin_not_a_tty_lists_even_when_stdout_is_a_terminal():
               and "questions interrupted" not in out, out[-1500:])
         check("...e não commita", al._git(root, "rev-parse", "HEAD").strip()
               == head_before, "commit novo")
+
+
+def _no_route_repo(tmp):
+    """Two queues and no open route: `a` only has a delivered item, `b` a pending
+    item that waits for nobody."""
+    return al._repo(tmp, {"a": [base.item("a1", status="done")],
+                          "b": [base.item("b1")]})
+
+
+def test_cs11_nothing_waiting_off_a_terminal_is_one_line_and_exit_0():
+    """The spec's script, off a terminal: exit 0, stdout is the one line "nada
+    espera você", and `git log` gains no commit."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _no_route_repo(tmp)
+        head_before = al._git(root, "rev-parse", "HEAD").strip()
+        queues_before = {q: p.read_text() for q, p in paths.items()}
+        p = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide", "--all",
+                            "--repo", str(root)], capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL, timeout=60)
+        check("sem rota aberta, fora do terminal: sai com 0", p.returncode == 0,
+              p.stdout[-800:] + p.stderr[-800:])
+        check("...e a saída é a linha 'nada espera você', só ela",
+              p.stdout.strip().splitlines() == ["nada espera você"], repr(p.stdout))
+        check("...sem erro", p.stderr.strip() == "", p.stderr[-800:])
+        check("...e o git log não ganha commit",
+              al._git(root, "rev-parse", "HEAD").strip() == head_before, "")
+        check("...e as filas ficam como estavam",
+              {q: p.read_text() for q, p in paths.items()} == queues_before,
+              "fila mudou")
+
+
+def test_cs11_nothing_waiting_on_a_terminal_is_the_same_line():
+    """On a terminal the owner came to answer: the same one line, no panel, exit
+    0, no commit."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _no_route_repo(tmp)
+        head_before = al._git(root, "rev-parse", "HEAD").strip()
+        rc, out = _decide_all_on_tty(tmp, root, [])
+        lines = [l.strip() for l in out.splitlines() if l.strip()]
+        check("sem rota aberta, no terminal: sai com 0", rc == 0, out[-800:])
+        check("...uma linha só, 'nada espera você'",
+              lines == ["nada espera você"], repr(out[-800:]))
+        check("...e não commita",
+              al._git(root, "rev-parse", "HEAD").strip() == head_before, "")
+
+
+def test_cs11_bare_decide_with_nothing_waiting_says_the_same():
+    """CS-8 makes the bare call `--all`: it says the same line."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _no_route_repo(tmp)
+        p = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide",
+                            "--repo", str(root)], capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL, timeout=60)
+        check("decide sem argumento, nada esperando: a mesma linha e 0",
+              p.returncode == 0
+              and p.stdout.strip().splitlines() == ["nada espera você"],
+              repr(p.stdout) + p.stderr[-400:])
+
+
+def test_cs11_a_route_answered_no_or_a_live_run_is_not_nothing():
+    """A route already answered "no" still sits with the owner (CS-9 counts it),
+    and so does the question of a queue with its own live run: neither prints
+    "nada espera você"."""
+    with tempfile.TemporaryDirectory() as tmp:
+        no = _owner_item("a1", "liberar a", "Liberei a?")
+        no["evidence"] = "Resposta do dono em 2026-11-19: não: Liberei a?"
+        root, _ = al._repo(tmp, {"a": [no]})
+        p = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide", "--all",
+                            "--repo", str(root)], capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL, timeout=60)
+        check("só rota negada: não diz 'nada espera você'",
+              "nada espera você" not in p.stdout
+              and "already answered" in p.stdout, p.stdout[-800:])
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = al._repo(tmp, {
+            "c": [_owner_item("c1", "liberar c", "Liberei c?")]})
+        alive = subprocess.Popen([sys.executable, "-c",
+                                  "import time; time.sleep(120)", "cepa-until"])
+        try:
+            al._live_run_of_queue(root, "c", alive.pid)
+            p = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide",
+                                "--all", "--repo", str(root)],
+                               capture_output=True, text=True,
+                               stdin=subprocess.DEVNULL, timeout=60)
+        finally:
+            alive.kill()
+            alive.wait()
+        check("só fila com run vivo: não diz 'nada espera você'",
+              "nada espera você" not in p.stdout
+              and "left out of this panel" in p.stdout, p.stdout[-800:])
+
+
+def test_cs11_the_launch_panel_with_nothing_waiting_stays_silent():
+    """The `--all` launch panel prints nothing when nothing waits: the line is
+    only for the owner who called `decide`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = al._repo(tmp, {"b": [base.item("b1")]})
+        rc, out, _ = al._launch_all_on_tty(tmp, root, [], wait="2")
+        check("largada sem nada esperando: não diz 'nada espera você'",
+              "nada espera você" not in out, out[-1200:])
 
 
 def main():
