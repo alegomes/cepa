@@ -1199,6 +1199,29 @@ SPLIT_PREV = msg("assistant", [{"type": "text", "text": _top.rstrip()},
 check("(X4) lista anterior em dois blocos de texto ainda é lista → bloqueia",
       has_subst(subst(SPLIT_PREV, NOTIF, text(GOOD), session="s-sub-x4")))
 
+# ── fourth proof round ──────────────────────────────────────────────────────
+# G6: a list-only turn WITH a recommendation and no deviation was measured
+# before this rule (telemetry event with 0 deviations), and still is.
+_ev_before_g6 = len(report_events())
+r = run("Stop", transcript(user("o que falta?"), text(GOOD)), session="s-sub-g6")
+check("(G6) lista com recomendação, sem desvio, turno só de lista → ainda emite telemetria",
+      block_reason(r.stdout) == "" and len(report_events()) == _ev_before_g6 + 1,
+      f"{len(report_events()) - _ev_before_g6} evento(s)")
+# X1: an assistant row whose content is not a list is skipped, not a crash
+check("(X1) linha de assistente sem lista de conteúdo entre as listas → ainda bloqueia",
+      has_subst(subst(text(GOOD), {"type": "assistant", "isSidechain": False,
+                                   "message": {"role": "assistant", "content": None}},
+                      NOTIF, text(GOOD), session="s-sub-x1")))
+# X3: a tool-only assistant row after the report is not "the current
+# message"; otherwise the report would be compared with itself and the first
+# list of the conversation would be asked for a replacement line
+TOOL_ONLY = msg("assistant", [{"type": "tool_use", "name": "Bash",
+                               "input": {"command": "ls"}}])
+check("(X3) primeira lista seguida de chamada de ferramenta → não pede a linha",
+      not has_subst(subst(NOTIF, text(GOOD), TOOL_ONLY, session="s-sub-x3")))
+check("(X3b) lista sem resposta, lista, chamada de ferramenta → bloqueia",
+      has_subst(subst(text(GOOD), NOTIF, text(GOOD), TOOL_ONLY, session="s-sub-x3b")))
+
 print()
 if FAILURES:
     print(f"{len(FAILURES)} failure(s): {FAILURES}")
