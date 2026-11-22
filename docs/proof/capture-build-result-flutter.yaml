@@ -1,0 +1,36 @@
+schema_version: 2
+card: capture-build-result-flutter
+verdict: needs-human
+reviewed_at: 2026-11-22T15:00:00-03:00
+base_commit: aa6e2ea
+head_commit: 8f1398c
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - { class: "common/hooks/capture-build-result.py (PATTERNS flutter entry, declared_check_scripts, _check_script_regex, _runs_check_script, _last_line, _classify_check_script, classify(root=), _is_build_segment(seg, scripts), effective_build_dir, _harvest_one trailer strip, main root=cwd)", module: hooks, external_observable: true, substituted_by_double: null }
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN first at 8f1398c: tests/test_capture_build_result_flutter.py + tests/test_capture_build_result_classify.py -> 78 passed. The covering tests run the real hook as a subprocess with a PostToolUse JSON payload and read .claude/last-build.json (no double of the changed code)."
+        - "26 perturbations of the hook at 8f1398c (every changed hunk), each run with -x against the two test files, in a throwaway detached worktree. 24 KILLED (1 failed): flutter ok marker, flutter fail marker, flutter kind renamed, declared root None guard, ok_line default, regex sh/bash prefix, regex ./ prefix, regex end lookahead, regex start anchor, last line equality (-> `ok in text`), last line skips blank lines, unclassified branch returns SUCCESS, classify wiring of the declared result off, classify root None, harvest trailer strip, harvest root, main root, nonzero exit wins, plus the 6 earlier survivors: (a) effective_build_dir scripts=[] , (b) _is_build_segment declared branch off, (c) _is_build_segment called without scripts, (d) removeprefix('./') dropped, (e) _runs_check_script on the raw command instead of the unquoted view, (f) exit_code != 0 -> > 0."
+        - "2 perturbations stay green and are EQUIVALENT mutants, not gaps: (g) removing `if not f.is_file(): return []` (read_text raises OSError, caught, the result is [] either way; only a stderr line differs); (h) dropping the `(?:fvm\\s+)?` group of the flutter regex (the preceding `(?:^|\\s)` already lets `fvm flutter test` match through the space before `flutter`, so the group never changes a match; `fvm flutter test` is covered and stays green)."
+      run: "git worktree add --detach /tmp/proof-cbrf2 8f1398c; python3 -m pytest tests/test_capture_build_result_flutter.py tests/test_capture_build_result_classify.py -q -> 78 passed; perturbation loop via sed on the worktree copy of the hook, restore by git checkout 8f1398c -- hook after each -> 24 x '1 failed', 2 equivalent x '78 passed'; worktree removed (git worktree list shows only main and the session worktree)."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python hooks in this repo; reachability inferred from the perturbation results above, not measured"
+  l4_adversarial_input:
+    status: skipped
+    reason: "not run: the touched surface parses the Bash command and tool output; no adversarial generator was run in this proof (scope limited to the covering tests and perturbation)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card; red-first check done anyway: head tests/test_capture_build_result_flutter.py against the aa6e2ea hook -> 40 failed, 4 passed (RED); against the 8f1398c hook -> 44 passed (78 passed with the classify file)."
+routing_reason: "Every changed hunk is load-bearing at the external surface (real hook subprocess, last-build.json): the 7 survivors of the dedb39a round are now killed, and red-at-base is 40 failed. Two perturbations stay green and were shown equivalent (is_file guard, fvm group). Not PROVEN only because L2 coverage is assumed (no coverage tool for Python hooks) and L4 adversarial input was not run; both are structural, nothing is unproven. Suggested decision for the human: accept the perturbation evidence in place of measured coverage and mark the card done."
