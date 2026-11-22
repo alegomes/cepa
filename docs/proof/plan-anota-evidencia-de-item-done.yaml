@@ -1,0 +1,37 @@
+schema_version: 2
+card: plan-anota-evidencia-de-item-done
+verdict: unproven
+reviewed_at: 2026-11-21T13:30:00-03:00
+base_commit: 94fcd74
+head_commit: fcce21a
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan (cmd_annotate, annotations_of, cmd_status, item_detail, finish_gate, argparse annotate, dispatch)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "killed (RED) 13 of 17: P1 status json drops anotacoes -> 6 falha(s); P2 text-status line off -> 1; P3 show field emptied -> 3; P4 finish refusal stops naming annotate -> 1; P5 open item accepted -> 3; P6 empty note accepted -> 2; P7 notes overwritten instead of appended -> 7; P8 evidence overwritten by the note -> 4; P9 write_body skipped -> 9; P10 date blanked -> 1; P12 dropped refused -> 1; P14 --author ignored -> 2; P15 unknown id accepted -> 1"
+        - "SURVIVED P11 (cepa-plan:3593): `text = str(note or '').strip()` instead of collapsing inner whitespace/newlines; test only passes a note with outer spaces, so multi-line or double-spaced notes are unguarded -> `ok`"
+        - "SURVIVED P13b (cepa-plan:3582): annotations_of stops dropping notes with blank `texto` -> `ok`"
+        - "SURVIVED P13c (cepa-plan:3582): annotations_of stops dropping non-dict entries -> `ok`"
+        - "SURVIVED P16 (cepa-plan:1973): the text-status line prints `0` instead of the note count -> `ok`"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for this Python CLI; reachability judged from the perturbation results above (the four survivors are the lines the test does not reach with a discriminating assertion)"
+  l4_adversarial_input:
+    status: skipped
+    reason: "the diff adds a free-text `--note` argument; adversarial inputs (newlines, very long text, non-dict entries hand-edited into the queue file) not run in this pass, only visible through survivors P11 and P13"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card; red-at-base was still checked: `git checkout 94fcd74 -- common/bin/cepa-plan` in /tmp/proof-pa, `python3 tests/test_cepa_plan_annotate.py` -> `14 falha(s)` (RED); at fcce21a -> 28 `ok` lines and final `ok` (GREEN). Neighbors at head: test_cepa_plan_finish_route, status_code_and_epic, discovered_pending, finish_owner, decisions, verdict all green."
+routing_reason: "O comando annotate funciona e o teste dele fica vermelho sem a mudança (14 falhas) e verde com ela. Mas 4 de 17 quebras deliberadas de linhas alteradas passaram sem nenhum teste reclamar: texto da nota com várias linhas ou espaços internos, filtro de notas em branco ou malformadas na leitura, e a contagem na linha de status em texto. UNPROVEN: devolver ao worker para cobrir esses quatro pontos."
