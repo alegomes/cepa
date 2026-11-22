@@ -166,7 +166,9 @@ def test_cs7_queue_and_all_together_are_refused():
                            stdin=subprocess.DEVNULL, timeout=60)
         check("decide <fila> --all sai com 2", p.returncode == 2,
               p.stdout + p.stderr)
-        check("...dizendo que não combinam", "--all" in p.stderr, p.stderr)
+        check("...dizendo que não combinam e por quê",
+              "--all do not go together" in p.stderr
+              and "--all already asks every queue" in p.stderr, p.stderr)
 
 
 def _pty_session(cmd, cwd, env, steps, timeout=90):
@@ -205,7 +207,11 @@ def _pty_session(cmd, cwd, env, steps, timeout=90):
                 alive = pump(pause)
             seen.append(dec.ANSI.sub("", out))
             if reply is not None:
-                os.write(fd, reply.encode() + (b"" if reply in ("\x03",) else b"\n"))
+                try:
+                    os.write(fd, reply.encode()
+                             + (b"" if reply in ("\x03",) else b"\n"))
+                except OSError:  # the child already left: the checks say why
+                    alive = False
         elif not steps:
             alive = pump(1)
             break
@@ -275,6 +281,27 @@ def test_cs7_ctrl_c_keeps_what_was_answered_and_says_where_to_answer_the_rest():
               and ".claude/queues/a/queue.yaml" in files
               and ".claude/queues/b/queue.yaml" not in files, (a1, files))
         check("...b1 segue esperando", b1.get("human_pending") == "liberar b", str(b1))
+
+
+def test_cs7_q_stops_the_panel_and_says_nothing_else_is_asked():
+    """`q` at the first question ends the whole panel: the line says nothing else
+    is asked, names `decide` for both queues and never speaks of a run."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = al._repo(tmp, {
+            "a": [_owner_item("a1", "liberar a", "Liberei a?")],
+            "b": [_owner_item("b1", "liberar b", "Liberei b?")]})
+        rc, out, _ = _pty_session(
+            [sys.executable, str(CEPA_UNTIL), "decide", "--all", "--repo", str(root)],
+            str(root), _decide_all_env(tmp, "600"),
+            [("[w] I write the answer", "q", 0)])
+        check("q: sai com 0", rc == 0, out[-1200:])
+        check("...a linha diz que nada mais é perguntado",
+              "questions stopped with q; nothing else is asked." in out, out[-1200:])
+        check("...nomeia o decide das duas filas",
+              "cepa-until decide a" in out and "cepa-until decide b" in out,
+              out[-1200:])
+        check("...sem falar de run", "the run goes on" not in out, out[-1200:])
+        check("...e não pergunta a segunda", "Liberei b?" not in out, out[-1200:])
 
 
 def test_cs7_decide_all_commits_the_waiver_the_answer_converted():
