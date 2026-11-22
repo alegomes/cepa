@@ -1,0 +1,22 @@
+key: CS-9-decisoes-de-todas-as-filas
+status: complete
+criteria:
+  - id: AC1
+    text: "Na decisão em lote, rotas já respondidas \"não\" não são perguntadas e uma fila com run vivo fica fora com aviso. Red test: com `a1` já respondido \"não\" em 2026-11-18, fila `c` com run vivo (`*.estado.json` `rodando`, pid vivo) e `b1` com rota aberta, `cepa until decide --all` num pseudo-terminal pergunta só `b1`, imprime a linha das negadas de `a` com `cepa until decide a` e uma linha nomeando a fila `c` e o run dela."
+    altitude: cli
+    surface: "cepa-until decide --all em pseudo-terminal, repo com filas a (negada), b (rota aberta), c (run vivo com pid vivo)"
+    test: tests/test_cepa_until_decide_all.py::test_cs9_decide_all_skips_the_no_answers_and_the_queue_with_a_live_run
+    layer: cli end-to-end (subprocesso real em pty, repo git temporário, processo vivo de verdade para o pid)
+    evidence: verified
+    run: "python3 tests/test_cepa_until_decide_all.py -> '✓ 14 testes'; o teste roda 8 checks ok (sai 0; pergunta só b1, sem a1 nem c1; uma linha das negadas de a com data 18/11 e 'cepa-until decide a'; uma linha com a fila c, 'c/<run>', pid vivo e 'left out of this panel'; c1 sem resposta gravada; b1 fecha; commit toca só a fila b)"
+    status: complete
+  - id: AC2
+    text: "Spec, 'Decided without asking': fila com run vivo fica fora da decisão em lote com uma linha de aviso, como na largada do `--all`."
+    altitude: cli
+    surface: "cepa-until decide --all (só fila com run vivo) e largada `cepa-until --all`"
+    test: tests/test_cepa_until_decide_all.py::test_cs9_a_live_run_is_named_even_when_nothing_else_is_asked, test_cs9_the_launch_panel_of_all_keeps_its_live_queue_silent
+    layer: cli end-to-end (subprocesso real em pty)
+    evidence: verified
+    run: "mesma execução (14 testes ok): com só a fila c viva, sai 0, nenhuma pergunta, linha nomeia c e o run, nenhum commit (4 checks ok); a largada do --all não ganha a linha extra, mantendo o aviso em stderr (3 checks ok)"
+    status: complete
+notes: "Ressalva de forma, não de cobertura: a CLI imprime `cepa-until decide a` (forma com hífen, mesmo binário de `cepa until`), consistente com CS-3/CS-7. A recusa 'hoje o comando é recusado' do red test já fora resolvida por CS-7. Vermelho do teste anterior ao fix declarado no commit 2e6b1af; não reexecutei o vermelho."
