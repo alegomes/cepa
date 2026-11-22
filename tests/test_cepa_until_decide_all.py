@@ -762,6 +762,74 @@ def test_cs11_an_unreadable_queue_is_not_nothing():
               al._git(root, "rev-parse", "HEAD").strip() == head_before, "")
 
 
+def _cepa_until_module():
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader("cepa_until_cs11",
+                                                  str(CEPA_UNTIL))
+    spec = importlib.util.spec_from_loader("cepa_until_cs11", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+def test_cs11_a_listed_queue_that_cannot_be_queried_is_not_nothing():
+    """`cepa plan ready` lists queue `b`, but `cepa plan queue b` fails right
+    after (the file changed in between, a timeout): what `b` holds is unknown,
+    so the panel of `decide --all` does not say "nada espera você"."""
+    import contextlib
+    import io
+    mod = _cepa_until_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _no_route_repo(tmp)
+        real = mod.query_queue
+        mod.query_queue = lambda name, repo, **kw: (
+            (None, "`cepa-plan queue` did not answer within 60s") if name == "b"
+            else real(name, repo, **kw))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            mod.ask_at_launch_all(root, wait=None, leftovers=True,
+                                  name_live=True, as_text=True, say_empty=True)
+        check("fila listada mas ilegível na consulta: não diz 'nada espera você'",
+              "nada espera você" not in out.getvalue(), repr(out.getvalue()))
+        mod.query_queue = real
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            mod.ask_at_launch_all(root, wait=None, leftovers=True,
+                                  name_live=True, as_text=True, say_empty=True)
+        check("...e com a consulta de pé, diz", out.getvalue().strip()
+              == "nada espera você", repr(out.getvalue()))
+
+
+def test_cs11_the_launch_panel_does_not_name_the_unreadable_queue():
+    """The launch panel (no `say_empty`) stays silent on stderr too when `ready`
+    hid a queue: the line naming it is only for the owner who called `decide`."""
+    import contextlib
+    import io
+    mod = _cepa_until_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _no_route_repo(tmp)
+        real = mod.query_ready
+
+        def hiding(repo, unreadable=None):
+            if unreadable is not None:
+                unreadable.append(("c", "aviso: fila c ilegível, fora da lista: x"))
+            return real(repo)
+        mod.query_ready = hiding
+        err, out = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+            mod.ask_at_launch_all(root, wait=0)
+        check("largada com fila escondida: nada no stderr",
+              err.getvalue() == "", repr(err.getvalue()))
+        check("...nem no stdout", out.getvalue() == "", repr(out.getvalue()))
+        err, out = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+            mod.ask_at_launch_all(root, wait=None, as_text=True, say_empty=True)
+        check("...e o decide nomeia a fila c no stderr",
+              "`c`" in err.getvalue() and "nada espera você" not in out.getvalue(),
+              repr(err.getvalue()) + repr(out.getvalue()))
+
+
 def main():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]
