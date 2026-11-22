@@ -28,8 +28,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_cepa_until import build_repo  # noqa: E402
-from test_cepa_until_decide import CEPA_PLAN, on_tty, items_of  # noqa: E402
+from test_cepa_until import build_repo, item  # noqa: E402
+from test_cepa_until_decide import CEPA_PLAN, on_tty, items_of, load_module  # noqa: E402
 from test_cepa_plan_answer_creates_item import ENV, routed  # noqa: E402
 
 FAILURES = []
@@ -156,6 +156,81 @@ def test_tty_path_unchanged():
         check("no terminal, sem --from-chat, sai 0", rc == 0, out)
         ev = str(items_of(root)["a1"].get("evidence") or "")
         check("no terminal a evidência não diz chat", "no chat" not in ev, ev)
+
+
+def test_evidence_keeps_the_prefix_cepa_until_reads():
+    """AC3: `cepa-until`'s `last_owner_no` reads "Resposta do dono em
+    AAAA-MM-DD: não" at the start; the chat answer keeps it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        blocked = item("b1", status="blocked")
+        blocked["owner_question"] = "Devolvo à fila?"
+        root = build_repo(tmp, [blocked])
+        write_log(root, [(NOW - timedelta(minutes=2), "não, deixa parado")])
+        rc, out = no_tty(root, "b1", "não: deixa parado", "--keep",
+                         "--from-chat", "não, deixa parado")
+        check("um `não` do chat com --keep sai 0", rc == 0, out)
+        ev = str(items_of(root)["b1"].get("evidence") or "")
+        today = datetime.now().strftime("%Y-%m-%d")
+        check("a evidência começa com o prefixo de sempre",
+              ev.startswith(f"Resposta do dono em {today}: não"), ev)
+        check("o `last_owner_no` do cepa-until lê a data",
+              load_module().last_owner_no(ev) == today, ev)
+
+
+def test_blocked_item_from_chat_goes_back_to_pending():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("b1", status="blocked")])
+        write_log(root, [(NOW - timedelta(minutes=2), "pode destravar")])
+        rc, out = no_tty(root, "b1", "sim: pode destravar",
+                         "--from-chat", "pode destravar")
+        check("blocked com --from-chat sai 0", rc == 0, out)
+        check("o item volta a `pending`",
+              items_of(root)["b1"]["status"] == "pending", items_of(root)["b1"])
+
+
+def test_word_followed_by_letters_does_not_count():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [routed("a1", yes_item="nenhum")])
+        write_log(root, [(NOW - timedelta(minutes=5), "isso é simples")])
+        rc, out = no_tty(root, "a1", "sim: pode", "--from-chat", "sim")
+        check("'sim' dentro de 'simples' não conta (sai 7)", rc == 7, out)
+
+
+def test_recent_prompt_wins_over_an_old_one():
+    """The log is read newest first: an old prompt does not stop the search
+    before the recent one is seen, and the evidence names the recent one."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [routed("a1", yes_item="nenhum")])
+        recent = NOW - timedelta(minutes=3)
+        write_log(root, [(NOW - timedelta(hours=30), "1. sim"),
+                         (NOW - timedelta(hours=2), "outra coisa"),
+                         (recent, "1. sim")])
+        rc, out = no_tty(root, "a1", "sim: pode", "--from-chat", "1. sim")
+        check("com mensagem velha antes, a recente vale (sai 0)", rc == 0, out)
+        ev = str(items_of(root)["a1"].get("evidence") or "")
+        check("a evidência cita a hora da recente",
+              recent.strftime("%H:%M:%S UTC") in ev, ev)
+
+
+def test_empty_or_punctuation_quote_is_refused():
+    for quote in ("", "   ", "?!"):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = build_repo(tmp, [routed("a1", yes_item="nenhum")])
+            write_log(root, [(NOW - timedelta(minutes=5), "?! qualquer coisa")])
+            rc, out = no_tty(root, "a1", "sim: pode", "--from-chat", quote)
+            check(f"citação {quote!r} sai 7", rc == 7, out)
+            check(f"citação {quote!r} não grava",
+                  items_of(root)["a1"].get("human_pending"), out)
+
+
+def test_case_and_spacing_do_not_matter():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [routed("a1", yes_item="nenhum")])
+        write_log(root, [(NOW - timedelta(minutes=5), "1. SIM,\npode   fechar")])
+        rc, out = no_tty(root, "a1", "sim: pode fechar",
+                         "--from-chat", "1. sim, pode fechar")
+        check("caixa, quebra de linha e espaço duplo não impedem (sai 0)",
+              rc == 0, out)
 
 
 if __name__ == "__main__":

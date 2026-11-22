@@ -4306,7 +4306,7 @@ def owner_said_in_chat(repo, quote, now=None):
     for when, text in reversed(prompts):
         if when.timestamp() < oldest:
             break
-        if text.lstrip().startswith("/"):
+        if text.startswith("/"):  # `owner_prompts` already stripped it
             continue
         if pattern.search(text):
             return {"when": when.strftime("%Y-%m-%d %H:%M:%S UTC"),
