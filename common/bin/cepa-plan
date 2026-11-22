@@ -2145,6 +2145,46 @@ def waiting_of_queue(root, name, target=None):
             "itens": rows}, None
 
 
+def waiting_runs_of(root):
+    """(runs, warning) waiting on the owner, read from `cepa-until pending
+    --json`: the spec forbids a rule of its own for "a run waiting" (two rules
+    would drift), so the source is the command `/common:next` and the doctor
+    already read. Each run is one dict with `alvo` (`<fila>/<run>`), `como`
+    (what is waiting) and `comando` (what resolves it)."""
+    until = Path(__file__).resolve().parent / "cepa-until"
+    try:
+        p = subprocess.run([sys.executable, str(until), "pending", "--json",
+                            "--repo", str(root)],
+                           capture_output=True, text=True, timeout=120)
+        data = json.loads(p.stdout) if p.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
+        return [], f"cepa-until pending falhou ({e})"
+    if not isinstance(data, dict):
+        return [], ("cepa-until pending falhou (saiu com "
+                    f"{p.returncode}): {(p.stderr or '').strip()[:200]}")
+    runs = []
+    for m in data.get("mortos") or []:
+        runs.append({"alvo": f"{m.get('fila')}/{m.get('run')}",
+                     "fila": m.get("fila"), "run": m.get("run"),
+                     "como": "o supervisor morreu no meio do run",
+                     "comando": m.get("fechar")})
+    for r in data.get("runs") or []:
+        if r.get("build_vermelho"):
+            how = (f"entrou em `{r.get('destino')}` com build vermelho, sem "
+                   "push: commite o conserto e rode de novo")
+            command = f"{r.get('comando')} --yes"
+        else:
+            how = f"espera aterrissar em `{r.get('destino')}`"
+            left = r.get("fica_com_voce") or 0
+            if left:
+                how += f" ({left} item(ns) em \"Fica com você\")"
+            command = r.get("comando")
+        runs.append({"alvo": f"{r.get('fila')}/{r.get('run')}",
+                     "fila": r.get("fila"), "run": r.get("run"),
+                     "como": how, "comando": command})
+    return runs, None
+
+
 def cmd_waiting(root, as_json):
     # Same walk and exit codes as `ready`: an unreadable queue is a warning by
     # name and stays out, no queue file at all is exit 2.
@@ -2164,15 +2204,25 @@ def cmd_waiting(root, as_json):
         return 2
     shown = [q for q in queues if q["itens"]]
     total = sum(len(q["itens"]) for q in shown)
+    # CS-2: the runs waiting on the owner, in a section of their own, each
+    # with the command that resolves it.
+    runs, run_warning = waiting_runs_of(root)
+    if run_warning:
+        print(f"aviso: runs fora da lista: {run_warning}", file=sys.stderr)
     if as_json:
         print(json.dumps({"root": str(root), "filas": shown,
-                          "total_itens": total}, ensure_ascii=False, indent=2))
+                          "total_itens": total, "runs": runs},
+                         ensure_ascii=False, indent=2))
         return 0
     print(f"esperam você · {len(shown)} filas · {total} itens")
     for q in shown:
         print(f"\nfila {q['queue']}")
         for r in q["itens"]:
             print(f"  {r['posicao']:>3}. {r['id']} — {r['motivo']}: {r['pergunta']}")
+    if runs:
+        print(f"\nruns que esperam você · {len(runs)}")
+        for r in runs:
+            print(f"  {r['alvo']} — {r['como']} — {r['comando']}")
     return 0
 
 # ── one item in full: `cepa-plan show <fila> <id>` ──────────────────────────
@@ -5803,7 +5853,11 @@ def main(argv=None):
             "travado), an open human route on an item not closed (tarefa só\n"
             "sua) and a route left on a `done` item (tarefa que sobrou em item\n"
             "concluído). Each line: id, reason, the question cut to one line.\n"
-            "To answer them: cepa until decide <fila>."),
+            "To answer them: cepa until decide <fila>.\n"
+            "\n"
+            "A section of its own lists the runs waiting on you (the same ones\n"
+            "`cepa until pending` lists: ready to land, merged with a red build,\n"
+            "supervisor dead), each with the command that resolves it."),
         examples=[("cepa plan waiting", "every queue, for a human"),
                   ("cepa plan waiting --json", "for code")],
         exit_codes=[(0, "shown (even with nothing waiting)"),
