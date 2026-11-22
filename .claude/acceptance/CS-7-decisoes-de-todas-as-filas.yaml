@@ -1,0 +1,25 @@
+key: CS-7-decisoes-de-todas-as-filas
+status: complete
+diff_range: 765b7fa..be6072b
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      `cepa-until decide --all --repo DIR` em pseudo-terminal, repo git
+      temporário com filas `a` (a1) e `b` (b1), cada item com rota de dono
+      aberta. Painel único com seções `a` e `b` numeradas 1 e 2; `y` nos dois
+      fecha as rotas, cada uma no queue.yaml da sua fila; o último commit toca
+      os dois arquivos.
+    test: tests/test_cepa_until_decide_all.py::test_cs7_decide_all_asks_every_queue_in_one_panel_and_records_each_answer
+    layer: cli/subprocesso em pty (dec.on_tty) sobre repo git real; asserta saída (um único "2 question(s) for you", ordem das seções, numeração 1/2 e 2/2), human_pending null lido do YAML de cada fila, e git show --name-only HEAD com os dois queue.yaml
+    evidence: verified
+    run: "python3 tests/test_cepa_until_decide_all.py -> 4 testes, 21 checks 'ok', 0 FAIL, '✓ 4 testes'"
+    note: >
+      Diff muda common/bin/cepa-until (camada de saída que o dono toca) e o
+      teste a exercita. Asserções não codificam o defeito. O vermelho antes da
+      correção (7f475a3 antes de be6072b) não foi reexecutado por mim. Os
+      testes extras (tarefa sobrando, commit só das filas alteradas, recusa de
+      <fila> com --all) são comportamento além do critério.
+    verdict: complete
+    gap: null
+deferral: []
