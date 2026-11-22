@@ -1,0 +1,21 @@
+key: CS-8-decisoes-de-todas-as-filas
+status: complete
+criteria:
+  - id: AC1
+    text: "`cepa until decide` sem argumento faz o mesmo que `--all`; no repo do CS-7, num pseudo-terminal, mostra o mesmo painel com as seções `a` e `b`; antes saía com 2 por falta do argumento obrigatório."
+    altitude: cli
+    surface: "cepa-until decide (sem argumento) em pseudo-terminal, repo com filas a e b"
+    test: tests/test_cepa_until_decide_all.py::test_cs8_bare_decide_on_a_terminal_is_the_all_panel
+    layer: cli end-to-end (subprocesso real em pty, repo git temporário)
+    evidence: verified
+    run: "python3 tests/test_cepa_until_decide_all.py -> '✓ 11 testes'; test_cs8_bare_decide_on_a_terminal_is_the_all_panel: 8 checks ok (sai 0, sem 'required', painel único 2 perguntas, seções a e b, numeradas 1/2 e 2/2, human_pending null, commit toca os dois queue.yaml, mesma mensagem do --all)"
+    status: complete
+  - id: AC2
+    text: "Q6: `--all` é sinônimo do sem-argumento."
+    altitude: cli
+    surface: "cepa-until decide fora de terminal, com e sem --all"
+    test: tests/test_cepa_until_decide_all.py::test_cs8_bare_decide_off_a_terminal_is_the_same_as_all
+    layer: cli end-to-end (subprocesso real)
+    evidence: verified
+    run: "mesma execução, 3 checks ok: não é erro de uso, mostra a pergunta, saída/código/erro idênticos ao --all"
+    status: complete

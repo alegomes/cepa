@@ -1,0 +1,39 @@
+schema_version: 2
+card: CS-8-decisoes-de-todas-as-filas
+verdict: needs-human
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: c5859a6
+head_commit: 88945e8
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::cmd_decide (bare call routed to the --all path; 'arguments are required' exit 2 removed; help text)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN baseline at 88945e8 in detached worktree /tmp/proof-CS-8 (removed afterwards): both covering tests run through the real CLI (subprocess and pty, no double): test_cs8_bare_decide_on_a_terminal_is_the_all_panel and test_cs8_bare_decide_off_a_terminal_is_the_same_as_all, 11 checks ok, 0 failures."
+        - "P1 cepa-until:5566 'if a.all or not a.target' -> 'if a.all' (bare no longer routed to the all panel): KILLED, '9 falha(s)' (TypeError traceback on the terminal, off-terminal output differs)."
+        - "P6 cepa-until:5572 goes_on text differs for the bare call ('later.' instead of 'nothing else is asked.'): KILLED, '1 falha(s)' (check '...igual ao decide --all (codigo, saida e erro)')."
+        - "P8 cepa-until:5567 bare call ignores --repo (reads a nonexistent dir): KILLED, '8 falha(s)'."
+        - "P3 cepa-until:5566 'if a.all or not a.target' -> 'if not a.target': EQUIVALENT, '11 testes' ok. After the refusal at :5561 (a.all and a.target -> exit 2), a.all implies target is None, so the two conditions are the same."
+        - "Documentation hunk (help paragraph, the example 'cepa until decide', help of target and --all): no test reads the help text (grep for the new phrases in tests/ finds nothing). Not perturbed; it is prose, not behavior."
+    survivors: []
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI; precision not measured. Indirect signal: the changed branch line :5566 and its body are reached by both tests (P1, P6, P8 went red)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only routes a missing positional argument of `cepa until decide` to the existing --all path; it parses no new external input (no api-rest module); the path reads local queue YAML from the owner's repo"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "git checkout c5859a6 -- common/bin/cepa-until in the worktree, tests from HEAD: python3 tests/test_cepa_until_decide_all.py -> '11 falha(s)' (stderr 'cepa-until decide: the following arguments are required: QUEUE[/RUN] (or --all)', exit 2). Restored to HEAD: 0 failures."
+routing_reason: "Criterion shown red at base and green at head: the bare call exited 2 before, now shows the same panel (sections a and b, numbered 1/2, one commit touching both queues) on a terminal, and is byte-identical to --all off a terminal. 3 perturbations killed, 1 equivalent, 0 survivors. Only l2_coverage is assumed (no coverage tool for the Python CLI), which makes proven unavailable to the reviewer by protocol. Suggested decision for the human: accept the perturbation table as coverage evidence (default: yes)."
