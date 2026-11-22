@@ -2084,6 +2084,97 @@ def cmd_ready(root, as_json):
                   "estão reservados")
     return 0
 
+# ── what waits on the owner, across every queue: `cepa-plan waiting` ───────
+#
+# Owner, 2026-11-20 (docs/spec/decisoes-de-todas-as-filas.md): `ready` lists
+# what an agent can take; nothing listed what waits on HIM, and he guessed
+# which queues to open with `cepa until decide <fila>`. The reasons are the
+# three cepa-until already uses for the owner (OWNER_REASON there: blocked-
+# before, human_pending, pos-entrega), translated: one vocabulary for
+# `waiting` and `decide`.
+
+WAITING_REASON = {
+    "blocked-before": "item travado",
+    "human_pending": "tarefa só sua",
+    "pos-entrega": "tarefa que sobrou em item concluído",
+}
+WAITING_LIMIT = 100  # characters of the question on its line
+
+
+def waiting_of_item(it):
+    """(reason key, the question cut to one line) when the item waits on the
+    owner, else None. `blocked` wins over an open route on the same item, the
+    precedence of build_batch; a `done` item counts only with a route left."""
+    st = status_of(it)
+    route = it.get("human_pending")
+    if st == "dropped":
+        return None
+    if st == "blocked":
+        reason = "blocked-before"
+        question = (it.get("owner_question") or route
+                    or blocked_reason({"owner_summary": it.get("owner_summary"),
+                                       "evidence": it.get("evidence")})
+                    or "sem motivo registrado")
+    elif route is None:
+        return None
+    else:
+        reason = "pos-entrega" if st == "done" else "human_pending"
+        question = it.get("owner_question") or route
+    return reason, first_sentence(question, WAITING_LIMIT)
+
+
+def waiting_of_queue(root, name, target=None):
+    """(summary, error) of one queue for `waiting`; (None, None) for a file
+    that is not a single-track queue (a waves plan)."""
+    target = target or queue_path(root, name)
+    plan, error = read_plan(target)
+    if error:
+        return None, error
+    if not isinstance(plan, dict) or mode_of(plan) != MODE:
+        return None, None
+    rows = []
+    for pos, it in enumerate((plan.get("items") or []), 1):
+        if not isinstance(it, dict):
+            continue
+        found = waiting_of_item(it)
+        if found:
+            rows.append({"posicao": pos, "id": str(it.get("id")),
+                         "motivo": WAITING_REASON[found[0]],
+                         "pergunta": found[1]})
+    return {"queue": qp.queue_name_of(plan, name), "path": str(target),
+            "itens": rows}, None
+
+
+def cmd_waiting(root, as_json):
+    # Same walk and exit codes as `ready`: an unreadable queue is a warning by
+    # name and stays out, no queue file at all is exit 2.
+    queues, unreadable = [], 0
+    for name, qfile in qp.queue_files(root):
+        summary, error = waiting_of_queue(root, name, qfile)
+        if error:
+            unreadable += 1
+            print(f"aviso: fila {name} ilegível, fora da lista: {error}",
+                  file=sys.stderr)
+            continue
+        if summary is not None:
+            queues.append(summary)
+    if not queues and not unreadable:
+        print(f"nenhuma fila em {root / qp.NEW_DIR} — quem escreve é o "
+              "/common:queue", file=sys.stderr)
+        return 2
+    shown = [q for q in queues if q["itens"]]
+    total = sum(len(q["itens"]) for q in shown)
+    if as_json:
+        print(json.dumps({"root": str(root), "filas": shown,
+                          "total_itens": total}, ensure_ascii=False, indent=2))
+        return 0
+    print(f"esperam você · {len(shown)} filas · {total} itens")
+    for q in shown:
+        print(f"\nfila {q['queue']}")
+        for r in q["itens"]:
+            print(f"  {r['posicao']:>3}. {r['id']} — {r['motivo']}: {r['pergunta']}")
+    return 0
+
 # ── one item in full: `cepa-plan show <fila> <id>` ──────────────────────────
 #
 # On 2026-11-05 the owner read item C1-15 of the kairos queue and could not tell
@@ -5703,6 +5794,23 @@ def main(argv=None):
     rd.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
     rd.add_argument("--json", action="store_true", dest="as_json", help=json_help)
 
+    wt = sub.add_parser(
+        "waiting", help="lists, grouped by queue, the items waiting on you "
+                        "across every queue of the repo",
+        description=(
+            "Read only. Walks EVERY single-track queue, in the order of `ready`,\n"
+            "and lists the items only the owner unblocks: `blocked` (item\n"
+            "travado), an open human route on an item not closed (tarefa só\n"
+            "sua) and a route left on a `done` item (tarefa que sobrou em item\n"
+            "concluído). Each line: id, reason, the question cut to one line.\n"
+            "To answer them: cepa until decide <fila>."),
+        examples=[("cepa plan waiting", "every queue, for a human"),
+                  ("cepa plan waiting --json", "for code")],
+        exit_codes=[(0, "shown (even with nothing waiting)"),
+                    (2, f"invalid usage, {not_git}, no queue file at all")])
+    wt.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
+    wt.add_argument("--json", action="store_true", dest="as_json", help=json_help)
+
     sh = sub.add_parser(
         "show", help="shows the queue header, or one item in full with the codes "
                      "of its title resolved in the Epic",
@@ -6344,6 +6452,8 @@ def main(argv=None):
         return cmd_show(root, a.name, a.as_json, a.item)
     if a.cmd == "ready":
         return cmd_ready(root, a.as_json)
+    if a.cmd == "waiting":
+        return cmd_waiting(root, a.as_json)
     if a.cmd == "epics":
         return cmd_epics(root, a.as_json, a.brief)
     if a.cmd == "queue":
