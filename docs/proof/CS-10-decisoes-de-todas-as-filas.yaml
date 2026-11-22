@@ -1,0 +1,51 @@
+schema_version: 2
+card: CS-10-decisoes-de-todas-as-filas
+verdict: unproven
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: d43857a
+head_commit: 63407d6
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::ask_at_launch_all (new parameter as_text: branch that prints total, one section per queue, one line per question, a hint line, and returns without asking)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::cmd_decide (passes as_text=not (stdin.isatty() and stdout.isatty()) on the --all path)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "GREEN baseline at 63407d6 in detached worktree /tmp/proof-CS-10 (removed afterwards): python3 tests/test_cepa_until_decide_all.py -> '16 testes' ok. The test_cs10_* run the real CLI as a subprocess with stdin=DEVNULL, no double."
+        - "P1 cmd_decide as_text always False: KILLED, '7 falha(s)'."
+        - "P2 cmd_decide as_text always True (also on a terminal): KILLED, '31 falha(s)'."
+        - "P4 'if as_text:' -> 'if False:': KILLED, '7 falha(s)'."
+        - "P5 text branch loses its 'return' (falls into the interactive panel): KILLED, '2 falha(s)' ('...não pergunta nada')."
+        - "P6 total count printed as total+1: KILLED, '1 falha(s)' ('...conta as duas perguntas')."
+        - "P7 per-queue section line dropped: KILLED, '2 falha(s)'."
+        - "P8 question text dropped from the line: KILLED, '4 falha(s)'."
+        - "P9 question id replaced by '?': KILLED, '4 falha(s)'."
+        - "P10 hint line 'cepa-until decide --all' dropped: KILLED, '1 falha(s)'."
+        - "P11 only the first queue listed (sections[:1]): KILLED, '2 falha(s)'."
+        - "P12 only the first question of each queue listed (items[:1]): SURVIVED, '16 testes' ok. Both test_cs10_* repos hold ONE question per queue, so a queue with two pending questions would print only one and no test notices."
+        - "P3b condition reduced to 'not sys.stdout.isatty()' (stdin no longer checked): SURVIVED, '16 testes' ok. The criterion is 'stdin not a TTY'; the tests always have stdin=DEVNULL AND stdout piped, so the case stdin-not-a-TTY with stdout on a terminal (it would ask on a dead stdin instead of listing) is never exercised."
+        - "P3 condition reduced to 'not sys.stdin.isatty()': SURVIVED, '16 testes' ok. Not counted against the criterion (it only names stdin); recorded because stdin a terminal with stdout piped is also unexercised."
+        - "Neighbor tests/test_cepa_until_all.py at 63407d6 (shares ask_at_launch_all): '47 testes' ok, 0 failures."
+    survivors:
+      - "cepa-until ask_at_launch_all as_text branch, 'for ad in items:' (P12): no test with 2+ pending questions in one queue. Needed: a test_cs10_* repo whose queue 'a' holds a1 and a2 asserting both lines appear and the count reads 3 with b1."
+      - "cepa-until cmd_decide as_text condition (P3b): no test with stdin not a TTY and stdout a TTY (pty on stdout, stdin=DEVNULL). Needed: a test asserting that case also lists as text, exit 0, no commit."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI; precision not measured. Indirect signal: the changed lines are reached by the test_cs10_* tests and 10 of 13 perturbations went red; the two survivors above are the measured gaps."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only prints already-loaded queue questions as text and parses no new external input (no api-rest module)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "code at d43857a with tests from adf4d99, python3 tests/test_cepa_until_decide_all.py -> '7 falha(s)' (FAIL '...lista a1 como texto', '...imprime a pergunta de a1', '...e a pergunta de b1', '...na ordem das filas', '...conta as duas perguntas', '...não pergunta nada', '...diz onde responder, num terminal'). At 63407d6: '16 testes' ok."
+routing_reason: "The criterion is red before the fix (7 failures) and green after (16 tests; neighbor 47). But 2 perturbations survive on changed lines (a queue with several questions listing only the first; the stdin-only half of the criterion never exercised without stdout also being piped), so the proof is not load-bearing there: UNPROVEN, deterministic, sent back to add the two tests. Also assumed: l2_coverage (no coverage tool for the Python CLI)."
