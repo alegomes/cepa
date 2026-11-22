@@ -1,9 +1,9 @@
 schema_version: 2
 card: CS-1-decisoes-de-todas-as-filas
-verdict: unproven
+verdict: needs-human
 reviewed_at: 2026-11-22T00:00:00-03:00
 base_commit: 42bc4df~1
-head_commit: 1d5c5da
+head_commit: f0efa4e
 issue_type: Task
 scope:
   changed_classes:
@@ -16,25 +16,19 @@ levels:
       status: n/a
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "54 perturbations in a detached worktree (git worktree add --detach /tmp/cs1-proof2 1d5c5da, removed at the end), perturbations scoped to the waiting block of common/bin/cepa-plan (a first unscoped run hit the same text in cmd_ready and was discarded); covering test tests/test_cepa_plan_waiting.py run with python3. Baseline: waiting test green (27 ok lines, 'tudo passou'), tests/test_cepa_plan_ready.py green"
-        - "ALL 12 survivors of the previous pass (42bc4df) are now RED: blocked question fallback to human_pending, 'sem motivo registrado', positions base 0, waves-plan filter, unreadable-queue stderr warning, exit 2 with no queue, hiding empty queues, header total, --json branch, total_itens, non-dict guard, header text and line format"
-        - "RED (46 of 54), including reasons, WAITING_LIMIT, dropped, blocked branch, route-none guard, done/open swap, owner_question precedence, positions 0 and 2, waves filter removed and inverted, json return code, json filas, header filas count, line prefix/separator/width, queue name, id, motivo, pergunta, posicao, dispatch (removed, json forced, json ignored), parser --json dest"
-        - "SURVIVED (real, new, finer than the previous set): cmd_waiting `unreadable += 1` removed (and `not queues and not unreadable` -> `not queues`): with every queue file unreadable the command should print the warnings and exit 0, mutated it exits 2 with 'nenhuma fila' and no test notices (tests/test_cepa_plan_waiting.py has no all-unreadable case; test_cepa_plan_ready.py has one for `ready`)"
-        - "SURVIVED (real): order of items inside a queue (reversed(q['itens']) in the text output) - no test with two waiting items in one queue asserts their order"
-        - "SURVIVED (real): --json field `root` blanked, and --json `path` of each queue blanked - fields never asserted"
-        - "SURVIVED (real): --json ensure_ascii False->True - no assertion on raw accented output"
-        - "SURVIVED (real, minor): stderr text of the 'nenhuma fila em ...' message changed - only the exit code is asserted"
-        - "SURVIVED (equivalent, no action): dropping `continue` after the unreadable warning (summary is None on error, so nothing is appended); total summed over queues instead of shown (empty queues add 0)"
+        - "54 perturbations in a detached worktree (git worktree add --detach /tmp/cs1-proof3 f0efa4e, removed at the end), scoped to the waiting block of common/bin/cepa-plan; covering test tests/test_cepa_plan_waiting.py run with python3. Baseline: waiting test green (32 ok lines, 'tudo passou'), tests/test_cepa_plan_ready.py green ('cepa-plan ready')"
+        - "52 of 54 RED, including all 12 survivors of the first pass and all 5 of the second pass (every queue unreadable -> exit 0, item order, --json root and path, ensure_ascii, stderr text of the empty-repo message)"
+        - "2 of 54 stay green and are EQUIVALENT mutants (the changed code cannot alter behavior): dropping `continue` after the unreadable warning (summary is None on error, nothing appended), and summing the total over `queues` instead of `shown` (queues with no items add 0)"
   l2_coverage:
     status: assumed
-    uncovered_lines: ["cmd_waiting: all-queues-unreadable path (`and not unreadable`)", "cmd_waiting --json: root and path fields", "cmd_waiting: text output order within a queue"]
-    run: "no coverage tool run; uncovered branches inferred from the surviving perturbations above"
+    uncovered_lines: []
+    run: "no coverage tool run (none wired for the Python CLI); reachability inferred from 52 killed perturbations over the changed block, none of which left a branch unobserved"
   l4_adversarial_input:
     status: n/a
     reason: "the subcommand only reads local queue YAML written by the owner's own tooling and opens no external input surface; no changed module is input-bearing (api-rest)"
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-routing_reason: "The 12 earlier survivors are dead. A finer perturbation set found 5 real survivors on observable behavior of the new command: the exit code when every queue is unreadable (0 vs 2), item order inside a queue, the --json fields root and path, ensure_ascii, and the stderr text of the empty-repo message. Breaking each leaves tests/test_cepa_plan_waiting.py green. UNPROVEN until tests cover them (the first, the exit code with every queue unreadable, is the one with real weight)."
+routing_reason: "Every non-equivalent perturbation of the changed waiting block is killed by tests/test_cepa_plan_waiting.py at the external surface (subprocess on cepa-plan and the cepa launcher). Only L2 coverage is `assumed` because no coverage tool exists for this CLI, which makes proven structurally unavailable; the human decides whether the 52/54 kill with 2 equivalent mutants stands in for measured coverage."
