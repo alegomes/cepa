@@ -20,6 +20,10 @@ Against the real CLI, in a temporary git repo:
   - `--json` carries `respondidas_nao` per queue, and `total_itens` counts
     only the lines
   - a queue with nothing answered "não" prints no count line
+  - the latest date wins even when the first answered route is the oldest
+  - the section and the command use the queue's own name, not its folder
+  - "nãox" is not a "não" (the word must end there)
+  - `waiting --help` tells the answered routes are only counted
 
 Run with `python3 tests/test_cepa_plan_waiting_answered_no.py`.
 """
@@ -70,10 +74,10 @@ def route(ident, status="pending", **extra):
                 owner_question=f"Faço {ident} à mão?", **extra)
 
 
-def write_queue(root, name, items):
+def write_queue(root, name, items, header=None):
     d = root / ".claude" / "queues" / name
     d.mkdir(parents=True)
-    plan = {"schema_version": 2, "mode": "single-track", "queue": name,
+    plan = {"schema_version": 2, "mode": "single-track", "queue": header or name,
             "source": "teste", "items": items}
     (d / "queue.yaml").write_text(yaml.safe_dump(plan, allow_unicode=True),
                                   encoding="utf-8")
@@ -207,8 +211,66 @@ def dropped_and_done_without_route():
         check("só `a4` como linha", len(sec) == 1 and " a4 — " in sec[0], sec)
 
 
+def oldest_first_and_header_name():
+    print("a primeira rota respondida é a mais antiga; o nome é o da fila")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = git_repo(tmp)
+        write_queue(root, "pasta", [
+            route("a1", evidence=answered("2026-11-02")),
+            route("a2", evidence=answered("2026-11-19")),
+            route("a3", evidence=answered("2026-11-07")),
+        ], header="minha-fila")
+        p = run(root, "waiting")
+        check("a seção usa o nome da fila, não o da pasta",
+              section(p.stdout, "minha-fila") is not None
+              and section(p.stdout, "pasta") is None, p.stdout)
+        check("a data é a mais recente (19/11), não a da primeira rota",
+              section(p.stdout, "minha-fila") == [
+                  "  3 que você já respondeu \"não\" (última em 19/11): para "
+                  "revisitar, cepa until decide minha-fila"], p.stdout)
+        data = json.loads(run(root, "waiting", "--json").stdout)
+        check("--json: última e comando com o nome da fila",
+              data["filas"][0]["respondidas_nao"] ==
+              {"total": 3, "ultima": "2026-11-19",
+               "comando": "cepa until decide minha-fila"}, data)
+
+
+def word_must_end():
+    print("\"nãox\" não é um \"não\"")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = git_repo(tmp)
+        write_queue(root, "a", [
+            route("a1", evidence=answered("2026-11-18", "nãoxyz: outra coisa")),
+            route("a2", evidence=answered("2026-11-18", "naozinho")),
+        ])
+        p = run(root, "waiting")
+        sec = section(p.stdout, "a") or []
+        check("as duas rotas continuam como linhas",
+              any(" a1 — " in l for l in sec) and any(" a2 — " in l for l in sec),
+              sec)
+        check("nenhuma contagem", not any("já respondeu" in l for l in sec), sec)
+
+
+def help_tells():
+    print("`waiting --help` explica a contagem")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = git_repo(tmp)
+        p = run(root, "waiting", "--help")
+        flat = " ".join(p.stdout.split())
+        check("sai com 0", p.returncode == 0, p.stderr)
+        check("a ajuda diz que a rota respondida \"não\" só é contada",
+              'A route whose last answer was "não" is not a line' in flat
+              and "with the date of the last one and the command that "
+                  "revisits them" in flat, p.stdout)
+        check("a ajuda nomeia `respondidas_nao`",
+              "`respondidas_nao` in --json" in flat, p.stdout)
+
+
 def main():
     red_test()
+    oldest_first_and_header_name()
+    word_must_end()
+    help_tells()
     latest_and_rules()
     only_answered_queue()
     dropped_and_done_without_route()
