@@ -570,6 +570,69 @@ def test_cs10_bare_decide_off_a_terminal_also_lists_as_text():
               p.stdout[-1200:])
 
 
+def test_cs10_off_a_terminal_every_question_of_a_queue_is_listed():
+    """A queue with two questions lists both, and the count says three in all:
+    the text listing must not keep only the first question of each queue."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = al._repo(tmp, {
+            "a": [_owner_item("a1", "liberar a1", "Liberei a1?"),
+                  _owner_item("a2", "liberar a2", "Liberei a2?")],
+            "b": [_owner_item("b1", "liberar b1", "Liberei b1?")]})
+        p = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide", "--all",
+                            "--repo", str(root)], capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL, timeout=60)
+        out = p.stdout
+        check("fora do terminal: as três perguntas aparecem",
+              all(re.search(rf"{i} \(.*\): Liberei {i}\?", out)
+                  for i in ("a1", "a2", "b1")), out)
+        check("...a fila a diz 2 perguntas e o total diz 3",
+              "queue `a` · 2 question(s)" in out and "waiting on you: 3" in out, out)
+
+
+def test_cs10_stdin_not_a_tty_lists_even_when_stdout_is_a_terminal():
+    """The criterion is about stdin: with stdout on a terminal and stdin not one,
+    there is nobody to answer, so it lists as text, exits 0 and commits nothing."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = al._repo(tmp, {
+            "a": [_owner_item("a1", "liberar a", "Liberei a fila a?")],
+            "b": [_owner_item("b1", "liberar b", "Liberei a fila b?")]})
+        head_before = al._git(root, "rev-parse", "HEAD").strip()
+        env = al._tty_env(tmp)
+        env["CEPA_UNTIL_LEITOR"] = "off"
+        master, slave = pty.openpty()
+        proc = subprocess.Popen(
+            [sys.executable, str(CEPA_UNTIL), "decide", "--all", "--repo",
+             str(root)], cwd=str(root), env=env, stdin=subprocess.DEVNULL,
+            stdout=slave, stderr=slave)
+        os.close(slave)
+        chunks, deadline = [], time.time() + 60
+        while time.time() < deadline:
+            ready, _, _ = select.select([master], [], [], 0.5)
+            if ready:
+                try:
+                    data = os.read(master, 65536)
+                except OSError:
+                    break
+                if not data:
+                    break
+                chunks.append(data)
+            elif proc.poll() is not None:
+                break
+        try:
+            rc = proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            rc = proc.wait()
+        os.close(master)
+        out = dec.ANSI.sub("", b"".join(chunks).decode("utf-8", "replace"))
+        check("stdin sem terminal, stdout em terminal: sai com 0", rc == 0, out[-1200:])
+        check("...lista a1 e b1 como texto, sem o menu",
+              "a1 (" in out and "b1 (" in out and "[y] yes" not in out
+              and "questions interrupted" not in out, out[-1500:])
+        check("...e não commita", al._git(root, "rev-parse", "HEAD").strip()
+              == head_before, "commit novo")
+
+
 def main():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]
