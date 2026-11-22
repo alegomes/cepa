@@ -4696,6 +4696,18 @@ A correção de 2026-10-19 cobriu o `claude -p` do `cepa-until`. Na sessão inte
 >
 > `fb-20261110-5`, 2026-11-10 · wego-faturamento-backend · session/C1-18 · construction · `build-hex:engineering-lead`
 
+**Feito (2026-11-22, fila `fb-2026-10`, item `leads-build-hex-acordam-na-sessao-interativa`).** A
+exceção virou a regra. Um lead é sempre subagente (do orquestrador num run, da sessão principal
+numa sessão interativa), e o aviso do worker em segundo plano vai para a sessão do topo, nunca
+para o lead. Nas 11 specs que delegam, a seção "Delegation is asynchronous" deixou de dizer
+"End the turn. The notification brings you back" e manda `run_in_background: false` em todo
+caso, citando as duas medições. `tests/test_async_delegation_specs.py` ganhou a marca
+"interactive session" e duas frases proibidas, para a premissa falsa não voltar numa cópia. A
+mensagem do `no-busy-wait` separa sessão principal (encerra o turno) de subagente (espera no
+mesmo turno), e o invariante I8 registra a mudança. Não medido: uma sessão interativa real com
+lead depois da mudança; a próxima diz, pela contagem de `SendMessage` da sessão principal a
+leads (zero esperado).
+
 ---
 
 ## `planning-lead` do `build-hex` chama os workers sem o prefixo do plugin, e as três chamadas falham

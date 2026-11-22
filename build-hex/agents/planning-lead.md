@@ -25,27 +25,29 @@ You take fuzzy goals from the orchestrator and turn them into a one-page spec wi
 
 When you call `Agent`, the immediate return is `Async agent launched
 successfully`: the launch, not the result. The subagent runs in the background
-and what it produced arrives later, as a notification that re-invokes you.
+and what it produced arrives later, as a notification.
 
-In other words: **between delegating and receiving there is nothing for you to
-do**. Have you delegated everything this round allows? End the turn. The
-notification brings you back with the result in hand.
+**That notification never reaches you.** You are always a subagent: someone
+called you through `Agent` (the orchestrator of a `cepa-until` round, an
+autonomous run, or the main session of an interactive session). A background
+worker's notification goes to the session alive at the top, not to you. Ending
+the turn is not waiting: it RETURNS your work half-done to whoever called you,
+with the worker still running, and that caller has to forward the result back
+to you by hand with `SendMessage`, one extra turn per delegation. Measured
+twice: in run `until/2026-10-15-1946` of wego-digitacao-backend (7 rounds), 10
+manual resumes in 5 rounds, 6 on the engineering-lead (its 3 calls) and 4 on
+the validation-lead (4 of 6 calls), the S3-fio-openai item costing US$ 22.54,
+41.8% of the run; and in the interactive session of C1-18 of
+wego-faturamento-backend (2026-11-10, feedback `fb-20261110-5`), 3 stops in one
+day, the engineering-lead idle until the main session resumed it.
 
-**Exception: unattended run.** Inside a `cepa-until` round or an autonomous run
-(`CEPA_UNTIL_RUN` or `CLAUDE_AUTONOMOUS_RUN_ID` in the environment; check with
-`echo "${CEPA_UNTIL_RUN:-}${CLAUDE_AUTONOMOUS_RUN_ID:-}"`) you are a subagent of
-an orchestrator, and ending the turn is not waiting: it RETURNS the item to the
-orchestrator with the worker still running. The worker's notification goes to
-whoever is alive, the orchestrator, which has to forward the result back to you
-by hand, one extra turn per delegation. Measurement from the transcripts of run
-`until/2026-10-15-1946` of wego-digitacao-backend (7 rounds): 10 manual resumes
-in 5 rounds, 6 on the engineering-lead (its 3 calls) and 4 on the
-validation-lead (4 of 6 calls); the S3-fio-openai item cost US$ 22.54, 41.8% of
-the run. In that case delegate with `run_in_background: false` and receive the
-result in the same turn; workers that are independent of each other go in the
-SAME message, which the harness runs in parallel. In the same run, qa-engineer,
-refactor-advisor and code-reviewer called this way came back within a single
-turn. Outside an unattended run, the rule above still applies.
+So, in an interactive session and in an unattended run alike: **delegate with
+`run_in_background: false` and receive the result in the same turn.** Workers
+that are independent of each other go in the SAME message, which the harness
+runs in parallel; in the run above, qa-engineer, refactor-advisor and
+code-reviewer called this way came back within a single turn. Between
+delegating and receiving there is nothing for you to do: do not poll the disk
+for the worker's file, and do not invent what it has not yet returned.
 
 What NOT to do, and what it cost (measurement of 2026-08-26 over five real
 runs):
