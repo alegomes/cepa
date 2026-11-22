@@ -1,0 +1,39 @@
+schema_version: 2
+card: ready-cabecalho-zero-itens-com-pendente
+verdict: needs-human
+reviewed_at: 2026-11-22
+base_commit: d56624b
+head_commit: 4f1e666
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan (ready_of_queue, cmd_ready)", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "Python/shell repo: no PIT"
+    perturbation:
+      status: pass
+      results:
+        - "green at head 4f1e666: python3 tests/test_cepa_plan_ready_header_waiting.py -> ok (all cases, final line 'ok cepa-plan ready header: esperam voce'); python3 tests/test_cepa_plan_ready.py -> ok"
+        - "common/bin/cepa-plan is identical between fa5fd3c and 4f1e666 (git diff --stat shows only tests/test_cepa_plan_ready_header_waiting.py changed)"
+        - "21 perturbations in a throwaway detached worktree at 4f1e666 (perl edit of one line, rerun of the header test, restore from a copy of head): 21 killed, 0 survived"
+        - "previous survivors now KILLED: S1 line 2077 wait_p sum->max (RED, 1 fail); S2 line 2082 JSON pendentes: wait_p -> wait_b (RED, 1 fail)"
+        - "killed (RED): 2047 pending->blocked (6 fail); 2048 is not None -> is None (8); 2048 drop predicate (5); 2050 blocked->pending (8); 2078 sum->max (1); 2090 plural pendente swapped (3); 2092 plural bloqueado swapped (4); 2089 if wait_p -> True (4); 2091 if wait_b -> True (3); 2093 if parts -> True (2); 2093 if parts -> False (5); 2094 ' e ' -> ', ' (2); 2082 key total_esperam_dono renamed (2); 2082 key pendentes renamed (2); 2083 key bloqueados renamed (2); 2046 per-queue key pendentes renamed (8); 2049 per-queue key bloqueados renamed (8); 2078 wait_b read from the pendentes key (5); 2077 wait_p read from the bloqueados key (5)"
+        - "worktree /tmp/proof-rc removed; git worktree list shows only the main checkout and the primary tree"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "python3 -m coverage not installed; no sh/Python coverage tool. Reachability structural: the test runs the real CLI via subprocess and every changed line was perturbed. assumed alone gives NEEDS-HUMAN by the queue's convention."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff changes only how counts are printed in a CLI header; it parses no external input and touches no input-bearing module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "common/bin/cepa-plan from d56624b with the head test: exit 1, 8 FAIL (1 pendente e 1 bloqueado exact header, two queues summed, plural forms, only pending-with-route, only blocked, blocked+route once, json total_esperam_dono, json per-queue counts, json zeros); head: exit 0, 0 failures"
+routing_reason: "Regression is red at base (8 fails) and green at head; all 21 perturbations of the changed lines go RED, including the 2 previous survivors (S1 sum->max, S2 pendentes/bloqueados swap in JSON). The only open item is l2_coverage: assumed (no coverage tool installed), which by the queue's convention alone yields NEEDS-HUMAN."

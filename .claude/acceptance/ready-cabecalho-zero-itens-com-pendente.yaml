@@ -1,0 +1,23 @@
+key: ready-cabecalho-zero-itens-com-pendente
+status: complete
+criteria:
+  - id: AC1
+    text: o cabeçalho do `cepa plan ready` também diz quantos itens esperam o dono, com as palavras pendentes / bloqueados
+    altitude: cli
+    surface: stdout de `cepa-plan ready` (e do launcher `cepa plan ready`)
+    test: tests/test_cepa_plan_ready_header_waiting.py
+    layer: subprocess contra o CLI real em repo git temporário
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_ready_header_waiting.py -> todos 'ok', fim '✓ cepa-plan ready header: esperam você'; CLI real: 'prontos para construir · 1 filas · 0 itens · esperam você: 1 pendente e 1 bloqueado'; launcher `cepa plan ready` idem"
+    status: complete
+  - id: AC2
+    text: com 1 pendente com ação humana e 1 bloqueado, o cabeçalho não pode ser lido como fila vazia
+    altitude: cli
+    surface: primeira linha do stdout de `cepa-plan ready`
+    test: tests/test_cepa_plan_ready_header_waiting.py ('1 pendente e 1 bloqueado: exact header')
+    layer: subprocess contra o CLI real
+    evidence: verified
+    run: "mesma execução; caso reproduzido por mim com `cepa-plan ready --repo <tmp>`: exit 0, cabeçalho com '· esperam você: 1 pendente e 1 bloqueado'. Regressão: python3 tests/test_cepa_plan_ready.py -> '✓ cepa-plan ready'"
+    status: complete
+deferral: []
+notes: fora do escopo e registrado no BACKLOG, a linha por fila ainda lista o id do bloqueado junto do pendente em 'esperam você'. A contagem de testes (N) está nas linhas 'ok' impressas pelo runner próprio do teste, não em contador numérico único.
