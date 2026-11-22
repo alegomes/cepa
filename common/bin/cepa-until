@@ -801,15 +801,22 @@ def query_queue(name, repo, max_items=1):
         return None, f"`cepa-plan queue` did not return JSON ({e})"
 
 
-def query_ready(repo):
+def query_ready(repo, unreadable=None):
     """`cepa-plan ready --json`: the ready items of every single-track queue, in
-    the order `ready` lists them. Returns (data, error)."""
+    the order `ready` lists them. Returns (data, error). `ready` leaves out a
+    queue it cannot read, saying so only on its stderr; with `unreadable` (a
+    list), the `(name, line)` of each such queue is appended to it."""
     try:
         p = subprocess.run(
             [sys.executable, str(CEPA_PLAN), "ready", "--repo", str(repo),
              "--json"], capture_output=True, text=True, timeout=60)
     except subprocess.TimeoutExpired:
         return None, "`cepa-plan ready` did not answer within 60s"
+    if unreadable is not None:
+        for line in (p.stderr or "").splitlines():
+            m = re.match(r"aviso: fila (\S+) ilegível", line)
+            if m:
+                unreadable.append((m.group(1), line))
     if p.returncode != 0:
         return None, (p.stderr or p.stdout or "").strip() or \
             f"`cepa-plan ready` exited {p.returncode}"
@@ -5452,12 +5459,19 @@ def ask_at_launch_all(repo, wait=ANSWER_WAIT_SEC, leftovers=False,
     prints the same sections as text, one line per question, and asks nothing.
     `say_empty` (CS-11 of decisoes-de-todas-as-filas): with nothing to ask and
     nothing named either (no route answered "no", no queue left out for its live
-    run, no queue unreadable), `decide --all` prints the one line "nada espera
+    run, no queue unreadable, here or in `cepa-plan ready`), `decide --all` prints the one line "nada espera
     você", on a terminal or off it; the launch panel stays silent."""
-    ready, error = query_ready(repo)
+    hidden = []
+    ready, error = query_ready(repo, hidden)
     if error:
         return
-    sections, named = [], False
+    # A queue `ready` could not read may hold a question: it is named, never
+    # counted as "nothing waits".
+    sections, named = [], bool(hidden)
+    if say_empty:
+        for name, line in hidden:
+            print(f"cepa-until decide: queue `{name}` could not be read, left "
+                  f"out ({line})", file=sys.stderr)
     for q in ready.get("filas") or []:
         name = Path(str(q.get("path") or "")).parent.name or str(q.get("queue"))
         if not name or name == ALL_DIR:
