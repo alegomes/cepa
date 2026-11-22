@@ -578,6 +578,9 @@ class _Ctx:
         self.seg_args = []
         # lazy cache of this repo's registered worktrees (see _worktrees).
         self._worktrees = None
+        # destination of the `cd`/`pushd` of the segment just classified, when
+        # it is a single literal path (read by _classify for _cd_cannot_fail).
+        self.last_cd = None
 
 
 # ─── line reading: substitutions and heredocs ──────────────────────────────
@@ -886,6 +889,53 @@ def _inside(p, root):
         return True
     except ValueError:
         return False
+
+
+def _git_common_dir(d):
+    """Absolute git common dir of the repository holding `d`, or None."""
+    try:
+        import subprocess
+        out = subprocess.run(["git", "-C", str(d), "rev-parse", "--git-common-dir"],
+                             capture_output=True, text=True, timeout=5)
+        if out.returncode != 0 or not out.stdout.strip():
+            return None
+        c = Path(out.stdout.strip())
+        return (c if c.is_absolute() else Path(d) / c).resolve()
+    except Exception:
+        return None
+
+
+def _cd_cannot_fail(ctx, dests):
+    """Is the `cd` that opens the line certain to land in another repository?
+
+    With `;`/newline the lock assumes a `cd` may have failed and keeps judging
+    the next segments in the session root, by the session's lanes. That is the
+    owner's design (2026-08-15) and it stays for /tmp and for worktrees of this
+    same repo (the perturbation copy). Incident fb-20261110-6: a session in
+    repo A, a worker writing in a sibling repo B (`cd <B> && cat > X <<EOF`,
+    then `cat > Y` on the next line) was denied by A's lanes for a file that
+    was in B. A `cd` into a directory that exists now, belongs to ANOTHER git
+    repository and is the first segment of the line (nothing before it could
+    remove the directory) cannot fail: the line runs in B, outside A's
+    jurisdiction, as it already did with `&&`.
+
+    Fail-silent: any doubt (git error, timeout) returns False, which is the
+    old conservative reading.
+    """
+    if not dests or len(dests) != 1:
+        return False
+    d = next(iter(dests))
+    if _inside(d, ctx.root):
+        return False
+    try:
+        if not d.is_dir() or not os.access(str(d), os.X_OK):
+            return False
+    except OSError:
+        return False
+    theirs = _git_common_dir(d)
+    if theirs is None:
+        return False
+    return theirs != _git_common_dir(ctx.root)
 
 
 def _worktrees(ctx):
@@ -2150,9 +2200,15 @@ def _classify(ctx, command, cwds, depth=0):
     history = set(state_in)
     prev = None
     stack = []
-    for sep, seg in _split_with_seps(flat):
+    certain = None   # destination of a first-segment `cd` that cannot fail
+    for n_seg, (sep, seg) in enumerate(_split_with_seps(flat)):
         if prev is not None:
             p_in, p_ok, p_fail = prev
+            if certain is not None and sep not in ("|", "&"):
+                # the `cd` happened: the states before it are unreachable
+                history = set(certain)
+                p_ok = p_fail = certain
+            certain = None
             if sep == "&&":
                 state_in = p_ok
             elif sep in ("|", "&"):
@@ -2163,6 +2219,7 @@ def _classify(ctx, command, cwds, depth=0):
         if not text:
             prev = (state_in, state_in, state_in)
             continue
+        opened = text.startswith("(")
         while text.startswith("(") and not text.startswith("(("):
             stack.append(state_in)
             text = text[1:].lstrip()
@@ -2177,10 +2234,14 @@ def _classify(ctx, command, cwds, depth=0):
         for sm in _SUB_MARK_RE.finditer(text):
             run_sub(int(sm.group(1)) - base, state_in)
         ok = fail = state_in
+        ctx.last_cd = None
         if text.strip() and not text.startswith("(("):
             res = _guard(ctx, lambda: _classify_segment(ctx, text.strip(), state_in))
             if res is not None:
                 ok, fail = res
+        if n_seg == 0 and depth == 0 and not opened and not pops and not stack \
+                and _cd_cannot_fail(ctx, ctx.last_cd):
+            certain = ctx.last_cd
         for _ in range(pops):
             ok = fail = stack.pop() if stack else frozenset(cwds)
         history |= ok | fail | state_in
@@ -2234,6 +2295,7 @@ def _classify_segment(ctx, text, cwds):
                 ctx.unknown_dirs.append(nf[0].raw)
         else:
             dest = set(_resolve_all(nf[0].value, cwds))
+            ctx.last_cd = frozenset(dest)
         return frozenset(dest), frozenset(cwds)
 
     # bucket 3 — everything outside the root, and the line does not cite the root

@@ -5382,7 +5382,7 @@ Subcomando que acrescenta uma linha datada à evidência de um item done, sem ap
 
 ## A trava de caminhos aplica as regras do repo da sessão a um arquivo de outro repo
 
-**Status:** pendente · **Lar provável:** build-hex (`build-hex/hooks/path-lock.py` e `bash-path-lock.py`, `project_root` lido do `cwd` do payload) · **Origem:** feedback `fb-20261110-6`, 2026-11-10
+**Status:** feito em 2026-11-21 (reproduzido nos registros da sessão de C1-18 e consertado) · **Lar:** `common/hooks/_templates/bash-path-lock.py.tmpl`, gerado nas seis cópias do `bash-path-lock.py` · **Origem:** feedback `fb-20261110-6`, 2026-11-10
 
 ### Problema
 
@@ -5397,6 +5397,12 @@ A sessão foi aberta no wego-faturamento-backend e o worker de adapter escrevia 
 ### Esboço
 
 Resolver a raiz pelo `git rev-parse --show-toplevel` do diretório do arquivo escrito e ler o `build-hex.yaml` desse repo. Teste que falta: sessão no repo A, Write de worker em arquivo do repo B, as regras de B decidem.
+
+### O que foi feito
+
+A reprodução mostrou que quem barrou foi a trava do Bash, não a do Write (o Write num repo vizinho já passa: fica fora da raiz da sessão). O worker rodava `cd <worktree de B> && cat > X <<EOF`, e o `cat > Y` seguinte vinha na linha de baixo. Depois de `;` ou quebra de linha a trava supõe que o `cd` pode ter falhado e julga o caminho relativo também na raiz de A, pelas pistas de A. Agora um `cd` que abre a linha, para um diretório que existe e pertence a outro repositório git, conta como certo: a linha roda em B, fora da jurisdição da trava de A, como já acontecia com `&&`. Continuam conservadores: `cd` que não é o primeiro trecho, em pipe ou subshell, para diretório que não existe, fora de git (`/tmp`) ou numa worktree do mesmo repo (a cópia de perturbação). Teste: `tests/test_bash_path_lock_other_repo.py`.
+
+Ficou de fora, de propósito: aplicar as regras de B (o `build-hex.yaml` de B) à escrita em B. Fora da raiz da sessão a trava não tem jurisdição, e isso vale para as duas ferramentas.
 
 ---
 
