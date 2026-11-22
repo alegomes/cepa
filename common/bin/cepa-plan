@@ -2027,8 +2027,18 @@ def ready_of_queue(root, name, target=None):
                if status_of(it) not in ("done", "dropped")
                and (it.get("human_pending") is not None
                     or status_of(it) == "blocked")]
+    # CS-6 (decisoes-de-todas-as-filas): a `done` item with an open route is
+    # a task the owner still has, so a queue with one is not "tudo concluído".
+    # A route whose last answer was "não" is counted apart, by the same reader
+    # `waiting` and `cepa-until decide` use: decide does not ask it again.
+    leftover = [it for it in items if status_of(it) == "done"
+                and it.get("human_pending") is not None]
+    leftover_no = sum(1 for it in leftover
+                      if _ownertext.last_owner_no(it.get("evidence")))
     return {"queue": qp.queue_name_of(plan, name), "path": str(target),
             "prontos": ready, "pendentes": len(pending),
+            "tarefas_sobrando": len(leftover) - leftover_no,
+            "tarefas_respondidas_nao": leftover_no,
             "abertos": sum(1 for it in items
                            if status_of(it) not in ("done", "dropped")),
             "esperam_dono": waiting,
@@ -2074,7 +2084,18 @@ def cmd_ready(root, as_json):
                     print(f"       espera: {', '.join(l['blocked_by'])} (entra "
                           "antes neste lote)")
             continue
-        if q["abertos"] == 0:
+        if q["abertos"] == 0 and q["tarefas_sobrando"]:
+            n = q["tarefas_sobrando"]
+            tasks = ("1 tarefa espera você" if n == 1
+                     else f"{n} tarefas esperam você")
+            print(head + f" — fila fechada, {tasks} (cepa until decide "
+                  f"{q['queue']})")
+        elif q["abertos"] == 0 and q["tarefas_respondidas_nao"]:
+            n = q["tarefas_respondidas_nao"]
+            print(head + f" — fila fechada: {n} tarefa"
+                  f"{'' if n == 1 else 's'} que você respondeu não "
+                  f"(cepa until decide {q['queue']})")
+        elif q["abertos"] == 0:
             print(head + " — fila fechada: tudo concluído ou descartado")
         elif q["esperam_dono"]:
             print(head + f" — esperam você: {', '.join(q['esperam_dono'])}"
