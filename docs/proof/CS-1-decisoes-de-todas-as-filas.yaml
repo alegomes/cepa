@@ -1,0 +1,44 @@
+schema_version: 2
+card: CS-1-decisoes-de-todas-as-filas
+verdict: unproven
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: 42bc4df~1
+head_commit: 42bc4df
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan (WAITING_REASON, waiting_of_item, waiting_of_queue, cmd_waiting, parser, dispatch)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "24 perturbations in a detached worktree (git worktree add --detach /tmp/cs1-proof 42bc4df), covering test tests/test_cepa_plan_waiting.py (script-style, run with python3), baseline green (tests/test_cepa_plan_ready.py also green)"
+        - "RED (12 of 24): three reason labels, WAITING_LIMIT cut, dropped ignored, blocked branch, question fallback to blocked reason, route-none guard, done vs open reason swap, owner_question precedence on open route, dispatch of `waiting`"
+        - "SURVIVED: question fallback owner_question -> human_pending on blocked item (c2 always has owner_question)"
+        - "SURVIVED: final fallback 'sem motivo registrado' (no test with no reason at all)"
+        - "SURVIVED: position numbering base 1 -> 0 (tests never assert the number)"
+        - "SURVIVED: waves-plan filter (mode_of != MODE) removed (no test with a waves plan)"
+        - "SURVIVED: stderr warning for unreadable queue removed (no test with a broken queue file)"
+        - "SURVIVED: exit 2 with no queue file changed to exit 0 (no test for the empty repo)"
+        - "SURVIVED: queues with nothing waiting hidden from output (shown = queues)"
+        - "SURVIVED: total items count forced to 0"
+        - "SURVIVED: --json branch disabled, and total_itens forced to 0 (no test calls --json)"
+        - "SURVIVED: non-dict item guard removed"
+        - "SURVIVED: header text 'esperam você' and line format (id — motivo: pergunta) changed (only substrings asserted)"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: ["cmd_waiting --json branch", "cmd_waiting exit 2 branch", "unreadable-queue warning", "waves-plan skip in waiting_of_queue", "non-dict item guard"]
+    run: "no coverage tool run; uncovered branches inferred from the surviving perturbations above"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the subcommand only reads local queue YAML written by the owner's own tooling and opens no external input surface; no changed module is input-bearing (api-rest)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Survivors on externally observable behavior of the CLI (exit code 2, --json output and total, header and line format, queue numbering, unreadable-queue warning, waves-plan skip): breaking each leaves tests/test_cepa_plan_waiting.py green. Main path (reasons, question fallbacks, cut, dropped, dispatch) is load-bearing. UNPROVEN: add tests for these branches."

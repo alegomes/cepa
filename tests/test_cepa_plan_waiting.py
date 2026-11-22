@@ -22,6 +22,7 @@ Against the real CLI, in a temporary git repo:
 
 Run with `python3 tests/test_cepa_plan_waiting.py`.
 """
+import json
 import subprocess
 import sys
 import tempfile
@@ -59,10 +60,10 @@ def item(ident, status="pending", **extra):
     return it
 
 
-def write_queue(root, name, items):
+def write_queue(root, name, items, mode="single-track"):
     d = root / ".claude" / "queues" / name
     d.mkdir(parents=True)
-    plan = {"schema_version": 2, "mode": "single-track", "queue": name,
+    plan = {"schema_version": 2, "mode": mode, "queue": name,
             "source": "teste", "items": items}
     (d / "queue.yaml").write_text(yaml.safe_dump(plan, allow_unicode=True),
                                   encoding="utf-8")
@@ -154,9 +155,76 @@ def reasons_and_fallbacks():
         check("descartado não aparece", "c5" not in out, out)
 
 
+def output_shape():
+    print("cabeçalho, numeração, filas sem nada, --json")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = git_repo(tmp)
+        write_queue(root, "a", [
+            "não é um item",
+            item("a1"),
+            item("a2", status="blocked", human_pending="Rota da a2"),
+            item("a3", status="blocked")])
+        write_queue(root, "b", [
+            item("b1", status="done", human_pending="Rotacionar o segredo")])
+        write_queue(root, "vazia", [item("v1"), item("v2", status="done")])
+        write_queue(root, "ondas", [
+            item("w1", status="blocked", owner_question="Onda?")],
+            mode="parallel-waves")
+        p = run(root, "waiting")
+        out = p.stdout
+        check("sai com 0 mesmo com item que não é dicionário",
+              p.returncode == 0, p.stderr)
+        check("cabeçalho com filas e itens",
+              out.splitlines()[0] == "esperam você · 2 filas · 3 itens", out)
+        check("linha com posição, id, motivo e pergunta",
+              "    3. a2 — item travado: Rota da a2" in out.splitlines(), out)
+        check("travado sem pergunta nem motivo diz que não há motivo",
+              "    4. a3 — item travado: sem motivo registrado" in out.splitlines(),
+              out)
+        check("fila sem nada esperando não aparece", "vazia" not in out, out)
+        check("plano em ondas não é fila", "ondas" not in out and "w1" not in out,
+              out)
+        j = run(root, "waiting", "--json")
+        check("--json sai com 0", j.returncode == 0, j.stderr)
+        try:
+            data = json.loads(j.stdout)
+        except ValueError:
+            data = {}
+        filas = data.get("filas") or []
+        check("--json traz só as filas com itens, na ordem",
+              [f.get("queue") for f in filas] == ["a", "b"], j.stdout)
+        check("--json traz o total de itens", data.get("total_itens") == 3,
+              j.stdout)
+        check("--json traz id, posição, motivo e pergunta",
+              filas and filas[0]["itens"][0] == {
+                  "posicao": 3, "id": "a2", "motivo": "item travado",
+                  "pergunta": "Rota da a2"}, j.stdout)
+
+
+def no_queue_and_unreadable():
+    print("sem fila nenhuma, fila ilegível")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = git_repo(tmp)
+        p = run(root, "waiting")
+        check("sem .claude/queues sai com 2", p.returncode == 2,
+              p.stdout + p.stderr)
+        write_queue(root, "boa", [item("g1", status="blocked",
+                                       owner_question="Destravo g1?")])
+        bad = root / ".claude" / "queues" / "quebrada"
+        bad.mkdir(parents=True)
+        (bad / "queue.yaml").write_text("items: [: ::\n", encoding="utf-8")
+        p = run(root, "waiting")
+        check("fila ilegível não derruba o comando", p.returncode == 0, p.stderr)
+        check("fila ilegível avisada pelo nome no stderr",
+              "aviso: fila quebrada ilegível" in p.stderr, p.stderr)
+        check("a fila boa continua listada", "g1" in p.stdout, p.stdout)
+
+
 if __name__ == "__main__":
     red_test()
     reasons_and_fallbacks()
+    output_shape()
+    no_queue_and_unreadable()
     if FAILURES:
         print(f"\n✗ {len(FAILURES)} falha(s)")
         sys.exit(1)
