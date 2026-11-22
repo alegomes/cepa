@@ -1,0 +1,60 @@
+schema_version: 2
+card: CS-1
+queue: pouso-ja-feito-sai-da-lista
+verdict: unproven
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: 1856ab6
+head_commit: 26db875
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::landed_upstream", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::close_landed_run", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::waiting_runs (new `red and landed_upstream` branch)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "GREEN at 26db875 (detached worktree /tmp/proof-cs1): python3 tests/test_cepa_until_pending_closes_landed.py -> '✓ tudo passou'; neighbors test_cepa_plan_waiting_runs.py '✓ tudo passou', test_cepa_plan_waiting_json.py '✓ tudo passou', test_cepa_until_land.py '✓ tudo verde'. The CLI runs as a subprocess; no double stands in for the changed code."
+        - "Each perturbation applied by sed on common/bin/cepa-until, whole new test file run (rc and count of FAIL lines), then git checkout restored. Count of tests per run not printed by this test runner; N>0 shown by the 'ok' lines."
+        - "P1 upstream lookup replaced by local destination: KILLED (4 failures)."
+        - "P2 fallback to local branch removed when no upstream: KILLED (1 failure)."
+        - "P3 `red and landed_upstream` branch disabled (if False): KILLED (7 failures)."
+        - "P4 condition inverted (`not landed_upstream`): KILLED (10 failures)."
+        - "P5 close_landed_run does not write the file (os.replace -> pass): KILLED (4 failures)."
+        - "P6 estado not set to aterrissado (kept esperando-dono): KILLED (2 failures)."
+        - "P7 `parou` not dropped: KILLED (1 failure)."
+        - "P8 `motivo` not dropped: KILLED (1 failure)."
+        - "P11 `quando` written as None: KILLED (1 failure)."
+        - "P13 branch tip replaced by the sha recorded in the aterrissar action: KILLED (6 failures)."
+        - "P14 is-ancestor arguments swapped: KILLED (9 failures)."
+        - "P15 landed_upstream always returns True: KILLED (5 failures)."
+        - "P17 estado written as 'encerrado': KILLED (2 failures)."
+        - "P4b `red and` dropped from the condition (if landed_upstream(...)): SURVIVED, rc=0, 0 failures. Input no test has: a run NOT red (no aterrissagem.parou) whose tip is in the destination's upstream but not in the local destination (local main behind its upstream). The perturbed code closes it; the spec says only red-build runs close."
+        - "P9 `destino=destination` not written in close_landed_run (line 6008): SURVIVED, 0 failures. No test reads aterrissagem.destino of the closed record."
+        - "P10 `fechado_por` written as None instead of 'pending' (line 6008): SURVIVED, 0 failures. No test reads aterrissagem.fechado_por."
+        - "P12 `atualizado` written as a constant instead of the closing time (line 6010-6011): SURVIVED, 0 failures. No test reads the top-level `atualizado` of the closed record."
+        - "P16 a `git fetch -q` added at the start of landed_upstream (line 5994, violates the spec's 'no git fetch'): SURVIVED, 0 failures. No test makes the remote hold a commit the clone does not know, so a fetch is unobservable."
+    survivors:
+      - "common/bin/cepa-until:6040-6050 (waiting_runs, `if red and landed_upstream`): non-red run whose tip is in upstream but not in local destination is not asserted to stay listed"
+      - "common/bin/cepa-until:6008 (close_landed_run): destino and fechado_por not asserted"
+      - "common/bin/cepa-until:6010 (close_landed_run): atualizado not asserted"
+      - "common/bin/cepa-until:5994 (landed_upstream): absence of git fetch not asserted"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI (absent, reported separately from the survivors); reachability inferred from 13 of 18 perturbations going red."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff reads git state (rev-parse, merge-base) of the repo and a run-state JSON written by cepa-until itself; no input from outside and no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Task, not Bug; still confirmed: base 1856ab6 common/bin/cepa-until with the new test -> '✗ 7 falha(s)' (RED); head 26db875 -> '✓ tudo passou'."
+routing_reason: "13 of 18 perturbations went red, the new test is RED at base (7 failures) and GREEN at head. 5 survived: dropping `red and` from the condition (P4b), not writing destino (P9), fechado_por (P10) or atualizado (P12), and adding a git fetch (P16). Each is a changed line of behavior the claimed surface (the CLI) does not guard, so unproven. Separately, l2_coverage is assumed because no coverage tool exists for the Python CLI; that alone would make it NEEDS-HUMAN, but the survivors come first."
