@@ -112,6 +112,12 @@ def red_test():
         p = run(root, "waiting")
         check(".claude/queues vazio também sai com 2", p.returncode == 2,
               p.stdout + p.stderr)
+        h = run(root, "waiting", "--help")
+        lines = h.stdout.splitlines()
+        check("o --help diz, no código de saída 0, a linha de nada esperando",
+              h.returncode == 0 and any(
+                  l.split()[:1] == ["0"] and NOTHING in l for l in lines),
+              h.stdout)
 
 
 def not_nothing():
