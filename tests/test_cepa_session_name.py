@@ -104,6 +104,16 @@ def t_two_sessions_get_their_own_name():
         check("the two names differ", len(got) == 2 and got[0] != got[1], str(got))
 
 
+def t_rest_of_owner_args_still_reach_claude():
+    with World() as w:
+        r = w.cepa("-s", "alpha", "--model", "opus", "do it")
+        c = w.calls()
+        argv = c[0][1] if c else []
+        check("injected --name is followed by the owner's flag and prompt, intact and in order",
+              len(c) == 1 and argv == ["--name", "alpha", "--model", "opus", "do it"],
+              f"{c} {r.stderr}")
+
+
 def t_owner_name_is_kept():
     for flag in (["-n", "foo"], ["--name", "foo"], ["--name=foo"]):
         with World() as w:
@@ -125,6 +135,7 @@ def t_no_session_branch_no_name():
 
 
 for fn in (t_two_sessions_get_their_own_name,
+           t_rest_of_owner_args_still_reach_claude,
            t_owner_name_is_kept,
            t_no_session_branch_no_name):
     fn()
