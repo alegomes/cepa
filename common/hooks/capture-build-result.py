@@ -19,6 +19,12 @@ Patterns detected:
     "Ran 0 tests" (with or without a test label) = EMPTY
   - cargo → exit code
   - go test → exit code
+  - flutter test (also `fvm flutter test`) → `All tests passed!` = SUCCESS,
+    `Some tests failed.` = FAILURE (flutter's summary line; fb-20261115-1)
+  - a repo check script declared in `.claude/check-scripts.json`
+    ({"scripts": [{"command": "tool/check.sh", "ok_line": "OK"}]}, kind
+    "check-script") → last non-empty output line == ok_line (default "OK") =
+    SUCCESS; a nonzero exit code = FAILURE and wins; otherwise unclassified
   - docker build → output markers (writing image / naming to /
     Successfully built), NOT exit code — CC's Bash tool_response omits
     the exit code on success, so marker-less patterns can't classify.
@@ -226,6 +232,12 @@ PATTERNS = [
     # termina em "Test run with N tests ... failed after".
     (re.compile(r"(?:^|[\s/])swift\s+(?:build|test)\b"),
      "swiftpm", ["Build complete!", " passed after"], ["error:", " failed after"]),
+    # flutter: the summary line of `flutter test` is "00:02 +5: All tests passed!" or
+    # "00:02 +4 -1: Some tests failed." (a compile error in a test file also ends in it).
+    # Without a marker a green Flutter run never cleared the STALE baseline (herdr-mobile,
+    # fb-20261115-1, 2026-11-15). `flutter analyze` / `flutter build` are not this kind.
+    (re.compile(r"(?:^|\s)(?:fvm\s+)?flutter\s+test\b"),
+     "flutter", ["All tests passed!"], ["Some tests failed."]),
     (re.compile(r"(?:^|\s)go\s+test\b"),
      "go-test", None, None),
     # docker build emits no exit code the hook can read, so classify on
@@ -414,11 +426,13 @@ def _marker_name(marker) -> str:
     return marker.pattern if isinstance(marker, re.Pattern) else marker
 
 
-def _is_build_segment(seg: str) -> bool:
+def _is_build_segment(seg: str, scripts=()) -> bool:
     """True when one segment is a real build invocation: a PATTERNS entry
     matches its unquoted view and, for Maven, it is a real mvn run of a build
-    phase (same rule as real_maven_args)."""
+    phase (same rule as real_maven_args), or it runs a declared check script."""
     seg = seg.strip()
+    if scripts and _runs_check_script(seg, scripts):
+        return True
     view = S._unquoted_view(seg)
     for pattern, kind, _s, _f in PATTERNS:
         if not pattern.search(view):
@@ -451,7 +465,84 @@ def _is_quiet(args) -> bool:
                for a in args)
 
 
-def classify(command: str, response_text: str, exit_code, interrupted: bool = False):
+# ─── declared check scripts ───────────────────────────────────────────
+#
+# A repo's own verification script (`tool/check.sh` in herdr-mobile, fb-20261115-1) is not a
+# toolchain the hook can know by name, and "ends in OK" is not a marker anyone else can use
+# (every app log has an OK). So the repo DECLARES it, in `.claude/check-scripts.json` at the
+# session root: {"scripts": [{"command": "tool/check.sh", "ok_line": "OK"}]}. Without the file
+# nothing changes. Kind "check-script".
+
+CHECK_SCRIPTS_FILE = Path(".claude") / "check-scripts.json"
+CHECK_SCRIPT_KIND = "check-script"
+
+
+def declared_check_scripts(root):
+    """[(path, ok_line)] declared in `<root>/.claude/check-scripts.json`; [] when the file is
+    missing or malformed (a malformed manifest is reported on stderr, never raised: this hook
+    never blocks)."""
+    if root is None:
+        return []
+    f = Path(root) / CHECK_SCRIPTS_FILE
+    if not f.is_file():
+        return []
+    try:
+        data = json.loads(f.read_text(encoding="utf-8"))
+        entries = data.get("scripts") if isinstance(data, dict) else None
+        if not isinstance(entries, list):
+            raise ValueError('expected {"scripts": [...]}')
+    except (OSError, ValueError) as e:
+        print(f"[capture-build-result] ignoring {f}: {e}", file=sys.stderr)
+        return []
+    out = []
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        cmd, ok = e.get("command"), e.get("ok_line", "OK")
+        if isinstance(cmd, str) and cmd.strip() and isinstance(ok, str) and ok.strip():
+            out.append((cmd.strip().removeprefix("./"), ok.strip()))
+    return out
+
+
+def _check_script_regex(path: str):
+    # The script must be what the segment RUNS: first word, optionally after `bash`/`sh`/`zsh`
+    # and with `./` in front. `cat tool/check.sh` or `other/tool/check.sh` is not running it.
+    return re.compile(r"(?:^|[;&|(]\s*|\n\s*)(?:(?:ba|z)?sh\s+)?(?:\./)?"
+                      + re.escape(path) + r"(?=\s|$|[;&|)])")
+
+
+def _runs_check_script(seg_or_command: str, scripts) -> bool:
+    view = S._unquoted_view(seg_or_command).strip()
+    return any(_check_script_regex(p).search(view) for p, _ok in scripts)
+
+
+def _last_line(text: str) -> str:
+    for line in reversed(text.splitlines()):
+        if line.strip():
+            return line.strip()
+    return ""
+
+
+def _classify_check_script(command, response_text, exit_code, scripts):
+    """(status, kind, reason) for a declared check script, or None when none is run."""
+    view = S._unquoted_view(command)
+    for seg in S._split_segments(view):
+        seg = S._strip_group_prefix(seg).strip()
+        for path, ok in scripts:
+            if not _check_script_regex(path).search(seg):
+                continue
+            if isinstance(exit_code, int) and exit_code != 0:
+                return "FAILURE", CHECK_SCRIPT_KIND, f"declared check script {path}: exit_code {exit_code}"
+            if _last_line(response_text) == ok:
+                return "SUCCESS", CHECK_SCRIPT_KIND, f"declared check script {path}: last line {ok!r}"
+            return None, CHECK_SCRIPT_KIND, (
+                f"declared check script {path} ran but its last line is not {ok!r} and there "
+                f"is no exit code; left unclassified")
+    return None
+
+
+def classify(command: str, response_text: str, exit_code, interrupted: bool = False,
+             root=None):
     """Return (status, kind, reason).
 
     status: "SUCCESS" | "FAILURE" | None
@@ -465,6 +556,9 @@ def classify(command: str, response_text: str, exit_code, interrupted: bool = Fa
     tool_response omits the exit code on success in current versions, so a
     marker-less pattern may stay unclassified (returns None) rather than
     falsely going green.
+
+    `root` is the session root whose `.claude/check-scripts.json` declares the repo's own
+    check scripts; they are tried after every known toolchain (see _classify_check_script).
     """
     view = S._unquoted_view(command)
     maven_args = real_maven_args(command)
@@ -502,6 +596,11 @@ def classify(command: str, response_text: str, exit_code, interrupted: bool = Fa
             f"CC's Bash tool_response often omits exit_code on success — "
             f"give this pattern text markers. Set CAPTURE_BUILD_DEBUG=1 to inspect."
         )
+
+    declared = _classify_check_script(command, response_text, exit_code,
+                                      declared_check_scripts(root))
+    if declared is not None:
+        return declared
 
     return None, None, "no command pattern matched (not a build command)"
 
@@ -699,8 +798,9 @@ def effective_build_dir(command: str, cwd: Path) -> Path:
     `git -C wt checkout ...; cd wt && sed ... && ./mvnw test` (2026-10-16): a
     deliberate-RED proof build was recorded on the session tree and blocked the
     next commit. Falls back to cwd when no segment is a build."""
+    scripts = declared_check_scripts(cwd)
     for seg, d, _explicit in S.segment_dirs(command, str(cwd)):
-        if _is_build_segment(seg):
+        if _is_build_segment(seg, scripts):
             return Path(d).resolve()
     return cwd
 
@@ -1063,7 +1163,10 @@ def _harvest_one(pending: Path, now):
         # even when a success marker printed before something later failed.
         status, kind, _ = "FAILURE", kind, f"background exit code {exit_code}"
     else:
-        status, kind, _ = classify(command, text, exit_code)
+        # Without CC's "[exited with code 0]" trailer: a declared check script is judged by
+        # its LAST line, and the trailer would always be it.
+        status, kind, _ = classify(command, _EXIT_LINE.sub("", text.rstrip()), exit_code,
+                                   root=entry.get("cwd"))
     status, tests_run, empty_reason = refine_empty(command, kind, status, text)
     if status is None:
         return
@@ -1112,7 +1215,7 @@ def main():
         if logged:
             response_text = f"{response_text}\n{logged}" if response_text else logged
 
-    status, kind, reason = classify(command, response_text, exit_code, interrupted)
+    status, kind, reason = classify(command, response_text, exit_code, interrupted, root=cwd)
     status, tests_run, empty_reason = refine_empty(command, kind, status, response_text)
     if empty_reason:
         reason = f"{reason}; {empty_reason}"

@@ -5450,7 +5450,7 @@ Em `_refs_root`, resolver também o trecho depois de `-X` colado e de `chave=`; 
 
 ## `capture-build-result` não reconhece `flutter test` nem `tool/check.sh`
 
-**Status:** pendente · **Lar provável:** common (`common/hooks/capture-build-result.py`, padrões de build) · **Origem:** feedback `fb-20261115-1`, 2026-11-15
+**Status:** feito nesta branch (item `capture-build-result-flutter` da fila `cepa`; o script de verificação entra declarado em `.claude/check-scripts.json`, ver `docs/green-or-revert.md`) · **Lar provável:** common (`common/hooks/capture-build-result.py`, padrões de build) · **Origem:** feedback `fb-20261115-1`, 2026-11-15
 
 ### Problema
 

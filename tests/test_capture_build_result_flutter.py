@@ -63,11 +63,14 @@ def _project(tmp_path, manifest=None):
 
 
 def _run_hook(proj, tmp_path, command, output, extra=None):
+    """A failed Bash call reaches the hook as a plain string "Error: Exit code N\\n<output>"
+    (CC drops the dict form on non-zero exits); a green one as the stdout dict."""
     tmp = tmp_path / "tmp"
     tmp.mkdir(exist_ok=True)
+    response = (output if output.startswith("Error: Exit code ") else
+                {"stdout": output, "stderr": "", "interrupted": False, **(extra or {})})
     payload = {"cwd": str(proj), "session_id": "s-flutter", "tool_name": "Bash",
-               "tool_input": {"command": command},
-               "tool_response": {"stdout": output, "stderr": "", "interrupted": False, **(extra or {})}}
+               "tool_input": {"command": command}, "tool_response": response}
     subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload), text=True,
                    capture_output=True, cwd=proj, env={**os.environ, "TMPDIR": str(tmp)})
     state = proj / ".claude" / "last-build.json"
@@ -245,7 +248,7 @@ def test_background_check_script_is_harvested_with_the_manifest(tmp_path):
     bash("tool/check.sh", {"stdout": "", "stderr": "", "interrupted": False,
                            "backgroundTaskId": "bg1"})
     assert list(tasks.glob("bg1*")) != [output], "the background check script was not registered"
-    output.write_text(CHECK_GREEN + "[exited with code 0]\n")
+    output.write_text(CHECK_GREEN + "\n[exited with code 0]\n")  # the trailer CC appends
     bash("ls", {"stdout": "pubspec.yaml", "stderr": "", "interrupted": False})
     state = json.loads((proj / ".claude" / "last-build.json").read_text())
     assert state["status"] == "SUCCESS" and state["kind"] == "check-script"
