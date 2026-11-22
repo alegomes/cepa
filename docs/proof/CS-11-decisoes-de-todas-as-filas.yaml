@@ -1,0 +1,46 @@
+schema_version: 2
+card: CS-11-decisoes-de-todas-as-filas
+verdict: unproven
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: f5468d9
+head_commit: a14d22b
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::ask_at_launch_all (new parameter say_empty and local flag named: prints the one line 'nada espera você' when nothing is asked and nothing is named)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::cmd_decide (passes say_empty=True on the --all path; help text gains one sentence)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "GREEN baseline P0 at a14d22b in a detached worktree under /tmp (removed afterwards): python3 tests/test_cepa_until_decide_all.py -> '✓ 23 testes'. The test_cs11_* run the real CLI as a subprocess (stdin=DEVNULL or a pty), no double."
+        - "P1 cmd_decide passes say_empty=False: KILLED, '3 falha(s)'."
+        - "P2 'if say_empty and not named:' -> 'if False:': KILLED, '3 falha(s)'."
+        - "P3 condition loses 'and not named': KILLED, '2 falha(s)'."
+        - "P4 live-run branch no longer sets named: KILLED, '1 falha(s)' (test_cs11_a_route_answered_no_or_a_live_run_is_not_nothing)."
+        - "P6 answered-no branch no longer sets named: KILLED, '1 falha(s)' (same test)."
+        - "P7 default of say_empty in ask_at_launch_all changed to True (launch panel would speak): KILLED, '1 falha(s)' (test_cs11_the_launch_panel_with_nothing_waiting_stays_silent)."
+        - "P8 printed text 'nada espera voce' (accent dropped): KILLED, '3 falha(s)'."
+        - "P9 named initialised True: KILLED, '3 falha(s)'."
+        - "P5 'named = named or bool(unreadable)' -> 'pass' (an unreadable queue no longer counts as named): SURVIVED, '✓ 23 testes'. No test makes `cepa-plan queue <name>` fail for a queue that `cepa-plan ready` lists, so the line is never exercised. Not equivalent: with such a queue and nothing else waiting, the mutant prints 'nada espera você' although it could not read that queue."
+        - "Method note: perturbations run with sed in throwaway detached worktrees /tmp/proof-cs11 and /tmp/proof-cs11b at a14d22b, both removed. The first batch exceeded the 120s tool limit and was moved to the background by the harness; its results (P1, P2, P3, P7, P8, P9, P5) were still read from the completed run; P4 and P6 were run separately in the foreground."
+    survivors:
+      - "common/bin/cepa-until ask_at_launch_all: 'named = named or bool(unreadable)' (P5)"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: ["common/bin/cepa-until: 'named = named or bool(unreadable)' is reached by no test that makes query_queue fail (inferred from P5 surviving)"]
+    run: "no coverage tool wired for the Python CLI; precision not measured. Indirect signal: P1-P9 except P5 each went red."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only prints one fixed line and parses no new external input (no api-rest module)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "red-first ordering stated by the caller: tests at 3664532 with code at 3664532~1 -> 3 failures; at a14d22b -> python3 tests/test_cepa_until_decide_all.py -> '✓ 23 testes' (this pass re-ran only the green side)."
+routing_reason: "The criterion is demonstrated and 8 of 9 perturbations of the changed lines went red. One did not: the line that treats an unreadable queue as 'not nothing' (P5) survives the whole file, so the safeguard that stops the CLI from saying 'nada espera você' when it could not read a queue is not pinned by any test. UNPROVEN until a test makes `cepa-plan queue` fail for a queue that `cepa-plan ready` lists and asserts the line is not printed. Separately l2_coverage is assumed (no coverage tool), which would route NEEDS-HUMAN even after that. Suggested decision for the human: if you consider the unreadable-queue safeguard outside this card's criterion, accept the survivor; I would not."
