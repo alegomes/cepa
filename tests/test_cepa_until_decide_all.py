@@ -11,6 +11,10 @@ queues held a question.
 
 CS-8: `cepa until decide` with no argument does the same as `--all`.
 
+CS-9: in that panel a route already answered "no" is not asked (one line per
+queue counts them), and a queue with its own live run is left out with one line
+naming the queue and its run.
+
 Against the real CLI (`cepa-until decide --all`) in a pseudo-terminal, in a
 temporary git repo with two queues, `a` and `b`, each holding one item with an
 open owner route.
@@ -410,6 +414,106 @@ def test_cs7_launch_panel_of_all_still_leaves_out_the_leftover_tasks():
         check("...e o corte diz que o run segue",
               "nobody answered in" in out and "the run goes on without." in out,
               out[-1500:])
+
+
+def test_cs9_decide_all_skips_the_no_answers_and_the_queue_with_a_live_run():
+    """CS-9, the spec's own script: `a1` already answered "no" on 2026-11-18,
+    queue `c` with a live run of its own and `b1` with an open route. The panel
+    asks only `b1`; one line counts the "no" of `a` and names `cepa-until decide
+    a`; one line names queue `c` and its run, whose question is not asked."""
+    with tempfile.TemporaryDirectory() as tmp:
+        old = _owner_item("a1", "liberar a", "Liberei a?")
+        old["evidence"] = "Resposta do dono em 2026-11-18: não: Liberei a?"
+        root, paths = al._repo(tmp, {
+            "a": [old],
+            "b": [_owner_item("b1", "liberar b", "Liberei b?")],
+            "c": [_owner_item("c1", "liberar c", "Liberei c?")]})
+        alive = subprocess.Popen([sys.executable, "-c",
+                                  "import time; time.sleep(120)", "cepa-until"])
+        try:
+            run = al._live_run_of_queue(root, "c", alive.pid)
+            rc, out = _decide_all_on_tty(tmp, root, [
+                ("[w] I write the answer", "y"), ("Anything to add", "")])
+        finally:
+            alive.kill()
+            alive.wait()
+        check("decide --all com negada e run vivo sai com 0", rc == 0, out[-1500:])
+        check("...pergunta só b1",
+              "1 question(s) for you" in out and "Liberei b?" in out
+              and "Liberei a?" not in out.split("question(s) for you", 1)[-1]
+              and "Liberei c?" not in out, out[-2500:])
+        no_line = [l for l in out.splitlines() if "already answered" in l]
+        check("...uma linha conta a negada de a, com a data e o comando",
+              len(no_line) == 1 and "queue `a`" in no_line[0]
+              and "18/11" in no_line[0] and "cepa-until decide a" in no_line[0],
+              str(no_line) + out[-1500:])
+        live_line = [l for l in out.splitlines() if "queue `c`" in l]
+        check("...uma linha nomeia a fila c e o run dela",
+              len(live_line) == 1 and f"c/{run}" in live_line[0]
+              and "left out of this panel" in live_line[0]
+              and f"pid {alive.pid}" in live_line[0],
+              str(live_line) + out[-1500:])
+        check("...e diz onde responder c depois que o run acabar",
+              live_line and "cepa-until decide c" in live_line[0], str(live_line))
+        c1 = _item_of(paths["c"], "c1")
+        b1 = _item_of(paths["b"], "b1")
+        check("c1 segue esperando, sem resposta gravada",
+              c1.get("human_pending") and "Resposta do dono" not in
+              str(c1.get("evidence") or ""), str(c1))
+        check("b1 fecha com o sim", b1.get("human_pending") is None, str(b1))
+        files = al._git(root, "show", "--name-only", "--format=", "HEAD").split()
+        check("...o commit toca só a fila b",
+              files == [".claude/queues/b/queue.yaml"], str(files))
+
+
+def test_cs9_a_live_run_is_named_even_when_nothing_else_is_asked():
+    """The queue with a live run is the only one with a question: the panel
+    opens no question, the line still names the queue and its run, and nothing
+    is committed."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = al._repo(tmp, {
+            "c": [_owner_item("c1", "liberar c", "Liberei c?")]})
+        head_before = al._git(root, "rev-parse", "HEAD").strip()
+        alive = subprocess.Popen([sys.executable, "-c",
+                                  "import time; time.sleep(120)", "cepa-until"])
+        try:
+            run = al._live_run_of_queue(root, "c", alive.pid)
+            rc, out = _decide_all_on_tty(tmp, root, [])
+        finally:
+            alive.kill()
+            alive.wait()
+        check("só fila com run vivo: sai com 0", rc == 0, out[-1500:])
+        check("...nenhuma pergunta", "question(s) for you" not in out
+              and "Liberei c?" not in out, out[-1500:])
+        check("...a linha nomeia c e o run",
+              any("queue `c`" in l and f"c/{run}" in l for l in out.splitlines()),
+              out[-1500:])
+        check("...e nada é commitado",
+              al._git(root, "rev-parse", "HEAD").strip() == head_before, "")
+
+
+def test_cs9_the_launch_panel_of_all_keeps_its_live_queue_silent():
+    """The `--all` launch already warns the queue with a live run on stderr when
+    it has ready items (CS-4 of until-todas-as-filas); its panel does not add a
+    second line for it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = al._repo(tmp, {
+            "b": [_owner_item("b1", "liberar b", "Liberei b?")],
+            "c": [_owner_item("c1", "liberar c", "Liberei c?")]})
+        alive = subprocess.Popen([sys.executable, "-c",
+                                  "import time; time.sleep(120)", "cepa-until"])
+        try:
+            run = al._live_run_of_queue(root, "c", alive.pid)
+            rc, out, _ = al._launch_all_on_tty(tmp, root, [], wait="2")
+        finally:
+            alive.kill()
+            alive.wait()
+        launch = out.split("item 1", 1)[0]
+        check("largada sai com 0", rc == 0, out[-1500:])
+        check("largada: o painel não ganha a linha da fila com run vivo",
+              "left out of this panel" not in out and f"c/{run}" not in launch,
+              launch[-1500:])
+        check("...e não pergunta c1", "Liberei c?" not in launch, launch[-1500:])
 
 
 def main():
