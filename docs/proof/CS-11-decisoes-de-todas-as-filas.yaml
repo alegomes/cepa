@@ -1,9 +1,9 @@
 schema_version: 2
 card: CS-11-decisoes-de-todas-as-filas
-verdict: unproven
+verdict: needs-human
 reviewed_at: 2026-11-22T00:00:00-03:00
 base_commit: f5468d9
-head_commit: bbd8c77
+head_commit: ef7ccce
 issue_type: Task
 scope:
   changed_classes:
@@ -18,32 +18,34 @@ levels:
       status: n/a
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "GREEN baseline at bbd8c77 in detached worktree /tmp/proof-cs11d: python3 tests/test_cepa_until_decide_all.py -> '✓ 24 testes'; the 6 test_cs11_* functions -> 'FAILURES 0'. Tests run the real CLI as a subprocess (no double)."
+        - "GREEN baseline at ef7ccce in detached worktree /tmp/proof-cs11e: python3 tests/test_cepa_until_decide_all.py -> '✓ 26 testes'. Whole file run per perturbation (~40s) because the path-lock denies `python3 -c`, so no cs11-only filter was possible; any red in the file counts, and every red was in a cs11 or decide --all test."
         - "M1 regex 'ilegível' -> 'ilegivel' in query_ready: KILLED, 2 failures."
-        - "M2 'named = bool(hidden)' -> 'named = False': KILLED, 1 failure."
-        - "M3 stderr print of unreadable queues disabled ('if say_empty:' -> 'if False:'): KILLED, 1 failure."
-        - "M5 say_empty default False -> True: KILLED, 1 failure."
+        - "M2 'sections, named = [], bool(hidden)' -> 'named = False': KILLED, 2 failures."
+        - "M3 stderr print guard 'if say_empty:' -> 'if False:': KILLED, 2 failures."
+        - "M4 'named = named or bool(unreadable)' -> 'pass': KILLED, 1 failure (was a survivor at bbd8c77; now killed by test_cs11_a_listed_queue_that_cannot_be_queried_is_not_nothing)."
+        - "M5 say_empty default False -> True: KILLED, 2 failures."
         - "M6 cmd_decide say_empty=True -> False: KILLED, 4 failures."
-        - "M7 printed text 'nada espera voce': KILLED, 3 failures."
-        - "M8 collection of unreadable in query_ready disabled: KILLED, 2 failures."
-        - "M9 ask_at_launch_all calls query_ready(repo) without hidden: KILLED, 2 failures."
-        - "M4 'named = named or bool(unreadable)' -> 'pass': SURVIVED, 0 failures. Same survivor as the previous pass: the new test makes `cepa-plan ready` omit a queue (stderr path), not `cepa-plan queue` fail for a queue that ready lists. Not equivalent: a listed queue whose query fails would print 'nada espera você'."
-        - "M10 stderr print guard 'if say_empty:' -> 'if True:' (launch panel would also print the unreadable-queue lines on stderr): SURVIVED, 0 failures. No test asserts the launch panel's stderr is silent when ready hides a queue."
-        - "Method: sed-style replacement via a script inside the worktree, one perturbation per run, restored after each; worktree removed at the end. Each perturbation ran only the test_cs11_* functions."
-    survivors:
-      - "common/bin/cepa-until ask_at_launch_all: 'named = named or bool(unreadable)' (M4, survivor since the previous pass)"
-      - "common/bin/cepa-until ask_at_launch_all: stderr print guarded by 'if say_empty:' (M10)"
+        - "M7 printed text 'nada espera voce': KILLED, 4 failures."
+        - "M8 collection of unreadable in query_ready disabled ('if m:' -> 'if False:'): KILLED, 2 failures."
+        - "M9 ask_at_launch_all calls query_ready(repo) without hidden: KILLED, 3 failures."
+        - "M10 stderr guard 'if say_empty:' -> 'if True:': KILLED, 1 failure (was a survivor at bbd8c77; now killed by test_cs11_the_launch_panel_does_not_name_the_unreadable_queue)."
+        - "M11 (added) 'if say_empty and not named:' -> 'if say_empty:': KILLED, 5 failures."
+        - "M12 (added) 'named = True' after a queue skipped for its live run -> 'pass': KILLED, 1 failure."
+        - "M13 (added) 'named = True' after routes answered no -> 'pass': KILLED, 1 failure."
+        - "Not perturbed: the 'named = True' inside the say_empty stderr loop, equivalent to the bool(hidden) initial value (M2 covers that path)."
+        - "Method: one sed perturbation at a time in the throwaway worktree, git checkout restored after each, worktree removed at the end."
+    survivors: []
   l2_coverage:
     status: assumed
-    uncovered_lines: ["'named = named or bool(unreadable)' reached by no test (inferred from M4)"]
-    run: "no coverage tool wired for the Python CLI; precision not measured."
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI; precision not measured. Reachability inferred from 13 perturbations all going red."
   l4_adversarial_input:
     status: n/a
     reason: "the diff parses only the stderr of our own cepa-plan subprocess with one anchored regex and prints fixed text; no external input surface and no api-rest module"
     findings: []
   bugfix_regression_red_at_base:
-    status: pass
-    run: "commit 4e833c2 states test_cs11_an_unreadable_queue_is_not_nothing red before 327d86b (2 failures); at bbd8c77 the cs11 functions -> FAILURES 0 and whole file -> '✓ 24 testes'. Red side not re-run in this pass."
-routing_reason: "The criterion (nothing waiting -> one line 'nada espera você', exit 0) is demonstrated and 8 of 10 perturbations went red, including all the new lines from 327d86b. Two survive: the old safeguard for a queue that ready lists but cannot be queried (M4), and the guard that keeps the launch panel's stderr silent (M10). UNPROVEN until tests pin both. l2_coverage is assumed (no coverage tool)."
+    status: n/a
+    run: ""
+routing_reason: "All 13 perturbations (the 10 of the previous pass plus 3 added) went red; the two former survivors (M4, M10) are now killed. The structural gap is l2_coverage: assumed, because the Python CLI has no coverage tool, which makes proven structurally unavailable to the reviewer. Suggested decision for the human: accept 13 of 13 killed perturbations as the coverage evidence."
