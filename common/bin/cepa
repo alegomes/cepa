@@ -375,8 +375,23 @@ run_claude() {
     CEPA_CHAIN_FROM_WORKTREE=1
   fi
   export CEPA_CHAIN_FROM_WORKTREE
+  # A session on session/<slice> is named after its slice (claude --name), so
+  # herdr's Agents list tells sessions apart: without it the title is the first
+  # prompt, the same mode menu for every session. The owner's -n/--name wins.
+  _name=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+  case "$_name" in
+    session/?*) _name="${_name#session/}" ;;
+    *) _name="" ;;
+  esac
+  for _a in "$@"; do
+    case "$_a" in -n|--name|--name=*) _name="" ;; esac
+  done
   set +e
-  "$CLAUDE_BIN" "$@"
+  if [ -n "$_name" ]; then
+    "$CLAUDE_BIN" --name "$_name" "$@"
+  else
+    "$CLAUDE_BIN" "$@"
+  fi
   _rc=$?
   set -e
   if [ "${CEPA_ENCADEAR:-on}" != "off" ] && [ -n "$CEPA_LAUNCH_ID" ] \
