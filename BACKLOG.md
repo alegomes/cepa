@@ -5362,7 +5362,7 @@ Quando um turno abre uma lista de decisões e a anterior ainda não foi respondi
 
 ## `cepa plan finish` não deixa corrigir a evidência de um item done que ficou falsa
 
-**Status:** pendente · **Lar provável:** common (`common/bin/cepa-plan`, `finish` e um subcomando novo de anotação) · **Origem:** feedback `fb-20261110-3`, 2026-11-10
+**Status:** feito nesta branch (2026-11-21): `cepa-plan annotate <fila> <id> --note TEXTO [--author QUEM]` acrescenta em `anotacoes` uma nota datada e assinada a um item `done` ou `dropped`, sem tocar em `evidence`, `status` nem `head_commit`; `show` mostra as notas antes da evidência, `status` marca o item anotado e a recusa do segundo `finish` aponta o `annotate`. Teste: `tests/test_cepa_plan_annotate.py` · **Lar:** common (`common/bin/cepa-plan`) · **Origem:** feedback `fb-20261110-3`, 2026-11-10
 
 ### Problema
 

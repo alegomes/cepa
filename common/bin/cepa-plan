@@ -1911,6 +1911,7 @@ def cmd_status(root, name, status_filter, as_json, item_id=None, via_show=False)
             "route_kind": it.get("route_kind"),
             "question": it.get("owner_question"),
             "evidence": it.get("evidence"),
+            "anotacoes": annotations_of(it),
             "owner_summary": it.get("owner_summary"),
             "claimed_by": ({"session_id": owner.get("session_id"),
                             "branch": owner.get("branch"),
@@ -1967,6 +1968,11 @@ def cmd_status(root, name, status_filter, as_json, item_id=None, via_show=False)
             print(f"  {l['posicao']:>3}. {l['id']} — {l['title']}")
             if code_line(l["codigo"]):
                 print(f"       {code_line(l['codigo'])}")
+            if l["anotacoes"]:
+                last = l["anotacoes"][-1]
+                print(f"       {len(l['anotacoes'])} anotação(ões) depois da "
+                      f"evidência, a última em {str(last.get('em') or '?')[:10]}: "
+                      f"cepa-plan show {qp.queue_name_of(plan, name)} {l['id']}")
             if st in ("done", "dropped"):
                 continue
             if l["sem_epic"]:
@@ -2250,6 +2256,10 @@ def item_detail(program, target, l, as_json, plan=None, root=None):
         ("sem Epic", [SEM_EPIC_LINE.split(": ", 1)[1]] if l.get("sem_epic") else []),
         ("pendências descobertas (abertas; feche com finish --resolve-pendencia N)",
          [f"{n}. {text}" for n, text in enumerate(l.get("pendencias") or [], 1)]),
+        ("anotações depois da evidência (a evidência abaixo ficou como foi "
+         "escrita; vale o que a anotação corrige)",
+         [f"{str(n.get('em') or '?')[:10]} · {n.get('autor') or '?'}: {n['texto']}"
+          for n in l.get("anotacoes") or []]),
         ("evidência" + (" (mais recente primeiro)" if len(ev) > 1 else ""), ev),
         ("resumo para o dono", [l["owner_summary"]] if l["owner_summary"] else []),
         ("reservado", [f"sessão {c['session_id'] or '?'} na branch "
@@ -3409,7 +3419,9 @@ def finish_gate(root, target, it, ident, status, repo, supervisor):
     if not supervisor and st in TERMINAL:
         first = _first_line(it.get("evidence")) or "(sem evidência)"
         return (f"{ident} já está `{st}`: um segundo `finish` apagaria a "
-                f"evidência de quem fechou. Primeira linha dela: \"{first}\"")
+                f"evidência de quem fechou. Primeira linha dela: \"{first}\""
+                + (f". Para corrigir o que ficou falso sem apagá-la: cepa-plan "
+                   f"annotate <fila> {ident} --note \"...\"" if st != "blocked" else ""))
     claim = it.get("claimed_by")
     caller = current_owner(root, session_root(repo))
     if not supervisor and isinstance(claim, dict) and claim.get("session_id"):
@@ -3561,6 +3573,50 @@ def cmd_reword_route(root, name, ident, route_kind, question, if_yes, if_no,
     it["owner_summary"] = summary
     write_body(target, plan, plan.get("items") or [])
     print(f"{ident}: route reworded in {target} (filled: {', '.join(changed)})")
+    return 0
+
+
+def annotations_of(it):
+    """The item's later notes (`anotacoes`), oldest first, only well-formed ones."""
+    return [dict(n) for n in (it.get("anotacoes") or [])
+            if isinstance(n, dict) and str(n.get("texto") or "").strip()]
+
+
+def cmd_annotate(root, name, ident, note, author=None):
+    """fb-20261110-3: a closed item's evidence that went stale (C1-17 said "sem
+    merge e sem push" after the merge landed) gets a dated note appended to
+    `anotacoes`. `evidence`, `status`, `head_commit` and every other key stay
+    as they were: the record only grows, and the closer's words are kept.
+    Only `done` and `dropped`: an open item's evidence is `finish`'s. Refuses
+    (exit 2, nothing written) an unknown id, an open item or an empty note.
+    Does not commit (as `reword-route`)."""
+    text = " ".join(str(note or "").split())
+    if not text:
+        print("`annotate` recusado: `--note` vazio; diga em palavras simples o que "
+              "mudou desde a evidência; nada foi gravado.", file=sys.stderr)
+        return 2
+    target, plan, by_id, rc = open_plan_for_marking(root, name)
+    if rc:
+        return rc
+    it = by_id.get(str(ident))
+    if it is None:
+        print(f"a fila {name} não tem item '{ident}'", file=sys.stderr)
+        return 2
+    st = status_of(it)
+    if st not in ("done", "dropped"):
+        print(f"`annotate` recusado para {ident}: o item está `{st}`, e a evidência "
+              "de item aberto é do `finish`; nada foi gravado.", file=sys.stderr)
+        return 2
+    who = " ".join(str(author or "").split()) or (
+        os.environ.get("CLAUDE_SESSION_ID")
+        or os.environ.get("CLAUDE_CODE_SESSION_ID")
+        or os.environ.get("CLAUDE_WT_CLAIM") or "sessão não registrada")
+    notes = list(it.get("anotacoes") or [])
+    notes.append({"texto": text, "em": now_iso(), "autor": who})
+    it["anotacoes"] = notes
+    write_body(target, plan, plan.get("items") or [])
+    print(f"{ident}: nota {len(annotations_of(it))} gravada em {target}; "
+          "a evidência original ficou como estava")
     return 0
 
 
@@ -5451,7 +5507,7 @@ def main(argv=None):
             ("sources (read only, return JSON)", ["from-spec", "from-epic", "from-triage"]),
             ("writing", ["write", "add", "verdict", "migrate", "check-name", "validate"]),
             ("reading", ["queue", "status", "show", "epics", "decisions", "promote", "order"]),
-            ("one item's cycle", ["start", "finish", "reword-route", "answer"]),
+            ("one item's cycle", ["start", "finish", "reword-route", "answer", "annotate"]),
             ("against the Jira board", ["reconcile", "landed", "divergence"]),
         ],
         examples=[
@@ -5958,6 +6014,27 @@ def main(argv=None):
                          "already there (the owner pressed `?` on that question)")
     rw.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
+    an = sub.add_parser(
+        "annotate", help="adds a dated note to a closed item's evidence",
+        description=(
+            "Appends a dated, signed note to a `done` or `dropped` item, for when\n"
+            "its evidence went stale (it said \"no merge\" and the merge landed).\n"
+            "The evidence, the status and the commit stay as they were: the record\n"
+            "only grows. `show` prints the notes before the evidence. An open item\n"
+            "is refused: its evidence is `finish`'s. Does not commit."),
+        examples=[('cepa plan annotate wego C1-17 --note "merged into main by eb31cd5"',
+                   "correct a stale \"no merge\" without erasing it")],
+        exit_codes=[(0, "note recorded"),
+                    (2, f"invalid usage, {not_git}, {no_queue}, unknown item id, item "
+                        "not `done`/`dropped`, empty note")])
+    an.add_argument("name", metavar="name", help="queue name")
+    an.add_argument("id", help="item id in the queue")
+    an.add_argument("--note", required=True, metavar="TEXT",
+                    help="what changed since the evidence, in plain words")
+    an.add_argument("--author", metavar="WHO",
+                    help="who signs the note (default: the calling session)")
+    an.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
+
     rs = sub.add_parser(
         "answer", aliases=["responde"],
         help="records the owner's answer to a deferred item (terminal only)",
@@ -6288,6 +6365,8 @@ def main(argv=None):
                           a.supervisor, a.decision, a.decision_commit,
                           a.route_kind, _cli_items(a), a.points,
                           a.resolve_points)
+    if a.cmd == "annotate":
+        return cmd_annotate(root, a.name, a.id, a.note, a.author)
     if a.cmd == "reword-route":
         return cmd_reword_route(root, a.name, a.id, a.route_kind, a.question,
                                 a.if_yes, a.if_no, a.replace, _cli_items(a))

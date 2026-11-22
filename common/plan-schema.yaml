@@ -114,6 +114,14 @@ items:                          # ORDEM DA LISTA = ordem de execução. É o dad
                                 # Done e tarefa fora do repo continuam rota
                                 # (resposta do dono à Q7). Fila sem a chave
                                 # segue válida.
+    anotacoes:                  # OPCIONAL (fb-20261110-3): notas datadas que
+      - texto: "mesclado na main pelo eb31cd5"   # corrigem a evidência de um
+        em: "2026-11-21T15:00:00+00:00"          # item `done`/`dropped` que
+        autor: "<sessão ou --author>"            # ficou falsa. Só cresce:
+                                # `cepa-plan annotate` acrescenta e nunca toca
+                                # em evidence, status nem head_commit. O `show`
+                                # mostra as notas antes da evidência. Fila sem
+                                # a chave segue válida.
     blocked_by: []              # ids de outros items; um item bloqueado não é
                                 # "o próximo" mesmo estando no topo da fila
     human_pending: |            # o que sobrou PRA VOCÊ depois do card fechar.
