@@ -16,6 +16,10 @@ Against the real CLI, in a temporary git repo with a remote:
     not the commit recorded in the action)
   - `--json` does not list the closed run either
   - in a repo whose destination has no upstream, the local branch counts
+  - the closed record carries `destino`, `fechado_por: pending` and an
+    `atualizado` equal to `quando` (fresh, not the fixture's old stamp)
+  - fence: a run without `parou` whose tip is only in `origin/main` stays listed
+  - `pending` never fetches: a stale `origin/main` keeps the run listed
 
 Run with `python3 tests/test_cepa_until_pending_closes_landed.py`.
 """
@@ -23,11 +27,13 @@ import json
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 CEPA_UNTIL = REPO / "common" / "bin" / "cepa-until"
 FAILURES = []
+OLD_STAMP = "2020-01-02T03:04:05"
 
 
 def check(name, cond, detail=""):
@@ -86,7 +92,7 @@ def add_run(root, run, marker):
     d.mkdir(parents=True, exist_ok=True)
     state_path(root, run).write_text(json.dumps({
         "fila": "a", "run": run, "branch": branch,
-        "estado": "esperando-dono",
+        "estado": "esperando-dono", "atualizado": OLD_STAMP,
         "verify": f"touch {marker}",
         "acoes": [{"id": "aterrissar", "destino": "main", "sha": sha}],
         "aterrissagem": {"parou": "build-vermelho", "motivo": "exit 1",
@@ -123,6 +129,19 @@ def red_test():
               "parou" not in info and "motivo" not in info, info)
         check("...e guarda o merge e a hora do fechamento",
               info.get("merge") and info.get("quando"), info)
+
+        check("...com `destino` = `main`", info.get("destino") == "main", info)
+        check("...e `fechado_por` = `pending`",
+              info.get("fechado_por") == "pending", info)
+        top = read_state(root, "r1").get("atualizado")
+        check("`atualizado` iguala `aterrissagem.quando`",
+              top == info.get("quando"), (top, info))
+        check("...difere do valor antigo da fixture", top != OLD_STAMP, top)
+        try:
+            age = abs((datetime.now() - datetime.fromisoformat(top)).total_seconds())
+        except (TypeError, ValueError):
+            age = None
+        check("...e e um ISO recente", age is not None and age < 300, top)
 
         p2 = pending(root)
         check("segunda chamada: a/r2 ainda listada, a/r1 não",
@@ -165,7 +184,54 @@ def no_upstream():
         check("sem build", not marker.exists())
 
 
+def fence_not_red():
+    print("cerca CS-1: sem `parou`, estar so no upstream nao fecha")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = make_repo(tmp)
+        marker = Path(tmp) / "m"
+        add_run(root, "r1", marker)
+        git(root, "push", "-q", "origin", "main")   # merge in origin/main
+        git(root, "reset", "-q", "--hard", "HEAD~1")  # local main behind upstream
+        st = read_state(root, "r1")
+        st["aterrissagem"] = None
+        state_path(root, "r1").write_text(json.dumps(st), encoding="utf-8")
+        p = pending(root)
+        # This case pins the CS-1 fence (only a red-build run is closed by
+        # upstream). Criterion CS-3 of docs/spec/pouso-ja-feito-sai-da-lista.md
+        # deliberately changes it: CS-3 closes such runs.
+        check("o run sem `parou` segue listado", "run r1" in p.stdout, p.stdout)
+        check("...e `esperando-dono`",
+              read_state(root, "r1")["estado"] == "esperando-dono")
+        check("sem build", not marker.exists())
+
+
+def no_fetch():
+    print("`pending` nao faz fetch: origin/main velho mantem o run listado")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = make_repo(tmp)
+        marker = Path(tmp) / "m"
+        branch, _ = add_run(root, "r1", marker)
+        git(root, "push", "-q", "origin", branch)
+        second = Path(tmp) / "second"
+        subprocess.run(["git", "clone", "-q", str(Path(tmp) / "origin.git"),
+                        str(second)], check=True, capture_output=True)
+        git(second, "merge", "-q", "--no-ff", "-m", "remote merge",
+            f"origin/{branch}")
+        git(second, "push", "-q", "origin", "main")
+        before = git(root, "rev-parse", "refs/remotes/origin/main")
+        p = pending(root)
+        after = git(root, "rev-parse", "refs/remotes/origin/main")
+        check("o run segue listado", "run r1" in p.stdout, p.stdout)
+        check("...e `esperando-dono`",
+              read_state(root, "r1")["estado"] == "esperando-dono")
+        check("`refs/remotes/origin/main` intacto", before == after,
+              (before, after))
+        check("sem build", not marker.exists())
+
+
 if __name__ == "__main__":
+    fence_not_red()
+    no_fetch()
     red_test()
     tip_after_merge()
     no_upstream()
