@@ -1,0 +1,49 @@
+schema_version: 2
+card: CS-6-decisoes-de-todas-as-filas
+verdict: unproven
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: bc763ba
+head_commit: a01e387
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan::ready_of_queue (tarefas_sobrando, tarefas_respondidas_nao)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-plan::cmd_ready (fila fechada, N tarefas esperam voce / 1 tarefa espera voce / N tarefa(s) que voce respondeu nao)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "GREEN at head a01e387 in detached worktree /tmp/cs6-proof: python3 tests/test_cepa_plan_ready_closed_leftover.py -> 'todos os checks passaram'; python3 tests/test_cepa_plan_ready.py -> 'cepa-plan ready' (ok)."
+        - "13 perturbations, one applied at a time with sed, test re-run, restored with git checkout; worktree clean before each. (A first batch had restore commands that failed silently in zsh, so mutations accumulated; that batch was discarded and every mutation below was re-run in isolation.)"
+        - "M1 leftover loses 'human_pending is not None' (cepa-plan:2035) -> RED, 3 FAIL (p count 3, q not 'tudo concluido', json)."
+        - "M3 tarefas_sobrando = len(leftover) without subtracting leftover_no (:2040) -> RED, 3 FAIL."
+        - "M4 last_owner_no replaced by False (:2037) -> RED, 4 FAIL."
+        - "M5 singular test n == 1 -> n == 99 (:2089) -> RED, 1 FAIL (s line)."
+        - "M6 first branch disabled (:2087) -> RED, 3 FAIL."
+        - "M7 'respondeu nao' branch disabled (:2093) -> RED, 1 FAIL."
+        - "M8 plural suffix of the 'respondeu nao' line always 's' (:2096) -> RED, 1 FAIL."
+        - "M9 json tarefas_respondidas_nao forced 0 (:2041) -> RED, 2 FAIL."
+        - "M10 '(cepa until decide <fila>)' removed from the first branch (:2091) -> RED, 2 FAIL."
+        - "M11 plural text 'tarefas esperam' -> 'tarefa esperam' (:2090) -> RED, 1 FAIL."
+        - "M12 first branch also taken for 'respondeu nao' routes (:2087) -> RED, 2 FAIL."
+        - "M13 '(cepa until decide <fila>)' removed from the 'respondeu nao' line (:2092-2097) -> RED, 1 FAIL."
+        - "SURVIVOR M2: leftover filter 'status_of(it) == \"done\"' changed to '!= \"dropped\"' (cepa-plan:2034) -> python3 tests/test_cepa_plan_ready_closed_leftover.py stays green (no FAIL, 'todos os checks passaram'). In the text output it is an equivalent mutant (the branch only runs when abertos == 0, i.e. every item is done or dropped), but the --json field tarefas_sobrando would then also count open (todo/blocked/in-progress) items that hold a route, contradicting 'done items with an open route'. No test has a queue with an open item carrying human_pending and asserts the json count."
+    survivors:
+      - "M2: cepa-plan:2034 'status_of(it) == \"done\"' -> '!= \"dropped\"' survives; observable only in --json tarefas_sobrando of a queue with an open item that has human_pending"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI; reachability inferred from perturbations (every changed line except the 'done' filter at :2034 turns the test red)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only changes how `cepa plan ready` reads local queue YAML written by the owner's own tooling and prints a status line; no external input surface and no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "12 of 13 perturbations turn tests/test_cepa_plan_ready_closed_leftover.py red; 1 survives (M2, the 'done' filter of the leftover list at cepa-plan:2034), which a changed line not guarded at the --json surface makes UNPROVEN. Fix: add to the test a queue with an open item (e.g. status todo) holding a human_pending, plus a done item with a route, and assert --json tarefas_sobrando counts only the done one. L2 stays assumed (no coverage tool)."
