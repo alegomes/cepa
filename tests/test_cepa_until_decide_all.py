@@ -737,6 +737,31 @@ def test_cs11_the_launch_panel_with_nothing_waiting_stays_silent():
               "nada espera você" not in out, out[-1200:])
 
 
+def test_cs11_an_unreadable_queue_is_not_nothing():
+    """`cepa plan ready` drops a queue it cannot read (a warning on its stderr
+    only): that queue may hold a question, so `decide --all` does not say "nada
+    espera você", and it names the queue on stderr. Exit 0, no commit."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _no_route_repo(tmp)
+        paths["b"].write_text("items: [oops\n")
+        al._git(root, "add", "-A")
+        al._git(root, "-c", "user.email=t@t", "-c", "user.name=t",
+                "commit", "-qm", "fila b corrompida")
+        head_before = al._git(root, "rev-parse", "HEAD").strip()
+        p = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide", "--all",
+                            "--repo", str(root)], capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL, timeout=60)
+        check("fila ilegível: sai com 0", p.returncode == 0,
+              p.stdout[-800:] + p.stderr[-800:])
+        check("...não diz 'nada espera você'",
+              "nada espera você" not in p.stdout, repr(p.stdout))
+        check("...e nomeia a fila b no stderr",
+              "`b`" in p.stderr and "could not be read" in p.stderr,
+              p.stderr[-800:])
+        check("...e não commita",
+              al._git(root, "rev-parse", "HEAD").strip() == head_before, "")
+
+
 def main():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]
