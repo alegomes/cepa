@@ -578,8 +578,8 @@ class _Ctx:
         self.seg_args = []
         # lazy cache of this repo's registered worktrees (see _worktrees).
         self._worktrees = None
-        # destination of the `cd`/`pushd` of the segment just classified, when
-        # it is a single literal path (read by _classify for _cd_cannot_fail).
+        # destination of the plain `cd <absolute path>` of the segment just
+        # classified, or None (read by _classify for _cd_cannot_fail).
         self.last_cd = None
 
 
@@ -905,7 +905,7 @@ def _git_common_dir(d):
         return None
 
 
-def _cd_cannot_fail(ctx, dests):
+def _cd_cannot_fail(ctx, d):
     """Is the `cd` that opens the line certain to land in another repository?
 
     With `;`/newline the lock assumes a `cd` may have failed and keeps judging
@@ -919,13 +919,16 @@ def _cd_cannot_fail(ctx, dests):
     remove the directory) cannot fail: the line runs in B, outside A's
     jurisdiction, as it already did with `&&`.
 
+    Only a plain `cd <absolute path>` with no flag and no `..` gets here
+    (see the cd branch of _classify_segment): `pushd -n` does not change
+    directory, a relative path may follow CDPATH, and the shell resolves `..`
+    logically (`cd <A>/link/..` with `link -> <B>/x` lands in A, while
+    Path.resolve() says B) — the three bypasses the pair review found.
+
     Fail-silent: any doubt (git error, timeout) returns False, which is the
     old conservative reading.
     """
-    if not dests or len(dests) != 1:
-        return False
-    d = next(iter(dests))
-    if _inside(d, ctx.root):
+    if d is None or _inside(d, ctx.root):
         return False
     try:
         if not d.is_dir() or not os.access(str(d), os.X_OK):
@@ -2204,7 +2207,7 @@ def _classify(ctx, command, cwds, depth=0):
     for n_seg, (sep, seg) in enumerate(_split_with_seps(flat)):
         if prev is not None:
             p_in, p_ok, p_fail = prev
-            if certain is not None and sep not in ("|", "&"):
+            if certain is not None:
                 # the `cd` happened: the states before it are unreachable
                 history = set(certain)
                 p_ok = p_fail = certain
@@ -2239,9 +2242,9 @@ def _classify(ctx, command, cwds, depth=0):
             res = _guard(ctx, lambda: _classify_segment(ctx, text.strip(), state_in))
             if res is not None:
                 ok, fail = res
-        if n_seg == 0 and depth == 0 and not opened and not pops and not stack \
+        if n_seg == 0 and not opened and not pops and not stack \
                 and _cd_cannot_fail(ctx, ctx.last_cd):
-            certain = ctx.last_cd
+            certain = frozenset({ctx.last_cd})
         for _ in range(pops):
             ok = fail = stack.pop() if stack else frozenset(cwds)
         history |= ok | fail | state_in
@@ -2295,7 +2298,10 @@ def _classify_segment(ctx, text, cwds):
                 ctx.unknown_dirs.append(nf[0].raw)
         else:
             dest = set(_resolve_all(nf[0].value, cwds))
-            ctx.last_cd = frozenset(dest)
+            literal = nf[0].value
+            if verb == "cd" and len(args) == 2 and os.path.isabs(literal) \
+                    and ".." not in Path(literal).parts:
+                ctx.last_cd = Path(literal).resolve()
         return frozenset(dest), frozenset(cwds)
 
     # bucket 3 — everything outside the root, and the line does not cite the root

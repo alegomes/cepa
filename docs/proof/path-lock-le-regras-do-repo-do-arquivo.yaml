@@ -1,0 +1,37 @@
+schema_version: 2
+card: path-lock-le-regras-do-repo-do-arquivo
+verdict: unproven
+reviewed_at: 2026-11-21T14:00:00-03:00
+base_commit: eec6801
+head_commit: c0fcbbc
+issue_type: Bug
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - { class: "common/hooks/_templates/bash-path-lock.py.tmpl (_cd_cannot_fail, _git_common_dir, _classify certain reset, _Ctx.last_cd)", module: hooks, external_observable: true, substituted_by_double: null }
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "33 perturbations of the template, regenerated with gen-locks --write, run against tests/test_bash_path_lock_other_repo.py (6 copies each): 15 killed, 18 survived (also survive tests/test_bash_path_lock_exec.py, exec_rc=0)."
+        - "KILLED: not_dests_drop(6), common_none_drop(6), common_eq_to_true(6), common_eq_inverted(30), cd_cannot_fail_false(24), certain_reset_drop(6), certain_none_check_drop(60), history_assign_drop(24), p_ok_fail_drop(12), p_ok_only(12), nseg0_drop(6), nseg0_to1(30), certain_assign_drop(24), last_cd_set_drop(24)"
+        - "SURVIVED, real gaps (non-equivalent behavior, no test): (a) len(dests) != 1 check (multi-destination cd is never tested; dropping it lets next(iter) pick an arbitrary destination); (b) `|` and `&` exclusion in `sep not in (\"|\",\"&\")` (cd B | cat > Y, cd B & cat > Y: the line is judged as if cd happened; dropping either or both stays green); (c) depth == 0 guard (cd as first segment of a nested classify, e.g. substitution or bash -c recursion)."
+        - "SURVIVED, redundant or likely equivalent: inside_root_drop (same common dir returns False anyway); is_dir_drop and X_OK drop (git -C on a missing or non-enterable dir returns None); gcd returncode drop (empty stdout caught); gcd .resolve() drop; p_fail_only (the && path already used p_ok = dest); opened/pops/stack dropped one at a time (three overlapping guards for the same subshell case, the subshell test passes through the other two); last_cd reset drop and last_cd init frozenset() (only the first segment, where last_cd is still None, reaches the use)."
+      run: "cd <disposable worktree at c0fcbbc> && python3 perturb.py (inline script outside the repo): per perturbation, python3 bin/gen-locks.py --write then python3 tests/test_bash_path_lock_other_repo.py; survivors then python3 tests/test_bash_path_lock_exec.py"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the hooks; reachability inferred from the perturbation results above"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff opens no new input surface: it narrows when a hook denies; the hook already parsed the same Bash command payload before the change"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "base eec6801 hooks + head test: python3 tests/test_bash_path_lock_other_repo.py -> 24 falha(s) (4 libera cases x 6 copies, exit=2 expected 0). Head c0fcbbc -> OK; tests/test_bash_path_lock_exec.py -> tudo verde em 6 cópias"
+routing_reason: "Regression is red at base and green at head, and the core behavior is load-bearing (15 killed, including the central cd_cannot_fail_false and the common-dir comparison). But three non-equivalent guards of the fix survive: the multi-destination check, the pipe/background exclusion, and the depth==0 guard. UNPROVEN: add negative cases for them. L2 is assumed (no coverage tool), which would also block PROVEN."

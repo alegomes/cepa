@@ -28,10 +28,19 @@ jurisdiction of A's lock (bucket 3), exactly as with `&&`.
 
 What stays conservative, on purpose (the owner's design for the `cd`, approved
 2026-08-15, and the existing tests in test_bash_path_lock_exec.py):
-a `cd` that is not the first segment, inside a pipe or subshell, into a
-directory that does not exist, into a directory that is not a git repository
-(/tmp), or into a worktree of the SAME repository (the proof-reviewer's
-perturbation copy). And a line that cites A's root is never bucket 3.
+a `cd` that is not the first segment, inside a pipe, subshell or background
+job, into a directory that does not exist, into a directory that is not a git
+repository (/tmp), or into a worktree of the SAME repository (the
+proof-reviewer's perturbation copy). And a line that cites A's root is never
+bucket 3. Only a plain `cd <absolute path>` counts: `pushd -n` does not move,
+a relative path may follow CDPATH, a flag changes the meaning, and `..` is
+resolved logically by the shell (`cd <A>/link/..` with `link -> <B>/x` lands
+back in A) — the last two were bypasses found in the pair review.
+
+The decision recorded with this item: outside the session root the lock has
+no jurisdiction, for the Write tool too, and B's `build-hex.yaml` is not read.
+`test_write_in_sibling_repo` pins that with a real repo B whose config would
+deny the file.
 
 The cases run against every generated copy of the hook, as a subprocess.
 
@@ -108,6 +117,35 @@ def run(hook, agent_type, command, cwd):
     return p.returncode, p.stderr
 
 
+def test_write_in_sibling_repo(a):
+    """Write tool, session in A, file in a real sibling repo B: out of A's
+    jurisdiction, and B's committed build-hex.yaml is NOT applied (the item's
+    recorded decision). The file is outside the qa-engineer's lanes in both
+    repos, so exit 0 proves neither rule set decided."""
+    b = make_repo("bpl-repo-b-cfg-")
+    (b / "build-hex.yaml").write_text("schema_version: 1\nroles:\n  domain: core\n",
+                                      encoding="utf-8")
+    git("add", "build-hex.yaml", cwd=b)
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "cfg", cwd=b)
+    hook = REPO / "build-hex" / "hooks" / "path-lock.py"
+    payload = {
+        "tool_name": "Write",
+        "tool_input": {"file_path": str(b / "core" / "src" / "main" / "X.java")},
+        "agent_type": "build-hex:qa-engineer",
+        "cwd": str(a),
+    }
+    p = subprocess.run([sys.executable, str(hook)], input=json.dumps(payload),
+                       capture_output=True, text=True, timeout=60)
+    check("[build-hex    ] Write num repo vizinho com build-hex.yaml: fora da jurisdição",
+          p.returncode == 0, f"exit={p.returncode} stderr={p.stderr.strip()[:300]!r}")
+    # control: the same file inside A's root IS judged (qa-engineer, src/main)
+    payload["tool_input"]["file_path"] = str(a / "domain" / "src" / "main" / "X.java")
+    p = subprocess.run([sys.executable, str(hook)], input=json.dumps(payload),
+                       capture_output=True, text=True, timeout=60)
+    check("[build-hex    ] controle: o mesmo Write dentro de A é julgado e negado",
+          p.returncode == 2, f"exit={p.returncode}")
+
+
 def main():
     if not HOOKS:
         print("FAIL: no */hooks/bash-path-lock.py found")
@@ -121,6 +159,8 @@ def main():
     same = Path(tempfile.mkdtemp(prefix="bpl-wt-")).resolve() / "red"
     git("worktree", "add", "-q", "--detach", str(same), "HEAD", cwd=a)
     tmp = Path(tempfile.mkdtemp(prefix="bpl-tmp-")).resolve()   # not a repo
+    (b / "x").mkdir()
+    (a / "link").symlink_to(b / "x")   # logical `..` through it lands in A
 
     heredocs = ("cat > Base.java <<'EOF'\nclass Base {}\nEOF\n"
                 "cat > MultimodalTest.java <<'EOF'\nclass MultimodalTest {}\nEOF")
@@ -132,6 +172,7 @@ def main():
         ("cd no repo vizinho, interpretador na linha seguinte",
          f"cd {b} && D=x\npython3 - <<'EOF'\nprint(1)\nEOF"),
         ("cd na raiz do repo vizinho || escrita", f"cd {b} || cat > Y.java <<'EOF'\nx\nEOF"),
+        ("cd no repo vizinho dentro de $(...)", f"x=$(cd {b}; python3 -c 1)"),
     ]
     deny = [
         ("cd não é o primeiro segmento", f"true && cd {b}; cat > Y.java <<'EOF'\nx\nEOF"),
@@ -141,6 +182,16 @@ def main():
         ("diretório fora de git (/tmp) segue conservador", f"cd {tmp}; python3 -c 1"),
         ("worktree do MESMO repo (cópia de perturbação) segue conservador",
          f"cd {same}; python3 -c 1"),
+        ("pushd -n não muda o diretório",
+         f"pushd -n {b}\ncat > rel.txt <<'EOF'\nx\nEOF"),
+        ("`..` lógico por um link de A volta para A",
+         f"cd {a}/link/..\ncat > rel.txt <<'EOF'\nx\nEOF"),
+        ("cd relativo pode seguir o CDPATH", f"cd ../{b.name}; python3 -c 1"),
+        ("cd com flag não conta como certo", f"cd -P {b}; python3 -c 1"),
+        ("cd | escrita: o pipe não herda o cd", f"cd {b} | cat > Y.java <<'EOF'\nx\nEOF"),
+        ("cd em segundo plano não muda o diretório",
+         f"cd {b} &\ncat > Y.java <<'EOF'\nx\nEOF"),
+        ("cd & escrita na mesma linha", f"cd {b} & cat > Y.java <<'EOF'\nx\nEOF"),
         ("linha que cita a raiz da sessão nunca é balde 3",
          f"cd {b}; python3 -c \"open('{a}/src/main/X.java','w')\""),
     ]
@@ -155,6 +206,8 @@ def main():
                 check(f"[{top:13}] {verb}: {label}",
                       rc == want and "erro interno" not in err,
                       f"exit={rc} (esperado {want}) stderr={err.strip()[:300]!r}")
+
+    test_write_in_sibling_repo(a)
 
     if FAILURES:
         print(f"\n{len(FAILURES)} falha(s)")

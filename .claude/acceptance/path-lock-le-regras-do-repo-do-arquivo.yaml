@@ -1,0 +1,40 @@
+key: path-lock-le-regras-do-repo-do-arquivo
+status: incomplete
+diff_range: eec6801..c0fcbbc
+build: delegated-to-supervisor
+criteria:
+  - id: AC1
+    source: "Palavras do dono + Problema: o worker escrevia no repo B (worktree do wego-digitacao-backend) com a sessao aberta no repo A, e um Bash com heredoc foi negado pelas pistas de A."
+    altitude: cli
+    surface: >
+      */hooks/bash-path-lock.py (6 copias) invocado como subprocesso com payload
+      PreToolUse Bash, cwd = repo A, comando `cd <B>/... && cat > X <<EOF ... EOF`
+      seguido de `cat > Y <<EOF` na linha de baixo, contra dois repos git reais.
+    test: tests/test_bash_path_lock_other_repo.py (caso "incidente: cd no repo vizinho && heredoc, outro heredoc na linha seguinte" + 3 liberacoes e 7 negacoes de controle)
+    layer: cli/subprocess sobre git init real (repo A, repo B, worktree do mesmo repo)
+    evidence: verified
+    run: "python3 tests/test_bash_path_lock_other_repo.py -> 66 linhas 'ok' (6 copias x 11 casos), 'OK', 0 FAIL. Vizinhos: python3 tests/test_bash_path_lock_exec.py -> 'tudo verde em 6 copias'; python3 tests/test_path_lock_out_of_root.py -> 'All checks passed across 6 hook copies'. python3 bin/gen-locks.py --check -> as 6 copias sao exatamente o molde renderizado."
+    gap: ""
+  - id: AC2
+    source: "Esboco: 'Resolver a raiz pelo git rev-parse --show-toplevel do diretorio do arquivo escrito e ler o build-hex.yaml desse repo. Teste que falta: sessao no repo A, Write de worker em arquivo do repo B, as regras de B decidem.'"
+    altitude: cli
+    surface: >
+      path-lock.py (Write) e bash-path-lock.py com sessao em A e arquivo em B,
+      onde o build-hex.yaml de B (suas pistas) decide permitir ou negar.
+    test: nenhum. tests/test_path_lock_out_of_root.py cobre Write fora da raiz, mas contra um diretorio temporario que nao e repo git e sem build-hex.yaml; nao ha teste de Write em repo B real, nem de regras de B decidindo.
+    layer: n/a
+    evidence: missing
+    deferral_rule: "nenhuma. O card nao tem criterio que aceite o adiamento; 'Ficou de fora, de proposito' esta na subsecao 'O que foi feito', escrita pelo implementador, nao e aceite do dono."
+    gap: >
+      A decisao do implementador (fora da raiz da sessao a trava nao tem
+      jurisdicao, para Write e Bash; o build-hex.yaml de B nao e aplicado) e um
+      desvio declarado do Esboço. Consequencia: um worker em B fica sem nenhuma
+      pista imposta, nem as de A nem as de B. Quem decide se isso e aceitavel e o
+      dono. Alem disso, o Write em repo vizinho (git real, com build-hex.yaml)
+      nao tem teste: a afirmacao "o Write num repo vizinho ja passa" so esta
+      coberta por diretorio nao-git. Fechamento sugerido, uma das duas vias:
+      (a) o dono aceita no card que B fica sem trava e se acrescenta
+      tests/test_path_lock_out_of_root.py com um repo B git real (com
+      build-hex.yaml que negaria o arquivo) provando exit 0 no Write e no Bash;
+      ou (b) card novo para aplicar as regras de B, com teste "sessao em A,
+      Write em arquivo de B proibido pela pista de B -> exit 2; permitido -> exit 0".
