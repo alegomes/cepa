@@ -1,15 +1,15 @@
 schema_version: 2
 card: CS-3-decisoes-de-todas-as-filas
-verdict: unproven
+verdict: needs-human
 reviewed_at: 2026-11-22T00:00:00-03:00
 base_commit: ed5a156
-head_commit: 69b8f5b
+head_commit: 6db580a
 issue_type: Task
 scope:
   changed_classes:
     - { class: "common/bin/cepa-plan (waiting_of_queue answered-no counting and respondidas_nao, cmd_waiting shown filter and count line, help text)", module: cli, external_observable: true, substituted_by_double: null }
     - { class: "common/hooks/_ownertext.py (OWNER_NO regex and last_owner_no moved from cepa-until)", module: cli, external_observable: true, substituted_by_double: null }
-    - { class: "common/bin/cepa-until (_OWNER_NO and last_owner_no aliased to the shared ones)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until (last_owner_no aliased to the shared one; the unused _OWNER_NO alias was deleted in 6db580a)", module: cli, external_observable: true, substituted_by_double: null }
   base_commit_resolved: true
 levels:
   l3_load_bearing:
@@ -18,23 +18,25 @@ levels:
       status: n/a
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "42 perturbations in a detached worktree (git worktree add --detach /tmp/cs3-proof 69b8f5b, removed at the end). Baseline green at 69b8f5b: `python3 tests/test_cepa_plan_waiting_answered_no.py` -> 'todos passaram'; `tests/test_cepa_plan_waiting.py` -> 'tudo passou'; `tests/test_cepa_plan_waiting_runs.py` -> 'tudo passou'; `tests/test_cepa_until_decide.py` -> 'tudo verde'. 36 of 42 RED, 6 SURVIVED."
-        - "RED (36): answered-date check inverted, missing continue (listed and counted), evidence None, ultima=min, total+1, total=1, comando without queue, respondidas_nao always dict or always None, rows losing pergunta, shown filter ignoring respondidas / all queues / only respondidas / and, count line never printed or always printed, wrong total in the line, text 'sim', day/month swapped, year shown, day/month duplicated, missing 'para revisitar', missing comando, lost indent, total counting answered routes; regex text 'Resposta do dono em', dropped 'nao', dropped 'ão', dropped IGNORECASE, dropped colon, match->search, wrong date group, always None; lstrip dropped (RED only by tests/test_cepa_until_decide.py), cepa-until last_owner_no alias replaced by a stub (RED only by tests/test_cepa_until_decide.py)."
-        - "SURVIVED 1 (common/bin/cepa-plan, waiting_of_queue, '\"ultima\": max(answered_no)' -> '\"ultima\": answered_no[0]'): every test puts the latest date on the first answered route (a1 = 2026-11-18 is both first and latest in tests/test_cepa_plan_waiting_answered_no.py:132-140), so max() is indistinguishable from 'first found'. Needs a queue whose first answered route has an older date than a later one."
-        - "SURVIVED 2 (common/bin/cepa-plan, waiting_of_queue, '\"comando\": f\"cepa until decide {queue}\"' -> '{name}') and SURVIVED 3 ('queue = qp.queue_name_of(plan, name)' -> 'queue = name'): write_queue in the test always sets the header `queue:` equal to the directory name, so the header-name vs directory-name choice is never observed. Needs a queue whose header `queue:` differs from its directory name, asserting both the 'fila <x>' title and the command use the header name."
-        - "SURVIVED 4 (common/bin/cepa-plan, main help text, the paragraph 'A route whose last answer was \"não\" ...' replaced by 'x'): no test reads `cepa-plan waiting --help`. Needs one check that --help mentions respondidas_nao."
-        - "SURVIVED 5 (common/hooks/_ownertext.py OWNER_NO, dropping the trailing \\b after n(?:ão|ao)): survives all four covering test files including tests/test_cepa_until_decide.py (311 s run). No test feeds an answer like 'Resposta do dono em 2026-11-18: nãox' or 'naomesmo' that must NOT count. Needs a negative case for a word glued to 'não'."
-        - "SURVIVED 6 (common/bin/cepa-until:5308, '_OWNER_NO = _ownertext.OWNER_NO' -> '_OWNER_NO = None'): equivalent mutant, `_OWNER_NO` has no reader left in common/bin/cepa-until or tests/ (grep -n _OWNER_NO shows only the definition). Dead alias; either delete it or accept as equivalent."
+        - "First pass at 69b8f5b: 42 perturbations, 36 RED, 6 survivors (see git history of this file, commit 640e1d9). Second pass at 6db580a (production code unchanged since 69b8f5b except the deleted dead alias; tests only added): the 36 already killed were not rerun, by instruction."
+        - "Baseline at 6db580a in a detached worktree (git worktree add --detach /tmp/cs3-proof3 6db580a, removed at the end): `python3 tests/test_cepa_plan_waiting_answered_no.py` -> rc=0, last line 'todos passaram'."
+        - "Survivor 1 now RED: '\"ultima\": max(answered_no)' -> 'answered_no[0]' -> rc=1, '2 falha(s)'."
+        - "Survivor 2 now RED: comando 'cepa until decide {queue}' -> '{name}' (cepa-plan:2154) -> rc=1, '2 falha(s)'."
+        - "Survivor 3 now RED: 'queue = qp.queue_name_of(plan, name)' -> 'queue = name' (cepa-plan:2152) -> rc=1, '3 falha(s)'."
+        - "Survivor 4 now RED: waiting help paragraph 'A route whose last answer was \"não\" ...' replaced by 'x' -> rc=1, '1 falha(s)'."
+        - "Survivor 5 now RED: OWNER_NO (_ownertext.py:137) trailing \\b after n(?:ão|ao) removed -> rc=1, '2 falha(s)' ('as duas rotas continuam como linhas', 'nenhuma contagem'); the slow tests/test_cepa_until_decide.py was not needed."
+        - "Survivor 6 (equivalent dead alias) eliminated: `grep -n _OWNER_NO common/bin/cepa-until` at 6db580a returns nothing (rc=1)."
+        - "Total: 42 of 42 resolved (36 + 5 killed in this pass + 1 alias removed); 0 survivors. All runs are in the foreground, each under 3 s. Mutations were applied one at a time and reverted with git checkout; worktree removed."
   l2_coverage:
     status: assumed
     uncovered_lines: []
-    run: "no coverage tool wired for the Python CLI; reachability inferred from the perturbation results: the 4 survivors on cepa-plan are observable branches the tests do not distinguish, not unreached lines"
+    run: "no coverage tool wired for the Python CLI; reachability inferred from the perturbation results (every mutated changed line turned a test red, so no changed line is unreached)"
   l4_adversarial_input:
     status: n/a
     reason: "the subcommand only reads local queue YAML and the evidence text written by the owner's own tooling (cepa-plan answer); it opens no external input surface and no changed module is input-bearing (api-rest)"
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-routing_reason: "Deterministic gaps, safe to send back: 5 mutants survive on changed lines (ultima=first, comando/queue taken from the directory name instead of the header, help text, regex word boundary) plus 1 equivalent dead alias (_OWNER_NO in cepa-until). Each needs a named test in tests/test_cepa_plan_waiting_answered_no.py (or the decide test for the regex boundary). Also L2 coverage is assumed (no coverage tool), which alone would make this needs-human."
+routing_reason: "Load-bearing proof is complete: the 5 surviving mutants of the first pass now turn tests/test_cepa_plan_waiting_answered_no.py red and the dead alias is gone (42 of 42, 0 survivors). The only open level is L2 coverage, which stays assumed because no coverage tool is wired for the Python CLI; that alone makes the verdict needs-human. Suggested decision for the human: accept the perturbation results as the coverage evidence (every changed line was mutated and caught). Recommended default: accept."
