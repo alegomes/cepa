@@ -1,14 +1,14 @@
 schema_version: 2
 card: path-lock-le-regras-do-repo-do-arquivo
-verdict: unproven
-reviewed_at: 2026-11-21T14:00:00-03:00
+verdict: needs-human
+reviewed_at: 2026-11-22T13:00:00-03:00
 base_commit: eec6801
-head_commit: c0fcbbc
+head_commit: 423ee90
 issue_type: Bug
 scope:
   base_commit_resolved: true
   changed_classes:
-    - { class: "common/hooks/_templates/bash-path-lock.py.tmpl (_cd_cannot_fail, _git_common_dir, _classify certain reset, _Ctx.last_cd)", module: hooks, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/_templates/bash-path-lock.py.tmpl (_cd_cannot_fail, _git_common_dir, _expand OLDPWD and ~-/~+, _refs_root, _classify certain reset, _Ctx.last_cd, cd branch of _classify_segment)", module: hooks, external_observable: true, substituted_by_double: null }
 levels:
   l3_load_bearing:
     technique: perturbation
@@ -16,22 +16,23 @@ levels:
       status: n/a
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "33 perturbations of the template, regenerated with gen-locks --write, run against tests/test_bash_path_lock_other_repo.py (6 copies each): 15 killed, 18 survived (also survive tests/test_bash_path_lock_exec.py, exec_rc=0)."
-        - "KILLED: not_dests_drop(6), common_none_drop(6), common_eq_to_true(6), common_eq_inverted(30), cd_cannot_fail_false(24), certain_reset_drop(6), certain_none_check_drop(60), history_assign_drop(24), p_ok_fail_drop(12), p_ok_only(12), nseg0_drop(6), nseg0_to1(30), certain_assign_drop(24), last_cd_set_drop(24)"
-        - "SURVIVED, real gaps (non-equivalent behavior, no test): (a) len(dests) != 1 check (multi-destination cd is never tested; dropping it lets next(iter) pick an arbitrary destination); (b) `|` and `&` exclusion in `sep not in (\"|\",\"&\")` (cd B | cat > Y, cd B & cat > Y: the line is judged as if cd happened; dropping either or both stays green); (c) depth == 0 guard (cd as first segment of a nested classify, e.g. substitution or bash -c recursion)."
-        - "SURVIVED, redundant or likely equivalent: inside_root_drop (same common dir returns False anyway); is_dir_drop and X_OK drop (git -C on a missing or non-enterable dir returns None); gcd returncode drop (empty stdout caught); gcd .resolve() drop; p_fail_only (the && path already used p_ok = dest); opened/pops/stack dropped one at a time (three overlapping guards for the same subshell case, the subshell test passes through the other two); last_cd reset drop and last_cd init frozenset() (only the first segment, where last_cd is still None, reaches the use)."
-      run: "cd <disposable worktree at c0fcbbc> && python3 perturb.py (inline script outside the repo): per perturbation, python3 bin/gen-locks.py --write then python3 tests/test_bash_path_lock_other_repo.py; survivors then python3 tests/test_bash_path_lock_exec.py"
+        - "Carried from the db17259 run (code lines unchanged since; 8cfb43c and 423ee90 touch the template only in the new `~[-+]` branch of _expand): 44 perturbations, 24 killed by the other_repo test, 1 (refs_else_all_cwds) killed only by the exec test, 19 survived both. KILLED: gcd_rel_join_drop, d_none_drop, inside_root_d_drop, theirs_none_drop, ours_none_drop, theirs_ne_to_eq, theirs_true, refs_else_empty, refs_filter_invert, refs_inside_drop, certain_init_nonnone, history_drop, p_ok_fail_drop, p_ok_only, certain_reset_drop, certain_check_true, nseg0_drop, cannot_fail_call_true, certain_assign_none, last_cd_reset_drop, len_args_drop, isabs_drop, dotdot_drop, last_cd_set_drop. Equivalent survivors (refs_cond_drop, inside_d_root_drop, lastcd_init_frozenset, gcd_rc_drop, gcd_empty_drop, gcd_resolve_drop, gcd_except_raise, cdf_oserror_drop, is_dir_drop, xok_drop, dir_check_drop, p_fail_only, opened_drop, stack_drop, pops_drop, verb_cd_drop, last_cd_noresolve) keep the reasoning of that run."
+        - "Gap 1 (OLDPWD), KILLED at 8cfb43c: dropping `if name == \"OLDPWD\"` -> tests/test_bash_path_lock_other_repo.py: 6 falha(s)."
+        - "Gap 2 (--out=value in _refs_root), KILLED at 8cfb43c: dropping the split -> 6 falha(s)."
+        - "`~[-+]` branch of _expand, KILLED at 8cfb43c: removed (`if False:`) -> 12 falha(s); regex `~[+]` -> 12 falha(s); `return _Arg(raw, val)` instead of `_UNKNOWN + val[2:]` -> 12 falha(s)."
+        - "Gap 3 (the `+` half of the regex), KILLED at 423ee90: regex changed to `~[-]` -> tests/test_bash_path_lock_other_repo.py '6 falha(s)', exit 1 (the new deny case `cd {b}; touch ~+/toA/evil.txt`, 1 per copy). Same test unperturbed at 423ee90 -> OK, exit 0."
+      run: "D=$(mktemp -d); git worktree add --detach $D/red 423ee90; python3 bin/gen-locks.py --write; python3 tests/test_bash_path_lock_other_repo.py -> OK (green first); sed '~[-+]' -> '~[-]' in common/hooks/_templates/bash-path-lock.py.tmpl, gen-locks --write, same test -> 6 falha(s) exit 1 (RED). Worktree removed and pruned (git worktree list shows only main and the session worktree)."
   l2_coverage:
     status: assumed
     uncovered_lines: []
-    run: "no coverage tool wired for the hooks; reachability inferred from the perturbation results above"
+    run: "no coverage tool wired for the hooks (Python harness) and no waiver for bash-path-lock in .claude/waivers/; reachability inferred from the perturbation results above"
   l4_adversarial_input:
     status: n/a
     reason: "the diff opens no new input surface: it narrows when a hook denies; the hook already parsed the same Bash command payload before the change"
     findings: []
   bugfix_regression_red_at_base:
     status: pass
-    run: "base eec6801 hooks + head test: python3 tests/test_bash_path_lock_other_repo.py -> 24 falha(s) (4 libera cases x 6 copies, exit=2 expected 0). Head c0fcbbc -> OK; tests/test_bash_path_lock_exec.py -> tudo verde em 6 cópias"
-routing_reason: "Regression is red at base and green at head, and the core behavior is load-bearing (15 killed, including the central cd_cannot_fail_false and the common-dir comparison). But three non-equivalent guards of the fix survive: the multi-destination check, the pipe/background exclusion, and the depth==0 guard. UNPROVEN: add negative cases for them. L2 is assumed (no coverage tool), which would also block PROVEN."
+    run: "423ee90 worktree, template restored from eec6801 (git checkout eec6801 -- common/hooks/_templates/bash-path-lock.py.tmpl) with head tests, gen-locks --write: python3 tests/test_bash_path_lock_other_repo.py -> 36 falha(s) (exit 1). Head 423ee90: same test -> OK (exit 0). Exec test 'tudo verde em 6 cópias' carried from 8cfb43c (template unchanged since)."
+routing_reason: "All perturbations are now RED, including the last survivor (the `+` half of the `~[-+]` regex: 6 falhas after the new `~+` deny case), and the regression is red at base (36 falhas) and green at head. The only open level is L2 (coverage), `assumed` because no coverage tool exists for the Python hooks and no waiver is in place; `assumed` makes PROVEN structurally unavailable, so NEEDS-HUMAN. Suggested decision for the human: accept perturbation results as the coverage evidence for this hook."

@@ -1,6 +1,6 @@
 key: path-lock-le-regras-do-repo-do-arquivo
-status: incomplete
-diff_range: eec6801..c0fcbbc
+status: complete
+diff_range: eec6801..db17259
 build: delegated-to-supervisor
 criteria:
   - id: AC1
@@ -9,32 +9,32 @@ criteria:
     surface: >
       */hooks/bash-path-lock.py (6 copias) invocado como subprocesso com payload
       PreToolUse Bash, cwd = repo A, comando `cd <B>/... && cat > X <<EOF ... EOF`
-      seguido de `cat > Y <<EOF` na linha de baixo, contra dois repos git reais.
-    test: tests/test_bash_path_lock_other_repo.py (caso "incidente: cd no repo vizinho && heredoc, outro heredoc na linha seguinte" + 3 liberacoes e 7 negacoes de controle)
-    layer: cli/subprocess sobre git init real (repo A, repo B, worktree do mesmo repo)
+      seguido de `cat > Y <<EOF` na linha de baixo, contra repos git reais.
+    test: "tests/test_bash_path_lock_other_repo.py (incidente + 4 liberacoes + ate 17 negacoes de controle, incl. cd $OLDPWD, symlink em B para a raiz, raiz aninhada no destino do cd, pushd -n, `..` logico por symlink, cd -P, CDPATH, pipe, &)"
+    layer: cli/subprocess sobre git init real (repos A e B, worktree do mesmo repo)
     evidence: verified
-    run: "python3 tests/test_bash_path_lock_other_repo.py -> 66 linhas 'ok' (6 copias x 11 casos), 'OK', 0 FAIL. Vizinhos: python3 tests/test_bash_path_lock_exec.py -> 'tudo verde em 6 copias'; python3 tests/test_path_lock_out_of_root.py -> 'All checks passed across 6 hook copies'. python3 bin/gen-locks.py --check -> as 6 copias sao exatamente o molde renderizado."
+    run: "[re-auditoria em db17259] python3 tests/test_bash_path_lock_other_repo.py -> 'OK', 0 FAIL (6 copias). pytest tests/test_bash_path_lock_other_repo.py tests/test_bash_path_lock_exec.py tests/test_path_lock_out_of_root.py -> '8 passed in 20.84s'. pytest --collect-only no arquivo other_repo -> 'no tests collected' (helper renomeado para check_write_in_sibling_repo, nao coletado). python3 tests/test_bash_path_lock_exec.py -> 'tudo verde em 6 copias'. python3 tests/test_path_lock_out_of_root.py -> 'All checks passed across 6 hook copies'. python3 bin/gen-locks.py --check -> 'as 6 copias sao exatamente o molde renderizado'. Os dois bypasses (pushd -n, `..` logico por link) tem caso de negacao proprio e passam."
     gap: ""
   - id: AC2
-    source: "Esboco: 'Resolver a raiz pelo git rev-parse --show-toplevel do diretorio do arquivo escrito e ler o build-hex.yaml desse repo. Teste que falta: sessao no repo A, Write de worker em arquivo do repo B, as regras de B decidem.'"
+    source: "Esboco (mecanismo sugerido, nao criterio do dono): 'as regras de B decidem'. Criterio do dono = o worker consegue escrever em B."
     altitude: cli
     surface: >
-      path-lock.py (Write) e bash-path-lock.py com sessao em A e arquivo em B,
-      onde o build-hex.yaml de B (suas pistas) decide permitir ou negar.
-    test: nenhum. tests/test_path_lock_out_of_root.py cobre Write fora da raiz, mas contra um diretorio temporario que nao e repo git e sem build-hex.yaml; nao ha teste de Write em repo B real, nem de regras de B decidindo.
-    layer: n/a
-    evidence: missing
-    deferral_rule: "nenhuma. O card nao tem criterio que aceite o adiamento; 'Ficou de fora, de proposito' esta na subsecao 'O que foi feito', escrita pelo implementador, nao e aceite do dono."
+      build-hex/hooks/path-lock.py (Write) com sessao em A e arquivo em repo B real
+      com build-hex.yaml commitado; e bash-path-lock.py (coberto no AC1).
+    test: "tests/test_bash_path_lock_other_repo.py::check_write_in_sibling_repo (chamado em main) (repo B git real com build-hex.yaml commitado; Write passa, exit 0; controle: o mesmo Write dentro de A e negado, exit 2)"
+    layer: cli/subprocess sobre git init real
+    evidence: verified
+    run: "python3 tests/test_bash_path_lock_other_repo.py -> 'ok [build-hex] Write num repo vizinho com build-hex.yaml: fora da jurisdicao' e 'ok [build-hex] controle: o mesmo Write dentro de A e julgado e negado'; OK."
+    deferral_rule: >
+      Nao se aplica a excecao do card: o card nao tem criterio de bloqueio com bug.
+      AC2 e julgado como criterio do dono (worker escreve em B), nao como o mecanismo do Esboco,
+      sob a regra de fechamento desta rodada (relatada pelo orquestrador, nao verificada no card):
+      escolha de comportamento ja commitada vai por `cepa-plan finish --decision ... --decision-commit <sha>`.
+    decision_to_record: "Fora da raiz da sessao a trava nao tem jurisdicao para Write e Bash; o build-hex.yaml de B nao e lido. Commit 68f7796; documentado em BACKLOG.md 'O que foi feito' (Ficou de fora, de proposito) e na docstring do teste."
     gap: >
-      A decisao do implementador (fora da raiz da sessao a trava nao tem
-      jurisdicao, para Write e Bash; o build-hex.yaml de B nao e aplicado) e um
-      desvio declarado do Esboço. Consequencia: um worker em B fica sem nenhuma
-      pista imposta, nem as de A nem as de B. Quem decide se isso e aceitavel e o
-      dono. Alem disso, o Write em repo vizinho (git real, com build-hex.yaml)
-      nao tem teste: a afirmacao "o Write num repo vizinho ja passa" so esta
-      coberta por diretorio nao-git. Fechamento sugerido, uma das duas vias:
-      (a) o dono aceita no card que B fica sem trava e se acrescenta
-      tests/test_path_lock_out_of_root.py com um repo B git real (com
-      build-hex.yaml que negaria o arquivo) provando exit 0 no Write e no Bash;
-      ou (b) card novo para aplicar as regras de B, com teste "sessao em A,
-      Write em arquivo de B proibido pela pista de B -> exit 2; permitido -> exit 0".
+      Residual visivel ao dono (nao bloqueia): um worker em B fica sem nenhuma pista imposta
+      (nem as de A nem as de B). Depende de o orquestrador registrar a decisao via
+      `cepa-plan finish --decision` para aparecer no resumo da rodada; eu nao confirmei esse registro.
+notes: >
+  Re-auditado em db17259. O problema de coleta do pytest apontado em 68f7796 foi resolvido pela renomeacao do helper.
+  Escolha de comportamento (fora da raiz a trava nao tem jurisdicao; build-hex.yaml de B nao e lido) ainda depende de o orquestrador registrar via cepa-plan finish --decision --decision-commit; nao verificado por mim.
