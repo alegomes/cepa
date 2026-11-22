@@ -1,0 +1,43 @@
+schema_version: 2
+card: leads-build-hex-acordam-na-sessao-interativa
+verdict: needs-human
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: 756c4af
+head_commit: eef3245
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "*/agents/*.md (11 delegating agents, section 'Delegation is asynchronous')", module: agents, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/no-busy-wait.py (block message text, item 1)", module: hooks, external_observable: true, substituted_by_double: null }
+    - { class: "tests/test_async_delegation_specs.py (new marks + FORBIDDEN)", module: tests, external_observable: false, substituted_by_double: null }
+    - { class: "tests/test_no_busy_wait.py (message_failures, added at eef3245)", module: tests, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN baseline at eef3245 in detached worktree /tmp/proof-leadeef: test_async_delegation_specs.py -> 'ok — 11 agentes que delegam, todos com a seção completa'; test_no_busy_wait.py -> 'ok — 8 bloqueios e 9 liberações conferidos, e o texto do bloqueio manda o subagente esperar no mesmo turno'; test_common_drain_plan.py -> 'all green'; test_multiline_quoted_shell.py -> 'tudo verde em 6 cópias do bash-path-lock + os 2 guards do common'."
+        - "P4 (previous survivor) common/hooks/no-busy-wait.py reverted to 756c4af text: KILLED. test_no_busy_wait.py -> 'FAIL: MENSAGEM: não diz ao subagente que a notificação não chega a ele / voltou a prometer que a notificação REINVOCA quem delegou / ENCERRE O TURNO sem estar condicionado à sessão principal; 3 falha(s) de 17 casos'."
+        - "P5 (new) hook message 'a notificação NÃO chega a você' changed to 'a notificação REINVOCA você': KILLED. test_no_busy_wait.py -> 'FAIL: MENSAGEM: não diz ao subagente que a notificação não chega a ele / voltou a prometer que a notificação REINVOCA quem delegou; 2 falha(s) de 17 casos'."
+        - "P1 'in the same turn' replaced by old 'End the turn. The notification brings you back.' in marketing/agents/content-lead.md: KILLED (test_async_delegation_specs.py: 2 FAIL, perdeu o que fazer no lugar + ensina a promessa)."
+        - "P3 'run_in_background: false' -> 'run_in_background: true' in docs-topology/agents/docs-lead.md: KILLED (test_async_delegation_specs.py: '1 falha(s) em 11 agentes que delegam')."
+        - "P2 'interactive session' -> 'session' in discovery/agents/epic-briefer.md: KILLED (FAIL ... perdeu o caso da sessão interativa (interactive\\s+session))."
+        - "Method: one perturbation at a time in the throwaway worktree, restored via git checkout after each (git status clean at the end); worktree removed; primary tree untouched. Only the 4 named test scripts were run, foreground."
+    survivors: []
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python harness; precision not measured. Reachability inferred from the 5 perturbations of changed hunks (agent specs and hook message) all going red."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff changes prose in agent specs and the text of a hook's block message; it parses no external input and touches no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: ""
+routing_reason: "All 5 perturbations went red, including the previous survivor (hook message reverted to the 756c4af text, now caught by message_failures at eef3245) and the new one (NÃO chega a você back to a REINVOCA promise). No survivors. Not PROVEN only because l2_coverage is assumed: the Python harness has no coverage tool, and an assumed level makes proven structurally unavailable. Suggested human decision: accept the perturbation results as the coverage evidence for this harness repo."
