@@ -5427,7 +5427,7 @@ def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False, skip=
 
 
 def ask_at_launch_all(repo, wait=ANSWER_WAIT_SEC, leftovers=False,
-                      goes_on="the run goes on without."):
+                      goes_on="the run goes on without.", name_live=False):
     """The launch panel of a `--all` run (spec until-todas-as-filas, CS-7): ONE
     panel with what every queue holds for the owner, a section per queue in the
     order of `cepa-plan ready`, numbered across the whole list. Each answer is
@@ -5442,14 +5442,26 @@ def ask_at_launch_all(repo, wait=ANSWER_WAIT_SEC, leftovers=False,
     `cepa until decide --all` asks through this same panel (spec
     decisoes-de-todas-as-filas, CS-7): `wait=None` (the owner is at the terminal on
     purpose), `leftovers` adds the tasks a delivered item left for the owner, as
-    `cepa until decide <fila>` does, and `goes_on` ends the line of a cut panel."""
+    `cepa until decide <fila>` does, and `goes_on` ends the line of a cut panel.
+    `name_live` (CS-9 of decisoes-de-todas-as-filas): a queue with its own live run
+    is left out with one line naming the queue and its run. Only `decide --all`
+    asks for it; the launch already warns that queue on stderr when it has
+    ready items."""
     ready, error = query_ready(repo)
     if error:
         return
     sections = []
     for q in ready.get("filas") or []:
         name = Path(str(q.get("path") or "")).parent.name or str(q.get("queue"))
-        if not name or name == ALL_DIR or live_run_of_queue(repo, name):
+        if not name or name == ALL_DIR:
+            continue
+        alive = live_run_of_queue(repo, name)
+        if alive:
+            if name_live:
+                print(f"\n── queue `{name}`: left out of this panel, it has its own "
+                      f"run in progress ({name}/{alive['run']}, pid {alive['pid']}), "
+                      "which asks its questions; to answer them after it ends: "
+                      f"cepa-until decide {name}")
             continue
         whole, _ = query_queue(name, repo, max_items=10 ** 6)
         to_ask, answered_no = [], []
@@ -5568,7 +5580,7 @@ def cmd_decide(argv):
         return _decide_reporting("all", lambda: commit_after_decide(
             repo, ALL_QUEUE, None, lambda: ask_at_launch_all(
                 repo, wait=None, leftovers=True,
-                goes_on="nothing else is asked.") or 0,
+                goes_on="nothing else is asked.", name_live=True) or 0,
             every_queue=True))
     if "/" not in a.target:
         if not (re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", a.target)
