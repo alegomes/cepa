@@ -96,13 +96,17 @@ def main():
         root = repo_with(tmp, {
             "a": [item("A-1", human_pending="x"), item("A-2", human_pending="y"),
                   item("A-3", status="blocked")],
-            "b": [item("B-1", status="blocked"),
-                  item("B-2", status="blocked")],
+            # `b` waits too, with different counts: a max() over the queues,
+            # or the two counts swapped, cannot give 3 and 4.
+            "b": [item("B-0", human_pending="z"),
+                  item("B-1", status="blocked"),
+                  item("B-2", status="blocked"),
+                  item("B-3", status="blocked")],
         })
         line, _ = first_line(root)
         check("two queues summed, plural forms",
               line == "prontos para construir · 2 filas · 0 itens · "
-                      "esperam você: 2 pendentes e 3 bloqueados", line)
+                      "esperam você: 3 pendentes e 4 bloqueados", line)
 
     # 3. only one kind.
     with tempfile.TemporaryDirectory() as tmp:
@@ -148,25 +152,28 @@ def main():
     # 6. --json.
     with tempfile.TemporaryDirectory() as tmp:
         root = repo_with(tmp, {
-            "a": [item("A-1", human_pending="x"), item("A-2", status="blocked")],
+            # 2 and 1, not 1 and 1: swapped counts must show.
+            "a": [item("A-1", human_pending="x"),
+                  item("A-3", human_pending="y"),
+                  item("A-2", status="blocked")],
             "b": [item("B-1")],
         })
         r = run(root, "ready", "--json")
         data = json.loads(r.stdout)
         check("json: total_esperam_dono",
-              data.get("total_esperam_dono") == {"pendentes": 1, "bloqueados": 1},
+              data.get("total_esperam_dono") == {"pendentes": 2, "bloqueados": 1},
               data.get("total_esperam_dono"))
         check("json: total_prontos unchanged", data["total_prontos"] == 1,
               data["total_prontos"])
         qa = next(q for q in data["filas"] if q["queue"] == "a")
         qb = next(q for q in data["filas"] if q["queue"] == "b")
         check("json: per-queue counts",
-              qa.get("esperam_dono_pendentes") == 1
+              qa.get("esperam_dono_pendentes") == 2
               and qa.get("esperam_dono_bloqueados") == 1
               and qb.get("esperam_dono_pendentes") == 0
               and qb.get("esperam_dono_bloqueados") == 0, (qa, qb))
         check("json: esperam_dono id list unchanged",
-              qa["esperam_dono"] == ["A-1", "A-2"], qa["esperam_dono"])
+              qa["esperam_dono"] == ["A-1", "A-3", "A-2"], qa["esperam_dono"])
     with tempfile.TemporaryDirectory() as tmp:
         root = repo_with(tmp, {"q": [item("Q-1")]})
         data = json.loads(run(root, "ready", "--json").stdout)
