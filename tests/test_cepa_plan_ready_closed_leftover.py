@@ -13,7 +13,8 @@ Against the real CLI, in a temporary git repo:
   - queue `q`: done/dropped with no route -> still "tudo concluído ou descartado"
   - queue `r`: the only leftover route was answered "não" by the owner -> not
     counted as waiting (decide does not ask it again), the line says so
-  - a route on a `dropped` item is not a leftover task
+  - a route on a `dropped` item is not a leftover task, nor one on an
+    open (`pending`/`blocked`) item
   - --json carries `tarefas_sobrando` per queue
   - the launcher `cepa plan ready` prints the same line
 
@@ -82,6 +83,13 @@ def main():
             item("s1", human_pending="Aprovar o PR"),
             item("s2", status="dropped", human_pending="rota de item descartado"),
         ])
+        # An OPEN item with a route is "esperam você", not a leftover task of
+        # a done item: tarefas_sobrando counts only `done` (proof survivor M2).
+        write_queue(root, "t", [
+            item("t1", status="pending", human_pending="Rodar à mão"),
+            item("t2", status="blocked", human_pending="Pedir a credencial"),
+            item("t3", human_pending="Aprovar o PR"),
+        ])
 
         r = subprocess.run([sys.executable, str(CEPA_PLAN), "ready",
                             "--repo", str(root)],
@@ -115,11 +123,11 @@ def main():
         data = {q["queue"]: q for q in json.loads(r.stdout)["filas"]}
         check("--json carries tarefas_sobrando per queue",
               {k: v.get("tarefas_sobrando") for k, v in data.items()}
-              == {"p": 2, "q": 0, "r": 0, "s": 1},
+              == {"p": 2, "q": 0, "r": 0, "s": 1, "t": 1},
               {k: v.get("tarefas_sobrando") for k, v in data.items()})
         check("--json carries tarefas_respondidas_nao per queue",
               {k: v.get("tarefas_respondidas_nao") for k, v in data.items()}
-              == {"p": 0, "q": 0, "r": 1, "s": 0},
+              == {"p": 0, "q": 0, "r": 1, "s": 0, "t": 0},
               {k: v.get("tarefas_respondidas_nao") for k, v in data.items()})
 
         r = subprocess.run(["sh", str(CEPA), "plan", "ready",
