@@ -2225,6 +2225,12 @@ def cmd_waiting(root, as_json):
                           "total_itens": total, "runs": runs},
                          ensure_ascii=False, indent=2))
         return 0
+    # CS-4: nothing waiting is one line. Only when nothing was hidden either:
+    # an unreadable queue or a failed `pending` may hide what waits, so the
+    # counter header (and the warning on stderr) stays.
+    if not shown and not runs and not unreadable and not run_warning:
+        print("nada espera você")
+        return 0
     print(f"esperam você · {len(shown)} filas · {total} itens")
     for q in shown:
         print(f"\nfila {q['queue']}")
@@ -5880,7 +5886,8 @@ def main(argv=None):
             "supervisor dead), each with the command that resolves it."),
         examples=[("cepa plan waiting", "every queue, for a human"),
                   ("cepa plan waiting --json", "for code")],
-        exit_codes=[(0, "shown (even with nothing waiting)"),
+        exit_codes=[(0, "shown; with nothing waiting, the single line "
+                        "\"nada espera você\""),
                     (2, f"invalid usage, {not_git}, no queue file at all")])
     wt.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
     wt.add_argument("--json", action="store_true", dest="as_json", help=json_help)
