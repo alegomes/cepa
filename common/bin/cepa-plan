@@ -4232,13 +4232,115 @@ def answer_item_id(ident, by_id):
     return new
 
 
+# ── answer × the chat (fb-20261021-2, fb-20261022-1, fb-20261028-1, fb-20261109-3)
+#
+# The TTY guard left the owner copying long commands into a terminal outside
+# Claude Code to record what they had ALREADY answered in the chat ("se você
+# não é capaz de registrar as respostas, por que insiste em me perguntar?").
+# `--from-chat "<the owner's words>"` lets the agent record it with no TTY, on
+# one condition the CLI checks instead of trusting the agent: the words are in
+# a prompt the owner typed in this session, as `session-log.py` (the
+# UserPromptSubmit hook) wrote it to `.claude/session-log.md`. What does NOT
+# count: a prompt that is a slash command (its text is what the agent was
+# handed, like a `cepa-until` round's prompt), a prompt older than the
+# horizon, and a match inside another word ("sim" in "assim"). In an
+# unattended run nobody is in the chat, so the flag is refused outright.
+#
+# What this does not stop: an agent that writes the log itself. The TTY guard
+# did not stop that either (`script` fakes a terminal); both are a check that
+# the normal path did not invent the answer, and the evidence names the
+# message and quotes it, so the owner audits it in one read.
+UNATTENDED_ENV = ("CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID")
+CHAT_HORIZON_HOURS = 24
+_LOG_DAY = re.compile(r"^## (\d{4}-\d{2}-\d{2})\s*$")
+_LOG_TIME = re.compile(r"^### (\d{2}:\d{2}:\d{2}) UTC\s*$")
+
+
+def owner_prompts(log_path):
+    """[(datetime UTC, prompt text)] from the session log, oldest first."""
+    try:
+        lines = Path(log_path).read_text(encoding="utf-8",
+                                         errors="replace").splitlines()
+    except OSError:
+        return []
+    out, day, when, body = [], None, None, []
+
+    def flush():
+        if when is not None:
+            out.append((when, "\n".join(body).strip()))
+
+    for line in lines:
+        d, t = _LOG_DAY.match(line), _LOG_TIME.match(line)
+        if d:
+            flush()
+            day, when, body = d.group(1), None, []
+        elif t and day:
+            flush()
+            try:
+                when = datetime.strptime(f"{day} {t.group(1)}",
+                                         "%Y-%m-%d %H:%M:%S").replace(
+                                             tzinfo=timezone.utc)
+            except ValueError:
+                when = None
+            body = []
+        elif when is not None:
+            body.append(line)
+    flush()
+    return out
+
+
+def owner_said_in_chat(repo, quote, now=None):
+    """({"when", "quote"}, None) when `quote` is in a recent owner prompt of this
+    session's log; (None, the reason in pt-BR) otherwise."""
+    clean = " ".join(str(quote or "").split())
+    if not re.search(r"\w", clean):
+        return None, "a citação está vazia"
+    log = session_root(repo) / ".claude" / "session-log.md"
+    prompts = owner_prompts(log)
+    if not prompts:
+        return None, f"não há mensagens do dono no log desta sessão ({log})"
+    now = now or datetime.now(timezone.utc)
+    oldest = now.timestamp() - CHAT_HORIZON_HOURS * 3600
+    pattern = re.compile(r"(?<!\w)" + r"\s+".join(map(re.escape, clean.split()))
+                         + r"(?!\w)", re.I)
+    for when, text in reversed(prompts):
+        if when.timestamp() < oldest:
+            break
+        if text.lstrip().startswith("/"):
+            continue
+        if pattern.search(text):
+            return {"when": when.strftime("%Y-%m-%d %H:%M:%S UTC"),
+                    "quote": clean}, None
+    return None, ("essas palavras não estão em nenhuma mensagem do dono das "
+                  f"últimas {CHAT_HORIZON_HOURS}h (comandos com `/` não contam)")
+
+
 def cmd_answer(root, name, ident, answer, keep=False, force=False,
                  commit=True, repo=".", author=None, drop=False,
-                 multiline=False):
-    if not sys.stdin.isatty():
-        print("`answer` é a resposta do dono e só roda num terminal: sem "
-              "TTY, quem chama é um agente, e só o humano fecha uma rota "
-              "`human_pending` ou destrava um `blocked`.", file=sys.stderr)
+                 multiline=False, from_chat=None):
+    chat_origin = None
+    if from_chat is not None:
+        unattended = [v for v in UNATTENDED_ENV if os.environ.get(v)]
+        if unattended:
+            print(f"`--from-chat` não vale num run desatendido ({unattended[0]} "
+                  "no ambiente): ninguém está no chat para ter respondido. "
+                  "Deixe a pergunta no item; o dono responde em `cepa-until "
+                  "decide`.", file=sys.stderr)
+            return 2
+        chat_origin, why_not = owner_said_in_chat(repo, from_chat)
+        if chat_origin is None:
+            print(f"`--from-chat` recusado para {ident}: {why_not}; nada foi "
+                  "gravado. Cite as palavras do dono exatamente como ele "
+                  f"escreveu numa mensagem das últimas {CHAT_HORIZON_HOURS}h "
+                  "desta sessão.", file=sys.stderr)
+            return 7
+    elif not sys.stdin.isatty():
+        print("`answer` é a resposta do dono: sem terminal, só grava com "
+              "`--from-chat \"<as palavras do dono, como ele escreveu>\"`, que "
+              "confere a citação numa mensagem dele desta sessão. Sem isso, "
+              "quem chama é um agente sem resposta do dono, e só o humano "
+              "fecha uma rota `human_pending` ou destrava um `blocked`.",
+              file=sys.stderr)
         return 2
     if multiline:
         # Whitespace collapsed per line: line breaks written in the editor
@@ -4293,7 +4395,13 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
             return 6
     today = datetime.now().strftime("%Y-%m-%d")
     previous = " ".join(str(it.get("evidence") or "").split())
+    # The prefix stays the same with or without the chat: `cepa-until`'s
+    # `last_owner_no` reads "Resposta do dono em AAAA-MM-DD: não" at the start.
     parts = [f"Resposta do dono em {today}: {answer}."]
+    if chat_origin is not None:
+        parts.append(f"Dada no chat, na mensagem do dono de "
+                     f"{chat_origin['when']} («{chat_origin['quote']}»), e "
+                     "gravada pelo agente.")
     proposals = item_proposals(root, repo, name, ident)
     waiver_lines, waiver_sentences = decide_waivers(
         proposals, answer, keep, today,
@@ -6267,13 +6375,16 @@ def main(argv=None):
 
     rs = sub.add_parser(
         "answer", aliases=["responde"],
-        help="records the owner's answer to a deferred item (terminal only)",
+        help="records the owner's answer to a deferred item (terminal, or --from-chat)",
         description=(
             "`blocked` goes back to `pending` with the answer, and the\n"
             "`human_pending` route closes. The answer is kept verbatim in the item's\n"
             "evidence, where the next run reads it. Refuses a text that does not\n"
             "look like an answer (a request for clarification, a question) unless\n"
-            "--force. Runs only on a terminal: an agent cannot answer for the owner.\n"
+            "--force. Runs on a terminal; with no terminal, only with --from-chat\n"
+            "and the owner's words, which must be in a recent prompt of this\n"
+            "session (refused in an unattended run): an agent cannot answer for\n"
+            "the owner, only record what the owner said.\n"
             "A \"sim\" to a route on a `done` item whose route declares an item for\n"
             "the yes (`--if-yes-item` in `finish`) creates that item at the end of\n"
             "the same queue, `pending`, and prints its id; declared needs-owner,\n"
@@ -6288,13 +6399,16 @@ def main(argv=None):
                   ('cepa plan answer wego WEGO-124 --answer "wait for go-live" --keep',
                    "record it, leave the item stuck"),
                   ('cepa plan answer wego WEGO-124 --answer "no longer needed" --drop',
-                   "drop the item")],
+                   "drop the item"),
+                  ('cepa plan answer wego WEGO-124 --answer "sim: fecha" --from-chat "1. sim"',
+                   "record, with no terminal, what the owner said in the chat")],
         exit_codes=[(0, "recorded"),
                     (2, f"invalid usage, not a terminal, empty answer, --keep with "
                         f"--drop, {not_git}, {no_queue}, unknown item id, item not "
                         "deferred"),
                     (3, waves),
-                    (6, "the text does not look like an answer (repeat with --force)")])
+                    (6, "the text does not look like an answer (repeat with --force)"),
+                    (7, "--from-chat: the quote is not in a recent owner prompt")])
     rs.add_argument("name", metavar="name", help="queue name")
     rs.add_argument("id", help="id of the deferred item")
     rs.add_argument("--answer", "--resposta", dest="answer", metavar="TEXT", required=True,
@@ -6306,6 +6420,13 @@ def main(argv=None):
     rs.add_argument("--drop", "--descarta", dest="drop", action="store_true",
                     help="drops the item (`dropped`) and closes the route; on a "
                          "`done` item, only closes the leftover task")
+    rs.add_argument("--from-chat", "--do-chat", dest="from_chat", metavar="QUOTE",
+                    default=None,
+                    help="records with no terminal an answer the owner gave in "
+                         "the chat: QUOTE is the owner's words, as typed, and "
+                         "must be in a prompt of this session's "
+                         ".claude/session-log.md from the last 24h (a slash "
+                         "command does not count). Refused in an unattended run")
     rs.add_argument("--multiline", dest="multiline", action="store_true",
                     help="keeps the line breaks of the answer (default: the "
                          "answer is flattened into one line)")
@@ -6605,7 +6726,7 @@ def main(argv=None):
     if a.cmd == "answer":
         return cmd_answer(root, a.name, a.id, a.answer, a.keep,
                             a.force, not a.no_commit, a.repo, a.author, a.drop,
-                          a.multiline)
+                          a.multiline, a.from_chat)
     return cmd_write(root, a)
 
 
