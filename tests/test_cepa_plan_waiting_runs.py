@@ -175,6 +175,13 @@ def landed_red_and_dead():
                                  "como": "o supervisor morreu no meio do run",
                                  "comando": f"cepa-until close-dead a/{RUN}"}], j)
 
+        # With a remote, a merge only in the local `main` is not landed (spec
+        # pouso-ja-feito-sai-da-lista: the upstream decides; no upstream, the
+        # local branch would decide and close the run).
+        bare = Path(tmp) / "origin.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+        git(root, "remote", "add", "origin", str(bare))
+        git(root, "push", "-q", "-u", "origin", "main")
         git(root, "merge", "-q", "--no-ff", "-m", "land", f"until/{RUN}")
         write_state(root, aterrissagem={"parou": "build-vermelho"}, **LAND)
         check("build vermelho: o `pending` também lista (fixture válida)",

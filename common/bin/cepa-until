@@ -5988,6 +5988,33 @@ def run_states(root):
     return sorted(found)
 
 
+def landed_upstream(root, sha, destination):
+    """Is `sha` (the tip of the run branch) already at the upstream of the
+    destination branch? Where the destination has no upstream the local branch
+    counts. Reads the upstream as the clone knows it: no `git fetch`."""
+    code, upstream = git(["rev-parse", "--verify", "-q",
+                          f"{destination}@{{upstream}}"], root)
+    target = upstream if code == 0 and upstream else destination
+    code, _ = git(["merge-base", "--is-ancestor", sha, target], root)
+    return code == 0
+
+
+def close_landed_run(path, item_states, destination):
+    """The one place where `pending` closes a run that already landed: state
+    `aterrissado`, the red-build marks of `aterrissagem` dropped, no build."""
+    info = dict(item_states.get("aterrissagem") or {})
+    info.pop("parou", None)
+    info.pop("motivo", None)
+    info.update(destino=destination, fechado_por="pending",
+                quando=datetime.now().isoformat(timespec="seconds"))
+    item_states.update(estado="aterrissado", aterrissagem=info,
+                       atualizado=info["quando"])
+    tmp = path.parent / (path.name + ".tmp")
+    tmp.write_text(json.dumps(item_states, ensure_ascii=False, indent=2) + "\n",
+                   encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def waiting_runs(repo):
     """The runs whose `aterrissar` action is still valid: state `esperando-dono`,
     night branch existing and still outside the destination branch. A merge done
@@ -6013,9 +6040,14 @@ def waiting_runs(repo):
         destination = action.get("destino") or current_branch(root)
         code, _ = git(["merge-base", "--is-ancestor", sha, destination], root)
         # A merge left by `land` on a red build is in the destination but has
-        # not landed: it waits for the fix and for `land` again.
+        # not landed: it waits for the fix and for `land` again, unless the
+        # destination's upstream already holds the branch tip (pushed by hand
+        # or by another machine): then the run is closed, with no build.
         red = (item_states.get("aterrissagem") or {}).get("parou") == "build-vermelho"
         if code == 0 and not red:
+            continue
+        if red and landed_upstream(root, sha, destination):
+            close_landed_run(path, item_states, destination)
             continue
         queue, run = item_states.get("fila"), item_states.get("run")
         found.append({"fila": queue, "run": run, "branch": item_states.get("branch"),
