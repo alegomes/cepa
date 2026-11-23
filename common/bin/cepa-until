@@ -2606,21 +2606,63 @@ def _cmd_land(argv, wrote):
         # redone by running the landing again (the merge is done, it resumes here).
         install_on_landing(repo, path.parent, run_id)
 
-    if tree and Path(tree).exists():
-        r = subprocess.run([sys.executable, str(WTLIB), "rescue", tree,
-                            branch], capture_output=True, text=True)
-        for line in rescued_files_block(repo, branch, r.stdout or ""):
-            print(line)
-        git(["worktree", "remove", tree], repo)
-    code, output = git(["branch", "-d", branch], repo)
-    if code != 0:
-        print(f"warning: did not delete `{branch}` ({output})")
+    for line in remove_run_tree_and_branch(repo, tree, branch)[0]:
+        print(line)
     ended = datetime.now()
     landing_info["quando"] = ended.isoformat(timespec="seconds")
     record(estado="aterrissado", aterrissagem=landing_info)
     print(f"landed at {ended:%H:%M}: `{branch}` is in `{destination}`; "
           "run worktree and branch removed")
     return 0
+
+
+def remove_run_tree_and_branch(repo, tree, branch, force_branch=False,
+                               quiet_caller=False):
+    """The one rule for taking a landed run off the disk, shared by `land` and
+    `pending`: save the git-ignored files of the run worktree under
+    `.claude/rescued/`, remove the worktree (never `--force`: a tracked change
+    not committed makes git refuse and the worktree stays), then delete the
+    branch (`-D` when `force_branch`, for a caller that already proved the tip
+    is in the destination upstream and the clone may be on another branch).
+    Returns (lines to show, removed): `removed` is False when the worktree or
+    the branch is still there. `quiet_caller` is for `pending`, which runs on
+    every call: it drops registrations of worktree folders deleted by hand
+    (`git worktree prune`) and leaves a dirty worktree entirely alone, so the
+    rescue does not copy the same files again each time."""
+    lines, removed = [], True
+    if quiet_caller:
+        git(["worktree", "prune"], repo)
+        if tree and Path(tree).exists() and git(
+                ["-C", str(tree), "status", "--porcelain"], repo)[1].strip():
+            return lines, False
+    if tree and Path(tree).exists():
+        r = subprocess.run([sys.executable, str(WTLIB), "rescue", tree,
+                            branch], capture_output=True, text=True)
+        lines.extend(rescued_files_block(repo, branch, r.stdout or ""))
+        code, output = git(["worktree", "remove", tree], repo)
+        if code != 0:
+            lines.append(f"warning: did not remove the worktree {tree} ({output})")
+            removed = False
+    code, output = git(["branch", "-D" if force_branch else "-d", branch], repo)
+    if code != 0 and git(["rev-parse", "--verify", "-q", branch], repo)[0] == 0:
+        lines.append(f"warning: did not delete `{branch}` ({output})")
+        removed = False
+    return lines, removed
+
+
+def run_worktree(root, branch):
+    """Where the run worktree is: the one git lists with `branch` checked out,
+    or None (the path recorded in the `aterrissar` action is not trusted: it
+    may now be a worktree of another branch)."""
+    code, out = git(["worktree", "list", "--porcelain"], root)
+    here = None
+    for line in (out.splitlines() if code == 0 else []):
+        if line.startswith("worktree "):
+            here = line[len("worktree "):]
+        elif line == f"branch refs/heads/{branch}" and here:
+            if Path(here).resolve() != Path(root).resolve():
+                return here
+    return None
 
 
 def land_step(n, name, result):
@@ -6047,8 +6089,15 @@ def waiting_runs(repo):
         if code == 0 and not red:
             continue
         if red and landed_upstream(root, sha, destination):
-            close_landed_run(path, item_states, destination)
-            continue
+            # Tree and branch go first: if the worktree cannot be removed (a
+            # tracked change not committed) the record stays open and listed.
+            branch = str(item_states.get("branch"))
+            _, removed = remove_run_tree_and_branch(
+                root, run_worktree(root, branch), branch, force_branch=True,
+                quiet_caller=True)
+            if removed:
+                close_landed_run(path, item_states, destination)
+                continue
         queue, run = item_states.get("fila"), item_states.get("run")
         found.append({"fila": queue, "run": run, "branch": item_states.get("branch"),
                         "destino": destination,
