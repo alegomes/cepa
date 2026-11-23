@@ -1,0 +1,17 @@
+key: CS-3-pouso-ja-feito-sai-da-lista
+queue: pouso-ja-feito-sai-da-lista
+status: complete
+criteria:
+  - id: AC1
+    text: "docs/spec/pouso-ja-feito-sai-da-lista.md CS-3 (cli): num repo de teste com remoto, um run em `esperando-dono` com `aterrissagem: null` e outro com `aterrissagem.parou: conflito`, ambos com o branch contido em `origin/main`. Depois de `cepa-until pending`: `estado: aterrissado` nos dois registros e os dois branches removidos."
+    altitude: cli
+    surface: "common/bin/cepa-until pending (processo real via subprocess, --repo), em repo git temporario com remoto bare"
+    test: "tests/test_cepa_until_pending_closes_landed.py::not_through_land (a/r1 com aterrissagem null, a/r2 com parou conflito; checa estado aterrissado, branch removido, saida da lista, conflito apagado do registro, cerca a/r3 so no main local segue aberto, sem build)"
+    layer: cli-process
+    evidence: verified
+    run: "python3 tests/test_cepa_until_pending_closes_landed.py -> bloco CS-3 com 10 linhas 'ok' (33 'ok' no arquivo, 0 FAIL), '✓ tudo passou', exit 0; python3 tests/test_cepa_until_pending_removes_branch_and_tree.py -> '✓ tudo passou' (regressao CS-2)"
+    readings:
+      diff: "7fe5e01: waiting_runs passa a fechar por landed_upstream(root, sha, destination) sem exigir parou == build-vermelho; sem upstream vale o branch local (CS-1)."
+      scope: "CS-4 a CS-9 sao itens posteriores e nao contam como lacuna de CS-3."
+      not_run: "suite completa e test_cepa_until_auto_land.py nao rodados por regra da rodada (supervisor rodou em 7fe5e01: exit 0, 0 FAIL, segundo relato dele, nao verificado por mim)."
+gap: null
