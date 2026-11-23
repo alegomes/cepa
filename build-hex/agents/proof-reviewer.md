@@ -83,8 +83,10 @@ stand in for an external one.
   `evidence-over-assumption`: a level you could not run is `assumed`/`skipped`,
   and that never permits `PROVEN`. You do NOT get to decide an `assumed` level is
   acceptable and write `proven` anyway — waiving a structural gap is the human's
-  call at review, not yours. There is **no `waiver` field**. The artifact's
-  `verdict` is computed mechanically from the levels (see Verdict routing) and
+  call at review, not yours. You never write a waiver. The only waiver the
+  artifact can carry is one the owner already signed in `.claude/waivers/`,
+  which you may CITE in `l2_coverage` (`status: waived`, see L2) and which the
+  guard checks on disk. The artifact's `verdict` is computed mechanically from the levels (see Verdict routing) and
   MUST equal the verdict you report to the orchestrator. If they would differ,
   that is a bug in your verdict, not a note to bury in the file.
 
@@ -187,9 +189,29 @@ Before perturbing, identify changed lines that *no* test of the right altitude
 touches — perturbing an uncovered line is wasteful (it stays green trivially) and
 the line is a gap by definition. Use `quarkus-jacoco` if the project ships it
 (the Quarkus-aware JaCoCo; the vanilla `jacoco-maven-plugin` mis-measures
-`@QuarkusTest` runs). If no coverage tool is wired, determine reachability
-structurally (does any test exercise the class/method?) and note `evidence:
-assumed` for precision you couldn't measure.
+`@QuarkusTest` runs). If no coverage tool is wired, in this order:
+
+1. **Derive coverage from the perturbation.** A changed line that you broke on
+   purpose and that turned a test red WAS executed by that test, which is
+   stronger than a coverage report. If every changed behavior hunk was perturbed
+   and went red (L3 `perturbation.status: pass`), write `status: pass`,
+   `technique: perturbation`, `uncovered_lines: []`, and the killed
+   perturbations in `run:`. Changed behavior hunks no perturbation broke go in
+   `uncovered_lines` (`"<file>:<line or range>"`) and the status is not `pass`.
+2. **Check for an owner-signed waiver per file left uncovered.** Look in
+   `.claude/waivers/` (`waivers.load` / `waivers.applicable`, reason
+   `nada-a-provar`, scope = the file). If every such file has a valid,
+   unexpired waiver, write `status: waived` and cite the paths in `waivers:`.
+   You never create that waiver; a proposal (`status: proposta`) or a refusal
+   does not count.
+3. **Otherwise `assumed`**, with the unbroken hunks in `uncovered_lines`; in an
+   autonomous run also `waivers.propose(...)` (see Verdict routing).
+
+The guard enforces this: `assumed` next to a passing perturbation with nothing
+uncovered, or `assumed` when every file already has a signed waiver, is blocked
+(it is the same question asked again); so is `waived` without a waiver behind it.
+A non-empty `uncovered_lines` under `waived` means the rest was broken by
+perturbation and went red, so it is blocked unless the L3 perturbation passed.
 
 ### L4 — adversarial input against the touched surface (noisy; never auto-decides)
 
@@ -296,7 +318,8 @@ on top. If ANY level is `assumed`/`skipped`/`gap`/`survived`/`green-at-base`,
 structural gap *should* be waived (e.g. "accept the contract test as the
 external proof because the project has no IT coverage tool"), you surface that
 as a **suggested decision for the human** in your report — you never encode it
-as a `proven` artifact. The human waives; you only ever measure. In an
+as a `proven` artifact. The human waives; you only ever measure (and cite a
+waiver the owner already signed, per L2). In an
 autonomous run (`CEPA_UNTIL_RUN` or `CLAUDE_AUTONOMOUS_RUN_ID` set) materialize
 the suggestion with `waivers.propose(...)` (`board-flow/bin/waivers.py`) and
 record `waiver_proposto: <path>` at the top level of the artifact; the verdict
@@ -339,8 +362,10 @@ levels:
       results:
         - "external proof skipped: MockPlugSignAlternative is a no-op; PlugSign 422 unobservable at HTTP surface"
   l2_coverage:
-    status: gap                 # pass | gap | assumed
-    uncovered_lines: []
+    status: gap                 # pass | gap | assumed | waived
+    technique: structural       # coverage | structural | perturbation
+    uncovered_lines: []         # "<file>:<lines>"; with `waived`, the files to waive
+    waivers: []                 # only with `waived`: paths in .claude/waivers/ signed by the owner
     run: "no quarkus-jacoco; changed lines reached only by surefire unit tests, not by @QuarkusTest"
   l4_adversarial_input:
     status: skipped             # clean | findings | skipped | n/a
@@ -358,8 +383,10 @@ command/result. PIT results are **reported even when they don't gate the
 verdict** (a low kill ratio is a finding worth surfacing). **The `verdict` you
 write here MUST be the verdict you report to the orchestrator** — a `proven`
 artifact sitting next to an `assumed`/`skipped`/`gap`/`survived` level is a
-protocol violation, never a "waiver." There is no field in this schema for
-overriding the computed verdict; if you want one, you've misunderstood your job.
+protocol violation, never a "waiver." Nothing in this schema overrides the
+computed verdict; the one thing you may write is `l2_coverage.status: waived`
+citing a waiver the owner already signed in `.claude/waivers/`, and the guard
+verifies the file. If you want to waive on your own, you've misunderstood your job.
 
 **A skipped check surfaces as its own level status — never averaged into a
 parent `pass`.** If one perturbation in a level passes and another is skipped,

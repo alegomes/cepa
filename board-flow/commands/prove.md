@@ -116,7 +116,9 @@ PROVEN. If the artifact says `verdict: proven` but a level contradicts it (a
 self-granted waiver the agent must never write), treat the card as
 **NEEDS-HUMAN**, act on that, and flag the inconsistency in your report. The
 verdict field is not authoritative when it disagrees with its own levels — the
-levels are.
+levels are. The one exception: `l2_coverage.status: waived` does not block
+(the guard validated the owner-signed waiver in `.claude/waivers/` at write time),
+and `l2_coverage` `technique: perturbation` + `pass` counts as measured coverage.
 
 ### 3b. UI gate — when the diff touches a declared UI surface
 

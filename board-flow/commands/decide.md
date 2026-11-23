@@ -210,8 +210,9 @@ Per accepted group:
   user's rationale, author and `revisit_trigger` (all mandatory — a waiver with
   no deadline or condition is a waiver forever, and nobody decided that); then
   advance the cards via `atlassian-expert`. The waiver is **the human's**: the
-  `proof-reviewer` still cannot waive anything and the proof artifact still has
-  no field for it.
+  `proof-reviewer` still cannot waive anything: the proof artifact has no field
+  for the agent to waive with, it may only CITE this waiver in
+  `l2_coverage.status: waived`, and `proof-verdict-guard.py` checks the file.
   **In an autonomous run** (`CEPA_UNTIL_RUN` or `CLAUDE_AUTONOMOUS_RUN_ID` in
   the environment) there is no owner in front of you: `waivers.write` records a
   **proposal** (`status: proposta`, `autor: null`), not a waiver. Pass

@@ -4937,7 +4937,7 @@ O `answer`/`responde` recusa quem não tem stdin em terminal (`common/bin/cepa-p
 
 ## A dispensa de cobertura aceita pelo dono não é lida pelo esquema de prova e volta como NEEDS-HUMAN
 
-**Status:** pendente · **Lar provável:** build-hex (`build-hex/hooks/proof-verdict-guard.py`, esquema `l2_coverage`) · **Origem:** feedback `fb-20261020-1`, 2026-10-20, `fb-20261028-2`, 2026-10-28
+**Status:** feito em 2026-11-23 (item `prova-cobertura-pela-perturbacao`: `l2_coverage` aceita `technique: perturbation` e `status: waived` com `waivers:`, ambos conferidos pelo `proof-verdict-guard`) · **Lar provável:** build-hex (`build-hex/hooks/proof-verdict-guard.py`, esquema `l2_coverage`) · **Origem:** feedback `fb-20261020-1`, 2026-10-20, `fb-20261028-2`, 2026-10-28
 
 ### Problema
 
