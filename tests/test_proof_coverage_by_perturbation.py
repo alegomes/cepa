@@ -272,14 +272,32 @@ for label, val in (("string", "'c/D:1-9'"), ("dict", "{a: 1}")):
     check(f"proven + perturbation pass + uncovered_lines as a {label} -> blocked",
           blocked(r, "technique: perturbation"), r.stderr[:300])
 
+# The process cwd is a neutral dir outside any git repo, so the REAL repo's
+# `.claude/waivers` can never decide these outcomes; the scope exists only in the temp repo.
+neutral = TMP / "neutral-cwd"
+neutral.mkdir()
+UNIQ = "zz/only-in-temp/Thing.py"
 rel = make_repo("rel")
-waiver(rel, "common/bin/cepa-plan")
+UWV = [str(waiver(rel, UNIQ).relative_to(rel))]
 payload = json.dumps({"tool_name": "Write",
                       "tool_input": {"file_path": "docs/proof/X-1.yaml",
-                                     "content": artifact(l2=l2_block("waived", waivers=WV))},
+                                     "content": artifact(l2=l2_block("waived", waivers=UWV),
+                                                         classes=(UNIQ,))},
                       "cwd": str(rel)})
-r = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True, text=True)
-check("relative file_path: waiver under payload cwd is found", r.returncode == 0, r.stderr[:300])
+r = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True, text=True,
+                   cwd=str(neutral))
+check("relative file_path, no prefix: waiver under payload cwd is found (process cwd elsewhere)",
+      r.returncode == 0, r.stderr[:300])
+rel_none = make_repo("rel-none")
+payload = json.dumps({"tool_name": "Write",
+                      "tool_input": {"file_path": "docs/proof/X-1.yaml",
+                                     "content": artifact(l2=l2_block("waived", waivers=UWV),
+                                                         classes=(UNIQ,))},
+                      "cwd": str(rel_none)})
+r = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True, text=True,
+                   cwd=str(neutral))
+check("...and a payload cwd without that waiver -> blocked (the lookup is not satisfied elsewhere)",
+      r.returncode == 2, r.stderr[:300])
 
 pw = make_repo("partial")
 waiver(pw, "a/B")
@@ -413,6 +431,19 @@ r = run(sv, artifact("unproven", l2_block("waived", uncovered=UNC1, waivers=WV),
                      perturbation="survived"))
 check("unproven + waived + uncovered_lines + perturbation survived -> blocked",
       blocked(r, "perturbation did not pass"), r.stderr[:300])
+
+# 13. rule 1 is about status `pass` only (not "anything but gap", not pass-or-waived)
+bw = make_repo("rule1-waived")
+BWV = [str(waiver(bw, "a/B.py").relative_to(bw))]
+r = run(bw, artifact(l2=l2_block("waived", "perturbation", ["a/B.py:1-3"], BWV),
+                     classes=("a/B.py",)))
+check("proven + waived/perturbation + uncovered_lines + signed waiver + perturbation pass -> allowed",
+      r.returncode == 0, r.stderr[:300])
+bn = make_repo("rule1-assumed")
+r = run(bn, artifact("needs-human", l2_block("assumed", "perturbation", ["a/B.py:1-3"]),
+                     classes=("a/B.py",)))
+check("needs-human + assumed/perturbation + uncovered_lines + no waiver + perturbation pass -> allowed",
+      r.returncode == 0, r.stderr[:300])
 
 # telemetry: distinct blocked= per new block
 tele = os.environ.get("CEPA_TELEMETRY_DIR")
