@@ -498,6 +498,99 @@ check("perturbation status ' pass ' (padded) + assumed + nothing uncovered -> bl
       blocked(r, "technique: perturbation"), r.stderr[:300])
 tagged("padded perturbation status", r, "l2_assumed_but_perturbed")
 
+# ── fourth-round survivors + sweep of the waiver code ──────────────────────
+# A. the scope is compared for EQUALITY (through the loose key), never containment
+for label, esc, fpath in (("waiver scope contains the file", "pkg/a/Service.py", "Service.py"),
+                          ("file contains the waiver scope", "Service.py", "pkg/a/Service.py")):
+    d = make_repo("scope-" + label.split()[0] + "-" + label.split()[-1])
+    waiver(d, "scope-x", escopo=esc, fname="nada-a-provar--scope-x.yaml")
+    r = run(d, artifact("needs-human", l2_block("waived", uncovered=[fpath + ":1"], waivers=WV),
+                        classes=(fpath,)))
+    check(f"waived + {label} (not equal) -> blocked", blocked(r, fpath), r.stderr[:300])
+    tagged(f"waived, {label}", r, "l2_waived_unbacked")
+    r = run(d, artifact("needs-human", l2_block("assumed", uncovered=[fpath + ":1"]),
+                        classes=(fpath,)))
+    check(f"assumed + {label} -> not 'already waived' -> allowed", r.returncode == 0,
+          r.stderr[:300])
+
+# B. only `*.yaml` files are waivers
+for ext in (".yaml.bak", ".yml", ".yaml~"):
+    d = make_repo("ext-" + ext.strip(".~").replace(".", "-") + str(len(ext)))
+    waiver(d, "common/bin/cepa-plan", fname="nada-a-provar--svc" + ext)
+    r = run(d, artifact(l2=l2_block("waived", waivers=WV)))
+    check(f"valid waiver saved as *{ext} does not count -> blocked", blocked(r, "cepa-plan"),
+          r.stderr[:300])
+    tagged(f"waiver file *{ext}", r, "l2_waived_unbacked")
+d = make_repo("ext-yaml")
+waiver(d, "common/bin/cepa-plan", fname="nada-a-provar--svc.yaml")
+r = run(d, artifact(l2=l2_block("waived", waivers=WV)))
+check("the same content saved as .yaml counts -> allowed", r.returncode == 0, r.stderr[:300])
+
+# motivo is compared for equality
+for mot in ("nada-a-provar-x", "nada", "Nada-a-provar"):
+    d = make_repo("motivo-" + mot.replace("-", ""))
+    waiver(d, "common/bin/cepa-plan", motivo=mot)
+    r = run(d, artifact(l2=l2_block("waived", waivers=WV)))
+    check(f"waiver with motivo {mot!r} (not equal to nada-a-provar) -> blocked",
+          blocked(r, "cepa-plan"), r.stderr[:300])
+
+# the first APPLICABLE waiver wins: an unusable one sorted first does not end the search
+d = make_repo("sorted")
+waiver(d, "common/bin/cepa-plan", trigger=f"until {PAST}", fname="a-expired.yaml")
+waiver(d, "other/File", fname="b-other-file.yaml")
+waiver(d, "common/bin/cepa-plan", status="proposta", fname="c-proposta.yaml")
+waiver(d, "common/bin/cepa-plan", fname="z-valid.yaml")
+r = run(d, artifact(l2=l2_block("waived", waivers=WV)))
+check("expired + other-file + proposta waivers sorted before a valid one -> still waived",
+      r.returncode == 0, r.stderr[:300])
+r = run(d, artifact("needs-human", l2_block("assumed", uncovered=UNC)))
+check("...and assumed there is told to write `waived`", blocked(r, "status: waived"),
+      r.stderr[:300])
+
+# a bare repo's git-common-dir is not `<main>/.git`: its parent is not a main clone
+bp = TMP / "bare-parent"
+(bp / ".claude" / "waivers").mkdir(parents=True)
+waiver(bp, "common/bin/cepa-plan")
+bare = bp / "repo.git"
+subprocess.run(G + ["init", "-q", "--bare", str(bare)], check=True)
+(bare / "docs" / "proof").mkdir(parents=True)
+r = run(bare, artifact(l2=l2_block("waived", waivers=WV)))
+check("bare repo: the waiver in its PARENT dir is not a main-clone waiver -> blocked",
+      blocked(r, "cepa-plan"), r.stderr[:300])
+tagged("bare repo common dir", r, "l2_waived_unbacked")
+
+# uncovered_lines shapes
+r = run(a, artifact(l2=l2_block("pass", "perturbation").replace(
+    '    run: "r"\n', '    uncovered_lines: ""\n    run: "r"\n')))
+check("uncovered_lines: '' (empty string) is empty -> proven + pass/perturbation allowed",
+      r.returncode == 0, r.stderr[:300])
+r = run(a, artifact(l2=l2_block("pass", "perturbation").replace(
+    '    run: "r"\n', '    uncovered_lines: "  "\n    run: "r"\n')))
+check("uncovered_lines: '  ' (blank string, not null) is NOT empty -> blocked",
+      blocked(r, "uncovered_lines"), r.stderr[:300])
+d = make_repo("nocolon")
+waiver(d, "a/B.py")
+r = run(d, artifact("needs-human", l2_block("waived", uncovered=["a/B.py"], waivers=WV),
+                    classes=("a/B.py",)))
+check("uncovered_lines entry without a colon is the file itself -> waiver found -> allowed",
+      r.returncode == 0, r.stderr[:300])
+r = run(pw, artifact("needs-human", l2_block("assumed", uncovered=["a/B:1", "c/D:2"]),
+                     classes=PC))
+check("assumed + two uncovered files, waiver for only one -> allowed (not 'already waived')",
+      r.returncode == 0, r.stderr[:300])
+
+# no l2_coverage mapping at all: no L2 rule fires (old behavior)
+nol2 = ("schema_version: 2\ncard: X-1\nverdict: needs-human\n"
+        + scope_yaml(("common/bin/cepa-plan",))
+        + "levels:\n  l3_load_bearing:\n    perturbation:\n      status: pass\n")
+r = run(b, nol2)
+check("no l2_coverage + a signed waiver + perturbation pass -> allowed (no L2 rule fires)",
+      r.returncode == 0, r.stderr[:300])
+tagged("no l2_coverage", r, None)
+r = run(b, nol2 + "  l2_coverage: waived\n")
+check("l2_coverage as a scalar -> allowed (no L2 rule fires)", r.returncode == 0,
+      r.stderr[:300])
+
 # ── twin agreement with board-flow/bin/waivers.py ──────────────────────────
 spec = importlib.util.spec_from_file_location("guard", HOOK)
 guard = importlib.util.module_from_spec(spec)
@@ -516,6 +609,22 @@ CASES = {
     "missing-revisit_trigger": dict(drop="revisit_trigger"),
     "missing-criado_em": dict(drop="criado_em"),
     "today": dict(trigger=f"until {date.today().isoformat()}"),
+    # fourth-round sweep: scope / motivo / status / date shapes / file extension
+    "escopo-contains-file": dict(escopo="pkg/common/bin/cepa-plan"),
+    "file-contains-escopo": dict(escopo="bin/cepa-plan"),
+    "motivo-superstring": dict(motivo="nada-a-provar-x"),
+    "motivo-substring": dict(motivo="nada"),
+    "motivo-capitalised": dict(motivo="Nada-a-provar"),
+    "status-Proposta": dict(status="Proposta"),
+    "status-padded": dict(status="proposta "),
+    "status-other": dict(status="aceita"),
+    "two-dates-expired-first": dict(trigger=f"from {PAST} until {FUTURE}"),
+    "two-dates-future-first": dict(trigger=f"from {FUTURE} until {PAST}"),
+    "invalid-month-past": dict(trigger="until 2020-13-45"),
+    "invalid-month-future": dict(trigger="until 2099-13-45"),
+    "short-date": dict(trigger="until 2020-1-5"),
+    "bak-file": dict(fname="nada-a-provar--svc.yaml.bak"),
+    "yml-file": dict(fname="nada-a-provar--svc.yml"),
 }
 for label, kw in CASES.items():
     t = make_repo("twin-" + label)
