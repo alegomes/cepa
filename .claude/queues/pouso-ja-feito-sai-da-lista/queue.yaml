@@ -31,14 +31,21 @@ items:
     e o registro de `a/r1` segue `esperando-dono`.'
   status: done
   blocked_by: []
-  human_pending: Aceitar ou recusar a dispensa de medição de cobertura do fechamento
-    de run já pousado pela lista de espera (não há ferramenta de cobertura ligada
-    ao CLI Python; 19 de 19 quebras propositais foram pegas)
-  evidence: 'Código em 26db875 na branch until/2026-11-21-1244 (landed_upstream,
-    close_landed_run e o desvio em waiting_runs de common/bin/cepa-until); testes
-    em 26db875 e 05bfc3a (tests/test_cepa_until_pending_closes_landed.py; fixture
-    de tests/test_cepa_plan_waiting_runs.py ganhou remoto). pair-reviewer: OK-WITH-NOTES,
-    sem correção pedida. completion-auditor: COMPLETE (.claude/acceptance/CS-1-pouso-ja-feito-sai-da-lista.yaml,
+  human_pending: null
+  evidence: 'Resposta do dono em 2026-11-23: sim: dispensa de cobertura aceita,
+    todas as quebras propositais foram pegas pelos testes. Rota humana fechada pelo
+    dono: Aceitar ou recusar a dispensa de medição de cobertura do fechamento de
+    run já pousado pela lista de espera (não há ferramenta de cobertura ligada ao
+    CLI Python; 19 de 19 quebras propositais foram pegas). Pergunta respondida:
+    Aceito a prova do fechamento de run já pousado sem medição de cobertura? Recomendo
+    sim: as 19 quebras propositais foram pegas pelos testes. O que cada opção prometia:
+    se sim, a prova fica aceita e o item segue fechado como está; se não, o item
+    segue fechado, com a prova marcada como dependente de medição de cobertura.
+    O dono escolheu o "sim". Evidência anterior: Código em 26db875 na branch until/2026-11-21-1244
+    (landed_upstream, close_landed_run e o desvio em waiting_runs de common/bin/cepa-until);
+    testes em 26db875 e 05bfc3a (tests/test_cepa_until_pending_closes_landed.py;
+    fixture de tests/test_cepa_plan_waiting_runs.py ganhou remoto). pair-reviewer:
+    OK-WITH-NOTES, sem correção pedida. completion-auditor: COMPLETE (.claude/acceptance/CS-1-pouso-ja-feito-sai-da-lista.yaml,
     b0b2999). proof-reviewer: UNPROVEN em 26db875 (5 sobreviventes), depois NEEDS-HUMAN
     em 05bfc3a com 19 perturbações mortas e 0 sobreviventes, só por não haver ferramenta
     de cobertura (docs/proof/CS-1-pouso-ja-feito-sai-da-lista.yaml, a5682e2). Rodados
@@ -49,19 +56,6 @@ items:
     com land no mesmo run usa o mesmo arquivo .tmp; build_vermelho: red and code
     == 0 (linha antiga) sem teste que pegue a troca por red.'
   head_commit: a5682e27d9fba16390236918cc568a09ee2a0a91
-  route_kind: open-question
-  owner_question: 'Aceito a prova do fechamento de run já pousado sem medição de
-    cobertura? Recomendo sim: as 19 quebras propositais foram pegas pelos testes'
-  owner_summary:
-    pedido: tirar da lista de espera o run com build vermelho cujo trabalho já está
-      no remoto, sem rodar build
-    pronto: esse run sai da lista e fica marcado como pousado; o que só está no
-      branch local continua listado
-    se_sim: a prova fica aceita e o item segue fechado como está
-    se_nao: o item segue fechado, com a prova marcada como dependente de medição
-      de cobertura
-    item_se_sim: nenhum
-    item_se_nao: nenhum
   decisions:
   - texto: Quando o destino não tem remoto configurado, ou o remoto está configurado
       mas a referência dele sumiu do clone, a lista confere pelo branch local e
@@ -79,11 +73,18 @@ items:
     Hoje branch, worktree e arquivo ficam onde estavam.'
   status: done
   blocked_by: []
-  human_pending: Aceitar ou recusar a dispensa de medição de cobertura da remoção
-    de branch e worktree pela lista de espera (não há ferramenta de cobertura ligada
-    ao CLI Python; 33 de 36 quebras propositais foram pegas e as 3 restantes não
-    mudam nada visível)
-  evidence: 'Código em f26650a na branch until/2026-11-21-1244 (remove_run_tree_and_branch
+  human_pending: null
+  evidence: 'Resposta do dono em 2026-11-23: sim: dispensa de cobertura aceita,
+    todas as quebras propositais foram pegas pelos testes. Rota humana fechada pelo
+    dono: Aceitar ou recusar a dispensa de medição de cobertura da remoção de branch
+    e worktree pela lista de espera (não há ferramenta de cobertura ligada ao CLI
+    Python; 33 de 36 quebras propositais foram pegas e as 3 restantes não mudam
+    nada visível). Pergunta respondida: Aceito a dispensa de medição de cobertura
+    desta mudança? Recomendo sim: 33 de 36 quebras propositais foram pegas e as
+    outras 3 são inofensivas. O que cada opção prometia: se sim, a prova fica aceita
+    e o item segue fechado como está; se não, o item segue fechado, com a prova
+    marcada como dependente de medição de cobertura. O dono escolheu o "sim". Evidência
+    anterior: Código em f26650a na branch until/2026-11-21-1244 (remove_run_tree_and_branch
     extraído de _cmd_land e usado por land e pending; run_worktree; waiting_runs
     remove árvore e branch antes de close_landed_run, em common/bin/cepa-until).
     Testes em f26650a e 2cb636f (tests/test_cepa_until_pending_removes_branch_and_tree.py,
@@ -102,19 +103,6 @@ items:
     não commita registros. Herdado do land e não mudado: arquivo ignorado fora de
     .claude/ some junto com a worktree.'
   head_commit: 7cda7bc52e661507d10568e26e9752a37b27ae73
-  route_kind: open-question
-  owner_question: 'Aceito a dispensa de medição de cobertura desta mudança? Recomendo
-    sim: 33 de 36 quebras propositais foram pegas e as outras 3 são inofensivas.'
-  owner_summary:
-    pedido: ao fechar um run já pousado, a lista de espera remover o branch e a
-      pasta de trabalho dele e guardar os arquivos ignorados pelo git
-    pronto: o run fechado perde branch e pasta, e os arquivos ignorados ficam guardados;
-      pasta com trabalho sem commit não é tocada
-    se_sim: a prova fica aceita e o item segue fechado como está
-    se_nao: o item segue fechado, com a prova marcada como dependente de medição
-      de cobertura
-    item_se_sim: nenhum
-    item_se_nao: nenhum
   decisions:
   - texto: 'Na lista de espera: a worktree do run é só a que o git mostra com o
       branch do run (o caminho gravado no registro não é usado); worktree com qualquer
@@ -136,14 +124,21 @@ items:
     seguem `esperando-dono`.'
   status: done
   blocked_by: []
-  human_pending: Aceitar ou recusar a dispensa de medição de cobertura do fechamento,
-    pela lista de espera, do run que nunca terminou o pouso (não há ferramenta de
-    cobertura ligada ao CLI Python; as 17 quebras propositais foram pegas pelos
-    testes)
-  evidence: 'Código em 7fe5e01 na branch until/2026-11-21-1244 (waiting_runs em
-    common/bin/cepa-until: o run em esperando-dono cuja ponta já está no upstream
-    do destino é fechado seja qual for aterrissagem, pelo mesmo remove_run_tree_and_branch
-    + close_landed_run do CS-2). Testes em 7fe5e01, 301300a e 7ccb94f (tests/test_cepa_until_pending_closes_landed.py:
+  human_pending: null
+  evidence: 'Resposta do dono em 2026-11-23: sim: dispensa de cobertura aceita,
+    todas as quebras propositais foram pegas pelos testes. Rota humana fechada pelo
+    dono: Aceitar ou recusar a dispensa de medição de cobertura do fechamento, pela
+    lista de espera, do run que nunca terminou o pouso (não há ferramenta de cobertura
+    ligada ao CLI Python; as 17 quebras propositais foram pegas pelos testes). Pergunta
+    respondida: Aceito a dispensa de medição de cobertura neste item? Recomendo
+    sim: as 17 quebras propositais do código foram pegas pelos testes. O que cada
+    opção prometia: se sim, a prova fica aceita e o item segue fechado como está;
+    se não, o item segue fechado, com a prova marcada como dependente de medição
+    de cobertura. O dono escolheu o "sim". Evidência anterior: Código em 7fe5e01
+    na branch until/2026-11-21-1244 (waiting_runs em common/bin/cepa-until: o run
+    em esperando-dono cuja ponta já está no upstream do destino é fechado seja qual
+    for aterrissagem, pelo mesmo remove_run_tree_and_branch + close_landed_run do
+    CS-2). Testes em 7fe5e01, 301300a e 7ccb94f (tests/test_cepa_until_pending_closes_landed.py:
     not_through_land substituiu fence_not_red, mais merged_local_and_upstream e
     unmerged_run_stays). RED antes da correção: 7 falhas. pair-reviewer: OK-WITH-NOTES,
     sem nota de correção. completion-auditor: COMPLETE (.claude/acceptance/CS-3-pouso-ja-feito-sai-da-lista.yaml,
@@ -157,19 +152,6 @@ items:
     aberto e sai na lista com a frase waits to land, que só o CS-8 troca por linha
     própria; docstring de waiting_runs ainda fala só em sair da lista.'
   head_commit: cb4b4d9a290f6ae5f95c2b75342f138711cb68e2
-  route_kind: open-question
-  owner_question: 'Aceito a dispensa de medição de cobertura neste item? Recomendo
-    sim: as 17 quebras propositais do código foram pegas pelos testes.'
-  owner_summary:
-    pedido: a lista de espera fechar também o run que nunca terminou o pouso, quando
-      o código dele já está no upstream
-    pronto: o run sem pouso registrado ou parado em conflito, com o código já no
-      upstream, é fechado e perde o branch
-    se_sim: a prova fica aceita e o item segue fechado como está
-    se_nao: o item segue fechado, com a prova marcada como dependente de medição
-      de cobertura
-    item_se_sim: nenhum
-    item_se_nao: nenhum
   decisions:
   - texto: 'Em repositório sem upstream, vale o branch local: o run mesclado à mão
       no main local, sem ter parado em nada, agora é fechado e perde branch e pasta
@@ -193,14 +175,22 @@ items:
     em `a/r4`. Hoje os dois seguem `esperando-dono`.'
   status: done
   blocked_by: []
-  human_pending: Aceitar ou recusar a dispensa de medição de cobertura do fechamento,
-    pela lista de espera, do registro de run cujo branch foi apagado (não há ferramenta
+  human_pending: null
+  evidence: 'Resposta do dono em 2026-11-23: sim: dispensa de cobertura aceita,
+    todas as quebras propositais foram pegas pelos testes. Rota humana fechada pelo
+    dono: Aceitar ou recusar a dispensa de medição de cobertura do fechamento, pela
+    lista de espera, do registro de run cujo branch foi apagado (não há ferramenta
     de cobertura ligada ao CLI Python; das 42 quebras propositais, 39 foram pegas
-    pelos testes e 3 não mudam o comportamento)
-  evidence: 'Código em 49d2f05 na branch until/2026-11-21-1244 (common/bin/cepa-until:
-    recorded_commit_landed novo, _landing_target extraído de landed_upstream, close_landed_run
-    com parâmetro estado, caminho sem branch em waiting_runs; common/hooks/_state.py:
-    descartado no docstring de run_liveness). Testes em 49d2f05 e cf9e4c4 (tests/test_cepa_until_pending_closes_branchless.py,
+    pelos testes e 3 não mudam o comportamento). Pergunta respondida: Aceito a dispensa
+    de medição de cobertura neste item? Recomendo sim: as quebras propositais já
+    mostram que cada linha nova é exercitada pelos testes. O que cada opção prometia:
+    se sim, a prova fica aceita e o item segue fechado como está; se não, o item
+    segue fechado, com a prova marcada como dependente de medição de cobertura.
+    O dono escolheu o "sim". Evidência anterior: Código em 49d2f05 na branch until/2026-11-21-1244
+    (common/bin/cepa-until: recorded_commit_landed novo, _landing_target extraído
+    de landed_upstream, close_landed_run com parâmetro estado, caminho sem branch
+    em waiting_runs; common/hooks/_state.py: descartado no docstring de run_liveness).
+    Testes em 49d2f05 e cf9e4c4 (tests/test_cepa_until_pending_closes_branchless.py,
     novo). RED antes da correção: a/r3 e a/r4 seguiam esperando-dono; arquivo novo
     contra o cepa-until de cb4b4d9: 6 falhas. pair-reviewer: OK-WITH-NOTES, nota
     aplicada (commit só no main local não vira descartado). completion-auditor:
@@ -212,16 +202,6 @@ items:
     e tests/test_state_deposits.py; suíte completa fica com o supervisor. Sem merge,
     sem push. Fora do escopo: linha closed: e chave fechados (CS-5).'
   head_commit: 4bfc324f49a0eb3b21890a09ac4f3a52eed9f536
-  route_kind: open-question
-  owner_question: 'Aceito a dispensa de medição de cobertura neste item? Recomendo
-    sim: as quebras propositais já mostram que cada linha nova é exercitada pelos
-    testes'
-  owner_summary:
-    se_sim: a prova fica aceita e o item segue fechado como está
-    se_nao: o item segue fechado, com a prova marcada como dependente de medição
-      de cobertura
-    item_se_sim: nenhum
-    item_se_nao: nenhum
   decisions:
   - texto: 'Registro sem branch cujo commit gravado está só no main local, ainda
       sem push, fica como está em vez de virar descartado: descartado é definitivo,
@@ -246,11 +226,18 @@ items:
     existe linha `closed:` nem a chave `fechados`.'
   status: done
   blocked_by: []
-  human_pending: Aceitar ou recusar a dispensa de medição de cobertura do aviso,
-    pela lista de espera, do que ela fechou (não há ferramenta de cobertura ligada
-    ao CLI Python; das 34 quebras propositais, 30 foram pegas pelos testes e 4 não
-    mudam o que o critério pede)
-  evidence: 'Código e teste em 0c60621 na branch until/2026-11-21-1244 (common/bin/cepa-until:
+  human_pending: null
+  evidence: 'Resposta do dono em 2026-11-23: sim: dispensa de cobertura aceita,
+    todas as quebras propositais foram pegas pelos testes. Rota humana fechada pelo
+    dono: Aceitar ou recusar a dispensa de medição de cobertura do aviso, pela lista
+    de espera, do que ela fechou (não há ferramenta de cobertura ligada ao CLI Python;
+    das 34 quebras propositais, 30 foram pegas pelos testes e 4 não mudam o que
+    o critério pede). Pergunta respondida: Aceito a dispensa da medição de cobertura
+    do aviso de fechamento da lista? Recomendo sim: os testes pegaram 30 de 34 quebras
+    propositais. O que cada opção prometia: se sim, a prova fica aceita e o item
+    segue fechado como está; se não, o item segue fechado, com a prova marcada como
+    dependente de medição de cobertura. O dono escolheu o "sim". Evidência anterior:
+    Código e teste em 0c60621 na branch until/2026-11-21-1244 (common/bin/cepa-until:
     close_landed_run e waiting_runs com parâmetro closed, cmd_pending imprime as
     linhas closed: e a chave fechados no --json; tests/test_cepa_until_pending_says_what_closed.py
     novo; helper de saída de tests/test_cepa_until_land.py, test_cepa_until_pending_closes_landed.py
@@ -268,15 +255,6 @@ items:
     pending --json e descartam fechados, então o run fechado por eles nunca mostra
     a linha closed: ao dono. Fora do escopo: CS-6 a CS-9.'
   head_commit: 7defee7f58908f2aa9256e6b9591811076b7d4cb
-  route_kind: open-question
-  owner_question: 'Aceito a dispensa da medição de cobertura do aviso de fechamento
-    da lista? Recomendo sim: os testes pegaram 30 de 34 quebras propositais'
-  owner_summary:
-    se_sim: a prova fica aceita e o item segue fechado como está
-    se_nao: o item segue fechado, com a prova marcada como dependente de medição
-      de cobertura
-    item_se_sim: nenhum
-    item_se_nao: nenhum
   decisions:
   - texto: 'A linha de fechamento sai como ''closed: queue <fila> · run <run>: landed|discarded'',
       depois das linhas de run morto e antes das de espera; no JSON, cada entrada
@@ -295,11 +273,18 @@ items:
     não escreve evento nenhum.'
   status: done
   blocked_by: []
-  human_pending: Aceitar ou recusar a dispensa de medição de cobertura da reinstalação
+  human_pending: null
+  evidence: 'Resposta do dono em 2026-11-23: sim: dispensa de cobertura aceita,
+    todas as quebras propositais foram pegas pelos testes. Rota humana fechada pelo
+    dono: Aceitar ou recusar a dispensa de medição de cobertura da reinstalação
     dos plugins quando a lista de espera fecha um run (não há ferramenta de cobertura
     ligada ao CLI Python; das 34 quebras propositais, 29 foram pegas pelos testes
-    e 5 não mudam o que o critério pede)
-  evidence: 'Código e teste em 50984dd na branch until/2026-11-21-1244 (common/bin/cepa-until:
+    e 5 não mudam o que o critério pede). Pergunta respondida: Aceito a dispensa
+    de medição de cobertura deste item? Recomendo sim: os testes pegaram 29 das
+    34 quebras propositais. O que cada opção prometia: se sim, a prova fica aceita
+    e o item segue fechado como está; se não, o item segue fechado, com a prova
+    marcada como dependente de medição de cobertura. O dono escolheu o "sim". Evidência
+    anterior: Código e teste em 50984dd na branch until/2026-11-21-1244 (common/bin/cepa-until:
     install_for_closed nova, chamada em cmd_pending depois de waiting_runs/dead_runs,
     reaproveita install_on_landing e cepa_repo; help de pending e bloco de doc do
     topo atualizados; tests/test_cepa_until_pending_install.py novo). Asserções
@@ -326,19 +311,6 @@ items:
     todos; o .log da instalação está no .gitignore no layout .claude/queues, não
     no layout legado .claude/programs. Fora do escopo: CS-7 a CS-9.'
   head_commit: 94e6cae85b0d207bd5d32c65a57a53ee9a640c2a
-  route_kind: open-question
-  owner_question: 'Aceito a dispensa de medição de cobertura deste item? Recomendo
-    sim: os testes pegaram 29 das 34 quebras propositais.'
-  owner_summary:
-    pedido: ao fechar sozinha um run que já pousou, a lista de espera reinstala
-      os plugins como o pouso faz
-    pronto: a reinstalação acontece, é adiada quando outro run vivo usa os plugins,
-      e os testes pegam 29 das 34 quebras propositais
-    se_sim: a prova fica aceita e o item segue fechado como está
-    se_nao: o item segue fechado, com a prova marcada como dependente de medição
-      de cobertura
-    item_se_sim: nenhum
-    item_se_nao: nenhum
   decisions:
   - texto: Quando a lista fecha vários runs de uma vez, os plugins são reinstalados
       uma vez só e o aviso da instalação é copiado para o registro de cada run fechado.
@@ -356,11 +328,18 @@ items:
     `.jsonl` do run. Hoje não há commit com essa mensagem.'
   status: done
   blocked_by: []
-  human_pending: Aceitar ou recusar a dispensa de medição de cobertura do commit
-    que a lista de espera faz ao fechar um run (não há ferramenta de cobertura ligada
+  human_pending: null
+  evidence: 'Resposta do dono em 2026-11-23: sim: dispensa de cobertura aceita,
+    todas as quebras propositais foram pegas pelos testes. Rota humana fechada pelo
+    dono: Aceitar ou recusar a dispensa de medição de cobertura do commit que a
+    lista de espera faz ao fechar um run (não há ferramenta de cobertura ligada
     ao CLI Python; das 24 quebras propositais, 22 foram pegas pelos testes e 2 não
-    mudam o que o critério pede)
-  evidence: 'Código e teste em 1f60f1c na branch until/2026-11-21-1244 (common/bin/cepa-until:
+    mudam o que o critério pede). Pergunta respondida: Aceito a dispensa de medição
+    de cobertura deste item? Recomendo sim: os testes pegaram 22 das 24 quebras
+    propositais. O que cada opção prometia: se sim, a prova fica aceita e o item
+    segue fechado como está; se não, o item segue fechado, com a prova marcada como
+    dependente de medição de cobertura. O dono escolheu o "sim". Evidência anterior:
+    Código e teste em 1f60f1c na branch until/2026-11-21-1244 (common/bin/cepa-until:
     install_for_closed ganhou o parâmetro written com (fila, run, caminho) de cada
     .jsonl em que gravou; cmd_pending chama commit_subcommand_records(..., ''pending'',
     paths=[o .jsonl]) uma vez por run; mensagem ''until <fila>/<run> pending: install
@@ -387,19 +366,6 @@ items:
     suíte completa fica com o supervisor. Sem merge, sem push. Fora do escopo: CS-8
     e CS-9.'
   head_commit: 96a377267b2960afdb6ff96b67197e7610880bc7
-  route_kind: open-question
-  owner_question: 'Aceito a dispensa de medição de cobertura deste item? Recomendo
-    sim: os testes pegaram 22 das 24 quebras propositais.'
-  owner_summary:
-    pedido: ao fechar sozinha um run que já pousou, a lista de espera guarda num
-      commit o que escreveu e deixa o clone limpo
-    pronto: o commit acontece, um por run fechado, sem envio ao remoto, e os testes
-      pegam 22 das 24 quebras propositais
-    se_sim: a prova fica aceita e o item segue fechado como está
-    se_nao: o item segue fechado, com a prova marcada como dependente de medição
-      de cobertura
-    item_se_sim: nenhum
-    item_se_nao: nenhum
   decisions:
   - texto: Quando a lista fecha vários runs de uma vez, sai um commit por run, cada
       um só com o registro daquele run e com o nome da fila e do run na mensagem.

@@ -112,37 +112,33 @@ items:
     entrou no fim da fila)'
   status: done
   blocked_by: []
-  human_pending: Aceitar ou recusar a dispensa da medição de cobertura deste item
-    (o repositório não tem ferramenta de cobertura para Python; as 5 tentativas
-    de quebrar a mudança foram pegas pelos testes)
-  evidence: 'Commits 3f1890f (11 delegating agents: ''Delegation is asynchronous''
-    now says a lead is always a subagent, the background notification never reaches
-    it, delegate with run_in_background: false in interactive and unattended sessions
-    alike; test_async_delegation_specs gains marks + FORBIDDEN old sentences; no-busy-wait
-    message splits main session vs subagent; invariant I8; BACKLOG; PATCH bumps
-    build-hex 1.4.5, build-team 0.5.4, design 0.3.4, discovery 0.4.4, marketing
-    0.1.4, docs-topology 0.3.5, common 3.6.1), eef3245 (test_no_busy_wait message_failures,
-    RED vs 756c4af hook text, kills the proof survivor), d56624b (proof). completion-auditor
-    COMPLETE (.claude/acceptance/leads-build-hex-acordam-na-sessao-interativa.yaml).
-    proof-reviewer NEEDS-HUMAN at eef3245: 5 perturbations killed, 0 survivors,
-    l2_coverage assumed (no Python coverage tool), docs/proof/leads-build-hex-acordam-na-sessao-interativa.yaml.
+  human_pending: null
+  evidence: 'Resposta do dono em 2026-11-23: sim: dispensa de cobertura aceita,
+    todas as quebras propositais foram pegas pelos testes. Rota humana fechada pelo
+    dono: Aceitar ou recusar a dispensa da medição de cobertura deste item (o repositório
+    não tem ferramenta de cobertura para Python; as 5 tentativas de quebrar a mudança
+    foram pegas pelos testes). Pergunta respondida: Aceito dispensar a medição de
+    cobertura, já que os testes pegaram as 5 tentativas de quebrar a mudança? Recomendo
+    sim: caso igual já aceito antes. O que cada opção prometia: se sim, a prova
+    do item passa a valer como aprovada e a mudança segue para entrar na main; se
+    não, o item fica sem prova aprovada até existir medição de cobertura para Python.
+    O dono escolheu o "sim". Evidência anterior: Commits 3f1890f (11 delegating
+    agents: ''Delegation is asynchronous'' now says a lead is always a subagent,
+    the background notification never reaches it, delegate with run_in_background:
+    false in interactive and unattended sessions alike; test_async_delegation_specs
+    gains marks + FORBIDDEN old sentences; no-busy-wait message splits main session
+    vs subagent; invariant I8; BACKLOG; PATCH bumps build-hex 1.4.5, build-team
+    0.5.4, design 0.3.4, discovery 0.4.4, marketing 0.1.4, docs-topology 0.3.5,
+    common 3.6.1), eef3245 (test_no_busy_wait message_failures, RED vs 756c4af hook
+    text, kills the proof survivor), d56624b (proof). completion-auditor COMPLETE
+    (.claude/acceptance/leads-build-hex-acordam-na-sessao-interativa.yaml). proof-reviewer
+    NEEDS-HUMAN at eef3245: 5 perturbations killed, 0 survivors, l2_coverage assumed
+    (no Python coverage tool), docs/proof/leads-build-hex-acordam-na-sessao-interativa.yaml.
     Ran only touched tests (async_delegation_specs, no_busy_wait, common_drain_plan,
     multiline_quoted_shell): green. Code is on the overnight branch until/2026-11-21-1244.
     Not measured: a live interactive session with a lead after the change.'
   sem_epic: true
   head_commit: d56624ba7e403643cc0f84f29378e4b86034360c
-  route_kind: open-question
-  owner_question: 'Aceito dispensar a medição de cobertura, já que os testes pegaram
-    as 5 tentativas de quebrar a mudança? Recomendo sim: caso igual já aceito antes'
-  owner_summary:
-    se_sim: a prova do item passa a valer como aprovada e a mudança segue para entrar
-      na main
-    se_nao: o item fica sem prova aprovada até existir medição de cobertura para
-      Python
-    item_se_sim: nenhum
-    item_se_nao:
-      titulo: Instalar medição de cobertura para os testes em Python do Cepa
-      precisa_do_dono: false
   decisions:
   - texto: Lead sempre espera o worker no mesmo turno, também na sessão interativa;
       só a sessão principal encerra o turno à espera do aviso
@@ -152,10 +148,17 @@ items:
   why: 'Origem: feedback fb-20261120-4 (2026-11-20); BACKLOG.md § A lista Agents
     do herdr mostra o mesmo nome para todas as sessões do Cepa (ainda não priorizado:
     entrou no fim da fila)'
-  status: blocked
+  status: pending
   blocked_by: []
   human_pending: null
-  evidence: 'Commits on until/2026-11-21-1244: 0186163 (common/bin/cepa run_claude
+  evidence: 'Resposta do dono em 2026-11-23: sim: o título lido pelo hc vale como
+    prova, sem olhar o painel Agents. O item voltou de `blocked` para `pending`.
+    Pergunta respondida: Aceito o título lido pela linha de comando do herdr como
+    prova, sem olhar o painel Agents? Recomendo sim: o título é por terminal. O
+    que cada opção prometia: se sim, o título lido pela linha de comando vale como
+    prova e o trabalho segue para fechar; se não, o trabalho espera você abrir duas
+    sessões no mesmo Space e olhar o painel. O dono escolheu o "sim". Evidência
+    anterior: Commits on until/2026-11-21-1244: 0186163 (common/bin/cepa run_claude
     passes --name <slice> on session/<slice> unless the owner passed -n/--name/--name=x;
     new tests/test_cepa_session_name.py, RED at d56624b), 08ffa09 (assertion that
     owner flags + prompt follow the injected name, kills proof survivor P8), 8f12127
@@ -184,19 +187,6 @@ items:
       nos outros itens desta fila
     aberta_em: '2026-11-22'
     resolvida_em: null
-  owner_question: 'Aceito o título lido pela linha de comando do herdr como prova,
-    sem olhar o painel Agents? Recomendo sim: o título é por terminal.'
-  owner_summary:
-    pedido: fazer cada sessão do Cepa aparecer com nome próprio na lista Agents
-      do herdr
-    pronto: o Cepa já abre cada sessão com o nome da sua fatia, e o herdr respondeu
-      com títulos diferentes para duas sessões de teste
-    impede: a conferência de aceite pede ver os nomes no painel Agents, com duas
-      sessões no mesmo Space. Eu só consigo ler o título pela linha de comando do
-      herdr
-    se_sim: o título lido pela linha de comando vale como prova e o trabalho segue
-      para fechar
-    se_nao: o trabalho espera você abrir duas sessões no mesmo Space e olhar o painel
   decisions:
   - texto: A sessão recebe o nome da fatia da worktree, não o propósito gravado
       na intenção; se o dono passar um nome ao abrir, vale o dele
@@ -209,22 +199,30 @@ items:
     pendente" (ainda não priorizado: entrou no fim da fila)'
   status: done
   blocked_by: []
-  human_pending: Aceitar ou recusar a dispensa da medição de cobertura deste item
-    (o repositório não tem ferramenta de cobertura para Python; as 21 tentativas
-    de quebrar a mudança foram pegas pelos testes)
-  evidence: 'Commits on until/2026-11-21-1244: fa5fd3c (common/bin/cepa-plan: ready_of_queue
-    returns esperam_dono_pendentes / esperam_dono_bloqueados, cmd_ready appends
-    '' · esperam você: N pendente(s) e M bloqueado(s)'' to the header only when
-    either is > 0 and adds total_esperam_dono to --json; new tests/test_cepa_plan_ready_header_waiting.py,
-    RED before the fix with 8 FAIL; BACKLOG status; common 3.6.2), 4f1e666 (test:
-    both queues contribute and the JSON counts differ, kills proof survivors S1
-    sum->max and S2 pendentes<-wait_b), HEAD (gate records). pair-reviewer APPROVE
-    at fa5fd3c. completion-auditor COMPLETE (.claude/acceptance/ready-cabecalho-zero-itens-com-pendente.yaml;
-    auditor reproduced the reported case by hand on the real CLI). proof-reviewer
-    UNPROVEN at fa5fd3c (18 killed, 2 survivors), then NEEDS-HUMAN at 4f1e666: 21
-    perturbations killed, 0 survivors, red at base d56624b, l2_coverage assumed
-    (python3 -m coverage not installed), docs/proof/ready-cabecalho-zero-itens-com-pendente.yaml.
-    Ran only touched tests and neighbors (ready_header_waiting, plan_ready, ready_closed_leftover,
+  human_pending: null
+  evidence: 'Resposta do dono em 2026-11-23: sim: dispensa de cobertura aceita,
+    todas as quebras propositais foram pegas pelos testes. Rota humana fechada pelo
+    dono: Aceitar ou recusar a dispensa da medição de cobertura deste item (o repositório
+    não tem ferramenta de cobertura para Python; as 21 tentativas de quebrar a mudança
+    foram pegas pelos testes). Pergunta respondida: Aceito a dispensa da medição
+    de cobertura deste item? Recomendo sim: as 21 tentativas de quebrar a mudança
+    foram pegas pelos testes. O que cada opção prometia: se sim, a prova do item
+    passa a valer como aprovada e a mudança segue para entrar na main; se não, o
+    item fica sem prova aprovada até existir medição de cobertura para Python. O
+    dono escolheu o "sim". Evidência anterior: Commits on until/2026-11-21-1244:
+    fa5fd3c (common/bin/cepa-plan: ready_of_queue returns esperam_dono_pendentes
+    / esperam_dono_bloqueados, cmd_ready appends '' · esperam você: N pendente(s)
+    e M bloqueado(s)'' to the header only when either is > 0 and adds total_esperam_dono
+    to --json; new tests/test_cepa_plan_ready_header_waiting.py, RED before the
+    fix with 8 FAIL; BACKLOG status; common 3.6.2), 4f1e666 (test: both queues contribute
+    and the JSON counts differ, kills proof survivors S1 sum->max and S2 pendentes<-wait_b),
+    HEAD (gate records). pair-reviewer APPROVE at fa5fd3c. completion-auditor COMPLETE
+    (.claude/acceptance/ready-cabecalho-zero-itens-com-pendente.yaml; auditor reproduced
+    the reported case by hand on the real CLI). proof-reviewer UNPROVEN at fa5fd3c
+    (18 killed, 2 survivors), then NEEDS-HUMAN at 4f1e666: 21 perturbations killed,
+    0 survivors, red at base d56624b, l2_coverage assumed (python3 -m coverage not
+    installed), docs/proof/ready-cabecalho-zero-itens-com-pendente.yaml. Ran only
+    touched tests and neighbors (ready_header_waiting, plan_ready, ready_closed_leftover,
     queue_ready_and_decide_queue, plan_status_code_and_epic, plan_waiting, until_decide_all,
     until_all, runs_without_pyyaml, answer_next_round): green. Full build not run
     (supervisor). Code is on the overnight branch. Not changed: the per-queue line,
@@ -232,18 +230,6 @@ items:
     você''.'
   sem_epic: true
   head_commit: 1856ab609ba5f4f6d16ccecca16decc67eff46e6
-  route_kind: open-question
-  owner_question: 'Aceito a dispensa da medição de cobertura deste item? Recomendo
-    sim: as 21 tentativas de quebrar a mudança foram pegas pelos testes.'
-  owner_summary:
-    se_sim: a prova do item passa a valer como aprovada e a mudança segue para entrar
-      na main
-    se_nao: o item fica sem prova aprovada até existir medição de cobertura para
-      Python
-    item_se_sim: nenhum
-    item_se_nao:
-      titulo: Instalar medição de cobertura para os testes em Python do Cepa
-      precisa_do_dono: false
   decisions:
   - texto: 'O cabeçalho do cepa plan ready só ganha o trecho ''esperam você: N pendentes
       e M bloqueados'' quando algum item espera o dono; pendente é o item com ação
