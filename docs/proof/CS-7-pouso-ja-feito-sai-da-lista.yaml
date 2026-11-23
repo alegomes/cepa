@@ -1,0 +1,46 @@
+schema_version: 2
+card: CS-7
+queue: pouso-ja-feito-sai-da-lista
+verdict: unproven
+reviewed_at: 2026-11-23T06:00:00-03:00
+base_commit: 94e6cae
+head_commit: 6671a9b
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::install_for_closed (new `written` parameter; ledgers carry the queue; each .jsonl is listed before its write is attempted)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::cmd_pending (one commit_subcommand_records(..., 'pending', ..., paths=[record]) per written run, commit screen lines joined to the install lines, stderr under --json)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "GREEN at 6671a9b (detached worktree /tmp/proof-cs7-w, removed at the end): `python3 tests/test_cepa_until_pending_install.py` -> '✓ tudo passou' (68 ok lines, about 12 s per run). The test drives the real `cepa-until pending` as a subprocess in a temp git repo with a fake HOME and fake bin/install.sh; no double stands in for the changed code."
+        - "Method: one exact-string replacement per perturbation on common/bin/cepa-until (each pattern required to match exactly once; multi-part for Q3 and Q5), only tests/test_cepa_until_pending_install.py per perturbation, file restored between perturbations. Driver /tmp/cs7tools/driver.py, run in 3 batches of at most 8 plus Q24 alone. Q8 first failed to match (indentation) and was corrected before it was counted."
+        - "KILLED (17 of 24, each turned the test red, rc 1): Q1 call without `written` (nothing committed); Q2 first record never listed; Q3 first record listed only after the install succeeded (undoes the 6671a9b review fix); Q4 other runs never listed; Q6 queue and run swapped; Q7 ledger queue always None; Q9 exists() guard inverted; Q11 verb `land` instead of `pending`; Q13 commit stdout not captured (breaks --json stdout); Q16 only the first written run committed; Q17 written guard inverted; Q18 other run listed under first_run; Q20 --json drops the commit; Q21 commit only under --json; Q22 no commit under --json; Q23 first record not listed when the install is deferred; Q24 commit made against repo `/`."
+        - "SURVIVED, REAL (5): Q5 the other runs' record is listed AFTER its write loop instead of before (the midway-failure case of the review fix, known uncovered by the dev, confirmed); Q8 `if not record.exists(): continue` removed (a listed .jsonl that was never created would reach git add and print a refusal; no test makes the file absent); Q10 `paths=[record]` replaced by the default paths of the run (queue file and .review.md too), so a queue file the user left dirty would be swept into the commit, against 'contains only the run's .jsonl' (judged by reading commit_subcommand_records / run_record_paths; the fixture never has a dirty queue file); Q14 commit screen lines dropped from the output (`commit_lines += ...` replaced by pass; no test reads the 'commit made' lines); Q19 the other runs' queue taken from the first run, so a second landed run in ANOTHER queue gets the message `until <first queue>/<run> pending` (the two-closed test uses a single queue, `a`)."
+        - "SURVIVED, EQUIVALENT (2): Q12 commit summary text replaced (the criterion fixes only the `until a/r1 pending: ` prefix, `...` is free text); Q15 commit lines placed before the install lines (no criterion and no test pins the order of those blocks; same judgment as CS-6 P27)."
+        - "Totals: 24 perturbations; 17 killed, 7 survived of which 5 real and 2 equivalent."
+    survivors:
+      - "Q5 common/bin/cepa-until install_for_closed copy loop: move `written.append((queue, run_id, target))` to after the `with target.open(...)` block -> green. Missing: a test where the copy onto a SECOND closed run fails after the file was opened and partly written (e.g. a read-only second .jsonl made writable-then-failing, or a fake write error), asserting that second .jsonl is still in the commit and `git status --porcelain` is empty."
+      - "Q8 cmd_pending: delete `if not record.exists(): continue` -> green. Missing: a test where the install fails before the .jsonl of a closed run exists (e.g. the run's until/ directory not writable), asserting exit 0, no `refused`/commit-refused text and a clean status."
+      - "Q10 cmd_pending: drop `paths=[record]` -> green. Missing: a test with the queue file (`.claude/queues/a/queue.*`) modified and uncommitted before `pending`, asserting the new commit contains only the .jsonl and the queue file stays dirty."
+      - "Q14 cmd_pending: replace `commit_lines += buf.getvalue().splitlines()` by `pass` -> green. Missing: an assertion that the text-mode stdout contains the 'commit made' line (and, under --json, that stderr does), i.e. that the commit screen lines are joined to the install lines."
+      - "Q19 install_for_closed copy loop: `written.append((first_queue, run_id, target))` -> green. Missing: two landed runs in different queues closed in one call, asserting the second commit subject is `until <its own queue>/<run> pending: ...`."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "`python3 -m pip list 2>/dev/null | grep -i cov` -> only `python-discovery 1.2.1`: neither `coverage` nor `pytest-cov` is installed, so no coverage tool is wired for this Python CLI (reported separately from the survivors). Reachability inferred from perturbations; the lines behind Q5, Q8, Q10, Q14, Q19 are reached by the suite (they execute) but not asserted."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only commits records that cepa-until itself wrote while closing a landed run; no input from outside and no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Task, not Bug. Red-at-base check done anyway: tests/test_cepa_until_pending_install.py at 6671a9b against common/bin/cepa-until of 94e6cae (`git -C /tmp/proof-cs7-w checkout 94e6cae -- common/bin/cepa-until`) -> rc 1, '✗ 11 falha(s)' (57 ok); all failures are CS-7 assertions (clean status, commit at top, message, only the .jsonl, no push check, --json commit, two-closed commits, failed-write commit); the CS-6 assertions stay green. Restored to 6671a9b afterwards."
+routing_reason: "UNPROVEN: 5 real survivors on changed lines (Q5, Q8, Q10, Q14, Q19), each a deterministic gap a dev can close with one assertion (listed under survivors). The headline criterion itself (clean status, commit `until a/r1 pending: ...` with only the .jsonl, no push, red at base with 11 failed assertions) is load-bearing: 17 of 24 perturbations go red, including undoing the review fix (Q3). Independently, l2_coverage is assumed because no coverage tool exists for this CLI; per the CS-1..CS-6 rule that alone would be NEEDS-HUMAN, and it will remain so after the survivors are closed. Suggested decision for the human: accept reachability by perturbation in place of a coverage tool."
