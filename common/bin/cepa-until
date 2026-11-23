@@ -6072,7 +6072,8 @@ def recorded_commit_landed(root, sha, destination):
     return None if code == 0 else False
 
 
-def close_landed_run(path, item_states, destination, estado="aterrissado"):
+def close_landed_run(path, item_states, destination, estado="aterrissado",
+                     closed=None):
     """The one place where `pending` closes a run: state `aterrissado` (the run
     already landed; the red-build marks of `aterrissagem` dropped, no build) or
     `descartado` (a record without branch whose commit never reached the
@@ -6089,12 +6090,18 @@ def close_landed_run(path, item_states, destination, estado="aterrissado"):
     tmp.write_text(json.dumps(item_states, ensure_ascii=False, indent=2) + "\n",
                    encoding="utf-8")
     os.replace(tmp, path)
+    if closed is not None:
+        closed.append({"fila": item_states.get("fila"), "run": item_states.get("run"),
+                       "resultado": "landed" if estado == "aterrissado"
+                       else "discarded"})
 
 
-def waiting_runs(repo):
+def waiting_runs(repo, closed=None):
     """The runs whose `aterrissar` action is still valid: state `esperando-dono`,
     night branch existing and still outside the destination branch. A merge done
-    by hand, outside `aterrissar`, also takes the run off the list."""
+    by hand, outside `aterrissar`, also takes the run off the list. The runs this
+    call closes are appended to `closed` (when given) as `{fila, run, resultado}`,
+    `resultado` being `landed` or `discarded`; the return value is unchanged."""
     root = main_root(repo)
     found = []
     for path in run_states(root):
@@ -6121,7 +6128,8 @@ def waiting_runs(repo):
             landed = recorded_commit_landed(root, action.get("sha"), destination)
             if landed is not None:
                 close_landed_run(path, item_states, destination,
-                                 "aterrissado" if landed else "descartado")
+                                 "aterrissado" if landed else "descartado",
+                                 closed)
             continue
         code, _ = git(["merge-base", "--is-ancestor", sha, destination], root)
         # A merge left by `land` on a red build is in the destination but has
@@ -6143,7 +6151,7 @@ def waiting_runs(repo):
                 root, run_worktree(root, branch), branch, force_branch=True,
                 quiet_caller=True)
             if removed:
-                close_landed_run(path, item_states, destination)
+                close_landed_run(path, item_states, destination, closed=closed)
                 continue
         queue, run = item_states.get("fila"), item_states.get("run")
         found.append({"fila": queue, "run": run, "branch": item_states.get("branch"),
@@ -6384,7 +6392,8 @@ def cmd_pending(argv):
             "A run is waiting for the owner when its branch is ready to land or it\n"
             "left items that only the owner can unblock (\"Left with you\"). A run\n"
             "is dead when its supervisor died before writing the end of the run.\n"
-            "Each line says which command takes the run forward.\n"
+            "Each line says which command takes the run forward. A line starting with\n"
+            "`closed:` says a run this call closed (landed or discarded); it shows once.\n"
             "\n"
             "This is what /common:next and /common:doctor read to say that a run is\n"
             "waiting for you."),
@@ -6403,14 +6412,18 @@ def cmd_pending(argv):
                     help="repository root (default: the current directory)")
     ap.add_argument("--json", action="store_true", help="prints JSON, for code")
     a = ap.parse_args(argv)
-    found = waiting_runs(Path(a.repo).resolve())
+    closed = []
+    found = waiting_runs(Path(a.repo).resolve(), closed)
     dead = dead_runs(Path(a.repo).resolve())
     if a.json:
-        print(json.dumps({"runs": found, "mortos": dead},
+        print(json.dumps({"runs": found, "mortos": dead,
+                          "fechados": closed},
                          ensure_ascii=False))
         return 0
     for m in dead:
         print(dead_run_phrase(m))
+    for c in closed:
+        print(f"closed: queue {c['fila']} · run {c['run']}: {c['resultado']}")
     for r in found:
         if r.get("build_vermelho"):
             print(f"queue {r['fila']} · run {r['run']}: `{r['branch']}` is "

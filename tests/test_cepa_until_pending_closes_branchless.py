@@ -44,9 +44,14 @@ def git(root, *args):
 
 
 def pending(root, *extra):
-    return subprocess.run([sys.executable, str(CEPA_UNTIL), "pending",
+    p = subprocess.run([sys.executable, str(CEPA_UNTIL), "pending",
                            "--repo", str(root), *extra],
                           capture_output=True, text=True, cwd=str(root))
+    # The `closed:` lines (CS-5) say what this call closed; these checks are
+    # about the waiting lines, so they are dropped here.
+    p.stdout = "".join(ln for ln in p.stdout.splitlines(True)
+                       if not ln.startswith("closed:"))
+    return p
 
 
 def state_path(root, run):
