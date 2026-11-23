@@ -764,6 +764,36 @@ r = run(n, artifact("needs-human", l2_block("waived", waivers=WV)).replace(
 check("a numeric class is still a file to cover -> waived without a waiver is blocked",
       blocked(r, "no owner-signed waiver covers: 7"), r.stderr[:300])
 
+# an entry whose class is empty or falsy is not a file to cover; a real class still is
+ew = make_repo("empty-class-waived")
+waiver(ew, "a/B.py")
+en = make_repo("empty-class-unwaived")
+for label, extra in (("an empty string", '    - class: ""\n      module: bin\n'),
+                     ("the number 0", "    - class: 0\n      module: bin\n")):
+    art = artifact("needs-human", l2_block("waived", uncovered=[], waivers=WV),
+                   classes=("a/B.py",))
+    art = art.replace("levels:\n", extra + "levels:\n", 1)
+    r = hook(json.dumps({"tool_name": "Write",
+                         "tool_input": {"file_path": str(ew / "docs" / "proof" / "X-1.yaml"),
+                                        "content": art},
+                         "cwd": str(ew)}))
+    check(f"changed_classes with a real class (waived) and {label} as a class -> allowed",
+          r.returncode == 0, r.stderr[:300])
+    tagged(f"real class waived + {label} class", r, None)
+    r = run(en, art)
+    check(f"same without a waiver for a/B.py ({label} entry) -> blocked, names a/B.py only",
+          blocked(r, "no owner-signed waiver covers: a/B.py.\n"), r.stderr[:300])
+    tagged(f"real class unwaived + {label} class", r, "l2_waived_unbacked")
+
+# the printed name of a missing file is trimmed (file part of an uncovered entry; class name)
+r = run(en, artifact("needs-human", l2_block("waived", uncovered=["  a/B.py :3"], waivers=WV)))
+check("uncovered entry '  a/B.py :3' with no waiver -> printed file name is trimmed",
+      blocked(r, "no owner-signed waiver covers: a/B.py.\n"), r.stderr[:300])
+r = run(en, artifact("needs-human", l2_block("waived", uncovered=[], waivers=WV),
+                     classes=(" a/B.py ",)))
+check("class ' a/B.py ' with no waiver -> printed class name is trimmed",
+      blocked(r, "no owner-signed waiver covers: a/B.py.\n"), r.stderr[:300])
+
 # waiver files of odd shape must be skipped or compared, never crash the hook
 d = make_repo("odd-files")
 (d / ".claude" / "waivers" / "a-broken.yaml").write_text("[unclosed\n")
