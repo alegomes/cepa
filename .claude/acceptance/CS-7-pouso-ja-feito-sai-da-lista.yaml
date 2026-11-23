@@ -1,0 +1,17 @@
+key: CS-7-pouso-ja-feito-sai-da-lista
+queue: pouso-ja-feito-sai-da-lista
+status: complete
+criteria:
+  - id: AC1
+    text: "docs/spec/pouso-ja-feito-sai-da-lista.md CS-7 (cli): O que o fechamento escreve nos registros versionados entra num commit, e a arvore do clone fica limpa. Teste vermelho: depois do fechamento do CS-6, `git status --porcelain` vazio no clone e um commit no topo com a mensagem `until a/r1 pending: ...` que contem so o `.jsonl` do run."
+    altitude: cli
+    surface: "common/bin/cepa-until pending (e pending --json), processo real via subprocess, repo git temporario com remoto bare e bin/install.sh falso"
+    test: "tests/test_cepa_until_pending_install.py (test_closing_commits_what_it_wrote, test_two_closed_both_committed_clean_tree, test_json_stdout_stays_json_with_commit, test_non_cepa_repo_makes_no_commit)"
+    layer: cli-process
+    evidence: verified
+    run: "python3 tests/test_cepa_until_pending_install.py -> todas as linhas 'ok', 0 FAIL, '✓ tudo passou'. Blocos CS-7: 7+3+2+1 = 13 checagens executadas (N > 0): status --porcelain vazio, um commit novo no topo, mensagem `until a/r1 pending: ...`, commit contem so o .jsonl, sem push (origin/main parado), segunda chamada sem novo commit, dois fechados = um commit por run, --json com stdout so JSON, repo fora do cepa nao commita."
+    readings:
+      diff: "1f60f1c: install_for_closed devolve via `written` cada .jsonl que anexou; cmd_pending commita cada um com commit_subcommand_records (a mesma funcao de decide, close-dead e land), paths=[so o .jsonl], sem push. .estado.json e ignorado pelo git (.gitignore linha 50), logo fora do commit. Sob --json as linhas do commit vao a stderr."
+      scope: "CS-8 e CS-9 sao itens posteriores e nao contam como lacuna."
+      not_run: "suite completa (tests/run-all.sh) nao rodada por regra da rodada; fica com o supervisor."
+gap: null
