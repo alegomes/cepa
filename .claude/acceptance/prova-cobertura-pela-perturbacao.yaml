@@ -1,0 +1,45 @@
+key: prova-cobertura-pela-perturbacao
+status: complete
+diff_range: d1e7f96..9757103
+note: >
+  Item da fila cepa, sem cartao Jira. Criterios derivados do titulo. "Suite completa verde"
+  nao e criterio deste item: delegado ao supervisor, que roda tests/run-all.sh apos o fechamento.
+  Fora de escopo declarado: L4 skipped continua NEEDS-HUMAN; o guard nao sabe quem escreveu o
+  arquivo de dispensa (documentado); casco Java FQCN (documentado). Sem discordancia.
+criteria:
+  - id: AC1
+    criterion: "linha quebrada de proposito que deixou teste vermelho conta como coberta"
+    altitude: cli
+    surface: build-hex/hooks/proof-verdict-guard.py como subprocesso (PreToolUse, payload Write)
+    test: tests/test_proof_coverage_by_perturbation.py
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_proof_coverage_by_perturbation.py -> 57 linhas 'ok', termina em 'all proof coverage-by-perturbation tests passed'"
+    status: complete
+  - id: AC2
+    criterion: "assumed ao lado de perturbacao passando e uncovered_lines vazio e recusado, com mensagem dizendo o que escrever"
+    altitude: cli
+    surface: mesmo hook (telemetria blocked=l2_assumed_but_perturbed)
+    test: tests/test_proof_coverage_by_perturbation.py
+    layer: cli/subprocess
+    evidence: verified
+    run: "mesma execucao acima; 'ok telemetry blocked=l2_assumed_but_perturbed'"
+    status: complete
+  - id: AC3
+    criterion: "dispensa assinada em .claude/waivers vale para o arquivo (repo e clone principal de worktree); proposta/recusa/expirada/malformada/outro arquivo nao contam; assumed recusado se ha dispensa"
+    altitude: cli
+    surface: mesmo hook, com repo git real e worktree ligada
+    test: tests/test_proof_coverage_by_perturbation.py (+ vizinhos)
+    layer: cli/subprocess
+    evidence: verified
+    run: "mesma execucao: 'twin agrees with waivers.py' para valid/proposta/recusada/missing-field/expired/future/loose-key/wrong-motivo, 'blocked=l2_waived_unbacked', 'blocked=l2_assumed_but_waived'; python3 -m pytest tests/test_needs_human_reasons.py tests/test_proof_waiver_proposed.py tests/test_proof_status_enum.py tests/test_proof_double_substitution.py tests/test_waivers.py -q -> 85 passed"
+    status: complete
+  - id: AC4
+    criterion: "agente e docs dizem o mesmo; classify_needs_human nao conta waived como nivel bloqueado"
+    altitude: cli
+    surface: proof-reviewer.md (L2 e exemplo de esquema), docs/proof-gate.md, prove.md, classify_needs_human.PASSED
+    test: tests/test_needs_human_reasons.py::test_l2_waived_is_not_a_blocked_level
+    layer: unit sobre o leitor; instrucoes verificadas por leitura do diff
+    evidence: verified
+    run: "pytest (comando acima) -> 85 passed, inclui o teste novo; diff mostra 'waived' em PASSED e texto de L2 passos 1 e 2 em proof-reviewer.md e docs/proof-gate.md. Texto de instrucao nao tem teste automatico, so leitura."
+    status: complete
