@@ -299,6 +299,116 @@ def test_failed_copy_is_reported():
               p.stdout + p.stderr)
 
 
+def failing_installer(root):
+    """The fake install.sh of the cepa repo fails (exit 1); its `--rollback` goes through."""
+    (root / "bin" / "install.sh").write_text(
+        "#!/bin/sh\n"
+        "case \" $* \" in *\" --rollback \"*) exit 0;; esac\n"
+        "exit 1\n")
+
+
+def test_copy_reaches_every_other_run():
+    print("CS-6: tres fechados, a copia chega ao terceiro")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp, runs=("r1", "r3", "r5"))
+        p = pending(root, Path(tmp) / "home")
+        check("sai 0 e fechou os tres", p.returncode == 0
+              and p.stdout.count("closed:") == 3, p.stdout)
+        check("r5 (o terceiro) tem o instalado_no_pouso",
+              len(events(root, "r5", "instalado_no_pouso")) == 1,
+              str(lines_of(root, "a", "r5")))
+
+
+def test_copy_appends_and_keeps_earlier_lines():
+    print("CS-6: a copia anexa ao .jsonl do segundo run, sem apagar o que ja tinha")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp, runs=("r1", "r3"))
+        mine = [json.dumps({"evento": "meu_antigo", "n": i}) for i in range(2)]
+        with jsonl_of(root, "a", "r3").open("a") as f:
+            f.write("".join(l + "\n" for l in mine))
+        pending(root, Path(tmp) / "home")
+        got = lines_of(root, "a", "r3")
+        check("as linhas antigas de r3 continuam, no comeco, na ordem",
+              [l for l in got if "meu_antigo" in l] == mine
+              and all(l in got[:len(got)] for l in mine)
+              and got.index(mine[0]) < got.index(mine[1]), str(got))
+        check("...seguidas do instalado_no_pouso copiado",
+              "instalado_no_pouso" in got[-1]
+              and not any("instalado_no_pouso" in l
+                          for l in got[:got.index(mine[1])]), str(got))
+
+
+def evento_or_bad(line):
+    try:
+        return json.loads(line).get("evento")
+    except (ValueError, AttributeError):
+        return "bad"
+
+
+def test_copy_carries_every_new_line_in_order():
+    print("CS-6: instalacao que falha: o segundo run recebe as duas linhas novas")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp, runs=("r1", "r3"))
+        failing_installer(root)
+        p = pending(root, Path(tmp) / "home")
+        check("sai 0", p.returncode == 0, p.stderr)
+        for r in ("r1", "r3"):
+            names = [evento_or_bad(l) for l in lines_of(root, "a", r)]
+            new = [n for n in names if n in ("instalado_no_pouso",
+                                             "reinstalacao_desfeita")]
+            check(f"{r}: instalado_no_pouso e depois reinstalacao_desfeita",
+                  new == ["instalado_no_pouso", "reinstalacao_desfeita"]
+                  and names[-2:] == new, str(names))
+        check("r3: instalado_no_pouso com ok falso",
+              ['"ok": false' in l for l in lines_of(root, "a", "r3")][:1] == [True])
+
+
+def test_copy_ends_with_newline_and_each_line_is_json():
+    print("CS-6: o .jsonl copiado termina em newline e cada linha e JSON")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp, runs=("r1", "r3"))
+        failing_installer(root)
+        pending(root, Path(tmp) / "home")
+        raw = jsonl_of(root, "a", "r3").read_text()
+        check("termina com \\n", raw.endswith("\n"), repr(raw[-80:]))
+        parts = raw.split("\n")[:-1]
+        ok = True
+        for l in parts:
+            try:
+                ok = ok and isinstance(json.loads(l), dict)
+            except ValueError:
+                ok = False
+        check("cada linha (separada so por \\n) e um JSON sozinha, sem linha "
+              "colada nem vazia", ok and len(parts) >= 2
+              and all(l.strip() for l in parts), repr(raw))
+
+
+def test_failed_copy_message_goes_where_the_install_text_goes():
+    print("CS-6: a mensagem de falha da copia vai para stdout (texto) ou stderr (--json)")
+    msg = "install after closing: could not record it"
+    for mode in ("texto", "--json"):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = landed_repo(tmp, runs=("r1", "r3"))
+            second = jsonl_of(root, "a", "r3")
+            if second.exists():
+                second.unlink()
+            second.mkdir()
+            extra = ("--json",) if mode == "--json" else ()
+            p = pending(root, Path(tmp) / "home", *extra)
+            if mode == "texto":
+                check("texto: a mensagem esta em stdout", msg in p.stdout, p.stdout)
+                check("texto: ...e nao em stderr", msg not in p.stderr, p.stderr)
+            else:
+                check("--json: a mensagem esta em stderr", msg in p.stderr, p.stderr)
+                try:
+                    json.loads(p.stdout)
+                    pure = True
+                except ValueError:
+                    pure = False
+                check("--json: stdout continua so o JSON, sem a mensagem",
+                      pure and msg not in p.stdout, p.stdout)
+
+
 def test_runs_from_subdir_and_worktree():
     print("CS-6: --repo em subdiretorio ou worktree do clone instala do clone")
     for kind in ("subdir", "worktree"):
@@ -329,6 +439,11 @@ if __name__ == "__main__":
     test_copy_carries_only_new_lines()
     test_install_text_placement()
     test_failed_copy_is_reported()
+    test_copy_reaches_every_other_run()
+    test_copy_appends_and_keeps_earlier_lines()
+    test_copy_carries_every_new_line_in_order()
+    test_copy_ends_with_newline_and_each_line_is_json()
+    test_failed_copy_message_goes_where_the_install_text_goes()
     test_runs_from_subdir_and_worktree()
     if FAILURES:
         print(f"\n✗ {len(FAILURES)} falha(s)")
