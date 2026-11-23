@@ -3532,6 +3532,20 @@ items:
   - texto: 'Fora da raiz da sessão a trava não manda, nem no Write nem no Bash:
       o arquivo de regras do outro repositório não é lido'
     commit: 68f7796c95fdc3dc8d6ada164534c0bd799cc8cc
+- id: prova-cobertura-pela-perturbacao
+  title: 'A prova não pede mais dispensa de cobertura: linha quebrada de propósito
+    que deixa um teste vermelho conta como coberta, e a dispensa gravada em .claude/waivers
+    vale para o arquivo nas provas seguintes'
+  why: 28 dos 33 itens do run all/2026-11-21-1244 voltaram NEEDS-HUMAN só porque
+    o repo não tem ferramenta de cobertura Python, mesmo com dispensa já assinada
+    em .claude/waivers (cepa-plan, 10/11); o dono chamou isso de desrespeito (fb-20261123-8)
+    e a queixa vem desde fb-20261020-1; é o item do BACKLOG 'A dispensa de cobertura
+    aceita pelo dono não é lida pelo esquema de prova'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
 - id: capture-build-result-flutter
   title: '`capture-build-result` não reconhece `flutter test` nem `tool/check.sh`'
   why: 'Origem: feedback fb-20261115-1 (2026-11-15); BACKLOG.md § `capture-build-result`
