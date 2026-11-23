@@ -536,6 +536,33 @@ for mot in ("nada-a-provar-x", "nada", "Nada-a-provar"):
     check(f"waiver with motivo {mot!r} (not equal to nada-a-provar) -> blocked",
           blocked(r, "cepa-plan"), r.stderr[:300])
 
+# motivo is compared EXACTLY: no trimming, no case folding (same as waivers.matches)
+for label, mot in (("padded", " nada-a-provar "), ("mixed case", "Nada-A-Provar")):
+    d = make_repo("motivo-exact-" + label.replace(" ", ""))
+    waiver(d, "a/B.py", motivo=mot)
+    r = run(d, artifact(l2=l2_block("waived", uncovered=[], waivers=WV), classes=("a/B.py",)))
+    check(f"waived + waiver with motivo {mot!r} ({label}) -> blocked, names a/B.py",
+          blocked(r, "no owner-signed waiver covers: a/B.py"), r.stderr[:300])
+    tagged(f"waiver motivo {label}", r, "l2_waived_unbacked")
+
+# status is compared EXACTLY too: only the literal `proposta`/`recusada` void a waiver,
+# so a padded or capitalised status is NOT a no-effect status and the waiver counts
+for idx, st in enumerate((" proposta ", "Proposta", " Recusada", "recusada\t")):
+    d = make_repo(f"status-exact-{idx}")
+    waiver(d, "common/bin/cepa-plan", status=st)
+    r = run(d, artifact(l2=l2_block("waived", waivers=WV)))
+    check(f"waived + waiver with status {st!r} (not a literal no-effect status) -> allowed",
+          r.returncode == 0, r.stderr[:300])
+    tagged(f"waiver status {st!r}", r, None)
+
+# only a perturbation that PASSED measures coverage: any other word, even a
+# good-looking one, leaves `assumed` + empty uncovered_lines allowed
+for st in ("ran", "clean", "n/a"):
+    r = run(a, artifact("needs-human", l2_block("assumed", uncovered=[]), perturbation=st))
+    check(f"needs-human + assumed + empty uncovered + perturbation {st!r} -> allowed",
+          r.returncode == 0, r.stderr[:300])
+    tagged(f"assumed next to perturbation {st!r}", r, None)
+
 # the first APPLICABLE waiver wins: an unusable one sorted first does not end the search
 d = make_repo("sorted")
 waiver(d, "common/bin/cepa-plan", trigger=f"until {PAST}", fname="a-expired.yaml")
@@ -932,6 +959,10 @@ CASES = {
     "status-Proposta": dict(status="Proposta"),
     "status-padded": dict(status="proposta "),
     "status-other": dict(status="aceita"),
+    "status-leading-padded": dict(status=" proposta "),
+    "status-Recusada": dict(status="Recusada"),
+    "motivo-padded": dict(motivo=" nada-a-provar "),
+    "motivo-mixed-case": dict(motivo="Nada-A-Provar"),
     "two-dates-expired-first": dict(trigger=f"from {PAST} until {FUTURE}"),
     "two-dates-future-first": dict(trigger=f"from {FUTURE} until {PAST}"),
     "invalid-month-past": dict(trigger="until 2020-13-45"),
