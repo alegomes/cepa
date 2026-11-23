@@ -3153,99 +3153,385 @@ items:
   why: 'Origem: feedback fb-20261120-2 (2026-11-20); BACKLOG.md § Branch lateral
     de um run é casada com o item de outra fila que tem o mesmo id (ainda não priorizado:
     entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits d643c61 (fix: _queuepath.side_branch_item, the one copy of
+    the rule; cepa-until clean_side_branches takes the queue; cepa-plan code_location
+    via _branch_of_item), 4dae01b (e2e test: another queue''s side branch with an
+    id done here survives a cepa-until run), b0acf94 (e2e test: same-minute runs
+    of two queues), c176092 (gates). completion-auditor COMPLETE at 82d00f1..4dae01b
+    (.claude/acceptance/until-lateral-casa-pela-fila.yaml; b0acf94 only adds a test).
+    proof-reviewer PROVEN at 82d00f1..b0acf94 (docs/proof/until-lateral-casa-pela-fila.yaml):
+    perturbations E, D, C, A red at CLI; B equivalent. Red at base reproduced: old
+    cepa-until deleted the other queue''s branch and wrote its patch into this queue''s
+    .laterais. Tests run: tests/test_side_branch_belongs_to_queue.py, tests/test_cepa_until_run_branch.py,
+    tests/test_cepa_plan_status_code_and_epic.py, tests/test_cepa_until_all.py,
+    tests/test_cepa_until_decide.py, tests/test_cepa_until_hook_reinstall.py, all
+    green; full suite left to the supervisor. Left out: the --all run still skips
+    clean_side_branches (unchanged); branches the owner renamed to until/<fila>/<run>-...
+    are not side-branch names and are ignored by both. Code is on the overnight
+    branch until/2026-11-21-1244.'
   sem_epic: true
+  head_commit: c176092bf59caf95c1e434965509bfa651b50172
+  decisions:
+  - texto: Uma branch lateral pertence à fila cujo registro do run (o .jsonl com
+      o nome do run) existe; se duas filas têm run no mesmo minuto, vale a fila
+      cujo registro cita a branch; branch de run --all só conta para a fila escrita
+      no nome dela
+    commit: d643c618ad6a7aaa4688c0b69f9d2ee7797e7e20
 - id: classificador-nh-le-campo-de-motivo
   title: '`classify_needs_human.py` casa frase de comentário e ignora o motivo que
     o artefato de prova já grav'
   why: 'Origem: feedback fb-20261106-2 (2026-11-06); BACKLOG.md § `classify_needs_human.py`
     casa frase de comentário e ignora o motivo que o artefato de prova já grava
     (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
-  evidence: null
+  human_pending: Aceitar ou recusar a dispensa da medição de cobertura do classificador
+    de motivos (o repo não tem ferramenta de cobertura para Python; as 16 quebras
+    de propósito ficaram vermelhas)
+  evidence: 'Commits 53f8390 (6 fixtures reais WEGO-2357/2368/2369/2044/2416/2355
+    + testes vermelhos), 39dd266 (classify lê needs_human_motivo, motivo_needs_human,
+    inspection.motivo_needs_human, done_transition_held.reason e routing_reason
+    após ''motivo'', antes das frases; achado L4 segue primeiro), 347969e (docstring),
+    991d998 (3 testes para mutantes sobreviventes). pair-reviewer APPROVE. completion-auditor
+    COMPLETE (.claude/acceptance/classificador-nh-le-campo-de-motivo.yaml). proof-reviewer:
+    1a passada UNPROVEN (c00ce61, 3 mutantes), 2a NEEDS-HUMAN (cf822d0): 16/16 perturbações
+    RED, L2 assumed por falta de ferramenta de cobertura Python; proposta de dispensa
+    em .claude/waivers/nada-a-provar--board-flow-bin-classify-needs-human-py.yaml.
+    Testes: tests/test_needs_human_reasons.py + test_cepa_runs_without_pyyaml.py
+    58 passed. Código na branch noturna until/2026-11-21-1244. Fora: observação
+    do revisor sobre slug citado de passagem nos campos dedicados (teórico, sem
+    caso real).'
   sem_epic: true
+  head_commit: 9f112d3bf947a459a679805644abac4d9fde0234
+  route_kind: open-question
+  owner_question: 'Aceito dispensar a medição de cobertura do classificador, já
+    que todas as 16 quebras de propósito foram pegas? Recomendo sim: mesmo critério
+    de 10/11'
+  owner_summary:
+    se_sim: a dispensa fica gravada e a prova do classificador conta como completa
+    se_nao: a prova segue incompleta até o repositório ganhar uma ferramenta de
+      cobertura
+    item_se_sim: nenhum
+    item_se_nao:
+      titulo: Instalar uma ferramenta de cobertura para os testes em Python do Cepa
+      precisa_do_dono: false
+  decisions:
+  - texto: o motivo declarado no artefato vence as frases, mas um achado do teste
+      de entradas hostis continua vencendo o motivo declarado
+    commit: 39dd2665d1a1a4f013d82e6fbab8e5d14efb1fa5
 - id: sondagem-l4-nao-grava-last-build
   title: As sondagens L4 do `proof-reviewer` gravam EMPTY no `last-build.json` do
     worktree principal
   why: 'Origem: feedback fb-20261106-3 (2026-11-06); BACKLOG.md § As sondagens L4
     do `proof-reviewer` gravam EMPTY no `last-build.json` do worktree principal
     (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
-  evidence: null
+  human_pending: Aceitar ou recusar a dispensa de common/hooks/_shellscan.py e common/hooks/capture-build-result.py
+    (cobertura de linhas não medida; as 13 quebras de propósito ficaram vermelhas)
+  evidence: 'Causa: capture-build-result.py não reconhecia o build quando o Maven
+    vinha em agrupamento de shell (`cd /tmp/proof-X && (timeout 580 ./mvnw -q ...
+    | grep ...)`, `run(){ ./mvnw ...; }`, `{ ...; }`, `do cd`, `then/else/elif`,
+    `!`), formas tiradas do transcript do prove-drain de 2026-11-03 no wego-assinatura-backend;
+    o EMPTY caía no .claude/last-build.json da sessão. Fix 28aff57: _shellscan._strip_group_prefix
+    usado por segment_dirs e em real_maven_args/redirected_output/runs_root_install.
+    Testes: 502db49 (vermelho antes do fix), 600428c, 1ac0cfc em tests/test_capture_build_result_classify.py;
+    vizinhos 305 verdes. pair-reviewer APPROVE. completion-auditor COMPLETE (.claude/acceptance/sondagem-l4-nao-grava-last-build.yaml,
+    7d274e4). proof-reviewer NEEDS-HUMAN em 1ac0cfc (1cf5a11): vermelho no base,
+    13/13 perturbações mortas, só L2 não medida (sem ferramenta de cobertura); proposta
+    de dispensa em e618340. Código no branch noturno until/2026-11-21-1244. Fora
+    do escopo, notado: maven-reactor-guard.py usa _split_segments/_maven_args direto
+    e tem a mesma cegueira a `( )`; `(./mvnw install)` deixa `install)` colado e
+    não grava last-root-install.json; edited_paths não tira os prefixos antes do
+    cd.'
   sem_epic: true
+  head_commit: e618340f1550c714fc6f1138f4297db79fef76a3
+  route_kind: open-question
+  owner_question: 'Dispenso medir cobertura do conserto, já que as 13 quebras de
+    propósito foram detectadas? Recomendo sim: mesmo critério aceito em 10/11'
+  owner_summary:
+    se_sim: a prova do conserto passa a valer como completa e o item fica fechado
+      sem pendência
+    se_nao: o conserto continua no código, mas a prova fica incompleta até o repositório
+      medir cobertura
+    item_se_sim: nenhum
+    item_se_nao: nenhum
 - id: wrap-up-fecha-cursor-da-intencao
   title: O cursor da intenção só anda quando o agente lembra, e o `cepa-intent close`
     não fecha o último pass
   why: 'Origem: feedback fb-20261109-1 (2026-11-09); BACKLOG.md § O cursor da intenção
     só anda quando o agente lembra, e o `cepa-intent close` não fecha o último passo
     (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
-  evidence: null
+  human_pending: Aceitar ou recusar a dispensa da medição de cobertura de common/bin/cepa-intent
+    (o repo não tem ferramenta de cobertura para Python; as 26 quebras de propósito
+    ficaram vermelhas)
+  evidence: 'Commits ce06ebf (cepa-intent close --landed + wrap-up.md step 0 reads
+    state, confirm-screen intent line, new L6b after push), 7290d1b (tests killing
+    proof survivors P11/W2/P7 and contract checks on L6b gating/discard), 8c1cb0a
+    (docs/proof + .claude/acceptance + waiver proposal). close --landed: this session''s
+    intent -> cursor M+1 (plano cumprido), emits intent.finished_at_last_step via=wrap-up
+    de=<prev>; no intent.cursor_advanced, so cepa-metrics ''nunca avançou'' stays
+    honest; plain close unchanged. Gates: pair-reviewer APPROVE; completion-auditor
+    COMPLETE at 7290d1b; proof-reviewer NEEDS-HUMAN at 7290d1b (red at base 18 FAIL,
+    green at head, 26/26 perturbations killed, only L2 coverage unmeasured: no coverage
+    tool) -> waiver proposal .claude/waivers/nada-a-provar--common-bin-cepa-intent.yaml.
+    Tests run: tests/test_intent_telemetry.py, test_cepa_intent.py, test_session_intent*.py,
+    test_whereami_intent.py, test_cepa_intent_reminders.py, test_wrapup_next_step.py,
+    test_safe_exit_gate.py, test_green_without_test.py, test_report_style_lint.py,
+    test_cepa_help_layout.py and 4 neighbours, all green; full build left to the
+    supervisor. Code is on the overnight branch until/2026-11-21-1244. Left out:
+    wrap-up executed end to end by an agent (prose command; ceiling is CLI + text
+    contract).'
   sem_epic: true
+  head_commit: 8c1cb0a7089d17debe01e325ed67c3baef2f0b13
+  route_kind: open-question
+  owner_question: 'Aceito dispensar a medição de cobertura do comando da intenção,
+    já que as 26 quebras propositais foram pegas? Recomendo sim: mesmo critério
+    do cepa-plan'
+  owner_summary:
+    se_sim: a mudança fica provada com a dispensa registrada, e a medição volta
+      quando o repo tiver ferramenta de cobertura
+    se_nao: a mudança segue sem prova completa até alguém medir a cobertura de outro
+      jeito
+    item_se_sim: nenhum
+    item_se_nao:
+      titulo: Medir a cobertura de linhas do comando da intenção sem ferramenta
+        pronta
+      precisa_do_dono: false
+  decisions:
+  - texto: 'Quando o wrap-up termina de mesclar e publicar, o cursor da intenção
+      vai para ''plano cumprido'' (passo 5 de um plano de 4), não para ''passo 4
+      em andamento'' como dizia o esboço: o painel deixa de mostrar um passo em
+      andamento depois que a sessão acabou. Um passo que ficou de fora é dito na
+      tela única de confirmação do wrap-up e o cursor para nele.'
+    commit: ce06ebf66721f4e9861c8fc8043ed7c9936288c3
 - id: gate-advance-exige-build-que-cobre-o-commit
   title: '`gate-advance` aceita build verde de um teste só para liberar commit que
     deixa outro teste vermelho'
   why: 'Origem: feedback fb-20261109-2 (2026-11-09); BACKLOG.md § `gate-advance`
     aceita build verde de um teste só para liberar commit que deixa outro teste
     vermelho (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: blocked
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Código no branch until/2026-11-21-1244: b44ee52 (teste vermelho), e4197a5
+    (correção: capture-build-result grava test_filter de -Dtest=/-Dit.test=; gate-advance
+    recusa commit local com verde filtrado quando um teste JVM fora do filtro está
+    no commit ou nomeia, com git grep -w, a classe de outro arquivo JVM do commit),
+    eb978e7 (casos j/l/m/n + BACKLOG separa pytest -k, go -run, jest -t e -pl num
+    item novo), 4dc4df2 (helper de teste alterado cobra os testes que o usam; teste
+    fora do git conta), cf58961 (caso q), bb5cb0b (artefatos). Testes: tests/test_gate_advance_filtered_green.py
+    ok; vizinhos test_gate_advance_red_test_commit, test_gate_advance_target_repo,
+    test_capture_build_result_classify (34), test_gate_advance_django_green/test_capture_build_result_pytest/django/test_no_background_build
+    (298) verdes. proof-reviewer: NEEDS-HUMAN em cf58961 (docs/proof/gate-advance-exige-build-que-cobre-o-commit.yaml),
+    vermelho na base, todas as perturbações reais mortas, L2 assumed e L4 skipped.
+    completion-auditor: INCOMPLETE em eb978e7 (.claude/acceptance/gate-advance-exige-build-que-cobre-o-commit.yaml):
+    AC1 e AC2 completos, AC3 (filtros não Maven e -pl) só fecha com o dono aceitando
+    a divisão. Se sim: reauditar com a divisão registrada como decisão do dono,
+    fechar done e abrir a proposta de dispensa de L2 (cobertura de hooks Python
+    não medida). [supervisor] The item''s commits, which did not go through the
+    supervisor''s build (it only runs after `done`), are in `until/2026-11-21-1244-travado-cepa-gate-advance-exige-build-que-cobre-o-commit`;
+    the run branch went back to 8c1cb0a708.'
   sem_epic: true
+  owner_question: 'Fecho este item só com o Maven e deixo os outros filtros de teste
+    no item novo do backlog? Recomendo sim: o incidente foi Maven'
+  owner_summary:
+    pedido: fazer a trava de commit recusar um verde que rodou só parte dos testes,
+      quando outro teste cobre o que mudou
+    pronto: 'pronto e testado para o Maven, que foi o caso do incidente: o verde
+      de um teste só não libera mais o commit'
+    impede: a revisão de aceite exige os outros filtros de teste e o recorte por
+      módulo; separei isso num item novo do backlog, e só você aceita a separação
+    se_sim: o item volta, a revisão de aceite é refeita com a separação e ele fecha;
+      o resto fica no item novo
+    se_nao: o item segue parado até eu cobrir também os outros filtros e o recorte
+      por módulo
 - id: item-pronto-carrega-pendencias-descobertas
   title: '`cepa-plan status` diz que o item está pronto e a pergunta sobre o desbloqueio
     revela pendências que'
   why: 'Origem: feedback fb-20261110-1 (2026-11-10); BACKLOG.md § `cepa-plan status`
     diz que o item está pronto e a pergunta sobre o desbloqueio revela pendências
     que nunca apareceram (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
-  evidence: null
+  human_pending: Confirmar que a dispensa de cobertura do cepa-plan, aceita em 10/11,
+    vale também para a prova deste item
+  evidence: 'Código no branch until/2026-11-21-1244: c8cdeb9 (teste vermelho tests/test_cepa_plan_discovered_pending.py),
+    69e85b9 (cepa-plan finish --pendencia/--resolve-pendencia; open_points; status
+    --json pronto=false + pendencias; status texto/tela, show, queue batch e start
+    imprimem as abertas; pegavel_line nomeia o motivo; owner_lines conta à parte;
+    drain-plan.md passo 3.e; BACKLOG marcado), 7c5ddd8 (asserções que mataram os
+    2 sobreviventes da prova), 87b8dc6 (artefatos). Testes: discovered_pending 30
+    ok; vizinhos status_code_and_epic, finish_decision, finish_owner, finish_route,
+    ready, single_track, answer_next_round, answer_keeps_promises, reason_aliases,
+    route_item_declaration, common_drain_plan, cepa_help_layout, cepa_until_decide,
+    cepa_until verdes. completion-auditor COMPLETE (.claude/acceptance/item-pronto-carrega-pendencias-descobertas.yaml;
+    a metade ''decisões fora do Epic'' já era coberta pelo aviso sem Epic). proof-reviewer
+    NEEDS-HUMAN em 7c5ddd8 (docs/proof/item-pronto-carrega-pendencias-descobertas.yaml):
+    vermelho na base, 12/12 perturbações mortas, só L2 assumed; waiver_proposto
+    aponta a dispensa VÁLIDA do dono .claude/waivers/nada-a-provar--common-bin-cepa-plan.yaml
+    (2026-11-10), que waivers.propose devolveu sem tocar. Fora: não mexi no /common:epic
+    nem no /common:spec.'
   sem_epic: true
+  head_commit: 87b8dc6b7f8e2ed62c6828b461961238cf1ac320
+  route_kind: open-question
+  owner_question: 'A dispensa de medir cobertura do cepa-plan, que você aceitou
+    em 10/11, vale para este item? Recomendo sim: as 12 quebras ficaram vermelhas'
+  owner_summary:
+    se_sim: a prova do item fica aceita pela dispensa que já existe e nada mais
+      muda
+    se_nao: a prova fica em aberto até o repositório ganhar uma ferramenta que mede
+      cobertura
+    item_se_sim: nenhum
+    item_se_nao:
+      titulo: medir a cobertura de testes do cepa-plan com uma ferramenta para Python
+      precisa_do_dono: false
+  decisions:
+  - texto: um item com pendência descoberta aberta continua sendo pego pelo próximo
+      run (não fica adiado); ele só deixa de aparecer como pronto, e o run que o
+      pega recebe a lista e fecha cada uma
+    commit: 69e85b953a9f86ad04c342ea85d2f276400f484f
 - id: lista-de-decisoes-substituida-declarada
   title: Dois blocos de decisões numeradas na mesma conversa, sem dizer qual substitui
     qual
   why: 'Origem: feedback fb-20261110-2 (2026-11-10); BACKLOG.md § Dois blocos de
     decisões numeradas na mesma conversa, sem dizer qual substitui qual (ainda não
     priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
-  evidence: null
+  human_pending: 'Aceitar ou recusar a dispensa da medição de cobertura de common/hooks/report-style-lint.py
+    (nada-a-provar: o repo não mede cobertura de Python e as 43 quebras de propósito
+    ficaram vermelhas)'
+  evidence: 'Código no branch until/2026-11-21-1244: 59a036b (testes vermelhos),
+    1a9e688 (report-style-lint: categoria lista-substituida-sem-aviso; replaced_list_deviation,
+    has_decision_list, REPLACES_LINE, MACHINE_TAG, isenção da reescrita após o próprio
+    bloqueio; plain-report SKILL.md e docstring), 651fc2b (correções do pair-reviewer:
+    portões separados para não medir códigos em lista sem recomendação, linha só
+    na seção final, <command-message> é o dono), d6b644f (sem telemetria para lista
+    sem recomendação e sem desvio), 391a214/c093f97/84a5196/22dc69b (testes que
+    matam os sobreviventes de 4 rodadas de prova), 94fcd74 (artefatos). Testes:
+    python3 tests/test_report_style_lint.py verde; vizinhos test_isolated_telemetry,
+    test_common_until_review, test_gauntlet_command, test_epic_readiness_gate verdes.
+    Suíte completa fica com o supervisor. pair-reviewer: CHANGES-REQUESTED aplicado.
+    completion-auditor: COMPLETE em d6b644f (.claude/acceptance/lista-de-decisoes-substituida-declarada.yaml;
+    hook não mudou depois, só testes). proof-reviewer: NEEDS-HUMAN em 22dc69b (docs/proof/lista-de-decisoes-substituida-declarada.yaml),
+    vermelho na base (23 FAIL), verde no head, 43 de 47 perturbações mortas e 4
+    equivalentes, só L2 não medida. Proposta de dispensa: .claude/waivers/nada-a-provar--common-hooks-report-style-lint-py.yaml
+    (status proposta). Fora do escopo: o hook exige só a linha de substituição,
+    não confere se os itens que ainda valem foram repetidos nem a numeração (o auditor
+    não considerou lacuna). Defeito antigo notado e registrado como feedback fb-20261122-1
+    (notificação reabre sessão encerrada no session_closed).'
   sem_epic: true
+  head_commit: 94fcd74b85c6ceb0ec5107d225f050764e7ad4a3
+  route_kind: open-question
+  owner_question: 'Dispenso medir cobertura do verificador de relatórios, já que
+    as 43 quebras de propósito ficaram vermelhas? Recomendo sim: mesmo critério
+    do cepa-plan'
+  owner_summary:
+    se_sim: a mudança fica provada com a dispensa registrada e o item fecha sem
+      pendência
+    se_nao: a mudança segue no lugar, mas sem prova completa até existir medição
+      de cobertura para Python
+    item_se_sim: nenhum
+    item_se_nao: nenhum
+  decisions:
+  - texto: O verificador de formato só exige a linha dizendo que a lista nova substitui
+      a anterior, na seção final; não confere se os itens ainda válidos foram repetidos.
+      A reescrita logo depois do próprio bloqueio dele fica isenta.
+    commit: 1a9e68872d9ec140547c4f9d93092a86762797d7
 - id: plan-anota-evidencia-de-item-done
   title: '`cepa plan finish` não deixa corrigir a evidência de um item done que
     ficou falsa'
   why: 'Origem: feedback fb-20261110-3 (2026-11-10); BACKLOG.md § `cepa plan finish`
     não deixa corrigir a evidência de um item done que ficou falsa (ainda não priorizado:
     entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
-  evidence: null
+  human_pending: Confirmar que a dispensa de cobertura do cepa-plan, aceita em 10/11,
+    vale também para a prova deste item
+  evidence: 'Código no branch until/2026-11-21-1244: 9139d5c (teste vermelho tests/test_cepa_plan_annotate.py),
+    fcce21a (cepa-plan annotate <fila> <id> --note [--author]: acrescenta {texto,
+    em, autor} em anotacoes de item done/dropped sem tocar evidence/status/head_commit;
+    annotations_of; status --json e show --json levam anotacoes; status texto marca
+    o item; show imprime as notas antes da evidência; recusa do segundo finish aponta
+    annotate; docs/cepa-cli.md, common/plan-schema.yaml, BACKLOG marcado), 56472de
+    (casos que mataram os 4 sobreviventes da 1a prova), 3fbe1f7/52c290a/eec6801
+    (artefatos). Testes: test_cepa_plan_annotate 34 ok; vizinhos discovered_pending,
+    finish_owner, finish_route, finish_decision, single_track, validate_root, status_code_and_epic,
+    ready, route_item_declaration, common_drain_plan, common_plan, cepa_help_layout,
+    docs_skills_header verdes. completion-auditor COMPLETE (.claude/acceptance/plan-anota-evidencia-de-item-done.yaml).
+    proof-reviewer NEEDS-HUMAN em 56472de (docs/proof/plan-anota-evidencia-de-item-done.yaml):
+    vermelho na base (20 falhas), 17/17 perturbações mortas, só L2 assumed; a dispensa
+    válida .claude/waivers/nada-a-provar--common-bin-cepa-plan.yaml (alegomes, 2026-11-10)
+    cobre o escopo. Fora: a tela decorada (status_on_screen, TTY) não mostra a linha
+    de anotação.'
   sem_epic: true
+  head_commit: eec680187985b54999cb1022c09eaba314258dc7
+  route_kind: open-question
+  owner_question: 'A dispensa de medir cobertura do cepa-plan, que você aceitou
+    em 10/11, vale para este item? Recomendo sim: as 17 quebras ficaram vermelhas'
+  owner_summary:
+    se_sim: a mudança fica provada com a dispensa que já existe e o item fecha sem
+      pendência
+    se_nao: a mudança segue no lugar, mas sem prova completa até existir medição
+      de cobertura para Python
+    item_se_sim: nenhum
+    item_se_nao: nenhum
 - id: path-lock-le-regras-do-repo-do-arquivo
   title: A trava de caminhos aplica as regras do repo da sessão a um arquivo de
     outro repo
   why: 'Origem: feedback fb-20261110-6 (2026-11-10); BACKLOG.md § A trava de caminhos
     aplica as regras do repo da sessão a um arquivo de outro repo (ainda não priorizado:
     entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
-  evidence: null
+  human_pending: Aceitar ou recusar a dispensa de medição de cobertura da trava
+    do Bash (não há ferramenta de cobertura para os hooks em Python)
+  evidence: 'Reproduzido nos transcripts da sessão C1-18 (wego-faturamento-backend,
+    subagents agent-abb8926a1fbfd0456/agent-a4ff637717a092000): era o bash-path-lock,
+    não o path-lock do Write. `cd <worktree B> && cat > X <<EOF ... EOF` + `cat
+    > Y` na linha seguinte: depois de newline o lock supunha cd falho e julgava
+    Y na raiz de A. Código no branch until/2026-11-21-1244: 9f26cf6 (teste vermelho
+    tests/test_bash_path_lock_other_repo.py), c0fcbbc (cd absoluto no 1º segmento
+    para outro repo git existente é certo: _cd_cannot_fail, ctx.last_cd, certain
+    em _classify; molde common/hooks/_templates/bash-path-lock.py.tmpl + 6 cópias
+    via bin/gen-locks.py), 68f7796 (só `cd <abs>` sem flag e sem ..: fecha pushd
+    -n e .. lógico por link), db17259 (_refs_root resolve relativo a partir dos
+    cwds fora da raiz: link B->A e raiz aninhada; OLDPWD desconhecido; destino que
+    contém a raiz ou raiz fora de git nunca é certo; vale também para &&), 8cfb43c
+    (~- e ~+ desconhecidos; BACKLOG item novo para resíduos de texto do balde 3),
+    423ee90 (caso ~+), aa6e2ea (artefatos). Testes: test_bash_path_lock_other_repo
+    OK (194 casos), vizinhos test_bash_path_lock_exec (6 cópias), redir, path_lock_out_of_root,
+    lock_copies_drift, multiline_quoted_shell, hook_replay, write_lock_rename, refactor_gate,
+    write_mode_gate, marketing_topology verdes; gen-locks --check ok. pair-reviewer:
+    APPROVE na 4ª rodada (3 REJECT anteriores, todos fechados; sem capacidade nova
+    vs eec6801 com &&). completion-auditor COMPLETE em db17259 (.claude/acceptance/path-lock-le-regras-do-repo-do-arquivo.yaml).
+    proof-reviewer NEEDS-HUMAN em 423ee90 (docs/proof/path-lock-le-regras-do-repo-do-arquivo.yaml):
+    vermelho na base (36 falhas), todas as perturbações reais mortas, só L2 assumed
+    (sem ferramenta de cobertura, sem dispensa para bash-path-lock). Fora: resíduos
+    de checagem por texto no balde 3 (valor colado em opção, glob, maiúsculas no
+    macOS, string de interpretador), já possíveis com && na base, viraram BACKLOG
+    § ''Fora da raiz, a trava do Bash só confere o texto''.'
   sem_epic: true
+  head_commit: aa6e2ea0eeb00ee37fcbd6126f7f7b38796b085e
+  route_kind: open-question
+  owner_question: 'Aceito a dispensa de cobertura da trava do Bash? Recomendo sim:
+    cada linha mudada foi quebrada de propósito e o teste ficou vermelho'
+  owner_summary:
+    se_sim: a mudança fica provada com a dispensa e o item fecha sem pendência
+    se_nao: a mudança segue no lugar, mas sem prova completa até existir medição
+      de cobertura para os hooks
+    item_se_sim: nenhum
+    item_se_nao: nenhum
+  decisions:
+  - texto: 'Fora da raiz da sessão a trava não manda, nem no Write nem no Bash:
+      o arquivo de regras do outro repositório não é lido'
+    commit: 68f7796c95fdc3dc8d6ada164534c0bd799cc8cc
 - id: capture-build-result-flutter
   title: '`capture-build-result` não reconhece `flutter test` nem `tool/check.sh`'
   why: 'Origem: feedback fb-20261115-1 (2026-11-15); BACKLOG.md § `capture-build-result`
@@ -3253,9 +3539,22 @@ items:
     no fim da fila)'
   status: pending
   blocked_by: []
-  human_pending: null
-  evidence: null
+  human_pending: Aceitar ou recusar a dispensa de medição de cobertura do capture-build-result
+    (não há ferramenta de cobertura para os hooks em Python)
+  evidence: 'This is return 1 of 2: the item closed `done`, but the full build of
+    the run branch (`tests/run-all.sh`) exited 1, and the 2nd build exited 1. Output
+    in the `.log` of run 2026-11-21-1244. The commits of every attempt are in `until/2026-11-21-1244-vermelho-cepa-capture-build-result-flutter`
+    and the run branch went back to aa6e2ea0ee. The item went back to `pending`:
+    reuse the side branch (`git cherry-pick` or `git merge` inside the attempt)
+    or redo it; the supervisor''s build judges the result. Disabling or deleting
+    the failing test does not count as a fix.'
   sem_epic: true
+  route_kind: open-question
+  decisions:
+  - texto: o script de verificação do repo só conta quando declarado em .claude/check-scripts.json
+      (comando e linha final esperada, padrão OK); sem o arquivo nada muda, porque
+      um OK solto aparece em qualquer log
+    commit: dedb39a4bc3720d7d0e6011ffb91eb8478cd5a33
 - id: plan-answer-aceita-resposta-do-chat
   title: cepa-plan answer grava a resposta que o dono já deu no chat, sem exigir
     terminal fora do Claude Code
@@ -3264,6 +3563,20 @@ items:
     entrou no fim da fila)'
   status: pending
   blocked_by: []
-  human_pending: null
-  evidence: null
+  human_pending: Aceitar ou recusar a dispensa de medição de cobertura e de teste
+    de entradas hostis do cepa-plan answer --from-chat (não há ferramenta de cobertura
+    para os hooks em Python; todas as quebras de código foram pegas pelos testes)
+  evidence: 'This is return 1 of 2: the item closed `done`, but the full build of
+    the run branch (`tests/run-all.sh`) exited 1, and the 2nd build exited 1. Output
+    in the `.log` of run 2026-11-21-1244. The commits of every attempt are in `until/2026-11-21-1244-vermelho-cepa-plan-answer-aceita-resposta-do-chat`
+    and the run branch went back to aa6e2ea0ee. The item went back to `pending`:
+    reuse the side branch (`git cherry-pick` or `git merge` inside the attempt)
+    or redo it; the supervisor''s build judges the result. Disabling or deleting
+    the failing test does not count as a fix.'
   sem_epic: true
+  route_kind: open-question
+  decisions:
+  - texto: a resposta do chat só é gravada se as palavras do dono estiverem numa
+      mensagem dele desta sessão, das últimas 24 horas, que não seja um comando
+      com barra; em run desatendido isso é recusado
+    commit: 2ee87975c4337d2cb049aa39b9f14fdfb1152c5f

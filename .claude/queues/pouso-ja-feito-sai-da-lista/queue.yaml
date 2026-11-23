@@ -29,9 +29,45 @@ items:
     de `a/r1`, arquivo marcador ausente, e a linha "merged in `main` with a red
     build" ainda presente para `a/r2`. Hoje a linha de espera aparece para os dois
     e o registro de `a/r1` segue `esperando-dono`.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
+  human_pending: Aceitar ou recusar a dispensa de medição de cobertura do fechamento
+    de run já pousado pela lista de espera (não há ferramenta de cobertura ligada
+    ao CLI Python; 19 de 19 quebras propositais foram pegas)
+  evidence: 'Código em 26db875 na branch until/2026-11-21-1244 (landed_upstream,
+    close_landed_run e o desvio em waiting_runs de common/bin/cepa-until); testes
+    em 26db875 e 05bfc3a (tests/test_cepa_until_pending_closes_landed.py; fixture
+    de tests/test_cepa_plan_waiting_runs.py ganhou remoto). pair-reviewer: OK-WITH-NOTES,
+    sem correção pedida. completion-auditor: COMPLETE (.claude/acceptance/CS-1-pouso-ja-feito-sai-da-lista.yaml,
+    b0b2999). proof-reviewer: UNPROVEN em 26db875 (5 sobreviventes), depois NEEDS-HUMAN
+    em 05bfc3a com 19 perturbações mortas e 0 sobreviventes, só por não haver ferramenta
+    de cobertura (docs/proof/CS-1-pouso-ja-feito-sai-da-lista.yaml, a5682e2). Rodados
+    só os testes tocados e vizinhos (pending_closes_landed, plan_waiting_runs, plan_waiting_json,
+    until_land), todos verdes; build completo fica com o supervisor. Sem merge,
+    sem push. Fora deste item (CS-2 a CS-9): branch e worktree do run fechado continuam
+    no lugar, não há linha closed:. Notas do revisor não corrigidas: pending concorrente
+    com land no mesmo run usa o mesmo arquivo .tmp; build_vermelho: red and code
+    == 0 (linha antiga) sem teste que pegue a troca por red.'
+  head_commit: a5682e27d9fba16390236918cc568a09ee2a0a91
+  route_kind: open-question
+  owner_question: 'Aceito a prova do fechamento de run já pousado sem medição de
+    cobertura? Recomendo sim: as 19 quebras propositais foram pegas pelos testes'
+  owner_summary:
+    pedido: tirar da lista de espera o run com build vermelho cujo trabalho já está
+      no remoto, sem rodar build
+    pronto: esse run sai da lista e fica marcado como pousado; o que só está no
+      branch local continua listado
+    se_sim: a prova fica aceita e o item segue fechado como está
+    se_nao: o item segue fechado, com a prova marcada como dependente de medição
+      de cobertura
+    item_se_sim: nenhum
+    item_se_nao: nenhum
+  decisions:
+  - texto: Quando o destino não tem remoto configurado, ou o remoto está configurado
+      mas a referência dele sumiu do clone, a lista confere pelo branch local e
+      fecha o run. O fechamento acontece na própria leitura da lista, então o comando
+      que lista o que espera o dono também fecha.
+    commit: 26db875591a0669cd091fb56eacb56ac0d56f51e
 - id: CS-2
   title: Ao fechar o run, a lista remove o branch e a worktree dele e guarda os
     arquivos ignorados pelo git
@@ -41,9 +77,53 @@ items:
     de `cepa-until pending` o teste exige `git branch --list until/r1` vazio, a
     pasta da worktree ausente e o arquivo ignorado presente sob `.claude/rescued/`.
     Hoje branch, worktree e arquivo ficam onde estavam.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
+  human_pending: Aceitar ou recusar a dispensa de medição de cobertura da remoção
+    de branch e worktree pela lista de espera (não há ferramenta de cobertura ligada
+    ao CLI Python; 33 de 36 quebras propositais foram pegas e as 3 restantes não
+    mudam nada visível)
+  evidence: 'Código em f26650a na branch until/2026-11-21-1244 (remove_run_tree_and_branch
+    extraído de _cmd_land e usado por land e pending; run_worktree; waiting_runs
+    remove árvore e branch antes de close_landed_run, em common/bin/cepa-until).
+    Testes em f26650a e 2cb636f (tests/test_cepa_until_pending_removes_branch_and_tree.py,
+    tests/test_cepa_until_land_refusals.py). pair-reviewer: OK-WITH-NOTES; as 3
+    notas que eram correção foram corrigidas antes do commit (resgate repetido com
+    árvore suja, fallback arvore removendo worktree de outro branch, pasta apagada
+    à mão). completion-auditor: COMPLETE (.claude/acceptance/CS-2-pouso-ja-feito-sai-da-lista.yaml,
+    abdf851). proof-reviewer: UNPROVEN em f26650a (13 sobreviventes, 402bb0b), depois
+    NEEDS-HUMAN em 2cb636f: 36 perturbações, 33 mortas, 3 julgadas equivalentes
+    (P5, P22, P26), 0 sobreviventes reais, só por não haver ferramenta de cobertura
+    (docs/proof/CS-2-pouso-ja-feito-sai-da-lista.yaml, 7cda7bc). Rodados só os testes
+    tocados e vizinhos (pending_removes_branch_and_tree, pending_closes_landed,
+    land, land_steps, land_install, land_refusals, plan_waiting_runs), todos verdes;
+    build completo fica com o supervisor. Sem merge, sem push. Fora deste item (CS-3
+    a CS-9): pending não imprime linha de recusa nem closed:, não reinstala plugins,
+    não commita registros. Herdado do land e não mudado: arquivo ignorado fora de
+    .claude/ some junto com a worktree.'
+  head_commit: 7cda7bc52e661507d10568e26e9752a37b27ae73
+  route_kind: open-question
+  owner_question: 'Aceito a dispensa de medição de cobertura desta mudança? Recomendo
+    sim: 33 de 36 quebras propositais foram pegas e as outras 3 são inofensivas.'
+  owner_summary:
+    pedido: ao fechar um run já pousado, a lista de espera remover o branch e a
+      pasta de trabalho dele e guardar os arquivos ignorados pelo git
+    pronto: o run fechado perde branch e pasta, e os arquivos ignorados ficam guardados;
+      pasta com trabalho sem commit não é tocada
+    se_sim: a prova fica aceita e o item segue fechado como está
+    se_nao: o item segue fechado, com a prova marcada como dependente de medição
+      de cobertura
+    item_se_sim: nenhum
+    item_se_nao: nenhum
+  decisions:
+  - texto: 'Na lista de espera: a worktree do run é só a que o git mostra com o
+      branch do run (o caminho gravado no registro não é usado); worktree com qualquer
+      arquivo sem commit fica intacta, sem cópia de resgate, e o run segue listado;
+      o branch sai com -D porque a ponta já está no remoto do destino; registro
+      de pasta apagada à mão é limpo com git worktree prune. No land: passa a avisar
+      quando o git recusa remover a worktree e não avisa mais quando o branch já
+      não existe.'
+    commit: f26650aa069e19b6004bbb99c44f4f3098c08c03
 - id: CS-3
   title: O run que nunca passou por `land` até o fim, mas cujo branch já está no
     upstream, também é fechado
@@ -54,9 +134,54 @@ items:
     Depois de `cepa-until pending`, o teste exige `estado: aterrissado` nos dois
     registros e os dois branches removidos. Hoje a lista pula os dois e os registros
     seguem `esperando-dono`.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
+  human_pending: Aceitar ou recusar a dispensa de medição de cobertura do fechamento,
+    pela lista de espera, do run que nunca terminou o pouso (não há ferramenta de
+    cobertura ligada ao CLI Python; as 17 quebras propositais foram pegas pelos
+    testes)
+  evidence: 'Código em 7fe5e01 na branch until/2026-11-21-1244 (waiting_runs em
+    common/bin/cepa-until: o run em esperando-dono cuja ponta já está no upstream
+    do destino é fechado seja qual for aterrissagem, pelo mesmo remove_run_tree_and_branch
+    + close_landed_run do CS-2). Testes em 7fe5e01, 301300a e 7ccb94f (tests/test_cepa_until_pending_closes_landed.py:
+    not_through_land substituiu fence_not_red, mais merged_local_and_upstream e
+    unmerged_run_stays). RED antes da correção: 7 falhas. pair-reviewer: OK-WITH-NOTES,
+    sem nota de correção. completion-auditor: COMPLETE (.claude/acceptance/CS-3-pouso-ja-feito-sai-da-lista.yaml,
+    2e7a6bc). proof-reviewer: UNPROVEN em 7fe5e01 (2 sobreviventes, 81df0d3), UNPROVEN
+    em 301300a (1 sobrevivente, cb05e28), depois NEEDS-HUMAN em 7ccb94f: 17 perturbações,
+    17 mortas, 0 sobreviventes, 0 equivalentes, teste do head vermelho com 11 falhas
+    contra o cepa-until de 7cda7bc; só por não haver ferramenta de cobertura (docs/proof/CS-3-pouso-ja-feito-sai-da-lista.yaml,
+    cb4b4d9). Rodados só os testes tocados e vizinhos (pending_closes_landed, pending_removes_branch_and_tree,
+    land, auto_land), todos verdes; build completo fica com o supervisor. Sem merge,
+    sem push. Fora deste item: com a worktree suja o run com ponta no upstream segue
+    aberto e sai na lista com a frase waits to land, que só o CS-8 troca por linha
+    própria; docstring de waiting_runs ainda fala só em sair da lista.'
+  head_commit: cb4b4d9a290f6ae5f95c2b75342f138711cb68e2
+  route_kind: open-question
+  owner_question: 'Aceito a dispensa de medição de cobertura neste item? Recomendo
+    sim: as 17 quebras propositais do código foram pegas pelos testes.'
+  owner_summary:
+    pedido: a lista de espera fechar também o run que nunca terminou o pouso, quando
+      o código dele já está no upstream
+    pronto: o run sem pouso registrado ou parado em conflito, com o código já no
+      upstream, é fechado e perde o branch
+    se_sim: a prova fica aceita e o item segue fechado como está
+    se_nao: o item segue fechado, com a prova marcada como dependente de medição
+      de cobertura
+    item_se_sim: nenhum
+    item_se_nao: nenhum
+  decisions:
+  - texto: 'Em repositório sem upstream, vale o branch local: o run mesclado à mão
+      no main local, sem ter parado em nada, agora é fechado e perde branch e pasta
+      de trabalho (antes só sumia da lista)'
+    commit: 7fe5e01759179929755cb9c6c36d45859e3979de
+  - texto: O run vazio, cujo branch está no mesmo ponto do destino, conta como já
+      pousado e é fechado
+    commit: 7fe5e01759179929755cb9c6c36d45859e3979de
+  - texto: Se a pasta de trabalho do run tem mudança sem commit e não pode ser removida,
+      o run segue aberto e aparece na lista como esperando pouso, mesmo com o código
+      já no upstream
+    commit: 7fe5e01759179929755cb9c6c36d45859e3979de
 - id: CS-4
   title: O registro em `esperando-dono` sem branch é fechado pelo commit gravado
     nele
@@ -66,9 +191,49 @@ items:
     de `a/r3` está em `origin/main`, o de `a/r4` não está. Depois de `cepa-until
     pending`, o teste exige `estado: aterrissado` em `a/r3` e `estado: descartado`
     em `a/r4`. Hoje os dois seguem `esperando-dono`.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
+  human_pending: Aceitar ou recusar a dispensa de medição de cobertura do fechamento,
+    pela lista de espera, do registro de run cujo branch foi apagado (não há ferramenta
+    de cobertura ligada ao CLI Python; das 42 quebras propositais, 39 foram pegas
+    pelos testes e 3 não mudam o comportamento)
+  evidence: 'Código em 49d2f05 na branch until/2026-11-21-1244 (common/bin/cepa-until:
+    recorded_commit_landed novo, _landing_target extraído de landed_upstream, close_landed_run
+    com parâmetro estado, caminho sem branch em waiting_runs; common/hooks/_state.py:
+    descartado no docstring de run_liveness). Testes em 49d2f05 e cf9e4c4 (tests/test_cepa_until_pending_closes_branchless.py,
+    novo). RED antes da correção: a/r3 e a/r4 seguiam esperando-dono; arquivo novo
+    contra o cepa-until de cb4b4d9: 6 falhas. pair-reviewer: OK-WITH-NOTES, nota
+    aplicada (commit só no main local não vira descartado). completion-auditor:
+    COMPLETE (.claude/acceptance/CS-4-pouso-ja-feito-sai-da-lista.yaml). proof-reviewer:
+    UNPROVEN em 49d2f05 (1 sobrevivente, commit 80fbd1d), depois NEEDS-HUMAN em
+    cf9e4c4 (docs/proof/CS-4-pouso-ja-feito-sai-da-lista.yaml, commit 4bfc324):
+    42 perturbações, 39 mortas, 0 sobreviventes, 3 equivalentes; l2_coverage assumed
+    por não haver ferramenta de cobertura no CLI Python. Rodados só tests/test_cepa_until_pending_*.py
+    e tests/test_state_deposits.py; suíte completa fica com o supervisor. Sem merge,
+    sem push. Fora do escopo: linha closed: e chave fechados (CS-5).'
+  head_commit: 4bfc324f49a0eb3b21890a09ac4f3a52eed9f536
+  route_kind: open-question
+  owner_question: 'Aceito a dispensa de medição de cobertura neste item? Recomendo
+    sim: as quebras propositais já mostram que cada linha nova é exercitada pelos
+    testes'
+  owner_summary:
+    se_sim: a prova fica aceita e o item segue fechado como está
+    se_nao: o item segue fechado, com a prova marcada como dependente de medição
+      de cobertura
+    item_se_sim: nenhum
+    item_se_nao: nenhum
+  decisions:
+  - texto: 'Registro sem branch cujo commit gravado está só no main local, ainda
+      sem push, fica como está em vez de virar descartado: descartado é definitivo,
+      e o dono já respondeu que merge local sem push não conta como pousado'
+    commit: 49d2f05b2dc35e168d7161daf1b0c0781625344c
+  - texto: 'Registro sem branch sem commit gravado, com o commit sumido do repositório
+      ou com o branch de destino inexistente fica como está, em espera e fora da
+      lista: sem o commit não há como saber se o trabalho entrou'
+    commit: 49d2f05b2dc35e168d7161daf1b0c0781625344c
+  - texto: O registro fechado como descartado mantém as marcas do build vermelho,
+      que são o histórico; o fechado como aterrissado as perde, como já era
+    commit: 49d2f05b2dc35e168d7161daf1b0c0781625344c
 - id: CS-5
   title: A lista diz o que fechou, em uma linha por run, separada das linhas de
     espera
@@ -79,9 +244,45 @@ items:
     (`landed` ou `discarded`), e `cepa-until pending --json` traz a chave `fechados`
     com os três. Uma segunda chamada não imprime nenhuma linha `closed:`. Hoje não
     existe linha `closed:` nem a chave `fechados`.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
+  human_pending: Aceitar ou recusar a dispensa de medição de cobertura do aviso,
+    pela lista de espera, do que ela fechou (não há ferramenta de cobertura ligada
+    ao CLI Python; das 34 quebras propositais, 30 foram pegas pelos testes e 4 não
+    mudam o que o critério pede)
+  evidence: 'Código e teste em 0c60621 na branch until/2026-11-21-1244 (common/bin/cepa-until:
+    close_landed_run e waiting_runs com parâmetro closed, cmd_pending imprime as
+    linhas closed: e a chave fechados no --json; tests/test_cepa_until_pending_says_what_closed.py
+    novo; helper de saída de tests/test_cepa_until_land.py, test_cepa_until_pending_closes_landed.py
+    e test_cepa_until_pending_closes_branchless.py descarta linhas closed: antes
+    das checagens de linhas de espera). RED antes da correção: 10 falhas no teste
+    novo (pair-dev) e de novo 10 falhas do teste novo contra o cepa-until de 4bfc324
+    (proof-reviewer). pair-reviewer: OK-WITH-NOTES, sem correção obrigatória. completion-auditor:
+    COMPLETE (.claude/acceptance/CS-5-pouso-ja-feito-sai-da-lista.yaml). proof-reviewer:
+    NEEDS-HUMAN em 0c60621 (docs/proof/CS-5-pouso-ja-feito-sai-da-lista.yaml, commit
+    7defee7): 34 perturbações, 30 mortas, 0 sobreviventes, 4 equivalentes (append
+    antes da escrita, frase de ajuda, 2 de ordem do bloco closed:); l2_coverage
+    assumed por não haver ferramenta de cobertura no CLI Python. Rodados só o teste
+    novo e os vizinhos de pending/land/waiting; suíte completa fica com o supervisor.
+    Sem merge, sem push. Nota do revisor para o CS-9: cepa-doctor e cepa-plan chamam
+    pending --json e descartam fechados, então o run fechado por eles nunca mostra
+    a linha closed: ao dono. Fora do escopo: CS-6 a CS-9.'
+  head_commit: 7defee7f58908f2aa9256e6b9591811076b7d4cb
+  route_kind: open-question
+  owner_question: 'Aceito a dispensa da medição de cobertura do aviso de fechamento
+    da lista? Recomendo sim: os testes pegaram 30 de 34 quebras propositais'
+  owner_summary:
+    se_sim: a prova fica aceita e o item segue fechado como está
+    se_nao: o item segue fechado, com a prova marcada como dependente de medição
+      de cobertura
+    item_se_sim: nenhum
+    item_se_nao: nenhum
+  decisions:
+  - texto: 'A linha de fechamento sai como ''closed: queue <fila> · run <run>: landed|discarded'',
+      depois das linhas de run morto e antes das de espera; no JSON, cada entrada
+      de fechados traz fila, run e resultado; a linha aparece só na chamada que
+      fechou o run'
+    commit: 0c60621baa8a92c5c720b5c8a27a21dc650392b7
 - id: CS-6
   title: No repo cepa, fechar o run reinstala os plugins com a mesma regra e as
     mesmas travas do `land`
@@ -92,9 +293,59 @@ items:
     Com o registro da última instalação apontando para a worktree de outro run vivo,
     o `.jsonl` ganha `instalacao_adiada` e o `install.sh` falso não roda. Hoje `pending`
     não escreve evento nenhum.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
+  human_pending: Aceitar ou recusar a dispensa de medição de cobertura da reinstalação
+    dos plugins quando a lista de espera fecha um run (não há ferramenta de cobertura
+    ligada ao CLI Python; das 34 quebras propositais, 29 foram pegas pelos testes
+    e 5 não mudam o que o critério pede)
+  evidence: 'Código e teste em 50984dd na branch until/2026-11-21-1244 (common/bin/cepa-until:
+    install_for_closed nova, chamada em cmd_pending depois de waiting_runs/dead_runs,
+    reaproveita install_on_landing e cepa_repo; help de pending e bloco de doc do
+    topo atualizados; tests/test_cepa_until_pending_install.py novo). Asserções
+    extras em 121e001 e ea4aa91 (só teste; cepa-until não mudou desde 50984dd).
+    RED antes da correção: 7 falhas no teste novo (pair-dev); teste de ea4aa91 contra
+    o cepa-until de 7defee7: 17 falhas (proof-reviewer). pair-reviewer: OK-WITH-NOTES,
+    sem correção obrigatória. completion-auditor: COMPLETE (.claude/acceptance/CS-6-pouso-ja-feito-sai-da-lista.yaml;
+    trava de rollback coberta por reuso de install_on_landing + tests/test_cepa_until_land_install.py,
+    não demonstrada na superfície pending). proof-reviewer: UNPROVEN em 50984dd
+    (29cb839: 27 perturbações, 8 sobreviventes), UNPROVEN em 121e001 (a560069: 34
+    perturbações, 5 sobreviventes), NEEDS-HUMAN em ea4aa91 (docs/proof/CS-6-pouso-ja-feito-sai-da-lista.yaml,
+    commit 94e6cae): 34 perturbações, 29 mortas, 0 sobreviventes, 5 equivalentes
+    (P6 e P10 guardas redundantes, P25 frase de ajuda, P27 ordem do texto, P33 filtro
+    != discarded); l2_coverage assumed por não haver ferramenta de cobertura no
+    CLI Python. Rodados só tests/test_cepa_until_pending_install.py e os vizinhos
+    de pending/land; suíte completa fica com o supervisor. Sem merge, sem push.
+    Notas do revisor, não corrigidas: (1) cepa-doctor:1074 chama pending --json
+    com timeout=60 e cepa-plan:2208 com timeout=120; instalação real medida em 16
+    a 34 s (20 eventos nos .jsonl do clone), mas falha + rollback pode passar de
+    60 s: o doctor mata o pending, a instalação segue (start_new_session) e o evento
+    não é gravado; (2) install_for_closed só captura OSError, outra exceção de install_on_landing
+    derrubaria o pending depois do fechamento gravado; (3) para o CS-7: o fechamento
+    escreve no .jsonl de TODOS os runs fechados na chamada, o commit precisa incluir
+    todos; o .log da instalação está no .gitignore no layout .claude/queues, não
+    no layout legado .claude/programs. Fora do escopo: CS-7 a CS-9.'
+  head_commit: 94e6cae85b0d207bd5d32c65a57a53ee9a640c2a
+  route_kind: open-question
+  owner_question: 'Aceito a dispensa de medição de cobertura deste item? Recomendo
+    sim: os testes pegaram 29 das 34 quebras propositais.'
+  owner_summary:
+    pedido: ao fechar sozinha um run que já pousou, a lista de espera reinstala
+      os plugins como o pouso faz
+    pronto: a reinstalação acontece, é adiada quando outro run vivo usa os plugins,
+      e os testes pegam 29 das 34 quebras propositais
+    se_sim: a prova fica aceita e o item segue fechado como está
+    se_nao: o item segue fechado, com a prova marcada como dependente de medição
+      de cobertura
+    item_se_sim: nenhum
+    item_se_nao: nenhum
+  decisions:
+  - texto: Quando a lista fecha vários runs de uma vez, os plugins são reinstalados
+      uma vez só e o aviso da instalação é copiado para o registro de cada run fechado.
+      Run fechado como descartado não reinstala. No modo para código, o texto da
+      instalação sai no canal de erro. A reinstalação roda mesmo quando quem chamou
+      a lista foi o diagnóstico, que espera só 60 segundos.
+    commit: 50984ddee54932875eefd97f721a9cf8527ec6f5
 - id: CS-7
   title: O que o fechamento escreve nos registros versionados entra num commit,
     e a árvore do clone fica limpa
@@ -103,9 +354,59 @@ items:
     do fechamento do CS-6, o teste exige `git status --porcelain` vazio no clone
     e um commit no topo com a mensagem `until a/r1 pending: ...` que contém só o
     `.jsonl` do run. Hoje não há commit com essa mensagem.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
+  human_pending: Aceitar ou recusar a dispensa de medição de cobertura do commit
+    que a lista de espera faz ao fechar um run (não há ferramenta de cobertura ligada
+    ao CLI Python; das 24 quebras propositais, 22 foram pegas pelos testes e 2 não
+    mudam o que o critério pede)
+  evidence: 'Código e teste em 1f60f1c na branch until/2026-11-21-1244 (common/bin/cepa-until:
+    install_for_closed ganhou o parâmetro written com (fila, run, caminho) de cada
+    .jsonl em que gravou; cmd_pending chama commit_subcommand_records(..., ''pending'',
+    paths=[o .jsonl]) uma vez por run; mensagem ''until <fila>/<run> pending: install
+    events written when the landed run was closed''; sem push). Correção de revisão
+    em 6671a9b (o caminho entra em written ANTES da escrita, para o .jsonl gravado
+    antes de uma falha também ser commitado). Testes extras em fdfb997 (só tests/test_cepa_until_pending_install.py;
+    cepa-until igual a 6671a9b). RED antes do código: 10 falhas no arquivo (pair-dev);
+    teste de fdfb997 contra o cepa-until de 94e6cae: 20 falhas (proof-reviewer).
+    pair-reviewer: OK-WITH-NOTES em 1f60f1c, 1 correção obrigatória feita em 6671a9b;
+    notas não corrigidas: a ajuda de pending não menciona o commit; não há teste
+    do commit rodando a partir de uma worktree; o teste usa install.sh falso, então
+    sujeira que o bin/install.sh real deixe fora do .gitignore não é coberta. completion-auditor:
+    COMPLETE em 1f60f1c (.claude/acceptance/CS-7-pouso-ja-feito-sai-da-lista.yaml,
+    commit c477de4). proof-reviewer: UNPROVEN em 6671a9b (9f4ebaa: 24 perturbações,
+    17 mortas, 5 sobreviventes Q5 Q8 Q10 Q14 Q19, 2 equivalentes), NEEDS-HUMAN em
+    fdfb997 (docs/proof/CS-7-pouso-ja-feito-sai-da-lista.yaml, commit 96a3772):
+    24 perturbações, 22 mortas, 0 sobreviventes, 2 equivalentes (Q12 texto do resumo
+    do commit, Q15 ordem entre linhas do commit e da instalação); l2_coverage assumed
+    por não haver ferramenta de cobertura no CLI Python. O proof-reviewer não viu
+    qual asserção exata derruba o Q8 (inferido da leitura do teste) e não rodou
+    a perturbação Q25 (continue trocado por break na guarda). Dois testes se pulam
+    quando o processo é root (chmod ignorado). Rodados só tests/test_cepa_until_pending_install.py
+    e os vizinhos tests/test_cepa_until_pending_*.py e test_cepa_until_land.py;
+    suíte completa fica com o supervisor. Sem merge, sem push. Fora do escopo: CS-8
+    e CS-9.'
+  head_commit: 96a377267b2960afdb6ff96b67197e7610880bc7
+  route_kind: open-question
+  owner_question: 'Aceito a dispensa de medição de cobertura deste item? Recomendo
+    sim: os testes pegaram 22 das 24 quebras propositais.'
+  owner_summary:
+    pedido: ao fechar sozinha um run que já pousou, a lista de espera guarda num
+      commit o que escreveu e deixa o clone limpo
+    pronto: o commit acontece, um por run fechado, sem envio ao remoto, e os testes
+      pegam 22 das 24 quebras propositais
+    se_sim: a prova fica aceita e o item segue fechado como está
+    se_nao: o item segue fechado, com a prova marcada como dependente de medição
+      de cobertura
+    item_se_sim: nenhum
+    item_se_nao: nenhum
+  decisions:
+  - texto: Quando a lista fecha vários runs de uma vez, sai um commit por run, cada
+      um só com o registro daquele run e com o nome da fila e do run na mensagem.
+      O aviso do commit aparece junto do texto da instalação; no modo para código
+      ele sai no canal de erro. Sem nada versionado escrito, não há commit. Um registro
+      versionado que sumiu não vira commit de remoção.
+    commit: 1f60f1c63c4a0087109cfe39e5687e40eae807ae
 - id: CS-8
   title: O run cuja worktree tem mudança rastreada sem commit não é fechado, e a
     linha dele diz por quê
