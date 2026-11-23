@@ -180,6 +180,46 @@ def tree_deleted_by_hand():
         check("registro aterrissado", read_state(root, "r1")["estado"] == "aterrissado")
 
 
+def locked_tree():
+    print("worktree travada (git recusa remover, sem mudanca): registro fica aberto")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = make_repo(tmp)
+        add_run(root, "r1", Path(tmp) / "m")
+        tree = add_tree(root, tmp, "r1")
+        git(root, "push", "-q", "origin", "main")
+        git(root, "worktree", "lock", str(tree))
+        p = pending(root)
+        check("`pending` sai 0", p.returncode == 0, p.stderr)
+        check("registro segue esperando-dono",
+              read_state(root, "r1")["estado"] == "esperando-dono")
+        check("a run segue na lista", "a/r1" in p.stdout, p.stdout)
+        check("branch e worktree ficam", branches(root, "r1") != "" and tree.exists())
+
+
+def branch_checked_out_in_main_clone():
+    print("branch do run aberto no clone principal: nada sai, clone intacto")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = make_repo(tmp)
+        add_run(root, "r1", Path(tmp) / "m")
+        git(root, "push", "-q", "origin", "main")
+        exclude = root / ".git" / "info" / "exclude"
+        exclude.write_text(".claude/notes/\n.claude/rescued/\n.claude/queues/\n")
+        git(root, "checkout", "-q", "until/r1")
+        f = root / ".claude" / "notes" / "idea.md"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("ignored work\n")
+        p = pending(root)
+        check("`pending` sai 0", p.returncode == 0, p.stderr)
+        check("registro segue esperando-dono",
+              read_state(root, "r1")["estado"] == "esperando-dono")
+        check("a run segue na lista", "a/r1" in p.stdout, p.stdout)
+        check("o branch segue", branches(root, "r1") != "")
+        check("o clone principal segue no branch do run",
+              git(root, "rev-parse", "--abbrev-ref", "HEAD") == "until/r1")
+        check("o arquivo ignorado do clone segue la e nada foi copiado",
+              f.exists() and not rescued(root), rescued(root))
+
+
 if __name__ == "__main__":
     red_test()
     branch_only()
@@ -189,6 +229,8 @@ if __name__ == "__main__":
     dirty_no_rescue()
     arvore_of_other_branch()
     tree_deleted_by_hand()
+    locked_tree()
+    branch_checked_out_in_main_clone()
     if FAILURES:
         print(f"\n✗ {len(FAILURES)} falha(s)")
         sys.exit(1)
