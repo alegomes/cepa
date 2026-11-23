@@ -6084,11 +6084,15 @@ def waiting_runs(repo):
         # A merge left by `land` on a red build is in the destination but has
         # not landed: it waits for the fix and for `land` again, unless the
         # destination's upstream already holds the branch tip (pushed by hand
-        # or by another machine): then the run is closed, with no build.
+        # or by another machine): then the run is closed, with no build. The
+        # same holds for a run that never got through `land` (no `aterrissagem`,
+        # or one that stopped on a conflict): whatever the record says, a tip
+        # already at the upstream has landed.
         red = (item_states.get("aterrissagem") or {}).get("parou") == "build-vermelho"
-        if code == 0 and not red:
+        in_upstream = landed_upstream(root, sha, destination)
+        if code == 0 and not red and not in_upstream:
             continue
-        if red and landed_upstream(root, sha, destination):
+        if in_upstream:
             # Tree and branch go first: if the worktree cannot be removed (a
             # tracked change not committed) the record stays open and listed.
             branch = str(item_states.get("branch"))

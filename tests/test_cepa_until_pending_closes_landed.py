@@ -18,7 +18,8 @@ Against the real CLI, in a temporary git repo with a remote:
   - in a repo whose destination has no upstream, the local branch counts
   - the closed record carries `destino`, `fechado_por: pending` and an
     `atualizado` equal to `quando` (fresh, not the fixture's old stamp)
-  - fence: a run without `parou` whose tip is only in `origin/main` stays listed
+  - CS-3: runs with `aterrissagem: null` or `parou: conflito` whose branch is
+    in `origin/main` are closed and lose the branch; one only in local `main` is not
   - `pending` never fetches: a stale `origin/main` keeps the run listed
 
 Run with `python3 tests/test_cepa_until_pending_closes_landed.py`.
@@ -184,24 +185,41 @@ def no_upstream():
         check("sem build", not marker.exists())
 
 
-def fence_not_red():
-    print("cerca CS-1: sem `parou`, estar so no upstream nao fecha")
+def not_through_land():
+    print("CS-3: run que nunca passou por `land` ate o fim, com branch no upstream, fecha")
     with tempfile.TemporaryDirectory() as tmp:
         root = make_repo(tmp)
         marker = Path(tmp) / "m"
-        add_run(root, "r1", marker)
-        git(root, "push", "-q", "origin", "main")   # merge in origin/main
-        git(root, "reset", "-q", "--hard", "HEAD~1")  # local main behind upstream
+        b1, _ = add_run(root, "r1", marker)
+        b2, _ = add_run(root, "r2", marker)
+        git(root, "push", "-q", "origin", "main")   # both merges in origin/main
+        git(root, "reset", "-q", "--hard", "HEAD~2")  # local main behind upstream
         st = read_state(root, "r1")
         st["aterrissagem"] = None
         state_path(root, "r1").write_text(json.dumps(st), encoding="utf-8")
+        st = read_state(root, "r2")
+        st["aterrissagem"] = {"parou": "conflito", "motivo": "f.txt"}
+        state_path(root, "r2").write_text(json.dumps(st), encoding="utf-8")
+        b3, _ = add_run(root, "r3", marker)   # merged only in local main
+        st = read_state(root, "r3")
+        st["aterrissagem"] = None
+        state_path(root, "r3").write_text(json.dumps(st), encoding="utf-8")
         p = pending(root)
-        # This case pins the CS-1 fence (only a red-build run is closed by
-        # upstream). Criterion CS-3 of docs/spec/pouso-ja-feito-sai-da-lista.md
-        # deliberately changes it: CS-3 closes such runs.
-        check("o run sem `parou` segue listado", "run r1" in p.stdout, p.stdout)
-        check("...e `esperando-dono`",
-              read_state(root, "r1")["estado"] == "esperando-dono")
+        check("`pending` sai 0", p.returncode == 0, p.stderr)
+        for run, branch in (("r1", b1), ("r2", b2)):
+            check(f"a/{run} vira `aterrissado`",
+                  read_state(root, run)["estado"] == "aterrissado",
+                  read_state(root, run))
+            check(f"a/{run} perde o branch",
+                  not git(root, "branch", "--list", branch))
+            check(f"a/{run} some da lista", f"run {run}" not in p.stdout,
+                  p.stdout)
+        info = read_state(root, "r2")["aterrissagem"]
+        check("o `conflito` nao fica no registro fechado",
+              "parou" not in info and "motivo" not in info, info)
+        check("cerca: a/r3 (so no main local, sem `parou`) segue como estava",
+              read_state(root, "r3")["estado"] == "esperando-dono"
+              and git(root, "branch", "--list", b3), read_state(root, "r3"))
         check("sem build", not marker.exists())
 
 
@@ -230,7 +248,7 @@ def no_fetch():
 
 
 if __name__ == "__main__":
-    fence_not_red()
+    not_through_land()
     no_fetch()
     red_test()
     tip_after_merge()
