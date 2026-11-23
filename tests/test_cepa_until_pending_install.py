@@ -54,11 +54,19 @@ def calls(root):
     return f.read_text().splitlines() if f.exists() else []
 
 
-def pending(root, home, *extra, repo=None):
+def pending(root, home, *extra, repo=None, fsize=None):
+    """`fsize`: the largest file size, in bytes, the command (and what it spawns) may
+    write (RLIMIT_FSIZE); a write past it fails with OSError, after the part that fits."""
     env = dict(os.environ, HOME=str(home))
+    pre = None
+    if fsize is not None:
+        def pre():
+            import resource
+            resource.setrlimit(resource.RLIMIT_FSIZE, (fsize, fsize))
     return subprocess.run([sys.executable, str(CEPA_UNTIL), "pending",
                            "--repo", str(repo or root), *extra],
-                          capture_output=True, text=True, cwd=str(root), env=env)
+                          capture_output=True, text=True, cwd=str(root), env=env,
+                          preexec_fn=pre)
 
 
 INSTALL_TEXT = "installing the plugins from the clone"
@@ -541,6 +549,141 @@ def test_record_written_before_a_failed_write_is_still_committed():
               git(root, "diff", "--name-only", before, "HEAD").split())
 
 
+COMMIT_LINE = "commit: "
+REFUSED_TEXT = "commit: not made"
+
+
+def test_partial_copy_to_second_run_is_still_committed():
+    print("CS-7: copia que falha no meio do segundo .jsonl: o que entrou e commitado")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp, runs=("r1", "r3"))
+        second = jsonl_of(root, "a", "r3")
+        second.parent.mkdir(parents=True, exist_ok=True)
+        # Big enough that nothing else the command writes reaches the size limit.
+        second.write_text("".join(json.dumps({"evento": "antigo", "n": i}) + "\n"
+                                  for i in range(400)))
+        commit_fixture(root)
+        limit = second.stat().st_size + 10     # 10 bytes of the copy fit, then EFBIG
+        before = git(root, "rev-parse", "HEAD")
+        p = pending(root, Path(tmp) / "home", fsize=limit)
+        check("sai 0", p.returncode == 0, p.stderr)
+        check("a copia falhou no meio (diz que nao conseguiu registrar)",
+              "could not record it" in p.stdout, p.stdout + p.stderr)
+        check("o segundo .jsonl ganhou parte do conteudo",
+              second.stat().st_size > limit - 10, str(second.stat().st_size))
+        check("git status --porcelain vazio",
+              git(root, "status", "--porcelain") == "", git(root, "status", "--porcelain"))
+        check("o segundo .jsonl entrou num commit",
+              ".claude/queues/a/until/r3.jsonl" in
+              git(root, "diff", "--name-only", before, "HEAD").split(),
+              git(root, "diff", "--name-only", before, "HEAD"))
+
+
+def test_record_that_is_gone_is_not_committed_as_a_deletion():
+    print("CS-7: .jsonl que sumiu antes do commit: nao vira commit de remocao nem recusa")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp)
+        record = jsonl_of(root, "a", "r1")
+        record.parent.mkdir(parents=True, exist_ok=True)
+        record.write_text(json.dumps({"evento": "run_start", "fila": "a"}) + "\n")
+        until = record.parent
+        # The installer removes the tracked `.jsonl` and takes the directory's write
+        # permission away: the install can not create it again to write its event, so
+        # the record is listed but does not exist when the commits are made.
+        (root / "bin" / "install.sh").write_text(
+            "#!/bin/sh\n"
+            f"case \" $* \" in *\" --rollback \"*) exit 0;; esac\n"
+            f"rm -f '{record}'\n"
+            f"chmod a-w '{until}'\n")
+        commit_fixture(root)
+        before = git(root, "rev-parse", "HEAD")
+        try:
+            p = pending(root, Path(tmp) / "home")
+        finally:
+            until.chmod(0o755)
+        if record.exists():
+            print("  (o .jsonl foi recriado neste ambiente: root ignora chmod; nada a provar)")
+            return
+        check("sai 0", p.returncode == 0, p.stderr)
+        check("sem recusa de commit na saida",
+              "commit:" not in p.stdout + p.stderr and "refused" not in p.stdout + p.stderr,
+              p.stdout + p.stderr)
+        check("o .jsonl que nao existe nao vira commit (nem de remocao)",
+              git(root, "rev-parse", "HEAD") == before,
+              git(root, "log", "-1", "--format=%s"))
+
+
+def test_dirty_queue_file_stays_out_of_the_commit():
+    print("CS-7: queue.yaml modificado e nao commitado fica fora do commit e continua modificado")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp)
+        queue_file = root / ".claude" / "queues" / "a" / "queue.yaml"
+        queue_file.parent.mkdir(parents=True, exist_ok=True)
+        queue_file.write_text("items: []\n")
+        commit_fixture(root)
+        queue_file.write_text("items: []\n# edited by the owner, not committed\n")
+        before = git(root, "rev-parse", "HEAD")
+        p = pending(root, Path(tmp) / "home")
+        check("sai 0", p.returncode == 0, p.stderr)
+        check("um commit novo no topo", git(root, "rev-parse", "HEAD~1") == before)
+        check("o commit contem so o .jsonl, sem o queue.yaml",
+              files_of(root, "HEAD") == [".claude/queues/a/until/r1.jsonl"],
+              str(files_of(root, "HEAD")))
+        status = git(root, "status", "--porcelain").splitlines()
+        check("o queue.yaml continua modificado, sozinho, fora do indice",
+              [l.split() for l in status] == [["M", ".claude/queues/a/queue.yaml"]]
+              and not git(root, "diff", "--cached", "--name-only"),
+              git(root, "status", "--porcelain"))
+
+
+def test_commit_screen_line_is_shown():
+    print("CS-7: a linha de tela do commit sai em stdout (texto) ou stderr (--json)")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp)
+        commit_fixture(root)
+        p = pending(root, Path(tmp) / "home")
+        check("texto: stdout traz a linha do commit",
+              COMMIT_LINE in p.stdout and "(not pushed)" in p.stdout, p.stdout)
+        check("texto: stderr nao traz", COMMIT_LINE not in p.stderr, p.stderr)
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp)
+        commit_fixture(root)
+        p = pending(root, Path(tmp) / "home", "--json")
+        check("--json: stderr traz a linha do commit",
+              COMMIT_LINE in p.stderr and "(not pushed)" in p.stderr, p.stderr)
+        try:
+            json.loads(p.stdout)
+            pure = True
+        except ValueError:
+            pure = False
+        check("--json: stdout continua so o JSON, sem a linha do commit",
+              pure and COMMIT_LINE not in p.stdout, p.stdout)
+
+
+def test_two_closed_in_different_queues_each_commit_names_its_queue():
+    print("CS-7: dois fechados em filas diferentes: cada commit traz a sua fila")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp, runs=("r1", "r3"))
+        # a/r3 becomes b/r3: the first ledger (path order) is in `a`, the second in `b`.
+        old = state_path(root, "r3")
+        data = json.loads(old.read_text())
+        old.unlink()
+        d = root / ".claude" / "queues" / "b" / "until"
+        d.mkdir(parents=True, exist_ok=True)
+        data["fila"] = "b"
+        (d / "r3.estado.json").write_text(json.dumps(data))
+        commit_fixture(root)
+        before = git(root, "rev-parse", "HEAD")
+        p = pending(root, Path(tmp) / "home")
+        check("sai 0", p.returncode == 0, p.stderr)
+        subjects = git(root, "log", f"{before}..HEAD", "--format=%s").splitlines()
+        check("um commit por fila, cada um com a sua: `until <fila>/<run> pending: ...`",
+              sorted(s.split(":")[0] for s in subjects)
+              == ["until a/r1 pending", "until b/r3 pending"], str(subjects))
+        check("git status --porcelain vazio",
+              git(root, "status", "--porcelain") == "", git(root, "status", "--porcelain"))
+
+
 if __name__ == "__main__":
     test_installs_when_it_closes()
     test_live_other_run_defers()
@@ -563,6 +706,11 @@ if __name__ == "__main__":
     test_json_stdout_stays_json_with_commit()
     test_non_cepa_repo_makes_no_commit()
     test_record_written_before_a_failed_write_is_still_committed()
+    test_partial_copy_to_second_run_is_still_committed()
+    test_record_that_is_gone_is_not_committed_as_a_deletion()
+    test_dirty_queue_file_stays_out_of_the_commit()
+    test_commit_screen_line_is_shown()
+    test_two_closed_in_different_queues_each_commit_names_its_queue()
     if FAILURES:
         print(f"\n✗ {len(FAILURES)} falha(s)")
         sys.exit(1)
