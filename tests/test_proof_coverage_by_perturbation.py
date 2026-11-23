@@ -128,12 +128,14 @@ def run(root, content, name="X-1.yaml"):
     return hook(payload)
 
 
-def tagged(label, r, tag):
+def tagged(label, r, tag, verdict=None):
     """This call appended exactly one `proof_verdict` event, and its `blocked` is `tag`
-    (None: an allowed call, the hook emits no `blocked` key)."""
+    (None: an allowed call, the hook emits no `blocked` key). With `verdict`, the event
+    also records that declared verdict."""
     ev = r.events
     ok = (len(ev) == 1 and ev[0].get("event") == "proof_verdict"
-          and ev[0].get("blocked") == tag)
+          and ev[0].get("blocked") == tag
+          and (verdict is None or ev[0].get("verdict") == verdict))
     check(f"telemetry [{tag}]: {label}", ok, f"events={ev}")
 
 
@@ -155,7 +157,7 @@ check("...with L3 perturbation skipped -> blocked by the L2 perturbation rule",
 r = run(a, artifact(l2=l2_block("pass", "perturbation", ["common/bin/cepa-plan:10-12"])))
 check("...with non-empty uncovered_lines -> blocked, names uncovered_lines",
       blocked(r, "uncovered_lines"), r.stderr[:300])
-tagged("pass/perturbation + uncovered_lines", r, "l2_perturbation_unbacked")
+tagged("pass/perturbation + uncovered_lines", r, "l2_perturbation_unbacked", "proven")
 
 r = run(a, artifact(perturbation="survived"))
 check("...with perturbation survived -> blocked", r.returncode == 2, r.stderr[:300])
@@ -286,7 +288,7 @@ broken = artifact(l2=l2_block("waived", waivers=WV)) + "broken: [unclosed\n"
 r = run(b, broken)
 check("fallback: proven + waived -> blocked, waiver could not be verified",
       blocked(r, "could not be verified"), r.stderr[:300])
-tagged("no-PyYAML fallback", r, "l2_waived_unverifiable")
+tagged("no-PyYAML fallback", r, "l2_waived_unverifiable", "proven")
 r = run(b, broken.replace("verdict: proven", "verdict: needs-human"))
 check("fallback: needs-human + waived -> allowed (rules 2 and 4 do not fire)",
       r.returncode == 0, r.stderr[:300])
@@ -591,6 +593,288 @@ r = run(b, nol2 + "  l2_coverage: waived\n")
 check("l2_coverage as a scalar -> allowed (no L2 rule fires)", r.returncode == 0,
       r.stderr[:300])
 
+# ── malformed / edge input: the L2 code must decide, not an exception swallowed ──
+L3_PERT = ("  l3_load_bearing:\n    pit:\n      status: absent\n"
+           "    perturbation:\n      status: pass\n")
+L3_SCALAR = "  l3_load_bearing: pass\n"
+PERT_SCALAR = "  l3_load_bearing:\n    pit:\n      status: absent\n    perturbation: pass\n"
+ASSUMED_BARE = "  l2_coverage:\n    status: assumed\n    run: r\n"
+for label, l3 in (("l3_load_bearing as a bare scalar", L3_SCALAR),
+                  ("perturbation as a bare scalar", PERT_SCALAR)):
+    assert L3_PERT in artifact()
+    r = run(a, artifact().replace(L3_PERT, l3))
+    check(f"proven + pass/perturbation + {label} -> blocked (the perturbation did not pass)",
+          blocked(r, "technique: perturbation"), r.stderr[:300])
+    tagged(f"pass/perturbation with {label}", r, "l2_perturbation_unbacked")
+    r = run(b, artifact("needs-human", ASSUMED_BARE).replace(L3_PERT, l3))
+    check(f"assumed + signed waiver for every class + {label} -> blocked by rule 4",
+          blocked(r, "status: waived"), r.stderr[:300])
+    tagged(f"assumed with a waiver, {label}", r, "l2_assumed_but_waived")
+
+NO_SCOPE = artifact("needs-human", l2_block("waived", waivers=WV)).replace(
+    scope_yaml(("common/bin/cepa-plan",)), "")
+assert "scope:" not in NO_SCOPE
+r = run(b, NO_SCOPE)
+check("waived + empty uncovered_lines + no `scope` key -> blocked (nothing to cover)",
+      blocked(r, "no file to cover"), r.stderr[:300])
+tagged("waived, no scope key", r, "l2_waived_unbacked")
+NULL_CLASSES = artifact("needs-human", l2_block("waived", waivers=WV), classes=())
+assert "changed_classes:\n" in NULL_CLASSES and "- class" not in NULL_CLASSES
+r = run(b, NULL_CLASSES)
+check("waived + empty uncovered_lines + `changed_classes:` null -> blocked (nothing to cover)",
+      blocked(r, "no file to cover"), r.stderr[:300])
+tagged("waived, changed_classes null", r, "l2_waived_unbacked")
+
+# The hook only PARSES file_path (it writes nothing): an absolute path whose proof dir
+# sits at index 0 has root `/`, so the waiver under the payload cwd is NOT the one used.
+rootp = make_repo("root-slash")
+waiver(rootp, "common/bin/cepa-plan")
+payload = json.dumps({"tool_name": "Write",
+                      "tool_input": {"file_path": "/docs/proof/X-1.yaml",
+                                     "content": artifact(l2=l2_block("waived", waivers=WV))},
+                      "cwd": str(rootp)})
+r = hook(payload, cwd=str(neutral))
+check("absolute /docs/proof/X-1.yaml: root is `/`, the waiver under the payload cwd does not count",
+      blocked(r, "cepa-plan"), r.stderr[:300])
+tagged("absolute path with the proof dir at index 0", r, "l2_waived_unbacked")
+
+# project in a SUBDIRECTORY of the repo: git-common-dir is `../.git` unless absolute
+sr = TMP / "subrepo"
+sr.mkdir()
+subprocess.run(G + ["init", "-q", "-b", "main", str(sr)], check=True)
+(sr / "sub" / "docs" / "proof").mkdir(parents=True)
+waiver(sr, "common/bin/cepa-plan")          # in <repo>/.claude/waivers, not <repo>/sub/
+payload = json.dumps({"tool_name": "Write",
+                      "tool_input": {"file_path": str(sr / "sub" / "docs" / "proof" / "X.yaml"),
+                                     "content": artifact(l2=l2_block("waived", waivers=WV))},
+                      "cwd": str(sr / "sub")})
+r = hook(payload, cwd=str(neutral))
+check("project in <repo>/sub: the waiver in <repo>/.claude/waivers is found (process cwd elsewhere)",
+      r.returncode == 0, r.stderr[:300])
+tagged("project in a repo subdirectory", r, None)
+
+# ── sweep: the enum line, the message each branch prints, absent/blank status ──
+r = run(a, artifact(l2="  l2_coverage:\n    status: gap\n    run: r\n"))
+check("proven + l2 gap -> blocked by the forbidding-status rule (gap is in the l2 enum)",
+      blocked(r, "forbid") and "closed enum" not in r.stderr, r.stderr[:300])
+check("...and the event is a proof_block, not an unknown_status",
+      len(r.events) == 1 and r.events[0].get("event") == "proof_block", str(r.events))
+r = run(a, artifact(l2="  l2_coverage:\n    status: ran\n    run: r\n"))
+check("proven + l2 `ran` (a status of ANOTHER level) -> blocked, outside the l2 enum",
+      blocked(r, "closed enum"), r.stderr[:300])
+tagged("l2 status from another level's enum", r, "unknown_status", "proven")
+
+SKIP_L3 = "    perturbation:\n      status: skipped\n"
+r = run(a, artifact(l2=l2_block("pass", "perturbation", UNC)))
+check("pass/perturbation + passing perturbation + uncovered: the message lists the uncovered",
+      blocked(r, "is not empty: common/bin/cepa-plan:10-12")
+      and "perturbation.status is not `pass`" not in r.stderr, r.stderr[:300])
+for label, unc in (("nothing uncovered", []), ("something uncovered", UNC)):
+    r = run(a, artifact(l2=l2_block("pass", "perturbation", unc), perturbation="skipped"))
+    check(f"pass/perturbation + perturbation skipped + {label}: the message blames the perturbation",
+          blocked(r, "perturbation.status is not `pass`") and "is not empty" not in r.stderr,
+          r.stderr[:300])
+    tagged(f"pass/perturbation, perturbation skipped, {label}", r,
+           "l2_perturbation_unbacked", "proven")
+
+# an l2_coverage with NO status (or a blank one) matches no status rule
+NOSTATUS = "  l2_coverage:\n    run: r\n"
+n_ = make_repo("nostatus-none")
+for label, repo_, art in (
+        ("perturbation pass + signed waiver for the class", b, artifact("needs-human", NOSTATUS)),
+        ("no class and nothing uncovered", b, artifact("needs-human", NOSTATUS, classes=())),
+        ("uncovered + perturbation skipped, no waiver", n_,
+         artifact("needs-human", NOSTATUS.replace("run: r", "uncovered_lines: " + json.dumps(UNC)),
+                  perturbation="skipped")),
+        ("a signed waiver for the class + perturbation skipped", b,
+         artifact("needs-human", NOSTATUS, perturbation="skipped")),
+        ("an unwaived class + perturbation skipped", n_,
+         artifact("needs-human", NOSTATUS, perturbation="skipped"))):
+    for st in ("", "    status: ''\n"):
+        r = run(repo_, art.replace("  l2_coverage:\n", "  l2_coverage:\n" + st))
+        check(f"l2_coverage with {'a blank' if st else 'no'} status + {label} -> allowed",
+              r.returncode == 0, r.stderr[:300])
+
+r = run(a, artifact(l2=l2_block("pass", uncovered=UNC)))
+check("proven + l2 pass WITHOUT a technique + uncovered_lines -> allowed (not perturbation)",
+      r.returncode == 0, r.stderr[:300])
+
+# five unwaived files are named in sorted order, whichever way they were declared
+ORDER = ["m/E", "m/B", "m/D", "m/A", "m/C"]
+SORTED = "m/A, m/B, m/C, m/D, m/E"
+r = run(n, artifact(l2=l2_block("waived", waivers=WV), classes=ORDER))
+check("waived + five unwaived changed classes: named sorted", blocked(r, SORTED), r.stderr[:300])
+r = run(n, artifact(l2=l2_block("waived", uncovered=[f"{c}:1" for c in ORDER], waivers=WV)))
+check("waived + five unwaived uncovered files: named sorted", blocked(r, SORTED), r.stderr[:300])
+
+# a bare-`pass`/null/uppercase perturbation status
+r = run(b, artifact("needs-human", ASSUMED_BARE, perturbation="PASS"))
+check("assumed + perturbation status `PASS` (any case) + nothing uncovered -> blocked by rule 3",
+      blocked(r, "technique: perturbation"), r.stderr[:300])
+tagged("PASS in capitals", r, "l2_assumed_but_perturbed")
+r = run(b, artifact("needs-human", ASSUMED_BARE, perturbation="null"))
+check("assumed + perturbation status null + signed waiver -> blocked by rule 4 (not a pass)",
+      blocked(r, "status: waived"), r.stderr[:300])
+tagged("perturbation status null", r, "l2_assumed_but_waived")
+r = run(b, artifact("needs-human", ASSUMED_BARE, classes=()).replace(
+    "    perturbation:\n      status: pass\n", "    perturbation:\n      run: r\n"))
+check("assumed + perturbation mapping WITHOUT a status + nothing to cover -> allowed",
+      r.returncode == 0, r.stderr[:300])
+r = run(b, artifact("needs-human", ASSUMED_BARE.replace("assumed\n", "assumed\n    technique: 5\n")))
+check("assumed + technique as a number + perturbation pass -> still blocked by rule 3",
+      blocked(r, "technique: perturbation"), r.stderr[:300])
+for label, val in (("blank", '"  "'), ("empty", '""')):
+    r = run(a, artifact(l2=l2_block("pass", "perturbation").replace(
+        '    run: "r"\n', f'    uncovered_lines: [{val}, ""]\n    run: "r"\n')))
+    check(f"uncovered_lines holding only {label} strings is empty -> proven allowed",
+          r.returncode == 0, r.stderr[:300])
+
+# technique perturbation with no status at all is not `pass`
+r = run(a, artifact(l2="  l2_coverage:\n    technique: perturbation\n"
+                       "    uncovered_lines: " + json.dumps(UNC) + "\n    run: r\n"))
+check("proven + technique perturbation WITHOUT a status + uncovered_lines -> allowed (not `pass`)",
+      r.returncode == 0, r.stderr[:300])
+
+# uncovered_lines is reported as written, trimmed; odd shapes still count as uncovered
+r = run(a, artifact(l2=l2_block("pass", "perturbation", ["  common/bin/cepa-plan:10-12 "])))
+check("a padded entry is listed trimmed", blocked(r, "is not empty: common/bin/cepa-plan:10-12."),
+      r.stderr[:300])
+for label, val, listed in (("string", '"  common/bin/cepa-plan:10-12  "', "common/bin/cepa-plan:10-12."),
+                           ("blank string", '"   "', "   ."),
+                           ("number", "5", "5.")):
+    r = run(a, artifact(l2=f"  l2_coverage:\n    status: pass\n    technique: perturbation\n"
+                           f"    uncovered_lines: {val}\n    run: r\n"))
+    check(f"uncovered_lines as a {label}: blocked and listed as written",
+          blocked(r, "is not empty: " + listed), r.stderr[:300])
+r = run(a, artifact(l2="  l2_coverage:\n    status: pass\n    technique: perturbation\n"
+                       "    uncovered_lines: [5]\n    run: r\n"))
+check("uncovered_lines holding a number is uncovered -> blocked", blocked(r, "is not empty: 5."),
+      r.stderr[:300])
+
+# changed_classes entries of odd shape
+ODD = (scope_yaml(("common/bin/cepa-plan",))
+       + "    - module: bin\n      substituted_by_double: none\n"
+       + "    - class: null\n      substituted_by_double: none\n")
+r = run(b, artifact("needs-human", l2_block("waived", waivers=WV)).replace(
+    scope_yaml(("common/bin/cepa-plan",)), ODD))
+check("changed_classes entries without a class (missing / null) are not files to cover -> allowed",
+      r.returncode == 0, r.stderr[:300])
+r = run(n, artifact("needs-human", l2_block("waived", waivers=WV)).replace(
+    '"common/bin/cepa-plan"', "7"))
+check("a numeric class is still a file to cover -> waived without a waiver is blocked",
+      blocked(r, "no owner-signed waiver covers: 7"), r.stderr[:300])
+
+# waiver files of odd shape must be skipped or compared, never crash the hook
+d = make_repo("odd-files")
+(d / ".claude" / "waivers" / "a-broken.yaml").write_text("[unclosed\n")
+(d / ".claude" / "waivers" / "b-list.yaml").write_text("- just\n- a list\n")
+waiver(d, "other/File", escopo=123, fname="c-int-escopo.yaml")
+waiver(d, "common/bin/cepa-plan", fname="z-valid.yaml")
+r = run(d, artifact(l2=l2_block("waived", waivers=WV)))
+check("broken YAML, a list and a numeric escopo sorted before a valid waiver -> allowed",
+      r.returncode == 0, r.stderr[:300])
+d = make_repo("date-trigger")
+waiver(d, "common/bin/cepa-plan", trigger=date.today() - timedelta(days=30))
+r = run(d, artifact(l2=l2_block("waived", waivers=WV)))
+check("revisit_trigger as an unquoted YAML date in the past -> expired -> blocked (no crash)",
+      blocked(r, "cepa-plan"), r.stderr[:300])
+d = make_repo("date-trigger-future")
+waiver(d, "common/bin/cepa-plan", trigger=date.today() + timedelta(days=300))
+r = run(d, artifact(l2=l2_block("waived", waivers=WV)))
+check("revisit_trigger as an unquoted YAML date in the future -> allowed", r.returncode == 0,
+      r.stderr[:300])
+d = make_repo("no-escopo")
+waiver(d, "none-x", drop="escopo", fname="no-escopo.yaml")
+r = run(d, artifact(l2=l2_block("waived", waivers=WV), classes=("None",)))
+check("a waiver WITHOUT escopo does not cover a file called `None` -> blocked",
+      blocked(r, "None"), r.stderr[:300])
+d = make_repo("blank-file")
+waiver(d, "x", fname="x.yaml")
+r = run(d, artifact(l2=l2_block("waived", uncovered=[":3"], waivers=WV)))
+check("uncovered entry with an empty file part is not covered by a waiver for `x` -> blocked",
+      r.returncode == 2, r.stderr[:300])
+
+# payload cwd that is not a string: the guard must still decide, not crash
+payload = json.dumps({"tool_name": "Write",
+                      "tool_input": {"file_path": "docs/proof/X-1.yaml",
+                                     "content": artifact("needs-human",
+                                                         l2_block("waived", waivers=WV))},
+                      "cwd": 5})
+r = hook(payload, cwd=str(neutral))
+check("payload cwd as a number + relative path + waived -> blocked, no traceback",
+      blocked(r, "cepa-plan") and "Traceback" not in r.stderr, r.stderr[:300])
+
+payload = json.dumps({"tool_name": "Write",
+                      "tool_input": {"file_path": str(b / "docs" / "proof" / "X-1.yaml"),
+                                     "content": artifact("needs-human",
+                                                         l2_block("waived", waivers=WV))},
+                      "cwd": 5})
+r = hook(payload, cwd=str(neutral))
+check("payload cwd as a number + ABSOLUTE path: the waiver at the artifact's root is found",
+      r.returncode == 0, r.stderr[:300])
+
+# a git that fails contributes nothing, whatever it printed
+fake = TMP / "fakebin"
+fake.mkdir()
+fmain = make_repo("fake-main")
+waiver(fmain, "common/bin/cepa-plan")
+fg = make_repo("fake-git-repo")
+(fake / "git").write_text(f'#!/bin/sh\necho "{fmain}/.git"\nexit 1\n')
+(fake / "git").chmod(0o755)
+old_path = os.environ["PATH"]
+os.environ["PATH"] = f"{fake}{os.pathsep}{old_path}"
+try:
+    r = run(fg, artifact(l2=l2_block("waived", waivers=WV)))
+finally:
+    os.environ["PATH"] = old_path
+check("git exits non-zero printing a .git path: that dir is not a waiver dir -> blocked",
+      blocked(r, "cepa-plan"), r.stderr[:300])
+
+# a NUL byte in the path: glob cannot list the dir, which must read as "no waivers"
+payload = json.dumps({"tool_name": "Write",
+                      "tool_input": {"file_path": "/tmp/x\u0000y/docs/proof/X-1.yaml",
+                                     "content": artifact("needs-human",
+                                                         l2_block("waived", waivers=WV))},
+                      "cwd": str(TMP)})
+r = hook(payload, cwd=str(neutral))
+check("a NUL byte in the path -> no waiver dir can be listed -> blocked, no traceback",
+      blocked(r, "cepa-plan") and "Traceback" not in r.stderr, r.stderr[:300])
+
+# a git slower than the 5 s guard is abandoned, even if it would have answered later
+slow = TMP / "slowbin"
+slow.mkdir()
+sg = make_repo("slow-git-repo")
+# slow only for the waiver lookup (cwd = the repo); the telemetry's own git call (cwd = TMP) is fast
+(slow / "git").write_text("#!/usr/bin/env python3\nimport sys, time\n"
+                          f"if sys.argv[2] != {str(sg)!r}:\n    sys.exit(1)\n"
+                          f'time.sleep(5.3)\nprint("{fmain}/.git")\n')
+(slow / "git").chmod(0o755)
+payload = json.dumps({"tool_name": "Write",
+                      "tool_input": {"file_path": str(sg / "docs" / "proof" / "X-1.yaml"),
+                                     "content": artifact(l2=l2_block("waived", waivers=WV))},
+                      "cwd": str(TMP)})
+os.environ["PATH"] = f"{slow}{os.pathsep}{old_path}"
+try:
+    r = hook(payload, cwd=str(neutral))
+finally:
+    os.environ["PATH"] = old_path
+check("git slower than 5 s is abandoned: its late answer is not a waiver dir -> blocked",
+      blocked(r, "cepa-plan"), r.stderr[:300])
+
+# fallback / no-l2 shapes under `proven`
+r = run(b, nol2.replace("verdict: needs-human", "verdict: proven"))
+check("proven + no l2_coverage mapping -> allowed (nothing to check, nothing crashes)",
+      r.returncode == 0, r.stderr[:300])
+tagged("proven, no l2_coverage", r, None)
+FB = artifact(l2=l2_block("pass", "perturbation", [])) + "broken: [unclosed\n"
+r = run(b, FB)
+check("fallback: proven with no `waived` anywhere -> allowed", r.returncode == 0, r.stderr[:300])
+tagged("fallback, nothing waived", r, None)
+r = run(b, FB.replace("status: clean", "status: d"))
+check("fallback: a status that is a substring of `waived` is just unknown -> blocked as such",
+      blocked(r, "closed enum"), r.stderr[:300])
+tagged("fallback, status `d`", r, "unknown_status", "proven")
+
 # ── twin agreement with board-flow/bin/waivers.py ──────────────────────────
 spec = importlib.util.spec_from_file_location("guard", HOOK)
 guard = importlib.util.module_from_spec(spec)
@@ -635,6 +919,24 @@ for label, kw in CASES.items():
                                    "common/bin/cepa-plan", today=date.today())
     check(f"twin agrees with waivers.py: {label}", bool(real) == bool(twin),
           f"real={bool(real)} twin={bool(twin)}")
+
+
+# direct assertions on the inline twin's helpers
+check("_wkey(None) is the empty key", guard._wkey(None) == "" and guard._wkey("") == "")
+check("_wkey keeps only lowercase alphanumerics (no replacement text)",
+      guard._wkey("A/b-C 1") == "abc1", guard._wkey("A/b-C 1"))
+check("_waiver_expired takes `today` (before / after the date)",
+      not guard._waiver_expired({"revisit_trigger": "until 2020-01-01"}, today=date(2019, 12, 31))
+      and guard._waiver_expired({"revisit_trigger": "until 2020-01-01"}, today=date(2020, 1, 2)))
+check("an absolute path with the proof dir at index 0 has root `/`",
+      guard.waiver_dirs("/docs/proof/X-1.yaml", "/some/cwd")[0] == Path("/.claude/waivers"),
+      str(guard.waiver_dirs("/docs/proof/X-1.yaml", "/some/cwd")))
+check("a relative path with a prefix is joined to the payload cwd",
+      guard.waiver_dirs("pkg/docs/proof/X-1.yaml", str(TMP))[0] == TMP / "pkg" / ".claude" / "waivers")
+loaded = guard.load_waivers([TMP / "ext-yaml" / ".claude" / "waivers"])
+check("load_waivers records the file it read in `_path`",
+      len(loaded) == 1 and loaded[0].get("_path", "").endswith("nada-a-provar--svc.yaml"),
+      str(loaded))
 
 print()
 if FAILURES:
