@@ -1,0 +1,66 @@
+schema_version: 2
+card: CS-2
+queue: pouso-ja-feito-sai-da-lista
+verdict: unproven
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: 05bfc3a
+head_commit: f26650a
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::remove_run_tree_and_branch", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::run_worktree", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::waiting_runs (call to the helper, close gated on removed)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::_cmd_land (now calls the helper)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "GREEN at f26650a (detached worktree /tmp/proof-cs2-a, since removed): tests/test_cepa_until_pending_removes_branch_and_tree.py -> '✓ tudo passou'; test_cepa_until_pending_closes_landed.py -> '✓ tudo passou'; test_cepa_until_land.py -> '✓ tudo verde'; test_cepa_until_land_steps.py -> 'ok'. The CLI runs as a subprocess; no double stands in for the changed code."
+        - "Method: 36 perturbations, each an exact one-occurrence string replacement on common/bin/cepa-until, the four test files run, file restored. 35 applied (P15 first matched twice, pattern tightened and rerun)."
+        - "KILLED (23): P1 rescue call removed (pending_removes RED, land_steps RED); P2 rescued_files_block lines dropped (land_steps RED); P3 worktree remove skipped (pending_removes RED, land RED); P7 -D always -d (pending_removes RED); P9 force_branch inverted (pending_removes RED); P14 removed starts False (pending_removes, pending_closes RED); P15 git worktree prune removed (pending_removes RED); P16 dirty guard removed (pending_removes RED); P17 dirty guard returns removed True (RED); P18 dirty guard inverted (RED); P20 quiet_caller block never runs (RED); P21 tree-exists check dropped before rescue (RED); P23 run_worktree always None (RED); P24 run_worktree returns root when no worktree has the branch (pending_removes, pending_closes RED); P25 run_worktree branch match loosened to any branch (RED); P27 close regardless of removed (RED); P28 close gate inverted (RED); P29 waiting_runs force_branch False (RED); P30 waiting_runs quiet_caller False (RED); P31 waiting_runs passes tree None (RED); P32 waiting_runs wrong branch (RED); P33 land prints no helper lines (land_steps RED); P34 land skips the helper (land RED, land_steps RED)."
+        - "SURVIVED P4 common/bin/cepa-until:~2651 `git worktree remove` -> `git worktree remove --force`: all four tests green (no test has a tracked uncommitted change in a run worktree, so nothing shows that the removal is never forced)."
+        - "SURVIVED P5 :~2653 failed worktree removal no longer sets removed=False: all four green (the 'record stays open and listed' path when the worktree cannot be removed is unexercised)."
+        - "SURVIVED P6 :~2652 warning line 'did not remove the worktree' dropped: all four green."
+        - "SURVIVED P8 :~2655 `-D if force_branch else -d` -> always `-D`: all four green (no test shows land refusing to delete an unmerged branch)."
+        - "SURVIVED P10 :~2657 failed branch delete no longer sets removed=False: all four green."
+        - "SURVIVED P11 :~2657 warning line 'did not delete `branch`' dropped: all four green."
+        - "SURVIVED P12 :~2656 `and rev-parse --verify` check dropped (warn even when the branch is already gone): all four green."
+        - "SURVIVED P13 :~2656 rev-parse check inverted: all four green."
+        - "SURVIVED P19 :~2637 quiet_caller ignored (prune plus dirty-tree guard run also for `land`): all four green."
+        - "SURVIVED P22 run_worktree:~2662 main worktree no longer skipped (`if True`): all four green (no test has the run branch checked out in the main clone)."
+        - "SURVIVED P26 run_worktree:~2661 `if code == 0 else []` dropped: all four green. Likely equivalent (a failing `worktree list` prints nothing), reported for completeness, not counted as a gap."
+        - "SURVIVED P35 _cmd_land: helper called with force_branch=True: all four green (land keeps `-d` only by convention, untested)."
+        - "SURVIVED P36 _cmd_land: helper called with quiet_caller=True: all four green."
+        - "Totals: 36 perturbations, 23 killed, 13 survived (12 real, P26 probably equivalent)."
+    survivors:
+      - "P4 worktree remove forced (cepa-until remove_run_tree_and_branch): pending_removes, pending_closes_landed, land, land_steps all green"
+      - "P5 worktree removal failure not marked removed=False: all green"
+      - "P6 worktree removal warning line dropped: all green"
+      - "P8 branch delete always -D: all green"
+      - "P10 branch delete failure not marked removed=False: all green"
+      - "P11 branch delete warning line dropped: all green"
+      - "P12 rev-parse already-gone check dropped: all green"
+      - "P13 rev-parse already-gone check inverted: all green"
+      - "P19 quiet_caller ignored (land would prune and skip dirty trees): all green"
+      - "P22 run_worktree does not skip the main worktree: all green"
+      - "P35 land passes force_branch=True: all green"
+      - "P36 land passes quiet_caller=True: all green"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI; reachability inferred from the 23 perturbations going red. The survivors above sit on failure paths (worktree or branch refusal) and on caller-flag defaults that no test reaches."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff runs git commands (worktree list/remove/prune, branch -d/-D, status) on the repo and reads a run-state JSON written by cepa-until itself; no input from outside and no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Task, not Bug; not run for this card."
+routing_reason: "Core criterion of CS-2 is load-bearing (branch removed, worktree removed, rescued file kept: rescue, worktree remove, -d/-D choice, dirty guard, prune, run_worktree lookup and the removed gate all go red), but 12 changed lines survive: the whole refusal path (a tracked change not committed makes git refuse, the record must stay open and the warning must show) is untested, `git worktree remove` is not shown to be never forced, and the land-versus-pending flag defaults (force_branch, quiet_caller) and the main-worktree skip have no test. Survivors on changed lines mean UNPROVEN regardless of the missing coverage tool (CS-1 rule). Note the refusal path is the subject of CS-8 in the spec; a test there would kill P4, P5, P6 and probably P10 to P13."
