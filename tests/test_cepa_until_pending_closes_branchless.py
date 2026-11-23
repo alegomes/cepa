@@ -127,6 +127,37 @@ def red_test():
         check("--json nao lista nenhum", j["runs"] == [], j)
 
 
+def red_build_marks():
+    print("marcas de build vermelho: `descartado` guarda, `aterrissado` solta")
+    marks = {"parou": "build-vermelho", "motivo": "teste X falhou no build"}
+    with tempfile.TemporaryDirectory() as tmp:
+        root = make_repo(tmp)
+        add_branchless(root, "r3", merged=True)
+        git(root, "push", "-q", "origin", "main")     # r3's commit reaches origin/main
+        add_branchless(root, "r4", merged=False)      # r4's commit is nowhere
+        for run in ("r3", "r4"):
+            st = read_state(root, run)
+            st["aterrissagem"] = dict(marks)
+            state_path(root, run).write_text(json.dumps(st), encoding="utf-8")
+        p = pending(root)
+        check("`pending` sai 0", p.returncode == 0, p.stderr)
+        st4 = read_state(root, "r4")
+        info4 = st4["aterrissagem"] or {}
+        check("a/r4 vira `descartado`", st4["estado"] == "descartado", st4)
+        check("a/r4 `descartado` guarda `parou` e `motivo`",
+              info4.get("parou") == marks["parou"]
+              and info4.get("motivo") == marks["motivo"], info4)
+        check("a/r4 `descartado` tem `fechado_por` pending",
+              info4.get("fechado_por") == "pending", info4)
+        st3 = read_state(root, "r3")
+        info3 = st3["aterrissagem"] or {}
+        check("a/r3 vira `aterrissado`", st3["estado"] == "aterrissado", st3)
+        check("a/r3 `aterrissado` solta `parou` e `motivo`",
+              "parou" not in info3 and "motivo" not in info3, info3)
+        check("a/r3 `aterrissado` tem `fechado_por` pending",
+              info3.get("fechado_por") == "pending", info3)
+
+
 def merged_only_local():
     print("commit so no main local (sem push): segue esperando-dono, intacto")
     with tempfile.TemporaryDirectory() as tmp:
@@ -195,6 +226,7 @@ def branch_exists_unchanged():
 
 if __name__ == "__main__":
     red_test()
+    red_build_marks()
     merged_only_local()
     no_upstream()
     undecidable()
