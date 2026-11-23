@@ -1,0 +1,45 @@
+schema_version: 2
+card: CS-4
+queue: pouso-ja-feito-sai-da-lista
+verdict: unproven
+reviewed_at: 2026-11-23T00:00:00-03:00
+base_commit: cb4b4d9
+head_commit: 49d2f05
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::recorded_commit_landed (new)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::_landing_target (extracted from landed_upstream)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::close_landed_run (estado parameter)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::waiting_runs (branch-gone path)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "GREEN at 49d2f05 (detached worktree /tmp/proof-cs4, since removed), each file on its own via `python3 <file>`: test_cepa_until_pending_closes_branchless.py -> 'tudo passou'; test_cepa_until_pending_closes_landed.py -> 'tudo passou'; test_cepa_until_pending_removes_branch_and_tree.py -> 'tudo passou'. The CLI runs as a subprocess in a temp repo with a remote; no double stands in for the changed code."
+        - "Method: one exact-string replacement per perturbation on common/bin/cepa-until (pattern required to match exactly once), the three test files run, file restored from the original text. Script kept outside the repo. 42 perturbations."
+        - "KILLED (38 of 42): P1/P2 no-sha return None->False/True; P5 cat-file guard removed; P6/P7 cat-file None->False/True; P12 cat-file code!=0 -> ==0; P8 destination guard removed; P9/P10 destination guard None->False/True; P11 destination guard !=0 -> ==0; P13 landed True->False; P14 landed_upstream condition negated; P15 landed_upstream condition False; P16 local-destination check removed (return False); P17 local check always None; P18 local check swapped; P19 local check ==0 -> !=0; P20 local check None->True; P21 local check against target instead of destination; P22 _landing_target always destination (3 files red); P23 _landing_target always upstream; P25 landed_upstream ==0 -> !=0 (3 files red); P26 close default estado -> descartado; P28 pop never; P29 pop only when descartado; P30 estado always aterrissado; P31 estado always descartado; P32 caller swaps aterrissado/descartado; P33 caller always aterrissado; P34 caller always descartado; P35 `is not None` -> truthy; P36 `is not None` -> True; P37 `is not None` -> `is None`; P38 `continue` -> `pass`; P39 close call removed; P40 wrong action key (`commit` instead of `sha`); P41 destination ignores action `destino`; P42 `destino` not written to the record."
+        - "SURVIVOR (real) P27: close_landed_run `if estado == \"aterrissado\":` -> `if True:` (the pop of `parou`/`motivo` made unconditional, so a `descartado` record also loses its red-build marks). All three files stay green. Missing assertion: a `descartado` branchless record that carries `aterrissagem.parou`/`motivo` (the fixtures of test_cepa_until_pending_closes_branchless.py have no `parou`/`motivo` at all) must keep those marks after pending closes it (spec: 'the marks stay, they are the history')."
+        - "Survivors judged equivalent (not counted as gaps): P24 `_landing_target` `code == 0 and upstream` -> `upstream` (`rev-parse --verify -q` prints nothing on failure, so the empty string already falls to the destination); P3 drop `not sha` in recorded_commit_landed (None fails isinstance; an empty string makes `cat-file -e '^{commit}'` fail, same None). P4 drop `isinstance(sha, str)` is equivalent in practice (a non-string recorded commit is stringified and does not resolve to a commit object); it would differ only for a number that happens to be a valid abbreviated hash. A record with a non-string `sha` is not exercised by any test; add one if the defensive guard is meant to stay."
+        - "Head test file against the BASE common/bin/cepa-until (git checkout cb4b4d9 -- common/bin/cepa-until in the throwaway): test_cepa_until_pending_closes_branchless.py -> '6 falha(s)' (red). Restored to 49d2f05: 'tudo passou'."
+        - "Totals: 42 perturbations; 38 killed, 1 real survivor (P27), 3 judged equivalent or defensive (P3, P4, P24)."
+    survivors:
+      - { id: P27, file: "common/bin/cepa-until", line: 6081, mutation: "if estado == \"aterrissado\": -> if True:", missing_assertion: "descartado record keeps aterrissagem.parou and aterrissagem.motivo after pending closes it; needs a fixture with those marks" }
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI (absent, reported separately from survivors); reachability inferred from 38 of 42 perturbations going red, including the cat-file guard, the destination guard, the local-destination check and the `continue`."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff runs git cat-file/rev-parse/merge-base on the repo and reads a run-state JSON written by cepa-until itself; no input from outside and no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Task, not Bug. Equivalent check done anyway: head tests/test_cepa_until_pending_closes_branchless.py against base cb4b4d9 common/bin/cepa-until -> '6 falha(s)'; at head -> 'tudo passou'."
+routing_reason: "One real survivor: P27, making the pop of `parou`/`motivo` unconditional in close_landed_run keeps every test green, so nothing guards the rule that a `descartado` record keeps its red-build marks as history. The other 38 perturbations are killed and 3 survivors are equivalent or purely defensive. Close with one assertion on a descartado fixture carrying `parou`/`motivo`. Also open: l2_coverage assumed (no coverage tool for the Python CLI)."
