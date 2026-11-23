@@ -1,4 +1,3 @@
-status: proposta
 motivo: nada-a-provar
 escopo: common/hooks/_shellscan.py
 razao: 'L2 (cobertura) dispensada no item sondagem-l4-nao-grava-last-build: a prova
@@ -7,7 +6,6 @@ razao: 'L2 (cobertura) dispensada no item sondagem-l4-nao-grava-last-build: a pr
   não tem ferramenta de cobertura para Python. L4 não se aplica: o diff só lê a string
   do comando.'
 revisit_trigger: quando o repo ganhar ferramenta de cobertura para Python
-autor: null
 proposto_por: drain-plan (cepa-until until/2026-11-21-1244)
 proposto_em: '2026-11-21'
 pergunta: 'Aceito a dispensa da medição de cobertura do leitor de comandos do registro
@@ -15,3 +13,7 @@ pergunta: 'Aceito a dispensa da medição de cobertura do leitor de comandos do 
   critério já aceito para o cepa-plan em 10/11'
 fila: cepa
 item: sondagem-l4-nao-grava-last-build
+autor: alegomes
+criado_em: '2026-11-23'
+resposta_do_dono: 'sim: dispensa de cobertura aceita, todas as quebras propositais
+  foram pegas pelos testes'

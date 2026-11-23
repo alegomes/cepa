@@ -1,4 +1,3 @@
-status: proposta
 motivo: nada-a-provar
 escopo: common/bin/cepa-intent
 razao: 'L2 (cobertura) dispensada no item wrap-up-fecha-cursor-da-intencao: a prova
@@ -7,7 +6,6 @@ razao: 'L2 (cobertura) dispensada no item wrap-up-fecha-cursor-da-intencao: a pr
   de cobertura para Python. L4 não se aplica: o diff só acrescenta uma opção booleana
   a um script local.'
 revisit_trigger: quando o repo ganhar ferramenta de cobertura para Python
-autor: null
 proposto_por: drain-plan (cepa-until until/2026-11-21-1244)
 proposto_em: '2026-11-21'
 pergunta: 'Aceito a dispensa da medição de cobertura do comando da intenção, já que
@@ -15,3 +13,7 @@ pergunta: 'Aceito a dispensa da medição de cobertura do comando da intenção,
   para o cepa-plan'
 fila: cepa
 item: wrap-up-fecha-cursor-da-intencao
+autor: alegomes
+criado_em: '2026-11-23'
+resposta_do_dono: 'sim: dispensa de cobertura aceita, todas as quebras propositais
+  foram pegas pelos testes'
