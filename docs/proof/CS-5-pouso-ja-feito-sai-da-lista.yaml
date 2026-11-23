@@ -1,0 +1,43 @@
+schema_version: 2
+card: CS-5
+queue: pouso-ja-feito-sai-da-lista
+verdict: needs-human
+reviewed_at: 2026-11-23T00:00:00-03:00
+base_commit: 4bfc324
+head_commit: 0c60621
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::close_landed_run (closed parameter, append of {fila, run, resultado} after the state file is written)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::waiting_runs (closed passed through at its two closing call sites)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::cmd_pending (closed: lines, fechados in --json, one help sentence)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at 0c60621 (detached worktree /tmp/proof-cs5, since removed), each file on its own via `python3 <file>`: test_cepa_until_pending_says_what_closed.py -> 'tudo passou'; test_cepa_until_pending_closes_landed.py -> 'tudo passou'; test_cepa_until_pending_closes_branchless.py -> 'tudo passou'; test_cepa_until_pending_removes_branch_and_tree.py -> 'tudo passou'; test_cepa_until_land.py -> 'tudo verde'. The CLI runs as a subprocess in a temp repo with a bare remote; no double stands in for the changed code."
+        - "Method: one exact-string replacement per perturbation on common/bin/cepa-until (pattern required to match exactly once), the five files run in order (new file first, stop at the first red), file restored between perturbations; worktree clean afterwards. Scripts /tmp/cs5tools/perturb.py and perturb2.py."
+        - "KILLED (30 of 34 counted): P1 append never runs; P2 `if closed:` instead of `is not None`; P3 branch-gone call site without closed; P4 branch-present call site without closed; P5 landed/discarded swapped; P6 always landed; P7 always discarded; P8 literal descartado; P9 literal aterrissado; P11 fila None; P12 run None; P13 run takes fila; P14 fechados dropped from --json; P15 fechados always []; P16 key renamed; P17 cmd_pending does not pass closed; P18 waiting_runs discards closed; P19 prefix `closed -`; P20 leading space before closed:; P21 `Closed:`; P22 line shows run in the queue slot; P23 line shows queue in the run slot; P24 line without resultado; P25 print loop removed; P26 only the first closed line printed; P29 closed lines also printed in --json mode; P30 closed lines to stderr; P31 appended twice; P32 `runs` emptied in --json; P34 state file never replaced (second call would re-close). All turned test_cepa_until_pending_says_what_closed.py red (rc 1); none needed a sibling file to go red."
+        - "P27 of the first script was a mistake (it removed the print loop, a duplicate of P25), so it is not counted; the real reorder is P35. Counts: 34 perturbations counted (P1-P35 minus P27), 30 killed, 4 survived, all 4 judged equivalent below."
+        - "Survivors judged equivalent (4, not counted as gaps): P10 append moved before the state-file write (close_landed_run): it only differs if the write raises; the call is not inside any try, so the exception aborts `pending` before anything is printed and the list is lost anyway; no input from the real flow can tell them apart. P33 help sentence removed from the epilog: text only, no behavior; no file of the five reads --help (tests/test_cepa_help_layout.py is outside the allowed set and belongs to the supervisor's full run). P28 closed lines printed before the dead-run lines, and P35 closed lines printed after the waiting lines: the criterion asks the `closed:` lines to be 'apart from the waiting lines', which the new test pins by prefix (startswith) and by absence of a waiting line for the closed runs; no test and no criterion pins the relative ORDER of the blocks (the fixture has no dead run, and the position of the a/r2 waiting line is not checked). Equivalent with respect to the criterion, not in theory: a reader that depends on position would see the difference (CS-9 reads by prefix, so it does not)."
+        - "Siblings' output helper (land, closes_landed, closes_branchless): each drops stdout lines starting with `closed:` before its assertions. It hides nothing those files assert (their checks are about waiting lines and state files); a `closed:` line wrongly emitted is caught by the new file, which requires exactly three `closed:` lines with the right fields and none on the second call. No perturbation of the closed-line behavior needed a sibling to go red, which confirms they are insensitive to `closed:` lines by design and the new file is the sole guard of CS-5."
+        - "Totals: 34 perturbations; 30 killed, 0 survived, 4 judged equivalent."
+    survivors: []
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI (absent, reported separately from survivors); reachability inferred from 30 of 34 perturbations going red, including both call sites, the append, the --json key and the print loop."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only reports in text and JSON which runs this same call closed, from a run-state JSON written by cepa-until itself; no input from outside and no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Task, not Bug. Red-at-base check done anyway: tests/test_cepa_until_pending_says_what_closed.py against common/bin/cepa-until of 4bfc324 -> '10 falha(s)' (no `closed:` line, no `fechados` key); restored to 0c60621 -> 'tudo passou'."
+routing_reason: "30 of 34 perturbations turn the new test red, 0 survivors, 4 judged equivalent (P10 write order, P33 help text, P28/P35 relative order of the closed block, which neither the criterion nor any test pins). Red at base confirmed (10 failures). The only open item is l2_coverage assumed: no coverage tool exists for this Python CLI, which by the CS-1..CS-4 rule makes it NEEDS-HUMAN, not a survivor. Suggested decision for the human: accept reachability by perturbation in place of a coverage tool (same decision as CS-2/CS-3/CS-4)."
