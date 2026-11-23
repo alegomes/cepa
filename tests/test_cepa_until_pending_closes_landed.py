@@ -220,6 +220,8 @@ def not_through_land():
         check("cerca: a/r3 (so no main local, sem `parou`) segue como estava",
               read_state(root, "r3")["estado"] == "esperando-dono"
               and git(root, "branch", "--list", b3), read_state(root, "r3"))
+        check("cerca: a/r3 nao aparece na lista (nao espera por `land`)",
+              "run r3" not in p.stdout, p.stdout)
         check("sem build", not marker.exists())
 
 
