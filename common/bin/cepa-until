@@ -200,7 +200,7 @@ gains `hooks_reinstalados` (`sha_antes`, `sha_depois`: a content digest of the i
 `done` and the night goes on. If not even the rollback gives the cache back, the run ends
 with `reinstalacao-falhou`. Installing from the worktree leaves the plugins in force with
 the worktree's content: `land --yes` runs `sh bin/install.sh` from the main clone by itself,
-after the merge and the green build, and records `instalado_no_pouso`. If `~/.claude/ops/last-install.json` says the plugins in force come from the worktree of another run that is still alive, the install is skipped instead (`instalacao_adiada` in the record, and "Fica com você" asks for `sh bin/install.sh` in the clone when that run ends); the landing's exit code is the same. If that install fails, the landing runs `sh bin/install.sh --rollback` from the clone, records `reinstalacao_desfeita` and asks, under "Fica com você", for `sh bin/install.sh` in the clone by hand; the landing stands and its exit code is the same. Open sessions keep the old hooks in memory until restarted. Two
+after the merge and the green build, and records `instalado_no_pouso`. `pending` does the same (once per call) when it closes a landed run by itself. If `~/.claude/ops/last-install.json` says the plugins in force come from the worktree of another run that is still alive, the install is skipped instead (`instalacao_adiada` in the record, and "Fica com você" asks for `sh bin/install.sh` in the clone when that run ends); the landing's exit code is the same. If that install fails, the landing runs `sh bin/install.sh --rollback` from the clone, records `reinstalacao_desfeita` and asks, under "Fica com você", for `sh bin/install.sh` in the clone by hand; the landing stands and its exit code is the same. Open sessions keep the old hooks in memory until restarted. Two
 reinstalls in one night keep only the previous cache in `.prev`. Without `--verify` there is
 no build, so no reinstall: only the warning above. With less than 120 s left in the window the supervisor does not start the install (killing it halfway would leave the cache half moved): it records `reinstalacao_adiada` and falls back to the warning. In any other repo nothing changes.
 
@@ -6382,6 +6382,53 @@ def dead_run_phrase(m):
             f"land: {m['fechar']} (without --yes only shows the plan)")
 
 
+def install_for_closed(repo, closed):
+    """CS-6 of `pouso-ja-feito-sai-da-lista`: closing a landed run in the cepa repo
+    reinstalls the plugins, with the rule and the guards of `land` (the same
+    `install_on_landing`: skipped and recorded as `instalacao_adiada` when the plugins
+    in force come from the worktree of another live run; rollback when it fails).
+    Once per call, however many runs it closed: the first closed run's `.jsonl` gets
+    the event(s) from `install_on_landing` and the other closed runs get a copy of
+    the same lines. A run closed as `descartado` never landed, so it does not count.
+    Returns what the install printed, as lines, for the caller to place (stdout
+    in text mode, stderr in `--json`). The close is already done by now."""
+    landed = {(c.get("fila"), c.get("run")) for c in closed
+              if c.get("resultado") == "landed"}
+    root = main_root(repo)
+    if not landed or not cepa_repo(root):
+        return []
+    ledgers = []
+    for path in run_states(root):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict) and (data.get("fila"), data.get("run")) in landed:
+            ledgers.append((path.parent, str(data.get("run"))))
+    if not ledgers:
+        return []
+    import contextlib
+    import io
+    out = io.StringIO()
+    first_dir, first_run = ledgers[0]
+    record = first_dir / f"{first_run}.jsonl"
+    try:
+        before = len(record.read_text(encoding="utf-8").splitlines())
+    except OSError:
+        before = 0
+    try:
+        with contextlib.redirect_stdout(out):
+            install_on_landing(root, first_dir, first_run)
+        new = record.read_text(encoding="utf-8").splitlines()[before:]
+        for ledger_dir, run_id in ledgers[1:]:
+            with (ledger_dir / f"{run_id}.jsonl").open("a", encoding="utf-8") as f:
+                for line in new:
+                    f.write(line + "\n")
+    except OSError as e:
+        out.write(f"install after closing: could not record it ({e})\n")
+    return out.getvalue().splitlines()
+
+
 def cmd_pending(argv):
     """`cepa-until pending [--repo R] [--json]`: what `/common:next` and
     `/common:doctor` read to say that a run is waiting for the owner (C6)."""
@@ -6394,6 +6441,9 @@ def cmd_pending(argv):
             "is dead when its supervisor died before writing the end of the run.\n"
             "Each line says which command takes the run forward. A line starting with\n"
             "`closed:` says a run this call closed (landed or discarded); it shows once.\n"
+            "In the cepa repo, closing a landed run also reinstalls the plugins from the\n"
+            "clone, with the rule and the guards of `land` (`instalado_no_pouso` or\n"
+            "`instalacao_adiada` in the run's record); with --json that text goes to stderr.\n"
             "\n"
             "This is what /common:next and /common:doctor read to say that a run is\n"
             "waiting for you."),
@@ -6415,7 +6465,11 @@ def cmd_pending(argv):
     closed = []
     found = waiting_runs(Path(a.repo).resolve(), closed)
     dead = dead_runs(Path(a.repo).resolve())
+    install_lines = install_for_closed(Path(a.repo).resolve(), closed)
     if a.json:
+        # stdout is the JSON and nothing else: what the install said goes to stderr.
+        for line in install_lines:
+            print(line, file=sys.stderr)
         print(json.dumps({"runs": found, "mortos": dead,
                           "fechados": closed},
                          ensure_ascii=False))
@@ -6424,6 +6478,8 @@ def cmd_pending(argv):
         print(dead_run_phrase(m))
     for c in closed:
         print(f"closed: queue {c['fila']} · run {c['run']}: {c['resultado']}")
+    for line in install_lines:
+        print(line)
     for r in found:
         if r.get("build_vermelho"):
             print(f"queue {r['fila']} · run {r['run']}: `{r['branch']}` is "
