@@ -428,6 +428,90 @@ def test_runs_from_subdir_and_worktree():
                   len(events(root, "r1", "instalado_no_pouso")) == 1)
 
 
+def commit_fixture(root):
+    """What the repo has before `pending` runs: `.estado.json` and `.log` ignored by git (as in
+    the real repos) and the fixture committed, so any change `git status` shows
+    afterwards was written by the closing."""
+    (root / ".gitignore").write_text(
+        ".claude/queues/*/until/*.estado.json\n.claude/queues/*/until/*.log\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "fixture")
+
+
+def files_of(root, rev):
+    return sorted(git(root, "show", "--name-only", "--pretty=format:", rev).split())
+
+
+def test_closing_commits_what_it_wrote():
+    print("CS-7: o que o fechamento escreve entra num commit e a arvore fica limpa")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp)
+        commit_fixture(root)
+        before = git(root, "rev-parse", "HEAD")
+        origin_before = git(root, "rev-parse", "origin/main")
+        p = pending(root, Path(tmp) / "home")
+        check("sai 0", p.returncode == 0, p.stderr)
+        check("git status --porcelain vazio",
+              git(root, "status", "--porcelain") == "", git(root, "status", "--porcelain"))
+        check("um commit novo no topo", git(root, "rev-parse", "HEAD~1") == before)
+        check("mensagem `until a/r1 pending: ...`",
+              git(root, "log", "-1", "--format=%s").startswith("until a/r1 pending: "),
+              git(root, "log", "-1", "--format=%s"))
+        check("o commit contem so o .jsonl do run",
+              files_of(root, "HEAD") == [".claude/queues/a/until/r1.jsonl"],
+              str(files_of(root, "HEAD")))
+        check("sem push: origin/main nao se mexeu",
+              git(root, "rev-parse", "origin/main") == origin_before)
+        p2 = pending(root, Path(tmp) / "home")
+        check("segunda chamada nao faz outro commit", git(root, "rev-parse", "HEAD~1") == before
+              and git(root, "status", "--porcelain") == "", p2.stdout)
+
+
+def test_two_closed_both_committed_clean_tree():
+    print("CS-7: dois fechados na mesma chamada, cada .jsonl num commit e arvore limpa")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp, runs=("r1", "r3"))
+        commit_fixture(root)
+        before = git(root, "rev-parse", "HEAD")
+        pending(root, Path(tmp) / "home")
+        check("git status --porcelain vazio", git(root, "status", "--porcelain") == "",
+              git(root, "status", "--porcelain"))
+        subjects = git(root, "log", f"{before}..HEAD", "--format=%s").splitlines()
+        check("um commit por run fechado, `until <fila>/<run> pending: ...`",
+              sorted(s.split(":")[0] for s in subjects)
+              == ["until a/r1 pending", "until a/r3 pending"], str(subjects))
+        touched = sorted(git(root, "diff", "--name-only", before, "HEAD").split())
+        check("os dois .jsonl, e nada mais, foram commitados",
+              touched == [".claude/queues/a/until/r1.jsonl",
+                          ".claude/queues/a/until/r3.jsonl"], str(touched))
+
+
+def test_json_stdout_stays_json_with_commit():
+    print("CS-7: --json continua so o JSON quando houve commit")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp)
+        commit_fixture(root)
+        p = pending(root, Path(tmp) / "home", "--json")
+        try:
+            json.loads(p.stdout)
+            pure = True
+        except ValueError:
+            pure = False
+        check("stdout e so o JSON", pure, p.stdout)
+        check("o commit foi feito mesmo assim",
+              git(root, "log", "-1", "--format=%s").startswith("until a/r1 pending: "))
+
+
+def test_non_cepa_repo_makes_no_commit():
+    print("CS-7: repo que nao e o do cepa nao escreve nada versionado, nao commita")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp, cepa=False)
+        commit_fixture(root)
+        before = git(root, "rev-parse", "HEAD")
+        pending(root, Path(tmp) / "home")
+        check("HEAD nao se mexeu", git(root, "rev-parse", "HEAD") == before)
+
+
 if __name__ == "__main__":
     test_installs_when_it_closes()
     test_live_other_run_defers()
@@ -445,6 +529,10 @@ if __name__ == "__main__":
     test_copy_ends_with_newline_and_each_line_is_json()
     test_failed_copy_message_goes_where_the_install_text_goes()
     test_runs_from_subdir_and_worktree()
+    test_closing_commits_what_it_wrote()
+    test_two_closed_both_committed_clean_tree()
+    test_json_stdout_stays_json_with_commit()
+    test_non_cepa_repo_makes_no_commit()
     if FAILURES:
         print(f"\n✗ {len(FAILURES)} falha(s)")
         sys.exit(1)

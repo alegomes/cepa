@@ -6382,7 +6382,7 @@ def dead_run_phrase(m):
             f"land: {m['fechar']} (without --yes only shows the plan)")
 
 
-def install_for_closed(repo, closed):
+def install_for_closed(repo, closed, written=None):
     """CS-6 of `pouso-ja-feito-sai-da-lista`: closing a landed run in the cepa repo
     reinstalls the plugins, with the rule and the guards of `land` (the same
     `install_on_landing`: skipped and recorded as `instalacao_adiada` when the plugins
@@ -6391,7 +6391,9 @@ def install_for_closed(repo, closed):
     the event(s) from `install_on_landing` and the other closed runs get a copy of
     the same lines. A run closed as `descartado` never landed, so it does not count.
     Returns what the install printed, as lines, for the caller to place (stdout
-    in text mode, stderr in `--json`). The close is already done by now."""
+    in text mode, stderr in `--json`). The close is already done by now.
+    `written`, when given, gets `(queue, run, path)` for every `.jsonl` it appended
+    to, so the caller commits exactly those (CS-7)."""
     landed = {(c.get("fila"), c.get("run")) for c in closed
               if c.get("resultado") == "landed"}
     root = main_root(repo)
@@ -6404,13 +6406,13 @@ def install_for_closed(repo, closed):
         except (OSError, ValueError):
             continue
         if isinstance(data, dict) and (data.get("fila"), data.get("run")) in landed:
-            ledgers.append((path.parent, str(data.get("run"))))
+            ledgers.append((path.parent, str(data.get("run")), data.get("fila")))
     if not ledgers:
         return []
     import contextlib
     import io
     out = io.StringIO()
-    first_dir, first_run = ledgers[0]
+    first_dir, first_run, first_queue = ledgers[0]
     record = first_dir / f"{first_run}.jsonl"
     try:
         before = len(record.read_text(encoding="utf-8").splitlines())
@@ -6419,11 +6421,16 @@ def install_for_closed(repo, closed):
     try:
         with contextlib.redirect_stdout(out):
             install_on_landing(root, first_dir, first_run)
+        if written is not None:
+            written.append((first_queue, first_run, record))
         new = record.read_text(encoding="utf-8").splitlines()[before:]
-        for ledger_dir, run_id in ledgers[1:]:
-            with (ledger_dir / f"{run_id}.jsonl").open("a", encoding="utf-8") as f:
+        for ledger_dir, run_id, queue in ledgers[1:]:
+            target = ledger_dir / f"{run_id}.jsonl"
+            with target.open("a", encoding="utf-8") as f:
                 for line in new:
                     f.write(line + "\n")
+            if written is not None:
+                written.append((queue, run_id, target))
     except OSError as e:
         out.write(f"install after closing: could not record it ({e})\n")
     return out.getvalue().splitlines()
@@ -6465,7 +6472,27 @@ def cmd_pending(argv):
     closed = []
     found = waiting_runs(Path(a.repo).resolve(), closed)
     dead = dead_runs(Path(a.repo).resolve())
-    install_lines = install_for_closed(Path(a.repo).resolve(), closed)
+    written = []
+    install_lines = install_for_closed(Path(a.repo).resolve(), closed, written)
+    # CS-7: what the closing wrote to the versioned records (the `.jsonl` of each
+    # run the install touched) goes into one commit per run, with the function
+    # `decide`, `close-dead` and `land` use; no push. `.estado.json` is ignored by
+    # git. The commit's screen lines join the install's, so with --json they go to
+    # stderr and stdout stays the JSON.
+    import contextlib
+    import io
+    commit_lines = []
+    for queue, run_id, record in written:
+        if not record.exists():
+            continue
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            commit_subcommand_records(
+                Path(a.repo).resolve(), queue, run_id, "pending",
+                "install events written when the landed run was closed",
+                what="the run records", paths=[record])
+        commit_lines += buf.getvalue().splitlines()
+    install_lines = install_lines + commit_lines
     if a.json:
         # stdout is the JSON and nothing else: what the install said goes to stderr.
         for line in install_lines:
