@@ -223,6 +223,64 @@ def not_through_land():
         check("sem build", not marker.exists())
 
 
+def merged_local_and_upstream():
+    print("CS-3: merge no main local E no origin/main, sem `parou` de build, fecha")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = make_repo(tmp)
+        marker = Path(tmp) / "m"
+        b1, _ = add_run(root, "r1", marker)
+        b2, _ = add_run(root, "r2", marker)
+        git(root, "push", "-q", "origin", "main")   # local main == origin/main
+        st = read_state(root, "r1")
+        st["aterrissagem"] = None
+        state_path(root, "r1").write_text(json.dumps(st), encoding="utf-8")
+        st = read_state(root, "r2")
+        st["aterrissagem"] = {"parou": "conflito", "motivo": "f.txt"}
+        state_path(root, "r2").write_text(json.dumps(st), encoding="utf-8")
+        p = pending(root)
+        check("`pending` sai 0", p.returncode == 0, p.stderr)
+        for run, branch in (("r1", b1), ("r2", b2)):
+            check(f"a/{run} vira `aterrissado`",
+                  read_state(root, run)["estado"] == "aterrissado",
+                  read_state(root, run))
+            check(f"a/{run} perde o branch",
+                  not git(root, "branch", "--list", branch))
+            check(f"a/{run} some da lista", f"run {run}" not in p.stdout,
+                  p.stdout)
+
+
+def unmerged_run_stays():
+    print("run que nao esta mergeado em lugar nenhum segue esperando e listado")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = make_repo(tmp)
+        marker = Path(tmp) / "m"
+        branch = "until/r1"
+        git(root, "checkout", "-qb", branch)
+        (root / "r1.txt").write_text("night\n")
+        git(root, "add", "r1.txt")
+        git(root, "commit", "-qm", "work r1")
+        sha = git(root, "rev-parse", "HEAD")
+        git(root, "checkout", "-q", "main")
+        d = root / ".claude" / "queues" / "a" / "until"
+        d.mkdir(parents=True, exist_ok=True)
+        state_path(root, "r1").write_text(json.dumps({
+            "fila": "a", "run": "r1", "branch": branch,
+            "estado": "esperando-dono", "atualizado": OLD_STAMP,
+            "verify": f"touch {marker}",
+            "acoes": [{"id": "aterrissar", "destino": "main", "sha": sha}],
+            "aterrissagem": None,
+        }), encoding="utf-8")
+        p = pending(root)
+        check("`pending` sai 0", p.returncode == 0, p.stderr)
+        check("a/r1 segue `esperando-dono`",
+              read_state(root, "r1")["estado"] == "esperando-dono",
+              read_state(root, "r1"))
+        check("a/r1 mantem o branch", git(root, "branch", "--list", branch))
+        check("a/r1 aparece na lista com a linha `waits to land`",
+              "run r1" in p.stdout and "waits to land" in p.stdout, p.stdout)
+        check("sem build", not marker.exists())
+
+
 def no_fetch():
     print("`pending` nao faz fetch: origin/main velho mantem o run listado")
     with tempfile.TemporaryDirectory() as tmp:
@@ -249,6 +307,8 @@ def no_fetch():
 
 if __name__ == "__main__":
     not_through_land()
+    merged_local_and_upstream()
+    unmerged_run_stays()
     no_fetch()
     red_test()
     tip_after_merge()
