@@ -36,6 +36,11 @@ import test_cepa_until_decide as dec  # noqa: E402
 check = dec.check
 FAILURES = dec.FAILURES
 CEPA_UNTIL = al.CEPA_UNTIL
+# `CEPA_UNTIL_SCRIPT` points every case at another copy of the script (a mutated copy
+# in a proof run); `common/bin/` next to it must come along (it imports its siblings).
+if os.environ.get("CEPA_UNTIL_SCRIPT"):
+    CEPA_UNTIL = Path(os.environ["CEPA_UNTIL_SCRIPT"]).resolve()
+    dec.CEPA_UNTIL = al.CEPA_UNTIL = CEPA_UNTIL
 ANSI = dec.ANSI
 
 MOTIVO = "nada-a-provar"
@@ -63,13 +68,14 @@ def write_waivers(root, waivers):
 class Keys:
     """A scripted keyboard: returns the next input, records the prompts."""
 
-    def __init__(self, inputs):
-        self.inputs, self.prompts = list(inputs), []
+    def __init__(self, inputs, exhausted=None):
+        self.inputs, self.prompts, self.exhausted = list(inputs), [], exhausted
 
     def __call__(self, prompt):
         self.prompts.append(ANSI.sub("", prompt))
         if not self.inputs:
-            raise EOFError("the script ran out of inputs")
+            raise (self.exhausted() if self.exhausted
+                   else EOFError("the script ran out of inputs"))
         return self.inputs.pop(0)
 
 
@@ -87,14 +93,18 @@ class Recorder:
 
 
 def run(deferred, inputs, repo=None, fail=(), analysis=None, **kw):
-    m = dec.load_module()
+    m = dec.load_module(kw.pop("color", "nunca"))
     keys, rec, screen = Keys(inputs), Recorder(fail), []
     progress = kw.pop("progress", {})
+    states = kw.pop("states", {})
+    editor = kw.pop("editor", None)
+    if editor:
+        m.edit_in_editor = editor
     with tempfile.TemporaryDirectory() as tmp:
         repo = repo or Path(tmp)
         if callable(repo):
             repo = repo(Path(tmp))
-        applied, later = m.decide(repo, "fila", "run1", {}, deferred, analysis or {},
+        applied, later = m.decide(repo, "fila", "run1", states, deferred, analysis or {},
                                   question=keys, output=screen.append, answer=rec,
                                   progress=progress, **kw)
     return m, "\n".join(screen), applied, later, rec, keys, progress
@@ -364,21 +374,52 @@ def _all_repo(tmp, queues, waivers):
     return root, paths
 
 
-def _panel(root, inputs, fail=(), as_text=False):
+def _panel(root, inputs, fail=(), as_text=False, color="nunca", exhausted=None,
+           real=False):
     """`ask_at_launch_all` in-process with a scripted keyboard and a recording
-    `_apply_answer` (the real one needs a terminal)."""
-    m = dec.load_module()
-    keys, calls = Keys(inputs), []
+    `_apply_answer` (the real one needs a terminal; `real=True` runs it, see
+    `real_plan`). `exhausted(m)` makes the exception the keyboard raises when the
+    script runs out (default EOFError)."""
+    m = dec.load_module(color)
+    keys, calls = Keys(inputs, (lambda: exhausted(m)) if exhausted else None), []
 
     def fake_apply(repo, queue, ident, text, keep=False, drop=False):
         calls.append({"queue": queue, "id": ident, "text": text, "keep": keep})
         return (1, "refused") if f"{queue}/{ident}" in fail else (0, f"{queue}/{ident} ok")
-    m._apply_answer = fake_apply
+    if not real:
+        m._apply_answer = fake_apply
     m.read_line = lambda prompt, output=print, wait=None: keys(prompt)
     buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
+    with contextlib.redirect_stdout(buf), real_plan(m, real):
         m.ask_at_launch_all(root, wait=None, leftovers=True, as_text=as_text)
     return buf.getvalue(), calls, keys
+
+
+@contextlib.contextmanager
+def real_plan(m, on=True):
+    """`cepa-plan answer` runs only with a terminal on stdin. The module under test gets
+    a `subprocess` that hands every child a pty as stdin, so the REAL `_apply_answer`
+    and the real `cepa-plan answer` run in-process."""
+    if not on:
+        yield
+        return
+    master, slave = os.openpty()
+    real = subprocess
+
+    class WithTty:
+        def __getattr__(self, name):
+            return getattr(real, name)
+
+        def run(self, cmd, **kw):
+            kw.setdefault("stdin", slave)
+            return real.run(cmd, **kw)
+    m.subprocess = WithTty()
+    try:
+        yield
+    finally:
+        m.subprocess = real
+        os.close(master)
+        os.close(slave)
 
 
 TWO_QUEUES = lambda: {  # noqa: E731
@@ -665,6 +706,868 @@ def test_created_items_reads_the_lines_a_group_answer_produces():
             m.Panel.close_panel = real
     check("all queues: the id carries its queue", m.created_items(got) == ["b/n1 — novo titulo"],
           (got, m.created_items(got)))
+
+
+# ── proof review: what a member records, the keys, the wording, the terminal ──
+
+def flat(text):
+    """The screen wraps long lines: compare the words."""
+    return " ".join(str(text).split())
+
+
+def four_with_waivers(tmp):
+    write_waivers(tmp, [waiver("fila", f"x{i}") for i in (1, 2, 3, 4)])
+    return tmp
+
+
+def _four_members():
+    """x1 writes a question AND has an analysis `pergunta` (the question wins); x2 only
+    the analysis one; x3 only a route; x4 nothing at all."""
+    x1 = owner_item("x1", "Q1? Recomendo sim: ok")
+    x2, x3, x4 = owner_item("x2", None), owner_item("x3", None), owner_item("x4", None)
+    x4["human_pending"] = None
+    analysis = {"itens": {"x1": {"pergunta": "P1?", "instrucao": "  faça   X  "},
+                          "x2": {"pergunta": "P2?", "instrucao": "Y2"},
+                          "x3": {},
+                          "x4": {"instrucao": "Y4"}}}
+    return [x1, x2, x3, x4], analysis
+
+
+def test_group_answer_text_instruction_extra_and_base_fallbacks():
+    items, analysis = _four_members()
+    _, out, applied, later, rec, keys, _ = run(items, ["y", "e1"], repo=four_with_waivers,
+                                              analysis=analysis)
+    note = "(respondida em grupo de 4)"
+    check("y with a one-line extra: base question, then Instrução, then the extra, then the "
+          "group note; base falls back from question to analysis pergunta to the route to "
+          "'unblock the item'",
+          [c["text"] for c in rec.calls] == [
+              f"sim: Q1? Recomendo sim: ok Instrução: faça X. e1 {note}",
+              f"sim: P2? Instrução: Y2. e1 {note}",
+              f"sim: route of x3. e1 {note}",
+              f"sim: unblock the item Instrução: Y4. e1 {note}"], rec.calls)
+    check("y is never kept", not any(c["keep"] for c in rec.calls), rec.calls)
+    _, out, *_, rec, keys, _ = run(items, ["y", ""], repo=four_with_waivers,
+                                   analysis=analysis)
+    check("y with no extra: no '. ' piece, the instruction stays",
+          [c["text"] for c in rec.calls] == [
+              f"sim: Q1? Recomendo sim: ok Instrução: faça X {note}",
+              f"sim: P2? Instrução: Y2 {note}", f"sim: route of x3 {note}",
+              f"sim: unblock the item Instrução: Y4 {note}"], rec.calls)
+    _, out, *_, rec, keys, _ = run(items, ["n", "e1"], repo=four_with_waivers,
+                                   analysis=analysis)
+    check("n: 'não', the same bases, NO Instrução (it is only for yes), always kept",
+          [c["text"] for c in rec.calls] == [
+              f"não: Q1? Recomendo sim: ok. e1 {note}", f"não: P2?. e1 {note}",
+              f"não: route of x3. e1 {note}", f"não: unblock the item. e1 {note}"]
+          and all(c["keep"] for c in rec.calls), rec.calls)
+
+
+def test_a_answers_each_member_with_its_own_recommendation_and_the_rest_one_by_one():
+    items, analysis = _four_members()
+    analysis["itens"]["x2"]["recomendo"] = "não"
+    analysis["itens"]["x3"]["recomendo"] = "sim"
+    _, out, applied, later, rec, keys, prog = run(
+        items, ["a", "", "n", ""], repo=four_with_waivers, analysis=analysis)
+    note = "(respondida em grupo de 4)"
+    byid = {c["id"]: c for c in rec.calls}
+    check("x1 sim from its own question, x2 não from the analysis (kept, no Instrução), "
+          "x3 sim from the analysis",
+          byid["x1"]["text"] == f"sim: Q1? Recomendo sim: ok Instrução: faça X {note}"
+          and byid["x2"]["text"] == f"não: P2? {note}" and byid["x2"]["keep"]
+          and byid["x3"]["text"] == f"sim: route of x3 {note}" and not byid["x3"]["keep"],
+          rec.calls)
+    check("x4 carries none: asked on its own card afterwards, no group note",
+          "[2/2] x4" in out and byid["x4"]["text"].startswith("não: unblock the item")
+          and "grupo" not in byid["x4"]["text"], (out, rec.calls))
+    check("the card counts the ones with a recommendation and says the rest follow",
+          "3 of the 4 carry a recommendation (2 yes, 1 no); the 1 that carry none stay out "
+          "of [a] and are asked one by one" in flat(out)
+          and "a = answers each item with its own recommendation (2 yes, 1 no); the 1 with "
+          "none are asked one by one" in flat(out), out)
+    check("the summary line says how many were recorded and how many come next",
+          "→ 3 of 4 answers recorded, 1 asked one by one next" in out, out)
+    check("the analysis recommendation alone is enough to offer [a]",
+          "[a] accept each one's recommendation" in keys.prompts[0]
+          and "(recommended)" not in keys.prompts[0], keys.prompts[0])
+
+
+def test_group_summary_line_all_recorded_and_the_card_words():
+    _, out, *_ = run(SCOPED, ["y", ""], repo=three_with_waivers)
+    check("everything recorded: the line has no 'not recorded' and no failure piece",
+          "→ 3 of 3 answers recorded\n" in out + "\n" and "not recorded" not in out
+          and "failed" not in out and "asked one by one next" not in out, out)
+    check("the card has its Items label, the three one-by-one lines and the legend of o/Enter/q",
+          "Items: 3 share this question:" in out
+          and "o = asks the 3 one by one, as usual" in out
+          and "Enter = leaves all 3 for later" in out
+          and "q = stops the questions; the rest stays for later" in out
+          and "y = yes to all 3: the item goes back to the queue with your answer; a "
+          "proposed waiver is accepted" in flat(out)
+          and "n = no to all 3: it stays as it is and I only record what you say" in flat(out),
+          out)
+    text_items = [owner_item("t1", "Fecho o card? Recomendo sim: x"),
+                  owner_item("t2", "fecho   o CARD? recomendo sim: x")]
+    _, out, *_ = run(text_items, ["q"])
+    check("a text group shows the question itself and has no waiver piece in its legend",
+          "Question: Fecho o card? Recomendo sim: x" in out
+          and "a proposed waiver" not in out and "In common" not in out
+          and "Items: 2 share this question:" in out, out)
+
+
+def test_group_keys_are_case_blind_and_have_the_words_yes_no_nao():
+    for key, want in (("Y", "sim"), ("yes", "sim"), ("  YES ", "sim"), ("N", "não"),
+                      ("no", "não"), ("nao", "não"), ("não", "não"), ("NAO", "não")):
+        _, out, applied, later, rec, keys, _ = run(SCOPED, [key, ""],
+                                                   repo=three_with_waivers)
+        check(f"{key!r} on the group card answers {want} to the three",
+              len(rec.calls) == 3 and all(c["text"].startswith(want + ": ")
+                                          for c in rec.calls)
+              and all(c["keep"] == (want == "não") for c in rec.calls), (out, rec.calls))
+    _, out, applied, later, rec, keys, _ = run(
+        [owner_item("x1", "A?"), owner_item("x2", "B?")], ["a", "q"],
+        repo=lambda t: (write_waivers(t, [waiver("fila", "x1"), waiver("fila", "x2")]) or t))
+    check("`a` when nobody recommends is an error and the card asks again (then q)",
+          '"a" is not one of the options' in out and len(keys.prompts) == 2
+          and not rec.calls, (out, keys.prompts))
+
+
+def test_group_v_opens_the_editor_for_the_one_line_extra():
+    seen = []
+
+    def editor(*a, **k):
+        seen.append(a)
+        return "texto do editor"
+    _, out, applied, later, rec, keys, _ = run(SCOPED, ["y", "v"], repo=three_with_waivers,
+                                              editor=editor)
+    check("the editor opened once, as 'group of 3', on the common reason, titled with the "
+          "count",
+          len(seen) == 1 and seen[0][0] == "group of 3" and "nada a provar" in seen[0][1]
+          and seen[0][2] == "3 items, one question", seen)
+    check("what the editor returned is the extra of every member",
+          all(". texto do editor (respondida em grupo de 3)" in c["text"]
+              for c in rec.calls) and len(rec.calls) == 3, rec.calls)
+    seen.clear()
+    pair = [owner_item("t1", "Fecho   o card?"), owner_item("t2", "fecho o card?")]
+    run(pair, ["n", "V"], editor=editor)
+    check("on a text group the editor is shown the question text itself",
+          len(seen) == 1 and seen[0][0] == "group of 2" and seen[0][1] == "Fecho   o card?"
+          and seen[0][2] == "2 items, one question", seen)
+
+
+def test_group_o_says_it_asks_them_one_by_one_and_all_no_recommendation_lines():
+    _, out, *_ = run(SCOPED, ["o", "q"], repo=three_with_waivers)
+    check("o prints its note and the panel announces the cards that follow",
+          "asking the 3 one by one" in out
+          and "3 more question(s) follow, one by one" in out, out)
+    no = [owner_item(f"x{i}", f"Aceito {i}? Recomendo não: nao") for i in (1, 2, 3)]
+    _, out, _a, _l, rec, keys, _p = run(no, ["a", ""], repo=three_with_waivers)
+    check("all-no: the line says no, `a` is recommended, the legend counts 0 yes 3 no",
+          "Recommend a: all 3 recommend no" in out
+          and "(recommended)" in keys.prompts[0]
+          and "a = answers each item with its own recommendation (0 yes, 3 no)" in out
+          and "the 3 with none" not in out, out)
+    check("a on all-no keeps every item with 'não'", len(rec.calls) == 3 and all(
+        c["keep"] and c["text"].startswith("não: ") for c in rec.calls), rec.calls)
+    _, out, *_ = run(SCOPED[:2] + [owner_item("x3", "C? Recomendo não: x")], ["q"],
+                     repo=three_with_waivers)
+    check("mixed: the recommendation is 'each item's own', `a` is the recommended key",
+          "Recommend a: each item's own recommendation (2 yes, 1 no)" in out
+          and "all 3 recommend" not in out, out)
+    _, out, *_ = run([owner_item("x1", "A?"), owner_item("x2", "B?")], ["q"],
+                     repo=lambda t: (write_waivers(
+                         t, [waiver("fila", "x1"), waiver("fila", "x2")]) or t))
+    check("no recommendation: the card says so and the legend has no `a` line",
+          "none of them carries a recommendation, so there is no [a]" in flat(out)
+          and "a = answers" not in out, out)
+
+
+def test_analysis_recommendation_and_pergunta_reach_the_group():
+    items = [owner_item(f"t{i}", None) for i in (1, 2, 3)]
+    analysis = {"itens": {f"t{i}": {"pergunta": "Fecho o card?", "recomendo": "sim",
+                                    "porque": "p"} for i in (1, 2, 3)}}
+    _, out, applied, later, rec, keys, _ = run(items, ["a", ""], analysis=analysis)
+    check("the analysis pergunta is the written question, so the three are one text group",
+          "[1/1] 3 items, one question" in out and "Question: Fecho o card?" in out, out)
+    check("the analysis recommendation makes `a` the recommended key",
+          "Recommend a: all 3 recommend yes" in out and "(recommended)" in keys.prompts[0],
+          out)
+    check("each member records the analysis pergunta",
+          [c["text"] for c in rec.calls] == ["sim: Fecho o card? (respondida em grupo de 3)"] * 3,
+          rec.calls)
+    out2 = []
+    m = dec.load_module()
+    m.pending_as_text("fila", "run1", {}, items, analysis, output=out2.append,
+                      repo=Path(tempfile.gettempdir()))
+    check("the text listing takes the analysis too",
+          "- 3 items, same question (t1, t2, t3): Fecho o card?" in "\n".join(out2), out2)
+
+
+def test_group_card_on_a_real_terminal_lists_members_and_numbers_the_head():
+    long_title = " ".join(f"palavra{i}" for i in range(60))
+    items = [owner_item("x1", "Aceito? Recomendo sim: ok", title=long_title)] + [
+        dict(it) for it in SCOPED[1:]] + [owner_item("z9", "Libero o acesso?")]
+    _, out, applied, later, rec, keys, _ = run(items, ["y", "", "n", ""],
+                                              repo=three_with_waivers, color="sempre")
+    plain = ANSI.sub("", out)
+    lines = plain.splitlines()
+    check("the opening rule counts items and questions",
+          "── 4 items in 2 question(s) for you" in plain, plain)
+    check("the head is a card top with i/n and the count",
+          any(l.startswith("┌─ 1/2 · 3 items, one question") for l in lines), plain)
+    check("every member is a bordered line, indented by 4, with its title",
+          "│    x2 — title of x2" in lines and "│    x3 — title of x3" in lines
+          and any(l.startswith("│    x1 — palavra0 palavra1") for l in lines), plain)
+    check("a long member line wraps with a hanging indent of 6",
+          any(l.startswith("│      palavra") for l in lines), plain)
+    check("the card is closed: one end per card (group and single)",
+          sum(l.startswith("└─") for l in lines) == 2, plain)
+    check("the summary is a green tick line inside the card",
+          "│  ✓ 3 of 3 answers recorded" in lines, plain)
+    check("the second card is numbered 2/2", any(l.startswith("┌─ 2/2 · z9") for l in lines),
+          plain)
+    _, out, *_ = run(SCOPED, ["y", ""], repo=three_with_waivers, color="sempre",
+                     fail={"x2"})
+    lines = ANSI.sub("", out).splitlines()
+    check("a failed member is a red cross line, and so is the summary",
+          "│  ✗ not recorded: x2 — title of x2: cepa-plan refused x2" in lines
+          and "│  ✗ not recorded: 2 of 3 answers recorded, 1 failed and stay for later"
+          in lines, lines)
+    check("on a terminal a good run is green and the colors are those of the screen",
+          "\x1b[32m✓ 3 of 3 answers recorded" in
+          run(SCOPED, ["y", ""], repo=three_with_waivers, color="sempre")[1]
+          and "\x1b[31m✗" in out, out)
+
+
+# ── proof review: decide numbering, landing, the listing, the grouping rules ─
+
+def test_decide_numbers_the_cards_after_a_group_is_handed_back():
+    def repo(tmp):
+        write_waivers(tmp, [waiver("fila", "x1"), waiver("fila", "x2"),
+                            waiver("fila", "y1", motivo="m2"), waiver("fila", "y2", motivo="m2"),
+                            waiver("fila", "w1", motivo="m3"), waiver("fila", "w2", motivo="m3")])
+        return tmp
+    items = [owner_item(i, f"{i}? Recomendo sim: x") for i in ("x1", "x2", "y1", "y2", "w1", "w2")]
+    items.insert(1, owner_item("z9", "Libero o acesso?"))
+    inputs = ["o", "y", "", "y", "", "y", "", "y", "", "y", ""]
+    _, out, applied, later, rec, keys, prog = run(items, inputs, repo=repo)
+    check("the opening counts 7 items in 4 questions", "7 items in 4 question(s) for you" in out,
+          out)
+    heads = [l.strip() for l in out.splitlines() if l.strip().startswith("━━")]
+    check("G1 is 1/4; once it is handed back the others are 1/5 and 2/5; the members and the "
+          "single come after, 3/5 to 5/5, the handed-back ones first",
+          heads == ["━━ [1/4] 2 items, one question", "━━ [1/5] 2 items, one question",
+                    "━━ [2/5] 2 items, one question", "━━ [3/5] x1", "━━ [4/5] x2",
+                    "━━ [5/5] z9"], heads)
+    check("the handed-back members are announced once",
+          out.count("2 more question(s) follow, one by one") == 1, out)
+    check("answers: the two other groups first, then x1, x2, then z9",
+          [c["id"] for c in rec.calls] == ["y1", "y2", "w1", "w2", "x1", "x2", "z9"], rec.calls)
+    check("asked counts 7 items, once each; one card per group, the handed-back one included",
+          prog.get("asked") == 7 and prog.get("answered") == 7
+          and prog.get("questions") == 3, prog)
+
+
+def test_decide_group_false_asks_every_item_one_by_one():
+    _, out, applied, later, rec, keys, prog = run(SCOPED, ["q"], repo=three_with_waivers,
+                                                  group=False)
+    check("with group=False the panel is the old one: 3 cards, no group card",
+          "3 question(s) for you" in out and "one question" not in out
+          and "[1/3] x1" in out and "items in" not in out, out)
+
+
+def test_decide_with_a_given_total_numbers_inside_it():
+    _, out, *_ = run(SCOPED, ["q"], repo=three_with_waivers, first=3, of=9)
+    check("of=9 and first=3: the opening says 9, the card is 3/9",
+          "── 9 question(s) for you" in out and "[3/9] 3 items, one question" in out, out)
+
+
+def test_the_landing_counts_in_the_opening_and_q_there_leaves_the_groups_for_later():
+    action = {"acoes": [{"id": "aterrissar", "frase": "Land it", "destino": "main"}]}
+    items = SCOPED + [owner_item("z9", "Outra?")]
+    _, out, applied, later, rec, keys, prog = run(items, ["q"], repo=three_with_waivers,
+                                                  states=action)
+    check("the landing is one item and one question next to 3+1 owner items: 5 items in 3",
+          "5 items in 3 question(s) for you" in out, out)
+    check("q on the landing card: no group card, nothing asked, everything for later",
+          len(keys.prompts) == 1 and "one question" not in out and not rec.calls
+          and [l.split(":")[0] for l in later] == ["merge into `main`", "x1", "x2", "x3", "z9"],
+          (later, keys.prompts))
+    check("the group never reached the screen, so it is not counted as asked",
+          prog.get("questions", 0) == 0, prog)
+    landed = []
+    _, out, applied, later, rec, keys, prog = run(
+        SCOPED, ["y", "n", "ok"], repo=three_with_waivers, states=action,
+        land=lambda: landed.append(1) or 0)
+    check("y on the landing lands it and the group card follows",
+          landed == [1] and "3 items, one question" in out and len(rec.calls) == 3
+          and "2 items in 2 question(s)" not in out and "4 items in 2 question(s)" in out,
+          out)
+
+
+def test_pending_as_text_counts_the_landing_and_asks_the_listing_for_the_repo():
+    action = {"acoes": [{"id": "aterrissar", "frase": "Land it", "destino": "main"}]}
+    items = SCOPED + [owner_item("z9", "Outra?")]
+    m = dec.load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        write_waivers(tmp, [waiver("fila", "x1"), waiver("fila", "x2"), waiver("fila", "x3")])
+        with_action, without = [], []
+        m.pending_as_text("fila", "run1", action, items, {}, output=with_action.append,
+                          repo=Path(tmp))
+        m.pending_as_text("fila", "run1", {}, items, {}, output=without.append,
+                          repo=Path(tmp))
+    check("with the landing: 5 items (landing + 4) in 3 questions (landing + group + z9)",
+          "waiting on you: 5 items in 3 question(s)" in "\n".join(with_action),
+          with_action)
+    check("without it: 4 items in 2 questions",
+          "waiting on you: 4 items in 2 question(s)" in "\n".join(without), without)
+
+
+def _delivered_repo(tmp, ids=("a", "b", "c")):
+    """A git repo whose queue `fila` holds delivered items (done, with a route left) and
+    a proposed waiver each: what `cepa-until decide fila` lists."""
+    queue = []
+    for i in ids:
+        it = base.item(i, status="done", human_pending=f"route of {i}")
+        it["route_kind"] = "owner-task"
+        it["owner_question"] = f"Aceito {i}?"
+        queue.append(it)
+    root, paths = al._repo(tmp, {"fila": queue})
+    write_waivers(root, [waiver("fila", i) for i in ids])
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
+                    "waivers"], cwd=root, check=True)
+    return root, paths["fila"]
+
+
+def test_close_with_owner_lists_a_group_as_one_entry_when_not_interactive():
+    m = dec.load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _delivered_repo(tmp)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = m.close_with_owner(root, "fila", None, {}, interactive=False)
+    out = buf.getvalue()
+    check("the closing path passes the repo, so the listing groups: 3 items in 1 question",
+          rc == 0 and "waiting on you: 3 items in 1 question(s)" in out
+          and "- 3 items, same question (a, b, c): proof waiver" in out
+          and "- a (" not in out, out)
+
+
+def test_ask_at_launch_asks_one_by_one_and_never_groups():
+    m = dec.load_module()
+    queue = []
+    for i in ("a", "b"):
+        it = base.item(i, status="blocked", human_pending=f"route of {i}")
+        it["route_kind"] = "owner-task"
+        it["owner_question"] = f"Aceito {i}?"
+        queue.append(it)
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = al._repo(tmp, {"fila": queue})
+        write_waivers(root, [waiver("fila", "a"), waiver("fila", "b")])
+        data, _ = m.query_queue("fila", root)
+        keys, buf = Keys(["q"]), io.StringIO()
+        m.read_line = lambda prompt, output=print, wait=None: keys(prompt)
+        with contextlib.redirect_stdout(buf):
+            m.ask_at_launch(root, "fila", data)
+    out = buf.getvalue()
+    check("the launch panel counts items and shows the first item's own card, no group card",
+          "── 2 question(s) for you" in out and "one question" not in out
+          and "[1/2] a" in out, out)
+
+
+# ── group_owner_items and its helpers, called directly ──────────────────────
+
+def member(queue, ident, question=None, d=None, delivered=False, kind="owner-task"):
+    ad = owner_item(ident, question, kind=kind)
+    if delivered:
+        ad["reason"] = "pos-entrega"
+    return {"queue": queue, "ad": ad, "d": d or {}, "label": ident, "bare": ident}
+
+
+def grouping(waivers, members, files=()):
+    m = dec.load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        write_waivers(tmp, waivers)
+        for name, text in files:
+            (Path(tmp) / ".claude" / "waivers").mkdir(parents=True, exist_ok=True)
+            (Path(tmp) / ".claude" / "waivers" / name).write_text(text, encoding="utf-8")
+        return m.group_owner_items(Path(tmp), members)
+
+
+def ids(group_or_list):
+    members = group_or_list["members"] if isinstance(group_or_list, dict) else group_or_list
+    return [x["bare"] for x in members]
+
+
+def test_grouping_an_item_is_in_one_group_and_groups_keep_the_order_of_their_first_member():
+    members = [member("fila", "t1", "  Mesma?"), member("fila", "w1", "A?"),
+               member("fila", "t2", "mesma?"), member("fila", "w2", "B?"),
+               member("fila", "w3", "Mesma?"), member("fila", "lone", "Outra?")]
+    groups, singles = grouping([waiver("fila", f"w{i}") for i in (1, 2, 3)], members)
+    check("the waiver group takes w3 and the text group does not take it again",
+          [(g["kind"], ids(g)) for g in groups] == [("text", ["t1", "t2"]),
+                                                    ("waiver", ["w1", "w2", "w3"])],
+          [(g["kind"], ids(g)) for g in groups])
+    check("the group order follows the first member (text at 0 before waiver at 1), the "
+          "members keep the queue order, the singles are what is left, in order",
+          ids(singles) == ["lone"], ids(singles))
+    check("a text group carries the first member's question as written, not collapsed",
+          groups[0]["text"] == "  Mesma?" and groups[0]["delivered"] is False
+          and groups[1]["motivo"] == MOTIVO and groups[1]["delivered"] is False, groups)
+    members = [member("fila", "d1", "Igual?", delivered=True),
+               member("fila", "d2", "igual?", delivered=True)]
+    groups, singles = grouping([], members)
+    check("a text group of delivered items is delivered, and has no motivo",
+          len(groups) == 1 and groups[0]["delivered"] is True and "motivo" not in groups[0]
+          and not singles, groups)
+    members = [member("fila", "w1"), member("fila", "w2"), member("fila", "t1", "Q?"),
+               member("fila", "t2", "Q?"), member("fila", "u1", "R?"), member("fila", "u2", "R?")]
+    groups, _ = grouping([waiver("fila", "w1"), waiver("fila", "w2")], members)
+    check("the first group is the one of the first member; three groups come out in order",
+          [(g["kind"], ids(g)) for g in groups] == [
+              ("waiver", ["w1", "w2"]), ("text", ["t1", "t2"]), ("text", ["u1", "u2"])], groups)
+
+
+def test_grouping_waivers_by_motivo_queue_status_and_unreadable_files():
+    members = [member("fila", i) for i in ("x1", "x2", "x3", "x4")]
+    groups, singles = grouping([waiver("fila", "x1", "m1"), waiver("fila", "x2", "m1"),
+                                waiver("fila", "x3", "m2"), waiver("fila", "x4", "m2")],
+                               members)
+    check("two different motivos are two groups, each with its own motivo",
+          [(g["motivo"], ids(g)) for g in groups] == [("m1", ["x1", "x2"]),
+                                                      ("m2", ["x3", "x4"])] and not singles,
+          groups)
+    for status in ("aceita", "recusada", None):
+        w = [waiver("fila", "x1", status=status), waiver("fila", "x2", status=status)]
+        if status is None:
+            for x in w:
+                del x["status"]
+        groups, singles = grouping(w, members[:2])
+        check(f"a waiver whose status is {status!r} is not a proposal: no group",
+              not groups and len(singles) == 2, groups)
+    groups, _ = grouping([waiver(None, "x1"), waiver(None, "x2")],
+                         [member("a", "x1"), member("b", "x2")])
+    check("a waiver without `fila` ties its item in any queue: one group across queues",
+          [(g["kind"], [(x["queue"], x["bare"]) for x in g["members"]]) for g in groups]
+          == [("waiver", [("a", "x1"), ("b", "x2")])], groups)
+    groups, singles = grouping([waiver("a", "x1"), waiver("a", "x2")],
+                               [member("a", "x1"), member("b", "x2")])
+    check("a waiver that names another queue does not tie the item", not groups
+          and len(singles) == 2, groups)
+    groups, _ = grouping([waiver("fila", 7), waiver("fila", 8)],
+                         [member("fila", "7"), member("fila", "8")])
+    check("an item id the yaml reads as a number still matches", len(groups) == 1, groups)
+    m = dec.load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        write_waivers(tmp, [waiver("fila", "x1", "b"), waiver("fila", "x1", "a"),
+                            waiver("fila", "x1", "a"), waiver("fila", "x9", "c")])
+        found = m.proposed_waivers(Path(tmp))
+        check("two motivos on one item are joined sorted and deduplicated; an item with none "
+              "is None",
+              m.waiver_motivo_of(found, "fila", "x1") == "a, b"
+              and m.waiver_motivo_of(found, "fila", "nope") is None
+              and m.waiver_motivo_of(found, "other", "x9") is None, found)
+    members = [member("fila", "x1"), member("fila", "x2")]
+    groups, _ = grouping([waiver("fila", "x1", "a"), waiver("fila", "x1", "b"),
+                          waiver("fila", "x2", "a, b")], members)
+    check("the joined motivos are the key: x1 (a + b) and x2 (a, b) are one group",
+          len(groups) == 1 and groups[0]["motivo"] == "a, b", groups)
+
+
+def test_proposed_waivers_skips_what_is_not_a_proposal_or_cannot_be_read():
+    m = dec.load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = Path(tmp) / ".claude" / "waivers"
+        folder.mkdir(parents=True)
+        for name, text in (("00-list.yaml", "- a\n- b\n"), ("01-scalar.yaml", "hello\n"),
+                           ("02-broken.yaml", "a: [unclosed\n"),
+                           ("03-noitem.yaml", "motivo: m\nstatus: proposta\n"),
+                           ("04-nomotivo.yaml", "item: x1\nstatus: proposta\n"),
+                           ("05-emptymotivo.yaml", "item: x1\nmotivo: ''\nstatus: proposta\n"),
+                           ("06-nostatus.yaml", "item: x1\nmotivo: m\n"),
+                           ("07-accepted.yaml", "item: x1\nmotivo: m\nstatus: aceita\n"),
+                           ("08-ok.yaml", "item: x5\nmotivo: m\nstatus: proposta\n")):
+            (folder / name).write_text(text, encoding="utf-8")
+        (folder / "09-dir.yaml").mkdir()
+        (folder / "10-ok.yaml").write_text("item: x6\nmotivo: m\nstatus: proposta\n",
+                                           encoding="utf-8")
+        found = m.proposed_waivers(Path(tmp))
+    check("only the two real proposals are returned, whatever came before them",
+          [w["item"] for w in found] == ["x5", "x6"], found)
+
+
+def test_written_question_and_own_recommendation_read_the_question_then_the_analysis():
+    m = dec.load_module()
+    wq = m.written_question_of
+    check("the item's question wins, then the analysis pergunta, then nothing",
+          wq({"question": "Q"}, {"pergunta": "P"}) == "Q"
+          and wq({"question": None}, {"pergunta": "P"}) == "P"
+          and wq({"question": ""}, {"pergunta": "P"}) == "P"
+          and wq({}, {}) is None and wq({}, None) is None and wq({"question": ""}, {}) is None,
+          None)
+    rec = m.own_recommendation
+    check("'Recomendo sim' in any case, 'nao' and 'não', any amount of space",
+          rec({"question": "Fecho? recomendo SIM"}, {}) == "y"
+          and rec({"question": "Fecho? Recomendo nao"}, {}) == "n"
+          and rec({"question": "Fecho? Recomendo   não"}, {}) == "n"
+          and rec({"question": "Fecho? RECOMENDO\tsim: porque"}, {}) == "y", None)
+    check("the word must stand alone on both sides",
+          rec({"question": "Fecho? irRecomendo sim"}, {}) is None
+          and rec({"question": "Fecho? Recomendo simples"}, {}) is None
+          and rec({"question": "Fecho? Recomendo naoo"}, {}) is None, None)
+    check("with none in the question, the analysis one; the question's own wins over it",
+          rec({"question": "Fecho?"}, {"recomendo": "sim"}) == "y"
+          and rec({"question": "Fecho?"}, {"recomendo": "não"}) == "n"
+          and rec({"question": "Fecho?"}, {"recomendo": "nao"}) == "n"
+          and rec({"question": "Fecho?"}, {}) is None and rec({}, {}) is None
+          and rec({"question": "Fecho? Recomendo sim"}, {"recomendo": "não"}) == "y"
+          and rec({}, {"pergunta": "Fecho? Recomendo não", "recomendo": "sim"}) == "n", None)
+
+
+# ── proof review: the --all panel (hand back, cut, numbering, keep) ────────
+
+def _each_alone(names, pairs):
+    """One queue per name holding ONE item; `pairs` are the groups: (motivo, [names])."""
+    queues = {n: [_q_item(f"{n}1", f"Aceito {n}? Recomendo sim: ok")] for n in names}
+    waivers = [waiver(n, f"{n}1", motivo=motivo) for motivo, group in pairs for n in group]
+    return queues, waivers
+
+
+def test_all_panel_o_on_a_group_whose_members_are_the_only_items_of_their_queues():
+    with tempfile.TemporaryDirectory() as tmp:
+        queues, ws = _each_alone("ab", [(MOTIVO, "ab")])
+        root, _ = _all_repo(tmp, queues, ws)
+        out, calls, _ = _panel(root, ["o", "y", "", "n", ""])
+    check("each member, whose queue holds nothing else, gets its own card after the group",
+          [(c["queue"], c["id"]) for c in calls] == [("a", "a1"), ("b", "b1")], (calls, out))
+    check("...answered one by one: no group note, y goes back, n keeps",
+          [c["keep"] for c in calls] == [False, True]
+          and all("grupo" not in c["text"] for c in calls), calls)
+    check("the cards are numbered 1/2 and 2/2 and the handing back is announced",
+          "[1/2] a1" in out and "[2/2] b1" in out
+          and "2 more question(s) follow, one by one" in out
+          and "queue `a` · 1 question(s)" in out and "queue `b` · 1 question(s)" in out, out)
+
+
+def test_all_panel_o_with_two_members_in_the_same_queue_asks_them_one_by_one():
+    with tempfile.TemporaryDirectory() as tmp:
+        queues = {"c": [_q_item("c1", "Aceito C? Recomendo sim: ok"),
+                        _q_item("c2", "Aceito D? Recomendo sim: ok")]}
+        root, _ = _all_repo(tmp, queues, [waiver("c", "c1"), waiver("c", "c2")])
+        out, calls, keys = _panel(root, ["o", "y", "", "n", ""])
+    check("after `o` the two come as single cards, not as a second group card",
+          out.count("one question") == 1 and "[1/2] c1" in out and "[2/2] c2" in out,
+          out)
+    check("each answered on its own, in order, without the group note",
+          [(c["id"], c["keep"]) for c in calls] == [("c1", False), ("c2", True)]
+          and all("grupo" not in c["text"] for c in calls), calls)
+    check("the singles had the per-item menu", sum("[w] I write" in p for p in keys.prompts)
+          == 2, keys.prompts)
+
+
+def test_all_panel_n_to_all_keeps_every_item_and_y_does_not():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _all_repo(tmp, TWO_QUEUES(), TWO_WAIVERS)
+        out, calls, _ = _panel(root, ["n", "porque", "y", "", "y", ""])
+    byk = {(c["queue"], c["id"]): c for c in calls}
+    check("n to the group: both members recorded 'não: ...' with keep, with the follow-up",
+          all(byk[k]["keep"] and byk[k]["text"].startswith("não: ")
+              and ". porque (respondida em grupo de 2)" in byk[k]["text"]
+              for k in (("a", "a1"), ("b", "b1"))), calls)
+    check("y on the singles that follow is not kept",
+          not byk[("a", "a2")]["keep"] and not byk[("b", "b2")]["keep"], calls)
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _all_repo(tmp, TWO_QUEUES(), TWO_WAIVERS)
+        out, calls, _ = _panel(root, ["y", "", "q"])
+    check("y to the group: both members NOT kept",
+          [(c["id"], c["keep"]) for c in calls] == [("a1", False), ("b1", False)], calls)
+
+
+def _three_groups():
+    """Six queues with one item each; G1 = a+b, G2 = c+d, G3 = e+f."""
+    return _each_alone("abcdef", [("m1", "ab"), ("m2", "cd"), ("m3", "ef")])
+
+
+def _all_back(names):
+    return " · ".join(f"cepa-until decide {n}" for n in names)
+
+
+def test_all_panel_quit_or_cut_on_the_first_of_three_groups_names_every_queue_once():
+    cuts = (("q", ["q"], None, "questions stopped with q; the run goes on without."),
+            ("EOF", [], None, "questions interrupted; the run goes on without."),
+            ("NoAnswer", [], lambda m: m.NoAnswer("wait"),
+             "nobody answered in 0 min; the run goes on without."),
+            ("Ctrl-C", [], lambda m: KeyboardInterrupt(),
+             "questions interrupted; the run goes on without."))
+    for label, inputs, exhausted, says in cuts:
+        with tempfile.TemporaryDirectory() as tmp:
+            queues, ws = _three_groups()
+            root, _ = _all_repo(tmp, queues, ws)
+            out, calls, keys = _panel(root, inputs, exhausted=exhausted)
+        check(f"{label} on the first card: nothing answered, only that card was shown",
+              not calls and len(keys.prompts) == 1 and "[2/3]" not in out, (calls, out))
+        check(f"{label}: the closing line says why and names the six queues, each once, "
+              "in the order of the groups",
+              f"{says} To answer later: {_all_back('abcdef')}" in out
+              and out.count("cepa-until decide a") == 1, out)
+        check(f"{label}: the card counters are 1/3 and no closing panel follows",
+              "[1/3] 2 items, one question" in out and "Answered now" not in out, out)
+
+
+def test_all_panel_cut_on_a_later_group_names_only_the_queues_still_holding_questions():
+    for label, exhausted, says in (
+            ("EOF", None, "questions interrupted;"),
+            ("NoAnswer", lambda m: m.NoAnswer("wait"), "nobody answered in")):
+        with tempfile.TemporaryDirectory() as tmp:
+            queues, ws = _three_groups()
+            root, _ = _all_repo(tmp, queues, ws)
+            out, calls, _ = _panel(root, ["y", ""], exhausted=exhausted)
+        check(f"{label} on G2: G1 was answered in its two queues",
+              [(c["queue"], c["id"]) for c in calls] == [("a", "a1"), ("b", "b1")], calls)
+        check(f"{label}: the line names the queues of G2 and G3 only, G2's included",
+              f"{says}" in out and f"To answer later: {_all_back('cdef')}\n" in out + "\n"
+              and "decide a" not in out and "decide b" not in out, out)
+    with tempfile.TemporaryDirectory() as tmp:
+        queues, ws = _three_groups()
+        root, _ = _all_repo(tmp, queues, ws)
+        out, calls, _ = _panel(root, ["y", "", "q"])
+    check("q on G2: G1 answered, the queues of G2 and G3 named, once each",
+          f"To answer later: {_all_back('cdef')}" in out, out)
+
+
+def test_all_panel_numbers_the_cards_and_the_singles_after_a_group_is_handed_back():
+    with tempfile.TemporaryDirectory() as tmp:
+        queues, ws = _three_groups()
+        root, _ = _all_repo(tmp, queues, ws)
+        out, calls, _ = _panel(root, ["y", "", "y", "", "y", ""])
+    heads = [l.strip() for l in out.splitlines() if "one question" in l]
+    check("three groups, three cards numbered 1/3, 2/3, 3/3",
+          heads == [f"━━ [{k}/3] 2 items, one question" for k in (1, 2, 3)]
+          and "6 items in 3 question(s) for you" in out, heads)
+    with tempfile.TemporaryDirectory() as tmp:
+        queues, ws = _three_groups()
+        root, _ = _all_repo(tmp, queues, ws)
+        out, calls, _ = _panel(root, ["o", "y", "", "y", "", "y", "", "y", ""])
+    heads = [l.strip() for l in out.splitlines() if l.strip().startswith("━━")]
+    check("G1 handed back: it was 1/3, the other two are 1/4 and 2/4 and the two members "
+          "come last, 3/4 and 4/4",
+          heads == ["━━ [1/3] 2 items, one question", "━━ [1/4] 2 items, one question",
+                    "━━ [2/4] 2 items, one question", "━━ [3/4] a1", "━━ [4/4] b1"], heads)
+    check("the handed-back members answered as singles; the others as groups",
+          [(c["id"], "grupo" in c["text"]) for c in calls] == [
+              ("c1", True), ("d1", True), ("e1", True), ("f1", True),
+              ("a1", False), ("b1", False)], calls)
+
+
+# ── proof review: the REAL `_apply_answer` against the real `cepa-plan answer` ──
+
+def _queue_of(path):
+    return {str(i["id"]): i for i in yaml.safe_load(Path(path).read_text())["items"]}
+
+
+def _commits(root):
+    return int(al._git(root, "rev-list", "--count", "HEAD").strip())
+
+
+def test_real_apply_answer_records_drops_flattens_multiline_and_refuses():
+    m = dec.load_module()
+    items = []
+    for ident, status in (("a", "pending"), ("b", "pending"), ("c", "done"), ("d", "pending"),
+                          ("e", "pending")):
+        it = base.item(ident, status=status, human_pending=f"route of {ident}")
+        it["route_kind"] = "owner-task"
+        items.append(it)
+    with tempfile.TemporaryDirectory() as tmp:
+        root, path = al._repo(tmp, {"fila": items})
+        path = path["fila"]
+        with real_plan(m):
+            before = _commits(root)
+            ra = m._apply_answer(root, "fila", "a", "sim: pode seguir")
+            rb = m._apply_answer(root, "fila", "b", "não: ainda não", keep=True)
+            rc_ = m._apply_answer(root, "fila", "c", "sim: linha 1\nlinha 2")
+            rd = m._apply_answer(root, "fila", "d", "descartado: não vale", drop=True)
+            made = _commits(root) - before
+            rz = m._apply_answer(root, "fila", "zz", "sim: nada")
+            m._answer_commit = False
+            re_ = m._apply_answer(root, "fila", "e", "sim: sem commit")
+            after = _commits(root)
+        q = _queue_of(path)
+        check("y: rc 0, the route closes and the item stays pending with the answer kept",
+              ra[0] == 0 and q["a"]["human_pending"] is None and q["a"]["status"] == "pending"
+              and "sim: pode seguir" in q["a"]["evidence"], (ra, q["a"]))
+        check("n with keep: rc 0, the route stays open, the answer is recorded",
+              rb[0] == 0 and q["b"]["human_pending"] == "route of b"
+              and "não: ainda não" in q["b"]["evidence"], (rb, q["b"]))
+        check("a text with a line break keeps it (--multiline)",
+              rc_[0] == 0 and "linha 1\nlinha 2" in q["c"]["evidence"], (rc_, q["c"]))
+        check("drop: the item is dropped", rd[0] == 0 and q["d"]["status"] == "dropped",
+              (rd, q["d"]))
+        check("a refusal comes back as its nonzero rc and its message (stderr here)",
+              rz[0] != 0 and "não tem item 'zz'" in rz[1], rz)
+        check("the answer is committed by default, one commit per answered item",
+              made == 4, made)
+        check("with the commit turned off the queue is written but nothing is committed, "
+              "and the 'fila gravada sem commit' notice (false by then) is not shown",
+              re_[0] == 0 and after == before + 4 and q["e"]["human_pending"] is None
+              and "sem commit" not in re_[1] and re_[1], (re_, before, after))
+        m._answer_commit = True
+
+
+def test_real_apply_answer_shows_the_no_commit_notice_cepa_plan_prints_when_unfiltered():
+    """The notice is cepa-plan's own, so dropping the filter in `_apply_answer` shows it;
+    here the filter is what keeps `decide`'s output true."""
+    m = dec.load_module()
+    it = base.item("e", status="pending", human_pending="route of e")
+    it["route_kind"] = "owner-task"
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = al._repo(tmp, {"fila": [it]})
+        master, slave = os.openpty()
+        raw = subprocess.run([sys.executable, str(CEPA_UNTIL.parent / "cepa-plan"), "answer",
+                              "fila", "e", "--answer", "sim: z", "--repo", str(root),
+                              "--no-commit"], capture_output=True, text=True, stdin=slave)
+        os.close(master)
+        os.close(slave)
+    check("cepa-plan itself prints the notice with --no-commit",
+          "fila gravada sem commit" in raw.stdout + raw.stderr, raw)
+
+
+def _real_decide(deferred, inputs, queue_items, waivers=(), **kw):
+    """`decide` on queue `fila` with the real `_apply_answer`; returns what the screen,
+    the queue file and the waivers say after."""
+    m = dec.load_module()
+    keys, screen = Keys(inputs), []
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = _all_repo(tmp, {"fila": queue_items}, list(waivers))
+        with real_plan(m):
+            applied, later = m.decide(root, "fila", None, {}, deferred, {}, question=keys,
+                                      output=screen.append, progress={}, **kw)
+        waiver_files = [yaml.safe_load(p.read_text()) for p in
+                        sorted((root / ".claude" / "waivers").glob("*.yaml"))] \
+            if (root / ".claude" / "waivers").exists() else []
+        return ("\n".join(screen), applied, later, _queue_of(paths["fila"]), waiver_files,
+                _commits(root))
+
+
+def _delivered_queue_items(ids):
+    out = []
+    for i in ids:
+        it = base.item(i, status="done", human_pending=f"route of {i}")
+        it["route_kind"] = "owner-task"
+        out.append(it)
+    return out
+
+
+def test_real_group_answer_on_delivered_items_y_n_and_a_refusal():
+    ids = ("x1", "x2", "x3")
+    deferred = [delivered_item(i, f"Aceito {i}? Recomendo sim: ok") for i in ids]
+    ws = [waiver("fila", i) for i in ids]
+    out, applied, later, q, waivers, _ = _real_decide(
+        deferred, ["y", "tudo certo"], _delivered_queue_items(ids), ws)
+    check("y to a delivered group: the three tasks close in the real queue, the work stays done",
+          all(q[i]["human_pending"] is None and q[i]["status"] == "done" for i in ids)
+          and [a.split(":")[0] for a in applied] == list(ids) and not later, (q, applied))
+    check("each item's evidence holds its own question, the extra and the group note",
+          all(f"sim: Aceito {i}? Recomendo sim: ok. tudo certo (respondida em grupo de 3)"
+              in q[i]["evidence"] for i in ids), q)
+    check("the proposed waivers were accepted by the yes (status gone)",
+          len(waivers) == 3 and all("status" not in w for w in waivers), waivers)
+    check("the card reports the three recorded", "→ 3 of 3 answers recorded" in out, out)
+    out, applied, later, q, waivers, _ = _real_decide(
+        deferred, ["n", ""], _delivered_queue_items(ids), ws)
+    check("n to the group: every route stays open (kept), the answer is recorded as 'não'",
+          all(q[i]["human_pending"] == f"route of {i}"
+              and f"não: Aceito {i}? Recomendo sim: ok (respondida em grupo de 3)"
+              in q[i]["evidence"] for i in ids), q)
+    out, applied, later, q, waivers, _ = _real_decide(
+        deferred, ["y", ""], _delivered_queue_items(("x1", "x3")), ws)
+    check("a member cepa-plan refuses (it is not in the queue): its message is shown, it "
+          "stays for later, the other two are recorded",
+          "not recorded: x2 — title of x2: a fila fila não tem item 'x2'" in out
+          and "2 of 3 answers recorded, 1 failed and stay for later" in out
+          and [a.split(":")[0] for a in applied] == ["x1", "x3"]
+          and [l.split(":")[0] for l in later] == ["x2"]
+          and q["x1"]["human_pending"] is None and q["x3"]["human_pending"] is None,
+          (out, applied, later))
+
+
+def test_real_all_panel_n_to_all_keeps_the_routes_open_in_every_queue():
+    with tempfile.TemporaryDirectory() as tmp:
+        queues, ws = _each_alone("ab", [(MOTIVO, "ab")])
+        root, paths = _all_repo(tmp, queues, ws)
+        out, _, _ = _panel(root, ["n", "porque", ], real=True)
+        qa, qb = _queue_of(paths["a"]), _queue_of(paths["b"])
+    check("n to all in the --all panel: both routes stay open and carry 'não' + the note",
+          qa["a1"]["human_pending"] == "route of a1" and qb["b1"]["human_pending"] == "route of b1"
+          and "não: Aceito a? Recomendo sim: ok. porque (respondida em grupo de 2)"
+          in qa["a1"]["evidence"]
+          and "(respondida em grupo de 2)" in qb["b1"]["evidence"], (qa, qb, out))
+
+
+def test_group_card_closes_on_o_on_a_terminal_and_mixed_marks_a_recommended():
+    _, out, *_ = run(SCOPED, ["o", "q"], repo=three_with_waivers, color="sempre")
+    lines = ANSI.sub("", out).splitlines()
+    check("`o` closes the group card (one end) before the single card opens",
+          lines.index("└─") < next(i for i, l in enumerate(lines) if l.startswith("┌─ 1/3 · x1")),
+          lines)
+    mixed = [owner_item("x1", "A? Recomendo sim: ok"), owner_item("x2", "B? Recomendo não: x")]
+    _, _, _, _, _, keys, _ = run(mixed, ["q"], repo=lambda t: (write_waivers(
+        t, [waiver("fila", "x1"), waiver("fila", "x2")]) or t))
+    check("mixed recommendations: `a` is the recommended key in the menu",
+          "[a] accept each one's recommendation (recommended)" in keys.prompts[0],
+          keys.prompts[0])
+
+
+def test_all_panel_cut_after_o_lists_the_handed_back_queues_in_order_and_asks_nothing():
+    queues = {"a": [_q_item("a1", "Aceito A? Recomendo sim: ok")],
+              "b": [_q_item("b1", "Aceito B? Recomendo sim: ok")],
+              "c": [_q_item("c1", "Outra coisa?")],
+              "d": [_q_item("d1", "Aceito D? Recomendo sim: ok")],
+              "e": [_q_item("e1", "Aceito E? Recomendo sim: ok")]}
+    ws = [waiver("a", "a1"), waiver("b", "b1"), waiver("d", "d1", motivo="m2"),
+          waiver("e", "e1", motivo="m2")]
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _all_repo(tmp, queues, ws)
+        out, calls, keys = _panel(root, ["o"])
+    check("`o` on G1 then the keyboard ends on G2: nothing answered, no 'more questions "
+          "follow' (they are never asked)",
+          not calls and "more question(s) follow" not in out and len(keys.prompts) == 2,
+          (calls, out))
+    check("the closing names G2's queues first, then the handed-back ones, then the queue "
+          "that was never opened, each once",
+          f"To answer later: {_all_back('deabc')}" in out, out)
+
+
+def test_all_panel_two_members_of_one_queue_name_that_queue_once():
+    with tempfile.TemporaryDirectory() as tmp:
+        queues = {"c": [_q_item("c1", "Aceito C? Recomendo sim: ok"),
+                        _q_item("c2", "Aceito D? Recomendo sim: ok")]}
+        root, _ = _all_repo(tmp, queues, [waiver("c", "c1"), waiver("c", "c2")])
+        out, calls, _ = _panel(root, ["q"])
+    check("q on a group with two members in one queue: the queue is named once",
+          "To answer later: cepa-until decide c\n" in out + "\n"
+          and out.count("cepa-until decide c") == 1, out)
+
+
+def test_all_panel_a_with_one_member_lacking_a_recommendation_keeps_the_numbering():
+    queues = {"a": [_q_item("a1", "Aceito A? Recomendo sim: ok")],
+              "b": [_q_item("b1", "Aceito B? Recomendo não: x")],
+              "c": [_q_item("c1", "Aceito C?")],
+              "d": [_q_item("d1", "Outra coisa?")]}
+    ws = [waiver("a", "a1"), waiver("b", "b1"), waiver("c", "c1")]
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _all_repo(tmp, queues, ws)
+        out, calls, _ = _panel(root, ["a", "", "y", "", "n", ""])
+    heads = [l.strip() for l in out.splitlines() if l.strip().startswith("━━")]
+    check("the group is not dissolved (two members were answered): the card stays 1/2 and "
+          "the two singles are 2/3 and 3/3, the handed-back member last",
+          heads == ["━━ [1/2] 3 items, one question", "━━ [2/3] d1", "━━ [3/3] c1"], heads)
+    byk = {(c["queue"], c["id"]): c for c in calls}
+    check("a1 sim, b1 não (kept) from their own recommendation; d1 and c1 one by one",
+          byk[("a", "a1")]["text"].startswith("sim: ") and not byk[("a", "a1")]["keep"]
+          and byk[("b", "b1")]["text"].startswith("não: ") and byk[("b", "b1")]["keep"]
+          and not byk[("d", "d1")]["keep"] and byk[("c", "c1")]["keep"]
+          and "grupo" not in byk[("c", "c1")]["text"], calls)
 
 
 def main():
