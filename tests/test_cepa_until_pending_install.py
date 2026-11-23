@@ -54,11 +54,37 @@ def calls(root):
     return f.read_text().splitlines() if f.exists() else []
 
 
-def pending(root, home, *extra):
+def pending(root, home, *extra, repo=None):
     env = dict(os.environ, HOME=str(home))
     return subprocess.run([sys.executable, str(CEPA_UNTIL), "pending",
-                           "--repo", str(root), *extra],
+                           "--repo", str(repo or root), *extra],
                           capture_output=True, text=True, cwd=str(root), env=env)
+
+
+INSTALL_TEXT = "installing the plugins from the clone"
+
+
+def jsonl_of(root, queue, run):
+    return (root / ".claude" / "queues" / queue / "until" / f"{run}.jsonl")
+
+
+def lines_of(root, queue, run):
+    f = jsonl_of(root, queue, run)
+    return f.read_text().splitlines() if f.exists() else []
+
+
+def waiting_in_queue_b(root, run):
+    """A run of queue `b` that stays waiting (branch not landed), named `run`."""
+    tmp_run = f"tmp{run}"
+    add_run(root, tmp_run, keep_branch=True, merged=False, aterrissagem=RED)
+    data = json.loads(state_path(root, tmp_run).read_text())
+    state_path(root, tmp_run).unlink()
+    d = root / ".claude" / "queues" / "b" / "until"
+    d.mkdir(parents=True, exist_ok=True)
+    data.update({"fila": "b", "run": run})
+    (d / f"{run}.estado.json").write_text(json.dumps(data))
+    (d / f"{run}.jsonl").write_text(
+        json.dumps({"evento": "run_start", "fila": "b"}) + "\n")
 
 
 def events(root, run, name=None):
@@ -204,6 +230,94 @@ def test_two_closed_install_once():
                   for r in ("r1", "r3")))
 
 
+def test_ledger_match_is_by_queue_and_run():
+    print("CS-6: so o run fechado ganha o evento (par fila+run)")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp)                    # a/r1 landed
+        add_run(root, "r2", keep_branch=True, aterrissagem=RED)   # a/r2 stays
+        waiting_in_queue_b(root, "r1")             # b/r1: same run id, stays
+        p = pending(root, Path(tmp) / "home")
+        check("fechou so a/r1", p.stdout.count("closed:") == 1, p.stdout)
+        check("a/r1 ganha o evento", len(events(root, "r1", "instalado_no_pouso")) == 1)
+        check("a/r2 (mesma fila, nao fechado) nao ganha",
+              not any("instalado_no_pouso" in l for l in lines_of(root, "a", "r2")))
+        check("b/r1 (mesmo run id, outra fila) nao ganha",
+              not any("instalado_no_pouso" in l for l in lines_of(root, "b", "r1")),
+              str(lines_of(root, "b", "r1")))
+
+
+def test_copy_carries_only_new_lines():
+    print("CS-6: a copia para o segundo run leva so as linhas novas")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp, runs=("r1", "r3"))
+        old = "".join(json.dumps({"evento": "velho_r1", "n": i}) + "\n"
+                      for i in range(3))
+        with jsonl_of(root, "a", "r1").open("a") as f:
+            f.write(old)
+        pending(root, Path(tmp) / "home")
+        second = lines_of(root, "a", "r3")
+        check("r3 nao herda as linhas antigas de r1",
+              not any("velho_r1" in l for l in second), str(second))
+        check("r3 tem o instalado_no_pouso",
+              any("instalado_no_pouso" in l for l in second), str(second))
+
+
+def test_install_text_placement():
+    print("CS-6: texto da instalacao em stdout (texto) ou stderr (--json)")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp)
+        p = pending(root, Path(tmp) / "home")
+        check("texto: stdout traz o texto da instalacao",
+              INSTALL_TEXT in p.stdout, p.stdout)
+        check("texto: stderr nao traz", INSTALL_TEXT not in p.stderr, p.stderr)
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp)
+        p = pending(root, Path(tmp) / "home", "--json")
+        check("--json: stderr traz o texto da instalacao",
+              INSTALL_TEXT in p.stderr, p.stderr)
+        try:
+            json.loads(p.stdout)
+            ok = True
+        except ValueError:
+            ok = False
+        check("--json: stdout continua so o JSON",
+              ok and INSTALL_TEXT not in p.stdout, p.stdout)
+
+
+def test_failed_copy_is_reported():
+    print("CS-6: falha ao gravar no segundo .jsonl e dita, e sai 0")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp, runs=("r1", "r3"))
+        second = jsonl_of(root, "a", "r3")
+        if second.exists():
+            second.unlink()
+        second.mkdir()                              # cannot be opened for append
+        p = pending(root, Path(tmp) / "home")
+        check("sai 0", p.returncode == 0, p.stderr)
+        check("diz que nao conseguiu registrar",
+              "install after closing: could not record it" in p.stdout + p.stderr,
+              p.stdout + p.stderr)
+
+
+def test_runs_from_subdir_and_worktree():
+    print("CS-6: --repo em subdiretorio ou worktree do clone instala do clone")
+    for kind in ("subdir", "worktree"):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = landed_repo(tmp)
+            if kind == "subdir":
+                where = root / "sub"
+                where.mkdir()
+            else:
+                where = Path(tmp) / "linked"
+                git(root, "worktree", "add", "-q", "-b", "side", str(where))
+            p = pending(root, Path(tmp) / "home", repo=where)
+            check(f"{kind}: sai 0", p.returncode == 0, p.stderr)
+            check(f"{kind}: instalou do clone",
+                  calls(root) == [str(root.resolve())], str(calls(root)) + p.stderr)
+            check(f"{kind}: evento no .jsonl do clone",
+                  len(events(root, "r1", "instalado_no_pouso")) == 1)
+
+
 if __name__ == "__main__":
     test_installs_when_it_closes()
     test_live_other_run_defers()
@@ -211,6 +325,11 @@ if __name__ == "__main__":
     test_json_stays_json()
     test_nothing_closed_does_not_install()
     test_two_closed_install_once()
+    test_ledger_match_is_by_queue_and_run()
+    test_copy_carries_only_new_lines()
+    test_install_text_placement()
+    test_failed_copy_is_reported()
+    test_runs_from_subdir_and_worktree()
     if FAILURES:
         print(f"\n✗ {len(FAILURES)} falha(s)")
         sys.exit(1)
