@@ -198,7 +198,7 @@ def run_liveness(estado):
     """(state, detail) of a run record (the parsed `.estado.json`).
 
     state is `vivo`, `morto`, `desconhecido`, or the literal non-running estado
-    (`esperando-dono`, `aterrissado`, `interrompido`, ...). Only `rodando` is
+    (`esperando-dono`, `aterrissado`, `descartado`, `interrompido`, ...). Only `rodando` is
     judged: same host -> the pid must answer AND the heartbeat be fresh; other
     host -> the heartbeat only (a pid can't be probed there). No heartbeat
     (a file from before DUR-1) is `desconhecido`: never `vivo`.

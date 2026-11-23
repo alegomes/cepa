@@ -6034,22 +6034,56 @@ def landed_upstream(root, sha, destination):
     """Is `sha` (the tip of the run branch) already at the upstream of the
     destination branch? Where the destination has no upstream the local branch
     counts. Reads the upstream as the clone knows it: no `git fetch`."""
-    code, upstream = git(["rev-parse", "--verify", "-q",
-                          f"{destination}@{{upstream}}"], root)
-    target = upstream if code == 0 and upstream else destination
+    target = _landing_target(root, destination)
     code, _ = git(["merge-base", "--is-ancestor", sha, target], root)
     return code == 0
 
 
-def close_landed_run(path, item_states, destination):
-    """The one place where `pending` closes a run that already landed: state
-    `aterrissado`, the red-build marks of `aterrissagem` dropped, no build."""
+def _landing_target(root, destination):
+    """The ref a run is compared against: the upstream of the destination
+    branch, or the local branch where there is no upstream."""
+    code, upstream = git(["rev-parse", "--verify", "-q",
+                          f"{destination}@{{upstream}}"], root)
+    return upstream if code == 0 and upstream else destination
+
+
+def recorded_commit_landed(root, sha, destination):
+    """For a record whose branch is gone: is the commit recorded in its
+    `aterrissar` action at the landing target (same as `landed_upstream`: the
+    upstream of the destination, the local branch where there is no upstream)?
+    True when it is there; False when it is in neither the target nor the local
+    destination branch (never landed); None when it cannot be told: no recorded
+    commit, the commit object is not in the repo, the destination does not exist,
+    or the commit is in the local destination branch but not yet at its upstream
+    (a merge waiting for the push: not landed yet, not discarded either). On None
+    the caller leaves the record as it is instead of closing it blindly."""
+    if not sha or not isinstance(sha, str):
+        return None
+    code, _ = git(["cat-file", "-e", f"{sha}^{{commit}}"], root)
+    if code != 0:
+        return None
+    target = _landing_target(root, destination)
+    code, _ = git(["rev-parse", "--verify", "-q", f"{target}^{{commit}}"], root)
+    if code != 0:
+        return None
+    if landed_upstream(root, sha, destination):
+        return True
+    code, _ = git(["merge-base", "--is-ancestor", sha, destination], root)
+    return None if code == 0 else False
+
+
+def close_landed_run(path, item_states, destination, estado="aterrissado"):
+    """The one place where `pending` closes a run: state `aterrissado` (the run
+    already landed; the red-build marks of `aterrissagem` dropped, no build) or
+    `descartado` (a record without branch whose commit never reached the
+    destination; the marks stay, they are the history)."""
     info = dict(item_states.get("aterrissagem") or {})
-    info.pop("parou", None)
-    info.pop("motivo", None)
+    if estado == "aterrissado":
+        info.pop("parou", None)
+        info.pop("motivo", None)
     info.update(destino=destination, fechado_por="pending",
                 quando=datetime.now().isoformat(timespec="seconds"))
-    item_states.update(estado="aterrissado", aterrissagem=info,
+    item_states.update(estado=estado, aterrissagem=info,
                        atualizado=info["quando"])
     tmp = path.parent / (path.name + ".tmp")
     tmp.write_text(json.dumps(item_states, ensure_ascii=False, indent=2) + "\n",
@@ -6077,9 +6111,18 @@ def waiting_runs(repo):
             continue
         code, sha = git(["rev-parse", "--verify", "-q",
                            str(item_states.get("branch"))], root)
-        if code != 0:
-            continue
         destination = action.get("destino") or current_branch(root)
+        if code != 0:
+            # Branch gone: the commit recorded in the action decides. In the
+            # landing target (upstream) the run landed; in neither the upstream
+            # nor the local destination it was discarded. Without a verdict (no
+            # commit recorded, object missing, or merged locally and not yet
+            # pushed) the record stays `esperando-dono`, untouched.
+            landed = recorded_commit_landed(root, action.get("sha"), destination)
+            if landed is not None:
+                close_landed_run(path, item_states, destination,
+                                 "aterrissado" if landed else "descartado")
+            continue
         code, _ = git(["merge-base", "--is-ancestor", sha, destination], root)
         # A merge left by `land` on a red build is in the destination but has
         # not landed: it waits for the fix and for `land` again, unless the
