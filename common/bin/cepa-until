@@ -6418,19 +6418,21 @@ def install_for_closed(repo, closed, written=None):
         before = len(record.read_text(encoding="utf-8").splitlines())
     except OSError:
         before = 0
+    # Listed BEFORE the write: a write that fails midway still leaves content in the
+    # file, and the caller must commit it (`commit_run_records` skips a clean path).
+    if written is not None:
+        written.append((first_queue, first_run, record))
     try:
         with contextlib.redirect_stdout(out):
             install_on_landing(root, first_dir, first_run)
-        if written is not None:
-            written.append((first_queue, first_run, record))
         new = record.read_text(encoding="utf-8").splitlines()[before:]
         for ledger_dir, run_id, queue in ledgers[1:]:
             target = ledger_dir / f"{run_id}.jsonl"
+            if written is not None:
+                written.append((queue, run_id, target))
             with target.open("a", encoding="utf-8") as f:
                 for line in new:
                     f.write(line + "\n")
-            if written is not None:
-                written.append((queue, run_id, target))
     except OSError as e:
         out.write(f"install after closing: could not record it ({e})\n")
     return out.getvalue().splitlines()

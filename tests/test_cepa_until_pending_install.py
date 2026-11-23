@@ -512,6 +512,35 @@ def test_non_cepa_repo_makes_no_commit():
         check("HEAD nao se mexeu", git(root, "rev-parse", "HEAD") == before)
 
 
+def test_record_written_before_a_failed_write_is_still_committed():
+    print("CS-7: .jsonl que ganhou conteudo antes de uma escrita falhar entra no commit")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = landed_repo(tmp)
+        record = jsonl_of(root, "a", "r1")
+        # The install fails, and its rollback makes the record read-only: the first
+        # append (`instalado_no_pouso`) succeeded, the second (`reinstalacao_desfeita`)
+        # raises OSError inside `install_on_landing`.
+        (root / "bin" / "install.sh").write_text(
+            "#!/bin/sh\n"
+            f"case \" $* \" in *\" --rollback \"*) chmod a-w '{record}'; exit 0;; esac\n"
+            "exit 1\n")
+        commit_fixture(root)
+        before = git(root, "rev-parse", "HEAD")
+        p = pending(root, Path(tmp) / "home")
+        record.chmod(0o644)
+        if any(e.get("evento") == "reinstalacao_desfeita" for e in events(root, "r1")):
+            print("  (a escrita nao falhou neste ambiente: root ignora chmod; nada a provar)")
+            return
+        check("sai 0", p.returncode == 0, p.stderr)
+        check("o .jsonl ganhou o primeiro evento",
+              len(events(root, "r1", "instalado_no_pouso")) == 1)
+        check("git status --porcelain vazio",
+              git(root, "status", "--porcelain") == "", git(root, "status", "--porcelain"))
+        check("o .jsonl foi commitado",
+              ".claude/queues/a/until/r1.jsonl" in
+              git(root, "diff", "--name-only", before, "HEAD").split())
+
+
 if __name__ == "__main__":
     test_installs_when_it_closes()
     test_live_other_run_defers()
@@ -533,6 +562,7 @@ if __name__ == "__main__":
     test_two_closed_both_committed_clean_tree()
     test_json_stdout_stays_json_with_commit()
     test_non_cepa_repo_makes_no_commit()
+    test_record_written_before_a_failed_write_is_still_committed()
     if FAILURES:
         print(f"\n✗ {len(FAILURES)} falha(s)")
         sys.exit(1)
