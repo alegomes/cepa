@@ -1,0 +1,18 @@
+key: CS-6-pouso-ja-feito-sai-da-lista
+queue: pouso-ja-feito-sai-da-lista
+status: complete
+criteria:
+  - id: AC1
+    text: "docs/spec/pouso-ja-feito-sai-da-lista.md CS-6 (cli): no repo cepa, fechar o run por `cepa-until pending` reinstala os plugins com a mesma regra e as mesmas travas do `land`. Teste vermelho: com `bin/install.sh` falso, `pending` fecha a/r1 e o .jsonl ganha `instalado_no_pouso`; com last-install apontando para a worktree de outro run vivo, o .jsonl ganha `instalacao_adiada` e o install.sh falso nao roda."
+    altitude: cli
+    surface: "common/bin/cepa-until pending (e pending --json), processo real via subprocess, --repo, HOME falso, repo git temporario com remoto bare e bin/install.sh falso"
+    test: "tests/test_cepa_until_pending_install.py::test_installs_when_it_closes e ::test_live_other_run_defers (mais ::test_other_repo_does_not_install, ::test_json_stays_json, ::test_nothing_closed_does_not_install, ::test_two_closed_install_once)"
+    layer: cli-process
+    evidence: verified
+    run: "python3 tests/test_cepa_until_pending_install.py -> 19 linhas 'ok', 0 FAIL, '✓ tudo passou'. Contagem: 5+4+4+2+2+2 = 19 checagens executadas (N > 0). Vizinho: python3 tests/test_cepa_until_land_install.py -> '✓ tudo verde'"
+    readings:
+      diff: "50984dd: install_for_closed chama o mesmo install_on_landing do `land` (unica definicao, linha 2786), uma vez por chamada, so para runs fechados como landed, so no repo cepa; eventos vao ao .jsonl do run fechado; sob --json o texto vai para stderr e stdout segue JSON puro."
+      rollback_guard: "A trava de rollback (instalacao falha -> `--rollback`, evento reinstalacao_desfeita) vive dentro de install_on_landing, que o pending chama diretamente; nao ha segundo caminho. Nao e demonstrada na superficie `pending`: e coberta por reuso mais tests/test_cepa_until_land_install.py (CS-8: rollback ok, rollback que tambem falha, instalacao verde sem rollback), verde nesta auditoria. A trava de adiamento (instalacao_adiada), que e a que o teste vermelho declarado nomeia, e demonstrada na superficie pending. Registrado como leitura, nao como lacuna: o criterio declarado nao exige o rollback no pending."
+      scope: "CS-7 (commit do .jsonl), CS-8 e CS-9 sao itens posteriores e nao contam como lacuna de CS-6."
+      not_run: "suite completa (tests/run-all.sh) nao rodada por regra da rodada; fica com o supervisor."
+gap: null

@@ -1,0 +1,47 @@
+schema_version: 2
+card: CS-6
+queue: pouso-ja-feito-sai-da-lista
+verdict: unproven
+reviewed_at: 2026-11-23T03:00:00-03:00
+base_commit: 7defee7
+head_commit: 50984dd
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::install_for_closed (new: install once per call, event lines copied to the other closed runs, text returned as lines)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::cmd_pending (call to install_for_closed, text placed on stdout or, under --json, on stderr; help sentence)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "GREEN at 50984dd (detached worktree /tmp/proof-cs6-mir24g/wt, since removed): `python3 tests/test_cepa_until_pending_install.py` -> 'tudo passou'; `python3 tests/test_cepa_until_land_install.py` -> 'tudo verde'. The test drives the real `cepa-until pending` as a subprocess in a temp repo with a fake HOME and a fake bin/install.sh; no double stands in for the changed code."
+        - "Method: one exact-string replacement per perturbation on common/bin/cepa-until (pattern required to match exactly once), the two files run in order (new file first, stop at the first red), file restored between perturbations. Script /tmp/cs6tools/perturb.py. Worktree clean afterwards."
+        - "KILLED (15 of 27): P1 call removed; P2 filter == discarded; P3 filter != landed; P4 filter always true; P5 cepa_repo guard removed (installs in other repos); P7 guard always returns; P9 ledger match never; P11 copy skips the second closed run; P12 copy also onto the first run; P13 copy write removed; P15 install recorded on the last run instead of the first; P16 install_on_landing not called; P17 stdout of the install not captured (breaks --json); P20 --json install text on stdout (breaks the JSON); P26 call made with an empty closed list. All turned tests/test_cepa_until_pending_install.py red (rc 1); the land_install neighbor was not needed for any."
+        - "EQUIVALENT (4): P6 `not landed` guard removed: with no landed run `ledgers` stays empty and the next guard returns [], same behavior. P10 `if not ledgers` guard removed: it matters only when a state file just written by close_landed_run is missing again, which the CLI flow cannot produce. P25 help sentence removed: text only, no test reads --help for it. P27 install text printed before the closed: lines: no criterion and no test pins the relative order of those blocks (same judgment as CS-5 P28/P35)."
+        - "SURVIVED (8, not equivalent), all on behavior the diff builds beyond the two outcomes of the criterion: P8 ledger match by queue only (a run of the same queue that was not closed would get the copied event lines; the test closes both runs of queue a, so it cannot tell); P14 `before` offset always 0 (the copies to the other closed runs would also carry the first run's old lines; the test only counts instalado_no_pouso, which is not in the old lines); P18 install_for_closed returns [] (install text never shown); P22 text mode does not print the install lines; P23 text mode prints them to stderr; P21 --json drops the install text (the test only checks stdout is JSON); P19 the OSError message on a failed copy is dropped (error path never driven); P24 `main_root(repo)` replaced by `repo` (pending run from a subdirectory or worktree of the clone would look in the wrong root)."
+        - "Totals: 27 perturbations; 15 killed, 8 survived, 4 equivalent."
+    survivors:
+      - "P8 common/bin/cepa-until install_for_closed ledger match: missing assertion: a queue with a closed run and a not-closed run (e.g. a/r1 landed, a/r2 still waiting); after `pending`, a/r2's .jsonl must not contain instalado_no_pouso."
+      - "P14 common/bin/cepa-until install_for_closed `before` offset: missing assertion: with a closed second run whose .jsonl already has lines, the copied block must be only the new lines (line count of the second .jsonl grows by exactly the number of new events)."
+      - "P18/P22/P23 install text in text mode: missing assertion: stdout of `pending` contains the install output line (from the fake install.sh) and stderr does not."
+      - "P21 install text under --json: missing assertion: with --json, stderr contains the install output line and stdout is still only the JSON."
+      - "P19 failed copy message: missing assertion (needs an unwritable second .jsonl): the output carries `install after closing: could not record it`."
+      - "P24 root resolution: missing assertion: `pending --repo <subdir of the clone>` still installs from the clone root."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "`python3 -c \"import coverage\"` was not usable here (inline python is blocked) and `pip list` shows neither coverage nor pytest-cov: no coverage tool wired for the Python CLI (absent, reported separately from survivors); reachability inferred from 15 of 27 perturbations going red, including the call, the filter, the repo guard, the copy and the --json stdout."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only reinstalls plugins after closing a run recorded by cepa-until itself and relays the installer's text; no input from outside and no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Task, not Bug. Red-at-base check done anyway: tests/test_cepa_until_pending_install.py against common/bin/cepa-until of 7defee7 -> '7 falha(s)' (no instalado_no_pouso, no instalacao_adiada, no install call); restored to 50984dd -> 'tudo passou'."
+routing_reason: "The two outcomes the criterion names (instalado_no_pouso on close; instalacao_adiada with install.sh not run when last-install points at another live run) are load-bearing: their perturbations (P1, P5, P7, P9, P16, P26) are killed, and red at base is confirmed (7 failures). But 8 perturbations on behavior the diff also builds survive: the install text in text mode and under --json, the copy of event lines to the other closed runs (queue-only match, offset), the failed-copy message and the root resolution. These hunks are externally observable at the CLI, so they are unguarded by the external test; UNPROVEN until the assertions named under `survivors` exist. After they do, the remaining item is l2_coverage assumed (no coverage tool for this CLI), which by the CS-1..CS-5 rule routes to NEEDS-HUMAN; suggested decision for the human: accept reachability by perturbation in place of a coverage tool."
