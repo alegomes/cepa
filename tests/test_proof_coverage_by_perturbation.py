@@ -29,7 +29,8 @@ from _isolated_telemetry import isolate
 isolate()
 
 REPO = Path(__file__).resolve().parent.parent
-HOOK = REPO / "build-hex" / "hooks" / "proof-verdict-guard.py"
+HOOK = Path(os.environ.get("CEPA_PROOF_GUARD_HOOK")
+            or REPO / "build-hex" / "hooks" / "proof-verdict-guard.py")
 sys.path.insert(0, str(REPO / "board-flow" / "bin"))
 FAILURES = []
 
@@ -294,6 +295,125 @@ r = run(pw, artifact(l2=l2_block("waived", uncovered=[], waivers=WV), classes=PC
 check("waived + empty uncovered_lines + waiver only for a/B of two -> blocked, names c/D",
       blocked(r, "c/D"), r.stderr[:300])
 
+# ── mutation-survivor cases (each pins one rule of the L2 block) ───────────
+TODAY = date.today()
+sv = make_repo("surv")
+waiver(sv, "common/bin/cepa-plan")
+UNC1 = ["common/bin/cepa-plan:10-12"]
+NO_CLASSES = lambda c: c.replace("  changed_classes:\n", "  changed_classes: []\n")  # noqa: E731
+
+# 1. rule 1 fires only for technique: perturbation
+r = run(sv, artifact(l2=l2_block("pass", uncovered=UNC1)))
+check("proven + plain l2 pass (no technique) + uncovered_lines + perturbation pass -> allowed",
+      r.returncode == 0, r.stderr[:300])
+
+# 2. waived + empty uncovered_lines does not need the perturbation to pass
+r = run(sv, artifact("needs-human", l2_block("waived", uncovered=[], waivers=WV),
+                     perturbation="skipped"))
+check("waived + empty uncovered_lines + every class waived + perturbation skipped -> allowed",
+      r.returncode == 0, r.stderr[:300])
+
+# 3. assumed with nothing to cover is not "already waived"
+r = run(sv, artifact("needs-human", "  l2_coverage:\n    status: assumed\n    run: r\n",
+                     perturbation="skipped", classes=()).replace(
+    "  changed_classes:\n", "  changed_classes: []\n"))
+check("assumed + nothing to cover + perturbation skipped -> allowed (no waiver rule)",
+      r.returncode == 0, r.stderr[:300])
+r = run(sv, "schema_version: 2\ncard: X-1\nverdict: needs-human\n"
+            "levels:\n  l3_load_bearing:\n    perturbation:\n      status: skipped\n"
+            "  l2_coverage:\n    status: assumed\n    run: r\n")
+check("...same with no scope at all -> allowed", r.returncode == 0, r.stderr[:300])
+
+# 4. every field of WAIVER_REQUIRED counts
+for fld in ("revisit_trigger", "criado_em"):
+    d = make_repo("req-" + fld)
+    waiver(d, "common/bin/cepa-plan", drop=fld)
+    r = run(d, artifact(l2=l2_block("waived", waivers=WV)))
+    check(f"proven + waived + waiver missing {fld} -> blocked", blocked(r, "cepa-plan"),
+          r.stderr[:300])
+
+# 5. a waiver whose date is TODAY still holds
+d = make_repo("today")
+waiver(d, "common/bin/cepa-plan", trigger=f"until {TODAY.isoformat()}")
+r = run(d, artifact(l2=l2_block("waived", waivers=WV)))
+check("waiver whose revisit_trigger date is today still holds", r.returncode == 0,
+      r.stderr[:300])
+
+# 6. non-mapping YAML files in .claude/waivers/ never crash the hook
+d = make_repo("junk")
+(d / ".claude" / "waivers" / "empty.yaml").write_text("")
+(d / ".claude" / "waivers" / "list.yaml").write_text("- a\n- b\n")
+r = run(d, artifact(l2=l2_block("waived", waivers=WV)))
+check("empty + list yaml next to no valid waiver -> exit 2, no crash",
+      r.returncode == 2 and "Traceback" not in r.stderr, f"{r.returncode} {r.stderr[:300]}")
+waiver(d, "common/bin/cepa-plan")
+r = run(d, artifact(l2=l2_block("waived", waivers=WV)))
+check("empty + list yaml next to a valid waiver -> the valid one is found (exit 0)",
+      r.returncode == 0 and "Traceback" not in r.stderr, f"{r.returncode} {r.stderr[:300]}")
+
+# 7. relative file_path resolves against the PAYLOAD cwd, not the process cwd
+rr = make_repo("relroot")
+proj = rr / "proj"
+(proj / "docs" / "proof").mkdir(parents=True)
+waiver(proj, "common/bin/cepa-plan")
+elsewhere = TMP / "elsewhere"
+elsewhere.mkdir()
+payload = json.dumps({"tool_name": "Write",
+                      "tool_input": {"file_path": "proj/docs/proof/X-1.yaml",
+                                     "content": artifact(l2=l2_block("waived", waivers=WV))},
+                      "cwd": str(rr)})
+r = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True,
+                   text=True, cwd=str(elsewhere))
+check("relative file_path with a prefix: waiver found via payload cwd, process cwd elsewhere",
+      r.returncode == 0, r.stderr[:300])
+
+# 8. status / technique are compared case-insensitively
+r = run(sv, artifact("needs-human", l2_block("Assumed", uncovered=[])))
+check("status: Assumed (capitalised) + perturbation pass + nothing uncovered -> blocked",
+      blocked(r, "technique: perturbation"), r.stderr[:300])
+r = run(sv, artifact(l2=l2_block("pass", "Perturbation", UNC1)))
+check("technique: Perturbation + pass + uncovered_lines + proven -> blocked by rule 1",
+      blocked(r, "uncovered_lines"), r.stderr[:300])
+r = run(n, artifact("needs-human", l2_block("Waived", waivers=WV)))
+check("status: Waived (capitalised) with no waiver -> blocked", blocked(r, "waived"),
+      r.stderr[:300])
+
+# 9. blank uncovered_lines entries are not uncovered hunks
+r = run(sv, artifact(l2=l2_block("pass", "perturbation", ["", "  "])))
+check("uncovered_lines of blank strings is empty -> proven + pass/perturbation allowed",
+      r.returncode == 0, r.stderr[:300])
+
+# 10. the file part of an uncovered_lines entry is split at the LAST colon
+for fpart in ("pkg:mod/a.py", "C:/proj/a/B.py"):
+    d = make_repo("colon-" + fpart.replace(":", "_").replace("/", "_"))
+    waiver(d, fpart, fname="nada-a-provar--colon.yaml")
+    r = run(d, artifact(l2=l2_block("waived", uncovered=[fpart + ":10-12"], waivers=WV)))
+    check(f"uncovered_lines entry with a colon in the file ({fpart}) + waiver for it -> allowed",
+          r.returncode == 0, r.stderr[:300])
+
+# 11. non-dict entries of changed_classes are ignored
+d = make_repo("junkclasses")
+waiver(d, "common/bin/cepa-plan")
+c = artifact("needs-human", l2_block("waived", uncovered=[], waivers=WV))
+c = c.replace("  changed_classes:\n", "  changed_classes:\n    - bare-string\n    - null\n", 1)
+r = run(d, c)
+check("changed_classes with a bare string and null next to a waived dict -> allowed, no crash",
+      r.returncode == 0 and "Traceback" not in r.stderr, f"{r.returncode} {r.stderr[:300]}")
+
+# a malformed sibling must not switch the L2 rules off (the guard swallows the error)
+r = run(n, c)
+check("...and with no waiver for the dict's class -> still blocked (rules not silently off)",
+      blocked(r, "cepa-plan"), r.stderr[:300])
+
+# 12. a perturbation that did not PASS backs nothing
+r = run(a, artifact("unproven", l2_block("assumed", uncovered=[]), perturbation="survived"))
+check("unproven + assumed + empty uncovered + perturbation survived -> allowed",
+      r.returncode == 0, r.stderr[:300])
+r = run(sv, artifact("unproven", l2_block("waived", uncovered=UNC1, waivers=WV),
+                     perturbation="survived"))
+check("unproven + waived + uncovered_lines + perturbation survived -> blocked",
+      blocked(r, "perturbation did not pass"), r.stderr[:300])
+
 # telemetry: distinct blocked= per new block
 tele = os.environ.get("CEPA_TELEMETRY_DIR")
 events = ""
@@ -319,13 +439,17 @@ CASES = {
     "future": dict(trigger=f"until {FUTURE}"),
     "loose-key": dict(escopo="Common  Bin/Cepa_Plan"),
     "wrong-motivo": dict(motivo="teste-cego"),
+    "missing-revisit_trigger": dict(drop="revisit_trigger"),
+    "missing-criado_em": dict(drop="criado_em"),
+    "today": dict(trigger=f"until {date.today().isoformat()}"),
 }
 for label, kw in CASES.items():
     t = make_repo("twin-" + label)
     waiver(t, "common/bin/cepa-plan", **kw)
-    real = W.applicable(W.load(str(t)), "nada-a-provar", "common/bin/cepa-plan")
+    real = W.applicable(W.load(str(t)), "nada-a-provar", "common/bin/cepa-plan",
+                        today=date.today())
     twin = guard.applicable_waiver(guard.load_waivers([t / ".claude" / "waivers"]),
-                                   "common/bin/cepa-plan")
+                                   "common/bin/cepa-plan", today=date.today())
     check(f"twin agrees with waivers.py: {label}", bool(real) == bool(twin),
           f"real={bool(real)} twin={bool(twin)}")
 
