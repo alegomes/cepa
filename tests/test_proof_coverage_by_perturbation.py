@@ -27,6 +27,10 @@ from pathlib import Path
 from _isolated_telemetry import isolate
 
 isolate()
+# `isolate()` points at a FIXED ledger dir that is never emptied, so a tag assertion
+# would read events of earlier executions. This file takes a fresh dir per execution.
+TELE = Path(tempfile.mkdtemp(prefix="proof-cov-tele-")).resolve()
+os.environ["CEPA_TELEMETRY_DIR"] = str(TELE)
 
 REPO = Path(__file__).resolve().parent.parent
 HOOK = Path(os.environ.get("CEPA_PROOF_GUARD_HOOK")
@@ -99,13 +103,38 @@ def l2_block(status, technique=None, uncovered=None, waivers=None):
     return s + '    run: "r"\n'
 
 
+def ledger():
+    """Every line of the (fresh) telemetry ledger, in file order."""
+    out = []
+    for p in sorted(TELE.glob("events-*.jsonl")):
+        out += p.read_text().splitlines()
+    return out
+
+
+def hook(payload, cwd=None):
+    """Runs the hook once; `.events` holds exactly what THIS call appended to the ledger."""
+    before = ledger()
+    r = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True,
+                       text=True, cwd=cwd, env=dict(os.environ, CEPA_TELEMETRY_DIR=str(TELE)))
+    r.events = [json.loads(line) for line in ledger()[len(before):]]
+    return r
+
+
 def run(root, content, name="X-1.yaml"):
     fp = str(Path(root) / "docs" / "proof" / name)
     payload = json.dumps({"tool_name": "Write",
                           "tool_input": {"file_path": fp, "content": content},
                           "cwd": str(root)})
-    return subprocess.run([sys.executable, str(HOOK)], input=payload,
-                          capture_output=True, text=True)
+    return hook(payload)
+
+
+def tagged(label, r, tag):
+    """This call appended exactly one `proof_verdict` event, and its `blocked` is `tag`
+    (None: an allowed call, the hook emits no `blocked` key)."""
+    ev = r.events
+    ok = (len(ev) == 1 and ev[0].get("event") == "proof_verdict"
+          and ev[0].get("blocked") == tag)
+    check(f"telemetry [{tag}]: {label}", ok, f"events={ev}")
 
 
 def blocked(r, *needles):
@@ -117,6 +146,7 @@ a = make_repo("a")
 r = run(a, artifact())
 check("proven + l2 pass/perturbation + L3 pass + nothing uncovered -> allowed",
       r.returncode == 0, r.stderr[:300])
+tagged("allowed proven", r, None)
 
 r = run(a, artifact(perturbation="skipped"))
 check("...with L3 perturbation skipped -> blocked by the L2 perturbation rule",
@@ -125,6 +155,7 @@ check("...with L3 perturbation skipped -> blocked by the L2 perturbation rule",
 r = run(a, artifact(l2=l2_block("pass", "perturbation", ["common/bin/cepa-plan:10-12"])))
 check("...with non-empty uncovered_lines -> blocked, names uncovered_lines",
       blocked(r, "uncovered_lines"), r.stderr[:300])
+tagged("pass/perturbation + uncovered_lines", r, "l2_perturbation_unbacked")
 
 r = run(a, artifact(perturbation="survived"))
 check("...with perturbation survived -> blocked", r.returncode == 2, r.stderr[:300])
@@ -132,6 +163,7 @@ check("...with perturbation survived -> blocked", r.returncode == 2, r.stderr[:3
 r = run(a, artifact("needs-human", l2_block("assumed", uncovered=[])))
 check("needs-human + assumed + perturbation pass + nothing uncovered -> blocked",
       blocked(r, "technique: perturbation"), r.stderr[:300])
+tagged("assumed next to a passing perturbation", r, "l2_assumed_but_perturbed")
 
 r = run(a, artifact("needs-human", "  l2_coverage:\n    status: assumed\n    run: r\n"))
 check("...uncovered_lines absent -> blocked too", blocked(r, "technique: perturbation"),
@@ -155,6 +187,7 @@ UNC = ["common/bin/cepa-plan:10-12"]
 r = run(b, artifact("needs-human", l2_block("assumed", uncovered=UNC)))
 check("assumed + uncovered X + valid waiver for X -> blocked, says write `waived`",
       blocked(r, "status: waived", "waivers:"), r.stderr[:300])
+tagged("assumed with a valid waiver", r, "l2_assumed_but_waived")
 
 r = run(b, artifact("needs-human", "  l2_coverage:\n    status: assumed\n    run: r\n",
                     perturbation="skipped"))
@@ -192,6 +225,7 @@ r = run(b, artifact(l2=l2_block("waived", waivers=WV),
                     classes=("common/bin/cepa-plan", "common/bin/other")))
 check("waived but only one of two changed classes has a waiver -> blocked, names the other",
       blocked(r, "common/bin/other"), r.stderr[:300])
+tagged("waived, one of two classes unwaived (missing-waiver site)", r, "l2_waived_unbacked")
 
 f = make_repo("future")
 waiver(f, "common/bin/cepa-plan", trigger=f"until {FUTURE}")
@@ -202,6 +236,7 @@ n = make_repo("none")
 r = run(n, artifact("needs-human", l2_block("waived", waivers=WV)))
 check("needs-human + waived with no waiver at all -> blocked", r.returncode == 2,
       r.stderr[:300])
+tagged("waived, no waiver at all (missing-waiver site)", r, "l2_waived_unbacked")
 
 e = make_repo("empty")
 waiver(e, "common/bin/cepa-plan")
@@ -209,6 +244,7 @@ r = run(e, artifact(l2=l2_block("waived", waivers=WV), classes=()).replace(
     "  changed_classes:\n", "  changed_classes: []\n"))
 check("waived with nothing to cover (no classes, no uncovered) -> blocked", r.returncode == 2,
       r.stderr[:300])
+tagged("waived, nothing to cover (site 1)", r, "l2_waived_unbacked")
 
 # loose scope key
 lo = make_repo("loose")
@@ -250,6 +286,7 @@ broken = artifact(l2=l2_block("waived", waivers=WV)) + "broken: [unclosed\n"
 r = run(b, broken)
 check("fallback: proven + waived -> blocked, waiver could not be verified",
       blocked(r, "could not be verified"), r.stderr[:300])
+tagged("no-PyYAML fallback", r, "l2_waived_unverifiable")
 r = run(b, broken.replace("verdict: proven", "verdict: needs-human"))
 check("fallback: needs-human + waived -> allowed (rules 2 and 4 do not fire)",
       r.returncode == 0, r.stderr[:300])
@@ -284,8 +321,7 @@ payload = json.dumps({"tool_name": "Write",
                                      "content": artifact(l2=l2_block("waived", waivers=UWV),
                                                          classes=(UNIQ,))},
                       "cwd": str(rel)})
-r = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True, text=True,
-                   cwd=str(neutral))
+r = hook(payload, cwd=str(neutral))
 check("relative file_path, no prefix: waiver under payload cwd is found (process cwd elsewhere)",
       r.returncode == 0, r.stderr[:300])
 rel_none = make_repo("rel-none")
@@ -294,8 +330,7 @@ payload = json.dumps({"tool_name": "Write",
                                      "content": artifact(l2=l2_block("waived", waivers=UWV),
                                                          classes=(UNIQ,))},
                       "cwd": str(rel_none)})
-r = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True, text=True,
-                   cwd=str(neutral))
+r = hook(payload, cwd=str(neutral))
 check("...and a payload cwd without that waiver -> blocked (the lookup is not satisfied elsewhere)",
       r.returncode == 2, r.stderr[:300])
 
@@ -309,9 +344,11 @@ r = run(pw, artifact("needs-human", l2_block("waived", uncovered=["a/B:1"], waiv
                      perturbation="skipped", classes=PC))
 check("waived + partial uncovered_lines + perturbation skipped -> blocked",
       blocked(r, "perturbation did not pass"), r.stderr[:300])
+tagged("waived + uncovered_lines, perturbation not passing (site 2)", r, "l2_waived_unbacked")
 r = run(pw, artifact(l2=l2_block("waived", uncovered=[], waivers=WV), classes=PC))
 check("waived + empty uncovered_lines + waiver only for a/B of two -> blocked, names c/D",
       blocked(r, "c/D"), r.stderr[:300])
+tagged("waived, c/D unwaived (missing-waiver site)", r, "l2_waived_unbacked")
 
 # ── mutation-survivor cases (each pins one rule of the L2 block) ───────────
 TODAY = date.today()
@@ -380,8 +417,7 @@ payload = json.dumps({"tool_name": "Write",
                       "tool_input": {"file_path": "proj/docs/proof/X-1.yaml",
                                      "content": artifact(l2=l2_block("waived", waivers=WV))},
                       "cwd": str(rr)})
-r = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True,
-                   text=True, cwd=str(elsewhere))
+r = hook(payload, cwd=str(elsewhere))
 check("relative file_path with a prefix: waiver found via payload cwd, process cwd elsewhere",
       r.returncode == 0, r.stderr[:300])
 
@@ -431,6 +467,8 @@ r = run(sv, artifact("unproven", l2_block("waived", uncovered=UNC1, waivers=WV),
                      perturbation="survived"))
 check("unproven + waived + uncovered_lines + perturbation survived -> blocked",
       blocked(r, "perturbation did not pass"), r.stderr[:300])
+tagged("unproven waived + uncovered_lines, perturbation survived (site 2)", r,
+       "l2_waived_unbacked")
 
 # 13. rule 1 is about status `pass` only (not "anything but gap", not pass-or-waived)
 bw = make_repo("rule1-waived")
@@ -445,15 +483,20 @@ r = run(bn, artifact("needs-human", l2_block("assumed", "perturbation", ["a/B.py
 check("needs-human + assumed/perturbation + uncovered_lines + no waiver + perturbation pass -> allowed",
       r.returncode == 0, r.stderr[:300])
 
-# telemetry: distinct blocked= per new block
-tele = os.environ.get("CEPA_TELEMETRY_DIR")
-events = ""
-if tele:
-    for p in Path(tele).glob("events-*.jsonl"):
-        events += p.read_text()
-for tag in ("l2_perturbation_unbacked", "l2_assumed_but_perturbed",
-            "l2_waived_unbacked", "l2_assumed_but_waived"):
-    check(f"telemetry blocked={tag}", f'"blocked": "{tag}"' in events)
+# 14. surrounding whitespace in QUOTED values is stripped before the comparison
+#     (`collect_statuses`, the older enum check, strips + lowercases too: it never objects)
+r = run(a, artifact("needs-human", l2_block('" assumed "', uncovered=[])))
+check("l2 status ' assumed ' (padded) + perturbation pass + nothing uncovered -> blocked",
+      blocked(r, "technique: perturbation"), r.stderr[:300])
+tagged("padded l2 status", r, "l2_assumed_but_perturbed")
+r = run(a, artifact(l2=l2_block("pass", '" perturbation "', UNC1)))
+check("technique ' perturbation ' (padded) + pass + uncovered_lines + proven -> blocked by rule 1",
+      blocked(r, "uncovered_lines"), r.stderr[:300])
+tagged("padded technique", r, "l2_perturbation_unbacked")
+r = run(a, artifact("needs-human", l2_block("assumed", uncovered=[]), perturbation='" pass "'))
+check("perturbation status ' pass ' (padded) + assumed + nothing uncovered -> blocked by rule 2",
+      blocked(r, "technique: perturbation"), r.stderr[:300])
+tagged("padded perturbation status", r, "l2_assumed_but_perturbed")
 
 # ── twin agreement with board-flow/bin/waivers.py ──────────────────────────
 spec = importlib.util.spec_from_file_location("guard", HOOK)
