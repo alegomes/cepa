@@ -1,0 +1,43 @@
+schema_version: 2
+card: CS-3
+queue: pouso-ja-feito-sai-da-lista
+verdict: unproven
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: 7cda7bc
+head_commit: 7fe5e01
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::waiting_runs (in_upstream condition, lines 6091-6095)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "GREEN at 7fe5e01 (detached worktree /tmp/proof-cs3-a, since removed), each file on its own: tests/test_cepa_until_pending_closes_landed.py -> 'tudo passou' (rc 0); tests/test_cepa_until_pending_removes_branch_and_tree.py -> 'tudo passou' (rc 0). The CLI runs as a subprocess in a temp repo with a remote; no double stands in for the changed code."
+        - "Method: one-line sed on common/bin/cepa-until in the throwaway worktree (diff checked, 1 line changed), both test files run, file restored with git checkout. Line numbers are those of 7fe5e01."
+        - "KILLED (5): P2 line 6095 `if in_upstream:` -> `if red and in_upstream:` (closes rc=1, the exact CS-3 regression); P3 line 6093 drop `and not red` (closes rc=1); P5 line 6092 `in_upstream = False` (closes rc=1, removes rc=1); P6 line 6092 `in_upstream = True` (closes rc=1, removes rc=1, killed by the r3 fence); P7 line 6092 `in_upstream = not landed_upstream(...)` (closes rc=1, removes rc=1)."
+        - "SURVIVED P1 (real): line 6093 `if code == 0 and not red and not in_upstream:` -> `if code == 0 and not red:` (the old skip). Both files rc=0. A run with no `parou` whose branch is in the local destination AND in its upstream (merged by hand and pushed, the common case) is skipped and stays `esperando-dono` with branch kept. The new test only builds runs where local main was reset behind origin/main (code != 0), so the `code == 0` side of the new condition is never exercised."
+        - "SURVIVED P4 (real): line 6093 `code == 0 and` -> `code != 0 and`. Both files rc=0. Runs not yet merged and not in upstream would vanish from the waiting list, and the r3 fence only asserts state/branch of r3, not that its line is (or is not) in the output. Other test files may kill this (not run here by round rules: only the two covering files were allowed); inside the two covering files it is unguarded."
+        - "Judged equivalent: none."
+        - "Totals: 7 perturbations; 5 killed, 2 survived (P1, P4), 0 judged equivalent."
+    survivors:
+      - "common/bin/cepa-until:6093 P1: dropping `and not in_upstream` (old skip returns) stays green; needs a case with local main containing the merge, aterrissagem null (and another with parou: conflito), branch also in origin/main, expecting estado aterrissado and branch removed."
+      - "common/bin/cepa-until:6093 P4: `code == 0` -> `code != 0` stays green; needs a case with a run not merged and not in upstream, asserting its `waits to land` line is printed."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI (absent, reported separately from survivors); reachability inferred from 5 of 7 perturbations going red. The code == 0 branch of the changed condition is reached only by the r3 fence."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff runs git merge-base/rev-parse on the repo and reads a run-state JSON written by cepa-until itself; no input from outside and no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Task, not Bug. Equivalent check done anyway: head version of tests/test_cepa_until_pending_closes_landed.py against base 7cda7bc common/bin/cepa-until -> rc=1, '7 falha(s)': a/r1 and a/r2 stay esperando-dono, keep their branch and stay listed, and the `conflito` mark stays in the record (the not_through_land case is red at base)."
+routing_reason: "The new behavior is red at base (7 failures) and the CS-3 flip itself (line 6095) is guarded. But the changed skip condition at line 6093 has two survivors in the covering tests: P1 (a run merged in local main and also in origin/main, with no `parou`, is the usual real-world case and is not tested; the new test only uses a local main reset behind origin) and P4 (inverted `code == 0`). Surviving mutants on changed lines at the external surface make this UNPROVEN. Fix: extend not_through_land (or add a case) with a run whose merge is in local main and pushed, aterrissagem null / conflito, and one unmerged run asserted listed. l2_coverage assumed (no coverage tool) would otherwise route to NEEDS-HUMAN."
