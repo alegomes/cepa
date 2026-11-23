@@ -1,0 +1,66 @@
+key: lista-de-decisoes-substituida-declarada
+status: complete
+diff_range: 87b8dc6..d6b644f
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      common/hooks/report-style-lint.py como subprocesso (payload JSON com
+      transcript_path no stdin; {"decision":"block","reason":...} no stdout),
+      categoria lista-substituida-sem-aviso quando duas listas numeradas com ?
+      se seguem sem prompt do dono entre elas.
+    test: "tests/test_report_style_lint.py, bloco CAT_SUBST: (a) notificação, (a2) mensagem de outra sessão, (a3) tool_result, (h) isMeta, (g) turno só de lista sem edição, (k) com Edit"
+    layer: cli/subprocess com transcript sintético
+    evidence: verified
+    run: "python3 tests/test_report_style_lint.py -> 251 linhas 'ok', 0 falhas, 'all report-style tests passed'"
+    status: complete
+  - id: AC2
+    altitude: cli
+    surface: mesmo hook; linha de substituição na seção de fechamento é aceita, só no detalhe técnico não conta.
+    test: "(b) 'Esta lista substitui a anterior', (i) 'This list replaces the previous one', (i2) 'replaces the previous list', (n) só no detalhe técnico continua bloqueando"
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_report_style_lint.py -> 251 ok, 0 falhas, all report-style tests passed"
+    status: complete
+  - id: AC3
+    altitude: cli
+    surface: mesmo hook; resposta do dono (inclui <command-message>) entre as listas; "Nada pendente." não é lista.
+    test: "(c) resposta real do dono, (o) <command-message> do dono, (f) 'Nada pendente.' anterior"
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_report_style_lint.py -> 251 ok, 0 falhas, all report-style tests passed"
+    status: complete
+  - id: AC4
+    altitude: cli
+    surface: reescrita logo após o bloqueio do próprio hook é isenta, salvo mensagem não-dona no meio.
+    test: "(d) só o bloqueio do hook, reescrita -> isenta; (e) bloqueio, reescrita, notificação, lista -> bloqueia; (e2) notificação antes do bloqueio -> não isenta"
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_report_style_lint.py -> 251 ok, 0 falhas, all report-style tests passed"
+    status: complete
+  - id: AC5
+    altitude: cli
+    surface: lista sem recomendação segue sem medição de legenda de código e sem telemetria quando nada é levantado; sessão fechada por wrap-up não recebe a categoria nova.
+    test: "(j) primeira lista, (m) sem lista anterior, (m1) sem evento de telemetria, (m2) só a categoria nova, (p) wrap-up + nova lista, (l) telemetria carrega a categoria; blocos pós-wrap-up pré-existentes (a..p) seguem verdes"
+    layer: cli/subprocess (lê o arquivo de telemetria)
+    evidence: verified
+    run: "python3 tests/test_report_style_lint.py -> 251 ok, 0 falhas, all report-style tests passed"
+    status: complete
+  - id: AC6
+    altitude: domain
+    surface: common/skills/plain-report/SKILL.md declara a regra (seção "A new decision list over an unanswered one says it replaces it"; linha vai na seção de fechamento, não no detalhe técnico).
+    test: "leitura do diff 87b8dc6..d6b644f em SKILL.md (+14 linhas); documentação, sem teste executável"
+    layer: documentação
+    evidence: verified
+    run: "git diff 87b8dc6..d6b644f -- common/skills/plain-report/SKILL.md mostra a seção com exemplos PT/EN, local da linha, isenções e nome da categoria"
+    status: complete
+notes:
+  repeat_still_holds_numbering: >
+    O esboço do backlog dizia que a linha "repete o que ainda vale, com numeração
+    que não colide". A implementação exige só a linha de substituição; a mensagem
+    do bloqueio e o SKILL.md mandam repetir os itens que ainda valem, mas isso
+    não é verificado (o hook não tem como saber quais itens valem). Julgamento:
+    não é lacuna de critério. A linha declarada é o que desfaz a ambiguidade
+    (o dono sabe que só a lista nova vale); a checagem de numeração sem colisão
+    seria heurística frágil. Fica registrado como diferença do esboço, não como
+    pendência; se o dono quiser a checagem, vira card novo.

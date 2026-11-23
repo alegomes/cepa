@@ -1,0 +1,25 @@
+key: CS-10-decisoes-de-todas-as-filas
+queue: decisoes-de-todas-as-filas
+status: complete
+diff_range: d43857a..63407d6
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      `cepa-until decide --all --repo DIR` (e `decide` sem argumento) com stdin
+      que não é TTY (subprocess, stdin=DEVNULL), repo git temporário com filas
+      `a` (a1) e `b` (b1), cada item com rota de dono aberta. Sai com 0,
+      imprime as perguntas de a1 e b1 como texto, uma seção por fila, sem menu
+      de resposta, e o HEAD do git e os queue.yaml ficam como estavam.
+    test: tests/test_cepa_until_decide_all.py::test_cs10_decide_all_off_a_terminal_lists_every_question_and_commits_nothing (e test_cs10_bare_decide_off_a_terminal_also_lists_as_text)
+    layer: cli/subprocesso sobre repo git real; asserta rc 0, texto das duas perguntas, ordem das seções, contagem "waiting on you: 2", ausência de "[y] yes", HEAD igual e conteúdo das filas igual
+    evidence: verified
+    run: "python3 tests/test_cepa_until_decide_all.py -> '✓ 16 testes', todos os checks cs10 'ok', 0 falhas"
+    note: >
+      Diff muda common/bin/cepa-until (ask_at_launch_all com as_text; cmd_decide
+      escolhe as_text quando stdin ou stdout não é TTY) e o teste a exercita.
+      Asserções não codificam o defeito. O vermelho em adf4d99 antes da
+      correção não foi reexecutado por mim.
+    verdict: complete
+    gap: null
+deferral: []

@@ -1,0 +1,17 @@
+status: proposta
+motivo: nada-a-provar
+escopo: common/hooks/_shellscan.py
+razao: 'L2 (cobertura) dispensada no item sondagem-l4-nao-grava-last-build: a prova
+  quebrou de propósito os 13 pontos mudados (prefixos de agrupamento e as 4 chamadas)
+  e todos ficaram vermelhos em tests/test_capture_build_result_classify.py; o repo
+  não tem ferramenta de cobertura para Python. L4 não se aplica: o diff só lê a string
+  do comando.'
+revisit_trigger: quando o repo ganhar ferramenta de cobertura para Python
+autor: null
+proposto_por: drain-plan (cepa-until until/2026-11-21-1244)
+proposto_em: '2026-11-21'
+pergunta: 'Aceito a dispensa da medição de cobertura do leitor de comandos do registro
+  de build, já que as 13 quebras de propósito ficaram vermelhas? Recomendo sim: mesmo
+  critério já aceito para o cepa-plan em 10/11'
+fila: cepa
+item: sondagem-l4-nao-grava-last-build

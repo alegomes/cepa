@@ -1,0 +1,40 @@
+schema_version: 2
+card: until-lateral-casa-pela-fila
+verdict: proven
+reviewed_at: 2026-11-21T15:10:00-03:00
+base_commit: 82d00f1
+head_commit: b0acf94
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/hooks/_queuepath.py (SIDE_BRANCH com grupo run, side_branch_item)", module: common/hooks, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until (clean_side_branches recebe a fila e usa side_branch_item)", module: common/bin, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-plan (code_location/_branch_of_item casa a lateral pela fila do run)", module: common/bin, external_observable: true, substituted_by_double: null }
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "PRIMEIRA PASSADA (head 4dae01b), worktree detached descartavel. VERMELHA E (cepa-until volta a casar pelo id sozinho): python3 tests/test_cepa_until_run_branch.py -> 4 falhas, rc=1."
+        - "VERMELHA D (cepa-plan volta a _id_in(ident, branch)): python3 tests/test_side_branch_belongs_to_queue.py -> rc=1 (subprocesso de cepa-plan status --json)."
+        - "VERMELHA C (ramo --all sem exigir o prefixo '<fila>-'): python3 tests/test_side_branch_belongs_to_queue.py -> rc=1."
+        - "B (side_branch_item sem exigir ledger proprio): so o teste de funcao direta fica vermelho; equivalente na pratica nos cenarios de CLI (sem ledger proprio a leitura falha e devolve None). Nao gate."
+        - "SEGUNDA PASSADA (head b0acf94; desde 4dae01b so mudou tests/test_cepa_until_run_branch.py, +23 linhas, entao E, D e C seguem validas). Worktree detached /tmp/proof-until-lateral3, removido ao fim. BASELINE: python3 tests/test_side_branch_belongs_to_queue.py -> 'tudo ok'; python3 tests/test_cepa_until_run_branch.py -> 'tudo verde'; python3 tests/test_cepa_plan_status_code_and_epic.py -> 'tudo verde'."
+        - "VERMELHA A no CLI (_queuepath.py: 'if not others:' -> 'if True:'): python3 tests/test_cepa_until_run_branch.py -> rc=1, 2 FAIL em test_4f_same_minute_run_of_another_queue_keeps_its_side_branch ('run do mesmo minuto: a lateral que o registro da outra fila cita fica' e 'o registro desta fila nao diz que apagou', evento lateral_apagada). Superficie externa: cepa-until real como subprocesso."
+        - "Restaurado: git checkout do arquivo; python3 tests/test_cepa_until_run_branch.py -> 'tudo verde'."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; a clausula do mesmo minuto (ramo others) e alcancada na superficie de CLI: a perturbacao A em b0acf94 deixa test_cepa_until_run_branch.py vermelho (rc=1)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "ferramenta de desenvolvimento: a entrada e o nome de branch git e o ledger do proprio repositorio; nao ha usuario externo nem modulo api-rest"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Story; nao se aplica"
+routing_reason: "Segunda passada em b0acf94. O furo da primeira passada (perturbacao A sobrevivia no CLI) fechou: o teste novo test_4f_same_minute_run_of_another_queue_keeps_its_side_branch deixa a perturbacao vermelha em cepa-until real. E, D e C seguem vermelhas (codigo de producao identico a 4dae01b). Baseline verde nos tres arquivos de teste. Dubles: cepa-until, cepa-plan, _queuepath e git rodam reais como subprocesso; so o agente de desenvolvimento (claude) e falso, e ele nao e classe alterada. Suite completa nao rodada, por instrucao do supervisor. Ressalva: a clausula do mesmo minuto so e provada no CLI de cepa-until; no cepa-plan status e coberta por chamada direta da funcao compartilhada."

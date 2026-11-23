@@ -1,0 +1,34 @@
+schema_version: 2
+card: CS-1-decisoes-de-todas-as-filas
+verdict: needs-human
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: 42bc4df~1
+head_commit: f0efa4e
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan (WAITING_REASON, waiting_of_item, waiting_of_queue, cmd_waiting, parser, dispatch)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "54 perturbations in a detached worktree (git worktree add --detach /tmp/cs1-proof3 f0efa4e, removed at the end), scoped to the waiting block of common/bin/cepa-plan; covering test tests/test_cepa_plan_waiting.py run with python3. Baseline: waiting test green (32 ok lines, 'tudo passou'), tests/test_cepa_plan_ready.py green ('cepa-plan ready')"
+        - "52 of 54 RED, including all 12 survivors of the first pass and all 5 of the second pass (every queue unreadable -> exit 0, item order, --json root and path, ensure_ascii, stderr text of the empty-repo message)"
+        - "2 of 54 stay green and are EQUIVALENT mutants (the changed code cannot alter behavior): dropping `continue` after the unreadable warning (summary is None on error, nothing appended), and summing the total over `queues` instead of `shown` (queues with no items add 0)"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool run (none wired for the Python CLI); reachability inferred from 52 killed perturbations over the changed block, none of which left a branch unobserved"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the subcommand only reads local queue YAML written by the owner's own tooling and opens no external input surface; no changed module is input-bearing (api-rest)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Every non-equivalent perturbation of the changed waiting block is killed by tests/test_cepa_plan_waiting.py at the external surface (subprocess on cepa-plan and the cepa launcher). Only L2 coverage is `assumed` because no coverage tool exists for this CLI, which makes proven structurally unavailable; the human decides whether the 52/54 kill with 2 equivalent mutants stands in for measured coverage."

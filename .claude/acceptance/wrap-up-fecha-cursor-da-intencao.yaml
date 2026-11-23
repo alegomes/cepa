@@ -1,0 +1,41 @@
+schema_version: 1
+card: wrap-up-fecha-cursor-da-intencao
+status: complete
+audited_at: 2026-11-21T00:00:00-03:00
+head: 7290d1b
+diff: e618340..7290d1b
+source: "BACKLOG.md ~l.5283, origem fb-20261109-1 (sem Jira; criterios derivados do Esboço)"
+reading_used: |
+  Leitura pela INTENCAO (fb-20261109-1), nao pela letra: o painel nao pode afirmar
+  um passo em andamento depois que a sessao pousou, e o evento
+  intent.finished_at_last_step precisa ser gravado. O Esboço diz "cursor termina em 4";
+  o codigo grava 5 e mostra "plano cumprido 4/4". Isso e escolha de comportamento ja
+  commitada no branch (ce06ebf), registrada como DECISAO no resumo da run com o commit,
+  onde o dono pode derrubar. Nao foi tratada como pergunta ao dono nem como lacuna.
+criteria:
+  - id: AC1
+    text: "O wrap-up que termina com merge e push avança o cursor até o último passo. Intenção de 4 passos com cursor no 2, wrap-up completo, evento intent.finished_at_last_step gravado."
+    altitude: cli
+    surface: "`/common:wrap-up` (prosa executada por agente) -> `cepa-intent close --landed` -> .claude/session-intent + ledger intent.finished_at_last_step"
+    demonstrated_by:
+      test: "tests/test_intent_telemetry.py secao 3b (subprocess real do cepa-intent, 4 passos, cursor no 2) + contratos de texto sobre common/commands/wrap-up.md"
+      layer: "CLI via subprocess + contrato sobre o texto do wrap-up.md"
+      evidence: verified
+      run: |
+        python3 tests/test_intent_telemetry.py -> 97 linhas 'ok', 0 falhas, 'all intent telemetria tests passed'
+        python3 tests/test_cepa_intent.py      -> 'tudo ok'
+    verdict: complete
+    ceiling_note: |
+      Teto de altitude: /common:wrap-up e markdown executado por agente; nao existe
+      superficie automatizavel acima de CLI-subprocess + contrato de texto. Esse teto
+      agora esta coberto adequadamente: o passo 0 so le (`state`, nenhum `close` antes do
+      merge), L6b fica entre L6 e L7 e e condicionado a "only after L5 and L6 succeeded",
+      conflito em L5 diz "does not run", o caminho de descarte nunca contem
+      `close --landed`, passo esquecido vira `--step N`. Resta irredutivel apenas que o
+      agente de fato execute a prosa; isso so se prova com run real, nao com teste.
+    notes: |
+      Comportamento verificado no CLI: 4 passos/cursor 2 -> "plano cumprido 4/4", evento
+      via=wrap-up de=2 passos=4 passo=5, sem intent.cursor_advanced; historico preservado;
+      plano ja cumprido nao e reescrito; sessao alheia, --step e --landed fora do close
+      recusados/ignorados.
+status_reason: "Todos os criterios completos pela leitura de intencao declarada acima; a divergencia 5 vs 4 fica como decisao registrada para o dono derrubar, nao como lacuna."

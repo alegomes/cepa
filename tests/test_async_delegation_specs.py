@@ -29,6 +29,16 @@ lead is a subagent of the orchestrator, and ending the turn does not wait for th
 to the orchestrator with the worker still running. Measurement in run `until/2026-10-15-1946`: 10
 hand resumptions in 5 of 7 rounds. The fourth mark (`run_in_background: false`) keeps the
 exception from getting lost in a copy.
+
+## The exception became the rule (2026-11-22)
+
+The interactive session stopped the same way (feedback `fb-20261110-5`, wego-faturamento-backend,
+C1-18, 2026-11-10: 3 stops in one day). A lead is ALWAYS a subagent, of the orchestrator in a run
+and of the main session in an interactive one, and the background worker's notification goes to
+the session alive at the top, never to the lead. "End the turn, the notification brings you back"
+was never true for a lead. So `run_in_background: false` is the rule everywhere, the section names
+the interactive session, and the two sentences that taught the false premise are FORBIDDEN: a copy
+that brings either back fails here.
 """
 
 import re
@@ -44,9 +54,19 @@ TITLE = "## Delegation is asynchronous"
 # wherever there is a space — match with `\s+` and not with a literal " ".
 MARKS = [
     ("o retorno real da chamada", re.compile(r"Async\s+agent\s+launched\s+successfully")),
-    ("o que fazer no lugar", re.compile(r"[Ee]nd\s+the\s+turn")),
+    ("o que fazer no lugar", re.compile(r"in\s+the\s+same\s+turn")),
     ("o antipadrão medido", re.compile(r"until\s+\[\s+-f")),
-    ("a exceção do run desatendido", re.compile(r"run_in_background:\s*false")),
+    ("a regra de quem é subagente", re.compile(r"run_in_background:\s*false")),
+    ("o caso da sessão interativa", re.compile(r"interactive\s+session")),
+]
+
+# What the section must NOT say any more: the false premise that the notification comes back
+# to the lead, and the sentence that limited `run_in_background: false` to unattended runs.
+FORBIDDEN = [
+    ("a promessa de que o aviso volta ao lead",
+     re.compile(r"End\s+the\s+turn\.\s+The\s+notification\s+brings\s+you\s+back")),
+    ("a regra restrita ao run desatendido",
+     re.compile(r"Outside\s+an\s+unattended\s+run,\s+the\s+rule\s+above\s+still\s+applies")),
 ]
 
 
@@ -79,6 +99,10 @@ def main():
         for name, mark in MARKS:
             if not mark.search(text):
                 fails.append(f"{rel}: tem a seção mas perdeu {name} "
+                              f"({mark.pattern})")
+        for name, mark in FORBIDDEN:
+            if mark.search(text):
+                fails.append(f"{rel}: a seção ainda ensina {name} "
                               f"({mark.pattern})")
 
     for f in fails:

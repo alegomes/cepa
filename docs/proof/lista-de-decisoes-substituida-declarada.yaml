@@ -1,0 +1,45 @@
+schema_version: 2
+card: lista-de-decisoes-substituida-declarada
+verdict: needs-human
+reviewed_at: 2026-11-21T23:10:00-03:00
+base_commit: 87b8dc6
+head_commit: 22dc69b
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/hooks/report-style-lint.py (Stop hook, subprocess with JSON on stdin)"
+      module: common
+      external_observable: true
+      substituted_by_double: null   # tests invoke the real hook as a subprocess; no double
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "Python repo, no PIT"
+    perturbation:
+      status: pass
+      results:
+        - "FINAL RUN at head 22dc69b (hook unchanged since d6b644f), throwaway detached worktree /tmp/proof-lista (removed at the end): python3 tests/test_report_style_lint.py -> exit 0, 'all report-style tests passed'"
+        - "Previous round (head 84a5196, harness p4run.py): 47 perturbations; 13 earlier survivors killed (X4, X7, X8, X10-X18, X30); 4 SURVIVED-EQUIVALENT (not gaps): S11 'len(texts)<2'->'<1'; S12 rows[prev+1:cur]->rows[prev+1:]; S19 text-block filters dropped; G2 early-gate 'and False'; 3 survivors G6, X1, X3 (see next lines); all other perturbations (N1-N7, S1-S10, S13-S18, S20-S22, G1, G3-G5, G7-G9, Y1-Y6, X.0-X.5 wording alternatives) killed"
+        - "G6 RE-APPLIED at head (line 954, 'and not listed' dropped from the final no-telemetry gate in on_stop): KILLED by new test (G6) 'lista com recomendação, sem desvio, turno só de lista -> ainda emite telemetria' (0 events)"
+        - "X1 RE-APPLIED at head (line 877 inside replaced_list_deviation, isinstance guard replaced by 'if False:'): KILLED by new test (X1) 'linha de assistente sem lista de conteúdo entre as listas -> ainda bloqueia'"
+        - "X3 RE-APPLIED at head (line 882 inside replaced_list_deviation, 'if joined.strip():' replaced by 'if True:'): KILLED by new tests (X3) / (X3b) 'primeira lista seguida de chamada de ferramenta -> não pede a linha'"
+        - "Spot regression sample at head, 8 earlier kills re-applied, all still KILLED: S17 (has_decision_list guard -> False; test S9), S18 (isSidechain dropped; test 'texto de subagente'), N2 (any->all; test N2), S3 (blocks-and-not-others -> False; test d), S15 (REPLACES scope = whole report; test n), G1 (final-gate has_decision_list dropped; test m2), G4 (not closed -> True; test p), S13 (cur=texts[-2]; test c)"
+        - "Process note: an unprotected first batch (shell function failed to restore between mutations) made perturbations cumulative; that batch was discarded, worktree verified clean (git status empty), and the sample was redone one mutation at a time with git -C restore between each. Results above are from the clean redo."
+        - "Net result at head 22dc69b: 0 non-equivalent survivors among all perturbations applied (47 earlier + 3 re-applied + 8 sampled)"
+    pit_note: "n/a"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool for Python hooks in this repo; coverage not measured, reachability judged structurally (every changed branch has a named test above)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The hook reads a transcript and a JSON payload produced by the harness itself; the diff touches no api-rest module and opens no external input surface."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "git checkout 87b8dc6 -- common/hooks/report-style-lint.py with tests from 22dc69b: python3 tests/test_report_style_lint.py -> exit 1 (23 FAIL lines); restored to 22dc69b -> exit 0, 'all report-style tests passed'"
+routing_reason: "Red at base, green at head 22dc69b. The three previous survivors (G6, X1, X3) are now killed by the new tests, and the 8 earlier kills sampled still go red. Nothing externally observable is left unproven. The only open item is L2 coverage, which cannot be measured for Python hooks and stays 'assumed'; by the rule an assumed level makes PROVEN unavailable, so the verdict is NEEDS-HUMAN. Suggested decision for the human: accept structural reachability in place of measured coverage for this Python hook."

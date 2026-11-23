@@ -1,0 +1,16 @@
+status: proposta
+motivo: nada-a-provar
+escopo: board-flow/bin/classify_needs_human.py
+razao: 'L2 (cobertura) dispensada no item classificador-nh-le-campo-de-motivo: a prova
+  quebrou de propósito os 16 pontos mudados do classificador e todos ficaram vermelhos
+  em tests/test_needs_human_reasons.py; o repo não tem ferramenta de cobertura para
+  Python. L4 não se aplica: a função só lê um artefato já carregado do disco.'
+revisit_trigger: quando o repo ganhar ferramenta de cobertura para Python
+autor: null
+proposto_por: drain-plan (cepa-until until/2026-11-21-1244)
+proposto_em: '2026-11-21'
+pergunta: 'Aceito a dispensa da medição de cobertura do classificador de motivos,
+  já que as 16 quebras de propósito ficaram vermelhas? Recomendo sim: mesmo critério
+  já aceito para o cepa-plan em 10/11'
+fila: cepa
+item: classificador-nh-le-campo-de-motivo

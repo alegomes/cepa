@@ -1,0 +1,17 @@
+key: CS-4-pouso-ja-feito-sai-da-lista
+queue: pouso-ja-feito-sai-da-lista
+status: complete
+criteria:
+  - id: AC1
+    text: "docs/spec/pouso-ja-feito-sai-da-lista.md CS-4 (cli): dois runs em `esperando-dono` cujo branch foi apagado: o commit gravado na acao `aterrissar` de `a/r3` esta em `origin/main`, o de `a/r4` nao esta. Depois de `cepa-until pending`: `estado: aterrissado` em `a/r3` e `estado: descartado` em `a/r4`. (Respostas do dono, linhas 74 e 76, e 'Estado e migracao', linhas 31-32: `descartado` e estado novo conhecido pelo catalogo de `_state.py`.)"
+    altitude: cli
+    surface: "common/bin/cepa-until pending (processo real via subprocess, --repo), em repo git temporario com remoto bare"
+    test: "tests/test_cepa_until_pending_closes_branchless.py::red_test (a/r3 mergeado e empurrado para origin/main, a/r4 so em commit solto; checa aterrissado, descartado, fora da lista, destino/fechado_por/quando, `atualizado` novo, segunda chamada sem mudanca, --json sem runs). Cercas: merged_only_local (so no main local segue esperando-dono, arquivo intacto), no_upstream (vale o main local), undecidable (sem sha, objeto sumido, destino inexistente, sem acao: ficam como estao), branch_exists_unchanged (branch vivo segue o caminho CS-1..CS-3)"
+    layer: cli-process
+    evidence: verified
+    run: "python3 tests/test_cepa_until_pending_closes_branchless.py -> 19 linhas 'ok', 0 FAIL, '✓ tudo passou', exit 0. Regressao: tests/test_cepa_until_pending_closes_landed.py e tests/test_cepa_until_pending_removes_branch_and_tree.py -> '✓ tudo passou' cada um"
+    readings:
+      diff: "49d2f05: waiting_runs, com branch ausente, decide por recorded_commit_landed(sha gravado, destino): True fecha `aterrissado`, False fecha `descartado` (marcas de aterrissagem mantidas), None (sem sha, objeto ausente, destino inexistente, ou so no main local sem push) deixa o registro intacto. _state.py so cita `descartado` no docstring do catalogo de estados (nenhuma tabela a mudar)."
+      scope: "CS-5 a CS-8 (linha `closed:`, chave `fechados`, reinstalacao, commit do .jsonl, worktree suja) sao itens posteriores e nao contam como lacuna de CS-4."
+      not_run: "suite completa (tests/run-all.sh) nao rodada por regra da rodada; fica com o supervisor."
+gap: null

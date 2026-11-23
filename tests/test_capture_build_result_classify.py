@@ -230,3 +230,90 @@ def test_perturbation_build_after_git_dash_c_does_not_touch_main_state(tmp_path)
     assert not (proj / ".claude" / "last-build.json").exists()
     st = json.loads((wt / ".claude" / "last-build.json").read_text())
     assert st["status"] == "FAILURE"
+
+
+# fb-20261106-3: the proof-reviewer wraps Maven in shell grouping, so the build segment
+# started with `(`, `{`, `do` or `run(){` and was not recognised; the L4 probe result
+# (EMPTY) was recorded on the session tree. Real shapes from the 2026-11-03 prove-drain.
+_MVN = "./mvnw -q -pl application -am test -Dtest=T -Dsurefire.failIfNoSpecifiedTests=false"
+_GROUPED_BUILDS = {
+    "subshell_after_semicolon": (
+        "git worktree add @WT@ HEAD -f >/dev/null 2>&1; cd @WT@ && git checkout Y -- a; "
+        f"({_MVN} 2>&1 | grep -E \"Tests run:\" | head -8)"),
+    "l4_probe_timeout_in_subshell": (
+        f"cd @WT@ && (timeout 580 {_MVN} 2>&1 | grep -E \"Tests run\" | head -100)"),
+    "time_in_subshell": f"cd @WT@ && (time {_MVN} 2>&1 | grep Tests)",
+    "function_no_space": (
+        f"cd @WT@ && F=a/B.java\nrun(){{ {_MVN} >/dev/null 2>&1; grep -h \"Tests run\" x; }}"),
+    "function_with_space": (
+        f"cd @WT@ && F=a/B.java\nrun() {{ {_MVN} >/dev/null 2>&1; grep -h \"Tests run\" x; }}"),
+    "brace_group": "cd @WT@ && { ./mvnw test; }",
+    "for_loop_do_cd": "for t in A B; do cd @WT@ && ./mvnw test -Dtest=$t; done",
+}
+
+
+def test_effective_build_dir_sees_build_inside_shell_grouping(tmp_path):
+    wt = (tmp_path / "wt").resolve()
+    wt.mkdir()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for name, tmpl in _GROUPED_BUILDS.items():
+        assert cbr.effective_build_dir(tmpl.replace("@WT@", str(wt)), repo) == wt, name
+
+
+def test_perturbation_l4_probe_in_subshell_does_not_touch_main_state(tmp_path):
+    wt = (tmp_path / "wt").resolve()
+    wt.mkdir()
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    tmp = tmp_path / "tmp"
+    tmp.mkdir()
+    cmd = _GROUPED_BUILDS["l4_probe_timeout_in_subshell"].replace("@WT@", str(wt))
+    payload = {"cwd": str(proj), "session_id": "s-l4", "tool_name": "Bash",
+               "tool_input": {"command": cmd},
+               "tool_response": {"stdout": "", "stderr": "", "interrupted": False,
+                                 "exit_code": 0}}
+    subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload), text=True,
+                   capture_output=True, cwd=proj, env={**os.environ, "TMPDIR": str(tmp)})
+    assert not (proj / ".claude" / "last-build.json").exists()
+    st = json.loads((wt / ".claude" / "last-build.json").read_text())
+    assert st["status"] == "EMPTY"
+
+
+# Survivors of the proof gate for sondagem-l4-nao-grava-last-build: `!`, then/else/elif,
+# and the two call sites that read a segment after `cd` (log redirect, root-install marker).
+_PREFIXED_BUILDS = {
+    "bang": "cd @WT@ && ! ./mvnw test",
+    "then": "if true; then cd @WT@ && ./mvnw test; fi",
+    "else": "if false; then echo a; else cd @WT@ && ./mvnw test; fi",
+    "elif": "if false; then echo a; elif true; then cd @WT@ && ./mvnw test; fi",
+    # the build IS the elif condition: only the `elif` prefix exposes it (not `then`)
+    "elif_condition": "cd @WT@ && if false; then :; elif ./mvnw test; then :; fi",
+}
+
+
+def test_effective_build_dir_sees_build_after_bang_then_else_elif(tmp_path):
+    wt = (tmp_path / "wt").resolve()
+    wt.mkdir()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for name, tmpl in _PREFIXED_BUILDS.items():
+        assert cbr.effective_build_dir(tmpl.replace("@WT@", str(wt)), repo) == wt, name
+
+
+def test_redirected_output_reads_log_of_grouped_build(tmp_path):
+    (tmp_path / "out.log").write_text("[INFO] BUILD SUCCESS\n")
+    (tmp_path / "other.txt").write_text("unrelated\n")
+    # the Maven segment must be preferred over the later `echo > other.txt`; unstripped,
+    # `{ ./mvnw` is not recognised as Maven and the unrelated redirect wins.
+    cmd = "cd /tmp/wt && { ./mvnw test > out.log 2>&1; }; echo x > other.txt"
+    assert "BUILD SUCCESS" in cbr.redirected_output(cmd, tmp_path)
+
+
+def test_runs_root_install_sees_grouped_install(tmp_path):
+    tmp_path = tmp_path.resolve()
+    # brace group: the closing `)` of a subshell stays glued to the last token
+    # (`install)`), which is a separate, unhandled shape.
+    assert cbr.runs_root_install("cd /tmp/wt && { ./mvnw install; }", tmp_path, tmp_path)
+    assert not cbr.runs_root_install("cd /tmp/wt && { ./mvnw -pl a install; }", tmp_path, tmp_path)

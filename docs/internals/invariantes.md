@@ -176,6 +176,11 @@ não o resultado. Toda spec de agente que delega diz onde o turno termina. Nunca
 sondar disco atrás do arquivo de um worker, nunca inventar o que o subagente
 ainda não devolveu. A seção nas specs de agente está, desde 2026-10-23,
 em inglês e se chama "Delegation is asynchronous: do not poll the disk".
+Desde 2026-11-22 quem delega e é subagente (todo lead) chama o worker com
+`run_in_background: false` e recebe o resultado no mesmo turno, na sessão
+interativa e no run desatendido: o aviso do worker em segundo plano vai para a
+sessão do topo, nunca para o lead (feedback `fb-20261110-5`). "Encerrar o turno
+e esperar o aviso" vale só para a sessão principal.
 
 **Incidente.** 912 minutos (15 horas) medidos em 5 runs de 2026-08-26, entre
 19% e 52% do relógio de cada um, quase tudo no `engineering-lead` em laço de

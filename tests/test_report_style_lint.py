@@ -899,6 +899,329 @@ r = subprocess.run([sys.executable, str(HOOK)], input="{lixo",
                    capture_output=True, text=True)
 check("payload ilegível → rc=0", r.returncode == 0, f"rc={r.returncode}")
 
+# ── a new decision list over an unanswered one must say it replaces it ───
+# (2026-11-21, feedback fb-20261110-2, lista-de-decisoes-substituida-declarada)
+CAT_SUBST = "lista-substituida-sem-aviso"
+HEAD_STEPS = "### Decisões e próximos passos\n"
+GOOD_SUBST = GOOD.replace(
+    HEAD_STEPS, HEAD_STEPS + "Esta lista substitui a anterior; vale o "
+    "item 1, que continua o mesmo.\n")
+assert GOOD_SUBST != GOOD
+NOTIF = msg("user", "<task-notification>\n<task-id>abc</task-id>\n"
+            "<status>completed</status>\n</task-notification>", mtype="user")
+XSESSION = msg("user", [{"type": "text", "text":
+               '<cross-session-message from="outra">terminei o item</cross-session-message>'}],
+               mtype="user")
+HOOK_BLOCK = msg("user", "Stop hook feedback:\nSeu relatório final saiu do "
+                 "formato `plain-report`:\n  - falta a linha `**For you:**`\n"
+                 "Reescreva o relatório inteiro.", mtype="user")
+TOOL_RESULT = msg("user", [{"type": "tool_result", "tool_use_id": "t1",
+                            "content": "ok"}], mtype="user")
+
+
+def subst(*rows, session):
+    r = run("Stop", transcript(user("faça a coisa"), *rows), session=session)
+    return block_reason(r.stdout)
+
+
+def has_subst(reason):
+    return "substitui" in reason and "anterior" in reason
+
+
+check("(a) lista, notificação, lista sem a linha → bloqueia pedindo a linha",
+      has_subst(subst(text(GOOD), NOTIF, text(GOOD), session="s-sub-a")))
+check("(a2) lista, mensagem de outra sessão, lista sem a linha → bloqueia",
+      has_subst(subst(text(GOOD), XSESSION, text(GOOD), session="s-sub-a2")))
+check("(a3) tool_result entre as listas não é resposta → bloqueia",
+      has_subst(subst(text(GOOD), TOOL_RESULT, text(GOOD), session="s-sub-a3")))
+check("(b) mesma situação com 'Esta lista substitui a anterior' → não pede a linha",
+      not has_subst(subst(text(GOOD), NOTIF, text(GOOD_SUBST), session="s-sub-b")))
+check("(c) lista, resposta real do dono, lista → não pede a linha",
+      not has_subst(subst(text(GOOD), user("1. sim"), text(GOOD), session="s-sub-c")))
+check("(d) lista, só o bloqueio do próprio hook, reescrita → isenta",
+      not has_subst(subst(text(GOOD), HOOK_BLOCK, text(GOOD), session="s-sub-d")))
+check("(e) lista, bloqueio, reescrita, notificação, lista sem a linha → bloqueia",
+      has_subst(subst(text(GOOD), HOOK_BLOCK, text(GOOD), NOTIF, text(GOOD),
+                      session="s-sub-e")))
+check("(e2) lista, notificação, bloqueio, reescrita → não isenta (houve não-dono)",
+      has_subst(subst(text(GOOD), NOTIF, HOOK_BLOCK, text(GOOD), session="s-sub-e2")))
+NADA = ("O trabalho terminou e não sobrou nada para você decidir agora. " * 4
+        + "\n\n**Pra você:** nada.\n\n### Detalhe técnico\n"
+        + "Tudo foi conferido com os testes do próprio módulo. " * 12
+        + "\n\n### Decisões e próximos passos\nNada pendente.\n")
+check("(f) mensagem anterior com 'Nada pendente.' não conta como lista → não pede",
+      not has_subst(subst(text(NADA), NOTIF, text(GOOD), session="s-sub-f")))
+READ_ONLY = msg("assistant", [{"type": "tool_use", "name": "Bash",
+                               "input": {"command": "ls docs"}}])
+check("(g) turno só de lista, com leitura (Bash só de leitura) no turno → bloqueia",
+      has_subst(subst(text(GOOD), NOTIF, READ_ONLY, text(GOOD), session="s-sub-g")))
+check("(h) linha isMeta entre as listas não é resposta → bloqueia",
+      has_subst(subst(text(GOOD), msg("user", "corpo de skill injetado",
+                                      mtype="user", meta=True),
+                      text(GOOD), session="s-sub-h")))
+check("(i) 'This list replaces the previous one' é aceito",
+      not has_subst(subst(text(GOOD), NOTIF, text(GOOD.replace(
+          HEAD_STEPS, HEAD_STEPS + "This list replaces the previous one.\n")),
+          session="s-sub-i")))
+check("(i2) 'replaces the previous list' é aceito",
+      not has_subst(subst(text(GOOD), NOTIF, text(GOOD.replace(
+          HEAD_STEPS, HEAD_STEPS + "Note: replaces the previous list.\n")),
+          session="s-sub-i2")))
+check("(j) primeira lista da conversa → nada a fazer",
+      not has_subst(subst(text(GOOD), session="s-sub-j")))
+check("(k) com Edit no turno também bloqueia",
+      has_subst(subst(text(GOOD), NOTIF, EDIT, text(GOOD), session="s-sub-k")))
+# review fixes: the list-only gate keeps the old measurements untouched
+LISTONLY = ("Separei os pontos que dependem de você e deixei cada um como uma "
+            "pergunta curta, para a resposta caber em uma palavra só. " * 3
+            + "\n\n**Pra você:** 2 perguntas.\n\n### Detalhe técnico\n"
+            + "Nada foi alterado neste turno; só reuni o que estava aberto. " * 8
+            + "\n\n### Decisões e próximos passos\n"
+            "1. Mato o PR8 e o E1 antigos?\n"
+            "2. Apago o branch E3?\n")
+_ev_before_m = len(report_events())
+check("(m) lista sem recomendação, sem lista anterior → nenhum bloqueio",
+      block_reason(run("Stop", transcript(user("o que falta?"), text(LISTONLY)),
+                       session="s-sub-m").stdout) == "")
+check("(m1) ... e nenhum evento de telemetria (turno que nunca foi medido)",
+      len(report_events()) == _ev_before_m,
+      f"{len(report_events()) - _ev_before_m} evento(s) novo(s)")
+reason_m2 = subst(text(GOOD), NOTIF, text(LISTONLY), session="s-sub-m2")
+check("(m2) lista sem recomendação sobre lista anterior sem resposta → só a categoria nova",
+      has_subst(reason_m2) and "legenda" not in reason_m2
+      and "código de referência" not in reason_m2, repr(reason_m2[:300]))
+
+# review fixes: the replacement line must be in the closing section
+IN_DETAIL = GOOD.replace("### Detalhe técnico\n", "### Detalhe técnico\n"
+                         "O novo parser substitui o anterior. ")
+assert IN_DETAIL != GOOD
+check("(n) 'substitui o anterior' só no detalhe técnico → continua bloqueando",
+      has_subst(subst(text(GOOD), NOTIF, text(IN_DETAIL), session="s-sub-n")))
+
+# review fixes: an owner's slash command lands as <command-message>
+CMD_ROW = msg("user", "<command-message>common:next</command-message>\n"
+              "<command-name>/common:next</command-name>", mtype="user")
+check("(o) comando do dono (<command-message>) entre as listas é resposta → não pede",
+      not has_subst(subst(text(GOOD), CMD_ROW, text(GOOD), session="s-sub-o")))
+
+# review fixes: closed session (wrap-up) never gets the new category
+rows_p = [msg("user", CMD_WRAP, mtype="user"),
+          msg("assistant", [{"type": "tool_use", "name": "Bash",
+                             "input": {"command": "git commit -m x"}}]),
+          text(GOOD), text(END_WRAP), TOOL_RESULT, text(GOOD)]
+check("(p) sessão fechada pelo wrap-up + nova lista → categoria nova não aparece",
+      not has_subst(block_reason(run("Stop", transcript(*rows_p),
+                                     session="s-sub-p").stdout)))
+
+r = run("Stop", transcript(user("faça a coisa"), text(GOOD), NOTIF, text(GOOD)),
+        session="s-sub-tel")
+check("(l) telemetria carrega a categoria em tipos",
+      CAT_SUBST in json.dumps([e.get("tipos") for e in report_events()]))
+
+# ── proof survivors S1..S11 of the replaced-decision-list rule ─────────────
+# S1: a numbered `?` list with NO closing heading is not a decision list
+FILLER = "O trabalho segue e o resto está registrado no documento de apoio. " * 12
+NOHEAD = (FILLER + "\n\n1. Você roda o instalador agora?\n"
+          "   Recomendo **sim** — sem isso a mudança não vale.\n")
+check("(S1a) lista anterior sem o título de fechamento não conta → não pede a linha",
+      not has_subst(subst(text(NOHEAD), NOTIF, text(GOOD), session="s-sub-s1a")))
+check("(S1b) lista atual sem o título de fechamento não é lista de decisões → não pede",
+      not has_subst(subst(text(GOOD), NOTIF, text(NOHEAD), session="s-sub-s1b")))
+
+# S2: items without `?` are not decisions
+NOQ = GOOD.replace("1. **Você roda `bin/install.sh --clean` agora?**",
+                   "1. **Rode `bin/install.sh --clean` agora.**")
+assert NOQ != GOOD
+check("(S2) lista anterior com itens numerados sem `?` não conta → não pede a linha",
+      not has_subst(subst(text(NOQ), NOTIF, text(GOOD), session="s-sub-s2")))
+
+# S3: a <system-reminder> row is the machine, not the owner
+SYSREM = msg("user", "<system-reminder>\nlembrete injetado pelo harness\n"
+             "</system-reminder>", mtype="user")
+check("(S3) <system-reminder> entre as listas não é resposta → bloqueia",
+      has_subst(subst(text(GOOD), SYSREM, text(GOOD), session="s-sub-s3")))
+
+# S4: feedback from ANOTHER hook is not our block
+OTHER_HOOK = msg("user", "Stop hook feedback:\nOutro hook: faltou rodar os "
+                 "testes antes de encerrar.", mtype="user")
+check("(S4) feedback de OUTRO hook entre as listas não isenta → bloqueia",
+      has_subst(subst(text(GOOD), OTHER_HOOK, text(GOOD), session="s-sub-s4")))
+
+# S5: the block about codes without legend is also ours
+CODES_BLOCK = msg("user", "Stop hook feedback:\nSua lista de decisões usa "
+                  "código de referência que o leitor não consegue resolver:\n"
+                  "  - código de referência sem legenda nesta mensagem: E1\n"
+                  "Reenvie a MESMA lista com um bloco `Legenda:`.", mtype="user")
+check("(S5) bloqueio de código sem legenda + reescrita da lista → isenta",
+      not has_subst(subst(text(GOOD), CODES_BLOCK, text(GOOD), session="s-sub-s5")))
+
+# S6: a tool_result (empty text) between our block and the rewrite is no owner
+check("(S6) bloqueio, tool_result sem texto, reescrita → isenta",
+      not has_subst(subst(text(GOOD), HOOK_BLOCK, TOOL_RESULT, text(GOOD),
+                          session="s-sub-s6")))
+
+# S7: the replacement line is matched without accents
+for n, phrase in enumerate(("Esta lista substituí a anterior.",
+                            "A lista anterior está substituída por esta.")):
+    check(f"(S7.{n}) linha de substituição com acento é aceita: {phrase!r}",
+          not has_subst(subst(text(GOOD), NOTIF, text(GOOD.replace(
+              HEAD_STEPS, HEAD_STEPS + phrase + "\n")),
+              session=f"s-sub-s7-{n}")))
+
+# S8: an "owner-like" row from a subagent (sidechain) is not the owner
+SIDE_OWNER = msg("user", [{"type": "text", "text": "1. sim"}], sidechain=True,
+                 mtype="user")
+check("(S8) linha de subagente (sidechain) parecida com resposta não é o dono → bloqueia",
+      has_subst(subst(text(GOOD), SIDE_OWNER, NOTIF, text(GOOD), session="s-sub-s8")))
+check("(S8b) bloqueio do hook + linha de subagente com texto + reescrita → isenta "
+      "(a linha de subagente nem entra na conta)",
+      not has_subst(subst(text(GOOD), HOOK_BLOCK, SIDE_OWNER, text(GOOD),
+                          session="s-sub-s8b")))
+
+# S9: a final report that is not a decision list never gets the new category
+reason_s9 = subst(text(GOOD), NOTIF, EDIT, text(NADA), session="s-sub-s9")
+check("(S9) relatório de trabalho sem lista de decisões sobre lista anterior → sem a categoria nova",
+      not has_subst(reason_s9), repr(reason_s9[:300]))
+
+# S10: the wording of the list-only block vs the full-report block
+reason_s10a = subst(text(GOOD), NOTIF, text(GOOD), session="s-sub-s10a")
+check("(S10a) turno só de lista → texto de lista, 'Reenvie a MESMA lista'",
+      "Sua lista de decisões saiu do formato `plain-report`" in reason_s10a
+      and "Reenvie a MESMA lista corrigindo só isso" in reason_s10a
+      and "Reescreva o relatório inteiro" not in reason_s10a,
+      repr(reason_s10a[:300]))
+reason_s10b = subst(text(GOOD), NOTIF, EDIT, text(GOOD), session="s-sub-s10b")
+check("(S10b) turno com edição → texto do relatório inteiro",
+      "Reescreva o relatório inteiro" in reason_s10b
+      and "Reenvie a MESMA lista" not in reason_s10b, repr(reason_s10b[:300]))
+
+# S11: codes_only means ALL deviations are code ones
+BATCH_LIST = BATCH + ("\n\n### Decisões e próximos passos\n"
+                     "1. Mantenho E2 como base da proposta? Recomendo sim.\n")
+reason_s11a = subst(text(GOOD), NOTIF, text(BATCH_LIST), session="s-sub-s11a")
+check("(S11a) códigos sem legenda + lista substituída → texto de lista com as duas queixas",
+      "Sua lista de decisões saiu do formato `plain-report`" in reason_s11a
+      and "sem legenda" in reason_s11a and has_subst(reason_s11a)
+      and "usa código de referência" not in reason_s11a, repr(reason_s11a[:500]))
+reason_s11b = subst(text(BATCH), session="s-sub-s11b")
+check("(S11b) só códigos sem legenda → texto de código, pede o bloco `Legenda:`",
+      "usa código de referência" in reason_s11b
+      and "Reenvie a MESMA lista com um bloco `Legenda:`" in reason_s11b
+      and "saiu do formato" not in reason_s11b, repr(reason_s11b[:500]))
+
+# ── second-round proof survivors N1..N7 ────────────────────────────────────
+def with_line(line):
+    return GOOD.replace(HEAD_STEPS, HEAD_STEPS + line + "\n")
+
+
+# N1: the previous list is the NEAREST one, not the oldest
+check("(N1) lista1, resposta do dono, lista2, notificação, lista3 sem a linha → bloqueia",
+      has_subst(subst(text(GOOD), user("1. sim"), text(GOOD), NOTIF, text(GOOD),
+                      session="s-sub-n1")))
+
+# N2: ONE owner answer between is enough, other non-owner rows do not undo it
+check("(N2) lista, resposta do dono, notificação, lista sem a linha → não pede",
+      not has_subst(subst(text(GOOD), user("1. sim"), NOTIF, text(GOOD),
+                          session="s-sub-n2")))
+
+# N3: an assistant row between our block and the rewrite is not an "other" user row
+check("(N3) lista, bloqueio, fala do assistente, reescrita → isenta",
+      not has_subst(subst(text(GOOD), HOOK_BLOCK,
+                          text("Vou reescrever a lista agora, corrigindo o formato."),
+                          text(GOOD), session="s-sub-n3")))
+
+# N4: a user row shaped like a decision list is not a previous assistant list
+USER_LIST = msg("user", [{"type": "text", "text": GOOD}], mtype="user", meta=True)
+check("(N4) linha de usuário com texto de lista não é lista anterior → não pede",
+      not has_subst(subst(text(NADA), USER_LIST, text(GOOD), session="s-sub-n4")))
+
+# N5: the replacement line is matched case-insensitively
+for n, phrase in enumerate(("Esta lista Substitui a anterior.",
+                            "ESTA LISTA SUBSTITUI A ANTERIOR.")):
+    check(f"(N5.{n}) linha de substituição em maiúsculas é aceita: {phrase!r}",
+          not has_subst(subst(text(GOOD), NOTIF, text(with_line(phrase)),
+                              session=f"s-sub-n5-{n}")))
+
+# N6: English "previous list is replaced/superseded"
+for n, phrase in enumerate(("The previous list is superseded by this one.",
+                            "The previous decision list was replaced.")):
+    check(f"(N6.{n}) linha em inglês aceita: {phrase!r}",
+          not has_subst(subst(text(GOOD), NOTIF, text(with_line(phrase)),
+                              session=f"s-sub-n6-{n}")))
+
+# N7: only a real `Stop hook feedback:` row is our block, not a quote of it
+QUOTE_ROW = msg("user", "<task-notification>\nO agente citou: Seu relatório final "
+                "saiu do formato `plain-report`\n</task-notification>", mtype="user")
+check("(N7) notificação que cita o texto do bloqueio não isenta → bloqueia",
+      has_subst(subst(text(GOOD), QUOTE_ROW, text(GOOD), session="s-sub-n7")))
+
+# ── third proof round (X survivors) ────────────────────────────────────────
+# X30: a numbered `?` BEFORE the closing heading is not a decision list; only
+# the closing section counts. The previous report asks in the technical
+# detail and closes with "Nada pendente." -> nothing to replace.
+ASKS_IN_DETAIL = GOOD.split(HEAD_STEPS)[0].replace(
+    "### Detalhe técnico\n", "### Detalhe técnico\n"
+    "1. Por que o portão aceitava digitação errada?\n"
+    "2. Quem chamava o verificador?\n\n") + HEAD_STEPS + "Nada pendente.\n"
+assert "?" in ASKS_IN_DETAIL.split(HEAD_STEPS)[0]
+check("(X30) pergunta numerada só antes do título final não é lista → não pede",
+      not has_subst(subst(text(ASKS_IN_DETAIL), NOTIF, text(GOOD),
+                          session="s-sub-x30")))
+
+# X10..X18: every wording REPLACES_LINE promises is accepted in the closing section
+for i, phrase in enumerate([
+        "Substitui o bloco anterior.",                       # o + bloco
+        "Esta lista substituiu as anteriores.",              # substituiu + as
+        "Esta lista substitui a lista de decisões anterior.",  # de decisões
+        "A lista anterior fica superada por esta.",          # superad
+        "This list supersedes the previous one.",            # supersedes
+        "This replaces the previous decision block.",        # block
+        ]):
+    check(f"(X.{i}) {phrase!r} na seção final é aceita",
+          not has_subst(subst(text(GOOD), NOTIF, text(GOOD.replace(
+              HEAD_STEPS, HEAD_STEPS + phrase + "\n")), session=f"s-sub-x{i}")))
+
+# X7: our block feedback with leading whitespace is still our block -> exempt
+check("(X7) bloqueio do hook com espaço no começo ainda isenta a reescrita",
+      not has_subst(subst(text(GOOD), msg("user", "\n  " + HOOK_BLOCK["message"]
+                                          ["content"], mtype="user"),
+                          text(GOOD), session="s-sub-x7")))
+# X8: a user row with only whitespace is not the owner answering
+check("(X8) linha de usuário só com espaços não é resposta → bloqueia",
+      has_subst(subst(text(GOOD), msg("user", [{"type": "text", "text": "  \n "}],
+                                      mtype="user"), NOTIF, text(GOOD),
+                      session="s-sub-x8")))
+# X4: a message's text blocks join with a newline, so a closing heading that
+# opens the second block still starts a line
+_top, _tail = GOOD.split(HEAD_STEPS)
+SPLIT_PREV = msg("assistant", [{"type": "text", "text": _top.rstrip()},
+                               {"type": "text", "text": HEAD_STEPS + _tail}])
+check("(X4) lista anterior em dois blocos de texto ainda é lista → bloqueia",
+      has_subst(subst(SPLIT_PREV, NOTIF, text(GOOD), session="s-sub-x4")))
+
+# ── fourth proof round ──────────────────────────────────────────────────────
+# G6: a list-only turn WITH a recommendation and no deviation was measured
+# before this rule (telemetry event with 0 deviations), and still is.
+_ev_before_g6 = len(report_events())
+r = run("Stop", transcript(user("o que falta?"), text(GOOD)), session="s-sub-g6")
+check("(G6) lista com recomendação, sem desvio, turno só de lista → ainda emite telemetria",
+      block_reason(r.stdout) == "" and len(report_events()) == _ev_before_g6 + 1,
+      f"{len(report_events()) - _ev_before_g6} evento(s)")
+# X1: an assistant row whose content is not a list is skipped, not a crash
+check("(X1) linha de assistente sem lista de conteúdo entre as listas → ainda bloqueia",
+      has_subst(subst(text(GOOD), {"type": "assistant", "isSidechain": False,
+                                   "message": {"role": "assistant", "content": None}},
+                      NOTIF, text(GOOD), session="s-sub-x1")))
+# X3: a tool-only assistant row after the report is not "the current
+# message"; otherwise the report would be compared with itself and the first
+# list of the conversation would be asked for a replacement line
+TOOL_ONLY = msg("assistant", [{"type": "tool_use", "name": "Bash",
+                               "input": {"command": "ls"}}])
+check("(X3) primeira lista seguida de chamada de ferramenta → não pede a linha",
+      not has_subst(subst(NOTIF, text(GOOD), TOOL_ONLY, session="s-sub-x3")))
+check("(X3b) lista sem resposta, lista, chamada de ferramenta → bloqueia",
+      has_subst(subst(text(GOOD), NOTIF, text(GOOD), TOOL_ONLY, session="s-sub-x3b")))
+
 print()
 if FAILURES:
     print(f"{len(FAILURES)} failure(s): {FAILURES}")

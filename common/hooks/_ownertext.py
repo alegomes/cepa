@@ -128,3 +128,20 @@ def item_flags(summary):
         elif isinstance(v, str) and v.strip().lower() in NONE_WORDS:
             out += [flag, NONE_VALUE]
     return out
+
+
+# The owner's answer that `cepa-plan answer` prepends to the evidence. Read by
+# `cepa-until decide` (a route answered "no" is not asked again in the launch
+# panel) and `cepa-plan waiting` (it is only counted, CS-3 of
+# decisoes-de-todas-as-filas): one reader, so both agree on what "answered no" is.
+OWNER_NO = re.compile(r"Resposta do dono em (\d{4})-(\d{2})-(\d{2}): n(?:ão|ao)\b",
+                      re.I)
+
+
+def last_owner_no(evidence):
+    """The date (`YYYY-MM-DD`) of the owner's LAST answer when it was "não", else None.
+    `cepa-plan answer` prepends each answer to the evidence, so the last one is the
+    text's start: a later "sim" or free text, or an older "não" further down, does
+    not count."""
+    m = OWNER_NO.match((evidence or "").lstrip())
+    return f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else None

@@ -1,0 +1,31 @@
+key: CS-5-decisoes-de-todas-as-filas
+status: complete
+diff_range: 42bc4df^..e725cf9
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      `cepa plan waiting --json` (e `cepa-plan waiting --json`) como subprocesso
+      num repo git de teste (o repo do CS-1: fila `a` com a1 travado e
+      owner_question "Rodo X à mão?", fila `b` com b1 done e human_pending
+      "Rotacionar o segredo"). Exit 0, stdout inteiro é JSON válido,
+      filas[0].itens[0].id == "a1", total_itens == 2, chave `runs` presente
+      (lista vazia sem run esperando). Chaves do topo exatamente root, filas,
+      total_itens, runs. Fila ilegível: aviso no stderr, stdout segue JSON.
+    test: tests/test_cepa_plan_waiting_json.py, funções red_test e
+      unreadable_stays_out_of_stdout
+    layer: cli/subprocess sobre repo git real em diretório temporário, também
+      pelo lançador `cepa plan`
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_waiting_json.py -> 14 checks 'ok', 0
+      FAIL, '✓ tudo passou'. Vizinhos na mesma execução (python3 tests/
+      test_cepa_plan_waiting.py, _answered_no.py, _nothing.py, _runs.py): todos
+      terminam em 'tudo passou' sem FAIL (HEAD e725cf9)."
+    note: >
+      O teste exercita a CLI real, não um mock, e afirma igualdade exata nos
+      campos do critério (id, total, chaves do topo, runs == []). O estado
+      vermelho antes do CS-1 (42bc4df^, subcomando inexistente) foi informado
+      pelo coordenador e não foi reexecutado por mim. As asserções não
+      codificam comportamento defeituoso. Os vizinhos (_runs, _nothing,
+      _answered_no) também cobrem --json com runs vazio e o mesmo formato.
+deferral: []

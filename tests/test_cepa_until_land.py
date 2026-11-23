@@ -261,9 +261,14 @@ NEXT = CEPA_UNTIL.parents[1] / "commands" / "next.md"
 
 
 def pending_ones(root):
-    return subprocess.run([sys.executable, str(CEPA_UNTIL), "pendentes",
+    p = subprocess.run([sys.executable, str(CEPA_UNTIL), "pendentes",
                            "--repo", str(root)], capture_output=True, text=True,
                           cwd=str(root), timeout=60)
+    # The `closed:` lines (CS-5) say what this call closed; these checks are
+    # about the waiting lines, so they are dropped here.
+    p.stdout = "".join(ln for ln in p.stdout.splitlines(True)
+                       if not ln.startswith("closed:"))
+    return p
 
 
 def test_5_pending_lists_the_waiting_run_and_vanishes_after_landing():

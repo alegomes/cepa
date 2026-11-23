@@ -13,7 +13,7 @@ lidos; quando o mesmo card tem os dois, `docs/proof/` vence.
 Cinco vieram do desenho; os motivos 6 e 7 vieram do piloto de 03/08/2026 sobre
 33 artefatos reais (`wego-assinatura-backend`, `wego-tasy-gateway`) — não
 cabiam em nenhum dos cinco. A classificação de referência desses 33 é a suíte
-de regressão em `tests/test_needs_human_motivos.py`.
+de regressão em `tests/test_needs_human_reasons.py`.
 
 **O slug é interno** (vive no script de classificação e no nome do arquivo em
 `.claude/waivers/`). O que aparece na tela é sempre a frase.
@@ -191,3 +191,7 @@ olha* ao quebrar o código de propósito:
 A falha que o revisor mais teme é a peça certa que nunca foi plugada: passa em
 todo teste interno e não muda nada na aplicação. Por isso prova interna nunca
 substitui prova externa quando a mudança é observável de fora.
+
+## Leitura do motivo declarado
+
+O classificador primeiro lê o motivo que o próprio artefato de prova declara, nos campos `needs_human_motivo`, `motivo_needs_human`, `inspection.motivo_needs_human` e `done_transition_held.reason` (nessa ordem) e, por último, o `routing_reason`, onde só vale o motivo citado logo depois da palavra "motivo". Só quando esses campos faltam, ou trazem um motivo fora da lista fechada, ele recorre às frases do texto. Um achado do L4 continua passando na frente de tudo.

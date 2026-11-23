@@ -1,0 +1,28 @@
+key: CS-4-decisoes-de-todas-as-filas
+status: complete
+diff_range: e3bcd97..fb10032
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      `cepa plan waiting` (e `cepa-plan waiting`) como subprocesso num repo git
+      de teste. Fila só de itens `done` sem rota e nenhum run pendente: stdout
+      é exatamente "nada espera você\n", exit 0, stderr vazio. Sem
+      `.claude/queues/` (ou com o diretório vazio): exit 2 e sem a frase.
+    test: tests/test_cepa_plan_waiting_nothing.py, funções red_test e
+      not_nothing
+    layer: cli/subprocess sobre repo git real em diretório temporário, também
+      pelo lançador `cepa plan`
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_waiting_nothing.py -> 12 checks 'ok',
+      0 FAIL, '✓ tudo passou' (exit 0 do script). Vizinhos na mesma execução:
+      test_cepa_plan_waiting.py, _answered_no.py e _runs.py, todos
+      'tudo passou'."
+    note: >
+      O diff muda só cmd_waiting (linha única quando não há filas mostradas,
+      runs, fila ilegível nem aviso de `pending`) e o texto de exit_codes.
+      Quando algo está escondido ou respondido "não", o cabeçalho continua e
+      o teste afirma isso, então a frase não mascara itens. --json mantém a
+      forma. O teste faz asserções de igualdade exata em stdout e de código
+      de saída, não afirma comportamento defeituoso.
+deferral: []

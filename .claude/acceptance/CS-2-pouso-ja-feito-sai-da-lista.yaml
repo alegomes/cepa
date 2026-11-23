@@ -1,0 +1,17 @@
+key: CS-2-pouso-ja-feito-sai-da-lista
+queue: pouso-ja-feito-sai-da-lista
+status: complete
+criteria:
+  - id: AC1
+    text: "docs/spec/pouso-ja-feito-sai-da-lista.md CS-2 (cli): com o run a/r1 do CS-1 tendo uma worktree com arquivo ignorado pelo git, depois de `cepa-until pending`: `git branch --list until/r1` vazio, pasta da worktree ausente, arquivo ignorado presente sob `.claude/rescued/`. Decisoes lidas: conferencia pela ponta do branch (commit depois do merge mantem o run), sem git fetch, worktree com mudanca rastreada sem commit impede o fechamento (CS-8 como protecao: nada destruido)."
+    altitude: cli
+    surface: "common/bin/cepa-until pending (processo real via subprocess, --repo), em repo git temporario com remoto bare e worktree real"
+    test: "tests/test_cepa_until_pending_removes_branch_and_tree.py::red_test (CS-2 literal), mais branch_only, branch_only_other_head, tip_after_merge, dirty_tree, dirty_no_rescue, arvore_of_other_branch, tree_deleted_by_hand"
+    layer: cli-process
+    evidence: verified
+    run: "python3 tests/test_cepa_until_pending_removes_branch_and_tree.py -> 29 linhas 'ok', nenhuma FAIL, '✓ tudo passou'; python3 tests/test_cepa_until_pending_closes_landed.py -> '✓ tudo passou'"
+    readings:
+      scope: "CS-3 a CS-9 (closed:, fechados, descartado, reinstalacao, commit do registro, mensagem de worktree suja) sao itens posteriores e nao contam como lacuna de CS-2."
+      shared_rule: "land e pending usam remove_run_tree_and_branch; `land` mantem o comportamento (rescue, worktree remove, branch -d) via a mesma funcao."
+      not_run: "suite completa nao rodada (a cargo do supervisor); so a regressao de CS-1 foi rodada."
+gap: null

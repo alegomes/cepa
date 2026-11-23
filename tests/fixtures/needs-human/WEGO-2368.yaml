@@ -1,0 +1,41 @@
+schema_version: 2
+card: WEGO-2368
+verdict: needs-human            # proven | unproven | needs-human
+reviewed_at: 2026-11-05T23:00:00-03:00
+base_commit: f1ba8f8a           # derivado (pai de e8a5c6cc); .claude/cards/WEGO-2368.yaml nao existe
+head_commit: d0424bce           # HEAD de main na revisao; os commits do card sao e8a5c6cc e 15b8373a
+issue_type: Task
+scope:
+  base_commit_resolved: false   # derivado, nao capturado em baseline
+  changed_classes: []           # f1ba8f8a..15b8373a: AtomicidadeCofreTrilhaE2ETest, ForcaFalhaGenuinaNaTrilhaAdministrativa, TrilhaAdministrativaFalhaGenuina (todos de teste), docs/investigations/wego-2368-atomicidade-cofre-trilha.md, docs/validation/WEGO-2368.yaml. Zero classe de producao.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: skipped           # o diff do card nao tem hunk de producao para perturbar; as corridas abaixo verificam a afirmacao do card (AC1) sobre o teste
+      results:
+        - "afirmacao do card (AC1), base do card e8a5c6cc com @Disabled desativado: ./mvnw -pl bootstrap -am test -Dtest=AtomicidadeCofreTrilhaE2ETest -Dsurefire.failIfNoSpecifiedTests=false -Djunit.jupiter.conditions.deactivate='org.junit.*DisabledCondition' -> Tests run: 2, Failures: 2, Errors: 0, Skipped: 0; BUILD FAILURE; mensagens: 'expected: <ATIVA> but was: <INATIVA>' (inativacao, linha 84) e 'expected: <0> but was: <1>' (habilitacao, linha 115). Bate com o Implementation Summary."
+        - "HEAD d0424bce (pos-correcao WEGO-2455, sem @Disabled; grep -c '@Disabled(' = 0): ./mvnw -pl bootstrap -am test -Dtest=AtomicidadeCofreTrilhaE2ETest -Dsurefire.failIfNoSpecifiedTests=false -> Tests run: 2, Failures: 0, Errors: 0, Skipped: 0; BUILD SUCCESS"
+        - "verde(HEAD) -> vermelho(sem @Transactional, e8a5c6cc) -> verde: a causa apontada pelo card (servicos sem @Transactional) e a que o teste acusa; as perturbacoes isoladas de cada @Transactional estao em docs/proof/WEGO-2455.yaml (PROVEN), nao repetidas aqui."
+        - "worktree descartavel /tmp/proof-WEGO-2368, removido; arvore primaria intocada; sem repeticao por ruido de Maven concorrente (as duas corridas bootaram de primeira)."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "diff do card sem linhas de producao: nada a medir. Alcance estrutural lido: o teste faz chamadas HTTP reais (@QuarkusTest, Postgres via Dev Services) a inativacao e a habilitacao individual, atravessando os servicos reais."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff so tem teste, dubles de teste e documentacao: nao abre superficie de entrada nem toca classe de api-rest."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a                 # Task de investigacao, nao Bug; o Bug derivado (WEGO-2455) tem artefato proprio PROVEN
+inspection:
+  double_substitution_check: "TrilhaAdministrativaFalhaGenuina (@Alternative, @IfBuildProperty wego.e2e.trilha-administrativa.falha-genuina.enabled=true, ligado por @TestProfile(ForcaFalhaGenuinaNaTrilhaAdministrativa)) substitui SOMENTE a trilha na fronteira de escrita, de proposito: e a injecao de falha que a investigacao pede, ligada pela flag volatil 'falhar' so em volta da chamada investigada (a linha CADASTRO da preparacao do teste nao falha). AlterarSituacaoCredencialService, HabilitarOperadorService e os adapters de cofre e habilitacao rodam de verdade. Como nenhuma classe de producao mudou, scope.changed_classes e vazio e nao ha classe do card substituida por dublê (substituted_by_double: null por vacuidade)."
+  stale_statements_in_implementation_summary: "'Nao esta em main' e falso: e8a5c6cc e 15b8373a estao em main. '@Disabled apontando para WEGO-2455' tambem esta defasado: o WEGO-2455 foi corrigido (34dadaba remove o @Disabled, 6dfb2a22 poe @Transactional nos dois servicos, 093f753b, 8b5cbadf) e esta Done; em HEAD o teste roda 2/2 verde. O 'Revisit trigger' do card (correcao do WEGO-2455) ja foi cumprido e a divida 'teste desligado' nao existe mais."
+  ac1: "Respondida com evidencia: ha estado parcial (credencial INATIVA sem admin:inativacao; 1 habilitacao sem admin:habilitacao) e o teste com falha injetada na trilha a demonstra, reproduzido aqui com 2 vermelhos nas mensagens do card."
+  ac2: "Bug aberto (WEGO-2455) com o teste RED: cumprido e ja fechado."
+  motivo_needs_human: "nada-a-provar (motivo 6 de docs/needs-human-motivos.md): o diff do card e so teste e documentacao; proven e estruturalmente indisponivel (L3 skipped, L2 assumed). Mesmo precedente de WEGO-2357."
+routing_reason: "NEEDS-HUMAN motivo 6 (nada-a-provar) de docs/needs-human-motivos.md: o diff do WEGO-2368 (teste E2E, dois dubles de teste, investigacao em docs e veredito de validacao) nao tem codigo de producao, entao L3 (perturbacao do diff) fica skipped e L2 (cobertura do diff) fica assumed, e proven e estruturalmente indisponivel. L4 e n/a (sem superficie de entrada) e regressao e n/a (Task). Evidencia alem do estrutural: a afirmacao do card confere. No commit e8a5c6cc com @Disabled desativado o teste da borda HTTP roda 2 e falha 2 com as mensagens do card; em HEAD d0424bce, apos a correcao do WEGO-2455, roda 2 e passa 2. Os trechos 'nao esta em main' e '@Disabled' do Implementation Summary estao defasados porque o WEGO-2455 ja entrou. Sugestao de decisao para o humano (nao e waiver): gravar a dispensa nada-a-provar sob a politica (a), nomeando L3 e L2 do diff. waiver_proposto NAO materializado: waivers.propose exige executar Python, e o bash-path-lock da pista do proof-reviewer negou a execucao do script; nao contornei. Base_commit derivado (f1ba8f8a), nao capturado."
+waiver_proposto: docs/waivers/nada-a-provar--task-wego-2368-investigacao-da-atomicidade-cofre-trilha-na-inativacao-e-na-habilitacao-individual-diff-so-de-teste-e-documentacao-nao-cabem-a-perturbacao-do-diff-l3-nem-a-cobertura-do-diff-l2.yaml   # proposta (status: proposta, autor: null) gravada pelo orquestrador do prove-drain em 2026-11-05; o proof-reviewer nao conseguiu executar waivers.propose (bash-path-lock). Conversao em dispensa e ato do dono (cepa-plan answer).

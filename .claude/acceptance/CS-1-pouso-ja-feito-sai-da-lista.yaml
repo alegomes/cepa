@@ -1,0 +1,16 @@
+key: CS-1-pouso-ja-feito-sai-da-lista
+queue: pouso-ja-feito-sai-da-lista
+status: complete
+criteria:
+  - id: AC1
+    text: "docs/spec/pouso-ja-feito-sai-da-lista.md CS-1 (cli): run a/r1 em esperando-dono com aterrissagem.parou build-vermelho e branch contido em origin/main, run a/r2 igual mas com o merge so no main local; verify dos dois grava marcador. Depois de `cepa-until pending`: nenhuma linha de espera para a/r1, estado aterrissado no registro de a/r1, marcador ausente, linha 'merged in `main` with a red build' ainda presente para a/r2. Respostas do dono lidas: upstream decide, sem upstream vale o branch local, sem git fetch, a ponta do branch (nao o sha gravado) decide."
+    altitude: cli
+    surface: "common/bin/cepa-until pending (processo real via subprocess, --repo, e --json), em repo git temporario com remoto bare"
+    test: "tests/test_cepa_until_pending_closes_landed.py::red_test (CS-1 literal), tip_after_merge (commit no branch depois do merge mantem o run listado), no_upstream (sem upstream vale o branch local); fixture ajustada em tests/test_cepa_plan_waiting_runs.py (remoto adicionado para o merge so local continuar listado)"
+    layer: cli-process
+    evidence: verified
+    run: "python3 tests/test_cepa_until_pending_closes_landed.py -> 14 linhas 'ok', nenhuma FAIL, '✓ tudo passou'; python3 tests/test_cepa_plan_waiting_runs.py -> '✓ tudo passou'"
+    readings:
+      scope: "CS-2 a CS-9 (remocao de branch/worktree, rescued, closed:, fechados, descartado, reinstalacao de plugins, mudanca sem commit) sao itens posteriores e nao contam como lacuna de CS-1."
+      verify_marker: "marcador ausente confirmado para a/r1 e a/r2 (nenhum build rodou)."
+gap: null

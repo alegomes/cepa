@@ -1,0 +1,53 @@
+schema_version: 2
+card: sondagem-l4-nao-grava-last-build
+verdict: needs-human
+reviewed_at: 2026-11-21T16:20:00-03:00
+base_commit: 9f112d3
+head_commit: 1ac0cfc
+issue_type: Bug
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/hooks/_shellscan.py (_GROUP_PREFIX_RE, _strip_group_prefix, call in segment_dirs)"
+      module: common-hooks
+      external_observable: true       # surface = hook CLI: stdin JSON payload -> .claude/last-build.json
+      substituted_by_double: null     # tests run the real hook script via subprocess
+    - class: "common/hooks/capture-build-result.py (real_maven_args, redirected_output, runs_root_install call sites)"
+      module: common-hooks
+      external_observable: true
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: absent
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at HEAD 1ac0cfc (detached worktree): pytest tests/test_capture_build_*.py tests/test_gate_advance_target_repo.py tests/test_multiline_quoted_shell.py -q -> 299 passed (hooks source identical to 28aff57; only tests added since)"
+        - "KILLED 1/13 regex keyword 'elif' removed (do|then|else kept) -> 1 failed, 298 passed (the last survivor of the previous pass)"
+        - "KILLED 2/13 _shellscan.py:474 segment_dirs call reverted to seg.strip() -> 3 failed, 296 passed"
+        - "KILLED 3/13 capture-build-result.py:439 real_maven_args call reverted -> 1 failed, 298 passed"
+        - "KILLED 4/13 capture-build-result.py:714 redirected_output call reverted -> 1 failed, 298 passed"
+        - "KILLED 5/13 capture-build-result.py:762 runs_root_install call reverted -> 1 failed, 298 passed"
+        - "KILLED 6/13 regex prefixes '(' and '{' removed (only '!' left) -> 4 failed, 295 passed"
+        - "KILLED 7/13 regex prefix '!' removed -> 1 failed, 298 passed"
+        - "KILLED 8/13 regex prefix '{' removed ('(' and '!' kept) -> 3 failed, 296 passed"
+        - "KILLED 9/13 regex keyword 'then' removed -> 1 failed, 298 passed"
+        - "KILLED 10/13 regex keyword 'else' removed -> 1 failed, 298 passed"
+        - "KILLED 11/13 regex keyword 'do' removed -> 1 failed, 298 passed"
+        - "KILLED 12/13 regex function-header alternative removed -> 1 failed, 298 passed"
+        - "KILLED 13/13 _strip_group_prefix loop 'while True' -> 'if True' (single pass) -> 5 failed, 294 passed"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired in this Python harness (pytest-cov absent); precision not measured. Structurally every changed branch was perturbed in l3 and all 13 went RED."
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff touches hook parsing of a command string already received from the harness, plus tests; no HTTP endpoint, no api-rest module, no new external input boundary."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "hooks from 9f112d3 with tests from 1ac0cfc: pytest tests/test_capture_build_result_classify.py -q -> 5 failed, 29 passed; head -> 299 passed"
+routing_reason: "Bug fix red at base (5 failed), green at head (299 passed), and all 13 perturbations of the changed lines go RED against the real hook run as a subprocess; no survivors. The only blocker is L2 coverage, which is assumed because no coverage tool is wired in this harness, and an assumed level makes proven structurally unavailable. Suggested waiver for the human: accept all-branch perturbation as the L2 substitute for this repo (same suggestion as classificador-nh-le-campo-de-motivo). NEEDS-HUMAN."

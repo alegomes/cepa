@@ -4696,6 +4696,18 @@ A correção de 2026-10-19 cobriu o `claude -p` do `cepa-until`. Na sessão inte
 >
 > `fb-20261110-5`, 2026-11-10 · wego-faturamento-backend · session/C1-18 · construction · `build-hex:engineering-lead`
 
+**Feito (2026-11-22, fila `fb-2026-10`, item `leads-build-hex-acordam-na-sessao-interativa`).** A
+exceção virou a regra. Um lead é sempre subagente (do orquestrador num run, da sessão principal
+numa sessão interativa), e o aviso do worker em segundo plano vai para a sessão do topo, nunca
+para o lead. Nas 11 specs que delegam, a seção "Delegation is asynchronous" deixou de dizer
+"End the turn. The notification brings you back" e manda `run_in_background: false` em todo
+caso, citando as duas medições. `tests/test_async_delegation_specs.py` ganhou a marca
+"interactive session" e duas frases proibidas, para a premissa falsa não voltar numa cópia. A
+mensagem do `no-busy-wait` separa sessão principal (encerra o turno) de subagente (espera no
+mesmo turno), e o invariante I8 registra a mudança. Não medido: uma sessão interativa real com
+lead depois da mudança; a próxima diz, pela contagem de `SendMessage` da sessão principal a
+leads (zero esperado).
+
 ---
 
 ## `planning-lead` do `build-hex` chama os workers sem o prefixo do plugin, e as três chamadas falham
@@ -5322,7 +5334,7 @@ Gravar no `last-build.json` o filtro do build (`-Dtest=`, `-pl`, `-k`) e o gate 
 
 ## `cepa-plan status` diz que o item está pronto e a pergunta sobre o desbloqueio revela pendências que nunca apareceram
 
-**Status:** pendente · **Lar provável:** common (`common/bin/cepa-plan status`, `queue.yaml`; `/common:epic` e `/common:spec`) · **Origem:** feedback `fb-20261110-1`, 2026-11-10
+**Status:** feito nesta branch (2026-11-21): `cepa-plan finish --pendencia` grava a pendência descoberta no item; com uma aberta, `status` não mostra o item como pronto, e `status`, `show`, `queue` e `start` a imprimem; `--resolve-pendencia N` fecha (teste `tests/test_cepa_plan_discovered_pending.py`). A outra metade, decisões que ficaram fora do Epic, já tinha o aviso "sem Epic" · **Lar provável:** common (`common/bin/cepa-plan status`, `queue.yaml`; `/common:epic` e `/common:spec`) · **Origem:** feedback `fb-20261110-1`, 2026-11-10
 
 ### Problema
 
@@ -5362,7 +5374,7 @@ Quando um turno abre uma lista de decisões e a anterior ainda não foi respondi
 
 ## `cepa plan finish` não deixa corrigir a evidência de um item done que ficou falsa
 
-**Status:** pendente · **Lar provável:** common (`common/bin/cepa-plan`, `finish` e um subcomando novo de anotação) · **Origem:** feedback `fb-20261110-3`, 2026-11-10
+**Status:** feito nesta branch (2026-11-21): `cepa-plan annotate <fila> <id> --note TEXTO [--author QUEM]` acrescenta em `anotacoes` uma nota datada e assinada a um item `done` ou `dropped`, sem tocar em `evidence`, `status` nem `head_commit`; `show` mostra as notas antes da evidência, `status` marca o item anotado e a recusa do segundo `finish` aponta o `annotate`. Teste: `tests/test_cepa_plan_annotate.py` · **Lar:** common (`common/bin/cepa-plan`) · **Origem:** feedback `fb-20261110-3`, 2026-11-10
 
 ### Problema
 
@@ -5382,7 +5394,7 @@ Subcomando que acrescenta uma linha datada à evidência de um item done, sem ap
 
 ## A trava de caminhos aplica as regras do repo da sessão a um arquivo de outro repo
 
-**Status:** pendente · **Lar provável:** build-hex (`build-hex/hooks/path-lock.py` e `bash-path-lock.py`, `project_root` lido do `cwd` do payload) · **Origem:** feedback `fb-20261110-6`, 2026-11-10
+**Status:** feito em 2026-11-21 (reproduzido nos registros da sessão de C1-18 e consertado) · **Lar:** `common/hooks/_templates/bash-path-lock.py.tmpl`, gerado nas seis cópias do `bash-path-lock.py` · **Origem:** feedback `fb-20261110-6`, 2026-11-10
 
 ### Problema
 
@@ -5397,6 +5409,28 @@ A sessão foi aberta no wego-faturamento-backend e o worker de adapter escrevia 
 ### Esboço
 
 Resolver a raiz pelo `git rev-parse --show-toplevel` do diretório do arquivo escrito e ler o `build-hex.yaml` desse repo. Teste que falta: sessão no repo A, Write de worker em arquivo do repo B, as regras de B decidem.
+
+### O que foi feito
+
+A reprodução mostrou que quem barrou foi a trava do Bash, não a do Write (o Write num repo vizinho já passa: fica fora da raiz da sessão). O worker rodava `cd <worktree de B> && cat > X <<EOF`, e o `cat > Y` seguinte vinha na linha de baixo. Depois de `;` ou quebra de linha a trava supõe que o `cd` pode ter falhado e julga o caminho relativo também na raiz de A, pelas pistas de A. Agora um `cd` que abre a linha, para um diretório que existe e pertence a outro repositório git, conta como certo: a linha roda em B, fora da jurisdição da trava de A, como já acontecia com `&&`. Só conta o `cd <caminho absoluto>` sem flag e sem `..` (a revisão achou dois furos: `pushd -n` não muda de diretório, e `cd <A>/link/..` por um link para B volta para A). Continuam conservadores: `cd` que não é o primeiro trecho, em pipe, subshell ou segundo plano, para diretório que não existe, fora de git (`/tmp`) ou numa worktree do mesmo repo (a cópia de perturbação). Teste: `tests/test_bash_path_lock_other_repo.py`.
+
+A segunda revisão achou mais três jeitos de escrever na raiz com a linha tratada como fora dela, que já existiam com `&&` e o conserto estenderia para `;`: um link em B apontando para A (`cat > toA/x`), a raiz aninhada no destino (`cd <P>` com a raiz em `<P>/N`) e `cd $OLDPWD`. Os três foram fechados também para `&&`: a pergunta "a linha cita a raiz?" resolve todo caminho relativo a partir dos diretórios de fora da raiz, `$OLDPWD` conta como valor desconhecido, e destino que contém a raiz nunca é certo.
+
+Ficou de fora, de propósito: aplicar as regras de B (o `build-hex.yaml` de B) à escrita em B. Fora da raiz da sessão a trava não tem jurisdição, e isso vale para as duas ferramentas.
+
+---
+
+## Fora da raiz, a trava do Bash só confere o texto: link, glob e valor colado na opção ainda alcançam a raiz
+
+**Status:** pendente · **Lar provável:** `common/hooks/_templates/bash-path-lock.py.tmpl` (`_refs_root`, balde 3) · **Origem:** revisão de par do item `path-lock-le-regras-do-repo-do-arquivo`, 2026-11-22
+
+### Problema
+
+Uma linha que roda fora da raiz da sessão (balde 3) passa inteira se o texto não citar a raiz. A revisão achou formas de escrever na raiz assim, todas já possíveis com `cd <B> && ...` antes daquele item: valor colado na opção (`sort -otoA/x`, `cp -ttoA`, `dd of=toA/x`, com `B/toA` apontando para a raiz), glob que o shell expande para o link (`cp f t*/`), caminho com maiúsculas diferentes no disco do macOS, e `python3 -c "open('toA/x','w')"`. O próprio comentário de `_refs_root` declara o resíduo de checagem por texto.
+
+### Esboço
+
+Em `_refs_root`, resolver também o trecho depois de `-X` colado e de `chave=`; tratar `*`, `?` e `[` como possível alcance da raiz quando algum diretório da linha tem link para dentro dela; comparar caminhos com `os.path.samefile` em vez de texto. Teste: um caso de negação para cada forma acima, com `&&` e com `;`.
 
 ---
 
@@ -5446,7 +5480,7 @@ O launcher informa ao herdr um nome por sessão (o slug da worktree ou o propós
 
 ## O cabeçalho do `cepa plan ready` diz "0 itens" com item pendente na fila, e o dono lê "nada pendente"
 
-**Status:** pendente · **Lar provável:** common (`common/bin/cepa-plan`, `cmd_ready`) · **Origem:** feedback `fb-20261120-5`, 2026-11-20
+**Status:** feito nesta branch (2026-11-22, fila `fb-2026-10`): com item esperando o dono, o cabeçalho do `cepa-plan ready` termina em `· esperam você: 1 pendente e 1 bloqueado` (pendente = `pending` com ação humana aberta; bloqueado = `blocked`, contado uma vez), somando todas as filas; sem ninguém esperando, o cabeçalho fica como era. O `--json` ganhou `total_esperam_dono` e os dois contadores por fila. Teste: `tests/test_cepa_plan_ready_header_waiting.py`. Não mexido: a linha de cada fila, que ainda lista o id do bloqueado junto do pendente em "esperam você" · **Lar:** common (`common/bin/cepa-plan`, `cmd_ready`) · **Origem:** feedback `fb-20261120-5`, 2026-11-20
 
 ### Problema
 

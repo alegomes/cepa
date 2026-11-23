@@ -1,0 +1,18 @@
+key: CS-5-pouso-ja-feito-sai-da-lista
+queue: pouso-ja-feito-sai-da-lista
+status: complete
+criteria:
+  - id: AC1
+    text: "docs/spec/pouso-ja-feito-sai-da-lista.md CS-5 (cli): com os runs do CS-1 e do CS-4, a saida de `cepa-until pending` traz uma linha que comeca com `closed:` para `a/r1`, `a/r3` e `a/r4`, cada uma com fila, run e o desfecho (`landed` ou `discarded`), e `cepa-until pending --json` traz a chave `fechados` com os tres. Uma segunda chamada nao imprime nenhuma linha `closed:`. Tambem 'Estado e migracao' (`--json` ganha `fechados`; `runs` e `mortos` nao mudam) e 'Decided without asking' (linhas novas em ingles: `closed:`, `landed`, `discarded`)."
+    altitude: cli
+    surface: "common/bin/cepa-until pending e pending --json (processo real via subprocess, --repo), em repo git temporario com remoto bare"
+    test: "tests/test_cepa_until_pending_says_what_closed.py::red_test e ::json_test (a/r1 landed com marcas de build vermelho, a/r3 branchless landed, a/r4 branchless descartado, a/r2 so no main local). Checa: exatamente 3 linhas iniciadas por `closed:`, cada uma com `queue a`, `run <r>` e terminando em landed/discarded; a/r2 segue com linha de espera e sem `closed:`; run fechado sem linha de espera; segunda chamada sem `closed:` e ainda lista a/r2; --json com `fechados` == {r1: landed, r3: landed, r4: discarded}, `runs` so a/r2 com o mesmo conjunto de chaves, `mortos` vazio, segunda chamada com `fechados` vazio."
+    layer: cli-process
+    evidence: verified
+    run: "python3 tests/test_cepa_until_pending_says_what_closed.py -> todas as linhas 'ok', 0 FAIL, '✓ tudo passou'. Vizinhos: tests/test_cepa_until_land.py -> '✓ tudo verde'; tests/test_cepa_until_pending_closes_landed.py -> '✓ tudo passou'; tests/test_cepa_until_pending_closes_branchless.py -> '✓ tudo passou'"
+    readings:
+      diff: "0c60621: close_landed_run recebe `closed` e acrescenta {fila, run, resultado: landed|discarded}; waiting_runs repassa a lista nos dois pontos de fechamento (branch ausente e branch vivo); cmd_pending imprime `closed: queue <fila> · run <run>: <resultado>` depois das linhas de morto e antes das de espera, e --json ganha `fechados` mantendo `runs` e `mortos`. Segunda chamada nao fecha nada, entao nao imprime. Ajuda do comando atualizada."
+      siblings: "Os tres testes vizinhos so passaram a descartar linhas que comecam com `closed:` no helper de saida, porque as checagens deles sao sobre linhas de espera; nenhuma assercao foi removida ou afrouxada alem disso, e os tres seguem verdes."
+      scope: "CS-6 a CS-9 (reinstalacao, commit do .jsonl, worktree suja, /common:next) sao itens posteriores e nao contam como lacuna de CS-5."
+      not_run: "suite completa (tests/run-all.sh) nao rodada por regra da rodada; fica com o supervisor."
+gap: null

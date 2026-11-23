@@ -200,7 +200,7 @@ gains `hooks_reinstalados` (`sha_antes`, `sha_depois`: a content digest of the i
 `done` and the night goes on. If not even the rollback gives the cache back, the run ends
 with `reinstalacao-falhou`. Installing from the worktree leaves the plugins in force with
 the worktree's content: `land --yes` runs `sh bin/install.sh` from the main clone by itself,
-after the merge and the green build, and records `instalado_no_pouso`. If `~/.claude/ops/last-install.json` says the plugins in force come from the worktree of another run that is still alive, the install is skipped instead (`instalacao_adiada` in the record, and "Fica com você" asks for `sh bin/install.sh` in the clone when that run ends); the landing's exit code is the same. If that install fails, the landing runs `sh bin/install.sh --rollback` from the clone, records `reinstalacao_desfeita` and asks, under "Fica com você", for `sh bin/install.sh` in the clone by hand; the landing stands and its exit code is the same. Open sessions keep the old hooks in memory until restarted. Two
+after the merge and the green build, and records `instalado_no_pouso`. `pending` does the same (once per call) when it closes a landed run by itself. If `~/.claude/ops/last-install.json` says the plugins in force come from the worktree of another run that is still alive, the install is skipped instead (`instalacao_adiada` in the record, and "Fica com você" asks for `sh bin/install.sh` in the clone when that run ends); the landing's exit code is the same. If that install fails, the landing runs `sh bin/install.sh --rollback` from the clone, records `reinstalacao_desfeita` and asks, under "Fica com você", for `sh bin/install.sh` in the clone by hand; the landing stands and its exit code is the same. Open sessions keep the old hooks in memory until restarted. Two
 reinstalls in one night keep only the previous cache in `.prev`. Without `--verify` there is
 no build, so no reinstall: only the warning above. With less than 120 s left in the window the supervisor does not start the install (killing it halfway would leave the cache half moved): it records `reinstalacao_adiada` and falls back to the warning. In any other repo nothing changes.
 
@@ -801,15 +801,22 @@ def query_queue(name, repo, max_items=1):
         return None, f"`cepa-plan queue` did not return JSON ({e})"
 
 
-def query_ready(repo):
+def query_ready(repo, unreadable=None):
     """`cepa-plan ready --json`: the ready items of every single-track queue, in
-    the order `ready` lists them. Returns (data, error)."""
+    the order `ready` lists them. Returns (data, error). `ready` leaves out a
+    queue it cannot read, saying so only on its stderr; with `unreadable` (a
+    list), the `(name, line)` of each such queue is appended to it."""
     try:
         p = subprocess.run(
             [sys.executable, str(CEPA_PLAN), "ready", "--repo", str(repo),
              "--json"], capture_output=True, text=True, timeout=60)
     except subprocess.TimeoutExpired:
         return None, "`cepa-plan ready` did not answer within 60s"
+    if unreadable is not None:
+        for line in (p.stderr or "").splitlines():
+            m = re.match(r"aviso: fila (\S+) ilegível", line)
+            if m:
+                unreadable.append((m.group(1), line))
     if p.returncode != 0:
         return None, (p.stderr or p.stdout or "").strip() or \
             f"`cepa-plan ready` exited {p.returncode}"
@@ -2165,16 +2172,8 @@ def red_returns(ledger_dir, ident, queue=None):
     return n
 
 
-# The side branches the supervisor creates: `until/<run>-vermelho-<id>[-v<n>]` on a
-# red build, `until/<run>-parado-<id>` on the item that spent its attempts and
-# `until/<run>-travado-<id>` on the item the agent closed `blocked` with commits.
-SIDE_BRANCH = re.compile(
-    r"^until/\d{4}-\d{2}-\d{2}-\d{4}-(?:vermelho|parado|travado)-(.+?)"
-    r"(?:-v\d+)?$")
-
-
-def clean_side_branches(repo, plan_path, destination, run_branch):
-    """Deletes the side branches of `done` or `dropped` items, but only after
+def clean_side_branches(repo, queue, plan_path, destination, run_branch):
+    """Deletes the side branches of `done` or `dropped` items of `queue`, but only after
     writing to `destination` the `git format-patch` of the commits that the night branch
     doesn't have (Revision 3, 4f). Without the patch on disk, the branch stays: the owner asked
     not to have anything to remember, and not to lose code.
@@ -2193,8 +2192,12 @@ def clean_side_branches(repo, plan_path, destination, run_branch):
               for it in items if isinstance(it, dict)}
     done_items = []
     for branch in output.splitlines():
-        m = SIDE_BRANCH.match(branch.strip())
-        if not m or status.get(m.group(1)) not in ("done", "dropped"):
+        branch = branch.strip()
+        # The item is found by the run in the branch name, not by the id alone:
+        # the run 2026-11-20-1609 of `pyyaml` deleted three branches of other
+        # queues whose ids (CS-6, CS-1) were `done` in `pyyaml` (fb-20261120-2).
+        ident = qp.side_branch_item(repo, queue, branch)
+        if ident is None or status.get(ident) not in ("done", "dropped"):
             continue
         file_path = destination / (branch[len("until/"):] + ".patch")
         try:
@@ -2603,21 +2606,63 @@ def _cmd_land(argv, wrote):
         # redone by running the landing again (the merge is done, it resumes here).
         install_on_landing(repo, path.parent, run_id)
 
-    if tree and Path(tree).exists():
-        r = subprocess.run([sys.executable, str(WTLIB), "rescue", tree,
-                            branch], capture_output=True, text=True)
-        for line in rescued_files_block(repo, branch, r.stdout or ""):
-            print(line)
-        git(["worktree", "remove", tree], repo)
-    code, output = git(["branch", "-d", branch], repo)
-    if code != 0:
-        print(f"warning: did not delete `{branch}` ({output})")
+    for line in remove_run_tree_and_branch(repo, tree, branch)[0]:
+        print(line)
     ended = datetime.now()
     landing_info["quando"] = ended.isoformat(timespec="seconds")
     record(estado="aterrissado", aterrissagem=landing_info)
     print(f"landed at {ended:%H:%M}: `{branch}` is in `{destination}`; "
           "run worktree and branch removed")
     return 0
+
+
+def remove_run_tree_and_branch(repo, tree, branch, force_branch=False,
+                               quiet_caller=False):
+    """The one rule for taking a landed run off the disk, shared by `land` and
+    `pending`: save the git-ignored files of the run worktree under
+    `.claude/rescued/`, remove the worktree (never `--force`: a tracked change
+    not committed makes git refuse and the worktree stays), then delete the
+    branch (`-D` when `force_branch`, for a caller that already proved the tip
+    is in the destination upstream and the clone may be on another branch).
+    Returns (lines to show, removed): `removed` is False when the worktree or
+    the branch is still there. `quiet_caller` is for `pending`, which runs on
+    every call: it drops registrations of worktree folders deleted by hand
+    (`git worktree prune`) and leaves a dirty worktree entirely alone, so the
+    rescue does not copy the same files again each time."""
+    lines, removed = [], True
+    if quiet_caller:
+        git(["worktree", "prune"], repo)
+        if tree and Path(tree).exists() and git(
+                ["-C", str(tree), "status", "--porcelain"], repo)[1].strip():
+            return lines, False
+    if tree and Path(tree).exists():
+        r = subprocess.run([sys.executable, str(WTLIB), "rescue", tree,
+                            branch], capture_output=True, text=True)
+        lines.extend(rescued_files_block(repo, branch, r.stdout or ""))
+        code, output = git(["worktree", "remove", tree], repo)
+        if code != 0:
+            lines.append(f"warning: did not remove the worktree {tree} ({output})")
+            removed = False
+    code, output = git(["branch", "-D" if force_branch else "-d", branch], repo)
+    if code != 0 and git(["rev-parse", "--verify", "-q", branch], repo)[0] == 0:
+        lines.append(f"warning: did not delete `{branch}` ({output})")
+        removed = False
+    return lines, removed
+
+
+def run_worktree(root, branch):
+    """Where the run worktree is: the one git lists with `branch` checked out,
+    or None (the path recorded in the `aterrissar` action is not trusted: it
+    may now be a worktree of another branch)."""
+    code, out = git(["worktree", "list", "--porcelain"], root)
+    here = None
+    for line in (out.splitlines() if code == 0 else []):
+        if line.startswith("worktree "):
+            here = line[len("worktree "):]
+        elif line == f"branch refs/heads/{branch}" and here:
+            if Path(here).resolve() != Path(root).resolve():
+                return here
+    return None
 
 
 def land_step(n, name, result):
@@ -3001,7 +3046,7 @@ def run_record_paths(repo, queue, run_id=None):
 
 def commit_subcommand_records(repo, queue, run_id, verb, summary,
                               what="the queue marks and the run records",
-                              extra_paths=()):
+                              extra_paths=(), paths=None):
     """CS-7: `decide`, `close-dead` and `land` commit what they wrote to the queue
     and to the run's records, like the run's end does: the same
     `commit_run_records` (only these paths, `--only`, never `--no-verify`, no empty
@@ -3009,8 +3054,10 @@ def commit_subcommand_records(repo, queue, run_id, verb, summary,
     because of it. The message is `until <queue>/<run> <verb>: <summary>`, or
     `until <queue> <verb>: <summary>` when the command has no run. SIGINT and
     SIGTERM are ignored while git runs, so a Ctrl+C cannot kill `git commit`
-    halfway and leave `.git/index.lock` behind."""
-    paths = run_record_paths(repo, queue, run_id) + list(extra_paths)
+    halfway and leave `.git/index.lock` behind. `paths`, when given, replaces the
+    queue's and the run's paths (`decide --all`: the queue files an answer changed)."""
+    paths = list(run_record_paths(repo, queue, run_id) if paths is None
+                 else paths) + list(extra_paths)
     target = f"{queue}/{run_id}" if run_id else queue
     message = f"until {target} {verb}: {summary}"
     saved = {}
@@ -5308,17 +5355,8 @@ def open_precondition_route(queue, repo, row):
     return error
 
 
-_OWNER_NO = re.compile(r"Resposta do dono em (\d{4})-(\d{2})-(\d{2}): n(?:ão|ao)\b",
-                       re.I)
-
-
-def last_owner_no(evidence):
-    """The date (`YYYY-MM-DD`) of the owner's LAST answer when it was "não", else None.
-    `cepa-plan answer` prepends each answer to the evidence, so the last one is the
-    text's start: a later "sim" or free text, or an older "não" further down, does
-    not count."""
-    m = _OWNER_NO.match((evidence or "").lstrip())
-    return f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else None
+# One reader of "the owner's last answer was no", shared with `cepa-plan waiting`.
+last_owner_no = _ownertext.last_owner_no
 
 
 def is_old_route(ad):
@@ -5437,7 +5475,9 @@ def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False, skip=
     return data if error or not fresh else fresh
 
 
-def ask_at_launch_all(repo):
+def ask_at_launch_all(repo, wait=ANSWER_WAIT_SEC, leftovers=False,
+                      goes_on="the run goes on without.", name_live=False,
+                      as_text=False, say_empty=False):
     """The launch panel of a `--all` run (spec until-todas-as-filas, CS-7): ONE
     panel with what every queue holds for the owner, a section per queue in the
     order of `cepa-plan ready`, numbered across the whole list. Each answer is
@@ -5448,23 +5488,58 @@ def ask_at_launch_all(repo):
     `left`. What was answered "no" before is summarized per queue, as in
     `ask_at_launch`. No answer within the wait, EOF or Ctrl-C: one line naming
     `cepa-until decide <queue>` for the queues still holding questions, and the
-    run carries on. With nothing waiting, prints nothing."""
-    ready, error = query_ready(repo)
+    run carries on. With nothing waiting, prints nothing.
+    `cepa until decide --all` asks through this same panel (spec
+    decisoes-de-todas-as-filas, CS-7): `wait=None` (the owner is at the terminal on
+    purpose), `leftovers` adds the tasks a delivered item left for the owner, as
+    `cepa until decide <fila>` does, and `goes_on` ends the line of a cut panel.
+    `name_live` (CS-9 of decisoes-de-todas-as-filas): a queue with its own live run
+    is left out with one line naming the queue and its run. Only `decide --all`
+    asks for it; the launch already warns that queue on stderr when it has
+    ready items.
+    `as_text` (CS-10 of decisoes-de-todas-as-filas): off a terminal `decide --all`
+    prints the same sections as text, one line per question, and asks nothing.
+    `say_empty` (CS-11 of decisoes-de-todas-as-filas): with nothing to ask and
+    nothing named either (no route answered "no", no queue left out for its live
+    run, no queue unreadable, here or in `cepa-plan ready`), `decide --all` prints the one line "nada espera
+    você", on a terminal or off it; the launch panel stays silent."""
+    hidden = []
+    ready, error = query_ready(repo, hidden)
     if error:
         return
-    sections = []
+    # A queue `ready` could not read may hold a question: it is named, never
+    # counted as "nothing waits".
+    sections, named = [], bool(hidden)
+    if say_empty:
+        for name, line in hidden:
+            print(f"cepa-until decide: queue `{name}` could not be read, left "
+                  f"out ({line})", file=sys.stderr)
     for q in ready.get("filas") or []:
         name = Path(str(q.get("path") or "")).parent.name or str(q.get("queue"))
-        if not name or name == ALL_DIR or live_run_of_queue(repo, name):
+        if not name or name == ALL_DIR:
             continue
-        whole, _ = query_queue(name, repo, max_items=10 ** 6)
+        alive = live_run_of_queue(repo, name)
+        if alive:
+            named = True
+            if name_live:
+                print(f"\n── queue `{name}`: left out of this panel, it has its own "
+                      f"run in progress ({name}/{alive['run']}, pid {alive['pid']}), "
+                      "which asks its questions; to answer them after it ends: "
+                      f"cepa-until decide {name}")
+            continue
+        whole, unreadable = query_queue(name, repo, max_items=10 ** 6)
+        named = named or bool(unreadable)
         to_ask, answered_no = [], []
-        for ad in (whole or {}).get("deferred") or []:
+        held = list((whole or {}).get("deferred") or [])
+        if leftovers:
+            held += delivered_leftovers(name, repo)
+        for ad in held:
             if reason_alias(ad.get("reason")) not in OWNER_REASON:
                 continue
             date = last_owner_no(ad.get("evidence"))
             (answered_no if date else to_ask).append(date or ad)
         if answered_no:
+            named = True
             latest = max(answered_no)
             print(f"\n── queue `{name}`: {len(answered_no)} route(s) you already "
                   f"answered \"no\" (last on {latest[8:10]}/{latest[5:7]}): not asked "
@@ -5473,6 +5548,17 @@ def ask_at_launch_all(repo):
             sections.append((name, to_ask))
     total = sum(len(items) for _, items in sections)
     if not total:
+        if say_empty and not named:
+            print("nada espera você")
+        return
+    if as_text:
+        print(f"\n── waiting on you: {total}")
+        for name, items in sections:
+            print(f"   queue `{name}` · {len(items)} question(s)")
+            for ad in items:
+                why, q = owner_question_of(ad, {})
+                print(f"   - {ad.get('id')} ({why}): {q}")
+        print("   To answer them one by one, in a terminal: cepa-until decide --all")
         return
     screen = Panel(SCREEN, print)
     screen.open_panel(total)
@@ -5487,16 +5573,15 @@ def ask_at_launch_all(repo):
         tally["shown"] = shown + len(items)
         try:
             got, later = decide(repo, name, None, {}, items, {},
-                                wait=ANSWER_WAIT_SEC, progress=tally,
+                                wait=wait, progress=tally,
                                 first=shown + 1, of=total, opened=True,
                                 close=False)
         except NoAnswer:
-            cut = (f"nobody answered in {ANSWER_WAIT_SEC / 60:g} min; the run goes "
-                   "on without.")
+            cut = f"nobody answered in {(wait or 0) / 60:g} min; {goes_on}"
             unanswered.append(name)
             continue
         except (EOFError, KeyboardInterrupt):
-            cut = "questions interrupted; the run goes on without."
+            cut = f"questions interrupted; {goes_on}"
             unanswered.append(name)
             continue
         applied += [f"{name}/{x}" for x in got]
@@ -5504,7 +5589,7 @@ def ask_at_launch_all(repo):
         if later:
             unanswered.append(name)
         if tally.get("quit"):
-            cut = "questions stopped with q; the run goes on without."
+            cut = f"questions stopped with q; {goes_on}"
     back = " · ".join(f"cepa-until decide {n}" for n in unanswered)
     if cut:
         print(f"\n   {cut} To answer later: {back}")
@@ -5527,7 +5612,11 @@ def cmd_decide(argv):
             "left some for later. With <queue>, everything the queue holds for the\n"
             "owner, from any run, including the leftover tasks of delivered items.\n"
             "With <queue>/<run>, the merge and each deferred item of\n"
-            "that run.\n"
+            "that run. With no target (or --all), the questions of every queue\n"
+            "in one panel, a section per queue in the order of `cepa plan ready`,\n"
+            "numbered across the queues; each answer is recorded in the queue of\n"
+            "its item and one commit at the end holds every queue file an answer\n"
+            "changed.\n"
             "\n"
             "Each question is closed, with a recommendation, and the answer is\n"
             "applied right away (cepa plan answer). When it ends, whatever the way\n"
@@ -5535,8 +5624,12 @@ def cmd_decide(argv):
             "<run>, the run records (only those paths, never --no-verify, not pushed).\n"
             "If git refuses, it says why and prints the command to run by hand; the\n"
             "exit code does not change. Outside a terminal it prints the pending\n"
-            "questions as text instead of asking, and commits nothing."),
+            "questions as text instead of asking, and commits nothing. With no\n"
+            "target and no open route in any queue, it prints the one line\n"
+            "\"nada espera você\" and exits 0."),
         examples=[
+            ("cepa until decide", "every question of every queue, in one panel"),
+            ("cepa until decide --all", "the same, said out loud"),
             ("cepa until decide wego", "every question the queue holds for you"),
             ("cepa until decide wego/2026-11-03-2210", "the questions of one run"),
         ],
@@ -5547,11 +5640,29 @@ def cmd_decide(argv):
         ],
         see_also=["cepa until pending: which runs are waiting for you",
                   "cepa plan answer: what applies each answer"])
-    ap.add_argument("target", metavar="QUEUE[/RUN]",
-                    help="the whole queue, or one run as the run summary prints it")
+    ap.add_argument("target", metavar="QUEUE[/RUN]", nargs="?",
+                    help="the whole queue, or one run as the run summary prints it; "
+                         "without it, every queue (as --all)")
+    ap.add_argument("--all", action="store_true",
+                    help="the questions of every queue, in one panel (the same as no target)")
     ap.add_argument("--repo", default=".", metavar="DIR",
                     help="repository root (default: the current directory)")
     a = ap.parse_args(argv)
+    if a.all and a.target:
+        print(f"cepa-until decide: a queue ({a.target!r}) and --all do not go "
+              "together; --all already asks every queue", file=sys.stderr)
+        return 2
+    # CS-8 (decisoes-de-todas-as-filas, Q6): no target means every queue, and
+    # `--all` is its synonym.
+    if a.all or not a.target:
+        repo = Path(a.repo).resolve()
+        return _decide_reporting("all", lambda: commit_after_decide(
+            repo, ALL_QUEUE, None, lambda: ask_at_launch_all(
+                repo, wait=None, leftovers=True,
+                goes_on="nothing else is asked.", name_live=True,
+                as_text=not (sys.stdin.isatty() and sys.stdout.isatty()),
+                say_empty=True) or 0,
+            every_queue=True))
     if "/" not in a.target:
         if not (re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", a.target)
                 and ".." not in a.target):
@@ -5602,7 +5713,13 @@ def _waiver_files(repo):
     return sorted({p for folder in folders for p in folder.glob("*.yaml")})
 
 
-def commit_after_decide(repo, queue, run_id, ask):
+def every_queue_file(repo):
+    """The queue file of every queue of the main clone, `_all` (the record folder
+    of `--all` runs) aside: what `cepa until decide --all` may write."""
+    return [p for n, p in qp.queue_files(main_root(repo)) if n != ALL_DIR]
+
+
+def commit_after_decide(repo, queue, run_id, ask, every_queue=False):
     """Runs `ask` (the questions) and, on every way out, commits what the answers
     wrote (CS-7): the queue, the waiver files an answer changed and, with a run, its
     records. Compares the paths before and after, so listing the questions without a
@@ -5612,9 +5729,14 @@ def commit_after_decide(repo, queue, run_id, ask):
     closed terminal): they end the questions through the same `finally`, with the
     exit status 128 + the signal number, as the run's own `interrupt` does. When
     `decide` landed the run, the run's paths are committed even if no answer changed
-    them (as `land --yes` does)."""
+    them (as `land --yes` does).
+    `every_queue` (`cepa until decide --all`, CS-7 of decisoes-de-todas-as-filas):
+    the paths are every queue's file, and only the ones whose content an answer
+    changed go into the one commit, so a queue the owner left modified and no
+    answer touched is not swept in."""
     global _answer_commit, _decide_landed
-    paths = run_record_paths(repo, queue, run_id)
+    paths = (every_queue_file(repo) if every_queue
+             else run_record_paths(repo, queue, run_id))
     before = _content_snapshot(paths)
     waivers_before = _content_snapshot(_waiver_files(repo))
     _answer_commit = False
@@ -5645,7 +5767,16 @@ def commit_after_decide(repo, queue, run_id, ask):
             # answer, the previous evidence) in the same step that converts the
             # waiver, so the queue snapshot has changed whenever a waiver has. The
             # waivers only ride along in the paths of that commit.
-            if _content_snapshot(paths) != before or _decide_landed:
+            after = _content_snapshot(paths)
+            if every_queue:
+                changed = [Path(p) for p in after if after[p] != before.get(p)]
+                if changed:
+                    commit_subcommand_records(
+                        repo, "--all", None, "decide",
+                        f"owner answers recorded in {len(changed)} queue(s)",
+                        what="the owner's answers",
+                        extra_paths=changed_waivers, paths=changed)
+            elif after != before or _decide_landed:
                 commit_subcommand_records(
                     repo, queue, run_id, "decide",
                     "owner answers recorded in the queue",
@@ -5899,10 +6030,78 @@ def run_states(root):
     return sorted(found)
 
 
-def waiting_runs(repo):
+def landed_upstream(root, sha, destination):
+    """Is `sha` (the tip of the run branch) already at the upstream of the
+    destination branch? Where the destination has no upstream the local branch
+    counts. Reads the upstream as the clone knows it: no `git fetch`."""
+    target = _landing_target(root, destination)
+    code, _ = git(["merge-base", "--is-ancestor", sha, target], root)
+    return code == 0
+
+
+def _landing_target(root, destination):
+    """The ref a run is compared against: the upstream of the destination
+    branch, or the local branch where there is no upstream."""
+    code, upstream = git(["rev-parse", "--verify", "-q",
+                          f"{destination}@{{upstream}}"], root)
+    return upstream if code == 0 and upstream else destination
+
+
+def recorded_commit_landed(root, sha, destination):
+    """For a record whose branch is gone: is the commit recorded in its
+    `aterrissar` action at the landing target (same as `landed_upstream`: the
+    upstream of the destination, the local branch where there is no upstream)?
+    True when it is there; False when it is in neither the target nor the local
+    destination branch (never landed); None when it cannot be told: no recorded
+    commit, the commit object is not in the repo, the destination does not exist,
+    or the commit is in the local destination branch but not yet at its upstream
+    (a merge waiting for the push: not landed yet, not discarded either). On None
+    the caller leaves the record as it is instead of closing it blindly."""
+    if not sha or not isinstance(sha, str):
+        return None
+    code, _ = git(["cat-file", "-e", f"{sha}^{{commit}}"], root)
+    if code != 0:
+        return None
+    target = _landing_target(root, destination)
+    code, _ = git(["rev-parse", "--verify", "-q", f"{target}^{{commit}}"], root)
+    if code != 0:
+        return None
+    if landed_upstream(root, sha, destination):
+        return True
+    code, _ = git(["merge-base", "--is-ancestor", sha, destination], root)
+    return None if code == 0 else False
+
+
+def close_landed_run(path, item_states, destination, estado="aterrissado",
+                     closed=None):
+    """The one place where `pending` closes a run: state `aterrissado` (the run
+    already landed; the red-build marks of `aterrissagem` dropped, no build) or
+    `descartado` (a record without branch whose commit never reached the
+    destination; the marks stay, they are the history)."""
+    info = dict(item_states.get("aterrissagem") or {})
+    if estado == "aterrissado":
+        info.pop("parou", None)
+        info.pop("motivo", None)
+    info.update(destino=destination, fechado_por="pending",
+                quando=datetime.now().isoformat(timespec="seconds"))
+    item_states.update(estado=estado, aterrissagem=info,
+                       atualizado=info["quando"])
+    tmp = path.parent / (path.name + ".tmp")
+    tmp.write_text(json.dumps(item_states, ensure_ascii=False, indent=2) + "\n",
+                   encoding="utf-8")
+    os.replace(tmp, path)
+    if closed is not None:
+        closed.append({"fila": item_states.get("fila"), "run": item_states.get("run"),
+                       "resultado": "landed" if estado == "aterrissado"
+                       else "discarded"})
+
+
+def waiting_runs(repo, closed=None):
     """The runs whose `aterrissar` action is still valid: state `esperando-dono`,
     night branch existing and still outside the destination branch. A merge done
-    by hand, outside `aterrissar`, also takes the run off the list."""
+    by hand, outside `aterrissar`, also takes the run off the list. The runs this
+    call closes are appended to `closed` (when given) as `{fila, run, resultado}`,
+    `resultado` being `landed` or `discarded`; the return value is unchanged."""
     root = main_root(repo)
     found = []
     for path in run_states(root):
@@ -5919,15 +6118,41 @@ def waiting_runs(repo):
             continue
         code, sha = git(["rev-parse", "--verify", "-q",
                            str(item_states.get("branch"))], root)
-        if code != 0:
-            continue
         destination = action.get("destino") or current_branch(root)
+        if code != 0:
+            # Branch gone: the commit recorded in the action decides. In the
+            # landing target (upstream) the run landed; in neither the upstream
+            # nor the local destination it was discarded. Without a verdict (no
+            # commit recorded, object missing, or merged locally and not yet
+            # pushed) the record stays `esperando-dono`, untouched.
+            landed = recorded_commit_landed(root, action.get("sha"), destination)
+            if landed is not None:
+                close_landed_run(path, item_states, destination,
+                                 "aterrissado" if landed else "descartado",
+                                 closed)
+            continue
         code, _ = git(["merge-base", "--is-ancestor", sha, destination], root)
         # A merge left by `land` on a red build is in the destination but has
-        # not landed: it waits for the fix and for `land` again.
+        # not landed: it waits for the fix and for `land` again, unless the
+        # destination's upstream already holds the branch tip (pushed by hand
+        # or by another machine): then the run is closed, with no build. The
+        # same holds for a run that never got through `land` (no `aterrissagem`,
+        # or one that stopped on a conflict): whatever the record says, a tip
+        # already at the upstream has landed.
         red = (item_states.get("aterrissagem") or {}).get("parou") == "build-vermelho"
-        if code == 0 and not red:
+        in_upstream = landed_upstream(root, sha, destination)
+        if code == 0 and not red and not in_upstream:
             continue
+        if in_upstream:
+            # Tree and branch go first: if the worktree cannot be removed (a
+            # tracked change not committed) the record stays open and listed.
+            branch = str(item_states.get("branch"))
+            _, removed = remove_run_tree_and_branch(
+                root, run_worktree(root, branch), branch, force_branch=True,
+                quiet_caller=True)
+            if removed:
+                close_landed_run(path, item_states, destination, closed=closed)
+                continue
         queue, run = item_states.get("fila"), item_states.get("run")
         found.append({"fila": queue, "run": run, "branch": item_states.get("branch"),
                         "destino": destination,
@@ -6157,6 +6382,62 @@ def dead_run_phrase(m):
             f"land: {m['fechar']} (without --yes only shows the plan)")
 
 
+def install_for_closed(repo, closed, written=None):
+    """CS-6 of `pouso-ja-feito-sai-da-lista`: closing a landed run in the cepa repo
+    reinstalls the plugins, with the rule and the guards of `land` (the same
+    `install_on_landing`: skipped and recorded as `instalacao_adiada` when the plugins
+    in force come from the worktree of another live run; rollback when it fails).
+    Once per call, however many runs it closed: the first closed run's `.jsonl` gets
+    the event(s) from `install_on_landing` and the other closed runs get a copy of
+    the same lines. A run closed as `descartado` never landed, so it does not count.
+    Returns what the install printed, as lines, for the caller to place (stdout
+    in text mode, stderr in `--json`). The close is already done by now.
+    `written`, when given, gets `(queue, run, path)` for every `.jsonl` it appended
+    to, so the caller commits exactly those (CS-7)."""
+    landed = {(c.get("fila"), c.get("run")) for c in closed
+              if c.get("resultado") == "landed"}
+    root = main_root(repo)
+    if not landed or not cepa_repo(root):
+        return []
+    ledgers = []
+    for path in run_states(root):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict) and (data.get("fila"), data.get("run")) in landed:
+            ledgers.append((path.parent, str(data.get("run")), data.get("fila")))
+    if not ledgers:
+        return []
+    import contextlib
+    import io
+    out = io.StringIO()
+    first_dir, first_run, first_queue = ledgers[0]
+    record = first_dir / f"{first_run}.jsonl"
+    try:
+        before = len(record.read_text(encoding="utf-8").splitlines())
+    except OSError:
+        before = 0
+    # Listed BEFORE the write: a write that fails midway still leaves content in the
+    # file, and the caller must commit it (`commit_run_records` skips a clean path).
+    if written is not None:
+        written.append((first_queue, first_run, record))
+    try:
+        with contextlib.redirect_stdout(out):
+            install_on_landing(root, first_dir, first_run)
+        new = record.read_text(encoding="utf-8").splitlines()[before:]
+        for ledger_dir, run_id, queue in ledgers[1:]:
+            target = ledger_dir / f"{run_id}.jsonl"
+            if written is not None:
+                written.append((queue, run_id, target))
+            with target.open("a", encoding="utf-8") as f:
+                for line in new:
+                    f.write(line + "\n")
+    except OSError as e:
+        out.write(f"install after closing: could not record it ({e})\n")
+    return out.getvalue().splitlines()
+
+
 def cmd_pending(argv):
     """`cepa-until pending [--repo R] [--json]`: what `/common:next` and
     `/common:doctor` read to say that a run is waiting for the owner (C6)."""
@@ -6167,7 +6448,11 @@ def cmd_pending(argv):
             "A run is waiting for the owner when its branch is ready to land or it\n"
             "left items that only the owner can unblock (\"Left with you\"). A run\n"
             "is dead when its supervisor died before writing the end of the run.\n"
-            "Each line says which command takes the run forward.\n"
+            "Each line says which command takes the run forward. A line starting with\n"
+            "`closed:` says a run this call closed (landed or discarded); it shows once.\n"
+            "In the cepa repo, closing a landed run also reinstalls the plugins from the\n"
+            "clone, with the rule and the guards of `land` (`instalado_no_pouso` or\n"
+            "`instalacao_adiada` in the run's record); with --json that text goes to stderr.\n"
             "\n"
             "This is what /common:next and /common:doctor read to say that a run is\n"
             "waiting for you."),
@@ -6186,14 +6471,44 @@ def cmd_pending(argv):
                     help="repository root (default: the current directory)")
     ap.add_argument("--json", action="store_true", help="prints JSON, for code")
     a = ap.parse_args(argv)
-    found = waiting_runs(Path(a.repo).resolve())
+    closed = []
+    found = waiting_runs(Path(a.repo).resolve(), closed)
     dead = dead_runs(Path(a.repo).resolve())
+    written = []
+    install_lines = install_for_closed(Path(a.repo).resolve(), closed, written)
+    # CS-7: what the closing wrote to the versioned records (the `.jsonl` of each
+    # run the install touched) goes into one commit per run, with the function
+    # `decide`, `close-dead` and `land` use; no push. `.estado.json` is ignored by
+    # git. The commit's screen lines join the install's, so with --json they go to
+    # stderr and stdout stays the JSON.
+    import contextlib
+    import io
+    commit_lines = []
+    for queue, run_id, record in written:
+        if not record.exists():
+            continue
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            commit_subcommand_records(
+                Path(a.repo).resolve(), queue, run_id, "pending",
+                "install events written when the landed run was closed",
+                what="the run records", paths=[record])
+        commit_lines += buf.getvalue().splitlines()
+    install_lines = install_lines + commit_lines
     if a.json:
-        print(json.dumps({"runs": found, "mortos": dead},
+        # stdout is the JSON and nothing else: what the install said goes to stderr.
+        for line in install_lines:
+            print(line, file=sys.stderr)
+        print(json.dumps({"runs": found, "mortos": dead,
+                          "fechados": closed},
                          ensure_ascii=False))
         return 0
     for m in dead:
         print(dead_run_phrase(m))
+    for c in closed:
+        print(f"closed: queue {c['fila']} · run {c['run']}: {c['resultado']}")
+    for line in install_lines:
+        print(line)
     for r in found:
         if r.get("build_vermelho"):
             print(f"queue {r['fila']} · run {r['run']}: `{r['branch']}` is "
@@ -7031,7 +7346,7 @@ def _main(argv=None):
     # A `--all` run leaves them for now: the cleanup reads ONE queue's item ids,
     # and ids can repeat across queues.
     for side, patch, side_error in ([] if a.all_queues else clean_side_branches(
-            repo, data.get("path"), ledger_dir / f"{run_id}.laterais",
+            repo, a.queue, data.get("path"), ledger_dir / f"{run_id}.laterais",
             start_branch)):
         if patch:
             log_event({"evento": "lateral_apagada", "branch": side,

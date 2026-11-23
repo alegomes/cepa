@@ -1,0 +1,48 @@
+key: plan-anota-evidencia-de-item-done
+status: complete
+diff: 94fcd74..fcce21a
+criteria:
+  - id: AC1
+    text: >
+      A subcommand appends a dated line to a done item's evidence without
+      erasing the original (the record only grows).
+    altitude: cli
+    surface: >
+      `cepa-plan annotate <fila> <id> --note TEXT [--author]` run as a
+      subprocess against a real plan.yaml in a temp git repo; asserts on exit
+      code and on the plan file afterwards.
+    test: tests/test_cepa_plan_annotate.py (test_note_is_appended_and_evidence_kept, test_refusals_write_nothing)
+    layer: cli subprocess (common/bin/cepa-plan)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_plan_annotate.py -> exit 0, 28 "ok" checks, 0 FAIL.
+      Checks include: evidence/status/head_commit untouched after annotate,
+      second note appended with first kept, annotate on dropped exits 0,
+      open item / unknown id / empty note refused with exit 2 and file bytes
+      unchanged, second finish on done still refused and naming annotate.
+    gap: null
+  - id: AC2
+    text: >
+      Missing test: annotating a done item records the new line with date and
+      author, and `cepa plan show` shows both.
+    altitude: cli
+    surface: >
+      `cepa-plan annotate` then `cepa-plan show <fila> <id>` (text and --json)
+      and `status` (text and --json), stdout asserted.
+    test: tests/test_cepa_plan_annotate.py (test_note_is_appended_and_evidence_kept)
+    layer: cli subprocess (common/bin/cepa-plan)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_plan_annotate.py -> exit 0, 28 ok / 0 FAIL.
+      Checks: "note dated" (em starts with today UTC), "author is the session"
+      (CLAUDE_SESSION_ID) and "--author wins", "show prints both notes and the
+      old evidence", "show prints the notes before the evidence", "show prints
+      author of each note", show --json and status --json carry anotacoes.
+    gap: null
+report:
+  summary: >
+    Both criteria are demonstrated at the CLI surface they name, by a test
+    that spawns cepa-plan as a subprocess, and the run was green with N=28
+    checks. The red test commit (9139d5c) precedes the implementation
+    (fcce21a). Only the touched test was run, per the run's rules; neighbor
+    suites were not run.

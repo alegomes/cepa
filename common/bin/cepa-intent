@@ -32,6 +32,7 @@ Usage:
     cepa-intent continue          # adopts, in this session, another session's intent
     cepa-intent state             # read-only: classifies and prints (whereami)
     cepa-intent close             # run by /common:wrap-up: end-of-session telemetry
+    cepa-intent close --landed    # run by /common:wrap-up after merge + push: plan fulfilled
     cepa-intent remind "<text>" --context "<one sentence>" [--at YYYY-MM-DD]
     cepa-intent reminders         # read-only: the owner's reminders, with date
 
@@ -64,6 +65,19 @@ Rules:
     session, or no intent: does not emit. There is no "finished without
     advancing" event: /common:metrics derives it from `intent.written` with no
     `intent.cursor_advanced` in the same session.
+  - `close --landed` is what /common:wrap-up runs AFTER the merge and the push
+    succeeded (fb-20261109-1): the cursor only moved when the agent remembered
+    `--step N`, so a session that landed its work could end with the panel
+    saying "step 2 of 4 in progress". It writes the cursor to M+1 (plan
+    fulfilled) when the intent is this session's and the plan is not fulfilled
+    yet, and emits `intent.finished_at_last_step` with `via=wrap-up` and
+    `de=<the step the cursor was on>`. It does NOT emit
+    `intent.cursor_advanced`: the "never advanced" count of /common:metrics
+    keeps measuring the agent that forgot. Intent from another session or no
+    intent: nothing written, nothing emitted. Always exits 0 (telemetry and
+    the write never fail the wrap-up); with `--step` and the like, exits 2.
+    A step the owner says was left out is NOT `--landed`: the wrap-up runs
+    `cepa-intent --step N` instead.
 
   - `state` is the read that /common:whereami, /common:next (fallback) and
     /common:recap (opening line) run. It never writes and exits 0 in every
@@ -325,8 +339,9 @@ def _show_state(root, current):
           f"(desde {current.get('step_since', '?')})")
 
 
-def close_session(root, current):
-    """End-of-session telemetry. Read-only; never fails the wrap-up."""
+def close_session(root, current, landed=False):
+    """End-of-session telemetry; never fails the wrap-up. Read-only, except
+    with `landed` (the wrap-up merged and pushed): then the plan is fulfilled."""
     plan = (current or {}).get("plan")
     if not (current and current.get("purpose") and isinstance(plan, list) and plan):
         print("encerrar: sem intenção gravada.")
@@ -335,6 +350,9 @@ def close_session(root, current):
         print("encerrar: a intenção é de outra sessão; nada a registrar.")
         return
     m, step = len(plan), current.get("step")
+    if landed:
+        land_session(root, current, m, step)
+        return
     if isinstance(step, int) and step >= m:
         try:
             emit_event(root, "intent.finished_at_last_step", passo=step, passos=m)
@@ -343,6 +361,33 @@ def close_session(root, current):
         print(f"encerrar: cursor no último passo ({min(step, m)}/{m}); registrado.")
     else:
         print(f"encerrar: cursor no passo {step} de {m}; fora do último, nada registrado.")
+
+
+def land_session(root, current, m, step):
+    """`close --landed`: the work landed, so nothing is in progress any more.
+    Moves the cursor to M+1 and records where it was, without counting as an
+    advance the agent made (`intent.cursor_advanced` is not emitted)."""
+    fulfilled = isinstance(step, int) and step > m
+    if not fulfilled:
+        d = dict(current)
+        d["history"] = list(current.get("history", []))
+        d["step"], d["step_since"] = m + 1, now_utc()
+        try:
+            write_intent(root, d)
+        except Exception as e:  # noqa: BLE001 — the write never fails the wrap-up
+            print(f"encerrar: não consegui gravar o plano como cumprido ({e}); "
+                  f"cursor segue no passo {step} de {m}.")
+            return
+    try:
+        emit_event(root, "intent.finished_at_last_step", passo=m + 1, passos=m,
+                   de=step, via="wrap-up")
+    except Exception:  # noqa: BLE001 — telemetry never fails the wrap-up
+        pass
+    if fulfilled:
+        print(f"encerrar: plano já cumprido ({m}/{m}); registrado.")
+    else:
+        print(f"encerrar: trabalho publicado; cursor saiu do passo {step} de {m} "
+              f"para plano cumprido {m}/{m}; registrado.")
 
 
 # Actions: the old (pt-BR) name -> the new one. The old name is still accepted
@@ -377,6 +422,7 @@ def main():
             "  continue   adopts in this session the intent recorded by another session\n"
             "  state      read-only: classifies it (empty, normal, fulfilled, other-session)\n"
             "  close      what /common:wrap-up runs: end-of-session telemetry\n"
+            "             (with --landed, after merge + push: marks the plan fulfilled)\n"
             "  remind     records an owner reminder with its date and a context sentence\n"
             "  reminders  read-only: lists the owner's reminders (state ends with them too)\n"
             "\n"
@@ -393,6 +439,7 @@ def main():
             ('cepa intent --plan "a" "b"', "new plan, cursor back to step 1"),
             ("cepa intent", "show the current intent"),
             ("cepa intent state", "classify it, read-only"),
+            ("cepa intent close --landed", "the wrap-up landed: plan fulfilled"),
             ('cepa intent remind "revisitar o ADR 14" --context "spec de contratos"',
              "record an owner reminder (today's date)"),
             ("cepa intent reminders", "list the owner's reminders"),
@@ -423,6 +470,9 @@ def main():
                     help="the steps, one argument per step (1 to %d, no ':')" % M.PLAN_MAX)
     ap.add_argument("--step", "--passo", type=int, dest="step", metavar="N",
                     help="the step IN PROGRESS (1-based); M+1 = plan fulfilled")
+    ap.add_argument("--landed", action="store_true",
+                    help="only with close: the wrap-up merged and pushed, so the "
+                         "plan is fulfilled (cursor to M+1)")
     ap.add_argument("--reason", "--motivo", dest="reason", metavar="TEXT",
                     help="why the intent changed; required with --purpose and when "
                          "rewriting with write")
@@ -439,6 +489,8 @@ def main():
     exists = bool(current) and bool(current.get("purpose")) and bool(current.get("plan"))
     edits = a.step is not None or (a.action is None and (a.purpose or a.plan))
 
+    if a.landed and a.action != "close":
+        refuse("--landed só vale com `close`.")
     if a.action == "state":
         if a.step is not None or a.purpose or a.plan or a.by_when or a.reason:
             refuse("state só lê; não aceita outras opções.")
@@ -484,8 +536,9 @@ def main():
 
     if a.action == "close":
         if a.step is not None or a.purpose or a.plan or a.by_when or a.reason:
-            refuse("close só lê; não aceita outras opções.")
-        close_session(root, current)
+            refuse("close não aceita --step/--purpose/--plan/--by-when/--reason; "
+                   "só --landed.")
+        close_session(root, current, landed=a.landed)
         return
 
     if a.action == "write":

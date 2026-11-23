@@ -1,0 +1,41 @@
+schema_version: 2
+card: CS-6
+queue: pouso-ja-feito-sai-da-lista
+verdict: needs-human
+reviewed_at: 2026-11-23T05:00:00-03:00
+base_commit: 7defee7
+head_commit: ea4aa91
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::install_for_closed (new: install once per call, event lines copied to the other closed runs, text returned as lines)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::cmd_pending (call to install_for_closed, text placed on stdout or, under --json, on stderr; help sentence)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at ea4aa91 (detached worktrees /tmp/proof-cs6-r3x and /tmp/proof-cs6-r3y, both removed): `python3 tests/test_cepa_until_pending_install.py` -> '✓ tudo passou' (about 12 s per run); `python3 tests/test_cepa_until_land_install.py` -> '✓ tudo verde'. common/bin/cepa-until is identical between 50984dd and ea4aa91 (`git diff 50984dd ea4aa91 --stat` lists only docs/proof/CS-6 and tests/test_cepa_until_pending_install.py). The test drives the real `cepa-until pending` as a subprocess in a temp repo with a fake HOME and a fake bin/install.sh; no double stands in for the changed code."
+        - "Method: one exact-string replacement per perturbation on common/bin/cepa-until (pattern required to match exactly once), only tests/test_cepa_until_pending_install.py per perturbation, file restored between perturbations. Patterns reused from /tmp/cs6tools2 (P1..P34) through /tmp/cs6tools3/driver.py, run in 5 batches of at most 8 (each under 80 s). All 34 patterns matched exactly once."
+        - "KILLED (29 of 34, each turned the test red, rc 1): P1 call removed; P2 filter == discarded; P3 filter != landed; P4 filter always true; P5 cepa_repo guard removed; P7 guard always returns; P8 ledger match by queue only; P9 ledger match never; P11 copy skips the second closed run (ledgers[2:]); P12 copy also onto the first run; P13 copy write removed; P14 `before` offset always 0; P15 install recorded on the last run; P16 install_on_landing not called; P17 install stdout not captured; P18 install_for_closed returns []; P19 failed-copy message dropped; P20 --json text on stdout; P21 --json drops the install text; P22 text mode does not print install lines; P23 text mode prints them to stderr; P24 main_root(repo) -> repo; P26 call with an empty closed list; P28 copy only to the second closed run (ledgers[1:2]); P29 copy opens the other run's record with `w`; P30 copied block drops its first new line; P31 copied block is only the first new line; P32 copied lines without trailing newline; P34 failed-copy message to stderr instead of the install text. The 5 survivors of 121e001 (P28, P29, P31, P32, P34) are all dead now, confirmed by independent re-run."
+        - "EQUIVALENT (5, survived green and re-judged by reading install_for_closed / close_landed_run at ea4aa91): P6 `not landed` guard removed: with no landed run `ledgers` stays empty and the next guard `if not ledgers: return []` returns the same. P10 `if not ledgers` guard removed: matters only if the state file close_landed_run just wrote is gone again, which the CLI flow cannot produce (it would be an IndexError on ledgers[0], unreachable). P25 help sentence removed: text only; no test reads --help for it. P27 install text printed before the closed: lines: no criterion and no test pins the relative order of those blocks (same judgment as CS-5 P28/P35). P33 landed filter `!= discarded` instead of `== landed`: close_landed_run (cepa-until line 6095) only ever sets `resultado` to `landed` or `discarded`, so the two filters select the same set."
+        - "Exhaustion of the set: the diff has 58 added lines (install_for_closed 47, cmd_pending 11) plus a 1-line change in the docstring text. Every executable line is hit by at least one perturbation: landed set (P2/P3/P4/P33), main_root (P24), guards (P5/P6/P7), ledger scan and match (P8/P9), no-ledgers guard (P10), first run and before offset (P14/P15), install call and capture (P16/P17), new slice (P30/P31), copy loop and open mode and write (P11/P12/P13/P28/P29/P32), OSError message and its placement (P19/P34), return (P18), call site (P1/P26), --json and text placement (P20..P23, P27), help (P25). The only lines without a dedicated perturbation are the `except (OSError, ValueError): continue` of the state scan and the `except OSError: before = 0`; both are defensive and any variant would be a re-skin of the ones above. No new perturbations were invented: the set is exhausted at 34."
+        - "Totals: 34 perturbations; 29 killed, 0 survived, 5 equivalent."
+    survivors: []
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "`python3 -m pip list 2>/dev/null | grep -i cov` -> only `python-discovery 1.2.1` matched, neither `coverage` nor `pytest-cov`: no coverage tool wired for the Python CLI (absent, reported separately from survivors); reachability inferred from 29 of 34 perturbations going red, covering every executable line of the diff."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only reinstalls plugins after closing a run recorded by cepa-until itself and relays the installer's text; no input from outside and no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Task, not Bug. Red-at-base check done anyway: tests/test_cepa_until_pending_install.py at ea4aa91 against common/bin/cepa-until of 7defee7 (`git checkout 7defee7 -- common/bin/cepa-until` in the throwaway worktree) -> rc 1 with 17 FAIL assertions (22 ok) and then an uncaught FileNotFoundError at test line 445 (test_copy_ends_with_newline_and_each_line_is_json reads r3.jsonl that base never creates), which aborts the remaining tests; restored to ea4aa91 -> '✓ tudo passou'. Previous count at 121e001 was 16 falha(s); the extra assertion failures come from the tests added in ea4aa91."
+routing_reason: "All 29 non-equivalent perturbations go red against the pending-install test at ea4aa91, including the 5 survivors of the previous round; the 5 survivors left are equivalent by reading the code; red at base is confirmed (17 failed assertions plus a crash). Nothing is UNPROVEN. The only open item is l2_coverage assumed (no coverage tool for this CLI), which by the CS-1..CS-5 rule routes to NEEDS-HUMAN. Suggested decision for the human: accept reachability by perturbation in place of a coverage tool."

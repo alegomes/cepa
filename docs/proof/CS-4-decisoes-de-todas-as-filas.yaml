@@ -1,0 +1,35 @@
+schema_version: 2
+card: CS-4-decisoes-de-todas-as-filas
+verdict: needs-human
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: e3bcd97
+head_commit: 13e6a43
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan (cmd_waiting 'nada espera você' branch, waiting help exit code 0 text)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "First pass at fb10032 (see git history of this file, commit d59d050): 11 perturbations, 10 RED (M2 'drop not runs' only via the neighbor tests/test_cepa_plan_waiting_runs.py), 1 survivor M10 (help exit-code-0 text reverted to '(0, \"shown (even with nothing waiting)\")'). The 10 already killed were not rerun, by instruction; production code is unchanged between fb10032 and 13e6a43, only a test check was added."
+        - "Baseline at 13e6a43 in a detached worktree (git worktree add --detach /tmp/cs4-proof2 13e6a43, removed at the end): tests/test_cepa_plan_waiting_nothing.py -> 'tudo passou'; test_cepa_plan_waiting.py -> 'tudo passou'; _runs.py -> 'tudo passou'; _answered_no.py -> 'todos passaram'."
+        - "Survivor M10 now RED: cepa-plan:5889-5890 exit_codes line for 0 replaced by '(0, \"shown (even with nothing waiting)\")' -> python3 tests/test_cepa_plan_waiting_nothing.py rc=1, '1 falha(s)', failing check 'o --help diz, no código de saída 0, a linha de nada esperando'."
+        - "Total: 11 of 11 resolved (10 killed in pass one + 1 killed now); 0 survivors. All runs in the foreground, each under 3 s; mutation applied once with sed in the throwaway worktree; worktree removed."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI; reachability inferred from the perturbation results (every mutated changed line, including the help line, now turns a test red, so no changed line is unreached)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the subcommand only reads local queue YAML and run state written by the owner's own tooling; it opens no external input surface and no changed module is input-bearing (api-rest)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Load-bearing proof is complete: the single survivor of the first pass (the help line for exit code 0) now turns tests/test_cepa_plan_waiting_nothing.py red (11 of 11 resolved, 0 survivors). The only open level is L2 coverage, which stays assumed because no coverage tool is wired for the Python CLI; that alone makes the verdict needs-human. Suggested decision for the human: accept the perturbation results as the coverage evidence (every changed line was mutated and caught). Recommended default: accept."

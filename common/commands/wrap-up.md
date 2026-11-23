@@ -83,11 +83,12 @@ git constraints follow, and the whole command is built around them:
   `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/safe-exit-gate.py" --check <base-worktree>`.
   Step 1 shows what the wrap-up will commit in the base (tracked changes),
   exclude (runtime files) and ask about (untracked work).
-- **Intent telemetry (read-only, never blocks):** run
-  `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intent" close`. It emits
-  `intent.finished_at_last_step` when this session's intent cursor is on the
-  last step (or the plan is fulfilled) and prints one line; ignore the output,
-  and ignore a failure. Skip it on the `--discard` path.
+- **Intent cursor (read-only here, never blocks):** run
+  `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intent" state` and keep its
+  `opening:` line ("purpose / step N of M"), shown in the plan of step 1. No
+  `opening:` line (no intent, or another session's) → no intent line in the
+  plan. The cursor itself moves only in L6b, after the push; ignore a failure.
+  Skip it on the `--discard` path.
 - **Decide the path.** Default **land**. Switch to **discard** if `--discard`
   was passed, OR if there are 0 commits ahead of base AND nothing worth
   committing (an empty branch — landing it would be a no-op merge). If you flip
@@ -106,8 +107,16 @@ wrap-up plan — landing session/<slice> → <base>
   3. merge --no-ff into <base>    (in base worktree <path>)   [green: OK | no-build]
   4. push <base>                  → origin   (or: local-only, skip)
   5. prune                        remove worktree + delete session/<slice>
+  intent: step <N> of <M> → plano cumprido <M>/<M> after the push
+          (a step left out? say which, and the cursor stops there)
 Proceed? (this merges, pushes, and deletes the branch)
 ```
+
+The `intent:` line is the one question the cursor gets: the agent only moves
+the cursor when it remembers `cepa-intent --step N`, so a session that landed
+its work used to end with the panel saying "step 2 of 4 in progress"
+(fb-20261109-1). The same "yes" that covers the merge covers marking the plan
+fulfilled. If the user names a step that was left out, note its number for L6b.
 
 Discard example:
 
@@ -225,6 +234,21 @@ re-show the plan.
   forgot was unpushed. A plain `git push` can't push only this merge.
 - Push the **integration branch only** — never the session branch; it's about to
   be deleted.
+
+### L6b. Mark the intent fulfilled (only after L5 and L6 succeeded)
+
+- Run it in THIS worktree (the intent lives here, and the prune is deferred):
+  `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intent" close --landed`. With this
+  session's intent it moves the cursor to plan fulfilled (M+1) and emits
+  `intent.finished_at_last_step` with `via=wrap-up` and the step the cursor was
+  on; with no intent, or another session's, it writes nothing. It always exits
+  0 and prints one line: carry that line into the L8 report, and ignore a
+  failure (telemetry never blocks the wrap-up).
+- **A step the user said was left out** (step 1): run
+  `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intent" --step <N>` instead, so the
+  panel shows that step still in progress. Do not run `close --landed` then.
+- Merge conflict in L5 stopped the chain → this step does not run: the work did
+  not land, and the cursor stays where it is.
 
 ### L7. Defer the prune to SessionEnd (do NOT remove your own cwd)
 

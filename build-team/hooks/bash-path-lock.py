@@ -578,6 +578,9 @@ class _Ctx:
         self.seg_args = []
         # lazy cache of this repo's registered worktrees (see _worktrees).
         self._worktrees = None
+        # destination of the plain `cd <absolute path>` of the segment just
+        # classified, or None (read by _classify for _cd_cannot_fail).
+        self.last_cd = None
 
 
 # ─── line reading: substitutions and heredocs ──────────────────────────────
@@ -860,6 +863,11 @@ def _expand(ctx, raw, cwds):
             return _UNKNOWN if v is None else v
         if name == "PWD" and len(cwds) == 1:
             return str(next(iter(cwds)))
+        if name == "OLDPWD":
+            # the hook's own environment says nothing about the line's previous
+            # `cd`: `cd <B>; cd $OLDPWD` goes back to the root (pair review of
+            # path-lock-le-regras-do-repo-do-arquivo)
+            return _UNKNOWN
         v = os.environ.get(name)
         return _UNKNOWN if v is None else v
 
@@ -868,6 +876,10 @@ def _expand(ctx, raw, cwds):
         return _UNKNOWN if v is None else v
 
     val = _SUB_MARK_RE.sub(sub, raw)
+    if re.match(r"~[-+]", val):
+        # `~-` is $OLDPWD and `~+` is $PWD for the shell; the hook does not
+        # know them for this line (pair review of path-lock-le-regras-do-repo-do-arquivo)
+        return _Arg(raw, _UNKNOWN + val[2:])
     val = val.replace("__CEPAARITH__", "0")
     val = _VAR_RE.sub(var, val)
     return _Arg(raw, val)
@@ -886,6 +898,59 @@ def _inside(p, root):
         return True
     except ValueError:
         return False
+
+
+def _git_common_dir(d):
+    """Absolute git common dir of the repository holding `d`, or None."""
+    try:
+        import subprocess
+        out = subprocess.run(["git", "-C", str(d), "rev-parse", "--git-common-dir"],
+                             capture_output=True, text=True, timeout=5)
+        if out.returncode != 0 or not out.stdout.strip():
+            return None
+        c = Path(out.stdout.strip())
+        return (c if c.is_absolute() else Path(d) / c).resolve()
+    except Exception:
+        return None
+
+
+def _cd_cannot_fail(ctx, d):
+    """Is the `cd` that opens the line certain to land in another repository?
+
+    With `;`/newline the lock assumes a `cd` may have failed and keeps judging
+    the next segments in the session root, by the session's lanes. That is the
+    owner's design (2026-08-15) and it stays for /tmp and for worktrees of this
+    same repo (the perturbation copy). Incident fb-20261110-6: a session in
+    repo A, a worker writing in a sibling repo B (`cd <B> && cat > X <<EOF`,
+    then `cat > Y` on the next line) was denied by A's lanes for a file that
+    was in B. A `cd` into a directory that exists now, belongs to ANOTHER git
+    repository and is the first segment of the line (nothing before it could
+    remove the directory) cannot fail: the line runs in B, outside A's
+    jurisdiction, as it already did with `&&`.
+
+    Only a plain `cd <absolute path>` with no flag and no `..` gets here
+    (see the cd branch of _classify_segment): `pushd -n` does not change
+    directory, a relative path may follow CDPATH, and the shell resolves `..`
+    logically (`cd <A>/link/..` with `link -> <B>/x` lands in A, while
+    Path.resolve() says B) — the three bypasses the pair review found.
+
+    Fail-silent: any doubt (git error, timeout) returns False, which is the
+    old conservative reading.
+    """
+    # a root nested in the destination (`cd <P>` with the root at `<P>/N`)
+    # keeps the root reachable from there: never certain.
+    if d is None or _inside(d, ctx.root) or _inside(ctx.root, d):
+        return False
+    try:
+        if not d.is_dir() or not os.access(str(d), os.X_OK):
+            return False
+    except OSError:
+        return False
+    theirs = _git_common_dir(d)
+    ours = _git_common_dir(ctx.root)
+    if theirs is None or ours is None:
+        return False
+    return theirs != ours
 
 
 def _worktrees(ctx):
@@ -922,6 +987,13 @@ def _refs_root(ctx, text, args, cwds):
     A string check, declared as such: a path assembled at runtime
     (`$(echo L3Jvb3Q= | base64 -d)`) escapes. The design accepts that
     residue — obfuscating after a deny is willful, not discovery.
+
+    Every known argument is also resolved against the line's directories,
+    not only the ones with `~`, `..` or `/`: a relative path can reach the
+    root through a symlink (`cd <B> && cat > toA/x` with `B/toA -> <root>`)
+    or because the root is nested in the directory (`cd <P> && cat > N/x`
+    with the root at `<P>/N`). Both were found in the pair review of
+    path-lock-le-regras-do-repo-do-arquivo.
     """
     root_s = str(ctx.root)
     if root_s in text:
@@ -932,10 +1004,16 @@ def _refs_root(ctx, text, args, cwds):
         v = a.value
         if root_s in v:
             return True
+        v = v.split("=", 1)[-1] if v.startswith("-") else v
         if v.startswith("~") or ".." in v or os.path.isabs(v):
-            for p in _resolve_all(v.split("=", 1)[-1] if v.startswith("-") else v, cwds):
-                if _inside(p, ctx.root):
-                    return True
+            where = cwds
+        else:
+            # a plain relative path trivially lands in the root from a
+            # directory inside it: that is not citing the root.
+            where = [c for c in cwds if not _inside(c, ctx.root)]
+        for p in _resolve_all(v, where):
+            if _inside(p, ctx.root):
+                return True
     return False
 
 
@@ -2150,9 +2228,15 @@ def _classify(ctx, command, cwds, depth=0):
     history = set(state_in)
     prev = None
     stack = []
-    for sep, seg in _split_with_seps(flat):
+    certain = None   # destination of a first-segment `cd` that cannot fail
+    for n_seg, (sep, seg) in enumerate(_split_with_seps(flat)):
         if prev is not None:
             p_in, p_ok, p_fail = prev
+            if certain is not None:
+                # the `cd` happened: the states before it are unreachable
+                history = set(certain)
+                p_ok = p_fail = certain
+            certain = None
             if sep == "&&":
                 state_in = p_ok
             elif sep in ("|", "&"):
@@ -2163,6 +2247,7 @@ def _classify(ctx, command, cwds, depth=0):
         if not text:
             prev = (state_in, state_in, state_in)
             continue
+        opened = text.startswith("(")
         while text.startswith("(") and not text.startswith("(("):
             stack.append(state_in)
             text = text[1:].lstrip()
@@ -2177,10 +2262,14 @@ def _classify(ctx, command, cwds, depth=0):
         for sm in _SUB_MARK_RE.finditer(text):
             run_sub(int(sm.group(1)) - base, state_in)
         ok = fail = state_in
+        ctx.last_cd = None
         if text.strip() and not text.startswith("(("):
             res = _guard(ctx, lambda: _classify_segment(ctx, text.strip(), state_in))
             if res is not None:
                 ok, fail = res
+        if n_seg == 0 and not opened and not pops and not stack \
+                and _cd_cannot_fail(ctx, ctx.last_cd):
+            certain = frozenset({ctx.last_cd})
         for _ in range(pops):
             ok = fail = stack.pop() if stack else frozenset(cwds)
         history |= ok | fail | state_in
@@ -2234,6 +2323,10 @@ def _classify_segment(ctx, text, cwds):
                 ctx.unknown_dirs.append(nf[0].raw)
         else:
             dest = set(_resolve_all(nf[0].value, cwds))
+            literal = nf[0].value
+            if verb == "cd" and len(args) == 2 and os.path.isabs(literal) \
+                    and ".." not in Path(literal).parts:
+                ctx.last_cd = Path(literal).resolve()
         return frozenset(dest), frozenset(cwds)
 
     # bucket 3 — everything outside the root, and the line does not cite the root

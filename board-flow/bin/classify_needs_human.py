@@ -12,8 +12,8 @@ comes out as `sem-motivo`, and `/board-flow:decide` stops and warns — it never
 invents an eighth reason at run time, because an invented reason is what makes
 a recorded waiver later match the wrong card.
 
-The regression suite is tests/test_needs_human_reasons.py, built on 33 real
-artifacts from wego-assinatura-backend and wego-tasy-gateway.
+The regression suite is tests/test_needs_human_reasons.py, built on 43 real
+artifacts from wego-assinatura-backend, wego-tasy-gateway and wego-acessos-backend.
 
 Usage as a script (read-only, writes nothing):
     classify_needs_human.py <repo> [<repo> ...]
@@ -206,6 +206,45 @@ def _match(rules, blob):
             return evidence
     return None
 
+# The dedicated fields where an artifact declares its own reason, in reading
+# order, then the free-prose `routing_reason` (read only after the word "motivo").
+DECLARED_SLUGS = [k for k in REASONS if k != "sem-motivo"]
+_SLUG_RE = re.compile(
+    r"(?<![\w-])(" + "|".join(re.escape(s) for s in DECLARED_SLUGS) + r")(?![\w-])")
+_QUOTES = "\"'\u201c\u201d\u2018\u2019"
+_ROUTING_RE = re.compile(
+    r"motivo\s*(?:\d+\s*)?[(" + _QUOTES + r"\s]*("
+    + "|".join(re.escape(s) for s in DECLARED_SLUGS) + r")(?![\w-])", re.IGNORECASE)
+
+
+def _dig(d, *path):
+    for key in path:
+        if not isinstance(d, dict):
+            return None
+        d = d.get(key)
+    return d
+
+
+def _declared_reason(d: dict):
+    """(slug, evidence) the artifact declares in its own fields, or None."""
+    for path in (("needs_human_motivo",), ("motivo_needs_human",),
+                 ("inspection", "motivo_needs_human"), ("done_transition_held", "reason")):
+        value = _dig(d, *path)
+        if value is None or isinstance(value, (dict, list)):
+            continue
+        text = str(value).strip()
+        m = _SLUG_RE.search(text)
+        if m:
+            ev = "motivo declarado no próprio artefato de prova" if text == m.group(1) else text[:200]
+            return m.group(1), ev
+    value = d.get("routing_reason")
+    if value is not None and not isinstance(value, (dict, list)):
+        text = str(value).strip()
+        m = _ROUTING_RE.search(text.lower())
+        if m:
+            return m.group(1), text[:200]
+    return None
+
 
 def classify(d: dict) -> tuple[str, str]:
     """Returns (slug, evidence) for an already-read proof artifact."""
@@ -249,6 +288,14 @@ def classify(d: dict) -> tuple[str, str]:
     # text itself — the reader is the human; the command does not claim it is open.
     if l4.get("status") == "findings":
         return "sem-cobertura", str(l4.get("findings") or "")[:200]
+
+    # fb-20261106-2: 6 of 12 Review cards of wego-acessos-backend were
+    # misclassified because the classifier matched phrases and ignored the
+    # fields the artifact already writes. The declared reason is read first;
+    # an unknown value falls through to the rules below.
+    declared = _declared_reason(d)
+    if declared:
+        return declared
 
     # The order is precedence, not taste. "Depends on someone outside" and "diff
     # without production" come first because they also cite the environment in

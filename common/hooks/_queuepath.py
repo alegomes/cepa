@@ -9,6 +9,7 @@ moves the existing queues. The maestro wave plan (`parallel-waves`) stays in
 
 This module is the only copy of the resolution rule; the binaries import it.
 """
+import re
 from pathlib import Path
 
 NEW_DIR = ".claude/queues"
@@ -64,3 +65,50 @@ def queue_name_of(plan, fallback=None):
 def both_layouts(root, name):
     """True if the same name exists in both layouts (the new one hides the legacy)."""
     return _new(root, name).exists() and _legacy(root, name).exists()
+
+
+# The side branches `cepa-until` creates: `until/<run>-vermelho-<id>[-v<n>]` on a
+# red build, `until/<run>-parado-<id>` on the item that spent its attempts and
+# `until/<run>-travado-<id>` on the item the agent closed `blocked` with commits.
+# A `--all` run puts the queue in front of the id: `<run>-vermelho-<queue>-<id>`.
+SIDE_BRANCH = re.compile(
+    r"^until/(\d{4}-\d{2}-\d{2}-\d{4})-(?:vermelho|parado|travado)-(.+?)"
+    r"(?:-v\d+)?$")
+ALL_DIR = "_all"
+
+
+def _run_ledger(root, queue, run):
+    return queue_dir(root, queue) / "until" / f"{run}.jsonl"
+
+
+def side_branch_item(root, queue, branch):
+    """The id of the `queue` item a side branch belongs to, or None when the
+    branch is not a side branch or belongs to another queue.
+
+    Queues reuse ids (`CS-1`, `CS-6`), so the id in the name says nothing about
+    the queue. The run in the name does: each run writes its `.jsonl` in the
+    folder of its own queue (or of `_all`, for `--all`). The branch is this
+    queue's when that run's ledger is in this queue's folder; a `--all` run's
+    branch is, when its ledger is in `_all` and the name carries the queue.
+    When the same run name has a ledger in another queue too (two runs started
+    in the same minute), the ledger has to name the branch (fb-20261120-2)."""
+    m = SIDE_BRANCH.match(str(branch).strip())
+    if not m:
+        return None
+    run, tail = m.groups()
+    own = _run_ledger(root, queue, run)
+    if own.is_file():
+        others = [p for base in (NEW_DIR, LEGACY_DIR)
+                  for p in (Path(root) / base).glob(f"*/until/{run}.jsonl")
+                  if p.parent.parent.name not in (queue, ALL_DIR)]
+        if not others:
+            return tail
+        try:
+            return tail if branch in own.read_text(encoding="utf-8") else None
+        except OSError:
+            return None
+    prefix = f"{queue}-"
+    if (_run_ledger(root, ALL_DIR, run).is_file() and tail.startswith(prefix)
+            and len(tail) > len(prefix)):
+        return tail[len(prefix):]
+    return None

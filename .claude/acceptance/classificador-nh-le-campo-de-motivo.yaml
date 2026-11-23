@@ -1,0 +1,35 @@
+key: classificador-nh-le-campo-de-motivo
+status: complete
+diff_range: 53f8390~1..HEAD
+criteria:
+  - id: AC1
+    altitude: domain
+    surface: >
+      classify() em board-flow/bin/classify_needs_human.py (consumida pelo
+      CLI e por /board-flow:decide): lê needs_human_motivo, motivo_needs_human
+      (também em inspection.) e routing_reason antes dos casadores de frase,
+      e só cai neles quando o campo falta ou nomeia motivo fora da lista de sete.
+    test: >
+      tests/test_needs_human_reasons.py::test_declared_reason_field_beats_phrase_matching,
+      ::test_declared_reason_accepts_only_the_closed_list,
+      ::test_routing_reason_counts_only_after_the_word_motivo,
+      ::test_l4_finding_still_beats_a_declared_reason
+    layer: unit sobre classify() com artefatos sintéticos (o caso sem o campo prova "nao-rodou" por frase)
+    evidence: verified
+    run: "python3 -m pytest tests/test_needs_human_reasons.py tests/test_cepa_runs_without_pyyaml.py -q -> 55 passed (N>0)"
+    note: >
+      A leitura vem depois da regra estrutural "L4 com findings -> sem-cobertura",
+      de propósito (o fato vence o texto), coberta por teste e documentada no código.
+  - id: AC2
+    altitude: domain
+    surface: >
+      classify() sobre os 6 artefatos reais do episódio, copiados em
+      tests/fixtures/needs-human/ (idênticos byte a byte aos originais em
+      wego-acessos-backend/docs/proof, conferido com diff -q).
+    test: >
+      tests/test_needs_human_reasons.py, tabela EXPECTED (2357/2368/2416
+      nada-a-provar, 2369 teste-cego, 2044 e 2355 fora-do-alcance)
+    layer: unit parametrizado sobre fixtures reais
+    evidence: verified
+    run: "pytest -k '2357 or 2368 or 2369 or 2044 or 2416 or 2355 or declared or routing' -> 10 passed; suíte dos dois arquivos 55 passed"
+gaps: []

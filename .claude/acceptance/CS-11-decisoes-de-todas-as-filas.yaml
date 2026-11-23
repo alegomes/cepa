@@ -1,0 +1,28 @@
+key: CS-11-decisoes-de-todas-as-filas
+queue: decisoes-de-todas-as-filas
+status: complete
+diff_range: f5468d9..a14d22b
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      `cepa-until decide --all --repo DIR` (e `decide` sem argumento), em repo
+      git temporário com filas `a` (item done) e `b` (item pendente sem rota de
+      dono). Fora do terminal (stdin=DEVNULL) e num pty: sai com 0, stdout é
+      exatamente a linha "nada espera você", stderr vazio, HEAD do git e
+      queue.yaml iguais.
+    test: tests/test_cepa_until_decide_all.py::test_cs11_nothing_waiting_off_a_terminal_is_one_line_and_exit_0 (e test_cs11_nothing_waiting_on_a_terminal_is_the_same_line, test_cs11_bare_decide_with_nothing_waiting_says_the_same)
+    layer: cli/subprocesso (e pty) sobre repo git real; asserta rc 0, stdout == ["nada espera você"], stderr vazio, HEAD e filas inalterados
+    evidence: verified
+    run: "python3 tests/test_cepa_until_decide_all.py -> '✓ 23 testes', todos os checks cs11 'ok', 0 falhas (rodado duas vezes)"
+    note: >
+      Diff muda common/bin/cepa-until (ask_at_launch_all ganha say_empty; cmd_decide
+      passa say_empty=True; só imprime se nada foi perguntado e nada foi nomeado).
+      Testes negativos: rota já respondida "não" e fila com run vivo não imprimem a
+      linha; a largada (painel de launch) continua muda. Asserções não codificam o
+      defeito. A frase "hoje o comando é recusado" é anterior ao CS-8 (antes da
+      mudança o comando imprimia nada e saía 0); o vermelho anterior à correção não
+      foi reexecutado por mim.
+    verdict: complete
+    gap: null
+deferral: []

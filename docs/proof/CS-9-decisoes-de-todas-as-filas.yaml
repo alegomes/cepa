@@ -1,0 +1,44 @@
+schema_version: 2
+card: CS-9-decisoes-de-todas-as-filas
+verdict: needs-human
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: 5eb6e45
+head_commit: 55cfbe3
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::ask_at_launch_all (new parameter name_live: a queue with a live run prints one line naming it and its run)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::cmd_decide (passes name_live=True on the --all path)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN baseline at 55cfbe3 in detached worktree /tmp/proof-CS-9 (removed afterwards): python3 tests/test_cepa_until_decide_all.py -> '14 testes' ok. The three test_cs9_* run the real CLI on a pty with a real live pid (subprocess), no double."
+        - "P1 cepa-until:5460 'if name_live:' -> 'if False:' (line never printed): KILLED, '3 falha(s)'."
+        - "P2 cepa-until:5459 'if alive:' -> 'if False:' (live queue is asked instead of left out): KILLED, '8 falha(s)' (c1 asked, commit touches a, b and c)."
+        - "P3 run id in the line replaced by 'x': KILLED, '2 falha(s)'."
+        - "P4 pid in the line replaced by 0: KILLED, '5 falha(s)'."
+        - "P5 'cepa-until decide {name}' -> 'cepa-until decide' (command loses the queue): KILLED, '1 falha(s)' (check '...e diz onde responder c depois que o run acabar')."
+        - "P6 cmd_decide passes name_live=False (cepa-until:5583): KILLED, '3 falha(s)'."
+        - "P7 default of name_live False -> True (launch panel of --all would also name the live queue): KILLED, '1 falha(s)' (test_cs9_the_launch_panel_of_all_keeps_its_live_queue_silent)."
+        - "Neighbor tests/test_cepa_until_all.py at 55cfbe3 (shares ask_at_launch_all): '47 testes' ok, 0 failures."
+        - "No-answers half of the criterion (a1 answered 'no' on 2026-11-18 not asked, one line with date and 'cepa-until decide a'): behavior pre-exists CS-9 in the shared function and is not part of this diff; it is asserted by test_cs9_decide_all_skips... (checks 'pergunta so b1' and 'uma linha conta a negada de a') and stayed green at base, so it is not perturbed here."
+    survivors: []
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI; precision not measured. Indirect signal: every changed line (:5441 signature, :5459-5465 branch and print, :5583 call) is reached and went red under P1-P7."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only prints one informational line about a queue that already has a live run; it parses no new external input (no api-rest module)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "code at 5eb6e45 with tests from 2e6b1af, python3 tests/test_cepa_until_decide_all.py -> '3 falha(s)' (FAIL '...a linha nomeia c e o run', '...uma linha nomeia a fila c e o run dela', '...e diz onde responder c depois que o run acabar'). At 55cfbe3: '14 testes' ok."
+routing_reason: "Criterion shown red before the fix (3 failures) and green after (14 tests; neighbor 47 tests). 7 perturbations killed, 0 equivalent, 0 survivors. Only l2_coverage is assumed (no coverage tool for the Python CLI), which makes proven unavailable by protocol. Suggested decision for the human: accept the perturbation table as coverage evidence (default: yes)."

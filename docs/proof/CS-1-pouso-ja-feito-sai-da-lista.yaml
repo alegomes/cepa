@@ -1,0 +1,59 @@
+schema_version: 2
+card: CS-1
+queue: pouso-ja-feito-sai-da-lista
+verdict: needs-human
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: 1856ab6
+head_commit: 05bfc3a
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::landed_upstream", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::close_landed_run", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::waiting_runs (new `red and landed_upstream` branch)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at 05bfc3a (detached worktree /tmp/proof-cs1): python3 tests/test_cepa_until_pending_closes_landed.py -> '✓ tudo passou' (27 'ok' lines, N>0). The CLI runs as a subprocess; no double stands in for the changed code. Production code identical to 26db875."
+        - "Method: each perturbation applied as an exact one-occurrence string replacement on common/bin/cepa-until, whole new test file run, file restored. All 18 of the previous round re-applied by the reviewer, none taken from the implementer's claim."
+        - "P1 upstream lookup replaced by local destination: KILLED (6 failures)."
+        - "P2 fallback to local branch removed when no upstream: KILLED (1 failure)."
+        - "P3 `red and landed_upstream` branch disabled (if False): KILLED (12 failures)."
+        - "P4 condition inverted (`not landed_upstream`): KILLED (17 failures)."
+        - "P4b `red and` dropped from the condition: KILLED (2 failures) [survivor of the previous round]."
+        - "P5 close_landed_run does not write the file (os.replace -> pass): KILLED (9 failures)."
+        - "P6 estado kept esperando-dono: KILLED (2 failures)."
+        - "P7 `parou` not dropped: KILLED (1 failure)."
+        - "P8 `motivo` not dropped: KILLED (1 failure)."
+        - "P9 `destino` not written: KILLED (1 failure) [survivor of the previous round]."
+        - "P10 `fechado_por` None instead of 'pending': KILLED (1 failure) [survivor of the previous round]."
+        - "P11 `quando` written as None: KILLED (2 failures)."
+        - "P12 `atualizado` constant instead of closing time: KILLED (2 failures) [survivor of the previous round]."
+        - "P13 branch tip replaced by the sha recorded in the aterrissar action: KILLED (1 failure)."
+        - "P14 is-ancestor arguments swapped: KILLED (16 failures)."
+        - "P15 landed_upstream always True: KILLED (7 failures)."
+        - "P16 `git fetch -q` added at the start of landed_upstream: KILLED (3 failures) [survivor of the previous round]."
+        - "P17 estado written as 'encerrado': KILLED (2 failures)."
+        - "P20 (new) `quando` a constant string instead of the closing timestamp: KILLED (1 failure)."
+        - "Out of the diff, informational: `build_vermelho: red and code == 0` changed to `red` survives (rc 0). That line is unchanged context from base, not a changed line of this card, so it does not gate."
+        - "18 of 18 previous perturbations plus 1 new: 19 of 19 killed, 0 survivors."
+    survivors: []
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI (absent, reported separately from survivors); reachability inferred from 19 of 19 perturbations going red."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff reads git state (rev-parse, merge-base) of the repo and a run-state JSON written by cepa-until itself; no input from outside and no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Task, not Bug; still confirmed: common/bin/cepa-until at base 1856ab6 with the head test file -> '✗ 12 falha(s)' (RED); head 05bfc3a -> '✓ tudo passou'."
+routing_reason: "All 19 perturbations (the 18 of the previous round, including the 5 old survivors, plus 1 new) went red, 0 survivors; the new test is RED at base (12 failures) and GREEN at head. The only open item is l2_coverage assumed: no coverage tool exists for this Python CLI. That alone makes it NEEDS-HUMAN, not a survivor."

@@ -1,0 +1,17 @@
+status: proposta
+motivo: nada-a-provar
+escopo: common/bin/cepa-intent
+razao: 'L2 (cobertura) dispensada no item wrap-up-fecha-cursor-da-intencao: a prova
+  quebrou de propósito os 26 pontos mudados (14 no cepa-intent e 12 no texto do wrap-up.md)
+  e todos ficaram vermelhos em tests/test_intent_telemetry.py; o repo não tem ferramenta
+  de cobertura para Python. L4 não se aplica: o diff só acrescenta uma opção booleana
+  a um script local.'
+revisit_trigger: quando o repo ganhar ferramenta de cobertura para Python
+autor: null
+proposto_por: drain-plan (cepa-until until/2026-11-21-1244)
+proposto_em: '2026-11-21'
+pergunta: 'Aceito a dispensa da medição de cobertura do comando da intenção, já que
+  as 26 quebras de propósito ficaram vermelhas? Recomendo sim: mesmo critério já aceito
+  para o cepa-plan'
+fila: cepa
+item: wrap-up-fecha-cursor-da-intencao

@@ -1,0 +1,42 @@
+schema_version: 2
+card: WEGO-2357
+verdict: needs-human            # proven | unproven | needs-human
+reviewed_at: 2026-11-05T22:00:00-03:00
+base_commit: 1f1be6f7           # derivado (pai de ed222741); .claude/cards/WEGO-2357.yaml nao existe
+head_commit: 75ccc891
+issue_type: Task
+scope:
+  base_commit_resolved: false   # derivado, nao capturado em baseline
+  changed_classes: []           # diff 1f1be6f7..HEAD do card: so docs/tasks/wego-2357/TASK.md e docs/validation/WEGO-2357.yaml
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: skipped           # o diff do card nao tem hunk de codigo; as perturbacoes abaixo sao do codigo existente em HEAD, sobre o teste que o card diz ser a prova
+      results:
+        - "baseline verde em HEAD 75ccc891: ./mvnw -pl bootstrap -am test -Dtest='HabilitacaoEmLoteConfirmacaoDeContagemE2ETest' -Dsurefire.failIfNoSpecifiedTests=false -> Tests run: 6, Failures: 0, Errors: 0, Skipped: 0; BUILD SUCCESS"
+        - "P1 (AC3) HabilitarOperadoresEmLoteService.quemSobra: 'if (alvo.size() != totalEsperado)' trocado por 'if (false && ...)' -> Tests run: 6, Failures: 1; RED em excetoComContagemErradaRecusaSemGravarEComContagemCertaHabilitaAsQuarenta; BUILD FAILURE"
+        - "P2 (AC3, mapeamento 409) ContagemDoLoteDivergenteException.httpStatus 409 -> 400 -> Tests run: 6, Failures: 1; 'Expected status code <409> but was <400>'; RED no mesmo teste"
+        - "P3 (AC2, quem sobra) removido 'fora.addAll(command.exceto())' -> Tests run: 6, Failures: 2; RED em excetoComContagemErrada...HabilitaAsQuarenta e excetoNaoContaDesativadaNemJaHabilitada"
+        - "cada perturbacao feita em worktree descartavel /tmp/proof-WEGO-2357, restaurada com git checkout, worktree removido; arvore primaria intocada"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "diff do card sem linhas de codigo: nada a medir. Alcance estrutural lido: o teste faz POST real em .../habilitacoes/lote com @QuarkusTest e RestAssured, atravessa Resource, HabilitarOperadoresEmLoteService e mapper de excecao."
+  l4_adversarial_input:
+    status: n/a
+    reason: "Diff so de documentacao (TASK.md e veredito de validacao): nao abre superficie de entrada nem toca classe de api-rest."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+inspection:
+  double_substitution_check: "HabilitacaoEmLoteConfirmacaoDeContagemE2ETest usa @TestProfile(ResolvedorPessoasRealTestProfile) com wego.e2e.resolvedor-pessoas.permissivo.enabled=false, entao o resolvedor real roda e so a borda (Keycloak Admin GET /admin/realms/<realm>/users) e estubada por WireMockKeycloakRapidoResource (restrictToAnnotatedClass = true). Nao ha @InjectMock, @Alternative nem fake de HabilitarOperadoresEmLoteService. AC1 atendido: servico de lote e o de producao."
+  ac1: "sem 500: o teste roda o modo exceto em credencial ativa e as perturbacoes mostram que a resposta real (409/200) e afirmada."
+  ac2: "200 com totalEsperado certo e 40 habilitacoes + 40 linhas de auditoria; load-bearing, RED em P3."
+  ac3: "409 CONTAGEM_DO_LOTE_DIVERGENTE com totalEsperado=5, 0 itens e 0 linhas de auditoria; load-bearing, RED em P1 e P2."
+  inconsistencia_cosmetica: "javadoc da classe de teste diz 201 onde o teste afirma 200 (ja registrado no Implementation Summary como fora de escopo)."
+  motivo_needs_human: "nada-a-provar (motivo 6 de docs/needs-human-motivos.md): o diff do card e so documentacao; proven e estruturalmente indisponivel (L3 skipped, L2 assumed)."
+routing_reason: "NEEDS-HUMAN motivo 6 (nada-a-provar) de docs/needs-human-motivos.md: o diff do card (docs/tasks/wego-2357/TASK.md e docs/validation/WEGO-2357.yaml) nao tem codigo, entao L3 (perturbacao do diff) fica skipped e L2 (cobertura do diff) fica assumed, e proven e estruturalmente indisponivel. Nao se aplicam a um diff so de documentacao: L3 e L2 sobre o diff, L4 (n/a, sem superficie de entrada) e regressao em base (Task). Evidencia alem do estrutural: o teste HTTP que o card aponta existe, roda 6/6 verde em HEAD com o resolvedor de pessoas real e so o Keycloak Admin estubado, e ficou RED nas tres perturbacoes do codigo de producao de que AC2 e AC3 dependem (comparacao de totalEsperado, status 409, exclusao das excecoes). O orquestrador deve gravar a dispensa nada-a-provar sob a politica (a), nomeando L3 e L2 do diff; este artefato nao a grava nem a presume. Base_commit foi derivado (1f1be6f7), nao capturado."

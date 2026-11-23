@@ -1,0 +1,39 @@
+schema_version: 1
+card: leads-build-hex-acordam-na-sessao-interativa
+status: complete
+audited_at: 2026-11-22T12:00:00-03:00
+note: "Criterios derivados do item do BACKLOG (nao ha card Jira). Efeito comportamental em sessao interativa viva NAO medido; a superficie real do item e o texto do prompt do agente, entao isso e risco residual declarado, nao lacuna de altitude."
+criteria:
+  - id: AC1
+    text: "Spec de todo agente que delega (*/agents/*.md com Task) deixa de mandar encerrar o turno e passa a mandar delegar com run_in_background: false, na sessao interativa e no run, mantendo paralelismo."
+    altitude: document (prompt do agente)
+    surface: "*/agents/*.md, secao '## Delegation is asynchronous'"
+    demonstrated_by:
+      test: "tests/test_async_delegation_specs.py"
+      layer: varredura de todos os agentes com Task; marcas obrigatorias (in the same turn, run_in_background: false, interactive session) e frases proibidas
+      evidence: verified
+      run: "python3 tests/test_async_delegation_specs.py -> 'ok — 11 agentes que delegam, todos com a seção completa' (N=11). Leitura de build-hex/agents/engineering-lead.md: 'in an interactive session and in an unattended run alike: delegate with run_in_background: false', workers independentes na MESMA mensagem em paralelo; grep de 'end the turn|notification brings you back' em */agents devolve 0."
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "Teste-guarda falha se uma copia trouxer de volta a premissa antiga ou perder a regra nova."
+    altitude: test (guarda)
+    surface: "tests/test_async_delegation_specs.py: MARKS + FORBIDDEN"
+    demonstrated_by:
+      test: "tests/test_async_delegation_specs.py"
+      layer: MARKS exige a regra nova; FORBIDDEN falha com as duas frases antigas
+      evidence: verified
+      run: "python3 tests/test_async_delegation_specs.py -> ok, 11 agentes (N>0), reexecutado em eef3245. Leitura do diff 756c4af..3f1890f confirma o laco FORBIDDEN. Nao mutei o repo (somente leitura); a falha-sob-regressao esta lida no codigo, nao executada."
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "A mensagem do hook no-busy-wait nao manda mais um lead subagente encerrar o turno, e um teste a guarda."
+    altitude: cli (stderr/exit code do hook, executado como subprocesso)
+    surface: "common/hooks/no-busy-wait.py, texto do bloqueio"
+    demonstrated_by:
+      test: "tests/test_no_busy_wait.py::message_failures (chamada em main)"
+      layer: subprocesso real do hook com comando de espera ocupada; exige exit 2, 'run_in_background: false', 'subagente' + 'NÃO chega a você', ausencia de 'REINVOCA você', e 'ENCERRE O TURNO' so depois de 'sessão principal'
+      evidence: verified
+      run: "python3 tests/test_no_busy_wait.py -> 'ok — 8 bloqueios e 9 liberações conferidos, e o texto do bloqueio manda o subagente esperar no mesmo turno' (exit 0; a funcao de mensagem executa antes do restante em main). Relato do coordenador: RED com 3 falhas contra o texto de 756c4af (nao reexecutado por mim; leitura do diff confirma que o texto antigo tinha 'REINVOCA você' e ENCERRE O TURNO incondicional)."
+    verdict: complete
+    gap: null

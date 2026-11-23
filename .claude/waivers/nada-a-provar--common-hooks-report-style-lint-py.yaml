@@ -1,0 +1,16 @@
+status: proposta
+motivo: nada-a-provar
+escopo: common/hooks/report-style-lint.py
+razao: 'L2 (cobertura) dispensada no item lista-de-decisoes-substituida-declarada:
+  a prova quebrou de propósito 47 pontos da regra nova (43 ficaram vermelhos em tests/test_report_style_lint.py,
+  4 não mudam comportamento); o repo não tem ferramenta de cobertura para Python.
+  L4 não se aplica: o hook só lê o transcript que o próprio harness grava.'
+revisit_trigger: quando o repo ganhar ferramenta de cobertura para Python
+autor: null
+proposto_por: drain-plan (cepa-until until/2026-11-21-1244)
+proposto_em: '2026-11-21'
+pergunta: 'Aceito a dispensa da medição de cobertura do verificador de formato dos
+  relatórios, já que as 43 quebras de propósito ficaram vermelhas? Recomendo sim:
+  mesmo critério já aceito para o cepa-plan em 10/11'
+fila: cepa
+item: lista-de-decisoes-substituida-declarada

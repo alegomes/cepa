@@ -1,0 +1,37 @@
+key: CS-3-decisoes-de-todas-as-filas
+status: complete
+diff_range: ed5a156..69b8f5b
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      `cepa-plan waiting` (texto e --json) invocado como subprocesso num repo
+      git de teste com a fila `a`, o item `a1` com evidência "Resposta do dono
+      em 2026-11-18: não" e `a2` sem resposta; stdout não traz `a1` como
+      linha e traz `1 que você já respondeu "não" (última em 18/11): para
+      revisitar, cepa until decide a`.
+    test: tests/test_cepa_plan_waiting_answered_no.py, função red_test (CS-3),
+      mais latest_and_rules, only_answered_queue e
+      dropped_and_done_without_route
+    layer: cli/subprocess sobre repo git real em diretório temporário
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_waiting_answered_no.py -> 25 checks 'ok',
+      0 FAIL, 'todos passaram' (a1 fora das linhas, a2 continua, linha exata da
+      contagem com data e comando, última data vale, sim posterior ou não que
+      não é a última resposta continuam linha, travado respondido não é
+      contado, fila só com respondidas ainda mostra a seção, --json
+      respondidas_nao, total_itens só das linhas, descartado/concluído sem
+      rota não conta). Vizinho: python3 tests/test_cepa_plan_waiting.py ->
+      '✓ tudo passou'."
+    note: >
+      O teste chama common/bin/cepa-plan diretamente (o lançador `cepa plan
+      waiting` foi coberto como idêntico no CS-1). Q4 respeitada: a rota não
+      volta como linha, só contada. "Decided without asking" não tem item
+      que conflite. O diff também move last_owner_no de cepa-until para
+      _ownertext e faz cepa-until usar o leitor compartilhado; o vizinho
+      tests/test_cepa_until_decide.py passou de 120s no meu primeiro plano,
+      foi movido para segundo plano pelo harness e não tive seu resultado, então
+      a não regressão do `decide` após a movimentação é evidência assumida
+      (o supervisor roda a suíte completa em seguida). Esse caminho não é
+      parte da superfície do critério.
+deferral: []

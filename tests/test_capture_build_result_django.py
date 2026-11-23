@@ -336,3 +336,175 @@ def test_empty_reason_carries_the_test_label_hint(tmp_path):
     st = _run_hook(tmp_path, "python manage.py test app.NaoExiste", "Ran 0 tests in 0.000s\n\nNO TESTS RAN")
     assert st and st["status"] == "EMPTY"
     assert st["reason"] and cbr.UNITTEST_EMPTY_FIX_HINT in st["reason"]
+
+
+# --- CS-4: `python -m unittest` and `django-admin test` classify like `manage.py test` ---
+
+_NEW_CMDS = [
+    "python3 -m unittest discover",
+    "python -m unittest",
+    "uv run python -m unittest discover -s tests",
+    "poetry run python3 -m unittest app.tests",
+    "docker compose exec web python -m unittest",
+    ".venv/bin/python -m unittest",
+    "python3.12 -m unittest",
+    "python -u -m unittest",
+    "django-admin test --settings=proj.settings",
+    "django-admin test",
+    "uv run django-admin test app",
+    "django-admin.py test",
+    "python -u -b -m unittest",
+    "python -Wignore::DeprecationWarning -m unittest",
+    "python --foo -m unittest",
+]
+
+
+@pytest.mark.parametrize("command", _NEW_CMDS)
+def test_cs4_green_writes_success(tmp_path, command):
+    st = _run_hook(tmp_path, command, "Ran 5 tests in 0.1s\n\nOK")
+    assert st and st["status"] == "SUCCESS" and st["kind"] == "unittest"
+
+
+@pytest.mark.parametrize("command", _NEW_CMDS)
+def test_cs4_red_writes_failure(tmp_path, command):
+    st = _run_hook(tmp_path, command, "Ran 5 tests in 0.1s\n\nFAILED (failures=1)")
+    assert st and st["status"] == "FAILURE" and st["kind"] == "unittest"
+
+
+@pytest.mark.parametrize("command", _NEW_CMDS)
+def test_cs4_ran_zero_records_empty(tmp_path, command):
+    st = _run_hook(tmp_path, command, "Ran 0 tests in 0.000s\n\nNO TESTS RAN")
+    assert st and st["status"] == "EMPTY" and st["tests_run"] == 0
+
+
+@pytest.mark.parametrize("command", _NEW_CMDS)
+@pytest.mark.parametrize("verdict, expected", [
+    ("Ran 5 tests in 0.1s\n\nOK\n", "SUCCESS"),
+    ("Ran 5 tests in 0.1s\n\nFAILED (errors=1)\n", "FAILURE"),
+])
+def test_cs4_verdict_only_in_stderr(tmp_path, command, verdict, expected):
+    st = _run_hook(tmp_path, command, "Found 5 test(s).\n", stderr=verdict)
+    assert st and st["status"] == expected and st["kind"] == "unittest"
+
+
+@pytest.mark.parametrize("command", _NEW_CMDS)
+def test_cs4_classify_kind_is_unittest(command):
+    assert cbr.classify(command, _GREEN_OUT, None)[:2] == ("SUCCESS", "unittest")
+
+
+@pytest.mark.parametrize("command", [
+    'echo "python -m unittest"',
+    'echo "django-admin test"',
+    "echo 'python3 -m unittest discover'",
+])
+def test_cs4_quoted_mention_is_not_a_build(tmp_path, command):
+    assert cbr.classify(command, _GREEN_OUT, None)[:2] == (None, None)
+    assert cbr.add_unittest_stderr(command, "out", {"stderr": "Ran 1 test\nOK"}) == "out"
+    assert _run_hook(tmp_path, command, _GREEN_OUT) is None
+
+
+@pytest.mark.parametrize("command", [
+    "python -m unittestfoo",
+    "python -m unittest-foo",
+    "python -m xunittest",
+    "python -m unittests",
+    "python -munittest",
+    "pythonx -m unittest",
+    "node -m unittest",
+    "django-admin migrate",
+    "django-admin testserver",
+    "django-admin test-foo",
+    "django-admin tests",
+    "xdjango-admin test",
+    "django-admin makemessages",
+    "django_admin test",
+    "djangoxadmin test",
+    "django-admintest",
+    "django-admin.pytest",
+    "python-wrapper -m unittest",
+    "python-m unittest",
+    "python3-u -m unittest",
+    "python -u-m unittest",
+    "FOO=python -m unittest",
+    "x=django-admin test",
+    "x=manage.py test",
+    "python - -m unittest",
+    "python -c x -m unittest",
+    "python -W x -m unittest",
+    "python -c 'a' && ls -m unittest",
+    "django-admin.pyc test",
+    "django-admin.sh test",
+    "python -c unittest",
+    "python -u unittest",
+    "python -x unittest",
+    "python unittest",
+    "python -mm unittest",
+    "python -m -u unittest",
+    "django-admin startapp test",
+    "django-admin migrate test",
+    "django-admin help test",
+    "echo a:python -m unittest",
+    "img:python -m unittest",
+    "a,python -m unittest",
+    "a-python -m unittest",
+    "a.python -m unittest",
+    "@python -m unittest",
+    "a:django-admin test",
+    "a-django-admin test",
+    "a.django-admin test",
+    "a_django-admin test",
+    "a:manage.py test",
+    "python -m coverage unittest",
+    "python -m x.unittest",
+    "python manage.py loadtest",
+    "python manage.py createtest",
+    "python manage.py smoke_test",
+    "python manage.py mytest",
+    "python manage.py test_foo",
+    "python manage.py migrate test",
+    "python manage.py",
+    "echo a)python -m unittest",
+    "a)django-admin test",
+    "a)manage.py test",
+    "a]python -m unittest",
+    "a}python -m unittest",
+    "a+python -m unittest",
+    "a~python -m unittest",
+    "a%python -m unittest",
+    "python -m test",
+    "python -m test -v",
+    "python -m doctest",
+    "python -m unit",
+    "python -m unittes",
+    "python -m nittest",
+    "python -m UNITTEST",
+    "django-admin",
+    "django-admin check",
+    "django-admin shell",
+    "django-admin tes",
+    "django-admin est",
+    "django-admin TEST",
+    "DJANGO-ADMIN test",
+    "PYTHON -m unittest",
+    "django-admin-foo test",
+    "djangoadmin test",
+    "python --m unittest",
+    "python -m unittest-foo test",
+    # A double quote right before the word: classify() reads the unquoted view, where every quote
+    # is blanked (opening, closing, escaped, unbalanced) except the delimiter quote on a heredoc
+    # opener line, so only this input keeps a `"` in front of the word and tells `[\s/]` from `[\s/"]`.
+    'cat <<"E"python -m unittest',
+    'cat <<"E"django-admin test',
+])
+def test_cs4_near_misses_are_not_unittest(command):
+    assert cbr.classify(command, _GREEN_OUT, None)[1] != "unittest"
+
+
+@pytest.mark.parametrize("command", [
+    "python -m unittest; echo done",
+    "python -m unittest&&echo ok",
+    "django-admin test; echo done",
+    "python -m unittest | tee out.log",
+])
+def test_cs4_shell_terminator_right_after_the_word_is_unittest(command):
+    assert cbr.classify(command, _GREEN_OUT, None)[:2] == ("SUCCESS", "unittest")

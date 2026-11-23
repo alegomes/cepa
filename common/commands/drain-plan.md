@@ -438,6 +438,17 @@ For each item of the batch, in order:
      lists what is missing and writes nothing. **Never close a route**: only whoever ran it knows whether it
      passed, and the command refuses.
 
+     **A pending point you discovered goes in a field, not only in the
+     prose.** A validation caveat left open, a decision nobody took, a proof
+     not run: record each one with `--pendencia "<in plain words>"`
+     (repeatable). While one is open, `cepa-plan status` does not show the
+     item as ready, and `start` prints it to the next run, which closes it
+     with `--resolve-pendencia N` (N as `cepa-plan show` numbers the open
+     ones). Written only in `--evidence`, it disappears the moment the owner's
+     answer returns the item to `pending`, and `status` says "pronto"
+     (fb-20261110-1, C1-18). It opens no route: what only the owner decides
+     still needs `--question` or `--human-pending`.
+
      **A waiver produced in the item is a proposal, not a waiver.** If a waiver
      came out during the item (`waivers.write` in an autonomous run records
      `status: proposta`, with `fila=`/`item=`), open it as `--human-pending

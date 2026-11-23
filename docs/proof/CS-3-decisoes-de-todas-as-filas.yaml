@@ -1,0 +1,42 @@
+schema_version: 2
+card: CS-3-decisoes-de-todas-as-filas
+verdict: needs-human
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: ed5a156
+head_commit: 6db580a
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan (waiting_of_queue answered-no counting and respondidas_nao, cmd_waiting shown filter and count line, help text)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/_ownertext.py (OWNER_NO regex and last_owner_no moved from cepa-until)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until (last_owner_no aliased to the shared one; the unused _OWNER_NO alias was deleted in 6db580a)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "First pass at 69b8f5b: 42 perturbations, 36 RED, 6 survivors (see git history of this file, commit 640e1d9). Second pass at 6db580a (production code unchanged since 69b8f5b except the deleted dead alias; tests only added): the 36 already killed were not rerun, by instruction."
+        - "Baseline at 6db580a in a detached worktree (git worktree add --detach /tmp/cs3-proof3 6db580a, removed at the end): `python3 tests/test_cepa_plan_waiting_answered_no.py` -> rc=0, last line 'todos passaram'."
+        - "Survivor 1 now RED: '\"ultima\": max(answered_no)' -> 'answered_no[0]' -> rc=1, '2 falha(s)'."
+        - "Survivor 2 now RED: comando 'cepa until decide {queue}' -> '{name}' (cepa-plan:2154) -> rc=1, '2 falha(s)'."
+        - "Survivor 3 now RED: 'queue = qp.queue_name_of(plan, name)' -> 'queue = name' (cepa-plan:2152) -> rc=1, '3 falha(s)'."
+        - "Survivor 4 now RED: waiting help paragraph 'A route whose last answer was \"não\" ...' replaced by 'x' -> rc=1, '1 falha(s)'."
+        - "Survivor 5 now RED: OWNER_NO (_ownertext.py:137) trailing \\b after n(?:ão|ao) removed -> rc=1, '2 falha(s)' ('as duas rotas continuam como linhas', 'nenhuma contagem'); the slow tests/test_cepa_until_decide.py was not needed."
+        - "Survivor 6 (equivalent dead alias) eliminated: `grep -n _OWNER_NO common/bin/cepa-until` at 6db580a returns nothing (rc=1)."
+        - "Total: 42 of 42 resolved (36 + 5 killed in this pass + 1 alias removed); 0 survivors. All runs are in the foreground, each under 3 s. Mutations were applied one at a time and reverted with git checkout; worktree removed."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI; reachability inferred from the perturbation results (every mutated changed line turned a test red, so no changed line is unreached)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "the subcommand only reads local queue YAML and the evidence text written by the owner's own tooling (cepa-plan answer); it opens no external input surface and no changed module is input-bearing (api-rest)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Load-bearing proof is complete: the 5 surviving mutants of the first pass now turn tests/test_cepa_plan_waiting_answered_no.py red and the dead alias is gone (42 of 42, 0 survivors). The only open level is L2 coverage, which stays assumed because no coverage tool is wired for the Python CLI; that alone makes the verdict needs-human. Suggested decision for the human: accept the perturbation results as the coverage evidence (every changed line was mutated and caught). Recommended default: accept."

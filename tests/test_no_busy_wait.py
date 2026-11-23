@@ -67,9 +67,44 @@ RELEASES = [
 ]
 
 
+def message_failures():
+    """The refusal text itself, not only the decision (fb-20261110-5, 2026-11-22).
+
+    A lead is a subagent: the notification of a worker it launched in the background goes to
+    the session at the top, never to the lead. The old text told everyone to END THE TURN and
+    wait for the notification, which leaves a lead idle until someone resumes it by hand. The
+    proof of 2026-11-22 reverted the text and every other test stayed green; this is the guard.
+    """
+    import json
+    import os
+    import subprocess
+    import tempfile
+
+    payload = json.dumps({"tool_name": "Bash",
+                          "tool_input": {"command": "until [ -f /tmp/x ]; do sleep 10; done"}})
+    with tempfile.TemporaryDirectory() as home:
+        r = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True,
+                           text=True, env={**os.environ, "HOME": home}, timeout=30)
+    msg = r.stderr
+    out = []
+    if r.returncode != 2:
+        return [f"MENSAGEM: o hook devia bloquear com exit 2, saiu {r.returncode}"]
+    if "run_in_background: false" not in msg:
+        out.append("MENSAGEM: não manda o subagente delegar com `run_in_background: false`")
+    if "subagente" not in msg or "NÃO chega a você" not in msg:
+        out.append("MENSAGEM: não diz ao subagente que a notificação não chega a ele")
+    if "REINVOCA você" in msg:
+        out.append("MENSAGEM: voltou a prometer que a notificação REINVOCA quem delegou")
+    if "ENCERRE O TURNO" in msg and (
+            "sessão principal" not in msg
+            or msg.index("sessão principal") > msg.index("ENCERRE O TURNO")):
+        out.append("MENSAGEM: 'ENCERRE O TURNO' sem estar condicionado à sessão principal")
+    return out
+
+
 def main():
     mod = load()
-    failures = []
+    failures = message_failures()
 
     for label, cmd in BLOCKS:
         if mod.blocks(cmd) is None:
@@ -87,7 +122,8 @@ def main():
               file=sys.stderr)
         return 1
 
-    print(f"ok — {len(BLOCKS)} bloqueios e {len(RELEASES)} liberações conferidos")
+    print(f"ok — {len(BLOCKS)} bloqueios e {len(RELEASES)} liberações conferidos, "
+          "e o texto do bloqueio manda o subagente esperar no mesmo turno")
     return 0
 
 

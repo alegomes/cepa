@@ -1,0 +1,44 @@
+schema_version: 2
+card: CS-7
+queue: pouso-ja-feito-sai-da-lista
+verdict: needs-human
+reviewed_at: 2026-11-23T08:00:00-03:00
+base_commit: 94e6cae
+head_commit: fdfb997
+issue_type: Task
+round: 2
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::install_for_closed (new `written` parameter; ledgers carry the queue; each .jsonl is listed before its write is attempted)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::cmd_pending (one commit_subcommand_records(..., 'pending', ..., paths=[record]) per written run, commit screen lines joined to the install lines, stderr under --json)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "common/bin/cepa-until unchanged between the round-1 head and this one: `git diff 6671a9b fdfb997 --stat` lists only docs/proof/CS-7-...yaml and tests/test_cepa_until_pending_install.py. The only production diff against base is 94e6cae..fdfb997 (install_for_closed and cmd_pending), all of it hit by the set below."
+        - "GREEN at fdfb997 (detached worktree /tmp/proof-cs7-r2, removed at the end): `python3 tests/test_cepa_until_pending_install.py` -> '✓ tudo passou' (about 24 s per run; the real `cepa-until pending` runs as a subprocess in a temp git repo with a fake HOME and fake bin/install.sh; no double stands in for the changed code)."
+        - "Method: the same 24 one-string replacements Q1..Q24 of round 1 (each pattern required to match exactly once), re-run independently from the dev's evidence, one at a time, only tests/test_cepa_until_pending_install.py, source restored after each; 3 batches of 8 (each about 3.5 min). The worktree was clean (git status empty) after the batches."
+        - "KILLED (22 of 24, each rc 1): Q1 Q2 Q3 Q4 Q5 Q6 Q7 Q8 Q9 Q10 Q11 Q13 Q14 Q16 Q17 Q18 Q19 Q20 Q21 Q22 Q23 Q24."
+        - "The 5 round-1 survivors are now dead: Q5 (other run listed after its write) KILLED by test_partial_copy_to_second_run_is_still_committed (RLIMIT_FSIZE makes the copy fail after 10 bytes); Q8 (exists() guard removed) KILLED by test_record_that_is_gone_is_not_committed_as_a_deletion; Q10 (paths=[record] dropped) KILLED by test_dirty_queue_file_stays_out_of_the_commit; Q14 (commit lines dropped) KILLED by test_commit_screen_line_is_shown; Q19 (other run's queue taken from the first) KILLED by test_two_closed_in_different_queues_each_commit_names_its_queue."
+        - "SURVIVED, EQUIVALENT (2), re-judged and kept: Q12 commit summary text replaced by 'x' (the criterion fixes only the `until a/r1 pending: ` prefix, the text after it is free); Q15 commit lines placed before the install lines (no criterion pins the order of the two blocks of screen text; same judgment as CS-6 P27)."
+        - "Dev claim on Q8 checked: the test indeed asserts exit 0, HEAD unchanged and no `commit:`/`refused` text, and does NOT assert a clean status (reading the test: the tree is left with the tracked .jsonl deleted). That matches the guard's purpose (without it git would be asked to commit a deleted path). Q8 goes red with the guard removed. Caveat: I could not print the failing assertion of Q8 or run an extra break-instead-of-continue perturbation (the path-lock denied running a script outside the worktree and an in-place checkout by relative path), so the exact assertion that catches Q8 is inferred from the test, not observed. The test also self-skips ('nada a provar') when the process is root, because chmod is then ignored; it ran for real here (uid non-root, the perturbation went red)."
+        - "Totals: 24 perturbations; 22 killed, 2 survived, both equivalent, 0 real survivors. Not run: an extra Q25 (`continue` -> `break` in the exists() guard), judged low value: with one missing record the two forms are indistinguishable and the test has a single missing record."
+    survivors: []
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "`python3 -m pip list 2>/dev/null | grep -i -E '^(coverage|pytest-cov)'` -> empty: no coverage tool is wired for this Python CLI (checked again in round 2; same result as CS-1..CS-6). Reachability inferred from the 24 perturbations: every changed line is executed and now asserted. Reported separately from survivors; per the CS-1..CS-6 rule `assumed` routes to NEEDS-HUMAN."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only commits records that cepa-until itself wrote while closing a landed run; no input from outside and no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Task, not Bug. Red-at-base redone: tests/test_cepa_until_pending_install.py at fdfb997 against common/bin/cepa-until of 94e6cae (`git -C /tmp/proof-cs7-r2 checkout 94e6cae -- common/bin/cepa-until`) -> '✗ 20 falha(s)' (round 1 had 11; the 9 extra come from the new tests: partial copy, vanished record, dirty queue file, screen line, queue of each commit). Restored to fdfb997 afterwards; worktree removed."
+routing_reason: "NEEDS-HUMAN: no real survivor remains (22 of 24 perturbations red, the 5 round-1 survivors dead, 2 equivalent re-judged), but l2_coverage is assumed because no coverage tool exists for this CLI; by the CS-1..CS-6 rule that routes to NEEDS-HUMAN. Suggested decision for the human: accept reachability by perturbation in place of a coverage tool (every changed line is hit and asserted by a red-when-broken test); with that accepted the item is proven."

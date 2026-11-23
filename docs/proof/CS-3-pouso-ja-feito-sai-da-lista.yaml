@@ -1,0 +1,41 @@
+schema_version: 2
+card: CS-3
+queue: pouso-ja-feito-sai-da-lista
+verdict: needs-human
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: 7cda7bc
+head_commit: 7ccb94f
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::waiting_runs (in_upstream condition, lines 6091-6103)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN at 7ccb94f (detached worktree /tmp/proof-cs3-c, since removed), each file on its own: tests/test_cepa_until_pending_closes_landed.py -> 'tudo passou' (rc 0); tests/test_cepa_until_pending_removes_branch_and_tree.py -> 'tudo passou' (rc 0). The CLI runs as a subprocess in a temp repo with a remote; no double stands in for the changed code."
+        - "Method: one-line sed on common/bin/cepa-until in the throwaway worktree (git diff --numstat checked: 1 line changed each time), both test files run, file restored with git checkout. Line numbers are those of 7ccb94f. All 14 perturbations of the previous proof re-run by the reviewer, plus 3 more."
+        - "KILLED (17 of 17): P1 line 6093 drop `and not in_upstream` (closes rc=1); P2 line 6095 `if red and in_upstream:` (closes rc=1); P3 line 6093 drop `and not red` (closes rc=1); P4 line 6093 `code == 0` -> `code != 0` (closes rc=1); P5 line 6092 `in_upstream = False` (closes rc=1, removes rc=1); P6 line 6092 `in_upstream = True` (closes rc=1, removes rc=1); P7 line 6092 `in_upstream = not landed_upstream(...)` (closes rc=1, removes rc=1); P8 line 6093 `not red` -> `red` (closes rc=1); P9 line 6093 `code == 0 or not red and not in_upstream` (closes rc=1, removes rc=1); P10 line 6091 `== 'build-vermelho'` -> `!=` (closes rc=1); P11 line 6094 `continue` -> `pass` (closes rc=1, 1 failure: 'FAIL cerca: a/r3 nao aparece na lista (nao espera por `land`)', the assertion added by 7ccb94f; this was the survivor of 301300a); P12 line 6095 `if not in_upstream:` (closes rc=1, removes rc=1); P13 line 6102 `if removed:` -> `if True:` (closes rc=0, KILLED by removes rc=1); P14 line 6103 `close_landed_run(...)` -> `pass` (closes rc=1, removes rc=1)."
+        - "EXTRA perturbations chosen by the reviewer, all killed: P15 line 6104 `continue` after the close -> `pass` (closes rc=1); P16 line 6093 `and not in_upstream` -> `and in_upstream` (closes rc=1); P17 line 6095 `if in_upstream:` -> `if True:` (closes rc=1, removes rc=1)."
+        - "Survivors: none. Judged equivalent: none."
+        - "Head tests against the BASE common/bin/cepa-until (git checkout 7cda7bc -- common/bin/cepa-until in the throwaway): closes_landed rc=1, '11 falha(s)'; removes_branch_and_tree rc=0 (untouched by the card, expected). Restored to 7ccb94f afterwards: closes_landed rc=0."
+        - "Totals: 17 perturbations; 17 killed, 0 survived, 0 judged equivalent."
+    survivors: []
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI (absent, reported separately from survivors); reachability inferred from 17 of 17 perturbations going red, including the skip branch (line 6094), now asserted by the r3 fence."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff runs git merge-base/rev-parse on the repo and reads a run-state JSON written by cepa-until itself; no input from outside and no api-rest module"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Task, not Bug. Equivalent check done anyway: head version of tests/test_cepa_until_pending_closes_landed.py against base 7cda7bc common/bin/cepa-until -> rc=1, '11 falha(s)'; head file -> rc=0."
+routing_reason: "The last survivor of 301300a (P11, line 6094 `continue` -> `pass`) is now killed by the assertion 7ccb94f added to the r3 fence, and the other 13 plus 3 extra perturbations stay killed: 17 of 17, 0 survivors, none equivalent; head tests are red (11 failures) against the base version. The only open item is l2_coverage assumed: no coverage tool exists for this Python CLI, which by the CS-1/CS-2 rule makes it NEEDS-HUMAN, not a survivor. Suggested decision for the human: accept reachability by perturbation in place of a coverage tool (same decision as CS-2)."

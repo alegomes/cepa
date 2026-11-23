@@ -1,0 +1,34 @@
+key: CS-6-decisoes-de-todas-as-filas
+status: complete
+diff_range: bc763ba..a01e387
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      `cepa-plan ready --repo DIR` (e o lançador `cepa plan ready`) como
+      subprocesso num repo git de teste. Fila `p` com todos os itens `done`,
+      dois com `human_pending` aberto: a linha de `p` é exatamente "fila p ·
+      0 de 0 pendentes prontos — fila fechada, 2 tarefas esperam você (cepa
+      until decide p)" e não contém "tudo concluído ou descartado". Linha 19
+      do escopo (deixa de dizer "tudo concluído ou descartado" quando um item
+      done ainda tem tarefa) coberta pelo mesmo teste.
+    test: tests/test_cepa_plan_ready_closed_leftover.py (main, 10 checks)
+    layer: cli/subprocess sobre repo git real em diretório temporário, também
+      pelo lançador `sh common/bin/cepa plan ready`
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_ready_closed_leftover.py -> 10 checks
+      'ok', 0 FAIL, '✓ todos os checks passaram'. Vizinho: python3
+      tests/test_cepa_plan_ready.py -> 0 FAIL, '✓ cepa-plan ready' (HEAD
+      a01e387)."
+    note: >
+      Teste exercita a CLI real e afirma igualdade exata da linha (não
+      substring). Cobre ainda singular (1 tarefa), item dropped com rota não
+      contado, fila sem rota ainda diz "tudo concluído ou descartado", rota
+      respondida "não" contada à parte, campo --json tarefas_sobrando e o
+      lançador. O código (ready_of_queue/cmd_ready) mudou na camada de saída
+      que o dono vê. As asserções não codificam o defeito. O estado vermelho
+      antes da correção (3c5eb06 antes de a01e387) foi informado pelo
+      coordenador e não foi reexecutado por mim. A ramificação "respondeu não"
+      é comportamento extra além do critério, testada e coerente com o
+      leitor usado por waiting/decide.
+deferral: []

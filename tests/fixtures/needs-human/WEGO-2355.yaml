@@ -1,0 +1,58 @@
+schema_version: 2
+card: WEGO-2355
+verdict: proven
+reviewed_at: 2026-11-05T21:15:00-03:00
+base_commit: ad2b1536
+head_commit: c10ded9a
+issue_type: Bug
+scope:
+  changed_classes:
+    - class: "com.wego.acesso.infrastructure.identidade.KeycloakGestaoUsuarios"
+      module: infrastructure
+      external_observable: true
+      substituted_by_double: null   # adaptador REAL roda; WireMock so no Keycloak (fronteira distante)
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: pit+perturbation
+    pit:
+      status: ran
+      results:
+        - "pitest existe no pom raiz sob o profile -Ppitest (a prova anterior dizia ausente). ./mvnw -Ppitest -pl infrastructure -am test-compile org.pitest:pitest-maven:mutationCoverage -DtargetClasses=...KeycloakGestaoUsuarios -DtargetTests='...KeycloakGestaoUsuarios*' -DfailWhenNoMutations=false"
+        - "Linhas alteradas (131 ramo 401/403 de chamarKeycloak, 147 retorno de contaDeServicoRecusada, 195-196 catch WAE de criar()): todos os mutantes KILLED. Sobreviventes na classe (L127, L168, L211, L383, L388) estao em linhas NAO alteradas pelo card (L127 = limite 5xx preexistente) e nao gateiam."
+        - "PIT cobre so os testes unitarios; nao substitui a prova externa abaixo"
+    perturbation:
+      status: pass
+      results:
+        - "GREEN em HEAD: ./mvnw -pl bootstrap -am test -Dtest=ContaDeServicoDoKeycloakRecusadaResponde500E2ETest -Dsurefire.failIfNoSpecifiedTests=false -> Tests run: 5, Failures: 0, Errors: 0, BUILD SUCCESS"
+        - "GREEN em HEAD (unitario): ./mvnw -pl infrastructure -am test -Dtest='KeycloakGestaoUsuarios*' -Dsurefire.failIfNoSpecifiedTests=false -> Tests run: 25, Failures: 0, Errors: 0, BUILD SUCCESS"
+        - "RED (chamarKeycloak linha 131 -> if (false)): mesmo comando do E2E -> Tests run: 5, Failures: 4 (listar tags, listar funcionarios, aplicar tags em lote, habilitar em lote), BUILD FAILURE"
+        - "RED (criar() linha 196 -> if (false)): E2E -> Tests run: 5, Failures: 1 (cadastrarFuncionarioComContaDeServicoRecusadaResponde500: esperava 500, veio 401 corpo vazio), BUILD FAILURE"
+        - "RED (LOG.errorf -> LOG.debugf em contaDeServicoRecusada): unitario KeycloakGestaoUsuarios* -> Tests run: 25, Failures: 2 (contaDeServicoRecusadaLogaUmaLinhaErrorSemSegredoNemHost 401 e 403: esperava 1 registro ERROR, veio 0), BUILD FAILURE"
+        - "Ressalva: a linha de log ERROR e provada SOMENTE pelo teste unitario; o E2E nao assere o log. Perturbar o log mantem o E2E verde."
+        - "Perturbacoes em worktree descartavel /tmp/proof-WEGO-2355 (removido); arvore primaria intocada"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem jacoco/quarkus-jacoco executado; alcance externo (@QuarkusTest) dos trechos alterados demonstrado por perturbacao: chamarKeycloak L131 -> 4/5 E2E RED; criar() L196 -> 1/5 E2E RED. A linha de log (L147/L140 area) so e alcancada e assertada pelo teste unitario (ressalva registrada)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff so converte erro de saida (resposta 401/403 do Keycloak ao backend) em 500; nenhuma classe de api-rest alterada e nenhum parse de entrada externa novo"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "KeycloakGestaoUsuarios.java e KeycloakGestaoUsuariosIdentidadeIndisponivelTest.java revertidos a ad2b1536, E2E de HEAD mantido: ./mvnw -pl bootstrap -am test -Dtest=ContaDeServicoDoKeycloakRecusadaResponde500E2ETest -Dsurefire.failIfNoSpecifiedTests=false -> Tests run: 5, Failures: 5 (esperava 500, veio 401 corpo ''), BUILD FAILURE. HEAD c10ded9a -> Tests run: 5, Failures: 0."
+debt:
+  duplicated_401_403_check_present_at_head: true
+  locations: "KeycloakGestaoUsuarios.java:131 (chamarKeycloak) e :196 (catch WAE de criar()); ambos delegam a contaDeServicoRecusada, entao a logica de log/excecao nao duplica, so o teste de status"
+  new_debt_introduced: "small: o teste 401/403 existe em dois lugares (chamarKeycloak e catch de criar()) porque criar() le Response manualmente; ambos cobertos por perturbacao RED. Revisit trigger: se surgir um terceiro metodo que leia Response manualmente, extrair um helper unico."
+routing_reason: "Regressao provada RED na base (5/5, 401 com corpo vazio) e GREEN em HEAD c10ded9a (5/5). Cada trecho alterado fica RED quando quebrado: ramo 401/403 de chamarKeycloak (4/5 E2E), catch de criar() (1/5 E2E), linha de log ERROR (2 unitarios). PIT (profile -Ppitest) matou todos os mutantes das linhas alteradas. Nenhum dublê substitui a classe alterada. Ressalva: o E2E nao assere a linha de log; so o teste unitario a prova."
+done_transition_held:
+  at: 2026-11-05T21:13:00-03:00
+  by: acceptance-gate (.claude/acceptance/WEGO-2355.yaml status incomplete, AC4 human-pending)
+  reason: fora-do-alcance   # docs/needs-human-motivos.md, motivo 7
+  what_unblocks: >-
+    Dono (alegomes) define KEYCLOAK_ADMIN_CLIENT_ID e KEYCLOAK_ADMIN_CLIENT_SECRET no .env da raiz
+    (conta de servico do backend no realm wego do Keycloak de dev), sobe bin/run-dev.sh --iam on e roda
+    bin/smoke/tag-listar.sh e bin/smoke/funcionario-listar.sh --alvo dev-iam esperando 200; entao marca
+    AC4 complete no artefato de aceite e move o card para Done. Nao ha trabalho de codigo: nao devolver a In Progress.

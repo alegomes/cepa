@@ -1,0 +1,50 @@
+schema_version: 2
+card: CS-10-decisoes-de-todas-as-filas
+verdict: needs-human
+reviewed_at: 2026-11-22T00:00:00-03:00
+base_commit: d43857a
+head_commit: 18e0f07
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until::ask_at_launch_all (new parameter as_text: branch that prints total, one section per queue, one line per question, a hint line, and returns without asking)", module: cli, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::cmd_decide (passes as_text=not (stdin.isatty() and stdout.isatty()) on the --all path)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  production_code_changed_since_previous_pass: false   # 63407d6..18e0f07 touches only tests/ and docs/proof/
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN baseline P0 at 18e0f07 in a detached worktree under /tmp (removed afterwards): python3 tests/test_cepa_until_decide_all.py -> '✓ 18 testes'. The test_cs10_* run the real CLI as a subprocess (stdin=DEVNULL; the new one also puts stdout on a pty), no double."
+        - "P1 cmd_decide as_text always False: KILLED, '10 falha(s)'."
+        - "P2 cmd_decide as_text always True (also on a terminal): KILLED, '31 falha(s)'."
+        - "P3b condition reduced to 'not sys.stdout.isatty()' (stdin no longer checked): KILLED NOW, '1 falha(s)' ('...lista a1 e b1 como texto, sem o menu'), by the new test_cs10_stdin_not_a_tty_lists_even_when_stdout_is_a_terminal (survived at 63407d6)."
+        - "P4 'if as_text:' -> 'if False:': KILLED, '10 falha(s)'."
+        - "P5 text branch loses its 'return' (falls into the interactive panel): KILLED, '3 falha(s)'."
+        - "P6 total count printed as total+1: KILLED, '2 falha(s)'."
+        - "P7 per-queue section line dropped: KILLED, '3 falha(s)'."
+        - "P8 question text dropped from the line: KILLED, '5 falha(s)'."
+        - "P9 question id replaced by '?': KILLED, '6 falha(s)'."
+        - "P10 hint line 'cepa-until decide --all' dropped: KILLED, '1 falha(s)'."
+        - "P11 only the first queue listed (sections[:1]): KILLED, '4 falha(s)'."
+        - "P12 only the first question of each queue listed (items[:1]): KILLED NOW, '1 falha(s)' (the new test_cs10_off_a_terminal_every_question_of_a_queue_is_listed, queue a holds a1 and a2; survived at 63407d6)."
+        - "P3 condition reduced to 'not sys.stdin.isatty()' (stdout no longer checked): SURVIVED, '✓ 18 testes'. Classified EQUIVALENT FOR THE CRITERION, not a gap: the criterion speaks only of stdin not being a TTY, and for every input with stdin not a TTY the mutant and the real code behave the same (both list as text). They differ only when stdin IS a terminal and stdout is piped (`cepa-until decide --all | tee`): real code lists as text, the mutant asks questions interactively with the answers going to a pipe. That input is outside the criterion; the 'and stdout.isatty()' half is an extra safeguard the card did not ask for and no criterion pins. This classification is mine; the human may overrule it (see routing_reason)."
+        - "Method note: perturbations were run in throwaway detached worktrees /tmp/proof-CS-10-P<n> at 18e0f07, all removed (git worktree list shows only the main checkout and this branch). A first attempt running 4-8 test files at once as shell background jobs hung (pty tests) and was discarded; the numbers above come from clean runs (P1-P4 in one parallel batch before the hang, P5-P12 sequential in the foreground)."
+    survivors: []
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool wired for the Python CLI; precision not measured. Indirect signal only: every changed line of the as_text branch and of the cmd_decide condition was individually perturbed (P1-P12) and each went red, so each is reached by a test."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff only prints already-loaded queue questions as text and parses no new external input (no api-rest module)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "code at d43857a with tests from adf4d99, python3 tests/test_cepa_until_decide_all.py -> '7 falha(s)' (FAIL '...lista a1 como texto', '...imprime a pergunta de a1', '...e a pergunta de b1', '...na ordem das filas', '...conta as duas perguntas', '...não pergunta nada', '...diz onde responder, num terminal'). At 18e0f07: '✓ 18 testes'. (Result of the first pass at 63407d6, still valid: production code is unchanged and the two tests added in 18e0f07 only add checks.)"
+routing_reason: "Both survivors of the first pass are dead (P12 and P3b killed by the two new tests, 12 of 13 perturbations killed, suite 18 tests green, criterion red at base with 7 failures). The one survivor left, P3 (stdin-only condition), is equivalent for the criterion as written. NEEDS-HUMAN only because l2_coverage is 'assumed' (no coverage tool for the Python CLI), which makes proven structurally unavailable to me. Suggested decision for the human: accept the per-line perturbation evidence as the coverage signal and accept the P3 classification; if a human prefers that `decide --all | tee` with a live keyboard also list instead of asking, that is a new criterion, not a gap in this one. I did not write a waivers.propose file: it needs running Python inline, which this agent's path lock forbids."

@@ -1,0 +1,27 @@
+key: CS-1-decisoes-de-todas-as-filas
+status: complete
+diff_range: 42bc4df~1..42bc4df
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      `cepa plan waiting` (e o lançador `cepa plan waiting`) invocado como
+      subprocesso num repo git de teste com as filas `a` (a1 blocked com
+      owner_question) e `b` (b1 done com human_pending); stdout agrupado por
+      fila, com id, motivo e pergunta.
+    test: tests/test_cepa_plan_waiting.py, função red_test (CS-1) e
+      reasons_and_fallbacks (três motivos, pergunta cortada em uma linha)
+    layer: cli/subprocess sobre repo git real em diretório temporário
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_waiting.py -> 13 checks 'ok' (sai com 0,
+      seção a antes de b, a1 com motivo e pergunta, b1 com motivo e pergunta,
+      a2/b2 sem rota não aparecem, lançador idêntico, rota aberta em pendente,
+      travado ganha de rota, travado sem pergunta usa o motivo, pergunta longa
+      cortada, descartado não aparece) -> '✓ tudo passou'. Vizinho:
+      python3 tests/test_cepa_plan_ready.py -> '✓ cepa-plan ready'."
+    note: >
+      A fila b é gravada antes da a no teste e a saída traz a antes de b, então
+      a ordem é exercida de verdade. Só leitura (cmd_waiting não escreve) e
+      "mesma ordem do ready" (mesmo qp.queue_files) valem por construção no
+      código, sem teste dedicado; não fazem parte do red test do CS-1.
+deferral: []

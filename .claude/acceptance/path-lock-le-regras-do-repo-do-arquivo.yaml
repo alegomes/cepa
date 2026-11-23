@@ -1,0 +1,40 @@
+key: path-lock-le-regras-do-repo-do-arquivo
+status: complete
+diff_range: eec6801..db17259
+build: delegated-to-supervisor
+criteria:
+  - id: AC1
+    source: "Palavras do dono + Problema: o worker escrevia no repo B (worktree do wego-digitacao-backend) com a sessao aberta no repo A, e um Bash com heredoc foi negado pelas pistas de A."
+    altitude: cli
+    surface: >
+      */hooks/bash-path-lock.py (6 copias) invocado como subprocesso com payload
+      PreToolUse Bash, cwd = repo A, comando `cd <B>/... && cat > X <<EOF ... EOF`
+      seguido de `cat > Y <<EOF` na linha de baixo, contra repos git reais.
+    test: "tests/test_bash_path_lock_other_repo.py (incidente + 4 liberacoes + ate 17 negacoes de controle, incl. cd $OLDPWD, symlink em B para a raiz, raiz aninhada no destino do cd, pushd -n, `..` logico por symlink, cd -P, CDPATH, pipe, &)"
+    layer: cli/subprocess sobre git init real (repos A e B, worktree do mesmo repo)
+    evidence: verified
+    run: "[re-auditoria em db17259] python3 tests/test_bash_path_lock_other_repo.py -> 'OK', 0 FAIL (6 copias). pytest tests/test_bash_path_lock_other_repo.py tests/test_bash_path_lock_exec.py tests/test_path_lock_out_of_root.py -> '8 passed in 20.84s'. pytest --collect-only no arquivo other_repo -> 'no tests collected' (helper renomeado para check_write_in_sibling_repo, nao coletado). python3 tests/test_bash_path_lock_exec.py -> 'tudo verde em 6 copias'. python3 tests/test_path_lock_out_of_root.py -> 'All checks passed across 6 hook copies'. python3 bin/gen-locks.py --check -> 'as 6 copias sao exatamente o molde renderizado'. Os dois bypasses (pushd -n, `..` logico por link) tem caso de negacao proprio e passam."
+    gap: ""
+  - id: AC2
+    source: "Esboco (mecanismo sugerido, nao criterio do dono): 'as regras de B decidem'. Criterio do dono = o worker consegue escrever em B."
+    altitude: cli
+    surface: >
+      build-hex/hooks/path-lock.py (Write) com sessao em A e arquivo em repo B real
+      com build-hex.yaml commitado; e bash-path-lock.py (coberto no AC1).
+    test: "tests/test_bash_path_lock_other_repo.py::check_write_in_sibling_repo (chamado em main) (repo B git real com build-hex.yaml commitado; Write passa, exit 0; controle: o mesmo Write dentro de A e negado, exit 2)"
+    layer: cli/subprocess sobre git init real
+    evidence: verified
+    run: "python3 tests/test_bash_path_lock_other_repo.py -> 'ok [build-hex] Write num repo vizinho com build-hex.yaml: fora da jurisdicao' e 'ok [build-hex] controle: o mesmo Write dentro de A e julgado e negado'; OK."
+    deferral_rule: >
+      Nao se aplica a excecao do card: o card nao tem criterio de bloqueio com bug.
+      AC2 e julgado como criterio do dono (worker escreve em B), nao como o mecanismo do Esboco,
+      sob a regra de fechamento desta rodada (relatada pelo orquestrador, nao verificada no card):
+      escolha de comportamento ja commitada vai por `cepa-plan finish --decision ... --decision-commit <sha>`.
+    decision_to_record: "Fora da raiz da sessao a trava nao tem jurisdicao para Write e Bash; o build-hex.yaml de B nao e lido. Commit 68f7796; documentado em BACKLOG.md 'O que foi feito' (Ficou de fora, de proposito) e na docstring do teste."
+    gap: >
+      Residual visivel ao dono (nao bloqueia): um worker em B fica sem nenhuma pista imposta
+      (nem as de A nem as de B). Depende de o orquestrador registrar a decisao via
+      `cepa-plan finish --decision` para aparecer no resumo da rodada; eu nao confirmei esse registro.
+notes: >
+  Re-auditado em db17259. O problema de coleta do pytest apontado em 68f7796 foi resolvido pela renomeacao do helper.
+  Escolha de comportamento (fora da raiz a trava nao tem jurisdicao; build-hex.yaml de B nao e lido) ainda depende de o orquestrador registrar via cepa-plan finish --decision --decision-commit; nao verificado por mim.
