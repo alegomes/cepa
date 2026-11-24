@@ -1,0 +1,65 @@
+schema_version: 1
+card: auto-clean-nao-apaga-sessao-viva
+status: complete
+audited_at: 2026-11-24T00:00:00-03:00
+audited_commit: 1adf196
+previous_audit_commit: 99690f5
+criteria:
+  - id: AC1
+    text: "registro da sessão gravado por arquivo temporário e troca atômica"
+    altitude: persistence
+    surface: "_wtlib.write_entry, chamada por session-heartbeat.py:144 e session-subject.py:227 (os dois escritores paralelos do defeito)"
+    demonstrated_by:
+      test: "tests/test_auto_clean_keeps_live_session.py, parte A (dois processos filhos reescrevendo a mesma entrada com payloads de 6000 e 20 bytes, 400 rodadas, leitor concorrente)"
+      layer: "escrita real em disco com processos concorrentes; queda no meio da escrita simulada deixa o conteúdo anterior intacto"
+      evidence: verified
+      run: |
+        python3 tests/test_auto_clean_keeps_live_session.py
+          ok   concurrent writers: reader never saw invalid JSON
+          ok   concurrent writers: final file is valid JSON
+          ok   no temp leftovers in the sessions dir after the writes
+          ok   read_entries only sees the real entry (temp names do not match *.json)
+          ok   a write that dies midway leaves the previous content intact
+        all green (45 linhas ok, 0 falhas, exit 0, em 1adf196)
+    verdict: complete
+    gap: null
+
+  - id: AC2
+    text: "registro ilegível conta como sessão viva"
+    altitude: application
+    surface: "_wtlib.classify / prune_dead / auto_clean sobre um .claude/sessions/<id>.json com JSON inválido (lixo após o último })"
+    demonstrated_by:
+      test: "tests/test_auto_clean_keeps_live_session.py, parte B e B horizon"
+      layer: "repo git descartável com worktree real; entrada com pid morto e last_seen de 72h, ilegível; checa alive=True, arquivo preservado por prune_dead, worktree e branch mantidos por auto_clean; arquivo ilegível mais velho que STALE_HOURS deixa de proteger"
+      evidence: verified
+      run: "mesma execução do AC1 (python3 tests/test_auto_clean_keeps_live_session.py, 'all green'): linhas ok de B, B horizon e B conteúdo hostil (binário, lista, string, número, null, vazio, diretório: classify vivo, auto_clean sem exceção, worktree e branch mantidos) mais B .next.json inválido não protege; em 1adf196"
+    verdict: complete
+    gap: null
+
+  - id: AC3
+    text: "worktree sem registro legível não é removida"
+    altitude: application
+    surface: "_wtlib.auto_clean num repo com worktree de sessão limpa, sem arquivo de registro e sem tombstone"
+    demonstrated_by:
+      test: "tests/test_auto_clean_keeps_live_session.py, parte C (caso negativo mais contra-caso)"
+      layer: "repo git descartável com worktree real; sem registro e sem tombstone o worktree e a branch permanecem; contra-caso na ordem do session-registry.py (prune_dead e depois auto_clean) ainda remove a worktree de entrada legível e morta, então a limpeza legítima não regrediu"
+      evidence: verified
+      run: "mesma execução do AC1 ('all green'): linhas ok de C (sem registro e sem tombstone; contra-caso com prune_dead; contra-caso sem tombstone); em 1adf196"
+    verdict: complete
+    gap: null
+
+notes: |
+  Altitude: os três critérios nomeiam funções de _wtlib (write_entry,
+  auto_clean) e o estado do registro, não o payload do hook SessionStart. O
+  teste exercita essas funções contra disco e git reais, não mocks. O hook
+  session-registry.py (linhas 172 e 223) não é invocado por subprocess neste
+  teste; a ordem prune_dead -> auto_clean é reproduzida no contra-caso. Se o
+  dono quiser altitude de hook, é um teste a mais, fora da letra dos critérios.
+  Escritor com falha de fsync/replace propaga o erro como antes (comportamento
+  preservado, documentado no docstring).
+  A suíte completa (tests/run-all.sh) não foi rodada por esta auditoria; é do
+  supervisor.
+  Re-auditoria em 1adf196: o diff 99690f5..1adf196 só toca read_entries,
+  unreadable_recent e find_entry (aceitam apenas objeto JSON; ValueError cobre
+  UTF-8 inválido) e adiciona testes; os três critérios seguem demonstrados e a
+  execução em 1adf196 saiu verde (45 ok, exit 0).
