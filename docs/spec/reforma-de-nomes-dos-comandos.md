@@ -21,6 +21,8 @@ A mesma palavra nomeia coisas diferentes e a mesma coisa tem nomes diferentes co
 - P6: a ajuda do `cepa plan` abre com os subcomandos do dono e põe os demais num bloco "usados pelos comandos"; `cepa plan queue` vira `batch`.
 - P7: `/maestro:*`, `cepa dor` e `cepa hotspots` aparecem num bloco "frozen" no fim da ajuda.
 - P8: o argumento se chama `<slice>` em toda a família `/common:worktree-*`; `/common:worktree-name` vira `/common:worktree-rename`.
+- Q7, Q8 e Q10: os 12 plugins e suas pastas mudam de nome. `common` vira `cepa`, `board-flow` vira `cepa-board`, `build-hex` vira `cepa-hex`, `build-solo` vira `cepa-solo`, `build-team` vira `cepa-team`, `discovery` vira `cepa-discovery`, `docs` (pasta `docs-topology/`) vira `cepa-docs`, `design` vira `cepa-design`, `marketing` vira `cepa-marketing`, `review-gate` vira `cepa-review`, `maestro` vira `cepa-maestro`, `compass` vira `cepa-compass`. Comandos, skills e agentes passam a ser chamados pelo prefixo novo (`/cepa:queue`, `cepa:plain-report`, `cepa-board:atlassian-expert`).
+- Q9: a instalação troca o nome antigo pelo novo nas configurações de cada repo.
 - Item 10 do dono: todos os menus de ajuda atualizados com os nomes novos (ajuda da CLI, `description` e `argument-hint` dos comandos de barra, menus de modo, docs/commands.md e docs/cepa-cli.md).
 
 ### Não entra
@@ -30,6 +32,8 @@ A mesma palavra nomeia coisas diferentes e a mesma coisa tem nomes diferentes co
 
 ## Estado e migração
 Nenhum arquivo gravado muda de nome nem de formato: a pasta `.claude/queues/<fila>/until/`, a branch `until/<run>`, os registros `.jsonl`, as filas e as especificações continuam como estão (Q4). Muda só o que se digita e o que a ajuda mostra. Variáveis de ambiente e flags antigas continuam lidas (P3, P4). O nome antigo de um comando renomeado é recusado com uma linha que diz o nome novo (Q3).
+
+Duas coisas mudam em disco por causa dos prefixos (Q7 a Q10). No repo do Cepa, as 12 pastas de plugin mudam de nome com `git mv`, preservando o histórico. Em cada repo que usa o Cepa, as chaves `<nome antigo>@cepa` de `enabledPlugins` nas configurações do Claude Code são trocadas pelas novas por `bin/install.sh` e por `cepa doctor --fix`, com uma cópia do arquivo guardada antes. Os arquivos de configuração `board-flow.yaml` e `review-gate.yaml` e o conteúdo de `.claude/topology` continuam como estão.
 
 ## Critérios de sucesso
 
@@ -51,7 +55,7 @@ Nenhum arquivo gravado muda de nome nem de formato: a pasta `.claude/queues/<fil
 
 ### CS-5: as flags dos comandos de barra e os valores de veredito aparecem em inglês, e os antigos continuam aceitos
 **Surface:** cli
-**Red test:** `cepa modes menu discovery` imprime `/common:spec --continue <slug>` e não imprime `--continuar`; o `argument-hint` de `spec.md`, `advisors.md`, `gauntlet.md`, `queue-run.md` e `run-review.md` contém `--continue`, `--close`, `--list`, `--lenses`, `--angles`, `--on-branch` e `--queue` e nenhuma das formas em português; `cepa queue verdict <arquivo> 1 kept` grava o mesmo marcador que `mantida` grava hoje, e `mantida` continua aceito; `cepa queue finish ... --open-point "x"` grava o mesmo que `--pendencia "x"`, que continua aceito.
+**Red test:** `cepa modes menu discovery` imprime `/common:spec --continue <slug>` e não imprime `--continuar`; o `argument-hint` de `spec.md`, `advisors.md`, `gauntlet.md`, `queue-run.md` e `run-review.md` contém `--continue`, `--close`, `--list`, `--lenses`, `--angles`, `--on-branch` e `--queue` e nenhuma das formas em português; `cepa queue verdict <arquivo> 1 kept` grava o mesmo marcador que `mantida` grava hoje, e `mantida` continua aceito; `cepa queue finish ... --open-point "x"` grava o mesmo que `--pendencia "x"`, que continua aceito. Depois do CS-1.
 
 ### CS-6: toda variável de ambiente tem prefixo `CEPA_` e nome em inglês, e a antiga continua lida
 **Surface:** cli
@@ -63,7 +67,7 @@ Nenhum arquivo gravado muda de nome nem de formato: a pasta `.claude/queues/<fil
 
 ### CS-8: a ajuda do `cepa queue` abre com os subcomandos do dono, e `queue` vira `batch`
 **Surface:** cli
-**Red test:** em `cepa queue --help`, um bloco "for you" com `status`, `show`, `ready`, `waiting`, `epics`, `answer` e `add` aparece antes de um bloco "used by the commands" com os demais; `cepa queue batch <fila> --max 3` imprime o que `cepa plan queue <fila> --max 3` imprime hoje; `cepa queue queue <fila>` sai com 2 com "queue is now batch".
+**Red test:** em `cepa queue --help`, um bloco "for you" com `status`, `show`, `ready`, `waiting`, `epics`, `answer` e `add` aparece antes de um bloco "used by the commands" com os demais; `cepa queue batch <fila> --max 3` imprime o que `cepa plan queue <fila> --max 3` imprime hoje; `cepa queue queue <fila>` sai com 2 com "queue is now batch". Depois do CS-1.
 
 ### CS-9: o que está congelado aparece num bloco "frozen" no fim da ajuda
 **Surface:** cli
@@ -73,9 +77,25 @@ Nenhum arquivo gravado muda de nome nem de formato: a pasta `.claude/queues/<fil
 **Surface:** application
 **Red test:** um teste lê o `argument-hint` de `worktree-start.md`, `worktree-merge.md`, `worktree-discard.md`, `worktree-rename.md` e `worktree-label.md` e falha se algum citar `<name>`, `<new-name>` ou `<old-name>` no lugar de `<slice>`, `<new-slice>` e `<old-slice>`. Hoje `worktree-discard.md` e `worktree-name.md` usam `<name>`.
 
+### CS-12: os 12 plugins e suas pastas têm o nome novo
+**Surface:** application
+**Red test:** um teste lê `.claude-plugin/marketplace.json` e o `plugin.json` de cada pasta de plugin e falha se os nomes declarados não forem exatamente `cepa`, `cepa-board`, `cepa-hex`, `cepa-solo`, `cepa-team`, `cepa-discovery`, `cepa-docs`, `cepa-design`, `cepa-marketing`, `cepa-review`, `cepa-maestro` e `cepa-compass`, se alguma pasta tiver nome diferente do plugin que contém, ou se existir uma pasta `common/`, `board-flow/`, `build-hex/`, `build-solo/`, `build-team/`, `discovery/`, `docs-topology/`, `design/`, `marketing/`, `review-gate/`, `maestro/` ou `compass/` na raiz. A suíte inteira passa com os scripts em `cepa/bin/`. Depois do CS-1, CS-2, CS-3, CS-4, CS-5, CS-6, CS-7, CS-8, CS-9 e CS-10.
+
+### CS-13: toda referência a comando, skill ou agente usa o prefixo novo e aponta para algo que existe
+**Surface:** cli
+**Red test:** `cepa modes menu discovery` imprime `/cepa:spec --continue <slug>` e `/cepa-discovery:capture`; um teste extrai toda referência `<prefixo>:<nome>` dos arquivos vivos (`*/commands/*.md`, `*/skills/**/SKILL.md`, `*/agents/*.md`, `*/hooks/*.py`, README.md, docs/commands.md, docs/cepa-cli.md) e falha se o prefixo não for um dos 12 nomes novos ou se não existir o arquivo de comando, skill ou agente correspondente. Hoje as referências usam `common:`, `board-flow:` e os demais nomes antigos. Depois do CS-12.
+
+### CS-14: a instalação troca o nome antigo dos plugins nas configurações do repo
+**Surface:** cli
+**Red test:** num repo de teste cujas configurações do Claude Code habilitam `common@cepa` e `board-flow@cepa`, `cepa doctor` aponta as duas chaves como correção mecânica e não altera o arquivo; `cepa doctor --fix` deixa `cepa@cepa` e `cepa-board@cepa` habilitados, remove as chaves antigas e guarda uma cópia do arquivo anterior; `bin/install.sh` no mesmo repo de teste chega ao mesmo resultado; rodar de novo não muda nada. Depois do CS-12.
+
+### CS-15: `cepa doctor` avisa quando um arquivo de instruções do dono cita um prefixo antigo
+**Surface:** cli
+**Red test:** com um `CLAUDE.md` de teste (o global e o do repo) contendo "plugin `common`" e `common:plain-report`, `cepa doctor` lista o arquivo e a linha de cada menção no bloco do que precisa do dono, com o nome novo ao lado, e não edita o arquivo; sem menção, não lista nada. Depois do CS-12.
+
 ### CS-11: nenhum menu de ajuda nem documento vivo cita um nome antigo
 **Surface:** cli
-**Red test:** um teste com a tabela de nomes antigos (comandos, subcomandos, flags, valores e variáveis desta especificação) roda `--help` em cada `cepa <subcomando>` e em cada sub-subcomando, roda `cepa modes menu <modo>` para cada modo, e lê `*/commands/*.md`, `*/skills/**/SKILL.md`, `*/agents/*.md`, `common/hooks/*.py`, README.md, docs/commands.md e docs/cepa-cli.md; falha em qualquer menção fora das linhas que declaram a compatibilidade. `tests/test_commands_catalog.py` passa com os nomes novos.
+**Red test:** um teste com a tabela de nomes antigos (comandos, subcomandos, flags, valores, variáveis e prefixos de plugin desta especificação) roda `--help` em cada `cepa <subcomando>` e em cada sub-subcomando, roda `cepa modes menu <modo>` para cada modo, e lê `*/commands/*.md`, `*/skills/**/SKILL.md`, `*/agents/*.md`, `common/hooks/*.py`, README.md, docs/commands.md e docs/cepa-cli.md; falha em qualquer menção fora das linhas que declaram a compatibilidade. `tests/test_commands_catalog.py` passa com os nomes novos. Depois do CS-1, CS-2, CS-3, CS-4, CS-5, CS-6, CS-7, CS-8, CS-9, CS-10, CS-12, CS-13, CS-14 e CS-15.
 
 ## Perguntas em aberto
 - [x] Q-P1: renomear `cepa plan` para `cepa queue` e `/common:drain-plan` para `/common:queue-run`? — sim (dono, 2026-11-24)
@@ -91,6 +111,11 @@ Nenhum arquivo gravado muda de nome nem de formato: a pasta `.claude/queues/<fil
 - [x] Q3: o nome antigo de um comando renomeado (`cepa plan`, `cepa until`, `/common:drain-plan`) é recusado com uma linha que diz o nome novo, em vez de continuar funcionando? — sim, recusa e diz o novo (dono, 2026-11-24)
 - [x] Q4: os nomes gravados em disco (pasta `.claude/queues/<fila>/until/`, branch `until/<run>`, registros `.jsonl`) ficam como estão? — sim, ficam (dono, 2026-11-24)
 - [x] Q5: para um comando de barra renomeado, mantenho um arquivo com o nome antigo só para avisar do nome novo? — não: o nome antigo some do menu e a linha com o nome novo vale só na CLI (dono, 2026-11-24)
+- [x] Q6: reabro esta especificação para incluir a troca do prefixo `/common:`? — sim, e inclui a revisão dos prefixos dos outros plugins do Cepa, "para que fique claro de que são partes de algo maior (o Cepa)" (dono, 2026-11-24)
+- [x] Q7: o plugin `common` passa a se chamar `cepa` (`/cepa:queue`, `/cepa:next`)? — sim, `cepa` (dono, 2026-11-24)
+- [x] Q8: que forma tem o prefixo dos outros plugins (`board-flow`, `build-hex`, `build-solo`, `build-team`, `discovery`, `docs`, `design`, `marketing`, `review-gate`, `maestro`, `compass`)? — `cepa-` mais nome curto: `cepa-board`, `cepa-hex`, `cepa-solo`, `cepa-team`, `cepa-discovery`, `cepa-docs`, `cepa-design`, `cepa-marketing`, `cepa-review`, `cepa-maestro`, `cepa-compass` (dono, 2026-11-24)
+- [x] Q9: a instalação troca sozinha o nome antigo dos plugins nas configurações de cada repo que usa o Cepa? — sim, `bin/install.sh` e `cepa doctor --fix` trocam, guardando uma cópia (dono, 2026-11-24)
+- [x] Q10: as pastas do repo (`common/`, `board-flow/`, ...) mudam de nome junto com os plugins? — sim, pastas mudam também (dono, 2026-11-24)
 
 ## Decided without asking
 - Os arquivos de histórico que citam os nomes antigos (docs/acceptance, docs/proof, `.claude/queues`, docs/archive e especificações já fechadas) não são reescritos: registram o que valia na data. Vete aqui se discordar.
@@ -103,11 +128,19 @@ Nenhum arquivo gravado muda de nome nem de formato: a pasta `.claude/queues/<fil
 - Nomes novos das variáveis: `CEPA_MODO` vira `CEPA_MODE`, `CEPA_ENCADEAR` vira `CEPA_CHAIN`, `CEPA_PERMISSOES=classificador` vira `CEPA_PERMISSIONS=classifier`, `CEPA_PROMPT_MODO=substitui` vira `CEPA_PROMPT_MODE=replace`, `CEPA_COR` vira `CEPA_COLOR`, `CEPA_UNTIL_<X>` vira `CEPA_RUN_<X em inglês>`, `CLAUDE_WT_<X>` vira `CEPA_WT_<X>`, `CCW_<X>` vira `CEPA_<X>`. Vete aqui se discordar.
 - Em `cepa intent`, a edição sem ação vira `cepa intent step N` e `cepa intent edit --purpose/--plan --reason`; em `cepa modes`, `cepa modes [MODE]` sem subcomando continua imprimindo a tabela. Vete aqui se discordar.
 - `--demandas` do `/maestro:program-plan` não é traduzida: o comando está congelado. Vete aqui se discordar.
+- O prefixo antigo de comando de barra segue a regra de Q5: some do menu, sem arquivo de aviso. Vete aqui se discordar.
+- Os scripts da CLI mantêm o nome (`cepa-queue`, `cepa-run`, ...) e passam a morar em `cepa/bin/`; os scripts `maestro-*` não mudam de nome, o Maestro está congelado. Vete aqui se discordar.
+- `board-flow.yaml`, `review-gate.yaml` e o valor gravado em `.claude/topology` (por exemplo `build-solo`) não mudam: são arquivos dos repos que usam o Cepa, e os leitores aceitam o valor antigo. Segue a resposta da Q4. Vete aqui se discordar.
+- O `CLAUDE.md` do dono não é editado pela instalação: o `cepa doctor` só aponta a linha (CS-15). Vete aqui se discordar.
+- Na fila, a troca de pastas e plugins (CS-12) vem depois de CS-1 a CS-10, e a varredura final (CS-11) vem por último. Vete aqui se discordar.
 - Critério sobre arquivo de comando de barra usa a Surface `application`: o teste lê o arquivo, não existe camada mais externa que um teste alcance. Vete aqui se discordar.
 
 ## Riscos e o que ficou de fora desta especificação
 - `common/bin/cepa-until` chama `/common:drain-plan` e `/common:until-review` por nome em 24 linhas (contagem: `grep -n 'drain-plan\|until-review' common/bin/cepa-until | wc -l`, 2026-11-24). Uma run aberta durante a troca chamaria o nome antigo: a troca entra com nenhuma run aberta.
 - Em 2026-10 a troca de nome de dois hooks sem compatibilidade derrubou Bash, Edit e Write das sessões abertas até `/reload-plugins` (BACKLOG.md, linhas 2380-2386). Uma sessão aberta antes da troca continua oferecendo os comandos de barra antigos até recarregar os plugins.
+- 372 arquivos vivos citam `common:` (contagem: `grep -rlE '(/|")common:'` em `.md`, `.py`, `.json` e `.yaml`, fora de docs/acceptance, docs/proof e docs/archive, 2026-11-24). A troca do prefixo e das pastas é o item de maior alcance da reforma.
+- Os caminhos escritos nos critérios CS-1 a CS-10 usam as pastas de hoje (`common/commands/`, `board-flow/bin/`). Depois do CS-12 os testes desses critérios passam a apontar para `cepa/` e `cepa-board/`.
+- A instalação viva em `~/.claude/cepa-live/common/` muda de caminho: uma sessão aberta durante a instalação perde os hooks até reabrir.
 - Hábito: quem digita `/common:drain-plan` recebe "Unknown command" sem a dica do nome novo (Q5).
 - Fica de fora: um passo do plano da intenção não pode conter `:`, então não cita um comando de barra. Não foi aprovado como mudança.
 - Fica de fora: o comando que refaz esta revisão, especificado em docs/spec/revisao-de-comandos.md (Q2).
