@@ -4243,8 +4243,11 @@ def answer_item_id(ident, by_id):
 # UserPromptSubmit hook) wrote it to `.claude/session-log.md`. What does NOT
 # count: a prompt that is a slash command (its text is what the agent was
 # handed, like a `cepa-until` round's prompt), a prompt older than the
-# horizon, and a match inside another word ("sim" in "assim"). In an
-# unattended run nobody is in the chat, so the flag is refused outright.
+# horizon or dated after now, and a match inside another word ("sim" in
+# "assim"). In an unattended run nobody is in the chat, so the flag is refused
+# outright. The hook escapes prompt lines that look like the log's own headers
+# (`session-log.py`, `escape_headers`), so text pasted inside a slash command
+# cannot read back as a separate prose prompt.
 #
 # What this does not stop: an agent that writes the log itself. The TTY guard
 # did not stop that either (`script` fakes a terminal); both are a check that
@@ -4252,6 +4255,7 @@ def answer_item_id(ident, by_id):
 # message and quotes it, so the owner audits it in one read.
 UNATTENDED_ENV = ("CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID")
 CHAT_HORIZON_HOURS = 24
+CHAT_CLOCK_SKEW_SECONDS = 60
 _LOG_DAY = re.compile(r"^## (\d{4}-\d{2}-\d{2})\s*$")
 _LOG_TIME = re.compile(r"^### (\d{2}:\d{2}:\d{2}) UTC\s*$")
 
@@ -4306,6 +4310,8 @@ def owner_said_in_chat(repo, quote, now=None):
     for when, text in reversed(prompts):
         if when.timestamp() < oldest:
             break
+        if when.timestamp() > now.timestamp() + CHAT_CLOCK_SKEW_SECONDS:
+            continue  # dated after now: not something the owner said yet
         if text.startswith("/"):  # `owner_prompts` already stripped it
             continue
         if pattern.search(text):
