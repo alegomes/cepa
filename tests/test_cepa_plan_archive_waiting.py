@@ -79,9 +79,10 @@ def with_point(it):
                          "resolvida_em": None}]
 
 
-def with_run(root, name, days=8):
+def with_run(root, name, days=8, fila=None):
     """A night branch one commit ahead of `main` and a state file that makes
-    `cepa-until pending` list the run of queue `name` as waiting to land."""
+    `cepa-until pending` list the run of queue `name` as waiting to land.
+    `fila` is the queue name the run recorded, when it is not the folder's."""
     git(root, "checkout", "-qb", f"until/{RUN}")
     (root / "f.txt").write_text("night\n")
     commit(root, "night work", days_ago(days), "f.txt")
@@ -89,7 +90,7 @@ def with_run(root, name, days=8):
     d = queue_dir(root, name) / "until"
     d.mkdir(parents=True, exist_ok=True)
     (d / f"{RUN}.estado.json").write_text(json.dumps({
-        "fila": name, "run": RUN, "branch": f"until/{RUN}",
+        "fila": fila or name, "run": RUN, "branch": f"until/{RUN}",
         "estado": "esperando-dono",
         "acoes": [{"id": "aterrissar", "destino": "main"}]}), encoding="utf-8")
     commit(root, "run state", days_ago(days), f"{NEW}/{name}")
@@ -301,6 +302,110 @@ def test_runs_check_failure_fails_closed():
                   "não deu para conferir" in l and "run" in l, p.stdout)
 
 
+def fake_until(tmp, body):
+    """A copy of the plugin whose `cepa-until` is `body`: the only way to make
+    `cepa-until pending` answer something a real repo cannot be put into."""
+    plugin = Path(tmp) / "plugin"
+    (plugin / "bin").mkdir(parents=True)
+    for d in ("hooks", "_vendor"):
+        (plugin / d).symlink_to(REPO / "common" / d)
+    (plugin / "bin" / "cepa-plan").write_text(CEPA_PLAN.read_text())
+    (plugin / "bin" / "cepa-until").write_text(body)
+    return plugin / "bin" / "cepa-plan"
+
+
+def test_dropped_point_does_not_block():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        write_queue(root, "solta", ["done", "dropped"])
+        edit_queue(root, "solta", lambda plan: with_point(plan["items"][1]))
+        commit(root, "solta", days_ago(8), f"{NEW}/solta")
+        p = cli(root, "archive")
+        check("dropped point: archived",
+              (archived(root, "solta") / "queue.yaml").is_file(), p.stdout)
+
+
+def test_entry_that_is_not_an_item_is_ignored():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        write_queue(root, "mista", ["done"])
+        edit_queue(root, "mista", lambda plan: plan["items"].append("solto"))
+        commit(root, "mista", days_ago(8), f"{NEW}/mista")
+        p = cli(root, "archive")
+        check("non-item entry: no warning", "ilegível" not in p.stderr, p.stderr)
+        check("non-item entry: archived",
+              (archived(root, "mista") / "queue.yaml").is_file(), p.stdout)
+
+
+def test_run_recorded_under_the_header_name_blocks():
+    """The folder is `pasta`, the header says `queue: titulo`, and the run
+    recorded `titulo`: the run still belongs to this queue."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        write_queue(root, "pasta", ["done"])
+        edit_queue(root, "pasta", lambda plan: plan.update(queue="titulo"))
+        commit(root, "pasta", days_ago(8), f"{NEW}/pasta")
+        with_run(root, "pasta", fila="titulo")
+        p = cli(root, "archive")
+        l = line_of(p.stdout, "pasta")
+        check("header name: stays", (queue_dir(root, "pasta") / "queue.yaml").is_file()
+              and not archived(root, "pasta").exists(), p.stdout)
+        check("header name: names the run", RUN in l, p.stdout)
+
+
+def test_each_route_wording_is_its_own():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        closed(root, "aberta", mutate=with_route)
+        write_queue(root, "duas", ["done", "done"])
+        edit_queue(root, "duas", lambda plan: [with_route(it, "não")
+                                               for it in plan["items"]])
+        commit(root, "duas", days_ago(8), f"{NEW}/duas")
+        p = cli(root, "archive")
+        a, d = line_of(p.stdout, "aberta"), line_of(p.stdout, "duas")
+        check("open route: says it is open, not that it was answered",
+              "tarefa sua em aberto em aberta-0" in a and "respondeu não" not in a, a)
+        check("answered no: counts the two and names them",
+              "2 tarefa(s) que você respondeu não" in d
+              and "duas-0, duas-1" in d, d)
+        check("answered no: not also listed as an open task",
+              "tarefa sua em aberto" not in d, d)
+
+
+def test_run_without_a_command_does_not_print_none():
+    body = ("import json\nprint(json.dumps({'runs': [], 'fechados': [], "
+            "'mortos': [{'fila': 'velha', 'run': 'r9'}]}))\n")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        closed(root, "velha")
+        p = cli_at(fake_until(tmp, body), root, "archive")
+        l = line_of(p.stdout, "velha")
+        check("no command: stays and names the run", "r9" in l, p.stdout)
+        check("no command: points at `cepa until pending`, never None",
+              "None" not in l and "cepa until pending" in l, l)
+
+
+def test_what_the_run_check_writes_counts_for_the_same_sweep():
+    """`cepa-until pending` may close a landed run and write its record inside
+    the queue folder. The sweep reads the runs BEFORE it measures the folder,
+    so a queue changed by that read is not moved in the same sweep."""
+    body = ("import json, sys\nfrom pathlib import Path\n"
+            "root = Path(sys.argv[sys.argv.index('--repo') + 1])\n"
+            "d = root / '.claude' / 'queues' / 'velha' / 'until'\n"
+            "d.mkdir(exist_ok=True)\n(d / 'r9.jsonl').write_text('{}\\n')\n"
+            "print(json.dumps({'runs': [], 'mortos': [], 'fechados': []}))\n")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        closed(root, "velha")
+        p = cli_at(fake_until(tmp, body), root, "archive")
+        l = line_of(p.stdout, "velha")
+        check("run check wrote in the folder: stays",
+              (queue_dir(root, "velha") / "queue.yaml").is_file()
+              and not archived(root, "velha").exists(), p.stdout)
+        check("run check wrote in the folder: says it is uncommitted",
+              "não commitadas" in l, p.stdout)
+
+
 def main():
     for t in (test_declared_red_test, test_route_answered_no_still_blocks,
               test_dropped_route_does_not_block, test_resolved_point_does_not_block,
@@ -308,7 +413,13 @@ def main():
               test_dry_run_shows_refusals_and_moves_nothing,
               test_all_reasons_are_listed, test_two_items_and_two_reasons_in_one_queue,
               test_runs_are_checked_at_most_once_and_only_for_closed_queues,
-              test_runs_check_failure_fails_closed):
+              test_runs_check_failure_fails_closed,
+              test_dropped_point_does_not_block,
+              test_entry_that_is_not_an_item_is_ignored,
+              test_run_recorded_under_the_header_name_blocks,
+              test_each_route_wording_is_its_own,
+              test_run_without_a_command_does_not_print_none,
+              test_what_the_run_check_writes_counts_for_the_same_sweep):
         print(t.__name__)
         t()
     if FAILURES:

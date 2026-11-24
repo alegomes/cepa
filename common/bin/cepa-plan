@@ -5842,17 +5842,26 @@ def archive_waiting_reasons(name, plan, runs_of):
     if warning:
         reasons.append("não deu para conferir se há run esperando você "
                        f"({warning}); por segurança a fila fica")
+    # a run records the queue by the name it was started with: the folder's,
+    # or the one in the header when the two differ
+    names = {name, qp.queue_name_of(plan, name)}
     for r in runs:
-        if r.get("fila") == name:
+        if r.get("fila") in names:
             reasons.append(f"o run {r.get('run')} espera você "
-                           f"({r.get('como')}); resolva com: {r.get('comando')}")
+                           f"({r.get('como')}); resolva com: "
+                           f"{r.get('comando') or 'cepa until pending'}")
     return reasons
 
 
 def archive_blockers(root, name, qfile, today, plan=None, runs_of=None):
     """Why a CLOSED queue is not archived: a list of plain sentences, empty
     when it can go. One place on purpose: a new refusal reason is one more
-    `append` here. All the reasons that apply are listed."""
+    `append` here. All the reasons that apply are listed. What waits on the
+    owner is read FIRST: reading the runs (`cepa-until pending`) may close a
+    landed run and write its record inside this folder, and the age and the
+    uncommitted-changes checks below have to see that."""
+    waiting = (archive_waiting_reasons(name, plan, runs_of)
+               if plan is not None and runs_of is not None else [])
     reasons = []
     qdir = qfile.parent
     rel = _queue_rel(root, qdir)
@@ -5872,9 +5881,7 @@ def archive_blockers(root, name, qfile, today, plan=None, runs_of=None):
         if dirty.strip():
             reasons.append("a pasta tem alterações não commitadas; "
                            "commite antes de arquivar")
-    if plan is not None and runs_of is not None:
-        reasons += archive_waiting_reasons(name, plan, runs_of)
-    return reasons
+    return reasons + waiting
 
 
 def _archive_one(root, name, qfile, today, dry_run, runs_of):
