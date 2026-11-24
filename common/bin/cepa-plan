@@ -24,6 +24,27 @@ Subcommands:
       directory (until/ included) and one commit. Refuses: a LIVE session
       reservation, a destination that already exists. A wave plan is skipped.
 
+  cepa-plan archive [--dry-run] [--no-commit] [--repo DIR]
+      Sweeps the single-track queues of .claude/queues/ and moves to
+      .claude/queues/_archive/<nome>/ (whole folder, until/ included) each one
+      that is closed (at least one item, all `done` or `dropped`) and still for
+      ARCHIVE_AFTER_DAYS days (date of the last commit that touched the folder).
+      Never touches waves plans, .claude/programs/, _all/ or _archive/. A name
+      already taken in _archive, a queue with no commit, a queue with no item,
+      or one with something waiting on the owner (open route, leftover point
+      on a `done` item, run to land: the rule `waiting` uses) stays and the
+      output says why. By hand it commits only what it moved; --no-commit leaves the
+      commit (the move stays staged) to a caller that has its own.
+      The source spec goes along: when the queue's `source:` starts with
+      docs/spec/<slug>.md, the file moves to docs/spec/_archive/<slug>.md and
+      that queue's `source:` is rewritten (text after the path is kept); the
+      output says how many decisions without a verdict went along. Any other
+      source (Epic, BACKLOG.md, strategy doc) stays where it is. The spec stays
+      too when another queue still cites it, when it does not exist, when the
+      destination is taken or when it has uncommitted changes (the output says
+      which).
+      Spec: docs/spec/filas-fechadas-saem-da-vista.md (CS-1, CS-2, CS-3).
+
   cepa-plan check-name <nome> [--repo DIR]
       Is the program name free for a QUEUE? Mirror of
       `maestro-programs --check-name`, which asks the same question from the
@@ -5780,6 +5801,341 @@ def cmd_migrate(root, name, all_queues, dry_run):
     return 3 if refused else 0
 
 
+ARCHIVE_AFTER_DAYS = 7  # a constant on purpose: the spec leaves it out of config
+ARCHIVE_DIR = "_archive"
+
+
+def _last_commit_date(root, rel):
+    """The date (a `date`) of the last commit that touched `rel`, or None when
+    no commit ever did (an untracked queue has no measurable age)."""
+    rc, out, _ = _git(root, "log", "-1", "--format=%cs", "--", rel)
+    out = out.strip()
+    if rc != 0 or not out:
+        return None
+    try:
+        return datetime.strptime(out, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _ids(items):
+    return ", ".join(str(it.get("id")) for it in items)
+
+
+def archive_waiting_reasons(name, plan, runs_of):
+    """CS-2: the sentences for what a closed queue still has waiting on the
+    owner, by the rule `waiting` uses (`waiting_of_item`: a `done` item with a
+    route left; a `dropped` item never counts) plus the leftover points of
+    `finish --pendencia` and the runs `cepa-until pending` lists. A route the
+    owner answered "não" is still open, so it blocks too (`waiting` only
+    hides it). `runs_of()` returns the cached `(runs, warning)`; it is called
+    here, once per sweep, only for a queue that is otherwise closed."""
+    reasons = []
+    items = [it for it in (plan.get("items") or []) if isinstance(it, dict)]
+    routes = [it for it in items if waiting_of_item(it)
+              and not _ownertext.last_owner_no(it.get("evidence"))]
+    refused = [it for it in items if waiting_of_item(it)
+               and _ownertext.last_owner_no(it.get("evidence"))]
+    points = [it for it in items if status_of(it) != "dropped" and open_points(it)]
+    if routes:
+        reasons.append(f"tarefa sua em aberto em {_ids(routes)}: "
+                       "a fila ainda espera você")
+    if refused:
+        reasons.append(f"{len(refused)} tarefa(s) que você respondeu não "
+                       f"continuam abertas em {_ids(refused)}")
+    if points:
+        reasons.append(f"sobrou ponto pendente em {_ids(points)}: "
+                       "ninguém o fechou")
+    runs, warning = runs_of()
+    if warning:
+        reasons.append("não deu para conferir se há run esperando você "
+                       f"({warning}); por segurança a fila fica")
+    # a run records the queue by the name it was started with: the folder's,
+    # or the one in the header when the two differ
+    names = {name, qp.queue_name_of(plan, name)}
+    for r in runs:
+        if r.get("fila") in names:
+            reasons.append(f"o run {r.get('run')} espera você "
+                           f"({r.get('como')}); resolva com: "
+                           f"{r.get('comando') or 'cepa until pending'}")
+    return reasons
+
+
+def archive_blockers(root, name, qfile, today, plan=None, runs_of=None):
+    """Why a CLOSED queue is not archived: a list of plain sentences, empty
+    when it can go. One place on purpose: a new refusal reason is one more
+    `append` here. All the reasons that apply are listed. What waits on the
+    owner is read FIRST: reading the runs (`cepa-until pending`) may close a
+    landed run and write its record inside this folder, and the age and the
+    uncommitted-changes checks below have to see that."""
+    waiting = (archive_waiting_reasons(name, plan, runs_of)
+               if plan is not None and runs_of is not None else [])
+    reasons = []
+    qdir = qfile.parent
+    rel = _queue_rel(root, qdir)
+    if (qdir.parent / ARCHIVE_DIR / name).exists():
+        reasons.append(f"já existe {qp.NEW_DIR}/{ARCHIVE_DIR}/{name}; "
+                       "a fila não foi movida")
+    last = _last_commit_date(root, rel)
+    if last is None:
+        reasons.append("nenhum commit tocou a pasta da fila, então não há "
+                       "idade para medir")
+    elif (today - last).days < ARCHIVE_AFTER_DAYS:
+        reasons.append(f"último commit em {last.isoformat()}, faltam "
+                       f"{ARCHIVE_AFTER_DAYS - (today - last).days} dia(s) "
+                       f"para os {ARCHIVE_AFTER_DAYS} de parada")
+    else:
+        _, dirty, _ = _git(root, "status", "--porcelain", "--", rel)
+        if dirty.strip():
+            reasons.append("a pasta tem alterações não commitadas; "
+                           "commite antes de arquivar")
+    return reasons + waiting
+
+
+def _archive_one(root, name, qfile, today, dry_run, runs_of):
+    """One queue of the sweep. Returns True when it moved (or would, in
+    dry-run). Any exception is the caller's to contain."""
+    plan, error = read_plan(qfile)
+    if error:
+        print(f"aviso: fila {name} ilegível, não arquivada: {error}",
+              file=sys.stderr)
+        return False
+    if not isinstance(plan, dict) or mode_of(plan) != MODE:
+        return False
+    summary = queue_summary(name, plan)
+    if not sum(summary["counts"].values()):
+        # no item at all is not "closed" (nothing was ever delivered): said
+        # out loud, so an empty queue does not look forgotten by the sweep
+        print(f"não arquivada · {name}: a fila não tem nenhum item, então "
+              "não conta como fechada")
+        return False
+    if not queue_closed(summary):
+        return False
+    reasons = archive_blockers(root, name, qfile, today, plan, runs_of)
+    if reasons:
+        print(f"não arquivada · {name}: " + "; ".join(reasons))
+        return False
+    src = qfile.parent
+    dst = src.parent / ARCHIVE_DIR / name
+    if dry_run:
+        print(f"(dry-run) arquivaria · {name}")
+        return True
+    try:
+        dst.parent.mkdir(exist_ok=True)
+        os.rename(src, dst)
+    except OSError as e:
+        print(f"não arquivada · {name}: o move falhou ({e})")
+        return False
+    print(f"arquivada · {name} → {qp.NEW_DIR}/{ARCHIVE_DIR}/{name}")
+    return True
+
+
+SPEC_DIR = "docs/spec"
+_SPEC_SOURCE_RE = re.compile(
+    r"^\s*[\"']?(?:\./)?docs/spec/([^/\s,;()\"']+?)\.md(?![\w/-]|\.\w)")
+
+
+def _spec_slug(source):
+    """The <slug> when the queue's `source:` starts with `docs/spec/<slug>.md`
+    (text may follow the path), else None: an Epic, BACKLOG.md, a strategy doc
+    or a nested path serves more than one queue and never moves."""
+    if not isinstance(source, str):
+        return None
+    m = _SPEC_SOURCE_RE.match(source)
+    return m.group(1) if m and not m.group(1).startswith("_") else None
+
+
+def _still_cited_by_open_queue(root, rel, leaving):
+    """The name of a queue outside `leaving` whose `source:` still cites `rel`,
+    or None. A queue that cannot be read is judged by its raw text (the safe
+    side: the spec stays)."""
+    for name, qfile in qp.queue_files(root):
+        if name in leaving:
+            continue
+        plan, error = read_plan(qfile)
+        if error or not isinstance(plan, dict):
+            try:
+                text = qfile.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                text = ""
+            if _cites(text, rel):
+                return name
+        elif _cites(plan.get("source"), rel):
+            return name
+    return None
+
+
+def _decisions_went_along(path):
+    """How many decisions without a verdict the spec holds, by the reader
+    `cepa-plan decisions` uses (`_decisions.read_file`); 0 without the section."""
+    res = _decisions.read_file(path)
+    return len(res.pending) if res is not None else 0
+
+
+def _went_along_line(count, rel):
+    if count == 0:
+        return f"nenhuma decisão sem veredito foi junto em {rel}"
+    if count == 1:
+        return f"1 decisão sem veredito foi junto em {rel}"
+    return f"{count} decisões sem veredito foram junto em {rel}"
+
+
+def _rewrite_source(qyaml, slug):
+    """Points the queue's own top-level `source:` at the archived spec, keeping
+    what follows the path and the rest of the file byte for byte. False (file
+    untouched) when that line is not a plain one-line `source:`."""
+    old = f"docs/spec/{slug}.md"
+    new = f"{SPEC_DIR}/{ARCHIVE_DIR}/{slug}.md"
+    text = qyaml.read_text(encoding="utf-8")
+    pat = re.compile(r"^(source:[ \t]*[\"']?)(?:\./)?" + re.escape(old)
+                     + r"(?![\w/-]|\.\w)", re.M)
+    out, n = pat.subn(lambda m: m.group(1) + new, text, count=1)
+    if n != 1:
+        return False
+    plan = yaml.safe_load(out)
+    if not (isinstance(plan, dict) and isinstance(plan.get("source"), str)
+            and plan["source"].startswith(new)):
+        return False
+    qyaml.write_text(out, encoding="utf-8")
+    return True
+
+
+def _archive_specs(root, moved, dry_run):
+    """CS-3: after the queues moved, the spec each one came from goes along,
+    when every queue that cites it is archived (this sweep, or before). Returns
+    the repo paths it moved (old and new), to be staged and committed. Each
+    spec is judged alone: one that stays (missing, destination taken,
+    uncommitted changes, still cited) says why and never stops the sweep."""
+    by_slug = {}
+    for name in moved:
+        qdir = (Path(root) / qp.NEW_DIR / name if dry_run
+                else Path(root) / qp.NEW_DIR / ARCHIVE_DIR / name)
+        plan, error = read_plan(qdir / qp.NEW_FILE)
+        slug = None if error or not isinstance(plan, dict) else _spec_slug(plan.get("source"))
+        if slug:
+            by_slug.setdefault(slug, []).append((name, qdir / qp.NEW_FILE))
+    paths = []
+    for slug, queues in by_slug.items():
+        old_rel = f"{SPEC_DIR}/{slug}.md"
+        new_rel = f"{SPEC_DIR}/{ARCHIVE_DIR}/{slug}.md"
+        old, new = Path(root) / old_rel, Path(root) / new_rel
+        try:
+            why = None
+            other = _still_cited_by_open_queue(root, old_rel, set(moved))
+            if not old.is_file():
+                why = f"a especificação {old_rel} não existe; o source da fila fica como está"
+            elif other:
+                why = (f"a especificação {old_rel} fica: a fila {other} ainda a cita "
+                       "em source")
+            elif new.exists():
+                why = (f"a especificação {old_rel} fica: já existe {new_rel}; "
+                       "nada foi sobrescrito")
+            else:
+                _, dirty, _ = _git(root, "status", "--porcelain", "--", old_rel)
+                if dirty.strip():
+                    why = (f"a especificação {old_rel} fica: tem alterações não "
+                           "commitadas; commite e rode de novo")
+            if why:
+                print(f"especificação não movida · {why}")
+                continue
+            if dry_run:
+                print(f"(dry-run) levaria a especificação {old_rel} → {new_rel} "
+                      f"({_went_along_line(_decisions_went_along(old), new_rel)})")
+                continue
+            # queues archived in an earlier sweep that cite this spec follow it
+            earlier = []
+            for q in sorted((Path(root) / qp.NEW_DIR / ARCHIVE_DIR).glob("*/" + qp.NEW_FILE)):
+                if q in {qq for _, qq in queues} or q.parent.name in moved:
+                    continue
+                eplan, eerr = read_plan(q)
+                if eerr or not isinstance(eplan, dict):
+                    continue
+                if _spec_slug(eplan.get("source")) == slug:
+                    earlier.append(q)
+            targets = [q for _, q in queues] + earlier
+            snapshots = {q: q.read_text(encoding="utf-8") for q in targets}
+            new.parent.mkdir(exist_ok=True)
+            os.rename(old, new)
+            try:
+                for q in targets:
+                    if not _rewrite_source(q, slug):
+                        raise OSError(f"o source de {q.parent.name} não é uma linha simples")
+            except Exception:
+                for q, text in snapshots.items():
+                    q.write_text(text, encoding="utf-8")
+                os.rename(new, old)
+                raise
+            paths += [old_rel, new_rel]
+            paths += [str(q.relative_to(root)) for q in earlier]
+            print(f"especificação movida · {old_rel} → {new_rel}")
+            if earlier:
+                print("source reescrito também em: "
+                      + ", ".join(q.parent.name for q in earlier))
+            try:
+                print(_went_along_line(_decisions_went_along(new), new_rel))
+            except Exception as e:  # noqa: BLE001 - the spec did move; only the count failed
+                print(f"as decisões sem veredito de {new_rel} não puderam ser "
+                      f"contadas ({e.__class__.__name__}: {e}); a especificação "
+                      "foi movida mesmo assim")
+        except Exception as e:  # noqa: BLE001 - one spec must not stop the sweep
+            print(f"especificação não movida · {old_rel}: "
+                  f"{e.__class__.__name__}: {e}")
+    return paths
+
+
+def cmd_archive(root, dry_run, no_commit):
+    from datetime import date
+    today = date.today()
+    moved = []
+    cache = []
+
+    def runs_of():  # `cepa-until pending` once per sweep, and only when asked
+        if not cache:
+            cache.append(waiting_runs_of(root))
+        return cache[0]
+
+    for name, qfile in qp.queue_files(root):
+        if name.startswith("_"):  # `_` marks a folder that is not a queue
+            continue
+        # only the new layout: `.claude/programs/` is not this command's
+        if qfile.parent != Path(root) / qp.NEW_DIR / name:
+            continue
+        # one broken queue must not strand the moves already made: a failure
+        # in reading or judging it skips it, the sweep goes on to the commit
+        try:
+            if _archive_one(root, name, qfile, today, dry_run, runs_of):
+                moved.append(name)
+        except Exception as e:  # noqa: BLE001 - contain whatever one queue throws
+            print(f"aviso: fila {name} ilegível, pulada: "
+                  f"{e.__class__.__name__}: {e}", file=sys.stderr)
+    if not moved:
+        print("nada a arquivar")
+        return 0
+    try:
+        spec_paths = _archive_specs(root, moved, dry_run)
+    except Exception as e:  # noqa: BLE001 - the queues already moved: still commit them
+        spec_paths = []
+        print(f"aviso: as especificações não foram movidas: "
+              f"{e.__class__.__name__}: {e}", file=sys.stderr)
+    if dry_run:
+        return 0
+    paths = list(spec_paths)
+    for n in moved:
+        paths += [f"{qp.NEW_DIR}/{n}", f"{qp.NEW_DIR}/{ARCHIVE_DIR}/{n}"]
+    _git(root, "add", "-A", "--", *paths)
+    if no_commit:
+        print("movido e em stage, sem commit (--no-commit): o commit é de quem chamou")
+        return 0
+    rc, _, err = _git(root, "commit", "-q", "-m",
+                      "archive closed queues: " + ", ".join(moved), "--", *paths)
+    if rc != 0:
+        print(f"aviso: o commit falhou ({err.strip()}); o move ficou em stage",
+              file=sys.stderr)
+        return 3
+    print(f"commit feito com {len(moved)} fila(s)")
+    return 0
+
+
 def _item_help(answer, cmd):
     required = ("required when the route opens on a `done` item; optional on "
                 "`pending`/`blocked` (that yes returns the item to the queue)"
@@ -5823,7 +6179,7 @@ def main(argv=None):
             "(/maestro:run)."),
         groups=[
             ("sources (read only, return JSON)", ["from-spec", "from-epic", "from-triage"]),
-            ("writing", ["write", "add", "verdict", "migrate", "check-name", "validate"]),
+            ("writing", ["write", "add", "verdict", "migrate", "archive", "check-name", "validate"]),
             ("reading", ["queue", "status", "show", "epics", "decisions", "promote", "order"]),
             ("one item's cycle", ["start", "finish", "reword-route", "answer", "annotate"]),
             ("against the Jira board", ["reconcile", "landed", "divergence"]),
@@ -6046,6 +6402,48 @@ def main(argv=None):
                     (2, f"invalid usage, {not_git}, no queue file at all")])
     wt.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
     wt.add_argument("--json", action="store_true", dest="as_json", help=json_help)
+
+    ar = sub.add_parser(
+        "archive",
+        help="moves the closed queues that have been still for 7 days to "
+             ".claude/queues/_archive/",
+        description=(
+            "Sweeps the single-track queues and moves to\n"
+            ".claude/queues/_archive/<name>/ (the whole folder, until/ included)\n"
+            "each queue that is closed (at least one item, every item `done` or\n"
+            "`dropped`) and still for 7 days: the last commit that touched its\n"
+            "folder is 7 or more days old. Never touches waves plans,\n"
+            ".claude/programs/, _all/ or _archive/.\n"
+            "\n"
+            "A queue is left in place, and the output says why, when the name is\n"
+            "taken in _archive, when no commit ever touched its folder (no age to\n"
+            "measure), when the folder has uncommitted changes, when the queue\n"
+            "has no item, or when something in it still waits on the owner (an\n"
+            "open route, a leftover point on a `done` item, a run to land; the\n"
+            "same rule as `waiting`; if the runs cannot be checked, nothing\n"
+            "closed is moved). By hand it commits only what it moved.\n"
+            "\n"
+            "The spec the queue came from goes along: when `source:` starts\n"
+            "with docs/spec/<slug>.md, the file moves to\n"
+            "docs/spec/_archive/<slug>.md, the queue's `source:` is rewritten\n"
+            "(text after the path is kept) and the output says how many\n"
+            "decisions without a verdict went along and in which file. Any other\n"
+            "source (Epic, BACKLOG.md, strategy doc) stays where it is. The spec\n"
+            "also stays, and the output says why, when another queue still cites\n"
+            "it, when it does not exist, when the destination is taken or when it\n"
+            "has uncommitted changes."),
+        examples=[("cepa plan archive --dry-run", "what would move, without moving"),
+                  ("cepa plan archive", "move and commit"),
+                  ("cepa plan archive --no-commit", "move and stage; the caller commits")],
+        exit_codes=[(0, "swept (or nothing to archive)"),
+                    (2, f"invalid usage, {not_git}"),
+                    (3, "moved, but the commit failed (the move stays staged)")])
+    ar.add_argument("--dry-run", action="store_true", dest="dry_run",
+                    help="says what it would move, without moving")
+    ar.add_argument("--no-commit", action="store_true", dest="no_commit",
+                    help="moves and stages, but leaves the commit to the caller "
+                         "(`cepa until land`, wrap-up)")
+    ar.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
     sh = sub.add_parser(
         "show", help="shows the queue header, or one item in full with the codes "
@@ -6688,6 +7086,8 @@ def main(argv=None):
         return cmd_migrate(root, a.name, a.all_queues, a.dry_run)
     if a.cmd == "check-name":
         return cmd_check_name(root, a.name)
+    if a.cmd == "archive":
+        return cmd_archive(root, a.dry_run, a.no_commit)
     if a.cmd == "add":
         return cmd_add(root, a.name, a.id, a)
     if a.cmd == "order":

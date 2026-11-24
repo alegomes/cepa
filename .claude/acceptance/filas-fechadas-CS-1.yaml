@@ -1,0 +1,45 @@
+schema_version: 1
+card: filas-fechadas-CS-1
+status: complete
+audited_at: 2026-11-24T00:00:00-03:00
+covers: 3d824bf..7fade7d
+audited_commit: 7fade7d
+criteria:
+  - id: AC1
+    text: "CS-1: a varredura move a fila fechada e parada há 7 dias, e só ela (docs/spec/filas-fechadas-saem-da-vista.md). Fixture com velha (todo item done, último commit há 8 dias, com until/r1.jsonl), recente (done, 6 dias) e aberta (um pending); `cepa-plan archive` sai 0; existem _archive/velha/queue.yaml e _archive/velha/until/r1.jsonl, não existe queues/velha/, recente e aberta ficam; com --dry-run a saída nomeia velha e nada é movido."
+    altitude: cli
+    surface: "`cepa-plan archive [--dry-run]` como subprocesso real num repo git de fixture, lendo exit code, stdout e o disco/git depois"
+    demonstrated_by:
+      test: "tests/test_cepa_plan_archive.py::test_declared_red_test"
+      layer: "subprocesso real de cepa-plan num repo git temporário, com commits datados (8 e 6 dias); asserções no filesystem e no git"
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_plan_archive.py  -> "all ok", 95 checagens "ok" (N>0), 0 FAIL, exit 0 (HEAD 7fade7d, reauditado após _archive_one com try/except por fila)
+          ok  dry-run exits 0 / dry-run names velha / dry-run moves nothing
+          ok  archive exits 0 / velha/queue.yaml is in _archive / velha/until/r1.jsonl is in _archive
+          ok  velha is gone from its place / recente stays / aberta stays / nothing else in _archive
+      also_demonstrated_by:
+        - test: "tests/test_cepa_plan_archive.py::test_boundary_and_mix"
+          layer: "cli: limite de 7 dias exatos, 6 dias fica, fila sem done não é fechada"
+          evidence: verified
+          run: "ok exactly 7 days is archived; ok 6 days stays; ok a queue with no `done` is not closed (mesma execução, all ok)"
+        - test: "tests/test_cepa_plan_archive.py::test_collision_in_archive"
+          layer: "cli: nome já em _archive é pulado e dito, varredura continua"
+          evidence: verified
+          run: "5 checagens ok (mesma execução)"
+        - test: "tests/test_cepa_plan_archive.py::test_untouched_kinds"
+          layer: "cli: waves, layout legado, _all e fila sem commit não são tocados"
+          evidence: verified
+          run: "6 checagens ok (mesma execução)"
+        - test: "tests/test_cepa_plan_archive.py::test_no_commit_flag"
+          layer: "cli: à mão faz o próprio commit só do que moveu; --no-commit deixa em stage"
+          evidence: verified
+          run: "7 checagens ok (mesma execução)"
+    verdict: complete
+    gap: null
+notes:
+  - "Divergência deliberada julgada: o código reusa queue_closed (exige ao menos um item done), então fila com TODOS os itens dropped não é arquivada, enquanto o texto da spec diz 'todo item está done ou dropped'. Não é lacuna contra o critério CS-1: a fixture do critério usa só done, e a mistura done+dropped é arquivada e testada. É divergência contra o texto da spec, fora do que o critério pede; a decisão é do dono e está registrada no item da fila."
+  - "Fora do escopo desta chave (itens posteriores): CS-2 (recusas por espera do dono), CS-3 (spec de origem acompanha), CS-4..CS-9."
+  - "Escopo relacionado presente e testado: só fila single-track, pasta inteira, 7 dias pelo último commit, colisão em _archive pulada e dita, commit próprio à mão / --no-commit."
+  - "Não rodei tests/run-all.sh nem a suíte completa, por regra do turno."
+  - "Reauditoria em 7fade7d: o diff f6e94f6..7fade7d mexe só no corpo do laço (_archive_one sob try/except por fila) e adiciona 9 testes; as checagens de CS-1 em test_declared_red_test seguem as mesmas e verdes (95 ok no total, 0 FAIL). Rodado só tests/test_cepa_plan_archive.py."

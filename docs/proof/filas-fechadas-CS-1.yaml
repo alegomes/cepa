@@ -1,0 +1,47 @@
+schema_version: 2
+card: filas-fechadas-CS-1
+verdict: proven
+reviewed_at: 2026-11-24T17:00:00-03:00
+base_commit: 3d824bf
+head_commit: 0ca60e7
+issue_type: Story
+history:
+  - "round 1 @ f6e94f6: UNPROVEN. 38 of 55 perturbations killed, 14 survived (dirty-folder guard, exit 3 on commit failure, unreadable-queue skip, non-dict plan skip, move-failure handler, _last_commit_date branches, days-remaining arithmetic). Adversarial: a binary queue.yaml and 'items: 5' crashed the sweep with a traceback and left the earlier moves unstaged."
+  - "round 2 @ 7fade7d: the round-1 survivors that were real are all killed and both crashes are fixed (rc 0, no traceback, good queues moved and committed). ONE new real survivor: 'git log -1' -> '-2' in _last_commit_date (common/bin/cepa-plan:5801) leaves the suite green, and with it a queue touched by two or more commits is never archived (shown by hand). Also survived: dry-run prints a contradictory 'nada a arquivar' (minor)."
+  - "round 3 @ 0ca60e7: PROVEN. Delta since 7fade7d is tests only (git diff --stat 7fade7d..0ca60e7 -- common is empty), so every round-2 kill carries over. GREEN at 0ca60e7 (tests/test_cepa_plan_archive.py -> 100 ok lines, 'all ok'; tests/test_cepa_help_layout.py -> 'all green'). Both round-2 survivors now RED, the cosmetic one RED, and the spot-checked carried kills still RED (details in l3_load_bearing)."
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (ARCHIVE_AFTER_DAYS, _last_commit_date, archive_blockers, _archive_one, cmd_archive, parser 'archive', dispatch)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # the test runs the real common/bin/cepa-plan by subprocess against real git repos with backdated commits; no double for the changed code
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "Round 3, throwaway detached worktree /tmp/proof-filas-fechadas-cs1-r3 (git worktree add --detach ... 0ca60e7, removed with git worktree remove --force). GREEN first: python3 tests/test_cepa_plan_archive.py -> 'all ok' (100 'ok' lines, 0 FAIL); python3 tests/test_cepa_help_layout.py -> 'all green'. Each perturbation = exact-string replacement (pattern checked to occur exactly once) in common/bin/cepa-plan, archive test re-run, file restored; after all perturbations the tree was GREEN again."
+        - "Round-2 survivor 1, now KILLED: _last_commit_date 'git log -1' -> 'git log -2' (common/bin/cepa-plan:5801) -> RED, 1 failed: ['two old commits: archived'] (test_latest_commit_counts)."
+        - "Round-2 survivor 2, now KILLED: _archive_one dry-run 'return True' -> 'return False' -> RED, 1 failed: [\"dry-run with a candidate: no 'nada a arquivar'\"]."
+        - "Cosmetic, now KILLED: skip warning without the exception class name (f'{e.__class__.__name__}: {e}' -> f'{e}') -> RED, 1 failed: ['corrupted: the warning names the exception class']."
+        - "Carried kills spot-checked, all still RED: age boundary '< ARCHIVE_AFTER_DAYS' -> '<=' -> 1 failed ['exactly 7 days is archived (done+dropped mix)']; dirty-folder guard 'if dirty.strip()' (archive_blockers) -> 'if False' -> RED (4 FAIL lines, the corrupted-state fixture then crashes on a missing queue.yaml); per-queue 'except Exception' -> 'except ZeroDivisionError' -> 7 failed (corrupted: exit 0, no traceback, reason printed for binary and items, good queue archived, good moves committed, commit holds exactly the two good queues)."
+        - "Round-2 equivalents unchanged (not counted): 'git add -A --' -> 'git add --' (paths named explicitly), '_last_commit_date rc != 0 or not out' -> 'not out' (failing git log prints nothing), unreachable 'except ValueError' (%cs always YYYY-MM-DD). Common/ untouched since 7fade7d, so the earlier judgment holds."
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "no coverage tool in repo; every changed behavior hunk was broken on purpose and went red. The two lines left uncovered in round 2 (common/bin/cepa-plan:5801 the -1 limit, and the dry-run return True) are now broken and RED: 'log -2' -> 1 failed ['two old commits: archived']; dry-run 'return False' -> 1 failed [\"dry-run with a candidate: no 'nada a arquivar'\"]."
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Story, not Bug. Red-at-base for the feature (round 1): common/bin/cepa-plan at 3d824bf with the HEAD test -> 23 failed (subcommand 'archive' does not exist); at 0ca60e7 -> 'all ok'."
+routing_reason: "Os dois furos da rodada 2 foram fechados por testes novos e provados: se alguém trocar 'olhar o último commit' (git log -1) por -2, o teste da fila com dois commits antigos fica vermelho; se o --dry-run voltar a dizer 'nada a arquivar' logo depois de 'arquivaria X', o teste do dry-run fica vermelho; e o aviso de fila corrompida agora tem teste que exige o nome do tipo de erro. O código de produção não mudou desde a rodada 2 (diff vazio em common/), então as provas anteriores continuam valendo, e conferi por amostra três delas (limite de 7 dias, trava de pasta com alteração não commitada, proteção por fila): todas continuam vermelhas quando quebro. PROVEN."

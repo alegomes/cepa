@@ -1,0 +1,39 @@
+schema_version: 1
+card: filas-fechadas-CS-3
+status: complete
+audited_at: 2026-11-24T00:00:00-03:00
+covers: fc216fb..c6c934e
+audited_commit: c6c934e
+criteria:
+  - id: AC1
+    text: "CS-3: a especificação de origem vai junto, e o que foi junto é avisado. Red test: na fixture do CS-1, `velha` tem `source: docs/spec/velha.md` e esse arquivo tem duas linhas em 'Decided without asking' sem veredito. Depois de `cepa-plan archive`: existe `docs/spec/_archive/velha.md`, não existe `docs/spec/velha.md`, o `source:` de `.claude/queues/_archive/velha/queue.yaml` começa com `docs/spec/_archive/velha.md`, e a saída contém '2 decisões sem veredito foram junto em docs/spec/_archive/velha.md'. Uma segunda fila fechada com `source: docs/epics/x.md, ciclo 1` é movida e `docs/epics/x.md` continua no lugar. (docs/spec/filas-fechadas-saem-da-vista.md, seção CS-3)"
+    altitude: cli
+    surface: "`cepa-plan archive` como subprocesso real (common/bin/cepa-plan) num repo git de fixture com commits datados de 8 dias; asserções em exit code, stdout, disco, conteúdo do queue.yaml arquivado e git (commit próprio)."
+    demonstrated_by:
+      test: "tests/test_cepa_plan_archive_spec.py::test_declared_red_test"
+      layer: "subprocesso real de cepa-plan; fixture com `velha` (source docs/spec/velha.md, spec com 2 pontos sem veredito, lidos pelo leitor real de `cepa-plan decisions`) e `outra` (source `docs/epics/x.md, ciclo 1`), ambas fechadas há 8 dias. Checa: exit 0; spec em _archive com conteúdo intacto; ausente de docs/spec; source da fila arquivada começa em docs/spec/_archive/velha.md; saída com a frase literal do critério; `outra` movida, docs/epics/x.md no lugar e source dela inalterado; árvore limpa; o commit próprio contém caminho antigo e novo da spec e só coisas movidas."
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_plan_archive_spec.py  -> "all ok", 87 linhas "ok", 0 FAIL; 13 checagens ok no teste declarado (HEAD c6c934e), foreground
+        python3 tests/test_cepa_plan_archive.py  -> "all ok" (regressão CS-1)
+        python3 tests/test_cepa_plan_archive_waiting.py  -> "all ok" (regressão CS-2)
+      also_demonstrated_by:
+        - test: "tests/test_cepa_plan_archive_spec.py::test_trailing_text_and_other_citations_untouched / test_wording_for_one_and_zero / test_only_docs_spec_slug_paths_move"
+          layer: "cli: texto após o caminho preservado; `evidence` que cita o caminho antigo não é tocado; singular/zero; só docs/spec/<slug>.md move (Epic, BACKLOG, aninhado ficam)"
+          evidence: verified
+          run: "mesma execução, all ok"
+        - test: "tests/test_cepa_plan_archive_spec.py::test_other_open_queue_keeps_the_spec / test_all_citers_archived_in_one_sweep_or_before"
+          layer: "cli: regra 'só move quando toda fila que a cita em source está arquivada' (fila aberta que cita segura a spec; todas arquivadas na mesma varredura ou antes movem e reescrevem)"
+          evidence: verified
+          run: "mesma execução, all ok"
+        - test: "tests/test_cepa_plan_archive_spec.py::test_spec_missing / test_destination_taken / test_spec_with_uncommitted_changes / test_count_fails_after_the_move / test_dry_run_and_no_commit / test_commit_leaves_strangers_out / test_help_mentions_the_spec_move"
+          layer: "cli: spec ausente, destino ocupado, spec suja ficam e dizem por quê; falha na contagem não desfaz o move; dry-run e --no-commit; commit só com o movido; --help"
+          evidence: verified
+          run: "mesma execução, all ok"
+    verdict: complete
+    gap: null
+notes:
+  - "Rodados só os três arquivos de teste pedidos, em primeiro plano. A suíte completa (tests/run-all.sh) fica delegada ao supervisor da run; não foi executada aqui."
+  - "Fora de escopo: CS-4 em diante (restaurar fila arquivada, comandos de leitura achando a fila arquivada). Linha 18 da spec (escopo) e 'Não entra' (linhas 27-28: Epic/BACKLOG/estratégia não movem; só o source da própria fila é reescrito) conferidos contra o diff: _spec_slug só aceita docs/spec/<slug>.md, e outros textos que citam o caminho antigo não são tocados (teste cobre)."
+  - "Regra 'Uma especificação só é movida quando toda fila que a cita em source está arquivada' implementada em _still_cited_by_open_queue e demonstrada em teste de CLI; fila ilegível é julgada pelo texto cru (lado seguro)."
+  - "Nenhum teste afirma defeito nem teve asserção enfraquecida; nenhuma deferral invocada."

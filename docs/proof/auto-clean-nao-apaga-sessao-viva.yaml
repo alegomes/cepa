@@ -1,0 +1,49 @@
+schema_version: 2
+card: auto-clean-nao-apaga-sessao-viva
+verdict: proven
+reviewed_at: 2026-11-24T14:00:00-03:00
+base_commit: c647dc1fa6250c801a097fa1e1684d9268f0e02b
+head_commit: 19dfcd2
+issue_type: Bug
+history:
+  - "round 1 @ 99690f5: UNPROVEN. Survivors: temp cleanup on failed write (os.unlink(tmp)), .next.json skip in unreadable_recent, dead_evidence of a readable unpruned dead entry. Non-dict JSON and binary garbage made classify/auto_clean raise (fail-safe, pre-existing)."
+  - "round 2 @ 1adf196: the three round-1 survivors killed; hostile-input crash fixed. Two new production lines in find_entry survived (_wtlib.py:361 except tuple, :363 isinstance dict)."
+  - "round 3 @ 19dfcd2: delta since round 2 is tests only (part_find_entry in tests/test_auto_clean_keeps_live_session.py). Both find_entry survivors now killed. Zero survivors."
+scope:
+  changed_classes:
+    - class: "common/hooks/_wtlib.py (write_entry, read_entries, unreadable_recent, find_entry, classify, auto_clean)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null        # tests build real git repos/worktrees and call the real _wtlib; only the crash test wraps open() to simulate a dying writer
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "production identical to round 2: git diff --stat 1adf196..19dfcd2 -- common -> empty (only tests/test_auto_clean_keeps_live_session.py changed, +24 lines), so the round-2 kills carry over"
+        - "GREEN at 19dfcd2 (throwaway detached worktree /tmp/proof-auto-clean-3): python3 tests/test_auto_clean_keeps_live_session.py -> 'all green' (includes 'ok find_entry valid object', 'ok find_entry missing file'); python3 tests/test_session_heartbeat.py -> 'all green', rc=0"
+        - "round-2 survivor (a), _wtlib.py:361 find_entry only (read_entries untouched) except (OSError, ValueError) -> (OSError, json.JSONDecodeError): RED, 1 FAIL 'find_entry invalid utf-8: returns None' (UnicodeDecodeError escapes) (KILLED)"
+        - "round-2 survivor (b), _wtlib.py:363 find_entry 'return data if isinstance(data, dict) else None' -> 'return data': RED, 3 FAIL (find_entry list/string/number: returns None) (KILLED)"
+        - "spot-check carried kill, _wtlib.py:300 read_entries isinstance(data, dict) -> True: RED (classify and auto_clean raise AttributeError on list/string) (KILLED)"
+        - "spot-check carried kill, _wtlib.py:872 auto_clean guard 'or not info[\"dead_evidence\"]' removed: RED, 2 FAIL (auto_clean keeps a worktree with no registry and no tombstone) (KILLED)"
+        - "each perturbation restored with git checkout 19dfcd2 -- common (git diff --stat -- common empty after restore; card test 'all green', test_session_heartbeat rc=0); worktree removed with git worktree remove --force"
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "no coverage tool in repo; every changed behaviour hunk was broken on purpose and went red in rounds 1-3 (including find_entry :361 and :363 in round 3), so each was executed by the card test"
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: "card test at 19dfcd2 feeds an empty file, a directory named x.json, binary garbage, a JSON list, string, number and null to classify and auto_clean (every case alive via unreadable-registry, no raise, worktree and branch kept) and, new in round 3, the same hostile files (invalid utf-8, trailing garbage, list, string, number, null, empty) to find_entry (all return None); 'all green'"
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "c647dc1 _wtlib.py + 1adf196 tests (round 2): python3 tests/test_auto_clean_keeps_live_session.py -> FAIL concurrent writers (436 invalid reads of 2960); FAIL a write that dies midway leaves the previous content intact; FAIL classify alive=False for unreadable-registry worktree; FAIL auto_clean keeps the worktree directory; FAIL auto_clean keeps the branch; AttributeError: no attribute unreadable_recent. Production unchanged since, 19dfcd2 -> 'all green'."
+routing_reason: "O bug (auto_clean apagava a worktree de sessao viva cujo registro estava ilegivel) esta vermelho na base e verde no head. Na rodada 3 os dois sobreviventes que restavam em find_entry (_wtlib.py:361 e :363) ficaram vermelhos quando quebrados, o codigo de producao e identico ao da rodada 2 (kills anteriores valem), e nao ha sobreviventes. PROVEN."
