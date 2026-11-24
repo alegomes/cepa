@@ -242,6 +242,9 @@ def part_a(base: Path):
     after = f3.read_text(encoding="utf-8")
     check("a write that dies midway leaves the previous content intact",
           after == before, f"(file now: {after[:80]!r})")
+    left = sorted(p.name for p in f3.parent.iterdir())
+    check("...and leaves no temp file behind (only <key>.json in the dir)",
+          left == [f3.name], str(left))
 
 
 def part_b(base: Path):
@@ -321,6 +324,71 @@ def part_c(base: Path):
     check("...and its branch", not branch_exists(repo2, "session/z"))
 
 
+def part_next_json(base: Path):
+    print("B. an invalid *.next.json is not a session: it does not protect")
+    import _wtlib as L
+    repo = make_repo(base, "nj-main")
+    wt, sdir = add_wt(repo, base, "nj")
+    f = sdir / "something.next.json"
+    f.write_text('{"next": broken', encoding="utf-8")   # invalid, mtime = now
+    check("unreadable_recent does not list the invalid .next.json",
+          L.unreadable_recent(str(repo)) == [], str(L.unreadable_recent(str(repo))))
+    info = [i for i in L.classify(str(repo)) if i["branch"] == "session/nj"]
+    check("classify: no alive_reason=unreadable-registry because of a .next.json",
+          len(info) == 1 and info[0]["alive_reason"] != "unreadable-registry"
+          and info[0]["alive"] is False, str(info))
+
+
+def part_dead_unpruned(base: Path):
+    print("C. counter-case: readable dead entry NOT pruned (no tombstone) is removed")
+    import _wtlib as L
+    repo = make_repo(base, "du-main")
+    wt, sdir = add_wt(repo, base, "du")
+    f = sdir / "uuuuuuuu-dead.json"
+    f.write_text(json.dumps(entry_for("du", "uuuuuuuu-dead", wt, pid=dead_pid(),
+                                      started_at=iso(timedelta(hours=72)),
+                                      last_seen=iso(timedelta(hours=72)))))
+    check("fixture: entry present, no tombstone", f.exists() and not list(sdir.glob("*.gone")))
+    removed = L.auto_clean(str(repo), by_session="newcomer")
+    check("auto_clean removes the worktree of a readable dead entry",
+          not wt.exists() and "session/du" in removed, f"(removed={removed})")
+    check("...and its branch", not branch_exists(repo, "session/du"))
+
+
+def part_hostile(base: Path):
+    print("B. hostile registry content: no crash, counts as an unreadable (live) registry")
+    import _wtlib as L
+    cases = [("binary garbage", b"\xff\xfe\x80\x00\xc3\x28garbage"),
+             ("list", b"[]"), ("string", b'"x"'), ("number", b"3"),
+             ("null", b"null"), ("empty file", b""), ("directory", None)]
+    for i, (label, content) in enumerate(cases):
+        repo = make_repo(base, f"hs{i}-main")
+        wt, sdir = add_wt(repo, base, f"hs{i}")
+        f = sdir / "x.json"
+        if content is None:
+            f.mkdir()
+        else:
+            f.write_bytes(content)
+        branch = f"session/hs{i}"
+        try:
+            info = [x for x in L.classify(str(repo)) if x["branch"] == branch]
+            classify_ok = True
+        except Exception as exc:  # noqa: BLE001
+            info, classify_ok = [], False
+            check(f"{label}: classify does not raise", False, repr(exc))
+        if classify_ok:
+            check(f"{label}: classify reports alive via unreadable-registry",
+                  len(info) == 1 and info[0]["alive"] is True
+                  and info[0]["alive_reason"] == "unreadable-registry", str(info))
+        try:
+            L.auto_clean(str(repo), by_session="newcomer")
+            check(f"{label}: auto_clean does not raise", True)
+        except Exception as exc:  # noqa: BLE001
+            check(f"{label}: auto_clean does not raise", False, repr(exc))
+        check(f"{label}: worktree and branch kept",
+              wt.is_dir() and branch_exists(repo, branch))
+
+
 def main():
     with tempfile.TemporaryDirectory() as t:
         base = Path(t).resolve()
@@ -330,6 +398,9 @@ def main():
         part_b(base)
         part_b_horizon(base)
         part_c(base)
+        part_next_json(base)
+        part_dead_unpruned(base)
+        part_hostile(base)
 
     print()
     if failures:

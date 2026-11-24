@@ -294,9 +294,11 @@ def read_entries(root: str):
         if f.name.endswith(".next.json"):  # próximo passo do encadeamento, não sessão
             continue
         try:
-            out.append((f, json.loads(f.read_text(encoding="utf-8"))))
-        except (OSError, json.JSONDecodeError):
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):  # ValueError: bad JSON and bad UTF-8
             continue
+        if isinstance(data, dict):  # a registry entry is an object
+            out.append((f, data))
     return out
 
 
@@ -339,8 +341,8 @@ def unreadable_recent(root: str):
         if f.name.endswith(".next.json"):
             continue
         try:
-            json.loads(f.read_text(encoding="utf-8"))
-            continue
+            if isinstance(json.loads(f.read_text(encoding="utf-8")), dict):
+                continue
         except (OSError, ValueError):
             pass
         try:
@@ -355,9 +357,10 @@ def find_entry(root: str, key: str):
     f = sessions_dir(root) / f"{key}.json"
     if f.exists():
         try:
-            return json.loads(f.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
             return None
+        return data if isinstance(data, dict) else None
     return None
 
 
