@@ -337,3 +337,17 @@ def test_the_dot_of_the_script_name_is_a_dot_not_any_character(tmp_path, command
 def test_last_line_ignores_carriage_return_and_trailing_spaces(tmp_path, output):
     proj = _project(tmp_path, DECLARED)
     assert cbr.classify("tool/check.sh", output, None, root=proj)[:2] == ("SUCCESS", "check-script")
+
+
+# ─── the script inside a group or after a shell keyword ───────────────
+
+@pytest.mark.parametrize("command", [
+    "{ tool/check.sh; }",
+    "! tool/check.sh",
+    "if true; then tool/check.sh; fi",
+])
+def test_declared_check_script_inside_a_group_or_after_a_keyword_is_run(tmp_path, command):
+    # the regex anchor knows `;`, `&`, `|` and `(`; `{`, `!` and `then` are peeled per segment
+    proj = _project(tmp_path, DECLARED)
+    assert cbr.classify(command, CHECK_GREEN, None, root=proj)[:2] == ("SUCCESS", "check-script")
+
