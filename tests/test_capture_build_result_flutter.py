@@ -284,3 +284,56 @@ def test_check_script_declared_with_dot_slash_matches_both_spellings(tmp_path):
 def test_negative_exit_code_is_failure(tmp_path):
     proj = _project(tmp_path, DECLARED)
     assert cbr.classify("tool/check.sh", CHECK_GREEN, -9, root=proj)[0] == "FAILURE"
+
+
+# ─── guards of the manifest reader and of the last-line match ─────────
+# Each one could be deleted from the hook with every test above still green
+# (proof round of 2026-11-24): a manifest the owner wrote by hand has to
+# survive a wrong entry, and an empty `ok_line` must never become a green.
+
+GOOD_ENTRY = {"command": "tool/check.sh", "ok_line": "OK"}
+
+
+@pytest.mark.parametrize("bad_entry", [
+    {"command": 5},
+    {"command": ["tool/check.sh"]},
+    "tool/check.sh",
+    None,
+    7,
+])
+def test_a_wrong_entry_does_not_take_the_good_ones_down(tmp_path, bad_entry):
+    proj = _project(tmp_path, {"scripts": [bad_entry, GOOD_ENTRY]})
+    assert cbr.declared_check_scripts(proj) == [("tool/check.sh", "OK")]
+    assert cbr.classify("tool/check.sh", CHECK_GREEN, None, root=proj)[:2] == ("SUCCESS", "check-script")
+
+
+@pytest.mark.parametrize("ok_line", ["", "   ", "\n", 5, None])
+def test_an_empty_ok_line_never_makes_a_silent_script_green(tmp_path, ok_line):
+    # with "" accepted, a script that printed nothing would match its own empty last line
+    proj = _project(tmp_path, {"scripts": [{"command": "tool/check.sh", "ok_line": ok_line}]})
+    assert cbr.declared_check_scripts(proj) == []
+    for output in ("", "\n\n", "   \n"):
+        assert cbr.classify("tool/check.sh", output, None, root=proj)[:2] == (None, None)
+
+
+def test_an_empty_ok_line_does_not_reach_last_build_json_as_green(tmp_path):
+    proj = _project(tmp_path, {"scripts": [{"command": "tool/check.sh", "ok_line": ""}]})
+    state = _run_hook(proj, tmp_path, "tool/check.sh", "")
+    assert state is None or state.get("status") != "SUCCESS"
+
+
+def test_ok_line_declared_with_spaces_around_still_matches(tmp_path):
+    proj = _project(tmp_path, {"scripts": [{"command": "  tool/check.sh ", "ok_line": " OK "}]})
+    assert cbr.classify("tool/check.sh", CHECK_GREEN, None, root=proj)[:2] == ("SUCCESS", "check-script")
+
+
+@pytest.mark.parametrize("command", ["tool/checkXsh", "tool/check_sh", "toolXcheck.sh"])
+def test_the_dot_of_the_script_name_is_a_dot_not_any_character(tmp_path, command):
+    proj = _project(tmp_path, DECLARED)
+    assert cbr.classify(command, CHECK_GREEN, None, root=proj)[:2] == (None, None)
+
+
+@pytest.mark.parametrize("output", ["lint ok\nOK\r\n", "lint ok\nOK  \n", "lint ok\n\tOK\n\n\n"])
+def test_last_line_ignores_carriage_return_and_trailing_spaces(tmp_path, output):
+    proj = _project(tmp_path, DECLARED)
+    assert cbr.classify("tool/check.sh", output, None, root=proj)[:2] == ("SUCCESS", "check-script")
