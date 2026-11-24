@@ -1,0 +1,50 @@
+schema_version: 2
+card: filas-fechadas-CS-2
+verdict: proven
+reviewed_at: 2026-11-24T19:30:00-03:00
+base_commit: a9dcb08
+head_commit: 6c26110
+issue_type: Story
+history:
+  - "round 1 @ f2ddde0: UNPROVEN. 27 perturbations run, 21 killed, 6 survived; 2 of the survivors are real, unguarded behavior (a leftover point on a dropped item; a stray non-dict entry in items), 4 are cosmetic or equivalent. L4 finding: a queue whose yaml header 'queue:' differs from the folder name, with a run recorded under the header name, was archived."
+  - "round 2 @ 9bd7a3b: UNPROVEN. All round-1 survivors (real and cosmetic) are now RED, the header-name L4 case is fixed and pinned, and hunks (b) and (c) are RED. ONE new real survivor: in the new run match, dropping the FOLDER name from the set {folder, header} (common/bin/cepa-plan:5847) left both archive test files green; a queue whose header differs from its folder, with a run recorded under the folder name, was then archived while the run waits."
+  - "round 3 @ 6c26110: PROVEN. Commit 6c26110 is tests only (git diff --stat 9bd7a3b..6c26110 -- common is empty; the whole diff is +17 lines in tests/test_cepa_plan_archive_waiting.py: test_run_recorded_under_the_folder_name_blocks), so every round-2 kill carries over. The round-2 survivor is now RED."
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (_ids, archive_waiting_reasons, archive_blockers, _archive_one, cmd_archive, archive help text)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # tests run the real common/bin/cepa-plan by subprocess against real git repos and the real `cepa-until pending --json`; the only stand-ins are scripts replacing the sibling cepa-until in the 'once', 'lazy' and 'fail-closed' cases, which test the cache and the fail-closed path themselves, not a double for the changed reason logic
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "Round 3, throwaway detached worktree /tmp/proof-filas-fechadas-cs2-r3 (git worktree add --detach ... HEAD, removed with git worktree remove --force; primary tree untouched). Production diff since round 2: git diff --stat 9bd7a3b..6c26110 -- common -> empty."
+        - "GREEN first at 6c26110: python3 tests/test_cepa_plan_archive_waiting.py -> 62 'ok' lines, 0 FAIL, 'all ok'; python3 tests/test_cepa_plan_archive.py -> 0 FAIL, 'all ok'."
+        - "ROUND-2 SURVIVOR, now KILLED: common/bin/cepa-plan:5847 'names = {name, qp.queue_name_of(plan, name)}' -> '{qp.queue_name_of(plan, name)}' (drop the folder name) -> RED, 2 failed ['folder name: stays', 'folder name: names the run'] (queue was 'arquivada · pasta -> .claude/queues/_archive/pasta'); test_cepa_plan_archive.py stays 'all ok' (expected, it does not cover this). Restored; worktree diff clean."
+        - "Carried kills re-run, all still RED: (1) header name dropped, same line -> '{name}' -> 2 failed ['header name: stays', 'header name: names the run']; (2) line 5852 \"r.get('comando') or 'cepa until pending'\" -> \"r.get('comando')\" -> 1 failed ['no command: points at `cepa until pending`, never None']; (3) line 5831 'status_of(it) != \"dropped\"' removed from points -> 1 failed ['dropped point: archived']. Each restored by inverse replacement; git diff clean before the worktree was removed."
+        - "Carried from round 2 by the empty production diff, not re-run this round: items filter without isinstance(dict) (2 failed), last_owner_no filters (3 hunks, 1 failed each), waiting computed after the age/dirty checks (2 failed), run match never/always (8 and 1 failed), routes emptied (8), reasons not appended (4 and 3), fail-closed branch dropped (6), _ids positions (9)."
+        - "EQUIVALENT (not counted): 'plan is not None and runs_of is not None' -> 'or' in archive_blockers stays green; _archive_one always passes both arguments, no caller passes one. Same judgment as rounds 1 and 2."
+    adversarial_cli:
+      - "Header-name input (header 'queue: titulo', folder 'pasta', run recorded as 'titulo'), through the CLI subprocess by test_run_recorded_under_the_header_name_blocks: pinned (RED when the header name is dropped)."
+      - "Mirror input (header differs, run recorded under the FOLDER name), through the CLI subprocess by test_run_recorded_under_the_folder_name_blocks: pinned (RED when the folder name is dropped)."
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "no coverage tool in repo; every changed behavior hunk was broken on purpose across rounds 1-3 and went red (round-2 survivor common/bin/cepa-plan:5847 now killed: python3 tests/test_cepa_plan_archive_waiting.py -> '2 failed [folder name: stays, folder name: names the run]')."
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []                         # round-1 header/folder divergence closed and pinned on both sides; note kept, not a defect: human_pending: '' pins a queue, consistent with `waiting`, undocumented
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Story, not Bug. Red-at-base for the feature (round 1): HEAD test file against common/bin/cepa-plan at a9dcb08 -> 24 FAIL lines; at the round-1 head -> 'all ok'."
+routing_reason: "Provado. O único furo que sobrava da rodada anterior, o nome da pasta na lista de nomes pelos quais um run pode estar gravado, agora tem teste: quem tirar esse nome vê dois testes ficarem vermelhos (a fila seria arquivada com o run ainda esperando você). Os cortes herdados (nome do cabeçalho, texto sem comando, ponto descartado) continuam vermelhos, e o código de produção não mudou desde a rodada 2, então o restante também vale. Os dois arquivos de teste estão verdes em 6c26110."

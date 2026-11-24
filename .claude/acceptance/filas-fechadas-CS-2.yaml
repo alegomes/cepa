@@ -1,0 +1,45 @@
+schema_version: 1
+card: filas-fechadas-CS-2
+status: complete
+audited_at: 2026-11-24T00:00:00-03:00
+covers: a9dcb08..9bd7a3b
+audited_commit: 9bd7a3b
+criteria:
+  - id: AC1
+    text: "CS-2: fila com algo esperando o dono não é arquivada. Red test: num repo de fixture, quatro filas com todo item `done` ou `dropped` e último commit há 8 dias: uma com tarefa que sobrou num item `done`, uma com rota humana aberta, uma com run por pousar e uma com `items: []`. `cepa-plan archive` não move nenhuma e a saída diz, por fila, o motivo. (docs/spec/filas-fechadas-saem-da-vista.md, seção CS-2)"
+    altitude: cli
+    surface: "`cepa-plan archive` como subprocesso real (common/bin/cepa-plan) num repo git de fixture com commits datados de 8 dias; asserções em exit code, stdout e disco/git. O caso 'run por pousar' passa pelo `cepa-until pending --json` real (branch until/<run> à frente de main + arquivo .estado.json), sem dublê."
+    demonstrated_by:
+      test: "tests/test_cepa_plan_archive_waiting.py::test_declared_red_test"
+      layer: "subprocesso real de cepa-plan; fixture com sobra (pendencias abertas em item done), rota (human_pending em item done), run (cepa-until pending real) e vazia (items: []), todas a 8 dias, mais a controle `velha` que É arquivada na mesma varredura (prova que as recusas são específicas). Checa: exit 0, sem Traceback, as quatro ficam no lugar e não aparecem em _archive, só velha em _archive, e a linha por fila traz o motivo certo (sobra-0 + ponto pendente, sem 'tarefa sua'; rota-0 + 'tarefa sua', sem 'ponto'; run id + `cepa-until land run/<run>`, sem motivo de idade/pasta suja; vazia 'nenhum item')."
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_plan_archive_waiting.py  -> "all ok", 16 checagens "ok" no teste declarado (60 no arquivo), 0 FAIL, exit 0 (HEAD 9bd7a3b). Saída real: "não arquivada · rota: tarefa sua em aberto em rota-0: a fila ainda espera você" / "não arquivada · run: o run 2026-11-20-0100 espera você (espera aterrissar em `main`); resolva com: cepa-until land run/2026-11-20-0100" / "não arquivada · sobra: sobrou ponto pendente em sobra-0: ninguém o fechou" / "não arquivada · vazia: a fila não tem nenhum item, então não conta como fechada" / "arquivada · velha → .claude/queues/_archive/velha"
+        python3 tests/test_cepa_plan_archive.py  -> "all ok" (regressão do CS-1, 100 checagens ok, exit 0, 0 FAIL, HEAD 9bd7a3b)
+      also_demonstrated_by:
+        - test: "tests/test_cepa_plan_archive_waiting.py::test_route_answered_no_still_blocks"
+          layer: "cli: rota respondida 'não' continua bloqueando, com texto próprio"
+          evidence: verified
+          run: "3 checagens ok (mesma execução)"
+        - test: "tests/test_cepa_plan_archive_waiting.py::test_dropped_route_does_not_block / test_resolved_point_does_not_block / test_blocked_only_queue_is_silent_and_stays"
+          layer: "cli: contra-exemplos (rota em item dropped e ponto resolvido arquivam; fila com blocked não é fechada e fica calada)"
+          evidence: verified
+          run: "1 + 1 + 3 checagens ok (mesma execução)"
+        - test: "tests/test_cepa_plan_archive_waiting.py::test_dry_run_shows_refusals_and_moves_nothing / test_all_reasons_are_listed / test_two_items_and_two_reasons_in_one_queue"
+          layer: "cli: dry-run mostra as recusas; todos os motivos numa linha; vários itens nomeados"
+          evidence: verified
+          run: "5 + 4 + 2 checagens ok (mesma execução)"
+        - test: "tests/test_cepa_plan_archive_waiting.py::test_runs_are_checked_at_most_once_and_only_for_closed_queues / test_runs_check_failure_fails_closed"
+          layer: "cli: cepa-until pending chamado 1 vez por varredura e só se há fila fechada; falha da checagem (exit 1, não JSON, não objeto) mantém a fila e diz"
+          evidence: verified
+          run: "4 + 9 checagens ok (mesma execução)"
+        - test: "tests/test_cepa_plan_archive_waiting.py::test_run_recorded_under_the_header_name_blocks / test_run_without_a_command_does_not_print_none / test_each_route_wording_is_its_own / test_what_the_run_check_writes_counts_for_the_same_sweep"
+          layer: "cli: run casado pelo nome do cabeçalho; run sem comando aponta `cepa until pending`, nunca None; rota aberta vs respondida 'não' com textos próprios; escrita da checagem de runs na pasta conta como alteração não commitada na mesma varredura"
+          evidence: verified
+          run: "python3 tests/test_cepa_plan_archive_waiting.py -> all ok (mesma execução, HEAD 9bd7a3b)"
+    verdict: complete
+    gap: null
+notes:
+  - "Reauditoria em 9bd7a3b: o diff f2ddde0..9bd7a3b em common/bin/cepa-plan só (a) casa o run pelo nome da pasta OU do cabeçalho, (b) troca comando ausente por `cepa until pending`, (c) calcula os motivos de espera antes das checagens de idade/não commitado. As 16 checagens do teste declarado seguem verdes e a saída por fila traz o motivo certo. Rodados só os dois arquivos de teste, em primeiro plano."
+  - "Fora de escopo: CS-1 (reauditado só como regressão, all ok) e CS-3..CS-9."
+  - "Nenhum teste afirma o defeito nem teve asserção enfraquecida; a fila só com item blocked fica calada porque não é 'fechada' (comportamento do CS-1), e o teste fixa isso."
