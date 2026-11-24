@@ -23,13 +23,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_cepa_until as base  # noqa: E402
 import test_cepa_until_all as al  # noqa: E402
 import test_cepa_until_decide as dec  # noqa: E402
+import test_cepa_until_run_branch as rb  # noqa: E402
 
 check = dec.check
 FAILURES = dec.FAILURES
 CEPA_UNTIL = al.CEPA_UNTIL
 if os.environ.get("CEPA_UNTIL_SCRIPT"):
     CEPA_UNTIL = Path(os.environ["CEPA_UNTIL_SCRIPT"]).resolve()
-    dec.CEPA_UNTIL = al.CEPA_UNTIL = CEPA_UNTIL
+    dec.CEPA_UNTIL = al.CEPA_UNTIL = base.CEPA_UNTIL = CEPA_UNTIL
 ANSI = dec.ANSI
 RUN = "2026-11-21-1244"
 
@@ -275,8 +276,103 @@ def test_next_panel_counts_the_answered_no_and_does_not_say_nothing_left():
 def test_help_text_says_it():
     p = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide", "--help"],
                        capture_output=True, text=True, timeout=60)
+    flat = " ".join(p.stdout.split())
     check("the help says a run's decide leaves out the routes answered no",
-          "already answered" in " ".join(p.stdout.split()), p.stdout)
+          "With <queue>/<run> it does not ask again the routes you already answered"
+          in flat, p.stdout)
+    check("...and that the queue alone asks them again",
+          "<queue> alone asks them again" in flat, p.stdout)
+
+
+def test_an_item_that_is_not_the_owners_is_never_counted_as_answered_no():
+    """`d1` waits for `n1` (depends-on-deferred: nobody's question) and its evidence
+    starts with an old "não": it is not a route the owner answered, so the line
+    counts one route, with the date of `n1`."""
+    m = dec.load_module()
+    d1 = base.item("d1")
+    d1["blocked_by"] = ["n1"]
+    d1["evidence"] = dec._answered("2026-11-21")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = single(tmp, [no_route("n1", "old route text"), d1])
+        deferred = m.owner_deferred(root, "fila", RUN)
+        reasons = {str(ad.get("id")): m.reason_alias(ad.get("reason")) for ad in deferred}
+        check("the fixture: d1 is deferred for a reason that is not the owner's",
+              reasons.get("d1") == "depends-on-deferred"
+              and str(next(ad for ad in deferred if str(ad.get("id")) == "d1")
+                      .get("evidence") or "").startswith("Resposta do dono em 2026-11-21"),
+              str(deferred))
+        kept, no = m.split_answered_no(deferred, "fila")
+        check("it stays among the items, the owner's route goes to the count",
+              [str(ad.get("id")) for ad in kept] == ["d1"]
+              and no == {"fila": ["2026-11-06"]}, f"{kept} {no}")
+        rc, out = text_out(root, f"fila/{RUN}")
+    line = lines_with(out, "already answered")
+    check("the line counts one route, with the date of the owner's route",
+          rc == 0 and len(line) == 1 and "1 route(s)" in line[0] and "06/11" in line[0],
+          out)
+
+
+def test_the_report_of_a_whole_queue_keeps_the_answered_no():
+    """Without a run nothing is left out, on the path after the questions either."""
+    m = dec.load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = single(tmp, [no_route("a1", "old route text"),
+                            open_route("a2", "open route text")])
+        seen = []
+        real = m.decide
+        m.decide = lambda *a, **k: seen.append([str(ad.get("id")) for ad in a[4]])
+        try:
+            report = {}
+            with contextlib.redirect_stdout(io.StringIO()):
+                m.close_with_owner(root, "fila", None, {}, interactive=True,
+                                   ask_land=False, report=report)
+        finally:
+            m.decide = real
+    check("the panel gets both routes", seen and sorted(seen[0]) == ["a1", "a2"],
+          str(seen))
+    check("both are handed back and none is counted as left out",
+          sorted(str(ad.get("id")) for ad in report.get("deferred") or [])
+          == ["a1", "a2"] and report.get("answered_no") == {}, str(report))
+
+
+def test_the_end_of_a_real_run_counts_the_answered_no_in_next():
+    """A whole run (fake claude, no terminal) down to the printed final report: the
+    Next panel names the open route as a question, counts the one answered "não" in
+    its own row and does not say nothing is left."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = base.build_repo(tmp, [base.item("w1"),
+                                     no_route("n1", "old route text"),
+                                     open_route("o1", "open route text")])
+        binv = base.fake_claude(tmp, rb.WORKS)
+        p, _ = base.run_until(root, binv, rb.plan_of(root),
+                              ["--for", "2h", "--verify", rb.VERIFY, "--no-analysis"],
+                              extra_env={"COLUMNS": "160"})
+        out = ANSI.sub("", p.stdout + p.stderr)
+    check("the run ended with the final report", "── Next" in out, out[-1500:])
+    nxt = out.split("── Next")[-1]
+    line = lines_with(nxt, "already answered")
+    check("one row: count, date, the command that revisits",
+          len(line) == 1 and "1 route(s)" in line[0] and "06/11" in line[0]
+          and "cepa-until decide fila" in line[0]
+          and not line[0].rstrip().endswith("--yes"), nxt)
+    owner = lines_with(nxt, "owner question(s)")
+    check("the open route is the one owner question",
+          len(owner) == 1 and "1 owner question(s): o1" in owner[0]
+          and "n1" not in owner[0], nxt)
+    check("the answered route is not spelled out as a question",
+          not lines_with(nxt, "n1:"), nxt)
+    check("it does not say nothing is left", "nothing left for you" not in nxt, nxt)
+    with tempfile.TemporaryDirectory() as tmp:
+        root = base.build_repo(tmp, [base.item("w1"),
+                                     no_route("n1", "old route text")])
+        binv = base.fake_claude(tmp, rb.WORKS)
+        p, _ = base.run_until(root, binv, rb.plan_of(root),
+                              ["--for", "2h", "--verify", rb.VERIFY, "--no-analysis"],
+                              extra_env={"COLUMNS": "160"})
+        nxt = ANSI.sub("", p.stdout + p.stderr).split("── Next")[-1]
+    check("with only the answered route: its row, and no owner question",
+          len(lines_with(nxt, "already answered")) == 1
+          and "owner question" not in nxt and "nothing left for you" not in nxt, nxt)
 
 
 def main():
