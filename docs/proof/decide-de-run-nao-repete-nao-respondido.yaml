@@ -1,0 +1,62 @@
+schema_version: 2
+card: decide-de-run-nao-repete-nao-respondido
+verdict: proven
+reviewed_at: 2026-11-24T10:00:00-03:00
+base_commit: fe8bc08
+head_commit: 308eb6b
+issue_type: Story
+round: 2
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-until (split_answered_no, say_answered_no, close_with_owner + hand_back, next_rows, cmd_decide help)"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+      double_check: >-
+        The covering test drives the real script (`cepa-until decide <queue>/<run>` through a pty and a plain subprocess, a whole real run with a fake claude down to the printed Next panel, or the mutated copy via CEPA_UNTIL_SCRIPT) and calls the real close_with_owner, split_answered_no and next_rows. The only fake is `claude`, the far boundary, not a changed function. Round 2 also sets base.CEPA_UNTIL to the mutated copy, so the whole-run test runs the mutant too.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "Python repo, no Maven, no PIT"
+    perturbation:
+      status: pass
+      run: >-
+        Throwaway worktree /tmp/proof-decide-run-2 at 308eb6b (removed; `git worktree list` confirms). `git diff 2d8dbcc..308eb6b --stat`: only tests/test_cepa_until_decide_run_answered_no.py changed (98 insertions, 2 deletions), so production is byte-identical to round 1. GREEN at head first: `python3 tests/test_cepa_until_decide_run_answered_no.py` -> exit 0, 46 ok lines, "tudo verde". Each mutant: a copy of common/ with ONE text edit (applied only if the old text occurred exactly once), run as `CEPA_UNTIL_SCRIPT=<copy>/common/bin/cepa-until python3 tests/test_cepa_until_decide_run_answered_no.py`, foreground, one at a time.
+        Re-run this round (10 mutants, 10 RED, 0 survived).
+      results:
+        - "RED m01 (split_answered_no `... in OWNER_REASON else None` -> `if True else None`): 'it stays among the items, the owner's route goes to the count' and 'the line counts one route' fail (the non-owner depends-on-deferred item is now swallowed and its old date counted). Round 1 survivor, killed by test_an_item_that_is_not_the_owners_is_never_counted_as_answered_no."
+        - "RED m08 (hand_back `if run_id and left_out is None:` -> `if left_out is None:`): 'both are handed back and none is counted as left out' fails (the report of a whole queue without a run lost its routes). Round 1 survivor, so not equivalent after all; killed by test_the_report_of_a_whole_queue_keeps_the_answered_no."
+        - "RED m18c (help: 'alone asks them again' -> 'alone asks them all'): 'and that the queue alone asks them again' fails."
+        - "RED m18d (help: 'it does not ask again' -> 'it asks again', the opposite sentence): 'the help says a run's decide leaves out the routes answered no' fails. Together m18c and m18d close the prose survivor."
+        - "RED m30 (next_rows: the answered_no loop exits at once): 'one row per queue', 'the row has the count, the latest date and the way to revisit' and 'the other queue's row names that queue' fail."
+        - "RED m31 (next_rows latest date max -> min): 'the row has the count, the latest date and the way to revisit' fails."
+        - "RED m32 (next_rows revisit command loses the queue name): row, other-queue row and the whole-run test 'one row: count, date, the command that revisits' fail."
+        - "RED m33 (next_rows date printed mm/dd instead of dd/mm): the row test and the whole-run test 'one row: count, date, the command that revisits' fail."
+        - "RED m34 (hand_back never splits: `if False:`): 'after the questions, only the open route is handed back' and 'after the questions, the left-out route is counted' fail."
+        - "RED m35 (hand_back drops the left_out it receives: answered_no always {}): 'the report carries the count and latest date of the left-out routes' and, in the whole real run, 'one row: count, date, the command that revisits' and 'with only the answered route: its row, and no owner question' fail."
+        - >-
+          Whole-run test is load-bearing: m32, m33 and m35 each turn RED in test_the_end_of_a_real_run_counts_the_answered_no_in_next (the run through the fake claude to the printed Next panel), not only in the direct next_rows tests.
+        - >-
+          Carried over from round 1 (not re-run): the other 22 mutants (m02 m03 m04 m05 m06 m07 m09 m10 m11 m12 m13 m14 m15 m17 m18 m20 m21 m22 m25 m26 m27, plus m28 which was never evidence). Sound because production is byte-identical (empty diff on common/ between 2d8dbcc and 308eb6b), the edits and the anchors are therefore the same, and the only change to the test file adds assertions and one import and the assignment `base.CEPA_UNTIL = CEPA_UNTIL`; existing check() calls were not weakened (the only edited one, the help check, got stricter). A test file that only grows stricter cannot turn a RED into green.
+    l3_note: "m01, m08 and m18c, the three round 1 survivors, are all RED now. No survivor."
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: >-
+      No Python coverage tool; coverage derived from the perturbation. Every behavior hunk was broken and went RED: split_answered_no (m01 m02 m20 m22), say_answered_no (m03 m04 m06 m14 m26 m17), the filter in close_with_owner (m05 m27), hand_back (m08 m09 m10 m21 m34 m35), the print guard (m07), next_rows (m11 m12 m13 m15 m25 m30 m31 m32 m33), cmd_decide help (m18 m18c m18d). Commands as in l3.
+  l4_adversarial_input:
+    status: n/a
+    reason: "The diff reads no new input: it filters items already read by owner_deferred and prints counts and dates taken from the queue's own evidence field through last_owner_no (unchanged). No api-rest module exists in this repo."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Story."
+build: "full suite delegated to the run's supervisor. Round 2: tests/test_cepa_until_decide_run_answered_no.py green at 308eb6b (46 ok, exit 0). tests/test_cepa_until_decide.py was green at 2d8dbcc in round 1 (494 ok) and was not re-run, as instructed: production is unchanged and nothing it loads changed."
+routing_reason: >-
+  PROVEN. The three survivors of round 1 (the owner-reason guard, the run-id guard in hand_back, the help sentence) are RED at 308eb6b, and seven more perturbations on next_rows and hand_back, including three that also turn the whole-run test RED, confirm the new tests are load-bearing. The 22 round 1 reds carry over because production did not change and the tests only got stricter. Substituted double: null.
