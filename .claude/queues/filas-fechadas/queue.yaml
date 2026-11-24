@@ -27,9 +27,40 @@ items:
     não existe `.claude/queues/velha/`, e `recente` e `aberta` continuam no lugar.
     Com `--dry-run` a saída nomeia `velha` e nada é movido. Hoje o subcomando `archive`
     não existe.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Na branch until/2026-11-24-1139 (sem merge, sem push; build completo
+    fica com o supervisor). Commits: f6e94f6 (feat: cepa-plan archive [--dry-run]
+    [--no-commit]), 7fade7d (fix: fila ilegível é pulada em vez de abortar a varredura
+    + testes das lacunas da prova), 0ca60e7 (só testes), a9dcb08 (artefatos). Teste:
+    tests/test_cepa_plan_archive.py (100 checagens, all ok); vizinhos test_cepa_help_layout
+    e test_common_plan verdes. pair-reviewer: OK-WITH-NOTES, as duas notas aplicadas
+    (pasta com nome iniciado em _ não é fila; asserção frouxa apertada). completion-auditor:
+    COMPLETE em 7fade7d (.claude/acceptance/filas-fechadas-CS-1.yaml), só testes
+    depois. proof-reviewer: PROVEN em 0ca60e7 na rodada 3 (docs/proof/filas-fechadas-CS-1.yaml);
+    rodadas 1 e 2 UNPROVEN, sobreviventes mortos. Ficou de fora, por ser dos itens
+    seguintes: CS-2 (motivos de quem espera o dono; o ponto de extensão é archive_blockers),
+    CS-3 a CS-9. Suíte completa NÃO rodada nesta rodada.'
+  head_commit: a9dcb08394e503bed5296a1b18f49f049234a393
+  decisions:
+  - texto: 'Fila em que todo item foi descartado (nenhum concluído) não é arquivada:
+      a varredura usa a mesma regra de fila fechada que as listas e o Epic já usam,
+      que exige ao menos um item concluído. O texto da especificação diz ''todo
+      item done ou dropped''.'
+    commit: 7fade7d5c263092079efd2159f0267c741eb2167
+  - texto: Pasta de fila com alteração ainda não commitada não é arquivada, e a
+      saída diz o motivo; a especificação não pedia essa recusa. Sem ela o commit
+      da varredura levaria edições alheias junto.
+    commit: 7fade7d5c263092079efd2159f0267c741eb2167
+  - texto: 'Quem chama a varredura e quer fazer o próprio commit passa --no-commit:
+      o que foi movido fica preparado no git para o commit de quem chamou. Sem a
+      opção, a varredura commita só o que moveu.'
+    commit: 7fade7d5c263092079efd2159f0267c741eb2167
+  - texto: Fila com queue.yaml ilegível é pulada com aviso e a varredura segue com
+      as outras, saindo com código 0; se o commit da própria varredura falhar, o
+      código de saída é 3.
+    commit: 7fade7d5c263092079efd2159f0267c741eb2167
 - id: CS-2
   title: fila com algo esperando o dono não é arquivada
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -38,9 +69,33 @@ items:
     8 dias: uma com tarefa que sobrou num item `done`, uma com rota humana aberta,
     uma com run por pousar e uma com `items: []`. `cepa-plan archive` não move nenhuma
     e a saída diz, por fila, o motivo. Hoje o subcomando não existe.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-24-1139: f2ddde0 (feat), 9bd7a3b (fix
+    da rodada 1 da prova), 6c26110 (teste), fc216fb (proof + acceptance). common/bin/cepa-plan:
+    archive_waiting_reasons novo; archive_blockers, _archive_one e cmd_archive alterados.
+    Testes: tests/test_cepa_plan_archive_waiting.py (62 checagens, all ok), tests/test_cepa_plan_archive.py
+    (all ok), tests/test_cepa_plan_waiting_runs.py e tests/test_cepa_help_layout.py
+    verdes. pair-reviewer: APPROVE em f2ddde0. completion-auditor: COMPLETE auditado
+    em 9bd7a3b (.claude/acceptance/filas-fechadas-CS-2.yaml), só testes depois.
+    proof-reviewer: PROVEN em 6c26110 na rodada 3 (docs/proof/filas-fechadas-CS-2.yaml);
+    rodada 1 UNPROVEN com 2 sobreviventes reais e um caso de fila arquivada com
+    run esperando quando o queue: do yaml difere da pasta; rodada 2 UNPROVEN com
+    1 sobrevivente. Suíte completa não rodada aqui: é do supervisor. Fora do escopo
+    e não mexido: fila só com itens dropped continua sem ser arquivada e sem aviso,
+    porque queue_closed exige ao menos um done, e a spec diz done ou dropped (herdado
+    do CS-1).'
+  head_commit: fc216fb9839c3c1a93d65d33c27e0b782a9ce657
+  decisions:
+  - texto: 'No arquivamento: (1) tarefa que sobrou em item concluído vale tanto
+      para rota aberta quanto para ponto pendente que ninguém fechou, cada um com
+      sua frase; (2) rota que você já respondeu não continua segurando a fila; (3)
+      se não der para conferir os runs por pousar, nenhuma fila fechada é movida;
+      (4) fila sem item avisa que não conta como fechada em toda varredura, mesmo
+      com menos de 7 dias; (5) o run é casado pelo nome da pasta e pelo nome do
+      cabeçalho da fila; (6) item descartado nunca segura a fila.'
+    commit: 9bd7a3bd4d4b6a22ca3e2d87bfbab6c58af85c07
 - id: CS-3
   title: a especificação de origem vai junto, e o que foi junto é avisado
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -52,9 +107,42 @@ items:
     e a saída contém "2 decisões sem veredito foram junto em docs/spec/_archive/velha.md".
     Uma segunda fila fechada com `source: docs/epics/x.md, ciclo 1` é movida e `docs/epics/x.md`
     continua no lugar. Hoje nada disso existe.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-24-1139: c6c934e (feat: archive leva
+    a especificação de origem e avisa as decisões sem veredito), 8ee8537 (só testes,
+    fecha os 14 sobreviventes da prova), 9eaaea1 (proof + acceptance). pair-reviewer:
+    NEEDS-FIX na 1ª (fila arquivada em varredura anterior ficava com source velho),
+    OK-WITH-NOTES na 2ª, nota fechada com teste. completion-auditor: COMPLETE em
+    c6c934e (.claude/acceptance/filas-fechadas-CS-3.yaml), só testes desde então.
+    proof-reviewer: UNPROVEN em c6c934e (58 perturbações, 30 mortas, 14 reais vivas,
+    14 cosméticas), PROVEN em 8ee8537 (docs/proof/filas-fechadas-CS-3.yaml). Testes
+    rodados: tests/test_cepa_plan_archive_spec.py (203 ok), test_cepa_plan_archive.py
+    (100 ok), test_cepa_plan_archive_waiting.py (62 ok), test_cepa_help_layout.py,
+    test_cepa_plan_decisions.py. Build completo não rodado: é do supervisor do run.
+    Ficou de fora: CS-4 em diante; o --dry-run fala das decisões no passado (''foi
+    junto'') embora nada tenha movido, cosmético.'
+  head_commit: 9eaaea133d9bbc3871482e3ddd5eea3d88f9d532
+  decisions:
+  - texto: Com 1 decisão sem veredito a varredura diz '1 decisão sem veredito foi
+      junto em <arquivo>'; com zero diz 'nenhuma decisão sem veredito foi junto
+      em <arquivo>', para o aviso nunca faltar
+    commit: c6c934e12ab16fcc807ac470bd07e9021919c676
+  - texto: 'A especificação fica no lugar, a fila é arquivada mesmo assim e a saída
+      diz o motivo quando: a especificação não existe, já há um arquivo com o mesmo
+      nome no arquivo morto, ou ela tem alterações não commitadas'
+    commit: c6c934e12ab16fcc807ac470bd07e9021919c676
+  - texto: Fila fechada há menos de 7 dias que cita a mesma especificação também
+      segura a especificação, igual a uma fila aberta
+    commit: c6c934e12ab16fcc807ac470bd07e9021919c676
+  - texto: Quando a especificação vai para o arquivo, as filas arquivadas em varreduras
+      anteriores que a citam também têm o source reescrito, no mesmo commit
+    commit: c6c934e12ab16fcc807ac470bd07e9021919c676
+  - texto: Se o source de alguma fila citante não é uma linha simples e não dá para
+      reescrever, a especificação não se move e a saída nomeia a fila; fila arquivada
+      ilegível é pulada
+    commit: c6c934e12ab16fcc807ac470bd07e9021919c676
 - id: CS-4
   title: as listas separam abertas, fechadas em espera e arquivadas
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios

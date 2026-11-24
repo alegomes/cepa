@@ -673,11 +673,47 @@ items:
     pula JSON inválido; classify marca alive=False sem registro; auto_clean apaga
     worktree limpa e sem commit. Vem antes de tudo porque toda sessão nova sem commit
     corre o risco no segundo prompt'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Na branch until/2026-11-24-1139 (sem merge, sem push; build completo
+    é do supervisor). Commits: 99690f5 (conserto: write_entry por mkstemp + os.replace;
+    unreadable_recent; classify com alive_reason/dead_evidence; auto_clean exige
+    dead_evidence), 1adf196 (read_entries/find_entry pegam ValueError e só aceitam
+    objeto JSON), 19dfcd2 (teste de find_entry), 3d824bf (prova + aceite). Teste
+    de regressão tests/test_auto_clean_keeps_live_session.py: vermelho em c647dc1
+    (6 FAIL: leitor viu JSON inválido, escrita interrompida corrompe, classify alive=False,
+    auto_clean removeu session/x e session/y), verde no head. pair-reviewer: APPROVE
+    em 99690f5. completion-auditor: COMPLETE (.claude/acceptance/auto-clean-nao-apaga-sessao-viva.yaml,
+    auditado em 1adf196, só teste depois). proof-reviewer: PROVEN em 19dfcd2 na
+    3a rodada (docs/proof/auto-clean-nao-apaga-sessao-viva.yaml; rodadas 1 e 2 UNPROVEN
+    por 3 e 2 sobreviventes, todos fechados). Vizinhos rodados com rc=0: test_session_heartbeat,
+    test_prune_marker_orphan, test_worktree_remove_guard, test_state_deposits, test_cepa_chaining,
+    test_handoff_claim, test_until_does_not_inherit_handoff, test_ghost_worktrees_warning,
+    test_stale_session, test_worktree_artifact_rescue, test_session_edges_friction,
+    test_cepa_slice_isolation, test_pluginver_boot. tests/run-all.sh NÃO rodado
+    aqui. Ficou de fora, sem item na fila: (1) heartbeat e subject ainda leem-mudam-gravam
+    sem trava, o último a gravar vence e um campo pode se perder (não corrompe mais);
+    (2) write_tombstone ainda usa write_text sem troca atômica; (3) registro ilegível
+    com mais de 24h fica no disco para sempre, sem proteger nada; (4) tombstone
+    antigo de um caminho reusado por worktree nova sem registro permite remoção
+    (janela pequena: session-registry grava o registro antes do auto_clean); (5)
+    worktrees já perdidas em 2026-11-24 não são recuperadas por este conserto.'
   sem_epic: true
+  head_commit: 3d824bfebc5fbd665209021025633405d4118937
+  decisions:
+  - texto: Registro de sessão ilegível conta como sessão viva só por 24 horas a
+      partir da última gravação do arquivo; depois disso deixa de proteger, mas
+      a worktree continua de pé enquanto não houver prova de que a sessão morreu
+    commit: 99690f568681adf6da399517472fc1522726f9f5
+  - texto: Um único registro ilegível recente protege todas as worktrees de sessão
+      que estão sem registro legível, porque o arquivo quebrado não diz de qual
+      worktree é dono
+    commit: 99690f568681adf6da399517472fc1522726f9f5
+  - texto: 'A limpeza automática só remove worktree com prova de sessão morta: registro
+      legível de sessão morta ou a marca deixada quando esse registro foi podado.
+      Worktree criada à mão, sem registro nenhum, não é mais removida sozinha'
+    commit: 99690f568681adf6da399517472fc1522726f9f5
 - id: maestro-calibrar-porteiro
   title: Calibrar as regras do porteiro do Maestro com o lote de sombra (43 escalações)
   why: o card está PARCIAL — o motor de classificação já aterrissou em maestro 0.4.3
