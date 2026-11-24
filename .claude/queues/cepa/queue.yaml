@@ -3308,9 +3308,17 @@ items:
     vermelho (ainda não priorizado: entrou no fim da fila)'
   status: done
   blocked_by: []
-  human_pending: Aceitar ou recusar a dispensa de common/hooks/gate-advance.py (cobertura
-    de linha e entrada hostil não medidas)
-  evidence: 'Commits da tentativa de 2026-11-21 trazidos por cherry-pick do branch
+  human_pending: null
+  evidence: 'Resposta do dono em 2026-11-24: sim: aceito a dispensa de cobertura
+    e entrada hostil. Dispensa nada-a-provar em common/hooks/gate-advance.py: aceita
+    pelo dono. Rota humana fechada pelo dono: Aceitar ou recusar a dispensa de common/hooks/gate-advance.py
+    (cobertura de linha e entrada hostil não medidas). Pergunta respondida: Aceito
+    dispensar a medição de cobertura da trava de commit, já que todas as quebras
+    de propósito foram pegas? Recomendo sim: mesmo critério do capture-build-result.
+    O que cada opção prometia: se sim, a dispensa fica assinada e a prova da trava
+    de commit deixa de esperar por você; se não, a trava de commit segue sem prova
+    completa até alguém medir a cobertura dos hooks. O dono escolheu o "sim". Evidência
+    anterior: Commits da tentativa de 2026-11-21 trazidos por cherry-pick do branch
     until/2026-11-21-1244-travado-cepa-gate-advance-exige-build-que-cobre-o-commit
     sem conflito: 36339bb (teste vermelho), 8562aa3 (capture-build-result grava
     test_filter de -Dtest=/-Dit.test=; gate-advance recusa commit com verde filtrado
@@ -3329,19 +3337,6 @@ items:
     Fora: filtros não Maven e -pl (item novo do BACKLOG).'
   sem_epic: true
   head_commit: d1e7f9655ee3845870528b143eac924949be9ed7
-  route_kind: open-question
-  owner_question: 'Aceito dispensar a medição de cobertura da trava de commit, já
-    que todas as quebras de propósito foram pegas? Recomendo sim: mesmo critério
-    do capture-build-result'
-  owner_summary:
-    se_sim: a dispensa fica assinada e a prova da trava de commit deixa de esperar
-      por você
-    se_nao: a trava de commit segue sem prova completa até alguém medir a cobertura
-      dos hooks
-    item_se_sim: nenhum
-    item_se_nao:
-      titulo: Medir a cobertura de linha dos hooks em Python
-      precisa_do_dono: false
   decisions:
   - texto: a trava de commit recusa o verde filtrado do Maven quando o commit tem
       um teste fora do filtro ou um teste que cita pelo nome a classe alterada;

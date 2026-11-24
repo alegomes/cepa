@@ -7,8 +7,6 @@ razao: 'L2 (cobertura de linha) e L4 (entrada hostil) dispensadas no item gate-a
   o hook só lê o comando git digitado pelo próprio agente na sessão.'
 revisit_trigger: quando o repo ganhar ferramenta de cobertura para os hooks, ou quando
   o hook passar a ler entrada de fora da sessão
-status: proposta
-autor: null
 proposto_por: drain-plan (cepa-until until/2026-11-23-1116)
 proposto_em: '2026-11-23'
 pergunta: 'Aceito a dispensa da medição de cobertura da trava de commit, já que todas
@@ -16,3 +14,6 @@ pergunta: 'Aceito a dispensa da medição de cobertura da trava de commit, já q
   para o capture-build-result'
 fila: cepa
 item: gate-advance-exige-build-que-cobre-o-commit
+autor: alegomes
+criado_em: '2026-11-24'
+resposta_do_dono: 'sim: aceito a dispensa de cobertura e entrada hostil'
