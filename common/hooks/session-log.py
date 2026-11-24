@@ -108,7 +108,7 @@ def now() -> tuple[str, str]:
     return n.strftime("%Y-%m-%d"), n.strftime("%H:%M:%S UTC")
 
 
-_HEADER_LOOKALIKE = re.compile(r"^(?=#{1,6}(?:\s|$))", re.M)
+_HEADER_LOOKALIKE = re.compile(r"#{1,6}(?:\s|$)")
 
 
 def escape_headers(prompt: str) -> str:
@@ -124,8 +124,15 @@ def escape_headers(prompt: str) -> str:
     typed, so that split would let text inside a slash command pass for a
     prose answer of the owner. `\\## x` renders the same in markdown and is no
     longer a header to any reader.
+
+    A line is what `str.splitlines()` says it is, not only what follows a
+    "\\n": the readers split the file with it, and it also ends a line on a
+    lone CR, VT, FF, FS, GS, RS, NEL and the unicode line and paragraph
+    separators. Escaping only after "\\n" left all of those as a way to write
+    a header (proof round 2, 2026-11-24).
     """
-    return _HEADER_LOOKALIKE.sub(lambda _m: "\\", prompt)
+    return "".join(("\\" + line) if _HEADER_LOOKALIKE.match(line) else line
+                   for line in prompt.splitlines(keepends=True))
 
 
 def append_entry(log_path: Path, prompt: str) -> None:
