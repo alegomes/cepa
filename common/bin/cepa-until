@@ -4840,6 +4840,33 @@ def owner_deferred(repo, queue, run_id, quiet=False):
     return deferred
 
 
+def split_answered_no(items, queue):
+    """`(items to ask, {queue: [dates]})`: the owner-reason items whose evidence
+    still STARTS with the owner's last "não" (`last_owner_no`: the conditions did not
+    change) go to the second part, keyed by their own queue (`fila` for an `all/<run>`
+    item, else `queue`). Everything else stays, in order."""
+    kept, no = [], {}
+    for ad in items:
+        date = (last_owner_no(ad.get("evidence"))
+                if reason_alias(ad.get("reason")) in OWNER_REASON else None)
+        if date:
+            no.setdefault(ad.get("fila") or queue, []).append(date)
+        else:
+            kept.append(ad)
+    return kept, no
+
+
+def say_answered_no(no, all_run):
+    """The one line per queue for the routes a run's `decide` does not ask again
+    (the wording of `ask_at_launch` / `ask_at_launch_all`)."""
+    for name, dates in no.items():
+        latest = max(dates)
+        where = f"queue `{name}`: " if all_run else ""
+        print(f"\n── {where}{len(dates)} route(s) you already answered \"no\" "
+              f"(last on {latest[8:10]}/{latest[5:7]}): not asked again here; to "
+              f"revisit them: cepa-until decide {name}")
+
+
 def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=None,
                      wait=None, already_asked=(), ask_land=True, report=None):
     """The closing of the run and of `cepa-until decide`: queries the queue again (its
@@ -4852,6 +4879,11 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
     deferred = owner_deferred(repo, queue, run_id)
     if is_all_run(repo, queue) and run_id:
         already_asked = ()
+    # The decide of ONE run does not ask again what the owner already answered "no"
+    # and nothing changed (`cepa-until decide <queue>` revisits them).
+    answered_no = {}
+    if run_id:
+        deferred, answered_no = split_answered_no(deferred, queue)
     # Asked mid-run already (the panel before closing, LL-1): asking the same
     # question twice in one run is the ping-pong the panel exists to avoid.
     asked = {str(x) for x in already_asked}
@@ -4869,9 +4901,12 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
                 Path(review).read_text(encoding="utf-8"))
         except OSError:
             analysis = {}
-    def hand_back(still_open):
+    def hand_back(still_open, left_out=None):
         """The run end's report gets what is still open, the items already asked
         in this run apart: the "Next" panel names them but does not ask again."""
+        report["answered_no"] = left_out or {}
+        if run_id and left_out is None:
+            still_open, report["answered_no"] = split_answered_no(still_open, queue)
         report["analysis"] = analysis
         report["asked"] = [str(ad.get("id")) for ad in still_open
                            if str(ad.get("id")) in asked]
@@ -4880,9 +4915,11 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
 
     if interactive is None:
         interactive = sys.stdin.isatty() and sys.stdout.isatty()
+    if answered_no and report is None:
+        say_answered_no(answered_no, is_all_run(repo, queue))
     if not interactive:
         if report is not None:
-            hand_back(everything)
+            hand_back(everything, answered_no)
         else:
             pending_as_text(queue, run_id, item_states, deferred, analysis,
                             repo=repo)
@@ -5043,6 +5080,13 @@ def next_rows(repo, queue, run_id, state, ledger, report, left=None):
                      (None, ", ".join(asked), True)])
         rows.append([(None, "   "), ("ciano", f"cepa-until decide {queue}/{run_id}"),
                      ("cinza", " (to answer again)")])
+    # Routes the owner already answered "no": counted, never asked here again
+    # (decide-de-run-nao-repete-nao-respondido); the whole queue revisits them.
+    for name, dates in ((report or {}).get("answered_no") or {}).items():
+        latest = max(dates)
+        rows.append([("cinza", f"{len(dates)} route(s) you already answered \"no\" "
+                      f"(last on {latest[8:10]}/{latest[5:7]}), not asked again: "),
+                     ("ciano", f"cepa-until decide {name}", True)])
     for stay in state.get("fica_com_voce") or []:
         if stay.get("id") in shown:
             continue
@@ -6035,7 +6079,9 @@ def cmd_decide(argv):
             "exit code does not change. Outside a terminal it prints the pending\n"
             "questions as text instead of asking, and commits nothing. With no\n"
             "target and no open route in any queue, it prints the one line\n"
-            "\"nada espera você\" and exits 0."),
+            "\"nada espera você\" and exits 0. With <queue>/<run> it does not ask again\n"
+            "the routes you already answered \"no\" (nothing changed since): one line\n"
+            "per queue counts them; <queue> alone asks them again."),
         examples=[
             ("cepa until decide", "every question of every queue, in one panel"),
             ("cepa until decide --all", "the same, said out loud"),

@@ -1171,6 +1171,9 @@ def test_decidir_s_and_n_on_terminal_reach_the_plan():
               a2.get("human_pending") is None, a2)
         check("...com 'sim: <rota>. <acréscimo>' na evidência",
               "sim: valide o login real. vi ok" in a2["evidence"], a2)
+        # a1 now carries the owner's "não": the decide of the run no longer asks it
+        # again (decide-de-run-nao-repete-nao-respondido); the whole queue revisits it.
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), inputs=[
             (("[w] I write the answer", "y")),
             ("Anything to add", "mas só depois do deploy")])
