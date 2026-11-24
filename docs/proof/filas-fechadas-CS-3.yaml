@@ -1,0 +1,61 @@
+schema_version: 2
+card: filas-fechadas-CS-3
+verdict: proven
+reviewed_at: 2026-11-24T21:30:00-03:00
+base_commit: fc216fb
+head_commit: 8ee8537
+issue_type: Story
+history:
+  - "round 1 @ c6c934e: UNPROVEN. 58 perturbations run, 30 killed, 28 survived. Of the survivors, 14 are real unguarded behavior, 14 are cosmetic or equivalent. No adversarial input broke the command: every odd input either worked or kept the spec with a message."
+  - "round 2 @ 8ee8537: PROVEN. Commit 8ee8537 is tests only (git diff --stat c6c934e..8ee8537 -- common is empty), so the 30 round-1 kills carry over. All 14 round-1 real survivors (17 mutation lines: 14 with 14a/14b split, the dry-run pair and the two defensive excepts) re-applied as recorded in a throwaway worktree and each went RED."
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (_spec_slug, _SPEC_SOURCE_RE, _still_cited_by_open_queue, _decisions_went_along, _went_along_line, _rewrite_source, _archive_specs, cmd_archive, archive help text)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # tests/test_cepa_plan_archive_spec.py runs the real common/bin/cepa-plan by subprocess against real git repos; the only stand-in is a sitecustomize shim in test_count_fails_after_the_move that forces the count (not the move) to raise
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a                        # Python repo, no PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "Round 2: throwaway detached worktree /tmp/proof-filas-fechadas-cs3-r2 (git worktree add --detach ... 8ee8537), removed with git worktree remove --force; primary tree untouched except this file."
+        - "Production diff since round 1 is empty: git diff --stat c6c934e..8ee8537 -- common prints nothing (only tests/test_cepa_plan_archive_spec.py changed, +379/-1). Round-1 kills (30) carry over unchanged."
+        - "GREEN first at 8ee8537: python3 tests/test_cepa_plan_archive_spec.py -> 'all ok'; after all mutations, git status clean and test_cepa_plan_archive.py -> 'all ok', test_cepa_plan_archive_waiting.py -> 'all ok'."
+        - "Each round-1 real survivor applied to common/bin/cepa-plan, python3 tests/test_cepa_plan_archive_spec.py run (rc=1 = RED), file restored by git checkout."
+        - "KILLED, all rc=1 (17 of 17): (1) _SPEC_SOURCE_RE without the ./ group -> 'FAIL ./docs/spec/a.md: spec moved'. (2) without the leading quote group -> 'FAIL quote inside the value: says why'. (3) without the trailing lookahead -> 'FAIL docs/spec/a.md.bak: says nothing about a spec'. (4) _spec_slug without isinstance -> 'FAIL list: the other queue's spec still moves' (TypeError). (5) without startswith('_') -> 'FAIL underscore: spec stays'. (6) _rewrite_source without ./ -> 'FAIL ./docs/spec/a.md: spec moved'. (7) _rewrite_source without quote group -> 'FAIL double quoted: spec moved'. (8) earlier filter == slug -> True -> 'FAIL the spec moves' (velha, with unrelated arq-epic in _archive). (9) earlier unreadable skip -> if False -> 'FAIL the spec moves' (AttributeError). (10) rollback queue-text restore -> pass -> 'FAIL a-plain queue.yaml byte-identical'. (11) rollback os.rename(new, old) -> pass -> 'FAIL spec is back at docs/spec'. (12) final raise -> pass -> 'FAIL exits 0 / output says the spec was not moved'. (13) snapshots = {} -> 'FAIL a-plain queue.yaml byte-identical'. (14a) raw-text _cites branch -> if False -> 'FAIL spec stays'. (14b) `if error or not isinstance(plan, dict)` -> if False -> 'FAIL output names the unreadable open queue'. (15) dry-run set(moved) -> set() plus `if name in leaving` -> if False -> 'FAIL both eligible: dry-run says it would take the spec'. (16) per-spec except Exception -> ZeroDivisionError -> 'FAIL output says the spec was not moved and names the folded queue'. (17) cmd_archive try/except around _archive_specs -> ZeroDivisionError -> 'FAIL exits 0' (RuntimeError from the count shim propagates)."
+        - "Round 1 carried over: RED at base (HEAD test file against fc216fb -> FileNotFoundError on docs/spec/_archive/velha.md); 30 killed (cited-plan, count, _went_along_line branches, _rewrite_source, _archive_specs branches, staging, mkdir, rename, cmd_archive call and paths, help text second paragraph)."
+        - "Cosmetic or equivalent (14, not counted; re-judged in round 2, none found real): `count=1` in _rewrite_source (a ^-anchored re.M pattern on a top-level source: matches once), _rewrite_source trailing lookahead (same lookahead in _spec_slug), `n != 1` and `plan` validation (each covered by the other), `startswith(new)` -> True, `slug = None if error ...`, `q.parent.name in moved` (covered by `q in queues`), 'source reescrito também em' print, help text first paragraph."
+    adversarial_cli:
+      - "source: \"docs/spec/velha.md, ciclo 1\" (double quote) -> moved; queue now `source: \"docs/spec/_archive/velha.md, ciclo 1\"`. Same for single quote. OK."
+      - "source: ./docs/spec/velha.md ciclo -> moved; `source: docs/spec/_archive/velha.md ciclo` (the `./` is dropped). OK."
+      - "source: docs/spec/velha.md#secao -> moved, text kept. Extra spaces -> moved, spacing kept. OK."
+      - "slug that is a prefix of another (a.md and ab.md) -> only the cited one moved; open queue citing ab keeps ab; a.md.bak does not hold a.md. OK."
+      - "folded `source: >-` and block `source: |` -> queue archived, spec stays, source unchanged, message 'especificação não movida · ...: OSError: o source de velha não é uma linha simples'. Safe (rolled back), message shows a raw exception name."
+      - "earlier-archived queue with a folded source citing the same spec, plus a new simple queue -> spec stays, new queue untouched, message names the earlier queue. Safe, but the spec is stuck until someone edits the old queue by hand."
+      - "open queue with unparseable yaml citing the spec -> spec stays; stderr warns. OK."
+      - "open queue citing the spec mid-text -> spec stays (safe side)."
+      - "`../docs/spec/velha.md`, a list-valued `source:`, slug `_x` -> queue archived, spec stays, no message about the spec (silent, not wrong)."
+      - "docs/spec/_archive is a regular file -> FileExistsError caught per spec; queue archived and committed, tree clean. OK."
+      - "spec staged but never committed, untracked, or with working-tree edits -> stays with 'tem alterações não commitadas'. OK (pinned by tests)."
+      - "destination taken, in dry-run -> 'já existe ...; nada foi sobrescrito'. OK."
+      - "--dry-run output for a movable spec reads '(1 decisão sem veredito foi junto em ...)' in the past tense although nothing moved. Cosmetic."
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "no coverage tool; every changed behavior hunk was broken on purpose and went RED: round 1 (30 kills) carried over, round 2 python3 tests/test_cepa_plan_archive_spec.py rc=1 for all 17 re-applied mutations; cosmetic/equivalent hunks judged not behavior."
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []                         # no input broke the command or lost data; cosmetic notes above (raw exception name in message, past tense in dry-run, silent stays)
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Story, not Bug. Declared red test at base: python3 tests/test_cepa_plan_archive_spec.py against common/bin/cepa-plan at fc216fb -> FileNotFoundError on docs/spec/_archive/velha.md (red); at 8ee8537 -> 'all ok'."
+routing_reason: "Provado. A rodada 1 achou 14 pedaços do código que podiam ser quebrados sem nenhum teste ficar vermelho. O commit 8ee8537 só adicionou testes (nenhuma linha de common/ mudou), e cada um dos 14 trechos, reaplicado do jeito exato em que foi registrado, agora deixa o teste da especificação vermelho. Isso inclui o desfazer quando a reescrita do source falha, o filtro das filas já arquivadas e as fontes com ./ ou aspas. As 30 quebras já pegas na rodada 1 continuam valendo porque o código de produção não mudou."
