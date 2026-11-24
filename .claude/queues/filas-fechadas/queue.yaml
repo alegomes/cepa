@@ -1,0 +1,126 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/filas-fechadas-saem-da-vista.md (9 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-24
+
+schema_version: 2
+mode: single-track
+queue: filas-fechadas
+source: docs/spec/filas-fechadas-saem-da-vista.md (9 critérios de sucesso; ordem
+  herdada do texto)
+items:
+- id: CS-1
+  title: a varredura move a fila fechada e parada há 7 dias, e só ela
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    de fixture com a fila `velha` (todo item `done`, último commit há 8 dias, com
+    `until/r1.jsonl`), a fila `recente` (todo item `done`, último commit há 6 dias)
+    e a fila `aberta` (um item `pending`), `cepa-plan archive` sai com código 0;
+    depois existem `.claude/queues/_archive/velha/queue.yaml` e `.claude/queues/_archive/velha/until/r1.jsonl`,
+    não existe `.claude/queues/velha/`, e `recente` e `aberta` continuam no lugar.
+    Com `--dry-run` a saída nomeia `velha` e nada é movido. Hoje o subcomando `archive`
+    não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: fila com algo esperando o dono não é arquivada
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    de fixture, quatro filas com todo item `done` ou `dropped` e último commit há
+    8 dias: uma com tarefa que sobrou num item `done`, uma com rota humana aberta,
+    uma com run por pousar e uma com `items: []`. `cepa-plan archive` não move nenhuma
+    e a saída diz, por fila, o motivo. Hoje o subcomando não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: a especificação de origem vai junto, e o que foi junto é avisado
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: na fixture
+    do CS-1, `velha` tem `source: docs/spec/velha.md`, e esse arquivo tem duas linhas
+    em "Decided without asking" sem veredito. Depois de `cepa-plan archive`: existe
+    `docs/spec/_archive/velha.md`, não existe `docs/spec/velha.md`, o `source:`
+    de `.claude/queues/_archive/velha/queue.yaml` começa com `docs/spec/_archive/velha.md`,
+    e a saída contém "2 decisões sem veredito foram junto em docs/spec/_archive/velha.md".
+    Uma segunda fila fechada com `source: docs/epics/x.md, ciclo 1` é movida e `docs/epics/x.md`
+    continua no lugar. Hoje nada disso existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: as listas separam abertas, fechadas em espera e arquivadas
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com as
+    filas `aberta-1` e `aberta-2` (itens `pending`), `recente` (fechada há 6 dias)
+    e `velha` (já em `_archive`), `cepa-plan status` sem nome lista `aberta-1` e
+    `aberta-2`, depois uma linha "fechadas, aguardando arquivo: recente", e não
+    cita `velha`. `cepa-plan ready` imprime os blocos de `aberta-1` e `aberta-2`,
+    a mesma linha única para `recente` e nenhum bloco "fila fechada: tudo concluído
+    ou descartado". Hoje `status` lista os nomes misturados e `ready` imprime um
+    bloco por fila fechada.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: nomear uma fila arquivada num comando de leitura mostra a fila
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com `velha`
+    em `_archive`, `cepa-plan status velha` sai com código 0, lista os itens dela
+    e contém "arquivada em" seguido da data do commit que a moveu. Hoje a resposta
+    é "`.claude/queues/velha/queue.yaml` não existe".'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: gravar numa fila arquivada restaura a fila e a especificação
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com `velha`
+    em `_archive` e `docs/spec/_archive/velha.md`, `cepa-plan add velha N-1 --title
+    "novo"` sai com código 0; depois existem `.claude/queues/velha/queue.yaml` (com
+    os itens antigos, o item `N-1` e `source:` começando com `docs/spec/velha.md`),
+    `.claude/queues/velha/until/r1.jsonl` e `docs/spec/velha.md`; não existe `.claude/queues/_archive/velha/`;
+    a saída contém "restaurada do arquivo". Hoje o `add` responde que a fila não
+    existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: o pouso de um run arquiva e commita o que a varredura moveu
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    de fixture com um run pronto para pousar na fila `aberta` e a fila `velha` fechada
+    há 8 dias, `cepa-until land aberta/<run> --yes` termina com `velha` em `_archive`,
+    `git status --porcelain` vazio, a movimentação presente num commit do branch
+    de destino, e a saída contém "archived: velha". Hoje `velha` continua em `.claude/queues/velha/`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-8
+  title: o wrap-up chama a varredura antes do commit da sessão
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: um teste
+    sobre `common/commands/wrap-up.md` (como `tests/test_wrapup_next_step.py` faz)
+    acha, antes do passo que commita a worktree da sessão, um passo que roda `cepa-plan
+    archive` e manda incluir o que foi movido no commit e listar no relatório final.
+    Hoje o arquivo não cita `cepa-plan archive`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-9
+  title: o Epic continua vendo o ciclo fechado depois que a fila do ciclo é arquivada
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com `docs/epics/x.md`
+    de dois ciclos e a fila `x-c1` fechada dentro de `_archive`, `cepa-plan epics`
+    mostra o ciclo 1 como fechado com a contagem de itens. Hoje, sem `.claude/queues/x-c1/`,
+    o ciclo 1 aparece como sem fila.'
+  status: pending
+  blocked_by: []
+  human_pending: null
