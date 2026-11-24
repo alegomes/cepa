@@ -18,3 +18,4 @@
 {"evento": "hooks_reinstalados", "id": "CS-3", "arquivos": ["common/bin/cepa-plan"], "sha_antes": "7d2e7bff7790", "sha_depois": "ad674ff21588", "ok": true, "segundos": 33, "motivo": null, "quando": "2026-11-24T17:27:39"}
 {"evento": "run_end", "motivo": "prazo", "detalhe": "32min left, less than the minimum reserve of 45min — starting an item now would be wasted work", "itens": 4, "com_progresso": 4, "sem_progresso": 0, "esgotados": 0, "limite_de_uso": 0, "esperas_de_cota": 0, "quedas_de_rede": 0, "cota_apertada": 0, "entregues": 4, "travados": 0, "verify_vermelho": 0, "done_sem_commit": 0, "filas_fora": [], "quando": "2026-11-24T17:27:39"}
 {"evento": "analise", "feita": true, "arquivo": "/Users/alegomes/coding/cepa/.claude/queues/_all/until/2026-11-24-1139.review.md", "erro": null, "quando": "2026-11-24T17:29:38"}
+{"evento": "instalado_no_pouso", "repo": "/Users/alegomes/coding/cepa", "ok": true, "segundos": 18, "motivo": null, "quando": "2026-11-24T20:06:55"}

@@ -1,0 +1,105 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/land-reporta-ao-herdr.md (7 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-24
+
+schema_version: 2
+mode: single-track
+queue: land-reporta-ao-herdr
+source: docs/spec/land-reporta-ao-herdr.md (7 critérios de sucesso; ordem herdada
+  do texto)
+items:
+- id: CS-1
+  title: While `land --yes` runs, the terminal is a `working` agent whose title
+    names the step in progress
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: `cepa-until
+    land q/<run> --yes` in the terminal, on a run waiting for the owner with a green
+    build and an upstream, writes status `state=working` and the titles `q: landing,
+    merge`, `q: landing, full build` and `q: landing, push`, in that order, each
+    before the `[n/3]` line of its step; in the cepa repo it also writes `q: landing,
+    install` before the install. Today the output has no OSC 7501 and no OSC 2.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: A landing that went through ends in Done
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: the CS-1
+    landing ends with status `state=done` and title `q: landed` as the last status
+    and title written, and exit code 0. Today nothing is written.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: A landing that stopped ends in "Needs you" naming the step
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: (a) with
+    a merge conflict the last status is `state=blocked` and the title `q: landing
+    stopped, merge conflict`; (b) with a red build, `q: landing stopped, build RED`;
+    (c) with a refused push, `q: landing stopped, push failed`; (d) with the command
+    killed by SIGTERM during the build, `state=blocked` and `q: landing stopped
+    by SIGTERM`; (e) with Ctrl+C (SIGINT) during the build, the last status is `state=clear`
+    and the last title is empty. The exit codes are the ones of today. Today nothing
+    is written in any of the five.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: A landing whose plugin install was left for the owner ends in "Needs you"
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: in the
+    cepa repo, a landing with merge, build and push green whose install was skipped
+    (`instalacao_adiada`) or rolled back (`reinstalacao_desfeita`) ends with status
+    `state=blocked` and title `q: landed, install waits for you`, exit code 0. Today
+    nothing is written.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: '`close-dead --yes` reports like a landing'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: `cepa-until
+    close-dead q/<run> --yes` in the terminal on a dead run writes status `state=working`
+    with title `q: closing, full build` before the build; with a green build the
+    last status is `state=done` and the title `q: run closed, waiting to land`;
+    with a red build, `state=blocked` and `q: closing stopped, build RED`. Today
+    nothing is written.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: '`pending` is `working` only while it closes a landed run, and drops the
+    row at the exit'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: (a) `cepa-until
+    pending` in the terminal, in the cepa repo, with one run already landed upstream
+    and not yet closed, writes status `state=working` with title `closing landed
+    run <run>, install` before the install and ends with `state=clear` and an empty
+    title; (b) with nothing to close it writes no status and no title at all. Today
+    (a) writes nothing.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: Where nothing ran, or nobody is looking at a Herdr terminal, not one byte
+    is written
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: the output
+    has no OSC 7501 and no OSC 2 in each of: `land` without `--yes`; `close-dead`
+    without `--yes`; `land --yes` refused before the merge (run not waiting for
+    the owner, uncommitted changes in the clone, run already landed); `land --yes`,
+    `close-dead --yes` and `pending` with stdout piped; the same three in a pseudo-terminal
+    without `HC_TERMINAL_ID`; `pending --json`. This test passes today and must
+    keep passing after CS-1 to CS-6: it is the guard, and it goes red if the reporting
+    is wired before the `--yes` check, before the refusals or around the tty rule.'
+  status: pending
+  blocked_by: []
+  human_pending: null
