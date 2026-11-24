@@ -24,6 +24,17 @@ Subcommands:
       directory (until/ included) and one commit. Refuses: a LIVE session
       reservation, a destination that already exists. A wave plan is skipped.
 
+  cepa-plan archive [--dry-run] [--no-commit] [--repo DIR]
+      Sweeps the single-track queues of .claude/queues/ and moves to
+      .claude/queues/_archive/<nome>/ (whole folder, until/ included) each one
+      that is closed (at least one item, all `done` or `dropped`) and still for
+      ARCHIVE_AFTER_DAYS days (date of the last commit that touched the folder).
+      Never touches waves plans, .claude/programs/, _all/ or _archive/. A name
+      already taken in _archive, or a queue with no commit, stays and the output
+      says why. By hand it commits only what it moved; --no-commit leaves the
+      commit (the move stays staged) to a caller that has its own.
+      Spec: docs/spec/filas-fechadas-saem-da-vista.md (CS-1).
+
   cepa-plan check-name <nome> [--repo DIR]
       Is the program name free for a QUEUE? Mirror of
       `maestro-programs --check-name`, which asks the same question from the
@@ -5780,6 +5791,110 @@ def cmd_migrate(root, name, all_queues, dry_run):
     return 3 if refused else 0
 
 
+ARCHIVE_AFTER_DAYS = 7  # a constant on purpose: the spec leaves it out of config
+ARCHIVE_DIR = "_archive"
+
+
+def _last_commit_date(root, rel):
+    """The date (a `date`) of the last commit that touched `rel`, or None when
+    no commit ever did (an untracked queue has no measurable age)."""
+    rc, out, _ = _git(root, "log", "-1", "--format=%cs", "--", rel)
+    out = out.strip()
+    if rc != 0 or not out:
+        return None
+    try:
+        return datetime.strptime(out, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def archive_blockers(root, name, qfile, today):
+    """Why a CLOSED queue is not archived: a list of plain sentences, empty
+    when it can go. One place on purpose: the next refusal reasons (something
+    waiting on the owner) are one more `append` here."""
+    reasons = []
+    qdir = qfile.parent
+    rel = _queue_rel(root, qdir)
+    if (qdir.parent / ARCHIVE_DIR / name).exists():
+        reasons.append(f"já existe {qp.NEW_DIR}/{ARCHIVE_DIR}/{name}; "
+                       "a fila não foi movida")
+    last = _last_commit_date(root, rel)
+    if last is None:
+        reasons.append("nenhum commit tocou a pasta da fila, então não há "
+                       "idade para medir")
+    elif (today - last).days < ARCHIVE_AFTER_DAYS:
+        reasons.append(f"último commit em {last.isoformat()}, faltam "
+                       f"{ARCHIVE_AFTER_DAYS - (today - last).days} dia(s) "
+                       f"para os {ARCHIVE_AFTER_DAYS} de parada")
+    else:
+        _, dirty, _ = _git(root, "status", "--porcelain", "--", rel)
+        if dirty.strip():
+            reasons.append("a pasta tem alterações não commitadas; "
+                           "commite antes de arquivar")
+    return reasons
+
+
+def cmd_archive(root, dry_run, no_commit):
+    from datetime import date
+    today = date.today()
+    moved, kept = [], 0
+    for name, qfile in qp.queue_files(root):
+        if name.startswith("_"):  # `_` marks a folder that is not a queue
+            continue
+        # only the new layout: `.claude/programs/` is not this command's
+        if qfile.parent != Path(root) / qp.NEW_DIR / name:
+            continue
+        plan, error = read_plan(qfile)
+        if error:
+            print(f"aviso: fila {name} ilegível, não arquivada: {error}",
+                  file=sys.stderr)
+            continue
+        if not isinstance(plan, dict) or mode_of(plan) != MODE:
+            continue
+        if not queue_closed(queue_summary(name, plan)):
+            continue
+        reasons = archive_blockers(root, name, qfile, today)
+        if reasons:
+            kept += 1
+            print(f"não arquivada · {name}: " + "; ".join(reasons))
+            continue
+        src = qfile.parent
+        dst = src.parent / ARCHIVE_DIR / name
+        if dry_run:
+            print(f"(dry-run) arquivaria · {name}")
+            moved.append(name)
+            continue
+        try:
+            dst.parent.mkdir(exist_ok=True)
+            os.rename(src, dst)
+        except OSError as e:
+            print(f"não arquivada · {name}: o move falhou ({e})")
+            kept += 1
+            continue
+        print(f"arquivada · {name} → {qp.NEW_DIR}/{ARCHIVE_DIR}/{name}")
+        moved.append(name)
+    if not moved:
+        print("nada a arquivar")
+        return 0
+    if dry_run:
+        return 0
+    paths = []
+    for n in moved:
+        paths += [f"{qp.NEW_DIR}/{n}", f"{qp.NEW_DIR}/{ARCHIVE_DIR}/{n}"]
+    _git(root, "add", "-A", "--", *paths)
+    if no_commit:
+        print("movido e em stage, sem commit (--no-commit): o commit é de quem chamou")
+        return 0
+    rc, _, err = _git(root, "commit", "-q", "-m",
+                      "archive closed queues: " + ", ".join(moved), "--", *paths)
+    if rc != 0:
+        print(f"aviso: o commit falhou ({err.strip()}); o move ficou em stage",
+              file=sys.stderr)
+        return 3
+    print(f"commit feito com {len(moved)} fila(s)")
+    return 0
+
+
 def _item_help(answer, cmd):
     required = ("required when the route opens on a `done` item; optional on "
                 "`pending`/`blocked` (that yes returns the item to the queue)"
@@ -5823,7 +5938,7 @@ def main(argv=None):
             "(/maestro:run)."),
         groups=[
             ("sources (read only, return JSON)", ["from-spec", "from-epic", "from-triage"]),
-            ("writing", ["write", "add", "verdict", "migrate", "check-name", "validate"]),
+            ("writing", ["write", "add", "verdict", "migrate", "archive", "check-name", "validate"]),
             ("reading", ["queue", "status", "show", "epics", "decisions", "promote", "order"]),
             ("one item's cycle", ["start", "finish", "reword-route", "answer", "annotate"]),
             ("against the Jira board", ["reconcile", "landed", "divergence"]),
@@ -6046,6 +6161,35 @@ def main(argv=None):
                     (2, f"invalid usage, {not_git}, no queue file at all")])
     wt.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
     wt.add_argument("--json", action="store_true", dest="as_json", help=json_help)
+
+    ar = sub.add_parser(
+        "archive",
+        help="moves the closed queues that have been still for 7 days to "
+             ".claude/queues/_archive/",
+        description=(
+            "Sweeps the single-track queues and moves to\n"
+            ".claude/queues/_archive/<name>/ (the whole folder, until/ included)\n"
+            "each queue that is closed (at least one item, every item `done` or\n"
+            "`dropped`) and still for 7 days: the last commit that touched its\n"
+            "folder is 7 or more days old. Never touches waves plans,\n"
+            ".claude/programs/, _all/ or _archive/.\n"
+            "\n"
+            "A queue is left in place, and the output says why, when the name is\n"
+            "taken in _archive, when no commit ever touched its folder (no age to\n"
+            "measure) or when the folder has uncommitted changes. By hand it\n"
+            "commits only what it moved."),
+        examples=[("cepa plan archive --dry-run", "what would move, without moving"),
+                  ("cepa plan archive", "move and commit"),
+                  ("cepa plan archive --no-commit", "move and stage; the caller commits")],
+        exit_codes=[(0, "swept (or nothing to archive)"),
+                    (2, f"invalid usage, {not_git}"),
+                    (3, "moved, but the commit failed (the move stays staged)")])
+    ar.add_argument("--dry-run", action="store_true", dest="dry_run",
+                    help="says what it would move, without moving")
+    ar.add_argument("--no-commit", action="store_true", dest="no_commit",
+                    help="moves and stages, but leaves the commit to the caller "
+                         "(`cepa until land`, wrap-up)")
+    ar.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
     sh = sub.add_parser(
         "show", help="shows the queue header, or one item in full with the codes "
@@ -6688,6 +6832,8 @@ def main(argv=None):
         return cmd_migrate(root, a.name, a.all_queues, a.dry_run)
     if a.cmd == "check-name":
         return cmd_check_name(root, a.name)
+    if a.cmd == "archive":
+        return cmd_archive(root, a.dry_run, a.no_commit)
     if a.cmd == "add":
         return cmd_add(root, a.name, a.id, a)
     if a.cmd == "order":
