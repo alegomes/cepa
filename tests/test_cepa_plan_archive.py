@@ -246,10 +246,243 @@ def test_no_commit_flag():
         check("own commit holds the move", "_archive/velha" in shown, shown)
 
 
+NEW = ".claude/queues"
+
+
+def old_queue(root, name, days=10, statuses=("done",), with_until=False):
+    """A closed queue whose last commit is `days` old, committed and clean."""
+    write_queue(root, name, list(statuses), with_until=with_until)
+    commit(root, name, days_ago(days), f"{NEW}/{name}")
+
+
+def head_changes(root):
+    """`git show --name-status HEAD` without rename detection, as a sorted list."""
+    out = git(root, "show", "--no-renames", "--name-status", "--format=", "HEAD")
+    return sorted(line for line in out.splitlines() if line.strip())
+
+
+def test_corrupted_queues_do_not_abort_the_sweep():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        old_queue(root, "a-boa", with_until=True)
+        old_queue(root, "m-binaria")
+        (queue_dir(root, "m-binaria") / "queue.yaml").write_bytes(b"\xff\xfe\x00\x80\xc3\x28")
+        commit(root, "binaria", days_ago(10), f"{NEW}/m-binaria")
+        old_queue(root, "n-itens")
+        (queue_dir(root, "n-itens") / "queue.yaml").write_text(
+            "schema_version: 2\nmode: single-track\nqueue: n-itens\nitems: 5\n")
+        commit(root, "itens", days_ago(10), f"{NEW}/n-itens")
+        old_queue(root, "z-boa")
+        p = cli(root, "archive")
+        check("corrupted: exit 0", p.returncode == 0, p.stdout + p.stderr)
+        check("corrupted: no traceback", "Traceback" not in p.stderr, p.stderr)
+        check("corrupted: binary queue stays", (queue_dir(root, "m-binaria") / "queue.yaml").is_file())
+        check("corrupted: items-not-a-list queue stays", (queue_dir(root, "n-itens") / "queue.yaml").is_file())
+        check("corrupted: the reason is printed for the binary one",
+              "m-binaria" in p.stderr and "ilegível" in p.stderr, p.stderr)
+        check("corrupted: the reason is printed for the items one",
+              "n-itens" in p.stderr and "ilegível" in p.stderr, p.stderr)
+        check("corrupted: good queue before them archived",
+              (archived(root, "a-boa") / "until" / "r1.jsonl").is_file(), p.stdout)
+        check("corrupted: good queue after them archived",
+              (archived(root, "z-boa") / "queue.yaml").is_file(), p.stdout)
+        check("corrupted: the good moves are committed, tree has no stray state",
+              git(root, "status", "--porcelain").strip() == "", git(root, "status", "--porcelain"))
+        check("corrupted: the commit holds exactly the two good queues",
+              head_changes(root) == sorted([
+                  f"D\t{NEW}/a-boa/queue.yaml", f"D\t{NEW}/a-boa/until/r1.jsonl",
+                  f"A\t{NEW}/_archive/a-boa/queue.yaml", f"A\t{NEW}/_archive/a-boa/until/r1.jsonl",
+                  f"D\t{NEW}/z-boa/queue.yaml", f"A\t{NEW}/_archive/z-boa/queue.yaml"]),
+              str(head_changes(root)))
+
+
+def test_dirty_folder_is_not_archived():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        old_queue(root, "mexida")
+        old_queue(root, "com-novo", with_until=True)
+        old_queue(root, "limpa")
+        (queue_dir(root, "mexida") / "queue.yaml").write_text(
+            (queue_dir(root, "mexida") / "queue.yaml").read_text() + "# editado\n")
+        (queue_dir(root, "com-novo") / "until" / "r2.jsonl").write_text("{}\n")
+        p = cli(root, "archive")
+        check("dirty: exit 0", p.returncode == 0, p.stderr)
+        check("dirty: modified tracked file keeps the queue",
+              queue_dir(root, "mexida").is_dir() and not archived(root, "mexida").exists())
+        check("dirty: untracked file inside keeps the queue",
+              (queue_dir(root, "com-novo") / "until" / "r2.jsonl").is_file()
+              and not archived(root, "com-novo").exists())
+        check("dirty: modified file, the output says why",
+              "não arquivada · mexida: a pasta tem alterações não commitadas; commite antes de arquivar"
+              in p.stdout, p.stdout)
+        check("dirty: untracked file, the output says why",
+              "não arquivada · com-novo: a pasta tem alterações não commitadas; commite antes de arquivar"
+              in p.stdout, p.stdout)
+        check("dirty: the clean one goes", (archived(root, "limpa") / "queue.yaml").is_file(), p.stdout)
+        check("dirty: the dirty edit survives, untouched",
+              "# editado" in (queue_dir(root, "mexida") / "queue.yaml").read_text())
+
+
+def test_commit_failure_exits_3_and_keeps_stage():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        old_queue(root, "velha")
+        hook = root / ".git" / "hooks" / "pre-commit"
+        hook.write_text("#!/bin/sh\necho nope >&2\nexit 1\n")
+        hook.chmod(0o755)
+        p = cli(root, "archive")
+        check("commit failure: exit 3", p.returncode == 3, f"{p.returncode} {p.stdout} {p.stderr}")
+        check("commit failure: warning on stderr",
+              "aviso: o commit falhou" in p.stderr and "o move ficou em stage" in p.stderr, p.stderr)
+        check("commit failure: no success line", "commit feito" not in p.stdout, p.stdout)
+        check("commit failure: the move stays staged",
+              f"{NEW}/_archive/velha/queue.yaml" in git(root, "diff", "--cached", "--name-only"))
+        check("commit failure: the folder did move", (archived(root, "velha") / "queue.yaml").is_file())
+
+
+def test_unreadable_and_non_dict_plans_are_skipped():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        old_queue(root, "a-boa")
+        old_queue(root, "b-quebrada")
+        (queue_dir(root, "b-quebrada") / "queue.yaml").write_text("items: [unclosed\n  - : :\n")
+        old_queue(root, "c-lista")
+        (queue_dir(root, "c-lista") / "queue.yaml").write_text("- um\n- dois\n")
+        old_queue(root, "d-escalar")
+        (queue_dir(root, "d-escalar") / "queue.yaml").write_text("so texto\n")
+        old_queue(root, "e-boa")
+        commit(root, "bad", days_ago(10), NEW)
+        p = cli(root, "archive")
+        check("skips: exit 0", p.returncode == 0, p.stderr)
+        check("skips: no traceback", "Traceback" not in p.stderr, p.stderr)
+        check("skips: broken YAML is named on stderr",
+              "aviso: fila b-quebrada ilegível, não arquivada" in p.stderr, p.stderr)
+        check("skips: list plan is skipped without a warning", "c-lista" not in p.stderr, p.stderr)
+        check("skips: scalar plan is skipped without a warning", "d-escalar" not in p.stderr, p.stderr)
+        for n in ("b-quebrada", "c-lista", "d-escalar"):
+            check(f"skips: {n} stays", (queue_dir(root, n) / "queue.yaml").is_file())
+        check("skips: good ones around them go",
+              (archived(root, "a-boa") / "queue.yaml").is_file()
+              and (archived(root, "e-boa") / "queue.yaml").is_file(), p.stdout)
+
+
+def test_move_failure_leaves_the_queue_intact():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        old_queue(root, "velha", with_until=True)
+        (root / NEW / "_archive").write_text("sou um arquivo\n")
+        before = git(root, "rev-parse", "HEAD")
+        p = cli(root, "archive")
+        check("move failure: exit 0", p.returncode == 0, p.stdout + p.stderr)
+        check("move failure: no traceback", "Traceback" not in p.stderr, p.stderr)
+        check("move failure: the output says so",
+              "não arquivada · velha: o move falhou (" in p.stdout, p.stdout)
+        check("move failure: queue intact",
+              (queue_dir(root, "velha") / "until" / "r1.jsonl").is_file())
+        check("move failure: no archived line",
+              not any(l.startswith("arquivada ·") for l in p.stdout.splitlines()), p.stdout)
+        check("move failure: nothing to archive, no commit",
+              "nada a arquivar" in p.stdout and git(root, "rev-parse", "HEAD") == before, p.stdout)
+
+
+def test_no_commit_ever_touched_the_folder():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "repo"
+        root.mkdir()
+        git(root, "init", "-q", ".")  # no commit at all: git log fails
+        write_queue(root, "nova", ["done"])
+        p = cli(root, "archive")
+        check("unborn repo: exit 0", p.returncode == 0, p.stdout + p.stderr)
+        check("unborn repo: kept, with the reason",
+              "não arquivada · nova: nenhum commit tocou a pasta da fila, então não há idade para medir"
+              in p.stdout, p.stdout)
+        check("unborn repo: stays", queue_dir(root, "nova").is_dir())
+
+
+def test_days_remaining_number():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        old_queue(root, "seis", days=6)
+        old_queue(root, "tres", days=3)
+        p = cli(root, "archive")
+        d6 = (date.today() - timedelta(days=6)).isoformat()
+        d3 = (date.today() - timedelta(days=3)).isoformat()
+        check("remaining: 6 days old, 1 day left",
+              f"não arquivada · seis: último commit em {d6}, faltam 1 dia(s) para os 7 de parada"
+              in p.stdout, p.stdout)
+        check("remaining: 3 days old, 4 days left",
+              f"não arquivada · tres: último commit em {d3}, faltam 4 dia(s) para os 7 de parada"
+              in p.stdout, p.stdout)
+        check("remaining: nothing moved, says so", "nada a arquivar" in p.stdout, p.stdout)
+
+
+def test_commit_pathspec_and_messages():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        old_queue(root, "velha", with_until=True)
+        old_queue(root, "aberta", statuses=("done", "pending"))
+        old_queue(root, "outra", statuses=("done", "pending"))
+        # a stranger staged INSIDE .claude/queues: another queue's edit
+        outra = queue_dir(root, "outra") / "queue.yaml"
+        outra.write_text(outra.read_text() + "# edit de outra sessao\n")
+        git(root, "add", f"{NEW}/outra/queue.yaml")
+        p = cli(root, "archive", "--dry-run")
+        check("messages: dry-run line exact", "(dry-run) arquivaria · velha\n" in p.stdout, p.stdout)
+        p = cli(root, "archive")
+        check("messages: exit 0", p.returncode == 0, p.stderr)
+        check("messages: moved line exact",
+              f"arquivada · velha → {NEW}/_archive/velha\n" in p.stdout, p.stdout)
+        check("messages: commit line exact", "commit feito com 1 fila(s)\n" in p.stdout, p.stdout)
+        check("messages: the commit holds exactly the moved paths",
+              head_changes(root) == sorted([
+                  f"D\t{NEW}/velha/queue.yaml", f"D\t{NEW}/velha/until/r1.jsonl",
+                  f"A\t{NEW}/_archive/velha/queue.yaml", f"A\t{NEW}/_archive/velha/until/r1.jsonl"]),
+              str(head_changes(root)))
+        check("messages: the commit message names the queue",
+              git(root, "log", "-1", "--format=%s").strip() == "archive closed queues: velha")
+        check("messages: the stranger inside queues is still staged, not committed",
+              git(root, "diff", "--cached", "--name-only").split() == [f"{NEW}/outra/queue.yaml"])
+        # nothing left to do
+        git(root, "reset", "-q", "--hard")
+        p = cli(root, "archive")
+        check("messages: nothing to do line", p.stdout == "nada a arquivar\n", p.stdout)
+        # --no-commit line
+        old_queue(root, "outra2")
+        p = cli(root, "archive", "--no-commit")
+        check("messages: --no-commit line exact",
+              "movido e em stage, sem commit (--no-commit): o commit é de quem chamou\n" in p.stdout,
+              p.stdout)
+        # collision: exact reason
+        git(root, "reset", "-q", "--hard")
+        old_queue(root, "dup")
+        pre = archived(root, "dup")
+        pre.mkdir(parents=True)
+        (pre / "queue.yaml").write_text("# antes\n")
+        commit(root, "pre", days_ago(10), f"{NEW}/_archive")
+        p = cli(root, "archive")
+        check("messages: collision reason exact",
+              f"não arquivada · dup: já existe {NEW}/_archive/dup; a fila não foi movida\n" in p.stdout,
+              p.stdout)
+
+
+def test_help_lists_archive():
+    p = subprocess.run([sys.executable, str(CEPA_PLAN), "--help"], capture_output=True,
+                       text=True, env=ENV, timeout=60)
+    lines = p.stdout.splitlines()
+    check("help: exit 0", p.returncode == 0, p.stderr)
+    check("help: archive is listed under a group, with its text",
+          any(l.startswith("    archive ") and "closed queues" in l for l in lines), p.stdout)
+
+
 def main():
     for t in (test_declared_red_test, test_boundary_and_mix,
               test_collision_in_archive, test_untouched_kinds, test_underscore_folder_is_not_a_queue,
-              test_no_commit_flag):
+              test_no_commit_flag, test_corrupted_queues_do_not_abort_the_sweep,
+              test_dirty_folder_is_not_archived, test_commit_failure_exits_3_and_keeps_stage,
+              test_unreadable_and_non_dict_plans_are_skipped,
+              test_move_failure_leaves_the_queue_intact, test_no_commit_ever_touched_the_folder,
+              test_days_remaining_number, test_commit_pathspec_and_messages,
+              test_help_lists_archive):
         print(t.__name__)
         t()
     if FAILURES:

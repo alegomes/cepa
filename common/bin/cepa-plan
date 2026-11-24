@@ -5834,45 +5834,55 @@ def archive_blockers(root, name, qfile, today):
     return reasons
 
 
+def _archive_one(root, name, qfile, today, dry_run):
+    """One queue of the sweep. Returns True when it moved (or would, in
+    dry-run). Any exception is the caller's to contain."""
+    plan, error = read_plan(qfile)
+    if error:
+        print(f"aviso: fila {name} ilegível, não arquivada: {error}",
+              file=sys.stderr)
+        return False
+    if not isinstance(plan, dict) or mode_of(plan) != MODE:
+        return False
+    if not queue_closed(queue_summary(name, plan)):
+        return False
+    reasons = archive_blockers(root, name, qfile, today)
+    if reasons:
+        print(f"não arquivada · {name}: " + "; ".join(reasons))
+        return False
+    src = qfile.parent
+    dst = src.parent / ARCHIVE_DIR / name
+    if dry_run:
+        print(f"(dry-run) arquivaria · {name}")
+        return True
+    try:
+        dst.parent.mkdir(exist_ok=True)
+        os.rename(src, dst)
+    except OSError as e:
+        print(f"não arquivada · {name}: o move falhou ({e})")
+        return False
+    print(f"arquivada · {name} → {qp.NEW_DIR}/{ARCHIVE_DIR}/{name}")
+    return True
+
+
 def cmd_archive(root, dry_run, no_commit):
     from datetime import date
     today = date.today()
-    moved, kept = [], 0
+    moved = []
     for name, qfile in qp.queue_files(root):
         if name.startswith("_"):  # `_` marks a folder that is not a queue
             continue
         # only the new layout: `.claude/programs/` is not this command's
         if qfile.parent != Path(root) / qp.NEW_DIR / name:
             continue
-        plan, error = read_plan(qfile)
-        if error:
-            print(f"aviso: fila {name} ilegível, não arquivada: {error}",
-                  file=sys.stderr)
-            continue
-        if not isinstance(plan, dict) or mode_of(plan) != MODE:
-            continue
-        if not queue_closed(queue_summary(name, plan)):
-            continue
-        reasons = archive_blockers(root, name, qfile, today)
-        if reasons:
-            kept += 1
-            print(f"não arquivada · {name}: " + "; ".join(reasons))
-            continue
-        src = qfile.parent
-        dst = src.parent / ARCHIVE_DIR / name
-        if dry_run:
-            print(f"(dry-run) arquivaria · {name}")
-            moved.append(name)
-            continue
+        # one broken queue must not strand the moves already made: a failure
+        # in reading or judging it skips it, the sweep goes on to the commit
         try:
-            dst.parent.mkdir(exist_ok=True)
-            os.rename(src, dst)
-        except OSError as e:
-            print(f"não arquivada · {name}: o move falhou ({e})")
-            kept += 1
-            continue
-        print(f"arquivada · {name} → {qp.NEW_DIR}/{ARCHIVE_DIR}/{name}")
-        moved.append(name)
+            if _archive_one(root, name, qfile, today, dry_run):
+                moved.append(name)
+        except Exception as e:  # noqa: BLE001 - contain whatever one queue throws
+            print(f"aviso: fila {name} ilegível, pulada: "
+                  f"{e.__class__.__name__}: {e}", file=sys.stderr)
     if not moved:
         print("nada a arquivar")
         return 0
