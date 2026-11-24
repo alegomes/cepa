@@ -7,13 +7,13 @@
 # Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
 # fecha — agente nenhum troca o texto por null por conta própria.
 #
-# Fonte das demandas: docs/spec/reforma-de-nomes-dos-comandos.md (11 critérios de sucesso; ordem herdada do texto)
+# Fonte das demandas: docs/spec/reforma-de-nomes-dos-comandos.md (15 critérios de sucesso; ordem herdada do texto)
 # Escrito em: 2026-11-24
 
 schema_version: 2
 mode: single-track
 queue: reforma-de-nomes
-source: docs/spec/reforma-de-nomes-dos-comandos.md (11 critérios de sucesso; ordem
+source: docs/spec/reforma-de-nomes-dos-comandos.md (15 critérios de sucesso; ordem
   herdada do texto)
 items:
 - id: CS-1
@@ -76,9 +76,10 @@ items:
     `--angles`, `--on-branch` e `--queue` e nenhuma das formas em português; `cepa
     queue verdict <arquivo> 1 kept` grava o mesmo marcador que `mantida` grava hoje,
     e `mantida` continua aceito; `cepa queue finish ... --open-point "x"` grava
-    o mesmo que `--pendencia "x"`, que continua aceito.'
+    o mesmo que `--pendencia "x"`, que continua aceito. Depois do CS-1.'
   status: pending
-  blocked_by: []
+  blocked_by:
+  - CS-1
   human_pending: null
 - id: CS-6
   title: toda variável de ambiente tem prefixo `CEPA_` e nome em inglês, e a antiga
@@ -116,9 +117,10 @@ items:
     `epics`, `answer` e `add` aparece antes de um bloco "used by the commands" com
     os demais; `cepa queue batch <fila> --max 3` imprime o que `cepa plan queue
     <fila> --max 3` imprime hoje; `cepa queue queue <fila>` sai com 2 com "queue
-    is now batch".'
+    is now batch". Depois do CS-1.'
   status: pending
-  blocked_by: []
+  blocked_by:
+  - CS-1
   human_pending: null
 - id: CS-9
   title: o que está congelado aparece num bloco "frozen" no fim da ajuda
@@ -142,16 +144,100 @@ items:
   status: pending
   blocked_by: []
   human_pending: null
+- id: CS-12
+  title: os 12 plugins e suas pastas têm o nome novo
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: application · teste vermelho declarado:
+    um teste lê `.claude-plugin/marketplace.json` e o `plugin.json` de cada pasta
+    de plugin e falha se os nomes declarados não forem exatamente `cepa`, `cepa-board`,
+    `cepa-hex`, `cepa-solo`, `cepa-team`, `cepa-discovery`, `cepa-docs`, `cepa-design`,
+    `cepa-marketing`, `cepa-review`, `cepa-maestro` e `cepa-compass`, se alguma
+    pasta tiver nome diferente do plugin que contém, ou se existir uma pasta `common/`,
+    `board-flow/`, `build-hex/`, `build-solo/`, `build-team/`, `discovery/`, `docs-topology/`,
+    `design/`, `marketing/`, `review-gate/`, `maestro/` ou `compass/` na raiz. A
+    suíte inteira passa com os scripts em `cepa/bin/`. Depois do CS-1, CS-2, CS-3,
+    CS-4, CS-5, CS-6, CS-7, CS-8, CS-9 e CS-10.'
+  status: pending
+  blocked_by:
+  - CS-1
+  - CS-2
+  - CS-3
+  - CS-4
+  - CS-5
+  - CS-6
+  - CS-7
+  - CS-8
+  - CS-9
+  - CS-10
+  human_pending: null
+- id: CS-13
+  title: toda referência a comando, skill ou agente usa o prefixo novo e aponta
+    para algo que existe
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: `cepa
+    modes menu discovery` imprime `/cepa:spec --continue <slug>` e `/cepa-discovery:capture`;
+    um teste extrai toda referência `<prefixo>:<nome>` dos arquivos vivos (`*/commands/*.md`,
+    `*/skills/**/SKILL.md`, `*/agents/*.md`, `*/hooks/*.py`, README.md, docs/commands.md,
+    docs/cepa-cli.md) e falha se o prefixo não for um dos 12 nomes novos ou se não
+    existir o arquivo de comando, skill ou agente correspondente. Hoje as referências
+    usam `common:`, `board-flow:` e os demais nomes antigos. Depois do CS-12.'
+  status: pending
+  blocked_by:
+  - CS-12
+  human_pending: null
+- id: CS-14
+  title: a instalação troca o nome antigo dos plugins nas configurações do repo
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    de teste cujas configurações do Claude Code habilitam `common@cepa` e `board-flow@cepa`,
+    `cepa doctor` aponta as duas chaves como correção mecânica e não altera o arquivo;
+    `cepa doctor --fix` deixa `cepa@cepa` e `cepa-board@cepa` habilitados, remove
+    as chaves antigas e guarda uma cópia do arquivo anterior; `bin/install.sh` no
+    mesmo repo de teste chega ao mesmo resultado; rodar de novo não muda nada. Depois
+    do CS-12.'
+  status: pending
+  blocked_by:
+  - CS-12
+  human_pending: null
+- id: CS-15
+  title: '`cepa doctor` avisa quando um arquivo de instruções do dono cita um prefixo
+    antigo'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com um
+    `CLAUDE.md` de teste (o global e o do repo) contendo "plugin `common`" e `common:plain-report`,
+    `cepa doctor` lista o arquivo e a linha de cada menção no bloco do que precisa
+    do dono, com o nome novo ao lado, e não edita o arquivo; sem menção, não lista
+    nada. Depois do CS-12.'
+  status: pending
+  blocked_by:
+  - CS-12
+  human_pending: null
 - id: CS-11
   title: nenhum menu de ajuda nem documento vivo cita um nome antigo
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
     entre si · superfície onde se observa: cli · teste vermelho declarado: um teste
-    com a tabela de nomes antigos (comandos, subcomandos, flags, valores e variáveis
-    desta especificação) roda `--help` em cada `cepa <subcomando>` e em cada sub-subcomando,
-    roda `cepa modes menu <modo>` para cada modo, e lê `*/commands/*.md`, `*/skills/**/SKILL.md`,
-    `*/agents/*.md`, `common/hooks/*.py`, README.md, docs/commands.md e docs/cepa-cli.md;
-    falha em qualquer menção fora das linhas que declaram a compatibilidade. `tests/test_commands_catalog.py`
-    passa com os nomes novos.'
+    com a tabela de nomes antigos (comandos, subcomandos, flags, valores, variáveis
+    e prefixos de plugin desta especificação) roda `--help` em cada `cepa <subcomando>`
+    e em cada sub-subcomando, roda `cepa modes menu <modo>` para cada modo, e lê
+    `*/commands/*.md`, `*/skills/**/SKILL.md`, `*/agents/*.md`, `common/hooks/*.py`,
+    README.md, docs/commands.md e docs/cepa-cli.md; falha em qualquer menção fora
+    das linhas que declaram a compatibilidade. `tests/test_commands_catalog.py`
+    passa com os nomes novos. Depois do CS-1, CS-2, CS-3, CS-4, CS-5, CS-6, CS-7,
+    CS-8, CS-9, CS-10, CS-12, CS-13, CS-14 e CS-15.'
   status: pending
-  blocked_by: []
+  blocked_by:
+  - CS-1
+  - CS-2
+  - CS-3
+  - CS-4
+  - CS-5
+  - CS-6
+  - CS-7
+  - CS-8
+  - CS-9
+  - CS-10
+  - CS-12
+  - CS-13
+  - CS-14
+  - CS-15
   human_pending: null
