@@ -421,6 +421,23 @@ def test_future_dated_entry_does_not_hide_the_real_answer_before_it():
               rc == 0, out)
 
 
+def test_a_hash_in_the_middle_of_a_line_is_written_as_typed():
+    """Only a line that STARTS like a header is escaped. The owner's words with
+    a `#` further in go to the log exactly as typed."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [routed("a1", yes_item="nenhum")])
+        prompt = "1. sim # ok\nitem # 1 e ## dois\nveja ### 10:00:00 UTC aqui"
+        rc, out = real_hook(root, prompt)
+        check("o hook real grava a prosa com `#` no meio", rc == 0, out)
+        text = (root / ".claude" / "session-log.md").read_text(encoding="utf-8")
+        check("as linhas com `#` no meio ficam como digitadas",
+              f"\n\n{prompt}\n\n" in text, text)
+        check("nenhuma barra invertida entrou no log", "\\" not in text, text)
+        rc, out = no_tty(root, "a1", "sim: pode", "--from-chat",
+                         "item # 1 e ## dois")
+        check("a citação com `#` no meio vale (sai 0)", rc == 0, out)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):
