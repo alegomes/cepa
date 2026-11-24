@@ -5470,7 +5470,7 @@ Padrão para `flutter test` com os marcadores `All tests passed!` e `Some tests 
 
 ## A lista Agents do herdr mostra o mesmo nome para todas as sessões do Cepa
 
-**Status:** pendente · **Lar provável:** common (`common/bin/cepa`, o launcher que abre a sessão) · **Origem:** feedback `fb-20261120-4`, 2026-11-20, `fb-20261120-6`, 2026-11-20
+**Status:** feito nesta branch (2026-11-24, fila `fb-2026-10`) · **Lar provável:** common (`common/bin/cepa`, o launcher que abre a sessão) · **Origem:** feedback `fb-20261120-4`, 2026-11-20, `fb-20261120-6`, 2026-11-20
 
 ### Problema
 
@@ -5489,6 +5489,17 @@ Quatro sessões do Cepa abertas no mesmo Space do herdr aparecem na lista Agents
 ### Esboço
 
 O launcher informa ao herdr um nome por sessão (o slug da worktree ou o propósito gravado na intenção). Teste que falta: duas sessões no mesmo Space aparecem com nomes diferentes em `hc get`.
+
+**Feito (2026-11-24, fila `fb-2026-10`, item `agents-do-herdr-mesmo-nome-por-sessao`).** Em
+`run_claude`, o launcher chama `claude --name <slice>` quando a branch da pasta onde a sessão
+vai rodar é `session/<slice>`. Se o dono passou `-n`, `--name` ou `--name=x`, o nome dele vale e
+nada é injetado; fora de `session/*` a chamada não muda. `tests/test_cepa_session_name.py`
+confere, com um claude falso, que duas sessões recebem nomes diferentes e que as flags e o
+prompt do dono seguem intactos depois do nome. Conferido no herdr do app desktop em 2026-11-22:
+dois `cepa -s aud-slice-a|b` abertos com `hc run` apareceram em `hc get` com `title`
+`aud-slice-a` e `aud-slice-b`, e o título de um `claude --name` continuou o mesmo depois do
+primeiro prompt. Não olhado: o painel Agents da interface e duas sessões no mesmo Space. O dono
+aceitou em 2026-11-23 o título lido por `hc get` como prova, porque o título é por terminal.
 
 ---
 
