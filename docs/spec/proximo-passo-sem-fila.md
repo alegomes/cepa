@@ -1,7 +1,7 @@
 # Especificação: próximo passo quando o dono abre a sessão sem saber o que fazer
 
 **Status:** ready-to-build
-**Aberta em:** 2026-11-23      **Fechada em:** 2026-11-24
+**Aberta em:** 2026-11-23   **Fechada em:** 2026-11-24
 **Fontes lidas:** common/commands/whereami.md, common/commands/next.md, BACKLOG.md (entrada de `fb-20261104-3`), docs/spec/resposta-do-decide-vira-trabalho.md, docs/spec/perguntar-antes-do-run.md, docs/spec/until-todas-as-filas.md, saída de `cepa-plan --help`, `cepa-plan epics`, `cepa-intent --help` e `cepa-until --help`
 
 ## Como chegamos aqui
@@ -16,14 +16,14 @@ O que os comandos fazem hoje, lido no código:
 
 ## Escopo
 ### Entra
-- Um subcomando novo do `cepa-plan` (o programa que já lê filas e Epics), chamado aqui de `cepa plan propose`, que lista os candidatos a próxima meta na ordem das fontes e imprime UMA ação.
+- Um subcomando novo do `cepa-plan` (o programa que já lê filas e Epics), chamado aqui de `cepa plan propose`, que lista os candidatos a próximo passo na ordem das fontes e imprime um menu numerado.
 - Três situações: todas as filas terminadas, repositório sem fila nenhuma, fila em que tudo o que sobra espera o dono.
-- Com várias filas abertas e itens prontos, a ação é `cepa until --all --until 06:00` (o `cepa until` é o supervisor que roda as filas sem o dono presente, e `--all` roda todas).
+- Com várias filas abertas e itens prontos, a opção 1 é `cepa until --all --until 06:00` (o `cepa until` é o supervisor que roda as filas sem o dono presente, e `--all` roda todas).
 - Um comando novo, `/common:whatnext` (o dono pediu `/whatnext`; comando de plugin leva o prefixo do plugin), que roda o `cepa plan propose` e mostra a resposta. É o único jeito de pedir a resposta.
-- Formato da resposta: uma ação, o porquê em uma linha, a contagem do que mais espera o dono. A ação é a última linha.
-- O `/common:whatnext` só indica: não grava fila, não grava intenção, não executa item. A ação é um comando que o dono roda.
+- Formato da resposta: um menu de até 10 opções numeradas, na ordem das fontes, a primeira marcada "(recomendado)", cada uma com o porquê em uma linha. Depois a opção `0) Outra coisa`, a contagem do que mais espera o dono e a linha que ensina a responder.
+- Cada opção aceita duas letras: `R` (Run, rodar) e `D` (Detail, detalhe). O dono responde `2r` ou `2d` dentro da sessão.
+- Mostrar o menu não grava fila, não grava intenção e não executa nada. Só o `<n>r` do dono executa, e executa na própria sessão.
 - Sempre que a ação indicada é construir algo, o comando é o `cepa until` (em renome para `cepa run`): uma fila com item pronto dá `cepa until <fila> --until 06:00`.
-- A recusa é um comando à parte (`cepa plan propose --decline`), que o dono roda. Ela fica gravada e a chamada seguinte traz o segundo candidato, até 2 propostas.
 - A frase de beco sem saída do `/common:next` e do `/common:whereami` passa a ser "rode /common:whatnext".
 - Sem nenhuma fonte: uma pergunta ("o que você quer ver funcionando aqui?") acompanhada de sugestões tiradas da leitura do código, e a resposta abre `/common:spec`.
 
@@ -32,60 +32,61 @@ O que os comandos fazem hoje, lido no código:
 - Adaptar o `/common:next` e o `/common:whereami` para dar a resposta, e gatilho por texto livre. O dono vetou em 2026-11-24: "quanto mais determinístico, melhor".
 - Mudar a leitura do Jira. Com `board-flow.yaml` reconcilia como hoje, com `--offline` não.
 - Escolher entre várias filas abertas dentro da sessão. O dono pediu a sugestão do `cepa until`, não uma escolha de fila.
-- Fila com item pronto e uma fila só. O `/common:next` já responde esse caso.
+- Gravar o que o dono não escolheu, ou esconder opção do menu. Escolher outra opção já é o não.
+- Proposta única com "sim/não". O dono trocou pelo menu em 2026-11-24.
 
 ## Estado e migração
 - Arquivo novo `common/commands/whatnext.md`.
 - `common/commands/next.md`: onde hoje manda nomear o `/common:queue` com a fila terminada ou ausente, passa a mandar dizer "rode /common:whatnext". O resto não muda, inclusive a regra "nunca inventa ordem", que continua valendo para ele.
 - `cepa-intent state` no estado `empty`: a frase "Diga o propósito e eu proponho o plano" ganha "ou rode /common:whatnext".
-- Arquivo novo de propostas recusadas, gravado só pelo `cepa-plan`, no clone principal ao lado das filas. Repositórios existentes começam sem o arquivo, e a ausência significa "nada recusado".
+- Nenhum arquivo novo de estado: o menu é recalculado a cada chamada.
 - Filas existentes não mudam. Itens descartados continuam descartados até o dono aceitar uma proposta que os traga de volta.
 
 ## Critérios de sucesso
 
-### CS-1: com todas as filas terminadas e um ciclo de Epic sem fila, a saída propõe esse ciclo
+### CS-1: com todas as filas terminadas e um ciclo de Epic sem fila, a opção 1 é montar a fila desse ciclo
 **Surface:** cli
-**Red test:** num repositório de teste com uma fila toda `done` e um Epic com o ciclo 2 sem fila, `cepa plan propose` imprime uma proposta cuja fonte é o Epic e cuja ação é `/common:queue <nome> --from-epic <arquivo> --cycle 2`; hoje o subcomando não existe e o `cepa-plan` sai com erro de uso.
+**Red test:** num repositório de teste com uma fila toda `done` e um Epic com o ciclo 2 sem fila, a opção 1 de `cepa plan propose` tem como fonte o Epic, traz "(recomendado)" e o comando dela é `/common:queue <nome> --from-epic <arquivo> --cycle 2`; hoje o subcomando não existe e o `cepa-plan` sai com erro de uso.
 
-### CS-2: a ordem entre as fontes é Epic, especificação pronta, meta gravada, descartados, cards soltos, BACKLOG
+### CS-2: a ordem das opções segue as fontes: Epic, especificação pronta, meta gravada, descartados, cards soltos, BACKLOG
 **Surface:** cli
-**Red test:** com uma especificação `ready-to-build` sem fila e itens `dropped` na última fila, `cepa plan propose` propõe a especificação; tirando a especificação, propõe os itens descartados; com um lembrete do dono que nomeia uma meta e itens descartados, propõe a meta do lembrete com a data dele; hoje o subcomando não existe.
+**Red test:** com um ciclo de Epic sem fila, uma especificação `ready-to-build` sem fila, um lembrete do dono que nomeia uma meta e itens `dropped` na última fila, `cepa plan propose` lista as quatro opções nessa ordem, a do lembrete com a data dele; tirando o Epic, a especificação passa a ser a opção 1; hoje o subcomando não existe.
 
-### CS-3: a saída tem uma ação só, na última linha, e conta o resto sem listar
+### CS-3: a saída é um menu de até 10 opções, com a opção 0 e a contagem do resto
 **Surface:** cli
-**Red test:** com 3 pendências do dono que não impedem a meta e 2 cards fora de fila, a última linha de `cepa plan propose` é a ação da meta, uma linha anterior diz "mais 5 coisas esperam você" (3 + 2) e nenhuma das 5 aparece pelo nome; com `--detail` as 5 aparecem; hoje o subcomando não existe.
+**Red test:** com 12 candidatos, 3 pendências do dono que não impedem nenhum deles e 2 cards fora de fila, `cepa plan propose` imprime as opções 1 a 10 (cada uma com uma linha de porquê, só a 1 com "(recomendado)"), depois `0) Outra coisa`, depois uma linha que diz que 2 candidatos ficaram de fora (12 - 10) e que mais 5 coisas esperam o dono (3 + 2), sem nomear nenhuma, e a última linha ensina `<n>r` e `<n>d`; hoje o subcomando não existe.
 
-### CS-4: repositório sem fila nenhuma recebe a mesma proposta
+### CS-4: repositório sem fila nenhuma recebe o mesmo menu
 **Surface:** cli
-**Red test:** num repositório sem `.claude/queues` e com uma especificação `ready-to-build`, `cepa plan propose` propõe a especificação com a ação `/common:queue <nome> --from-spec`; hoje o subcomando não existe e o `/common:next` manda dizer "não há plano".
+**Red test:** num repositório sem `.claude/queues` e com uma especificação `ready-to-build`, a opção 1 de `cepa plan propose` é a especificação, com o comando `/common:queue <nome> --from-spec`; hoje o subcomando não existe e o `/common:next` manda dizer "não há plano".
 
-### CS-5: fila em que tudo o que sobra espera o dono aponta a pendência que destrava mais itens
+### CS-5: fila em que tudo o que sobra espera o dono põe na opção 1 a pendência que destrava mais itens
 **Surface:** cli
-**Red test:** numa fila com 4 itens `pending`, em que a pendência do item A bloqueia 2 itens e a do item B bloqueia 1, a ação de `cepa plan propose` é a pergunta fechada da pendência de A, e a de B entra na contagem; empate se resolve pela ordem da fila; hoje o subcomando não existe.
+**Red test:** numa fila com 4 itens `pending`, em que a pendência do item A bloqueia 2 itens e a do item B bloqueia 1, a opção 1 de `cepa plan propose` é a pergunta fechada da pendência de A e a opção 2 é a de B; empate se resolve pela ordem da fila; hoje o subcomando não existe.
 
-### CS-6: com várias filas abertas e itens prontos, a ação é um comando do `cepa until`
+### CS-6: com várias filas abertas e itens prontos, a opção 1 é rodar todas com o `cepa until`
 **Surface:** cli
-**Red test:** com duas filas que têm item pronto, a última linha de `cepa plan propose` é `cepa until --all --until 06:00` e nenhuma pergunta "qual fila?" aparece; hoje o subcomando não existe.
+**Red test:** com duas filas que têm item pronto, o comando da opção 1 de `cepa plan propose` é `cepa until --all --until 06:00` e nenhuma pergunta "qual fila?" aparece; hoje o subcomando não existe.
 
-### CS-7: sem nenhuma fonte, a saída diz que não achou e traz a pergunta
+### CS-7: sem nenhuma fonte, o menu só tem a opção 0 e a pergunta
 **Surface:** cli
-**Red test:** num repositório sem Epic, sem especificação, sem lembrete, sem fila e sem BACKLOG.md, `cepa plan propose` sai com código 0, diz "nenhuma fonte" e imprime a pergunta "O que você quer ver funcionando aqui?"; hoje o subcomando não existe.
+**Red test:** num repositório sem Epic, sem especificação, sem lembrete, sem fila e sem BACKLOG.md, `cepa plan propose` sai com código 0, diz "nenhuma fonte", imprime só `0) Outra coisa` e a pergunta "O que você quer ver funcionando aqui?"; hoje o subcomando não existe.
 
-### CS-8: o "não" fica gravado, traz o segundo candidato e para na segunda recusa
+### CS-8: o detalhe de uma opção mostra a fonte, o porquê, o comando exato e o que ele altera, e não grava nada
 **Surface:** cli
-**Red test:** depois de `cepa plan propose --decline <id> --reason "..."`, a chamada seguinte propõe o segundo candidato e não repete o primeiro; depois da segunda recusa a saída traz a pergunta do CS-7 em vez de uma terceira proposta; numa chamada de outro dia o candidato recusado continua fora; `cepa plan propose --declined` lista as recusas com data e motivo, e `--undecline <id>` devolve o candidato à lista; hoje o subcomando não existe.
+**Red test:** `cepa plan propose --detail 2` imprime, para a opção 2 do menu, o caminho do arquivo de onde ela veio, o porquê completo, o comando que o `R` roda e o que esse comando altera; `--detail` sem número lista pelo nome as coisas que esperam o dono e não viraram opção; `--detail 11` num menu de 3 opções sai com erro que diz quantas opções existem; depois de qualquer dessas chamadas nenhum arquivo do repositório mudou; hoje o subcomando não existe.
 
-### CS-9: a fila que nasce de uma proposta aceita diz de onde veio
+### CS-9: a fila que nasce de uma opção rodada diz de onde veio
 **Surface:** cli
-**Red test:** depois de o dono rodar o comando indicado por uma proposta de itens descartados, `cepa plan show <fila>` mostra em cada item o porquê "proposta do agente, aceita pelo dono em <data>"; hoje não há como gravar uma fila a partir de uma proposta.
+**Red test:** depois de rodar o comando de uma opção de itens descartados, `cepa plan show <fila>` mostra em cada item o porquê "proposta do agente, aceita pelo dono em <data>"; hoje não há como gravar uma fila a partir de uma opção do menu.
 
-### CS-10: existe o comando `/common:whatnext`, e ele só mostra o que o `cepa plan propose` imprime
+### CS-10: existe o comando `/common:whatnext`, com as respostas `<n>r` e `<n>d`
 **Surface:** cli
-**Red test:** um teste que lê `common/commands/whatnext.md` exige que o arquivo exista, que ele se declare somente leitura, que o único programa que ele manda rodar seja `cepa plan propose` e que mande mostrar a saída sem reescrever a ação; hoje o arquivo não existe.
+**Red test:** um teste que lê `common/commands/whatnext.md` exige que o arquivo exista, que ele mande mostrar o menu do `cepa plan propose` sem reordenar nem renumerar, que diga que `<n>r` roda o comando que o `cepa plan propose --detail <n>` imprime e nenhum outro, que `<n>d` e `<n>` sozinho mostram o detalhe, que `0` faz a pergunta "O que você quer ver funcionando aqui?" e que nada é executado antes de um `<n>r` do dono; hoje o arquivo não existe.
 
-### CS-11: com uma fila só e item pronto, a ação é executar esse item, e nada é executado
+### CS-11: com uma fila só e item pronto, a opção 1 é rodar a fila, e mostrar o menu não mexe nela
 **Surface:** cli
-**Red test:** numa fila com o item B1 pronto, a última linha de `cepa plan propose` é `cepa until <fila> --until 06:00`, o porquê é o do item B1 e, depois da chamada, o `queue.yaml` está byte a byte igual e B1 continua `pending` sem reserva; hoje o subcomando não existe.
+**Red test:** numa fila com o item B1 pronto, o comando da opção 1 de `cepa plan propose` é `cepa until <fila> --until 06:00`, o porquê é o do item B1 e, depois da chamada, o `queue.yaml` está byte a byte igual e B1 continua `pending` sem reserva; hoje o subcomando não existe.
 
 ### CS-12: os comandos antigos apontam o novo no beco sem saída
 **Surface:** cli
@@ -105,6 +106,8 @@ O que os comandos fazem hoje, lido no código:
 - [x] Q12. O `/common:next` e o `/common:whereami` ficam intocados, ou a frase de beco sem saída deles passa a nomear o `/common:whatnext`? — Só apontam o comando novo: continuam como são, e a frase final do beco sem saída passa a ser "rode /common:whatnext". (dono, 2026-11-24)
 - [x] Q13. O `/common:whatnext` responde também quando há uma fila só com item pronto? — Nas palavras do dono: "Eu não quero que o whatnext execute nada, apenas indique o próximo passo. Nesse caso, seu resultado seria similar a um common:next --dry-run". Lido como: responde sempre, inclusive com item pronto, e nunca grava nem executa. (dono, 2026-11-24)
 - [x] Q14. Com item pronto, que comando a ação indica? — Nas palavras do dono: "Gostaria que, quando a ação sugerida com a construção de algo, que se priorizasse o `cepa until` (que está sendo renomeado para `cepa run`)". (dono, 2026-11-24)
+- [x] Q15. Proposta única com "não" na sessão, ou menu de opções? — Nas palavras do dono: "Troca pelo menu. Mas acho que pode apresentar mais opções. Que tal 10?". Substitui a Q4 (uma ação só) e a Q8 (recusa gravada). (dono, 2026-11-24)
+- [x] Q16. Ao escolher uma opção, o agente executa na sessão? — Nas palavras do dono: "E se houver múltiplas opções para cada item do menu? Exemplo: (R)un, (D)etail". Lido como: cada opção tem `R` para rodar na sessão e `D` para ver o detalhe. Substitui a parte da Q13 que dizia "nunca executa". (dono, 2026-11-24)
 - [x] Q10. Que janela de tempo vai no comando `cepa until` sugerido? — `--until 6:00`. (dono, 2026-11-24)
 
 ## Decided without asking
@@ -118,17 +121,27 @@ O que os comandos fazem hoje, lido no código:
 - Na fonte 3, o `cepa-plan` lê sozinho os lembretes do dono (`.claude/reminders`); a memória do agente não é arquivo do repositório, então o agente lê a memória e passa a meta ao `cepa plan propose` por argumento, com a data — o programa não enxerga a pasta de memória do Claude. Vete aqui se discordar.
 - Pergunta em texto livre não ganha gatilho novo (hook ou skill) — na captura o agente já levou a pergunta livre ao `/common:next` sozinho; o que faltou foi a resposta. Vete aqui se discordar.
 - Sem fonte, as sugestões da leitura do código são no máximo 3 e redigidas pelo agente; o `cepa-plan` só avisa "nenhuma fonte" — ler código para sugerir meta não é coisa que um programa sem modelo faz. Vete aqui se discordar.
-- Proposta recusada fica fora até o dono nomeá-la ele mesmo; não expira com o tempo — uma recusa que expira volta a ser a mesma pergunta. Vete aqui se discordar.
-- "Até 2 propostas" conta por dia e por repositório, não por sessão — o `cepa-plan` não sabe de sessão, e a data ele sabe. Vete aqui se discordar.
+- Proposta recusada fica fora até o dono nomeá-la ele mesmo; não expira com o tempo — uma recusa que expira volta a ser a mesma pergunta. Vete aqui se discordar. · vetada em 2026-11-24: O menu de opções substitui a recusa: escolher outra opção já é o não, e nada fica gravado. Decidido pelo dono em 2026-11-24 ("Troca pelo menu").
+- "Até 2 propostas" conta por dia e por repositório, não por sessão — o `cepa-plan` não sabe de sessão, e a data ele sabe. Vete aqui se discordar. · vetada em 2026-11-24: O menu de opções substitui a recusa: escolher outra opção já é o não, e nada fica gravado. Decidido pelo dono em 2026-11-24 ("Troca pelo menu").
 
 - Quando a ação indicada é construir algo, o comando é o cepa until (em renome para cepa run): com uma fila, cepa until <fila> --until 06:00; com várias, cepa until --all --until 06:00. A saída usa o nome que o programa tiver no dia da construção. O dono pediu em 2026-11-24 que a construção priorize o cepa until. · refinada em 2026-11-24
-- O comando de recusa aparece na penúltima linha da resposta ("se não for isso: cepa plan propose --decline <id>"), para a ação continuar sendo a última — sem isso o dono não tem como saber o identificador da proposta. Vete aqui se discordar.
+- O comando de recusa aparece na penúltima linha da resposta ("se não for isso: cepa plan propose --decline <id>"), para a ação continuar sendo a última — sem isso o dono não tem como saber o identificador da proposta. Vete aqui se discordar. · vetada em 2026-11-24: O menu de opções substitui a recusa: escolher outra opção já é o não, e nada fica gravado. Decidido pelo dono em 2026-11-24 ("Troca pelo menu").
 
-- A recusa tem como ser vista e desfeita: `cepa plan propose --declined` lista e `--undecline <id>` desfaz — sem isso uma recusa por engano tira a meta da lista para sempre. Vete aqui se discordar.
+- A recusa tem como ser vista e desfeita: `cepa plan propose --declined` lista e `--undecline <id>` desfaz — sem isso uma recusa por engano tira a meta da lista para sempre. Vete aqui se discordar. · vetada em 2026-11-24: O menu de opções substitui a recusa: escolher outra opção já é o não, e nada fica gravado. Decidido pelo dono em 2026-11-24 ("Troca pelo menu").
+
+- Número sem letra mostra o detalhe, não roda (`2` é o mesmo que `2d`) — um número digitado por engano não inicia um `cepa until` de horas. Vete aqui se discordar.
+- O detalhe de uma opção mostra quatro coisas: de que fonte ela veio (com o caminho do arquivo), o porquê completo, o comando exato que o `R` vai rodar e o que esse comando altera. Vete aqui se discordar.
+- A opção "Outra coisa" é sempre a `0` e não conta nas 10 — assim o número dela não muda de uma chamada para outra. Vete aqui se discordar.
+- Dentro de uma mesma fonte, os candidatos saem na ordem do arquivo (ciclos do Epic pelo número, especificações pelo nome) — ninguém priorizou entre eles. Vete aqui se discordar.
+- Quando sobram candidatos além dos 10, a linha de contagem diz quantos ficaram de fora. Vete aqui se discordar.
+- `d` sem número lista as coisas que esperam o dono e que não viraram opção. Vete aqui se discordar.
+- O `R` de uma opção que é `cepa until` inicia o comando em segundo plano na sessão — ele roda por horas e a sessão não pode ficar presa. Vete aqui se discordar.
+- O `R` de uma opção que nasce de decisão antiga do dono vale como "ainda vale", e a fila que nasce de um `R` leva em cada item o porquê "proposta do agente, aceita pelo dono em <data>". Substitui o texto das decisões 5 e 6, que falavam de comando rodado por fora. Vete aqui se discordar.
 
 ## Riscos e o que ficou de fora desta especificação
 - O renome de `cepa until` para `cepa run` está em andamento na branch `session/command_rename`. Os testes vermelhos citam `cepa until`; quem construir usa o nome vigente.
 - A parte redigida pelo agente (a frase da proposta, as sugestões do CS-7) não tem teste mecânico. Os critérios cobrem a saída do `cepa-plan`, que é o que o agente recebe.
 - O texto de ajuda do `cepa until` ainda diz que `--all` só roda com `--dry-run`, o que é falso desde pelo menos 2026-11-15 (data do registro de run mais antigo em `_all/until/`). Corrigir a ajuda fica fora desta especificação.
-- Itens descartados (fonte 4) podem ter sido descartados de propósito. A proposta os traz de volta só com o sim, e o não fica gravado (CS-8).
+- Itens descartados (fonte 4) podem ter sido descartados de propósito e voltam a aparecer no menu a cada chamada, porque nada do que o dono deixa de escolher fica gravado.
+- Com 10 opções o menu ocupa cerca de 25 linhas (10 opções com porquê, mais o cabeçalho e o rodapé). O dono pediu 10 em 2026-11-24.
 - Ficou de fora: escolher entre várias filas dentro da sessão, e mostrar o próximo passo na abertura da sessão.
