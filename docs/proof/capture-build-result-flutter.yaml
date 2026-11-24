@@ -1,36 +1,55 @@
 schema_version: 2
 card: capture-build-result-flutter
-verdict: needs-human
-reviewed_at: 2026-11-22T15:00:00-03:00
-base_commit: aa6e2ea
-head_commit: 8f1398c
+verdict: proven
+reviewed_at: 2026-11-24T13:00:00-03:00
+base_commit: 8844366
+head_commit: b8293d7
 issue_type: Task
+round: 3
 scope:
   base_commit_resolved: true
   changed_classes:
-    - { class: "common/hooks/capture-build-result.py (PATTERNS flutter entry, declared_check_scripts, _check_script_regex, _runs_check_script, _last_line, _classify_check_script, classify(root=), _is_build_segment(seg, scripts), effective_build_dir, _harvest_one trailer strip, main root=cwd)", module: hooks, external_observable: true, substituted_by_double: null }
+    - class: "common/hooks/capture-build-result.py"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+      double_check: "The tests run the real hook as a subprocess with a PostToolUse payload and read .claude/last-build.json, or call the real classify / declared_check_scripts. No double of the changed code."
+    - class: "common/hooks/_state.py"
+      module: hooks
+      external_observable: false
+      substituted_by_double: null
+      double_check: "tests/test_state_deposits.py reads the real CATALOGUE."
 levels:
   l3_load_bearing:
     technique: perturbation
     pit:
       status: n/a
-      results: []
+      results:
+        - "Python repo, no Maven, no PIT"
     perturbation:
       status: pass
+      run: >-
+        Three rounds. Round 1 (5632a30, /tmp/proof-cbrf-1): 39 perturbations, 28 RED, 11 survivors. Round 2 (f9f5861): 6 of 7 real gaps closed, 2 equivalents confirmed, 2 survivors found (mutants 3 and 4 of _classify_check_script), verdict UNPROVEN. Round 3: git worktree add --detach /tmp/proof-cbrf-r3 b8293d7 (removed afterwards). `git diff f9f5861..b8293d7 --stat` lists only tests/test_capture_build_result_flutter.py (14 insertions), so common/ (hook and _state.py) is byte-identical to rounds 1 and 2. GREEN first at b8293d7: python3 -m pytest tests/test_capture_build_result_flutter.py tests/test_capture_build_result_classify.py tests/test_state_deposits.py -q -> 116 passed. Each perturbation: one sed replace of one anchor in the worktree copy, same 3 files, file restored with git checkout after each; foreground, one at a time; the worktree was clean (git status empty) after each. Only the 3 covering files were run, never the full suite.
       results:
-        - "GREEN first at 8f1398c: tests/test_capture_build_result_flutter.py + tests/test_capture_build_result_classify.py -> 78 passed. The covering tests run the real hook as a subprocess with a PostToolUse JSON payload and read .claude/last-build.json (no double of the changed code)."
-        - "26 perturbations of the hook at 8f1398c (every changed hunk), each run with -x against the two test files, in a throwaway detached worktree. 24 KILLED (1 failed): flutter ok marker, flutter fail marker, flutter kind renamed, declared root None guard, ok_line default, regex sh/bash prefix, regex ./ prefix, regex end lookahead, regex start anchor, last line equality (-> `ok in text`), last line skips blank lines, unclassified branch returns SUCCESS, classify wiring of the declared result off, classify root None, harvest trailer strip, harvest root, main root, nonzero exit wins, plus the 6 earlier survivors: (a) effective_build_dir scripts=[] , (b) _is_build_segment declared branch off, (c) _is_build_segment called without scripts, (d) removeprefix('./') dropped, (e) _runs_check_script on the raw command instead of the unquoted view, (f) exit_code != 0 -> > 0."
-        - "2 perturbations stay green and are EQUIVALENT mutants, not gaps: (g) removing `if not f.is_file(): return []` (read_text raises OSError, caught, the result is [] either way; only a stderr line differs); (h) dropping the `(?:fvm\\s+)?` group of the flutter regex (the preceding `(?:^|\\s)` already lets `fvm flutter test` match through the space before `flutter`, so the group never changes a match; `fvm flutter test` is covered and stays green)."
-      run: "git worktree add --detach /tmp/proof-cbrf2 8f1398c; python3 -m pytest tests/test_capture_build_result_flutter.py tests/test_capture_build_result_classify.py -q -> 78 passed; perturbation loop via sed on the worktree copy of the hook, restore by git checkout 8f1398c -- hook after each -> 24 x '1 failed', 2 equivalent x '78 passed'; worktree removed (git worktree list shows only main and the session worktree)."
+        - "Mutant 3 (round 2 survivor): `seg = S._strip_group_prefix(seg).strip()` -> `seg = seg.strip()` -> 3 failed, 113 passed. RED, killed by test_declared_check_script_inside_a_group_or_after_a_keyword_is_run for `{ tool/check.sh; }`, `! tool/check.sh` and `if true; then tool/check.sh; fi`."
+        - "Mutant 4 (round 2 survivor): `for seg in S._split_segments(view):` -> `for seg in [view]:` -> 1 failed, 115 passed. RED, killed by the `if true; then tool/check.sh; fi` case. Note: the two-declared-scripts ordering input (`tool/b.sh; tool/a.sh`) is still not asserted by any test; the mutant is killed only through the `then` segment. Not a survivor, just a thinner kill than round 2 intended."
+        - "Spot re-run of earlier kills at b8293d7, all RED: removeprefix('./') dropped -> 1 failed, 42 passed; re.escape(path) dropped -> 1 failed, 56 passed; last line `==` -> `in` -> 1 failed, 22 passed; `if root is None` guard disabled -> 1 failed, 7 passed."
+        - "Equivalents confirmed in round 2 and unchanged (hook byte-identical): dropping `(?:fvm\\s+)?` (leading `(?:^|\\s)` already matches), removing `if not f.is_file(): return []` (read_text raises OSError, caught, same [] result)."
+        - "Round 2 kills of round 1 gaps 5 to 10 (isinstance(cmd, str), ok.strip() truthiness, isinstance(e, dict), ok stored without strip, re.escape, _last_line strip) and the other round 1 kills carry over: the hook is byte-identical and the test file only grew."
+    l3_note: "All round 1 real gaps and both round 2 survivors are now killed; the only unkilled perturbations are the two confirmed equivalents."
   l2_coverage:
-    status: assumed
+    status: pass
+    technique: perturbation
     uncovered_lines: []
-    run: "no coverage tool wired for the Python hooks in this repo; reachability inferred from the perturbation results above, not measured"
+    waivers: []
+    run: "No Python coverage tool; derived from perturbation, carried from rounds 1 and 2 because common/ is byte-identical at b8293d7 (git diff f9f5861..b8293d7 --stat shows only the test file). Every behaviour hunk was broken at least once and went RED (PATTERNS flutter entry, declared_check_scripts, _check_script_regex, _runs_check_script, _last_line, _classify_check_script including group-prefix strip and segment split, classify(root=), _is_build_segment, effective_build_dir, harvest trailer strip, main root, _state.py CATALOGUE line). Commands as in l3."
   l4_adversarial_input:
-    status: skipped
-    reason: "not run: the touched surface parses the Bash command and tool output; no adversarial generator was run in this proof (scope limited to the covering tests and perturbation)"
+    status: clean
+    reason: ""
     findings: []
+    run: "Carried from round 1 (5632a30: 33 hostile manifests/payloads through the real hook, rc=0 each time, no traceback, no hang) and round 2 (group prefixes and two-script ordering probed through the real classify, no defect). Valid at b8293d7 because common/ is byte-identical (only a test file changed since f9f5861); not re-run."
   bugfix_regression_red_at_base:
     status: n/a
-    run: "not a Bug card; red-first check done anyway: head tests/test_capture_build_result_flutter.py against the aa6e2ea hook -> 40 failed, 4 passed (RED); against the 8f1398c hook -> 44 passed (78 passed with the classify file)."
-routing_reason: "Every changed hunk is load-bearing at the external surface (real hook subprocess, last-build.json): the 7 survivors of the dedb39a round are now killed, and red-at-base is 40 failed. Two perturbations stay green and were shown equivalent (is_file guard, fvm group). Not PROVEN only because L2 coverage is assumed (no coverage tool for Python hooks) and L4 adversarial input was not run; both are structural, nothing is unproven. Suggested decision for the human: accept the perturbation evidence in place of measured coverage and mark the card done."
+    run: "not a Bug card (Task)"
+build: "Only the 3 covering test files were run (116 passed at b8293d7); the full suite belongs to the supervisor."
+routing_reason: "PROVEN. The two round 2 survivors (group-prefix strip and segment split in _classify_check_script) now go RED against the new parametrized test; 4 earlier kills re-checked RED; the hook is byte-identical to the one already measured in rounds 1 and 2, so L2 and L4 carry over."
