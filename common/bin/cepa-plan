@@ -30,10 +30,12 @@ Subcommands:
       that is closed (at least one item, all `done` or `dropped`) and still for
       ARCHIVE_AFTER_DAYS days (date of the last commit that touched the folder).
       Never touches waves plans, .claude/programs/, _all/ or _archive/. A name
-      already taken in _archive, or a queue with no commit, stays and the output
-      says why. By hand it commits only what it moved; --no-commit leaves the
+      already taken in _archive, a queue with no commit, a queue with no item,
+      or one with something waiting on the owner (open route, leftover point
+      on a `done` item, run to land: the rule `waiting` uses) stays and the
+      output says why. By hand it commits only what it moved; --no-commit leaves the
       commit (the move stays staged) to a caller that has its own.
-      Spec: docs/spec/filas-fechadas-saem-da-vista.md (CS-1).
+      Spec: docs/spec/filas-fechadas-saem-da-vista.md (CS-1, CS-2).
 
   cepa-plan check-name <nome> [--repo DIR]
       Is the program name free for a QUEUE? Mirror of
@@ -5808,10 +5810,49 @@ def _last_commit_date(root, rel):
         return None
 
 
-def archive_blockers(root, name, qfile, today):
+def _ids(items):
+    return ", ".join(str(it.get("id")) for it in items)
+
+
+def archive_waiting_reasons(name, plan, runs_of):
+    """CS-2: the sentences for what a closed queue still has waiting on the
+    owner, by the rule `waiting` uses (`waiting_of_item`: a `done` item with a
+    route left; a `dropped` item never counts) plus the leftover points of
+    `finish --pendencia` and the runs `cepa-until pending` lists. A route the
+    owner answered "não" is still open, so it blocks too (`waiting` only
+    hides it). `runs_of()` returns the cached `(runs, warning)`; it is called
+    here, once per sweep, only for a queue that is otherwise closed."""
+    reasons = []
+    items = [it for it in (plan.get("items") or []) if isinstance(it, dict)]
+    routes = [it for it in items if waiting_of_item(it)
+              and not _ownertext.last_owner_no(it.get("evidence"))]
+    refused = [it for it in items if waiting_of_item(it)
+               and _ownertext.last_owner_no(it.get("evidence"))]
+    points = [it for it in items if status_of(it) != "dropped" and open_points(it)]
+    if routes:
+        reasons.append(f"tarefa sua em aberto em {_ids(routes)}: "
+                       "a fila ainda espera você")
+    if refused:
+        reasons.append(f"{len(refused)} tarefa(s) que você respondeu não "
+                       f"continuam abertas em {_ids(refused)}")
+    if points:
+        reasons.append(f"sobrou ponto pendente em {_ids(points)}: "
+                       "ninguém o fechou")
+    runs, warning = runs_of()
+    if warning:
+        reasons.append("não deu para conferir se há run esperando você "
+                       f"({warning}); por segurança a fila fica")
+    for r in runs:
+        if r.get("fila") == name:
+            reasons.append(f"o run {r.get('run')} espera você "
+                           f"({r.get('como')}); resolva com: {r.get('comando')}")
+    return reasons
+
+
+def archive_blockers(root, name, qfile, today, plan=None, runs_of=None):
     """Why a CLOSED queue is not archived: a list of plain sentences, empty
-    when it can go. One place on purpose: the next refusal reasons (something
-    waiting on the owner) are one more `append` here."""
+    when it can go. One place on purpose: a new refusal reason is one more
+    `append` here. All the reasons that apply are listed."""
     reasons = []
     qdir = qfile.parent
     rel = _queue_rel(root, qdir)
@@ -5831,10 +5872,12 @@ def archive_blockers(root, name, qfile, today):
         if dirty.strip():
             reasons.append("a pasta tem alterações não commitadas; "
                            "commite antes de arquivar")
+    if plan is not None and runs_of is not None:
+        reasons += archive_waiting_reasons(name, plan, runs_of)
     return reasons
 
 
-def _archive_one(root, name, qfile, today, dry_run):
+def _archive_one(root, name, qfile, today, dry_run, runs_of):
     """One queue of the sweep. Returns True when it moved (or would, in
     dry-run). Any exception is the caller's to contain."""
     plan, error = read_plan(qfile)
@@ -5844,9 +5887,16 @@ def _archive_one(root, name, qfile, today, dry_run):
         return False
     if not isinstance(plan, dict) or mode_of(plan) != MODE:
         return False
-    if not queue_closed(queue_summary(name, plan)):
+    summary = queue_summary(name, plan)
+    if not sum(summary["counts"].values()):
+        # no item at all is not "closed" (nothing was ever delivered): said
+        # out loud, so an empty queue does not look forgotten by the sweep
+        print(f"não arquivada · {name}: a fila não tem nenhum item, então "
+              "não conta como fechada")
         return False
-    reasons = archive_blockers(root, name, qfile, today)
+    if not queue_closed(summary):
+        return False
+    reasons = archive_blockers(root, name, qfile, today, plan, runs_of)
     if reasons:
         print(f"não arquivada · {name}: " + "; ".join(reasons))
         return False
@@ -5869,6 +5919,13 @@ def cmd_archive(root, dry_run, no_commit):
     from datetime import date
     today = date.today()
     moved = []
+    cache = []
+
+    def runs_of():  # `cepa-until pending` once per sweep, and only when asked
+        if not cache:
+            cache.append(waiting_runs_of(root))
+        return cache[0]
+
     for name, qfile in qp.queue_files(root):
         if name.startswith("_"):  # `_` marks a folder that is not a queue
             continue
@@ -5878,7 +5935,7 @@ def cmd_archive(root, dry_run, no_commit):
         # one broken queue must not strand the moves already made: a failure
         # in reading or judging it skips it, the sweep goes on to the commit
         try:
-            if _archive_one(root, name, qfile, today, dry_run):
+            if _archive_one(root, name, qfile, today, dry_run, runs_of):
                 moved.append(name)
         except Exception as e:  # noqa: BLE001 - contain whatever one queue throws
             print(f"aviso: fila {name} ilegível, pulada: "
@@ -6186,8 +6243,11 @@ def main(argv=None):
             "\n"
             "A queue is left in place, and the output says why, when the name is\n"
             "taken in _archive, when no commit ever touched its folder (no age to\n"
-            "measure) or when the folder has uncommitted changes. By hand it\n"
-            "commits only what it moved."),
+            "measure), when the folder has uncommitted changes, when the queue\n"
+            "has no item, or when something in it still waits on the owner (an\n"
+            "open route, a leftover point on a `done` item, a run to land; the\n"
+            "same rule as `waiting`; if the runs cannot be checked, nothing\n"
+            "closed is moved). By hand it commits only what it moved."),
         examples=[("cepa plan archive --dry-run", "what would move, without moving"),
                   ("cepa plan archive", "move and commit"),
                   ("cepa plan archive --no-commit", "move and stage; the caller commits")],
