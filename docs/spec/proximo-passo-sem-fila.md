@@ -129,7 +129,7 @@ O que os comandos fazem hoje, lido no código:
 
 - A recusa tem como ser vista e desfeita: `cepa plan propose --declined` lista e `--undecline <id>` desfaz — sem isso uma recusa por engano tira a meta da lista para sempre. Vete aqui se discordar. · vetada em 2026-11-24: O menu de opções substitui a recusa: escolher outra opção já é o não, e nada fica gravado. Decidido pelo dono em 2026-11-24 ("Troca pelo menu").
 
-- Número sem letra mostra o detalhe, não roda (`2` é o mesmo que `2d`) — um número digitado por engano não inicia um `cepa until` de horas. Vete aqui se discordar.
+- Número sem letra mostra o detalhe, não roda (`2` é o mesmo que `2d`) — um número digitado por engano não inicia um `cepa until` de horas. Vete aqui se discordar. · mantida em 2026-11-24
 - O detalhe de uma opção mostra quatro coisas: de que fonte ela veio (com o caminho do arquivo), o porquê completo, o comando exato que o `R` vai rodar e o que esse comando altera. Vete aqui se discordar.
 - A opção "Outra coisa" é sempre a `0` e não conta nas 10 — assim o número dela não muda de uma chamada para outra. Vete aqui se discordar.
 - Dentro de uma mesma fonte, os candidatos saem na ordem do arquivo (ciclos do Epic pelo número, especificações pelo nome) — ninguém priorizou entre eles. Vete aqui se discordar.
