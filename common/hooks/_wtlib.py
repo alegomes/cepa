@@ -41,6 +41,7 @@ import re
 import shutil
 import socket
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -300,9 +301,54 @@ def read_entries(root: str):
 
 
 def write_entry(root: str, key: str, entry: dict) -> None:
+    """Atomically write `<key>.json`: temp file in the same directory (unique
+    per writer, `.<key>.XXXX.tmp`, which no registry glob matches), flush +
+    fsync, then os.replace. Two hooks rewriting the same entry in parallel can
+    no longer leave truncated/garbled JSON; on failure the temp is removed and
+    the previous file stays intact (the error propagates, as before)."""
     d = sessions_dir(root)
     d.mkdir(parents=True, exist_ok=True)
-    (d / f"{key}.json").write_text(json.dumps(entry, indent=2), encoding="utf-8")
+    fd, tmp = tempfile.mkstemp(dir=str(d), prefix=f".{key}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(json.dumps(entry, indent=2))
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, d / f"{key}.json")
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def unreadable_recent(root: str):
+    """Registry files (`*.json`, not `*.next.json`) that exist but do not parse
+    and whose mtime is within STALE_HOURS (the same horizon entry_is_live uses).
+    Such a file is a session whose owner we cannot read: it counts as live, so
+    nothing may be concluded from its absence. Older than the horizon it no
+    longer protects anything. Separate from read_entries on purpose (callers do
+    `e.get(...)` on every entry)."""
+    out = []
+    d = sessions_dir(root)
+    if not d.is_dir():
+        return out
+    cutoff = datetime.now(timezone.utc).timestamp() - STALE_HOURS * 3600
+    for f in sorted(d.glob("*.json")):
+        if f.name.endswith(".next.json"):
+            continue
+        try:
+            json.loads(f.read_text(encoding="utf-8"))
+            continue
+        except (OSError, ValueError):
+            pass
+        try:
+            if f.stat().st_mtime >= cutoff:
+                out.append(f)
+        except OSError:
+            continue
+    return out
 
 
 def find_entry(root: str, key: str):
@@ -550,8 +596,18 @@ def age_str(stamp: str) -> str:
 
 def classify(root: str, predict=False):
     """Classify every session worktree. predict=True adds conflict prediction
-    (slower — runs merge-tree per worktree)."""
+    (slower — runs merge-tree per worktree).
+
+    `alive`: a matching readable entry that entry_is_live, OR a worktree with
+    no matching entry while some registry file is unreadable-but-recent (its
+    owner can't be told, so it counts as live). A worktree with no entry at all
+    is alive=False as before, but `dead_evidence` is False for it:
+    `dead_evidence` is True only for a readable entry that is not live, or a
+    tombstone (`.gone`) left by prune_dead for that worktree path. auto_clean
+    removes only when not alive AND dead_evidence. `alive_reason` says why:
+    entry-live | entry-dead | unreadable-registry | no-entry."""
     entries = read_entries(root)
+    unreadable = unreadable_recent(root)
 
     def entry_for(wt):
         for _, e in entries:
@@ -567,6 +623,15 @@ def classify(root: str, predict=False):
         ahead = commits_ahead(root, base, branch)
         dirty = is_dirty(wt["path"])
         touched = e.get("touched_dirs") or {}
+        if e:
+            alive = entry_is_live(e)
+            reason = "entry-live" if alive else "entry-dead"
+            dead_evidence = not alive
+        elif unreadable:
+            alive, reason, dead_evidence = True, "unreadable-registry", False
+        else:
+            alive, reason = False, "no-entry"
+            dead_evidence = tombstone_for_path(root, wt["path"]) is not None
         info = {
             "path": wt["path"],
             "branch": branch,
@@ -578,7 +643,9 @@ def classify(root: str, predict=False):
             # know shows up as "unmerged, uncommitted changes".
             "branch_gone": not branch_exists(root, branch),
             "base": base,
-            "alive": entry_is_live(e) if e else False,
+            "alive": alive,
+            "alive_reason": reason,
+            "dead_evidence": dead_evidence,
             "dirty": dirty,
             "ahead": ahead,
             "merged": ahead == 0,
@@ -785,7 +852,11 @@ def rescued_dirs(root: str):
 
 def auto_clean(root: str, by_session: str = ""):
     """Remove session worktrees that are provably safe to drop:
-    not alive AND clean AND (fully merged or zero commits). Returns names removed.
+    not alive AND clean AND (fully merged or zero commits) AND positive
+    evidence the session is dead (classify's `dead_evidence`: a readable dead
+    entry, or the tombstone prune_dead left for that worktree). A worktree with
+    no readable registry and no tombstone is kept, as is any worktree while an
+    unreadable-but-recent registry file exists. Returns names removed.
 
     `by_session` is the session_id that is doing the removal (the one whose
     SessionStart triggered this). Each removal emits a `worktree_auto_clean`
@@ -795,7 +866,7 @@ def auto_clean(root: str, by_session: str = ""):
     """
     removed = []
     for info in classify(root):
-        if info["alive"] or info["dirty"]:
+        if info["alive"] or info["dirty"] or not info["dead_evidence"]:
             continue
         if info["ahead"] != 0:   # has unmerged commits (or unknown) → keep
             continue
