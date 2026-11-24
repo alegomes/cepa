@@ -389,6 +389,29 @@ def part_hostile(base: Path):
               wt.is_dir() and branch_exists(repo, branch))
 
 
+def part_find_entry(base: Path):
+    print("B. find_entry: hostile registry content returns None, valid object returns the dict")
+    import _wtlib as L
+    root = base / "fe-root"
+    sdir = root / ".claude" / "sessions"
+    sdir.mkdir(parents=True)
+    cases = [("invalid utf-8", b"\xff\xfe\x00garbage"),
+             ("trailing garbage", b'{"a": 1}garbage'),
+             ("list", b"[]"), ("string", b'"x"'), ("number", b"3"),
+             ("null", b"null"), ("empty file", b"")]
+    for label, content in cases:
+        (sdir / "k.json").write_bytes(content)
+        try:
+            got = L.find_entry(str(root), "k")
+            check(f"find_entry {label}: returns None", got is None, repr(got))
+        except Exception as exc:  # noqa: BLE001
+            check(f"find_entry {label}: returns None", False, repr(exc))
+    (sdir / "k.json").write_bytes(b'{"a": 1}')
+    check("find_entry valid object: returns the dict",
+          L.find_entry(str(root), "k") == {"a": 1})
+    check("find_entry missing file: returns None", L.find_entry(str(root), "nope") is None)
+
+
 def main():
     with tempfile.TemporaryDirectory() as t:
         base = Path(t).resolve()
@@ -401,6 +424,7 @@ def main():
         part_next_json(base)
         part_dead_unpruned(base)
         part_hostile(base)
+        part_find_entry(base)
 
     print()
     if failures:
