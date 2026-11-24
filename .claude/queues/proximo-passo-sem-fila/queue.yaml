@@ -1,0 +1,153 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/proximo-passo-sem-fila.md (12 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-24
+
+schema_version: 2
+mode: single-track
+queue: proximo-passo-sem-fila
+source: docs/spec/proximo-passo-sem-fila.md (12 critérios de sucesso; ordem herdada
+  do texto)
+items:
+- id: CS-1
+  title: com todas as filas terminadas e um ciclo de Epic sem fila, a saída propõe
+    esse ciclo
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repositório
+    de teste com uma fila toda `done` e um Epic com o ciclo 2 sem fila, `cepa plan
+    propose` imprime uma proposta cuja fonte é o Epic e cuja ação é `/common:queue
+    <nome> --from-epic <arquivo> --cycle 2`; hoje o subcomando não existe e o `cepa-plan`
+    sai com erro de uso.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: a ordem entre as fontes é Epic, especificação pronta, meta gravada, descartados,
+    cards soltos, BACKLOG
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com uma
+    especificação `ready-to-build` sem fila e itens `dropped` na última fila, `cepa
+    plan propose` propõe a especificação; tirando a especificação, propõe os itens
+    descartados; com um lembrete do dono que nomeia uma meta e itens descartados,
+    propõe a meta do lembrete com a data dele; hoje o subcomando não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: a saída tem uma ação só, na última linha, e conta o resto sem listar
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com 3
+    pendências do dono que não impedem a meta e 2 cards fora de fila, a última linha
+    de `cepa plan propose` é a ação da meta, uma linha anterior diz "mais 5 coisas
+    esperam você" (3 + 2) e nenhuma das 5 aparece pelo nome; com `--detail` as 5
+    aparecem; hoje o subcomando não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: repositório sem fila nenhuma recebe a mesma proposta
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repositório
+    sem `.claude/queues` e com uma especificação `ready-to-build`, `cepa plan propose`
+    propõe a especificação com a ação `/common:queue <nome> --from-spec`; hoje o
+    subcomando não existe e o `/common:next` manda dizer "não há plano".'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: fila em que tudo o que sobra espera o dono aponta a pendência que destrava
+    mais itens
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: numa
+    fila com 4 itens `pending`, em que a pendência do item A bloqueia 2 itens e
+    a do item B bloqueia 1, a ação de `cepa plan propose` é a pergunta fechada da
+    pendência de A, e a de B entra na contagem; empate se resolve pela ordem da
+    fila; hoje o subcomando não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: com várias filas abertas e itens prontos, a ação é um comando do `cepa
+    until`
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com duas
+    filas que têm item pronto, a última linha de `cepa plan propose` é `cepa until
+    --all --until 06:00` e nenhuma pergunta "qual fila?" aparece; hoje o subcomando
+    não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: sem nenhuma fonte, a saída diz que não achou e traz a pergunta
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repositório
+    sem Epic, sem especificação, sem lembrete, sem fila e sem BACKLOG.md, `cepa
+    plan propose` sai com código 0, diz "nenhuma fonte" e imprime a pergunta "O
+    que você quer ver funcionando aqui?"; hoje o subcomando não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-8
+  title: o "não" fica gravado, traz o segundo candidato e para na segunda recusa
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: depois
+    de `cepa plan propose --decline <id> --reason "..."`, a chamada seguinte propõe
+    o segundo candidato e não repete o primeiro; depois da segunda recusa a saída
+    traz a pergunta do CS-7 em vez de uma terceira proposta; numa chamada de outro
+    dia o candidato recusado continua fora; `cepa plan propose --declined` lista
+    as recusas com data e motivo, e `--undecline <id>` devolve o candidato à lista;
+    hoje o subcomando não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-9
+  title: a fila que nasce de uma proposta aceita diz de onde veio
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: depois
+    de o dono rodar o comando indicado por uma proposta de itens descartados, `cepa
+    plan show <fila>` mostra em cada item o porquê "proposta do agente, aceita pelo
+    dono em <data>"; hoje não há como gravar uma fila a partir de uma proposta.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-10
+  title: existe o comando `/common:whatnext`, e ele só mostra o que o `cepa plan
+    propose` imprime
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: um teste
+    que lê `common/commands/whatnext.md` exige que o arquivo exista, que ele se
+    declare somente leitura, que o único programa que ele manda rodar seja `cepa
+    plan propose` e que mande mostrar a saída sem reescrever a ação; hoje o arquivo
+    não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-11
+  title: com uma fila só e item pronto, a ação é executar esse item, e nada é executado
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: numa
+    fila com o item B1 pronto, a última linha de `cepa plan propose` é `cepa until
+    <fila> --until 06:00`, o porquê é o do item B1 e, depois da chamada, o `queue.yaml`
+    está byte a byte igual e B1 continua `pending` sem reserva; hoje o subcomando
+    não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-12
+  title: os comandos antigos apontam o novo no beco sem saída
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: numa
+    sessão sem `.claude/session-intent`, `cepa-intent state` imprime `state: empty`
+    e uma frase que contém `/common:whatnext`; e um teste que lê `common/commands/next.md`
+    exige `/common:whatnext` no trecho da fila terminada; hoje nenhum dos dois cita
+    o comando.'
+  status: pending
+  blocked_by: []
+  human_pending: null
