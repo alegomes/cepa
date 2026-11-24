@@ -280,6 +280,8 @@ def test_corrupted_queues_do_not_abort_the_sweep():
         check("corrupted: items-not-a-list queue stays", (queue_dir(root, "n-itens") / "queue.yaml").is_file())
         check("corrupted: the reason is printed for the binary one",
               "m-binaria" in p.stderr and "ilegível" in p.stderr, p.stderr)
+        check("corrupted: the warning names the exception class",
+              "UnicodeDecodeError" in p.stderr or "TypeError" in p.stderr, p.stderr)
         check("corrupted: the reason is printed for the items one",
               "n-itens" in p.stderr and "ilegível" in p.stderr, p.stderr)
         check("corrupted: good queue before them archived",
@@ -474,6 +476,36 @@ def test_help_lists_archive():
           any(l.startswith("    archive ") and "closed queues" in l for l in lines), p.stdout)
 
 
+def test_latest_commit_counts():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        old_queue(root, "dois-velhos", days=20)
+        (queue_dir(root, "dois-velhos") / "nota.txt").write_text("b\n")
+        commit(root, "segundo", days_ago(10), f"{NEW}/dois-velhos")
+        old_queue(root, "mexida-ontem", days=20)
+        (queue_dir(root, "mexida-ontem") / "nota.txt").write_text("b\n")
+        commit(root, "segundo", days_ago(3), f"{NEW}/mexida-ontem")
+        p = cli(root, "archive")
+        check("two old commits: archived", (archived(root, "dois-velhos") / "queue.yaml").is_file(), p.stdout)
+        check("old commit then a 3-day-old one: stays (latest counts)",
+              (queue_dir(root, "mexida-ontem") / "queue.yaml").is_file(), p.stdout)
+
+
+def test_dry_run_nothing_line():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        old_queue(root, "velha")
+        p = cli(root, "archive", "--dry-run")
+        check("dry-run with a candidate: no 'nada a arquivar'",
+              "nada a arquivar" not in p.stdout, p.stdout)
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        old_queue(root, "recente", days=2)
+        p = cli(root, "archive", "--dry-run")
+        check("dry-run with nothing qualifying: 'nada a arquivar'",
+              "nada a arquivar" in p.stdout, p.stdout)
+
+
 def main():
     for t in (test_declared_red_test, test_boundary_and_mix,
               test_collision_in_archive, test_untouched_kinds, test_underscore_folder_is_not_a_queue,
@@ -482,7 +514,8 @@ def main():
               test_unreadable_and_non_dict_plans_are_skipped,
               test_move_failure_leaves_the_queue_intact, test_no_commit_ever_touched_the_folder,
               test_days_remaining_number, test_commit_pathspec_and_messages,
-              test_help_lists_archive):
+              test_help_lists_archive, test_latest_commit_counts,
+              test_dry_run_nothing_line):
         print(t.__name__)
         t()
     if FAILURES:
