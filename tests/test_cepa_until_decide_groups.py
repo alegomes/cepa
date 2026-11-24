@@ -1570,6 +1570,339 @@ def test_all_panel_a_with_one_member_lacking_a_recommendation_keeps_the_numberin
           and "grupo" not in byk[("c", "c1")]["text"], calls)
 
 
+# ── proof round 2: the 18 gaps and the unreadable waiver file ───────────────
+
+BAD_WAIVER_FILES = (("a-latin1.yaml", "item: x3\nmotivo: não-vale\nstatus: proposta\n"
+                     .encode("latin-1")),
+                    ("b-binary.yaml", b"\x00\xff\xfe\x80\x81\x00\x9c"))
+
+
+def _put_bad_waivers(root):
+    folder = Path(root) / ".claude" / "waivers"
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, raw in BAD_WAIVER_FILES:
+        (folder / name).write_bytes(raw)
+
+
+def test_a_waiver_file_that_is_not_utf8_counts_as_no_proposal_and_the_panel_still_asks():
+    m = dec.load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        write_waivers(tmp, [waiver("fila", "x1"), waiver("fila", "x2")])
+        _put_bad_waivers(tmp)
+        try:
+            found = m.proposed_waivers(Path(tmp))
+        except Exception as e:  # noqa: BLE001
+            found = f"{type(e).__name__}: {e}"
+    check("proposed_waivers skips a Latin-1 file and a binary one, keeps the valid two",
+          isinstance(found, list) and [w["item"] for w in found] == ["x1", "x2"], found)
+
+    def repo(tmp):
+        write_waivers(tmp, [waiver("fila", "x1"), waiver("fila", "x2")])
+        _put_bad_waivers(tmp)
+        return tmp
+    try:
+        _, out, applied, later, rec, keys, _ = run(SCOPED, ["y", "", "y", ""], repo=repo)
+    except Exception as e:  # noqa: BLE001
+        check("decide with a bad waiver file does not crash", False, f"{type(e).__name__}: {e}")
+        return
+    check("decide: the valid proposals still group (x1, x2), the Latin-1 one ties nothing "
+          "to x3, which is asked on its own",
+          "[1/2] 2 items, one question" in out and "[2/2] x3" in out, out)
+    check("decide: the three were answered, the group first",
+          [c["id"] for c in rec.calls] == ["x1", "x2", "x3"]
+          and "grupo" not in rec.calls[2]["text"], rec.calls)
+    # the all-queues panel and the non-terminal listing read the same folder
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _all_repo(tmp, TWO_QUEUES(), TWO_WAIVERS)
+        _put_bad_waivers(root)
+        try:
+            out, calls, _ = _panel(root, ["y", "", "y", "", "y", ""])
+        except Exception as e:  # noqa: BLE001
+            check("the --all panel with a bad waiver file does not crash", False,
+                  f"{type(e).__name__}: {e}")
+            out, calls = "", []
+    check("--all: the valid proposals group across queues and the panel asks every question",
+          "4 items in 3 question(s) for you" in out and "2 items, one question" in out
+          and len(calls) == 4, out)
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _all_repo(tmp, TWO_QUEUES(), TWO_WAIVERS)
+        _put_bad_waivers(root)
+        try:
+            out, _, _ = _panel(root, [], as_text=True)
+        except Exception as e:  # noqa: BLE001
+            check("the --all listing with a bad waiver file does not crash", False,
+                  f"{type(e).__name__}: {e}")
+            out = ""
+    check("--all listing: one group entry, the singles listed",
+          "waiting on you: 4 items in 3 question(s)" in out
+          and "- 2 items, same question (a/a1, b/b1)" in out, out)
+    listing = []
+    with tempfile.TemporaryDirectory() as tmp:
+        write_waivers(tmp, [waiver("fila", "x1"), waiver("fila", "x2")])
+        _put_bad_waivers(tmp)
+        try:
+            m.pending_as_text("fila", "run1", {}, SCOPED, {}, output=listing.append,
+                              repo=Path(tmp))
+        except Exception as e:  # noqa: BLE001
+            check("pending_as_text with a bad waiver file does not crash", False,
+                  f"{type(e).__name__}: {e}")
+    check("single-queue listing: 2 in a group, x3 alone",
+          "3 items in 2 question(s)" in "\n".join(listing)
+          and "(x1, x2)" in "\n".join(listing) and "- x3 (" in "\n".join(listing), listing)
+
+
+def test_all_panel_o_asks_a_handed_back_member_once_and_the_new_queues_in_a_fixed_order():
+    names = "zyxwvu"
+    queues = {"k": [_q_item("k1", "Aceito k? Recomendo sim: ok"), _q_item("k2", "Outra K?")]}
+    for n in names:
+        queues[n] = [_q_item(f"{n}1", f"Aceito {n}? Recomendo sim: ok")]
+    ws = [waiver(q, f"{q}1") for q in ["k", *names]]
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _all_repo(tmp, queues, ws)
+        out, calls, keys = _panel(root, ["o"] + ["y", ""] * 8)
+    check("`o` on the group of 7 (k1 sits in a queue that also holds k2): 8 items, each "
+          "asked exactly once, k's queue first (it already had a section), then the queues "
+          "that only exist because of the handed-back members, in the order of the cards",
+          [(c["queue"], c["id"]) for c in calls]
+          == [("k", "k1"), ("k", "k2")] + [(n, f"{n}1") for n in "uvwxyz"], calls)
+    check("the keyboard was read 1 + 8 x 2 times: no member is asked a second time",
+          len(keys.prompts) == 17 and not keys.inputs, (len(keys.prompts), keys.inputs))
+    check("each single card shows once: k1 once, and the heads run 1/8 to 8/8",
+          out.count("] k1\n") == 1 and "[8/8] z1" in out and "[9/9]" not in out
+          and out.count("queue `k` · 2 question(s)") == 1, out)
+
+
+def test_all_panel_gives_its_wait_limit_to_the_group_card_through_the_real_reader():
+    m = dec.load_module()
+    waits = []
+
+    def nobody_types(mod):
+        def timed_input(prompt, wait):
+            waits.append(wait)
+            raise mod.NoAnswer("nobody typed")
+        return timed_input
+
+    def no_keyboard(prompt=""):
+        raise EOFError("a read with no wait limit reached the keyboard")
+    m.input = no_keyboard
+    m._timed_input = nobody_types(m)
+    m._apply_answer = lambda *a, **k: (0, "ok")
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _all_repo(tmp, TWO_QUEUES(), TWO_WAIVERS)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            m.ask_at_launch_all(root, wait=120, leftovers=True)
+    out = buf.getvalue()
+    check("the real read_line gets the panel's wait (120 s) on the group card, once",
+          waits == [120], waits)
+    check("nobody answered the group card: the panel is cut with the wait in minutes and "
+          "names the queues",
+          "nobody answered in 2 min" in out and "To answer later: cepa-until decide a "
+          "· cepa-until decide b" in out, out)
+    waits.clear()
+    m2 = dec.load_module()
+    m2.input = no_keyboard
+    m2._timed_input = nobody_types(m2)
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = three_with_waivers(Path(tmp))
+        try:
+            m2.decide(repo, "fila", "run1", {}, SCOPED, {}, output=lambda *a: None,
+                      answer=Recorder(), wait=45, progress={})
+            cut = None
+        except m2.NoAnswer as e:
+            cut = e
+    check("decide with no reader of its own: the group card reads with its wait (45 s)",
+          waits == [45] and cut is not None, (waits, cut))
+
+
+def test_decide_numbers_every_card_next_to_the_landing_question():
+    action = {"acoes": [{"id": "aterrissar", "frase": "Land it", "destino": "main"}]}
+    items = SCOPED + [owner_item("z9", "Outra?")]
+    landed = []
+    _, out, applied, later, rec, keys, _ = run(
+        items, ["y", "y", "", "y", ""], repo=three_with_waivers, states=action,
+        land=lambda: landed.append(1) or 0)
+    heads = [l.strip() for l in out.splitlines() if l.strip().startswith("━━")]
+    check("the landing is not numbered; the group card is 1/2 and the single 2/2",
+          heads == ["━━ [1/2] 3 items, one question", "━━ [2/2] z9"] and landed == [1],
+          heads)
+    _, out, *_ = run(items, ["y", "o", "y", "", "y", "", "y", "", "y", ""],
+                     repo=three_with_waivers, states=action, land=lambda: 0)
+    heads = [l.strip() for l in out.splitlines() if l.strip().startswith("━━")]
+    check("with the landing and a group handed back: the group was 1/2, the cards after it "
+          "are numbered 1/4 to 4/4 (the landing is still out)",
+          heads == ["━━ [1/2] 3 items, one question", "━━ [1/4] x1", "━━ [2/4] x2",
+                    "━━ [3/4] x3", "━━ [4/4] z9"], heads)
+
+
+def test_a_non_text_motivo_does_not_crash_and_does_not_group_unrelated_items():
+    members = [member("fila", i) for i in ("x1", "x2", "x3", "x4", "x5", "x6")]
+    odd = [waiver("fila", "x1", 7), waiver("fila", "x2", 7),
+           waiver("fila", "x3", ["a", "b"]), waiver("fila", "x4", {"k": "v"}),
+           waiver("fila", "x5", ["a", "b"]), waiver("fila", "x6", "outro")]
+    try:
+        groups, singles = grouping(odd, members)
+    except Exception as e:  # noqa: BLE001
+        check("a motivo that is a number, a list or a dict does not crash", False,
+              f"{type(e).__name__}: {e}")
+        return
+    check("two items with the motivo 7 group; a list motivo groups only with an equal one; "
+          "a dict motivo and a text one stay alone",
+          [(g["motivo"], ids(g)) for g in groups]
+          == [("7", ["x1", "x2"]), ("['a', 'b']", ["x3", "x5"])]
+          and ids(singles) == ["x4", "x6"], (groups, singles))
+    m = dec.load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        write_waivers(tmp, [waiver("fila", "x1", 7), waiver("fila", "x2", 7),
+                            waiver("fila", "x3", ["a", "b"])])
+        found = m.proposed_waivers(Path(tmp))
+        check("the motivo of an item is its text, never the raw value",
+              m.waiver_motivo_of(found, "fila", "x1") == "7"
+              and m.waiver_motivo_of(found, "fila", "x3") == "['a', 'b']", found)
+
+    def repo(tmp):
+        write_waivers(tmp, [waiver("fila", "x1", 7), waiver("fila", "x2", 7),
+                            waiver("fila", "x3", ["a", "b"])])
+        return tmp
+    _, out, *_ = run(SCOPED, ["", "q"], repo=repo)
+    check("the panel shows the group of the number motivo and the list one alone",
+          "[1/2] 2 items, one question" in out and 'reason "7"' in out
+          and "[2/2] x3" in out, out)
+
+
+def test_a_group_of_legacy_named_reasons_names_them_when_left_for_later():
+    items = [owner_item(i, f"Aceito {i}?") for i in ("x1", "x2", "x3")]
+    for it in items:
+        it["reason"] = "bloqueado-antes"
+    stuck = "the agent marked the item as stuck"
+    _, out, applied, later, rec, _, _ = run(items, ["", ], repo=three_with_waivers)
+    check("Enter on a group whose reason is the old spelling: one 'why' per member",
+          later == [f"{i}: {stuck}" for i in ("x1", "x2", "x3")] and not rec.calls, later)
+    _, out, applied, later, rec, _, _ = run(items + [owner_item("z9", "Outra?")], ["q"],
+                                            repo=three_with_waivers)
+    check("q on that card: the same, and the single after it is left too",
+          later[:3] == [f"{i}: {stuck}" for i in ("x1", "x2", "x3")] and len(later) == 4,
+          later)
+    _, out, applied, later, rec, _, _ = run(items, ["y", ""], repo=three_with_waivers,
+                                            fail={"x2"})
+    check("a member whose answer fails is left for later with the same wording",
+          later == [f"x2: {stuck}"], later)
+
+
+def test_the_group_extra_is_trimmed_and_the_recorded_message_has_no_trailing_newline():
+    _, _, _, _, rec_none, _, _ = run(SCOPED, ["y", ""], repo=three_with_waivers)
+    _, _, _, _, rec_blank, _, _ = run(SCOPED, ["y", "   \t "], repo=three_with_waivers)
+    check("an extra of only spaces records no extra: the same texts as no extra",
+          [c["text"] for c in rec_blank.calls] == [c["text"] for c in rec_none.calls]
+          and rec_blank.calls, rec_blank.calls)
+    _, _, _, _, rec_pad, _, _ = run(SCOPED, ["y", "  texto  "], repo=three_with_waivers)
+    check("an extra with spaces around it is recorded trimmed",
+          all(c["text"].endswith(". texto (respondida em grupo de 3)") for c in rec_pad.calls),
+          rec_pad.calls)
+    seen = []
+
+    def editor(*a, **k):
+        seen.append(a)
+        return "do editor"
+    _, _, _, _, rec_v, _, _ = run(SCOPED, ["y", " v "], repo=three_with_waivers, editor=editor)
+    check("' v ' (spaces around) opens the editor, and its text is the extra",
+          len(seen) == 1 and all(". do editor (respondida" in c["text"] for c in rec_v.calls),
+          (seen, rec_v.calls))
+    m = dec.load_module()
+    it = base.item("a", status="pending", human_pending="route of a")
+    it["route_kind"] = "owner-task"
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = al._repo(tmp, {"fila": [it]})
+        with real_plan(m):
+            ok = m._apply_answer(root, "fila", "a", "sim: pode seguir")
+            bad = m._apply_answer(root, "fila", "zz", "sim: nada")
+    check("the message of a recorded answer and of a refusal come without their trailing "
+          "newline",
+          ok[0] == 0 and ok[1] and ok[1] == ok[1].strip()
+          and bad[0] != 0 and bad[1] and bad[1] == bad[1].strip(), (ok, bad))
+
+
+def test_a_member_title_with_whitespace_lists_on_one_line():
+    items = [owner_item("x1", "A?", title="  primeira   linha\n  segunda\tlinha  "),
+             owner_item("x2", "B?", title="x2   com   espaços"), owner_item("x3", "C?")]
+    _, out, *_ = run(items, ["q"], repo=three_with_waivers)
+    check("a title's line breaks and runs of spaces collapse to one space, and the member "
+          "is one line",
+          "         x1 — primeira linha segunda linha\n" in out + "\n"
+          and "         x2 — x2 com espaços\n" in out + "\n", out)
+    m = dec.load_module()
+    check("member_line trims a title that is only whitespace and shows the bare id",
+          m.member_line({"queue": "q", "bare": "i", "ad": {"title": " \n "}}, True) == "q/i"
+          and m.member_line({"queue": "q", "bare": "i", "ad": {"title": " a \n b "}}, False)
+          == "i — a b", None)
+
+
+def test_the_menu_of_the_group_card_names_every_key():
+    _, _, _, _, _, keys, _ = run(SCOPED, ["q"], repo=three_with_waivers)
+    check("the menu with the recommendation: every chip, in order, with the recommended mark",
+          keys.prompts[0] == "       [y] yes to all 3 · [n] no to all 3 · [a] accept each "
+          "one's recommendation (recommended) · [o] ask them one by one · [Enter] later · "
+          "[q] quit: ", keys.prompts[0])
+    _, _, _, _, _, keys, _ = run([owner_item("x1", "A?"), owner_item("x2", "A?")], ["q"])
+    check("the menu with no recommendation anywhere has no [a] chip",
+          keys.prompts[0] == "       [y] yes to all 2 · [n] no to all 2 · [o] ask them "
+          "one by one · [Enter] later · [q] quit: ", keys.prompts[0])
+    _, _, _, _, _, keys, _ = run(
+        [owner_item("x1", "A? Recomendo sim: ok"), owner_item("x2", "B?")], ["q"],
+        repo=lambda t: (write_waivers(t, [waiver("fila", "x1"), waiver("fila", "x2")]) or t))
+    check("a partial recommendation: [a] is offered but not marked recommended",
+          keys.prompts[0] == "       [y] yes to all 2 · [n] no to all 2 · [a] accept each "
+          "one's recommendation · [o] ask them one by one · [Enter] later · [q] quit: ",
+          keys.prompts[0])
+
+
+def _card_block(out):
+    """The lines of the first card of a terminal screen, from its top to its closing."""
+    lines = ANSI.sub("", out).splitlines()
+    top = next(i for i, l in enumerate(lines) if l.startswith("┌─ 1/"))
+    end = next(i for i in range(top, len(lines)) if lines[i].startswith("└─"))
+    return lines[top:end + 1]
+
+
+def test_group_card_on_a_terminal_has_its_borders_and_closes_on_enter_and_on_q():
+    expected = [
+        "│",
+        "│  In common       proof waiver: each of these items' proof asks you to accept the "
+        "waiver for the",
+        "│                  reason \"nada a provar\"",
+        "│  Items           3 share this question:",
+        "│    x1 — title of x1", "│    x2 — title of x2", "│    x3 — title of x3",
+        "│",
+        "│  ✦ Recommend a: all 3 recommend yes",
+        "│",
+        "│  y = yes to all 3: the item goes back to the queue with your answer; a proposed "
+        "waiver is accepted",
+        "│  n = no to all 3: it stays as it is and I only record what you say",
+        "│  a = answers each item with its own recommendation (3 yes, 0 no)",
+        "│  o = asks the 3 one by one, as usual",
+        "│  Enter = leaves all 3 for later",
+        "│  q = stops the questions; the rest stays for later",
+        "│",
+        "│  [y] yes to all 3 · [n] no to all 3 · [a] accept each one's recommendation "
+        "(recommended)",
+        "│  [o] ask them one by one · [Enter] later · [q] quit",
+        "└─"]
+    for key in ("", "q"):
+        _, out, *_ = run(SCOPED + [owner_item("z9", "Outra?")], [key, "q"],
+                         repo=three_with_waivers, color="sempre")
+        block = _card_block(out)
+        check(f"{key!r} on the group card: the card is bordered line by line, its head is "
+              "followed by an empty border line, the legend by another, and it is closed",
+              block[0].startswith("┌─ 1/2 · 3 items, one question") and block[1:] == expected,
+              block)
+        lines = ANSI.sub("", out).splitlines()
+        tops = [i for i, l in enumerate(lines) if l.startswith("┌─")]
+        ends = [i for i, l in enumerate(lines) if l.startswith("└─")]
+        check(f"{key!r}: every card opened is closed before the next one opens",
+              len(tops) == len(ends) and all(t < e for t, e in zip(tops, ends))
+              and (len(tops) < 2 or ends[0] < tops[1]), lines)
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

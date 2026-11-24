@@ -4103,8 +4103,8 @@ def proposed_waivers(repo):
     for path in _waiver_files(repo):
         try:
             d = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except (yaml.YAMLError, OSError):
-            continue
+        except (yaml.YAMLError, OSError, ValueError):
+            continue  # ValueError: UnicodeDecodeError, a file that is not UTF-8
         if (isinstance(d, dict) and d.get("status") == "proposta"
                 and d.get("item") is not None and d.get("motivo")):
             found.append(d)
