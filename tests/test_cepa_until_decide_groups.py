@@ -1903,6 +1903,209 @@ def test_group_card_on_a_terminal_has_its_borders_and_closes_on_enter_and_on_q()
               and (len(tops) < 2 or ends[0] < tops[1]), lines)
 
 
+# ── proof review round 3: assertions the mutants of the grouping code slipped past ──
+
+# `yaml.safe_load` raises a plain ValueError (not a YAMLError, not a UnicodeDecodeError)
+# for these two literals.
+DATE_WAIVER_FILES = (
+    ("a-bad-date.yaml", b"item: x3\nmotivo: m\nstatus: proposta\ncriado_em: 2026-13-45\n"),
+    ("b-bad-timestamp.yaml",
+     b"item: x3\nmotivo: m\nstatus: proposta\ncriado_em: !!timestamp 2026-02-30\n"),
+    ("z-bad-date.yaml", b"item: x3\nmotivo: m\nstatus: proposta\ncriado_em: 2026-13-45\n"),
+    ("zz-bad-timestamp.yaml",
+     b"item: x3\nmotivo: m\nstatus: proposta\ncriado_em: !!timestamp 2026-02-30\n"))
+
+
+def _put_date_waivers(root):
+    folder = Path(root) / ".claude" / "waivers"
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, raw in DATE_WAIVER_FILES:
+        (folder / name).write_bytes(raw)
+
+
+def test_a_waiver_file_with_an_impossible_date_counts_as_no_proposal_and_the_panel_asks():
+    # the yaml loader raises a plain ValueError here: the catch must be wider than
+    # UnicodeDecodeError; the bad files sort both before and after the valid ones
+    for name, raw in DATE_WAIVER_FILES:
+        try:
+            yaml.safe_load(raw.decode())
+            raised = None
+        except Exception as e:  # noqa: BLE001
+            raised = e
+        check(f"{name} makes the yaml loader raise a plain ValueError",
+              type(raised) is ValueError, raised)
+    m = dec.load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        write_waivers(tmp, [waiver("fila", "x1"), waiver("fila", "x2")])
+        _put_date_waivers(tmp)
+        try:
+            found = m.proposed_waivers(Path(tmp))
+        except Exception as e:  # noqa: BLE001
+            found = f"{type(e).__name__}: {e}"
+    check("proposed_waivers skips the impossible dates, keeps the valid two",
+          isinstance(found, list) and [w["item"] for w in found] == ["x1", "x2"], found)
+
+    def repo(tmp):
+        write_waivers(tmp, [waiver("fila", "x1"), waiver("fila", "x2")])
+        _put_date_waivers(tmp)
+        return tmp
+    try:
+        _, out, applied, later, rec, keys, _ = run(SCOPED, ["y", "", "y", ""], repo=repo)
+    except Exception as e:  # noqa: BLE001
+        check("decide with an impossible-date waiver does not crash", False,
+              f"{type(e).__name__}: {e}")
+    else:
+        check("decide: x1 and x2 still group, x3 is asked on its own, all three answered",
+              "[1/2] 2 items, one question" in out and "[2/2] x3" in out
+              and [c["id"] for c in rec.calls] == ["x1", "x2", "x3"], out)
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _all_repo(tmp, TWO_QUEUES(), TWO_WAIVERS)
+        _put_date_waivers(root)
+        try:
+            out, calls, _ = _panel(root, ["y", "", "y", "", "y", ""])
+        except Exception as e:  # noqa: BLE001
+            check("the --all panel with an impossible-date waiver does not crash", False,
+                  f"{type(e).__name__}: {e}")
+        else:
+            check("--all: the valid proposals group across queues and the panel asks all",
+                  "4 items in 3 question(s) for you" in out
+                  and "2 items, one question" in out and len(calls) == 4, out)
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _all_repo(tmp, TWO_QUEUES(), TWO_WAIVERS)
+        _put_date_waivers(root)
+        try:
+            out, _, _ = _panel(root, [], as_text=True)
+        except Exception as e:  # noqa: BLE001
+            check("the --all listing with an impossible-date waiver does not crash", False,
+                  f"{type(e).__name__}: {e}")
+        else:
+            check("--all listing: the group is one entry",
+                  "── waiting on you: 4 items in 3 question(s)" in out.splitlines()
+                  and "- 2 items, same question (a/a1, b/b1)" in out, out)
+    listing = []
+    with tempfile.TemporaryDirectory() as tmp:
+        write_waivers(tmp, [waiver("fila", "x1"), waiver("fila", "x2")])
+        _put_date_waivers(tmp)
+        try:
+            m.pending_as_text("fila", "run1", {}, SCOPED, {}, output=listing.append,
+                              repo=Path(tmp))
+        except Exception as e:  # noqa: BLE001
+            check("pending_as_text with an impossible-date waiver does not crash", False,
+                  f"{type(e).__name__}: {e}")
+        else:
+            text = "\n".join(listing)
+            check("single-queue listing: 2 in a group, x3 alone",
+                  "3 items in 2 question(s)" in text and "(x1, x2)" in text
+                  and "- x3 (" in text, listing)
+
+
+def test_all_panel_listing_header_is_the_whole_line_with_and_without_groups():
+    three = {"a": [_q_item("a1", "Primeira?")], "b": [_q_item("b1", "Segunda?")],
+             "c": [_q_item("c1", "Terceira?")]}
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _all_repo(tmp, three, [])
+        out, calls, _ = _panel(root, [], as_text=True)
+    lines = out.splitlines()
+    check("no group: the header line is exactly 'waiting on you: 3'",
+          "── waiting on you: 3" in lines and not any("items in" in l for l in lines)
+          and not calls, lines)
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _all_repo(tmp, TWO_QUEUES(), TWO_WAIVERS)
+        out, _, _ = _panel(root, [], as_text=True)
+    check("with a group: the header line is exactly '4 items in 3 question(s)'",
+          "── waiting on you: 4 items in 3 question(s)" in out.splitlines(), out)
+
+
+def test_the_plain_group_head_has_a_blank_line_before_it_and_the_exact_lines_around():
+    _, out, *_ = run(SCOPED + [owner_item("z9", "Outra?")], ["q"], repo=three_with_waivers)
+    lines = out.split("\n")
+    i = next((k for k, l in enumerate(lines) if "one question" in l), None)
+    check("the head is `   ━━ [1/2] 3 items, one question`, after the opening rule and ONE "
+          "blank line, followed by the first line of the body",
+          i is not None and lines[i] == "   ━━ [1/2] 3 items, one question"
+          and lines[i - 1] == "" and lines[i - 2].startswith("── 4 items in 2 question(s)")
+          and lines[i + 1].startswith("       In common: proof waiver"), lines[:8])
+
+
+def test_the_group_head_on_a_terminal_has_the_colour_of_a_single_head():
+    m, out, *_ = run(SCOPED + [owner_item("z9", "Outra?")], ["", "q"], repo=three_with_waivers,
+                     color="sempre")
+    cyan = m.SCREEN.COLORS["ciano"]
+    lines = out.split("\n")
+    group = [l for l in lines if ANSI.sub("", l).startswith("┌─ 1/2 · 3 items, one question")]
+    single = [l for l in lines if ANSI.sub("", l).startswith("┌─ 2/2 · z9")]
+    check("one group head and one single head are on the screen",
+          len(group) == 1 and len(single) == 1, lines)
+    if len(group) == 1 and len(single) == 1:
+        check("the single head starts with the cyan escape of the screen",
+              single[0].startswith(cyan + "┌─ "), repr(single[0]))
+        check("the group head starts with that same escape, and its rule is cyan too",
+              group[0].startswith(cyan + "┌─ ") and group[0].endswith(
+                  cyan + "─" * (len(ANSI.sub("", group[0])) - len(
+                      ANSI.sub("", group[0]).rstrip("─"))) + m.SCREEN.RESET),
+              repr(group[0]))
+
+
+def test_blocked_before_and_human_pending_with_the_same_question_are_one_card():
+    for reason in ("blocked-before", "bloqueado-antes"):
+        stuck = owner_item("x1", "Mesma pergunta?")
+        stuck["reason"] = reason
+        _, out, applied, later, rec, keys, _ = run(
+            [stuck, owner_item("x2", "Mesma pergunta?")], ["y", ""])
+        check(f"{reason} + human_pending with the same question: one card of 2",
+              "[1/1] 2 items, one question" in out
+              and [c["id"] for c in rec.calls] == ["x1", "x2"], out)
+        gone = delivered_item("x3", "Mesma pergunta?")
+        _, out, *_ = run([stuck, gone, owner_item("x2", "Mesma pergunta?")], ["", "q"])
+        check(f"a pos-entrega item does not join the {reason} + human_pending card",
+              "[1/2] 2 items, one question" in out and "[2/2] x3" in out, out)
+        _, out, *_ = run([stuck, gone], ["q"])
+        check(f"{reason} and pos-entrega with the same question are not a group",
+              "one question" not in out and "2 question(s) for you" in out, out)
+
+
+PLAN_WRAPPER = '''\
+import subprocess, sys
+p = subprocess.run([sys.executable, {real!r}] + sys.argv[1:], capture_output=True, text=True)
+notice = "  fila gravada sem commit"
+head, found, tail = p.stdout.partition(notice)
+if {mode!r} == "before":      # a blank line between the answer line and the notice
+    sys.stdout.write(head + "\\n" + found + tail)
+else:                         # the notice first, then a blank line, then the answer line
+    sys.stdout.write(found + tail.rstrip("\\n") + "\\n\\n" + head)
+sys.stderr.write(p.stderr)
+sys.exit(p.returncode)
+'''
+
+
+def test_apply_answer_with_the_notice_filtered_has_no_blank_line_and_no_edge_whitespace():
+    """A blank line before the filtered notice must not be left behind as a trailing
+    newline (nor one after it as a leading one when the notice comes first). The real
+    `cepa-plan answer` runs behind a wrapper that only inserts that blank line."""
+    m = dec.load_module()
+    real_script = CEPA_UNTIL.parent / "cepa-plan"
+    for where in ("before", "after"):
+        it = base.item("e", status="pending", human_pending="route of e")
+        it["route_kind"] = "owner-task"
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _ = al._repo(tmp, {"fila": [it]})
+            wrapper = Path(tmp) / "cepa-plan"
+            wrapper.write_text(PLAN_WRAPPER.format(real=str(real_script), mode=where),
+                               encoding="utf-8")
+            m.CEPA_PLAN = wrapper
+            m._answer_commit = False
+            try:
+                with real_plan(m):
+                    rc, msg = m._apply_answer(root, "fila", "e", "sim: ok")
+            finally:
+                m._answer_commit = True
+                m.CEPA_PLAN = real_script
+        check(f"blank line next to the notice ({where}): rc 0, the notice is gone, the "
+              "message is its own strip() and no blank line is left where the notice was",
+              rc == 0 and "sem commit" not in msg and bool(msg) and msg == msg.strip()
+              and "\n\n" not in msg, (rc, msg))
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
