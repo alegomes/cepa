@@ -1,0 +1,62 @@
+schema_version: 2
+card: plan-answer-aceita-resposta-do-chat
+verdict: proven
+reviewed_at: 2026-11-24T08:30:00+00:00
+base_commit: 8efbfc4
+head_commit: a7e4cea
+issue_type: Feature
+round: 6
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-plan (owner_prompts, owner_said_in_chat incl. CHAT_CLOCK_SKEW_SECONDS, UNATTENDED_ENV, CHAT_HORIZON_HOURS, cmd_answer --from-chat / no-TTY branch, evidence sentence, argparse)"
+      module: bin
+      external_observable: true
+      substituted_by_double: null
+      double_check: "tests/test_cepa_plan_answer_from_chat.py runs the real CLI (cepa-plan answer) as a subprocess with stdin=/dev/null in a real git repo and reads the item back from plan.yaml. No double of the changed code. common/ is byte-identical between e3a3168 and a7e4cea, so the kills of earlier rounds carry over."
+    - class: "common/hooks/session-log.py (escape_headers, _HEADER_LOOKALIKE, append_entry)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+      double_check: "The tests write the log through the real hook (subprocess with a UserPromptSubmit payload; the re-dating test calls the real hook's append_entry with only its clock function replaced, which is the far boundary, not the changed code) and read it back through the real cepa-plan CLI. The new test test_a_hash_in_the_middle_of_a_line_is_written_as_typed does the same."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "Python repo, no Maven, no PIT"
+    perturbation:
+      status: pass
+      run: >-
+        Round 6: `git diff e3a3168..a7e4cea --stat` lists only tests/test_cepa_plan_answer_from_chat.py (17 insertions, the new test); `git diff e3a3168 --stat -- common` in the worktree at a7e4cea is empty, so common/ is byte-identical to round 5. git worktree add --detach /tmp/proof-from-chat-r6 a7e4cea (removed with git worktree remove --force; git worktree list confirms). GREEN first: python3 tests/test_cepa_plan_answer_from_chat.py -> "tudo verde", rc 0. Each perturbation: one sed replace of an anchor (count == 1, `git diff --shortstat` = 1 file changed, 1 insertion, 1 deletion), the covering test file run in the foreground, then git checkout of the file; worktree clean (git status empty) after each. Only the covering file was run; the full suite (tests/run-all.sh) belongs to the supervisor.
+      results:
+        - "RED, round 5 survivor now killed: `_HEADER_LOOKALIKE.match(line)` -> `.search(line)` in escape_headers -> rc 1, 2 fails (the new test_a_hash_in_the_middle_of_a_line_is_written_as_typed). Round 5 had rc 0, 0 fails."
+        - "RED, spot re-run: `prompt.splitlines(keepends=True)` -> `prompt.split(\"\\n\")` -> rc 1, 41 fails."
+        - "RED, spot re-run: slash-prompt skip `if text.startswith(\"/\"):` -> `if False:` in cepa-plan -> rc 1, 47 fails."
+        - "RED, spot re-run: `map(re.escape, clean.split())` -> `map(str, clean.split())` in owner_said_in_chat -> rc 1, 2 fails."
+        - "Carried from round 5 (e3a3168, common/ byte-identical): 20 perturbations, 16 RED (escape_headers no-op 49 fails, LF-only splits 38/39 fails, splitlines() 1 fail, match inverted 51, match always false 49, call removed 49, regex #{3} 4 fails, #{2} 45, #{1,2} 45, `continue` -> `break` 1 fail, slash skip 47, horizon 1, word boundary 1, unattended refusal 4, skew sign 2) and 4 survivors; the one real survivor (.match -> .search) is killed above."
+        - "Equivalent by reading, carried from round 5: regex `#{1,6}(?:\\s|$)` -> `#{1,6}\\s` (a bare #-run at the very end of the rstripped prompt is never a header to the reader, which needs `## ` + a date or `### ` + a time)."
+        - "Equivalent by reading, carried: regex `#{1,6}` -> `#{1,5}` (a six-hash line is not a header to the reader, which needs exactly `## ` or `### ` in column 0)."
+        - "Equivalent for every log the hook writes, carried: `day, when, body = d.group(1), None, []` -> `day, body = d.group(1), []` (the hook always writes `## <day>` immediately followed by `### <time>`; the mutant only adds an empty-body entry that cannot match a quote)."
+    l3_note: "Every behaviour hunk has been broken and went RED; the round 5 real survivor is now killed by the new test. The only unkilled perturbations are the three equivalents by reading."
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "No Python coverage tool; derived from perturbation. Round 5's one uncovered anchor (the start-of-line `.match` in escape_headers) is now broken with `.search` and goes RED (rc 1, 2 fails); every other behaviour hunk was broken and went RED in round 5, and common/ is byte-identical at a7e4cea (git diff e3a3168..a7e4cea --stat lists only the test file). Commands as in l3."
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: "Carried from round 5 (/tmp/proof-scripts/l4r5.py at e3a3168: real hook as a subprocess and real `cepa-plan answer ... --from-chat` with stdin=/dev/null in a real temp git repo; 0 findings, 0 tracebacks, 0 hangs). Valid at a7e4cea because common/ is byte-identical (only the test file changed); not re-run. Summary of the sweep: nine non-LF line separators x two forged-header variants 18 of 18 refused; 24h re-dating bypass 17 of 17 refused; separator combinations 14 of 14 refused; forged headers after leading blanks/BOM/ZWSP/NUL/NBSP/full-width hash 21 of 21 refused; huge inputs (5 MB line, 200k lookalikes, 50k mixed-separator lines) refused or accepted correctly in under 0.3s; both directions of line splitting agree over all code points (the 10 characters str.splitlines() splits on are exactly what the reader splits on)."
+    notes:
+      - "Pre-existing, not a finding of this card: a lone surrogate in the hook payload makes append_entry raise UnicodeEncodeError (traceback, exit 1, empty log file, nothing forged); same at 8efbfc4."
+      - "Pre-existing, not a finding: append_entry decides whether to write a new day header with a substring test over the whole file, so a prompt that contains tomorrow's `## <date>` line can shift tomorrow's prompts one day earlier. Only denies, never accepts something not typed."
+      - "Out of scope: entries already in a session log written before this fix keep their header-shaped lines; the escape only protects new entries."
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card (Feature)"
+build: "Only tests/test_cepa_plan_answer_from_chat.py was run (green at a7e4cea, rc 0 'tudo verde', and per perturbation); the full suite (tests/run-all.sh) belongs to the supervisor."
+routing_reason: "PROVEN. The one real survivor of round 5 (`.match` -> `.search` in escape_headers) now goes RED against the new test (rc 1, 2 fails); three earlier kills re-checked RED at a7e4cea (splitlines keepends dropped 41 fails, slash-prompt skip off 47 fails, re.escape removed 2 fails); common/ is byte-identical to the code already measured in round 5, so the other 16 kills, the three equivalents by reading and the clean L4 sweep carry over. Earlier rounds: round 4 found two real gaps (#{3} and break), closed in round 5; round 5 left this single survivor."

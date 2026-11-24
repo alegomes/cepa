@@ -4911,7 +4911,7 @@ contém o aviso. Sem Docker: o passo 2 se testa com um `docker` falso no PATH qu
 
 ## `cepa-plan responde` só aceita resposta digitada num terminal fora do Claude Code
 
-**Status:** feito em 2026-11-22: `cepa-plan answer --from-chat "<palavras do dono>"` grava sem terminal quando a citação está numa mensagem do dono das últimas 24h em `.claude/session-log.md` (comando com `/` não conta; recusado em run desatendido); teste em `tests/test_cepa_plan_answer_from_chat.py` · **Lar:** common (`common/bin/cepa-plan`, `owner_said_in_chat` e o guarda do `answer`) · **Origem:** feedback `fb-20261021-2`, 2026-10-21, `fb-20261022-1`, 2026-10-22, `fb-20261028-1`, 2026-10-28
+**Status:** feito em 2026-11-24: `cepa-plan answer --from-chat "<palavras do dono>"` grava sem terminal quando a citação está numa mensagem do dono das últimas 24h em `.claude/session-log.md` (comando com `/` não conta, nem mensagem datada no futuro; recusado em run desatendido). Para o texto de um comando `/` não se passar por mensagem do dono, o hook `session-log.py` passou a pôr uma barra invertida antes de toda linha de prompt que começa como título de markdown; teste em `tests/test_cepa_plan_answer_from_chat.py` · **Lar:** common (`common/bin/cepa-plan`, `owner_said_in_chat` e o guarda do `answer`; `common/hooks/session-log.py`, `escape_headers`) · **Origem:** feedback `fb-20261021-2`, 2026-10-21, `fb-20261022-1`, 2026-10-22, `fb-20261028-1`, 2026-10-28
 
 ### Problema
 

@@ -1,0 +1,61 @@
+key: plan-answer-aceita-resposta-do-chat
+head_commit: e3a3168
+status: complete
+diff_range: 8efbfc4..e3a3168
+criteria:
+  - id: AC1
+    criterion: "Sem TTY, answer --from-chat com citação presente em prompt do dono das últimas 24h grava a resposta, fecha a rota / destrava blocked, evidência diz que veio do chat (citação + hora) e mantém o prefixo 'Resposta do dono em AAAA-MM-DD:'"
+    altitude: cli
+    surface: "common/bin/cepa-plan answer como subprocess, stdin=/dev/null, repo git real, .claude/session-log.md no formato do hook session-log.py"
+    test: "tests/test_cepa_plan_answer_from_chat.py::test_red_test_from_chat_records_the_owner_answer, ::test_evidence_keeps_the_prefix_cepa_until_reads, ::test_blocked_item_from_chat_goes_back_to_pending, ::test_recent_prompt_wins_over_an_old_one"
+    layer: cli/subprocess no entry point real
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_answer_from_chat.py -> 126 checks ok, exit 0, tudo verde (rodada 3)"
+    verdict: complete
+  - id: AC2
+    criterion: "Sem TTY e sem --from-chat continua recusando (exit 2) e a recusa nomeia --from-chat"
+    altitude: cli
+    surface: "cepa-plan answer, stdin=/dev/null, sem a flag"
+    test: "tests/test_cepa_plan_answer_from_chat.py::test_without_flag_no_tty_still_refuses_and_names_the_way_out"
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_answer_from_chat.py -> tudo verde"
+    verdict: complete
+  - id: AC3
+    criterion: "Citação ausente é recusada (exit 7) sem gravar; só em comando de barra, em prompt >24h ou dentro de outra palavra não conta"
+    altitude: cli
+    surface: "cepa-plan answer --from-chat com log da sessão adversário"
+    test: "tests/test_cepa_plan_answer_from_chat.py::test_quote_not_in_any_prompt_is_refused, ::test_no_session_log_is_refused, ::test_slash_command_prompt_does_not_count, ::test_old_prompt_does_not_count, ::test_word_inside_another_word_does_not_count, ::test_word_followed_by_letters_does_not_count, ::test_empty_or_punctuation_quote_is_refused"
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_answer_from_chat.py -> tudo verde"
+    verdict: complete
+  - id: AC4
+    criterion: "Em run desatendido (CEPA_UNTIL_RUN / CLAUDE_AUTONOMOUS_RUN_ID) a flag é recusada"
+    altitude: cli
+    surface: "cepa-plan answer --from-chat com cada variável no ambiente"
+    test: "tests/test_cepa_plan_answer_from_chat.py::test_unattended_run_refuses_from_chat"
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_answer_from_chat.py -> tudo verde (exit 2 e nada gravado, para as duas variáveis)"
+    verdict: complete
+  - id: AC5
+    criterion: "Com TTY o caminho antigo não muda"
+    altitude: cli
+    surface: "cepa-plan answer com TTY simulado, sem --from-chat"
+    test: "tests/test_cepa_plan_answer_from_chat.py::test_tty_path_unchanged (mais os testes vizinhos do answer, não rodados por mim)"
+    layer: cli/in-process com isatty simulado (on_tty), não pty real
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_answer_from_chat.py -> tudo verde"
+    note: "TTY é simulado por on_tty; evidência não diz 'chat'. Vizinhos rodados: test_guiding_thread 'all green', test_isolated_telemetry 'all telemetria-isolada tests passed', test_common_next 'all green'."
+    verdict: complete
+  - id: AC6
+    criterion: "common/commands/next.md manda o agente gravar a resposta do chat com --from-chat em vez de entregar comando ao dono, e ainda diz 'only the user clears it'"
+    altitude: application
+    surface: "texto de instrução do agente common/commands/next.md (linhas ~238-242)"
+    test: "tests/test_common_next.py::test_the_limits_reconciliation_cannot_cross (checks: 'manda gravar a resposta do chat com --from-chat', 'e não manda mais só entregar o comando ao usuário', 'e que só o usuário fecha uma')"
+    layer: teste de texto
+    evidence: verified
+    run: "python3 tests/test_common_next.py -> 15 checks ok, 'all green'; python3 tests/test_guiding_thread.py -> 'all green'"
+    verdict: complete
+notes: "Rodada 3 (e3a3168): o hook escapa cabeçalho após qualquer fim de linha de splitlines() (CR solto, U+2028 etc., testado [LF]/[LS]/... pelo hook real); dia colado não rejuvenesce prompt de 2 dias; entrada futura não esconde a resposta real. Suite 126 checks, test_common_next 15, test_guiding_thread 54, todos exit 0. Rodada 2: AC3 agora também coberto pelo hook real (cabeçalho colado dentro de comando de barra sai 7, nada gravado) e por entrada datada no futuro (test_entry_dated_in_the_future_does_not_count, tolerância de 60s). TTY de AC5 segue simulado."
