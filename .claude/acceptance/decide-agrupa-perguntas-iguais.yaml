@@ -1,0 +1,73 @@
+key: decide-agrupa-perguntas-iguais
+status: complete
+diff_range: 017fad6..3b2cf1e
+note: >
+  Item da fila cepa, sem spec nem cartao Jira. Criterios fixados pelo orquestrador antes do build.
+  Suite completa verde nao e criterio deste item: delegada ao supervisor (roda tests/run-all.sh
+  apos o item). tests/test_cepa_until_decide.py (>2 min) nao foi rodado aqui, pelo mesmo motivo.
+  Lacuna declarada e aceita (nao e criterio): o painel de largada de uma run de fila unica
+  (ask_at_launch) continua perguntando item a item. Sem discordancia.
+criteria:
+  - id: AC1
+    criterion: "agrupamento por motivo de dispensa proposta (fila+item) ou texto+route_kind; dispensa vence; entregues e bloqueados nunca juntos; sem pergunta escrita nunca agrupa por texto; nao agrupados como antes"
+    altitude: cli
+    surface: painel `cepa until decide` (stdin/stdout), por funcao de painel e por --all
+    test: tests/test_cepa_until_decide_groups.py (waiver_group_with_different_texts, a_group_of_waiver_wins_over_text, waiver_needs_status_proposta_and_the_same_queue, items_with_no_written_question, one_equal_pair_is_not_a_group_of_one, delivered_and_blocked_items_with_the_same_waiver_are_not_one_group, ungrouped_items_are_byte_for_byte)
+    layer: painel direto + teste real de `cepa until decide --all` em pty
+    evidence: verified
+    run: "python3 tests/test_cepa_until_decide_groups.py -> 86 linhas '  ok', termina em 'tudo verde'"
+    status: complete
+  - id: AC2
+    criterion: "cada grupo uma vez, num cartao, antes dos itens avulsos; sem alvo/--all o grupo cruza filas e grava na fila de cada membro"
+    altitude: cli
+    surface: `cepa until decide` e `decide --all`
+    test: tests/test_cepa_until_decide_groups.py::test_all_panel_waiver_group_spans_queues_and_is_asked_once, test_real_decide_all_in_a_pty_records_each_member_in_its_queue_and_converts_waivers
+    layer: pty sobre o binario real, le queue.yaml e arquivos de dispensa
+    evidence: verified
+    run: "mesma execucao do AC1 (86 ok, 'tudo verde'); tests/test_cepa_until_decide_all.py -> '26 testes' verde (painel --all sem grupo inalterado)"
+    status: complete
+  - id: AC3
+    criterion: "cartao oferece y/n/a/o/Enter/q; a ausente se ninguem recomenda, mista diz quantos; tecla invalida reabre; legenda diz o efeito por tipo"
+    altitude: cli
+    surface: cartao do grupo no terminal
+    test: tests/test_cepa_until_decide_groups.py (y_to_all, n_to_all, o_dissolves, enter_leaves_all_for_later_and_q_quits, a_with_a_member_without_recommendation, a_is_hidden_when_nobody_recommends, invalid_key_on_the_group_card, group_legend_says_what_y_does_for_its_kind)
+    layer: painel; teclas por stdin
+    evidence: verified
+    run: "mesma execucao do AC1; python3 tests/test_cepa_until_decide_keys.py e tests/test_cepa_until_legend_per_key.py -> 'tudo verde' (teclas e legenda por item intactas)"
+    status: complete
+  - id: AC4
+    criterion: "resposta em grupo grava por item o que o caminho individual grava (sim:/nao: com a propria pergunta) mais a nota de grupo de N; falha vira 'para depois' e os demais ficam aplicados"
+    altitude: cli
+    surface: efeito externo do `cepa-plan answer` em queue.yaml e arquivos de dispensa
+    test: tests/test_cepa_until_decide_groups.py (waiver_group_..._records_each_item, a_failing_answer_goes_to_for_later, all_panel_y_and_for_later_and_failure, real_decide_all_in_a_pty) + test_cepa_until_decide_created_items.py::test_created_items_reads_the_lines_a_group_answer_produces
+    layer: pty le queue.yaml gravado; falha por injecao no gravador
+    evidence: verified
+    run: "mesma execucao do AC1; python3 tests/test_cepa_until_decide_created_items.py -> 'all ok'"
+    status: complete
+  - id: AC5
+    criterion: "contagens verdadeiras (asked/answered uma vez por item, abertura diz itens e perguntas, numeracao estavel); devolvidos por 'um a um' nao se perdem ao sair/cortar: viram para depois e a fila e nomeada no fecho"
+    altitude: cli
+    surface: abertura, contadores e linha de fecho do painel, em fila unica e em --all
+    test: tests/test_cepa_until_decide_groups.py (asked_counts_each_item_once_when_the_group_is_handed_back, single_queue_handed_back_items_end_in_for_later_when_the_owner_quits, all_panel_handed_back_items_are_named_when_the_owner_quits_or_is_cut, all_panel_handed_back_items_count_once_in_asked, the group note says N)
+    layer: painel, incluindo corte por EOF/interrupcao
+    evidence: verified
+    run: "mesma execucao do AC1 (86 ok, 'tudo verde')"
+    status: complete
+  - id: AC6
+    criterion: "listagens fora de terminal imprimem o grupo como uma entrada com contagem e membros"
+    altitude: cli
+    surface: saida texto de `decide` e `decide --all` sem terminal
+    test: tests/test_cepa_until_decide_groups.py::test_text_listing_prints_a_group_as_one_entry, test_all_panel_listing_without_terminal_prints_one_entry
+    layer: painel sem tty
+    evidence: verified
+    run: "mesma execucao do AC1"
+    status: complete
+  - id: AC7
+    criterion: "ajuda de `cepa until decide` e docs/cepa-until.md descrevem o agrupamento"
+    altitude: cli
+    surface: `cepa-until decide -h` e docs/cepa-until.md
+    test: nenhum teste automatico; verificado por execucao e leitura
+    layer: texto de ajuda e documentacao
+    evidence: verified
+    run: "common/bin/cepa-until decide -h imprime o paragrafo 'Items that ask the same question (the same proposed waiver reason, or the same WRITTEN question text), also across queues, come first as ONE card: y or n ... a ... o ...'; git diff 017fad6..3b2cf1e -- docs/cepa-until.md acrescenta 16 linhas com regra de igualdade, cartao, teclas, nota '(respondida em grupo de N)', listagem sem terminal e a ressalva do painel de largada. Texto de ajuda/doc nao tem teste automatico; aceito como evidencia de leitura+execucao pois o criterio e descritivo."
+    status: complete

@@ -61,6 +61,13 @@ def test_the_limits_reconciliation_cannot_cross():
           "uma lista que se fecha sozinha é decoração, e a dívida volta a sumir")
     check("e que só o usuário fecha uma",
           "only the user clears it" in clean)
+    # fb-20261109-3: the answer the owner gave in the chat is recorded by the
+    # agent, not handed back as a command for the owner to run in a terminal
+    check("manda gravar a resposta do chat com --from-chat",
+          "cepa-plan answer" in clean and "--from-chat" in clean
+          and "record it yourself" in clean)
+    check("e não manda mais só entregar o comando ao usuário",
+          "so hand the user the command" not in clean)
     check("card do quadro ausente do plano NÃO é anexado",
           "are **not** appended" in f or "not appended" in clean,
           "posição sem `why` é a decisão que a fila existe para guardar")

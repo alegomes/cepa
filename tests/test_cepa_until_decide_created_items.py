@@ -58,7 +58,9 @@ def route(ident, yes_item, no_item="nenhum"):
     """A `done` item with an owner route that declares the item of each answer."""
     it = item(ident, status="done", human_pending=f"decidir se calibra {ident}")
     it["route_kind"] = "open-question"
-    it["owner_question"] = QUESTION
+    # Each item names its own id: two items with the same question are ONE group card
+    # now (decide-agrupa-perguntas-iguais), and these cases are about the per-item path.
+    it["owner_question"] = f"{QUESTION} ({ident})"
     it["owner_summary"] = {"se_sim": "um item novo calibra X",
                            "se_nao": "X fica como está",
                            "item_se_sim": yes_item, "item_se_nao": no_item}

@@ -22,6 +22,10 @@ Format: markdown with date headers and timestamped prompt blocks.
 
   ### 19:46:10 UTC
   <next prompt>
+
+Verbatim except for one thing: a prompt line that starts like a markdown
+header gets a backslash in front (see `escape_headers`), so the headers above
+are the only ones in the file.
 """
 
 import json
@@ -104,6 +108,33 @@ def now() -> tuple[str, str]:
     return n.strftime("%Y-%m-%d"), n.strftime("%H:%M:%S UTC")
 
 
+_HEADER_LOOKALIKE = re.compile(r"#{1,6}(?:\s|$)")
+
+
+def escape_headers(prompt: str) -> str:
+    """The prompt with a backslash before every line that starts like a
+    markdown header.
+
+    The log's structure IS its headers: `## <day>` and `### <time> UTC` are
+    what a reader uses to tell where one prompt ends and the next begins.
+    Written verbatim, a prompt that carries such a line (a pasted log, the
+    text of a slash command) splits itself in two when read back, and the
+    second half passes for a separate prompt with the time written in it.
+    `cepa-plan answer --from-chat` reads this file to check what the owner
+    typed, so that split would let text inside a slash command pass for a
+    prose answer of the owner. `\\## x` renders the same in markdown and is no
+    longer a header to any reader.
+
+    A line is what `str.splitlines()` says it is, not only what follows a
+    "\\n": the readers split the file with it, and it also ends a line on a
+    lone CR, VT, FF, FS, GS, RS, NEL and the unicode line and paragraph
+    separators. Escaping only after "\\n" left all of those as a way to write
+    a header (proof round 2, 2026-11-24).
+    """
+    return "".join(("\\" + line) if _HEADER_LOOKALIKE.match(line) else line
+                   for line in prompt.splitlines(keepends=True))
+
+
 def append_entry(log_path: Path, prompt: str) -> None:
     """Append a prompt entry, creating the file with a header if needed.
 
@@ -130,7 +161,7 @@ def append_entry(log_path: Path, prompt: str) -> None:
         chunks.append("# Session log\n\n")
     if needs_date_header:
         chunks.append(f"## {date_header}\n\n")
-    chunks.append(f"### {time_header}\n\n{prompt.rstrip()}\n\n")
+    chunks.append(f"### {time_header}\n\n{escape_headers(prompt.rstrip())}\n\n")
 
     with log_path.open("a", encoding="utf-8") as f:
         f.write("".join(chunks))

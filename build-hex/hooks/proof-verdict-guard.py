@@ -34,11 +34,12 @@ Exit codes:
   2 — blocked (stderr message reaches the agent so it can self-correct)
 """
 
+import glob
 import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 # The plugin's own PyYAML copy goes FIRST so it wins over any installed one
 # (docs/spec/cepa-roda-sem-pyyaml-instalado.md).
@@ -89,7 +90,7 @@ FORBIDDING_STATUSES = UNPROVEN_STATUSES | NEEDS_HUMAN_STATUSES
 ALLOWED_STATUSES = {
     "l3_load_bearing.pit.status": {"ran", "absent", "n/a"},
     "l3_load_bearing.perturbation.status": {"pass", "survived", "skipped"},
-    "l2_coverage.status": {"pass", "gap", "assumed"},
+    "l2_coverage.status": {"pass", "gap", "assumed", "waived"},
     "l4_adversarial_input.status": {"clean", "findings", "skipped", "n/a"},
     "bugfix_regression_red_at_base.status": {"pass", "green-at-base",
                                              "green_at_base", "n/a"},
@@ -263,6 +264,146 @@ def has_waiver(data) -> bool:
     return isinstance(data, dict) and any(data.get(k) for k in WAIVER_KEYS)
 
 
+# ── L2 coverage: measured by perturbation, or covered by an owner's waiver ─────
+# Without a coverage tool `l2_coverage` was always `assumed`, so 28 of 33 items of
+# run all/2026-11-21-1244 came back NEEDS-HUMAN even when every deliberate break
+# turned a test red and even when the owner had already signed a waiver.
+#   - `status: pass` + `technique: perturbation`: a line broken on purpose that
+#     turned a test red WAS executed by that test; valid only with a passing
+#     L3 perturbation and no `uncovered_lines`.
+#   - `status: waived` + `waivers: [...]`: the owner's signed `nada-a-provar`
+#     waiver holds for the file. The agent never waives; it only CITES, and this
+#     guard checks the file on disk.
+#
+# INLINE TWIN of board-flow/bin/waivers.py (`load`, `expired`, `matches`, `_key`,
+# `applicable`): importing across plugins is fragile across versioned cache dirs
+# (same reason `_t_emit` is duplicated above). tests/test_proof_coverage_by_
+# perturbation.py asserts the twin agrees with waivers.py; change both together.
+WAIVER_DIR = ".claude/waivers"
+WAIVER_NO_EFFECT = ("proposta", "recusada")
+WAIVER_REQUIRED = ("motivo", "escopo", "razao", "autor", "criado_em", "revisit_trigger")
+WAIVER_REASON = "nada-a-provar"
+
+
+def _wkey(text) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (text or "").lower())
+
+
+def load_waivers(dirs) -> list:
+    """Valid waivers (twin of waivers.load) from each directory; never raises."""
+    found = []
+    try:
+        import yaml
+    except Exception:
+        return found
+    for d in dirs:
+        try:
+            paths = sorted(glob.glob(os.path.join(str(d), "*.yaml")))
+        except Exception:
+            continue
+        for path in paths:
+            try:
+                with open(path) as fh:
+                    w = yaml.safe_load(fh)
+            except Exception:
+                continue
+            if not isinstance(w, dict) or w.get("status") in WAIVER_NO_EFFECT:
+                continue
+            if any(not w.get(c) for c in WAIVER_REQUIRED):
+                continue
+            w["_path"] = path
+            found.append(w)
+    return found
+
+
+def _waiver_expired(w, today=None) -> bool:
+    """Twin of waivers.expired: by DATE inside `revisit_trigger` only."""
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", str(w.get("revisit_trigger") or ""))
+    if not m:
+        return False
+    return (today or date.today()).isoformat() > m.group(0)
+
+
+def applicable_waiver(waivers, scope, today=None):
+    """Twin of waivers.applicable(waivers, "nada-a-provar", scope)."""
+    for w in waivers:
+        if (w.get("motivo") == WAIVER_REASON
+                and _wkey(str(w.get("escopo"))) == _wkey(scope)
+                and not _waiver_expired(w, today)):
+            return w
+    return None
+
+
+def waiver_dirs(file_path: str, cwd: str) -> list:
+    """`<root>/.claude/waivers` plus the main clone's. The root is the directory
+    holding the artifact's `docs/proof` or `.claude/proof`. Consuming projects
+    gitignore `.claude/`, so in a linked worktree the waivers exist only in the
+    main clone. Never raises."""
+    dirs = []
+    try:
+        p = file_path.replace(os.sep, "/")
+        m = _PROOF_DIR_RE.search(p)
+        root = ""
+        if m:
+            root = p[:m.start()]
+            if not root and p.startswith("/"):
+                root = "/"
+        if root and not os.path.isabs(root):
+            root = os.path.join(cwd, root)
+        root = root or cwd
+        dirs.append(Path(root) / WAIVER_DIR)
+        try:
+            import subprocess
+            out = subprocess.run(
+                ["git", "-C", root, "rev-parse", "--path-format=absolute",
+                 "--git-common-dir"], capture_output=True, text=True, timeout=5)
+            common = out.stdout.strip() if out.returncode == 0 else ""
+            if common.endswith("/.git"):
+                dirs.append(Path(common).parent / WAIVER_DIR)
+        except Exception:
+            pass
+    except Exception:
+        pass
+    seen, uniq = set(), []
+    for d in dirs:
+        k = str(d)
+        if k not in seen:
+            seen.add(k)
+            uniq.append(d)
+    return uniq
+
+
+def l2_facts(data):
+    """(status, technique, uncovered, perturbation_passes, to_cover) from the
+    parsed artifact, or None when there is no l2_coverage mapping."""
+    levels = data.get("levels") if isinstance(data, dict) else None
+    if not isinstance(levels, dict) or not isinstance(levels.get("l2_coverage"), dict):
+        return None
+    l2 = levels["l2_coverage"]
+    status = str(l2.get("status", "")).strip().lower()
+    technique = str(l2.get("technique", "")).strip().lower()
+    raw = l2.get("uncovered_lines")
+    if isinstance(raw, list):
+        uncovered = [str(u).strip() for u in raw if str(u).strip()]
+    elif raw is None or raw == "":
+        uncovered = []
+    else:  # a string or any other non-null value is NOT empty
+        uncovered = [str(raw).strip() or str(raw)]
+    l3 = levels.get("l3_load_bearing")
+    pert = l3.get("perturbation") if isinstance(l3, dict) else None
+    pert_ok = (isinstance(pert, dict)
+               and str(pert.get("status", "")).strip().lower() == "pass")
+    if uncovered:
+        to_cover = sorted({u.rsplit(":", 1)[0].strip() if ":" in u else u for u in uncovered})
+    else:
+        scope = data.get("scope")
+        classes = scope.get("changed_classes") if isinstance(scope, dict) else None
+        to_cover = sorted({str(c.get("class")).strip() for c in classes
+                           if isinstance(c, dict) and c.get("class")}
+                          ) if isinstance(classes, list) else []
+    return status, technique, uncovered, pert_ok, to_cover
+
+
 def _warn_no_yaml(exc) -> None:
     """One stderr line when the plugin's vendored PyYAML cannot load
     (docs/spec/cepa-roda-sem-pyyaml-instalado.md, CS-4). Never raises."""
@@ -352,9 +493,11 @@ def main():
     if not isinstance(content, str) or not content.strip():
         sys.exit(0)
 
+    fallback = False
     try:
         verdict, statuses, doubles, na_violations, bad_levels, waiver = parse_with_yaml(content)
     except Exception:
+        fallback = True
         try:
             verdict, statuses, doubles, na_violations, bad_levels, waiver = parse_with_lines(content)
         except Exception:
@@ -385,6 +528,73 @@ def main():
                 blocked="unknown_level_name")
         sys.exit(2)
 
+    # L2 coverage rules (perturbation / waiver). Under ANY verdict, like the level
+    # names: they stop the same question from being asked again.
+    facts = None
+    if not fallback:
+        try:
+            import yaml
+            facts = l2_facts(yaml.safe_load(content))
+        except Exception:
+            facts = None
+    if facts:
+        l2_status, technique, uncovered, pert_ok, to_cover = facts
+        wvs = []
+        if l2_status in ("assumed", "waived") and to_cover:
+            wvs = load_waivers(waiver_dirs(file_path, hook_cwd))
+        missing = [f for f in to_cover if not applicable_waiver(wvs, f)]
+
+        def l2_block(tag, body):
+            print(f"[build-hex proof-verdict-guard] BLOCKED: {file_path} "
+                  f"(verdict: {declared}) l2_coverage: {body}", file=sys.stderr)
+            _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict=declared,
+                    blocked=tag)
+            sys.exit(2)
+
+        if l2_status == "assumed" and pert_ok and not uncovered:
+            l2_block("l2_assumed_but_perturbed",
+                     "`status: assumed` sits next to a passing "
+                     "l3_load_bearing.perturbation and an empty `uncovered_lines`. "
+                     "The perturbation already measured coverage: a changed line "
+                     "broken on purpose that turned a test red was executed by it.\n"
+                     "  Write `status: pass` + `technique: perturbation` with the "
+                     "killed perturbations in `run:`, OR list in `uncovered_lines` "
+                     "(\"<file>:<lines>\") the changed hunks no perturbation broke "
+                     "and keep `assumed`.")
+        if l2_status == "assumed" and to_cover and not missing:
+            l2_block("l2_assumed_but_waived",
+                     "`status: assumed`, but the owner already signed a "
+                     "`nada-a-provar` waiver for every file concerned ("
+                     + ", ".join(to_cover) + ").\n"
+                     "  Write `status: waived` and cite the waiver paths in "
+                     "`waivers:` (e.g. `.claude/waivers/nada-a-provar--<scope>.yaml`). "
+                     "The owner already answered for these files; do not ask again.")
+        if l2_status == "waived" and not to_cover:
+            l2_block("l2_waived_unbacked",
+                     "`status: waived` but there is no file to cover (no "
+                     "`uncovered_lines`, no `scope.changed_classes`). Nothing to "
+                     "waive: write `pass` (technique: perturbation) or `assumed`.")
+        if l2_status == "waived" and uncovered and not pert_ok:
+            l2_block("l2_waived_unbacked",
+                     "`status: waived` with a non-empty `uncovered_lines`, but "
+                     "l3_load_bearing.perturbation.status is not `pass`. The files "
+                     "outside `uncovered_lines` are claimed covered by perturbation, "
+                     "but the perturbation did not pass.\n"
+                     "  Either leave `uncovered_lines` empty so every changed class "
+                     "needs a signed waiver, or write `status: assumed`.")
+        if l2_status == "waived" and missing:
+            l2_block("l2_waived_unbacked",
+                     "`status: waived` but no owner-signed waiver covers: "
+                     + ", ".join(missing) + ".\n"
+                     "  A waiver needs `motivo: nada-a-provar`, an `escopo` matching "
+                     "the file, every required field (autor, criado_em, "
+                     "revisit_trigger, ...), no `status: proposta`/`recusada` and an "
+                     "unexpired date in `.claude/waivers/`. A proposal or a refusal "
+                     "does not count; a `waived` with no signed waiver is the agent "
+                     "waiving on its own. Write `status: assumed` (and propose with "
+                     "`waivers.propose` in an autonomous run).")
+
+
     if not isinstance(verdict, str) or verdict.strip().lower() != "proven":
         _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict=declared)
         sys.exit(0)  # only `proven` can be contradicted
@@ -403,6 +613,37 @@ def main():
         )
         _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict="proven",
                 blocked="waiver_proposto")
+        sys.exit(2)
+
+    if fallback and any(v == "waived" for _, v in statuses):
+        print(
+            f"[build-hex proof-verdict-guard] BLOCKED: {file_path} declares "
+            f"verdict: proven with `waived`, but the artifact could not be read "
+            f"as YAML, so the waiver could not be verified.\n"
+            f"  Fix the YAML so the guard can check `.claude/waivers/`, or write "
+            f"`verdict: needs-human`.",
+            file=sys.stderr,
+        )
+        _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict="proven",
+                blocked="l2_waived_unverifiable")
+        sys.exit(2)
+
+    if facts and facts[1] == "perturbation" and facts[0] == "pass" \
+            and (not facts[3] or facts[2]):
+        why = ("l3_load_bearing.perturbation.status is not `pass`" if not facts[3]
+               else "`uncovered_lines` is not empty: " + ", ".join(facts[2]))
+        print(
+            f"[build-hex proof-verdict-guard] BLOCKED: {file_path} declares "
+            f"verdict: proven with `l2_coverage` `technique: perturbation`, but "
+            f"{why}.\n"
+            f"  Coverage by perturbation holds only when every changed behavior "
+            f"hunk was broken on purpose and went red. Write `status: assumed` "
+            f"(or `gap`) listing the unbroken hunks in `uncovered_lines`, and "
+            f"verdict needs-human.",
+            file=sys.stderr,
+        )
+        _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict="proven",
+                blocked="l2_perturbation_unbacked")
         sys.exit(2)
 
     unknown = unknown_statuses(statuses)

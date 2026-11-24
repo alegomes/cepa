@@ -1,0 +1,54 @@
+schema_version: 1
+card: agents-do-herdr-mesmo-nome-por-sessao
+status: complete
+audited_at: 2026-11-24T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "Em run_claude, se o branch for session/<slice> e o dono nao passou -n/--name, chamar $CLAUDE_BIN --name <slice> (fb-20261120-4, fb-20261120-6)."
+    altitude: cli
+    surface: "common/bin/cepa run_claude: argv que o launcher entrega ao binario claude"
+    demonstrated_by:
+      test: "tests/test_cepa_session_name.py ('each session gets --name <its own slice>', 'the two names differ', 'with the mode menu as opening prompt...', 'injected --name is followed by the owner's flag and prompt', 'outside session/* no --name is injected')"
+      layer: "launcher real (common/bin/cepa) em repo git descartavel, com fake claude gravando o argv"
+      evidence: verified
+      run: |
+        python3 tests/test_cepa_session_name.py  -> 8 linhas 'ok', 'all ok'
+        env -u CEPA_UNTIL_RUN python3 tests/test_cepa_session_name.py  -> as mesmas 8 linhas 'ok', 'all ok'
+        tests/run-all.sh cepa_session cepa_slice cepa_mode -> 3 de 3 arquivos ok, 'tudo verde'
+    verdict: complete
+    gap: null
+
+  - id: AC2
+    text: "Se o dono passou -n, --name ou --name=<x>, o launcher nao injeta um segundo --name."
+    altitude: cli
+    surface: "common/bin/cepa run_claude: argv entregue ao claude"
+    demonstrated_by:
+      test: "tests/test_cepa_session_name.py (owner -n foo / --name foo / --name=foo forwarded, no second --name)"
+      layer: "launcher real + fake claude"
+      evidence: verified
+      run: "mesmas execucoes do AC1 (com e sem CEPA_UNTIL_RUN): 3 linhas 'ok   owner ... forwarded, no second --name'"
+    verdict: complete
+    gap: null
+
+  - id: AC3
+    text: "Esboco: duas sessoes no mesmo Space do herdr aparecem com nomes diferentes (teste que falta: 'hc get')."
+    altitude: ui
+    surface: "titulo do terminal lido por `hc get --json` (superficie que o BACKLOG diz aceita pelo dono em 2026-11-23, no lugar do painel Agents da GUI)"
+    demonstrated_by:
+      test: "nenhum teste commitado; observacao manual da auditoria 8995b6d (2026-11-22): dois `cepa -s aud-slice-a|b` reais via `hc run` deram hc get title = aud-slice-a / aud-slice-b"
+      layer: "launcher real + claude real em terminais do herdr-core"
+      evidence: verified
+      run: |
+        Nao reobservado nesta rodada (um agente nao posiciona terminais num Space nem ve o painel).
+        `git diff 9bab982 HEAD -- common/bin/cepa` vazio: o launcher e identico ao observado.
+        O argv --name <slice> que produz o titulo e provado por AC1 rodado agora.
+        Observacao anterior: `git show 8995b6d:.claude/acceptance/agents-do-herdr-mesmo-nome-por-sessao.yaml`.
+    verdict: complete
+    gap: null
+    deferral_note: "Nao e deferral por bug; e reducao de superficie. O que consegui confirmar: BACKLOG.md (secao do item, ultimo paragrafo) registra 'O dono aceitou em 2026-11-23 o titulo lido por hc get como prova, porque o titulo e por terminal', e a evidencia do item na fila repete 'surface accepted by the owner on 2026-11-23'. O que NAO consegui confirmar: a resposta literal do dono. `cepa-plan show` traz so a evidencia da tentativa anterior (devolvida, return 1 de 2) e o queue.yaml nao tem a citacao 'sem olhar o painel Agents' que a auditoria 9bab982 atribuia ao dono; a aceitacao e conhecida so pelo registro secundario (BACKLOG e evidencia), escrito pelo proprio fluxo. Painel Agents da GUI e mesmo-Space seguem nunca observados."
+notes: |
+  Re-auditoria 2026-11-24 em until/2026-11-23-1116 (HEAD 464dbb7). common/bin/cepa identico a 9bab982;
+  so tests/test_cepa_session_name.py mudou (464dbb7): passa igual com e sem CEPA_UNTIL_RUN, a causa do
+  vermelho anterior no build do supervisor. Build completo nao rodado por mim (e do supervisor).
+  Ressalva honesta: AC3 so e complete porque se aceita a aceitacao do dono como registrada; se o
+  humano nao reconhece essa resposta, AC3 volta a incomplete (painel Agents / mesmo Space).

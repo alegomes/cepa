@@ -1,0 +1,76 @@
+key: decide-de-run-nao-repete-nao-respondido
+status: complete
+diff_range: fe8bc08..308eb6b
+note: >
+  Rodada 2 (308eb6b; producao inalterada desde 2d8dbcc, `git diff 2d8dbcc..308eb6b -- common` vazio). AC6 fechado
+  por test_the_end_of_a_real_run_counts_the_answered_no_in_next; os outros seis reconfirmados na mesma execucao.
+  Item da fila cepa, sem cartao Jira. Criterios derivados do titulo pelo orquestrador.
+  Suite completa nao rodada (delegada ao supervisor). tests/test_cepa_until_decide.py
+  (~6 min) nao rodado aqui; o diff nele so troca o alvo `fila/<run>` por `fila` num teste
+  que re-pergunta uma rota ja respondida (nao enfraquece asserts). Rodados:
+  test_cepa_until_decide_run_answered_no.py (34 '  ok', 'tudo verde') e
+  test_cepa_until_final_report.py (verde, regressao).
+criteria:
+  - id: AC1
+    criterion: "decide <fila>/<run> em terminal nao pergunta rota cuja evidencia comeca com o 'nao'; imprime 1 linha (contagem, ultima data, cepa-until decide <fila>); rotas abertas seguem perguntadas"
+    altitude: cli
+    surface: "binario `cepa-until decide fila/<run>` em pty"
+    test: "tests/test_cepa_until_decide_run_answered_no.py::test_run_decide_on_a_terminal_skips_the_answered_no_and_asks_the_open_one, test_run_decide_with_only_answered_no_routes_prints_the_line_and_asks_nothing"
+    layer: "subprocesso real em pty (dec.on_tty)"
+    evidence: verified
+    run: "python3 tests/test_cepa_until_decide_run_answered_no.py -> '✓ tudo verde' a 308eb6b (exit 0, ~12 s)"
+    status: complete
+  - id: AC2
+    criterion: "idem sem terminal (listagem em texto): rota nao listada, linha presente"
+    altitude: cli
+    surface: "binario `cepa-until decide fila/<run>` com stdin=DEVNULL"
+    test: "tests/test_cepa_until_decide_run_answered_no.py::test_run_decide_without_terminal_does_not_list_the_answered_no"
+    layer: "subprocesso real"
+    evidence: verified
+    run: "mesma execucao do AC1 (tudo verde a 308eb6b)"
+    status: complete
+  - id: AC3
+    criterion: "idem para all/<run>: uma linha por fila"
+    altitude: cli
+    surface: "binario `cepa-until decide all/<run>`, texto e pty"
+    test: "tests/test_cepa_until_decide_run_answered_no.py::test_all_run_has_one_line_per_queue_and_does_not_ask_the_answered_no"
+    layer: "subprocesso real, 2 filas, texto e pty"
+    evidence: verified
+    run: "mesma execucao do AC1 (tudo verde a 308eb6b)"
+    status: complete
+  - id: AC4
+    criterion: "'condicoes nao mudaram' = evidencia ainda comeca com o 'nao' (last_owner_no); 'nao' fora do inicio ou ultima resposta 'sim' E perguntada no decide da run"
+    altitude: cli
+    surface: "binario `cepa-until decide fila/<run>` (texto)"
+    test: "tests/test_cepa_until_decide_run_answered_no.py::test_a_no_that_is_not_at_the_start_of_the_evidence_is_asked_in_the_run, test_a_last_answer_sim_is_asked_in_the_run"
+    layer: "subprocesso real"
+    evidence: verified
+    run: "mesma execucao do AC1 (tudo verde a 308eb6b)"
+    status: complete
+  - id: AC5
+    criterion: "decide <fila> (sem run) inalterado: pergunta essas rotas"
+    altitude: cli
+    surface: "binario `cepa-until decide fila`, pty e texto"
+    test: "tests/test_cepa_until_decide_run_answered_no.py::test_queue_decide_without_run_still_asks_the_answered_no"
+    layer: "subprocesso real"
+    evidence: verified
+    run: "mesma execucao do AC1 (tudo verde a 308eb6b)"
+    status: complete
+  - id: AC6
+    criterion: "o fim de uma run (relatorio final, painel 'Next') nao apresenta essas rotas como perguntas ao dono; conta em uma linha por fila e nao diz 'nothing left for you'"
+    altitude: cli
+    surface: "painel Next impresso ao fim de `cepa-until run` (cmd_run -> commit_records -> next_rows(owner_report))"
+    test: "tests/test_cepa_until_decide_run_answered_no.py::test_the_end_of_a_real_run_counts_the_answered_no_in_next (alem de test_end_of_run_report_does_not_hand_back_the_answered_no, test_end_of_run_report_after_the_questions_leaves_the_answered_no_out, test_next_panel_counts_the_answered_no_and_does_not_say_nothing_left)"
+    layer: "run completa do binario cepa-until com fake claude, sem terminal, assercao sobre o relatorio final impresso (stdout+stderr)"
+    evidence: verified
+    run: "python3 tests/test_cepa_until_decide_run_answered_no.py -> tudo verde (exit 0); no teste novo, 6 '  ok': relatorio final presente, 1 linha 'already answered' com '1 route(s)', data 06/11 e 'cepa-until decide fila', 1 owner question (o1) sem n1, n1 nao listada como pergunta, sem 'nothing left for you', e caso so-'nao' com a linha e sem owner question"
+    status: complete
+  - id: AC7
+    criterion: "o help de `cepa until decide` diz isso"
+    altitude: cli
+    surface: "`cepa-until decide --help`"
+    test: "tests/test_cepa_until_decide_run_answered_no.py::test_help_text_says_it"
+    layer: "subprocesso real"
+    evidence: verified
+    run: "mesma execucao do AC1 (tudo verde a 308eb6b)"
+    status: complete

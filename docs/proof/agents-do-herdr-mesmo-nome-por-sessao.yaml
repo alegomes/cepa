@@ -1,0 +1,63 @@
+schema_version: 2
+card: agents-do-herdr-mesmo-nome-por-sessao
+verdict: proven
+reviewed_at: 2026-11-24T10:00:00+00:00
+base_commit: bdf1b95
+head_commit: 464dbb7
+issue_type: Bug
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa run_claude (--name <slice> on session/<slice>, owner -n/--name/--name=x wins)"
+      module: bin
+      external_observable: true
+      substituted_by_double: null
+      double_check: "tests/test_cepa_session_name.py runs the real common/bin/cepa run_claude; the only double is a fake claude binary (CLAUDE_WT_CLAUDE_BIN) recording argv, which is the far boundary (claude itself), not the changed launcher. Perturbing the launcher turns the test red, so the real code runs."
+    - class: "tests/test_cepa_session_name.py (new; its last commit made it independent of CEPA_UNTIL_RUN / CEPA_MENU)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+      double_check: "test file, not production code"
+  other_changes_not_behavior: "BACKLOG.md prose and the version string in common/.claude-plugin/plugin.json; no behavior hunk."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sh + Python repo, no Maven, no PIT"
+    perturbation:
+      status: pass
+      run: >-
+        git worktree add --detach /tmp/proof-herdr3 464dbb7 (removed with git worktree remove --force; git worktree list shows no /tmp entry afterwards). GREEN first at 464dbb7: python3 tests/test_cepa_session_name.py -> 8 ok, "all ok"; same with `env -u CEPA_UNTIL_RUN` -> 8 ok, "all ok"; tests/run-all.sh cepa_session cepa_slice cepa_mode cepa_prompt -> 5 of 5 files, "tudo verde" (also green with CEPA_UNTIL_RUN unset for cepa_session). Each perturbation: one sed on /tmp/proof-herdr3/common/bin/cepa, `git diff --shortstat` confirming the edit, the covering test run in the foreground both with the default environment and with `env -u CEPA_UNTIL_RUN` (identical failure counts every time, because the test itself pops CEPA_UNTIL_RUN and CEPA_MENU, so the mode menu is the opening prompt in both), then git checkout of the file. The full suite belongs to the supervisor (build: delegated-to-supervisor).
+      results:
+        - "P1 RED (both envs): case pattern `session/?*)` -> `sessionX/?*)` -> 4 failures (no --name at all; names do not differ; menu case; order case)."
+        - "P2 RED (both envs): prefix strip `${_name#session/}` -> `$_name` -> 3 failures (argv carried `--name session/alpha`)."
+        - "P3 RED (both envs): owner pattern `-n` removed from `-n|--name|--name=*` -> 1 failure (owner -n foo got a second --name)."
+        - "P4 RED (both envs): owner pattern `--name` removed -> 1 failure."
+        - "P5 RED (both envs): owner pattern `--name=*` removed -> 1 failure."
+        - "P6 RED (both envs): `if [ -n \"$_name\" ]` -> `if [ -z \"$_name\" ]` -> 8 failures."
+        - "P7 RED (both envs): `if [ -n \"$_name\" ]` -> `if true` -> 4 failures (three owner-flag cases and outside session/*: argv carried `--name ''`)."
+        - "P8 RED (both envs): named branch drops forwarded args (`--name \"$_name\" \"$@\"` -> `--name \"$_name\"`) -> 2 failures (menu case and order case)."
+        - "P9 RED (both envs): named branch puts the name after the args (`\"$@\" --name \"$_name\"`) -> 2 failures (menu case and order case)."
+        - "P10 RED (both envs): non-session fallthrough `*) _name=\"\" ;;` -> `*) : ;;` (2 lines) -> 4 failures (outside session/* got `--name main`; owner cases got a second --name)."
+        - "P11 RED (both envs): owner loop reset `_name=\"\"` -> `:` -> 3 failures (owner -n / --name / --name=x)."
+        - "P12 RED (both envs): `--name` -> `-n` on the injected flag -> 2 failures (menu case and order case, which read argv[:2] == [--name, alpha]; the helper `names()` accepts both spellings so the two-sessions case does not catch it, only these two pin the literal spelling)."
+        - "Menu case is load-bearing, not decorative: P8, P9 and P12 are caught by it (alongside the order case), and it is the one case that asserts the injected --name precedes the mode menu as the last argv entry. Not run, equivalent by reading: `session/?*` -> `session/*` (`session/` alone strips to the empty string and falls to the no-name branch); `2>/dev/null || true` on git rev-parse (silences stderr, keeps set -e alive outside a repo; the no-name branch is pinned by the outside-session test)."
+      survivors: []
+    l3_note: "12 perturbations, 12 RED, 0 survivors, in both environments, across every changed behavior line of run_claude: the case/strip, the owner-flag loop (each of the three patterns and its reset), both branches of the final if, argv order, and the spelling of the injected flag."
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "No coverage tool for this sh/Python harness; derived from perturbation. Every changed behavior line of common/bin/cepa (case pattern, prefix strip, fallthrough, owner loop incl. each of its 3 patterns and the reset, the if test, the --name branch, argv order) was broken and went RED (P1-P12 above). The remaining diff lines are comments, BACKLOG.md prose and the plugin.json version string."
+  l4_adversarial_input:
+    status: n/a
+    reason: "the diff adds a launcher flag derived from the local git branch name and inspects the owner's own argv; it parses nothing from an external party and touches no api-rest module. Branch names with spaces or a leading dash are passed quoted as a single argv element, not probed."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "git -C /tmp/proof-herdr3 checkout bdf1b95 -- common/bin/cepa, then python3 tests/test_cepa_session_name.py -> FAIL each session gets --name <its own slice>, FAIL the two names differ, FAIL menu case, FAIL order case, '4 failure(s)' (same 4 with env -u CEPA_UNTIL_RUN); the 3 owner-flag cases and the outside-session case stay ok at base, as they should. Fix restored (checkout 464dbb7 -- common/bin/cepa) -> all ok."
+routing_reason: "PROVEN. The covering test is RED at base_commit bdf1b95 (4 failures) and green at head 464dbb7 (8 ok), with and without CEPA_UNTIL_RUN. All 12 perturbations of the changed lines of run_claude go RED with 0 survivors, identically in both environments, so L2 is derived from perturbation (pass, nothing uncovered). The new menu case is load-bearing (kills P1, P2, P8, P9, P12). The four neighbour test files stay green. Not exercised: a real herdr rendering the names through `cepa -s` (the test measures the argv handed to claude, which is the boundary this change controls)."
+build: "delegated-to-supervisor: only tests/test_cepa_session_name.py and the near neighbours (tests/run-all.sh cepa_session cepa_slice cepa_mode cepa_prompt, 5 files) were run, all green at 464dbb7; the full suite (tests/run-all.sh) belongs to the supervisor."

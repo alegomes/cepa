@@ -80,6 +80,7 @@ CATALOGUE = {
     "mode-menu-pending": (None, "session-mode.py (menu do modo mostrado no turno anterior; consumido no seguinte para medir a escolha)"),
     "last-build.json": (None, "cepa-build (baseline do último build)"),
     "no-build": (None, "o dono (opta por não ter baseline de build)"),
+    "check-scripts.json": (None, "o dono (declara os scripts de verificação do repo que o capture-build-result reconhece)"),
     "last-root-install.json": (None, "bin/install.sh (registro da última instalação)"),
     "doctor-last-run": (None, "cepa-doctor (carimbo da última execução)"),
     "feedback-nudge": (None, "hook de feedback (carimbo)"),

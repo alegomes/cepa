@@ -133,6 +133,21 @@ back to the exit code, which is present on failures only.
 | `pytest` | `pytest` | exit code only (no markers): a failure is recorded, a green run is not |
 | `cargo test`, `cargo build` | `cargo` | exit code only, same limit |
 | `go test` | `go-test` | exit code only, same limit |
+| `flutter test`, `fvm flutter test` | `flutter` | flutter's summary line: success `All tests passed!`; failure `Some tests failed.` (a compile error in a test file ends in it too) |
+| a script the repo declares in `.claude/check-scripts.json` | `check-script` | the last non-empty output line is exactly the declared `ok_line` (default `OK`); a nonzero exit code is a failure and wins over the last line; anything else stays unclassified |
+
+A repo's own verification script (`tool/check.sh`, for example) is not a
+toolchain the hook can know by name, and a bare `OK` is in every app log.
+So the repo declares it, at the session root:
+
+```json
+{"scripts": [{"command": "tool/check.sh", "ok_line": "OK"}]}
+```
+
+The script counts only when it is what the command runs: `tool/check.sh`,
+`./tool/check.sh`, `bash tool/check.sh` or `cd app && tool/check.sh`, but not
+`cat tool/check.sh`. Without the file nothing changes; a malformed file is
+ignored with a note on stderr.
 
 Other commands are skipped (better to leave stale than misclassify).
 Records the command, kind, and last ~12 lines of output.

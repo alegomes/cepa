@@ -4911,7 +4911,7 @@ contém o aviso. Sem Docker: o passo 2 se testa com um `docker` falso no PATH qu
 
 ## `cepa-plan responde` só aceita resposta digitada num terminal fora do Claude Code
 
-**Status:** pendente · **Lar provável:** common (`common/bin/cepa-plan`, guarda `sys.stdin.isatty()` do `answer`) · **Origem:** feedback `fb-20261021-2`, 2026-10-21, `fb-20261022-1`, 2026-10-22, `fb-20261028-1`, 2026-10-28
+**Status:** feito em 2026-11-24: `cepa-plan answer --from-chat "<palavras do dono>"` grava sem terminal quando a citação está numa mensagem do dono das últimas 24h em `.claude/session-log.md` (comando com `/` não conta, nem mensagem datada no futuro; recusado em run desatendido). Para o texto de um comando `/` não se passar por mensagem do dono, o hook `session-log.py` passou a pôr uma barra invertida antes de toda linha de prompt que começa como título de markdown; teste em `tests/test_cepa_plan_answer_from_chat.py` · **Lar:** common (`common/bin/cepa-plan`, `owner_said_in_chat` e o guarda do `answer`; `common/hooks/session-log.py`, `escape_headers`) · **Origem:** feedback `fb-20261021-2`, 2026-10-21, `fb-20261022-1`, 2026-10-22, `fb-20261028-1`, 2026-10-28
 
 ### Problema
 
@@ -4937,7 +4937,7 @@ O `answer`/`responde` recusa quem não tem stdin em terminal (`common/bin/cepa-p
 
 ## A dispensa de cobertura aceita pelo dono não é lida pelo esquema de prova e volta como NEEDS-HUMAN
 
-**Status:** pendente · **Lar provável:** build-hex (`build-hex/hooks/proof-verdict-guard.py`, esquema `l2_coverage`) · **Origem:** feedback `fb-20261020-1`, 2026-10-20, `fb-20261028-2`, 2026-10-28
+**Status:** feito em 2026-11-23 (item `prova-cobertura-pela-perturbacao`: `l2_coverage` aceita `technique: perturbation` e `status: waived` com `waivers:`, ambos conferidos pelo `proof-verdict-guard`) · **Lar provável:** build-hex (`build-hex/hooks/proof-verdict-guard.py`, esquema `l2_coverage`) · **Origem:** feedback `fb-20261020-1`, 2026-10-20, `fb-20261028-2`, 2026-10-28
 
 ### Problema
 
@@ -5314,7 +5314,7 @@ O wrap-up que termina com merge e push avança o cursor até o último passo (ou
 
 ## `gate-advance` aceita build verde de um teste só para liberar commit que deixa outro teste vermelho
 
-**Status:** pendente · **Lar provável:** common (`common/hooks/gate-advance.py`, leitura do `last-build.json`) · **Origem:** feedback `fb-20261109-2`, 2026-11-09
+**Status:** feito em 2026-11-21 para Maven (`-Dtest=` / `-Dit.test=`): o `last-build.json` grava `test_filter` e o commit é recusado quando um teste JVM fora do filtro está no commit ou nomeia a classe de produção alterada (`tests/test_gate_advance_filtered_green.py`). O resto (`pytest -k`, `go -run`, jest `-t` e o escopo `-pl`) virou o item seguinte deste arquivo · **Lar provável:** common (`common/hooks/gate-advance.py`, leitura do `last-build.json`) · **Origem:** feedback `fb-20261109-2`, 2026-11-09
 
 ### Problema
 
@@ -5329,6 +5329,20 @@ No C1-17 do wego-digitacao-backend um agente rodou `verify` só de `OpenApiFecha
 ### Esboço
 
 Gravar no `last-build.json` o filtro do build (`-Dtest=`, `-pl`, `-k`) e o gate recusar commit cujos arquivos alterados ficam fora desse filtro, ou exigir build sem filtro para liberar. Teste que falta: build verde com `-Dtest=A` e commit que altera o código coberto por `B` é recusado.
+
+---
+
+## `gate-advance` aceita verde de `pytest -k`, `go -run`, jest `-t` ou `-pl` para liberar commit fora desse escopo
+
+**Status:** pendente · **Lar provável:** common (`common/hooks/gate-advance.py`, `capture-build-result.py`) · **Origem:** resto do item acima (fb-20261109-2), separado em 2026-11-21
+
+### Problema
+
+O item acima fechou só o filtro Maven `-Dtest=` / `-Dit.test=`, que foi o do incidente C1-17. Os outros filtros de teste e o escopo de módulo continuam liberando commit com o verde de uma parte: `pytest -k`, `go test -run` e jest `-t` escolhem testes por nome de função ou título, não por arquivo, e `./mvnw -pl X verify` verde libera commit que altera o módulo Y.
+
+### Esboço
+
+Para `-pl`: gravar os módulos do build e recusar commit com arquivo fora deles (e fora do `-am`). Para `-k`/`-run`/`-t`: decidir antes se vale casar nome de teste com o código alterado ou se basta exigir build sem filtro. Teste que falta: `./mvnw -pl a verify` verde e commit que altera `b/src/main` é recusado.
 
 ---
 
@@ -5436,7 +5450,7 @@ Em `_refs_root`, resolver também o trecho depois de `-X` colado e de `chave=`; 
 
 ## `capture-build-result` não reconhece `flutter test` nem `tool/check.sh`
 
-**Status:** pendente · **Lar provável:** common (`common/hooks/capture-build-result.py`, padrões de build) · **Origem:** feedback `fb-20261115-1`, 2026-11-15
+**Status:** feito nesta branch (item `capture-build-result-flutter` da fila `cepa`; o script de verificação entra declarado em `.claude/check-scripts.json`, ver `docs/green-or-revert.md`) · **Lar provável:** common (`common/hooks/capture-build-result.py`, padrões de build) · **Origem:** feedback `fb-20261115-1`, 2026-11-15
 
 ### Problema
 
@@ -5456,7 +5470,7 @@ Padrão para `flutter test` com os marcadores `All tests passed!` e `Some tests 
 
 ## A lista Agents do herdr mostra o mesmo nome para todas as sessões do Cepa
 
-**Status:** pendente · **Lar provável:** common (`common/bin/cepa`, o launcher que abre a sessão) · **Origem:** feedback `fb-20261120-4`, 2026-11-20, `fb-20261120-6`, 2026-11-20
+**Status:** feito nesta branch (2026-11-24, fila `fb-2026-10`) · **Lar provável:** common (`common/bin/cepa`, o launcher que abre a sessão) · **Origem:** feedback `fb-20261120-4`, 2026-11-20, `fb-20261120-6`, 2026-11-20
 
 ### Problema
 
@@ -5475,6 +5489,17 @@ Quatro sessões do Cepa abertas no mesmo Space do herdr aparecem na lista Agents
 ### Esboço
 
 O launcher informa ao herdr um nome por sessão (o slug da worktree ou o propósito gravado na intenção). Teste que falta: duas sessões no mesmo Space aparecem com nomes diferentes em `hc get`.
+
+**Feito (2026-11-24, fila `fb-2026-10`, item `agents-do-herdr-mesmo-nome-por-sessao`).** Em
+`run_claude`, o launcher chama `claude --name <slice>` quando a branch da pasta onde a sessão
+vai rodar é `session/<slice>`. Se o dono passou `-n`, `--name` ou `--name=x`, o nome dele vale e
+nada é injetado; fora de `session/*` a chamada não muda. `tests/test_cepa_session_name.py`
+confere, com um claude falso, que duas sessões recebem nomes diferentes e que as flags e o
+prompt do dono seguem intactos depois do nome. Conferido no herdr do app desktop em 2026-11-22:
+dois `cepa -s aud-slice-a|b` abertos com `hc run` apareceram em `hc get` com `title`
+`aud-slice-a` e `aud-slice-b`, e o título de um `claude --name` continuou o mesmo depois do
+primeiro prompt. Não olhado: o painel Agents da interface e duas sessões no mesmo Space. O dono
+aceitou em 2026-11-23 o título lido por `hc get` como prova, porque o título é por terminal.
 
 ---
 

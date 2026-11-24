@@ -1,0 +1,81 @@
+schema_version: 2
+card: prova-cobertura-pela-perturbacao
+verdict: proven
+reviewed_at: 2026-11-23T20:05:00-03:00
+base_commit: d1e7f96
+head_commit: f38949d
+issue_type: Story
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "build-hex/hooks/proof-verdict-guard.py"
+      module: build-hex
+      external_observable: true
+      substituted_by_double: null     # tests/test_proof_coverage_by_perturbation.py runs the real hook as a subprocess
+    - class: "board-flow/bin/classify_needs_human.py"
+      module: board-flow
+      external_observable: false
+      substituted_by_double: null     # tests/test_needs_human_reasons.py imports the real module
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "Python repo, no Maven, no PIT"
+    perturbation:
+      status: pass
+      run: >-
+        Round 8. Throwaway worktree /tmp/proof-cobertura8 at f38949d (removed before returning; `git worktree list | grep -c cobertura8` -> 0).
+        `git diff 9757103..f38949d --stat -- build-hex board-flow` -> empty: hook byte-identical across rounds 1-8.
+        `git diff 7d2c216..f38949d --stat` -> 1 file (tests/test_proof_coverage_by_perturbation.py), 31 insertions, 0 deletions (`grep -c '^-[^-]'` = 0): no pre-existing case edited or removed. New cases: padded and mixed-case `motivo` (blocked, telemetry, twin agreement), four exact-status cases (` proposta `, `Proposta`, ` Recusada`, `recusada\t` -> waiver still counts), needs-human + assumed + empty uncovered + perturbation `ran`/`clean`/`n/a` -> allowed.
+        GREEN: `python3 tests/test_proof_coverage_by_perturbation.py` run 2 times at f38949d -> exit 0 both, "all proof coverage-by-perturbation tests passed", 246 `  ok` lines, 0 FAIL each. `python3 -m pytest -q tests/test_needs_human_reasons.py` -> 59 passed.
+        RED at base: hook of d1e7f96 (git show) via CEPA_PROOF_GUARD_HOOK against the head test -> exit 1, 142 FAIL lines, 68 ok lines.
+        ROUND-7 SURVIVORS, re-run this round, all KILLED (each is one sed edit of a copy of the hook, 4-line diff printed, suite run with CEPA_PROOF_GUARD_HOOK on the copy):
+        :330 `.strip()` -> FAIL "waived + waiver with motivo ' nada-a-provar ' (padded) -> blocked, names a/B.py" (+ telemetry, + "twin agrees with waivers.py: motivo-padded real=False twin=True");
+        :330 `.lower()` -> FAIL "waiver with motivo 'Nada-a-provar' (not equal to nada-a-provar) -> blocked", "waived + waiver with motivo 'Nada-A-Provar' (mixed case) ...", "twin agrees ...: motivo-capitalised";
+        :395 `in ("pass","ran")` -> FAIL "needs-human + assumed + empty uncovered + perturbation 'ran' -> allowed" (+ telemetry).
+        PER-HUNK PASS, RUN THIS ROUND (one breaking perturbation per hunk of d1e7f96..f38949d; first failing case named):
+        1. l2 enum line :93 drop "waived" -> FAIL "proven + l2 waived + valid waiver for every changed class -> allowed".
+        2. WAIVER_NO_EFFECT :283 -> () -> FAIL "proven + waived + waiver with status proposta -> blocked".
+        3. WAIVER_REQUIRED :284 drop "autor" -> FAIL "proven + waived + waiver with missing autor -> blocked".
+        4. WAIVER_REASON :285 -> "x-y" -> FAIL "assumed + uncovered X + valid waiver for X -> blocked, says write `waived`".
+        5. _wkey :289 no .lower() -> FAIL "loose scope key matches the file of an uncovered_lines entry" (+ twin agreement loose-key).
+        6. load_waivers :301 `*.yaml` -> `*.yml` -> FAIL "assumed + uncovered X + valid waiver for X -> blocked, says write `waived`".
+        7. _waiver_expired :324 `>` -> `<` -> FAIL "proven + waived + waiver with expired date -> blocked".
+        8. applicable_waiver :331 scope compare -> True -> FAIL "proven + waived + waiver with other file -> blocked".
+        9. waiver_dirs :361 main-clone branch -> False -> FAIL "waiver only in the main clone is found from a linked worktree".
+        10. l2_facts :396 `if uncovered` -> `if False` -> FAIL "waived + partial uncovered_lines + perturbation pass -> allowed".
+        11. fallback flag :500 `fallback = True` -> False -> FAIL "fallback: proven + waived -> blocked, waiver could not be verified".
+        12. fallback-`waived` block :618 -> `if False and` -> same FAIL + telemetry l2_waived_unverifiable.
+        13. main() facts loading :537 -> `facts = None` -> FAIL "...with L3 perturbation skipped -> blocked by the L2 perturbation rule".
+        14. rule l2_assumed_but_perturbed :554 -> `if False and` -> FAIL "needs-human + assumed + perturbation pass + nothing uncovered -> blocked" (+ telemetry).
+        15. rule l2_assumed_but_waived :564 -> `if False and` -> FAIL "assumed + uncovered X + valid waiver for X -> blocked, says write `waived`" (+ telemetry).
+        16. l2_waived_unbacked site 1 :572 -> `if False and` -> FAIL "waived with nothing to cover (no classes, no uncovered) -> blocked" (+ telemetry site 1).
+        17. l2_waived_unbacked site 2 :577 -> `if False and` -> FAIL "waived + partial uncovered_lines + perturbation skipped -> blocked" (+ telemetry site 2).
+        18. l2_waived_unbacked site 3 :585 -> `if False and` -> FAIL "proven + waived + waiver with status proposta -> blocked".
+        19. rule-1 block :631 `facts[0] == "pass"` -> "passX" -> FAIL "...with L3 perturbation skipped -> blocked by the L2 perturbation rule", "...with non-empty uncovered_lines -> blocked, names uncovered_lines".
+        20. board-flow/bin/classify_needs_human.py:168 PASSED drop "waived" -> pytest tests/test_needs_human_reasons.py: 1 failed ("test_l2_waived_is_not_a_blocked_level"), 58 passed; reverted with git checkout, 59 passed after.
+        Hunk board-flow/bin/waivers.py is a docstring-only change (no behavior); not perturbable, not counted.
+        CARRIED from rounds 1-7 on the byte-identical hook (not re-run): about 85 fresh mutants plus the implementer's 555-mutant AST sweep; standing equivalents :383/:384 defaults, :534, :564 substring, :301 sorted, :543 `and to_cover`, :344 os.sep, :370 `if True`, :380 isinstance.
+      results:
+        - "Round-7 survivors :330 (strip), :330 (lower), :395 (in pass/ran): all 3 KILLED, each with a named case"
+        - "Per-hunk: 20 of 20 changed behavior hunks turn at least one case red when broken (19 in the hook, 1 in classify_needs_human.py)"
+        - "Suite green x2 (246 ok, 0 FAIL) + 59 pytest passed; red at the d1e7f96 hook (142 FAIL); the commit only added 31 lines of cases"
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    run: >-
+      No coverage tool; coverage derived from the perturbation (build-hex/agents/proof-reviewer.md section L2 at head). Every changed behavior hunk of d1e7f96..f38949d (20 listed in the l3 run above) was broken on purpose this round and turned a named case red, so each was executed by the suite. waivers.py is docstring-only. No waiver cited or needed: `ls .claude/waivers | grep -ic 'guard\|proof\|build-hex'` -> 0. I do not waive.
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: >-
+      Smoke this round, 9 shapes (script copied into the throwaway worktree, hook of the worktree, CEPA_TELEMETRY_DIR=/tmp/p8-tele, `Traceback` in stderr = False for all): empty .yaml + list .yaml in .claude/waivers + waived -> exit 2; uncovered_lines as a string + proven + pass + perturbation -> exit 2; uncovered_lines as a mapping, same -> exit 2; `levels` as a list + proven -> exit 0; l2_coverage as a list + proven -> exit 0; payload without cwd (relative file_path) + waived -> exit 2; non-JSON stdin -> exit 0 (fail open by design, same as base); changed_classes as a string + waived -> exit 2; uncovered_lines as a list of non-strings (1, null, mapping) + proven + pass + perturbation -> exit 2.
+      The hook bytes did not change since round 1; rounds 1-7 ran about 100 hostile shapes, nothing attributable to this change.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Story. Evidence anyway: hook from d1e7f96 against the head test -> exit 1, 142 FAIL lines, 68 ok."
+routing_reason: "Rounds 1-7 were UNPROVEN: each round's open-ended search for fresh mutants found one or two non-equivalent survivors, each a mutation that adds a tolerance on a line whose break/revert mutations were already killed (round 7: :330 padded `motivo` accepted, :395 `ran` counted as pass). Commit f38949d adds the cases for both (31 lines, nothing edited or removed) and this round both die, plus `.lower()` on :330. This round is decided by the criterion of build-hex/agents/proof-reviewer.md section L3: every changed behavior hunk is broken and the covering test must go red. 20 of 20 hunks (19 in the hook, 1 in classify_needs_human.py) turned a named case red this round; the hook is byte-identical to round 1; suite green twice (246 ok), red at the d1e7f96 hook (142 FAIL); L4 smoke clean. No defect or unguarded decision seen. PROVEN."

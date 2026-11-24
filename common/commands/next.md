@@ -234,9 +234,12 @@ missing and that `/common:queue <key> --from-jira` is what places them — `/boa
 
 **Closing human debt.** `reconcile` never touches `human_pending` — closing one
 is the user's, and this command's, alone. A `human_pending` is cleared by
-`cepa-plan answer <nome> <id> --answer "<what the user saw>"` (it refuses
-without a terminal, so hand the user the command, or let `cepa-until decide`
-ask), and **only the user clears it** — they are the only one who knows whether they
+`cepa-plan answer <nome> <id> --answer "<what the user saw>"`. Without a
+terminal it needs `--from-chat "<the user's words, as typed>"`: when the user
+answered in the chat, record it yourself with that quote (the CLI checks it is
+in one of their prompts of this session, from the last 24h) instead of handing
+them a command to run. In an unattended run the flag is refused; leave the
+question for `cepa-until decide`. Either way, **only the user clears it** — they are the only one who knows whether they
 actually ran the route. Ask, one item at a time, naming the route verbatim
 ("did you open /admin/devolucoes and confirm the refusal?"). Never infer it from
 a green test, a card status, or the passage of time: a list that closes itself

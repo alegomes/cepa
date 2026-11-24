@@ -7,8 +7,9 @@ comes back on every card that touches that adapter, and the answer given last
 time dies in the chat that produced it.
 
 Who waives is ALWAYS the human. The `proof-reviewer` still cannot waive
-anything and the proof artifact still has no field for it: the waiver lives out
-here, with author, date and a revisit trigger, and is auditable. See the
+anything and the proof artifact has no field for the agent to waive with (it
+may only CITE a waiver in `l2_coverage.status: waived`, and
+`proof-verdict-guard.py` checks the file): the waiver lives out here, with author, date and a revisit trigger, and is auditable. See the
 "Verdict routing" section in build-hex/agents/proof-reviewer.md.
 
 A waiver matches by REASON + SCOPE, never by card: matching by card would save

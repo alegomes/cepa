@@ -3761,13 +3761,17 @@ class Panel:
         else:
             self.output("\n── nothing is waiting on you in this run")
 
-    def open_panel(self, total):
+    def open_panel(self, total, items=None):
+        """`items` (decide-agrupa-perguntas-iguais): when equal questions were
+        grouped, the opening counts the items and the questions apart."""
+        head = (f"{items} items in {total} question(s)"
+                if items is not None and items != total else f"{total} question(s)")
         if not self.enabled:
-            self.output(f"\n── {total} question(s) for you. One at a time: y or n "
+            self.output(f"\n── {head} for you. One at a time: y or n "
                        "is enough; Enter leaves it for later, q quits")
             return
         self.output("")
-        self.output(self.t.rule(f"{total} question(s) for you"))
+        self.output(self.t.rule(f"{head} for you"))
         self.output("   " + self.t.c("cinza", "one at a time · y or n is enough · Enter "
                                              "leaves it for later · q quits"))
 
@@ -3865,6 +3869,25 @@ class Panel:
             for l in self._wrap(title, 2):
                 self._border(l, "negrito")
         self._border()
+
+    def group_head(self, i, n, count):
+        """Head of the card of a group of equal questions."""
+        title = f"{count} items, one question"
+        if not self.enabled:
+            self.output(f"\n   ━━ [{i}/{n}] {title}")
+            return
+        self.output("")
+        self._top(f"{i}/{n} · {title}", "ciano")
+        self._border()
+
+    def members(self, lines):
+        """The members of a group, one line each."""
+        for text in lines:
+            if not self.enabled:
+                self.output(f"         {text}")
+                continue
+            for l in self._wrap(text, 4, 6):
+                self._border(l)
 
     def label(self, name, text, short_path=None):
         """`name: text` outside a terminal; on a terminal the label (or its
@@ -4026,10 +4049,271 @@ def created_items(applied):
     return found
 
 
+# ── groups of equal questions (decide-agrupa-perguntas-iguais) ──────────────
+#
+# In the run `all/2026-11-21-1244` the owner got 26 delivered items, in 4 queues, each
+# asking the same thing (accept the proof's coverage waiver); the texts were not
+# identical (each named its scope), so the panel groups by what the question IS:
+# (a) a proposed waiver with the same `motivo`, else (b) the same written question text.
+
+GROUP_NOTE = "respondida em grupo de"
+RECOMMENDS = re.compile(r"\bRecomendo\s+(sim|não|nao)\b", re.IGNORECASE)
+
+
+def _apply_answer(repo, ans_queue, ans_ident, text, keep=False, drop=False):
+    """`cepa-plan answer <queue> <id>`: (rc, output). `decide` records each answer
+    through it, one item at a time or one per member of a group."""
+    p = subprocess.run(
+        [sys.executable, str(CEPA_PLAN), "answer", ans_queue, ans_ident,
+         "--answer", text, "--repo", str(repo)]
+        + (["--keep"] if keep else [])
+        + (["--drop"] if drop else [])
+        + ([] if _answer_commit else ["--no-commit"])
+        + (["--multiline"] if "\n" in text else []),
+        capture_output=True, text=True, timeout=60)
+    text_out = (p.stdout or p.stderr).strip()
+    if not _answer_commit:
+        # `decide` commits at its end and says so: the "queue written
+        # without a commit" notice of `cepa-plan answer --no-commit` would
+        # be false by the time the owner reads it.
+        text_out = "\n".join(
+            l for l in text_out.splitlines()
+            if not l.lstrip().startswith("fila gravada sem commit")).strip()
+    return p.returncode, text_out
+
+
+def written_question_of(ad, d):
+    """The question an item WRITES (the agent's `question`, else the analysis'
+    `pergunta`), or None: a default card question is not a written one."""
+    return ad.get("question") or (d or {}).get("pergunta") or None
+
+
+def own_recommendation(ad, d):
+    """`y`, `n` or None: the recommendation an item carries, the "Recomendo
+    sim/não" of its question first, else the analysis one."""
+    m = RECOMMENDS.search(str(written_question_of(ad, d) or ""))
+    if m:
+        return "y" if m.group(1).lower() == "sim" else "n"
+    return recommended_letter(d)
+
+
+def proposed_waivers(repo):
+    """The waivers waiting for the owner's answer (`status: proposta`), as dicts."""
+    found = []
+    for path in _waiver_files(repo):
+        try:
+            d = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (yaml.YAMLError, OSError, ValueError):
+            continue  # ValueError: UnicodeDecodeError, a file that is not UTF-8
+        if (isinstance(d, dict) and d.get("status") == "proposta"
+                and d.get("item") is not None and d.get("motivo")):
+            found.append(d)
+    return found
+
+
+def waiver_motivo_of(waivers, queue, ident):
+    """The `motivo` of the proposed waiver tied to a queue item (the same match
+    `cepa-plan answer` makes: `item`, and `fila` when the file names one), or None."""
+    motivos = sorted({str(w["motivo"]) for w in waivers
+                      if str(w.get("item")) == str(ident)
+                      and (not w.get("fila") or w.get("fila") == queue)})
+    return ", ".join(motivos) or None
+
+
+def is_delivered(ad):
+    """Delivered work with a leftover route: `y` closes the task, the work stays."""
+    return ad.get("reason") == "pos-entrega"
+
+
+def group_owner_items(repo, members):
+    """`(groups, singles)` of the owner items. `members` are dicts with `queue`, `ad`,
+    `d` (the analysis of the item, maybe empty), `label` and `bare` (the id inside its
+    queue). A group has 2+ members that share (a) a proposed waiver with the same
+    `motivo` or, among the rest, (b) the same WRITTEN question text (whitespace and
+    case collapsed) and the same route kind; delivered and not delivered items never share a
+    group (`y` means something else for each); an item with no written question is never
+    grouped by text. An item is in at most one group; groups come in
+    the order of their first member."""
+    waivers = proposed_waivers(repo)
+    by_waiver, by_text, grouped = {}, {}, set()
+    for i, m in enumerate(members):
+        motivo = waiver_motivo_of(waivers, m["queue"], m["bare"])
+        if motivo:
+            by_waiver.setdefault((motivo, is_delivered(m["ad"])), []).append(i)
+    groups = []
+    for (motivo, delivered), idx in by_waiver.items():
+        if len(idx) > 1:
+            groups.append((idx[0], {"kind": "waiver", "motivo": motivo,
+                                    "delivered": delivered,
+                                    "members": [members[i] for i in idx]}))
+            grouped.update(idx)
+    for i, m in enumerate(members):
+        if i in grouped:
+            continue
+        written = written_question_of(m["ad"], m["d"])
+        if not written:
+            continue  # no written question: the default one is not "the same question"
+        text = " ".join(str(written).split()).casefold()
+        by_text.setdefault((text, m["ad"].get("route_kind"), is_delivered(m["ad"])),
+                           []).append(i)
+    for idx in by_text.values():
+        if len(idx) > 1:
+            groups.append((idx[0], {"kind": "text",
+                                    "delivered": is_delivered(members[idx[0]]["ad"]),
+                                    "text": written_question_of(members[idx[0]]["ad"],
+                                                                members[idx[0]]["d"]),
+                                    "members": [members[i] for i in idx]}))
+            grouped.update(idx)
+    groups.sort(key=lambda x: x[0])
+    return ([g for _, g in groups],
+            [m for i, m in enumerate(members) if i not in grouped])
+
+
+def member_line(m, with_queue):
+    ident = f"{m['queue']}/{m['bare']}" if with_queue else m["bare"]
+    title = " ".join(str(m["ad"].get("title") or "").split())
+    return f"{ident} — {title}" if title else ident
+
+
+def group_in_common(g):
+    if g["kind"] == "waiver":
+        return ("proof waiver: each of these items' proof asks you to accept the "
+                f"waiver for the reason \"{g['motivo'].replace('-', ' ')}\"")
+    return None
+
+
+def group_as_text(g, with_queue):
+    """One entry of the non-terminal listing: the count, what they share, the ids."""
+    ids = ", ".join(f"{m['queue']}/{m['bare']}" if with_queue else m["bare"]
+                    for m in g["members"])
+    what = (f"proof waiver, reason \"{g['motivo'].replace('-', ' ')}\"" if g["kind"] == "waiver"
+            else g["text"])
+    return f"{len(g['members'])} items, same question ({ids}): {what}"
+
+
+def ask_group(screen, g, i, n, question, apply, progress, with_queue=False):
+    """One card for a group of equal questions. Returns
+    `(applied, for_later, ask_one_by_one, quit)`: `applied`/`for_later` have one entry
+    per member (`label: ...`, as the one-by-one path writes them) and
+    `ask_one_by_one` are the members that go on to their own cards (the owner chose
+    `o`, or chose `a` and they carry no recommendation). `apply(member, text, keep)`
+    records an answer and returns `(rc, output)`."""
+    members = g["members"]
+    count = len(members)
+    recs = [own_recommendation(m["ad"], m["d"]) for m in members]
+    with_rec = [r for r in recs if r]
+    yes_n, no_n = with_rec.count("y"), with_rec.count("n")
+    lacking = count - len(with_rec)
+    screen.group_head(i, n, count)
+    # Counted here once: the members handed back (`o`, or `a` without a
+    # recommendation) reach `decide` marked as counted and are not added again.
+    progress["asked"] = progress.get("asked", 0) + count
+    progress["questions"] = progress.get("questions", 0) + 1
+    common = group_in_common(g)
+    if common:
+        screen.label("In common", common)
+    else:
+        screen.question(g["text"])
+    screen.label("Items", f"{count} share this question:")
+    screen.members([member_line(m, with_queue) for m in members])
+    screen.blank()
+    recommended = None
+    if not with_rec:
+        screen.warning("none of them carries a recommendation, so there is no [a]")
+    elif lacking:
+        screen.warning(f"{len(with_rec)} of the {count} carry a recommendation "
+                       f"({yes_n} yes, {no_n} no); the {lacking} that carry none "
+                       "stay out of [a] and are asked one by one")
+    elif yes_n == count or no_n == count:
+        recommended = "a"
+        screen.recommend(f"Recommend a: all {count} recommend "
+                         f"{'yes' if yes_n == count else 'no'}")
+    else:
+        recommended = "a"
+        screen.recommend(f"Recommend a: each item's own recommendation "
+                         f"({yes_n} yes, {no_n} no)")
+    chips = [("y", f"yes to all {count}"), ("n", f"no to all {count}")]
+    # The effect of y and n is the per-item legend's, for the kind of the group.
+    effect = {k: legend_lines([(k, "")], {}, bool(g.get("delivered")))[0].split(" = ", 1)[1]
+              for k in ("y", "n")}
+    legend = [f"y = yes to all {count}: {effect['y']}"
+              + ("; a proposed waiver is accepted" if g["kind"] == "waiver" else ""),
+              f"n = no to all {count}: {effect['n']}"]
+    if with_rec:
+        chips.append(("a", "accept each one's recommendation"))
+        legend.append(f"a = answers each item with its own recommendation "
+                      f"({yes_n} yes, {no_n} no)"
+                      + (f"; the {lacking} with none are asked one by one" if lacking
+                         else ""))
+    chips += [("o", "ask them one by one"), ("Enter", "later"), ("q", "quit")]
+    legend += [f"o = asks the {count} one by one, as usual",
+               f"Enter = leaves all {count} for later",
+               "q = stops the questions; the rest stays for later"]
+    screen.blank()
+    screen.legend(legend)
+    prompt = screen.menu(chips, recommended)
+    valid = {"y", "n", "o", "", "q"} | ({"a"} if with_rec else set())
+    while True:
+        raw = str(question(prompt))
+        r = raw.strip().lower()
+        if r in OLD_KEY_NOW:
+            screen.key_error(OLD_KEY_NOW[r])
+            continue
+        r = {"yes": "y", "não": "n", "nao": "n", "no": "n"}.get(r, r)
+        if r not in valid:
+            screen.key_error(f"\"{raw.strip()}\" is not one of the options")
+            continue
+        break
+    applied, for_later = [], []
+    later_text = lambda m: f"{m['label']}: {OWNER_REASON[reason_alias(m['ad']['reason'])]}"
+    if r in ("", "q"):
+        for_later += [later_text(m) for m in members]
+        screen.end()
+        return applied, for_later, [], r == "q"
+    if r == "o":
+        screen.note(f"asking the {count} one by one")
+        screen.end()
+        return applied, for_later, list(members), False
+    extra = str(question(screen.follow_up(
+        f"Anything to add to all {count} answers, in one line? "
+        "[Enter skips, v opens the editor] "))).strip()
+    if extra.lower() == "v":
+        extra = edit_in_editor(f"group of {count}", g.get("text") or common,
+                               f"{count} items, one question")
+    one_by_one, failed = [], 0
+    for m, rec in zip(members, recs):
+        key = rec if r == "a" else r
+        if key is None:
+            one_by_one.append(m)
+            continue
+        ad, d = m["ad"], m["d"]
+        instruction = " ".join(str(d.get("instrucao") or "").split())
+        base = ad.get("question") or d.get("pergunta") or ad.get("human_pending") \
+            or "unblock the item"
+        text = (("sim" if key == "y" else "não") + f": {base}"
+                + (f" Instrução: {instruction}" if key == "y" and instruction else "")
+                + (f". {extra}" if extra else "")
+                + f" ({GROUP_NOTE} {count})")
+        rc, msg = apply(m, text, key != "y")
+        if rc == 0:
+            applied.append(f"{m['label']}: {msg}")
+            progress["answered"] = progress.get("answered", 0) + 1
+        else:
+            failed += 1
+            for_later.append(later_text(m))
+            screen.recorded(f"{member_line(m, with_queue)}: {msg}", ok=False)
+    screen.recorded(f"{len(applied)} of {count} answers recorded"
+                    + (f", {failed} failed and stay for later" if failed else "")
+                    + (f", {len(one_by_one)} asked one by one next" if one_by_one else ""),
+                    ok=not failed)
+    screen.end()
+    return applied, for_later, one_by_one, False
+
+
 def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
            output=print, answer=None, land=None, wait=None, first=1, of=None,
            opened=False, note=None, close=True, progress=None, unclear=None,
-           rewrite=None, ask_land=True):
+           rewrite=None, ask_land=True, group=True, counted=()):
     """Goes through what only the owner unblocks and applies each answer. Returns
     (applied, for_later), as text, for the closing.
     CS-4 (fim-do-until-sem-espera): `ask_land=False` (the end of a run) never offers
@@ -4043,7 +4327,12 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     screen) and `answered` (answers recorded in the queue).
     CS-7 (perguntas-da-largada-legiveis): `rewrite(ad, shown_question)` returns
     (route_or_None, error_or_None): after `?`, the new question replaces the old one
-    in the same block, is recorded in the queue, and the menu asks again."""
+    in the same block, is recorded in the queue, and the menu asks again.
+    decide-agrupa-perguntas-iguais: with `group` (the default), owner items that ask the
+    same question (see `group_owner_items`) come first, one card per group with a menu
+    that answers all of its members; the rest is asked one by one as always.
+    `progress["questions"]` counts the cards, `asked`/`answered` count items.
+    `counted` holds `id(ad)` of items a group card already counted in `asked`."""
     progress = {} if progress is None else progress
     if question is None:
         def question(prompt):
@@ -4053,23 +4342,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     if answer is None:
         def answer(ident, text, keep=False, drop=False):
             ans_queue, ans_ident = split_label(repo, queue, ident)
-            p = subprocess.run(
-                [sys.executable, str(CEPA_PLAN), "answer", ans_queue, ans_ident,
-                 "--answer", text, "--repo", str(repo)]
-                + (["--keep"] if keep else [])
-                + (["--drop"] if drop else [])
-                + ([] if _answer_commit else ["--no-commit"])
-                + (["--multiline"] if "\n" in text else []),
-                capture_output=True, text=True, timeout=60)
-            text_out = (p.stdout or p.stderr).strip()
-            if not _answer_commit:
-                # `decide` commits at its end and says so: the "queue written
-                # without a commit" notice of `cepa-plan answer --no-commit` would
-                # be false by the time the owner reads it.
-                text_out = "\n".join(
-                    l for l in text_out.splitlines()
-                    if not l.lstrip().startswith("fila gravada sem commit")).strip()
-            return p.returncode, text_out
+            return _apply_answer(repo, ans_queue, ans_ident, text, keep, drop)
     if unclear is None:
         # CS-6 (perguntas-da-largada-legiveis): "I did not understand" goes to the
         # global feedback ledger `/common:feedback` triages, target `cepa-until`;
@@ -4128,14 +4401,25 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     owner_items = [ad for ad in deferred if reason_alias(ad.get("reason")) in OWNER_REASON]
     without_owner = [ad for ad in deferred if reason_alias(ad.get("reason")) in NO_OWNER_REASON]
     action = pending_action(item_states) if ask_land else None
-    total = (1 if action else 0) + len(owner_items)
+    groups = []
+    if group and len(owner_items) > 1:
+        groups, singles = group_owner_items(repo, [
+            {"queue": queue, "ad": ad, "d": by_item.get(str(ad.get("id"))) or {},
+             "label": str(ad.get("id")), "bare": str(ad.get("id"))}
+            for ad in owner_items])
+        n_items = len(owner_items)
+        owner_items = [m["ad"] for m in singles]
+    else:
+        n_items = len(owner_items)
+    total = (1 if action else 0) + len(groups) + len(owner_items)
     if not total:
         if ask_land:
             screen.nothing()
         return applied, for_later
 
     if not opened:
-        screen.open_panel(of or total)
+        screen.open_panel(of or total,
+                          None if of else (1 if action else 0) + n_items)
         if note:
             screen.panel_note(note)
     stopped = False
@@ -4157,6 +4441,34 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                                f"{queue}/{run_id} --yes")
         screen.end()
 
+    # Groups first, one card each. A group the owner dissolves (`o`), and the members
+    # `a` could not answer, come back as ordinary cards after them; the "of" of the
+    # numbering grows by the cards added, so it stays true.
+    cards_before = len(groups)
+    base_of = of or (cards_before + len(owner_items))
+    again, dissolved = [], 0
+    counted = set(counted) | {id(ad) for g in groups for m in g["members"]
+                              for ad in (m["ad"],)}
+    for k, g in enumerate(groups):
+        if stopped:
+            for_later += [f"{m['label']}: {OWNER_REASON[reason_alias(m['ad']['reason'])]}"
+                          for m in g["members"]]
+            continue
+        got, later, one_by_one, quit_ = ask_group(
+            screen, g, first + k - dissolved, base_of + len(again) - dissolved, question,
+            lambda m, text, keep: answer(m["label"], text, keep=True) if keep
+            else answer(m["label"], text), progress)
+        applied += got
+        for_later += later
+        again += [m["ad"] for m in one_by_one]
+        # A card that dissolves entirely into one-by-one cards does not count in
+        # the numbering the items then show.
+        dissolved += len(one_by_one) == len(g["members"])
+        stopped = stopped or quit_
+    if again:
+        owner_items = again + owner_items
+        screen.panel_note(f"{len(again)} more question(s) follow, one by one")
+
     for i, ad in enumerate(owner_items, 1):
         ident = str(ad.get("id"))
         if stopped:
@@ -4172,8 +4484,11 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # characters the owner answered a question he saw only half of
         # (feedback of 10/15, decidir WEGO 2026-10-15-1128).
         summary = owner_summary_of(ad, d)
-        screen.item(i + first - 1, of or len(owner_items), ident, ad.get("title") or "")
-        progress["asked"] = progress.get("asked", 0) + 1
+        screen.item(i + first - 1 + cards_before - dissolved,
+                    base_of + len(again) - dissolved, ident,
+                    ad.get("title") or "")
+        if id(ad) not in counted:
+            progress["asked"] = progress.get("asked", 0) + 1
         # The human section first, in the order a person reads a story:
         # what stopped, what was asked, what is already done. The agent
         # section (the evidence, with its codes) only on `[e]`.
@@ -4419,18 +4734,34 @@ def owner_question_of(ad, by_item):
     return why, q
 
 
-def pending_as_text(queue, run_id, item_states, deferred, analysis, output=print):
+def pending_as_text(queue, run_id, item_states, deferred, analysis, output=print,
+                    repo=None):
     """Without a terminal (the run launched by `nohup`, or read by another program):
-    the same list, without asking."""
+    the same list, without asking. With `repo`, equal questions print as one entry
+    (decide-agrupa-perguntas-iguais), as the panel would group them."""
     analysis = analysis or {}
     by_item = analysis.get("itens") or {}
     action = pending_action(item_states)
     owner_items = [ad for ad in deferred if reason_alias(ad.get("reason")) in OWNER_REASON]
     if not action and not owner_items:
         return
-    output(f"\n── waiting on you: {(1 if action else 0) + len(owner_items)}")
+    groups = []
+    if repo is not None and len(owner_items) > 1:
+        groups, singles = group_owner_items(repo, [
+            {"queue": queue, "ad": ad, "d": by_item.get(str(ad.get("id"))) or {},
+             "label": str(ad.get("id")), "bare": str(ad.get("id"))}
+            for ad in owner_items])
+        n_items = (1 if action else 0) + len(owner_items)
+        owner_items = [m["ad"] for m in singles]
+    questions = (1 if action else 0) + len(groups) + len(owner_items)
+    if groups:
+        output(f"\n── waiting on you: {n_items} items in {questions} question(s)")
+    else:
+        output(f"\n── waiting on you: {questions}")
     if action:
         output(f"   - {action_label(action)}: {action.get('frase')}")
+    for g in groups:
+        output(f"   - {group_as_text(g, False)}")
     for ad in owner_items:
         why, q = owner_question_of(ad, by_item)
         output(f"   - {ad.get('id')} ({why}): {q}")
@@ -4509,6 +4840,33 @@ def owner_deferred(repo, queue, run_id, quiet=False):
     return deferred
 
 
+def split_answered_no(items, queue):
+    """`(items to ask, {queue: [dates]})`: the owner-reason items whose evidence
+    still STARTS with the owner's last "não" (`last_owner_no`: the conditions did not
+    change) go to the second part, keyed by their own queue (`fila` for an `all/<run>`
+    item, else `queue`). Everything else stays, in order."""
+    kept, no = [], {}
+    for ad in items:
+        date = (last_owner_no(ad.get("evidence"))
+                if reason_alias(ad.get("reason")) in OWNER_REASON else None)
+        if date:
+            no.setdefault(ad.get("fila") or queue, []).append(date)
+        else:
+            kept.append(ad)
+    return kept, no
+
+
+def say_answered_no(no, all_run):
+    """The one line per queue for the routes a run's `decide` does not ask again
+    (the wording of `ask_at_launch` / `ask_at_launch_all`)."""
+    for name, dates in no.items():
+        latest = max(dates)
+        where = f"queue `{name}`: " if all_run else ""
+        print(f"\n── {where}{len(dates)} route(s) you already answered \"no\" "
+              f"(last on {latest[8:10]}/{latest[5:7]}): not asked again here; to "
+              f"revisit them: cepa-until decide {name}")
+
+
 def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=None,
                      wait=None, already_asked=(), ask_land=True, report=None):
     """The closing of the run and of `cepa-until decide`: queries the queue again (its
@@ -4521,6 +4879,11 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
     deferred = owner_deferred(repo, queue, run_id)
     if is_all_run(repo, queue) and run_id:
         already_asked = ()
+    # The decide of ONE run does not ask again what the owner already answered "no"
+    # and nothing changed (`cepa-until decide <queue>` revisits them).
+    answered_no = {}
+    if run_id:
+        deferred, answered_no = split_answered_no(deferred, queue)
     # Asked mid-run already (the panel before closing, LL-1): asking the same
     # question twice in one run is the ping-pong the panel exists to avoid.
     asked = {str(x) for x in already_asked}
@@ -4538,9 +4901,12 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
                 Path(review).read_text(encoding="utf-8"))
         except OSError:
             analysis = {}
-    def hand_back(still_open):
+    def hand_back(still_open, left_out=None):
         """The run end's report gets what is still open, the items already asked
         in this run apart: the "Next" panel names them but does not ask again."""
+        report["answered_no"] = left_out or {}
+        if run_id and left_out is None:
+            still_open, report["answered_no"] = split_answered_no(still_open, queue)
         report["analysis"] = analysis
         report["asked"] = [str(ad.get("id")) for ad in still_open
                            if str(ad.get("id")) in asked]
@@ -4549,11 +4915,14 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
 
     if interactive is None:
         interactive = sys.stdin.isatty() and sys.stdout.isatty()
+    if answered_no and report is None:
+        say_answered_no(answered_no, is_all_run(repo, queue))
     if not interactive:
         if report is not None:
-            hand_back(everything)
+            hand_back(everything, answered_no)
         else:
-            pending_as_text(queue, run_id, item_states, deferred, analysis)
+            pending_as_text(queue, run_id, item_states, deferred, analysis,
+                            repo=repo)
         return 0
     try:
         decide(repo, queue, run_id, item_states, deferred, analysis, wait=wait,
@@ -4711,6 +5080,13 @@ def next_rows(repo, queue, run_id, state, ledger, report, left=None):
                      (None, ", ".join(asked), True)])
         rows.append([(None, "   "), ("ciano", f"cepa-until decide {queue}/{run_id}"),
                      ("cinza", " (to answer again)")])
+    # Routes the owner already answered "no": counted, never asked here again
+    # (decide-de-run-nao-repete-nao-respondido); the whole queue revisits them.
+    for name, dates in ((report or {}).get("answered_no") or {}).items():
+        latest = max(dates)
+        rows.append([("cinza", f"{len(dates)} route(s) you already answered \"no\" "
+                      f"(last on {latest[8:10]}/{latest[5:7]}), not asked again: "),
+                     ("ciano", f"cepa-until decide {name}", True)])
     for stay in state.get("fica_com_voce") or []:
         if stay.get("id") in shown:
             continue
@@ -5455,8 +5831,10 @@ def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False, skip=
         part["note"] = ("the pre-read is still reading; its questions come at the end "
                         "of this list")
     try:
+        # The launch's numbering counts items (`tally["shown"]`), so it does not group.
         applied, for_later = decide(repo, queue, None, {}, deferred, {},
-                                    wait=ANSWER_WAIT_SEC, progress=tally, **part)
+                                    wait=ANSWER_WAIT_SEC, progress=tally,
+                                    group=False, **part)
         if tally is not None:
             tally["cut"] = False
             tally.setdefault("applied", []).extend(applied)
@@ -5551,8 +5929,24 @@ def ask_at_launch_all(repo, wait=ANSWER_WAIT_SEC, leftovers=False,
         if say_empty and not named:
             print("nada espera você")
         return
+    # decide-agrupa-perguntas-iguais: equal questions (across queues too) become one
+    # card each, asked first; `sections` keeps only what is asked one by one.
+    groups = []
+    if total > 1:
+        groups, singles = group_owner_items(repo, [
+            {"queue": name, "ad": ad, "d": {}, "label": f"{name}/{ad.get('id')}",
+             "bare": str(ad.get("id"))}
+            for name, items in sections for ad in items])
+        single_ads = {id(m["ad"]) for m in singles}
+        sections = [(name, [ad for ad in items if id(ad) in single_ads])
+                    for name, items in sections]
+        sections = [(name, items) for name, items in sections if items]
+    questions = len(groups) + sum(len(items) for _, items in sections)
     if as_text:
-        print(f"\n── waiting on you: {total}")
+        print(f"\n── waiting on you: "
+              + (f"{total} items in {questions} question(s)" if groups else f"{total}"))
+        for g in groups:
+            print(f"   - {group_as_text(g, True)}")
         for name, items in sections:
             print(f"   queue `{name}` · {len(items)} question(s)")
             for ad in items:
@@ -5561,9 +5955,62 @@ def ask_at_launch_all(repo, wait=ANSWER_WAIT_SEC, leftovers=False,
         print("   To answer them one by one, in a terminal: cepa-until decide --all")
         return
     screen = Panel(SCREEN, print)
-    screen.open_panel(total)
+    screen.open_panel(questions, total)
     tally, applied, for_later, unanswered = {}, [], [], []
     cut = None
+    again, dissolved = [], 0
+    stop_goes_on = lambda: f"questions stopped with q; {goes_on}"
+    if groups:
+        def read(prompt):
+            return read_line(prompt, print, wait)
+
+        def apply(m, text, keep):
+            return _apply_answer(repo, m["queue"], m["bare"], text, keep=keep)
+
+        for k, g in enumerate(groups):
+            left = [m["queue"] for rest in groups[k:] for m in rest["members"]]
+            try:
+                got, later, one_by_one, quit_ = ask_group(
+                    screen, g, k + 1 - dissolved, questions + len(again) - dissolved,
+                    read, apply, tally,
+                    with_queue=True)
+            except NoAnswer:
+                cut = f"nobody answered in {(wait or 0) / 60:g} min; {goes_on}"
+                unanswered += left
+                break
+            except (EOFError, KeyboardInterrupt):
+                cut = f"questions interrupted; {goes_on}"
+                unanswered += left
+                break
+            applied += got
+            for_later += later
+            again += one_by_one
+            dissolved += len(one_by_one) == len(g["members"])
+            unanswered += [m["queue"] for m in g["members"]
+                           if any(x.startswith(f"{m['queue']}/{m['bare']}:")
+                                  for x in later)]
+            if quit_:
+                tally["quit"] = True
+                cut = stop_goes_on()
+                unanswered += [m["queue"] for rest in groups[k + 1:]
+                               for m in rest["members"]]
+                break
+        if again and not cut:
+            screen.panel_note(f"{len(again)} more question(s) follow, one by one")
+            sections = [(name, [m["ad"] for m in again if m["queue"] == name] + items)
+                        for name, items in sections]
+            known = {name for name, _ in sections}
+            sections += [(name, [m["ad"] for m in again if m["queue"] == name])
+                         for name in dict.fromkeys(m["queue"] for m in again)
+                         if name not in known]
+        elif again:
+            # Handed back by `o` but never asked (the panel was cut): they are left
+            # for later and their queues are named in the closing line.
+            for m in again:
+                for_later.append(f"{m['label']}: "
+                                 f"{OWNER_REASON[reason_alias(m['ad']['reason'])]}")
+                unanswered.append(m["queue"])
+    tally["shown"] = len(groups) - dissolved
     for i, (name, items) in enumerate(sections):
         if cut:
             unanswered.append(name)
@@ -5574,8 +6021,9 @@ def ask_at_launch_all(repo, wait=ANSWER_WAIT_SEC, leftovers=False,
         try:
             got, later = decide(repo, name, None, {}, items, {},
                                 wait=wait, progress=tally,
-                                first=shown + 1, of=total, opened=True,
-                                close=False)
+                                first=shown + 1, of=questions + len(again) - dissolved,
+                                opened=True, close=False, group=False,
+                                counted={id(m["ad"]) for m in again})
         except NoAnswer:
             cut = f"nobody answered in {(wait or 0) / 60:g} min; {goes_on}"
             unanswered.append(name)
@@ -5589,8 +6037,8 @@ def ask_at_launch_all(repo, wait=ANSWER_WAIT_SEC, leftovers=False,
         if later:
             unanswered.append(name)
         if tally.get("quit"):
-            cut = f"questions stopped with q; {goes_on}"
-    back = " · ".join(f"cepa-until decide {n}" for n in unanswered)
+            cut = stop_goes_on()
+    back = " · ".join(f"cepa-until decide {n}" for n in dict.fromkeys(unanswered))
     if cut:
         print(f"\n   {cut} To answer later: {back}")
         return
@@ -5619,14 +6067,21 @@ def cmd_decide(argv):
             "changed.\n"
             "\n"
             "Each question is closed, with a recommendation, and the answer is\n"
-            "applied right away (cepa plan answer). When it ends, whatever the way\n"
+            "applied right away (cepa plan answer). Items that ask the same\n"
+            "question (the same proposed waiver reason, or the same WRITTEN question text),\n"
+            "also across queues, come first as ONE card: y or n answers them all,\n"
+            "a accepts each item's own recommendation, o asks them one by one.\n"
+            "Each item still records its own answer, noting it came from a group.\n"
+            "When it ends, whatever the way\n"
             "(Ctrl+C included), it commits what the answers wrote: the queue and, with\n"
             "<run>, the run records (only those paths, never --no-verify, not pushed).\n"
             "If git refuses, it says why and prints the command to run by hand; the\n"
             "exit code does not change. Outside a terminal it prints the pending\n"
             "questions as text instead of asking, and commits nothing. With no\n"
             "target and no open route in any queue, it prints the one line\n"
-            "\"nada espera você\" and exits 0."),
+            "\"nada espera você\" and exits 0. With <queue>/<run> it does not ask again\n"
+            "the routes you already answered \"no\" (nothing changed since): one line\n"
+            "per queue counts them; <queue> alone asks them again."),
         examples=[
             ("cepa until decide", "every question of every queue, in one panel"),
             ("cepa until decide --all", "the same, said out loud"),

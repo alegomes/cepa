@@ -1,0 +1,42 @@
+schema_version: 2
+card: gate-advance-exige-build-que-cobre-o-commit
+verdict: needs-human
+reviewed_at: 2026-11-23T12:00:00-03:00
+base_commit: 6eade96
+head_commit: 2c0297e
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/hooks/capture-build-result.py", module: hooks, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/gate-advance.py", module: hooks, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  note: "Python hooks, no Maven. The covering test runs both hooks as subprocesses with a JSON payload (the real surface); no double stands in for the changed code. Commits were cherry-picked unchanged from the earlier branch (old base 8c1cb0a); behavior head is a3ea0a4, and 2c0297e only adds the proof/acceptance artifacts."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "Round 5 (head 2c0297e, throwaway worktree /tmp/proof-gate5, removed): head test python3 tests/test_gate_advance_filtered_green.py -> 'ok', zero FAIL (green established before perturbing)."
+        - "KILLED: P5 (--untracked dropped from the git grep) -> FAIL p (exit 2 expected, got 0)."
+        - "KILLED: P10' (second-loop skip back to is_test_path) -> FAIL o (exit 2 expected, got 0)."
+        - "KILLED: P10b (second-loop skip reduced to `if not name:`) -> FAIL q (exit 0 expected, got 2)."
+        - "KILLED: P4 (-w whole-word flag dropped from the git grep) -> FAIL l (exit 0 expected, got 2)."
+        - "KILLED: P1 (first loop, a runnable test outside the filter, disabled) -> FAIL g (exit 2 expected, got 0)."
+        - "KILLED: P2 (filter_runs ignores the `!` excludes) -> FAIL d (exit 2 expected, got 0)."
+        - "Labels P1/P2/P4 are re-derived from the hunks (the earlier numbering was not on disk), so they name the perturbation above, not necessarily the same-numbered one in rounds 3 and 4. Rounds 3 and 4 (earlier SHAs, same behavior code) killed 19 of 21 perturbations; the survivors P9, P19 and P22 were argued equivalent and were not re-run in this round."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "python3 -m coverage --version -> No module named coverage; no coverage tool wired for the Python hooks; not measured"
+  l4_adversarial_input:
+    status: skipped
+    reason: "not run: the hook parses a free-text git command from the agent; adversarial command shapes were not fuzzed"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "hooks gate-advance.py and capture-build-result.py checked out from 6eade96 with the head test: python3 tests/test_gate_advance_filtered_green.py -> 16 FAIL lines (a, b x3, d, g x2, h, i, m, n, k, o x2, p x2); at head -> 'ok'. Neighbors at head: tests/test_gate_advance_red_test_commit.py 'todos os casos verdes', tests/test_gate_advance_target_repo.py 'todos os casos verdes', python3 -m pytest -q tests/test_capture_build_result_classify.py -> 34 passed"
+routing_reason: "The proof holds at the new SHAs: regression red at base 6eade96, green at head, six representative perturbations all killed. Two levels still cannot be measured here: line coverage (no coverage tool for the Python hooks) and adversarial command shapes (not fuzzed). NEEDS-HUMAN. Suggested decision for the human: accept the contract test as sufficient evidence for L2 and L4 on this card."

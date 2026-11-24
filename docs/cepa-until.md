@@ -217,6 +217,22 @@ because it waits on the owner, plus the `done` items that still carry a task onl
 does (create a role, validate by hand). Each card has `[d]`: on a pending or blocked item it
 takes the item out of the queue (`dropped`); on a delivered one it closes the leftover task as
 no longer needed. `sim` always means "back to the queue", so it cannot stand for "discard".
+
+Items that ask the same question are asked once. Two items are "equal" when both carry a
+proposed waiver (`.claude/waivers/*.yaml`, `status: proposta`) with the same `motivo`, or,
+failing that, when both WRITTEN a question and the text is the same after collapsing whitespace
+and case (and the route kind is the same). Delivered items (a leftover route after delivered
+work) and blocked items are never in the same group, since `[y]` means something else for each:
+for a delivered group it closes the task and leaves the work as it is. An item with no written question is never grouped by
+text: the default question of the panel is not "the same question", the route text is what the
+owner is asked, and it differs. `cepa-until decide` and `decide --all` show each group first as ONE
+card, across queues too: it says how many items share the question, what they have in common,
+lists the members and offers `[y]` yes to all, `[n]` no to all, `[a]` accept each item's own
+recommendation (the "Recomendo sim/não" of its question; an item with none is asked one by one
+afterwards), `[o]` ask them one by one, Enter for later and `[q]` to quit. Each member records
+its own answer in its own queue, with the note `(respondida em grupo de N)`; one optional line
+of comment is appended to all of them. Without a terminal the listing prints a group as a
+single entry with the count and the ids. The launch panel of a run does not group.
 `cepa-plan status` says which `pending` items are ready (the next run takes them) and which wait
 on the owner or on another item; readiness is derived from the same rule the run uses, never
 stored.

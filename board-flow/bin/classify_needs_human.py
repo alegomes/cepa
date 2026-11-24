@@ -163,7 +163,9 @@ BLIND_TEST = [
 ]
 
 
-PASSED = ("pass", "clean", "ran", "n/a", None)
+# `waived` on l2_coverage: proof-verdict-guard.py validated the owner-signed
+# waiver at write time, so the level does not block.
+PASSED = ("pass", "clean", "ran", "n/a", "waived", None)
 
 
 def _blocked_levels(levels: dict) -> list[tuple[str, str]]:

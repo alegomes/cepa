@@ -1,0 +1,43 @@
+key: gate-advance-exige-build-que-cobre-o-commit
+status: complete
+diff_range: 6eade96..2c0297e
+note: >
+  O cartão não tem critérios numerados; derivados da fala do dono (fb-20261109-2)
+  e do esboço do BACKLOG. Verde de -Dtest=A não pode liberar commit coberto por B.
+criteria:
+  - id: AC1
+    criterion: "build verde com -Dtest=A e commit que altera o código coberto por B é recusado (teste nomeado no BACKLOG)"
+    altitude: cli
+    surface: >
+      common/hooks/gate-advance.py invocado como subprocesso com payload JSON
+      de PreToolUse (git commit) sobre repo git real e last-build.json com test_filter.
+    test: tests/test_gate_advance_filtered_green.py (blocos b, c, d, e, f, g, h, i, j, k)
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_gate_advance_filtered_green.py (reexecutado em 2026-11-23: 29 linhas ok, 0 falhas, termina em ok; inclui blocos o, p, q novos) (b: exit 2 e nomeia o teste que não rodou; c: filtro com B libera; d: !B recusa; e: sem filtro libera) -> 'ok'; python3 tests/test_gate_advance_red_test_commit.py -> 'todos os casos verdes'"
+    status: complete
+  - id: AC2
+    criterion: "o filtro do build fica gravado no last-build.json"
+    altitude: cli
+    surface: common/hooks/capture-build-result.py invocado como subprocesso (PostToolUse) gravando test_filter.
+    test: tests/test_gate_advance_filtered_green.py (bloco a)
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_gate_advance_filtered_green.py -> 'ok a: SUCCESS', 'ok a: test_filter com os três padrões, como digitados', 'ok a: build sem filtro não grava test_filter'; python3 -m pytest -q tests/test_capture_build_result_classify.py -> 34 passed (reexecutado 2026-11-23)"
+    status: complete
+  - id: AC3
+    criterion: "o gate exige que o build cubra os arquivos alterados para pytest -k, go -run, jest -t e -pl"
+    altitude: cli
+    surface: gate-advance.py para pytest -k, go -run, jest -t e escopo -pl.
+    test: nenhum neste item; pertence ao item do BACKLOG "gate-advance aceita verde de pytest -k, go -run, jest -t ou -pl para liberar commit fora desse escopo" (status pendente, confirmado em BACKLOG.md)
+    layer: ausente
+    evidence: missing
+    status: complete
+    deferral_by_owner: >
+      Movido para o item separado por decisão do dono em 2026-11-23. Pergunta:
+      "Fecho este item só com o Maven e deixo os outros filtros de teste no item
+      novo do backlog?". Resposta literal: "sim: fecha só com Maven, os outros
+      filtros de teste ficam num item novo do backlog". O escopo deste item passa
+      a ser só o filtro Maven; AC3 não é mais critério dele. Fonte da decisão: o
+      relato do coordenador (mensagem do dono citada na tarefa), não um registro
+      que eu tenha lido no disco.

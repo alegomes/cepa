@@ -39,7 +39,7 @@ noisy top level routed so it can never produce a false rejection.
 
 | Level | Question | Tooling (build-hex / Quarkus) | Verdict effect |
 |---|---|---|---|
-| **L2 coverage pre-filter** | Is every changed line even touched by a test at its claimed altitude? | `quarkus-jacoco` (the Quarkus-aware JaCoCo) ∩ diff, or structural | `gap` → UNPROVEN |
+| **L2 coverage pre-filter** | Is every changed line even touched by a test at its claimed altitude? | `quarkus-jacoco` (the Quarkus-aware JaCoCo) ∩ diff; with no coverage tool, derived from the L3 perturbation (a line broken on purpose that turned a test red was executed), else covered by an owner-signed waiver (`waived`), else `assumed` | `gap` → UNPROVEN |
 | **L3 load-bearing** | If I break a changed line, does the test that should guard it — *external* where the change is externally-observable — go red? | **perturbation** (universal: revert hunk → re-run covering test → require RED) + **PIT** as the fast path on non-Quarkus layers | survives / surviving mutant → UNPROVEN |
 | **L4 adversarial input** | Is there externally-observable behavior that no assertion covers? | jqwik / RestAssured fuzz on touched endpoints | finding → NEEDS-HUMAN |
 | **Bug: regression-red-at-base** | Does the regression test actually capture the bug? | run the test at `base_commit` with the fix reverted | green-at-base → UNPROVEN |
@@ -182,8 +182,21 @@ next to an unmet level and never embeds a self-granted waiver; the
 gap is the human's call: when you answer "accept the proof as it is" in
 `/board-flow:decide`, the command records a waiver in `.claude/waivers/`
 (reason, scope, your reasoning, author, date and when to revisit) and advances
-the cards. Only a human answer creates one; the proof artifact itself has no
-field for it, and the verdict in it stays as computed. A later `/board-flow:decide`
+the cards. Only a human answer creates one. The proof artifact has no field for the
+agent to waive with, and the verdict in it stays as computed; the one thing it
+may do is cite a waiver the owner already signed (`l2_coverage.status: waived`
+with `waivers: [<paths>]`), and the guard checks the file in `.claude/waivers/`
+(valid, unexpired, `nada-a-provar`, matching the file; a proposal or refusal does
+not count). Likewise, `l2_coverage` with `technique: perturbation` and `status:
+pass` is accepted only when the L3 perturbation passed and no changed hunk is left
+in `uncovered_lines`; `assumed` next to either fact is blocked, so the same
+question is not asked again. Two limits of the `waived` check: (a) the guard
+checks that the waiver file is valid, unexpired and not a proposal, but that
+the owner signed it is by convention (in an autonomous run `waivers.write` only
+records a proposal); the guard cannot tell who wrote the file. (b) Waivers match
+by file path / class name as written in `scope.changed_classes[].class`, so a
+project whose artifacts list Java FQCNs needs the waiver `escopo` to be that
+same name. A later `/board-flow:decide`
 applies a matching waiver instead of asking the same question again. As
 defense-in-depth, `/board-flow:prove` re-derives
 the verdict from the levels rather than trusting the `verdict` field, so a

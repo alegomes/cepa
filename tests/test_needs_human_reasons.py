@@ -210,6 +210,13 @@ def test_doc_only_diff_only_leaves_blind_test_with_the_three_signals():
     assert classify(pert_ran)[0] != "nada-a-provar"
 
 
+def test_l2_waived_is_not_a_blocked_level():
+    from classify_needs_human import _blocked_levels
+    levels = {"l2_coverage": {"status": "waived"},
+              "l4_adversarial_input": {"status": "skipped"}}
+    assert _blocked_levels(levels) == [("L4", "skipped")]
+
+
 def test_only_not_run_stops_becoming_a_question():
     assert NOT_A_QUESTION == {"nao-rodou"}
 
