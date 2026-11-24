@@ -239,7 +239,7 @@ terminal it needs `--from-chat "<the user's words, as typed>"`: when the user
 answered in the chat, record it yourself with that quote (the CLI checks it is
 in one of their prompts of this session, from the last 24h) instead of handing
 them a command to run. In an unattended run the flag is refused; leave the
-question for `cepa-until decide`. **Only the user clears it** — they are the only one who knows whether they
+question for `cepa-until decide`. Either way, **only the user clears it** — they are the only one who knows whether they
 actually ran the route. Ask, one item at a time, naming the route verbatim
 ("did you open /admin/devolucoes and confirm the refusal?"). Never infer it from
 a green test, a card status, or the passage of time: a list that closes itself

@@ -28,6 +28,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# Before the imports below: they copy os.environ into the ENV every subprocess
+# of this file runs with, and the session-log this test cites is written by an
+# emitter hook. See tests/_isolated_telemetry.py.
+from _isolated_telemetry import isolate  # noqa: E402
+
+isolate()
+
 from test_cepa_until import build_repo, item  # noqa: E402
 from test_cepa_until_decide import CEPA_PLAN, on_tty, items_of, load_module  # noqa: E402
 from test_cepa_plan_answer_creates_item import ENV, routed  # noqa: E402
