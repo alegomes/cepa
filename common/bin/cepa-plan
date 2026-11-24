@@ -35,7 +35,15 @@ Subcommands:
       on a `done` item, run to land: the rule `waiting` uses) stays and the
       output says why. By hand it commits only what it moved; --no-commit leaves the
       commit (the move stays staged) to a caller that has its own.
-      Spec: docs/spec/filas-fechadas-saem-da-vista.md (CS-1, CS-2).
+      The source spec goes along: when the queue's `source:` starts with
+      docs/spec/<slug>.md, the file moves to docs/spec/_archive/<slug>.md and
+      that queue's `source:` is rewritten (text after the path is kept); the
+      output says how many decisions without a verdict went along. Any other
+      source (Epic, BACKLOG.md, strategy doc) stays where it is. The spec stays
+      too when another queue still cites it, when it does not exist, when the
+      destination is taken or when it has uncommitted changes (the output says
+      which).
+      Spec: docs/spec/filas-fechadas-saem-da-vista.md (CS-1, CS-2, CS-3).
 
   cepa-plan check-name <nome> [--repo DIR]
       Is the program name free for a QUEUE? Mirror of
@@ -5922,6 +5930,159 @@ def _archive_one(root, name, qfile, today, dry_run, runs_of):
     return True
 
 
+SPEC_DIR = "docs/spec"
+_SPEC_SOURCE_RE = re.compile(
+    r"^\s*[\"']?(?:\./)?docs/spec/([^/\s,;()\"']+?)\.md(?![\w/-]|\.\w)")
+
+
+def _spec_slug(source):
+    """The <slug> when the queue's `source:` starts with `docs/spec/<slug>.md`
+    (text may follow the path), else None: an Epic, BACKLOG.md, a strategy doc
+    or a nested path serves more than one queue and never moves."""
+    if not isinstance(source, str):
+        return None
+    m = _SPEC_SOURCE_RE.match(source)
+    return m.group(1) if m and not m.group(1).startswith("_") else None
+
+
+def _still_cited_by_open_queue(root, rel, leaving):
+    """The name of a queue outside `leaving` whose `source:` still cites `rel`,
+    or None. A queue that cannot be read is judged by its raw text (the safe
+    side: the spec stays)."""
+    for name, qfile in qp.queue_files(root):
+        if name in leaving:
+            continue
+        plan, error = read_plan(qfile)
+        if error or not isinstance(plan, dict):
+            try:
+                text = qfile.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                text = ""
+            if _cites(text, rel):
+                return name
+        elif _cites(plan.get("source"), rel):
+            return name
+    return None
+
+
+def _decisions_went_along(path):
+    """How many decisions without a verdict the spec holds, by the reader
+    `cepa-plan decisions` uses (`_decisions.read_file`); 0 without the section."""
+    res = _decisions.read_file(path)
+    return len(res.pending) if res is not None else 0
+
+
+def _went_along_line(count, rel):
+    if count == 0:
+        return f"nenhuma decisão sem veredito foi junto em {rel}"
+    if count == 1:
+        return f"1 decisão sem veredito foi junto em {rel}"
+    return f"{count} decisões sem veredito foram junto em {rel}"
+
+
+def _rewrite_source(qyaml, slug):
+    """Points the queue's own top-level `source:` at the archived spec, keeping
+    what follows the path and the rest of the file byte for byte. False (file
+    untouched) when that line is not a plain one-line `source:`."""
+    old = f"docs/spec/{slug}.md"
+    new = f"{SPEC_DIR}/{ARCHIVE_DIR}/{slug}.md"
+    text = qyaml.read_text(encoding="utf-8")
+    pat = re.compile(r"^(source:[ \t]*[\"']?)(?:\./)?" + re.escape(old)
+                     + r"(?![\w/-]|\.\w)", re.M)
+    out, n = pat.subn(lambda m: m.group(1) + new, text, count=1)
+    if n != 1:
+        return False
+    plan = yaml.safe_load(out)
+    if not (isinstance(plan, dict) and isinstance(plan.get("source"), str)
+            and plan["source"].startswith(new)):
+        return False
+    qyaml.write_text(out, encoding="utf-8")
+    return True
+
+
+def _archive_specs(root, moved, dry_run):
+    """CS-3: after the queues moved, the spec each one came from goes along,
+    when every queue that cites it is archived (this sweep, or before). Returns
+    the repo paths it moved (old and new), to be staged and committed. Each
+    spec is judged alone: one that stays (missing, destination taken,
+    uncommitted changes, still cited) says why and never stops the sweep."""
+    by_slug = {}
+    for name in moved:
+        qdir = (Path(root) / qp.NEW_DIR / name if dry_run
+                else Path(root) / qp.NEW_DIR / ARCHIVE_DIR / name)
+        plan, error = read_plan(qdir / qp.NEW_FILE)
+        slug = None if error or not isinstance(plan, dict) else _spec_slug(plan.get("source"))
+        if slug:
+            by_slug.setdefault(slug, []).append((name, qdir / qp.NEW_FILE))
+    paths = []
+    for slug, queues in by_slug.items():
+        old_rel = f"{SPEC_DIR}/{slug}.md"
+        new_rel = f"{SPEC_DIR}/{ARCHIVE_DIR}/{slug}.md"
+        old, new = Path(root) / old_rel, Path(root) / new_rel
+        try:
+            why = None
+            other = _still_cited_by_open_queue(root, old_rel, set(moved))
+            if not old.is_file():
+                why = f"a especificação {old_rel} não existe; o source da fila fica como está"
+            elif other:
+                why = (f"a especificação {old_rel} fica: a fila {other} ainda a cita "
+                       "em source")
+            elif new.exists():
+                why = (f"a especificação {old_rel} fica: já existe {new_rel}; "
+                       "nada foi sobrescrito")
+            else:
+                _, dirty, _ = _git(root, "status", "--porcelain", "--", old_rel)
+                if dirty.strip():
+                    why = (f"a especificação {old_rel} fica: tem alterações não "
+                           "commitadas; commite e rode de novo")
+            if why:
+                print(f"especificação não movida · {why}")
+                continue
+            if dry_run:
+                print(f"(dry-run) levaria a especificação {old_rel} → {new_rel} "
+                      f"({_went_along_line(_decisions_went_along(old), new_rel)})")
+                continue
+            # queues archived in an earlier sweep that cite this spec follow it
+            earlier = []
+            for q in sorted((Path(root) / qp.NEW_DIR / ARCHIVE_DIR).glob("*/" + qp.NEW_FILE)):
+                if q in {qq for _, qq in queues} or q.parent.name in moved:
+                    continue
+                eplan, eerr = read_plan(q)
+                if eerr or not isinstance(eplan, dict):
+                    continue
+                if _spec_slug(eplan.get("source")) == slug:
+                    earlier.append(q)
+            targets = [q for _, q in queues] + earlier
+            snapshots = {q: q.read_text(encoding="utf-8") for q in targets}
+            new.parent.mkdir(exist_ok=True)
+            os.rename(old, new)
+            try:
+                for q in targets:
+                    if not _rewrite_source(q, slug):
+                        raise OSError(f"o source de {q.parent.name} não é uma linha simples")
+            except Exception:
+                for q, text in snapshots.items():
+                    q.write_text(text, encoding="utf-8")
+                os.rename(new, old)
+                raise
+            paths += [old_rel, new_rel]
+            paths += [str(q.relative_to(root)) for q in earlier]
+            print(f"especificação movida · {old_rel} → {new_rel}")
+            if earlier:
+                print("source reescrito também em: "
+                      + ", ".join(q.parent.name for q in earlier))
+            try:
+                print(_went_along_line(_decisions_went_along(new), new_rel))
+            except Exception as e:  # noqa: BLE001 - the spec did move; only the count failed
+                print(f"as decisões sem veredito de {new_rel} não puderam ser "
+                      f"contadas ({e.__class__.__name__}: {e}); a especificação "
+                      "foi movida mesmo assim")
+        except Exception as e:  # noqa: BLE001 - one spec must not stop the sweep
+            print(f"especificação não movida · {old_rel}: "
+                  f"{e.__class__.__name__}: {e}")
+    return paths
+
+
 def cmd_archive(root, dry_run, no_commit):
     from datetime import date
     today = date.today()
@@ -5950,9 +6111,15 @@ def cmd_archive(root, dry_run, no_commit):
     if not moved:
         print("nada a arquivar")
         return 0
+    try:
+        spec_paths = _archive_specs(root, moved, dry_run)
+    except Exception as e:  # noqa: BLE001 - the queues already moved: still commit them
+        spec_paths = []
+        print(f"aviso: as especificações não foram movidas: "
+              f"{e.__class__.__name__}: {e}", file=sys.stderr)
     if dry_run:
         return 0
-    paths = []
+    paths = list(spec_paths)
     for n in moved:
         paths += [f"{qp.NEW_DIR}/{n}", f"{qp.NEW_DIR}/{ARCHIVE_DIR}/{n}"]
     _git(root, "add", "-A", "--", *paths)
@@ -6254,7 +6421,17 @@ def main(argv=None):
             "has no item, or when something in it still waits on the owner (an\n"
             "open route, a leftover point on a `done` item, a run to land; the\n"
             "same rule as `waiting`; if the runs cannot be checked, nothing\n"
-            "closed is moved). By hand it commits only what it moved."),
+            "closed is moved). By hand it commits only what it moved.\n"
+            "\n"
+            "The spec the queue came from goes along: when `source:` starts\n"
+            "with docs/spec/<slug>.md, the file moves to\n"
+            "docs/spec/_archive/<slug>.md, the queue's `source:` is rewritten\n"
+            "(text after the path is kept) and the output says how many\n"
+            "decisions without a verdict went along and in which file. Any other\n"
+            "source (Epic, BACKLOG.md, strategy doc) stays where it is. The spec\n"
+            "also stays, and the output says why, when another queue still cites\n"
+            "it, when it does not exist, when the destination is taken or when it\n"
+            "has uncommitted changes."),
         examples=[("cepa plan archive --dry-run", "what would move, without moving"),
                   ("cepa plan archive", "move and commit"),
                   ("cepa plan archive --no-commit", "move and stage; the caller commits")],
