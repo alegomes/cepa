@@ -353,6 +353,22 @@ def test_run_recorded_under_the_header_name_blocks():
         check("header name: names the run", RUN in l, p.stdout)
 
 
+def test_run_recorded_under_the_folder_name_blocks():
+    """The usual case with a header that differs: `cepa-until` records the
+    run under the FOLDER name, and that one still has to match."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = new_repo(tmp)
+        write_queue(root, "pasta", ["done"])
+        edit_queue(root, "pasta", lambda plan: plan.update(queue="titulo"))
+        commit(root, "pasta", days_ago(8), f"{NEW}/pasta")
+        with_run(root, "pasta")
+        p = cli(root, "archive")
+        l = line_of(p.stdout, "pasta")
+        check("folder name: stays", (queue_dir(root, "pasta") / "queue.yaml").is_file()
+              and not archived(root, "pasta").exists(), p.stdout)
+        check("folder name: names the run", RUN in l, p.stdout)
+
+
 def test_each_route_wording_is_its_own():
     with tempfile.TemporaryDirectory() as tmp:
         root = new_repo(tmp)
@@ -417,6 +433,7 @@ def main():
               test_dropped_point_does_not_block,
               test_entry_that_is_not_an_item_is_ignored,
               test_run_recorded_under_the_header_name_blocks,
+              test_run_recorded_under_the_folder_name_blocks,
               test_each_route_wording_is_its_own,
               test_run_without_a_command_does_not_print_none,
               test_what_the_run_check_writes_counts_for_the_same_sweep):
