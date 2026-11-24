@@ -15,17 +15,22 @@ import sys
 import tempfile
 from pathlib import Path
 
+# CEPA_UNTIL_RUN and CEPA_MENU decide whether the launcher appends the mode menu as
+# the opening prompt. Inside a cepa-until round the first is set and the menu is off;
+# the supervisor's full build runs without it. Dropping both makes this file run the
+# same in the two places (menu on, as in the owner's terminal).
 for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODO", "CEPA_LAUNCH_ID", "CLAUDE_WT_CLAIM",
-           "CEPA_MODO", "CEPA_MODO_DEFAULT"):
+           "CEPA_MODO", "CEPA_MODO_DEFAULT", "CEPA_UNTIL_RUN", "CEPA_MENU"):
     os.environ.pop(_k, None)
 
 REPO = Path(__file__).resolve().parent.parent
 CEPA = REPO / "common" / "bin" / "cepa"
 
-# One line per call: the branch, then every argv entry, tab-separated.
+# One line per call: the branch, then every argv entry, tab-separated. An entry with
+# line breaks (the mode menu) is flattened, or it would read as several calls.
 STUB = """#!/bin/sh
 printf '%s' "$(git rev-parse --abbrev-ref HEAD)" >> "$STUB_LOG"
-for a in "$@"; do printf '\\t%s' "$a" >> "$STUB_LOG"; done
+for a in "$@"; do printf '\\t%s' "$(printf '%s' "$a" | tr '\\n' ' ')" >> "$STUB_LOG"; done
 printf '\\n' >> "$STUB_LOG"
 """
 GIT_ENV = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
@@ -104,6 +109,18 @@ def t_two_sessions_get_their_own_name():
         check("the two names differ", len(got) == 2 and got[0] != got[1], str(got))
 
 
+def t_session_opened_with_no_prompt_gets_name_and_menu():
+    """The owner's own case: `cepa -s alpha` and nothing else, so the launcher appends
+    the mode menu, which is the same text for every session."""
+    with World() as w:
+        r = w.cepa("-s", "alpha")
+        c = w.calls()
+        argv = c[0][1] if c else []
+        check("with the mode menu as opening prompt, the session is still named after its slice",
+              len(c) == 1 and argv[:2] == ["--name", "alpha"] and len(argv) == 3
+              and argv[2].startswith("[menu do modo]"), f"{c} {r.stderr}")
+
+
 def t_rest_of_owner_args_still_reach_claude():
     with World() as w:
         r = w.cepa("-s", "alpha", "--model", "opus", "do it")
@@ -135,6 +152,7 @@ def t_no_session_branch_no_name():
 
 
 for fn in (t_two_sessions_get_their_own_name,
+           t_session_opened_with_no_prompt_gets_name_and_menu,
            t_rest_of_owner_args_still_reach_claude,
            t_owner_name_is_kept,
            t_no_session_branch_no_name):
