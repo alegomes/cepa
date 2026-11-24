@@ -148,49 +148,69 @@ items:
   why: 'Origem: feedback fb-20261120-4 (2026-11-20); BACKLOG.md § A lista Agents
     do herdr mostra o mesmo nome para todas as sessões do Cepa (ainda não priorizado:
     entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-11-23: sim: o título lido pelo hc vale como
-    prova, sem olhar o painel Agents. O item voltou de `blocked` para `pending`.
-    Pergunta respondida: Aceito o título lido pela linha de comando do herdr como
-    prova, sem olhar o painel Agents? Recomendo sim: o título é por terminal. O
-    que cada opção prometia: se sim, o título lido pela linha de comando vale como
-    prova e o trabalho segue para fechar; se não, o trabalho espera você abrir duas
-    sessões no mesmo Space e olhar o painel. O dono escolheu o "sim". Evidência
-    anterior: Commits on until/2026-11-21-1244: 0186163 (common/bin/cepa run_claude
-    passes --name <slice> on session/<slice> unless the owner passed -n/--name/--name=x;
-    new tests/test_cepa_session_name.py, RED at d56624b), 08ffa09 (assertion that
-    owner flags + prompt follow the injected name, kills proof survivor P8), 8f12127
-    (BACKLOG Feito note, common 3.6.2), 8995b6d (gate records). pair-reviewer APPROVE.
-    proof-reviewer NEEDS-HUMAN at 8f12127: 8 perturbations killed, 0 survivors,
-    red at base, l2_coverage assumed (no sh/Python coverage tool), docs/proof/agents-do-herdr-mesmo-nome-por-sessao.yaml.
-    completion-auditor INCOMPLETE (.claude/acceptance/agents-do-herdr-mesmo-nome-por-sessao.yaml):
-    AC1+AC2 (cli) complete; AC3 (ui) open. Observed in the owner''s herdr-core 0.1.21:
-    orchestrator ran two ''claude --name probe-alpha|probe-beta'' via hc run, hc
-    get --json title = probe-alpha / probe-beta, title kept after first prompt;
-    auditor ran two real ''cepa -s aud-slice-a|b'' via hc run, title = aud-slice-a
-    / aud-slice-b. NOT observed, and no agent can: the Agents panel of the GUI,
-    and two sessions inside the same Space (hc run has no Space option). Ran only
-    touched tests: test_cepa_session_name, slice_isolation, chaining, mode, prompt,
-    commands_catalog, component_headers: green. Full build not run (supervisor).
-    If the owner answers yes: next run re-audits AC3 as accepted, then closes done
-    opening the coverage-waiver route like the other items of this queue. Side effect
-    outside the repo: folder-trust entries for deleted /tmp probe dirs in the owner''s
-    claude config. [supervisor] The item''s commits, which did not go through the
-    supervisor''s build (it only runs after `done`), are in `until/2026-11-21-1244-travado-fb-2026-10-agents-do-herdr-mesmo-nome-por-sessao`;
-    the run branch went back to d56624ba7e.'
+  evidence: 'Return 1 of 2 resolved. Cause of the red build: tests/test_cepa_session_name.py
+    passed inside a cepa-until round (CEPA_UNTIL_RUN set, launcher appends no mode
+    menu) and failed in the supervisor''s build (variable unset, the multi-line
+    menu became the last argv entry and the fake claude''s line-based log read it
+    as 7 calls; check ''owner --name=foo forwarded'' failed on len(calls)==1). Reproduced
+    with ''env -u CEPA_UNTIL_RUN python3 tests/test_cepa_session_name.py'' (1 failure)
+    before the fix. Launcher code unchanged from the side branch. Commits on until/2026-11-23-1116:
+    7c0c0c4 (run_claude passes --name <slice>), e83c465 (argv order assertion),
+    6c328dc (BACKLOG, common 3.6.3), all three cherry-picked from the -vermelho-
+    side branch; 464dbb7 (test drops CEPA_UNTIL_RUN and CEPA_MENU, stub flattens
+    line breaks, new case: ''cepa -s alpha'' with no prompt gets --name alpha followed
+    by the menu; no test disabled or deleted, 8 checks instead of 7); gate records
+    in the commit after it. proof-reviewer PROVEN at 464dbb7 (docs/proof/agents-do-herdr-mesmo-nome-por-sessao.yaml):
+    12 perturbations RED, 0 survivors, red at base bdf1b95 (4 failures), identical
+    with and without CEPA_UNTIL_RUN, L2 pass by perturbation, no waiver. completion-auditor
+    COMPLETE (.claude/acceptance/agents-do-herdr-mesmo-nome-por-sessao.yaml): AC1,
+    AC2 cli; AC3 on the title read by hc get, surface the owner accepted on 2026-11-23
+    (cepa-plan answer), not re-observed in this round because common/bin/cepa is
+    identical to the observed one. Never observed by any agent: the Agents panel
+    of the GUI and two sessions inside one Space. Ran: the test with and without
+    CEPA_UNTIL_RUN, and tests/run-all.sh cepa_session cepa_slice cepa_mode cepa_prompt
+    (green). Full build not run (supervisor).'
   sem_epic: true
   pendencias:
   - texto: A prova da mudança não tem medição de cobertura (o repositório não tem
       ferramenta para isso); ao fechar, abrir o pedido de dispensa ao dono como
       nos outros itens desta fila
     aberta_em: '2026-11-22'
-    resolvida_em: null
+    resolvida_em: '2026-11-24'
+    como: 'Commits on until/2026-11-23-1116: 182c22f + 0985224 (cherry-picks of
+      0186163 + 08ffa09 from until/2026-11-21-1244-travado-fb-2026-10-agents-do-herdr-mesmo-nome-por-sessao;
+      common/bin/cepa run_claude passes --name <slice> on session/<slice> unless
+      the owner passed -n/--name/--name=x; tests/test_cepa_session_name.py), 1565381
+      (BACKLOG Feito note, common 3.6.3 because 3.6.2 was taken by another item),
+      then the gate-records commit (HEAD). Topology build-solo: pair-reviewer APPROVE
+      was given on the identical code in the previous run (git diff 08ffa09 HEAD
+      on the two files is empty), not re-run. completion-auditor COMPLETE (.claude/acceptance/agents-do-herdr-mesmo-nome-por-sessao.yaml):
+      AC1+AC2 cli re-verified; AC3 closed on the hc get title observed on 2026-11-22
+      (aud-slice-a / aud-slice-b), surface accepted by the owner on 2026-11-23.
+      proof-reviewer PROVEN at 1565381 (docs/proof/agents-do-herdr-mesmo-nome-por-sessao.yaml):
+      11 perturbations killed, 0 survivors, red at base bdf1b95 (3 fails), l2_coverage
+      pass with technique: perturbation (same convention as docs/proof/plan-answer-aceita-resposta-do-chat.yaml),
+      L4 n/a. Pendencia 1 (coverage waiver) resolved without opening a route: the
+      verdict is PROVEN, no waiver proposal was produced, so there is nothing for
+      the owner to accept. Ran only touched tests and neighbors (test_cepa_session_name,
+      slice_isolation, chaining, mode, prompt, commands_catalog, component_headers,
+      plugin_summary_derived, pluginver_boot): green. Full build not run (supervisor).
+      Never observed: the Agents GUI panel and two sessions in the same Space.'
   decisions:
   - texto: A sessão recebe o nome da fatia da worktree, não o propósito gravado
       na intenção; se o dono passar um nome ao abrir, vale o dele
     commit: 0186163160a3b3934526f766f42074df9f46b743
+  - texto: O launcher dá à sessão o nome da sua worktree só quando ela roda numa
+      branch session/<nome>; se o dono passou um nome próprio (-n ou --name), vale
+      o do dono, e fora de session/ nada muda.
+    commit: 182c22f4235deb9ff89a472b72789998f8a616d4
+  - texto: Sessão aberta em session/<slice> recebe o nome do slice no claude; se
+      o dono passar -n ou --name, vale o dele; fora de session/* nada muda
+    commit: 7c0c0c4c4c5127e51af3d03a5d047918c6e61f3e
+  head_commit: 6425073bf1134352a4b88d38f62dab279342ebf8
 - id: ready-cabecalho-zero-itens-com-pendente
   title: O cabeçalho do `cepa plan ready` diz "0 itens" com item pendente na fila,
     e o dono lê "nada pendente

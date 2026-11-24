@@ -3306,36 +3306,47 @@ items:
   why: 'Origem: feedback fb-20261109-2 (2026-11-09); BACKLOG.md § `gate-advance`
     aceita build verde de um teste só para liberar commit que deixa outro teste
     vermelho (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
-  evidence: 'Resposta do dono em 2026-11-23: sim: fecha só com Maven, os outros
-    filtros de teste ficam num item novo do backlog. O item voltou de `blocked`
-    para `pending`. Pergunta respondida: Fecho este item só com o Maven e deixo
-    os outros filtros de teste no item novo do backlog? Recomendo sim: o incidente
-    foi Maven. O que cada opção prometia: se sim, o item volta, a revisão de aceite
-    é refeita com a separação e ele fecha; o resto fica no item novo; se não, o
-    item segue parado até eu cobrir também os outros filtros e o recorte por módulo.
-    O dono escolheu o "sim". Evidência anterior: Código no branch until/2026-11-21-1244:
-    b44ee52 (teste vermelho), e4197a5 (correção: capture-build-result grava test_filter
-    de -Dtest=/-Dit.test=; gate-advance recusa commit local com verde filtrado quando
-    um teste JVM fora do filtro está no commit ou nomeia, com git grep -w, a classe
-    de outro arquivo JVM do commit), eb978e7 (casos j/l/m/n + BACKLOG separa pytest
-    -k, go -run, jest -t e -pl num item novo), 4dc4df2 (helper de teste alterado
-    cobra os testes que o usam; teste fora do git conta), cf58961 (caso q), bb5cb0b
-    (artefatos). Testes: tests/test_gate_advance_filtered_green.py ok; vizinhos
-    test_gate_advance_red_test_commit, test_gate_advance_target_repo, test_capture_build_result_classify
-    (34), test_gate_advance_django_green/test_capture_build_result_pytest/django/test_no_background_build
-    (298) verdes. proof-reviewer: NEEDS-HUMAN em cf58961 (docs/proof/gate-advance-exige-build-que-cobre-o-commit.yaml),
-    vermelho na base, todas as perturbações reais mortas, L2 assumed e L4 skipped.
-    completion-auditor: INCOMPLETE em eb978e7 (.claude/acceptance/gate-advance-exige-build-que-cobre-o-commit.yaml):
-    AC1 e AC2 completos, AC3 (filtros não Maven e -pl) só fecha com o dono aceitando
-    a divisão. Se sim: reauditar com a divisão registrada como decisão do dono,
-    fechar done e abrir a proposta de dispensa de L2 (cobertura de hooks Python
-    não medida). [supervisor] The item''s commits, which did not go through the
-    supervisor''s build (it only runs after `done`), are in `until/2026-11-21-1244-travado-cepa-gate-advance-exige-build-que-cobre-o-commit`;
-    the run branch went back to 8c1cb0a708.'
+  human_pending: Aceitar ou recusar a dispensa de common/hooks/gate-advance.py (cobertura
+    de linha e entrada hostil não medidas)
+  evidence: 'Commits da tentativa de 2026-11-21 trazidos por cherry-pick do branch
+    until/2026-11-21-1244-travado-cepa-gate-advance-exige-build-que-cobre-o-commit
+    sem conflito: 36339bb (teste vermelho), 8562aa3 (capture-build-result grava
+    test_filter de -Dtest=/-Dit.test=; gate-advance recusa commit com verde filtrado
+    quando um teste JVM fora do filtro está no commit ou nomeia a classe alterada),
+    e1e878f (casos j/l/m/n + BACKLOG separa pytest -k, go -run, jest -t e -pl em
+    item novo), b54d6a3 (helper de teste alterado cobra os testes que o usam; teste
+    fora do git conta), a3ea0a4 (caso q), 2c0297e, d1e7f96 (artefatos + proposta
+    de dispensa). Testes no head: test_gate_advance_filtered_green ok, red_test_commit/target_repo
+    verdes, capture_build_result_classify 34 passed, total 71 nos vizinhos. completion-auditor
+    COMPLETE (.claude/acceptance/gate-advance-exige-build-que-cobre-o-commit.yaml):
+    AC1 e AC2 verificados, AC3 movido para o item novo do BACKLOG pela resposta
+    do dono de 2026-11-23. proof-reviewer NEEDS-HUMAN em 2c0297e (docs/proof/gate-advance-exige-build-que-cobre-o-commit.yaml):
+    vermelho na base 6eade96 (16 FAIL), verde no head, 6/6 perturbações refeitas
+    mortas; L2 assumed (sem coverage), L4 skipped. Proposta de dispensa em .claude/waivers/nada-a-provar--common-hooks-gate-advance-py.yaml
+    (status proposta). Código no branch do run; suíte completa fica com o supervisor.
+    Fora: filtros não Maven e -pl (item novo do BACKLOG).'
   sem_epic: true
+  head_commit: d1e7f9655ee3845870528b143eac924949be9ed7
+  route_kind: open-question
+  owner_question: 'Aceito dispensar a medição de cobertura da trava de commit, já
+    que todas as quebras de propósito foram pegas? Recomendo sim: mesmo critério
+    do capture-build-result'
+  owner_summary:
+    se_sim: a dispensa fica assinada e a prova da trava de commit deixa de esperar
+      por você
+    se_nao: a trava de commit segue sem prova completa até alguém medir a cobertura
+      dos hooks
+    item_se_sim: nenhum
+    item_se_nao:
+      titulo: Medir a cobertura de linha dos hooks em Python
+      precisa_do_dono: false
+  decisions:
+  - texto: a trava de commit recusa o verde filtrado do Maven quando o commit tem
+      um teste fora do filtro ou um teste que cita pelo nome a classe alterada;
+      um ajudante de teste alterado também cobra os testes que o usam
+    commit: b54d6a3cf0ddfd2e8f68f285c99af5a55f3de31a
 - id: item-pronto-carrega-pendencias-descobertas
   title: '`cepa-plan status` diz que o item está pronto e a pergunta sobre o desbloqueio
     revela pendências que'
@@ -3515,87 +3526,199 @@ items:
     em .claude/waivers (cepa-plan, 10/11); o dono chamou isso de desrespeito (fb-20261123-8)
     e a queixa vem desde fb-20261020-1; é o item do BACKLOG 'A dispensa de cobertura
     aceita pelo dono não é lida pelo esquema de prova'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits on until/2026-11-23-1116: 9757103 (guard + prose + test), 3acb959,
+    8d76087, 08b60d5, 211a9aa, ec8b7e7, 7d2c216, f38949d (tests only), 017fad6 (proof
+    + acceptance). build-hex/hooks/proof-verdict-guard.py: l2_coverage accepts status
+    pass + technique perturbation (needs L3 perturbation pass and empty uncovered_lines)
+    and new status waived (every file to cover needs a valid, unexpired, non-proposal
+    nada-a-provar waiver in .claude/waivers of the repo or of the main clone); assumed
+    next to either fact is blocked under any verdict. Inline twin of board-flow/bin/waivers.py
+    with agreement test. classify_needs_human.PASSED gained waived. Prose: build-hex/agents/proof-reviewer.md,
+    docs/proof-gate.md, board-flow/commands/prove.md, board-flow/commands/decide.md,
+    BACKLOG.md entry marked done. pair-reviewer: OK-WITH-NOTES, notes 1-4 fixed.
+    completion-auditor: COMPLETE at 9757103 (.claude/acceptance/prova-cobertura-pela-perturbacao.yaml;
+    production code byte-identical through f38949d). proof-reviewer: PROVEN at f38949d
+    (docs/proof/prova-cobertura-pela-perturbacao.yaml), round 8; rounds 1-7 UNPROVEN,
+    each closed by added test cases with no hook change; 20/20 changed hunks red
+    when broken, L2 pass by perturbation, L4 clean; tests/test_proof_coverage_by_perturbation.py
+    has 246 cases, red against the d1e7f96 hook (142 FAIL). Round 8 decided by the
+    per-hunk criterion of proof-reviewer.md, not by a further open-ended mutant
+    search (rounds 2-7 ran about 85 fresh mutants plus a 555-mutant sweep by the
+    implementer). Full build delegated to the supervisor; tests/run-all.sh and tests/test_cepa_until_decide.py
+    not run here. Not done: plugin version not bumped (build-hex 1.4.5 in repo and
+    in ~/.claude/plugins/cache/cepa), so the installed guard only gains the rule
+    after the plugin is reinstalled; L4 skipped still routes to NEEDS-HUMAN; no
+    hook stops an agent from writing a complete waiver file by hand (documented
+    in docs/proof-gate.md).'
   sem_epic: true
+  head_commit: 017fad67dc41c8980b306a82c71bdf3f8532b053
+  decisions:
+  - texto: Quando todas as quebras propositais foram pegas e nenhum trecho ficou
+      sem quebrar, a prova que ainda disser 'cobertura não medida' é recusada na
+      gravação, em qualquer veredito; o agente tem de declarar a cobertura como
+      medida pela quebra ou listar os trechos que não quebrou
+    commit: 975710302c1207cb9aa247af24bab10cdd952fc1
 - id: decide-agrupa-perguntas-iguais
   title: cepa until decide agrupa as perguntas iguais e pergunta uma vez por grupo,
     com a opção de aceitar a recomendação do grupo inteiro
   why: o dono se recusou a responder 26 perguntas repetidas no run all/2026-11-21-1244
     e pediu resposta em lote no próprio Cepa (fb-20261123-8); vem depois da correção
     da prova porque ela elimina a maior fonte de repetição
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits na branch until/2026-11-23-1116: 3b2cf1e (agrupamento no painel
+    do cepa until decide, common/bin/cepa-until + docs/cepa-until.md + tests/test_cepa_until_decide_groups.py),
+    f57bc0c e 8ce3977 (so testes), 3118c1a (except de proposed_waivers passa a pegar
+    ValueError: arquivo de dispensa fora de UTF-8 ou com data impossivel derrubava
+    o painel; achado pelo L4 da prova), fe8bc08 (artefatos). pair-reviewer: NEEDS-FIX
+    na 1a passada (asked contado em dobro, itens devolvidos por o sumiam apos q
+    no painel --all, legenda de y errada para item entregue), os tres corrigidos
+    antes do commit 3b2cf1e. completion-auditor: COMPLETE (7/7 criterios, auditado
+    em 3b2cf1e; .claude/acceptance/decide-agrupa-perguntas-iguais.yaml). proof-reviewer:
+    PROVEN em 8ce3977 na 4a rodada (rodadas 1-3 UNPROVEN com 103, 18 e 6 mutantes
+    vivos; docs/proof/decide-agrupa-perguntas-iguais.yaml; L2 pass por perturbacao,
+    L4 clean, substituted_by_double null). Testes rodados aqui: tests/test_cepa_until_decide_groups.py
+    (269 ok), decide_all, decide_keys, decide_created_items, legend_per_key, until_all,
+    isolated_telemetry, state_deposits, screen_english, help_layout. Suite completa
+    NAO rodada: e do supervisor. Fora do escopo entregue: o painel de largada de
+    run de fila unica (ask_at_launch) segue perguntando item a item.'
   sem_epic: true
+  head_commit: fe8bc08ac3d27dd6d668649f79d97e07a2277e29
+  decisions:
+  - texto: Duas perguntas contam como iguais quando os itens tem dispensa proposta
+      com o mesmo motivo, ou quando a pergunta escrita e o tipo de rota sao os mesmos;
+      item sem pergunta escrita nunca entra em grupo por texto
+    commit: 3b2cf1eaea93178e3d1e05cf4851148fd1b41b7d
+  - texto: Item ja entregue e item travado nunca ficam no mesmo grupo, porque o
+      sim faz coisas diferentes em cada um
+    commit: 3b2cf1eaea93178e3d1e05cf4851148fd1b41b7d
+  - texto: O cartao do grupo oferece sim para todos, nao para todos, aceitar a recomendacao
+      de cada item, perguntar um a um, deixar para depois e sair; a resposta de
+      cada item e gravada na fila dele com a nota de que foi respondida em grupo
+    commit: 3b2cf1eaea93178e3d1e05cf4851148fd1b41b7d
+  - texto: O painel de largada de um run de fila unica continua perguntando item
+      a item; o agrupamento vale para o cepa until decide (uma fila, um run, ou
+      todas as filas) e para as listagens em texto
+    commit: 3b2cf1eaea93178e3d1e05cf4851148fd1b41b7d
 - id: decide-de-run-nao-repete-nao-respondido
   title: cepa until decide de um run não volta a perguntar rotas que o dono já respondeu
     'não' e cujas condições não mudaram; só cepa until decide <fila> as revisita
   why: depois de responder as 30 do run all/2026-11-21-1244, o decide do run reapresentou
     3 rotas já respondidas 'não' (06/11, 11/11, 21/11) e alheias ao run; o waiting
     e o painel de largada já filtram (CS-4), o decide de run não (fb-20261123-9)
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits na branch until/2026-11-23-1116: 2d8dbcc (produção + testes),
+    308eb6b (testes que fecham as lacunas dos portões), 8844366 (artefatos). Mudança
+    só em common/bin/cepa-until: split_answered_no e say_answered_no novos, filtro
+    em close_with_owner (com run_id) e no hand_back, uma linha por fila em next_rows,
+    uma frase no help de cmd_decide. Regra reutilizada: last_owner_no (a evidência
+    ainda COMEÇA com o ''não'' do dono). decide <fila> sem run inalterado. Teste
+    novo tests/test_cepa_until_decide_run_answered_no.py (46 ok); um teste de tests/test_cepa_until_decide.py
+    passou a revisitar por ''decide fila''. Rodados e verdes: o arquivo novo, test_cepa_until_decide.py
+    (494 ok), _decide_all (102), _decide_groups (269), _final_report (60), _all
+    (226); os quatro últimos e o decide.py rodaram em 2d8dbcc antes da linha do
+    painel Next, e _final_report foi repetido depois. Build completo NÃO rodado:
+    é do supervisor. pair-reviewer: APROVADO. completion-auditor: COMPLETE em 308eb6b,
+    7 de 7 (.claude/acceptance/decide-de-run-nao-repete-nao-respondido.yaml), 2
+    rodadas. proof-reviewer: PROVEN em 308eb6b, 2 rodadas, 32 mutantes vermelhos
+    (22 da rodada 1 + 10 da rodada 2), L2 pass por perturbação, L4 n/a (docs/proof/decide-de-run-nao-repete-nao-respondido.yaml).
+    Ficou de fora: docs/workflow.md:83, docs/commands.md:114, docs/cepa-cli.md:45
+    e docs/cepa-until.md:162 dizem que decide <fila>/<run> ''pergunta de novo''
+    o que espera, sem citar as rotas respondidas ''não''; não editados.'
   sem_epic: true
+  head_commit: 8844366742e99f5bc5e13f87b41e681de0968d10
+  decisions:
+  - texto: No relatório final de um run, as rotas que o dono já respondeu 'não'
+      aparecem numa linha por fila com a contagem, a data mais recente e o comando
+      cepa-until decide <fila>, em vez de sumirem; com uma delas na fila, o painel
+      não diz 'nothing left for you'
+    commit: 2d8dbccf4507cbb6069cff2361f76afb64051f57
+  - texto: Uma rota respondida 'não' no próprio painel de fim de run sai da lista
+      'ainda aberta' desse relatório e entra na linha de contagem das já respondidas
+      'não'
+    commit: 2d8dbccf4507cbb6069cff2361f76afb64051f57
 - id: capture-build-result-flutter
   title: '`capture-build-result` não reconhece `flutter test` nem `tool/check.sh`'
   why: 'Origem: feedback fb-20261115-1 (2026-11-15); BACKLOG.md § `capture-build-result`
     não reconhece `flutter test` nem `tool/check.sh` (ainda não priorizado: entrou
     no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-11-23: sim: dispensa de cobertura aceita.
-    Retome de until/2026-11-21-1244-vermelho-cepa-capture-build-result-flutter,
-    ponha check-scripts.json no catálogo que tests/test_state_deposits.py confere
-    e rode esse teste antes do finish. Rota humana fechada pelo dono: Aceitar ou
-    recusar a dispensa de medição de cobertura do capture-build-result (não há ferramenta
-    de cobertura para os hooks em Python). Evidência anterior: This is return 1
-    of 2: the item closed `done`, but the full build of the run branch (`tests/run-all.sh`)
-    exited 1, and the 2nd build exited 1. Output in the `.log` of run 2026-11-21-1244.
-    The commits of every attempt are in `until/2026-11-21-1244-vermelho-cepa-capture-build-result-flutter`
-    and the run branch went back to aa6e2ea0ee. The item went back to `pending`:
-    reuse the side branch (`git cherry-pick` or `git merge` inside the attempt)
-    or redo it; the supervisor''s build judges the result. Disabling or deleting
-    the failing test does not count as a fix.'
+  evidence: 'Retomado do branch lateral until/2026-11-21-1244-vermelho-cepa-capture-build-result-flutter
+    por cherry-pick (10bc142 testes vermelhos, 1a75347 hook, 932da35 testes, 1011aaa
+    prova antiga). Causa do build vermelho anterior corrigida em 5632a30: check-scripts.json
+    declarado no catálogo de common/hooks/_state.py; tests/test_state_deposits.py
+    verde. Testes novos f9f5861 e b8293d7 (guardas do leitor do manifesto, ok_line
+    vazio, script dentro de { }, depois de ! e de then). Gates em 8efbfc4: pair-reviewer
+    APPROVE; completion-auditor COMPLETE (4 critérios, auditado em 5632a30, só testes
+    depois); proof-reviewer PROVEN em b8293d7 após 3 rodadas (rodada 1: 7 lacunas
+    de teste; rodada 2: 2; rodada 3: zero sobrevivente real, 2 equivalentes), L2
+    pass por perturbação, L4 limpo com 33 manifestos hostis no hook real. Rodado
+    aqui: tests/run-all.sh com filtros state isolated drift guiding doc backlog
+    english hook gate_advance build -> 36 de 36 arquivos verdes (antes dos 2 commits
+    de teste); depois, 116 passed nos 3 arquivos cobertores. Build completo fica
+    com o supervisor. Código está na branch until/2026-11-23-1116. Fora do escopo,
+    achado baixo do revisor: ''echo flutter test'' seguido de ''All tests passed!''
+    na saída grava SUCCESS, mesmo estilo de regex dos padrões go/maven já existentes.
+    Não pinado: com dois scripts declarados no mesmo comando vale o primeiro segmento.'
   sem_epic: true
   decisions:
   - texto: o script de verificação do repo só conta quando declarado em .claude/check-scripts.json
       (comando e linha final esperada, padrão OK); sem o arquivo nada muda, porque
       um OK solto aparece em qualquer log
     commit: dedb39a4bc3720d7d0e6011ffb91eb8478cd5a33
+  - texto: O script de verificação do repo só conta como build quando o dono o declara
+      em .claude/check-scripts.json; vale verde se a última linha da saída for a
+      linha combinada (padrão OK) e vermelho se o comando sair com erro. flutter
+      test é reconhecido sem declarar nada.
+    commit: 1a753471e16500e0e07e747ec29ba216e706f3f4
+  head_commit: 8efbfc48d9bbb4a703edd5d4e6d0b081f4ad01bd
 - id: plan-answer-aceita-resposta-do-chat
   title: cepa-plan answer grava a resposta que o dono já deu no chat, sem exigir
     terminal fora do Claude Code
   why: 'Origem: feedback fb-20261109-3 (2026-11-09); BACKLOG.md § `cepa-plan responde`
     só aceita resposta digitada num terminal fora do Claude Code (ainda não priorizado:
     entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-11-23: sim: dispensa de cobertura e de entradas
-    hostis aceita. Retome de until/2026-11-21-1244-vermelho-cepa-plan-answer-aceita-resposta-do-chat,
-    devolva a frase ''only the user clears it'' em common/commands/next.md, isole
-    a telemetria no teste novo e rode tests/test_guiding_thread.py e tests/test_isolated_telemetry.py
-    antes do finish. Rota humana fechada pelo dono: Aceitar ou recusar a dispensa
-    de medição de cobertura e de teste de entradas hostis do cepa-plan answer --from-chat
-    (não há ferramenta de cobertura para os hooks em Python; todas as quebras de
-    código foram pegas pelos testes). Evidência anterior: This is return 1 of 2:
-    the item closed `done`, but the full build of the run branch (`tests/run-all.sh`)
-    exited 1, and the 2nd build exited 1. Output in the `.log` of run 2026-11-21-1244.
-    The commits of every attempt are in `until/2026-11-21-1244-vermelho-cepa-plan-answer-aceita-resposta-do-chat`
-    and the run branch went back to aa6e2ea0ee. The item went back to `pending`:
-    reuse the side branch (`git cherry-pick` or `git merge` inside the attempt)
-    or redo it; the supervisor''s build judges the result. Disabling or deleting
-    the failing test does not count as a fix.'
+  evidence: 'Retomado de until/2026-11-21-1244-vermelho-cepa-plan-answer-aceita-resposta-do-chat
+    por cherry-pick (4f4a563, e87a182, 6efbe15). As duas causas do build vermelho
+    de 21/11 corrigidas em 319ebd7: a frase ''only the user clears it'' voltou a
+    common/commands/next.md e tests/test_cepa_plan_answer_from_chat.py chama isolate();
+    tests/test_guiding_thread.py e tests/test_isolated_telemetry.py rodados e verdes
+    antes do finish, como o dono pediu. A prova independente rodou entradas hostis
+    (não usou a dispensa aceita em 23/11) e achou um furo real: linha ''### HH:MM:SS
+    UTC'' ou ''## <dia>'' dentro de um comando / era relida de .claude/session-log.md
+    como mensagem de prosa recente do dono. Corrigido em 0d83c90 e e3a3168 (common/hooks/session-log.py
+    escape_headers, com as mesmas quebras de linha de str.splitlines; owner_said_in_chat
+    ignora entrada datada mais de 60s no futuro); teste do sobrevivente final em
+    a7e4cea. Vereditos: pair-reviewer APPROVE em 319ebd7 (4 achados não bloqueantes);
+    completion-auditor COMPLETE em e3a3168 (.claude/acceptance/plan-answer-aceita-resposta-do-chat.yaml,
+    só teste depois); proof-reviewer PROVEN em a7e4cea na rodada 6 (docs/proof/plan-answer-aceita-resposta-do-chat.yaml:
+    L2 pass por perturbação, L4 clean, 3 mutantes equivalentes por leitura). Build
+    completo (tests/run-all.sh) não rodado: é do supervisor. Código na branch until/2026-11-23-1116,
+    HEAD bdf1b95. Notas fora do escopo, já existentes em 8efbfc4: o hook session-log
+    cai com UnicodeEncodeError em surrogate solto no payload; append_entry decide
+    o cabeçalho do dia por substring no arquivo inteiro; logs gravados antes de
+    e3a3168 não têm o escape. Achado não bloqueante do revisor mantido: a citação
+    casa em qualquer mensagem de prosa do dono das últimas 24h, sem vínculo com
+    a pergunta; a evidência grava a hora e a citação para auditoria.'
   sem_epic: true
   decisions:
   - texto: a resposta do chat só é gravada se as palavras do dono estiverem numa
       mensagem dele desta sessão, das últimas 24 horas, que não seja um comando
       com barra; em run desatendido isso é recusado
     commit: 2ee87975c4337d2cb049aa39b9f14fdfb1152c5f
+  - texto: O registro das mensagens do dono passa a pôr uma barra invertida antes
+      de toda linha que começa como título de markdown, para que texto colado num
+      comando de barra não se passe por resposta do dono
+    commit: e3a316811d63bb93056eafdb4a9b310e5f9234ff
+  head_commit: bdf1b9566fe9761c35f0feb27a6a1735943d4316
