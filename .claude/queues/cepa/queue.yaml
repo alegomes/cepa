@@ -661,6 +661,23 @@ items:
     1bc65f5 corrigido), proof-reviewer PROVEN (4cb7626, 5 perturbacoes todas RED).
     Fora: /common:next e /maestro:resume sao prosa de comando, travados por grep,
     nao por execucao ponta a ponta com herdr.'
+- id: auto-clean-nao-apaga-sessao-viva
+  title: 'auto_clean não apaga worktree de sessão viva: registro da sessão gravado
+    por arquivo temporário e troca atômica, registro ilegível conta como sessão
+    viva, e worktree sem registro legível não é removida'
+  why: 'prioridade máxima pedida pelo dono em 2026-11-24 (fb-20261124-4): duas sessões
+    vivas perderam worktree e branch no mesmo dia (cepa-gc 07:56, cepa-until-fup
+    09:17). Causa reproduzida em fb-20261124-6 e fb-20261124-7: session-heartbeat.py
+    e session-subject.py regravam em paralelo o mesmo .claude/sessions/<id>.json
+    com write_entry (common/hooks/_wtlib.py, write_text sem trava); read_entries
+    pula JSON inválido; classify marca alive=False sem registro; auto_clean apaga
+    worktree limpa e sem commit. Vem antes de tudo porque toda sessão nova sem commit
+    corre o risco no segundo prompt'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
 - id: maestro-calibrar-porteiro
   title: Calibrar as regras do porteiro do Maestro com o lote de sombra (43 escalações)
   why: o card está PARCIAL — o motor de classificação já aterrissou em maestro 0.4.3
