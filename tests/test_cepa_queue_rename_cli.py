@@ -10,6 +10,8 @@ Run with `python3 -m pytest tests/test_cepa_queue_rename_cli.py -q` or
 """
 import json
 import os
+import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -83,14 +85,24 @@ def test_help_lists_queue_and_not_plan():
         words = [ln.split()[0] for ln in r.stdout.splitlines() if ln.startswith("  ") and ln.split()]
         assert "queue" in words, r.stdout
         assert "plan" not in words, r.stdout
-        # the plain-sh fallback (no python3 on PATH) says the same
-        sh = subprocess.run(["/bin/sh", str(CEPA), "help"], capture_output=True, text=True,
-                            cwd=str(d), env={"PATH": "/usr/bin:/bin", "HOME": str(d),
-                                             "CEPA_PREFLIGHT": "off"})
-        if sh.returncode == 0 and "subcommands:" in sh.stdout:
-            words = [ln.split()[0] for ln in sh.stdout.splitlines()
-                     if ln.startswith("  ") and ln.split()]
-            assert "queue" in words and "plan" not in words, sh.stdout
+
+
+def test_help_fallback_in_plain_sh_lists_queue_and_not_plan():
+    # A copy of common/bin with no ../hooks/_clihelp.py beside it, so `cepa help`
+    # takes the plain-sh list (the path for a machine without python3).
+    with tempfile.TemporaryDirectory() as base:
+        bindir = Path(base) / "bin"
+        shutil.copytree(REPO / "common" / "bin", bindir,
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        assert not (Path(base) / "hooks" / "_clihelp.py").exists()
+        assert (bindir / "cepa-plan").exists() and (bindir / "cepa-queue").exists()
+        r = _run(["/bin/sh", bindir / "cepa", "help"], base)
+        assert r.returncode == 0, (r.stdout, r.stderr)
+        assert "subcommands:" in r.stdout, r.stdout
+        words = [ln.split()[0] for ln in r.stdout.splitlines()
+                 if ln.startswith("  ") and ln.split()]
+        assert "queue" in words, r.stdout
+        assert "plan" not in words, r.stdout
 
 
 def test_transition_shim_is_not_a_command():
@@ -99,9 +111,23 @@ def test_transition_shim_is_not_a_command():
         d = _repo_with_queue(base)
         r = _run([sys.executable, SHIM_PLAN, "status", "fila", "--repo", "."], d)
         assert r.returncode == 0 and MARK in r.stdout, (r.stdout, r.stderr)
-        # and the typo logic never offers it
-        r = _run([CEPA, "plam"], d)
-        assert "cepa plan`" not in r.stderr, r.stderr
+        # and the typo logic never offers it: a near-miss of `plan` is not refused
+        # with "did you mean", it falls through to the launch (a stub `claude`
+        # records that it was reached)
+        stub = Path(base) / "claude-stub"
+        trace = Path(base) / "claude-args"
+        stub.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "' + str(trace) + '"\n',
+                        encoding="utf-8")
+        stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+        env = _env()
+        env.update({"CLAUDE_WT_CLAUDE_BIN": str(stub), "CEPA_MODO": "off",
+                    "CEPA_ENCADEAR": "off", "CEPA_MENU": "off"})
+        r = subprocess.run([str(CEPA), "plam"], capture_output=True, text=True,
+                           cwd=str(d), env=env, timeout=120)
+        assert "did you mean" not in r.stderr, r.stderr
+        assert "cepa plan" not in r.stderr, r.stderr
+        assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+        assert trace.exists() and "plam" in trace.read_text(), (r.stdout, r.stderr)
 
 
 def test_board_flow_shortcut_reaches_the_same_script():
