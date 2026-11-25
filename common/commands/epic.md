@@ -81,10 +81,11 @@ sieve, run `cepa-queue decisions docs/epics/<name>.md`. It numbers the lines of
 "Decided without asking (veto here)" and separates those with a verdict from
 those without. Walk only the ones without, one per turn, like the
 rest of this interview: show the decision with its number and ask the owner to
-keep it (`mantida`), veto it (`vetada`, with the reason) or refine it
-(`refinada`, with the new text). Record the answer in the same turn with
-`cepa-queue verdict docs/epics/<name>.md <n> mantida|vetada|refinada` (`vetada`
-needs `--reason`, `refinada` needs `--text`). Use the number exactly as `cepa-queue decisions` prints it (1-based over every
+keep it (`kept`), veto it (`vetoed`, with the reason) or refine it
+(`refined`, with the new text). Record the answer in the same turn with
+`cepa-queue verdict docs/epics/<name>.md <n> kept|vetoed|refined` (`vetoed`
+needs `--reason`, `refined` needs `--text`; the old `mantida`, `vetada` and
+`refinada` are still accepted). Use the number exactly as `cepa-queue decisions` prints it (1-based over every
 decision of the section, decided ones included, so the numbers shown may skip):
 never renumber. Never write the `· mantida em` /
 `· vetada em` / `· refinada em` marker by hand: the date and the format come

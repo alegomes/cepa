@@ -348,8 +348,18 @@ MENU_MARK = "[menu do modo]"
 MENU_PENDING = os.path.join(".claude", "mode-menu-pending")
 
 
+# Old flag spellings a prompt may still carry (CS-5): the menu shows the English
+# form, a prompt typed with the old one is the same menu action.
+LEGACY_FLAGS = {"--continuar": "--continue", "--fechar": "--close", "--lista": "--list"}
+
+
+def _modern(text):
+    "`/common:spec --continuar x` -> `/common:spec --continue x`."
+    return " ".join(LEGACY_FLAGS.get(w, w) for w in text.split())
+
+
 def bare_command(cmd):
-    """`/common:spec --continuar <slug>` -> `/common:spec --continuar`: the command
+    """`/common:spec --continue <slug>` -> `/common:spec --continue`: the command
     without its placeholders, which is what the owner types and what is recorded."""
     return " ".join(re.sub(r"<[^>]*>", " ", str(cmd)).split())
 
@@ -359,8 +369,9 @@ def menu_choice(pending, prompt):
 
     A choice is the bare number of an action (`1`, `1.`, `1)`) or a prompt that
     starts with one of the menu's commands; the longest command wins, so
-    `/common:spec --continuar x` is action 2, not action 1."""
-    text = " ".join(str(prompt or "").split())
+    `/common:spec --continue x` is action 2, not action 1. A prompt with the old
+    flag (`--continuar x`) is recognised as the same action."""
+    text = _modern(" ".join(str(prompt or "").split()))
     actions = pending.get("actions") or []
     m = re.fullmatch(r"(\d+)[.)]?", text)
     if m:

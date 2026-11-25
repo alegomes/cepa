@@ -669,7 +669,7 @@ def check_decisions(root: Path):
             res = _decisions.read(text)
             if res is None or not res.pending:
                 continue
-            cmd = (f"/common:spec --continuar {path.stem}" if kind == "spec"
+            cmd = (f"/common:spec --continue {path.stem}" if kind == "spec"
                    else f"/common:epic {path.stem}")
             pending.append((len(res.pending), str(path.relative_to(root)), cmd))
     total = sum(n for n, _p, _c in pending)

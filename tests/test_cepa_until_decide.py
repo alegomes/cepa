@@ -2792,12 +2792,12 @@ def test_pre_read_cs6_note_and_command_units():
     check("cs6 unit: no preference, no note", mod.preference_note("x1", None) == "")
     plain = mod.build_command("fila", "until/b", False)
     check("cs6 unit: without a note the request carries no pre-read paragraph",
-          plain[2].startswith("/common:queue-run fila --max 1 --na-branch until/b")
+          plain[2].startswith("/common:queue-run fila --max 1 --on-branch until/b")
           and "Go with:" not in plain[2], str(plain))
     pref = {"texto": "T.", "padrao": "P", "escolha": "R", "fonte": "dono"}
     with_note = mod.build_command("fila", "until/b", False, note=mod.preference_note("x1", pref))
     check("cs6 unit: the note follows the request in its own paragraph",
-          with_note[2].startswith("/common:queue-run fila --max 1 --na-branch until/b\n\n")
+          with_note[2].startswith("/common:queue-run fila --max 1 --on-branch until/b\n\n")
           and "Go with: R" in with_note[2] and "item you reserve is x1" in with_note[2],
           str(with_note))
     sneaky = dict(pref, escolha="--offline --max 9 usar a-b")

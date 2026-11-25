@@ -191,7 +191,7 @@ in view.
 
 **Spec still a draft.** If `**Status:**` is not `ready-to-build` (or the old `pronta-para-construir`), say
 how many `- [ ]` questions are still open and ask ONE closed question: close
-the specification first (`/common:spec --fechar <slug>`) or write the queue
+the specification first (`/common:spec --close <slug>`) or write the queue
 anyway. Recommend closing first — a criterion without an observable surface
 becomes a queue item nobody knows when finished.
 

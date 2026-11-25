@@ -1,6 +1,6 @@
 ---
 description: Answers "and now, what do I do?" at any moment: reads the `single-track` queue (.claude/queues/<name>/queue.yaml) and names ONE next step with the why recorded at prioritisation. Tells apart the two kinds of next that blur in silence: a pending human action (validate by hand, approve a PR, rotate a secret) and the next item. Needs no Jira: with board-flow.yaml present it reconciles against the live board; without it, answers from the queue and says the statuses are self-reported. Read-only by default; --sync records the reconciliation.
-argument-hint: [--plan NAME] [--offline] [--sync]
+argument-hint: [--queue NAME] [--offline] [--sync]
 interaction: routine
 ---
 
@@ -36,8 +36,9 @@ plan and says plainly that the statuses are self-reported.
 
 ## Variables
 
-- `--plan NOME` — plan to read, i.e. `<queues>/NOME/queue.yaml` (`<queues>`
+- `--queue NOME` — plan to read, i.e. `<queues>/NOME/queue.yaml` (`<queues>`
   defined in step 1 — always the main clone's, never the current worktree's).
+  `--plan` is still accepted.
 - `--offline` — skip the tracker round-trip even when one is configured. Use for
   an instant answer or with no network. Say in the report that the answer wasn't
   reconciled.
@@ -58,7 +59,7 @@ current directory: the plan is repo state, and a session worktree's own
 
 In order, first hit wins:
 
-1. `--plan NOME` → `<queues>/NOME/queue.yaml`, else (queue not migrated yet)
+1. `--queue NOME` → `<queues>/NOME/queue.yaml`, else (queue not migrated yet)
    the legacy `<main-root>/.claude/programs/NOME/plan.yaml`.
 2. Exactly one `<queues>/*/queue.yaml` (or legacy
    `<main-root>/.claude/programs/*/plan.yaml`; the new layout wins when a name

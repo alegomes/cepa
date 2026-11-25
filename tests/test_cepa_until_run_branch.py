@@ -34,7 +34,7 @@ from test_cepa_until import (  # noqa: E402
     FAILURES, check, fake_claude, item, ledger_of, build_repo, run_until)
 
 
-# A fake `claude` that works like drain-plan with `--na-branch`: commits
+# A fake `claude` that works like drain-plan with `--on-branch`: commits
 # in the directory it woke up in. Records the content it saw of `a1.txt` so the
 # test knows whether the 2nd card saw the 1st.
 WORKS = (
@@ -96,8 +96,8 @@ def test_subprocess_runs_on_the_night_branch_and_the_clone_stays_put():
         check("...que fica fora do clone",
               not Path(start["arvore"]).resolve().is_relative_to(root.resolve()),
               start["arvore"])
-        check("o pedido ao claude leva --na-branch",
-              calls and all(f"--na-branch {branch}" in c[1] for c in calls),
+        check("o pedido ao claude leva --on-branch",
+              calls and all(f"--on-branch {branch}" in c[1] for c in calls),
               str(calls))
         check("o 2º card enxerga o commit do 1º",
               len(seen_ones) == 2 and seen_ones[1]["viu_a1"], str(seen_ones))

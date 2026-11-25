@@ -1,14 +1,14 @@
 # Ângulos do Gauntlet
 
 Registry dos ângulos que o `/common:gauntlet` distribui entre os builders. Cada
-ângulo tem uma `key` (o que `--angulos=` aceita) e um `brief` (o texto, em
+ângulo tem uma `key` (o que `--angles=` aceita) e um `brief` (o texto, em
 inglês, que entra no prompt do builder). O brief é copiado como está para o
 campo `angles[i].brief` do `args` do script.
 
 Como o comando usa este arquivo:
 
-- **Default:** sem `--angulos`, usa os três abaixo, nesta ordem.
-- **`--angulos=a,b,c`:** seleciona por `key`, nessa ordem. Key fora do registry:
+- **Default:** sem `--angles`, usa os três abaixo, nesta ordem.
+- **`--angles=a,b,c`** (a antiga `--angulos` segue aceita)**:** seleciona por `key`, nessa ordem. Key fora do registry:
   o comando lista as válidas e para.
 - **`--builders=N`:** cada builder recebe um ângulo. Com N maior que o número de
   ângulos, os ângulos ciclam (o 4º builder pega o 1º ângulo de novo, e assim por

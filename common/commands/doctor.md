@@ -72,7 +72,7 @@ brings all of that forward to a moment when fixing is cheap.
    of `docs/epics/` that left `draft` (`rascunho` counts as `draft`: its
    decisions are counted by the readiness gate when it closes). It is a ⚠ with
    the total and one file per line, each with the command that opens the veto:
-   `/common:spec --continuar <slug>` for a spec, `/common:epic <nome>` for an
+   `/common:spec --continue <slug>` for a spec, `/common:epic <nome>` for an
    Epic. With zero pending it is a ✓ with the zero; a repo with neither
    directory does not show it. Report only: the veto is the owner's, and no
    `--fix` touches it.

@@ -825,7 +825,7 @@ def test_reconcile_does_not_list_dropped_equal_on_both_sides(base):
 
 
 def test_on_the_night_branch(base):
-    """`cepa-until` passes `--na-branch`. Without the command declaring what that
+    """`cepa-until` passes `--on-branch`. Without the command declaring what that
     changes, the agent goes back to opening its own worktree from `origin/main`,
     which is what left 20 of 25 rounds jammed on 2026-09-23.
     Run until/2026-10-15-1946: 10 hand resumptions in 5 of 7 rounds, because the
@@ -833,9 +833,9 @@ def test_on_the_night_branch(base):
     every lead to delegate with `run_in_background: false` and wait in the same turn."""
     f = CMD.read_text(encoding="utf-8")
     clean = f.replace("`", "").lower()
-    check("declara --na-branch nos argumentos",
-          "--na-branch" in f.split("## Instructions")[0])
-    i = clean.find("on the overnight branch (--na-branch")
+    check("declara --on-branch nos argumentos",
+          "--on-branch" in f.split("## Instructions")[0])
+    i = clean.find("on the overnight branch (--on-branch")
     excerpt = clean[i:i + 2500] if i != -1 else ""
     check("o passo 3 diz o que muda na branch da noite", bool(excerpt))
     check("...não criar worktree nem branch para o item",

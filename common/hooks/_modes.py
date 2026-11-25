@@ -78,7 +78,7 @@ MODES = {
         "write": ["docs/discovery/**", "docs/spec/**", "docs/epics/**", ".claude/**", "BACKLOG.md"],
         "actions": [
             {"label": "Detail an idea until it becomes a build-ready specification", "command": "/common:spec <the idea>", "ask": "What is the idea?"},
-            {"label": "Continue an open specification", "command": "/common:spec --continuar <slug>", "ask": "Which specification (slug)?"},
+            {"label": "Continue an open specification", "command": "/common:spec --continue <slug>", "ask": "Which specification (slug)?"},
             {"label": "Design a large package in cycles", "command": "/common:epic <name>", "ask": "What is the package name?"},
             {"label": "Record a user signal", "command": "/discovery:capture <the signal>", "ask": "What is the signal?", "needs": ["plugin:discovery"]},
             {"label": "Turn the ready specification into a build queue", "command": "/common:queue <name> --from-spec", "ask": "What is the queue name?"},

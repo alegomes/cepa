@@ -1,6 +1,6 @@
 ---
 description: Runs an interrogation until a high-level idea becomes a buildable specification — and stops there, without writing a line of code. You describe what you want in prose; the command asks in rounds, records each answer in a markdown file versioned in the repo, and only declares the specification ready when every success criterion has an observable surface (http/cli/ui/event/domain/application) and a red test declared on it. Needs neither Jira nor a configured board — on closing, it offers to register Epic + Stories if board-flow is installed. Resumable: running it again on the same specification continues where it stopped.
-argument-hint: <the idea in prose> | --continuar <slug> | --fechar <slug> | --lista
+argument-hint: <the idea in prose> | --continue <slug> | --close <slug> | --list
 interaction: conversational
 ---
 
@@ -41,11 +41,12 @@ discovery topology, not here.
 
 - `$ARGUMENTS` — the idea in prose, the way you would tell a person. It does
   not need to be organized; organizing it is the command's job.
-- `--continuar <slug>` — resume an existing specification from where it
-  stopped.
-- `--fechar <slug>` — run only the closing sieve over an existing one and, if
-  it passes, offer the registration in the tracker.
-- `--lista` — list the repo's specifications with the status of each.
+- `--continue <slug>` — resume an existing specification from where it
+  stopped. `--continuar` is still accepted.
+- `--close <slug>` — run only the closing sieve over an existing one and, if
+  it passes, offer the registration in the tracker. `--fechar` is still accepted.
+- `--list` — list the repo's specifications with the status of each. `--lista` is
+  still accepted.
 
 ## Instructions
 
@@ -76,25 +77,25 @@ The directory is `docs/spec/` at the repo root (create it if it does not
 exist). The file is `docs/spec/<slug>.md`, with `<slug>` derived from the
 subject in kebab-case.
 
-- With `--lista`: read the `Status` field of each `docs/spec/*.md` and return
+- With `--list`: read the `Status` field of each `docs/spec/*.md` and return
   the table (slug · status · no. of criteria · no. of open questions). Stop.
-- With `--continuar <slug>` or `--fechar <slug>`: read the file, open with the
+- With `--continue <slug>` or `--close <slug>`: read the file, open with the
   veto walk below, and only then go to step 4 (continue) or 5 (close).
 - Without a flag: if `docs/spec/<slug>.md` already exists for a clearly
   identical subject, **do not create a second one** — say that it exists and
   ask whether to continue that one. Two specifications of the same subject
   diverging silently is worse than none.
 
-**The veto walk (caminhada do veto).** On an existing file (`--continuar`,
-`--fechar`, or the "continue that one" answer), before resuming the interview
+**The veto walk (caminhada do veto).** On an existing file (`--continue`,
+`--close`, or the "continue that one" answer), before resuming the interview
 or the sieve, run `cepa-queue decisions docs/spec/<slug>.md`. It numbers the
 lines of "Decided without asking" and separates those with a verdict from those
 without. Walk only the ones without: show up to four per round, each with its
 number and text, and ask the owner for one answer per decision: keep it
-(`mantida`), veto it (`vetada`, with the reason) or refine it (`refinada`, with
+(`kept`), veto it (`vetoed`, with the reason) or refine it (`refined`, with
 the new text). Record each answer in the same turn with `cepa-queue verdict
-docs/spec/<slug>.md <n> mantida|vetada|refinada` (`vetada` needs `--reason`,
-`refinada` needs `--text`). Use the number exactly as `cepa-queue decisions` prints it (1-based over every
+docs/spec/<slug>.md <n> kept|vetoed|refined` (`vetoed` needs `--reason`,
+`refined` needs `--text`; the old `mantida`, `vetada` and `refinada` are still accepted). Use the number exactly as `cepa-queue decisions` prints it (1-based over every
 decision of the section, decided ones included, so the numbers shown may skip):
 never renumber. Never write the `· mantida em` / `· vetada em` /
 `· refinada em` marker by hand: the date and the format come from the command.
@@ -102,7 +103,7 @@ never renumber. Never write the `· mantida em` / `· vetada em` /
 only if the owner says so in the same turn. If `cepa-queue verdict` prints "já
 virou código na fila" (the file is the `source:` of a derived queue), pass the
 warning on to the owner as it came. A skipped decision does not block: it stays
-without marker, the walk moves on, and the next `--continuar` offers it again.
+without marker, the walk moves on, and the next `--continue` offers it again.
 With no decision without a verdict, say so in one line and go on.
 
 When creating a new file, write the skeleton with `**Status:** draft` (the format is in step
@@ -183,7 +184,7 @@ at the first context compaction, and the owner answers everything again.
 
 A question asked becomes `- [ ]` in the "Perguntas em aberto" (open questions)
 section; answered, it becomes `- [x]` with the answer on the same line. That
-is how `--continuar` knows where it stopped.
+is how `--continue` knows where it stopped.
 
 A line turns `- [x]` only after an owner utterance in the conversation that
 answers it. What the files said is a recommendation, never an answer. No hook

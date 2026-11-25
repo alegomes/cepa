@@ -815,7 +815,7 @@ def test_menu_discovery():
         check("--menu discovery rc 0", p.returncode == 0, p.stderr[-200:])
         out = p.stdout
         want = ["1) Detail an idea until it becomes a build-ready specification",
-                "/common:spec", "/common:spec --continuar", "/common:epic",
+                "/common:spec", "/common:spec --continue", "/common:epic",
                 "/discovery:capture", "/common:queue"]
         pos, ordered = 0, True
         for w in want:
@@ -1185,11 +1185,12 @@ def test_menu_telemetry_shown_and_chosen():
 
         # a menu command typed as the reply is a choice too, bound to its own action
         run_hook(r.path, env=env, prompt=opening, session_id="s-tel")
-        run_hook(r.path, env=env, prompt="/common:spec --continuar modos", session_id="s-tel")
+        run_hook(r.path, env=env, prompt="/common:spec --continue modos", session_id="s-tel")
         chosen = [e for e in menu_events(tdir) if e["event"] == "mode_menu.chosen"]
-        check("reply with a menu command: action 2, /common:spec --continuar",
+        check("reply with a menu command: action 2, /common:spec --continue",
               len(chosen) == 2 and chosen[1].get("action") == 2
-              and chosen[1].get("command") == "/common:spec --continuar", chosen)
+              and chosen[1].get("command") == "/common:spec --continue", chosen)
+
 
         # free text right after the menu: shown, never chosen
         run_hook(r.path, env=env, prompt=opening, session_id="s-tel")

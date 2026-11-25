@@ -58,7 +58,7 @@ This file is the wiring around that: clock, circuit breaker and log.
    stayed on `main` all night and the guard never fired. Nothing merged, and 20
    of the 25 rounds stalled because the previous card only existed on a
    loose branch. Now the supervisor creates the `until/<run>` worktree at launch, runs
-   each subprocess INSIDE it (`/common:queue-run ... --na-branch
+   each subprocess INSIDE it (`/common:queue-run ... --on-branch
    until/<run>`), and each card starts from where the previous one ended. Nothing goes
    to `main` or to `origin`: in the morning the owner merges a single branch.
 
@@ -1016,11 +1016,11 @@ CUT_RULE = (
 def build_command(name, branch, permissions, session_id=None, note="", model=None):
     # stream-json is what carries the `rate_limit_event` with the quota usage. `--verbose`
     # is required by `claude` itself for that format with `-p`.
-    # `--na-branch` tells queue-run that the tree it wakes up in IS the
+    # `--on-branch` tells queue-run that the tree it wakes up in IS the
     # night branch: no new worktree, commit straight onto it.
     request = f"/common:queue-run {name} --max 1"
     if branch:
-        request += f" --na-branch {branch}"
+        request += f" --on-branch {branch}"
     request += "\n\n" + CUT_RULE
     if note:
         # CS-6: the pre-read's preference, after the arguments, in its own paragraph.

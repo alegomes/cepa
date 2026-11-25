@@ -1,6 +1,6 @@
 ---
 description: Reads a finished `cepa-until` run (the `.jsonl` record and the `.log` output of the subprocesses) and says what the owner has to do from it, as closed questions with a recommendation. Runs by itself at the end of each run (`cepa-until` writes the result to `<run>.review.md`) and by hand for an old run or one the usage cap stopped. Does not read the whole `.log`, which passes 10 MB: reads the mechanical digest of `cepa-until-digest` and checks in git whatever it states. Read-only: does not merge, touch the queue or talk to Jira.
-argument-hint: [<run>.jsonl | latest] [--fila NAME]
+argument-hint: [<run>.jsonl | latest] [--queue NAME]
 interaction: routine
 ---
 
@@ -22,8 +22,8 @@ purpose, at the end of every run.
 - `<run>.jsonl` — the run record. `latest` (default) is the most recent
   `.jsonl` in `<raiz-principal>/.claude/queues/<fila>/until/` (main root,
   queue name).
-- `--fila NAME` — which queue, when the repo has more than one and the
-  argument is `latest`.
+- `--queue NAME` — which queue, when the repo has more than one and the
+  argument is `latest`. `--fila` is still accepted.
 
 ## Instructions
 

@@ -38,6 +38,17 @@ EXCEPTIONS = {
         "(que nomeou três comandos); só em Variables",
 }
 
+# CS-5 of docs/spec/reforma-de-nomes-dos-comandos.md: the hint shows only the English
+# flag; `## Variables` names the old Portuguese form in a "still accepted" line, which
+# is the declared compatibility. It is the one reason a flag lives only in Variables.
+LEGACY_REASON = "forma antiga, aceita e declarada em Variables (CS-5)"
+for _rel, _old in (("spec.md", ("--continuar", "--fechar", "--lista")),
+                   ("advisors.md", ("--lentes",)), ("gauntlet.md", ("--angulos",)),
+                   ("queue-run.md", ("--na-branch",)), ("run-review.md", ("--fila",)),
+                   ("next.md", ("--plan",))):
+    for _f in _old:
+        EXCEPTIONS[("common/commands/" + _rel, _f)] = LEGACY_REASON
+
 FAILURES = []
 
 
@@ -83,6 +94,7 @@ def main():
                 "common/commands/autonomous-start.md",
                 "board-flow/commands/execute.md"):
         hint, var = flags((REPO / rel).read_text())
+        var = None if var is None else {f for f in var if (rel, f) not in EXCEPTIONS}
         check(f"{rel} tem Variables e flags nos dois lados",
               var is not None and hint and hint == var, f"hint={hint} var={var}")
 

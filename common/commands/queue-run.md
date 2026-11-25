@@ -1,6 +1,6 @@
 ---
 description: Runs the repo's `single-track` queue, `.claude/queues/<name>/queue.yaml`, in batch and IN THE ORDER IT KEEPS. Stage 3 of the "one writer, three sources" design, closing the loop without a tracker: `/common:queue` writes the queue, `/common:next` names ONE step, this command runs several. Needs no Jira and never takes the ORDER from one: the only batch that existed before, `/board-flow:drain`, takes its order from the board rank, exactly the order the queue exists to replace. Keeps what drain got right: stop at the first stuck item and the `--max` ceiling. A route only a human closes DEFERS the item and the batch goes on, listing every route at the end. Reserves each item before touching it, with a recorded owner (to tell a live session from a dead run), and records the outcome of all of them. In a repo with Jira it reconciles against the board before building the batch and always moves the card of every item that is a card: In Progress on reserve, In Review on finish, a comment with the reason on block.
-argument-hint: <name> [--max N] [--dry-run] [--offline] [--na-branch <branch>]
+argument-hint: <name> [--max N] [--dry-run] [--offline] [--on-branch <branch>]
 interaction: routine
 ---
 
@@ -47,9 +47,10 @@ of trying to linearize it.
 - `--offline` — does not read the board in step 0 and does not transition any
   card. Use it when Jira is down or you want to run without network; the report
   says the queue's status is self-reported.
-- `--na-branch <branch>` — passed by `cepa-until`. It says the directory you
+- `--on-branch <branch>` — passed by `cepa-until`. It says the directory you
   woke up in is already the worktree of the overnight branch, and it changes
-  three things (see "On the overnight branch", in step 3).
+  three things (see "On the overnight branch", in step 3). `--na-branch` is
+  still accepted.
 
 ## Instructions
 
@@ -321,7 +322,7 @@ For each item of the batch, in order:
      scope — do not widen the item to "make the most of being here"
      (`scope-discipline`).
 
-  **On the overnight branch (`--na-branch <branch>`).**
+  **On the overnight branch (`--on-branch <branch>`).**
   First check that `git rev-parse --abbrev-ref HEAD` returns exactly `<branch>`;
   if it does not, `finish --status blocked` with the divergence and stop. Then:
 
@@ -440,10 +441,10 @@ For each item of the batch, in order:
 
      **A pending point you discovered goes in a field, not only in the
      prose.** A validation caveat left open, a decision nobody took, a proof
-     not run: record each one with `--pendencia "<in plain words>"`
-     (repeatable). While one is open, `cepa-queue status` does not show the
+     not run: record each one with `--open-point "<in plain words>"`
+     (repeatable; the old `--pendencia` is still accepted). While one is open, `cepa-queue status` does not show the
      item as ready, and `start` prints it to the next run, which closes it
-     with `--resolve-pendencia N` (N as `cepa-queue show` numbers the open
+     with `--resolve-open-point N` (the old `--resolve-pendencia` is still accepted; N as `cepa-queue show` numbers the open
      ones). Written only in `--evidence`, it disappears the moment the owner's
      answer returns the item to `pending`, and `status` says "pronto"
      (fb-20261110-1, C1-18). It opens no route: what only the owner decides

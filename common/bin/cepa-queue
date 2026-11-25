@@ -141,7 +141,7 @@ Subcommands:
 
   cepa-queue finish <nome> <id> --status done|blocked|pending --evidence TEXTO
                    [--human-pending ROTA] [--decision TEXTO [--decision-commit SHA]]
-                   [--pendencia TEXTO] [--resolve-pendencia N]
+                   [--open-point TEXTO] [--resolve-open-point N]
       Records the outcome. `--evidence` is mandatory: `done` without what
       happened is just a word, and this repo's queue keeps the evidence of each
       closed item. `--human-pending` OPENS a route only the human closes;
@@ -153,9 +153,10 @@ Subcommands:
       with the commit, and undoing it is a `git revert` (CS-11 of
       docs/spec/perguntar-antes-do-run.md). A proof waiver, a card to Done and a
       task outside the repo stay `--human-pending` (owner's answer to Q7).
-      `--pendencia TEXTO` (repeatable) records a pending point DISCOVERED while
+      `--open-point TEXTO` (repeatable; the old `--pendencia` is still accepted) records a pending point DISCOVERED while
       running the item (a validation caveat, a decision nobody took, a proof not
-      run) in the item key `pendencias`, open; `--resolve-pendencia N` closes the
+      run) in the item key `pendencias`, open; `--resolve-open-point N` (old `--resolve-pendencia` and
+      `--resolve-point` still accepted) closes the
       Nth open one with `--evidence` as how. While one is open the item is never
       `pronto` in `status`, and `status`, `show`, `queue` and `start` print it
       (fb-20261110-1: C1-18 went back to `pending` "pronto" with its caveats
@@ -1806,7 +1807,7 @@ def open_points(it):
     order they were recorded (owner, 2026-11-10, fb-20261110-1: C1-18 went back
     to `pending` after the owner's "sim" and `status` said "pronto", with the
     validation caveats and two owner decisions buried in the prose of
-    `evidence`). `finish --pendencia` opens one, `--resolve-pendencia` closes
+    `evidence`). `finish --open-point` opens one, `--resolve-open-point` closes
     it; an item with one open is never `pronto`, but stays `pegavel`: the run
     that takes it is the one that resolves them."""
     return [str(p.get("texto")) for p in (it.get("pendencias") or [])
@@ -2479,7 +2480,7 @@ def item_detail(program, target, l, as_json, plan=None, root=None):
                     else [f"no {l['codigo']['ref']}: " + ", ".join(l["codigo"]["no_main"])]
                     if l.get("codigo") else [])),
         ("sem Epic", [SEM_EPIC_LINE.split(": ", 1)[1]] if l.get("sem_epic") else []),
-        ("pendências descobertas (abertas; feche com finish --resolve-pendencia N)",
+        ("pendências descobertas (abertas; feche com finish --resolve-open-point N)",
          [f"{n}. {text}" for n, text in enumerate(l.get("pendencias") or [], 1)]),
         ("anotações depois da evidência (a evidência abaixo ficou como foi "
          "escrita; vale o que a anotação corrige)",
@@ -3318,7 +3319,7 @@ def cmd_start(root, name, ident, cwd=".", commit=False):
     still = open_points(it)
     if still:
         print("  pendências descobertas ainda abertas (feche cada uma com "
-              "`finish --resolve-pendencia N` ou diga por que segue aberta):")
+              "`finish --resolve-open-point N` ou diga por que segue aberta):")
         for n, text in enumerate(still, 1):
             print(f"    {n}. {text}")
     close_write(root, target, f"queue {name}: start {ident}", commit)
@@ -3853,7 +3854,7 @@ def resolve_points(it, new_texts, resolve_numbers, evidence, today):
     never lands on a point opened in the same call."""
     flat = [" ".join(str(t or "").split()) for t in (new_texts or [])]
     if any(not t for t in flat):
-        return None, None, None, ("`--pendencia` vazio: diga o que ficou pendente "
+        return None, None, None, ("`--open-point` vazio: diga o que ficou pendente "
                                   "em palavras simples")
     points = [dict(p) for p in (it.get("pendencias") or []) if isinstance(p, dict)]
     open_idx = [i for i, p in enumerate(points)
@@ -3862,7 +3863,7 @@ def resolve_points(it, new_texts, resolve_numbers, evidence, today):
     for n in resolve_numbers or []:
         if n < 1 or n > len(open_idx):
             return None, None, None, (
-                f"`--resolve-pendencia {n}` não existe: o item tem "
+                f"`--resolve-open-point {n}` não existe: o item tem "
                 f"{len(open_idx)} pendência(s) aberta(s), numeradas de 1 a "
                 f"{len(open_idx)} como o `cepa queue show` mostra")
     for n in sorted(set(resolve_numbers or [])):
@@ -3992,7 +3993,7 @@ def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
     if still:
         print(f"  {len(still)} pendência(s) aberta(s): o `cepa queue status` não "
               "mostra o item como pronto até cada uma fechar com "
-              "--resolve-pendencia N")
+              "--resolve-open-point N")
     if status in ("done", "blocked"):
         clear_validation_owed(name, ident)
     elif status == "pending":
@@ -5318,12 +5319,21 @@ def _rel_to_repo(path, repo):
     return path.as_posix()
 
 
+# What is typed (kept|vetoed|refined) -> the word the marker carries in the
+# document (CS-5). The document is Portuguese text that `_decisions` reads, so
+# the marker does not change; the old typed values stay accepted.
+VERDICT_MARKER = {"kept": "mantida", "vetoed": "vetada", "refined": "refinada",
+                  "mantida": "mantida", "vetada": "vetada", "refinada": "refinada"}
+
+
 def cmd_verdict(repo, file, ordinal, verdict, reason, text, today=None):
     """Writes the owner's verdict on decision `ordinal` of the "Decided
     without asking" section of `file`, numbered as `cepa-queue decisions`
-    numbers it. The marker is the one `_decisions` reads: `· mantida em
-    <date>`, `· vetada em <date>: <reason>`, `· refinada em <date>`. Only that
-    item changes; `Status` and every other line stay byte for byte.
+    numbers it. `verdict` is what was typed: kept|vetoed|refined, or the old
+    mantida|vetada|refinada, which writes the identical marker. The marker is
+    the one `_decisions` reads: `· mantida em <date>`, `· vetada em <date>:
+    <reason>`, `· refinada em <date>`. Only that item changes; `Status` and
+    every other line stay byte for byte.
 
     The veto is a record (O2'): it undoes nothing. What it does do, on vetada
     or refinada, is say when a queue was already derived from the file, so the
@@ -5332,14 +5342,16 @@ def cmd_verdict(repo, file, ordinal, verdict, reason, text, today=None):
     Exit 0 written; 1 refused (no section, ordinal out of range, item already
     has a verdict); 2 invalid usage (missing file, --reason or --text)."""
     path = Path(file)
+    typed = verdict
+    verdict = VERDICT_MARKER.get(typed, typed)
     if verdict == "vetada" and not (reason or "").strip():
-        print("vetada exige --reason: o motivo do veto é o que fica registrado "
+        print(f"{typed} exige --reason: o motivo do veto é o que fica registrado "
               "na linha.", file=sys.stderr)
         return 2
     if verdict == "refinada":
         text = " ".join((text or "").split())
         if not text:
-            print("refinada exige --text com o novo texto da decisão.",
+            print(f"{typed} exige --text com o novo texto da decisão.",
                   file=sys.stderr)
             return 2
         if _decisions.VERDICT_RE.search(text):
@@ -5395,7 +5407,7 @@ def cmd_verdict(repo, file, ordinal, verdict, reason, text, today=None):
         fh.write("".join(lines))
     os.replace(tmp, path)
 
-    print(f"{file}: decisão #{ordinal} (linha {d.line}) {verdict}.")
+    print(f"{file}: decisão #{ordinal} (linha {d.line}) {typed}.")
     print(f"  {shown.strip()}")
     if verdict in ("vetada", "refinada"):
         for q, done, total in derived_queues(repo, _rel_to_repo(path, repo)):
@@ -5826,7 +5838,7 @@ def archive_waiting_reasons(name, plan, runs_of):
     """CS-2: the sentences for what a closed queue still has waiting on the
     owner, by the rule `waiting` uses (`waiting_of_item`: a `done` item with a
     route left; a `dropped` item never counts) plus the leftover points of
-    `finish --pendencia` and the runs `cepa-run pending` lists. A route the
+    `finish --open-point` and the runs `cepa-run pending` lists. A route the
     owner answered "não" is still open, so it blocks too (`waiting` only
     hides it). `runs_of()` returns the cached `(runs, warning)`; it is called
     here, once per sweep, only for a queue that is otherwise closed."""
@@ -6489,7 +6501,7 @@ def main(argv=None):
         description=(
             "Read only. Per file, the decisions of the \"Decided without asking\"\n"
             "section, split into with and without a verdict (`· mantida em`,\n"
-            "`· vetada em`, `· refinada em`). Without a file, scans docs/spec/*.md\n"
+            "`· vetada em`, `· refinada em`; what you type is kept|vetoed|refined). Without a file, scans docs/spec/*.md\n"
             "and docs/epics/*.md of --repo. Each pending decision shows its ordinal\n"
             "(1-based, counting every decision of the section in file order) and\n"
             "its line. Same reader as the spec-readiness-gate hook."),
@@ -6510,16 +6522,19 @@ def main(argv=None):
             "Writes, at the end of decision <n> of the \"Decided without asking\"\n"
             "section (numbered as `cepa queue decisions` numbers it), the marker with\n"
             "today's date: `· mantida em <date>`, `· vetada em <date>: <reason>` or\n"
-            "`· refinada em <date>`. vetada requires --reason; refinada requires\n"
+            "`· refinada em <date>` (the marker stays in Portuguese: it is document\n"
+            "text). You type kept, vetoed or refined; the old mantida, vetada and\n"
+            "refinada are still accepted and write the same marker. vetoed requires\n"
+            "--reason; refined requires\n"
             "--text and swaps the decision's text before the marker. A decision that\n"
             "already has a verdict is refused. Status and the other lines do not\n"
             "change. On vetada or refinada, warns when a queue in .claude/queues/\n"
             "cites the file in its `source:`, with the queue name and how many of its\n"
             "items are done: the veto is a record and undoes nothing."),
-        examples=[("cepa queue verdict docs/spec/assinatura.md 2 mantida", "keep it"),
-                  ('cepa queue verdict docs/spec/assinatura.md 2 vetada --reason "fora do ciclo"',
+        examples=[("cepa queue verdict docs/spec/assinatura.md 2 kept", "keep it"),
+                  ('cepa queue verdict docs/spec/assinatura.md 2 vetoed --reason "fora do ciclo"',
                    "veto it"),
-                  ('cepa queue verdict docs/spec/assinatura.md 3 refinada --text "<novo texto>"',
+                  ('cepa queue verdict docs/spec/assinatura.md 3 refined --text "<novo texto>"',
                    "rewrite it")],
         exit_codes=[(0, "the marker was written"),
                     (1, "refused: no section, no decision <n>, or it already has a verdict"),
@@ -6527,10 +6542,14 @@ def main(argv=None):
     vd.add_argument("file", help="spec or Epic")
     vd.add_argument("ordinal", type=int, metavar="n",
                     help="the decision's number, as `cepa queue decisions` shows it")
-    vd.add_argument("verdict", choices=["mantida", "vetada", "refinada"])
-    vd.add_argument("--reason", default=None, help="why (required for vetada)")
+    vd.add_argument("verdict", choices=["kept", "vetoed", "refined",
+                                         "mantida", "vetada", "refinada"],
+                    metavar="{kept,vetoed,refined}",
+                    help="kept, vetoed or refined (the old mantida, vetada and "
+                         "refinada are still accepted)")
+    vd.add_argument("--reason", default=None, help="why (required for vetoed)")
     vd.add_argument("--text", default=None,
-                    help="the decision's new text (required for refinada)")
+                    help="the decision's new text (required for refined)")
     vd.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
     pr = sub.add_parser(
@@ -6692,7 +6711,7 @@ def main(argv=None):
                          "HEAD of --repo). Must be on the current branch. Not "
                          "`--commit`, which already means \"commit the queue "
                          "file\"")
-    fi.add_argument("--pendencia", "--open-point", dest="points", action="append",
+    fi.add_argument("--open-point", "--pendencia", dest="points", action="append",
                     metavar="TEXT",
                     help="a pending point you DISCOVERED while running the item "
                          "and that is still open (a validation caveat, a "
@@ -6703,7 +6722,8 @@ def main(argv=None):
                          "it. Repeatable; the same text open twice is kept once. "
                          "It opens no route: an owner decision still goes in "
                          "--question / --human-pending too")
-    fi.add_argument("--resolve-pendencia", "--resolve-point", dest="resolve_points",
+    fi.add_argument("--resolve-open-point", "--resolve-pendencia", "--resolve-point",
+                    dest="resolve_points",
                     action="append", type=int, metavar="N",
                     help="closes open pending point N (1-based among the OPEN "
                          "ones, as `cepa queue show` numbers them), with "

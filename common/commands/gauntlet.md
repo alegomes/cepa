@@ -1,6 +1,6 @@
 ---
 description: Design competition with blind judging (Gauntlet Loop) for an OPEN design decision — writes the quality bar first, has N isolated builders produce designs from distinct angles, 3 blind judges rank them by Borda count, the winner is revised and checked against the bar, and the result goes to docs/internals/gauntlet-<slug>.md. Opt-in and expensive (~600k tokens). To judge ONE already-written artifact through several lenses use /common:advisors.
-argument-hint: <target> [--builders=3] [--angulos=a,b,c] [--slug=<slug>]
+argument-hint: <target> [--builders=3] [--angles=a,b,c] [--slug=<slug>]
 interaction: routine
 ---
 
@@ -23,8 +23,8 @@ document with the whole path, not just the conclusion.
   whole section becomes the agents' context).
 - `--builders=N` — number of builders (default 3). Each one gets an angle; if N
   exceeds the number of angles, they cycle.
-- `--angulos=a,b,c` — picks the angles by `key` in the registry (default:
-  `mecanismo-novo`, `estender-o-que-existe`, `livre`).
+- `--angles=a,b,c` — picks the angles by `key` in the registry (default:
+  `mecanismo-novo`, `estender-o-que-existe`, `livre`). `--angulos` is still accepted.
 - `--slug=<slug>` — output file name (default: kebab-case of `<target>`).
 
 ## Instructions
@@ -68,8 +68,8 @@ on top of them.
 
 ### 2. Choose the angles
 
-Read `${CLAUDE_PLUGIN_ROOT}/gauntlet/angulos.md`. Without `--angulos`, use the
-default (`mecanismo-novo`, `estender-o-que-existe`, `livre`). With `--angulos`,
+Read `${CLAUDE_PLUGIN_ROOT}/gauntlet/angulos.md`. Without `--angles`, use the
+default (`mecanismo-novo`, `estender-o-que-existe`, `livre`). With `--angles`,
 select by `key` (a key outside the registry: list the valid ones and stop). Each
 builder gets an angle; `--builders` larger than the number of angles cycles,
 smaller uses the first N. Build `angles: [{key, brief}]` with the registry's

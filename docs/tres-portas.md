@@ -62,12 +62,12 @@ Para ver onde estas portas entram no trabalho inteiro, leia [workflow.md](workfl
 
 **Como dar o veredito.**
 
-1. Reabra o documento: `/common:spec --continuar <slug>` para spec, `/common:epic <nome>` para Epic.
+1. Reabra o documento: `/common:spec --continue <slug>` para spec, `/common:epic <nome>` para Epic.
 2. Antes de retomar qualquer outra coisa, o comando mostra as decisões sem veredito. Na spec são até quatro por rodada. No Epic é uma por turno, em prosa.
-3. Responda mantida, vetada (com a razão) ou refinada (com o texto novo). O agente grava com `cepa-queue verdict <arquivo> <n> <veredito>`, que põe a data do dia e o formato exato.
+3. Responda mantida, vetada (com a razão) ou refinada (com o texto novo); o comando recebe `kept`, `vetoed` ou `refined` (os antigos `mantida`, `vetada` e `refinada` seguem aceitos). O agente grava com `cepa-queue verdict <arquivo> <n> <veredito>`, que põe a data do dia e o formato exato.
 4. Pode pular. A decisão pulada fica sem marcador, volta no próximo `doctor` e não trava a entrevista.
 
-**Sem abrir a entrevista.** Rode você mesmo `cepa-queue verdict <arquivo> <n> mantida`, `... vetada --reason "<razão>"` ou `... refinada --text "<texto novo>"`, com o `<n>` que o `cepa-queue decisions` mostra. Escrever o marcador à mão também vale: o `cepa-queue decisions` lê do mesmo jeito.
+**Sem abrir a entrevista.** Rode você mesmo `cepa-queue verdict <arquivo> <n> kept`, `... vetoed --reason "<razão>"` ou `... refined --text "<texto novo>"`, com o `<n>` que o `cepa-queue decisions` mostra. Escrever o marcador à mão também vale: o `cepa-queue decisions` lê do mesmo jeito.
 
 **O que o veto não faz.**
 
