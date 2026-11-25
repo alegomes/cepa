@@ -3,7 +3,7 @@
 The queue moved from `.claude/programs/<name>/plan.yaml` (key `program:`,
 written by /common:plan) to `.claude/queues/<name>/queue.yaml` (key `queue:`,
 written by /common:queue), to match the vocabulary of docs/how-it-fits.md.
-During the transition every consumer READS BOTH layouts; `cepa-plan migrate`
+During the transition every consumer READS BOTH layouts; `cepa-queue migrate`
 moves the existing queues. The maestro wave plan (`parallel-waves`) stays in
 `.claude/programs/<name>/plan.yaml`: it is a program, not a queue.
 

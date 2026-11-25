@@ -8,10 +8,10 @@ touch a done item (it would erase the closer's evidence) and no subcommand
 could add a note, so the stale text made another agent state that C1-17 was
 not merged.
 
-Red test (BACKLOG.md § `cepa plan finish` não deixa corrigir a evidência de um
+Red test (BACKLOG.md § `cepa queue finish` não deixa corrigir a evidência de um
 item done que ficou falsa):
 
-  - `cepa-plan annotate <fila> <id> --note TEXT` on a `done` (or `dropped`)
+  - `cepa-queue annotate <fila> <id> --note TEXT` on a `done` (or `dropped`)
     item appends `{texto, em, autor}` to the item's `anotacoes`, and never
     touches `evidence`, `status` nor `head_commit` (the record only grows);
   - a second note is appended, the first stays;

@@ -86,7 +86,7 @@ If the repo uses Jira and work is left in the Review column, `/board-flow:prove 
 
 ## Step 5: check and move on
 
-**When the queue came from an Epic, run the cycle's script yourself.** Be careful: `cepa-plan epics`, which shows the state of the Epic, marks a cycle as closed (`fechado`) when every item of its queue has finished. It does not know whether anyone watched the demonstration. That check is yours.
+**When the queue came from an Epic, run the cycle's script yourself.** Be careful: `cepa-queue epics`, which shows the state of the Epic, marks a cycle as closed (`fechado`) when every item of its queue has finished. It does not know whether anyone watched the demonstration. That check is yours.
 
 After that:
 

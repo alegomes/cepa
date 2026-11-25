@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`cepa plan waiting` shows, in a section of its own, the runs waiting on the
+"""`cepa queue waiting` shows, in a section of its own, the runs waiting on the
 owner, each with the command that resolves it (spec
 docs/spec/decisoes-de-todas-as-filas.md, CS-2).
 
@@ -36,7 +36,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 CEPA_UNTIL = REPO / "common" / "bin" / "cepa-until"
 FAILURES = []
 RUN = "2026-11-20-0100"
@@ -201,15 +201,15 @@ def landed_red_and_dead():
 
 
 def plugin_with_fake_until(tmp, body):
-    """A copy of cepa-plan whose sibling `cepa-until` is `body`: the only way
+    """A copy of cepa-queue whose sibling `cepa-until` is `body`: the only way
     to make the real `pending` fail on demand."""
     plugin = Path(tmp) / "plugin"
     (plugin / "bin").mkdir(parents=True)
     for d in ("hooks", "_vendor"):
         (plugin / d).symlink_to(REPO / "common" / d)
-    (plugin / "bin" / "cepa-plan").write_text(CEPA_PLAN.read_text())
+    (plugin / "bin" / "cepa-queue").write_text(CEPA_PLAN.read_text())
     (plugin / "bin" / "cepa-until").write_text(body)
-    return plugin / "bin" / "cepa-plan"
+    return plugin / "bin" / "cepa-queue"
 
 
 def pending_fails():

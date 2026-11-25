@@ -22,10 +22,10 @@ The contract this file guards:
     - after an EMPTY capture, `git commit` is BLOCKED, and the message says that
       the filter matched zero tests and how to fix it.
 
-  acceptance-gate.py and cepa-plan finish (the other half: "not even declare done")
+  acceptance-gate.py and cepa-queue finish (the other half: "not even declare done")
     - after an EMPTY capture, the card transition to in_review/done is
       BLOCKED even with a `complete` audit; going back to in_progress passes;
-    - `cepa-plan finish --status done` refuses; blocked/pending accept;
+    - `cepa-queue finish --status done` refuses; blocked/pending accept;
     - after a green with an executed test, both doors release.
 
   prompts
@@ -48,7 +48,7 @@ HOOKS = REPO / "common" / "hooks"
 CAPTURE = HOOKS / "capture-build-result.py"
 GATE = HOOKS / "gate-advance.py"
 ACCEPTANCE = HOOKS / "acceptance-gate.py"
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 
 FAILURES = []
 
@@ -347,7 +347,7 @@ with tempfile.TemporaryDirectory() as tmp:
     print("\n# critério de pronto — depois de um EMPTY, o card não é declarado feito")
 
     # The two places where "done" is declared: the card transition in Jira
-    # (acceptance-gate) and the queue item outcome (cepa-plan finish).
+    # (acceptance-gate) and the queue item outcome (cepa-queue finish).
     r = make_repo(tmp / "e2e-feito")
     (r / "board-flow.yaml").write_text(BOARD_FLOW, encoding="utf-8")
     acc = r / ".claude" / "acceptance"
@@ -383,19 +383,19 @@ with tempfile.TemporaryDirectory() as tmp:
 
     f = cepa_plan(r, "finish", "fila", "A", "--status", "done",
                   "--evidence", "commit abc", "--repo", ".")
-    check("cepa-plan finish --status done RECUSA com baseline EMPTY",
+    check("cepa-queue finish --status done RECUSA com baseline EMPTY",
           f.returncode != 0, f"exit={f.returncode} out={f.stdout[:200]}")
     check("…e a recusa nomeia o build vazio",
           "EMPTY" in f.stderr and "zero" in f.stderr.lower(), f.stderr[:400])
     f = cepa_plan(r, "finish", "fila", "B", "--status", "blocked",
                   "--evidence", "travou no build vazio",
                   "--impede", "os testes não rodaram", "--repo", ".")
-    check("cepa-plan finish --status blocked ACEITA com baseline EMPTY",
+    check("cepa-queue finish --status blocked ACEITA com baseline EMPTY",
           f.returncode == 0, f.stderr[:300])
     f = cepa_plan(r, "finish", "fila", "B", "--status", "pending",
                   "--evidence", "volta para a fila", "--repo", ".",
                   "--supervisor")  # DUR-2: B is already `blocked`; reopening is the supervisor's
-    check("cepa-plan finish --status pending ACEITA com baseline EMPTY",
+    check("cepa-queue finish --status pending ACEITA com baseline EMPTY",
           f.returncode == 0, f.stderr[:300])
 
     # A real green afterwards releases both doors.
@@ -406,7 +406,7 @@ with tempfile.TemporaryDirectory() as tmp:
     settle(r)
     f = cepa_plan(r, "finish", "fila", "A", "--status", "done",
                   "--evidence", "commit abc", "--repo", ".")
-    check("depois de verde com teste, cepa-plan finish --status done aceita",
+    check("depois de verde com teste, cepa-queue finish --status done aceita",
           f.returncode == 0, f.stderr[:300])
 
     print("\n# worktree ligada — a baseline é a da worktree, não a do clone principal")

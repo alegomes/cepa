@@ -65,11 +65,11 @@ If 0 cards → report "Nothing in column <column>" (note the effective scope, so
 - `queue.yaml` exists → run:
 
   ```
-  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" order <project_key> --keys <K1,K2,...> --json
+  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-queue" order <project_key> --keys <K1,K2,...> --json
   ```
 
-  (`common/bin/cepa-plan` is a relative path that only exists inside the
-  `cepa` repo — this shim finds the real `cepa-plan` from `common`, in the
+  (`common/bin/cepa-queue` is a relative path that only exists inside the
+  `cepa` repo — this shim finds the real `cepa-queue` from `common`, in the
   repo or the plugin cache, so it also works in host projects like WEGO.)
 
   passing every key step 2 returned, in the order Jira gave them. The command
@@ -79,7 +79,7 @@ If 0 cards → report "Nothing in column <column>" (note the effective scope, so
   two calls) falls back to Jira order, same as "no `queue.yaml`" above.
 - Cards in `fora_do_plano` are **named** in the step-3 confirmation screen and
   the final report, with the hint that `/common:queue <project_key> --from-jira`
-  or `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" add <project_key> <key> --title "..."` is
+  or `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-queue" add <project_key> <key> --title "..."` is
   what puts a card into the queue.
 - Apply `--max` to the reordered list now, not to the raw Jira listing from
   step 2.
@@ -91,7 +91,7 @@ Show the user (order = the queue's, when step 2b found one; Jira's otherwise):
 ```
 Found N cards in <column> (scope: <effective scope, or "none — whole column">)<, queue: <project_key> — if a queue.yaml drove the order>:
   WEGO-1234 (P1) — <summary>
-  WEGO-1235 (P2) — <summary>  (out of the queue — only enters it with /common:queue <project_key> --from-jira or cepa-plan add)
+  WEGO-1235 (P2) — <summary>  (out of the queue — only enters it with /common:queue <project_key> --from-jira or cepa-queue add)
   ...
 
 Drain these? Each card runs the full execute flow (planning audit + build + validate + Jira transitions).
@@ -167,7 +167,7 @@ A single summary message:
 
 - **Drained from column:** <column> (scope: <effective scope, or "none">)
 - **Order:** queue `<project_key>` (`<queues>/<project_key>/queue.yaml`), or "Jira priority/rank (no queue for `<project_key>`)"
-- **Out of the queue (drained in Jira order, after the queued ones):** keys, or "none" — only when a queue drove the order; name them and repeat the hint (`/common:queue <project_key> --from-jira` or `cepa-plan add`)
+- **Out of the queue (drained in Jira order, after the queued ones):** keys, or "none" — only when a queue drove the order; name them and repeat the hint (`/common:queue <project_key> --from-jira` or `cepa-queue add`)
 - **Cards attempted:** N — each with its outcome terminal (`SHIPPED` / `BLOCKED` / `DEFERRED` / `DROPPED` / `ERROR`). The count of attempted cards MUST equal the count of named outcomes; if it doesn't, the drain is not finished.
 - **Moved to In Review:** M (list keys + verdicts)
 - **Blocked:** 0 or 1 (key + reason)

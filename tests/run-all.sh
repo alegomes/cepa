@@ -55,7 +55,7 @@ LIMITADOR="tests/_run_with_timeout.py"   # relativo à raiz, já depois do cd
 export CEPA_TELEMETRY_DIR="${CEPA_TELEMETRY_DIR:-${TMPDIR:-/tmp}/cepa-telemetry-tests}"
 
 # ── tamanho de terminal herdado não entra na suíte ────────────────────────
-# A suíte renderiza telas (cepa-until, cepa-plan) cuja largura vem de
+# A suíte renderiza telas (cepa-until, cepa-queue) cuja largura vem de
 # shutil.get_terminal_size(), que lê COLUMNS primeiro. Um COLUMNS exportado pelo
 # shell que lançou o runner muda a quebra de linha e derruba asserções de texto:
 # em 18/11/2026 isso deixou vermelho o pouso do run until-todas-as-filas/

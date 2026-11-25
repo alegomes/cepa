@@ -369,7 +369,7 @@ Jira stores the queue (the To Do column) but not the order you decided to
 work it in, nor why. `/board-flow:triage` decides that order and hands it off
 as a triage JSON (`<queues>/<project_key>/triagem-<date>.json`); the queue
 file `.claude/queues/<project_key>/queue.yaml` is written only by
-`/common:queue --from-jira` (`cepa-plan write --from-triage`), and
+`/common:queue --from-jira` (`cepa-queue write --from-triage`), and
 `/common:next` reads it back. Mechanism, schema and reasoning:
 **[execution-plan.md](execution-plan.md)**.
 

@@ -18,7 +18,7 @@ import subprocess
 # first run leaves the folder untracked and the next one refuses to start
 # because of what the previous one wrote.
 RUN_RECORD = re.compile(r"^.. \.claude/(programs|queues)/[^/]+/until/")
-# For the same reason, the copy that `cepa-plan write` makes of the previous queue before
+# For the same reason, the copy that `cepa-queue write` makes of the previous queue before
 # rewriting it: it is born untracked, and without this filter every rewrite of the
 # queue blocked the next run until someone deleted the `.bak` by hand. Only the
 # untracked (`??`): a `.bak` that was committed and then changed is a real change.

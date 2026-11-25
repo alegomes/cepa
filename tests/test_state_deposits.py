@@ -9,7 +9,7 @@ What it proves:
       entry in a `.claude/` is reported by `unknown_entries`;
   (b) the one liveness rule: a `rodando` record is alive only with a fresh
       heartbeat (and a live pid on the same host); no heartbeat is never `vivo`;
-  (c) the four commands' bins import and use the module, and `cepa-plan` has no
+  (c) the four commands' bins import and use the module, and `cepa-queue` has no
       copy of the heartbeat constant any more;
   (d) `cepa-doctor` warns in the `estado` area when `.claude/` has a stray entry.
 """
@@ -174,13 +174,13 @@ def test_runs_reader():
 
 
 def test_bins_use_the_module():
-    for name in ("cepa-plan", "cepa-doctor", "cepa-until-digest", "cepa-intent"):
+    for name in ("cepa-queue", "cepa-doctor", "cepa-until-digest", "cepa-intent"):
         text = (REPO / "common" / "bin" / name).read_text(encoding="utf-8")
         used = len(re.findall(r"_state\.\w+|from _state import", text))
         check(f"{name} importa e usa _state", "import _state" in text and used >= 1,
               f"usos={used}")
-    plan = (REPO / "common" / "bin" / "cepa-plan").read_text(encoding="utf-8")
-    check("cepa-plan não define mais HEARTBEAT_STALE_SEC",
+    plan = (REPO / "common" / "bin" / "cepa-queue").read_text(encoding="utf-8")
+    check("cepa-queue não define mais HEARTBEAT_STALE_SEC",
           not re.search(r"^HEARTBEAT_STALE_SEC\s*=", plan, re.M))
 
 

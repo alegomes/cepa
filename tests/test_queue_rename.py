@@ -4,7 +4,7 @@
     .claude/programs/<n>/plan.yaml  (key `program:`, /common:plan)
  -> .claude/queues/<n>/queue.yaml   (key `queue:`,   /common:queue)
 
-During the transition every consumer READS both layouts and `cepa-plan migrate`
+During the transition every consumer READS both layouts and `cepa-queue migrate`
 moves the existing queues. Each test calls the real binary (subprocess)
 in a temporary git repo, like the neighbors (`test_cepa_plan_write_commits.py`).
 
@@ -30,7 +30,7 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 CEPA_UNTIL = REPO / "common" / "bin" / "cepa-until"
 MAESTRO_PROGRAMS = REPO / "maestro" / "bin" / "maestro-programs"
 
@@ -536,7 +536,7 @@ def test_cepa_until_dry_run_new_queue_header_and_ledger_dir():
 
 
 def test_cepa_until_header_shows_queue_name_with_only_queue():
-    """[G1] `cepa-plan queue` today returns `program` AND `queue`; if one day it only
+    """[G1] `cepa-queue queue` today returns `program` AND `queue`; if one day it only
     returns `queue:`, the header must keep showing the name. Calls the real
     `main()`, with the queue query returning only `queue`.
     """

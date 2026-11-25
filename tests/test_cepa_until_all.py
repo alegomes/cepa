@@ -2,7 +2,7 @@
 """`cepa until --all` (spec `until-todas-as-filas`).
 
 CS-1: `cepa until --all --for 8h --dry-run` lists the ready items of every
-queue, grouped by queue and in the order of `cepa plan ready`, and exits 0
+queue, grouped by queue and in the order of `cepa queue ready`, and exits 0
 without executing anything. Before the flag existed the call exited 2: the
 queue name was a required positional.
 
@@ -67,7 +67,7 @@ def _run(tmp, root, args, via_launcher=True, claude_body="pass"):
     env["FAKE_CHAMADAS"] = str(calls)
     env["CEPA_UNTIL_LEITOR"] = "off"
     env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
-    env["FAKE_CEPA_PLAN"] = str(REPO / "common" / "bin" / "cepa-plan")
+    env["FAKE_CEPA_PLAN"] = str(REPO / "common" / "bin" / "cepa-queue")
     cmd = ([str(CEPA), "until"] if via_launcher
            else [sys.executable, str(CEPA_UNTIL)])
     p = subprocess.run(cmd + list(args) + ["--repo", str(root)],
@@ -92,7 +92,7 @@ def test_dry_run_lists_every_queue_in_ready_order():
         check("--all --dry-run sai com 0", p.returncode == 0,
               f"rc={p.returncode} err={p.stderr[-400:]}")
         check("...traz os dois ids", "a1" in out and "b1" in out, out[-800:])
-        check("...a fila a antes da b (ordem do `cepa plan ready`)",
+        check("...a fila a antes da b (ordem do `cepa queue ready`)",
               "a1" in out and "b1" in out and out.index("a1") < out.index("b1"),
               out[-800:])
         check("...agrupa por fila: o nome de cada fila precede o seu item",
@@ -107,7 +107,7 @@ def test_dry_run_lists_every_queue_in_ready_order():
 
 
 def test_dry_run_order_is_the_order_of_plan_ready():
-    """The same order `cepa plan ready --json` gives, item order inside a
+    """The same order `cepa queue ready --json` gives, item order inside a
     queue included, and a queue with nothing ready does not list an item."""
     with tempfile.TemporaryDirectory() as tmp:
         root, _ = _repo(tmp, {
@@ -116,14 +116,14 @@ def test_dry_run_order_is_the_order_of_plan_ready():
             "meio": [base.item("m1", human_pending="validar à mão")],
         })
         ready = json.loads(subprocess.run(
-            [sys.executable, str(REPO / "common" / "bin" / "cepa-plan"),
+            [sys.executable, str(REPO / "common" / "bin" / "cepa-queue"),
              "ready", "--repo", str(root), "--json"],
             capture_output=True, text=True, check=True).stdout)
         expected = [l["id"] for q in ready["filas"] for l in q["prontos"]]
         p, _ = _run(tmp, root, ["--all", "--for", "8h", "--dry-run"])
         out = p.stdout
         pos = [out.find(i) for i in expected]
-        check("a ordem da saída é a do `cepa plan ready`",
+        check("a ordem da saída é a do `cepa queue ready`",
               p.returncode == 0 and all(x >= 0 for x in pos) and pos == sorted(pos),
               f"esperado {expected}, posições {pos}\n{out[-800:]}")
         check("...item feito e item à espera do dono não aparecem como prontos",
@@ -150,7 +150,7 @@ def test_dry_run_with_nothing_ready_says_so_and_exits_0():
 
 def test_dependency_inside_the_run_is_named():
     """A ready item whose `blocked_by` is another ready item of the same run
-    says what it waits for, as `cepa plan ready` does."""
+    says what it waits for, as `cepa queue ready` does."""
     with tempfile.TemporaryDirectory() as tmp:
         c2 = dict(base.item("c2"), blocked_by=["c1"])
         root, _ = _repo(tmp, {"c": [base.item("c1"), c2]})
@@ -182,7 +182,7 @@ def test_neither_queue_nor_all_is_refused():
 
 
 # A fake `claude` that works like `/common:drain-plan <queue> --max 1` on the run
-# worktree: asks `cepa-plan` for the queue's first runnable item, reserves it,
+# worktree: asks `cepa-queue` for the queue's first runnable item, reserves it,
 # commits a file named after it and closes it `done`, all in ITS queue.
 DONE_IN_ITS_QUEUE = (
     "import subprocess\n"
@@ -1026,7 +1026,7 @@ def test_cs6_record_in_all_folder_pending_lists_it_and_land_yes_lands():
 
 def test_cs6_decide_all_run_lists_what_every_queue_holds_for_the_owner():
     """`decide all/<run>` outside a terminal lists the landing and the questions
-    of EVERY queue, each item named `queue/id`. Before, it asked `cepa-plan`
+    of EVERY queue, each item named `queue/id`. Before, it asked `cepa-queue`
     for a queue called `all` and printed "could not list the deferred items"."""
     with tempfile.TemporaryDirectory() as tmp:
         root, _paths = _repo(tmp, {
@@ -1168,7 +1168,7 @@ def test_cs6_all_run_on_a_terminal_only_lists_at_the_end_and_never_asks():
         env["FAKE_PLANO"] = str(Path(tmp) / "nenhum.yaml")
         env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
         env["CEPA_UNTIL_LEITOR"] = "off"
-        env["FAKE_CEPA_PLAN"] = str(REPO / "common" / "bin" / "cepa-plan")
+        env["FAKE_CEPA_PLAN"] = str(REPO / "common" / "bin" / "cepa-queue")
         env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "20"
         t0 = time.time()
         rc, out = dec.on_tty(
@@ -1345,7 +1345,7 @@ def _launch_all_on_tty(tmp, root, inputs, wait="20", extra=()):
     env["FAKE_PLANO"] = str(Path(tmp) / "nenhum.yaml")
     env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
     env["CEPA_UNTIL_LEITOR"] = "off"
-    env["FAKE_CEPA_PLAN"] = str(REPO / "common" / "bin" / "cepa-plan")
+    env["FAKE_CEPA_PLAN"] = str(REPO / "common" / "bin" / "cepa-queue")
     env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
     rc, out = dec.on_tty(
         [sys.executable, str(CEPA_UNTIL), "--all", "--for", "1h", "--no-verify",

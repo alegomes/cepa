@@ -38,13 +38,13 @@ window. That is what makes 12 hours possible.
 ## What it does not do, on purpose
 
 It does not reserve items, record outcomes, know the topology or know what a card is.
-`/common:drain-plan` and `cepa-plan` do that, with a state machine that already exists and is
+`/common:drain-plan` and `cepa-queue` do that, with a state machine that already exists and is
 tested:
 
-- `cepa-plan start` reserves the item and **signs** the reservation (session, pid, host).
-- `cepa-plan queue` hands back as runnable any reservation whose pid died. A dead subprocess
+- `cepa-queue start` reserves the item and **signs** the reservation (session, pid, host).
+- `cepa-queue queue` hands back as runnable any reservation whose pid died. A dead subprocess
   cannot lock the queue forever.
-- `cepa-plan finish` records the outcome, including the route only a human can close.
+- `cepa-queue finish` records the outcome, including the route only a human can close.
 
 `cepa-until` is the wiring around that: clock, circuit breaker and log.
 
@@ -96,7 +96,7 @@ instead of starting an item that would be cut halfway.
 ## When it stops
 
 At the first of: deadline reached, no runnable item in the queue (`end-of-queue`, `blocked`,
-`blocked-before`, as reported by `cepa-plan queue`), circuit breaker, a stuck queue, or a
+`blocked-before`, as reported by `cepa-queue queue`), circuit breaker, a stuck queue, or a
 usage cap whose wait does not fit in the window. (The queue reasons used to be Portuguese —
 `fim-da-fila`, `teto`, `bloqueado`, `reservado`, `depende-de-adiado`, `bloqueado-antes`; the old
 spelling is still accepted during the transition.)
@@ -132,7 +132,7 @@ O `run_start` traz `versao_registro: 2`; registros sem o campo são do formato a
 - **`heartbeat`** em `<run>.estado.json`, gravado com o deslocamento de fuso (ex.: `-03:00`, para quem lê de outro host) e regravado a cada `CEPA_UNTIL_HEARTBEAT` segundos
   (padrão 60) enquanto o `claude`, o build ou uma espera (reset de cota, sonda de rede)
   estão em andamento, com `item`, `tentativa`, `session_id` e `fase` do que está em voo. O
-  `cepa-plan` usa a idade dele para reservas de OUTRO host (onde o pid não pode ser
+  `cepa-queue` usa a idade dele para reservas de OUTRO host (onde o pid não pode ser
   sondado): se existe um `*.estado.json` com o mesmo `host` e `arvore` da reserva, ela é
   `viva` só se o run está `rodando` e o heartbeat tem menos de `CEPA_HEARTBEAT_ORFA`
   segundos (padrão 900); senão é `orfa`. Sem esse arquivo vale a regra de 24h de antes.
@@ -170,7 +170,7 @@ The first three panels print as the run ends and Next after the analysis and the
 so it shows what is still open. On a terminal, between them, `cepa-until` asks the owner, one at a time, about everything that waits on them:
 every deferred item that only the owner unblocks
 (`blocked` from an outside condition, open `human_pending` route). Each item shows the closed
-question the agent recorded with `cepa-plan finish --question` (or the one the
+question the agent recorded with `cepa-queue finish --question` (or the one the
 `/common:until-review` analysis wrote in its `cepa-decisoes` block), with the recommendation.
 Each item is one block, with the full title, then labelled lines: why it stopped, the task left
 to the owner, the analysis' `contexto` (lay words), the question, and `instrucao` (the technical
@@ -180,7 +180,7 @@ warning that the analysis broke the rules.
 
 On a terminal each question waits up to 10 minutes (`CEPA_UNTIL_ESPERA_RESPOSTA`, in seconds) for a keystroke; with none, the run prints the `cepa-until decide` command and exits, because an overnight run ends with nobody at the keyboard and a prompt without a limit left the process alive for days (PID 84993, 2026-10-07).
 
-An answer is applied on the spot by `cepa-plan answer`: a `blocked` item goes back to
+An answer is applied on the spot by `cepa-queue answer`: a `blocked` item goes back to
 `pending` and an open route closes, with the owner's answer in the item's evidence, where the
 next run reads it. `m` records the answer and keeps the item as it was (still `blocked`,
 route still open), for answers like "keep it blocked". Enter leaves an item for later; `q`
@@ -233,7 +233,7 @@ afterwards), `[o]` ask them one by one, Enter for later and `[q]` to quit. Each 
 its own answer in its own queue, with the note `(respondida em grupo de N)`; one optional line
 of comment is appended to all of them. Without a terminal the listing prints a group as a
 single entry with the count and the ids. The launch panel of a run does not group.
-`cepa-plan status` says which `pending` items are ready (the next run takes them) and which wait
+`cepa-queue status` says which `pending` items are ready (the next run takes them) and which wait
 on the owner or on another item; readiness is derived from the same rule the run uses, never
 stored.
 
@@ -274,7 +274,7 @@ no build, so no reinstall: only the warning above. With less than 120 s left in 
 
 ## Quem lê o estado: `_state.py` (DUR-4)
 
-O estado vive em cinco depósitos, e só neles: a fila (`queue.yaml`, ou `plan.yaml` no layout legado), o registro do run (`until/<run>.jsonl` e `<run>.estado.json`), o handoff por branch, as sessões vivas (`.claude/sessions/`) e o estado do modo autônomo (`docs/autonomous/<run>/state.yaml`). O módulo `common/hooks/_state.py` é o leitor único deles (só lê, nunca cria depósito) e traz o catálogo de tudo o que existe em `.claude/`. `next` (via `cepa-plan`), `doctor` (`cepa-doctor`), `until-review` (`cepa-until-digest`) e `whereami` (`cepa-intent`) importam o módulo. O `cepa-doctor` avisa na área `estado` quando aparece em `.claude/` uma entrada que o catálogo não conhece, e `tests/test_state_deposits.py` fica vermelho se alguém escrever em `.claude/<nome>` sem declarar o nome. A regra de vida de um run é uma só (`run_liveness`): `rodando` só conta como vivo com heartbeat recente (até `CEPA_HEARTBEAT_ORFA` segundos, padrão 900) e, na mesma máquina, com o pid respondendo; heartbeat velho é `morto`, e um registro `rodando` sem heartbeat (anterior ao DUR-1) é `desconhecido`, nunca `vivo`. O `cepa until pendentes` ainda tem a sua própria classificação de "mortos" (pid e prazo) e não usa essa regra.
+O estado vive em cinco depósitos, e só neles: a fila (`queue.yaml`, ou `plan.yaml` no layout legado), o registro do run (`until/<run>.jsonl` e `<run>.estado.json`), o handoff por branch, as sessões vivas (`.claude/sessions/`) e o estado do modo autônomo (`docs/autonomous/<run>/state.yaml`). O módulo `common/hooks/_state.py` é o leitor único deles (só lê, nunca cria depósito) e traz o catálogo de tudo o que existe em `.claude/`. `next` (via `cepa-queue`), `doctor` (`cepa-doctor`), `until-review` (`cepa-until-digest`) e `whereami` (`cepa-intent`) importam o módulo. O `cepa-doctor` avisa na área `estado` quando aparece em `.claude/` uma entrada que o catálogo não conhece, e `tests/test_state_deposits.py` fica vermelho se alguém escrever em `.claude/<nome>` sem declarar o nome. A regra de vida de um run é uma só (`run_liveness`): `rodando` só conta como vivo com heartbeat recente (até `CEPA_HEARTBEAT_ORFA` segundos, padrão 900) e, na mesma máquina, com o pid respondendo; heartbeat velho é `morto`, e um registro `rodando` sem heartbeat (anterior ao DUR-1) é `desconhecido`, nunca `vivo`. O `cepa until pendentes` ainda tem a sua própria classificação de "mortos" (pid e prazo) e não usa essa regra.
 
 ## Before you leave it running
 

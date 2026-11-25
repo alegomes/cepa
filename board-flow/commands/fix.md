@@ -210,7 +210,7 @@ the next card") compete in silence. Two lines, always both:
   real route. On a bug this is rarely null — a user-visible symptom is exactly
   what a green regression test cannot close alone. If it *is* the explicit null,
   say so plainly rather than staying quiet. Add any other human-only leftover.
-- **Next in the plan:** read `<queues>/<project_key>/queue.yaml` (or, in a repo not migrated yet, `<main-root>/.claude/programs/<project_key>/plan.yaml`; `cepa-plan status <project_key>` resolves both) (schema
+- **Next in the plan:** read `<queues>/<project_key>/queue.yaml` (or, in a repo not migrated yet, `<main-root>/.claude/programs/<project_key>/plan.yaml`; `cepa-queue status <project_key>` resolves both) (schema
   `common/plan-schema.yaml`, `mode: single-track`) and name the next `pending`
   item not `blocked_by` an unfinished one — key, title, and its `why`. Mark the
   card just fixed as `done` there, carrying its Human validation route into

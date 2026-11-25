@@ -4,7 +4,7 @@ came from goes with it, and what went along is announced.
 
 Red test declared in the spec: `velha` has `source: docs/spec/velha.md`, and
 that file has two lines in "Decided without asking" without a verdict. After
-`cepa-plan archive`: `docs/spec/_archive/velha.md` exists, `docs/spec/velha.md`
+`cepa-queue archive`: `docs/spec/_archive/velha.md` exists, `docs/spec/velha.md`
 does not, the `source:` of `.claude/queues/_archive/velha/queue.yaml` starts
 with `docs/spec/_archive/velha.md`, and the output contains
 "2 decisões sem veredito foram junto em docs/spec/_archive/velha.md". A second

@@ -16,7 +16,7 @@ Two ways to use it:
     `section (3)`, `✓ [tag] ...`, `18. id — title`, `key: value`). It is what
     every command uses.
   * `SCREEN` and its primitives, for whoever builds the screen by hand (the
-    `cepa-plan status`). A line that already carries color goes through the
+    `cepa-queue status`). A line that already carries color goes through the
     filter untouched.
 """
 
@@ -214,7 +214,7 @@ SCREEN = Screen()
 
 def verbatim(line):
     """Print one line as it is, never wrapped nor colored: a command the owner
-    copies (the `cepa-plan add` of an answer that creates no work) broken at the
+    copies (the `cepa-queue add` of an answer that creates no work) broken at the
     terminal width stops being a command."""
     out = sys.stdout
     if isinstance(out, Filter):

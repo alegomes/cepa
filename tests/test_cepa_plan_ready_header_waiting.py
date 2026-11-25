@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The header of `cepa-plan ready` says how many items wait on the owner
+"""The header of `cepa-queue ready` says how many items wait on the owner
 (fb-20261120-5).
 
 The header counts only what an agent can build alone now. With one `pending`
@@ -33,7 +33,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 FAILURES = []
 SEP = " · "
 
@@ -185,7 +185,7 @@ def main():
     if FAILURES:
         print(f"✗ {len(FAILURES)} falha(s): {', '.join(FAILURES)}")
         return 1
-    print("✓ cepa-plan ready header: esperam você")
+    print("✓ cepa-queue ready header: esperam você")
     return 0
 
 

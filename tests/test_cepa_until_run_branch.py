@@ -555,7 +555,7 @@ def test_stuck_item_without_commit_leaves_the_branch_alone():
 # ── red resolves without the owner (Revision 3, steps 4a, 4b, 4d, 4e) ───────
 
 # A fake `claude` that, on each call, notes the `evidence` the item had when
-# it was picked: it is the note the agent would see in `cepa-plan start`.
+# it was picked: it is the note the agent would see in `cepa-queue start`.
 WORKS_AND_READS = WORKS.replace(
     "ident = primeiro_pendente()\n",
     "ident = primeiro_pendente()\n"

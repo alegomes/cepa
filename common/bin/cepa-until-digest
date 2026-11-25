@@ -306,7 +306,7 @@ def queue_plan_path(ledger, queue):
     The ledger lives in `<tree>/.claude/queues/<queue>/until/` (or
     `.claude/programs/...`). When that tree is a linked worktree, the queue file
     next to it is a copy nobody updates: whoever writes the queue is
-    `cepa-plan`, always in the main clone (the parent of
+    `cepa-queue`, always in the main clone (the parent of
     `git rev-parse --git-common-dir`, the same rule as its `main_root`). On
     2026-09-26 this summary read the copy and showed 21 `pending` items that
     were already closed. Outside a git repo, the ledger's neighbor is what is

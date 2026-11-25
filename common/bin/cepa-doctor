@@ -90,7 +90,7 @@ except Exception:  # noqa: BLE001
     WT = None
 
 # The reader of "Decided without asking" is the one the readiness gate and
-# `cepa-plan decisions` use: the count here is the count they see.
+# `cepa-queue decisions` use: the count here is the count they see.
 try:
     import _decisions
 except Exception:  # noqa: BLE001
@@ -928,7 +928,7 @@ def check_twg_version(root: Path):
 #
 # Reports, never fixes: closing an orphan card or inventing a `**Plano:**` in
 # BACKLOG.md is the owner's decision, not the doctor's. Delegates the whole
-# calculation to `cepa-plan divergence`, which knows how to compare queue × BACKLOG (the
+# calculation to `cepa-queue divergence`, which knows how to compare queue × BACKLOG (the
 # live Jira read, cards_sem_item/itens_com_card_done, goes in the `--live` step
 # of /common:doctor, which passes `--board`).
 
@@ -966,7 +966,7 @@ def check_plan_divergence(root: Path):
     queue = resolve_single_track_queue(root)
     if queue is None:
         return  # no resolvable queue (none or more than one) — nothing to compare
-    cepa_plan = Path(__file__).resolve().parent / "cepa-plan"
+    cepa_plan = Path(__file__).resolve().parent / "cepa-queue"
     if not cepa_plan.is_file():
         return
     try:
@@ -978,7 +978,7 @@ def check_plan_divergence(root: Path):
         warn("plano", f"divergência da fila `{queue}` não rodou: {e}")
         return
     if p.returncode not in (0,):
-        return  # no queue / wave plan / read error — silent, cepa-plan already logs
+        return  # no queue / wave plan / read error — silent, cepa-queue already logs
     try:
         output = json.loads(p.stdout)
     except (ValueError, json.JSONDecodeError):
@@ -1030,7 +1030,7 @@ def check_queue_layout(root: Path):
     if legacy:
         ok("fila", f"{len(legacy)} fila(s) no layout antigo "
                    f"(.claude/programs: {', '.join(legacy)}) — "
-                   "`cepa-plan migrate --all` move para .claude/queues")
+                   "`cepa-queue migrate --all` move para .claude/queues")
 
 
 def check_awaiting_merge(root: Path):

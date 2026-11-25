@@ -62,7 +62,7 @@ def resume_notice(session_id: str, cwd: str, root: str, env=None):
         return (
             "[resume] Handoff deste branch NÃO entregue: esta sessão é uma rodada "
             "do cepa-until, e o handoff é da rodada anterior, sobre outro item. "
-            "O seu item é o que o /common:drain-plan reservar com `cepa-plan start`; "
+            "O seu item é o que o /common:drain-plan reservar com `cepa-queue start`; "
             "não continue trabalho de outro id."
         )
     meta, auto, note = H.parse(path)

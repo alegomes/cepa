@@ -111,7 +111,7 @@ def fake_claude(tmp, body):
         "        if it['id'] == ident:\n"
         "            it.update(campos)\n"
         "    grava(p)\n"
-        # Mirrors the deferral rule of `cepa-plan build_batch`: an item with an open
+        # Mirrors the deferral rule of `cepa-queue build_batch`: an item with an open
         # `human_pending` is NOT handed to the executor again. Without this the
         # fake marks the same item forever and the test measures itself.
         "def primeiro_pendente():\n"
@@ -567,7 +567,7 @@ def test_previous_run_record_is_not_dirt():
 
 
 def test_bak_of_the_queue_rewrite_is_not_dirt():
-    """`cepa-plan write` copies the previous queue to `plan.yaml.bak` before
+    """`cepa-queue write` copies the previous queue to `plan.yaml.bak` before
     rewriting (it is where the hand-written comments stay). The file is born
     untracked, and before the filter every queue rewrite blocked the next
     run until someone deleted the `.bak` by hand (seen on 2026-09-29, queue
@@ -584,7 +584,7 @@ def test_bak_of_the_queue_rewrite_is_not_dirt():
              "human_pending": None}]),
             encoding="utf-8")
         w = subprocess.run([sys.executable, str(REPO / "common" / "bin" /
-                                                "cepa-plan"),
+                                                "cepa-queue"),
                             "write", "fila", "--items", str(item_list),
                             "--repo", str(root)],
                            capture_output=True, text=True)
@@ -879,7 +879,7 @@ def test_header_says_how_many_items_run_and_how_many_wait_for_the_owner():
 
 def test_header_wait_count_ignores_items_deferred_for_another_reason():
     """CS-1: only an open `human_pending` counts as "waiting for the owner". An item
-    that `cepa-plan queue` defers for another reason (here `depends-on-deferred`:
+    that `cepa-queue queue` defers for another reason (here `depends-on-deferred`:
     a3 is blocked by a2, which is itself deferred) is in neither number."""
     with tempfile.TemporaryDirectory() as tmp:
         a3 = item("a3")
@@ -889,7 +889,7 @@ def test_header_wait_count_ignores_items_deferred_for_another_reason():
                                 a3])
         binv = fake_claude(tmp, "pass")
         plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
-        q = subprocess.run([sys.executable, str(REPO / "common" / "bin" / "cepa-plan"), "queue", "fila", "--max",
+        q = subprocess.run([sys.executable, str(REPO / "common" / "bin" / "cepa-queue"), "queue", "fila", "--max",
                             "1000000", "--repo", str(root), "--json"],
                            capture_output=True, text=True)
         deferred = json.loads(q.stdout).get("deferred") or []
@@ -923,7 +923,7 @@ def test_header_says_unavailable_when_the_uncapped_queue_read_fails():
 
         def flaky(name, repo, max_items=1):
             if max_items > 1:
-                return None, "boom: cepa-plan fell over"
+                return None, "boom: cepa-queue fell over"
             return real(name, repo, max_items=max_items)
         mod.query_queue = flaky
         out = io.StringIO()
@@ -935,7 +935,7 @@ def test_header_says_unavailable_when_the_uncapped_queue_read_fails():
         check("there is one '1st item:' line", len(lines) == 1, out.getvalue()[:800])
         line = lines[0] if lines else ""
         check("...saying unavailable with the error",
-              "start: unavailable (queue read failed: boom: cepa-plan fell over)" in line, line)
+              "start: unavailable (queue read failed: boom: cepa-queue fell over)" in line, line)
         check("...and with no count", " run, " not in line, line)
 
 
@@ -1315,7 +1315,7 @@ def test_live_run_of_the_same_queue_refuses_the_launch():
 
 def test_plan_of_another_queue_dirtied_by_the_live_run_is_not_dirt():
     """The `plan.yaml` of ANOTHER queue, which a live run of it writes via
-    `cepa-plan start/finish`, is not dirt; any other difference is."""
+    `cepa-queue start/finish`, is not dirt; any other difference is."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
         other = root / ".claude" / "programs" / "outra" / "plan.yaml"

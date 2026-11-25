@@ -4,15 +4,15 @@ not reported as ready (owner, 2026-11-10, fb-20261110-1).
 
 The case: C1-18 of wego-faturamento-backend went `blocked` with the validation
 caveats and two owner decisions buried in the prose of `evidence`. The owner
-answered "sim" to the route, the item went back to `pending`, and `cepa plan
+answered "sim" to the route, the item went back to `pending`, and `cepa queue
 status` said "pronto: o próximo cepa-until pega". When the owner asked what was
 left to unblock it, several pending points came up that no field of the item
 carried.
 
-Red test (BACKLOG.md § `cepa-plan status` diz que o item está pronto e a
+Red test (BACKLOG.md § `cepa-queue status` diz que o item está pronto e a
 pergunta sobre o desbloqueio revela pendências que nunca apareceram):
 
-  - `cepa-plan finish ... --pendencia "<texto>"` (repeatable) records each one
+  - `cepa-queue finish ... --pendencia "<texto>"` (repeatable) records each one
     in the item's `pendencias`, open;
   - an item with an open pending point is NOT `pronto` in `status` (JSON and
     text), even after the owner's answer returns it to `pending`; it stays

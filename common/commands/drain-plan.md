@@ -58,13 +58,13 @@ the one below, do not reorder because "this one is faster". Skipping is
 reordering the queue in silence — and a queue reordered in silence is the same
 as having no queue, which is the state this document exists to get rid of.
 
-**The batch is built by `cepa-plan`, not by your eye.** While the rules for
+**The batch is built by `cepa-queue`, not by your eye.** While the rules for
 "what can run now" lived in a command's prose, the only possible test was to
 grep the prose — which proves the command PROMISES to respect the order, never
-that a run did. Run `cepa-plan queue` and execute what it returned.
+that a run did. Run `cepa-queue queue` and execute what it returned.
 
 **Never edit `queue.yaml` by hand** — not with `Write`, not with `sed`. Marking
-goes through `cepa-plan start` / `cepa-plan finish`, which refuse an outcome
+goes through `cepa-queue start` / `cepa-queue finish`, which refuse an outcome
 without evidence, refuse a double reservation and refuse to close a human route.
 Written from outside, none of those refusals happen.
 
@@ -92,7 +92,7 @@ board):
 
 Jira is always spoken to by `atlassian-expert` — this command does not call any
 Atlassian tool directly, and the queue × board comparison belongs to
-`cepa-plan reconcile`, not your eye. Repo without `board-flow.yaml`: none of this
+`cepa-queue reconcile`, not your eye. Repo without `board-flow.yaml`: none of this
 happens, and the queue is the only truth.
 
 ## Workflow
@@ -125,7 +125,7 @@ mandatory.
 Save the response and hand it to the comparer:
 
 ```
-python3 common/bin/cepa-plan reconcile <nome> --board <arquivo.json> --apply --repo .
+python3 common/bin/cepa-queue reconcile <nome> --board <arquivo.json> --apply --repo .
 ```
 
 The comparison is its job, not yours: it reads the `defaults.status_map` from
@@ -158,7 +158,7 @@ applying the effective scope (`{"cards": [{"key", "status"}]}`, no transition),
 save it, and let the code decide which are ready:
 
 ```
-python3 common/bin/cepa-plan landed --board <arquivo.json> --repo . --json
+python3 common/bin/cepa-queue landed --board <arquivo.json> --repo . --json
 ```
 
 A card is in `prontos` only with `docs/proof/<KEY>.yaml` PROVEN, the
@@ -180,11 +180,11 @@ the report only when the reason is something other than "não proven".
 The queue lives in the **main clone**: `<raiz-principal>/.claude/queues/<nome>/`,
 where `<raiz-principal>` is the parent of `git rev-parse --git-common-dir` without
 the trailing `/.git` — inside a linked worktree that is the MAIN clone, not this
-tree. You don't resolve this by hand (`cepa-plan` resolves it by the same rule),
+tree. You don't resolve this by hand (`cepa-queue` resolves it by the same rule),
 but you need to know, because it is the path that goes in the report.
 
 ```
-python3 common/bin/cepa-plan queue <nome> --max N --repo . --json
+python3 common/bin/cepa-queue queue <nome> --max N --repo . --json
 ```
 
 What comes back: `batch` (the items runnable now, in queue order, each with the
@@ -274,7 +274,7 @@ For each item of the batch, in order:
   a. **Reserve first**, before any build, worktree or delegation:
 
      ```
-     python3 common/bin/cepa-plan start <nome> <id> --repo .
+     python3 common/bin/cepa-queue start <nome> <id> --repo .
      ```
 
      Exit 5 means the item stopped being reservable since the batch was built
@@ -382,7 +382,7 @@ For each item of the batch, in order:
      gate.** Its flow ends in it, and it is the one that calls
      `security-reviewer`. Delegate to `validation-lead` with the item's `id` as
      key; it writes `docs/validation/<id>.yaml`, and only `READY-TO-SHIP` or
-     `READY-WITH-CAVEATS` closes `done`. `cepa-plan finish --status done` refuses
+     `READY-WITH-CAVEATS` closes `done`. `cepa-queue finish --status done` refuses
      without that file, so skipping the gate does not go unnoticed: in the run of
      2026-09-23 none of the 5 WEGO cards went through `validation-lead`, and
      WEGO-2318, which logs into the portal with the carrier's credential, closed
@@ -415,7 +415,7 @@ For each item of the batch, in order:
   e. **Record the outcome**, always:
 
      ```
-     python3 common/bin/cepa-plan finish <nome> <id> --status done \
+     python3 common/bin/cepa-queue finish <nome> <id> --status done \
          --evidence "commits, verdicts, what was left out" --repo .
      ```
 
@@ -441,9 +441,9 @@ For each item of the batch, in order:
      **A pending point you discovered goes in a field, not only in the
      prose.** A validation caveat left open, a decision nobody took, a proof
      not run: record each one with `--pendencia "<in plain words>"`
-     (repeatable). While one is open, `cepa-plan status` does not show the
+     (repeatable). While one is open, `cepa-queue status` does not show the
      item as ready, and `start` prints it to the next run, which closes it
-     with `--resolve-pendencia N` (N as `cepa-plan show` numbers the open
+     with `--resolve-pendencia N` (N as `cepa-queue show` numbers the open
      ones). Written only in `--evidence`, it disappears the moment the owner's
      answer returns the item to `pending`, and `status` says "pronto"
      (fb-20261110-1, C1-18). It opens no route: what only the owner decides
@@ -459,7 +459,7 @@ For each item of the batch, in order:
      recorded by `answer`, it creates no queue item)
      (both owner-facing, in pt-BR: "Accept or refuse the waiver of <scope>
      (<reason>)" / "Do I accept the waiver of <scope> for <reason>? I recommend
-     <yes/no>: <why>"). The owner's `cepa-plan answer ... "sim: ..."` turns
+     <yes/no>: <why>"). The owner's `cepa-queue answer ... "sim: ..."` turns
      the proposal into a waiver (fb-20261014-3); the agent never records a waiver
      on the owner's behalf.
 
@@ -488,7 +488,7 @@ For each item of the batch, in order:
        **human section**, in pt-BR, for a lay reader. `--blocker` is mandatory
        on `blocked`; write all five whenever the item goes to the owner. Each
        one up to 30 words, with no card key, commit, branch, file, gate name or
-       verdict: `cepa-plan finish` refuses them and names the field.
+       verdict: `cepa-queue finish` refuses them and names the field.
        `--blocker` names the real reason, not its category: "o card manda
        entregar com os casos travados marcados, mas a revisão final exige
        todos passando", never "travou por algo de fora do código".
@@ -544,7 +544,7 @@ For each item of the batch, in order:
      a question, the terminal asks the default one ("destravo o item e devolvo
      para a fila?" — do I unblock the item and return it to the queue?) and the
      owner decides without the context only you have. Their answer comes back
-     through the item's evidence (`cepa-plan answer`), and the next run reads
+     through the item's evidence (`cepa-queue answer`), and the next run reads
      it there.
 
 ### 4. Terminal outcome — no item leaves the batch without a name
@@ -626,7 +626,7 @@ A single report, in the `plain-report` format, written in Brazilian Portuguese
   Inside `cepa-until` each item is a `claude -p` that dies at the end of the turn:
   there is no "when it goes green I'll come back". Await and collect in the same
   turn, or name the outcome before stopping.
-- **Marking is mechanical** (`cepa-plan start` / `finish`). Editing the YAML by
+- **Marking is mechanical** (`cepa-queue start` / `finish`). Editing the YAML by
   hand bypasses all the refusals. `finish --status done` requires a clean tree
   (commit first) and records `head_commit`; a second `finish` on a closed item,
   or from a session that does not hold it, is refused and logged in

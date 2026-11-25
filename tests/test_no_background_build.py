@@ -77,7 +77,7 @@ def test_inside_window_background_build_is_blocked():
     check("...e a recusa explica que não há turno seguinte",
           "NÃO HÁ TURNO SEGUINTE" in p.stderr, p.stderr[:300])
     check("...e diz o que fazer no lugar (primeiro plano ou desfecho nomeado)",
-          "PRIMEIRO PLANO" in p.stderr and "cepa-plan finish" in p.stderr,
+          "PRIMEIRO PLANO" in p.stderr and "cepa-queue finish" in p.stderr,
           p.stderr[:400])
 
 

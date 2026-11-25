@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Tests of stages 1 and 2 of "one writer, three sources": /common:plan + cepa-plan.
+"""Tests of stages 1 and 2 of "one writer, three sources": /common:plan + cepa-queue.
 
 Run with `python3 tests/test_common_plan.py` (it only needs the PyYAML that the
 script itself uses). Two families, on purpose:
 
-  - BEHAVIOR of `common/bin/cepa-plan`, which is the one that writes. Each refusal here
+  - BEHAVIOR of `common/bin/cepa-queue`, which is the one that writes. Each refusal here
     exists because the corresponding failure destroys the document in silence: a queue
     written over a wave plan, `human_pending` zeroed in a
     reprioritization, a blocking cycle that makes /common:next say the queue
@@ -30,7 +30,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 CMD = REPO / "common" / "commands" / "queue.md"
 
 FAILURES = []
@@ -548,15 +548,15 @@ def test_command_contract(_base):
           "interaction: conversational" in fm,
           "em `routine` o hook default-yes-inject injeta a política que manda "
           "decidir sozinho — e a ordem e o `why` são do dono, não do agente")
-    check("manda a gravação passar pelo cepa-plan",
-          "common/bin/cepa-plan" in f or "bin/cepa-plan" in f)
+    check("manda a gravação passar pelo cepa-queue",
+          "common/bin/cepa-queue" in f or "bin/cepa-queue" in f)
     check("proíbe escrever o YAML à mão",
           "Never writes the YAML by hand" in f,
           "por fora do script nenhuma das recusas acontece")
     check("proíbe inventar ordem e `why`",
           "Never invents order or `why`" in f)
     check("manda a leitura da spec passar pelo `from-spec` (não pelos seus olhos)",
-          "cepa-plan from-spec" in f,
+          "cepa-queue from-spec" in f,
           "leitura no olho não deixa evidência: só provaria que o comando promete")
     check("manda dizer quando a ordem foi HERDADA do texto da spec",
           "say that it inherited it" in f and "what was inherited" in f,
@@ -570,7 +570,7 @@ def test_command_contract(_base):
     # exist" and became "do not consult Jira on your own" — the risk is
     # the same on both sides, a queue whose order came out of the board's rank.
     check("manda a leitura do repasse passar pelo `from-triage`",
-          "cepa-plan from-triage" in f,
+          "cepa-queue from-triage" in f,
           "leitura no olho não deixa evidência: só provaria que o comando promete")
     check("proíbe montar a fila de uma consulta crua ao Jira",
           "Never queries Jira directly" in f and "/board-flow:triage" in f,
@@ -940,8 +940,8 @@ def test_triage_contract(_base):
     check("declara que NÃO escreve mais o plan.yaml",
           "no longer writes `queue.yaml`" in f,
           "enquanto ele escrever também, as regras vivem em dois lugares")
-    check("manda a gravação passar pelo cepa-plan --from-triage",
-          "cepa-plan write --from-triage" in f or "--from-triage" in f)
+    check("manda a gravação passar pelo cepa-queue --from-triage",
+          "cepa-queue write --from-triage" in f or "--from-triage" in f)
     check("nomeia o repasse e onde ele mora",
           "triagem-<YYYY-MM-DD>.json" in f)
     check("entrega a ordem ao /common:queue", "/common:queue" in f)

@@ -525,7 +525,7 @@ being re-invoked on completion instead of burning a turn in a spin-loop.
 ### validation-owed-gate.py (Stop)
 
 Owner: `common/hooks/`. Blocks the end of a turn while the session owes a
-validation-lead verdict for an item it built. `cepa-plan finish` writes a
+validation-lead verdict for an item it built. `cepa-queue finish` writes a
 marker in `~/.claude/cepa-validation-owed/<session-id>/` when it refuses
 `done` for lack of `docs/validation/<id>.yaml`, or when the item goes back to
 `pending` without it; `done` or `blocked` removes it. The block message names

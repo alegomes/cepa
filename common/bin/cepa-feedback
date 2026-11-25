@@ -251,9 +251,9 @@ def cmd_list(args):
 
 
 def _queue_status(args):
-    """Reads the queue via `cepa-plan status --json`.
+    """Reads the queue via `cepa-queue status --json`.
     Returns (data_or_None, error_message_or_None)."""
-    cepa_plan = Path(__file__).resolve().parent / "cepa-plan"
+    cepa_plan = Path(__file__).resolve().parent / "cepa-queue"
     cmd = [sys.executable, str(cepa_plan), "status", args.queue, "--json",
            "--repo", args.repo]
     try:
@@ -276,7 +276,7 @@ def _queue_item(args, data):
 
 
 def _queue_add(args, r, destination, why):
-    """Appends a new item to the queue via `cepa-plan add`. The triage is already
+    """Appends a new item to the queue via `cepa-queue add`. The triage is already
     written: a failure here only warns (never undoes the triage)."""
     item_id = args.item_id or args.id
     if args.title:
@@ -285,14 +285,14 @@ def _queue_add(args, r, destination, why):
         title = destination[len("BACKLOG.md §"):].strip()[:100]
     else:
         title = r["texto"][:100]
-    cepa_plan = Path(__file__).resolve().parent / "cepa-plan"
+    cepa_plan = Path(__file__).resolve().parent / "cepa-queue"
     cmd = [sys.executable, str(cepa_plan), "add", args.queue, item_id,
            "--title", title, "--why", why, "--repo", args.repo]
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     except (OSError, subprocess.SubprocessError) as e:
         print(f"⚠ {item_id} não entrou na fila '{args.queue}': "
-              f"cepa-plan não rodou ({e})", file=sys.stderr)
+              f"cepa-queue não rodou ({e})", file=sys.stderr)
         return
     if p.returncode == 0:
         for line in p.stdout.splitlines():
@@ -417,7 +417,7 @@ def main(argv=None):
             (4, "already triaged (triage)"),
         ],
         see_also=["/common:feedback: the skill that records and triages from a session",
-                  "cepa plan add: where `triage --queue` puts the item"])
+                  "cepa queue add: where `triage --queue` puts the item"])
     sub = ap.add_subparsers(dest="cmd")
 
     a = sub.add_parser(
@@ -499,7 +499,7 @@ def main(argv=None):
                    help="free-form note about the triage")
     t.add_argument("--queue", "--plano", dest="queue", metavar="QUEUE",
                    help="also appends the feedback to the single-track queue QUEUE via "
-                        "`cepa plan add` (title: see --title); an id already in the queue is not an error, "
+                        "`cepa queue add` (title: see --title); an id already in the queue is not an error, "
                         "any other failure only warns")
     t.add_argument("--item", metavar="ID",
                    help="the queue item the section already has (needs --queue). Pending, "

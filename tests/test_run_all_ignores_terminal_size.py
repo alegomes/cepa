@@ -4,7 +4,7 @@
 Origin (2026-11-18): the landing of run until-todas-as-filas/2026-11-17-1431
 went red in test_cepa_plan_answer_waiver and test_cepa_until_decide because the
 shell that launched `cepa-until land` had COLUMNS exported. The screens that
-`cepa-until` / `cepa-plan` render take their width from
+`cepa-until` / `cepa-queue` render take their width from
 `shutil.get_terminal_size()`, which reads COLUMNS first, so the wrap changed and
 the assertions on the text failed.
 

@@ -46,7 +46,7 @@ def test_until_review_documents_the_item_declaration():
           '"nenhum"' in review and "precisa_do_dono" in review, "")
     check("...says a question that promises work must declare it",
           "promises work" in flat and "MUST declare" in flat, "")
-    check("...points to the cepa-plan flags",
+    check("...points to the cepa-queue flags",
           "--if-yes-item" in review and "--if-no-item" in review, "")
 
 

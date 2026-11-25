@@ -220,7 +220,7 @@ def test_triage_with_plan_real_error_does_not_undo_the_triage():
     of `add` would go unnoticed if the assertion looked only at stdout."""
     with Box() as c:
         # `mode: waves` is a WAVES plan (/maestro:program-plan) — the
-        # `cepa-plan add` refuses with a real error (exit 3), different from the
+        # `cepa-queue add` refuses with a real error (exit 3), different from the
         # exit 4 of "id already in the queue".
         wave_plan = PLAN_TEXT.replace("mode: single-track", "mode: waves")
         (c.repo / ".claude" / "programs" / "WEGO").mkdir(parents=True)
@@ -421,7 +421,7 @@ def test_triage_ledger_and_queue_match():
               "--item", "sec-feita")
         lst = json.loads(c.cli("list", "--status", "triado", "--json").stdout)
         plan = subprocess.run(
-            [sys.executable, str(BIN.parent / "cepa-plan"), "status", "fila", "--json",
+            [sys.executable, str(BIN.parent / "cepa-queue"), "status", "fila", "--json",
              "--repo", str(c.repo)], capture_output=True, text=True)
         items = {it["id"]: it["status"] for it in json.loads(plan.stdout)["items"]}
         check("cruzamento: 3 triados", len(lst) == 3, lst)

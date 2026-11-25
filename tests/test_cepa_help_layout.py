@@ -3,7 +3,7 @@
 
 No third-party deps — run with `python3 tests/test_cepa_help_layout.py`.
 
-Before common/hooks/_clihelp.py each command wrote its own help: `cepa plan
+Before common/hooks/_clihelp.py each command wrote its own help: `cepa queue
 help` was an argparse error while `cepa doctor help` worked, some helps had
 examples and exit codes and others did not, Portuguese and English aliases
 were mixed. This test walks every command and every subcommand it lists and
@@ -26,6 +26,9 @@ REPO = Path(__file__).resolve().parent.parent
 BIN = REPO / "common" / "bin"
 CEPA = BIN / "cepa"
 ALIASES = {"intencao", "modos"}
+# `cepa-plan` is a transition shim for runs in flight (CS-1), not a command: it
+# is neither listed nor dispatched.
+ALIASES = ALIASES | {"plan"}
 # Old Portuguese names that are aliases of an English one. They must keep
 # working but never be listed in a help.
 HIDDEN = ["responde", "aterrissados", "ordena", "divergencia", "--proposito",

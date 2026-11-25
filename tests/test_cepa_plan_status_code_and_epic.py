@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Two checks `cepa-plan status` makes beyond the text of the queue
+"""Two checks `cepa-queue status` makes beyond the text of the queue
 (owner, 2026-11-10, fb-20261110-1):
 
 1. Where the item's code is. `evidence` is prose written once, and it goes
@@ -19,7 +19,7 @@
      - a commit brought to main by cherry-pick counts as in main, and the
        same commit cited short and as `head_commit` is listed once
 
-2. Items that entered by `cepa-plan add` have no Epic. `add` writes
+2. Items that entered by `cepa-queue add` have no Epic. `add` writes
    `sem_epic: true`; an older item whose `why` carries the phrase `add`
    writes ("ainda não priorizado: entrou no fim da fila") counts too. The
    status line about ready items leaves them out and counts them apart; the
@@ -44,7 +44,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 FAILURES = []
 NOT_PRIORITIZED = "ainda não priorizado: entrou no fim da fila"
 
@@ -310,7 +310,7 @@ def epic_checks():
         check("sem Epic contado à parte com os ids",
               "3 sem Epic à parte: OLD, FLAG, NEW" in out, out)
         check("item sem Epic marcado na lista",
-              out.count("sem Epic: entrou por cepa-plan add") == 3, out)
+              out.count("sem Epic: entrou por cepa-queue add") == 3, out)
         check("a lista diz 'pronto' só no item com Epic",
               out.count("pronto: o próximo cepa-until pega") == 1
               and out.count("pegável: não conta como pronto") == 3, out)
@@ -321,7 +321,7 @@ def epic_checks():
         show = run(root, "show", "q", "NEW").stdout
         detail = run(root, "status", "q", "NEW").stdout
         check("status <id> traz a linha sem Epic",
-              "sem Epic:\n  entrou por cepa-plan add, as decisões de domínio" in detail, detail)
+              "sem Epic:\n  entrou por cepa-queue add, as decisões de domínio" in detail, detail)
         check("show do item sem Epic não diz pronto",
               "pronto:" not in show and "pegável" in show and "sem Epic" in show, show)
 

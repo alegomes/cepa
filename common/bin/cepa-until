@@ -25,14 +25,14 @@ possible.
 ## What it deliberately does NOT do
 
 It doesn't reserve an item, doesn't record an outcome, doesn't know the topology
-and doesn't know what a card is. Whoever does all of that is `/common:drain-plan` + `cepa-plan`,
+and doesn't know what a card is. Whoever does all of that is `/common:drain-plan` + `cepa-queue`,
 which already have the needed state machine, built and tested:
 
-  - `cepa-plan start` reserves the item by SIGNING the reservation (session, pid, host);
-  - `cepa-plan queue` returns as executable the reservation whose pid died — the
+  - `cepa-queue start` reserves the item by SIGNING the reservation (session, pid, host);
+  - `cepa-queue queue` returns as executable the reservation whose pid died — the
     "orphan reservation". It is what keeps a dead subprocess from locking the queue
     forever, and it is exactly the guarantee a supervisor needs;
-  - `cepa-plan finish` records the outcome, including the route that only the human closes.
+  - `cepa-queue finish` records the outcome, including the route that only the human closes.
 
 This file is the wiring around that: clock, circuit breaker and log.
 
@@ -146,9 +146,9 @@ over a drop that was neither the item's nor the account's. The rule:
 ## When it stops
 
 It stops at the first of: deadline reached, queue with no executable item (the reason comes from
-`cepa-plan queue` — `end-of-queue`, `blocked`, `blocked-before`; the old Portuguese spelling is still accepted), circuit breaker,
+`cepa-queue queue` — `end-of-queue`, `blocked`, `blocked-before`; the old Portuguese spelling is still accepted), circuit breaker,
 or account usage ceiling whose wait doesn't fit in the window.
-An item that comes out `blocked` STOPS the batch — a `cepa-plan` rule, inherited from
+An item that comes out `blocked` STOPS the batch — a `cepa-queue` rule, inherited from
 `/board-flow:drain`: re-running measures the same stall.
 
 ## Signals
@@ -218,7 +218,7 @@ and its findings are printed as text, with nothing waiting for input.
 `--no-pre-read` skips both the pre-read and the launch panel: the forecast line
 stays, nothing is read and nothing is asked.
 A `--all` run on a terminal shows ONE panel for every queue, a section per queue
-in the order of `cepa plan ready`; each answer is recorded in the item's own
+in the order of `cepa queue ready`; each answer is recorded in the item's own
 queue and a "yes" runs the item in this run. A queue with its own live run is
 left out of the panel. The pre-read does not run in a `--all` run.
 
@@ -280,7 +280,7 @@ import _ownertext  # noqa: E402  (the human section of a blocked item)
 import _clihelp  # noqa: E402
 import _dirt  # noqa: E402  (single definition of "dirty clone")
 
-CEPA_PLAN = HERE / "cepa-plan"
+CEPA_PLAN = HERE / "cepa-queue"
 CEPA_UNTIL_DIGEST = HERE / "cepa-until-digest"
 
 # Where the night worktree is born. Same home and same variable as
@@ -522,7 +522,7 @@ HOOK_BLOCK = re.compile(
     r"|\bStop hook\b", re.I | re.S)
 
 # Seconds between two heartbeats written to the run's `estado.json` while a child (or a
-# quota/network wait) is running. `cepa-plan` reads the age of it to tell a dead run on
+# quota/network wait) is running. `cepa-queue` reads the age of it to tell a dead run on
 # another host from a live one.
 HEARTBEAT_INTERVAL = float(os.environ.get("CEPA_UNTIL_HEARTBEAT", "60"))
 
@@ -784,25 +784,25 @@ LIVE_LINE_INTERVAL = float(os.environ.get("CEPA_UNTIL_LINHA_VIVA", "30"))
 # ── reading the queue ───────────────────────────────────────────────────────
 
 def query_queue(name, repo, max_items=1):
-    """`cepa-plan queue --max <max_items> --json` (1 by default). Returns (data, error)."""
+    """`cepa-queue queue --max <max_items> --json` (1 by default). Returns (data, error)."""
     try:
         p = subprocess.run(
             [sys.executable, str(CEPA_PLAN), "queue", name,
              "--max", str(max_items), "--repo", str(repo), "--json"],
             capture_output=True, text=True, timeout=60)
     except subprocess.TimeoutExpired:
-        return None, "`cepa-plan queue` did not answer within 60s"
+        return None, "`cepa-queue queue` did not answer within 60s"
     if p.returncode != 0:
         return None, (p.stderr or p.stdout or "").strip() or \
-            f"`cepa-plan queue` exited {p.returncode}"
+            f"`cepa-queue queue` exited {p.returncode}"
     try:
         return json.loads(p.stdout), None
     except json.JSONDecodeError as e:
-        return None, f"`cepa-plan queue` did not return JSON ({e})"
+        return None, f"`cepa-queue queue` did not return JSON ({e})"
 
 
 def query_ready(repo, unreadable=None):
-    """`cepa-plan ready --json`: the ready items of every single-track queue, in
+    """`cepa-queue ready --json`: the ready items of every single-track queue, in
     the order `ready` lists them. Returns (data, error). `ready` leaves out a
     queue it cannot read, saying so only on its stderr; with `unreadable` (a
     list), the `(name, line)` of each such queue is appended to it."""
@@ -811,7 +811,7 @@ def query_ready(repo, unreadable=None):
             [sys.executable, str(CEPA_PLAN), "ready", "--repo", str(repo),
              "--json"], capture_output=True, text=True, timeout=60)
     except subprocess.TimeoutExpired:
-        return None, "`cepa-plan ready` did not answer within 60s"
+        return None, "`cepa-queue ready` did not answer within 60s"
     if unreadable is not None:
         for line in (p.stderr or "").splitlines():
             m = re.match(r"aviso: fila (\S+) ilegível", line)
@@ -819,11 +819,11 @@ def query_ready(repo, unreadable=None):
                 unreadable.append((m.group(1), line))
     if p.returncode != 0:
         return None, (p.stderr or p.stdout or "").strip() or \
-            f"`cepa-plan ready` exited {p.returncode}"
+            f"`cepa-queue ready` exited {p.returncode}"
     try:
         return json.loads(p.stdout), None
     except json.JSONDecodeError as e:
-        return None, f"`cepa-plan ready` did not return JSON ({e})"
+        return None, f"`cepa-queue ready` did not return JSON ({e})"
 
 
 # The name a `--all` run carries where a single-queue run carries its queue name
@@ -852,7 +852,7 @@ def is_all_run(repo, queue):
 
 def all_queue_names(repo):
     """The single-track queues a `--all` run may have touched, in the order of
-    `cepa-plan ready` (every queue is listed there, ready or not)."""
+    `cepa-queue ready` (every queue is listed there, ready or not)."""
     ready, error = query_ready(repo)
     if not error:
         return [Path(str(q.get("path") or "")).parent.name or str(q.get("queue"))
@@ -872,7 +872,7 @@ def split_label(repo, queue, ident):
 
 def query_next_ready(repo, warned=None, left=None):
     """The next item of a `--all` run, read fresh (spec until-todas-as-filas, Q4):
-    the first ready item in the order of `cepa-plan ready` (queue by queue, the
+    the first ready item in the order of `cepa-queue ready` (queue by queue, the
     recorded order inside a queue). Returns (queue, data, error): `data` is
     `query_queue` of that queue, so the run loop handles it like a single-queue
     round. With nothing ready anywhere, `data` has an empty batch and an
@@ -912,7 +912,7 @@ def query_next_ready(repo, warned=None, left=None):
 def all_queues_launch(a, repo, now, deadline):
     """`cepa until --all --dry-run` (spec until-todas-as-filas, CS-1): the plan of
     the run, the ready items of every queue, queue by queue in the order of
-    `cepa plan ready`, and inside a queue the recorded order. Nothing runs,
+    `cepa queue ready`, and inside a queue the recorded order. Nothing runs,
     nothing is marked, no branch is created. The real run (CS-2) is the loop of
     `_main`, which asks `query_next_ready` for each item."""
     data, error = query_ready(repo)
@@ -928,7 +928,7 @@ def all_queues_launch(a, repo, now, deadline):
           + SCREEN.c("negrito", deadline.strftime('%d/%m %H:%M'))
           + f" ({human(deadline - now)})")
     print(lbl("  plan   : ") + f"{total} ready item(s) in {len(with_ready)} of "
-          f"{len(queues)} queue(s), queue by queue in `cepa plan ready` order")
+          f"{len(queues)} queue(s), queue by queue in `cepa queue ready` order")
     for q in with_ready:
         ready = q["prontos"]
         print("\n" + lbl("queue ") + SCREEN.c("ciano", str(q["queue"]))
@@ -986,17 +986,17 @@ def read_item(plan_path, ident):
 
 # CS-12: the cut the owner made (spec perguntar-antes-do-run, Q7). Every item's agent gets
 # it, because the route it would open is decided at its `finish`, not by the supervisor.
-# The flags are named as `cepa-plan finish`'s, so drain-plan never reads them as its own.
+# The flags are named as `cepa-queue finish`'s, so drain-plan never reads them as its own.
 CUT_RULE = (
     "Closing rule for this item: a behavior choice you already committed on this branch "
-    "is not a question for the owner. Record it with `cepa-plan finish ... --decision "
+    "is not a question for the owner. Record it with `cepa-queue finish ... --decision "
     "\"<the choice, in plain words>\" --decision-commit <sha>` (default HEAD), and it shows "
-    "up in the run summary with the commit. Keep `cepa-plan finish ... --human-pending` "
+    "up in the run summary with the commit. Keep `cepa-queue finish ... --human-pending` "
     "for what only the owner closes: a proof waiver, moving a card to Done, and any task "
     "outside the repository (credentials, a real environment, a conversation). "
     # CS-12 of perguntas-da-largada-legiveis: since CS-1, `finish --human-pending`
     # refuses a route the owner cannot read, so the agent learns the shape up front
-    # instead of from the refusal. The three kinds are `cepa-plan`'s ROUTE_KINDS.
+    # instead of from the refusal. The three kinds are `cepa-queue`'s ROUTE_KINDS.
     "To open such a route, `--human-pending` needs, in the same `finish`: "
     "`--route-kind` with one of `owner-task` (a task only the owner does, outside the "
     "repository), `external-block` (something outside has to exist, not an owner "
@@ -1431,7 +1431,7 @@ _hc_label = None
 # `done` at the exit).
 _hc_asking = False
 
-# CS-7: `cepa-until decide` writes the owner's answers without `cepa-plan answer`'s
+# CS-7: `cepa-until decide` writes the owner's answers without `cepa-queue answer`'s
 # own commit and commits them itself at the end (one commit, the `until ...`
 # message, the same refusal handling). The run's end leaves it True: its own
 # commit comes after.
@@ -1623,7 +1623,7 @@ def block_item(name, repo, ident, attempts, side_branch=None):
     deliberate. What it records here — "this item has already consumed N subprocesses
     of THIS window" — is a fact that only exists at this level: each subprocess is born
     with no memory of the previous one, which is precisely what makes 12h possible, so
-    neither `/common:drain-plan` nor `cepa-plan` has any way to see the repetition.
+    neither `/common:drain-plan` nor `cepa-queue` has any way to see the repetition.
     Without the mark, `queue` re-offers the same item forever.
 
     `blocked` is the right state and is not a new state: `build_batch` DEFERS
@@ -1653,10 +1653,10 @@ QUEUE_BAK = _dirt.QUEUE_BAK
 
 
 # The `plan.yaml` modified on disk. Only the ` M` (uncommitted, unstaged):
-# it is how `cepa-plan start/finish` leaves it.
+# it is how `cepa-queue start/finish` leaves it.
 PLAN_MODIFIED = re.compile(
     r"^ M (\.claude/(?:programs/([^/]+)/plan|queues/([^/]+)/queue)\.yaml)$")
-# The fields that `cepa-plan start/finish` of a live run writes on the item.
+# The fields that `cepa-queue start/finish` of a live run writes on the item.
 # `head_commit` is the commit a `done` item closed on: without it here, the first
 # delivered item of a live run made its own queue file dirt again (2026-11-10).
 RUN_FIELDS = ("status", "claimed_by", "evidence", "head_commit")
@@ -2237,8 +2237,8 @@ def emit_telemetry(event, repo, **fields):
 
 
 def finish_item(name, repo, ident, status, evidence, impede=None, owner=None):
-    """`cepa-plan finish`. Returns None or the error as text. `impede` is the
-    human section's reason, required by `cepa-plan` on `blocked`; `owner` is a
+    """`cepa-queue finish`. Returns None or the error as text. `impede` is the
+    human section's reason, required by `cepa-queue` on `blocked`; `owner` is a
     whole human section to carry over (`finish` replaces it)."""
     owner = dict(owner or {})
     if impede:
@@ -2256,10 +2256,10 @@ def finish_item(name, repo, ident, status, evidence, impede=None, owner=None):
             + flags,
             capture_output=True, text=True, timeout=60)
     except (subprocess.TimeoutExpired, OSError) as e:
-        return f"`cepa-plan finish` did not answer: {e}"
+        return f"`cepa-queue finish` did not answer: {e}"
     if p.returncode != 0:
         return (p.stderr or p.stdout or "").strip() or \
-            f"`cepa-plan finish` exited {p.returncode}"
+            f"`cepa-queue finish` exited {p.returncode}"
     return None
 
 
@@ -2501,7 +2501,7 @@ def _cmd_land(argv, wrote):
     dirty_files = dirty_tree(repo)
     if dirty_files is None:
         return refuse("could not read the clone's `git status`")
-    # The queue lives in the clone and the run itself updates it (`cepa-plan finish`):
+    # The queue lives in the clone and the run itself updates it (`cepa-queue finish`):
     # after every run it is modified. The night branch doesn't touch it, and
     # the merge and the `reset --keep` preserve it.
     clone_queue = tuple(
@@ -3382,7 +3382,7 @@ def auto_land(repo, queue, run_id, state_path, ledger, left=None):
 # unblocks becomes a question, one at a time, and the answer is applied right away.
 #
 # The ACTIONS stay on a closed list (R2 of
-# docs/estrategia-fim-do-cepa-until.md): aterrissar, and `cepa-plan answer`,
+# docs/estrategia-fim-do-cepa-until.md): aterrissar, and `cepa-queue answer`,
 # which sends a `blocked` back to the queue or closes the human route with the owner's
 # answer. The question text may come from the model's analysis, but it is only shown:
 # no wording decides what is executed.
@@ -3391,9 +3391,9 @@ def auto_land(repo, queue, run_id, state_path, ledger, left=None):
 # section (`owner_summary.impede`). Until 2026-11-01 it said "travou por algo
 # de fora do código" for every blocked item, and on WEGO-2381 that was false:
 # the work was done and two rules disagreed.
-# Transition window (same method as f26a765/84fde4d): `cepa-plan queue` now emits
+# Transition window (same method as f26a765/84fde4d): `cepa-queue queue` now emits
 # the English reason; the old Portuguese spelling is still accepted on input
-# (older queue output, saved `deferred` lists). Mirrors cepa-plan REASON_ALIASES.
+# (older queue output, saved `deferred` lists). Mirrors cepa-queue REASON_ALIASES.
 REASON_ALIASES = {
     "fim-da-fila": "end-of-queue",
     "teto": "cap",
@@ -3491,7 +3491,7 @@ def owner_summary_of(ad, d):
     `finish`, completed by the analysis's `se_sim`/`se_nao`. Only text."""
     raw = ad.get("owner_summary")
     # Only text: the declared items (`item_se_sim`/`item_se_nao`, a dict or "nenhum")
-    # are for `cepa-plan answer`, not for this screen.
+    # are for `cepa-queue answer`, not for this screen.
     summary = {k: " ".join(str(v).split()) for k, v in
                (raw.items() if isinstance(raw, dict) else ())
                if isinstance(v, str) and v.strip()
@@ -3503,7 +3503,7 @@ def owner_summary_of(ad, d):
 
 
 # CS-2 (perguntas-da-largada-legiveis): the label beside the route text says
-# which kind of route it is, as `cepa-plan finish --route-kind` recorded it. A
+# which kind of route it is, as `cepa-queue finish --route-kind` recorded it. A
 # route with no kind (recorded before the kind existed, and not rewritten by the
 # route reader within its ceiling) gets "Left for you" (CS-5).
 ROUTE_KIND_LABEL = {"owner-task": "Task for you",
@@ -4009,7 +4009,7 @@ FAILURE_REASON_MAX = 200
 
 def failure_reason(error):
     """CS-8: the rewrite-failure reason as one safe line. It may be raw output of
-    `cepa-plan reword-route` (stderr or stdout, a traceback included), so terminal
+    `cepa-queue reword-route` (stderr or stdout, a traceback included), so terminal
     control characters (ESC, BEL, NUL) are dropped, every whitespace run becomes one
     space and the text is cut at FAILURE_REASON_MAX."""
     text = "".join(" " if ch.isspace() else ch for ch in str(error or "")
@@ -4025,7 +4025,7 @@ def later_names(for_later):
     return ", ".join(str(x).split(":", 1)[0] for x in for_later)
 
 
-# CS-7 (resposta-do-decide-vira-trabalho): the line `cepa-plan answer` prints for the
+# CS-7 (resposta-do-decide-vira-trabalho): the line `cepa-queue answer` prints for the
 # item an answer created, and the closing line that lists them all.
 CREATED_LINE = re.compile(r"^\s*item novo criado pela resposta: (\S+) — (.*?)"
                           r" \(no fim da fila, `pending`(, esperando você)?\)\s*$")
@@ -4061,7 +4061,7 @@ RECOMMENDS = re.compile(r"\bRecomendo\s+(sim|não|nao)\b", re.IGNORECASE)
 
 
 def _apply_answer(repo, ans_queue, ans_ident, text, keep=False, drop=False):
-    """`cepa-plan answer <queue> <id>`: (rc, output). `decide` records each answer
+    """`cepa-queue answer <queue> <id>`: (rc, output). `decide` records each answer
     through it, one item at a time or one per member of a group."""
     p = subprocess.run(
         [sys.executable, str(CEPA_PLAN), "answer", ans_queue, ans_ident,
@@ -4074,7 +4074,7 @@ def _apply_answer(repo, ans_queue, ans_ident, text, keep=False, drop=False):
     text_out = (p.stdout or p.stderr).strip()
     if not _answer_commit:
         # `decide` commits at its end and says so: the "queue written
-        # without a commit" notice of `cepa-plan answer --no-commit` would
+        # without a commit" notice of `cepa-queue answer --no-commit` would
         # be false by the time the owner reads it.
         text_out = "\n".join(
             l for l in text_out.splitlines()
@@ -4113,7 +4113,7 @@ def proposed_waivers(repo):
 
 def waiver_motivo_of(waivers, queue, ident):
     """The `motivo` of the proposed waiver tied to a queue item (the same match
-    `cepa-plan answer` makes: `item`, and `fila` when the file names one), or None."""
+    `cepa-queue answer` makes: `item`, and `fila` when the file names one), or None."""
     motivos = sorted({str(w["motivo"]) for w in waivers
                       if str(w.get("item")) == str(ident)
                       and (not w.get("fila") or w.get("fila") == queue)})
@@ -4361,7 +4361,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             return p.returncode, (p.stdout or p.stderr).strip()
     if rewrite is None:
         # CS-7: the route reader rewrites the question right there, within
-        # UNCLEAR_REWRITE_SEC, and the new one is recorded through `cepa-plan
+        # UNCLEAR_REWRITE_SEC, and the new one is recorded through `cepa-queue
         # reword-route --replace` (this script never edits queue.yaml). Only an open
         # route can be reworded: a delivered item or one without a route keeps the
         # CS-6 path (recorded as unclear, left for later).
@@ -4773,7 +4773,7 @@ def delivered_leftovers(queue, repo):
     """The `done` items that still carry a `human_pending`: delivered work with
     a task only the owner does (create a role, validate by hand). No run asks
     about them, so on 2026-11-02 the WEGO queue had 37 of them and the owner
-    had to know `cepa-plan answer` to close each one."""
+    had to know `cepa-queue answer` to close each one."""
     try:
         p = subprocess.run(
             [sys.executable, str(CEPA_PLAN), "status", queue, "--status", "done",
@@ -4803,7 +4803,7 @@ def ask_mid_run(stop_reason, remaining, reserve, interactive, disabled, question
     """Whether the run asks the owner BEFORE closing, so that a yes puts the item
     back into this same run (LL-1, docs/estrategia-loops-longos.md section 4.1).
     Only when the queue ran dry (not on a dependency stop), at a terminal (the
-    panel needs one, and `cepa-plan answer` refuses without it), with the window
+    panel needs one, and `cepa-queue answer` refuses without it), with the window
     still holding the minimum reserve and at least one owner question left."""
     return (not disabled and interactive
             and reason_alias(stop_reason) == "end-of-queue"
@@ -5663,7 +5663,7 @@ class BackgroundRead:
 
 
 def current_item(queue, repo, ident):
-    """The item as `cepa-plan show <queue> <id> --json` has it (evidence, owner_summary),
+    """The item as `cepa-queue show <queue> <id> --json` has it (evidence, owner_summary),
     or {} when it cannot be read."""
     try:
         p = subprocess.run(
@@ -5676,9 +5676,9 @@ def current_item(queue, repo, ident):
 
 def open_precondition_route(queue, repo, row):
     """Opens the owner's route for a pre-condition the pre-read found, through
-    `cepa-plan finish --status pending --human-pending` (the item stays `pending`, so
+    `cepa-queue finish --status pending --human-pending` (the item stays `pending`, so
     the queue defers it as `human_pending` until the owner answers). `--supervisor`
-    because nobody reserved the item. Never writes queue.yaml: `cepa-plan` keeps its
+    because nobody reserved the item. Never writes queue.yaml: `cepa-queue` keeps its
     own validation of the human text. `finish` REPLACES `evidence` and drops
     `owner_summary` on a `pending`, so both are read first and carried over (a red
     build leaves the side branch and commits in that evidence). `finish` requires a
@@ -5723,15 +5723,15 @@ def open_precondition_route(queue, repo, row):
             p = subprocess.run(attempt, capture_output=True, text=True, timeout=60,
                                env=env)
         except (subprocess.TimeoutExpired, OSError) as e:
-            return f"`cepa-plan finish` did not answer: {e}"
+            return f"`cepa-queue finish` did not answer: {e}"
         if p.returncode == 0:
             return None
         error = (p.stderr or p.stdout or "").strip() or \
-            f"`cepa-plan finish` exited {p.returncode}"
+            f"`cepa-queue finish` exited {p.returncode}"
     return error
 
 
-# One reader of "the owner's last answer was no", shared with `cepa-plan waiting`.
+# One reader of "the owner's last answer was no", shared with `cepa-queue waiting`.
 last_owner_no = _ownertext.last_owner_no
 
 
@@ -5746,7 +5746,7 @@ def is_old_route(ad):
 
 
 def reword_route(queue, repo, ident, route, replace=False):
-    """CS-4: records a route the reader rewrote, through `cepa-plan reword-route` (the
+    """CS-4: records a route the reader rewrote, through `cepa-queue reword-route` (the
     only door: this script never edits queue.yaml). It fills only what the item lacks
     and never touches `human_pending`, `status` nor `evidence`. Returns None or the
     error as text. CS-7: `replace` overwrites the question the owner found unclear."""
@@ -5766,17 +5766,17 @@ def reword_route(queue, repo, ident, route, replace=False):
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=env)
     except (subprocess.TimeoutExpired, OSError, ValueError) as e:  # UnicodeError is a ValueError
-        return f"`cepa-plan reword-route` did not answer: {e}"
+        return f"`cepa-queue reword-route` did not answer: {e}"
     if p.returncode == 0:
         return None
     if "--if-no-item" not in cmd and "--if-no-item" in (p.stderr or ""):
         print(f"   warning: the route reader declared no item for the \"no\" of "
               f"{ident}, so the rewritten question was NOT recorded (the old route "
-              f"stays). To record it: `cepa-plan reword-route {queue} {ident} "
+              f"stays). To record it: `cepa-queue reword-route {queue} {ident} "
               f"--route-kind {route['route_kind']} --question \"...\" --if-yes \"...\" "
               f"--if-no \"...\" --if-no-item \"<title>|nenhum\"{' --replace' if replace else ''}`")
     return (p.stderr or p.stdout or "").strip() or \
-        f"`cepa-plan reword-route` exited {p.returncode}"
+        f"`cepa-queue reword-route` exited {p.returncode}"
 
 
 def ask_at_launch(repo, queue, data, only=None, tally=None, reading=False, skip=()):
@@ -5858,7 +5858,7 @@ def ask_at_launch_all(repo, wait=ANSWER_WAIT_SEC, leftovers=False,
                       as_text=False, say_empty=False):
     """The launch panel of a `--all` run (spec until-todas-as-filas, CS-7): ONE
     panel with what every queue holds for the owner, a section per queue in the
-    order of `cepa-plan ready`, numbered across the whole list. Each answer is
+    order of `cepa-queue ready`, numbered across the whole list. Each answer is
     recorded in the item's own queue (`decide` on that queue), so a "yes" sends
     the item back to its queue and the next `query_next_ready` runs it in THIS
     run. A queue with its own live run is left out (CS-4: that run already asked
@@ -5879,7 +5879,7 @@ def ask_at_launch_all(repo, wait=ANSWER_WAIT_SEC, leftovers=False,
     prints the same sections as text, one line per question, and asks nothing.
     `say_empty` (CS-11 of decisoes-de-todas-as-filas): with nothing to ask and
     nothing named either (no route answered "no", no queue left out for its live
-    run, no queue unreadable, here or in `cepa-plan ready`), `decide --all` prints the one line "nada espera
+    run, no queue unreadable, here or in `cepa-queue ready`), `decide --all` prints the one line "nada espera
     você", on a terminal or off it; the launch panel stays silent."""
     hidden = []
     ready, error = query_ready(repo, hidden)
@@ -6061,13 +6061,13 @@ def cmd_decide(argv):
             "owner, from any run, including the leftover tasks of delivered items.\n"
             "With <queue>/<run>, the merge and each deferred item of\n"
             "that run. With no target (or --all), the questions of every queue\n"
-            "in one panel, a section per queue in the order of `cepa plan ready`,\n"
+            "in one panel, a section per queue in the order of `cepa queue ready`,\n"
             "numbered across the queues; each answer is recorded in the queue of\n"
             "its item and one commit at the end holds every queue file an answer\n"
             "changed.\n"
             "\n"
             "Each question is closed, with a recommendation, and the answer is\n"
-            "applied right away (cepa plan answer). Items that ask the same\n"
+            "applied right away (cepa queue answer). Items that ask the same\n"
             "question (the same proposed waiver reason, or the same WRITTEN question text),\n"
             "also across queues, come first as ONE card: y or n answers them all,\n"
             "a accepts each item's own recommendation, o asks them one by one.\n"
@@ -6094,7 +6094,7 @@ def cmd_decide(argv):
                 "unreadable"),
         ],
         see_also=["cepa until pending: which runs are waiting for you",
-                  "cepa plan answer: what applies each answer"])
+                  "cepa queue answer: what applies each answer"])
     ap.add_argument("target", metavar="QUEUE[/RUN]", nargs="?",
                     help="the whole queue, or one run as the run summary prints it; "
                          "without it, every queue (as --all)")
@@ -6158,7 +6158,7 @@ def cmd_decide(argv):
 
 
 def _waiver_files(repo):
-    """The waiver files `cepa-plan answer` may rewrite (a "sim" or "não" to a proposed
+    """The waiver files `cepa-queue answer` may rewrite (a "sim" or "não" to a proposed
     waiver): `.claude/waivers/*.yaml` of the main clone and of `repo`."""
     folders = []
     for base_dir in (main_root(repo), Path(repo).resolve()):
@@ -6218,7 +6218,7 @@ def commit_after_decide(repo, queue, run_id, ask, every_queue=False):
             changed_waivers = [Path(p) for p in waivers_after
                                if waivers_after[p] != waivers_before.get(p)]
             # A waiver changed by an answer never triggers the commit by itself:
-            # `cepa-plan answer` rewrites the item's `evidence` (today's date, the
+            # `cepa-queue answer` rewrites the item's `evidence` (today's date, the
             # answer, the previous evidence) in the same step that converts the
             # waiver, so the queue snapshot has changed whenever a waiver has. The
             # waivers only ride along in the paths of that commit.
@@ -7035,7 +7035,7 @@ def _main(argv=None):
             "until/<run> worktree the supervisor opens at the start. Running out of\n"
             "context stops being a failure and becomes the normal end of a subprocess.\n"
             "Reserving the item, recording the outcome and knowing the topology is\n"
-            "the job of drain-plan + cepa plan. This command is the wiring around\n"
+            "the job of drain-plan + cepa queue. This command is the wiring around\n"
             "them: clock, circuit breaker, account quota, full build after each `done`\n"
             "item (red = the item becomes `blocked` and the branch rolls back) and log.\n"
             "\n"
@@ -7052,7 +7052,7 @@ def _main(argv=None):
             ("cepa until wego --for 12h", "run the wego queue for 12 hours"),
             ("cepa until wego --until 07:00 --dry-run", "the run plan, nothing executed"),
             ("cepa until --all --for 8h --dry-run",
-             "the ready items of every queue, in `cepa plan ready` order"),
+             "the ready items of every queue, in `cepa queue ready` order"),
             ("cepa until wego --for 8h --no-verify", "a repo without a build"),
             ("cepa until pending", "runs waiting for you"),
             ("cepa until decide wego/2026-11-03-2210", "answer what a run left for you"),
@@ -7070,13 +7070,13 @@ def _main(argv=None):
         see_also=["cepa prove: the same supervisor for the Jira Review column",
                   "cepa until-digest: the summary of a finished run",
                   "/common:until-review: what the owner has to do from a run",
-                  "cepa plan: the queue this command runs"])
+                  "cepa queue: the queue this command runs"])
     ap.add_argument("queue", metavar="QUEUE", nargs="?",
                     help="queue name, as in .claude/queues/<name>/queue.yaml "
                          "(or --all, in its place)")
     ap.add_argument("--all", action="store_true", dest="all_queues",
                     help="every single-track queue instead of one, queue by "
-                         "queue in the order of `cepa plan ready`. For now "
+                         "queue in the order of `cepa queue ready`. For now "
                          "only with --dry-run (spec until-todas-as-filas)")
     window = ap.add_mutually_exclusive_group(required=True)
     window.add_argument("--for", dest="duration", metavar="DURATION",
@@ -7169,7 +7169,7 @@ def _main(argv=None):
         return 2
     if not a.all_queues and not a.queue:
         print("cepa-until: missing the queue name (or --all, for every queue). "
-              "`cepa plan ready` lists the queues with ready items",
+              "`cepa queue ready` lists the queues with ready items",
               file=sys.stderr)
         return 2
 
@@ -7395,7 +7395,7 @@ def _main(argv=None):
                    else "--dangerously-skip-permissions ON"))
     # Forecast (CS-1): `data` is capped at `--max 1`, so the count comes from a
     # second, uncapped read of the same queue. Even uncapped it is not the whole
-    # queue: `cepa-plan queue` stops walking at the first item whose `blocked_by`
+    # queue: `cepa-queue queue` stops walking at the first item whose `blocked_by`
     # is unmet and outside the batch (`stop = blocked`), so the items after it are
     # in neither `batch` nor `deferred`. The count is what runs / waits for the
     # owner now, up to that first unmet dependency. If the read fails, say so
@@ -7678,7 +7678,7 @@ def _main(argv=None):
                  "auto_land": bool(a.auto_land),
                  "atualizado": datetime.now().isoformat(timespec="seconds")}
         # Liveness proof for readers on other hosts (pid can't be probed there).
-        # With the UTC offset: a reader on another host (cepa-plan) must not guess the zone.
+        # With the UTC offset: a reader on another host (cepa-queue) must not guess the zone.
         body["heartbeat"] = datetime.now().astimezone().isoformat(timespec="seconds")
         body.update(rest)
         tmp = state_path.parent / (state_path.name + ".tmp")
@@ -8943,7 +8943,7 @@ def _main(argv=None):
         next_panel = next_rows(repo, a.queue, run_id, left_over, ledger,
                                owner_report, left=deadline - datetime.now())
         # The run's last step (CS-1), after the end questions (which write answers
-        # into the queue through `cepa-plan answer`) and after the `.review.md`:
+        # into the queue through `cepa-queue answer`) and after the `.review.md`:
         # committing earlier would leave the queue dirty again.
         commit_run_end()
         report_panel("Next", next_panel)

@@ -116,7 +116,7 @@ def main():
           "why" in triage and "re-priorisation from scratch" in triage)
     check("a fusão que não apaga `human_pending` continua exigida",
           "human_pending" in triage and "re-triage that wiped it" in triage,
-          "quem funde agora é o cepa-plan; o triage precisa continuar dizendo "
+          "quem funde agora é o cepa-queue; o triage precisa continuar dizendo "
           "o que está em jogo, senão a regra some do lugar onde ela é lida")
 
     # ── closing that points forward (loss 2) ────────────────────────────────

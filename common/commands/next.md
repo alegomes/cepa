@@ -78,7 +78,7 @@ In order, first hit wins:
    fine, and is what `/common:queue <project_key> --from-jira` does — but the
    name is a label, not a lookup key.
 
-This is the same rule `cepa-plan status` / `cepa-plan queue` apply when no name
+This is the same rule `cepa-queue status` / `cepa-queue queue` apply when no name
 is given (one queue → that one; several → `há mais de uma fila; diga qual`, i.e. "there is more than one queue; say which"), so
 the prose and the tool cannot drift.
 
@@ -88,7 +88,7 @@ that is sitting in the main clone — that happened on 2026-08-18 and cost a
 triage. Two cheap checks, in this order:
 
 1. `ls <main-root>/.claude/queues/*/queue.yaml <main-root>/.claude/programs/*/plan.yaml`
-   (the new layout and the legacy one, which `cepa-plan migrate --all` moves) — the anchoring above already
+   (the new layout and the legacy one, which `cepa-queue migrate --all` moves) — the anchoring above already
    points here, so this is a check that the resolution actually ran against
    `<main-root>` and not against the current tree.
 2. `ls <main-root>/.claude/rescued/*/queues/*/queue.yaml <main-root>/.claude/rescued/*/programs/*/plan.yaml` — artifacts the
@@ -195,7 +195,7 @@ talks to Jira — and ask for it as a file, not as prose:
 Then hand it to the comparator — **do not compare by eye**:
 
 ```
-python3 common/bin/cepa-plan reconcile <nome> --board <arquivo.json> --repo .
+python3 common/bin/cepa-queue reconcile <nome> --board <arquivo.json> --repo .
 ```
 
 The rule below is what that command implements. It lives in code (and has
@@ -221,7 +221,7 @@ with `--apply` — never by editing the YAML by hand, which bypasses every
 refusal it makes:
 
 ```
-python3 common/bin/cepa-plan reconcile <nome> --board <arquivo.json> --apply --repo .
+python3 common/bin/cepa-queue reconcile <nome> --board <arquivo.json> --apply --repo .
 ```
 
 It merges, never overwrites: `why` and `human_pending` survive on every item,
@@ -234,7 +234,7 @@ missing and that `/common:queue <key> --from-jira` is what places them — `/boa
 
 **Closing human debt.** `reconcile` never touches `human_pending` — closing one
 is the user's, and this command's, alone. A `human_pending` is cleared by
-`cepa-plan answer <nome> <id> --answer "<what the user saw>"`. Without a
+`cepa-queue answer <nome> <id> --answer "<what the user saw>"`. Without a
 terminal it needs `--from-chat "<the user's words, as typed>"`: when the user
 answered in the chat, record it yourself with that quote (the CLI checks it is
 in one of their prompts of this session, from the last 24h) instead of handing

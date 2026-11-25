@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""cepa-plan (board-flow) — shortcut that finds the real `cepa-plan`, from common.
+"""cepa-queue (board-flow) — shortcut that finds the real `cepa-queue`, from common.
 
-It exists because `common/bin/cepa-plan` is a RELATIVE path, and board-flow is
+It exists because `common/bin/cepa-queue` is a RELATIVE path, and board-flow is
 a plugin installed inside another repo (e.g. WEGO) that never had — and does
 not need — a `common/` directory at its root. `/board-flow:capture`, `/drain`
-and `/triage` called `python3 common/bin/cepa-plan ...` directly: inside the
+and `/triage` called `python3 common/bin/cepa-queue ...` directly: inside the
 cepa repo itself the path exists by accident of layout, but in any other
 project the file is simply not there, the command fails silently (or does not
 even run) and the card is born outside the queue with no warning — the bug
@@ -14,7 +14,7 @@ This same file serves as a shortcut for other common binaries: the target is
 the file's OWN name (`TARGET`), so `board-flow/bin/cepa-autonomy` is a
 byte-for-byte copy of this one (tests/test_autonomy_yaml.py pins the equality).
 
-This file reimplements nothing of cepa-plan: it finds the real script in
+This file reimplements nothing of cepa-queue: it finds the real script in
 `common` (repo or plugin cache) and `exec`s into it, passing on the whole
 argv and preserving the exit code — whoever reads the output does not notice
 it went through here.
@@ -23,13 +23,13 @@ Layouts considered, in order (same pattern as
 `maestro/bin/maestro-gatekeeper::_carregar_shellscan`, which resolves
 `common` from inside `maestro` the same way):
 
-  Repo:   <repo>/board-flow/bin/cepa-plan  → <repo>/common/bin/cepa-plan
-  Cache:  <mkt>/board-flow/<ver>/bin/      → <mkt>/common/<ver>/bin/cepa-plan
+  Repo:   <repo>/board-flow/bin/cepa-queue  → <repo>/common/bin/cepa-queue
+  Cache:  <mkt>/board-flow/<ver>/bin/      → <mkt>/common/<ver>/bin/cepa-queue
           (I may find SEVERAL versions of common installed at the same
           time — I take the highest by numeric tuple comparison, not
           lexical: "2.10.0" has to beat "2.9.0", and strings compare wrong)
-  PATH:   `cepa-plan` in some directory of the PATH (skipping this very
-          file, so it does not loop if it is also named `cepa-plan` and
+  PATH:   `cepa-queue` in some directory of the PATH (skipping this very
+          file, so it does not loop if it is also named `cepa-queue` and
           sits on the PATH).
 
 No candidate found → message on stderr naming each path tried and how to
@@ -51,7 +51,7 @@ def _numeric_version(name):
         return (0,)
 
 
-TARGET = Path(__file__).name  # cepa-plan, cepa-autonomy... — the shim resolves the same-named binary in common
+TARGET = Path(__file__).name  # cepa-queue, cepa-autonomy... — the shim resolves the same-named binary in common
 
 
 def _repo_candidate(here):

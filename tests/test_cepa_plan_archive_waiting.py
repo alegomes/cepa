@@ -5,14 +5,14 @@ something waiting on the owner is not archived, and the output says why.
 Red test declared in the spec: four queues with every item `done` or `dropped`
 and the last commit 8 days ago: `sobra` (a leftover point on a `done` item),
 `rota` (an open human route), `run` (a run waiting to land) and `vazia`
-(`items: []`). `cepa-plan archive` moves none and the output gives the reason
+(`items: []`). `cepa-queue archive` moves none and the output gives the reason
 per queue. A fifth control queue `velha` (plainly closed) IS archived in the
 same sweep, to prove the refusals are specific.
 
 The run is the real thing: a night branch plus a state file that makes the real
 `cepa-until pending --json` list it (the fixture approach of
 tests/test_cepa_plan_waiting_runs.py). The "could not check the runs" case swaps
-the sibling `cepa-until` of a copy of cepa-plan for a script that fails.
+the sibling `cepa-until` of a copy of cepa-queue for a script that fails.
 
 Run: python3 tests/test_cepa_plan_archive_waiting.py
 """
@@ -248,13 +248,13 @@ def test_runs_are_checked_at_most_once_and_only_for_closed_queues():
         (plugin / "bin").mkdir(parents=True)
         for d in ("hooks", "_vendor"):
             (plugin / d).symlink_to(REPO / "common" / d)
-        (plugin / "bin" / "cepa-plan").write_text(CEPA_PLAN.read_text())
+        (plugin / "bin" / "cepa-queue").write_text(CEPA_PLAN.read_text())
         real_until = REPO / "common" / "bin" / "cepa-until"
         (plugin / "bin" / "cepa-until").write_text(
             "import subprocess, sys\n"
             f"open({str(log)!r}, 'a').write('call\\n')\n"
             f"sys.exit(subprocess.call([sys.executable, {str(real_until)!r}, *sys.argv[1:]]))\n")
-        p = cli_at(plugin / "bin" / "cepa-plan", root, "archive")
+        p = cli_at(plugin / "bin" / "cepa-queue", root, "archive")
         calls = log.read_text().count("call") if log.exists() else 0
         check("once: exit 0", p.returncode == 0, p.stderr)
         check("once: cepa-until pending called exactly once for 3 closed queues",
@@ -270,10 +270,10 @@ def test_runs_are_checked_at_most_once_and_only_for_closed_queues():
         (plugin / "bin").mkdir(parents=True)
         for d in ("hooks", "_vendor"):
             (plugin / d).symlink_to(REPO / "common" / d)
-        (plugin / "bin" / "cepa-plan").write_text(CEPA_PLAN.read_text())
+        (plugin / "bin" / "cepa-queue").write_text(CEPA_PLAN.read_text())
         (plugin / "bin" / "cepa-until").write_text(
             "open(%r, 'w').write('x')\n" % str(Path(tmp) / "called"))
-        cli_at(plugin / "bin" / "cepa-plan", root, "archive")
+        cli_at(plugin / "bin" / "cepa-queue", root, "archive")
         check("lazy: no closed queue, cepa-until never called",
               not (Path(tmp) / "called").exists())
 
@@ -290,9 +290,9 @@ def test_runs_check_failure_fails_closed():
             (plugin / "bin").mkdir(parents=True)
             for d in ("hooks", "_vendor"):
                 (plugin / d).symlink_to(REPO / "common" / d)
-            (plugin / "bin" / "cepa-plan").write_text(CEPA_PLAN.read_text())
+            (plugin / "bin" / "cepa-queue").write_text(CEPA_PLAN.read_text())
             (plugin / "bin" / "cepa-until").write_text(body)
-            p = cli_at(plugin / "bin" / "cepa-plan", root, "archive")
+            p = cli_at(plugin / "bin" / "cepa-queue", root, "archive")
             l = line_of(p.stdout, "velha")
             check(f"fail-closed ({label}): exit 0", p.returncode == 0, p.stderr)
             check(f"fail-closed ({label}): not archived",
@@ -309,9 +309,9 @@ def fake_until(tmp, body):
     (plugin / "bin").mkdir(parents=True)
     for d in ("hooks", "_vendor"):
         (plugin / d).symlink_to(REPO / "common" / d)
-    (plugin / "bin" / "cepa-plan").write_text(CEPA_PLAN.read_text())
+    (plugin / "bin" / "cepa-queue").write_text(CEPA_PLAN.read_text())
     (plugin / "bin" / "cepa-until").write_text(body)
-    return plugin / "bin" / "cepa-plan"
+    return plugin / "bin" / "cepa-queue"
 
 
 def test_dropped_point_does_not_block():

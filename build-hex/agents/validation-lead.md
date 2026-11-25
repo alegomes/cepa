@@ -109,7 +109,7 @@ explains why.
 
    **Grave o veredito em `docs/validation/<KEY>.yaml`** antes de responder
    (`<KEY>` é a chave do card, ou o `id` do item quando a execução veio de uma
-   fila do `/common:drain-plan`). É o arquivo que o `cepa-plan finish --status
+   fila do `/common:drain-plan`). É o arquivo que o `cepa-queue finish --status
    done` lê: sem ele, ou com `verdict: BLOCKED`, o item não fecha. O arquivo é
    seu e de mais ninguém: o orquestrador que o escrevesse estaria
    certificando o próprio trabalho.

@@ -9,7 +9,7 @@ interaction: conversational
 ## Purpose
 
 The other queue commands answer other questions. `/common:next` names **one**
-next step. `/common:drain-plan` executes. `cepa-plan queue` shows only what the
+next step. `/common:drain-plan` executes. `cepa-queue queue` shows only what the
 next batch would run, hides what has already closed and stops at the first
 stuck item. None answers "how is the queue right now?", and on 2026-09-28 the
 only way out was to open the 72-item `queue.yaml` by hand.
@@ -24,7 +24,7 @@ status, does not call Jira. To reconcile with the board, `/common:next --sync`.
 1. Run, passing the argument through verbatim:
 
    ```
-   python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" status $ARGUMENTS --repo .
+   python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-queue" status $ARGUMENTS --repo .
    ```
 
    With no name, the script uses the repo's only queue. With more than one, it
@@ -43,7 +43,7 @@ status, does not call Jira. To reconcile with the board, `/common:next --sync`.
 ## Notes
 
 - The queue lives in the main clone (`<root>/.claude/queues/<name>/queue.yaml`),
-  even when the session runs in a worktree. `cepa-plan` resolves that on its own.
+  even when the session runs in a worktree. `cepa-queue` resolves that on its own.
 - The number before each item is its position in the recorded queue, not the
   execution order: a pending item may be waiting for another one further down.
 - Done and dropped items come out on one line each, without evidence. To see

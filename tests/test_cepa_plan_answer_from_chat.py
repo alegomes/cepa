@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`cepa-plan answer --from-chat`: the agent records an answer the owner already
+"""`cepa-queue answer --from-chat`: the agent records an answer the owner already
 gave in the chat, with no terminal (fb-20261021-2, fb-20261022-1, fb-20261028-1,
 fb-20261109-3: "se você não é capaz de registrar as respostas, por que insiste em
 me perguntar?").

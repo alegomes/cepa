@@ -29,7 +29,7 @@ def main():
     i = clean.find("**read-only.**")
     excerpt = " ".join(clean[i:i + 600].split()) if i != -1 else ""
     check("declara só leitura nas instruções", bool(excerpt))
-    for forbidden in ("git merge", "cepa-plan finish", "card transition",
+    for forbidden in ("git merge", "cepa-queue finish", "card transition",
                      "build", "push", "file edit"):
         check(f"...e proíbe {forbidden}", forbidden in excerpt, excerpt[:200])
     check("proíbe executar providência mesmo reversível",
@@ -46,8 +46,8 @@ def main():
     check("repete o bloco 'fica com você'", "left with you" in clean)
     check("tarefa do dono traz 'Done when'", "done when" in clean)
     j = clean.find("left with you")
-    check("'Left with you' manda escrever o cepa-plan answer colável",
-          "cepa-plan answer" in clean[j:j + 2500], clean[j:j + 200])
+    check("'Left with you' manda escrever o cepa-queue answer colável",
+          "cepa-queue answer" in clean[j:j + 2500], clean[j:j + 200])
     check("fecha com perguntas fechadas com recomendação",
           "closed questions" in clean and "i recommend yes/no" in clean)
     print()

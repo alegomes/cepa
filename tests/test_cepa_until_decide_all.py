@@ -2,7 +2,7 @@
 """`cepa until decide --all` (spec `decisoes-de-todas-as-filas`).
 
 CS-7: on a terminal, `cepa until decide --all` asks the owner questions of
-every queue in ONE panel, a section per queue in the order of `cepa plan
+every queue in ONE panel, a section per queue in the order of `cepa queue
 ready`, numbered across the whole list; each answer is recorded in the queue
 of its own item, and one commit at the end holds every queue file an answer
 changed. Before it, the command exited 2 refusing the queue `'--all'`, and the
@@ -130,7 +130,7 @@ def test_cs7_decide_all_asks_every_queue_in_one_panel_and_records_each_answer():
 def test_cs7_decide_all_asks_the_leftover_task_of_a_delivered_item():
     """`cepa until decide <fila>` asks the task a `done` item left for the owner;
     the panel of every queue asks it too, or the owner would still need the
-    per-queue command for the tasks `cepa plan waiting` lists as theirs."""
+    per-queue command for the tasks `cepa queue waiting` lists as theirs."""
     with tempfile.TemporaryDirectory() as tmp:
         root, paths = al._repo(tmp, {
             "a": [_owner_item("a1", "rotacionar o segredo",
@@ -318,7 +318,7 @@ def test_cs7_q_stops_the_panel_and_says_nothing_else_is_asked():
 
 
 def test_cs7_decide_all_commits_the_waiver_the_answer_converted():
-    """A "yes" to a proposed waiver turns it into a waiver (`cepa plan answer`);
+    """A "yes" to a proposed waiver turns it into a waiver (`cepa queue answer`);
     the one commit of `decide --all` carries that file with the queue, as the
     commit of `decide <fila>` does."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -738,7 +738,7 @@ def test_cs11_the_launch_panel_with_nothing_waiting_stays_silent():
 
 
 def test_cs11_an_unreadable_queue_is_not_nothing():
-    """`cepa plan ready` drops a queue it cannot read (a warning on its stderr
+    """`cepa queue ready` drops a queue it cannot read (a warning on its stderr
     only): that queue may hold a question, so `decide --all` does not say "nada
     espera você", and it names the queue on stderr. Exit 0, no commit."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -774,7 +774,7 @@ def _cepa_until_module():
 
 
 def test_cs11_a_listed_queue_that_cannot_be_queried_is_not_nothing():
-    """`cepa plan ready` lists queue `b`, but `cepa plan queue b` fails right
+    """`cepa queue ready` lists queue `b`, but `cepa queue queue b` fails right
     after (the file changed in between, a timeout): what `b` holds is unknown,
     so the panel of `decide --all` does not say "nada espera você"."""
     import contextlib
@@ -784,7 +784,7 @@ def test_cs11_a_listed_queue_that_cannot_be_queried_is_not_nothing():
         root, _ = _no_route_repo(tmp)
         real = mod.query_queue
         mod.query_queue = lambda name, repo, **kw: (
-            (None, "`cepa-plan queue` did not answer within 60s") if name == "b"
+            (None, "`cepa-queue queue` did not answer within 60s") if name == "b"
             else real(name, repo, **kw))
         out = io.StringIO()
         with contextlib.redirect_stdout(out):

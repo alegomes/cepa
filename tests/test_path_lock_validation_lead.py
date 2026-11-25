@@ -5,7 +5,7 @@ No third-party deps — run with `python3 tests/test_path_lock_validation_lead.p
 Exits non-zero on the first failure.
 
 The validation-lead agent (build-hex and build-team) has the instruction to write
-`.claude/validation/<KEY>.yaml`, and `cepa-plan finish --status done` refuses to
+`.claude/validation/<KEY>.yaml`, and `cepa-queue finish --status done` refuses to
 close an item without that file. But its ALLOWED_WRITES was `[]`: the path-lock
 blocked the write, and the orchestrator transcribed the verdict by hand. It happened in the
 3 items delivered in the cepa-until run 2026-09-27-0832 of wego-acessos-backend

@@ -5,11 +5,11 @@
 Origin (2026-11-18, kairos-etapa-1 queue of wego-digitacao-backend): the owner
 answered a run of "Ponho na fila um item para ...?" and nothing on screen said
 which work those answers put on the queue. CS-2 creates the declared item and
-`cepa-plan answer` prints it inside each answer's output; the closing is where the
+`cepa-queue answer` prints it inside each answer's output; the closing is where the
 owner reads the result of the whole panel, so it ends with one line
 "itens criados pelas suas respostas:" followed by the id and title of each one.
 
-Against the real `decide`, with the real `cepa-plan answer` behind it, in a PTY
+Against the real `decide`, with the real `cepa-queue answer` behind it, in a PTY
 (`answer` only runs on a TTY), in a real git repo:
   - red test: one answer that creates an item ends the closing with the line and
     the item's id and title, read back from the queue;

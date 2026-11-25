@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`cepa-plan landed` lists the Review cards whose code already reached the
+"""`cepa-queue landed` lists the Review cards whose code already reached the
 integration branch with PROVEN proof and complete acceptance (fb-20261103-1).
 
 Origin: on 2026-11-03 eleven WEGO cards sat in Review after
@@ -21,7 +21,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-CEPA_PLAN = Path(__file__).resolve().parent.parent / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = Path(__file__).resolve().parent.parent / "common" / "bin" / "cepa-queue"
 FAILURES = []
 
 

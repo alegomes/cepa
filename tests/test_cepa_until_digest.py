@@ -287,7 +287,7 @@ def test_version_2_item_end_with_session_but_without_end_reason_is_warned():
 def test_queue_state_comes_from_the_main_clone_not_the_worktree():
     """The record lives in the tree `cepa-until` was launched from. If it is a
     linked worktree, its plan.yaml is an old copy; the real queue is that of the
-    main clone (same rule as `cepa-plan`). On 2026-09-26 the summary
+    main clone (same rule as `cepa-queue`). On 2026-09-26 the summary
     read the copy and showed 21 `pending` items that were already closed."""
     with tempfile.TemporaryDirectory() as tmp:
         main_ = Path(tmp) / "principal"

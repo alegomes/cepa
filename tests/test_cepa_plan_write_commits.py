@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Every `cepa-plan` write commits the queue or warns that a commit is missing, and
+"""Every `cepa-queue` write commits the queue or warns that a commit is missing, and
 `responde` refuses text that does not answer the route.
 
-Origin (BACKLOG.md § "`cepa-plan responde` leaves `plan.yaml` dirty and accepts
+Origin (BACKLOG.md § "`cepa-queue responde` leaves `plan.yaml` dirty and accepts
 any sentence as an answer", fb-20261015-1 and fb-20261014-4):
 
   - on 2026-10-15 the owner ran `responde` three times and each time plan.yaml
@@ -334,7 +334,7 @@ def old_answer(root, ident, plain_text, *extra):
 
 
 def test_old_names_still_work_and_the_commit_says_queue():
-    """`cepa-plan responde --resposta` (and --forca/--mantem/--autor) does the same
+    """`cepa-queue responde --resposta` (and --forca/--mantem/--autor) does the same
     as `answer --answer` (--force/--keep/--author); the queue commit starts with
     `queue <name>:`."""
     results = []

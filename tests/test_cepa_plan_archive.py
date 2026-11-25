@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""CS-1 of docs/spec/filas-fechadas-saem-da-vista.md: `cepa-plan archive` moves
+"""CS-1 of docs/spec/filas-fechadas-saem-da-vista.md: `cepa-queue archive` moves
 the closed queue that has been still for 7 days, and only that one.
 
 Red test declared in the spec: in a fixture repo with the queue `velha` (every
 item `done`, last commit 8 days ago, with `until/r1.jsonl`), `recente` (every
 item `done`, last commit 6 days ago) and `aberta` (one `pending` item),
-`cepa-plan archive` exits 0; afterwards
+`cepa-queue archive` exits 0; afterwards
 `.claude/queues/_archive/velha/queue.yaml` and
 `.claude/queues/_archive/velha/until/r1.jsonl` exist, `.claude/queues/velha/`
 does not, and `recente` and `aberta` stay in place. With `--dry-run` the output
@@ -30,7 +30,7 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 
 FAILURES = []
 ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",

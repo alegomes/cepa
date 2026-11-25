@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`cepa plan waiting` lists, grouped by queue, the items waiting on the owner
+"""`cepa queue waiting` lists, grouped by queue, the items waiting on the owner
 across every single-track queue (spec docs/spec/decisoes-de-todas-as-filas.md,
 CS-1). Read only.
 
@@ -18,7 +18,7 @@ Against the real CLI, in a temporary git repo:
   - the question falls back to human_pending, then to the blocked reason
   - pending/in_progress/done items with no route are not listed
   - a long question is cut to one line
-  - the launcher `cepa plan waiting` reaches the same subcommand
+  - the launcher `cepa queue waiting` reaches the same subcommand
 
 Run with `python3 tests/test_cepa_plan_waiting.py`.
 """
@@ -35,7 +35,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 CEPA = REPO / "common" / "bin" / "cepa"
 FAILURES = []
 
@@ -47,7 +47,7 @@ def check(name, cond, detail=""):
 
 
 def run(repo, *args, launcher=False):
-    cmd = ([str(CEPA), "plan"] if launcher
+    cmd = ([str(CEPA), "queue"] if launcher
            else [sys.executable, str(CEPA_PLAN)]) + list(args)
     return subprocess.run(cmd, capture_output=True, text=True, cwd=str(repo))
 
@@ -117,7 +117,7 @@ def red_test():
         check("a2 pendente sem rota não aparece", "a2" not in out, out)
         check("b2 concluído sem rota não aparece", "b2" not in out, out)
         lp = run(root, "waiting", launcher=True)
-        check("o lançador `cepa plan waiting` chega no mesmo subcomando",
+        check("o lançador `cepa queue waiting` chega no mesmo subcomando",
               lp.returncode == 0 and lp.stdout == out, lp.stderr)
 
 

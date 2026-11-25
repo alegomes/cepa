@@ -8,7 +8,7 @@ interaction: conversational
 
 > Renamed from `/common:plan` on 2026-10-20; `/common:plan` remains as a
 > deprecated alias. A queue still sitting at `<main-root>/.claude/programs/<name>/plan.yaml`
-> is read and updated in place; `cepa-plan migrate --all` moves it to
+> is read and updated in place; `cepa-queue migrate --all` moves it to
 > `<main-root>/.claude/queues/<name>/queue.yaml`.
 
 ## Purpose
@@ -107,7 +107,7 @@ one who names the next step is `/common:next`; the one who executes in batch is
 keeps.
 
 **The write is mechanical.** The one who validates, merges and writes is
-`common/bin/cepa-plan` — do not write the YAML by hand with `Write`. The script
+`common/bin/cepa-queue` — do not write the YAML by hand with `Write`. The script
 refuses an empty `why`, a repeated `id`, a `blocked_by` pointing to a
 nonexistent item, a blocking cycle and a `human_pending` without the key; if you
 write the file from outside, none of those refusals happens.
@@ -124,11 +124,11 @@ directory is the loss of 2026-08-18: in a repo whose `.gitignore` covers
 `.claude/`, the queue is invisible to git and dies with the worktree, without a
 word (`docs/execution-plan.md`, "Where the file lives").
 
-You do not need to resolve this by hand — `cepa-plan` resolves it by the same
+You do not need to resolve this by hand — `cepa-queue` resolves it by the same
 rule — but you need to know it, because it is the path that goes in the report.
 
 ```
-python3 common/bin/cepa-plan check-name <name> --repo .
+python3 common/bin/cepa-queue check-name <name> --repo .
 ```
 
 Exit 3 is a **collision with a wave plan**: stop and say the name of the
@@ -147,7 +147,7 @@ be merged in step 4.
 **Reading the spec is mechanical**, not yours:
 
 ```
-python3 common/bin/cepa-plan from-spec docs/spec/<slug>.md
+python3 common/bin/cepa-queue from-spec docs/spec/<slug>.md
 ```
 
 It returns the list of items as JSON — **one item per success criterion**
@@ -202,14 +202,14 @@ The source here is a cycle of the value ladder of an Epic
 mechanical**, not yours:
 
 ```
-python3 common/bin/cepa-plan from-epic docs/epics/<name>.md --cycle N
+python3 common/bin/cepa-queue from-epic docs/epics/<name>.md --cycle N
 ```
 
 It returns a JSON with the cycle's `demonstrates` and `items`, and applies the
 rules that previously had no owner:
 
 - **the queue's `demonstrates:` is the cycle's script**, verbatim. It is what the
-  Epic declares as acceptance, and it is what `cepa-plan show` prints later;
+  Epic declares as acceptance, and it is what `cepa-queue show` prints later;
 - **one item per sentence of "What it crosses"**, in the order of the text,
   with id `C<N>-<k>`. A sentence is the stretch ending in `.` or `;` outside
   backticks: `/common:epic` writes one sentence per piece, and an Epic written
@@ -295,7 +295,7 @@ gathered, not yours.
 **Reading the handoff is mechanical**, not yours:
 
 ```
-python3 common/bin/cepa-plan from-triage <handoff.json>
+python3 common/bin/cepa-queue from-triage <handoff.json>
 ```
 
 For the same reason as `from-spec`: the rules below lived in the prose of
@@ -346,7 +346,7 @@ Then, in rounds of at most four questions:
    the owner correct it. A proposal with a reason is much cheaper to answer
    than an open question;
 3. **the `why` of each position** — whatever you could not get from the
-   source, ask. An item without a `why` cannot be written, and `cepa-plan`
+   source, ask. An item without a `why` cannot be written, and `cepa-queue`
    refuses the whole queue because of it.
 
 ### 3. Show the queue before writing
@@ -359,7 +359,7 @@ review. Ask it in Brazilian Portuguese (pt-BR).
 ### 4. Write
 
 ```
-python3 common/bin/cepa-plan write <name> \
+python3 common/bin/cepa-queue write <name> \
   --items <file.json> --source "<where it came from>" --when <YYYY-MM-DD> --repo .
 ```
 
@@ -427,7 +427,7 @@ Next step: /common:next (names ONE item and the why of it).
   from a raw query to the column inherits the board's rank order, which is the
   order this document exists to replace.
 - **Never writes the YAML by hand.** The write
-  goes through `common/bin/cepa-plan`, which is where the refusals live.
+  goes through `common/bin/cepa-queue`, which is where the refusals live.
 - **Never closes anyone's `human_pending`.**
   An item that comes from disk with an open pending action keeps it. The one
   who closes it is the owner, in `/common:next --sync`.

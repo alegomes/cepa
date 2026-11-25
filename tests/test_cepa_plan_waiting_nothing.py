@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`cepa plan waiting` with nothing waiting says so in one line and exits 0;
+"""`cepa queue waiting` with nothing waiting says so in one line and exits 0;
 with no queue at all it exits 2 (spec docs/spec/decisoes-de-todas-as-filas.md,
 CS-4). Read only.
 
@@ -13,7 +13,7 @@ Against the real CLI, in a temporary git repo:
   - CS-4 red test: one queue with only `done` items without a route and no
     run pending → stdout is exactly "nada espera você", exit 0
   - no `.claude/queues/` → exit 2 (and no "nada espera você")
-  - the launcher `cepa plan waiting` reaches the same subcommand
+  - the launcher `cepa queue waiting` reaches the same subcommand
   - a route answered "não" is still counted: not "nada espera você"
   - an unreadable queue, or a failed `cepa until pending`, keeps the header
   - --json keeps its shape (empty `filas`, `total_itens` 0, `runs` [])
@@ -33,7 +33,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 CEPA = REPO / "common" / "bin" / "cepa"
 NOTHING = "nada espera você"
 FAILURES = []
@@ -46,7 +46,7 @@ def check(name, cond, detail=""):
 
 
 def run(repo, *args, launcher=False, plan=CEPA_PLAN):
-    cmd = ([str(CEPA), "plan"] if launcher
+    cmd = ([str(CEPA), "queue"] if launcher
            else [sys.executable, str(plan)]) + list(args)
     return subprocess.run(cmd, capture_output=True, text=True, cwd=str(repo))
 
@@ -86,7 +86,7 @@ def red_test():
               p.stdout == NOTHING + "\n", repr(p.stdout))
         check("sem aviso no stderr", p.stderr == "", p.stderr)
         lp = run(root, "waiting", launcher=True)
-        check("o lançador `cepa plan waiting` diz o mesmo",
+        check("o lançador `cepa queue waiting` diz o mesmo",
               lp.returncode == 0 and lp.stdout == NOTHING + "\n",
               lp.stdout + lp.stderr)
         j = run(root, "waiting", "--json")
@@ -162,10 +162,10 @@ def not_nothing():
         (plugin / "bin").mkdir(parents=True)
         for d in ("hooks", "_vendor"):
             (plugin / d).symlink_to(REPO / "common" / d)
-        (plugin / "bin" / "cepa-plan").write_text(CEPA_PLAN.read_text())
+        (plugin / "bin" / "cepa-queue").write_text(CEPA_PLAN.read_text())
         (plugin / "bin" / "cepa-until").write_text(
             "import sys\nsys.stderr.write('boom')\nsys.exit(1)\n")
-        p = run(root, "waiting", plan=plugin / "bin" / "cepa-plan")
+        p = run(root, "waiting", plan=plugin / "bin" / "cepa-queue")
         check("`cepa until pending` falhou: não afirma \"nada\" e avisa",
               p.returncode == 0 and NOTHING not in p.stdout
               and p.stdout.startswith("esperam você · 0 filas · 0 itens")

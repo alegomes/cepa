@@ -130,7 +130,7 @@ def test_second_question_mark_says_so_and_moves_on():
 
 
 def test_a_hostile_failure_reason_reaches_the_screen_as_one_safe_line():
-    """The reason may be raw output of `cepa-plan reword-route`: terminal control
+    """The reason may be raw output of `cepa-queue reword-route`: terminal control
     sequences (clear screen, window title, NUL) never reach the screen raw, and a
     long reason is cut to one bounded line (proof L4 of CS-8)."""
     hostile = ("recusado\x1b[2J\x1b]0;pwned\x07\x00\r\nlinha nova " + "A" * 5000)

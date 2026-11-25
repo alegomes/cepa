@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prose contract: the three callers of the "single queue" cite the right `cepa-plan`,
+"""Prose contract: the three callers of the "single queue" cite the right `cepa-queue`,
 with the right flag, in the right rule.
 
 ## Why this file exists
@@ -8,7 +8,7 @@ with the right flag, in the right rule.
 `common/commands/doctor.md` are `.md` files that an orchestrator READS and follows — there is no
 interpreter that fails if a sentence is rewritten in silence. Without a test
 that locks ON TOP of the text, a prose editor (human or agent) can swap
-"cepa-plan orders" for "reorder by the queue" and the change goes unnoticed until
+"cepa-queue orders" for "reorder by the queue" and the change goes unnoticed until
 someone notices that `--max` went back to cutting the queue before the reordering. Each
 `check` below pins one clause of the rule R1–R4 / A1–A3 of the single queue
 ("Single queue: Jira, BACKLOG.md and plan.yaml converge on plan.yaml",
@@ -45,15 +45,15 @@ def read_rel(rel):
 
 def test_capture_add():
     f = read_rel("board-flow/commands/capture.md")
-    check("chama cepa-plan add <project_key> <KEY> --title",
-          "cepa-plan\" add <project_key> <KEY> --title" in f,
+    check("chama cepa-queue add <project_key> <KEY> --title",
+          "cepa-queue\" add <project_key> <KEY> --title" in f,
           "sem o comando exato, o card pode nascer e nunca entrar na fila")
     check("exit 4 (já na fila) é tratado como normal, não erro",
           "Exit 4" in f and "not an error" in f,
           "sem isso um id repetido vira BLOCKED indevido em vez de aviso")
     check("falha do add NÃO desfaz o card (não faz rollback da criação)",
           "do **not** roll back" in f,
-          "sem a proibição, uma falha mecânica do cepa-plan apagaria um card "
+          "sem a proibição, uma falha mecânica do cepa-queue apagaria um card "
           "real do Jira")
     check("relatório nomeia o card como fora da fila quando o add falha",
           "out of the queue" in f,
@@ -62,8 +62,8 @@ def test_capture_add():
 
 def test_drain_orders():
     f = read_rel("board-flow/commands/drain.md")
-    check("chama cepa-plan order <project_key> --keys",
-          "cepa-plan\" order <project_key> --keys" in f,
+    check("chama cepa-queue order <project_key> --keys",
+          "cepa-queue\" order <project_key> --keys" in f,
           "sem o comando exato, o drain volta a ordenar só pelo rank do Jira")
     check("pede a coluna inteira ao Jira quando a fila existe",
           "the whole column, no limit, if the single-track queue exists" in f,
@@ -84,10 +84,10 @@ def test_drain_orders():
 
 def test_doctor_live():
     f = read_rel("common/commands/doctor.md")
-    check("passa o board lido pelo atlassian-expert ao cepa-plan divergence",
-          "cepa-plan\" divergence <fila>" in f and "--board <arquivo-temporário>" in f,
+    check("passa o board lido pelo atlassian-expert ao cepa-queue divergence",
+          "cepa-queue\" divergence <fila>" in f and "--board <arquivo-temporário>" in f,
           "sem o --board, cards_sem_item e itens_com_card_done saem vazios "
-          "(o próprio cepa-plan divergence se recusa a inferi-los sem quadro)")
+          "(o próprio cepa-queue divergence se recusa a inferi-los sem quadro)")
     check("lista cards_sem_item e itens_com_card_done",
           "cards_sem_item" in f and "itens_com_card_done" in f,
           "sem nomear os dois campos, o passo --live não diz o que a fila "
@@ -99,7 +99,7 @@ def test_doctor_live():
 
 
 def main():
-    print("contratos da fila única (capture/drain/doctor × cepa-plan)\n")
+    print("contratos da fila única (capture/drain/doctor × cepa-queue)\n")
     for fn in (test_capture_add, test_drain_orders, test_doctor_live):
         print(fn.__name__)
         fn()

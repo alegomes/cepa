@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests of DUR-2 (docs/estrategia-durabilidade.md O1 item 1, 2026-11-05):
-`cepa-plan finish` refuses an item already terminal, a caller that is not the
+`cepa-queue finish` refuses an item already terminal, a caller that is not the
 holder, and `done` with an uncommitted tree; `done` records `head_commit`;
 every refusal is kept in `finish_recusado`; `--supervisor` bypasses the first two.
 
@@ -24,7 +24,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 
 FAILURES = []
 

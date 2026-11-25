@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CS-6 of decisoes-de-todas-as-filas: `cepa plan ready` no longer calls a queue
+"""CS-6 of decisoes-de-todas-as-filas: `cepa queue ready` no longer calls a queue
 "tudo concluído ou descartado" when a `done` item still left a task for the
 owner (an open `human_pending`). Owner, 2026-11-20 (fb-20261120-1): the pyyaml
 queue showed as closed with two questions hidden in CS-4 and CS-6.
@@ -16,7 +16,7 @@ Against the real CLI, in a temporary git repo:
   - a route on a `dropped` item is not a leftover task, nor one on an
     open (`pending`/`blocked`) item
   - --json carries `tarefas_sobrando` per queue
-  - the launcher `cepa plan ready` prints the same line
+  - the launcher `cepa queue ready` prints the same line
 
 Run with `python3 tests/test_cepa_plan_ready_closed_leftover.py`.
 """
@@ -33,7 +33,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 CEPA = REPO / "common" / "bin" / "cepa"
 FAILURES = []
 
@@ -130,10 +130,10 @@ def main():
               == {"p": 0, "q": 0, "r": 1, "s": 0, "t": 0},
               {k: v.get("tarefas_respondidas_nao") for k, v in data.items()})
 
-        r = subprocess.run(["sh", str(CEPA), "plan", "ready",
+        r = subprocess.run(["sh", str(CEPA), "queue", "ready",
                             "--repo", str(root)],
                            capture_output=True, text=True, cwd=str(root))
-        check("launcher `cepa plan ready` prints the same p line",
+        check("launcher `cepa queue ready` prints the same p line",
               line_of(r.stdout, "p") == p and r.returncode == 0,
               repr(line_of(r.stdout, "p")) + r.stderr)
 

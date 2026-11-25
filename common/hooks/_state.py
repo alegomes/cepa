@@ -3,14 +3,14 @@
 READ-ONLY. This module never writes a deposit and never creates one (rule R3 of
 docs/estrategia-durabilidade.md: "nenhum depósito de estado novo"). It exists so
 that `/common:next`, `/common:doctor`, `/common:until-review` and
-`/common:whereami` (through `cepa-plan`, `cepa-doctor`, `cepa-until-digest` and
+`/common:whereami` (through `cepa-queue`, `cepa-doctor`, `cepa-until-digest` and
 `cepa-intent`) answer "what is the state?" from ONE place and with ONE liveness
 rule, instead of four copies that drift ("um storage, uma conformidade").
 
 The five deposits (each has exactly one writer family):
 
   fila       the queue: `.claude/queues/<n>/queue.yaml` (legacy:
-             `.claude/programs/<n>/plan.yaml`). Written only by `cepa-plan`.
+             `.claude/programs/<n>/plan.yaml`). Written only by `cepa-queue`.
   run        the record of a `cepa-until` run: `<queue dir>/until/<run>.jsonl`
              and `<run>.estado.json` (+ `.log`, `.review.md`). Written by
              `cepa-until`; the `.estado.json` carries the `heartbeat`.
@@ -45,7 +45,7 @@ import _queuepath as qp
 import _wtlib as wt
 
 # A run is presumed dead when its heartbeat is older than this many seconds. The
-# only copy of the constant: `cepa-plan` imports it from here.
+# only copy of the constant: `cepa-queue` imports it from here.
 HEARTBEAT_STALE_SEC = float(os.environ.get("CEPA_HEARTBEAT_ORFA", "900"))
 
 DEPOSITS = {
@@ -59,8 +59,8 @@ DEPOSITS = {
 # name (fnmatch glob, relative to `.claude/`) -> (deposit or None, who writes it).
 CATALOGUE = {
     # the five deposits
-    "queues": ("fila", "cepa-plan (layout novo; `until/` guarda os runs do cepa-until)"),
-    "programs": ("fila", "cepa-plan (layout legado); maestro-wave-state grava wave-state.yaml aqui"),
+    "queues": ("fila", "cepa-queue (layout novo; `until/` guarda os runs do cepa-until)"),
+    "programs": ("fila", "cepa-queue (layout legado); maestro-wave-state grava wave-state.yaml aqui"),
     "handoffs": ("handoff", "_handoff.py, via /common:handoff e os hooks de sessão"),
     "sessions": ("sessao", "session-registry.py, session-launch.py, session-next.py, session-chain.py"),
     # not state deposits: artifacts, caches, configuration, logs
@@ -70,7 +70,7 @@ CATALOGUE = {
     "ui-proof": (None, "ui-proof-reviewer (artefatos de prova de UI)"),
     "validation": (None, "validação de ciclo (artefatos)"),
     "external-tests": (None, "registro de testes externos (artefato)"),
-    "waivers": (None, "cepa-plan (dispensas aprovadas pelo dono)"),
+    "waivers": (None, "cepa-queue (dispensas aprovadas pelo dono)"),
     "topology": (None, "cepa-topology (retrato da topologia do projeto)"),
     "deviations.md": (None, "registro de desvios, escrito à mão e por comandos"),
     "session-log.md": (None, "/session (diário da sessão)"),

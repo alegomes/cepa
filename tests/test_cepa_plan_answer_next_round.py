@@ -8,12 +8,12 @@ had only `done` items and one open owner question. The owner answered "sim" to
 promised item never existed, so nothing could pick it up.
 
 The scenario of that print, against the real CLIs, in a real git repo:
-  - before the answer, `cepa-plan queue fila --max 1` returns an empty batch
+  - before the answer, `cepa-queue queue fila --max 1` returns an empty batch
     and stops at `end-of-queue` (the state the owner saw);
-  - after `cepa-plan answer ... --answer "sim: ..."` (in a PTY: `answer` only
+  - after `cepa-queue answer ... --answer "sim: ..."` (in a PTY: `answer` only
     runs on a TTY), the same `queue --max 1` returns the created item, and only
     it, in the batch;
-  - the two ways a run looks for work see it: `cepa-plan ready --json` (what a
+  - the two ways a run looks for work see it: `cepa-queue ready --json` (what a
     `cepa-until --all` run reads) lists it among the ready items, and a
     single-queue `cepa-until fila --dry-run` names it as the 1st item;
   - an item declared "precisa do dono" is NOT handed to the run: it is deferred

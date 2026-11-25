@@ -138,7 +138,7 @@ async function rereadEpics($: EngineInterface, dir: string) {
   await update($, epics, () => loaded)
 }
 
-// The queues live in the main checkout (where `cepa-plan` writes), not in the worktree.
+// The queues live in the main checkout (where `cepa-queue` writes), not in the worktree.
 async function rereadQueues($: EngineInterface) {
   const git = await $.process.run(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'])
   if (git.exitCode !== 0) return

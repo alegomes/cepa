@@ -21,9 +21,9 @@ In an autonomous run (`claude -p` from `cepa-until`, or
 recorded there is the agent waiving proof on the owner's behalf (fb-20261014-3:
 a run wrote `autor: alegomes` on its own). So in that mode `write` becomes
 `propose`: the file is born as a PROPOSAL (`status: proposta`, `autor: null`),
-`load` does not see it, and only the owner's `cepa-plan answer`, in a terminal,
+`load` does not see it, and only the owner's `cepa-queue answer`, in a terminal,
 converts it into a waiver (`convert`). Inline twin of the conversion:
-`common/bin/cepa-plan` (`cmd_answer`).
+`common/bin/cepa-queue` (`cmd_answer`).
 """
 from __future__ import annotations
 
@@ -278,7 +278,7 @@ def write(repo: str, reason: str, scope: str, rationale: str, author: str,
     agent waiving proof on the owner's behalf (fb-20261014-3, `autor: alegomes`
     written on its own). There is no parameter that forces the real waiver in
     this mode — on purpose. `queue`/`item` tie the proposal to the queue item
-    so `cepa-plan answer` can find it."""
+    so `cepa-queue answer` can find it."""
     if in_autonomous_run():
         for n, v in (("razao", rationale), ("autor", author),
                      ("revisit_trigger", revisit_trigger),

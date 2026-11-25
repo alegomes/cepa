@@ -40,7 +40,7 @@ silent preflight: nothing is printed unless something needs you.
 | Check the harness installation | `cepa doctor` |
 | Know what mode you are in and what closes it | `cepa modes`, `cepa modes --exit` |
 | Record or advance the session's intent | `cepa intent` |
-| Write, inspect or reconcile the single-track queue | `cepa plan <subcommand>` |
+| Write, inspect or reconcile the single-track queue | `cepa queue <subcommand>` |
 | Run the queue unattended for a time window | `cepa until <queue> --for 12h` |
 | Read what an unattended run left for you | `cepa until decide <queue>/<run>`, `cepa until pending` |
 | Summarise an unattended run for a review | `cepa until-digest <run>.jsonl` |
@@ -167,7 +167,7 @@ cepa-feedback triage <id> --destination "<where>" [--note ...] [--queue QUEUE --
 ```
 
 `triage --queue` also appends the item to a single-track queue through
-`cepa-plan add`. Exit `0` ok, `2` invalid usage, `3` unknown id, `4` already
+`cepa-queue add`. Exit `0` ok, `2` invalid usage, `3` unknown id, `4` already
 triaged. The slash command is `/common:feedback`.
 
 ### `cepa-hotspots`
@@ -239,7 +239,7 @@ closed, `1` still open, `2` the mode has no mechanical verdict. The slash
 command is `/common:modes`; the design is in
 [modos-de-trabalho.md](modos-de-trabalho.md).
 
-### `cepa-plan`
+### `cepa-queue`
 
 The mechanical writer of the single-track queue,
 `.claude/queues/<name>/queue.yaml`, the document that keeps the order of the

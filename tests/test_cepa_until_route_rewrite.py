@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """CS-4 of docs/spec/perguntas-da-largada-legiveis.md: the launch rewrites an old route
 (an open `human_pending` with no written question or no kind) as a closed question and
-records the result in the item, through `cepa-plan reword-route`.
+records the result in the item, through `cepa-queue reword-route`.
 
 What these cases prove:
 
@@ -11,7 +11,7 @@ What these cases prove:
   - without a terminal the rewrite is recorded too, and nothing is asked;
   - a reader that prints garbage or fails leaves the item as it was and the launch goes on;
   - a route that already has question and kind never reaches the reader;
-  - `cepa-plan reword-route` refuses what it must, fills only what is missing and never
+  - `cepa-queue reword-route` refuses what it must, fills only what is missing and never
     touches `human_pending`, `status` nor `evidence`.
 
 Its own file (helpers borrowed from test_cepa_until_decide.py) so the proof gate can run
@@ -405,7 +405,7 @@ def test_is_old_route_selects_only_open_human_pending_routes():
               mod.is_old_route(ad(human_pending=blank)) is False)
 
 
-# ── cepa-plan reword-route ───────────────────────────────────────────────────
+# ── cepa-queue reword-route ───────────────────────────────────────────────────
 
 def _reword(root, ident, kind="external-block", question=QUESTION, if_yes=IF_YES,
             if_no=IF_NO, no_item="nenhum"):

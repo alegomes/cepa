@@ -14,7 +14,7 @@ Against the real CLI, in a real git repo, in a PTY (`answer` only runs on a TTY)
   - the new id never collides with an existing one;
   - `nenhum`, `--keep`, `--drop`, a "não" and the "sim" of a `blocked` item
     (which returns the item itself to the queue) create nothing;
-  - the queue still validates afterwards (`cepa-plan queue` exits 0 and returns
+  - the queue still validates afterwards (`cepa-queue queue` exits 0 and returns
     the new item).
 """
 import json

@@ -42,7 +42,7 @@ mode: single-track              # single-track | parallel-waves
 
 # Plano de ondas: `program:` + .claude/programs/<nome>/plan.yaml. Fila single-track:
 # a chave é `queue:` + .claude/queues/<nome>/queue.yaml (`program:` segue lido, no
-# layout antigo, até `cepa-plan migrate`).
+# layout antigo, até `cepa-queue migrate`).
 program: exemplo                # nome do plano (vira .claude/programs/<nome>/)
 source: "Jira WEGO · coluna To Do, priorizada em 2026-07-28"
                                 # de onde as demandas vieram (rastreio, não costura)
@@ -51,9 +51,9 @@ demonstrates: "o operador carrega o PDF e vê 3 respostas"
                                 # numa frase observável — é o roteiro do ciclo
                                 # de um Epic (/common:queue --from-epic). Ausente
                                 # = a fila não declara; presente tem que ser
-                                # texto não-vazio (`cepa-plan validate` recusa
+                                # texto não-vazio (`cepa-queue validate` recusa
                                 # o resto). Repriorizar não o apaga. Quem lê:
-                                # `cepa-plan show <nome>`. A chave antiga
+                                # `cepa-queue show <nome>`. A chave antiga
                                 # `demonstra:` segue lida (filas já gravadas).
 
 items:                          # ORDEM DA LISTA = ordem de execução. É o dado.
@@ -66,7 +66,7 @@ items:                          # ORDEM DA LISTA = ordem de execução. É o dad
                                 # obriga a refazer a priorização do zero.
     status: done                # pending | in_progress | done | blocked | dropped
     claimed_by:                 # QUEM reservou o item, gravado pelo
-                                # `cepa-plan start` e apagado pelo `finish`.
+                                # `cepa-queue start` e apagado pelo `finish`.
                                 # Só existe enquanto o status é in_progress.
                                 # Sem ele, "outra sessão está nele agora ou um
                                 # run morreu?" é indecidível a partir do
@@ -118,7 +118,7 @@ items:                          # ORDEM DA LISTA = ordem de execução. É o dad
       - texto: "mesclado na main pelo eb31cd5"   # corrigem a evidência de um
         em: "2026-11-21T15:00:00+00:00"          # item `done`/`dropped` que
         autor: "<sessão ou --author>"            # ficou falsa. Só cresce:
-                                # `cepa-plan annotate` acrescenta e nunca toca
+                                # `cepa-queue annotate` acrescenta e nunca toca
                                 # em evidence, status nem head_commit. O `show`
                                 # mostra as notas antes da evidência. Fila sem
                                 # a chave segue válida.
@@ -161,7 +161,7 @@ items:                          # ORDEM DA LISTA = ordem de execução. É o dad
                                 # remove a chave. Fila sem a chave segue válida;
                                 # valor fora dos três é rejeitado.
                                 # Rota antiga (sem tipo ou sem pergunta) é reescrita na
-                                # largada do cepa-until por `cepa-plan reword-route`,
+                                # largada do cepa-until por `cepa-queue reword-route`,
                                 # que só preenche o que falta e nunca toca em
                                 # human_pending, status nem evidence.
 

@@ -11,7 +11,7 @@ no declaration has nothing to create, so the least it owes the owner is to say s
 Against the real CLI, in a real git repo, in a PTY (`answer` only runs on a TTY):
   - red test: `done` item with an old route (no `item_se_sim`/`item_se_nao`):
     `answer --answer "sim: ..."` records the answer, creates nothing, and prints
-    "esta resposta não cria trabalho" with a `cepa-plan add <fila> ...` line ready
+    "esta resposta não cria trabalho" with a `cepa-queue add <fila> ...` line ready
     to copy, which, run as printed, adds a valid item;
   - the same for a route with no `owner_summary` at all, and for a "não" that
     closes the route;
@@ -83,7 +83,7 @@ def ordered(root):
 
 def add_line(out):
     lines = [l.strip() for l in out.replace("\r", "").splitlines()
-             if l.strip().startswith("cepa-plan add ")]
+             if l.strip().startswith("cepa-queue add ")]
     return lines[0] if lines else None
 
 
@@ -102,8 +102,8 @@ def test_red_test_old_route_yes_warns_with_the_add_command():
               "A resposta não criou item" in str(a1.get("evidence")), a1)
         check("a saída diz que a resposta não cria trabalho", WARNING in out, out)
         line = add_line(out)
-        check("a saída traz um `cepa-plan add` da mesma fila",
-              line is not None and line.startswith("cepa-plan add fila "), out)
+        check("a saída traz um `cepa-queue add` da mesma fila",
+              line is not None and line.startswith("cepa-queue add fila "), out)
         if line is None:
             return
         argv = shlex.split(line)
@@ -213,7 +213,7 @@ def load_until():
 
 
 def test_decide_closing_repeats_the_warning_for_each_item():
-    """The real `cepa-plan answer` runs behind `decide` (no injected `answer`),
+    """The real `cepa-queue answer` runs behind `decide` (no injected `answer`),
     so the closing reads what the owner's answer really printed."""
     m = load_until()
     with tempfile.TemporaryDirectory() as tmp:
@@ -225,7 +225,7 @@ def test_decide_closing_repeats_the_warning_for_each_item():
                     for i in ("a1", "a2", "a3")]
         answers = iter(["y", "", "y", "", "y", ""])
         screen = []
-        # `cepa-plan answer` needs a TTY: run decide's own subprocess under one.
+        # `cepa-queue answer` needs a TTY: run decide's own subprocess under one.
         orig_run = m.subprocess.run
 
         def run_on_tty(cmd, **kw):
@@ -249,8 +249,8 @@ def test_decide_closing_repeats_the_warning_for_each_item():
         check("...e não para a3, que declarou `nenhum`",
               not any("a3" in l for l in warned), closing)
         adds = [l.strip() for l in closing.splitlines()
-                if l.strip().startswith("cepa-plan add fila ")]
-        check("...com um `cepa-plan add` por item", len(adds) == 2, closing)
+                if l.strip().startswith("cepa-queue add fila ")]
+        check("...com um `cepa-queue add` por item", len(adds) == 2, closing)
 
 
 if __name__ == "__main__":

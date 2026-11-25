@@ -9,7 +9,7 @@ What these cases hold:
   - `NO_COLOR` and `CEPA_COR=nunca` turn the decoration off; `CEPA_COR=sempre` turns it on;
   - when on, the long line wraps with a hanging indent and no text is lost;
   - `--json` is never decorated, not even with the decoration forced;
-  - the decorated `cepa-plan status` brings a header, a scoreboard and the
+  - the decorated `cepa-queue status` brings a header, a scoreboard and the
     calculation memory of the percentage, and keeps the ids of all items.
 
 No third-party deps — run with `python3 tests/test_tui.py`.
@@ -95,7 +95,7 @@ def test_wrap_with_hanging_indent_keeps_text():
 def test_status_same_as_before_outside_terminal():
     with tempfile.TemporaryDirectory() as d:
         root = queue(Path(d))
-        r = run([str(BIN / "cepa-plan"), "status", "f", "--repo", str(root)])
+        r = run([str(BIN / "cepa-queue"), "status", "f", "--repo", str(root)])
     assert r.returncode == 0, r.stderr
     assert "\x1b" not in r.stdout
     assert "\npendentes (2)\n" in r.stdout
@@ -105,7 +105,7 @@ def test_status_same_as_before_outside_terminal():
 def test_status_decorated_in_terminal():
     with tempfile.TemporaryDirectory() as d:
         root = queue(Path(d))
-        r = run([str(BIN / "cepa-plan"), "status", "f", "--repo", str(root)],
+        r = run([str(BIN / "cepa-queue"), "status", "f", "--repo", str(root)],
                  color="sempre")
     assert r.returncode == 0, r.stderr
     plan_out = ANSI.sub("", r.stdout)
@@ -121,7 +121,7 @@ def test_status_decorated_in_terminal():
 def test_json_never_decorated():
     with tempfile.TemporaryDirectory() as d:
         root = queue(Path(d))
-        r = run([str(BIN / "cepa-plan"), "status", "f", "--repo", str(root),
+        r = run([str(BIN / "cepa-queue"), "status", "f", "--repo", str(root),
                   "--json"], color="sempre")
     assert r.returncode == 0, r.stderr
     assert json.loads(r.stdout)["total"] == 4

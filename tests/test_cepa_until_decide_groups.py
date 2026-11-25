@@ -13,7 +13,7 @@ across queues in the `--all` panel; each member records its own answer in its ow
 
 In-process cases drive `decide` / `ask_at_launch_all` with a scripted keyboard and a
 recording `answer`; one case runs the real `cepa-until decide --all` in a pty with the
-real `cepa-plan answer` behind it.
+real `cepa-queue answer` behind it.
 
 Run with `python3 tests/test_cepa_until_decide_groups.py`, exit 1 on any failure.
 """
@@ -88,7 +88,7 @@ class Recorder:
     def __call__(self, ident, text, keep=False, drop=False):
         self.calls.append({"id": ident, "text": text, "keep": keep, "drop": drop})
         if ident in self.fail:
-            return 1, f"cepa-plan refused {ident}"
+            return 1, f"cepa-queue refused {ident}"
         return 0, f"{ident} recorded"
 
 
@@ -116,7 +116,7 @@ def three_with_waivers(tmp):
 
 
 SCOPED = [owner_item("x1", "Aceito a dispensa do classificador? Recomendo sim: mesmo criterio"),
-          owner_item("x2", "Aceito a dispensa do cepa-plan? Recomendo sim: mesmo criterio"),
+          owner_item("x2", "Aceito a dispensa do cepa-queue? Recomendo sim: mesmo criterio"),
           owner_item("x3", "Aceito a dispensa do cepa-intent? Recomendo sim: mesmo criterio")]
 
 
@@ -148,7 +148,7 @@ def test_waiver_group_with_different_texts_is_one_card_and_a_records_each_item()
               and not c["keep"] for c in grouped), rec.calls)
     check("each answer carries its OWN question",
           [c["text"].split("?")[0] for c in grouped]
-          == ["sim: Aceito a dispensa do classificador", "sim: Aceito a dispensa do cepa-plan",
+          == ["sim: Aceito a dispensa do classificador", "sim: Aceito a dispensa do cepa-queue",
               "sim: Aceito a dispensa do cepa-intent"], rec.calls)
     check("no per-item 'anything to add': one follow-up for the group, one for z9",
           sum("Anything to add" in p for p in keys.prompts) == 2
@@ -302,7 +302,7 @@ def test_a_failing_answer_goes_to_for_later_and_the_others_stay_applied():
           [a.split(":")[0] for a in applied] == ["x1", "x3"]
           and [l.split(":")[0] for l in later] == ["x2"], (applied, later))
     check("the card reports the failed member and its reason",
-          "not recorded: x2 — title of x2: cepa-plan refused x2" in out
+          "not recorded: x2 — title of x2: cepa-queue refused x2" in out
           and "2 of 3 answers recorded, 1 failed and stay for later" in out, out)
     check("answered counts the two", prog.get("answered") == 2, prog)
 
@@ -397,9 +397,9 @@ def _panel(root, inputs, fail=(), as_text=False, color="nunca", exhausted=None,
 
 @contextlib.contextmanager
 def real_plan(m, on=True):
-    """`cepa-plan answer` runs only with a terminal on stdin. The module under test gets
+    """`cepa-queue answer` runs only with a terminal on stdin. The module under test gets
     a `subprocess` that hands every child a pty as stdin, so the REAL `_apply_answer`
-    and the real `cepa-plan answer` run in-process."""
+    and the real `cepa-queue answer` run in-process."""
     if not on:
         yield
         return
@@ -930,7 +930,7 @@ def test_group_card_on_a_real_terminal_lists_members_and_numbers_the_head():
                      fail={"x2"})
     lines = ANSI.sub("", out).splitlines()
     check("a failed member is a red cross line, and so is the summary",
-          "│  ✗ not recorded: x2 — title of x2: cepa-plan refused x2" in lines
+          "│  ✗ not recorded: x2 — title of x2: cepa-queue refused x2" in lines
           and "│  ✗ not recorded: 2 of 3 answers recorded, 1 failed and stay for later"
           in lines, lines)
     check("on a terminal a good run is green and the colors are those of the screen",
@@ -1360,7 +1360,7 @@ def test_all_panel_numbers_the_cards_and_the_singles_after_a_group_is_handed_bac
               ("a1", False), ("b1", False)], calls)
 
 
-# ── proof review: the REAL `_apply_answer` against the real `cepa-plan answer` ──
+# ── proof review: the REAL `_apply_answer` against the real `cepa-queue answer` ──
 
 def _queue_of(path):
     return {str(i["id"]): i for i in yaml.safe_load(Path(path).read_text())["items"]}
@@ -1415,7 +1415,7 @@ def test_real_apply_answer_records_drops_flattens_multiline_and_refuses():
 
 
 def test_real_apply_answer_shows_the_no_commit_notice_cepa_plan_prints_when_unfiltered():
-    """The notice is cepa-plan's own, so dropping the filter in `_apply_answer` shows it;
+    """The notice is cepa-queue's own, so dropping the filter in `_apply_answer` shows it;
     here the filter is what keeps `decide`'s output true."""
     m = dec.load_module()
     it = base.item("e", status="pending", human_pending="route of e")
@@ -1423,12 +1423,12 @@ def test_real_apply_answer_shows_the_no_commit_notice_cepa_plan_prints_when_unfi
     with tempfile.TemporaryDirectory() as tmp:
         root, _ = al._repo(tmp, {"fila": [it]})
         master, slave = os.openpty()
-        raw = subprocess.run([sys.executable, str(CEPA_UNTIL.parent / "cepa-plan"), "answer",
+        raw = subprocess.run([sys.executable, str(CEPA_UNTIL.parent / "cepa-queue"), "answer",
                               "fila", "e", "--answer", "sim: z", "--repo", str(root),
                               "--no-commit"], capture_output=True, text=True, stdin=slave)
         os.close(master)
         os.close(slave)
-    check("cepa-plan itself prints the notice with --no-commit",
+    check("cepa-queue itself prints the notice with --no-commit",
           "fila gravada sem commit" in raw.stdout + raw.stderr, raw)
 
 
@@ -1481,7 +1481,7 @@ def test_real_group_answer_on_delivered_items_y_n_and_a_refusal():
               in q[i]["evidence"] for i in ids), q)
     out, applied, later, q, waivers, _ = _real_decide(
         deferred, ["y", ""], _delivered_queue_items(("x1", "x3")), ws)
-    check("a member cepa-plan refuses (it is not in the queue): its message is shown, it "
+    check("a member cepa-queue refuses (it is not in the queue): its message is shown, it "
           "stays for later, the other two are recorded",
           "not recorded: x2 — title of x2: a fila fila não tem item 'x2'" in out
           and "2 of 3 answers recorded, 1 failed and stay for later" in out
@@ -2081,15 +2081,15 @@ sys.exit(p.returncode)
 def test_apply_answer_with_the_notice_filtered_has_no_blank_line_and_no_edge_whitespace():
     """A blank line before the filtered notice must not be left behind as a trailing
     newline (nor one after it as a leading one when the notice comes first). The real
-    `cepa-plan answer` runs behind a wrapper that only inserts that blank line."""
+    `cepa-queue answer` runs behind a wrapper that only inserts that blank line."""
     m = dec.load_module()
-    real_script = CEPA_UNTIL.parent / "cepa-plan"
+    real_script = CEPA_UNTIL.parent / "cepa-queue"
     for where in ("before", "after"):
         it = base.item("e", status="pending", human_pending="route of e")
         it["route_kind"] = "owner-task"
         with tempfile.TemporaryDirectory() as tmp:
             root, _ = al._repo(tmp, {"fila": [it]})
-            wrapper = Path(tmp) / "cepa-plan"
+            wrapper = Path(tmp) / "cepa-queue"
             wrapper.write_text(PLAN_WRAPPER.format(real=str(real_script), mode=where),
                                encoding="utf-8")
             m.CEPA_PLAN = wrapper

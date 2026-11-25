@@ -6,11 +6,11 @@ held `.claude/programs/WEGO/` (To Do, 48 items) and
 `.claude/programs/WEGO-in-progress/` side by side. A key names a project, not a
 slice, so a lookup "board-flow.yaml -> defaults.project_key -> <key>/plan.yaml"
 silently picks `WEGO/` forever. `/common:next` must instead follow the same rule
-as `cepa-plan`: one queue -> that one; several -> list and ask.
+as `cepa-queue`: one queue -> that one; several -> list and ask.
 
 The guard is mechanical because prose saying "don't pick by key" erodes quietly.
 Half A pins the prompt contracts (next.md, the doc); half B runs the real
-`cepa-plan status` on temp repos and pins the three paths.
+`cepa-queue status` on temp repos and pins the three paths.
 
 Run with `python3 tests/test_plan_program_naming.py`.
 """
@@ -24,7 +24,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 DOC = REPO / "docs" / "execution-plan.md"
 NEXT = REPO / "common" / "commands" / "next.md"
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 
 FAILURES = []
 
@@ -106,8 +106,8 @@ def half_a():
               "`<programs>/<project_key>/plan.yaml` automatically", ""),
           "só pode aparecer na regra negativa")
     check("next: não lê defaults.project_key", "defaults.project_key" not in nxt)
-    check("next: liga a prosa à ferramenta (cepa-plan status)",
-          "cepa-plan status" in nxt)
+    check("next: liga a prosa à ferramenta (cepa-queue status)",
+          "cepa-queue status" in nxt)
 
     doc = flat(read(DOC))
     check("doc: seção '### What the file is called'",

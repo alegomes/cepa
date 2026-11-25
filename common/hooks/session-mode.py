@@ -35,7 +35,7 @@ question nobody is there to answer.
 The PROJECT altitude comes once per session, on the first turn only (the hook
 pays a toll per turn): when `docs/epics/` has an Epic, one `[epic]` line per
 Epic with the cycles closed, in progress and without a queue, and the owner's
-open questions. It is not written anywhere: `cepa-plan epics --brief` derives it
+open questions. It is not written anywhere: `cepa-queue epics --brief` derives it
 from the Epic and the queues, so it cannot drift. It needs no mode (the session
 that lost the Epic's thread may have had none) and is skipped in a `cepa-until`
 run, where the intent is the queue item.
@@ -293,7 +293,7 @@ def intent_lines(root, payload, has_mode):
 def epic_lines(root, payload):
     """The `[epic]` lines (one per Epic) on the session's FIRST turn, or [].
 
-    Fail-silent: any error or non-zero exit from `cepa-plan epics` is silence."""
+    Fail-silent: any error or non-zero exit from `cepa-queue epics` is silence."""
     try:
         epics = os.path.join(root, "docs", "epics")
         if not os.path.isdir(epics) or not any(
@@ -302,7 +302,7 @@ def epic_lines(root, payload):
         if len(first_prompts(root, payload.get("session_id"),
                              payload.get("prompt"))) > 1:
             return []
-        plan = Path(__file__).resolve().parent.parent / "bin" / "cepa-plan"
+        plan = Path(__file__).resolve().parent.parent / "bin" / "cepa-queue"
         out = subprocess.run(
             [sys.executable, str(plan), "epics", "--brief", "--repo", root],
             capture_output=True, text=True, timeout=8)

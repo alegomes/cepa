@@ -9,9 +9,9 @@ WEGO-2336 was in the middle of 600 characters of evidence.
 
 What these cases prove:
 
-  - `cepa-plan finish --pergunta` records the item's closed question, and
+  - `cepa-queue finish --pergunta` records the item's closed question, and
     `queue` returns it together with the deferred item;
-  - `cepa-plan responde` turns a `blocked` back into `pending` and closes the human
+  - `cepa-queue responde` turns a `blocked` back into `pending` and closes the human
     route, with the owner's answer in the evidence, and ONLY in a terminal (a `claude -p`
     agent has no TTY and does not close the route in place of the human);
   - `decide` asks to land and each item that only the owner unblocks, applies
@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_cepa_until import (  # noqa: E402
     CEPA_UNTIL, fake_claude, item, build_repo, run_until)
 
-CEPA_PLAN = CEPA_UNTIL.parent / "cepa-plan"
+CEPA_PLAN = CEPA_UNTIL.parent / "cepa-queue"
 FAILURES = []
 
 
@@ -957,19 +957,19 @@ def test_agent_instructions_ask_for_the_question():
     check("until-review manda gravar o bloco cepa-decisoes",
           "```json cepa-decisoes" in review, "")
     check("...cobrindo todos os adiados da fila, pelo queue",
-          "deferred" in review and "cepa-plan queue" in review, "")
+          "deferred" in review and "cepa-queue queue" in review, "")
     check("...e diz que as ações vêm da lista fechada",
           "closed list" in review, "")
     check("drain-plan manda gravar --question ao travar",
           "--question" in drain, "")
-    p = subprocess.run([sys.executable, str(CEPA_UNTIL.parent / "cepa-plan"),
+    p = subprocess.run([sys.executable, str(CEPA_UNTIL.parent / "cepa-queue"),
                         "finish", "--help"], capture_output=True, text=True,
                        timeout=30)
     help_ = " ".join(p.stdout.split())
     for given_name, plain_text in (("until-review", review), ("drain-plan", drain),
-                        ("cepa-plan finish --help", help_)):
+                        ("cepa-queue finish --help", help_)):
         plain_text = " ".join(plain_text.replace("**", "").split())
-        # The commands and cepa-plan's help were translated to English.
+        # The commands and cepa-queue's help were translated to English.
         sentences = {
             "drain-plan": ("Up to 25 words", "without a branch name",
                            "the item goes back to the queue"),
@@ -1142,7 +1142,7 @@ def test_already_landed_run_does_not_ask_again():
 
 def test_decidir_s_and_n_on_terminal_reach_the_plan():
     """AC2 at the end: `n` and `s` typed in a real terminal go through the real
-    `cepa-plan responde` and record "não: <question>" (item as it is)
+    `cepa-queue responde` and record "não: <question>" (item as it is)
     and "sim: <question>" (item back to the queue)."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1"), item("a2")])
@@ -1295,7 +1295,7 @@ def test_cs1_long_pasted_answer_with_accents_reaches_the_item():
               rc == 0 and a1["status"] == "pending", (rc, a1.get("status"),
                                                       out[-800:]))
         # The owner's text is the end of the answer segment; after it
-        # `cepa-plan responde` appends its fixed trailer ("O item voltou de
+        # `cepa-queue responde` appends its fixed trailer ("O item voltou de
         # `blocked` para `pending`."), so "ends with" is read up to there.
         check("cs1: a resposta na evidência termina com os 1.500 bytes intactos",
               f"{long_text}. O item voltou de" in str(a1.get("evidence", "")),
@@ -1854,7 +1854,7 @@ def test_old_blocked_item_gets_a_true_generic_reason():
 
 def test_supervisor_block_writes_a_lay_reason():
     """`block_item` is the supervisor closing an item nobody explained; it
-    passes `cepa-plan`'s new rule with its own lay reason."""
+    passes `cepa-queue`'s new rule with its own lay reason."""
     m = load_module()
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
@@ -1867,7 +1867,7 @@ def test_supervisor_block_writes_a_lay_reason():
 
 
 def test_finish_item_reopens_an_item_the_agent_closed_done():
-    """DUR-2: `cepa-plan finish` refuses a second finish on a terminal item;
+    """DUR-2: `cepa-queue finish` refuses a second finish on a terminal item;
     the supervisor's `finish_item` must pass `--supervisor` (red full build puts
     the agent's `done` back to `pending`)."""
     m = load_module()
@@ -2058,7 +2058,7 @@ def test_launch_cs3_panel_before_the_first_item_leaves_the_delivered_route_out()
 
 
 def _answered(day, answer="não: Fecho o card?", old=""):
-    """Evidence as `cepa-plan answer --keep` leaves it: the answer prepended."""
+    """Evidence as `cepa-queue answer --keep` leaves it: the answer prepended."""
     return (f"Resposta do dono em {day}: {answer}. O dono manteve o item como estava "
             f"(`pending`, rota humana aberta). Evidência anterior: {old or 'x'}")
 
@@ -2484,7 +2484,7 @@ def test_pre_read_cs5_cepa_plan_refusing_both_attempts_runs_the_item_with_the_er
 
 
 def test_pre_read_cs5_orphan_reservation_needs_the_supervisor_flag():
-    # `cepa-plan queue` returns an `in_progress` item with an orphan reservation as
+    # `cepa-queue queue` returns an `in_progress` item with an orphan reservation as
     # executable; without `--supervisor`, `finish` refuses a claim that is not the
     # caller's (finish_gate), so the route would never open.
     x = dict(item("x1", status="in_progress"),

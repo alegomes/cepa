@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CS-4 of docs/spec/tres-portas-spec-epic.md (item 3 of O2'): `cepa-plan
+"""CS-4 of docs/spec/tres-portas-spec-epic.md (item 3 of O2'): `cepa-queue
 decisions` lists, per file, the decisions of the "Decided without asking"
 section split into with and without verdict, reusing the shared reader
 `common/hooks/_decisions.py`. With no argument it scans docs/spec/*.md and
@@ -21,7 +21,7 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 
 FAILURES = []
 

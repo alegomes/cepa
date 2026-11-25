@@ -10,7 +10,7 @@ from the commands; without a guard, the next pt-BR edit passes silently and
 the file gradually becomes bilingual again.
 
 What may stay in Portuguese is contract, and contract always comes quoted:
-between backticks (`**Próximo:**`, field names, cepa-plan output), between quotes
+between backticks (`**Próximo:**`, field names, cepa-queue output), between quotes
 ("sim = o item volta para a fila", sentences a script prints) or as a
 bold label that the owner reads (**Pra você:**, **Precisa de você**). Code blocks
 are also left out — they are what a script reads or what the owner sees. That is why the
@@ -70,7 +70,7 @@ def test_guard_distinguishes_prose_from_quotation():
     check("rótulo em negrito que o dono lê passa",
           not portuguese_lines("End with **Pra você:** and the count.\n"))
     check("bloco de código passa",
-          not portuguese_lines("Run:\n```\ncepa-plan finish --evidence "
+          not portuguese_lines("Run:\n```\ncepa-queue finish --evidence "
                                   "\"não colhido\"\n```\n"))
     check("prosa inglesa passa",
           not portuguese_lines("Never edit plan.yaml by hand; the queue "

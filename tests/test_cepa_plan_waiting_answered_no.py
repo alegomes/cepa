@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""`cepa plan waiting` shows routes the owner already answered "não" only as a
+"""`cepa queue waiting` shows routes the owner already answered "não" only as a
 count per queue, with the date of the last one and the command that revisits
 them (spec docs/spec/decisoes-de-todas-as-filas.md, CS-3; Q4: a route answered
 "no" is not asked again, and is not listed as a line either).
 
 "Answered no" is the rule `cepa-until decide` already uses (one reader,
-`_ownertext.last_owner_no`): the owner's LAST answer, which `cepa-plan answer`
+`_ownertext.last_owner_no`): the owner's LAST answer, which `cepa-queue answer`
 prepends to the evidence, is a "não".
 
 Against the real CLI, in a temporary git repo:
@@ -40,7 +40,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 FAILURES = []
 
 
@@ -56,7 +56,7 @@ def run(repo, *args):
 
 
 def answered(date, text="não: deixa como está", older=""):
-    """Evidence as `cepa-plan answer` leaves it: the last answer first."""
+    """Evidence as `cepa-queue answer` leaves it: the last answer first."""
     ev = f"Resposta do dono em {date}: {text}"
     return ev + (f"\n\n{older}" if older else "\n\nevidência original")
 

@@ -87,19 +87,19 @@ subject in kebab-case.
 
 **The veto walk (caminhada do veto).** On an existing file (`--continuar`,
 `--fechar`, or the "continue that one" answer), before resuming the interview
-or the sieve, run `cepa-plan decisions docs/spec/<slug>.md`. It numbers the
+or the sieve, run `cepa-queue decisions docs/spec/<slug>.md`. It numbers the
 lines of "Decided without asking" and separates those with a verdict from those
 without. Walk only the ones without: show up to four per round, each with its
 number and text, and ask the owner for one answer per decision: keep it
 (`mantida`), veto it (`vetada`, with the reason) or refine it (`refinada`, with
-the new text). Record each answer in the same turn with `cepa-plan verdict
+the new text). Record each answer in the same turn with `cepa-queue verdict
 docs/spec/<slug>.md <n> mantida|vetada|refinada` (`vetada` needs `--reason`,
-`refinada` needs `--text`). Use the number exactly as `cepa-plan decisions` prints it (1-based over every
+`refinada` needs `--text`). Use the number exactly as `cepa-queue decisions` prints it (1-based over every
 decision of the section, decided ones included, so the numbers shown may skip):
 never renumber. Never write the `· mantida em` / `· vetada em` /
 `· refinada em` marker by hand: the date and the format come from the command.
 `Status` does not change by veto; a vetoed decision becomes an open question
-only if the owner says so in the same turn. If `cepa-plan verdict` prints "já
+only if the owner says so in the same turn. If `cepa-queue verdict` prints "já
 virou código na fila" (the file is the `source:` of a derived queue), pass the
 warning on to the owner as it came. A skipped decision does not block: it stays
 without marker, the walk moves on, and the next `--continuar` offers it again.
@@ -230,7 +230,7 @@ both.
 The document is written in pt-BR. Keep the headings and the `**Status:**`,
 `**Aberta em:**`, `**Fechada em:**`, `**Fontes lidas:**`, `## Como chegamos aqui`, `### CS-<n>:`, `**Surface:**` and
 `**Red test:**` labels verbatim: `spec-readiness-gate` and
-`cepa-plan --from-spec` parse them (the old pt-BR `pronta-para-construir`,
+`cepa-queue --from-spec` parse them (the old pt-BR `pronta-para-construir`,
 `rascunho`, `Superfície`, `Teste vermelho` still read in older specs, but you
 write only the new ones). Only the placeholders below are in English.
 

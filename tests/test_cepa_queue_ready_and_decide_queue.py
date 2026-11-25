@@ -4,13 +4,13 @@
 Origin (owner, 2026-11-02, WEGO queue with 11 pending, 5 blocked and "43 com
 ação humana aberta"):
   - "Pendente ≠ Pronto pra ser feito. O cepa-until não deve perder tempo em
-    itens que certamente não irão avançar" -> `cepa-plan status` tells, per
+    itens que certamente não irão avançar" -> `cepa-queue status` tells, per
     item and in the summary, which `pending` the next run takes;
   - "eu odeio ter que usar qualquer outro comando cepa que não seja o
     cepa-until" -> `cepa-until decide <fila>` asks about everything the queue
     holds for the owner, including the leftover tasks of delivered items;
   - "descarto este pedido? sim" sent WEGO-2463 back to `pending` -> `[d]` and
-    `cepa-plan answer --drop` take the item out of the queue.
+    `cepa-queue answer --drop` take the item out of the queue.
 
 Run with `python3 tests/test_cepa_queue_ready_and_decide_queue.py`.
 """

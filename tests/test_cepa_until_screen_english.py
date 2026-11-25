@@ -4,7 +4,7 @@ docs/spec/fim-do-until-sem-espera.md.
 
 The landing action is shown as "merge into `<branch>`" wherever it is printed, never
 as `aterrissar` (the id stored in `.estado.json` and the CLI alias stay), and the
-`cepa-plan` stop details are in English.
+`cepa-queue` stop details are in English.
 
 Run with `python3 tests/test_cepa_until_screen_english.py`.
 """
@@ -25,7 +25,7 @@ from test_cepa_until import (  # noqa: E402
 from test_cepa_until_run_branch import WORKS, VERIFY, plan_of  # noqa: E402
 from test_cepa_until_decide import load_module  # noqa: E402
 
-CEPA_PLAN = CEPA_UNTIL.parent / "cepa-plan"
+CEPA_PLAN = CEPA_UNTIL.parent / "cepa-queue"
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 

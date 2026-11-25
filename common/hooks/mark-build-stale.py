@@ -92,7 +92,7 @@ def main():
 
     # `last_known_*` é a última execução REAL. Uma edição sobre um STALE
     # herda a linhagem dele: copiar `status: STALE` apagava o EMPTY de origem
-    # na segunda edição, e o acceptance-gate/cepa-plan finish liberavam o card.
+    # na segunda edição, e o acceptance-gate/cepa-queue finish liberavam o card.
     if str(previous.get("status", "")).upper() == "STALE":
         last = {
             "status": previous.get("last_known_status", "UNKNOWN"),

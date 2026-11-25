@@ -74,12 +74,12 @@ card born outside it starts already out of the queue that drives execution.
 - Queue exists → run:
 
   ```
-  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" add <project_key> <KEY> --title "<summary>"
+  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-queue" add <project_key> <KEY> --title "<summary>"
   ```
 
-  (`common/bin/cepa-plan` is a relative path that only exists inside the
+  (`common/bin/cepa-queue` is a relative path that only exists inside the
   `cepa` repo itself — in any host project this shim finds the real
-  `cepa-plan` from `common`, in the repo or the plugin cache.)
+  `cepa-queue` from `common`, in the repo or the plugin cache.)
 
   No `--before`, so the card lands at the end of the queue, marked "ainda
   não priorizado" (not yet prioritized) — capture doesn't decide priority, it only makes sure the

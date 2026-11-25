@@ -128,7 +128,7 @@ import re
 import sys
 from pathlib import Path
 
-# The reader of "Decided without asking" is shared with `cepa-plan decisions`
+# The reader of "Decided without asking" is shared with `cepa-queue decisions`
 # (item 3 of O2'): one rule for what counts as a decision and as a verdict.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _decisions  # noqa: E402
@@ -444,7 +444,7 @@ def piece_key(text: str) -> str:
 def pieces_of(cell: str):
     """One piece per sentence of "What it crosses": split at `.` or `;`
     followed by a space or the end, outside backticks and square brackets, the
-    same rule as `cepa-plan from-epic`."""
+    same rule as `cepa-queue from-epic`."""
     out, current, tick, depth = [], [], False, 0
     for i, ch in enumerate(cell):
         if ch == "`":

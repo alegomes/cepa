@@ -3,7 +3,7 @@
 already committed is recorded without opening a route, and the end-of-run
 summary lists it with the commit.
 
-Red test declared in the spec: `cepa-plan finish <fila> <id> done --decision
+Red test declared in the spec: `cepa-queue finish <fila> <id> done --decision
 "lote pula credencial inativa" --commit <hash>` leaves `human_pending` null and
 records the choice in `decisions`; the end-of-run summary lists it with the
 commit; `cepa-until decide <fila>` does not ask about it. Before CS-11,
@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_cepa_until import (  # noqa: E402
     CEPA_UNTIL, build_repo, fake_claude, item, run_until)
 
-CEPA_PLAN = CEPA_UNTIL.parent / "cepa-plan"
+CEPA_PLAN = CEPA_UNTIL.parent / "cepa-queue"
 DECISION = "lote pula credencial inativa"
 FAILURES = []
 
@@ -79,7 +79,7 @@ def started(root, ident="a1"):
     git(root, "commit", "-qm", "reserve")
 
 
-# ── cepa-plan finish --decision ──────────────────────────────────────────────
+# ── cepa-queue finish --decision ──────────────────────────────────────────────
 
 def test_decision_is_recorded_without_opening_a_route():
     with tempfile.TemporaryDirectory() as tmp:
@@ -220,7 +220,7 @@ def test_run_summary_lists_the_decision_with_its_commit_and_decide_skips_it():
         finish_log = Path(tmp, "chamadas.jsonl.finish")
         finish_out = finish_log.read_text() if finish_log.exists() else ""
         its = items_of(root)
-        check("o agente falso fechou os três itens pelo cepa-plan real",
+        check("o agente falso fechou os três itens pelo cepa-queue real",
               all(its[i]["status"] == "done" for i in ("a1", "a2", "a3")),
               finish_out + p.stdout[-800:])
         dec = (its["a1"].get("decisions") or [{}])[0]
@@ -253,7 +253,7 @@ def test_run_summary_lists_the_decision_with_its_commit_and_decide_skips_it():
 
 
 def main():
-    print("cepa-plan finish --decision (CS-11)\n")
+    print("cepa-queue finish --decision (CS-11)\n")
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
             print(f"{name}:")

@@ -27,7 +27,7 @@ purpose, at the end of every run.
 
 ## Instructions
 
-**Read-only.** No `git merge`, no `cepa-plan finish`, no card
+**Read-only.** No `git merge`, no `cepa-queue finish`, no card
 transition, no build, no push, no file edit. Every course of action becomes
 a question for the owner. Whoever runs you at the end of the run is a `claude -p` with nobody watching, and an
 irreversible action executed at 4 a.m. is worse than a question waiting at
@@ -153,11 +153,11 @@ I have to do? Give me the step by step."). Keep these three labels verbatim:
   tell me.
 
 For every `human_pending` route, also write, ready to paste, the command the
-owner runs when the task is done (`cepa-plan answer` closes the route or
+owner runs when the task is done (`cepa-queue answer` closes the route or
 returns the item to the queue; with `--keep` it only records the answer):
 
 ```
-python3 common/bin/cepa-plan answer <fila> <id> --answer "<what you saw>" --repo <raiz-principal>
+python3 common/bin/cepa-queue answer <fila> <id> --answer "<what you saw>" --repo <raiz-principal>
 ```
 
 The report never lists a category ("the human routes", "the pending items") in
@@ -173,13 +173,13 @@ After the report, and only at the end of the file, write a fenced block
 ```` ```json cepa-decisoes ```` that `cepa-until` reads to ask the owner, one at
 a time, in the terminal (`cepa-until decide`). The block does NOT decide what
 gets executed: the actions come from a closed list in
-`cepa-until` (aterrissar, and `cepa-plan answer`, which returns a `blocked`
+`cepa-until` (aterrissar, and `cepa-queue answer`, which returns a `blocked`
 item to the queue or closes the human route with the owner's answer, or, with
 `--keep`, only records the answer and leaves the item stuck). It only
 provides the wording of the question and your recommendation.
 
 Cover **all deferred items of the queue**, not only this run's: run
-`python3 common/bin/cepa-plan queue <fila> --max 1 --json --repo <raiz>` and
+`python3 common/bin/cepa-queue queue <fila> --max 1 --json --repo <raiz>` and
 take the `deferred` list. Those with reason `blocked-before` (old spelling `bloqueado-antes` is still accepted) and
 `human_pending` go in; `reserved` and `depends-on-deferred` are not the owner's
 and stay out. An item that already has a `question` (the question the agent
@@ -253,8 +253,8 @@ asked "o que diabos isso quer dizer?" — "what the hell does that mean?"):
   (`true` when the new item also waits for the owner). A question that promises
   work ("Do I put an item on the queue to ...?") MUST declare that work here, or
   the owner's "sim" only closes the route and the promised item is never born.
-  The same rule applies to `cepa-plan finish --human-pending` and
-  `cepa-plan reword-route` (`--if-yes-item`, `--if-no-item`).
+  The same rule applies to `cepa-queue finish --human-pending` and
+  `cepa-queue reword-route` (`--if-yes-item`, `--if-no-item`).
 - The lay fields (`contexto`, `pergunta`, `se_sim`, `se_nao`, `porque`, and the
   `titulo` of `item_se_sim`/`item_se_nao`) carry
   no card key, commit hash, gate name (`completion-auditor`,

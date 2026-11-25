@@ -4,7 +4,7 @@
 Run with `python3 tests/test_common_drain_plan.py` (it only needs PyYAML).
 Two families, as in test_common_plan.py:
 
-  - BEHAVIOR of `common/bin/cepa-plan` in the three subcommands the batch
+  - BEHAVIOR of `common/bin/cepa-queue` in the three subcommands the batch
     uses — `queue` (what can be executed now and where the batch stops), `start`
     (the reservation) and `finish` (the outcome). Each refusal here exists because
     the corresponding failure reorders the queue or erases debt in silence, which are
@@ -32,7 +32,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 CMD = REPO / "common" / "commands" / "drain-plan.md"
 
 FAILURES = []
@@ -452,15 +452,15 @@ def test_command_contract(base):
     f = CMD.read_text(encoding="utf-8")
     # without backticks: the instruction cannot depend on how markdown formatted it
     clean = f.replace("`", "").lower()
-    check("manda montar o lote pelo cepa-plan, não pelo olho",
-          "cepa-plan queue" in f,
+    check("manda montar o lote pelo cepa-queue, não pelo olho",
+          "cepa-queue queue" in f,
           "sem isso a ordem da fila volta a ser interpretada a cada run")
-    check("reserva o item antes de executar", "cepa-plan start" in f)
-    check("registra o desfecho de cada item", "cepa-plan finish" in f)
+    check("reserva o item antes de executar", "cepa-queue start" in f)
+    check("registra o desfecho de cada item", "cepa-queue finish" in f)
     check("proíbe escrever o YAML à mão",
           "never edit queue.yaml by hand" in clean,
           "sem a proibição, um Write no arquivo contorna TODAS as recusas do "
-          "cepa-plan e nenhuma delas dispara")
+          "cepa-queue e nenhuma delas dispara")
     check("declara que rota humana ADIA o item em vez de parar o lote",
           "human_pending" in f and "defers the item" in clean,
           "sem isso a prosa volta a mandar parar, e um lote de 3 vira um de 1")
@@ -475,12 +475,12 @@ def test_command_contract(base):
     check("declara o teto e o default",
           "--max" in f and "3" in f)
     check("manda reconciliar com o quadro ANTES de montar o lote",
-          "cepa-plan reconcile" in f,
+          "cepa-queue reconcile" in f,
           "sem reconciliar, o lote executa item que alguém já fechou em outro "
           "lugar")
     # By position, not by string cut: `split("### 0.")[-1]` returns the
     # WHOLE text when the marker does not come before step 1, and the whole
-    # text cites `cepa-plan reconcile` in the introduction — the check passed by
+    # text cites `cepa-queue reconcile` in the introduction — the check passed by
     # accident in exactly the case it exists to catch (the proof gate
     # inverted the order of the two steps and saw this green).
     i0 = f.find("### 0.")
@@ -490,7 +490,7 @@ def test_command_contract(base):
           f"i0={i0} i1={i1}")
     check("e a reconciliação acontece DENTRO dele, antes de resolver a fila",
           i0 != -1 and i1 != -1 and i0 < i1
-          and "cepa-plan reconcile" in f[i0:i1],
+          and "cepa-queue reconcile" in f[i0:i1],
           "reconciliar DEPOIS de montar o lote não evita executar o que já "
           "fechou em outro lugar — a ordem dos passos é o comportamento")
     check("declara o `--offline` como a condição que desliga quadro",
@@ -534,7 +534,7 @@ def test_command_contract(base):
           "a tabela de desfechos terminais é o que impede status vestido de "
           "decisão")
     # The prose is the instruction; the hook is the net. Only the prose erodes with no test
-    # going red — the lesson recorded in cepa-plan itself.
+    # going red — the lesson recorded in cepa-queue itself.
     plugin = json.loads(
         (REPO / "common" / ".claude-plugin" / "plugin.json").read_text("utf-8"))
     bash = [b for b in plugin["hooks"]["PreToolUse"] if b.get("matcher") == "Bash"]
@@ -971,7 +971,7 @@ def test_finish_done_requires_the_validation_lead_verdict(base):
 
 
 def test_topologies_with_validation_match_the_agents(base):
-    """The cepa-plan list is a copy of what is on disk; without this
+    """The cepa-queue list is a copy of what is on disk; without this
     check, a new topology with a validation-lead would close without it."""
     import re as _re
     source = CEPA_PLAN.read_text(encoding="utf-8")
@@ -1005,7 +1005,7 @@ def test_card_moves_on_the_board_in_every_outcome(base):
     f = CMD.read_text(encoding="utf-8")
     i3, i4 = f.find("### 3."), f.find("### 4.")
     step3 = f[i3:i4] if -1 not in (i3, i4) else ""
-    ia = step3.find("cepa-plan start")
+    ia = step3.find("cepa-queue start")
     ib = step3.find("  b. ")
     reservation = " ".join((step3[ia:ib] if -1 not in (ia, ib) else "").split())
     check("a reserva move o card para in_progress antes de qualquer trabalho",

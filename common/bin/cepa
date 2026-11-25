@@ -121,6 +121,7 @@ show_help() {
   for _s in "$SCRIPT_DIR"/cepa-*; do
     [ -x "$_s" ] || continue
     _name="${_s##*/cepa-}"
+    [ "$_name" = "plan" ] && continue   # transition shim, not a command
     # Line 2 of a python script is `"""cepa-x — summary`; shell scripts
     # carry `# cepa-x — summary`. Anything else prints just the name.
     _desc=$(sed -n 2p "$_s" | sed -e 's/^"""//' -e 's/^# *//' -e "s/^cepa-$_name *[—-]* *//")
@@ -150,6 +151,7 @@ nearest_subcommand() {
   for _s in "$SCRIPT_DIR"/cepa-*; do
     [ -x "$_s" ] || continue
     _name="${_s##*/cepa-}"
+    [ "$_name" = "plan" ] && continue   # transition shim, not a command
     case "$_name" in "$1"*) printf '%s\n' "$_name"; return 0 ;; esac
     _d=$(awk -v a="$1" -v b="$_name" 'BEGIN{
       la=length(a); lb=length(b);
@@ -164,6 +166,16 @@ nearest_subcommand() {
   [ -n "$_best" ] && printf '%s\n' "$_best"
   return 0
 }
+
+# `cepa plan` became `cepa queue` (2026-11-24). Refused with the new name before
+# any dispatch, so nothing runs. (`common/bin/cepa-plan` still exists as a
+# transition shim for runs in flight; it is not a command and is skipped below.)
+if [ $# -ge 1 ]; then
+  if [ "$1" = "plan" ] || { [ $# -ge 2 ] && [ "$2" = "plan" ] && case "$1" in help|ajuda|subcommands|subcomandos|--help|-h) true ;; *) false ;; esac; }; then
+    printf '✗ cepa: plan is now queue (run: cepa queue ...)\n' >&2
+    exit 2
+  fi
+fi
 
 if [ $# -ge 1 ]; then
   case "$1" in

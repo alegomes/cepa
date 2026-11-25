@@ -30,7 +30,7 @@ answer is challenged once before being accepted; the accepted answer is
 written down in the same turn; and the document closes by the sieve, not by
 fatigue.
 
-The "where are we" of an Epic is not written into the file: `cepa-plan epics`
+The "where are we" of an Epic is not written into the file: `cepa-queue epics`
 derives it from the ladder plus the queues linked to each cycle (name
 `<name>-c<N>`, or a `--from-epic` source naming the Epic and the cycle), and
 `/common:whereami` and the session hook show it. Consequence: name each cycle's
@@ -77,19 +77,19 @@ and then resume from the first gap (step 3 gives the order): do not start over,
 and do not ask again a question that already has `- [x]`.
 
 **The veto walk (caminhada do veto).** Before the first gap and before the
-sieve, run `cepa-plan decisions docs/epics/<name>.md`. It numbers the lines of
+sieve, run `cepa-queue decisions docs/epics/<name>.md`. It numbers the lines of
 "Decided without asking (veto here)" and separates those with a verdict from
 those without. Walk only the ones without, one per turn, like the
 rest of this interview: show the decision with its number and ask the owner to
 keep it (`mantida`), veto it (`vetada`, with the reason) or refine it
 (`refinada`, with the new text). Record the answer in the same turn with
-`cepa-plan verdict docs/epics/<name>.md <n> mantida|vetada|refinada` (`vetada`
-needs `--reason`, `refinada` needs `--text`). Use the number exactly as `cepa-plan decisions` prints it (1-based over every
+`cepa-queue verdict docs/epics/<name>.md <n> mantida|vetada|refinada` (`vetada`
+needs `--reason`, `refinada` needs `--text`). Use the number exactly as `cepa-queue decisions` prints it (1-based over every
 decision of the section, decided ones included, so the numbers shown may skip):
 never renumber. Never write the `· mantida em` /
 `· vetada em` / `· refinada em` marker by hand: the date and the format come
 from the command. `Status` does not change by veto; a vetoed decision becomes
-an open question only if the owner says so in the same turn. If `cepa-plan
+an open question only if the owner says so in the same turn. If `cepa-queue
 verdict` prints "já virou código na fila" (the file is the `source:` of a
 derived queue), pass the warning on to the owner as it came. A skipped
 decision does not block: it stays without marker, the walk moves on, and the
@@ -118,7 +118,7 @@ are named, and you look for each by path:
 Write the paths you actually read, and that informed the Epic, on the
 `**Fontes lidas:**` line of the header: once, at skeleton time, updated when
 another file is read. Never a label suffix on a ladder cell or a heading,
-which `spec-readiness-gate` and `cepa-plan --from-epic` parse.
+which `spec-readiness-gate` and `cepa-queue --from-epic` parse.
 
 The good question is the one left over after reading. A question whose answer
 was in the repo teaches the owner that the interview is bureaucracy.
@@ -323,7 +323,7 @@ first cycle.
 `ready` says the Epic can be built; `**Status:** closed` says it is over, and
 over means someone went back and measured. When the owner runs
 `/common:epic <name>` again on a `ready` Epic whose cycles are all closed
-(`cepa-plan epics` says so), the only gap left is `## Impact`: ask for the
+(`cepa-queue epics` says so), the only gap left is `## Impact`: ask for the
 measured value, propose reading it from the **Source** the metric declared,
 and fill **Measured value:** (the number now, next to the Baseline and the
 Target) and **Measured on:** (the date and how it was read). Only then write
@@ -339,7 +339,7 @@ count in the final report too, as in step 5.
 The document is written in pt-BR. Keep the `## Value ladder`, `## Invariants`, `## Decided without asking`,
 `## Who it is for`, `## Outcome metric`, `## Out of scope` and `## Impact`
 headings, the `**Status:**` and `**Fontes lidas:**` labels and the ladder column names verbatim:
-`spec-readiness-gate` and `cepa-plan --from-epic` parse them (they also still
+`spec-readiness-gate` and `cepa-queue --from-epic` parse them (they also still
 read the old pt-BR names `pronta`, `rascunho`, `Escada de valor`,
 `Invariantes`, `Decidido sem perguntar`, `Roteiro`, `Efeito em tela`, `Efeito em
 backend` in Epics written before 2026-10-23, but you write only the new ones).

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""`cepa-plan validate` resolves a queue NAME at the main clone, not the current folder.
+"""`cepa-queue validate` resolves a queue NAME at the main clone, not the current folder.
 
 Run with `python3 tests/test_cepa_plan_validate_root.py`. Surface: the CLI
-`common/bin/cepa-plan`, called as a subprocess.
+`common/bin/cepa-queue`, called as a subprocess.
 
   - from a linked worktree, `validate <name>` finds the queue in the main clone;
   - a file path keeps working, even outside any git repository;
@@ -22,7 +22,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 
 FAILURES = []
 

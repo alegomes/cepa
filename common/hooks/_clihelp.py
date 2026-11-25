@@ -1,7 +1,7 @@
 """One help layout for `cepa` and every `cepa-*` command.
 
 Before this module each command wrote its own help: some had examples, some
-exit codes, some only argparse's default dump; `cepa plan help` was an error
+exit codes, some only argparse's default dump; `cepa queue help` was an error
 while `cepa doctor help` worked; Portuguese and English aliases were mixed in
 the same listing. `Parser` is an `argparse.ArgumentParser` that renders every
 help in the same order and the same look:
@@ -19,7 +19,7 @@ help in the same order and the same look:
 Rules it enforces, so no command has to remember them:
 
   * `help` as the first word is the same as `--help`, at every level
-    (`cepa plan help`, `cepa plan write help`); `-h`, `--help` and `help`
+    (`cepa queue help`, `cepa queue write help`); `-h`, `--help` and `help`
     print the same text and exit 0.
   * Only the first long name of each option is shown, and subcommand aliases
     are hidden: the old Portuguese names still work, the help shows one name.
@@ -345,6 +345,8 @@ def launcher_help(bin_dir):
         if not name.startswith("cepa-") or not os.access(path, os.X_OK):
             continue
         sub = name[len("cepa-"):]
+        if sub == "plan":  # transition shim for runs in flight, not a command
+            continue
         try:
             with open(path, encoding="utf-8") as fh:
                 fh.readline()
@@ -376,8 +378,8 @@ def launcher_help(bin_dir):
             ("cepa --mode construction", "open a session in construction mode"),
             ("cepa -s billing-api", "resume or create the session/billing-api worktree"),
             ("cepa --mode help", "what each work mode is for"),
-            ("cepa plan status", "run a subcommand"),
-            ("cepa help plan", "the help of one subcommand (same as cepa plan --help)"),
+            ("cepa queue status", "run a subcommand"),
+            ("cepa help queue", "the help of one subcommand (same as cepa queue --help)"),
             ("cepa --resume", "any other argument goes to claude"),
         ],
         exit_codes=[(0, "help printed, or the exit code of claude / the subcommand"),

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""`cepa-plan responde` converts the waiver PROPOSED by the agent into a waiver.
+"""`cepa-queue responde` converts the waiver PROPOSED by the agent into a waiver.
 
 Origin (BACKLOG.md § "Waiver recorded in the owner's name during an autonomous
 run", fb-20261014-3): in an autonomous run the agent records a proposal
 (`board-flow/bin/waivers.py` `propor`: `status: proposta`, `autor: null`, `fila`,
 `item`) and opens the human route on the item. Only the owner's `responde`, in a terminal,
-converts it. The `cepa-plan` conversion is an INLINE TWIN of `waivers.convert` /
+converts it. The `cepa-queue` conversion is an INLINE TWIN of `waivers.convert` /
 `waivers.decline` (it does not import the module); this test uses the real `waivers` to
 write the proposal and to read the result, so it proves the two agree
 on the file schema.

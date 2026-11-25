@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests of CS-1 of docs/spec/resposta-do-decide-vira-trabalho.md: opening an owner
-route (`cepa-plan finish --human-pending`, `cepa-plan reword-route`) also declares the
+route (`cepa-queue finish --human-pending`, `cepa-queue reword-route`) also declares the
 queue item each answer without return creates, or says `nenhum`. The answers without
 return are the "sim" of a route on a `done` item and the "não" of any route. Nothing is
 written on a refusal.
@@ -23,7 +23,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 FAILURES = []
 
 ROUTE = "calibrar o limite depende de você"
@@ -253,7 +253,7 @@ def test_reword_route_bad_title_is_refused_even_when_the_item_already_declares()
         r = reword(d, "--if-no-item", "Registrar o limite")
         check("declaração guardada antes", r.returncode == 0, r.stderr)
         before = queue_file(d).read_bytes()
-        for bad in ("Ver o commit 3fa9c21", "Editar o arquivo cepa-plan.py"):
+        for bad in ("Ver o commit 3fa9c21", "Editar o arquivo cepa-queue.py"):
             for extra in ((), ("--replace",)):
                 r = reword(d, *extra, "--if-no-item", bad)
                 check(f"título ruim {bad!r} {extra}: recusa (2)",
@@ -281,7 +281,7 @@ def test_supervisor_re_finish_keeps_the_declarations():
 
 
 def main():
-    print("cepa-plan: a rota declara o item de cada resposta sem retorno (CS-1)\n")
+    print("cepa-queue: a rota declara o item de cada resposta sem retorno (CS-1)\n")
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
             print(f"{name}:")
