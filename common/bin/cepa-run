@@ -169,7 +169,7 @@ group, `claude` runs in its own session and survives, the supervisor doesn't.
     held elsewhere (see docs/cepa-until.md).
   - `run_start` and the state record the supervisor's **pid and host**. The
     `cepa-run pending` (and through it `cepa-doctor` and
-    `/common:until-review`) points at the `rodando` run whose pid died, and at the
+    `/common:run-review`) points at the `rodando` run whose pid died, and at the
     `interrompido` one, with the full build that was missed.
   - **SIGTERM and Ctrl+C end the child** (the `claude` or build group):
     going on by itself, it would change the card with nobody to run the build
@@ -224,7 +224,7 @@ left out of the panel. The pre-read does not run in a `--all` run.
 
 ## After the end
 
-With the run over, a final `claude -p "/common:until-review <run>"` reads the
+With the run over, a final `claude -p "/common:run-review <run>"` reads the
 record and the subprocesses' output and writes `<run>.review.md` next to them: what
 the owner needs to do, in closed questions. It doesn't run when the run stopped on
 the quota (the analysis would hit the same ceiling) nor with `--no-analysis`; in both
@@ -988,7 +988,7 @@ def read_item(plan_path, ident):
 
 # CS-12: the cut the owner made (spec perguntar-antes-do-run, Q7). Every item's agent gets
 # it, because the route it would open is decided at its `finish`, not by the supervisor.
-# The flags are named as `cepa-queue finish`'s, so drain-plan never reads them as its own.
+# The flags are named as `cepa-queue finish`'s, so queue-run never reads them as its own.
 CUT_RULE = (
     "Closing rule for this item: a behavior choice you already committed on this branch "
     "is not a question for the owner. Record it with `cepa-queue finish ... --decision "
@@ -1016,7 +1016,7 @@ CUT_RULE = (
 def build_command(name, branch, permissions, session_id=None, note="", model=None):
     # stream-json is what carries the `rate_limit_event` with the quota usage. `--verbose`
     # is required by `claude` itself for that format with `-p`.
-    # `--na-branch` tells drain-plan that the tree it wakes up in IS the
+    # `--na-branch` tells queue-run that the tree it wakes up in IS the
     # night branch: no new worktree, commit straight onto it.
     request = f"/common:queue-run {name} --max 1"
     if branch:
@@ -2268,10 +2268,10 @@ def finish_item(name, repo, ident, status, evidence, impede=None, owner=None):
 # ── the end-of-run analysis ─────────────────────────────────────────────────
 
 def analyze_run(repo, tree, ledger, permissions):
-    """Runs `/common:until-review` over the run and writes `<run>.review.md`.
+    """Runs `/common:run-review` over the run and writes `<run>.review.md`.
     Returns (path, error)."""
     destination = ledger.with_suffix(".review.md")
-    cmd = ["claude", "-p", f"/common:until-review {ledger}",
+    cmd = ["claude", "-p", f"/common:run-review {ledger}",
            "--output-format", "text"]
     if not permissions:
         cmd.append("--dangerously-skip-permissions")
@@ -3426,7 +3426,7 @@ DECISIONS_BLOCK = re.compile(r"```json cepa-decisoes\s*\n(.*?)\n```", re.S)
 
 def analysis_decisions(text):
     """The ```json cepa-decisoes``` block at the end of `.review.md`: the question and the
-    recommendation that /common:until-review wrote for each pending item.
+    recommendation that /common:run-review wrote for each pending item.
     Used only to SHOW. With no block, or with broken JSON, returns {} and the
     command shows the item's evidence, which is what the agent recorded."""
     m = DECISIONS_BLOCK.search(text or "")
@@ -5468,11 +5468,11 @@ def ask_preferences(prefs, wait=None, question=None, first=1, of=None):
 
 def preference_note(ident, pref):
     """CS-6: the paragraph added to the request of the item's agent, or "" without a
-    preference. The supervisor and drain-plan read the same queue head, but the note
+    preference. The supervisor and queue-run read the same queue head, but the note
     still names the item, so a drain that reserved another one ignores it."""
     if not pref:
         return ""
-    # The note rides in drain-plan's arguments: a free-text "--offline" or "--max 9"
+    # The note rides in queue-run's arguments: a free-text "--offline" or "--max 9"
     # typed by the owner (or written by the reader) must not read as one of its flags.
     def flat(text):
         return re.sub(r"(?<!\S)-+", "", " ".join(str(text or "").split()))
@@ -7076,7 +7076,7 @@ def _main(argv=None):
         ],
         see_also=["cepa prove: the same supervisor for the Jira Review column",
                   "cepa run digest: the summary of a finished run",
-                  "/common:until-review: what the owner has to do from a run",
+                  "/common:run-review: what the owner has to do from a run",
                   "cepa queue: the queue this command runs"])
     ap.add_argument("queue", metavar="QUEUE", nargs="?",
                     help="queue name, as in .claude/queues/<name>/queue.yaml "
@@ -7146,7 +7146,7 @@ def _main(argv=None):
                     help="does not ask, at the launch, whether the run may merge by "
                          "itself when it ends clean (the answer is no)")
     ap.add_argument("--no-analysis", "--sem-analise", action="store_true", dest="no_analysis",
-                    help="skips /common:until-review at the end of the run")
+                    help="skips /common:run-review at the end of the run")
     ap.add_argument("--no-resume-on-answer", "--sem-retomar-na-resposta",
                     action="store_true", dest="no_resume_on_answer",
                     help="when the queue runs dry with items waiting on you, does "
@@ -7678,7 +7678,7 @@ def _main(argv=None):
                "segundos": round(time.monotonic() - launch_clock, 1)})
     # The run state, next to the `.jsonl` (C6): `rodando` now, and at the end
     # `esperando-dono` (there is an action or pending item) or `encerrado`. It is written BEFORE
-    # the model analysis, which may fail on the quota (C7); `/common:until-review`
+    # the model analysis, which may fail on the quota (C7); `/common:run-review`
     # comments on the same list, and `/common:next` and `/common:doctor` read it.
     state_path = ledger.parent / (ledger.stem + ".estado.json")
 
@@ -8971,17 +8971,17 @@ def _main(argv=None):
         return commit_records(ask_owner())
     if end_reason == "limite-de-uso":
         print("   analysis: not run (the run stopped on the quota) — run "
-              f"`/common:until-review {short_path(ledger, repo)}` once the quota "
+              f"`/common:run-review {short_path(ledger, repo)}` once the quota "
               "is back")
         log_event({"evento": "analise", "feita": False, "motivo": "cota"})
         return commit_records(ask_owner())
-    print("   analysis: running /common:until-review…")
+    print("   analysis: running /common:run-review…")
     review, review_error = analyze_run(repo, tree if tree.exists() else None,
                                       ledger, a.with_permissions)
     log_event({"evento": "analise", "feita": review is not None,
               "arquivo": str(review) if review else None, "erro": review_error})
     if not review:
-        print(f"   analysis: failed ({review_error}) — run `/common:until-review "
+        print(f"   analysis: failed ({review_error}) — run `/common:run-review "
               f"{short_path(ledger, repo)}` by hand")
     return commit_records(ask_owner(review), review)
 

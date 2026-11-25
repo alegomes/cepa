@@ -189,13 +189,10 @@ def test_command_contract(_base):
     check("o título é /common:queue-status", "# /common:queue-status" in t)
 
 
-def test_old_name_fila_is_deprecated_alias(_base):
-    t = (REPO / "common" / "commands" / "fila.md").read_text(encoding="utf-8")
-    check("/common:fila continua existindo como alias deprecado",
-          "# /common:fila (deprecated)" in t)
-    check("...e manda rodar /common:queue-status com os mesmos argumentos",
-          "/common:queue-status" in t and "$ARGUMENTS" in t)
-    check("...sem manter segunda cópia dos passos", "cepa-queue" not in t)
+def test_old_name_fila_is_gone(_base):
+    # CS-3 (reforma-de-nomes, Q5): no file stays behind under the old name.
+    check("/common:fila não existe mais como comando",
+          not (REPO / "common" / "commands" / "fila.md").exists())
 
 
 def test_one_item_in_full(base):
@@ -500,7 +497,7 @@ def main():
                    test_refuses_wave_plan,
                    test_from_inside_a_worktree_reads_the_main_clone,
                    test_command_contract,
-                   test_old_name_fila_is_deprecated_alias):
+                   test_old_name_fila_is_gone):
             print(f"\n{fn.__name__}")
             fn(base)
     print()

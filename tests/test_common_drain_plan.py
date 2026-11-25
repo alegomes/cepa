@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests of stage 3 of "one writer, three sources": /common:drain-plan.
+"""Tests of stage 3 of "one writer, three sources": /common:queue-run.
 
 Run with `python3 tests/test_common_drain_plan.py` (it only needs PyYAML).
 Two families, as in test_common_plan.py:
@@ -9,7 +9,7 @@ Two families, as in test_common_plan.py:
     (the reservation) and `finish` (the outcome). Each refusal here exists because
     the corresponding failure reorders the queue or erases debt in silence, which are
     the two things the document exists to prevent.
-  - PROSE CONTRACT of `common/commands/drain-plan.md`. The command is a
+  - PROSE CONTRACT of `common/commands/queue-run.md`. The command is a
     prompt; the only possible guard over an instruction is mechanical.
 
 What these tests do NOT prove: that the command executes an item well. That is the
@@ -33,7 +33,7 @@ except ImportError:
 
 REPO = Path(__file__).resolve().parent.parent
 CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
-CMD = REPO / "common" / "commands" / "drain-plan.md"
+CMD = REPO / "common" / "commands" / "queue-run.md"
 
 FAILURES = []
 
@@ -180,7 +180,7 @@ def test_deferring_an_item_defers_whoever_depends_on_it(base):
 
 
 def test_deferring_does_not_rewrite_the_recorded_order(base):
-    """Deferring is an execution decision. Reordering the document belongs to /common:plan —
+    """Deferring is an execution decision. Reordering the document belongs to /common:queue —
     an executor that touches the order is what the queue exists to prevent.
 
     Comparing only the CONTENT does not prove this: `write_body` is idempotent, so

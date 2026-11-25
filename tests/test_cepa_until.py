@@ -7,7 +7,7 @@ Run with `python3 tests/test_cepa_until.py` (it only needs PyYAML).
 
 The supervisor has a single responsibility: deciding WHEN to fire one more
 subprocess and when to stop. Everything that happens INSIDE the subprocess belongs to
-`/common:drain-plan` and the topology, and no test here touches that.
+`/common:queue-run` and the topology, and no test here touches that.
 
 So `claude` is replaced by a fake script on the PATH, which does what
 drain-plan would do with the plan (mark `done`, open `human_pending`, do

@@ -122,7 +122,7 @@ def build_run(tmp, n_rounds_in_log=2, extra_round_1=()):
            "itens": 2, "entregues": 1, "travados": 1}]
     ledger = until / "r.jsonl"
     ledger.write_text("\n".join(json.dumps(e) for e in ev) + "\n")
-    log = ("\n===== t · claude -p /common:drain-plan F --max 1\n"
+    log = ("\n===== t · claude -p /common:queue-run F --max 1\n"
            + build_round("RELATORIO A1 " + "x" * 50,
                     agents=["build-hex:engineering-lead",
                              "common:completion-auditor"],
@@ -131,7 +131,7 @@ def build_run(tmp, n_rounds_in_log=2, extra_round_1=()):
            + "\n===== t · verify · ./mvnw -B clean verify\n"
            + "\n".join(f"linha {i}" for i in range(40)) + "\nBUILD SUCCESS\n")
     if n_rounds_in_log >= 2:
-        log += ("\n===== t · claude -p /common:drain-plan F --max 1\n"
+        log += ("\n===== t · claude -p /common:queue-run F --max 1\n"
                 + build_round("RELATORIO A2 travou", cost=0.25))
     (until / "r.log").write_text(log)
     return ledger
@@ -487,6 +487,23 @@ def test_non_object_json_lines_are_skipped_like_invalid_json():
               p.returncode == clean.returncode, f"{p.returncode} vs {clean.returncode}")
         check("...mesmo stdout do registro sem essas linhas", p.stdout == clean.stdout,
               p.stdout[-500:])
+
+
+def test_analysis_round_is_not_counted_as_an_item_round_under_either_name():
+    # The record keeps the name it was written with (spec Q4): logs from before
+    # the rename carry `/common:until-review`, new ones `/common:run-review`.
+    for name in ("/common:until-review", "/common:run-review"):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = build_run(tmp)
+            log = ledger.with_suffix(".log")
+            log.write_text(log.read_text()
+                           + f"\n===== t · claude -p {name} {ledger}\n"
+                           + build_round("ANALISE DA RODADA", cost=0.1))
+            p = run_digest(ledger)
+            check(f"{name}: sai 0", p.returncode == 0, p.stderr)
+            check(f"{name}: a rodada de analise nao conta como rodada de item",
+                  "ATENÇÃO" not in p.stdout and "3 rodadas" not in p.stdout,
+                  p.stdout[:600])
 
 
 def test_missing_record_exits_2():

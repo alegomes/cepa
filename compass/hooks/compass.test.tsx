@@ -1270,7 +1270,7 @@ test('sem intenção, Épicos também vem antes de Filas', async ($, on) => {
   expect(texts.indexOf('Épicos')).toBeLessThan(texts.indexOf('Filas'))
 })
 
-// Queue with `source:` in the format that /common:plan --from-epic writes.
+// Queue with `source:` in the format that /common:queue --from-epic writes.
 const QUEUE_WITH_SOURCE = (source: string, status: string[]) =>
   QUEUE_YAML('single-track', status).replace('items:\n', `source: ${source}\nitems:\n`)
 

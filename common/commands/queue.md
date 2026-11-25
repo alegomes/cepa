@@ -6,8 +6,8 @@ interaction: conversational
 
 # /common:queue
 
-> Renamed from `/common:plan` on 2026-10-20; `/common:plan` remains as a
-> deprecated alias. A queue still sitting at `<main-root>/.claude/programs/<name>/plan.yaml`
+> Renamed from `plan` on 2026-10-20 (the old name no longer exists as a
+> slash command). A queue still sitting at `<main-root>/.claude/programs/<name>/plan.yaml`
 > is read and updated in place; `cepa-queue migrate --all` moves it to
 > `<main-root>/.claude/queues/<name>/queue.yaml`.
 
@@ -103,7 +103,7 @@ being dictated by hand. Asking for the order is the job, not the last resort.
 
 **Does not execute anything.** The command writes a file. The
 one who names the next step is `/common:next`; the one who executes in batch is
-`/common:drain-plan` (stage 3, built on 2026-08-25), in the order this queue
+`/common:queue-run` (stage 3, built on 2026-08-25), in the order this queue
 keeps.
 
 **The write is mechanical.** The one who validates, merges and writes is

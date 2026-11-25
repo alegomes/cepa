@@ -52,9 +52,9 @@ def test_normal_end_commits_queue_record_and_review():
     with tempfile.TemporaryDirectory() as tmp:
         root = _scenario(tmp)
         # The fake marks the item done and, when called as the end analysis
-        # (`/common:until-review <ledger>`), prints a review like the real one.
+        # (`/common:run-review <ledger>`), prints a review like the real one.
         binv = base.fake_claude(tmp, (
-            "if any('until-review' in a for a in ARGS):\n"
+            "if any('run-review' in a for a in ARGS):\n"
             "    print('# revisão do run\\n\\nnada pendente')\n"
             "else:\n"
             "    marca(primeiro_pendente(), status='done')"))
@@ -253,7 +253,7 @@ def _cs5_run(tmp, hook_body):
         hook.write_text(hook_body, encoding="utf-8")
         hook.chmod(0o755)
     binv = base.fake_claude(tmp, (
-        "if any('until-review' in a for a in ARGS):\n"
+        "if any('run-review' in a for a in ARGS):\n"
         "    print('# revisão do run\\n\\nnada pendente')\n"
         "else:\n"
         "    marca(primeiro_pendente(), status='done')"))
@@ -353,7 +353,7 @@ def _cs6_run(tmp, make_state):
         "    import subprocess\n"
         f"    return subprocess.run(['git', '-C', {str(root)!r}, *a],\n"
         "        capture_output=True, text=True, check=True).stdout\n"
-        "if any('until-review' in a for a in ARGS):\n"
+        "if any('run-review' in a for a in ARGS):\n"
         "    print('# revisão do run\\n\\nnada pendente')\n"
         + "".join("    " + l + "\n" for l in make_state.splitlines())
         + f"    open({str(snap)!r}, 'w').write(git('ls-files', '-s'))\n"
@@ -504,7 +504,7 @@ def test_cs6_detached_head_does_not_commit():
 # The fake `claude` for CS-3: a1 is worked and closed like in a normal run; a2
 # writes its pid mark and waits for `<tmp>/segue`, the window in which the test
 # sends the signal with the second item in flight. As the end analysis
-# (`/common:until-review`), it writes the same mark and waits too, so a signal
+# (`/common:run-review`), it writes the same mark and waits too, so a signal
 # can land after the run's final state.
 _WAITS_ON_A2 = (
     "segue = os.path.join(os.path.dirname(os.environ['FAKE_CHAMADAS']), 'segue')\n"
@@ -513,7 +513,7 @@ _WAITS_ON_A2 = (
     "    fim = time.time() + 60\n"
     "    while not os.path.exists(segue) and time.time() < fim:\n"
     "        time.sleep(0.1)\n"
-    "if any('until-review' in a for a in ARGS):\n"
+    "if any('run-review' in a for a in ARGS):\n"
     "    espera('analise')\n"
     "    print('# revisão do run')\n"
     "else:\n"

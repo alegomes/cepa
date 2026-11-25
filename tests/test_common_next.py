@@ -5,8 +5,8 @@ Run with `python3 tests/test_common_next.py` (needs nothing installed).
 
 Why it exists: the "the plan says / the board says" comparison lived only in the prose
 of this command. On 2026-08-28 it became `cepa-queue reconcile`, code with a test,
-precisely so the batch executor (/common:drain-plan) uses the SAME rule instead
-of a second copy that drifts. Only that the `drain-plan.md` side gained a contract
+precisely so the batch executor (/common:queue-run) uses the SAME rule instead
+of a second copy that drifts. Only that the `queue-run.md` side gained a contract
 test and this one did not: if someone rewrites this file to go back to
 eyeballing the comparison, the two commands diverge again and nothing goes red.
 The completeness auditor blocked commit b71a404 for exactly this gap.
@@ -43,7 +43,7 @@ def test_calls_the_comparator_instead_of_eyeballing():
     check("e a comparação passa pelo `cepa-queue reconcile`",
           "cepa-queue reconcile" in f,
           "sem isso a tabela plano × quadro volta a ser interpretada a cada "
-          "run, e o /common:drain-plan passa a usar uma regra diferente da "
+          "run, e o /common:queue-run passa a usar uma regra diferente da "
           "deste comando")
     check("o passo Sync grava pelo mesmo comparador, com --apply",
           "cepa-queue reconcile" in f and "--apply" in f,

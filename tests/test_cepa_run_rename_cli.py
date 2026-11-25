@@ -319,10 +319,12 @@ def test_a_live_supervisor_is_recognised_under_both_names():
         other.wait()
 
 
-def test_the_new_command_file_exists_and_points_at_drain_plan():
+def test_the_new_command_file_is_the_real_runner():
+    # CS-3: the transitional forwarder is gone; queue-run.md is the runner itself.
     text = QUEUE_RUN_CMD.read_text(encoding="utf-8")
-    assert text.startswith("---\n") and "/common:drain-plan" in text and "$ARGUMENTS" in text
-    assert (REPO / "common" / "commands" / "drain-plan.md").exists()
+    assert text.startswith("---\n") and "/common:queue-run" in text
+    assert "/common:drain-plan" not in text
+    assert not (REPO / "common" / "commands" / "drain-plan.md").exists()
 
 
 if __name__ == "__main__":

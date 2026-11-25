@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests of stages 1 and 2 of "one writer, three sources": /common:plan + cepa-queue.
+"""Tests of stages 1 and 2 of "one writer, three sources": /common:queue + cepa-queue.
 
 Run with `python3 tests/test_common_plan.py` (it only needs the PyYAML that the
 script itself uses). Two families, on purpose:
@@ -149,7 +149,7 @@ def test_collision_with_waves(base):
     """The mirror of maestro-programs --check-name, from the other side.
 
     The two planners write to the SAME directory and the name is a free choice of
-    whoever calls; without this refusal, `/common:plan WEGO-paralelo` erases the waves —
+    whoever calls; without this refusal, `/common:queue WEGO-paralelo` erases the waves —
     surface, acceptance and fork point of each slice — without a word.
     """
     d = git_repo(base, "colisao")

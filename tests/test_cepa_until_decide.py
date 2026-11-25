@@ -952,8 +952,8 @@ def test_agent_instructions_ask_for_the_question():
     """AC6: without these lines, the agent goes back to blocking an item without a question and the
     analysis goes back to not recording the block the terminal reads."""
     commands = CEPA_UNTIL.parent.parent / "commands"
-    review = (commands / "until-review.md").read_text(encoding="utf-8")
-    drain = (commands / "drain-plan.md").read_text(encoding="utf-8")
+    review = (commands / "run-review.md").read_text(encoding="utf-8")
+    drain = (commands / "queue-run.md").read_text(encoding="utf-8")
     check("until-review manda gravar o bloco cepa-decisoes",
           "```json cepa-decisoes" in review, "")
     check("...cobrindo todos os adiados da fila, pelo queue",
@@ -966,16 +966,16 @@ def test_agent_instructions_ask_for_the_question():
                         "finish", "--help"], capture_output=True, text=True,
                        timeout=30)
     help_ = " ".join(p.stdout.split())
-    for given_name, plain_text in (("until-review", review), ("drain-plan", drain),
+    for given_name, plain_text in (("run-review", review), ("queue-run", drain),
                         ("cepa-queue finish --help", help_)):
         plain_text = " ".join(plain_text.replace("**", "").split())
         # The commands and cepa-queue's help were translated to English.
         sentences = {
-            "drain-plan": ("Up to 25 words", "without a branch name",
+            "queue-run": ("Up to 25 words", "without a branch name",
                            "the item goes back to the queue"),
             # the terminal menu is printed in pt-BR by cepa-until and the
             # command quotes it literally.
-            "until-review": ("Up to 25 words", "no branch name",
+            "run-review": ("Up to 25 words", "no branch name",
                              "volta para a fila"),
         }.get(given_name, ("25 words", "no branch, class or file name",
                            "the item returns to the queue"))
@@ -992,7 +992,7 @@ def test_agent_instructions_ask_for_the_question():
 
 
 REVIEW_WITH_BLOCK = (
-    "if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+    "if ARGS and ARGS[1].startswith('/common:run-review'):\n"
     "    print('RELATORIO')\n"
     "    print('```json cepa-decisoes')\n"
     "    print(json.dumps({'itens': [{'id': 'a1', 'pergunta': "
@@ -1026,7 +1026,7 @@ def test_end_stopped_by_quota_also_asks():
         stuck["evidence"] = "sem produção"
         stuck["owner_question"] = "Fecho o card?"
         root = build_repo(tmp, [stuck, item("a2")])
-        body = ("if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+        body = ("if ARGS and ARGS[1].startswith('/common:run-review'):\n"
                  "    sys.exit(0)\n"
                  "print(json.dumps({'type': 'result', 'result': "
                  "\"You've hit your session limit\"}))\n")

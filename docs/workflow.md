@@ -13,7 +13,7 @@ flowchart TB
     triage["<b>/board-flow:triage</b><br/>cards already in Jira"]
     queue["<b>/common:queue</b><br/>writes the queue"]
     next["<b>/common:next</b><br/>names the next step"]
-    exec["<b>/common:drain-plan</b> with you in the session<br/>or <b>cepa-until</b> with nobody watching"]
+    exec["<b>/common:queue-run</b> with you in the session<br/>or <b>cepa-until</b> with nobody watching"]
     answer["You answer what is left pending"]
     check["You check the result"]
     more{"Does the Epic have another cycle?"}
@@ -69,7 +69,7 @@ Before generating the queue from an Epic or a spec, settle the decisions the age
 
 | You want to | Command | How it works |
 |---|---|---|
-| Stay with it | `/common:drain-plan <queue>` | Runs a few items in a row in the open session (`--max`, 3 by default) |
+| Stay with it | `/common:queue-run <queue>` | Runs a few items in a row in the open session (`--max`, 3 by default) |
 | Leave it running alone | `cepa-until <queue> --for 8h` or `--until 07:00`, in the terminal | Opens a new session for each item until the time runs out, and proves each change |
 | Do one specific item | `/board-flow:execute <CARD>` | Runs one Jira card from start to finish |
 

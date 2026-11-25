@@ -22,7 +22,7 @@ This script picks what to read MECHANICALLY, and says what it picked:
   - for each full supervisor build, the tail of the output;
   - the CURRENT `status` and `evidence` of each touched item, read from the plan.
 
-Whoever interprets is `/common:until-review`. This script does not opine.
+Whoever interprets is `/common:run-review`. This script does not opine.
 
 Usage:
     cepa run digest .claude/programs/WEGO/until/2026-09-23-1826.jsonl
@@ -35,6 +35,10 @@ import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
+
+# The analysis round's command as a log header can carry; the second is the name
+# records written before the rename carry (names on disk do not change).
+REVIEW_COMMANDS = ("/common:run-review", "/common:until-review")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 # The plugin's own PyYAML copy goes FIRST so it wins over any installed one.
@@ -77,7 +81,7 @@ SIGNAL_EXCERPT = 160
 # Each signal comes out with WHO (the agent whose call or report brought it) and
 # a literal excerpt. This script does not judge: a `--detach` worktree of the
 # proof-reviewer for perturbation is allowed (and is annotated as such), and
-# /common:until-review decides.
+# /common:run-review decides.
 TEXT_SIGNALS = [
     ("worktree descartável relatada",
      re.compile(r"worktree\s+descart[aá]vel|c[oó]pia\s+descart[aá]vel"
@@ -344,7 +348,7 @@ def build_digest(ledger, result_max):
     # a round and not a build.
     own = (" · verify · ", " · reinstall · ", " · rollback · ")
     rounds = [s for s in log_segments(log) if not any(m in s[0] for m in own)
-              and "/common:until-review" not in s[0]]
+              and not any(c in s[0] for c in REVIEW_COMMANDS)]
     builds = [s for s in log_segments(log) if " · verify · " in s[0]]
     starts = [e for e in events if e.get("evento") == "item_start"]
     ends = [e for e in events if e.get("evento") == "item_end"]
@@ -517,7 +521,7 @@ def main(argv=None):
             "  - the tail of each full build the supervisor ran\n"
             "  - the CURRENT status and evidence of each touched item, read from the queue\n"
             "\n"
-            "/common:until-review interprets it. This command has no opinion."),
+            "/common:run-review interprets it. This command has no opinion."),
         examples=[
             ("cepa run digest .claude/queues/wego/until/<run>.jsonl",
              "the digest of one run"),
@@ -529,7 +533,7 @@ def main(argv=None):
             (2, "invalid usage (also with no arguments), or the record does not exist"),
         ],
         see_also=["cepa run: writes the record this command reads",
-                  "/common:until-review: reads this digest and says what to do"])
+                  "/common:run-review: reads this digest and says what to do"])
     ap.add_argument("ledger", metavar="LEDGER",
                     help="the <run>.jsonl that cepa run wrote (the .log next to it "
                          "is read too)")

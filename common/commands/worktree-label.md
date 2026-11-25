@@ -13,7 +13,7 @@ for git, useless for memory. This attaches a free-text **note of purpose** to a
 session worktree, surfaced in the SessionStart reminder and `/common:worktree-list`
 so you always know what each parallel window is *for*.
 
-Unlike `/common:worktree-name`, this does **not** rename the branch — the note is
+Unlike `/common:worktree-rename`, this does **not** rename the branch — the note is
 a full phrase, lives in the branch's git description, survives session end, and is
 removed automatically when the branch is merged or discarded. Read it any time;
 set it whenever you know the purpose (the wrap-up nudge will also offer).

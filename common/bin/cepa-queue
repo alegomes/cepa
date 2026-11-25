@@ -90,10 +90,10 @@ Subcommands:
       becomes `human_gate: "open: <rota>"` in the slice, which is what cepa-dor
       fails until someone decides. Exit 3 = the plan is a waves plan (nothing
       to promote); 4 = D7 floor (< 4 demands) — below it the fork loses to
-      /common:drain-plan, which executes the same queue with no worktree at all.
+      /common:queue-run, which executes the same queue with no worktree at all.
 
   cepa-queue queue <nome> [--max N] [--repo DIR] [--json]
-      The items `/common:drain-plan` can execute NOW, in queue order, and the
+      The items `/common:queue-run` can execute NOW, in queue order, and the
       reason the batch stops where it stops. It does not execute and writes
       nothing. Walks the list from the start and stops at the first thing it
       cannot resolve by itself — an open `human_pending`, an item blocked by
@@ -1420,7 +1420,7 @@ def cmd_from_triage(path, as_json=True):
     print(json.dumps(items, ensure_ascii=False, indent=2) if as_json else items)
     return 0
 
-# ── the batch: what /common:drain-plan can execute NOW ───────────────────────
+# ── the batch: what /common:queue-run can execute NOW ───────────────────────
 
 # What STOPS the batch. `human_pending`, `in_progress` and `blocked-before`
 # left here: all three DEFER the item and let the following ones run.
@@ -3117,7 +3117,7 @@ def cmd_promote(root, name, as_json, when):
                    if not demands else
                    f"só {len(demands)} demanda(s) — o piso D7 é {DEMAND_FLOOR}")
         print(f"PISO NÃO ATINGIDO: {detail}. Abaixo dele o fork perde para "
-              "executar a mesma fila em série: /common:drain-plan "
+              "executar a mesma fila em série: /common:queue-run "
               f"{name}.", file=sys.stderr)
         return 4
     return 0
@@ -4613,7 +4613,7 @@ def cmd_add(root, name, ident, a):
 # reconcile without becoming a second reconciler with the rule rewritten, and
 # the rule itself had no test — a `.md` proves the command PROMISES, never that
 # an execution kept the promise. Here the comparison is code, and the callers are
-# both `/common:next --sync` and `/common:drain-plan` before assembling the batch.
+# both `/common:next --sync` and `/common:queue-run` before assembling the batch.
 #
 # Jira access is NOT here: whoever talks to Jira is `atlassian-expert`, the
 # only agent with the tools. The command delegates the read, saves the result in
@@ -4770,7 +4770,7 @@ def reconcile(items, board, missing_keys, role_of):
 # never speaks to Jira, so nothing moved those cards afterwards. On
 # 2026-11-03 eleven WEGO cards sat in Review with PROVEN proof, complete
 # acceptance and code on main since the landing (fb-20261103-1). This lists
-# them; step 0 of /common:drain-plan sends them to Done through
+# them; step 0 of /common:queue-run sends them to Done through
 # atlassian-expert, the same auto-advance `/board-flow:prove` applies when
 # `defaults.status_map.done` is set.
 
@@ -4932,7 +4932,7 @@ def cmd_reconcile(root, name, filename, config, apply_changes, as_json):
 # ── order: the queue order applied to a list of Jira keys ────────────────────
 #
 # A2: until now /board-flow:drain ordered by Jira rank and
-# /common:drain-plan / /common:next by the queue — raising a card's priority
+# /common:queue-run / /common:next by the queue — raising a card's priority
 # in Jira changed nothing in the plan. This subcommand gives drain the SAME
 # order the queue already uses, without drain having to read the YAML itself.
 
@@ -6171,7 +6171,7 @@ def main(argv=None):
             "the ORDER of the items and the WHY of each position, which is what a\n"
             "tracker loses. This script is its mechanical writer: it validates,\n"
             "resolves the right root, refuses collisions and writes. /common:queue\n"
-            "drives the conversation; /common:drain-plan and cepa run execute;\n"
+            "drives the conversation; /common:queue-run and cepa run execute;\n"
             "/common:next and /common:queue-status read.\n"
             "\n"
             "It knows only `mode: single-track`. A wave plan is another document,\n"
@@ -6203,7 +6203,7 @@ def main(argv=None):
         ],
         see_also=["/common:queue: the conversation that calls `cepa queue write`",
                   "/common:next: names the next step from the queue",
-                  "/common:drain-plan: runs the queue in batch"])
+                  "/common:queue-run: runs the queue in batch"])
     sub = ap.add_subparsers(dest="cmd")
 
     mg = sub.add_parser(
@@ -6319,7 +6319,7 @@ def main(argv=None):
     q = sub.add_parser(
         "queue", help="lists the items the batch may execute now, and where it stops",
         description=(
-            "The items /common:drain-plan can execute NOW, in queue order. Does not\n"
+            "The items /common:queue-run can execute NOW, in queue order. Does not\n"
             "execute and writes nothing. Walks the list from the start and stops at\n"
             "the first thing it cannot resolve by itself: an open `human_pending`, an\n"
             "item blocked by something that is not in the batch, an item already\n"
@@ -6544,14 +6544,14 @@ def main(argv=None):
             "session, `blocked` is stuck on an outside condition, `done`/`dropped`\n"
             "already left. An open `human_pending` becomes `human_gate: \"open:\n"
             "<route>\"` in the slice, which cepa dor fails until someone decides.\n"
-            "Below 4 demands the fork loses to /common:drain-plan."),
+            "Below 4 demands the fork loses to /common:queue-run."),
         examples=[("cepa queue promote wego", "what can become a slice, and why not"),
                   ("cepa queue promote wego --json --when 2026-11-05",
                    "for program-plan, with the date to record")],
         exit_codes=[(0, "demands listed"),
                     (2, f"invalid usage, {not_git}, {no_queue}, invalid queue"),
                     (3, "the plan is a waves plan (nothing to promote)"),
-                    (4, "fewer than 4 demands: run /common:drain-plan instead")])
+                    (4, "fewer than 4 demands: run /common:queue-run instead")])
     pr.add_argument("name", metavar="name", help="queue name")
     pr.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
     pr.add_argument("--json", action="store_true", dest="as_json", help=json_help)

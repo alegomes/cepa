@@ -89,7 +89,7 @@ vocabulary of [how-it-fits.md](how-it-fits.md). Every reader (`cepa-queue`,
 one wins when a name exists in both. `cepa-queue migrate --all` moves the
 existing queues (the whole folder, `until/` included, in one commit). Wave
 plans of `/maestro:program-plan` are not queues and stay in
-`.claude/programs/<name>/plan.yaml`. `/common:plan` is a deprecated alias of
+`.claude/programs/<name>/plan.yaml`. The command that writes it was renamed
 `/common:queue`. Inside a
 linked worktree that resolves to the MAIN clone, not to the current tree;
 anywhere else it is the same thing as `git rev-parse --show-toplevel`. Every
@@ -147,7 +147,7 @@ The queue answers the question only if something asks it. Three moments do:
 | The order is being decided | [`/common:queue`](commands.md) | The single writer of the queue. From a spec, from a board (`--from-jira`, where [`/board-flow:triage`](commands.md) grooms the column by code evidence and hands back the order), or dictated by hand |
 | A card closes | `/board-flow:execute` · `/fix` · `/prove` | Close with **"And now?"** — the human route verbatim + the next unblocked item |
 | Mid-session, thread lost | [`/common:next`](commands.md) | Reconciles against the tracker (if any) and names **one** next step |
-| Several items are ready to run | [`/common:drain-plan`](commands.md) | Executes the queue **in its own order**, stopping at the first item it cannot resolve on its own |
+| Several items are ready to run | [`/common:queue-run`](commands.md) | Executes the queue **in its own order**, stopping at the first item it cannot resolve on its own |
 
 ### Writing it: `/common:queue`
 
@@ -293,7 +293,7 @@ into items. The same lesson as stage 1 decided the shape: the rules that say
 which bucket becomes a `pending` item (only `ready`; `implemented` belongs to
 the proof queue, `needs-refinement` stays in the backlog, `obsolete` is kept as
 `dropped` with its reason) were prose in `triage.md`, provable only by grepping
-the prose. **Stage 3 is built** (2026-08-25): `/common:drain-plan <name>` executes the
+the prose. **Stage 3 is built** (2026-08-25): `/common:queue-run <name>` executes the
 queue in the order the queue keeps. Until then the only bulk executor was
 `/board-flow:drain`, whose source is the board column ordered by `priority and
 rank` — precisely the order this document exists to replace — so the owner wrote
@@ -346,7 +346,7 @@ cannot fork in the same wave even with disjoint surfaces, and excluding a
 blocker cascades to whoever depended on it), and **what happens to an open
 `human_pending`** (it becomes `human_gate: "open: …"`, which the intake gate
 refuses until somebody decides, instead of vanishing). Below the D7 floor of 4
-demands it stops and points at `/common:drain-plan`, which runs the same queue
+demands it stops and points at `/common:queue-run`, which runs the same queue
 in series with no worktree at all. Promoting never writes to the queue: the
 items stay `pending` there, and the residual risk — the same item now having
 two possible executors — is said out loud rather than designed away.

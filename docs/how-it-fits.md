@@ -22,7 +22,7 @@ stop). Inboxes feed the queue; nothing runs from an inbox.
 | **hook** | A script Claude Code runs before or after an action, which can refuse it. The lock. The model cannot argue with a hook. |
 | **Epic** | A package of work worth a demonstration, written as `docs/epics/<name>.md` by `/common:epic`. It lists invariants that never regress and a ladder of cycles. |
 | **cycle** | One rung of an Epic's ladder. It closes when its demonstration script runs on screen and in the backend. Weeks long; crosses many sessions. `/common:queue --from-epic --cycle N` turns it into a queue. |
-| **queue** | The ordered list of items for one slice of work, with the reason each item sits where it sits. Stored as `.claude/queues/<name>/queue.yaml`; written only by `/common:queue`; read by `/common:next`, `/common:queue-status`, `/common:drain-plan` and `cepa-until`. See [execution-plan.md](execution-plan.md). |
+| **queue** | The ordered list of items for one slice of work, with the reason each item sits where it sits. Stored as `.claude/queues/<name>/queue.yaml`; written only by `/common:queue`; read by `/common:next`, `/common:queue-status`, `/common:queue-run` and `cepa-until`. See [execution-plan.md](execution-plan.md). |
 | **item** | One line of a queue: `id`, `title`, `why`, `status`, `blocked_by`, `human_pending`, `evidence`. |
 | **card** | An item's mirror on the Jira board, in repos that have `board-flow.yaml`. The board keeps the status; it keeps neither the order nor the why. |
 | **session** | One Claude Code open on the repo. Interactive (`claude` or `cepa`) or unattended (`cepa-until`). It may work zero, one or several items, or write an Epic, or only investigate. |

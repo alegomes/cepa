@@ -2,7 +2,7 @@
 """CS-6 of cycle 1 of the Cepa in a spiral Epic: a cycle's queue comes out of the Epic.
 
 Run with `python3 tests/test_cepa_plan_from_epic.py`. Surface: the CLI
-`common/bin/cepa-queue`, called as a subprocess — what `/common:plan
+`common/bin/cepa-queue`, called as a subprocess — what `/common:queue
 --from-epic` tells to run.
 
 What these tests charge:

@@ -45,7 +45,7 @@ Rules:
   - `--purpose` requires `--reason`. `--plan` resets the cursor (step 1) and
     stores the previous plan in the history (`previous_plan`, items joined by " | ").
   - Plan items contain no ':'; a plan has 1 to PLAN_MAX items (more than that
-    is a program: `plan.yaml` / `/common:plan`). Refusal = nothing is written.
+    is a program: `plan.yaml` / `/common:queue`). Refusal = nothing is written.
   - `continue` is the "I'll continue" answer to the question the `session-mode.py`
     hook asks when the intent was written by another session (decision D1): it
     swaps only `session_id` and `branch` for the current ones. Purpose, plan,
@@ -148,7 +148,7 @@ def validate_plan(items):
     items = [i.strip() for i in items]
     if not 1 <= len(items) <= M.PLAN_MAX:
         refuse(f"o plano tem {len(items)} itens; aceito de 1 a {M.PLAN_MAX}. "
-               "Mais que isso é programa: use plan.yaml (/common:plan).")
+               "Mais que isso é programa: use plan.yaml (/common:queue).")
     for i in items:
         if not i:
             refuse("item de plano vazio.")

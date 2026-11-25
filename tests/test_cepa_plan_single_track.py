@@ -90,7 +90,7 @@ def test_add_refuses_missing_queue(base):
     d = git_repo(base, "add-sem-fila")
     r = run(d, "add", "fila", "X", "--title", "x", "--repo", ".")
     check("recusa: fila não existe", r.returncode == 2, r.stdout)
-    check("a recusa aponta o /common:plan como quem cria a fila",
+    check("a recusa aponta o /common:queue como quem cria a fila",
           "/common:queue" in r.stderr, r.stderr)
 
 

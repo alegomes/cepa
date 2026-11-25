@@ -186,8 +186,8 @@ def test_aliases_do_not_diverge_from_session_md():
     for alias_name, target in from_hook.items():
         check(f"apelido {alias_name} está no session.md apontando para {target}",
               from_md.get(alias_name) == target, f"session.md diz {from_md.get(alias_name)!r}")
-    check("drain-plan é um apelido do hook",
-          from_hook.get("drain-plan") == "common:drain-plan", f"{from_hook.get('drain-plan')!r}")
+    check("queue-run é um apelido do hook",
+          from_hook.get("queue-run") == "common:queue-run", f"{from_hook.get('queue-run')!r}")
 
 
 def main():

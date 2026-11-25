@@ -409,18 +409,16 @@ def test_cepa_plan_check_name_sees_legacy_wave(d):
 
 # ── (i) the command ──────────────────────────────────────────────────────────
 
-def test_queue_command_exists_and_plan_is_alias():
+def test_queue_command_exists_and_plan_is_gone():
     q = REPO / "common" / "commands" / "queue.md"
     p = REPO / "common" / "commands" / "plan.md"
-    assert q.is_file() and p.is_file()
-    qt, pt = q.read_text(encoding="utf-8"), p.read_text(encoding="utf-8")
+    assert q.is_file() and not p.exists(), "CS-3: no file stays behind under the old name"
+    qt = q.read_text(encoding="utf-8")
     assert qt.splitlines()[0] == "---" and "# /common:queue" in qt
     assert "/common:plan" not in qt.split("## Purpose")[1], \
         "o corpo do /common:queue não pode mandar o leitor de volta ao nome velho"
-    assert "/common:queue" in pt and "renamed" in pt.lower()
-    assert len(pt.splitlines()) < 30, "o alias é curto; os passos moram no queue.md"
     cat = (REPO / "docs" / "commands.md").read_text(encoding="utf-8")
-    assert "| `/common:queue` |" in cat and "| `/common:plan` |" in cat
+    assert "| `/common:queue` |" in cat and "| `/common:plan` |" not in cat
 
 
 def test_doctor_warns_name_in_both_layouts_and_suggests_migrating():

@@ -16,7 +16,7 @@ cepa-until my-queue --for 3h --dry-run     # prints the schedule of the run, exe
 
 ## Why it exists
 
-The three bulk executors (`/board-flow:drain`, `/common:drain-plan`,
+The three bulk executors (`/board-flow:drain`, `/common:queue-run`,
 `/board-flow:prove-drain`) are limited by **count**: `--max N`. Count is the wrong unit for
 using idle time. You don't know how many items fit in a night. You know how many hours you
 have.
@@ -28,7 +28,7 @@ person typing `/common:autonomous-resume`. At 3 a.m. nobody types.
 So the design is **one item per subprocess**. The supervisor launches
 
 ```sh
-claude -p "/common:drain-plan <queue> --max 1"
+claude -p "/common:queue-run <queue> --max 1"
 ```
 
 once per item, in a new process every time. A full context window stops being a failure and
@@ -38,7 +38,7 @@ window. That is what makes 12 hours possible.
 ## What it does not do, on purpose
 
 It does not reserve items, record outcomes, know the topology or know what a card is.
-`/common:drain-plan` and `cepa-queue` do that, with a state machine that already exists and is
+`/common:queue-run` and `cepa-queue` do that, with a state machine that already exists and is
 tested:
 
 - `cepa-queue start` reserves the item and **signs** the reservation (session, pid, host).
@@ -171,7 +171,7 @@ so it shows what is still open. On a terminal, between them, `cepa-until` asks t
 every deferred item that only the owner unblocks
 (`blocked` from an outside condition, open `human_pending` route). Each item shows the closed
 question the agent recorded with `cepa-queue finish --question` (or the one the
-`/common:until-review` analysis wrote in its `cepa-decisoes` block), with the recommendation.
+`/common:run-review` analysis wrote in its `cepa-decisoes` block), with the recommendation.
 Each item is one block, with the full title, then labelled lines: why it stopped, the task left
 to the owner, the analysis' `contexto` (lay words), the question, and `instrucao` (the technical
 instruction the next run receives if the answer is yes, recorded together with the yes). A
@@ -274,7 +274,7 @@ no build, so no reinstall: only the warning above. With less than 120 s left in 
 
 ## Quem lê o estado: `_state.py` (DUR-4)
 
-O estado vive em cinco depósitos, e só neles: a fila (`queue.yaml`, ou `plan.yaml` no layout legado), o registro do run (`until/<run>.jsonl` e `<run>.estado.json`), o handoff por branch, as sessões vivas (`.claude/sessions/`) e o estado do modo autônomo (`docs/autonomous/<run>/state.yaml`). O módulo `common/hooks/_state.py` é o leitor único deles (só lê, nunca cria depósito) e traz o catálogo de tudo o que existe em `.claude/`. `next` (via `cepa-queue`), `doctor` (`cepa-doctor`), `until-review` (`cepa-until-digest`) e `whereami` (`cepa-intent`) importam o módulo. O `cepa-doctor` avisa na área `estado` quando aparece em `.claude/` uma entrada que o catálogo não conhece, e `tests/test_state_deposits.py` fica vermelho se alguém escrever em `.claude/<nome>` sem declarar o nome. A regra de vida de um run é uma só (`run_liveness`): `rodando` só conta como vivo com heartbeat recente (até `CEPA_HEARTBEAT_ORFA` segundos, padrão 900) e, na mesma máquina, com o pid respondendo; heartbeat velho é `morto`, e um registro `rodando` sem heartbeat (anterior ao DUR-1) é `desconhecido`, nunca `vivo`. O `cepa until pendentes` ainda tem a sua própria classificação de "mortos" (pid e prazo) e não usa essa regra.
+O estado vive em cinco depósitos, e só neles: a fila (`queue.yaml`, ou `plan.yaml` no layout legado), o registro do run (`until/<run>.jsonl` e `<run>.estado.json`), o handoff por branch, as sessões vivas (`.claude/sessions/`) e o estado do modo autônomo (`docs/autonomous/<run>/state.yaml`). O módulo `common/hooks/_state.py` é o leitor único deles (só lê, nunca cria depósito) e traz o catálogo de tudo o que existe em `.claude/`. `next` (via `cepa-queue`), `doctor` (`cepa-doctor`), `run-review` (`cepa-until-digest`) e `whereami` (`cepa-intent`) importam o módulo. O `cepa-doctor` avisa na área `estado` quando aparece em `.claude/` uma entrada que o catálogo não conhece, e `tests/test_state_deposits.py` fica vermelho se alguém escrever em `.claude/<nome>` sem declarar o nome. A regra de vida de um run é uma só (`run_liveness`): `rodando` só conta como vivo com heartbeat recente (até `CEPA_HEARTBEAT_ORFA` segundos, padrão 900) e, na mesma máquina, com o pid respondendo; heartbeat velho é `morto`, e um registro `rodando` sem heartbeat (anterior ao DUR-1) é `desconhecido`, nunca `vivo`. O `cepa until pendentes` ainda tem a sua própria classificação de "mortos" (pid e prazo) e não usa essa regra.
 
 ## Before you leave it running
 

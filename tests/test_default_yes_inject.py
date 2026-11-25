@@ -100,9 +100,9 @@ def test_session_follows_the_target():
     rc, ctx = run("/common:session prove-drain --max 5")
     check("session + rotina injeta", rc == 0 and "board-flow:prove-drain" in ctx,
           f"rc={rc} ctx={ctx[:150]!r}")
-    rc, ctx = run("/common:session drain-plan wego --max 2")
-    check("session + apelido drain-plan injeta",
-          rc == 0 and "common:drain-plan" in ctx, f"rc={rc} ctx={ctx[:150]!r}")
+    rc, ctx = run("/common:session queue-run wego --max 2")
+    check("session + apelido queue-run injeta",
+          rc == 0 and "common:queue-run" in ctx, f"rc={rc} ctx={ctx[:150]!r}")
     rc, ctx = run("/common:session common:spec uma ideia")
     check("session + conversacional não injeta", rc == 0 and ctx == "",
           f"rc={rc} ctx={ctx[:150]!r}")
@@ -149,16 +149,12 @@ def test_every_command_declares_interaction():
     check("todo comando declara interaction válido", not missing, str(missing))
 
 
-def test_queue_run_gets_the_same_injection_as_drain_plan():
+def test_queue_run_gets_the_unattended_injection():
     """The supervisor dispatches `/common:queue-run`; it must be as autonomous as
     `/common:drain-plan` was (queue-run.md has to be `interaction: routine`)."""
-    rc_old, ctx_old = run("/common:drain-plan x --max 1")
     rc_new, ctx_new = run("/common:queue-run x --max 1")
-    check("drain-plan injeta (referência)", rc_old == 0 and "default-yes" in ctx_old,
-          f"rc={rc_old} ctx={ctx_old[:120]!r}")
-    check("queue-run injeta a mesma politica que drain-plan",
-          rc_new == 0 and "default-yes" in ctx_new
-          and ctx_new == ctx_old.replace("common:drain-plan", "common:queue-run"),
+    check("queue-run injeta a politica default-yes",
+          rc_new == 0 and "default-yes" in ctx_new,
           f"rc={rc_new} ctx={ctx_new[:150]!r}")
 
 

@@ -9,7 +9,7 @@ prove-ui, decide) vanished from the catalog without any test flickering, because
 related the `*/commands/*.md` files to the doc's tables. Fixing the
 list by hand fixes today's symptom; this test prevents tomorrow's. In the
 check of 2026-09-25 three others were already out (the two build-solo
-flows and /common:until-review) — the symptom comes back on its own.
+flows and /common:run-review) — the symptom comes back on its own.
 
 The published name comes from the `name` in `.claude-plugin/plugin.json`, not from the
 folder name: the `docs-topology/` folder publishes `/docs:*`.
@@ -92,7 +92,7 @@ def main():
     # The test has to be able to go red: removing a line accuses it,
     # a prefix is not worth the whole command (/common:plan does not cover
     # /common:plan-x) and a mention outside a table is not worth the line.
-    target = "/common:until-review"
+    target = "/common:run-review"
     without_line = "\n".join(l for l in text.splitlines() if target not in l)
     check("tirar a linha de um comando faz ele faltar",
           lacking([target], without_line) == [target])

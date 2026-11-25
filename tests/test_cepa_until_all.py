@@ -181,7 +181,7 @@ def test_neither_queue_nor_all_is_refused():
         check("...e a recusa sugere o --all", "--all" in p.stderr, p.stderr[-400:])
 
 
-# A fake `claude` that works like `/common:drain-plan <queue> --max 1` on the run
+# A fake `claude` that works like `/common:queue-run <queue> --max 1` on the run
 # worktree: asks `cepa-queue` for the queue's first runnable item, reserves it,
 # commits a file named after it and closes it `done`, all in ITS queue.
 DONE_IN_ITS_QUEUE = (

@@ -105,7 +105,7 @@ MODES = {
         "write": "tudo",
         "actions": [
             {"label": "Do the next item in the queue", "command": "/common:next"},
-            {"label": "Run the whole queue in a batch", "command": "/common:drain-plan <queue>", "ask": "Which queue?"},
+            {"label": "Run the whole queue in a batch", "command": "/common:queue-run <queue>", "ask": "Which queue?"},
             {"label": "Execute a Jira card", "command": "/board-flow:execute <key>", "ask": "What is the card key?", "needs": ["file:board-flow.yaml"]},
             {"label": "Fix a bug", "command": ["/board-flow:capture Bug: <description>", "/board-flow:fix <created key>"], "ask": "What is the card key or the bug description?", "needs": ["file:board-flow.yaml"]},
             {"label": "Fix a bug", "command": "/build-solo:reproduce-fix-verify <description>", "ask": "What is the bug description?", "needs": ["topology:build-solo"]},

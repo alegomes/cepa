@@ -244,7 +244,7 @@ command is `/common:modes`; the design is in
 The mechanical writer of the single-track queue,
 `.claude/queues/<name>/queue.yaml`, the document that keeps the order of the
 items and the `why` of each position. `/common:queue` holds the conversation
-and hands the list here; `/common:drain-plan` and `cepa-run` execute it;
+and hands the list here; `/common:queue-run` and `cepa-run` execute it;
 `/common:next` and `/common:queue-status` read it. It only knows
 `mode: single-track`; waves belong to `/maestro:program-plan`.
 
@@ -348,7 +348,7 @@ round's final report (`--result-max` characters), agent calls by type, tool
 errors, cost, the process signals (a worktree opened by anyone other than the
 proof-reviewer, a build gate bypassed with another module's green), the tail
 of each supervisor build, and the current status and evidence of every item
-touched. `/common:until-review` interprets it; this script does not opine.
+touched. `/common:run-review` interprets it; this script does not opine.
 
 ```
 cepa run digest <run>.jsonl [--result-max 3000]

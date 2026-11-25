@@ -16,7 +16,7 @@ The cases below pin the fix:
   - `done` without a commit on the night branch is pointed out in the record;
   - a repo without a known build does not start without `--verify` or `--sem-verify`;
   - the summary separates delivered from stuck;
-  - the end analysis calls `/common:until-review` and writes `<run>.review.md`.
+  - the end analysis calls `/common:run-review` and writes `<run>.review.md`.
 """
 
 import json
@@ -321,7 +321,7 @@ def test_no_build_without_suite_still_waives():
 def test_end_analysis_writes_the_review_beside_the_record():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
-        body = ("if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+        body = ("if ARGS and ARGS[1].startswith('/common:run-review'):\n"
                  "    print('RELATORIO DA NOITE')\n"
                  "    sys.exit(0)\n"
                  "marca(primeiro_pendente(), status='blocked', evidence='x')\n")
@@ -329,8 +329,8 @@ def test_end_analysis_writes_the_review_beside_the_record():
         p, calls = run_until(root, binv, plan_of(root),
                            ["--for", "2h", "--com-analise"])
         requests = [c[1] for c in calls]
-        check("a última chamada é o /common:until-review do registro",
-              requests and requests[-1].startswith("/common:until-review ")
+        check("a última chamada é o /common:run-review do registro",
+              requests and requests[-1].startswith("/common:run-review ")
               and requests[-1].endswith(".jsonl"), str(requests))
         revs = list((root / ".claude" / "programs" / "fila" / "until")
                     .glob("*.review.md"))
@@ -345,7 +345,7 @@ def test_end_analysis_writes_the_review_beside_the_record():
 def test_run_stopped_by_quota_does_not_run_the_analysis():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
-        body = ("if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+        body = ("if ARGS and ARGS[1].startswith('/common:run-review'):\n"
                  "    sys.exit(0)\n"
                  "print(json.dumps({'type': 'result', 'result': "
                  "\"You've hit your session limit\"}))\n")
@@ -355,10 +355,10 @@ def test_run_stopped_by_quota_does_not_run_the_analysis():
         end = [e for e in ledger_of(root) if e["evento"] == "run_end"][0]
         check("o run parou pela cota", end["motivo"] == "limite-de-uso", str(end))
         check("...e a análise não foi chamada",
-              not any(c[1].startswith("/common:until-review") for c in calls),
+              not any(c[1].startswith("/common:run-review") for c in calls),
               str(calls))
         check("...mas o resumo diz como rodá-la depois",
-              "/common:until-review" in p.stdout, p.stdout[-400:])
+              "/common:run-review" in p.stdout, p.stdout[-400:])
 
 
 # ── all attempts go to the side branch (Revision 3, step 1; C4) ─────────────
@@ -817,7 +817,7 @@ def state_of(root):
 
 
 # The fake `claude` notes the run state it sees: during the item, and in the end
-# analysis (the `/common:until-review` call).
+# analysis (the `/common:run-review` call).
 LOOKS_AT_STATE = (
     "import glob\n"
     "def _estado():\n"
@@ -827,7 +827,7 @@ LOOKS_AT_STATE = (
     "with open(os.environ['FAKE_CHAMADAS'] + '.estado', 'a') as f:\n"
     "    f.write(json.dumps({'args0': ARGS[1][:30] if len(ARGS) > 1 else '',\n"
     "                        'estado': _estado()}) + '\\n')\n"
-    "if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+    "if ARGS and ARGS[1].startswith('/common:run-review'):\n"
     "    print(json.dumps({'type': 'result', 'result': 'analise'}))\n"
     "    sys.exit(0)\n")
 
@@ -850,11 +850,11 @@ def test_2_run_state_running_then_waiting_owner_before_the_analysis():
         p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", VERIFY, "--com-analise"])
         seen_ones = seen_state(root)
-        during = [v for v in seen_ones if not v["args0"].startswith("/common:until")]
+        during = [v for v in seen_ones if not v["args0"].startswith("/common:run-review")]
         check("durante o item, o estado é rodando",
               during and all((v["estado"] or {}).get("estado") == "rodando"
                               for v in during), str(during)[:400])
-        analysis = [v for v in seen_ones if v["args0"].startswith("/common:until")]
+        analysis = [v for v in seen_ones if v["args0"].startswith("/common:run-review")]
         state_dict = (analysis[0]["estado"] or {}) if analysis else {}
         check("a análise já encontra o estado final gravado",
               state_dict.get("estado") == "esperando-dono", str(analysis)[:400])

@@ -67,7 +67,7 @@ def test_round_does_not_receive_the_handoff():
     root, path = scenario()
     out = R.resume_notice("rodada-2", root, root, env={"CEPA_UNTIL_RUN": "1"}) or ""
     check("conteúdo da rodada anterior não é entregue", "WEGO-2337" not in out, out)
-    check("aviso aponta para o item reservado pelo drain-plan", "drain-plan" in out, out)
+    check("aviso aponta para o item reservado pelo queue-run", "queue-run" in out, out)
 
 
 def test_round_does_not_consume_the_handoff():

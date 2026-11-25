@@ -56,13 +56,13 @@ def resume_notice(session_id: str, cwd: str, root: str, env=None):
     # the SAME branch, so the handoff is the previous run's, about ANOTHER
     # item. Handing it over with "pick up where you left off" made the
     # WEGO-2321 run rewrite the WEGO-2337 report (run 2026-09-27-0832). The
-    # run's item is whatever drain-plan reserves. It does not reserve the
+    # run's item is whatever queue-run reserves. It does not reserve the
     # handoff: the owner still resumes it in the morning.
     if env.get(RUN_ENV):
         return (
             "[resume] Handoff deste branch NÃO entregue: esta sessão é uma rodada "
             "do cepa-until, e o handoff é da rodada anterior, sobre outro item. "
-            "O seu item é o que o /common:drain-plan reservar com `cepa-queue start`; "
+            "O seu item é o que o /common:queue-run reservar com `cepa-queue start`; "
             "não continue trabalho de outro id."
         )
     meta, auto, note = H.parse(path)

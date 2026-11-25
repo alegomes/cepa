@@ -1,5 +1,5 @@
 ---
-description: Run the build-solo workflow on one well-scoped task — pair-dev implements, pair-reviewer reviews, the orchestrator runs the project's full test suite and commits. The flow /common:autonomous-start and /common:drain-plan dispatch to when .claude/topology says build-solo.
+description: Run the build-solo workflow on one well-scoped task — pair-dev implements, pair-reviewer reviews, the orchestrator runs the project's full test suite and commits. The flow /common:autonomous-start and /common:queue-run dispatch to when .claude/topology says build-solo.
 argument-hint: <task description>
 interaction: routine
 ---
@@ -14,7 +14,7 @@ validate. There is no planning-lead and no spec file — if the task needs one,
 it is the wrong topology (see rule 4 of `build-solo-topology.md`).
 
 This command exists so a repo wired to `build-solo` can run an unattended
-queue: `/common:autonomous-start` and `/common:drain-plan` dispatch to
+queue: `/common:autonomous-start` and `/common:queue-run` dispatch to
 `/<topology>:plan-build-validate`, and without it they abort.
 
 ## Variables

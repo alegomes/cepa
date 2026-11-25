@@ -16,7 +16,7 @@ What these tests pin:
   2. SIGTERM and Ctrl+C write `run_interrompido` to the `.jsonl`, with the signal and the
      in-flight item, and leave the `<run>.estado.json` as `interrompido`;
   3. the `run_start` and the state carry the supervisor's pid and host;
-  4. `cepa-until pendentes`, `cepa-doctor` and `/common:until-review`
+  4. `cepa-until pendentes`, `cepa-doctor` and `/common:run-review`
      point to the `rodando` run whose supervisor died, with the full build that
      was missing.
 
@@ -47,7 +47,7 @@ from test_cepa_until_run_branch import (  # noqa: E402
     WORKS, VERIFY, plan_of)
 
 DOCTOR = CEPA_UNTIL.parent / "cepa-doctor"
-UNTIL_REVIEW = CEPA_UNTIL.parent.parent / "commands" / "until-review.md"
+UNTIL_REVIEW = CEPA_UNTIL.parent.parent / "commands" / "run-review.md"
 
 # The fake `claude` waits for the file `<tmp>/segue` before working: that is the
 # window in which the test sends the signal with the item in flight.
@@ -706,7 +706,7 @@ def test_help_lists_the_subcommands():
 
 def test_until_review_checks_the_dead_supervisor():
     plain_text = UNTIL_REVIEW.read_text(encoding="utf-8")
-    check("o /common:until-review manda conferir `mortos` no pendentes",
+    check("o /common:run-review manda conferir `mortos` no pendentes",
           "cepa-until pending" in plain_text and "mortos" in plain_text
           and "interrompido" in plain_text and "close-dead" in plain_text)
 

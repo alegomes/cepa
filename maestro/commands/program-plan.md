@@ -79,7 +79,7 @@ same convention as `--sweep`, measured by `cepa-promptcov`.
    session, `blocked` got stuck in a previous run); **show that list to the user**
    instead of keeping quiet — an item they expect to see in the wave and that does not appear is the
    question they will ask, and the answer is already in the JSON. The D7 floor is
-   mechanical here: **exit 4 = stop** and recommend `/common:drain-plan <NAME>`,
+   mechanical here: **exit 4 = stop** and recommend `/common:queue-run <NAME>`,
    which runs the same queue serially, with no worktree at all. Exit 3 = the name
    points to a waves plan, not to a queue.
 
@@ -218,7 +218,7 @@ same convention as `--sweep`, measured by `cepa-promptcov`.
   only reads, and the items remain `pending` there. The queue remains the document of the
   ORDER; the waves plan is a hypothesis about a slice of it. The risk that
   remains is human and is worth saying out loud to the user at the close: the same
-  item now has two possible executors (`/common:drain-plan` and the wave), and
+  item now has two possible executors (`/common:queue-run` and the wave), and
   running both builds it twice.
 - Surface is a promise about writing, not reading — the child may read the whole
   repo; it only writes inside the globs (layer 1 of the generated settings).

@@ -199,7 +199,7 @@ python3 common/bin/cepa-queue reconcile <nome> --board <arquivo.json> --repo .
 ```
 
 The rule below is what that command implements. It lives in code (and has
-tests) so that the batch runner — `/common:drain-plan`, which reconciles before
+tests) so that the batch runner — `/common:queue-run`, which reconciles before
 mounting a batch — uses the same rule instead of a second, drifting copy of it.
 Read its output; don't re-derive it:
 

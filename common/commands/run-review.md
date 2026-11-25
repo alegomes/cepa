@@ -4,7 +4,7 @@ argument-hint: [<run>.jsonl | latest] [--fila NAME]
 interaction: routine
 ---
 
-# /common:until-review
+# /common:run-review
 
 ## Purpose
 

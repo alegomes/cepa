@@ -2,7 +2,7 @@
 
 READ-ONLY. This module never writes a deposit and never creates one (rule R3 of
 docs/estrategia-durabilidade.md: "nenhum depósito de estado novo"). It exists so
-that `/common:next`, `/common:doctor`, `/common:until-review` and
+that `/common:next`, `/common:doctor`, `/common:run-review` and
 `/common:whereami` (through `cepa-queue`, `cepa-doctor`, `cepa-until-digest` and
 `cepa-intent`) answer "what is the state?" from ONE place and with ONE liveness
 rule, instead of four copies that drift ("um storage, uma conformidade").

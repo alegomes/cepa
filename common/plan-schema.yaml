@@ -134,7 +134,7 @@ items:                          # ORDEM DA LISTA = ordem de execução. É o dad
                                 # Um item com human_pending aberto NÃO some da
                                 # vista quando vira `done` — é o que responde
                                 # "tenho que testar à mão ou puxo o próximo?".
-                                # No LOTE (/common:drain-plan) uma rota aberta
+                                # No LOTE (/common:queue-run) uma rota aberta
                                 # ADIA o item e segue para o próximo, em vez de
                                 # parar o lote inteiro (decisão do dono,
                                 # 2026-08-28): quem depende dele por

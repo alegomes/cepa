@@ -48,7 +48,7 @@ export const parseEpic = (file: string, text: string): Epic | null => {
 }
 
 // The queue of a cycle, in this order: (1) the queue's `source:` cites the Epic file
-// and `ciclo N`, which is what `/common:plan --from-epic` writes; (2) the queue name
+// and `ciclo N`, which is what `/common:queue --from-epic` writes; (2) the queue name
 // matches the pattern of the Construção line with `<N>` swapped in; (3) `<file>-c<N>`.
 export const queueOfCycle = (epic: Epic, cycle: number, queues: readonly Queue[]): Queue | null => {
   const cites = new RegExp(`\\b(?:ciclo|cycle)\\s+${cycle}\\b`)

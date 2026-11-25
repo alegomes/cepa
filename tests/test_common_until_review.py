@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""/common:until-review — the command's contract, by content.
+"""/common:run-review — the command's contract, by content.
 
 It runs in a `claude -p` at the end of the run, with nobody watching. If an edit
 deleted the "read-only" clause, the next run could merge, tamper with the queue or
@@ -9,7 +9,7 @@ transition a card at 4am, and no other test would accuse it.
 import sys
 from pathlib import Path
 
-CMD = Path(__file__).resolve().parents[1] / "common" / "commands" / "until-review.md"
+CMD = Path(__file__).resolve().parents[1] / "common" / "commands" / "run-review.md"
 FAILURES = []
 
 
@@ -20,7 +20,7 @@ def check(name, cond, detail=""):
 
 
 def main():
-    print("/common:until-review — contrato\n")
+    print("/common:run-review — contrato\n")
     check("o comando existe", CMD.is_file(), str(CMD))
     if not CMD.is_file():
         return 1
