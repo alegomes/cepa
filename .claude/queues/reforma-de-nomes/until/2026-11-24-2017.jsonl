@@ -42,3 +42,4 @@
 {"evento": "instalado_no_pouso", "repo": "/Users/alegomes/coding/cepa", "ok": false, "segundos": 1, "motivo": "exited 1", "quando": "2026-11-25T17:22:10"}
 {"evento": "reinstalacao_desfeita", "repo": "/Users/alegomes/coding/cepa", "ok": false, "motivo": "exited 1", "segundos": 0, "quando": "2026-11-25T17:22:10"}
 {"evento": "instalado_no_pouso", "repo": "/Users/alegomes/coding/cepa", "ok": true, "segundos": 14, "motivo": null, "quando": "2026-11-25T19:37:52"}
+{"evento": "instalado_no_pouso", "repo": "/Users/alegomes/coding/cepa", "ok": true, "segundos": 21, "motivo": null, "quando": "2026-11-25T20:33:51"}
