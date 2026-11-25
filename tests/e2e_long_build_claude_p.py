@@ -78,7 +78,7 @@ def main():
     (d / "settings.json").write_text(json.dumps(settings(), indent=1))
 
     env = dict(os.environ)
-    env["CEPA_UNTIL_RUN"] = "1"
+    env["CEPA_RUN"] = "1"
     env["CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"] = "0"  # what cepa-until exports
     request = REQUEST.format(minutos=max(1, round(a.seconds / 60)))
     print(f"cenário em {d}; build de {a.seconds}s; modelo {a.model}")

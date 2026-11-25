@@ -454,7 +454,7 @@ def launch_on_tty(root, answers, *extra, wait="20"):
     from test_cepa_until_decide import on_tty, env_do_run, CEPA_UNTIL
     tmp = str(root.parent)
     env = env_do_run(tmp, root, fake_claude(root.parent, WORKS))
-    env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+    env["CEPA_RUN_ANSWER_WAIT"] = wait
     return on_tty([sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
                    "--for", "2h", "--verify", VERIFY, "--no-analysis", *extra],
                   str(root), inputs=answers, env=env, timeout=240)
@@ -570,7 +570,7 @@ def test_end_of_run_with_an_owner_item_still_asks_it_but_not_the_landing():
         root = build_repo(tmp, [item("a1"), item("a2")])
         with_origin(root)
         env = env_do_run(tmp, root, fake_claude(tmp, BLOCKS_A1_COMMITS_A2))
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "1000"
+        env["CEPA_RUN_ANSWER_WAIT"] = "1000"
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis", "--no-resume-on-answer"],

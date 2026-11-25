@@ -361,7 +361,7 @@ def test_intent_state_inside_a_run_says_if_it_is_alive():
             (u / "r.estado.json").write_text(json.dumps(
                 {"run": "r1", "estado": "rodando", "host": _wtlib.host(),
                  "pid": os.getpid(), "arvore": str(wtree), "heartbeat": heartbeat}))
-            env = {**os.environ, "CEPA_UNTIL_RUN": "r1"}
+            env = {**os.environ, "CEPA_RUN": "r1"}
             return subprocess.run([sys.executable, str(intent), "state"], cwd=wtree,
                                   capture_output=True, text=True, env=env).stdout
 
@@ -438,7 +438,7 @@ def test_intent_run_lookup_by_each_key_alone():
             (u / "r.estado.json").write_text(json.dumps(
                 {"run": "r1", "estado": "rodando", "host": _wtlib.host(),
                  "pid": os.getpid(), "arvore": arvore, "heartbeat": beat(3)}))
-            env = {**os.environ, "CEPA_UNTIL_RUN": env_run}
+            env = {**os.environ, "CEPA_RUN": env_run}
             return subprocess.run([sys.executable, str(intent), "state"], cwd=wtree,
                                   capture_output=True, text=True, env=env).stdout
 

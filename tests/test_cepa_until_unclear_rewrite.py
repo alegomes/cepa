@@ -64,7 +64,7 @@ def test_question_mark_rewrites_in_the_same_block_and_asks_again():
         qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
         before = _items(qfile)["b1"]
         reader, log = _reader(tmp)
-        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_UNTIL_LEITOR=str(reader))
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER=str(reader))
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), env=env,
                          inputs=[("[w] I write the answer", "?"),
@@ -110,7 +110,7 @@ def test_reader_without_item_declaration_records_nothing_and_warns():
         qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
         before = qfile.read_bytes()
         reader, _ = _reader(tmp, declare=False)
-        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_UNTIL_LEITOR=str(reader))
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER=str(reader))
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), env=env,
                          inputs=[("[w] I write the answer", "?"),

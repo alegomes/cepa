@@ -6,8 +6,8 @@ same output when, and only when, it goes to a terminal: bar header, section
 with a rule, colored glyphs, dimmed separators and long lines wrapped with a
 hanging indent (the continuation aligns with the text, not with the margin).
 Outside a terminal, with NO_COLOR or with TERM=dumb, nothing changes: the
-output is byte for byte the one from before. `CEPA_COR=sempre` and
-`CEPA_COR=nunca` force it on and off.
+output is byte for byte the one from before. `CEPA_COLOR=sempre` and
+`CEPA_COLOR=nunca` force it on and off.
 
 Two ways to use it:
 
@@ -25,6 +25,8 @@ import re
 import shutil
 import sys
 import textwrap
+
+import _cepaenv as E
 
 COLORS = {"verde": "32", "vermelho": "31", "amarelo": "33", "azul": "34",
           "magenta": "35", "ciano": "36", "cinza": "2", "negrito": "1"}
@@ -52,7 +54,7 @@ _WORDS = [
 class Screen:
     def __init__(self, stream=None):
         stream = sys.stdout if stream is None else stream
-        mode = os.environ.get("CEPA_COR", "").strip().lower()
+        mode = E.get("CEPA_COLOR", "").strip().lower()
         if mode in ("sempre", "always", "1"):
             enabled = True
         elif mode in ("nunca", "never", "0") or os.environ.get("NO_COLOR"):

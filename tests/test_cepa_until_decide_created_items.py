@@ -16,7 +16,7 @@ Against the real `decide`, with the real `cepa-queue answer` behind it, in a PTY
   - two items created, one of them waiting on the owner: both listed, in answer
     order, the second marked as waiting;
   - no answer creates an item (a declared `nenhum`, a "não" kept open): no line;
-  - the same on a colored terminal (`CEPA_UNTIL_COR=sempre`);
+  - the same on a colored terminal (`CEPA_RUN_COLOR=sempre`);
   - the panel of `--all` (entries `<queue>/<id>: ...`) names the queue too.
 """
 import importlib.machinery
@@ -38,7 +38,7 @@ FAILURES = []
 
 ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
            GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
-for v in ("CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID"):
+for v in ("CEPA_RUN", "CEPA_UNTIL_RUN", "CEPA_AUTONOMOUS_RUN_ID", "CLAUDE_AUTONOMOUS_RUN_ID"):
     ENV.pop(v, None)
 
 HEADER = "itens criados pelas suas respostas:"
@@ -68,8 +68,8 @@ def route(ident, yes_item, no_item="nenhum"):
 
 
 def load_until(color):
-    before = os.environ.get("CEPA_UNTIL_COR")
-    os.environ["CEPA_UNTIL_COR"] = color
+    before = os.environ.get("CEPA_RUN_COLOR")
+    os.environ["CEPA_RUN_COLOR"] = color
     try:
         name = f"cepa_until_cs7_{color}"
         loader = importlib.machinery.SourceFileLoader(name, str(CEPA_UNTIL))
@@ -78,9 +78,9 @@ def load_until(color):
         loader.exec_module(mod)
     finally:
         if before is None:
-            del os.environ["CEPA_UNTIL_COR"]
+            del os.environ["CEPA_RUN_COLOR"]
         else:
-            os.environ["CEPA_UNTIL_COR"] = before
+            os.environ["CEPA_RUN_COLOR"] = before
     return mod
 
 

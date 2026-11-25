@@ -28,8 +28,8 @@ import test_cepa_until_run_branch as rb  # noqa: E402
 check = dec.check
 FAILURES = dec.FAILURES
 CEPA_UNTIL = al.CEPA_UNTIL
-if os.environ.get("CEPA_UNTIL_SCRIPT"):
-    CEPA_UNTIL = Path(os.environ["CEPA_UNTIL_SCRIPT"]).resolve()
+if os.environ.get("CEPA_RUN_SCRIPT"):
+    CEPA_UNTIL = Path(os.environ["CEPA_RUN_SCRIPT"]).resolve()
     dec.CEPA_UNTIL = al.CEPA_UNTIL = base.CEPA_UNTIL = CEPA_UNTIL
 ANSI = dec.ANSI
 RUN = "2026-11-21-1244"

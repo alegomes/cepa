@@ -14,7 +14,7 @@ Contracts guarded here:
     <repo>/.claude/prompts — with and without the .md suffix;
   - a missing or empty prompt is an error (rc=2) and the session does NOT start: opening
     silently without the requested prompt is worse than not opening;
-  - CEPA_PROMPT/CEPA_PROMPT_MODO give the persistent default;
+  - CEPA_PROMPT/CEPA_PROMPT_MODE give the persistent default;
   - without --prompt, nothing changes (the cepa of before).
 
 No third-party deps — run with `python3 tests/test_cepa_prompt.py`.
@@ -25,11 +25,11 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-# cepa reads CEPA_PROMPT/CEPA_PROMPT_MODO from the environment. Inherited from the shell of whoever
+# cepa reads CEPA_PROMPT/CEPA_PROMPT_MODE from the environment. Inherited from the shell of whoever
 # runs the suite (cepa-until runs with them), they become a prompt the test did not
 # ask for and break the "passes only the user's args". Whoever wants the prompt passes
 # it in the env= of the case itself.
-for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODO"):
+for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODE"):
     os.environ.pop(_k, None)
 
 REPO = Path(__file__).resolve().parent.parent
@@ -70,9 +70,9 @@ class Repo:
 
     def run(self, *args, env=None):
         e = {**os.environ,
-             "CLAUDE_WT_CLAUDE_BIN": str(self.fake),
+             "CEPA_WT_CLAUDE_BIN": str(self.fake),
              "CEPA_PREFLIGHT": "off",
-             "CEPA_MODO": "off",
+             "CEPA_MODE": "off",
              "CEPA_PROMPTS_HOME": str(self.lib)}
         e.update(env or {})
         return subprocess.run(
@@ -225,11 +225,11 @@ def test_env_default():
         a = args_of(r.run("--resume", env={"CEPA_PROMPT": "padrao"}))
         check("CEPA_PROMPT: aplica sem flag", prompt_par(a)[1] == "do env", a)
         a = args_of(r.run(env={"CEPA_PROMPT": "padrao",
-                               "CEPA_PROMPT_MODO": "substitui"}))
-        check("CEPA_PROMPT_MODO=substitui: troca a flag",
+                               "CEPA_PROMPT_MODE": "substitui"}))
+        check("CEPA_PROMPT_MODE=replace: troca a flag",
               prompt_par(a)[0] == "--system-prompt", a)
-        p = r.run(env={"CEPA_PROMPT": "padrao", "CEPA_PROMPT_MODO": "xpto"})
-        check("CEPA_PROMPT_MODO inválido: rc=2", p.returncode == 2, p.stderr)
+        p = r.run(env={"CEPA_PROMPT": "padrao", "CEPA_PROMPT_MODE": "xpto"})
+        check("CEPA_PROMPT_MODE inválido: rc=2", p.returncode == 2, p.stderr)
 
 
 def test_flag_beats_the_env():

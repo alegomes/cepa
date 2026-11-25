@@ -198,7 +198,7 @@ def test_heartbeat_advances_while_the_item_runs():
             "marca(primeiro(), status='done')\n")
         binv = fake_claude(tmp, body)
         p, _ = run_until(root, binv, plan_of(root), ["--for", "2h"],
-                         extra_env={"CEPA_UNTIL_HEARTBEAT": "1"})
+                         extra_env={"CEPA_RUN_HEARTBEAT": "1"})
         views = [json.loads(l) for l in seen.read_text().splitlines()]
         check("o fake leu o estado duas vezes", len(views) == 2, p.stdout[-400:] + p.stderr[-400:])
         a, b = views

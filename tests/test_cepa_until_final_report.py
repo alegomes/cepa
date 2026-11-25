@@ -120,7 +120,7 @@ def test_items_panel_aligns_the_id_column_and_cuts_the_reason_but_not_the_state(
 
 def test_borders_exist_with_color_always_and_not_with_no_color():
     with tempfile.TemporaryDirectory() as tmp:
-        _, p, out = stuck_run(tmp, extra_env={"CEPA_UNTIL_COR": "sempre"})
+        _, p, out = stuck_run(tmp, extra_env={"CEPA_RUN_COLOR": "sempre"})
         end = end_of(out)
         for title in ("┌─ ended at", "┌─ Items (2)", "┌─ Next"):
             check(f"com cor sempre: {title}", title in end, end[-1500:])

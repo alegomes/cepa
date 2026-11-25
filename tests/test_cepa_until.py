@@ -137,7 +137,7 @@ def run_until(root, binv, plan, args, timeout=120, extra_env=None, repo_arg=None
     env.update(extra_env or {})
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(plan)
-    env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
+    env.setdefault("CEPA_RUN_READER", "off")  # the pre-read must not call the fake claude
     env.setdefault("CEPA_WORKTREE_HOME", str(Path(root).parent / "worktrees"))
     calls = Path(root).parent / "chamadas.jsonl"
     env["FAKE_CHAMADAS"] = str(calls)
@@ -241,7 +241,7 @@ def test_minimum_reserve_prevents_starting_an_item_that_does_not_fit():
 def test_item_environment_turns_on_the_window_and_zeroes_the_wait_ceiling():
     """What the subprocess receives in the environment is contract, not detail.
 
-    `CEPA_UNTIL_RUN` is what makes the window's hooks exist. And
+    `CEPA_RUN` is what makes the window's hooks exist. And
     `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` is what keeps `claude -p` from killing
     itself at 10 minutes with background work pending — that is how
     WEGO-2224 died half done on 2026-09-03 and the 8h window closed with
@@ -258,8 +258,8 @@ def test_item_environment_turns_on_the_window_and_zeroes_the_wait_ceiling():
         plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
         run_until(root, binv, plan, ["--for", "2h"])
         env = json.loads(target.read_text())
-        check("o subprocesso nasce com CEPA_UNTIL_RUN",
-              env.get("CEPA_UNTIL_RUN") == "1", repr(env.get("CEPA_UNTIL_RUN")))
+        check("o subprocesso nasce com CEPA_RUN",
+              env.get("CEPA_RUN") == "1", repr(env.get("CEPA_RUN")))
         check("...e com o teto de espera por segundo plano zerado",
               env.get("CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS") == "0",
               repr(env.get("CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS")))
@@ -749,7 +749,7 @@ def test_missing_queue_refuses_before_firing():
         env = dict(os.environ)
         env["PATH"] = f"{binv}:{env['PATH']}"
         env["FAKE_PLANO"] = str(plan)
-        env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
+        env.setdefault("CEPA_RUN_READER", "off")  # the pre-read must not call the fake claude
         env["FAKE_CHAMADAS"] = str(root.parent / "chamadas.jsonl")
         p = subprocess.run([sys.executable, str(CEPA_UNTIL), "nao-existe",
                             "--repo", str(root), "--for", "2h"],
@@ -1011,7 +1011,7 @@ def test_process_that_ignores_sigterm_is_killed_by_sigkill():
                             "--slack", "0.05m"],
                            timeout=200,
                            extra_env={"FAKE_FILHO": str(mark),
-                                      "CEPA_UNTIL_GRACA_SIGTERM": "2"})
+                                      "CEPA_RUN_SIGTERM_GRACE": "2"})
         ends = [e for e in ledger_of(root) if e.get("evento") == "item_end"]
         check("o item que ignora SIGTERM ainda é registrado como timeout",
               ends and ends[0]["timeout"] is True, str(ends))
@@ -1796,7 +1796,7 @@ def hc_scenario(tmp, hc_id="t9", tty=True):
     env["FAKE_CHAMADAS"] = str(Path(root).parent / "chamadas.jsonl")
     # The pre-read must not call the fake claude: it marks the first pending item
     # done on ANY call, so a1 was closed by the pre-read and only a2 ran.
-    env["CEPA_UNTIL_LEITOR"] = "off"
+    env["CEPA_RUN_READER"] = "off"
     argv = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
             "--for", "2h", "--no-verify", "--no-analysis"]
     if not tty:

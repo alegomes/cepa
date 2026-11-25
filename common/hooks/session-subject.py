@@ -26,11 +26,11 @@ The bar to suggest ENDING is deliberately higher than the bar to suggest worktre
 isolation, because a noisy signal that nags is worse than one that stays quiet.
 
 Config (env):
-  CLAUDE_WT_SUBJECT=off                 disable subject detection entirely
-  CLAUDE_WT_SUBJECT_THRESHOLD=0.20      relevance below this = candidate shift
-  CLAUDE_WT_SUBJECT_MINPROMPTS=3        need this many prior prompts as baseline
-  CLAUDE_WT_NUDGE=off                   disable the wrap-up/handoff nudge only
-  CLAUDE_WT_SESSION_SOFTCAP=45          prompts past which "long session" nudges
+  CEPA_WT_SUBJECT=off                 disable subject detection entirely
+  CEPA_WT_SUBJECT_THRESHOLD=0.20      relevance below this = candidate shift
+  CEPA_WT_SUBJECT_MINPROMPTS=3        need this many prior prompts as baseline
+  CEPA_WT_NUDGE=off                   disable the wrap-up/handoff nudge only
+  CEPA_WT_SESSION_SOFTCAP=45          prompts past which "long session" nudges
 
 Never blocks; exit 0 always.
 """
@@ -42,6 +42,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _wtlib as L  # noqa: E402
+import _cepaenv as E  # noqa: E402
 
 STOPWORDS = {
     "the", "and", "for", "you", "with", "this", "that", "have", "was", "are",
@@ -124,7 +125,7 @@ def label_offer(cwd: str, root: str) -> str:
 
 
 def main():
-    if os.environ.get("CLAUDE_WT_SUBJECT", "").lower() == "off":
+    if E.get("CEPA_WT_SUBJECT", "").lower() == "off":
         sys.exit(0)
     raw = sys.stdin.read()
     try:
@@ -141,8 +142,8 @@ def main():
     cwd = os.path.abspath(payload.get("cwd") or os.getcwd())
 
     try:
-        threshold = float(os.environ.get("CLAUDE_WT_SUBJECT_THRESHOLD", "0.20"))
-        min_prompts = int(os.environ.get("CLAUDE_WT_SUBJECT_MINPROMPTS", "3"))
+        threshold = float(E.get("CEPA_WT_SUBJECT_THRESHOLD", "0.20"))
+        min_prompts = int(E.get("CEPA_WT_SUBJECT_MINPROMPTS", "3"))
     except ValueError:
         threshold, min_prompts = 0.20, 3
 
@@ -152,9 +153,9 @@ def main():
         if entry is None:
             sys.exit(0)
 
-        nudge_on = os.environ.get("CLAUDE_WT_NUDGE", "").lower() != "off"
+        nudge_on = E.get("CEPA_WT_NUDGE", "").lower() != "off"
         try:
-            soft_cap = int(os.environ.get("CLAUDE_WT_SESSION_SOFTCAP", "45"))
+            soft_cap = int(E.get("CEPA_WT_SESSION_SOFTCAP", "45"))
         except ValueError:
             soft_cap = 45
 
@@ -182,7 +183,7 @@ def main():
                         "commit há pouco. Bom ponto de corte. "
                         + wrap_action(cwd, root, entry) +
                         " Se ele quiser continuar aqui, siga sem insistir — é "
-                        "sugestão, não bloqueio. (Desliga com CLAUDE_WT_NUDGE=off.)"
+                        "sugestão, não bloqueio. (Desliga com CEPA_WT_NUDGE=off.)"
                     ) + label_offer(cwd, root)
                 else:
                     msg = (
@@ -208,7 +209,7 @@ def main():
                     "contexto tende a poluir e ficar caro. Se estamos num ponto "
                     "estável, é um bom momento pra cortar. "
                     + wrap_action(cwd, root, entry) +
-                    " Sugestão, não bloqueio. (Desliga com CLAUDE_WT_NUDGE=off.)"
+                    " Sugestão, não bloqueio. (Desliga com CEPA_WT_NUDGE=off.)"
                 ) + label_offer(cwd, root)
 
         if msg is not None:

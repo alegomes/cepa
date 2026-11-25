@@ -222,7 +222,7 @@ def test_one_item_on_the_terminal_screen(base):
     d = git_repo(base, "um-item-tela")
     longo = "validar à mão. " + "detalhe " * 60 + "FIM-DO-TEXTO"
     write_queue(d, [item("a"), item("b", human_pending=longo)])
-    env = dict(os.environ, CEPA_COR="sempre", COLUMNS="80")
+    env = dict(os.environ, CEPA_COLOR="sempre", COLUMNS="80")
     r = subprocess.run([sys.executable, str(CEPA_PLAN), "status", "fila", "b",
                         "--repo", "."], capture_output=True, text=True,
                        cwd=str(d), env=env)
@@ -242,7 +242,7 @@ def test_whole_queue_on_the_terminal_screen(base):
     import os, re
     d = git_repo(base, "fila-tela")
     write_queue(d, ITEMS)
-    env = dict(os.environ, CEPA_COR="sempre", COLUMNS="80")
+    env = dict(os.environ, CEPA_COLOR="sempre", COLUMNS="80")
     r = subprocess.run([sys.executable, str(CEPA_PLAN), "status", "fila",
                         "--repo", "."], capture_output=True, text=True,
                        cwd=str(d), env=env)
@@ -372,7 +372,7 @@ def test_show_item_on_the_terminal_screen_splits_why_and_evidence(base):
     import os, re
     d = git_repo(base, "show-item-tela")
     write_epic_queue(d)
-    env = dict(os.environ, CEPA_COR="sempre", COLUMNS="100")
+    env = dict(os.environ, CEPA_COLOR="sempre", COLUMNS="100")
     r = subprocess.run([sys.executable, str(CEPA_PLAN), "show", "fila", "C1-1",
                         "--repo", "."], capture_output=True, text=True,
                        cwd=str(d), env=env)

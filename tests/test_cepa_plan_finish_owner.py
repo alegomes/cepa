@@ -39,7 +39,8 @@ def check(name, cond, detail=""):
 
 def run(repo, *args, session=None):
     env = dict(os.environ)
-    env.pop("CLAUDE_WT_CLAIM", None)
+    env.pop("CEPA_WT_CLAIM", None)
+    env.pop("CEPA_RUN", None)
     env.pop("CEPA_UNTIL_RUN", None)
     if session:
         env["CLAUDE_SESSION_ID"] = session

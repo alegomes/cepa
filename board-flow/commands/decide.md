@@ -213,7 +213,7 @@ Per accepted group:
   `proof-reviewer` still cannot waive anything: the proof artifact has no field
   for the agent to waive with, it may only CITE this waiver in
   `l2_coverage.status: waived`, and `proof-verdict-guard.py` checks the file.
-  **In an autonomous run** (`CEPA_UNTIL_RUN` or `CLAUDE_AUTONOMOUS_RUN_ID` in
+  **In an autonomous run** (`CEPA_RUN` or `CEPA_AUTONOMOUS_RUN_ID` in
   the environment) there is no owner in front of you: `waivers.write` records a
   **proposal** (`status: proposta`, `autor: null`), not a waiver. Pass
   `fila=`/`item=` and open the human route on the item: `cepa-queue finish <fila> <id> --status

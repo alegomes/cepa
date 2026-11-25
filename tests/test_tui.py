@@ -6,7 +6,7 @@ What these cases hold:
   - outside a terminal the output is byte for byte what it used to be: it is
     what the commands' tests read, what an agent receives through Bash and what
     a `nohup` writes;
-  - `NO_COLOR` and `CEPA_COR=nunca` turn the decoration off; `CEPA_COR=sempre` turns it on;
+  - `NO_COLOR` and `CEPA_COLOR=nunca` turn the decoration off; `CEPA_COLOR=sempre` turns it on;
   - when on, the long line wraps with a hanging indent and no text is lost;
   - `--json` is never decorated, not even with the decoration forced;
   - the decorated `cepa-queue status` brings a header, a scoreboard and the
@@ -32,10 +32,10 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def run(args, color=None, cwd=None, columns="100"):
-    env = {k: v for k, v in os.environ.items() if k not in ("CEPA_COR", "NO_COLOR")}
+    env = {k: v for k, v in os.environ.items() if k not in ("CEPA_COLOR", "NO_COLOR")}
     env["COLUMNS"] = columns
     if color:
-        env["CEPA_COR"] = color
+        env["CEPA_COLOR"] = color
     return subprocess.run([sys.executable, *args], capture_output=True, text=True,
                           env=env, cwd=cwd)
 
@@ -70,22 +70,22 @@ def test_no_color_wins_and_always_enables():
         assert not _tui.Screen().enabled
     finally:
         del os.environ["NO_COLOR"]
-    os.environ["CEPA_COR"] = "sempre"
+    os.environ["CEPA_COLOR"] = "sempre"
     try:
         assert _tui.Screen(stream=open(os.devnull, "w")).enabled
     finally:
-        del os.environ["CEPA_COR"]
+        del os.environ["CEPA_COLOR"]
 
 
 def test_wrap_with_hanging_indent_keeps_text():
-    os.environ["CEPA_COR"] = "sempre"
+    os.environ["CEPA_COLOR"] = "sempre"
     os.environ["COLUMNS"] = "60"
     try:
         t = _tui.Screen()
         original = "  18. item-x — " + " ".join(f"p{i}" for i in range(60))
         output = ANSI.sub("", t.line(original)).split("\n")
     finally:
-        del os.environ["CEPA_COR"]
+        del os.environ["CEPA_COLOR"]
     assert len(output) > 1
     assert all(len(l) <= 59 for l in output)
     assert all(l.startswith(" " * 6) and not l.startswith(" " * 7) for l in output[1:])

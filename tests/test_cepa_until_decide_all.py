@@ -62,7 +62,7 @@ def _owner_item(ident, route, question, status="pending"):
 
 def _decide_all_on_tty(tmp, root, inputs, args=("--all",)):
     env = al._tty_env(tmp)
-    env["CEPA_UNTIL_LEITOR"] = "off"
+    env["CEPA_RUN_READER"] = "off"
     rc, out = dec.on_tty(
         [sys.executable, str(CEPA_UNTIL), "decide", *args, "--repo", str(root)],
         str(root), inputs=inputs, env=env, timeout=90)
@@ -242,8 +242,8 @@ def _pty_session(cmd, cwd, env, steps, timeout=90):
 
 def _decide_all_env(tmp, wait="1"):
     env = al._tty_env(tmp)
-    env["CEPA_UNTIL_LEITOR"] = "off"
-    env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+    env["CEPA_RUN_READER"] = "off"
+    env["CEPA_RUN_ANSWER_WAIT"] = wait
     return env
 
 
@@ -602,7 +602,7 @@ def test_cs10_stdin_not_a_tty_lists_even_when_stdout_is_a_terminal():
             "b": [_owner_item("b1", "liberar b", "Liberei a fila b?")]})
         head_before = al._git(root, "rev-parse", "HEAD").strip()
         env = al._tty_env(tmp)
-        env["CEPA_UNTIL_LEITOR"] = "off"
+        env["CEPA_RUN_READER"] = "off"
         master, slave = pty.openpty()
         proc = subprocess.Popen(
             [sys.executable, str(CEPA_UNTIL), "decide", "--all", "--repo",

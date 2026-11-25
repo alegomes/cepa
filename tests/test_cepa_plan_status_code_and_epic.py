@@ -58,7 +58,7 @@ def check(name, cond, detail=""):
 def run(repo, *args, screen=False):
     env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",
            "HOME": str(repo)}
-    env.update({"CEPA_COR": "sempre", "COLUMNS": "200"} if screen else {"NO_COLOR": "1"})
+    env.update({"CEPA_COLOR": "sempre", "COLUMNS": "200"} if screen else {"NO_COLOR": "1"})
     return subprocess.run([sys.executable, str(CEPA_PLAN)] + list(args),
                           capture_output=True, text=True, cwd=str(repo), env=env)
 

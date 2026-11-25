@@ -38,7 +38,7 @@ HIDDEN = ["responde", "aterrissados", "ordena", "divergencia", "--proposito",
           "encerrar", "decidir", "triar", "--alvo", "--origem"]
 
 FAILURES = []
-ENV = {k: v for k, v in os.environ.items() if k not in ("CEPA_COR", "NO_COLOR")}
+ENV = {k: v for k, v in os.environ.items() if k not in ("CEPA_COLOR", "NO_COLOR")}
 ENV["COLUMNS"] = "100"
 
 
@@ -135,10 +135,10 @@ def test_every_command():
 def test_color_only_on_request():
     plain = run(BIN / "cepa-hotspots", "--help").stdout
     check("piped help has no escape codes", "\033" not in plain)
-    env = dict(ENV, CEPA_COR="sempre")
+    env = dict(ENV, CEPA_COLOR="sempre")
     p = subprocess.run([str(BIN / "cepa-hotspots"), "--help"], capture_output=True,
                        text=True, env=env, cwd=REPO)
-    check("CEPA_COR=sempre colors headings", "\033[" in p.stdout and "── " in p.stdout,
+    check("CEPA_COLOR=sempre colors headings", "\033[" in p.stdout and "── " in p.stdout,
           p.stdout[:300])
 
 

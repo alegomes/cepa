@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PostToolUse hook: append a state-file entry after every subagent call.
 
-Activates only when CLAUDE_AUTONOMOUS_RUN_ID is set in the environment.
+Activates only when CEPA_AUTONOMOUS_RUN_ID is set in the environment.
 Outside autonomous mode, this hook is a no-op.
 
 When active:
@@ -15,7 +15,7 @@ break the workflow — the orchestrator must always be able to keep working
 even if checkpointing fails.
 
 Run-id resolution:
-  - $CLAUDE_AUTONOMOUS_RUN_ID (env, set by /common:autonomous-start)
+  - $CEPA_AUTONOMOUS_RUN_ID (env, set by /common:autonomous-start)
   - else: no-op exit 0.
 """
 
@@ -24,6 +24,9 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _cepaenv as E  # noqa: E402
 
 
 MAX_TEXT_LEN = 200  # Truncate prompt + result text to keep state.yaml readable.
@@ -140,7 +143,7 @@ def extract_subagent_call(payload: dict) -> dict | None:
 
 
 def main():
-    run_id = os.environ.get("CLAUDE_AUTONOMOUS_RUN_ID")
+    run_id = E.get("CEPA_AUTONOMOUS_RUN_ID") or None
     if not run_id:
         # Not in autonomous mode — fast no-op.
         sys.exit(0)

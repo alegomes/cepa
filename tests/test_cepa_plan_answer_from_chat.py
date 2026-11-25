@@ -16,7 +16,7 @@ from /dev/null, the way an agent's Bash calls it):
     what the owner typed) does not count;
   - a prompt older than 24h does not count;
   - a word inside another word ("sim" in "assim") does not count;
-  - inside an unattended run (CEPA_UNTIL_RUN / CLAUDE_AUTONOMOUS_RUN_ID) the
+  - inside an unattended run (CEPA_RUN / CEPA_AUTONOMOUS_RUN_ID) the
     flag is refused: nobody is in the chat to have answered;
   - with a TTY, `--from-chat` is not needed and the old path is unchanged.
 """
@@ -146,7 +146,7 @@ def test_word_inside_another_word_does_not_count():
 
 
 def test_unattended_run_refuses_from_chat():
-    for var in ("CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID"):
+    for var in ("CEPA_RUN", "CEPA_UNTIL_RUN", "CEPA_AUTONOMOUS_RUN_ID", "CLAUDE_AUTONOMOUS_RUN_ID"):
         with tempfile.TemporaryDirectory() as tmp:
             root = build_repo(tmp, [routed("a1", yes_item="nenhum")])
             write_log(root, [(NOW - timedelta(minutes=5), "1. sim")])

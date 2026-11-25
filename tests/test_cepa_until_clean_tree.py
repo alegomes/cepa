@@ -530,7 +530,7 @@ def _launch(root, binv, plan, args):
     env = dict(os.environ)
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(plan)
-    env.setdefault("CEPA_UNTIL_LEITOR", "off")
+    env.setdefault("CEPA_RUN_READER", "off")
     env["FAKE_CHAMADAS"] = str(root.parent / "chamadas.jsonl")
     env["CEPA_WORKTREE_HOME"] = str(root.parent / "worktrees")
     return subprocess.Popen(
@@ -1258,17 +1258,17 @@ def _proposed_waiver(root, queue="fila", item="a1"):
     sys.path.insert(0, str(Path(base.__file__).resolve().parent.parent
                            / "board-flow" / "bin"))
     import waivers
-    before = os.environ.get("CEPA_UNTIL_RUN")
-    os.environ["CEPA_UNTIL_RUN"] = "1"
+    before = os.environ.get("CEPA_RUN")
+    os.environ["CEPA_RUN"] = "1"
     try:
         path = Path(waivers.write(str(root), "teste-cego", "PlugSignAdapter",
                                   "o fornecedor não é alcançável", "alegomes",
                                   "quando o adapter mudar", queue=queue, item=item))
     finally:
         if before is None:
-            os.environ.pop("CEPA_UNTIL_RUN")
+            os.environ.pop("CEPA_RUN")
         else:
-            os.environ["CEPA_UNTIL_RUN"] = before
+            os.environ["CEPA_RUN"] = before
     _git_ok(root, "add", "-f", "--", str(path))
     _git_ok(root, "commit", "-qm", "proposed waiver")
     return path

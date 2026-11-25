@@ -21,7 +21,7 @@ An INTERNAL test stays free: renaming a class forces touching its unit test,
 and that is a legitimate refactor. The distinction lives in the patterns
 below, overridable per repo in `.claude/external-tests` (one glob per line).
 
-Silent outside the refactor mode. Turned off with CEPA_MODO=off.
+Silent outside the refactor mode. Turned off with CEPA_MODE=off.
 """
 
 import fnmatch
@@ -33,6 +33,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _modes  # noqa: E402
+import _cepaenv as E  # noqa: E402
 
 # Tests that assert observable behavior from the outside. A repo with another
 # layout overrides the list in .claude/external-tests.
@@ -126,7 +127,7 @@ def main():
         sys.exit(0)
 
     try:
-        if os.environ.get("CEPA_MODO", "on") == "off":
+        if E.get("CEPA_MODE", "on") == "off":
             sys.exit(0)
 
         cwd = payload.get("cwd") or os.getcwd()

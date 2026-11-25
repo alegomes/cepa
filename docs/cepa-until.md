@@ -82,7 +82,7 @@ The Claude account has a usage quota per 5-hour window. On 2026-09-17 a run hit 
 of window went unused, and the item in flight lost its work. Two rules came out of that:
 
 - **Wait for the reset when the cap hits.** If the reset time is known and fits in the
-  window, the supervisor sleeps until reset plus a margin (`CEPA_UNTIL_MARGEM_RESET`, default
+  window, the supervisor sleeps until reset plus a margin (`CEPA_RUN_RESET_MARGIN`, default
   120s) and resumes the **same** item. The cut attempt does not count against the item's
   attempts or the circuit breaker. Three cuts in a row with no progress end the run.
 - **Do not start an item with the quota nearly gone.** Each subprocess reports the 5-hour
@@ -129,12 +129,12 @@ O `run_start` traz `versao_registro: 2`; registros sem o campo são do formato a
   `rede` (o `claude` não alcançou a API), `contexto` (o `result` final fala de contexto
   estourado), `hook` (o `result` final é erro e cita um hook que bloqueou), `ok` (saída 0),
   `desconhecido` (o resto).
-- **`heartbeat`** em `<run>.estado.json`, gravado com o deslocamento de fuso (ex.: `-03:00`, para quem lê de outro host) e regravado a cada `CEPA_UNTIL_HEARTBEAT` segundos
+- **`heartbeat`** em `<run>.estado.json`, gravado com o deslocamento de fuso (ex.: `-03:00`, para quem lê de outro host) e regravado a cada `CEPA_RUN_HEARTBEAT` segundos
   (padrão 60) enquanto o `claude`, o build ou uma espera (reset de cota, sonda de rede)
   estão em andamento, com `item`, `tentativa`, `session_id` e `fase` do que está em voo. O
   `cepa-queue` usa a idade dele para reservas de OUTRO host (onde o pid não pode ser
   sondado): se existe um `*.estado.json` com o mesmo `host` e `arvore` da reserva, ela é
-  `viva` só se o run está `rodando` e o heartbeat tem menos de `CEPA_HEARTBEAT_ORFA`
+  `viva` só se o run está `rodando` e o heartbeat tem menos de `CEPA_HEARTBEAT_ORPHAN`
   segundos (padrão 900); senão é `orfa`. Sem esse arquivo vale a regra de 24h de antes.
   No mesmo host continua valendo a sonda de pid.
 - **`item_pulado`** (`id`, `motivo: reservado`, `detalhe`): o item que a fila adiou porque
@@ -178,7 +178,7 @@ instruction the next run receives if the answer is yes, recorded together with t
 question over 25 words or carrying a branch, test class or file name is shown anyway, with a
 warning that the analysis broke the rules.
 
-On a terminal each question waits up to 10 minutes (`CEPA_UNTIL_ESPERA_RESPOSTA`, in seconds) for a keystroke; with none, the run prints the `cepa-until decide` command and exits, because an overnight run ends with nobody at the keyboard and a prompt without a limit left the process alive for days (PID 84993, 2026-10-07).
+On a terminal each question waits up to 10 minutes (`CEPA_RUN_ANSWER_WAIT`, in seconds) for a keystroke; with none, the run prints the `cepa-until decide` command and exits, because an overnight run ends with nobody at the keyboard and a prompt without a limit left the process alive for days (PID 84993, 2026-10-07).
 
 An answer is applied on the spot by `cepa-queue answer`: a `blocked` item goes back to
 `pending` and an open route closes, with the owner's answer in the item's evidence, where the
@@ -274,7 +274,7 @@ no build, so no reinstall: only the warning above. With less than 120 s left in 
 
 ## Quem lê o estado: `_state.py` (DUR-4)
 
-O estado vive em cinco depósitos, e só neles: a fila (`queue.yaml`, ou `plan.yaml` no layout legado), o registro do run (`until/<run>.jsonl` e `<run>.estado.json`), o handoff por branch, as sessões vivas (`.claude/sessions/`) e o estado do modo autônomo (`docs/autonomous/<run>/state.yaml`). O módulo `common/hooks/_state.py` é o leitor único deles (só lê, nunca cria depósito) e traz o catálogo de tudo o que existe em `.claude/`. `next` (via `cepa-queue`), `doctor` (`cepa-doctor`), `run-review` (`cepa-until-digest`) e `whereami` (`cepa-intent`) importam o módulo. O `cepa-doctor` avisa na área `estado` quando aparece em `.claude/` uma entrada que o catálogo não conhece, e `tests/test_state_deposits.py` fica vermelho se alguém escrever em `.claude/<nome>` sem declarar o nome. A regra de vida de um run é uma só (`run_liveness`): `rodando` só conta como vivo com heartbeat recente (até `CEPA_HEARTBEAT_ORFA` segundos, padrão 900) e, na mesma máquina, com o pid respondendo; heartbeat velho é `morto`, e um registro `rodando` sem heartbeat (anterior ao DUR-1) é `desconhecido`, nunca `vivo`. O `cepa until pendentes` ainda tem a sua própria classificação de "mortos" (pid e prazo) e não usa essa regra.
+O estado vive em cinco depósitos, e só neles: a fila (`queue.yaml`, ou `plan.yaml` no layout legado), o registro do run (`until/<run>.jsonl` e `<run>.estado.json`), o handoff por branch, as sessões vivas (`.claude/sessions/`) e o estado do modo autônomo (`docs/autonomous/<run>/state.yaml`). O módulo `common/hooks/_state.py` é o leitor único deles (só lê, nunca cria depósito) e traz o catálogo de tudo o que existe em `.claude/`. `next` (via `cepa-queue`), `doctor` (`cepa-doctor`), `run-review` (`cepa-until-digest`) e `whereami` (`cepa-intent`) importam o módulo. O `cepa-doctor` avisa na área `estado` quando aparece em `.claude/` uma entrada que o catálogo não conhece, e `tests/test_state_deposits.py` fica vermelho se alguém escrever em `.claude/<nome>` sem declarar o nome. A regra de vida de um run é uma só (`run_liveness`): `rodando` só conta como vivo com heartbeat recente (até `CEPA_HEARTBEAT_ORPHAN` segundos, padrão 900) e, na mesma máquina, com o pid respondendo; heartbeat velho é `morto`, e um registro `rodando` sem heartbeat (anterior ao DUR-1) é `desconhecido`, nunca `vivo`. O `cepa until pendentes` ainda tem a sua própria classificação de "mortos" (pid e prazo) e não usa essa regra.
 
 ## Before you leave it running
 
@@ -289,7 +289,7 @@ O estado vive em cinco depósitos, e só neles: a fila (`queue.yaml`, ou `plan.y
   window spent so far, a line that redraws every 30 s while the `claude` subprocess runs, and
   the item title cut to the terminal width (`--full-title` keeps it whole; the `.jsonl`
   always has it). Off a terminal (`nohup`, a file, `NO_COLOR`) the output is byte for byte
-  the plain one; `CEPA_UNTIL_COR=sempre|nunca` forces either way.
+  the plain one; `CEPA_RUN_COLOR=sempre|nunca` forces either way.
 
 Proof of the tool itself: [`docs/proof/cepa-until.yaml`](proof/cepa-until.yaml) and
 [`docs/proof/cepa-until-cota.yaml`](proof/cepa-until-cota.yaml).

@@ -93,7 +93,7 @@ ceiling at 01:00 with reset at 3:20 and the window lasting until 06:17: the run 
 went unused, and the in-flight item lost what it had already done. Two rules:
 
   - **Wait for the reset (when it hits).** With the reset time known and
-    fitting in the window, the supervisor sleeps until reset + `CEPA_UNTIL_MARGEM_RESET`
+    fitting in the window, the supervisor sleeps until reset + `CEPA_RUN_RESET_MARGIN`
     (default 120s) and resumes the SAME item. The cut attempt doesn't count toward the
     item's attempt ceiling nor toward the circuit breaker. Three cuts in a row with no progress
     between them end the run: the announced reset is not lifting the ceiling.
@@ -134,8 +134,8 @@ over a drop that was neither the item's nor the account's. The rule:
   - **Wait for the network to come back.** When the final `result` of the stream-json comes with
     `terminal_reason: api_error` and the message is a network one (ENOTFOUND,
     ECONNREFUSED, "Can't reach the API server"...), the attempt doesn't count toward the
-    item's ceiling nor toward the circuit breaker. The supervisor probes `CEPA_UNTIL_SONDA_REDE`
-    (default `api.anthropic.com:443`) every `CEPA_UNTIL_SONDA_INTERVALO`
+    item's ceiling nor toward the circuit breaker. The supervisor probes `CEPA_RUN_NETWORK_PROBE`
+    (default `api.anthropic.com:443`) every `CEPA_RUN_PROBE_INTERVAL`
     seconds (default 60) until the network is back, and resumes the SAME item — its
     reservation becomes orphan and `start` claims it. The wait goes at most
     up to the deadline minus the minimum reserve; past that, the run stops with reason
@@ -210,7 +210,7 @@ On a terminal (stdin and stdout), before the first item, the launch shows the sa
 panel `decide` shows at the end for what the queue already holds for the owner
 (open `human_pending`, `blocked-before`): "yes" sends the item back to the queue and it
 runs in THIS run. Nothing extra is printed when nothing waits for the owner. The panel
-waits `CEPA_UNTIL_ESPERA_RESPOSTA` seconds (600 by default); with no answer, or on
+waits `CEPA_RUN_ANSWER_WAIT` seconds (600 by default); with no answer, or on
 Ctrl-C / EOF, one line says so and the run goes on as if the item were not answered.
 `--dry-run` and runs without a terminal never ask: they list, as before.
 Without a terminal the pre-read still runs (a missing pre-condition defers the item)
@@ -279,6 +279,7 @@ import _queuepath as qp  # noqa: E402  (the queue lives in two layouts during th
 import _ownertext  # noqa: E402  (the human section of a blocked item)
 import _clihelp  # noqa: E402
 import _dirt  # noqa: E402  (single definition of "dirty clone")
+import _cepaenv as E  # noqa: E402  (the CEPA_ environment names; the old ones still read)
 
 CEPA_PLAN = HERE / "cepa-queue"
 RUN_DIGEST = HERE / "_run_digest.py"
@@ -360,11 +361,11 @@ def javascript_verify(repo):
 # not there when an overnight run ends (PID 84993, run WEGO 2026-10-07-2132,
 # stayed alive 15 days blocked in `input()`). After this wait (seconds) with no
 # keystroke the run prints the `cepa-run decide` command and exits.
-ANSWER_WAIT_SEC = float(os.environ.get("CEPA_UNTIL_ESPERA_RESPOSTA", "600"))
+ANSWER_WAIT_SEC = float(E.get("CEPA_RUN_ANSWER_WAIT", "600"))
 
 # How long the end-of-run analysis may take. It reads a summary of tens of KB,
 # not the whole `.log`; 20 minutes is slack, not an estimate.
-ANALYSIS_LIMIT_SEC = int(os.environ.get("CEPA_UNTIL_LIMITE_ANALISE", "1200"))
+ANALYSIS_LIMIT_SEC = int(E.get("CEPA_RUN_ANALYSIS_LIMIT", "1200"))
 
 # 45min and not 25: in run 2026-09-27-1632 of wego-acessos-backend, 3 of the 4
 # delivered items went past 25min (1610 s, 2127 s, 2700 s) and WEGO-2283 started with
@@ -379,7 +380,7 @@ DEFAULT_MAX_FAILURES = 3
 # escalation it would keep running all night while the supervisor believed
 # it had killed it. Adjustable only so the test can exercise the escalation without
 # waiting half a minute per case.
-SIGTERM_GRACE = float(os.environ.get("CEPA_UNTIL_GRACA_SIGTERM", "30"))
+SIGTERM_GRACE = float(E.get("CEPA_RUN_SIGTERM_GRACE", "30"))
 
 # Statuses that count as PROGRESS on the item. `dropped` is included because the item left
 # the queue by a recorded decision, not because the run failed.
@@ -448,7 +449,7 @@ RESET_HOUR = re.compile(
 # Margin after the announced reset before resuming. The server's clock and ours
 # don't match to the second, and waking up too early burns an attempt on the ceiling.
 # Adjustable only so the test can exercise the wait without sleeping minutes.
-RESET_MARGIN = float(os.environ.get("CEPA_UNTIL_MARGEM_RESET", "120"))
+RESET_MARGIN = float(E.get("CEPA_RUN_RESET_MARGIN", "120"))
 
 # Consecutive cuts by the ceiling, with no progress between them, that end the run. The
 # announced reset is not lifting the ceiling — waiting again repeats the night.
@@ -463,7 +464,7 @@ QUOTA_WITHOUT_HISTORY = 0.9
 # environment: in an interactive session sending the build to the background is the
 # right thing (the notification re-invokes the session), and under `claude -p` it means losing the
 # item, because there is no next turn to collect the result.
-ENV_WINDOW = "CEPA_UNTIL_RUN"
+ENV_WINDOW = "CEPA_RUN"
 
 # The ceiling `claude -p` uses to wait for background work before
 # killing itself. The default (10 min) killed WEGO-2224 at 47 minutes with the 3 Tasks
@@ -524,12 +525,12 @@ HOOK_BLOCK = re.compile(
 # Seconds between two heartbeats written to the run's `estado.json` while a child (or a
 # quota/network wait) is running. `cepa-queue` reads the age of it to tell a dead run on
 # another host from a live one.
-HEARTBEAT_INTERVAL = float(os.environ.get("CEPA_UNTIL_HEARTBEAT", "60"))
+HEARTBEAT_INTERVAL = float(E.get("CEPA_RUN_HEARTBEAT", "60"))
 
 # Where the supervisor knocks to find out whether the network is back (host:port, TCP), and how
 # often. The API is the right target: it is what `claude` needs to reach.
-NETWORK_PROBE = os.environ.get("CEPA_UNTIL_SONDA_REDE", "api.anthropic.com:443")
-PROBE_INTERVAL = float(os.environ.get("CEPA_UNTIL_SONDA_INTERVALO", "60"))
+NETWORK_PROBE = E.get("CEPA_RUN_NETWORK_PROBE", "api.anthropic.com:443")
+PROBE_INTERVAL = float(E.get("CEPA_RUN_PROBE_INTERVAL", "60"))
 
 # Consecutive network drops, with no progress between them, that end the run: the
 # probe sees the network, `claude` doesn't — waiting again doesn't change that.
@@ -631,8 +632,8 @@ def human(td):
 # `nohup` or in a file. The decoration (color, glyphs, window bar and the line
 # that redraws itself while `claude` runs) exists only in the first case. Outside
 # a terminal, or with NO_COLOR, the output is byte for byte the old one: it is what the
-# tests read and what a `nohup`'s `.log` keeps. `CEPA_UNTIL_COR=sempre`
-# and `CEPA_UNTIL_COR=nunca` force it.
+# tests read and what a `nohup`'s `.log` keeps. `CEPA_RUN_COLOR=sempre`
+# and `CEPA_RUN_COLOR=nunca` force it.
 
 class Screen:
     COLORS = {"verde": "\033[32m", "vermelho": "\033[31m", "amarelo": "\033[33m",
@@ -642,7 +643,7 @@ class Screen:
 
     def __init__(self, stream=None):
         stream = sys.stdout if stream is None else stream
-        mode = os.environ.get("CEPA_UNTIL_COR", "").strip().lower()
+        mode = E.get("CEPA_RUN_COLOR", "").strip().lower()
         if mode in ("sempre", "always", "1"):
             enabled = True
         elif mode in ("nunca", "never", "0") or os.environ.get("NO_COLOR"):
@@ -778,7 +779,7 @@ def wait_for_child(proc, limit_sec, label, on_tick=None):
             continue
 
 
-LIVE_LINE_INTERVAL = float(os.environ.get("CEPA_UNTIL_LINHA_VIVA", "30"))
+LIVE_LINE_INTERVAL = float(E.get("CEPA_RUN_LIVE_LINE", "30"))
 
 
 # ── reading the queue ───────────────────────────────────────────────────────
@@ -1883,7 +1884,7 @@ def open_run_branch(repo, run_id, inheritance=()):
     synced tree, and merges into it the `inheritance` branches. Returns
     (tree, branch, error). On error, neither worktree nor branch is left behind."""
     branch = f"until/{run_id}"
-    home = Path(os.environ.get(ENV_WORKTREE_HOME)
+    home = Path(E.get(ENV_WORKTREE_HOME)
                 or Path.home() / "cepa-worktrees")
     tree = home / f"{repo.name}-until-{run_id}"
     home.mkdir(parents=True, exist_ok=True)
@@ -5116,8 +5117,8 @@ def next_rows(repo, queue, run_id, state, ledger, report, left=None):
 # JSON: a missing pre-condition (something outside the code that must exist before
 # the item can be done: a credential, an environment, an external answer), a
 # preference (CS-6, only recorded here), or nothing. The closed format is what lets
-# a test plug a fake reader through CEPA_UNTIL_LEITOR.
-READER_CEILING_SEC = float(os.environ.get("CEPA_UNTIL_TETO_LEITURA", "300"))
+# a test plug a fake reader through CEPA_RUN_READER.
+READER_CEILING_SEC = float(E.get("CEPA_RUN_READER_CEILING", "300"))
 # `claude` readers in parallel: all the queue's items at once would be a burst on the
 # quota; the ones that do not start within the ceiling run as today.
 READER_WORKERS = 8
@@ -5216,11 +5217,11 @@ Item:
 
 def reader_command(item, prompt=READER_PROMPT):
     """(argv, stdin_text) of the reader of ONE item, or None when the pre-read is off.
-    `CEPA_UNTIL_LEITOR` replaces the command (shlex-split; it gets the item as JSON on
+    `CEPA_RUN_READER` replaces the command (shlex-split; it gets the item as JSON on
     stdin); `off` disables the pre-read. The default is a `claude -p` limited to the
     read-only tools, with the item inside the prompt (stdin stays closed). `prompt`
     is the job: READER_PROMPT (the item) or ROUTE_READER_PROMPT (an old route)."""
-    override = os.environ.get("CEPA_UNTIL_LEITOR")
+    override = E.get("CEPA_RUN_READER", None)
     payload = json.dumps(item, ensure_ascii=False)
     if override is not None:
         if override.strip().lower() == "off":
@@ -5231,7 +5232,7 @@ def reader_command(item, prompt=READER_PROMPT):
            "--tools", "Read,Glob,Grep", "--allowedTools", "Read,Glob,Grep",
            # no MCP server: its tools are not covered by `--tools`
            "--strict-mcp-config"]
-    model = os.environ.get("CEPA_UNTIL_MODELO_LEITOR")
+    model = E.get("CEPA_RUN_READER_MODEL")
     if model:
         cmd += ["--model", model]
     return cmd, None

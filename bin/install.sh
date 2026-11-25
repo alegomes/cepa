@@ -387,7 +387,7 @@ if [ -f "${CEPA_BIN}" ]; then
   echo "    alias claude='${CEPA_BIN}'"
   echo ""
   echo "  Aliasing 'claude' is recommended; cepa falls back to the real binary via"
-  echo "  CLAUDE_WT_CLAUDE_BIN. Prefer not to override 'claude'? Alias it as 'cepa':"
+  echo "  CEPA_WT_CLAUDE_BIN. Prefer not to override 'claude'? Alias it as 'cepa':"
   echo "    alias cepa='${CEPA_BIN}'"
   echo ""
   echo "  Renamed from 'ccw' on 2026-07-30. If your rc still aliases the old name,"

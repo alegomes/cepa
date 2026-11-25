@@ -18,7 +18,7 @@ Contracts guarded here:
   - `>=` in a condition does not become a redirect (that false block has already
     happened in the bash-path-lock and silenced perturbations);
   - .claude/external-tests overrides the default patterns;
-  - CEPA_MODO=off turns the gate off.
+  - CEPA_MODE=off turns the gate off.
 
 No third-party deps — run with `python3 tests/test_refactor_gate.py`.
 """
@@ -173,8 +173,8 @@ def test_repo_override():
 def test_kill_switch():
     with Repo() as r:
         r.mode("refactor")
-        p = r.edit("e2e/checkout.spec.ts", env={"CEPA_MODO": "off"})
-        check("CEPA_MODO=off desliga o gate", p.returncode == 0, p.stderr)
+        p = r.edit("e2e/checkout.spec.ts", env={"CEPA_MODE": "off"})
+        check("CEPA_MODE=off desliga o gate", p.returncode == 0, p.stderr)
 
 
 def main():

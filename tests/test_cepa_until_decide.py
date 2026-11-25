@@ -58,8 +58,8 @@ def load_module(color="nunca"):
     """Loads cepa-until with the terminal decoration turned off: the in-process
     cases read the plain text, even when they run in a terminal. With
     `color="sempre"` it turns on, for the case that proves the decorated layout."""
-    before = os.environ.get("CEPA_UNTIL_COR")
-    os.environ["CEPA_UNTIL_COR"] = color
+    before = os.environ.get("CEPA_RUN_COLOR")
+    os.environ["CEPA_RUN_COLOR"] = color
     try:
         loader = importlib.machinery.SourceFileLoader("cepa_until",
                                                       str(CEPA_UNTIL))
@@ -68,9 +68,9 @@ def load_module(color="nunca"):
         loader.exec_module(mod)
     finally:
         if before is None:
-            del os.environ["CEPA_UNTIL_COR"]
+            del os.environ["CEPA_RUN_COLOR"]
         else:
-            os.environ["CEPA_UNTIL_COR"] = before
+            os.environ["CEPA_RUN_COLOR"] = before
     return mod
 
 
@@ -391,7 +391,7 @@ def test_run_on_an_hc_terminal_that_nobody_answers_ends_in_needs_you():
         root = build_repo(tmp, [item("a1"), item("a2")])
         binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
         env = _hc_env(env_do_run(tmp, root, binv))
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        env["CEPA_RUN_ANSWER_WAIT"] = "2"
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"], str(root),
@@ -790,7 +790,7 @@ def test_run_on_terminal_ends_asking_and_applies():
         env = dict(os.environ)
         env["PATH"] = f"{binv}:{env['PATH']}"
         env["FAKE_PLANO"] = str(plan_of(root))
-        env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
+        env.setdefault("CEPA_RUN_READER", "off")  # the pre-read must not call the fake claude
         env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
         env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
         rc, out = on_tty(
@@ -813,13 +813,13 @@ def test_run_on_terminal_without_answer_exits_after_the_wait():
     """Item until-processo-nao-sai: an overnight run ends with nobody at the
     keyboard. The end-of-run prompt had no limit and PID 84993 (run WEGO
     2026-10-07-2132) stayed alive 15 days blocked in `input()`. With no
-    keystroke inside CEPA_UNTIL_ESPERA_RESPOSTA the run prints the
+    keystroke inside CEPA_RUN_ANSWER_WAIT the run prints the
     `cepa-run decide` command and exits 0, applying nothing."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1"), item("a2")])
         binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        env["CEPA_RUN_ANSWER_WAIT"] = "2"
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"], str(root),
@@ -855,7 +855,7 @@ def env_do_run(tmp, root, binv):
     env = dict(os.environ)
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(plan_of(root))
-    env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
+    env.setdefault("CEPA_RUN_READER", "off")  # the pre-read must not call the fake claude
     env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
     env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
     return env
@@ -1899,7 +1899,7 @@ def _launch_on_tty(answers, wait="600", items=None, extra=(), timeout=90):
                           [item("a1", human_pending="provision the Keycloak role")])
         binv = fake_claude(tmp, "pass")
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+        env["CEPA_RUN_ANSWER_WAIT"] = wait
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis", *extra], str(root),
@@ -1950,7 +1950,7 @@ def test_launch_without_terminal_keeps_ending_with_no_item_start():
         env = dict(os.environ)
         env["PATH"] = f"{binv}:{env['PATH']}"
         env["FAKE_PLANO"] = str(plan_of(root))
-        env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
+        env.setdefault("CEPA_RUN_READER", "off")  # the pre-read must not call the fake claude
         env.setdefault("CEPA_WORKTREE_HOME", str(Path(root).parent / "worktrees"))
         calls_f = Path(root).parent / "chamadas.jsonl"
         env["FAKE_CHAMADAS"] = str(calls_f)
@@ -2136,7 +2136,7 @@ def _cs10_check(label, items, answers, count):
         root = build_repo(tmp, items)
         binv = fake_claude(tmp, "pass")
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        env["CEPA_RUN_ANSWER_WAIT"] = "2"
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"], str(root),
@@ -2267,7 +2267,7 @@ def test_launch_guard_needs_both_stdin_and_stdout_on_a_terminal():
         root = build_repo(tmp, [item("a1", human_pending="provision the Keycloak role")])
         binv = fake_claude(tmp, "pass")
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        env["CEPA_RUN_ANSWER_WAIT"] = "2"
         cmd = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
                "--for", "2h", "--no-verify", "--no-analysis"]
         # a) stdin = pty, stdout = pipe
@@ -2358,14 +2358,14 @@ def _fake_reader(tmp, mode):
 
 def _pre_read_launch(mode, leitor=None, extra=(), x_item=None):
     """No terminal (stdin DEVNULL): queue with x1 and y1, the fake reader plugged
-    through CEPA_UNTIL_LEITOR (or `leitor` as given). Returns (stdout, events, items,
+    through CEPA_RUN_READER (or `leitor` as given). Returns (stdout, events, items,
     reader_calls)."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [x_item or item("x1"), item("y1")])
         binv = fake_claude(tmp, "pass")
         script, log = _fake_reader(tmp, mode)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = leitor if leitor is not None else str(script)
+        env["CEPA_RUN_READER"] = leitor if leitor is not None else str(script)
         p = subprocess.run(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis", *extra],
@@ -2503,8 +2503,8 @@ def test_pre_read_cs5_route_opened_by_the_pre_read_shows_in_the_launch_panel():
         binv = fake_claude(tmp, "pass")
         script, log = _fake_reader(tmp, "pre")
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(script)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        env["CEPA_RUN_READER"] = str(script)
+        env["CEPA_RUN_ANSWER_WAIT"] = "2"
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"], str(root),
@@ -2526,7 +2526,7 @@ def test_pre_read_cs5_nothing_left_after_the_pre_read_means_no_run():
         binv = fake_claude(tmp, "pass")
         script, log = _fake_reader(tmp, "pre")
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(script)
+        env["CEPA_RUN_READER"] = str(script)
         p = subprocess.run(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"],
@@ -2571,8 +2571,8 @@ def test_pre_read_cs5_ceiling_kills_a_slow_reader_and_the_item_runs():
         root = build_repo(tmp, [item("x1")])
         binv = fake_claude(tmp, "pass")
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = f"{sys.executable} -c 'import time; time.sleep(60)'"
-        env["CEPA_UNTIL_TETO_LEITURA"] = "1"
+        env["CEPA_RUN_READER"] = f"{sys.executable} -c 'import time; time.sleep(60)'"
+        env["CEPA_RUN_READER_CEILING"] = "1"
         t0 = time.time()
         p = subprocess.run(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
@@ -2588,13 +2588,13 @@ def test_pre_read_cs5_ceiling_kills_a_slow_reader_and_the_item_runs():
 # ── CS-7: the pre-read stops at the ceiling and the unread item runs as today ──
 
 def _cs7_launch(items, reader, ceiling="1", body="pass"):
-    """Real launch with `reader` as CEPA_UNTIL_LEITOR; returns (out, events)."""
+    """Real launch with `reader` as CEPA_RUN_READER; returns (out, events)."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, items)
         binv = fake_claude(tmp, body)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = reader(tmp) if callable(reader) else reader
-        env["CEPA_UNTIL_TETO_LEITURA"] = ceiling
+        env["CEPA_RUN_READER"] = reader(tmp) if callable(reader) else reader
+        env["CEPA_RUN_READER_CEILING"] = ceiling
         p = subprocess.run(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"],
@@ -2695,8 +2695,8 @@ def _pref_launch(mode="pref", tty_inputs=None, wait="5"):
         binv = fake_claude(tmp, "pass")
         script, _ = _fake_reader(tmp, mode)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(script)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+        env["CEPA_RUN_READER"] = str(script)
+        env["CEPA_RUN_ANSWER_WAIT"] = wait
         cmd = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
                "--for", "2h", "--no-verify", "--no-analysis"]
         if tty_inputs is None:
@@ -2851,8 +2851,8 @@ def _cs8_launch(items, mode="pre", inputs=None, wait="5", delay=2):
         binv = fake_claude(tmp, "pass")
         reader, done = _slow_reader(tmp, mode, delay)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(reader)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+        env["CEPA_RUN_READER"] = str(reader)
+        env["CEPA_RUN_ANSWER_WAIT"] = wait
         seen = {}
 
         def first_answer():
@@ -3010,8 +3010,8 @@ def test_launch_cs8_empty_queue_route_and_preference_from_the_pre_read_share_one
             "        'pergunta': 'Posso usar o formato curto?'}))\n")
         reader.chmod(0o755)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(reader)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "5"
+        env["CEPA_RUN_READER"] = str(reader)
+        env["CEPA_RUN_ANSWER_WAIT"] = "5"
         _, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"], str(root),
@@ -3065,8 +3065,8 @@ def test_launch_cs9_option_on_terminal_skips_the_pre_read_and_the_panel():
         binv = fake_claude(tmp, "pass")
         reader, log = _mixed_reader(tmp)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(reader)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        env["CEPA_RUN_READER"] = str(reader)
+        env["CEPA_RUN_ANSWER_WAIT"] = "2"
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis", "--no-pre-read"],
@@ -3102,7 +3102,7 @@ def test_launch_cs9_option_has_a_portuguese_alias_and_is_in_the_help():
         binv = fake_claude(tmp, "pass")
         reader, log = _mixed_reader(tmp)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(reader)
+        env["CEPA_RUN_READER"] = str(reader)
         q = subprocess.run(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis", "--sem-leitura"],
@@ -3126,8 +3126,8 @@ def test_launch_cs9_without_terminal_reads_and_lists_the_questions_as_text():
         binv = fake_claude(tmp, "pass")
         reader, log = _mixed_reader(tmp)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(reader)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "600"
+        env["CEPA_RUN_READER"] = str(reader)
+        env["CEPA_RUN_ANSWER_WAIT"] = "600"
         rfd, wfd = os.pipe()
         try:
             proc = subprocess.Popen(

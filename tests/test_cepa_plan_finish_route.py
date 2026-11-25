@@ -41,7 +41,7 @@ def check(name, cond, detail=""):
 
 def run(repo, *args):
     env = dict(os.environ)
-    for k in ("CLAUDE_WT_CLAIM", "CEPA_UNTIL_RUN", "CLAUDE_SESSION_ID"):
+    for k in ("CEPA_WT_CLAIM", "CLAUDE_WT_CLAIM", "CEPA_RUN", "CEPA_UNTIL_RUN", "CLAUDE_SESSION_ID"):
         env.pop(k, None)
     return subprocess.run([sys.executable, str(CEPA_PLAN)] + list(args),
                           capture_output=True, text=True, cwd=str(repo), env=env)
@@ -194,8 +194,8 @@ def test_validator_rejects_route_kind_outside_the_three():
 
 def answer_on_tty(d, *extra):
     env = {k: v for k, v in os.environ.items()
-           if k not in ("CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID",
-                        "CLAUDE_SESSION_ID", "CLAUDE_WT_CLAIM")}
+           if k not in ("CEPA_RUN", "CEPA_UNTIL_RUN", "CEPA_AUTONOMOUS_RUN_ID", "CLAUDE_AUTONOMOUS_RUN_ID",
+                        "CLAUDE_SESSION_ID", "CEPA_WT_CLAIM")}
     return on_tty([sys.executable, str(CEPA_PLAN), "answer", "fila", "A",
                    "--answer", "sim: o acesso já existe", "--no-commit",
                    "--repo", str(d), *extra], str(d), env=env)

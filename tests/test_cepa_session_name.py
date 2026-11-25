@@ -15,12 +15,14 @@ import sys
 import tempfile
 from pathlib import Path
 
-# CEPA_UNTIL_RUN and CEPA_MENU decide whether the launcher appends the mode menu as
+# CEPA_RUN and CEPA_MENU decide whether the launcher appends the mode menu as
 # the opening prompt. Inside a cepa-until round the first is set and the menu is off;
 # the supervisor's full build runs without it. Dropping both makes this file run the
 # same in the two places (menu on, as in the owner's terminal).
-for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODO", "CEPA_LAUNCH_ID", "CLAUDE_WT_CLAIM",
-           "CEPA_MODO", "CEPA_MODO_DEFAULT", "CEPA_UNTIL_RUN", "CEPA_MENU"):
+for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODE", "CEPA_LAUNCH_ID", "CEPA_WT_CLAIM",
+           "CEPA_MODE", "CEPA_MODE_DEFAULT", "CEPA_RUN", "CEPA_MENU",
+           # the names these had before CS-6 are still read: they must not leak in either
+           "CEPA_UNTIL_RUN", "CEPA_MODO", "CEPA_MODO_DEFAULT", "CEPA_ENCADEAR", "CLAUDE_WT_CLAIM", "CEPA_PROMPT_MODO", "CEPA_PERMISSOES"):
     os.environ.pop(_k, None)
 
 REPO = Path(__file__).resolve().parent.parent
@@ -74,8 +76,8 @@ class World:
         self.tmp.cleanup()
 
     def cepa(self, *args, cwd=None):
-        env = {**os.environ, "CLAUDE_WT_CLAUDE_BIN": str(self.stub), "CEPA_PREFLIGHT": "off",
-               "CEPA_ENCADEAR": "off", "CEPA_WORKTREE_HOME": str(self.home),
+        env = {**os.environ, "CEPA_WT_CLAUDE_BIN": str(self.stub), "CEPA_PREFLIGHT": "off",
+               "CEPA_CHAIN": "off", "CEPA_WORKTREE_HOME": str(self.home),
                "CEPA_TELEMETRY_DIR": str(self.telemetry), "STUB_LOG": str(self.log),
                "HOME": str(self.tmp_home)}
         return subprocess.run([str(CEPA), "--mode", "construction", *args],

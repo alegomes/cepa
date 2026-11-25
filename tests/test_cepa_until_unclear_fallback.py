@@ -54,7 +54,7 @@ def test_hung_reader_leaves_the_item_for_later_and_the_panel_goes_on():
         b2["route_kind"] = "external-block"
         root = build_repo(tmp, [b1, b2])
         env = dict(os.environ, CEPA_FEEDBACK_DIR=fb,
-                   CEPA_UNTIL_LEITOR=str(_hung_reader(tmp)))
+                   CEPA_RUN_READER=str(_hung_reader(tmp)))
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         start = time.monotonic()
         rc, out = on_tty(cmd, str(root), env=env,

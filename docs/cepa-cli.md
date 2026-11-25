@@ -74,6 +74,32 @@ refused with exit 2 and a line that names the new command.
   that fails (empty `why`, a `blocked` item without a question, a plan with a
   blocking cycle) refuses before touching the disk, and says which rule.
 
+## Environment variables
+
+Every variable Cepa owns starts with `CEPA_` and has an English name, for
+example `CEPA_MODE=off`, `CEPA_CHAIN=off`, `CEPA_PERMISSIONS=classifier`,
+`CEPA_PROMPT_MODE=replace`, `CEPA_COLOR=always`, `CEPA_RUN_*` (what `cepa run`
+reads) and `CEPA_WT_*` (the worktree launcher). Compatibility: the old names
+are still read, the new one wins when both are set, and the old values
+`classificador` and `substitui` are still accepted. The old -> new table lives
+in `common/hooks/_cepaenv.py`.
+
+| Old name (still read) | New name |
+|---|---|
+| `CEPA_MODO`, `CEPA_MODO_DEFAULT` | `CEPA_MODE`, `CEPA_MODE_DEFAULT` |
+| `CEPA_ENCADEAR` | `CEPA_CHAIN` |
+| `CEPA_PERMISSOES` (old value `classificador`) | `CEPA_PERMISSIONS` (`classifier`) |
+| `CEPA_PROMPT_MODO` (old value `substitui`) | `CEPA_PROMPT_MODE` (`replace`) |
+| `CEPA_COR` | `CEPA_COLOR` |
+| `CEPA_UNTIL_RUN` | `CEPA_RUN` |
+| `CEPA_UNTIL_<X>` (Portuguese `<X>`) | `CEPA_RUN_<X in English>`: `READER_CEILING`, `NETWORK_PROBE`, `PROBE_INTERVAL`, `READER_MODEL`, `RESET_MARGIN`, `LIVE_LINE`, `ANALYSIS_LIMIT`, `READER`, `HEARTBEAT`, `SIGTERM_GRACE`, `ANSWER_WAIT`, `COLOR` |
+| `CEPA_HEARTBEAT_ORFA` | `CEPA_HEARTBEAT_ORPHAN` |
+| `CLAUDE_AUTONOMOUS_RUN_ID` | `CEPA_AUTONOMOUS_RUN_ID` |
+| `CLAUDE_WT_<X>` | `CEPA_WT_<X>` |
+| `CCW_<X>` | `CEPA_<X>` |
+| `CAPTURE_BUILD_DEBUG`, `LEAD_WORKTREE_DEBUG` (and `_LOG`) | `CEPA_CAPTURE_BUILD_DEBUG`, `CEPA_LEAD_WORKTREE_DEBUG` |
+| `HEX_PATHLOCK_DEBUG`, `DOCS_PATHLOCK_DEBUG`, `REVIEW_GATE_ALLOW_DIRECT`, `REVIEW_GATE_NUDGE` | the same with the `CEPA_` prefix |
+
 ## Reference, one section per script
 
 ### `cepa-autonomy`

@@ -158,13 +158,13 @@ def test_wrapper_preflight():
         (bindir / "cepa").write_text(wrapper.read_text(encoding="utf-8"), encoding="utf-8")
         # --modo: since common 1.0.0 no session starts without a declared mode, and
         # without a tty cepa has no way to ask.
-        env = dict(os.environ, CLAUDE_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT_TTL="0")
+        env = dict(os.environ, CEPA_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT_TTL="0")
         p = subprocess.run(["sh", str(bindir / "cepa"), "--modo", "construcao"],
                            capture_output=True, text=True, cwd=str(root), env=env)
         check("doctor quebrado NÃO impede a sessão de abrir",
               "SESSAO-ABRIU" in p.stdout, p.stdout + p.stderr)
 
-        env_off = dict(os.environ, CLAUDE_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT="off")
+        env_off = dict(os.environ, CEPA_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT="off")
         p = subprocess.run(["sh", str(wrapper), "--modo", "construcao"],
                            capture_output=True, text=True, cwd=str(root), env=env_off)
         check("CEPA_PREFLIGHT=off desliga o preflight",

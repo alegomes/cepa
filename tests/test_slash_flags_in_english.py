@@ -37,7 +37,7 @@ from test_cepa_until import build_repo, item  # noqa: E402
 
 ENV = dict(os.environ, CEPA_PREFLIGHT="off", NO_COLOR="1", GIT_AUTHOR_NAME="t",
            GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
-for _v in ("CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID"):
+for _v in ("CEPA_RUN", "CEPA_UNTIL_RUN", "CEPA_AUTONOMOUS_RUN_ID", "CLAUDE_AUTONOMOUS_RUN_ID"):
     ENV.pop(_v, None)
 
 

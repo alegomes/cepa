@@ -28,7 +28,7 @@ capped at two lines, in one of three states:
     been stalled, and the next step. The age is what gives away the cursor the
     agent forgot to advance (decision D2); the whole plan stays in whereami.
 
-A `cepa-until` run (`CEPA_UNTIL_RUN`) gets no intent at all: there the intent is
+A `cepa-until` run (`CEPA_RUN`) gets no intent at all: there the intent is
 the plan.yaml item, and a file inherited from another session would become a
 question nobody is there to answer.
 
@@ -75,6 +75,7 @@ from pathlib import Path
 # Without it the mode is a label, not a boundary. The table lives in `_modes.py`
 # (single source, shared with `cepa-modes`); here it is only read.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _cepaenv as E  # noqa: E402
 try:
     from _modes import EXIT
 except Exception:  # noqa: BLE001 — the hook runs every turn; it must never break
@@ -104,7 +105,7 @@ except Exception:  # noqa: BLE001
     exploration_exit_line = None
 
 # The mark `cepa-until` exports on each run (same as session-registry).
-ENV_WINDOW = "CEPA_UNTIL_RUN"
+ENV_WINDOW = "CEPA_RUN"
 
 # How many log prompts enter the empty state, and the cut of each: they are a
 # hint of the intent, not a transcript, and they pay a toll every turn.
@@ -488,7 +489,7 @@ def main():
         sys.exit(0)
 
     try:
-        if os.environ.get("CEPA_MODO", "on") == "off":
+        if E.get("CEPA_MODE", "on") == "off":
             sys.exit(0)
 
         cwd = payload.get("cwd") or os.getcwd()
@@ -512,13 +513,13 @@ def main():
             )
             blocks.append(" ".join(lines))
 
-        if not os.environ.get(ENV_WINDOW):
+        if not E.get(ENV_WINDOW):
             try:
                 blocks += intent_lines(root, payload, bool(mode))
             except Exception as e:  # noqa: BLE001 — intent never takes the mode down
                 print(f"[session-mode] intenção: {e}", file=sys.stderr)
 
-        if not os.environ.get(ENV_WINDOW):
+        if not E.get(ENV_WINDOW):
             record_menu_reply(root, payload)
             blocks += menu_lines(root, payload.get("prompt"), payload)
             blocks += epic_lines(root, payload)

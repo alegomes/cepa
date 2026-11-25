@@ -19,7 +19,7 @@ Contracts guarded here:
   - with `comando` in the file, the initial prompt is `<comando>\\n\\n<brief>` (command
     on line 1); absent, blank or non-string `comando`: the brief alone, no warning;
   - without the file: the stub runs only once and its exit code is that of cepa;
-  - CEPA_ENCADEAR=off: only once, the file stays;
+  - CEPA_CHAIN=off: only once, the file stays;
   - invalid file (missing repo): only once, the file stays, and cepa says so;
   - with `intencao` in the file, the next session is born with it (purpose,
     goal and plan written for it, step 1, via cepa-intent); without `intencao`,
@@ -40,8 +40,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODO", "CEPA_ENCADEAR", "CEPA_LAUNCH_ID",
-           "CLAUDE_WT_CLAIM", "CEPA_MODO", "CEPA_MODO_DEFAULT"):
+for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODE", "CEPA_CHAIN", "CEPA_LAUNCH_ID",
+           "CEPA_WT_CLAIM", "CEPA_MODE", "CEPA_MODE_DEFAULT",
+           # the names these had before CS-6 are still read: they must not leak in either
+           "CEPA_UNTIL_RUN", "CEPA_MODO", "CEPA_MODO_DEFAULT", "CEPA_ENCADEAR", "CLAUDE_WT_CLAIM", "CEPA_PROMPT_MODO", "CEPA_PERMISSOES"):
     os.environ.pop(_k, None)
 
 REPO = Path(__file__).resolve().parent.parent
@@ -149,7 +151,7 @@ class World:
 
     def run(self, nxt=None, env=None, args=None):
         e = {**os.environ,
-             "CLAUDE_WT_CLAUDE_BIN": str(self.stub),
+             "CEPA_WT_CLAUDE_BIN": str(self.stub),
              "CEPA_PREFLIGHT": "off",
              "CEPA_WORKTREE_HOME": str(self.wt_home),
              "CEPA_TELEMETRY_DIR": str(self.telemetry),
@@ -390,10 +392,10 @@ def t_without_file():
 
 
 def t_off():
-    print("CEPA_ENCADEAR=off: não encadeia e o arquivo fica")
+    print("CEPA_CHAIN=off: não encadeia e o arquivo fica")
     with World() as w:
         r = w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF},
-                  env={"CEPA_ENCADEAR": "off", "STUB_RC": "7"})
+                  env={"CEPA_CHAIN": "off", "STUB_RC": "7"})
         check("o stub rodou uma vez", len(w.calls()) == 1, f"{len(w.calls())}")
         check("o arquivo continua lá", (w.sessions / "sess-1.next.json").exists())
         check("o código de saída é o do claude", r.returncode == 7, f"rc={r.returncode}")

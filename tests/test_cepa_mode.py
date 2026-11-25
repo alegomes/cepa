@@ -11,7 +11,7 @@ Contracts guarded here:
   - a valid mode writes the file and passes the remaining args to claude;
   - an unknown mode is an error (rc=2), never becomes a question nor a guess;
   - without a mode and without tty → refuses to start, and does NOT write a file;
-  - CEPA_MODO=off turns off the whole requirement (escape hatch);
+  - CEPA_MODE=off turns off the whole requirement (escape hatch);
   - an overhaul without a budget is refused — an overhaul without a closed scope does not end;
   - the detection of "there is a human to ask" looks at stdin, not only /dev/tty:
     /dev/tty stays readable with redirected stdin, and alone it would let a
@@ -27,11 +27,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-# cepa reads CEPA_PROMPT/CEPA_PROMPT_MODO from the environment. Inherited from the shell of whoever
+# cepa reads CEPA_PROMPT/CEPA_PROMPT_MODE from the environment. Inherited from the shell of whoever
 # runs the suite (cepa-until runs with them), they become a prompt the test did not
 # ask for and break the "passes only the user's args". Whoever wants the prompt passes
 # it in the env= of the case itself.
-for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODO"):
+for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODE"):
     os.environ.pop(_k, None)
 
 # The intent cases write the .claude/session-log.md that session-mode reads,
@@ -83,7 +83,7 @@ class Repo:
 
     def run(self, *args, env=None):
         e = {**os.environ,
-             "CLAUDE_WT_CLAUDE_BIN": str(self.fake),
+             "CEPA_WT_CLAUDE_BIN": str(self.fake),
              "CEPA_PREFLIGHT": "off"}
         e.update(env or {})
         return subprocess.run(
@@ -137,15 +137,15 @@ def test_without_mode_without_tty():
         check("sem modo: não grava", not r.mode_file.exists())
         check("sem modo: não caiu no menu interativo",
               "Which mode does this session operate in" not in p.stderr, p.stderr)
-        check("sem modo: ensina o escape", "CEPA_MODO=off" in p.stderr, p.stderr)
+        check("sem modo: ensina o escape", "CEPA_MODE=off" in p.stderr, p.stderr)
 
 
 def test_kill_switch():
     with Repo() as r:
-        p = r.run("--resume", env={"CEPA_MODO": "off"})
-        check("CEPA_MODO=off: sobe", p.returncode == 0, p.stderr)
-        check("CEPA_MODO=off: não grava", not r.mode_file.exists())
-        check("CEPA_MODO=off: entrega ao claude",
+        p = r.run("--resume", env={"CEPA_MODE": "off"})
+        check("CEPA_MODE=off: sobe", p.returncode == 0, p.stderr)
+        check("CEPA_MODE=off: não grava", not r.mode_file.exists())
+        check("CEPA_MODE=off: entrega ao claude",
               claude_args(p) == ["--resume"], p.stdout)
 
 
@@ -171,7 +171,7 @@ def run_hook(cwd, env=None, **payload):
     mark comes out of the environment: the suite runs inside it, and with it the hook
     silences the intent — whoever wants to test that passes it in the env= of the case."""
     import json as _json
-    e = {k: v for k, v in os.environ.items() if k != "CEPA_UNTIL_RUN"}
+    e = {k: v for k, v in os.environ.items() if k not in ("CEPA_RUN", "CEPA_UNTIL_RUN")}
     e.update(env or {})
     return subprocess.run(
         [sys.executable, str(HOOK)], input=_json.dumps({"cwd": str(cwd), **payload}),
@@ -226,8 +226,8 @@ def test_hook_silent_without_mode():
 def test_hook_respects_kill_switch():
     with Repo() as r:
         write_mode(r, "mode: construction\n")
-        p = run_hook(r.path, env={"CEPA_MODO": "off"})
-        check("hook: CEPA_MODO=off silencia", p.stdout.strip() == "", repr(p.stdout))
+        p = run_hook(r.path, env={"CEPA_MODE": "off"})
+        check("hook: CEPA_MODE=off silencia", p.stdout.strip() == "", repr(p.stdout))
 
 
 def test_hook_never_breaks_the_turn():
@@ -607,12 +607,12 @@ def test_intent_silent_in_cepa_until():
     with Repo() as r:
         write_mode(r, "mode: construction\n")
         write_intent(r, session_id="aaaaaaaa")
-        c = ctx(run_hook(r.path, env={"CEPA_UNTIL_RUN": "1"}, session_id=SID))
+        c = ctx(run_hook(r.path, env={"CEPA_RUN": "1"}, session_id=SID))
         check("cepa-until: sem intenção no contexto", "[intenção]" not in c, c)
         check("cepa-until: o modo segue", "[modo]" in c, c)
     with Repo() as r:
         write_intent(r)
-        p = run_hook(r.path, env={"CEPA_UNTIL_RUN": "1"}, session_id=SID)
+        p = run_hook(r.path, env={"CEPA_RUN": "1"}, session_id=SID)
         check("cepa-until sem modo: silêncio total", p.stdout.strip() == "", repr(p.stdout))
 
 
@@ -638,8 +638,8 @@ def test_corrupted_intent_does_not_break():
 def test_intent_respects_kill_switch():
     with Repo() as r:
         write_intent(r)
-        p = run_hook(r.path, env={"CEPA_MODO": "off"}, session_id=SID)
-        check("CEPA_MODO=off: cala a intenção também", p.stdout.strip() == "", repr(p.stdout))
+        p = run_hook(r.path, env={"CEPA_MODE": "off"}, session_id=SID)
+        check("CEPA_MODE=off: cala a intenção também", p.stdout.strip() == "", repr(p.stdout))
 
 
 # --- help of the mode menu --------------------------------------------------
@@ -681,7 +681,7 @@ def _pty_run(repo, keyboard):
 
     proc = subprocess.Popen(
         [str(CEPA), "--resume"], cwd=repo.path,
-        env={**os.environ, "CLAUDE_WT_CLAUDE_BIN": str(repo.fake),
+        env={**os.environ, "CEPA_WT_CLAUDE_BIN": str(repo.fake),
              "CEPA_PREFLIGHT": "off"},
         stdin=slave, stdout=slave, stderr=slave,
         preexec_fn=ctty, close_fds=True,
@@ -966,10 +966,10 @@ def recorded_args(repo, *cepa_args, env=None):
     home = Path(repo.tmp.name) / "rechome"
     if not home.exists():
         fake_home(repo.tmp.name, name="rechome")
-    e = {"CLAUDE_WT_CLAUDE_BIN": str(fake), "FAKE_ARGS_FILE": str(out), "HOME": str(home),
-         "CEPA_ENCADEAR": "off"}
+    e = {"CEPA_WT_CLAUDE_BIN": str(fake), "FAKE_ARGS_FILE": str(out), "HOME": str(home),
+         "CEPA_CHAIN": "off"}
     e.update(env or {})
-    for k in ("CEPA_UNTIL_RUN", "CEPA_MENU"):
+    for k in ("CEPA_RUN", "CEPA_UNTIL_RUN", "CEPA_MENU"):
         if k not in e:
             e[k] = ""
     p = repo.run(*cepa_args, env=e)
@@ -1014,10 +1014,10 @@ def test_opening_prompt_carries_the_menu():
         check("mode with an empty menu: no opening prompt", args == [], args)
         p, args = recorded_args(r, "--mode", "discovery", env={"CEPA_MENU": "off"})
         check("CEPA_MENU=off: no opening prompt", args == [], args)
-        p, args = recorded_args(r, "--mode", "discovery", env={"CEPA_UNTIL_RUN": "1"})
+        p, args = recorded_args(r, "--mode", "discovery", env={"CEPA_RUN": "1"})
         check("inside cepa-until: no opening prompt", args == [], args)
-        p, args = recorded_args(r, "--mode", "discovery", env={"CEPA_MODO": "off"})
-        check("CEPA_MODO=off: no opening prompt", args == [], args)
+        p, args = recorded_args(r, "--mode", "discovery", env={"CEPA_MODE": "off"})
+        check("CEPA_MODE=off: no opening prompt", args == [], args)
 
         p, args = recorded_args(r, "--mode", "discovery", "--model=opus")
         check("a flag=value alone still gets the menu",

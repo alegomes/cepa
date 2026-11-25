@@ -65,7 +65,7 @@ def _run(tmp, root, args, via_launcher=True, claude_body="pass"):
     env["FAKE_PLANO"] = str(Path(tmp) / "nenhum.yaml")
     calls = Path(tmp) / "chamadas.jsonl"
     env["FAKE_CHAMADAS"] = str(calls)
-    env["CEPA_UNTIL_LEITOR"] = "off"
+    env["CEPA_RUN_READER"] = "off"
     env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
     env["FAKE_CEPA_PLAN"] = str(REPO / "common" / "bin" / "cepa-queue")
     cmd = ([str(CEPA), "run"] if via_launcher
@@ -1167,9 +1167,9 @@ def test_cs6_all_run_on_a_terminal_only_lists_at_the_end_and_never_asks():
         env["PATH"] = f"{binv}:{env['PATH']}"
         env["FAKE_PLANO"] = str(Path(tmp) / "nenhum.yaml")
         env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
-        env["CEPA_UNTIL_LEITOR"] = "off"
+        env["CEPA_RUN_READER"] = "off"
         env["FAKE_CEPA_PLAN"] = str(REPO / "common" / "bin" / "cepa-queue")
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "20"
+        env["CEPA_RUN_ANSWER_WAIT"] = "20"
         t0 = time.time()
         rc, out = dec.on_tty(
             [sys.executable, str(CEPA_UNTIL), "--all", "--for", "1h",
@@ -1235,7 +1235,7 @@ def test_cs6_decide_all_run_reword_lands_in_the_queue_of_the_item():
             "    print(json.dumps({'tipo': None}))\n")
         reader.chmod(0o755)
         env = _tty_env(tmp)
-        env["CEPA_UNTIL_LEITOR"] = str(reader)
+        env["CEPA_RUN_READER"] = str(reader)
         env["CEPA_FEEDBACK_DIR"] = str(Path(tmp) / "feedback")
         before_a = paths["a"].read_text()
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", f"all/{run_id}",
@@ -1344,9 +1344,9 @@ def _launch_all_on_tty(tmp, root, inputs, wait="20", extra=()):
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(Path(tmp) / "nenhum.yaml")
     env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
-    env["CEPA_UNTIL_LEITOR"] = "off"
+    env["CEPA_RUN_READER"] = "off"
     env["FAKE_CEPA_PLAN"] = str(REPO / "common" / "bin" / "cepa-queue")
-    env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+    env["CEPA_RUN_ANSWER_WAIT"] = wait
     rc, out = dec.on_tty(
         [sys.executable, str(CEPA_UNTIL), "--all", "--for", "1h", "--no-verify",
          "--no-analysis", "--no-resume-on-answer", *extra, "--repo", str(root)],

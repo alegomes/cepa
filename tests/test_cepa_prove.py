@@ -101,7 +101,7 @@ def run_prove(root, binv, tmp, args, timeout=120, path=None, extra_env=None):
     env.update(extra_env or {})
     env["PATH"] = path if path is not None else f"{binv}:{env['PATH']}"
     env["FAKE_TMP"] = str(tmp)
-    env["CEPA_UNTIL_GRACA_SIGTERM"] = "2"
+    env["CEPA_RUN_SIGTERM_GRACE"] = "2"
     p = subprocess.run([sys.executable, str(CEPA_PROVE), "--repo", str(root)] + list(args),
                        capture_output=True, text=True, env=env, timeout=timeout)
     calls_path = Path(tmp) / "chamadas.jsonl"
@@ -247,7 +247,7 @@ def test_until_with_permissions_and_cwd():
 
 
 def test_env_marks_the_round_as_unattended():
-    """The round must see CEPA_UNTIL_RUN: it is what makes prove-drain skip its
+    """The round must see CEPA_RUN: it is what makes prove-drain skip its
     only confirmation."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp)
@@ -256,10 +256,10 @@ def test_env_marks_the_round_as_unattended():
         body = probe.read_text()
         probe.write_text(body.replace(
             "text = ''\n",
-            "open(os.path.join(tmp, 'env'), 'w').write(os.environ.get('CEPA_UNTIL_RUN', ''))\n"
+            "open(os.path.join(tmp, 'env'), 'w').write(os.environ.get('CEPA_RUN', ''))\n"
             "text = ''\n"))
         run_prove(root, binv, tmp, ["--for", "2h"])
-        check("CEPA_UNTIL_RUN=1 no ambiente da rodada",
+        check("CEPA_RUN=1 no ambiente da rodada",
               (Path(tmp) / "env").read_text() == "1")
 
 
@@ -442,7 +442,7 @@ def test_cepa_still_launches_a_session_for_flags_and_non_scripts():
         fake.write_text(f"#!{sys.executable}\nimport sys, json\n"
                         f"open({str(Path(tmp) / 'argv')!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
         fake.chmod(0o755)
-        env = dict(os.environ, CLAUDE_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT="off")
+        env = dict(os.environ, CEPA_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT="off")
         env.pop("CEPA_PROMPT", None)   # the machine's default prompt would pad the argv
         for args in (["--version"], ["FOO-1"], ["plan the migration"]):
             # cwd outside any git repo: the launcher then "just is claude".
@@ -493,7 +493,7 @@ def test_cepa_help_flags_and_typos():
         fake.write_text(f"#!{sys.executable}\nimport sys, json\n"
                         f"open({str(Path(tmp) / 'argv')!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
         fake.chmod(0o755)
-        env = dict(os.environ, CLAUDE_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT="off")
+        env = dict(os.environ, CEPA_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT="off")
         env.pop("CEPA_PROMPT", None)
         # `untl foo` is two words: a prompt, never a typo, even with `untl` in it.
         for args in (["go"], ["xyzzyqq"], ["untl", "foo"]):
@@ -511,8 +511,8 @@ def test_mode_menu_points_to_cepa_help():
     import pty, select
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp)
-        env = dict(os.environ, CEPA_PREFLIGHT="off", CEPA_MODO="")
-        env.pop("CEPA_MODO_DEFAULT", None)
+        env = dict(os.environ, CEPA_PREFLIGHT="off", CEPA_MODE="")
+        env.pop("CEPA_MODE_DEFAULT", None)
         pid, fd = pty.fork()
         if pid == 0:
             os.chdir(root)
@@ -685,7 +685,7 @@ def test_herdr_pane_is_released_on_sigterm_and_ctrl_c_mid_round():
             for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
                 full.pop(k, None)
             full.update(env, PATH=f"{binv}:{os.environ['PATH']}", FAKE_TMP=str(tmp),
-                        CEPA_UNTIL_GRACA_SIGTERM="2")
+                        CEPA_RUN_SIGTERM_GRACE="2")
             proc = subprocess.Popen([sys.executable, str(CEPA_PROVE), "--repo", str(root),
                                      "--for", "2h"], env=full, stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, text=True)
@@ -747,7 +747,7 @@ def run_prove_on_hc(root, binv, tmp, args, hc_id="t9", tty=True):
         env["HC_TERMINAL_ID"] = hc_id
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_TMP"] = str(tmp)
-    env["CEPA_UNTIL_GRACA_SIGTERM"] = "2"
+    env["CEPA_RUN_SIGTERM_GRACE"] = "2"
     argv = [sys.executable, str(CEPA_PROVE), "--repo", str(root)] + list(args)
     if not tty:
         r = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=120)

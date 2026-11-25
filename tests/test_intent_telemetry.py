@@ -104,6 +104,7 @@ def new_repo(name):
 
 def cli(repo, *args, sid="sess-1234-abcd"):
     env = {**os.environ, "CEPA_TELEMETRY_DIR": str(tel3), "CLAUDE_CODE_SESSION_ID": sid}
+    env.pop("CEPA_RUN", None)
     env.pop("CEPA_UNTIL_RUN", None)
     return subprocess.run([sys.executable, str(BIN), *args], cwd=repo, env=env,
                           capture_output=True, text=True)
@@ -147,6 +148,7 @@ check("close recusa opções de escrita", r.returncode == 2, str(r.returncode))
 repo_a = new_repo("r-antigo")
 BIN_OLD = REPO / "common" / "bin" / "cepa-intent"
 env_a = {**os.environ, "CEPA_TELEMETRY_DIR": str(tel3), "CLAUDE_CODE_SESSION_ID": "sess-1234-abcd"}
+env_a.pop("CEPA_RUN", None)
 env_a.pop("CEPA_UNTIL_RUN", None)
 def cli_old(repo, *args):
     return subprocess.run([sys.executable, str(BIN_OLD), *args], cwd=repo, env=env_a,

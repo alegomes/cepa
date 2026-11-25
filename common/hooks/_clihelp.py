@@ -26,7 +26,7 @@ Rules it enforces, so no command has to remember them:
   * A usage error prints `✗ <prog>: <reason>`, the usage line and where the
     full help is, and exits 2. An unknown subcommand names the nearest one.
   * On a terminal (the same test `_tui` uses: tty, no NO_COLOR, TERM not
-    dumb, CEPA_COR forces) headings become rules and names get color. Piped,
+    dumb, CEPA_COLOR forces) headings become rules and names get color. Piped,
     the text is plain, `heading:` lines and all.
 
 The summary defaults to the first docstring line of the running script
@@ -380,8 +380,8 @@ def launcher_help(bin_dir):
         ],
         exit_codes=[(0, "help printed, or the exit code of claude / the subcommand"),
                     (2, "invalid usage: unknown mode, missing value, typo in a subcommand")],
-        see_also=["environment: CEPA_MODO=off (no mode), CEPA_PREFLIGHT=off, "
-                  "CEPA_PERMISSOES=classificador, CEPA_ENCADEAR=off, CEPA_PROMPT=<name|path>",
+        see_also=["environment: CEPA_MODE=off (no mode), CEPA_PREFLIGHT=off, "
+                  "CEPA_PERMISSIONS=classifier, CEPA_CHAIN=off, CEPA_PROMPT=<name|path>",
                   "docs/modos-de-trabalho.md: the work modes"],
         add_help=False,
         options_title="launcher flags",

@@ -42,7 +42,7 @@ def check(name, cond, detail=""):
 
 TMP = Path(tempfile.mkdtemp(prefix="cepa-reminders-test-"))
 TEL = TMP / "tel"
-ENV = {k: v for k, v in os.environ.items() if k != "CEPA_UNTIL_RUN"}
+ENV = {k: v for k, v in os.environ.items() if k not in ("CEPA_RUN", "CEPA_UNTIL_RUN")}
 ENV.update({"CEPA_TELEMETRY_DIR": str(TEL), "CLAUDE_CODE_SESSION_ID": "sess-1234567890",
             "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
             "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
@@ -118,7 +118,7 @@ rm = new_repo("malformed")
     b'reminders:\n  - at: "2026-10-31\n    text: "aspas sem fechar\n'
     b"lixo sem dois pontos\n\xff\xfe\x00\n  - \n")
 for label, args, extra in (("state vazio", ("state",), {}),
-                           ("state no cepa-until", ("state",), {"CEPA_UNTIL_RUN": "1"}),
+                           ("state no cepa-until", ("state",), {"CEPA_RUN": "1"}),
                            ("close sem intenção", ("close",), {})):
     p = cepa(rm, *args, env=extra)
     check(f"arquivo malformado: {label} sai 0 sem traceback",
@@ -167,14 +167,14 @@ check("state fulfilled traz o bloco", "state: fulfilled" in p.stdout
 p = cepa(r, "state", env={"CLAUDE_CODE_SESSION_ID": "outra-sessao"})
 check("state other-session traz o bloco", "state: other-session" in p.stdout
       and "lembretes do dono (3):" in p.stdout, p.stdout)
-p = cepa(r, "state", env={"CEPA_UNTIL_RUN": "1"})
+p = cepa(r, "state", env={"CEPA_RUN": "1"})
 check("state em run do cepa-until traz o bloco", "delegate: /common:next" in p.stdout
       and "lembretes do dono (3):" in p.stdout and LINE in p.stdout, p.stdout)
 
 r2 = new_repo("b")
 p = cepa(r2, "state")
 check("sem lembretes: bloco ausente", "lembretes" not in p.stdout, p.stdout)
-p = cepa(r2, "state", env={"CEPA_UNTIL_RUN": "1"})
+p = cepa(r2, "state", env={"CEPA_RUN": "1"})
 check("sem lembretes no cepa-until: bloco ausente", "lembretes" not in p.stdout, p.stdout)
 p = cepa(r2, "reminders")
 check("reminders sem nenhum: mensagem", p.returncode == 0
@@ -182,7 +182,7 @@ check("reminders sem nenhum: mensagem", p.returncode == 0
 
 # --- hook -------------------------------------------------------------------
 def run_hook(cwd, env=None, **payload):
-    e = {k: v for k, v in os.environ.items() if k != "CEPA_UNTIL_RUN"}
+    e = {k: v for k, v in os.environ.items() if k not in ("CEPA_RUN", "CEPA_UNTIL_RUN")}
     e["CEPA_TELEMETRY_DIR"] = str(TEL)
     e.update(env or {})
     return subprocess.run([sys.executable, str(HOOK)],
@@ -216,7 +216,7 @@ write_log(r, [(TODAY, "10:00:00", "primeiro"), (TODAY, "10:05:00", "segundo")])
 p = run_hook(r, session_id="s1", prompt="terceiro")
 check("hook com 2 prompts antes: sem [lembretes]", "[lembretes]" not in ctx(p), ctx(p))
 write_log(r, [])
-p = run_hook(r, env={"CEPA_UNTIL_RUN": "1"}, session_id="s1", prompt="oi")
+p = run_hook(r, env={"CEPA_RUN": "1"}, session_id="s1", prompt="oi")
 check("hook em run do cepa-until: sem [lembretes]", "[lembretes]" not in ctx(p), ctx(p))
 p = run_hook(r2, session_id="s1", prompt="oi")
 check("hook sem lembretes: sem [lembretes]", "[lembretes]" not in ctx(p), ctx(p))

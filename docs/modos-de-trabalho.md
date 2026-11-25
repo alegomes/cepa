@@ -350,7 +350,7 @@ pertencem a modo nenhum.
 **O escape não é barato de propósito.** Não há `# modo-ok`: o agente digitaria e
 seguiria, que é a mesma fuga de novo. O escape é encerrar o modo e abrir o modo
 do trabalho que se quer fazer — uma sessão nova, e é o custo certo, porque
-trocar de atividade deveria custar. O `CEPA_MODO=off` continua desligando a
+trocar de atividade deveria custar. O `CEPA_MODE=off` continua desligando a
 mecânica inteira, e a mensagem de bloqueio não o oferece.
 
 **Construção indecidível avisa, não barra.** `python3 -c`, `patch`, `ed` e

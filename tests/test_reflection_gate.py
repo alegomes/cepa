@@ -15,7 +15,7 @@ Contracts guarded here:
   - `fechado: false` always passes — triage in progress is not a violation;
   - fail-open: a file outside .claude/reflection/, broken YAML, missing
     content → lets it pass, never invents a block;
-  - CEPA_MODO=off turns it off.
+  - CEPA_MODE=off turns it off.
 
 No deps beyond PyYAML (which the hook already requires) — run with
 `python3 tests/test_reflection_gate.py`.
@@ -126,8 +126,8 @@ def test_fail_open():
 
 
 def test_kill_switch():
-    p = run(WITHOUT_DESTINATION, env={"CEPA_MODO": "off"})
-    check("CEPA_MODO=off desliga", p.returncode == 0, p.stderr)
+    p = run(WITHOUT_DESTINATION, env={"CEPA_MODE": "off"})
+    check("CEPA_MODE=off desliga", p.returncode == 0, p.stderr)
 
 
 def main():

@@ -56,6 +56,7 @@ def state_command(md):
 def sh(cmd, cwd, session="sess-A", extra=None):
     env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT),
            "CLAUDE_CODE_SESSION_ID": session}
+    env.pop("CEPA_RUN", None)
     env.pop("CEPA_UNTIL_RUN", None)
     env.update(extra or {})
     return subprocess.run(cmd, shell=True, cwd=cwd, env=env, capture_output=True,
@@ -95,7 +96,7 @@ def main():
               in out.stdout, out.stdout)
         check("empty: não delega fora do cepa-until", "delegate" not in out.stdout)
         check("empty: não cria o arquivo", not (r / ".claude" / "session-intent").exists())
-        out = sh(cmd, r, extra={"CEPA_UNTIL_RUN": "2026-10-17-0711"})
+        out = sh(cmd, r, extra={"CEPA_RUN": "2026-10-17-0711"})
         check("vazio na rodada do cepa-until: delega ao /common:next",
               out.stdout.splitlines()[:2] == ["state: empty", "delegate: /common:next"], out.stdout)
 
@@ -123,7 +124,7 @@ def main():
         out2 = sh(cmd + " --step 3", r)
         check("estado recusa opções de escrita", out2.returncode == 2, out2.stderr)
         check("... e não mexe no cursor", (r / ".claude" / "session-intent").read_bytes() == before)
-        out = sh(cmd, r, extra={"CEPA_UNTIL_RUN": "x"})
+        out = sh(cmd, r, extra={"CEPA_RUN": "x"})
         check("rodada do cepa-until ignora a intenção herdada e delega",
               "delegate: /common:next" in out.stdout and out.stdout.startswith("state: empty"),
               out.stdout)
@@ -154,7 +155,7 @@ def main():
         hook = subprocess.run(
             [sys.executable, str(HOOK)], cwd=r, capture_output=True, text=True,
             input=json.dumps({"cwd": str(r), "session_id": "sess-B", "prompt": "oi"}),
-            env={**os.environ, "CEPA_MODO": "on", "CEPA_UNTIL_RUN": ""})
+            env={**os.environ, "CEPA_MODE": "on", "CEPA_RUN": "", "CEPA_UNTIL_RUN": ""})
         ctx = json.loads(hook.stdout)["hookSpecificOutput"]["additionalContext"] if hook.stdout else ""
         phrases = M.other_session_question(M.read_intent(r), "criar o comando whereami")
         check("a pergunta do estado é a mesma que o hook injeta",

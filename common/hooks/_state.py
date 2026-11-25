@@ -43,10 +43,11 @@ from pathlib import Path
 
 import _queuepath as qp
 import _wtlib as wt
+import _cepaenv as E  # noqa: E402
 
 # A run is presumed dead when its heartbeat is older than this many seconds. The
 # only copy of the constant: `cepa-queue` imports it from here.
-HEARTBEAT_STALE_SEC = float(os.environ.get("CEPA_HEARTBEAT_ORFA", "900"))
+HEARTBEAT_STALE_SEC = float(E.get("CEPA_HEARTBEAT_ORPHAN", "900"))
 
 DEPOSITS = {
     "fila": "a fila (queue.yaml / plan.yaml)",

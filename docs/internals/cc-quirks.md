@@ -204,7 +204,7 @@ text: ...}` AND `{type: tool_result, content: ...}` (the latter may
 itself nest a list).
 
 Pattern lesson: when writing a PostToolUse hook that reads
-`tool_response`, gate everything on a `CAPTURE_BUILD_DEBUG`-style env
+`tool_response`, gate everything on a `CEPA_CAPTURE_BUILD_DEBUG`-style env
 var that dumps the actual payload shape to a file on every invocation.
 You will hit shape drift; observability built in from day one beats
 guessing later.
@@ -283,7 +283,7 @@ After upgrading Claude Code:
 
 1. Re-run `bin/install.sh --clean` against your host project(s).
    Marketplace cache shape can change between versions.
-2. Re-test path-lock with `HEX_PATHLOCK_DEBUG=1` — the `agent_type`
+2. Re-test path-lock with `CEPA_HEX_PATHLOCK_DEBUG=1` — the `agent_type`
    payload field might have moved. Update `detect_agent`'s fallback
    list if so.
 3. Re-test hook lifecycle (`PreToolUse`, `PostToolUse`,

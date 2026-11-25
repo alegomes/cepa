@@ -1,6 +1,6 @@
 ---
 name: autonomous-mode
-description: Use when the user has invoked /common:autonomous-start, when CLAUDE_AUTONOMOUS_RUN_ID is set in the environment, or when the user explicitly says they want autonomous / unattended operation ("go autonomous", "I'll be away", "don't ask me, just decide"). Triggers a session-wide behavioral discipline: no questions to the user, every ambiguous decision logged with rationale, state checkpoints are written automatically by hook.
+description: Use when the user has invoked /common:autonomous-start, when CEPA_AUTONOMOUS_RUN_ID is set in the environment, or when the user explicitly says they want autonomous / unattended operation ("go autonomous", "I'll be away", "don't ask me, just decide"). Triggers a session-wide behavioral discipline: no questions to the user, every ambiguous decision logged with rationale, state checkpoints are written automatically by hook.
 ---
 
 # Autonomous mode

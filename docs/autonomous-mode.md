@@ -102,7 +102,7 @@ is the source of truth. In short:
 ## The checkpoint hook
 
 `common/hooks/autonomous-checkpoint.py` runs as a PostToolUse hook on
-the `Task` tool. When `CLAUDE_AUTONOMOUS_RUN_ID` is set in the
+the `Task` tool. When `CEPA_AUTONOMOUS_RUN_ID` is set in the
 environment, it appends a log entry to `state.yaml` after every
 subagent call: timestamp, subagent name, prompt summary (truncated
 ~200 chars), result summary (truncated), exit status.

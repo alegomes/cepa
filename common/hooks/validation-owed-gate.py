@@ -31,7 +31,7 @@ reads the folder of the session that is stopping:
     already continued by a Stop hook)  -> allow, so it never loops
 
 Fails open: unreadable input, no session id, unreadable marker -> allow.
-Turned off with CEPA_MODO=off.
+Turned off with CEPA_MODE=off.
 """
 
 import json
@@ -39,6 +39,9 @@ import os
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _cepaenv as E  # noqa: E402
 
 
 def owed_dir(session_id):
@@ -90,7 +93,7 @@ def message(entries):
 
 
 def main():
-    if os.environ.get("CEPA_MODO", "").lower() == "off":
+    if E.get("CEPA_MODE", "").lower() == "off":
         return 0
     try:
         data = json.load(sys.stdin)

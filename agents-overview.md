@@ -392,7 +392,7 @@ autonomous-run hooks, not an exhaustive list; see
 | Hook | Event | Purpose |
 |---|---|---|
 | `session-log.py` | UserPromptSubmit | Appends every user prompt to `.claude/session-log.md` with date/time headers. Survives auto-compaction. |
-| `autonomous-checkpoint.py` | PostToolUse on `Task` | Appends to `docs/autonomous/<run-id>/state.yaml` after every subagent call when `CLAUDE_AUTONOMOUS_RUN_ID` is set. Out-of-band — orchestrator cannot forget. |
+| `autonomous-checkpoint.py` | PostToolUse on `Task` | Appends to `docs/autonomous/<run-id>/state.yaml` after every subagent call when `CEPA_AUTONOMOUS_RUN_ID` is set. Out-of-band — orchestrator cannot forget. |
 | `mark-build-stale.py` | PostToolUse on `Edit\|Write\|MultiEdit` | Marks `.claude/last-build.json` as STALE when source / build manifest / migration is edited. |
 | `capture-build-result.py` | PostToolUse on `Bash` | Detects Maven/Gradle/npm/yarn/pytest/cargo/go-test invocations; writes SUCCESS or FAILURE with command + tail. |
 | `gate-advance.py` | PreToolUse on `Bash` | Hard gate: refuses `git commit` / `git push` / `gh pr create` / `kubectl apply` / `terraform apply` / `docker push` / `aws\|gcloud\|az deploy` when build state is STALE or FAILURE. |

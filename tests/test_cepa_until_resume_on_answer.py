@@ -163,7 +163,7 @@ def watch_phases(root, seen, stop):
 def silent_run(tmp, root, inputs=()):
     binv = fake_claude(tmp, BLOCKS_A1_COMMITS_A2)
     env = env_do_run(tmp, root, binv)
-    env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "3"
+    env["CEPA_RUN_ANSWER_WAIT"] = "3"
     seen, stop = set(), threading.Event()
     t = threading.Thread(target=watch_phases, args=(root, seen, stop), daemon=True)
     t.start()

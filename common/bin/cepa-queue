@@ -299,6 +299,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _queuepath as qp  # noqa: E402  (resolver for both queue layouts)
 import _ownertext  # noqa: E402  (the human section of a blocked item)
 import _decisions  # noqa: E402  (the one reader of "Decided without asking")
+import _cepaenv as E  # noqa: E402  (the CEPA_ environment names; the old ones still read)
 import _state  # noqa: E402  (the one reader of the state deposits and the run liveness rule)
 from _state import HEARTBEAT_STALE_SEC  # noqa: E402,F401  (one copy of the constant)
 
@@ -372,7 +373,7 @@ def current_owner(root, cwd):
                     "cwd": e.get("cwd") or str(cwd), "branch": e.get("branch"),
                     "started_at": now_iso()}
     return {"session_id": os.environ.get("CLAUDE_SESSION_ID")
-            or os.environ.get("CLAUDE_WT_CLAIM") or "sessão não registrada",
+            or E.get("CEPA_WT_CLAIM") or "sessão não registrada",
             "pid": os.getppid(), "hostname": w.host() if w else "?",
             "cwd": str(cwd), "branch": None, "started_at": now_iso()}
 
@@ -3235,7 +3236,7 @@ def close_write(root, target, message, commit, inside_run=None, extras=()):
               f"{command}")
         return False
     if inside_run is None:
-        inside_run = bool(os.environ.get("CEPA_UNTIL_RUN"))
+        inside_run = E.is_set("CEPA_RUN")
     if inside_run:
         print(f"  fila gravada sem commit ({rel}): dentro de um run do "
               "cepa-until o clone fica assim de propósito; o dono commita "
@@ -3836,7 +3837,7 @@ def cmd_annotate(root, name, ident, note, author=None):
     who = " ".join(str(author or "").split()) or (
         os.environ.get("CLAUDE_SESSION_ID")
         or os.environ.get("CLAUDE_CODE_SESSION_ID")
-        or os.environ.get("CLAUDE_WT_CLAIM") or "sessão não registrada")
+        or E.get("CEPA_WT_CLAIM") or "sessão não registrada")
     notes = list(it.get("anotacoes") or [])
     notes.append({"texto": text, "em": now_iso(), "autor": who})
     it["anotacoes"] = notes
@@ -4275,7 +4276,7 @@ def answer_item_id(ident, by_id):
 # did not stop that either (`script` fakes a terminal); both are a check that
 # the normal path did not invent the answer, and the evidence names the
 # message and quotes it, so the owner audits it in one read.
-UNATTENDED_ENV = ("CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID")
+UNATTENDED_ENV = ("CEPA_RUN", "CEPA_AUTONOMOUS_RUN_ID")
 CHAT_HORIZON_HOURS = 24
 CHAT_CLOCK_SKEW_SECONDS = 60
 _LOG_DAY = re.compile(r"^## (\d{4}-\d{2}-\d{2})\s*$")
@@ -4348,7 +4349,7 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
                  multiline=False, from_chat=None):
     chat_origin = None
     if from_chat is not None:
-        unattended = [v for v in UNATTENDED_ENV if os.environ.get(v)]
+        unattended = [v for v in UNATTENDED_ENV if E.get(v)]
         if unattended:
             print(f"`--from-chat` não vale num run desatendido ({unattended[0]} "
                   "no ambiente): ninguém está no chat para ter respondido. "

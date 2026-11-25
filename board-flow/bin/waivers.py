@@ -65,12 +65,20 @@ def _key(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", (text or "").lower())
 
 
+def _autonomous_run_id(env=None):
+    """`CEPA_AUTONOMOUS_RUN_ID`; the name it had before (CLAUDE_AUTONOMOUS_RUN_ID)
+    is still read. The new one wins."""
+    env = os.environ if env is None else env
+    return env.get("CEPA_AUTONOMOUS_RUN_ID") or env.get("CLAUDE_AUTONOMOUS_RUN_ID")
+
+
 def in_autonomous_run(env=None) -> bool:
-    """True when the process is a run with no owner in front: `CEPA_UNTIL_RUN`
-    (set by `cepa-until` on every `claude -p`) or `CLAUDE_AUTONOMOUS_RUN_ID`
+    """True when the process is a run with no owner in front: `CEPA_RUN`
+    (set by `cepa-run` on every `claude -p`) or `CEPA_AUTONOMOUS_RUN_ID`
     (set by /common:autonomous-start)."""
     env = os.environ if env is None else env
-    return bool(env.get("CEPA_UNTIL_RUN") or env.get("CLAUDE_AUTONOMOUS_RUN_ID"))
+    return bool(env.get("CEPA_RUN") or env.get("CEPA_UNTIL_RUN")
+                or _autonomous_run_id(env))
 
 
 def load(repo: str) -> list[dict]:
@@ -188,7 +196,7 @@ def propose(repo: str, reason: str, scope: str, rationale: str,
         return dest
 
     by = proposed_by
-    run_id = os.environ.get("CLAUDE_AUTONOMOUS_RUN_ID")
+    run_id = _autonomous_run_id()
     if run_id and run_id not in by:
         by = f"{by} (run {run_id})"
     d = {

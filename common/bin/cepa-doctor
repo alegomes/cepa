@@ -66,6 +66,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
 import _clihelp  # noqa: E402
 import _state  # noqa: E402  (catalogue of the state deposits; run liveness)
+import _cepaenv as E  # noqa: E402  (the CEPA_ environment names; the old ones still read)
 try:
     import _pluginver as PV
 except Exception:  # noqa: BLE001 — doctor degrades, never dies because of this
@@ -580,8 +581,7 @@ def check_project(cwd: Path):
                     d = (datetime.now(timezone.utc).timestamp() - int(out2.strip())) / 86400
                     if d > 14:
                         warn("worktrees", f"{Path(wt_path).name} ({branch}) sem commit há {d:.0f}d — merge ou /common:worktree-discard")
-    wt_home = Path(os.environ.get("CEPA_WORKTREE_HOME")
-                   or os.environ.get("CCW_WORKTREE_HOME")
+    wt_home = Path(E.get("CEPA_WORKTREE_HOME")
                    or (Path.home() / "cepa-worktrees"))
     if wt_home.is_dir():
         prefix = f"{root.name}-"

@@ -57,7 +57,7 @@ breaker, quota pause, log — and TWO things only a supervisor can do:
    `cepa-until`: without it the first permission prompt hangs the round and
    the night dies in silence. `--with-permissions` turns it off.
 5. **The round knows it is unattended** through the same mark `cepa-until`
-   sets (`CEPA_UNTIL_RUN=1`): `/board-flow:prove-drain` then takes its single
+   sets (`CEPA_RUN=1`): `/board-flow:prove-drain` then takes its single
    confirmation as yes + (a) instead of asking a terminal nobody is reading,
    and the session hooks behave as in a window (no intent, no background
    wait).

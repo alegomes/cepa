@@ -54,12 +54,12 @@ ln -s ~/coding/fixing-smartass-opus-5/sr_opus_5_system_prompt.md \
 ## Ligar por default, sem digitar a flag
 
 `CEPA_PROMPT` guarda o mesmo `<nome|caminho>` que a flag aceitaria, e
-`CEPA_PROMPT_MODO` escolhe entre `append` (o default) e `substitui`. No
+`CEPA_PROMPT_MODE` escolhe entre `append` (o default) e `substitui`. No
 `~/.zshrc`:
 
 ```sh
 export CEPA_PROMPT=smartass          # toda sessão sobe com ele, somado ao padrão
-# export CEPA_PROMPT_MODO=substitui  # só se o prompt se sustenta sozinho
+# export CEPA_PROMPT_MODE=replace  # só se o prompt se sustenta sozinho
 ```
 
 A flag na linha de comando vence a variável, então `cepa --prompt outro` troca o

@@ -224,8 +224,8 @@ def _launch_with_stub(base, *args):
                     encoding="utf-8")
     stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
     env = _env()
-    env.update({"CLAUDE_WT_CLAUDE_BIN": str(stub), "CEPA_MODO": "off",
-                "CEPA_ENCADEAR": "off", "CEPA_MENU": "off"})
+    env.update({"CEPA_WT_CLAUDE_BIN": str(stub), "CEPA_MODE": "off",
+                "CEPA_CHAIN": "off", "CEPA_MENU": "off"})
     subprocess.run(["git", "-C", str(d), "init", "-q"], check=True)
     r = subprocess.run([str(CEPA), *args], capture_output=True, text=True,
                        cwd=str(d), env=env, timeout=120)
@@ -285,8 +285,8 @@ def test_transition_shims_are_not_commands():
                         encoding="utf-8")
         stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
         env = _env()
-        env.update({"CLAUDE_WT_CLAUDE_BIN": str(stub), "CEPA_MODO": "off",
-                    "CEPA_ENCADEAR": "off", "CEPA_MENU": "off"})
+        env.update({"CEPA_WT_CLAUDE_BIN": str(stub), "CEPA_MODE": "off",
+                    "CEPA_CHAIN": "off", "CEPA_MENU": "off"})
         for word in ("untill", "until-digst"):
             r = subprocess.run([str(CEPA), word], capture_output=True, text=True,
                                cwd=str(d), env=env, timeout=120)

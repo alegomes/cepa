@@ -182,7 +182,7 @@ def main():
         "    2. Se o trabalho é longo e você quer seguir enquanto ele roda, use\n"
         "       `run_in_background` no Bash: a sessão é reinvocada quando terminar.\n"
         "       EXCEÇÃO: dentro de uma janela do `cepa-until` (a variável\n"
-        "       CEPA_UNTIL_RUN no ambiente) isso NÃO vale — cada item é um\n"
+        "       CEPA_RUN no ambiente) isso NÃO vale — cada item é um\n"
         "       `claude -p` e não há turno seguinte para colher o resultado.\n"
         "       Lá, build roda em primeiro plano; quem cobra é o\n"
         "       `no-background-build`.\n"

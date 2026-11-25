@@ -40,6 +40,9 @@ import json
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _cepaenv as E  # noqa: E402
+
 # Delegating agents that lose their reason to exist when worktreed.
 # The `-lead` suffix is the primary rule (covers every topology's leads);
 # this set catches delegators that don't carry the suffix.
@@ -78,11 +81,11 @@ def is_delegating_lead(agent: str) -> bool:
 
 
 def debug_log(payload: dict, agent: str, worktree: bool) -> None:
-    """Gated behind LEAD_WORKTREE_DEBUG=1 — dumps the payload shape so future
+    """Gated behind CEPA_LEAD_WORKTREE_DEBUG=1 — dumps the payload shape so future
     Task-param drift is diagnosable rather than a guessing game."""
-    if os.environ.get("LEAD_WORKTREE_DEBUG") != "1":
+    if E.get("CEPA_LEAD_WORKTREE_DEBUG") != "1":
         return
-    log_path = os.environ.get("LEAD_WORKTREE_DEBUG_LOG", "/tmp/lead-no-worktree-debug.log")
+    log_path = E.get("CEPA_LEAD_WORKTREE_DEBUG_LOG", "/tmp/lead-no-worktree-debug.log")
     snapshot = {
         "top_level_keys": sorted(payload.keys()),
         "tool_name": payload.get("tool_name"),

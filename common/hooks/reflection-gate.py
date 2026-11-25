@@ -22,7 +22,7 @@ reason: it exists so you can find the decision again three months from now.
 Conservative on purpose, like its sibling: acts only on a confirmed
 contradiction. A file that is not a reflection report, YAML that does not
 parse, or `fechado` absent/false -> lets it through. Never invents a block.
-Turned off with CEPA_MODO=off.
+Turned off with CEPA_MODE=off.
 """
 
 import json
@@ -31,6 +31,7 @@ import re
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _yamlwarn as _YW  # noqa: E402
+import _cepaenv as E  # noqa: E402
 # The plugin's own PyYAML copy goes FIRST so it wins over any installed one
 # (docs/spec/cepa-roda-sem-pyyaml-instalado.md).
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "_vendor"))
@@ -92,7 +93,7 @@ def main():
         sys.exit(0)
 
     try:
-        if os.environ.get("CEPA_MODO", "on") == "off":
+        if E.get("CEPA_MODE", "on") == "off":
             sys.exit(0)
 
         ti = payload.get("tool_input") or {}

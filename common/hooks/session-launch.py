@@ -12,10 +12,10 @@ Decision:
   - otherwise                             → run in place (main tree)
 
 The claim file is keyed by a generated claim-id. `cepa` passes that id to claude
-via CLAUDE_WT_CLAIM (survives `exec`, inherited by the hook), and the SessionStart
+via CEPA_WT_CLAIM (survives `exec`, inherited by the hook), and the SessionStart
 hook renames the claim to the real session_id.
 
-Env in:  CLAUDE_WT_ROOT (repo root, required), CLAUDE_WT_SLICE (optional name)
+Env in:  CEPA_WT_ROOT (repo root, required), CEPA_WT_SLICE (optional name)
 Stdout:  one line  "<launch-dir>\t<claim-id>"   (launch-dir = where cepa should cd)
 Exit:    0 on success; non-zero → cepa falls back to launching in place.
 """
@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _wtlib as L  # noqa: E402
+import _cepaenv as E  # noqa: E402
 
 
 def neutral_name(root: str) -> str:
@@ -43,8 +44,8 @@ def neutral_name(root: str) -> str:
 
 
 def main() -> int:
-    root_in = os.environ.get("CLAUDE_WT_ROOT", "").strip()
-    slice_name = os.environ.get("CLAUDE_WT_SLICE", "").strip()
+    root_in = E.get("CEPA_WT_ROOT", "").strip()
+    slice_name = E.get("CEPA_WT_SLICE", "").strip()
     if not root_in:
         return 1
     root = L.main_root(root_in) or root_in  # registry always lives in the main tree
@@ -83,14 +84,13 @@ def main() -> int:
             # have its sibling worktrees synced too, and the sync daemon's own
             # move/replace/conflict-copy races delete live worktrees mid-step.
             # Default home is ~/cepa-worktrees; override with CEPA_WORKTREE_HOME
-            # (the pre-rename CCW_WORKTREE_HOME is still honoured, so a shell
+            # (the old CCW_WORKTREE_HOME is still honoured, so a shell
             # that still exports it keeps working instead of silently relocating
             # every worktree to the new default).
             name = slice_name or neutral_name(root)
             branch = f"session/{name}"
             repo_name = os.path.basename(os.path.abspath(root))
-            wt_home = os.environ.get("CEPA_WORKTREE_HOME", "").strip() \
-                or os.environ.get("CCW_WORKTREE_HOME", "").strip() \
+            wt_home = E.get("CEPA_WORKTREE_HOME", "").strip() \
                 or os.path.expanduser("~/cepa-worktrees")
             wt_home = os.path.abspath(wt_home)
             os.makedirs(wt_home, exist_ok=True)

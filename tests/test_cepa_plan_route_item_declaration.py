@@ -42,7 +42,7 @@ def check(name, cond, detail=""):
 
 def run(repo, *args):
     env = dict(os.environ)
-    for k in ("CLAUDE_WT_CLAIM", "CEPA_UNTIL_RUN", "CLAUDE_SESSION_ID"):
+    for k in ("CEPA_WT_CLAIM", "CLAUDE_WT_CLAIM", "CEPA_RUN", "CEPA_UNTIL_RUN", "CLAUDE_SESSION_ID"):
         env.pop(k, None)
     return subprocess.run([sys.executable, str(CEPA_PLAN)] + list(args),
                           capture_output=True, text=True, cwd=str(repo), env=env)

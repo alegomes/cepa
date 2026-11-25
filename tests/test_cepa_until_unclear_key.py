@@ -43,7 +43,7 @@ def test_question_mark_on_terminal_records_feedback_and_leaves_item():
         before = qfile.read_bytes()
         # CS-7 rewrites the question after `?`; this case is about the record
         # alone, so the reader is off (and a real `claude` never runs in a test).
-        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_UNTIL_LEITOR="off")
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), env=env,
                          inputs=[("[w] I write the answer", "?")], timeout=60)

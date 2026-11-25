@@ -41,8 +41,8 @@ def check(label, ok, detail=""):
 
 
 def load_until():
-    before = os.environ.get("CEPA_UNTIL_COR")
-    os.environ["CEPA_UNTIL_COR"] = "nunca"
+    before = os.environ.get("CEPA_RUN_COLOR")
+    os.environ["CEPA_RUN_COLOR"] = "nunca"
     try:
         loader = importlib.machinery.SourceFileLoader("cepa_until_decl", str(CEPA_UNTIL))
         spec = importlib.util.spec_from_loader("cepa_until_decl", loader)
@@ -50,9 +50,9 @@ def load_until():
         loader.exec_module(mod)
     finally:
         if before is None:
-            del os.environ["CEPA_UNTIL_COR"]
+            del os.environ["CEPA_RUN_COLOR"]
         else:
-            os.environ["CEPA_UNTIL_COR"] = before
+            os.environ["CEPA_RUN_COLOR"] = before
     return mod
 
 

@@ -124,7 +124,7 @@ The hook couldn't identify the calling agent and fell back to
   `detect_agent` function returns the wrong value. Inspect with:
 
   ```sh
-  export HEX_PATHLOCK_DEBUG=1
+  export CEPA_HEX_PATHLOCK_DEBUG=1
   # re-run the operation; log lands at /tmp/hex-pathlock-debug.log
   ```
 

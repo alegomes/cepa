@@ -36,10 +36,10 @@ import test_cepa_until_decide as dec  # noqa: E402
 check = dec.check
 FAILURES = dec.FAILURES
 CEPA_UNTIL = al.CEPA_UNTIL
-# `CEPA_UNTIL_SCRIPT` points every case at another copy of the script (a mutated copy
+# `CEPA_RUN_SCRIPT` points every case at another copy of the script (a mutated copy
 # in a proof run); `common/bin/` next to it must come along (it imports its siblings).
-if os.environ.get("CEPA_UNTIL_SCRIPT"):
-    CEPA_UNTIL = Path(os.environ["CEPA_UNTIL_SCRIPT"]).resolve()
+if os.environ.get("CEPA_RUN_SCRIPT"):
+    CEPA_UNTIL = Path(os.environ["CEPA_RUN_SCRIPT"]).resolve()
     dec.CEPA_UNTIL = al.CEPA_UNTIL = CEPA_UNTIL
 ANSI = dec.ANSI
 
@@ -511,7 +511,7 @@ def test_real_decide_all_in_a_pty_records_each_member_in_its_queue_and_converts_
     with tempfile.TemporaryDirectory() as tmp:
         root, paths = _all_repo(tmp, TWO_QUEUES(), TWO_WAIVERS)
         env = al._tty_env(tmp)
-        env["CEPA_UNTIL_LEITOR"] = "off"
+        env["CEPA_RUN_READER"] = "off"
         rc, out = dec.on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", "--all", "--repo", str(root)],
             str(root), env=env, timeout=90,

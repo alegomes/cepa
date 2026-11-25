@@ -101,8 +101,8 @@ def test_quoted_prompt_starting_with_plan_is_not_refused():
                         encoding="utf-8")
         stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
         env = _env()
-        env.update({"CLAUDE_WT_CLAUDE_BIN": str(stub), "CEPA_MODO": "off",
-                    "CEPA_ENCADEAR": "off", "CEPA_MENU": "off"})
+        env.update({"CEPA_WT_CLAUDE_BIN": str(stub), "CEPA_MODE": "off",
+                    "CEPA_CHAIN": "off", "CEPA_MENU": "off"})
         subprocess.run(["git", "-C", str(d), "init", "-q"], check=True)
         r = subprocess.run([str(CEPA), "Plan the release"], capture_output=True,
                            text=True, cwd=str(d), env=env, timeout=120)
@@ -154,8 +154,8 @@ def test_transition_shim_is_not_a_command():
                         encoding="utf-8")
         stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
         env = _env()
-        env.update({"CLAUDE_WT_CLAUDE_BIN": str(stub), "CEPA_MODO": "off",
-                    "CEPA_ENCADEAR": "off", "CEPA_MENU": "off"})
+        env.update({"CEPA_WT_CLAUDE_BIN": str(stub), "CEPA_MODE": "off",
+                    "CEPA_CHAIN": "off", "CEPA_MENU": "off"})
         r = subprocess.run([str(CEPA), "plam"], capture_output=True, text=True,
                            cwd=str(d), env=env, timeout=120)
         assert "did you mean" not in r.stderr, r.stderr

@@ -101,7 +101,7 @@ def epics(repo_path, *args):
 
 
 def run_hook(cwd, env=None, **payload):
-    e = {k: v for k, v in os.environ.items() if k != "CEPA_UNTIL_RUN"}
+    e = {k: v for k, v in os.environ.items() if k not in ("CEPA_RUN", "CEPA_UNTIL_RUN")}
     e.update(env or {})
     return subprocess.run(
         [sys.executable, str(HOOK)],
@@ -314,7 +314,7 @@ def test_hook():
         check("hook com 2 prompts antes: sem [epic]", "[epic]" not in ctx(p),
               ctx(p))
         write_log(r, [])
-        p = run_hook(r.path, env={"CEPA_UNTIL_RUN": "1"}, session_id="s1",
+        p = run_hook(r.path, env={"CEPA_RUN": "1"}, session_id="s1",
                      prompt="oi")
         check("hook em run do cepa-until: sem [epic]", "[epic]" not in ctx(p),
               ctx(p))
@@ -347,7 +347,7 @@ def test_hook_fail_silent():
                                   "prompt": "oi"}),
                 capture_output=True, text=True, timeout=30,
                 env={k: v for k, v in os.environ.items()
-                     if k != "CEPA_UNTIL_RUN"})
+                     if k not in ("CEPA_RUN", "CEPA_UNTIL_RUN")})
             check(f"fail-silent ({variant}): rc 0", p.returncode == 0,
                   p.stderr)
             check(f"fail-silent ({variant}): sem [epic]",
@@ -367,6 +367,7 @@ def test_whereami_step0_runs():
         r.epic("x", EPIC_X)
         r.queue("x-c1", "x", [item("A-1", "done")])
         env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(REPO / "common")}
+        env.pop("CEPA_RUN", None)
         env.pop("CEPA_UNTIL_RUN", None)
         p = subprocess.run(["bash", "-c", m.group(1)], cwd=r.path, env=env,
                            capture_output=True, text=True, timeout=60)

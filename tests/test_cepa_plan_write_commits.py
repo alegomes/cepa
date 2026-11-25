@@ -17,7 +17,7 @@ Behavior, against the real CLI in a real git repo:
   - `responde` and `add` commit only plan.yaml in the same step (`git status`
     clean afterwards); `--no-commit` writes and says a commit is missing;
   - `start` and `finish` warn that a commit is missing (and which command); `--commit`
-    commits; inside a run (`CEPA_UNTIL_RUN=1`) the warning says the clone
+    commits; inside a run (`CEPA_RUN=1`) the warning says the clone
     stays that way on purpose;
   - a commit with other changes in the tree warns that it took only the queue;
   - `responde "não entendi"`, `"?"`, or a question: exit 6, nothing written, the
@@ -60,9 +60,10 @@ def last_commit(root):
 
 ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
            GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+ENV.pop("CEPA_RUN", None)
+
+
 ENV.pop("CEPA_UNTIL_RUN", None)
-
-
 def plan(root, *args, env=None):
     return subprocess.run([sys.executable, str(CEPA_PLAN)] + list(args)
                           + ["--repo", str(root)],
@@ -274,7 +275,7 @@ def test_start_and_finish_warn_to_commit_and_commit_commits():
         check("...commita a fila", last_commit(root) == "queue fila: a1 -> blocked",
               last_commit(root))
         check("...e deixa a árvore limpa", status(root) == "", status(root))
-        env = dict(ENV, CEPA_UNTIL_RUN="1")
+        env = dict(ENV, CEPA_RUN="1")
         p = plan(root, "start", "fila", "a2", env=env)
         check("dentro de um run, start diz que o clone fica assim de propósito",
               "de propósito" in p.stdout and "Falta commitar" not in p.stdout,

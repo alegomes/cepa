@@ -98,10 +98,10 @@ def _launch(items, mode="ok", tty=True, inputs=(), ceiling=None):
         binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
         reader, log = _route_reader(tmp, mode)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(reader)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "5"
+        env["CEPA_RUN_READER"] = str(reader)
+        env["CEPA_RUN_ANSWER_WAIT"] = "5"
         if ceiling is not None:
-            env["CEPA_UNTIL_TETO_LEITURA"] = str(ceiling)
+            env["CEPA_RUN_READER_CEILING"] = str(ceiling)
         cmd = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
                "--for", "2h", "--no-verify", "--no-analysis"]
         if tty:
@@ -500,8 +500,8 @@ def test_an_interrupted_pool_kills_its_own_running_readers():
             f"open({str(pidfile)!r}, 'w').write(str(os.getpid()))\n"
             "time.sleep(30)\n")
         script.chmod(0o755)
-        before = os.environ.get("CEPA_UNTIL_LEITOR")
-        os.environ["CEPA_UNTIL_LEITOR"] = str(script)
+        before = os.environ.get("CEPA_RUN_READER")
+        os.environ["CEPA_RUN_READER"] = str(script)
         pid = None
 
         def one(it, deadline):
@@ -544,9 +544,9 @@ def test_an_interrupted_pool_kills_its_own_running_readers():
                 except OSError:
                     pass
             if before is None:
-                os.environ.pop("CEPA_UNTIL_LEITOR", None)
+                os.environ.pop("CEPA_RUN_READER", None)
             else:
-                os.environ["CEPA_UNTIL_LEITOR"] = before
+                os.environ["CEPA_RUN_READER"] = before
 
 
 def main():

@@ -84,7 +84,7 @@ def build(base: Path) -> Path:
 
 def run_hook(repo: Path, home: Path) -> str:
     env = dict(os.environ, HOME=str(home))
-    env.pop("CLAUDE_WT_CLAIM", None)
+    env.pop("CEPA_WT_CLAIM", None)
     p = subprocess.run(
         [sys.executable, str(HOOKS / "session-registry.py")],
         input=json.dumps({"session_id": "teste-fantasma", "cwd": str(repo),

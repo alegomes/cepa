@@ -78,7 +78,7 @@ Create the directory if it doesn't exist.
 
 ### 6. Export run-id
 
-Run a Bash command to write the run-id to a session-local marker file at `docs/autonomous/<run-id>/.run-id` AND set `CLAUDE_AUTONOMOUS_RUN_ID=<run-id>` for the rest of this session via `export`. The hook reads the env var; the marker file is a fallback for resume.
+Run a Bash command to write the run-id to a session-local marker file at `docs/autonomous/<run-id>/.run-id` AND set `CEPA_AUTONOMOUS_RUN_ID=<run-id>` for the rest of this session via `export`. The hook reads the env var; the marker file is a fallback for resume.
 
 ### 7. (Conditional) Transition Jira card to "in progress"
 

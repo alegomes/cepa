@@ -50,7 +50,7 @@ def git(root, *args):
 
 def plan_cli(root, *args):
     env = dict(os.environ)
-    env.pop("CLAUDE_AUTONOMOUS_RUN_ID", None)
+    env.pop("CEPA_AUTONOMOUS_RUN_ID", None)
     return subprocess.run([sys.executable, str(CEPA_PLAN), *args, "--repo", str(root)],
                           capture_output=True, text=True, cwd=root, env=env,
                           timeout=60)

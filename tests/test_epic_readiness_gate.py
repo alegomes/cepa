@@ -283,7 +283,7 @@ def test_discovery_writes_docs_epics():
         (root / ".claude").mkdir()
         (root / ".claude" / "session-mode").write_text("modo: descoberta\n")
         env = dict(os.environ)
-        env.pop("CEPA_MODO", None)
+        env.pop("CEPA_MODE", None)
         payload = {
             "tool_name": "Write",
             "cwd": str(root),

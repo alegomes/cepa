@@ -37,7 +37,7 @@ def check(name, cond, detail=""):
 def env_for(home, sid="S1"):
     e = dict(os.environ, HOME=str(home), GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
              GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
-    for k in ("CEPA_UNTIL_RUN", "CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID", "CEPA_MODO"):
+    for k in ("CEPA_RUN", "CEPA_UNTIL_RUN", "CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID", "CEPA_MODE", "CEPA_MODO"):
         e.pop(k, None)
     if sid:
         e["CLAUDE_CODE_SESSION_ID"] = sid

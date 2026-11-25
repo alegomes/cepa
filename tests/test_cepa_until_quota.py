@@ -38,7 +38,7 @@ FAILURES = []
 
 # Wait of 1s after the reset, instead of 2min: the case measures the decision, not
 # the patience.
-MARGIN = {"CEPA_UNTIL_MARGEM_RESET": "1"}
+MARGIN = {"CEPA_RUN_RESET_MARGIN": "1"}
 
 
 def check(name, cond, detail=""):
@@ -395,7 +395,7 @@ def herdr_env(tmp):
                      "{'t': time.time(), 'argv': sys.argv[1:]}) + '\\n')\n")
     herdr.chmod(0o755)
     warm_up(herdr)
-    return ({"CEPA_UNTIL_MARGEM_RESET": str(HERDR_MARGIN), "HERDR_ENV": "1",
+    return ({"CEPA_RUN_RESET_MARGIN": str(HERDR_MARGIN), "HERDR_ENV": "1",
              "HERDR_PANE_ID": "w9:p9", "HERDR_BIN_PATH": str(herdr)}, log)
 
 

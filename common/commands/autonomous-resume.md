@@ -57,7 +57,7 @@ Based on the log + artifacts, decide what's next. Patterns:
 
 ### 4. Re-export run-id and resume
 
-Set `CLAUDE_AUTONOMOUS_RUN_ID=<run-id>` for this session (so the checkpoint hook continues logging to the same state file).
+Set `CEPA_AUTONOMOUS_RUN_ID=<run-id>` for this session (so the checkpoint hook continues logging to the same state file).
 
 Re-enter the active flow's command at the next pending step. Concretely: invoke the relevant subagent (e.g., `<topology>:engineering-lead` for a build-phase resume, `<topology>:validation-lead` for a validation-phase resume) with a prompt that includes:
 

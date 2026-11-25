@@ -90,7 +90,7 @@ def add_session_wt(repo: Path, base: Path, name: str, sid: str, age_h: int = 72)
 
 def env_for(tel: Path, home: Path):
     env = dict(os.environ, HOME=str(home), CEPA_TELEMETRY_DIR=str(tel))
-    env.pop("CLAUDE_WT_CLAIM", None)
+    env.pop("CEPA_WT_CLAIM", None)
     env.pop("CLAUDE_PROJECT_DIR", None)
     return env
 
