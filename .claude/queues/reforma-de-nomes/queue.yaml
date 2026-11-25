@@ -26,9 +26,42 @@ items:
     "plan is now queue" e não imprime a fila; `cepa help` lista `queue` e não lista
     `plan`; `board-flow/bin/cepa-queue status` chega ao mesmo script. Hoje `cepa
     queue` não existe.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
+  human_pending: 'Aceitar ou recusar a dispensa de common/bin/cepa-queue (nada-a-provar:
+    cobertura e entradas hostis)'
+  evidence: 'Commits na branch until/2026-11-24-2017 (codigo fica na branch do run,
+    sem merge nem push): 286de89 (rename cepa-plan -> cepa-queue em common/bin e
+    board-flow/bin, recusa de ''cepa plan'' no lancador, 146 arquivos), cf1bf82
+    (teste do fallback sh do help), d8c82b5 (recusa de PLAN em qualquer caixa),
+    26d2a0b (prova + proposta de dispensa). pair-reviewer: OK-WITH-NOTES. completion-auditor:
+    COMPLETE (.claude/acceptance/CS-1-reforma-de-nomes.yaml). proof-reviewer: NEEDS-HUMAN
+    em docs/proof/reforma-de-nomes-CS-1.yaml: P1-P11 e 13a/13b RED, L4 clean; so
+    L2 fica ''assumed'' em common/bin/cepa-queue ate o dono assinar .claude/waivers/nada-a-provar--common-bin-cepa-queue.yaml
+    (status: proposta). Teste: tests/test_cepa_queue_rename_cli.py 8 passed. Suite
+    inteira NAO rodada aqui (e do supervisor); 80 arquivos de teste tocados rodados
+    um a um pelo pair-dev, 1 falha intermitente de pty em test_cepa_until_decide
+    (Ctrl-C) que passou 2x isolada. Ficou de fora: common/bin/cepa-plan permanece
+    como shim de transicao (execv para cepa-queue), a remover no CS-11/CS-12; docs
+    datados (docs/estrategia-*, docs/epics, docs/investigations) nao reescritos.'
+  head_commit: 26d2a0b11354ef8272ba41c506c8676d36ab9069
+  route_kind: open-question
+  owner_question: 'Aceito a dispensa de medir cobertura no comando da fila renomeado?
+    Recomendo sim: nele só mudou o nome nas mensagens.'
+  owner_summary:
+    se_sim: a prova do item passa a valer como completa e o trabalho segue como
+      está
+    se_nao: o trabalho continua entregue, mas a prova fica incompleta até alguém
+      testar as mensagens do comando renomeado
+    item_se_sim: nenhum
+    item_se_nao:
+      titulo: Testar as mensagens do comando da fila depois da troca de nome
+      precisa_do_dono: false
+  decisions:
+  - texto: Mantive o arquivo antigo do comando da fila como um atalho escondido
+      que só repassa para o novo, porque a rodada em andamento ainda chama o caminho
+      antigo; ele sai no fim da reforma.
+    commit: 286de897c2a7bcc4bb6417b3ff107813cfadbee3
 - id: CS-2
   title: '`cepa run` faz o que `cepa until` fazia, e `cepa until` é recusado com
     o nome novo'
@@ -40,9 +73,43 @@ items:
     1h --dry-run` sai com 2 com uma linha contendo "until is now run"; `cepa until-digest
     x` sai com 2 com "until-digest is now run digest". A pasta da run continua sendo
     `.claude/queues/<fila>/until/` e a branch `until/<run>`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Return 1 of 2 resolved. Red cause: tests/run-all.sh failed only on
+    tests/test_marketplace_common_description.py (/queue-run missing from the common
+    description in .claude-plugin/marketplace.json), 1 of 250 files, both builds.
+    Reused side branch until/2026-11-24-2017-vermelho-CS-2 by cherry-pick: ba517aa
+    (=202b45d), 8f86f7e (=ee7df24), 7b9554a (=8cf6c66), 474e698 (=5a8801a); pairwise
+    diffs empty. Fix: c54b90d (one line in marketplace.json). Records: c576064.
+    completion-auditor COMPLETE for 26d2a0b..c54b90d (.claude/acceptance/CS-2-reforma-de-nomes.yaml).
+    proof-reviewer PROVEN review 5 at c54b90d (docs/proof/reforma-de-nomes-CS-2.yaml):
+    removing /queue-run from the description turns the marketplace test RED, restored
+    GREEN. Ran green at HEAD: test_marketplace_common_description (35 commands),
+    test_commands_catalog, test_cepa_run_rename_cli (15 passed), test_queue_rename
+    (27 passed), test_cepa_until_digest, test_cepa_help_layout (3 passed), test_cepa_until_dead_supervisor
+    (rc 0, 0 FAIL), test_cepa_until_cut_rule, test_default_yes_inject. Full build
+    not run here: it is the supervisor''s. Not run: test_cepa_until.py whole file
+    without perturbation. Topology build-solo, no validation-lead. Code is on the
+    run branch until/2026-11-24-2017; no merge, no push.'
+  decisions:
+  - texto: Os caminhos antigos do supervisor e do resumo continuam existindo como
+      atalhos escondidos que chamam o comando novo, porque há uma run em andamento
+      iniciada com o nome antigo; digitar cepa until é recusado
+    commit: 8cf6c66c9d1d0ab1927779d7d219f9a962e977cd
+  - texto: O comando de barra novo queue-run entra já, como entrada fina que roda
+      o drain-plan, até o item seguinte renomear os arquivos de comando; assim cepa
+      run funciona entre um item e outro
+    commit: 8cf6c66c9d1d0ab1927779d7d219f9a962e977cd
+  - texto: O resumo da run passa a pular uma linha do registro que não é um objeto,
+      em vez de terminar em erro do Python; o defeito era anterior ao renome
+    commit: 8cf6c66c9d1d0ab1927779d7d219f9a962e977cd
+  - texto: Os nomes antigos cepa-until e cepa-until-digest continuam existindo como
+      atalhos escondidos que repassam para cepa-run, para não derrubar uma run em
+      andamento; e /common:queue-run é por enquanto uma entrada fina que roda /common:drain-plan,
+      até o item seguinte renomear os arquivos de comando.
+    commit: ba517aa09fc76c81ae0c089c8baac61d3ad2ec98
+  head_commit: c576064c2fc8355f4faf24184dbaa7ab14965320
 - id: CS-3
   title: os comandos de barra renomeados existem com o nome novo e os antigos não
     existem
@@ -51,9 +118,37 @@ items:
     um teste lista `common/commands/` e encontra `queue-run.md`, `run-review.md`
     e `worktree-rename.md`, e não encontra `drain-plan.md`, `until-review.md`, `worktree-name.md`,
     `fila.md`, `modos.md` nem `plan.md`. Hoje é o contrário.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-24-2017 (o código está na branch da
+    run, sem merge nem push): 429a6fb (renomes + referências + teste tests/test_slash_command_rename.py)
+    e d0c02ab (registros dos portões). Fluxo build-solo: pair-dev implementou com
+    o teste vermelho antes (53 FAIL) e verde depois; pair-reviewer deu OK-WITH-NOTES
+    com 1 correção (common/bin/_run_digest.py deixava de reconhecer a rodada de
+    análise em logs antigos), corrigida com teste vermelho antes. completion-auditor:
+    COMPLETE (.claude/acceptance/CS-3-reforma-de-nomes.yaml, c576064..429a6fb).
+    proof-reviewer: PROVEN (docs/proof/reforma-de-nomes-CS-3.yaml; 10 perturbações
+    RED, teste do item RED em c576064). Suíte completa não rodada aqui: fica com
+    o supervisor. Só os arquivos de teste tocados e vizinhos rodaram, todos verdes.
+    Ficou de fora de propósito: flags (--na-branch, --fila), prefixo common:, nomes
+    dos arquivos de teste, arquivos de histórico (itens CS-5, CS-11, CS-12, CS-13).
+    ATENÇÃO para a run em voo: o supervisor desta run é o processo antigo (common/bin/cepa-until
+    do clone principal, pid 72191) e despacha /common:drain-plan e, no fim, /common:until-review;
+    como este item tocou common/bin e common/hooks, a reinstalação tira esses dois
+    comandos da cópia instalada. Conferido: um comando de barra inexistente em claude
+    -p chega ao modelo como texto solto, não como erro; a rodada seguinte depende
+    de o modelo achar common:queue-run sozinho.'
+  head_commit: d0c02abb07b16e6543f018e86dddd6907941e0a1
+  decisions:
+  - texto: O resumo de uma run continua reconhecendo a rodada de análise em registros
+      antigos, gravados com o nome velho do comando; os arquivos em disco não são
+      reescritos.
+    commit: 429a6fb828386ed89c8ad3a000c50522de141f76
+  - texto: 'O item foi feito com esta run aberta, embora a especificação avise que
+      a troca entra sem run aberta: as próximas rodadas desta run chamam o nome
+      antigo, que deixa de existir depois da reinstalação.'
+    commit: 429a6fb828386ed89c8ad3a000c50522de141f76
 - id: CS-4
   title: os apelidos antigos da CLI saem e a recusa diz o nome novo
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -62,9 +157,34 @@ items:
     "modos is now modes"; os arquivos `common/bin/cepa-intencao` e `common/bin/cepa-modos`
     não existem; a saída de `cepa help` não contém "Old subcommand names". Hoje
     os dois rodam o comando novo.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Second attempt (return 1 of 2). Reused the side branch until/2026-11-24-2017-vermelho-CS-4:
+    cherry-picked f816e70 as 45c9ba5 (aliases removed, refusal names the new command).
+    Cause of the red full build: tests/test_cepa_prove.py (test_cepa_help_flags_and_typos)
+    still required ''intencao (= intent)'' and ''modos (= modes)'' in cepa help;
+    ef5dbf3 rewrites that check to require the aliases gone plus the two refusals
+    (exit 2, ''X is now Y''). Gate records in 9a75f57: completion-auditor COMPLETE
+    (.claude/acceptance/CS-4-reforma-de-nomes.yaml), proof-reviewer PROVEN by perturbation,
+    6 perturbations red and new tests red at d0c02ab (docs/proof/reforma-de-nomes-CS-4.yaml).
+    Run here: test_cepa_prove.py 27 ok, test_cepa_cli_old_aliases_gone.py 8 passed,
+    and test_cepa_intent, test_intent_telemetry, test_modes_single_source, test_session_intent_contract,
+    test_whereami_intent, test_cepa_chaining, test_slash_command_rename, test_pt_names_to_english,
+    test_vendor_copies_drift all rc=0. Full build (tests/run-all.sh) not run: it
+    belongs to the supervisor. Code is on the run branch until/2026-11-24-2017,
+    no merge, no push. Left out: the supervisor still launches the round as /common:drain-plan,
+    a name CS-3 removed; this round resolved it to /common:queue-run by hand.'
+  decisions:
+  - texto: A recusa de 'cepa intencao' e 'cepa modos' usa a mesma frase de 'cepa
+      plan' e 'cepa until', e vale também em maiúsculas e por 'cepa help <nome antigo>'.
+      Os dois arquivos de apelido foram apagados sem deixar atalho de transição.
+    commit: f816e707ff22df831c6f0c0e20863bc8aa9a454b
+  - texto: 'O teste antigo que exigia os dois apelidos na ajuda do cepa foi reescrito
+      para exigir o contrário: os apelidos fora da lista e cada um recusado dizendo
+      o nome novo'
+    commit: ef5dbf35e56af107c34b1d07709be76da67fcb18
+  head_commit: 9a75f5725ef224c02eb3735588904e1b7834d7d6
 - id: CS-5
   title: as flags dos comandos de barra e os valores de veredito aparecem em inglês,
     e os antigos continuam aceitos
@@ -77,10 +197,40 @@ items:
     queue verdict <arquivo> 1 kept` grava o mesmo marcador que `mantida` grava hoje,
     e `mantida` continua aceito; `cepa queue finish ... --open-point "x"` grava
     o mesmo que `--pendencia "x"`, que continua aceito. Depois do CS-1.'
-  status: pending
+  status: done
   blocked_by:
   - CS-1
   human_pending: null
+  evidence: 'Commits on until/2026-11-24-2017: 0ede2ff (rename, new test tests/test_slash_flags_in_english.py),
+    0eb1628 (review follow-up), 78a0f4f (records). Gates: completion-auditor COMPLETE
+    (.claude/acceptance/CS-5-reforma-de-nomes.yaml); proof-reviewer PROVEN by perturbation,
+    new test red at base 9a75f57 (docs/proof/reforma-de-nomes-CS-5.yaml, head 0ede2ff);
+    pair-reviewer REJECT on 0ede2ff for two doc lines still showing old area names,
+    fixed in 0eb1628, not re-reviewed. 0eb1628 also makes menu_choice match a pending
+    menu saved with the old flag; that line is after the proof record, checked by
+    me red-without/green-with (test_menu_saved_before_the_rename_still_matches).
+    Tests run: the new file (12 passed) and neighbors only; full build left to the
+    supervisor. Code is on the run branch, no merge, no push. Not swept: skills
+    and plugins other than common/build-hex beyond a grep with no hits; final sweep
+    is CS-11.'
+  head_commit: 78a0f4ff90ac53eead001f1ce4b795d118508964
+  decisions:
+  - texto: O teste do menu chama 'cepa modes --menu discovery', porque a forma 'cepa
+      modes menu discovery' só passa a existir no item CS-7.
+    commit: 0eb16285f8ec43d15bec50b824113d1775650114
+  - texto: 'A troca de ''--plan NAME'' por ''--queue NAME'' no comando /common:next
+      entrou neste item, com a antiga ainda aceita: nenhum outro item da fila cobria
+      essa flag.'
+    commit: 0eb16285f8ec43d15bec50b824113d1775650114
+  - texto: Em 'cepa queue finish', a flag intermediária '--resolve-point' continua
+      aceita ao lado de '--resolve-open-point' e '--resolve-pendencia'.
+    commit: 0eb16285f8ec43d15bec50b824113d1775650114
+  - texto: As mensagens de erro e de sucesso de 'cepa queue verdict' repetem o valor
+      que foi digitado, em inglês ou em português.
+    commit: 0eb16285f8ec43d15bec50b824113d1775650114
+  - texto: Quem digita a flag antiga numa escolha do menu de modo tem a escolha
+      reconhecida, e o registro de uso grava a forma em inglês.
+    commit: 0eb16285f8ec43d15bec50b824113d1775650114
 - id: CS-6
   title: toda variável de ambiente tem prefixo `CEPA_` e nome em inglês, e a antiga
     continua lida
@@ -93,9 +243,16 @@ items:
     e `CEPA_PERMISSIONS=classifier` e nenhuma das formas antigas; com a nova e a
     antiga definidas com valores diferentes, vale a nova. Hoje a varredura acha
     `CEPA_MODO`, `CLAUDE_WT_CLAIM` e `CCW_SEED`, entre outras.'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  claimed_by:
+    session_id: 885ae67e-a5c1-4b82-9282-4b6fad798674
+    pid: 79404
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-until-2026-11-24-2017
+    branch: until/2026-11-24-2017
+    started_at: '2026-11-25T13:02:32+00:00'
 - id: CS-7
   title: '`cepa intent` e `cepa modes` dizem a ação por subcomando'
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
