@@ -281,6 +281,21 @@ def test_migrate_refuses_live_cepa_until_run(d):
     assert (d / ".claude" / "queues" / "x" / "queue.yaml").is_file()
 
 
+@with_repo
+def test_migrate_refuses_live_cepa_run(d):
+    folder = legacy_queue(d)
+    fake = subprocess.Popen(["bash", "-c", "exec -a cepa-run sleep 60"])
+    try:
+        _running_state(folder, fake.pid)
+        r = plan(d, "migrate", "x", "--repo", ".")
+        assert r.returncode != 0 and "está rodando" in r.stderr, r.stdout + r.stderr
+        assert (folder / "plan.yaml").is_file()
+        assert not (d / ".claude" / "queues").exists()
+    finally:
+        fake.kill()
+        fake.wait()
+
+
 # ── (f3) migrate refuses a queue with an uncommitted change ─────────────────
 
 @with_repo

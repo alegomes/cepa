@@ -110,6 +110,37 @@ def test_run_dry_run_cites_queue_run_and_exits_0():
         assert "until/" in r.stdout, r.stdout
 
 
+def test_run_dry_run_without_no_verify_cites_queue_run():
+    """The literal command of the criterion: no `--no-verify`, a committed
+    executable tests/run-all.sh, and the stub `claude` is never reached."""
+    with tempfile.TemporaryDirectory() as base:
+        d = _repo_with_queue(base)
+        runall = d / "tests" / "run-all.sh"
+        runall.parent.mkdir()
+        runall.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        runall.chmod(runall.stat().st_mode | stat.S_IXUSR)
+        subprocess.run(["git", "-C", str(d), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(d), "-c", "user.email=t@t", "-c", "user.name=t",
+                        "commit", "-q", "-m", "run-all"], check=True)
+        stubs = _stub_claude(base)
+        r = _run([CEPA, "run", "fila", "--for", "1h", "--dry-run"], d, stubs)
+        assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+        assert "/common:queue-run fila --max 1" in r.stdout, r.stdout
+        assert "claude was called" not in r.stderr + r.stdout, (r.stdout, r.stderr)
+
+
+def test_run_all_dry_run_item_line_cites_queue_run():
+    with tempfile.TemporaryDirectory() as base:
+        d = _repo_with_queue(base)
+        stubs = _stub_claude(base)
+        r = _run([CEPA, "run", "--all", "--for", "1h", "--dry-run"], d, stubs)
+        assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+        item = [ln for ln in r.stdout.splitlines() if ln.lstrip().startswith("item   :")]
+        assert item, r.stdout
+        assert "/common:queue-run <queue> --max 1" in item[0], item[0]
+        assert "/common:drain-plan" not in r.stdout, r.stdout
+
+
 def test_run_help_names_the_new_command_and_digest():
     with tempfile.TemporaryDirectory() as base:
         r = _run([CEPA, "run", "--help"], base)

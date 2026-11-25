@@ -149,6 +149,19 @@ def test_every_command_declares_interaction():
     check("todo comando declara interaction válido", not missing, str(missing))
 
 
+def test_queue_run_gets_the_same_injection_as_drain_plan():
+    """The supervisor dispatches `/common:queue-run`; it must be as autonomous as
+    `/common:drain-plan` was (queue-run.md has to be `interaction: routine`)."""
+    rc_old, ctx_old = run("/common:drain-plan x --max 1")
+    rc_new, ctx_new = run("/common:queue-run x --max 1")
+    check("drain-plan injeta (referência)", rc_old == 0 and "default-yes" in ctx_old,
+          f"rc={rc_old} ctx={ctx_old[:120]!r}")
+    check("queue-run injeta a mesma politica que drain-plan",
+          rc_new == 0 and "default-yes" in ctx_new
+          and ctx_new == ctx_old.replace("common:drain-plan", "common:queue-run"),
+          f"rc={rc_new} ctx={ctx_new[:150]!r}")
+
+
 for fn in list(globals().values()):
     if callable(fn) and getattr(fn, "__name__", "").startswith("test_"):
         print(f"\n{fn.__name__}")

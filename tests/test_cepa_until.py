@@ -1186,7 +1186,7 @@ def test_attempt_ceiling_takes_the_item_off_the_front_and_the_queue_moves():
         check("...o item preso ficou `blocked`",
               after["a1"]["status"] == "blocked", str(after["a1"]))
         check("...com a evidência dizendo que foi o supervisor, não um veredito",
-              "consecutive `cepa-until` attempts" in (after["a1"]["evidence"] or ""),
+              "consecutive `cepa-run` attempts" in (after["a1"]["evidence"] or ""),
               str(after["a1"].get("evidence"))[:200])
         check("...a reserva órfã foi limpa junto",
               not after["a1"].get("claimed_by"), str(after["a1"]))

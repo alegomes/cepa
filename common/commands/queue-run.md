@@ -1,7 +1,7 @@
 ---
 description: New name of the batch runner (what `cepa run` dispatches for each item). Transitional entry until the command files are renamed (reforma-de-nomes CS-3); runs /common:drain-plan with the same arguments.
 argument-hint: <name> [same arguments as /common:drain-plan]
-interaction: conversational
+interaction: routine
 ---
 
 # /common:queue-run

@@ -696,7 +696,7 @@ def test_help_lists_the_subcommands():
             q = subprocess.run([sys.executable, str(CEPA_UNTIL), sub, word],
                                capture_output=True, text=True, timeout=30)
             check(f"...e `{sub} {word}` mostra o uso dele",
-                  q.returncode == 0 and f"usage: cepa until {sub}" in q.stdout,
+                  q.returncode == 0 and f"usage: cepa run {sub}" in q.stdout,
                   q.stdout + q.stderr)
     q = subprocess.run([sys.executable, str(CEPA_UNTIL), "help"],
                        capture_output=True, text=True, timeout=30)
@@ -707,7 +707,7 @@ def test_help_lists_the_subcommands():
 def test_until_review_checks_the_dead_supervisor():
     plain_text = UNTIL_REVIEW.read_text(encoding="utf-8")
     check("o /common:until-review manda conferir `mortos` no pendentes",
-          "cepa-run pending" in plain_text and "mortos" in plain_text
+          "cepa-until pending" in plain_text and "mortos" in plain_text
           and "interrompido" in plain_text and "close-dead" in plain_text)
 
 

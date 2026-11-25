@@ -4351,7 +4351,7 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
         if unattended:
             print(f"`--from-chat` não vale num run desatendido ({unattended[0]} "
                   "no ambiente): ninguém está no chat para ter respondido. "
-                  "Deixe a pergunta no item; o dono responde em `cepa-until "
+                  "Deixe a pergunta no item; o dono responde em `cepa-run "
                   "decide`.", file=sys.stderr)
             return 2
         chat_origin, why_not = owner_said_in_chat(repo, from_chat)
@@ -4410,7 +4410,7 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
                 print(f"  a rota pergunta: {route_question}", file=sys.stderr)
             if reason == CLARIFICATION_REASON:
                 # CS-11: the way out of "I did not understand" is the `?` key.
-                print(f"  se a pergunta está mal escrita, abra `cepa-until "
+                print(f"  se a pergunta está mal escrita, abra `cepa-run "
                       f"decide {name}` e aperte `?`: ela é registrada como "
                       "mal escrita, nenhuma resposta é gravada no item e a "
                       "pergunta é reescrita na hora. Se o texto é mesmo a sua "

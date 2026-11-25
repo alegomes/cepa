@@ -399,7 +399,7 @@ def test_cepa_dispatches_to_sibling_scripts():
           (p.stdout + p.stderr)[-300:])
     p = subprocess.run([str(CEPA), "help"], capture_output=True, text=True, timeout=60)
     check("`cepa help` lista os subcomandos", p.returncode == 0
-          and "run" in p.stdout and "prove" in p.stdout and "doctor" in p.stdout,
+          and "\n  run  " in p.stdout and "runs the repo's queue" in p.stdout and "prove" in p.stdout and "doctor" in p.stdout,
           (p.stdout + p.stderr)[-500:])
     check("...com a primeira linha de cada docstring",
           "Review" in p.stdout and "time window" in p.stdout, p.stdout[-800:])
@@ -467,13 +467,13 @@ def test_cepa_help_flags_and_typos():
     for flag in ("--help", "-h"):
         p = subprocess.run([str(CEPA), flag], capture_output=True, text=True, timeout=60)
         check(f"`cepa {flag}` lista os subcomandos como `cepa help`",
-              p.returncode == 0 and p.stdout == ref and "until" in p.stdout, (p.stdout + p.stderr)[-300:])
+              p.returncode == 0 and p.stdout == ref and "\n  run  " in p.stdout, (p.stdout + p.stderr)[-300:])
     check("...e a seção de flags do launcher", "launcher flags:" in ref and "--slice" in ref
           and "--mode" in ref and "--prompt" in ref, ref[-600:])
     check("...e os aliases com rótulo limpo", "intencao (= intent)" in ref
           and "modos (= modes)" in ref and "Deprecated" not in ref, ref)
     # `feed` is 4 edits from `feedback`: only the prefix fast path finds it.
-    for typo, near in (("untl", "until"), ("prov", "prove"), ("docto", "doctor"), ("feed", "feedback")):
+    for typo, near in (("runn", "run"), ("prov", "prove"), ("docto", "doctor"), ("feed", "feedback")):
         p = subprocess.run([str(CEPA), typo], capture_output=True, text=True, timeout=60)
         check(f"`cepa {typo}` recusa e sugere `cepa {near}`",
               p.returncode == 2 and "did you mean" in p.stderr

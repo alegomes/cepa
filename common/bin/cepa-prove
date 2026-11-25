@@ -379,7 +379,7 @@ def _main(argv=None):
                 "live run, dirty tree outside docs/proof/"),
             (130, "interrupted (Ctrl-C)"),
         ],
-        see_also=["cepa until: the same supervisor for the repo's queue",
+        see_also=["cepa run: the same supervisor for the repo's queue",
                   "/board-flow:prove-drain: what each round runs",
                   "/board-flow:decide: the NEEDS-HUMAN cards left in Review"])
     window = ap.add_mutually_exclusive_group(required=True)

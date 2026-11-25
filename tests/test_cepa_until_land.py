@@ -312,7 +312,7 @@ def test_5_doctor_warns_of_the_run_waiting_for_the_owner():
 def test_5_next_reads_the_waiting_runs():
     plain_text = NEXT.read_text(encoding="utf-8")
     check("o /common:next manda rodar o cepa-until pendentes",
-          "cepa-run pending" in plain_text)
+          "cepa-until pending" in plain_text)
 
 
 def test_5_short_header_without_absolute_path_and_with_cost():

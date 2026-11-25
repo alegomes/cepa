@@ -1338,7 +1338,7 @@ def herdr_resume_argv(repo):
     path = str(Path(main_root(repo)).resolve())
     if "'" in path:
         return None
-    return ["cepa", "until", "pending", "--repo", path]
+    return ["cepa", "run", "pending", "--repo", path]
 
 
 def _herdr_call(args, agent="cepa-until"):
