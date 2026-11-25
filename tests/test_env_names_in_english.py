@@ -30,6 +30,14 @@ import sys
 import tempfile
 from pathlib import Path
 
+# This test runs a hook that emits telemetry (write-mode-gate); without this the
+# events would land in ~/.claude/cepa-telemetry/ and enter the /common:metrics
+# report as if they were real use. See tests/_isolated_telemetry.py.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _isolated_telemetry import isolate
+
+isolate()
+
 REPO = Path(__file__).resolve().parent.parent
 BIN = REPO / "common" / "bin"
 HOOKS = REPO / "common" / "hooks"

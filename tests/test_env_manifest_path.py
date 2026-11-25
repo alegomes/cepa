@@ -39,6 +39,8 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+# _wtlib imports its sibling _cepaenv, so the hooks folder must be importable.
+sys.path.insert(0, str(REPO / "common" / "hooks"))
 _spec = importlib.util.spec_from_file_location("wtlib", REPO / "common" / "hooks" / "_wtlib.py")
 wtlib = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(wtlib)
