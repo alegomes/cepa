@@ -1,0 +1,18 @@
+status: proposta
+motivo: nada-a-provar
+escopo: common/bin/cepa-queue
+razao: 'L2 (cobertura) e L4 (entradas hostis) no item CS-1 da fila reforma-de-nomes:
+  o arquivo é o antigo common/bin/cepa-plan renomeado, e a única mudança nele é o
+  nome do programa nas mensagens. Os comportamentos novos do item (recusa de `cepa
+  plan`, ajuda sem `plan`, atalhos) ficaram vermelhos na prova por perturbação. O
+  repo segue sem ferramenta de cobertura para Python, mesmo motivo da dispensa de
+  2026-11-10 para o caminho antigo.'
+revisit_trigger: quando o repo ganhar ferramenta de cobertura para Python ou o cepa-queue
+  passar a rodar fora do terminal do dono
+autor: null
+proposto_por: drain-plan (orquestrador), a pedido do proof-reviewer
+proposto_em: '2026-11-24'
+pergunta: Aceito a dispensa de cobertura e entradas hostis para common/bin/cepa-queue,
+  que é o cepa-plan renomeado e já tinha essa dispensa no nome antigo?
+fila: reforma-de-nomes
+item: CS-1
