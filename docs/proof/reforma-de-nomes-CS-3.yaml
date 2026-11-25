@@ -1,0 +1,78 @@
+schema_version: 2
+card: reforma-de-nomes-CS-3
+verdict: proven
+reviewed_at: 2026-11-25T04:40:00-03:00
+base_commit: c576064
+head_commit: 429a6fb
+issue_type: Feature
+repo_kind: harness            # repo Python + sh (cepa), não Quarkus. Superfície = arquivos de comando de barra + scripts
+review: 1
+scope:
+  changed_classes:
+    - class: "common/commands/ (queue-run.md substitui o redirecionador de 16 linhas de drain-plan.md; run-review.md e worktree-rename.md renomeados; drain-plan.md, until-review.md, worktree-name.md, fila.md, modos.md, plan.md removidos)"
+      module: commands
+      external_observable: true
+      substituted_by_double: null   # o teste lista a pasta real
+    - class: "common/bin/cepa-run:2274 (despacho da análise final: claude -p \"/common:run-review <ledger>\")"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # o teste roda o cepa-run real; só o `claude` é um fake na fronteira
+    - class: "common/bin/_run_digest.py:41 (REVIEW_COMMANDS aceita /common:run-review e o antigo /common:until-review)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/default-yes-inject.py:77 e common/hooks/session-routine-guard.py:70 (chave da rotina queue-run -> common:queue-run)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/_modes.py:108 (entrada do menu de modos /common:queue-run <queue>)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/sh, sem pitest; perturbação manual em worktree detached descartável (/tmp/proof-cs3-a em 429a6fb, /tmp/proof-cs3-base em c576064), ambos removidos ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "P1 common/commands/: restaurados de c576064 os seis arquivos antigos (drain-plan, until-review, worktree-name, fila, modos, plan): RED em tests/test_slash_command_rename.py (12 FAIL, rc 1). Restaurado: 'all ok', rc 0."
+        - "P1b Red-at-base: em c576064 com o teste de 429a6fb: RED (rc 1; run-review.md e worktree-rename.md não existem, os 6 antigos existem, queue-run.md é redirecionador de 16 linhas). Ver bugfix_regression_red_at_base."
+        - "P2 common/bin/cepa-run:2274 `/common:run-review` -> `/common:until-review`: RED em tests/test_cepa_until_clean_tree.py (66 falhas, ex.: 'CS-3 análise: a análise final começou') e em tests/test_cepa_until_run_branch.py (falhas, ex.: 'a última chamada é o /common:run-review do registro'; o fake claude recebeu /common:until-review). Restaurado: run_branch '✓ tudo verde'."
+        - "P3a common/bin/_run_digest.py:41 sem o nome antigo (`(\"/common:run-review\",)`): RED em tests/test_cepa_until_digest.py ('1 falha(s): /common:until-review: a rodada de analise nao conta como rodada de item')."
+        - "P3b mesmo trecho sem o nome novo (`(\"/common:until-review\",)`): RED no mesmo arquivo ('1 falha(s): /common:run-review: a rodada de analise nao conta como rodada de item'). Restaurado: '✓ tudo verde'."
+        - "P4a common/hooks/default-yes-inject.py:77 chave `queue-run` -> `drain-plan`: RED em tests/test_default_yes_inject.py ('FAIL session + apelido queue-run injeta', rc 1). Baseline 'all green'."
+        - "P4b common/hooks/session-routine-guard.py:70 mesma troca: RED em tests/test_session_routine_guard.py (2 FAILURE(S), rc 1). Baseline 'all green'."
+        - "P5 common/hooks/_modes.py:108 `/common:queue-run <queue>` -> `/common:drain-plan <queue>`: RED em tests/test_modes_single_source.py ('`construction` ação 2: `/common:drain-plan` não existe (common/commands/drain-plan.md ausente)', 1 falha) e em tests/test_slash_command_rename.py ('_modes.py has no stale slash-command reference'). tests/test_cepa_metrics_mode_menu.py continua verde (não pina essa linha). Restaurado: modes_single_source 'ok — 7 modos', rename 'all ok'."
+        - "Sobreviventes: nenhum nas linhas de comportamento do diff. Teste de conteúdo de run-review.md (tests/test_common_until_review.py, tests/test_until_review_item_declaration.py) leem run-review.md e ficam cobertos pela existência do arquivo; não perturbei o conteúdo."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs3-a 429a6fb`; baseline `python3 tests/test_slash_command_rename.py` -> 'all ok'.
+        P1: `git checkout c576064 -- common/commands/{6 antigos}` -> 12 FAIL rc 1; `git rm -qf` dos seis -> rc 0.
+        P2: `sed -i '' '2274s#/common:run-review#/common:until-review#' common/bin/cepa-run` -> `python3 tests/test_cepa_until_clean_tree.py` '✗ 66 falha(s)'; `python3 tests/test_cepa_until_run_branch.py` FAIL; `git checkout -- common/bin/cepa-run` -> run_branch '✓ tudo verde'.
+        P3/P4/P5: `sed -i ''` na linha citada, o teste citado, `git -C /tmp/proof-cs3-a checkout -- <arquivo>`; baselines: digest '✓ tudo verde', default_yes_inject 'all green', session_routine_guard 'all green', modes_single_source 'ok — 7 modos', commands_catalog 'tudo ok (68 comandos no catálogo)'.
+        `git worktree remove --force` dos dois; `git worktree list | grep -c proof` -> 0. Suíte completa (tests/run-all.sh) não rodada: é do supervisor.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "sem ferramenta de cobertura. Todo trecho de comportamento alterado (arquivos de comando, despacho de cepa-run:2274, REVIEW_COMMANDS, chaves de rotina dos dois hooks, entrada de _modes.py) foi quebrado e ficou RED (P1 a P5). O restante das 71 mudanças são referências de texto, vigiadas em bloco pela varredura 'no stale slash-command reference' de tests/test_slash_command_rename.py."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff é renomeação de nomes de comando e do texto que os cita; nenhuma entrada nova vinda de fora é lida. A única mudança de leitura (REVIEW_COMMANDS) só amplia o conjunto de strings aceitas de um registro que o próprio run escreveu, e o teste de digest cobre os dois nomes."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-3 da reforma de nomes). Vermelho no base: `cd /tmp/proof-cs3-base` (c576064) + `git checkout 429a6fb -- tests/test_slash_command_rename.py` + `python3 tests/test_slash_command_rename.py` -> FAIL em run-review.md exists, worktree-rename.md exists, drain-plan.md/until-review.md/worktree-name.md/fila.md/modos.md/plan.md does not exist, queue-run.md is not a forwarder, queue-run.md has the workflow (16 lines), títulos; rc 1."
+waiver_proposto_nao_escrito: "Não escrevi waiver. L2, L3 e L4 passam sem dispensa."
+build_completo: "delegado ao supervisor do run (tests/run-all.sh); não rodado por mim, por instrução."
+changed_behaviour_not_pinned:
+  - "tests/test_cepa_metrics_mode_menu.py não pina a entrada de _modes.py:108; quem a pina são test_modes_single_source.py e a varredura de test_slash_command_rename.py."
+  - "O conteúdo de queue-run.md e worktree-rename.md só é pinado por existência, título e (queue-run.md) >= 60 linhas e ausência de 'Transitional'; não perturbei o corpo do fluxo (é texto de prompt)."
+routing_reason: >-
+  O teste do item fica vermelho em c576064 e verde em 429a6fb. Cada trecho de comportamento (arquivos de comando, despacho do cepa-run, REVIEW_COMMANDS nos dois sentidos,
+  chaves dos dois hooks, entrada de _modes.py) quebrado ficou RED no teste que o cobre, e voltou ao verde ao restaurar. Nada assumed/skipped. Suíte completa é do supervisor. PROVEN.
