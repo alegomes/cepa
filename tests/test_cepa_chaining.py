@@ -22,7 +22,7 @@ Contracts guarded here:
   - CEPA_ENCADEAR=off: only once, the file stays;
   - invalid file (missing repo): only once, the file stays, and cepa says so;
   - with `intencao` in the file, the next session is born with it (purpose,
-    goal and plan written for it, step 1, via cepa-intencao); without `intencao`,
+    goal and plan written for it, step 1, via cepa-intent); without `intencao`,
     it is born without intent, because the brief talks about the session that left; invalid
     `intencao` warns and the session opens without it; previous intent goes to the
     history; failure to write warns and the session opens; without `--proposito`, nothing;

@@ -53,8 +53,8 @@ silent preflight: nothing is printed unless something needs you.
 | Find a repo's registry files before planning waves | `cepa hotspots <repo>` |
 | Measure test coverage of a conversational command | `cepa promptcov <cmd.md> <test.py>` |
 
-`cepa intencao` and `cepa modos` are the old names of `intent` and `modes`;
-they still work and are listed as aliases.
+`cepa intencao` and `cepa modos` (the old names of `intent` and `modes`) are
+refused with exit 2 and a line that names the new command.
 
 ## Conventions shared by every script
 

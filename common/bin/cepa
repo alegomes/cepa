@@ -125,12 +125,6 @@ show_help() {
     # Line 2 of a python script is `"""cepa-x — summary`; shell scripts
     # carry `# cepa-x — summary`. Anything else prints just the name.
     _desc=$(sed -n 2p "$_s" | sed -e 's/^"""//' -e 's/^# *//' -e "s/^cepa-$_name *[—-]* *//")
-    case "$_desc" in
-      *"Deprecated alias: renamed to cepa-"*)
-        _target=$(printf '%s' "$_desc" | sed -e 's/.*renamed to cepa-//' -e 's/[^a-z0-9-].*//')
-        _desc="(old alias of $_target)" ;;
-      *"Deprecated alias"*|*"alias"*) _desc="(old alias) $_desc" ;;
-    esac
     printf '  %-14s %s\n' "$_name" "$_desc"
   done
   echo ""
@@ -168,8 +162,9 @@ nearest_subcommand() {
 }
 
 # `cepa plan` became `cepa queue`, `cepa until` became `cepa run` and
-# `cepa until-digest` became `cepa run digest` (2026-11-24). Refused with the new
-# name before any dispatch, so nothing runs. (`common/bin/cepa-plan`, `cepa-until`
+# `cepa until-digest` became `cepa run digest`, and the aliases `cepa intencao` and
+# `cepa modos` went away in favour of `cepa intent` and `cepa modes` (2026-11-24).
+# Refused with the new name before any dispatch, so nothing runs. (`common/bin/cepa-plan`, `cepa-until`
 # and `cepa-until-digest` still exist as transition shims for runs in flight; they
 # are not commands and are skipped everywhere above and below.)
 if [ $# -ge 1 ]; then
@@ -188,6 +183,12 @@ if [ $# -ge 1 ]; then
       exit 2 ;;
     until-digest)
       printf '✗ cepa: until-digest is now run digest (run: cepa run digest ...)\n' >&2
+      exit 2 ;;
+    intencao)
+      printf '✗ cepa: intencao is now intent (run: cepa intent ...)\n' >&2
+      exit 2 ;;
+    modos)
+      printf '✗ cepa: modos is now modes (run: cepa modes ...)\n' >&2
       exit 2 ;;
   esac
 fi

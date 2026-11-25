@@ -339,7 +339,7 @@ def launcher_help(bin_dir):
     """`cepa help`: the launcher's own help, in the same layout. The list of
     subcommands is the `cepa-*` scripts next to the launcher, each described
     by its first docstring line."""
-    commands, old = [], []
+    commands = []
     for name in sorted(os.listdir(bin_dir)):
         path = os.path.join(bin_dir, name)
         if not name.startswith("cepa-") or not os.access(path, os.X_OK):
@@ -355,10 +355,6 @@ def launcher_help(bin_dir):
             line = ""
         desc = re.sub(r'^("""|#)\s*', "", line.strip())
         desc = re.sub(rf"^cepa-{re.escape(sub)}\s*[—-]+\s*", "", desc)
-        m = re.search(r"renamed to cepa-([\w-]+)", desc)
-        if m:
-            old.append(f"{sub} (= {m.group(1)})")
-            continue
         commands.append((sub, desc.rstrip(".")))
 
     ap = Parser(
@@ -415,9 +411,6 @@ def launcher_help(bin_dir):
                     help="REPLACES the whole system prompt (use only with a prompt "
                          "that stands on its own)")
     text = ap.render(_screen(sys.stdout))
-    if old:
-        text += _screen(sys.stdout).c(
-            "cinza", "Old subcommand names still work: " + ", ".join(old) + ".") + "\n"
     sys.stdout.write(text)
 
 

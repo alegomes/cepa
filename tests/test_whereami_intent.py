@@ -284,7 +284,7 @@ def main():
           and "plano cumprido 3/3" in rn and "passo 2 de 3" in rn)
 
     # --- old names ----------------------------------------------------------
-    # `cepa-intencao estado` (shortcut + old action) prints the same as
+    # `cepa-intent estado` (old action) prints the same as
     # `cepa-intent state`, and a session-intent in the OLD format is classified
     with tempfile.TemporaryDirectory() as t:
         r = repo(t, "antigo")
@@ -293,11 +293,11 @@ def main():
             'proposito: "criar o comando whereami"\npara_quando: "q"\nplano:\n  - "a"\n  - "b"\n'
             'passo: 2\npasso_desde: "2020-01-01T00:00:00Z"\nsession_id: "sess-A"\nbranch: "main"\n')
         new = sh(cmd, r)
-        old = sh('python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intencao" estado', r)
+        old = sh('python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intent" estado', r)
         check("antigo: arquivo com chaves pt-BR é classificado como normal",
               new.stdout.splitlines()[0] == "state: normal"
               and "opening: criar o comando whereami / passo 2 de 2" in new.stdout, new.stdout)
-        check("antigo: `cepa-intencao estado` imprime o mesmo que `cepa-intent state`",
+        check("antigo: `cepa-intent estado` imprime o mesmo que `cepa-intent state`",
               old.returncode == 0 and old.stdout == new.stdout, (old.stdout, new.stdout))
 
     if FAILURES:

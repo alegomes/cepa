@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """C1-4 (intencao-c1): the contract of step 3b of /common:session.
 
-The routine records the session intent through `cepa-intencao` right after the
+The routine records the session intent through `cepa-intent` right after the
 start, without a second ritual. Here it is guaranteed that the documented command
 exists between steps 3 and 4, handles exit 4 (`--motivo`), advances the cursor,
 does not run on `--help`, and that no item of `--plano` has ':' (the writer
 would refuse). And, stronger than the text: the documented command is EXECUTED
-against the real `cepa-intencao` in a temporary repo, with exit 4 and the
+against the real `cepa-intent` in a temporary repo, with exit 4 and the
 `--motivo` of the second recording, and the two `--passo`.
 
 No third-party deps — run with `python3 tests/test_session_intent_contract.py`.
@@ -85,9 +85,9 @@ def run_documented(cmd, cwd, env):
 
 
 def old_alias(sec, line):
-    """The documented command, written with the old names, still runs (shortcut + flags)."""
+    """The documented command, written with the old names, still runs (old action + flags)."""
     print("os nomes antigos do mesmo comando ainda funcionam")
-    old = (line.strip().replace("cepa-intent\" write", "cepa-intencao\" gravar")
+    old = (line.strip().replace("cepa-intent\" write", "cepa-intent\" gravar")
              .replace("--purpose", "--proposito").replace("--by-when", "--para-quando")
              .replace("--plan", "--plano"))
     old = re.sub(r'--proposito "<[^>]*>"', '--proposito "rodar via nomes antigos"', old)
@@ -97,7 +97,7 @@ def old_alias(sec, line):
                "CEPA_TELEMETRY_DIR": os.path.join(t, ".tel"),
                "CLAUDE_CODE_SESSION_ID": "sess-contrato"}
         r = run_documented(old, t, env)
-        check("antigo: `cepa-intencao gravar --proposito ...` sai 0", r.returncode == 0,
+        check("antigo: `cepa-intent gravar --proposito ...` sai 0", r.returncode == 0,
               f"rc={r.returncode} {r.stderr!r}")
         d = M.read_intent(t) or {}
         check("antigo: gravou o propósito e o plano de 3 passos",
@@ -106,7 +106,7 @@ def old_alias(sec, line):
         check("antigo: regravar sem --motivo sai 4", r.returncode == 4, f"rc={r.returncode}")
         r = run_documented(f'{old} --motivo "m"', t, env)
         check("antigo: com --motivo sai 0", r.returncode == 0, r.stderr)
-        r = run_documented('python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intencao" --passo 2', t, env)
+        r = run_documented('python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intent" --passo 2', t, env)
         check("antigo: `--passo 2` sai 0 e move o cursor",
               r.returncode == 0 and (M.read_intent(t) or {}).get("step") == 2, r.stderr)
 

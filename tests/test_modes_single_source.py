@@ -214,23 +214,16 @@ def main():
             failures.append(f"o nome antigo `{old}` deveria virar `{new}`")
         if normalize_mode(new) != new:
             failures.append(f"o nome novo `{new}` deveria ficar como está")
-    # alias: the old script `cepa-modos` prints the same as `cepa-modes`
+    # the old script `cepa-modos` is gone (CS-4); `cepa-modes` keeps the old flags
     bindir = REPO / "common" / "bin"
+    if (bindir / "cepa-modos").exists():
+        failures.append("o atalho cepa-modos deveria ter saído")
     for args in (["--json"], ["--purposes", "--no-color"], ["refactor", "--no-color"],
                  ["reforma", "--no-color"], ["--propositos", "--sem-cor"]):
         new = subprocess.run([sys.executable, str(bindir / "cepa-modes"), *args],
                               capture_output=True, text=True, timeout=30)
-        old = subprocess.run([sys.executable, str(bindir / "cepa-modos"), *args],
-                               capture_output=True, text=True, timeout=30)
         if new.returncode != 0 or not new.stdout.strip():
             failures.append(f"cepa-modes {' '.join(args)} falhou: {new.stderr[:200]}")
-        if (new.returncode, new.stdout) != (old.returncode, old.stdout):
-            failures.append(f"o atalho cepa-modos {' '.join(args)} não imprime o mesmo que cepa-modes")
-    # the shortcut also runs as a direct executable (not only via `python3`)
-    direct = subprocess.run([str(bindir / "cepa-modos"), "--purposes", "--no-color"],
-                            capture_output=True, text=True, timeout=30)
-    if direct.returncode != 0 or "construction" not in direct.stdout:
-        failures.append("o atalho cepa-modos não roda como executável direto")
 
     failures.extend(menu_failures(MODES))
     failures.extend(doc_failures(DOC.read_text(encoding="utf-8")))

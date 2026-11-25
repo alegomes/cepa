@@ -27,7 +27,7 @@ isolate()
 
 REPO = Path(__file__).resolve().parent.parent
 BIN = REPO / "common" / "bin" / "cepa-intent"
-OLD_BIN = REPO / "common" / "bin" / "cepa-intencao"  # shortcut: old name
+OLD_BIN = REPO / "common" / "bin" / "cepa-intencao"  # removed in CS-4: must not exist
 sys.path.insert(0, str(REPO / "common" / "hooks"))
 import _modes as M  # noqa: E402
 
@@ -334,7 +334,7 @@ outside.mkdir()
 p = cepa(outside, "--step", "1")
 check("fora de repo git recusa", p.returncode == 2 and "git" in p.stderr, p.stderr)
 
-# --- old names: actions, options, keys and the `cepa-intencao` shortcut ---------
+# --- old names: actions, options, keys (the `cepa-intencao` shortcut is gone) ---------
 def legacy(repo, *args, bin=BIN, env=None):
     return subprocess.run([sys.executable, str(bin), *args], cwd=repo, env=env or ENV,
                           capture_output=True, text=True)
@@ -396,15 +396,8 @@ check("arquivo antigo: uma escrita o converte para as chaves novas",
       p.returncode == 0 and "proposito" not in txt and "historico" not in txt
       and "motivo_da_troca" not in txt and "step: 3" in txt and "history:" in txt, txt)
 
-# the `cepa-intencao` shortcut is the same command (even the direct executable)
-rc_ = new_repo("rc")
-p = legacy(rc_, "write", "--purpose", "pelo atalho", "--by-when", "q", "--plan", "a", "b", bin=OLD_BIN)
-check("atalho cepa-intencao: write grava", p.returncode == 0
-      and M.read_intent(rc_)["purpose"] == "pelo atalho", p.stderr)
-p = subprocess.run([str(OLD_BIN), "show"], cwd=rc_, env=ENV, capture_output=True, text=True)
-q = subprocess.run([str(BIN), "show"], cwd=rc_, env=ENV, capture_output=True, text=True)
-check("atalho cepa-intencao roda como executável e imprime o mesmo que cepa-intent",
-      p.returncode == 0 and p.stdout == q.stdout and "pelo atalho" in p.stdout, (p.stderr, p.stdout))
+# the `cepa-intencao` shortcut is gone (CS-4); `cepa-intent` is the only script
+check("atalho cepa-intencao não existe mais", not OLD_BIN.exists(), str(OLD_BIN))
 
 if FAILURES:
     print(f"\n{len(FAILURES)} falha(s): {FAILURES}")

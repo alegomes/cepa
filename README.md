@@ -71,7 +71,7 @@ Demands wait in **inboxes** before they get an order: `BACKLOG.md`, the feedback
 Nothing runs from an inbox. `/common:queue` turns what is there into items.
 
 The old slash-command names are gone (the commands are now `/common:queue`, `/common:queue-status`,
-`/common:modes`); the CLI aliases `cepa-intencao` and `cepa-modos` still run `cepa-intent` and `cepa-modes` until they go. The
+`/common:modes`); the CLI aliases `cepa intencao` and `cepa modos` are gone too: they are refused with a line naming `cepa intent` and `cepa modes`. The
 `parallel-waves` queues of `maestro` are frozen since 2026-10-08 and archived in
 `.claude/programs/archive/`.
 
