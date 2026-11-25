@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""CS-6 of docs/spec/tres-portas-spec-epic.md (item 4 of O2'): `cepa-plan
+"""CS-6 of docs/spec/tres-portas-spec-epic.md (item 4 of O2'): `cepa-queue
 verdict <arquivo> <n> mantida|vetada|refinada` writes, on decision `<n>` of the
-"Decided without asking" section (numbered as `cepa-plan decisions` numbers
+"Decided without asking" section (numbered as `cepa-queue decisions` numbers
 it), the marker with today's date, and on vetada or refinada warns when a
 queue was already derived from the file.
 
 Red test declared in the spec: in a test repo with a spec of three decisions
 and a queue whose `source:` cites that spec with one `done` item,
-`cepa-plan verdict <spec> 2 vetada --reason "fora do ciclo"` exits 0, line 2
+`cepa-queue verdict <spec> 2 vetada --reason "fora do ciclo"` exits 0, line 2
 ends in `· vetada em <hoje>: fora do ciclo`, lines 1 and 3 do not change,
 `Status` does not change, the output contains "já virou código na fila" with
 the queue name and "1 item done"; repeating the command on line 2 exits
@@ -30,7 +30,7 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 
 FAILURES = []
 

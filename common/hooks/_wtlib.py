@@ -9,7 +9,7 @@ mergeable), the safe auto-clean rule, and conflict prediction.
 Registry: each session writes `.claude/sessions/<key>.json`. `<key>` is the
 claude `session_id` once known; before that, the launcher writes a claim file
 keyed by a generated `claim-id`, and the SessionStart hook renames it to the
-session_id (handed over via the CLAUDE_WT_CLAIM env var, which survives the
+session_id (handed over via the CEPA_WT_CLAIM env var, which survives the
 launcher's `exec` and is inherited by the hook subprocess).
 
 Entry schema (all optional except session_id/pid/cwd):
@@ -44,6 +44,8 @@ import subprocess
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+
+import _cepaenv as E
 
 STALE_HOURS = 24
 
@@ -1014,15 +1016,14 @@ def env_manifest_list(main_root: str, key: str):
 def seed_globs(main_root: str):
     """Globs of gitignored files to copy into a fresh worktree.
 
-    Precedence: $CEPA_SEED (or the legacy $CCW_SEED, still read;
+    Precedence: $CEPA_SEED (the old $CCW_SEED is still read;
     space/colon-separated) > .claude/worktree-seed
     (one glob per line, '#' comments) > DEFAULT_SEED_GLOBS.
     A `seed:` list in the env manifest (docs/env.yaml, or the legacy
     .claude/env.yaml — see docs/env-manifest.md) is ADDITIVE: its globs are
     appended to whichever source won, deduped.
     """
-    env = (os.environ.get("CEPA_SEED", "").strip()
-           or os.environ.get("CCW_SEED", "").strip())
+    env = E.get("CEPA_SEED", "").strip()
     if env:
         base = [g for g in re.split(r"[:\s]+", env) if g]
     else:

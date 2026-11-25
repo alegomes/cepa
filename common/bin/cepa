@@ -34,7 +34,7 @@
 # stands on its own. A <name> without a slash is looked up,
 # with and without the .md suffix, in $CEPA_PROMPTS_HOME (default
 # ~/.claude/cepa-prompts) and in <repo>/.claude/prompts. Persistent default:
-# CEPA_PROMPT=<name|path> (and CEPA_PROMPT_MODO=substitui for the destructive mode).
+# CEPA_PROMPT=<name|path> (and CEPA_PROMPT_MODE=replace for the destructive mode).
 #
 # Every launch goes through a preflight: the harness diagnostic runs (at most
 # once every 12h per repo) and fixes what is mechanical, so the session is born
@@ -49,7 +49,7 @@
 # in `repo`, with `--mode <mode>` and the initial prompt: the brief, preceded by
 # `comando` as line 1 plus a blank line when the file has one, so the next session
 # runs the command. Without the file, it exits
-# as before. Turn it off with CEPA_ENCADEAR=off. Details in common/hooks/session-chain.py.
+# as before. Turn it off with CEPA_CHAIN=off. Details in common/hooks/session-chain.py.
 #
 #   cepa --purpose "<text>"     # records the text as the session purpose
 #   cepa --purpose "<p>" --by-when "<goal>" --plan "<step 1>
@@ -67,10 +67,10 @@
 # interrupts a long routine: it consults a classifier on every command and,
 # after 3 blocks in a row, starts asking about everything. The harness hooks
 # still apply, since they do not depend on the permission mode. Go back to
-# Claude Code's default mode with CEPA_PERMISSOES=classificador.
+# Claude Code's default mode with CEPA_PERMISSIONS=classifier.
 #
 # Install: alias claude='/path/to/common/bin/cepa'   (or put this on PATH)
-# Override the real binary with CLAUDE_WT_CLAUDE_BIN if you aliased `claude`.
+# Override the real binary with CEPA_WT_CLAUDE_BIN if you aliased `claude`.
 #
 # Worktrees are created under ~/cepa-worktrees (override: CEPA_WORKTREE_HOME,
 # or the legacy CCW_WORKTREE_HOME, still read), deliberately OUTSIDE the repo
@@ -79,7 +79,39 @@
 
 set -e
 
-CLAUDE_BIN="${CLAUDE_WT_CLAUDE_BIN:-claude}"
+# Environment names (CS-6). Every variable cepa owns has the CEPA_ prefix and an
+# English name; the name it had before is still read. `cepa_env NEW [DEFAULT]`
+# prints the value of NEW, else of its old name, else DEFAULT: the new one wins
+# and an empty value counts as unset. The old value spellings are still accepted
+# (CEPA_PERMISSIONS=classificador, CEPA_PROMPT_MODE=substitui).
+# Shell twin of common/hooks/_cepaenv.py, which holds the full table; only the
+# variables this launcher reads are here, and tests/test_env_names_in_english.py
+# checks that the two agree.
+_cepa_old_name() {
+  case "$1" in
+    CEPA_MODE) echo CEPA_MODO ;;
+    CEPA_MODE_DEFAULT) echo CEPA_MODO_DEFAULT ;;
+    CEPA_CHAIN) echo CEPA_ENCADEAR ;;
+    CEPA_PERMISSIONS) echo CEPA_PERMISSOES ;;
+    CEPA_PROMPT_MODE) echo CEPA_PROMPT_MODO ;;
+    CEPA_RUN) echo CEPA_UNTIL_RUN ;;
+    CEPA_WT_CLAUDE_BIN) echo CLAUDE_WT_CLAUDE_BIN ;;
+  esac
+}
+cepa_env() {
+  _ce_v=$(eval "printf '%s' \"\${$1:-}\"")
+  if [ -z "$_ce_v" ]; then
+    _ce_old=$(_cepa_old_name "$1")
+    [ -z "$_ce_old" ] || _ce_v=$(eval "printf '%s' \"\${$_ce_old:-}\"")
+  fi
+  case "$1=$_ce_v" in
+    CEPA_PERMISSIONS=classificador) _ce_v=classifier ;;
+    CEPA_PROMPT_MODE=substitui) _ce_v=replace ;;
+  esac
+  printf '%s' "${_ce_v:-${2-}}"
+}
+
+CLAUDE_BIN=$(cepa_env CEPA_WT_CLAUDE_BIN claude)
 
 # Resolve our own location (following symlinks) → find session-launch.py.
 SELF="$0"
@@ -99,7 +131,7 @@ MODES_BIN="$SCRIPT_DIR/cepa-modes"
 INTENT_BIN="$SCRIPT_DIR/cepa-intent"
 
 # `cepa <subcommand>`: the single entry to the `cepa-*` scripts next to this
-# file (2026-11-03). `cepa until <queue> --for 3h` runs `cepa-until ...`,
+# file (2026-11-03). `cepa run <queue> --for 3h` runs `cepa-run ...`,
 # `cepa help` (also `--help`, `-h`) lists them plus the launcher's own flags.
 # Only an EXACT match of a sibling script dispatches: a flag, a Jira key or a
 # quoted prompt is a session launch, as before. The `cepa-*` names keep
@@ -121,15 +153,10 @@ show_help() {
   for _s in "$SCRIPT_DIR"/cepa-*; do
     [ -x "$_s" ] || continue
     _name="${_s##*/cepa-}"
+    case "$_name" in plan|until|until-digest) continue ;; esac   # transition shims, not commands
     # Line 2 of a python script is `"""cepa-x — summary`; shell scripts
     # carry `# cepa-x — summary`. Anything else prints just the name.
     _desc=$(sed -n 2p "$_s" | sed -e 's/^"""//' -e 's/^# *//' -e "s/^cepa-$_name *[—-]* *//")
-    case "$_desc" in
-      *"Deprecated alias: renamed to cepa-"*)
-        _target=$(printf '%s' "$_desc" | sed -e 's/.*renamed to cepa-//' -e 's/[^a-z0-9-].*//')
-        _desc="(old alias of $_target)" ;;
-      *"Deprecated alias"*|*"alias"*) _desc="(old alias) $_desc" ;;
-    esac
     printf '  %-14s %s\n' "$_name" "$_desc"
   done
   echo ""
@@ -150,6 +177,7 @@ nearest_subcommand() {
   for _s in "$SCRIPT_DIR"/cepa-*; do
     [ -x "$_s" ] || continue
     _name="${_s##*/cepa-}"
+    case "$_name" in plan|until|until-digest) continue ;; esac   # transition shims, not commands
     case "$_name" in "$1"*) printf '%s\n' "$_name"; return 0 ;; esac
     _d=$(awk -v a="$1" -v b="$_name" 'BEGIN{
       la=length(a); lb=length(b);
@@ -164,6 +192,38 @@ nearest_subcommand() {
   [ -n "$_best" ] && printf '%s\n' "$_best"
   return 0
 }
+
+# `cepa plan` became `cepa queue`, `cepa until` became `cepa run` and
+# `cepa until-digest` became `cepa run digest`, and the aliases `cepa intencao` and
+# `cepa modos` went away in favour of `cepa intent` and `cepa modes` (2026-11-24).
+# Refused with the new name before any dispatch, so nothing runs. (`common/bin/cepa-plan`, `cepa-until`
+# and `cepa-until-digest` still exist as transition shims for runs in flight; they
+# are not commands and are skipped everywhere above and below.)
+if [ $# -ge 1 ]; then
+  # Case-insensitive: on a case-insensitive filesystem `cepa-PLAN` finds the shim.
+  _w1=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  _w2=""
+  [ $# -ge 2 ] && _w2=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')
+  _old="$_w1"
+  case "$1" in help|ajuda|subcommands|subcomandos|--help|-h) _old="$_w2" ;; esac
+  case "$_old" in
+    plan)
+      printf '✗ cepa: plan is now queue (run: cepa queue ...)\n' >&2
+      exit 2 ;;
+    until)
+      printf '✗ cepa: until is now run (run: cepa run ...)\n' >&2
+      exit 2 ;;
+    until-digest)
+      printf '✗ cepa: until-digest is now run digest (run: cepa run digest ...)\n' >&2
+      exit 2 ;;
+    intencao)
+      printf '✗ cepa: intencao is now intent (run: cepa intent ...)\n' >&2
+      exit 2 ;;
+    modos)
+      printf '✗ cepa: modos is now modes (run: cepa modes ...)\n' >&2
+      exit 2 ;;
+  esac
+fi
 
 if [ $# -ge 1 ]; then
   case "$1" in
@@ -225,7 +285,7 @@ preflight() {
 #
 # Without a mode cepa does NOT start: a silent default rebuilds exactly the leak
 # between activities that the mode exists to close. Escape:
-# CEPA_MODO=off (does not write, does not ask, cepa behaves as before).
+# CEPA_MODE=off (does not write, does not ask, cepa behaves as before).
 MODES="exploration discovery design construction refactor reflection documentation"
 
 # The old (pt-BR) names are still accepted in --mode/--modo and become the new one.
@@ -268,7 +328,7 @@ ask_mode() {
     printf '✗ cepa: no session starts without a declared mode.\n' >&2
     printf '  Use: cepa --mode <%s>\n' "$(printf '%s' "$MODES" | tr ' ' '|')" >&2
     printf '  See what each one is for: cepa --mode help\n' >&2
-    printf '  Or turn the requirement off with CEPA_MODO=off\n' >&2
+    printf '  Or turn the requirement off with CEPA_MODE=off\n' >&2
     return 1
   fi
   while :; do
@@ -362,7 +422,7 @@ launch_here() {
 # deletes the file and reopens this launcher in its repo and mode, with the
 # brief as the prompt. CEPA_LAUNCH_ID is what ties this launch to the
 # session_id: the session-registry hook records it at SessionStart. Without the
-# file, it exits with claude's code, as before. Turn it off with CEPA_ENCADEAR=off.
+# file, it exits with claude's code, as before. Turn it off with CEPA_CHAIN=off.
 run_claude() {
   CEPA_LAUNCH_ID=$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
   export CEPA_LAUNCH_ID
@@ -394,7 +454,7 @@ run_claude() {
   fi
   _rc=$?
   set -e
-  if [ "${CEPA_ENCADEAR:-on}" != "off" ] && [ -n "$CEPA_LAUNCH_ID" ] \
+  if [ "$(cepa_env CEPA_CHAIN on)" != "off" ] && [ -n "$CEPA_LAUNCH_ID" ] \
       && [ -f "$CHAIN_PY" ] && command -v python3 >/dev/null 2>&1; then
     # The session may have removed its own worktree (wrap-up merges and deletes).
     # A process born in a deleted directory fails before running (the pyenv shim
@@ -407,7 +467,7 @@ run_claude() {
 }
 
 write_mode() {
-  [ "${CEPA_MODO:-on}" = "off" ] && return 0
+  [ "$(cepa_env CEPA_MODE on)" = "off" ] && return 0
   [ -n "$MODE" ] || return 0
   mkdir -p "$1/.claude" 2>/dev/null || return 0
   {
@@ -426,7 +486,7 @@ write_mode() {
 
 # Records the session purpose (--purpose) in the directory where it actually
 # runs, via cepa-intent, the only writer of .claude/session-intent. Independent
-# of CEPA_MODO: intent is not mode. --reason makes it overwrite an intent left by
+# of CEPA_MODE: intent is not mode. --reason makes it overwrite an intent left by
 # a previous session in this tree (it goes to the history; with no previous
 # intent --reason is ignored). A failure NEVER keeps the session from opening.
 write_intent() {
@@ -503,13 +563,13 @@ pick_slice() {
 # Parse our own flags; everything else goes to claude.
 SLICE=""
 PICK=0
-MODE="${CEPA_MODO_DEFAULT:-}"
+MODE=$(cepa_env CEPA_MODE_DEFAULT)
 BUDGET=""
 PURPOSE=""
 BY_WHEN=""
 PLAN=""
 PROMPT_REF="${CEPA_PROMPT:-}"
-PROMPT_MODE="${CEPA_PROMPT_MODO:-append}"
+PROMPT_MODE=$(cepa_env CEPA_PROMPT_MODE append)
 while [ $# -gt 0 ]; do
   case "$1" in
     -m|--mode|--modo)
@@ -543,9 +603,9 @@ while [ $# -gt 0 ]; do
     --prompt=*)    PROMPT_REF="${1#--prompt=}"; PROMPT_MODE="append"; shift ;;
     --prompt-replace|--prompt-substitui)
       [ $# -ge 2 ] || { printf '✗ cepa: %s exige um valor\n' "$1" >&2; exit 2; }
-      PROMPT_REF="$2"; PROMPT_MODE="substitui"; shift 2 ;;
+      PROMPT_REF="$2"; PROMPT_MODE="replace"; shift 2 ;;
     --prompt-replace=*|--prompt-substitui=*)
-      PROMPT_REF="${1#*=}"; PROMPT_MODE="substitui"; shift ;;
+      PROMPT_REF="${1#*=}"; PROMPT_MODE="replace"; shift ;;
     -s|--slice)
       # A real slice name follows only if the next arg exists, is non-empty,
       # and isn't itself a flag. Otherwise `-s` means "let me pick one".
@@ -569,8 +629,8 @@ MODE=$(normalize_mode "$MODE")
 # prompt, or a chained session's brief), and none of -c/--continue/-r/--resume/
 # -p/--print (resuming brings its own request). A bare word after a flag that
 # takes a value (`--model opus`) also counts as a request: the safe side is the
-# session opening as before. Never inside a cepa-until run (CEPA_UNTIL_RUN).
-# Off with CEPA_MENU=off; CEPA_MODO=off turns off this along with the mode.
+# session opening as before. Never inside a cepa-until run (CEPA_RUN).
+# Off with CEPA_MENU=off; CEPA_MODE=off turns off this along with the mode.
 OWNER_REQUEST=0
 for _a in "$@"; do
   case "$_a" in
@@ -584,8 +644,8 @@ done
 opening_prompt() {
   [ "$OWNER_REQUEST" = "0" ] || return 0
   [ "${CEPA_MENU:-on}" = "off" ] && return 0
-  [ "${CEPA_MODO:-on}" = "off" ] && return 0
-  [ -n "${CEPA_UNTIL_RUN:-}" ] && return 0
+  [ "$(cepa_env CEPA_MODE on)" = "off" ] && return 0
+  [ -n "$(cepa_env CEPA_RUN)" ] && return 0
   command -v python3 >/dev/null 2>&1 || return 0
   _menu=$(python3 "$MODES_BIN" --menu "$MODE" --no-color 2>/dev/null) || return 0
   [ -n "$_menu" ] || return 0
@@ -605,8 +665,8 @@ esac
 if [ -n "$PROMPT_REF" ]; then
   case "$PROMPT_MODE" in
     append)    PROMPT_FLAG="--append-system-prompt" ;;
-    substitui) PROMPT_FLAG="--system-prompt" ;;
-    *) printf '✗ cepa: CEPA_PROMPT_MODO inválido: %s (append|substitui)\n' \
+    replace)   PROMPT_FLAG="--system-prompt" ;;
+    *) printf '✗ cepa: CEPA_PROMPT_MODE inválido: %s (append|replace)\n' \
          "$PROMPT_MODE" >&2; exit 2 ;;
   esac
   PROMPT_FILE=$(resolve_prompt "$PROMPT_REF") || prompt_error "$PROMPT_REF"
@@ -632,9 +692,9 @@ fi
 # blocks in August/2026 alone. What gets out of the way is Claude Code's
 # classifier, not your guard.
 #
-# Escape: CEPA_PERMISSOES=classificador gives back Claude Code's default mode.
+# Escape: CEPA_PERMISSIONS=classifier gives back Claude Code's default mode.
 # A permission flag typed by you on the command line always wins.
-if [ "${CEPA_PERMISSOES:-bypass}" = "bypass" ]; then
+if [ "$(cepa_env CEPA_PERMISSIONS bypass)" = "bypass" ]; then
   _perm_set=0
   for _a in "$@"; do
     case "$_a" in
@@ -654,7 +714,7 @@ ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exec "$CLAUDE_BIN" "$@"
 # Mode: required before anything happens. An invalid mode is an error (it does
 # not become a question): the error is the typist's, and guessing would be the
 # silent default this design refuses.
-if [ "${CEPA_MODO:-on}" != "off" ]; then
+if [ "$(cepa_env CEPA_MODE on)" != "off" ]; then
   if [ -n "$MODE" ] && ! is_valid_mode "$MODE"; then
     printf '✗ cepa: modo desconhecido: %s\n  válidos: %s\n' "$MODE" "$MODES" >&2
     exit 2
@@ -706,7 +766,7 @@ fi
 
 # Decide (atomic, under lock). On any failure, fall back to launching in place.
 # An explicit -s never falls back: opening elsewhere is what it exists to prevent.
-RESULT=$(CLAUDE_WT_ROOT="$ROOT" CLAUDE_WT_SLICE="$SLICE" python3 "$LAUNCH_PY") || {
+RESULT=$(CEPA_WT_ROOT="$ROOT" CEPA_WT_SLICE="$SLICE" python3 "$LAUNCH_PY") || {
   if [ -n "$SLICE" ]; then
     printf '✗ cepa: could not open the worktree session/%s; no session started\n' "$SLICE" >&2
     exit 1
@@ -725,6 +785,6 @@ fi
 
 write_mode "$PWD"
 write_intent "$PWD"
-CLAUDE_WT_CLAIM="$CLAIM"
-export CLAUDE_WT_CLAIM
+CEPA_WT_CLAIM="$CLAIM"
+export CEPA_WT_CLAIM
 run_claude "$@"

@@ -97,7 +97,7 @@ conteúdo de `hooks/` e `bin/` instalados) no `.jsonl` do run, e todo
 `item_start` traz o SHA dos hooks em vigor. A rota mínima continua valendo:
 Estado e Alvo ficam no `last-install.json` como sempre, Rollback é o
 `--rollback` de manhã, e a Validação é o `/common:doctor` no evento
-`hooks_reinstalados` do `until-review`.
+`hooks_reinstalados` do `run-review`.
 
 Limites e falhas:
 

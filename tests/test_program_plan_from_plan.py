@@ -4,7 +4,7 @@
 Run with `python3 tests/test_program_plan_from_plan.py` (only needs PyYAML).
 Two families, as in test_common_plan.py and test_common_drain_plan.py:
 
-  - BEHAVIOR of `common/bin/cepa-plan promote` — which queue items can become a
+  - BEHAVIOR of `common/bin/cepa-queue promote` — which queue items can become a
     wave slice, which CANNOT and why, and the wave floor that `blocked_by`
     imposes. Each refusal here exists because the corresponding failure costs an entire
     wave: forking on top of a reserved item duplicates work, forking two
@@ -34,7 +34,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 CMD = REPO / "maestro" / "commands" / "program-plan.md"
 
 FAILURES = []
@@ -216,8 +216,8 @@ def behavior_tests(base):
     r, s = promote(d)
     check("promote: 3 demandas não atingem o piso D7 (exit 4)", r.returncode == 4,
           f"exit={r.returncode}")
-    check("promote: o piso recomenda o /common:drain-plan, que roda a mesma fila",
-          "drain-plan" in r.stderr, r.stderr)
+    check("promote: o piso recomenda o /common:queue-run, que roda a mesma fila",
+          "queue-run" in r.stderr, r.stderr)
     check("promote: mesmo abaixo do piso, o JSON sai (o comando precisa reportar)",
           s is not None and s["floor"] == {"minimo": 4, "demandas": 3,
                                            "atingido": False}, str(s and s.get("floor")))
@@ -283,10 +283,10 @@ def prose_tests():
 
     check("--from-plan está no argument-hint", "--from-plan" in lines[2])
     check("--from-plan está na descrição do comando", "--from-plan" in lines[1])
-    check("[from-plan:source] a fonte é a fila, lida pelo cepa-plan promote",
-          "cepa-plan promote" in text)
-    check("[from-plan:source] o piso D7 é o exit 4, e a saída é o /common:drain-plan",
-          "**exit 4 = stop**" in text and "/common:drain-plan" in text)
+    check("[from-plan:source] a fonte é a fila, lida pelo cepa-queue promote",
+          "cepa-queue promote" in text)
+    check("[from-plan:source] o piso D7 é o exit 4, e a saída é o /common:queue-run",
+          "**exit 4 = stop**" in text and "/common:queue-run" in text)
     check("[from-plan:source] mostra ao usuário o que ficou de fora",
           "excluded[]" in text)
     check("[from-plan:carry-why] o `why` da fila é copiado, nunca reescrito",

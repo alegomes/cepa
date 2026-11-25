@@ -16,7 +16,7 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parents[1]
-DIGEST = REPO / "common" / "bin" / "cepa-until-digest"
+DIGEST = REPO / "common" / "bin" / "cepa-run"
 FAILURES = []
 
 
@@ -122,7 +122,7 @@ def build_run(tmp, n_rounds_in_log=2, extra_round_1=()):
            "itens": 2, "entregues": 1, "travados": 1}]
     ledger = until / "r.jsonl"
     ledger.write_text("\n".join(json.dumps(e) for e in ev) + "\n")
-    log = ("\n===== t · claude -p /common:drain-plan F --max 1\n"
+    log = ("\n===== t · claude -p /common:queue-run F --max 1\n"
            + build_round("RELATORIO A1 " + "x" * 50,
                     agents=["build-hex:engineering-lead",
                              "common:completion-auditor"],
@@ -131,14 +131,14 @@ def build_run(tmp, n_rounds_in_log=2, extra_round_1=()):
            + "\n===== t · verify · ./mvnw -B clean verify\n"
            + "\n".join(f"linha {i}" for i in range(40)) + "\nBUILD SUCCESS\n")
     if n_rounds_in_log >= 2:
-        log += ("\n===== t · claude -p /common:drain-plan F --max 1\n"
+        log += ("\n===== t · claude -p /common:queue-run F --max 1\n"
                 + build_round("RELATORIO A2 travou", cost=0.25))
     (until / "r.log").write_text(log)
     return ledger
 
 
 def run_digest(ledger, *args):
-    return subprocess.run([sys.executable, str(DIGEST), str(ledger), *args],
+    return subprocess.run([sys.executable, str(DIGEST), "digest", str(ledger), *args],
                           capture_output=True, text=True, timeout=60)
 
 
@@ -287,7 +287,7 @@ def test_version_2_item_end_with_session_but_without_end_reason_is_warned():
 def test_queue_state_comes_from_the_main_clone_not_the_worktree():
     """The record lives in the tree `cepa-until` was launched from. If it is a
     linked worktree, its plan.yaml is an old copy; the real queue is that of the
-    main clone (same rule as `cepa-plan`). On 2026-09-26 the summary
+    main clone (same rule as `cepa-queue`). On 2026-09-26 the summary
     read the copy and showed 21 `pending` items that were already closed."""
     with tempfile.TemporaryDirectory() as tmp:
         main_ = Path(tmp) / "principal"
@@ -470,6 +470,40 @@ def test_broken_yaml_alongside_proposal_does_not_crash_summary():
         check("resumo sai 0 com YAML quebrado ao lado", p.returncode == 0, p.stderr)
         check("...e ainda lista a proposta", "teste-cego em Viva — pergunta:" in p.stdout,
               p.stdout[-500:])
+
+
+def test_non_object_json_lines_are_skipped_like_invalid_json():
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = build_run(tmp)
+        clean = run_digest(ledger)
+        lines = ledger.read_text().splitlines()
+        junk = ["[1,2]", '"str"', "42", "null"]
+        ledger.write_text("\n".join(lines[:2] + junk + lines[2:4] + junk[::-1]
+                                    + lines[4:]) + "\n")
+        p = run_digest(ledger)
+        check("linha JSON que nao e objeto: sem Traceback", "Traceback" not in p.stderr,
+              p.stderr[-500:])
+        check("...mesmo exit code do registro sem essas linhas",
+              p.returncode == clean.returncode, f"{p.returncode} vs {clean.returncode}")
+        check("...mesmo stdout do registro sem essas linhas", p.stdout == clean.stdout,
+              p.stdout[-500:])
+
+
+def test_analysis_round_is_not_counted_as_an_item_round_under_either_name():
+    # The record keeps the name it was written with (spec Q4): logs from before
+    # the rename carry `/common:until-review`, new ones `/common:run-review`.
+    for name in ("/common:until-review", "/common:run-review"):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = build_run(tmp)
+            log = ledger.with_suffix(".log")
+            log.write_text(log.read_text()
+                           + f"\n===== t · claude -p {name} {ledger}\n"
+                           + build_round("ANALISE DA RODADA", cost=0.1))
+            p = run_digest(ledger)
+            check(f"{name}: sai 0", p.returncode == 0, p.stderr)
+            check(f"{name}: a rodada de analise nao conta como rodada de item",
+                  "ATENÇÃO" not in p.stdout and "3 rodadas" not in p.stdout,
+                  p.stdout[:600])
 
 
 def test_missing_record_exits_2():

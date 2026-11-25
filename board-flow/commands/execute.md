@@ -179,7 +179,7 @@ user has to reconstruct the answer from memory. Two lines, always both:
   closes it" is the answer, not silence. Add any other human-only leftover the
   run produced (a secret to rotate, a PR to approve, a release to cut, an
   escalation left open).
-- **Next in the plan:** read `<queues>/<project_key>/queue.yaml` (or, in a repo not migrated yet, `<main-root>/.claude/programs/<project_key>/plan.yaml`; `cepa-plan status <project_key>` resolves both) (schema
+- **Next in the plan:** read `<queues>/<project_key>/queue.yaml` (or, in a repo not migrated yet, `<main-root>/.claude/programs/<project_key>/plan.yaml`; `cepa-queue status <project_key>` resolves both) (schema
   `common/plan-schema.yaml`, `mode: single-track`) and name the next `pending`
   item that is not `blocked_by` an unfinished one — key, title, and its `why`.
   Also mark the card just finished as `done` there, carrying its Human

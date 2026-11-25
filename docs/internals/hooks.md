@@ -102,7 +102,7 @@ constant and an `ALLOWED_WRITES` dict keyed by agent name.
 See [`path-lock.md`](path-lock.md) for design rationale, the
 multi-plugin collision fix (`PLUGIN_NAME` prefix scoping), the
 built-in-agent fail-open fix, and debugging via
-`HEX_PATHLOCK_DEBUG=1`.
+`CEPA_HEX_PATHLOCK_DEBUG=1`.
 
 ### bash-path-lock.py × 6 (PreToolUse, matcher `Bash`)
 
@@ -298,12 +298,12 @@ code only. Full behavior table: [`../green-or-revert.md`](../green-or-revert.md)
 Owner: `common/hooks/`.
 
 Out-of-band state writes during autonomous runs. Active only when
-`CLAUDE_AUTONOMOUS_RUN_ID` is set in env.
+`CEPA_AUTONOMOUS_RUN_ID` is set in env.
 
 **Logic:**
 
 ```python
-1. Read CLAUDE_AUTONOMOUS_RUN_ID env. If unset: fast no-op.
+1. Read CEPA_AUTONOMOUS_RUN_ID env. If unset: fast no-op.
 2. Parse stdin; tool_name must be Task.
 3. Extract subagent_type, prompt summary (description or first ~200
    chars of prompt), result text (handles list-of-blocks shape).
@@ -383,15 +383,15 @@ per-session vocabulary centroid in the registry entry. "Lexical proposes, model
 disposes": the hook injects a discreet note; the model, which understands the
 live conversation, decides whether to surface it.
 
-- **Subject divergence** (overlap below `CLAUDE_WT_SUBJECT_THRESHOLD`, after a
-  baseline of `CLAUDE_WT_SUBJECT_MINPROMPTS`): a gentle hint to isolate a new
+- **Subject divergence** (overlap below `CEPA_WT_SUBJECT_THRESHOLD`, after a
+  baseline of `CEPA_WT_SUBJECT_MINPROMPTS`): a gentle hint to isolate a new
   task in its own worktree.
 - **Wrap-up nudge** (a divergence AND a recent commit = prior work closed, OR a
-  long session past `CLAUDE_WT_SESSION_SOFTCAP=45` prompts): suggest saving a
+  long session past `CEPA_WT_SESSION_SOFTCAP=45` prompts): suggest saving a
   handoff and starting fresh; on agreement the model runs `/common:handoff`.
   Higher bar than the isolate-hint to avoid nagging.
 
-Off-switches: `CLAUDE_WT_SUBJECT=off` (whole detector), `CLAUDE_WT_NUDGE=off`
+Off-switches: `CEPA_WT_SUBJECT=off` (whole detector), `CEPA_WT_NUDGE=off`
 (just the wrap-up nudge).
 
 ### session-activity.py (PostToolUse, matcher `Edit|Write|MultiEdit`)
@@ -525,7 +525,7 @@ being re-invoked on completion instead of burning a turn in a spin-loop.
 ### validation-owed-gate.py (Stop)
 
 Owner: `common/hooks/`. Blocks the end of a turn while the session owes a
-validation-lead verdict for an item it built. `cepa-plan finish` writes a
+validation-lead verdict for an item it built. `cepa-queue finish` writes a
 marker in `~/.claude/cepa-validation-owed/<session-id>/` when it refuses
 `done` for lack of `docs/validation/<id>.yaml`, or when the item goes back to
 `pending` without it; `done` or `blocked` removes it. The block message names
@@ -536,7 +536,7 @@ delete the marker if the item was not built). Does not block twice in a row
 
 ### no-background-build.py (PreToolUse, matchers `Bash` and `Monitor`; also `Stop`)
 
-Owner: `common/hooks/`. Scoped to `cepa-until` runs only (`CEPA_UNTIL_RUN`
+Owner: `common/hooks/`. Scoped to `cepa-until` runs only (`CEPA_RUN`
 env var set; outside that mode, backgrounding a build is the right move
 and the hook is a no-op). Under `claude -p` (what `cepa-until` uses per
 queue item), there is no next turn to be woken up by a background job's
@@ -680,7 +680,7 @@ by ANOTHER session: the date and "continuo ou abro nova?" instead of showing it
 as current (answered by `cepa-intent continue` or `write --reason`); and
 the normal state: purpose, step N/M, how many turns the cursor has sat there,
 and the next step. Silent about intent inside a `cepa-until` round
-(`CEPA_UNTIL_RUN`), where the intent is the `plan.yaml` item. Design:
+(`CEPA_RUN`), where the intent is the `plan.yaml` item. Design:
 `docs/estrategia-intencao-da-sessao.md`.
 
 ### session-routine-guard.py (UserPromptSubmit)
@@ -752,10 +752,10 @@ Hooks print stderr; messages surface in the debug log.
 
 ### Hook-specific debug logs
 
-`build-hex/hooks/path-lock.py` has a `HEX_PATHLOCK_DEBUG` env var:
+`build-hex/hooks/path-lock.py` has a `CEPA_HEX_PATHLOCK_DEBUG` env var:
 
 ```sh
-export HEX_PATHLOCK_DEBUG=1
+export CEPA_HEX_PATHLOCK_DEBUG=1
 # Re-run the operation. Log lands at /tmp/hex-pathlock-debug.log.
 ```
 
@@ -766,10 +766,10 @@ Useful when CC version changes (the `agent_type` payload field might
 move; debug log shows what's actually arriving).
 
 `docs-topology/hooks/path-lock.py` has the equivalent
-`DOCS_PATHLOCK_DEBUG` (log at `/tmp/docs-pathlock-debug.log` by default,
-overridable via `DOCS_PATHLOCK_DEBUG_LOG`). `build-team`, `discovery`,
+`CEPA_DOCS_PATHLOCK_DEBUG` (log at `/tmp/docs-pathlock-debug.log` by default,
+overridable via `CEPA_DOCS_PATHLOCK_DEBUG_LOG`). `build-team`, `discovery`,
 `design`, and `marketing` ship no debug env var today; if you need one
-there, mirror `HEX_PATHLOCK_DEBUG`'s pattern rather than inventing a new
+there, mirror `CEPA_HEX_PATHLOCK_DEBUG`'s pattern rather than inventing a new
 shape.
 
 ### Adding your own debug print
@@ -792,7 +792,7 @@ Three common causes:
 ### Hook fires but is wrong
 
 ```sh
-HEX_PATHLOCK_DEBUG=1 claude --debug
+CEPA_HEX_PATHLOCK_DEBUG=1 claude --debug
 ```
 
 Then read `/tmp/hex-pathlock-debug.log`. If `resolved_agent` is wrong,

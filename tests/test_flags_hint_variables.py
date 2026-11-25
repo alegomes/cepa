@@ -7,7 +7,7 @@ Exits non-zero on the first sweep with a failure.
 The pain: each command describes the parameters twice. The `argument-hint:` of the
 frontmatter is what autocomplete shows; the `## Variables` section is what the
 agent reads. In the 2026-09-16 survey three diverged — `--offline` of
-/common:drain-plan only in Variables (autocomplete did not show it),
+/common:queue-run only in Variables (autocomplete did not show it),
 `--no-jira` of /common:autonomous-start and `--force-feature-flow` of
 /board-flow:execute only in the hint (the agent had no definition). The
 /common:session --help already reported it by reading both places, but the source
@@ -37,6 +37,17 @@ EXCEPTIONS = {
         "divergência real, fora do escopo do item parametros-de-comando-pela-metade "
         "(que nomeou três comandos); só em Variables",
 }
+
+# CS-5 of docs/spec/reforma-de-nomes-dos-comandos.md: the hint shows only the English
+# flag; `## Variables` names the old Portuguese form in a "still accepted" line, which
+# is the declared compatibility. It is the one reason a flag lives only in Variables.
+LEGACY_REASON = "forma antiga, aceita e declarada em Variables (CS-5)"
+for _rel, _old in (("spec.md", ("--continuar", "--fechar", "--lista")),
+                   ("advisors.md", ("--lentes",)), ("gauntlet.md", ("--angulos",)),
+                   ("queue-run.md", ("--na-branch",)), ("run-review.md", ("--fila",)),
+                   ("next.md", ("--plan",))):
+    for _f in _old:
+        EXCEPTIONS[("common/commands/" + _rel, _f)] = LEGACY_REASON
 
 FAILURES = []
 
@@ -79,10 +90,11 @@ def main():
     check("toda flag está no argument-hint e em ## Variables", not found,
           "; ".join(f"{r} {f} ({side})" for r, f, side in found))
 
-    for rel in ("common/commands/drain-plan.md",
+    for rel in ("common/commands/queue-run.md",
                 "common/commands/autonomous-start.md",
                 "board-flow/commands/execute.md"):
         hint, var = flags((REPO / rel).read_text())
+        var = None if var is None else {f for f in var if (rel, f) not in EXCEPTIONS}
         check(f"{rel} tem Variables e flags nos dois lados",
               var is not None and hint and hint == var, f"hint={hint} var={var}")
 

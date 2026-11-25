@@ -141,7 +141,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-autonomy" classify --mcp <tool>   # or -
 ```
 
 (`${CLAUDE_PLUGIN_ROOT}/bin/cepa-autonomy` is a shortcut to the real
-`common/bin/cepa-autonomy`, like `cepa-plan`; inside the cepa repo,
+`common/bin/cepa-autonomy`, like `cepa-queue`; inside the cepa repo,
 `python3 common/bin/cepa-autonomy` amounts to the same.)
 
 What the answer changes:
@@ -213,15 +213,15 @@ Per accepted group:
   `proof-reviewer` still cannot waive anything: the proof artifact has no field
   for the agent to waive with, it may only CITE this waiver in
   `l2_coverage.status: waived`, and `proof-verdict-guard.py` checks the file.
-  **In an autonomous run** (`CEPA_UNTIL_RUN` or `CLAUDE_AUTONOMOUS_RUN_ID` in
+  **In an autonomous run** (`CEPA_RUN` or `CEPA_AUTONOMOUS_RUN_ID` in
   the environment) there is no owner in front of you: `waivers.write` records a
   **proposal** (`status: proposta`, `autor: null`), not a waiver. Pass
-  `fila=`/`item=` and open the human route on the item: `cepa-plan finish <fila> <id> --status
+  `fila=`/`item=` and open the human route on the item: `cepa-queue finish <fila> <id> --status
   blocked|pending --human-pending "Aceitar ou recusar a dispensa de <escopo>
   (<motivo>)" --question "Aceito a dispensa de <escopo> por <razão>? Recomendo
   <sim/não>: <porquê>" --route-kind open-question --if-yes "<o que o sim faz
   ao trabalho>" --if-no "<o que o não faz>" --if-no-item nenhum` (plus `--if-yes-item nenhum`
-  when the item closes `done`: the `answer` records the waiver, it creates no queue item). Only the owner's `cepa-plan answer <fila> <id> --answer "sim:
+  when the item closes `done`: the `answer` records the waiver, it creates no queue item). Only the owner's `cepa-queue answer <fila> <id> --answer "sim:
   ..."`, in a terminal, converts the proposal into a waiver (fb-20261014-3).
 - **don't accept** → create the card for the missing test (one per real gap,
   not one per stuck card) and send the cards back with `**Reason:**` **per
@@ -260,7 +260,7 @@ how many questions are left, and it only means anything next to what was cut.
   a question, and the question proposes the id. Promoting an action to the
   automatic band is a diff in `common/autonomy.yaml`, never a decision in the turn.
 - **In an autonomous run, never record a waiver:** `waivers.write` becomes a
-  proposal and the item gets a human route; the owner's `cepa-plan answer` is
+  proposal and the item gets a human route; the owner's `cepa-queue answer` is
   what converts it.
 - `atlassian-expert` is the only write path to Jira.
 - **One question per group, never per card** — the cost this command attacks is

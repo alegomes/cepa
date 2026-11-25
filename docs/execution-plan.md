@@ -84,12 +84,12 @@ of `git rev-parse --git-common-dir` with the trailing `/.git` removed.
 **Transition (2026-10-20).** The queue used to live at
 `.claude/programs/<name>/plan.yaml`, with the key `program:`; it now lives at
 `.claude/queues/<name>/queue.yaml`, with the key `queue:`, to match the
-vocabulary of [how-it-fits.md](how-it-fits.md). Every reader (`cepa-plan`,
+vocabulary of [how-it-fits.md](how-it-fits.md). Every reader (`cepa-queue`,
 `cepa-until`, `cepa-doctor`, the compass panel) reads BOTH layouts, and the new
-one wins when a name exists in both. `cepa-plan migrate --all` moves the
+one wins when a name exists in both. `cepa-queue migrate --all` moves the
 existing queues (the whole folder, `until/` included, in one commit). Wave
 plans of `/maestro:program-plan` are not queues and stay in
-`.claude/programs/<name>/plan.yaml`. `/common:plan` is a deprecated alias of
+`.claude/programs/<name>/plan.yaml`. The command that writes it was renamed
 `/common:queue`. Inside a
 linked worktree that resolves to the MAIN clone, not to the current tree;
 anywhere else it is the same thing as `git rev-parse --show-toplevel`. Every
@@ -122,7 +122,7 @@ queue. A key names a project; a queue is one slice of work inside it. On
 and `WEGO-in-progress/` side by side — two slices of one project, which a
 key-based lookup cannot tell apart and resolves silently to the first.
 
-Rules every reader follows (`/common:next`, `cepa-plan status`, `cepa-plan queue`
+Rules every reader follows (`/common:next`, `cepa-queue status`, `cepa-queue queue`
 with no name):
 
 - one single-track queue → that one, whatever the name;
@@ -147,7 +147,7 @@ The queue answers the question only if something asks it. Three moments do:
 | The order is being decided | [`/common:queue`](commands.md) | The single writer of the queue. From a spec, from a board (`--from-jira`, where [`/board-flow:triage`](commands.md) grooms the column by code evidence and hands back the order), or dictated by hand |
 | A card closes | `/board-flow:execute` · `/fix` · `/prove` | Close with **"And now?"** — the human route verbatim + the next unblocked item |
 | Mid-session, thread lost | [`/common:next`](commands.md) | Reconciles against the tracker (if any) and names **one** next step |
-| Several items are ready to run | [`/common:drain-plan`](commands.md) | Executes the queue **in its own order**, stopping at the first item it cannot resolve on its own |
+| Several items are ready to run | [`/common:queue-run`](commands.md) | Executes the queue **in its own order**, stopping at the first item it cannot resolve on its own |
 
 ### Writing it: `/common:queue`
 
@@ -170,7 +170,7 @@ Why the writer moved out of the tracker plugin: while `/board-flow:triage` was
 the only command able to write the file, a repo with no Jira had no queue at
 all, and the rules for turning a classified card into an item lived in that
 command's prose — where they erode without a single test going red. They are
-now in `cepa-plan from-triage`, which refuses a READY card with no `why`, an
+now in `cepa-queue from-triage`, which refuses a READY card with no `why`, an
 OBSOLETE card with no reason, and a card still sitting in `needs-decision` (a
 grill that never finished, buried inside a queue that reads as decided).
 
@@ -278,9 +278,9 @@ file itself), or dictated by hand. The card in `BACKLOG.md` ("Cinco portas de
 planejamento") holds the full shape and what it costs.
 
 **Stage 1 is built** (2026-08-24): `/common:queue` with `--from-spec` and the
-hand-dictated queue, plus `common/bin/cepa-plan` — the mechanical writer, so the
+hand-dictated queue, plus `common/bin/cepa-queue` — the mechanical writer, so the
 refusals are code rather than prose. Reading the specification is mechanical too
-(`cepa-plan from-spec`, one item per `### CS-N`, in the order of the text): while
+(`cepa-queue from-spec`, one item per `### CS-N`, in the order of the text): while
 it was only a paragraph of instruction, the only possible test was a grep over
 that paragraph, which proves the command *promises* to inherit the order and
 never that a run produces the queue it promised.
@@ -288,17 +288,17 @@ never that a run produces the queue it promised.
 **Stage 2 is built** (2026-08-25): `--from-jira`, and `/board-flow:triage` no
 longer writes `queue.yaml`. It writes a **handoff** —
 `<queues>/<project_key>/triagem-<YYYY-MM-DD>.json`, the four buckets in the
-execution order confirmed at its step 7 — and `cepa-plan from-triage` turns that
+execution order confirmed at its step 7 — and `cepa-queue from-triage` turns that
 into items. The same lesson as stage 1 decided the shape: the rules that say
 which bucket becomes a `pending` item (only `ready`; `implemented` belongs to
 the proof queue, `needs-refinement` stays in the backlog, `obsolete` is kept as
 `dropped` with its reason) were prose in `triage.md`, provable only by grepping
-the prose. **Stage 3 is built** (2026-08-25): `/common:drain-plan <name>` executes the
+the prose. **Stage 3 is built** (2026-08-25): `/common:queue-run <name>` executes the
 queue in the order the queue keeps. Until then the only bulk executor was
 `/board-flow:drain`, whose source is the board column ordered by `priority and
 rank` — precisely the order this document exists to replace — so the owner wrote
 an order down and the only way to run it in bulk was one that ignored it. Which
-items are runnable *right now* is mechanical too (`cepa-plan queue`), for the
+items are runnable *right now* is mechanical too (`cepa-queue queue`), for the
 same reason as stages 1 and 2: as prose, "respect the order" is provable only by
 grepping the prose. The batch walks the list from the top and **stops** at the
 first thing it cannot resolve alone — an open `human_pending` (the owner's call,
@@ -306,12 +306,12 @@ first thing it cannot resolve alone — an open `human_pending` (the owner's cal
 blocked by something outside the batch, one already `blocked` by an earlier run,
 one reserved by another session, or the `--max` ceiling. It never skips a stuck
 item to reach the one below, because that is reordering the queue in silence.
-Each item is reserved before it is touched (`cepa-plan start` — the trackerless
+Each item is reserved before it is touched (`cepa-queue start` — the trackerless
 equivalent of the claim `/board-flow:drain` posts on a card) and gets a named
-terminal outcome with evidence (`cepa-plan finish`). An item that ends `blocked`, or
+terminal outcome with evidence (`cepa-queue finish`). An item that ends `blocked`, or
 that opens a `human_pending`, also records the closed question that would unblock it
 (`finish --question`, stored as `owner_question`). The owner answers it with
-`cepa-plan answer <queue> <id> --answer "..."`: a `blocked` item goes back to
+`cepa-queue answer <queue> <id> --answer "..."`: a `blocked` item goes back to
 `pending` and an open route closes, with the answer prepended to the evidence the
 next run reads. With `--keep` the answer is recorded and the item stays as it
 was: still `blocked`, route still open. `responde` refuses without a terminal, so an unattended `claude -p`
@@ -336,7 +336,7 @@ the queue → waves promotion that the section below used to declare **manual**,
 and the answer to *"how do I use `program-plan` on a project with Jira"* — the
 `--source` flag only accepts a file, while the queue accepts the board (through
 `/common:queue --from-jira`). Reading the queue is mechanical too
-(`cepa-plan promote`), for the same reason as stages 1–3, and it decides three
+(`cepa-queue promote`), for the same reason as stages 1–3, and it decides three
 things prose cannot be trusted to keep: **who may become a slice** (only
 `pending` — `in_progress` is reserved by another session, so forking a wave on
 top duplicates someone's work; `blocked` stopped in an outside condition nobody
@@ -346,14 +346,14 @@ cannot fork in the same wave even with disjoint surfaces, and excluding a
 blocker cascades to whoever depended on it), and **what happens to an open
 `human_pending`** (it becomes `human_gate: "open: …"`, which the intake gate
 refuses until somebody decides, instead of vanishing). Below the D7 floor of 4
-demands it stops and points at `/common:drain-plan`, which runs the same queue
+demands it stops and points at `/common:queue-run`, which runs the same queue
 in series with no worktree at all. Promoting never writes to the queue: the
 items stay `pending` there, and the residual risk — the same item now having
 two possible executors — is said out loud rather than designed away.
 
 ### Who may write the queue, and what the writer refuses
 
-`cepa-plan` exists because the losses this document is about are all silent
+`cepa-queue` exists because the losses this document is about are all silent
 ones, and a `.md` telling the model to check the `why` before writing is exactly
 the kind of instruction that erodes without anyone noticing. It refuses an empty
 `why` (the queue would keep the order and lose its criterion — the one thing a

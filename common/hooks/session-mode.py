@@ -28,14 +28,14 @@ capped at two lines, in one of three states:
     been stalled, and the next step. The age is what gives away the cursor the
     agent forgot to advance (decision D2); the whole plan stays in whereami.
 
-A `cepa-until` run (`CEPA_UNTIL_RUN`) gets no intent at all: there the intent is
+A `cepa-until` run (`CEPA_RUN`) gets no intent at all: there the intent is
 the plan.yaml item, and a file inherited from another session would become a
 question nobody is there to answer.
 
 The PROJECT altitude comes once per session, on the first turn only (the hook
 pays a toll per turn): when `docs/epics/` has an Epic, one `[epic]` line per
 Epic with the cycles closed, in progress and without a queue, and the owner's
-open questions. It is not written anywhere: `cepa-plan epics --brief` derives it
+open questions. It is not written anywhere: `cepa-queue epics --brief` derives it
 from the Epic and the queues, so it cannot drift. It needs no mode (the session
 that lost the Epic's thread may have had none) and is skipped in a `cepa-until`
 run, where the intent is the queue item.
@@ -75,6 +75,7 @@ from pathlib import Path
 # Without it the mode is a label, not a boundary. The table lives in `_modes.py`
 # (single source, shared with `cepa-modes`); here it is only read.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _cepaenv as E  # noqa: E402
 try:
     from _modes import EXIT
 except Exception:  # noqa: BLE001 — the hook runs every turn; it must never break
@@ -104,7 +105,7 @@ except Exception:  # noqa: BLE001
     exploration_exit_line = None
 
 # The mark `cepa-until` exports on each run (same as session-registry).
-ENV_WINDOW = "CEPA_UNTIL_RUN"
+ENV_WINDOW = "CEPA_RUN"
 
 # How many log prompts enter the empty state, and the cut of each: they are a
 # hint of the intent, not a transcript, and they pay a toll every turn.
@@ -293,7 +294,7 @@ def intent_lines(root, payload, has_mode):
 def epic_lines(root, payload):
     """The `[epic]` lines (one per Epic) on the session's FIRST turn, or [].
 
-    Fail-silent: any error or non-zero exit from `cepa-plan epics` is silence."""
+    Fail-silent: any error or non-zero exit from `cepa-queue epics` is silence."""
     try:
         epics = os.path.join(root, "docs", "epics")
         if not os.path.isdir(epics) or not any(
@@ -302,7 +303,7 @@ def epic_lines(root, payload):
         if len(first_prompts(root, payload.get("session_id"),
                              payload.get("prompt"))) > 1:
             return []
-        plan = Path(__file__).resolve().parent.parent / "bin" / "cepa-plan"
+        plan = Path(__file__).resolve().parent.parent / "bin" / "cepa-queue"
         out = subprocess.run(
             [sys.executable, str(plan), "epics", "--brief", "--repo", root],
             capture_output=True, text=True, timeout=8)
@@ -348,8 +349,18 @@ MENU_MARK = "[menu do modo]"
 MENU_PENDING = os.path.join(".claude", "mode-menu-pending")
 
 
+# Old flag spellings a prompt may still carry (CS-5): the menu shows the English
+# form, a prompt typed with the old one is the same menu action.
+LEGACY_FLAGS = {"--continuar": "--continue", "--fechar": "--close", "--lista": "--list"}
+
+
+def _modern(text):
+    "`/common:spec --continuar x` -> `/common:spec --continue x`."
+    return " ".join(LEGACY_FLAGS.get(w, w) for w in text.split())
+
+
 def bare_command(cmd):
-    """`/common:spec --continuar <slug>` -> `/common:spec --continuar`: the command
+    """`/common:spec --continue <slug>` -> `/common:spec --continue`: the command
     without its placeholders, which is what the owner types and what is recorded."""
     return " ".join(re.sub(r"<[^>]*>", " ", str(cmd)).split())
 
@@ -359,20 +370,21 @@ def menu_choice(pending, prompt):
 
     A choice is the bare number of an action (`1`, `1.`, `1)`) or a prompt that
     starts with one of the menu's commands; the longest command wins, so
-    `/common:spec --continuar x` is action 2, not action 1."""
-    text = " ".join(str(prompt or "").split())
+    `/common:spec --continue x` is action 2, not action 1. A prompt with the old
+    flag (`--continuar x`) is recognised as the same action."""
+    text = _modern(" ".join(str(prompt or "").split()))
     actions = pending.get("actions") or []
     m = re.fullmatch(r"(\d+)[.)]?", text)
     if m:
         n = int(m.group(1))
         for a in actions:
             if a.get("n") == n and a.get("commands"):
-                return n, bare_command(a["commands"][0])
+                return n, _modern(bare_command(a["commands"][0]))
         return None
     best = None
     for a in actions:
         for c in a.get("commands") or []:
-            b = bare_command(c)
+            b = _modern(bare_command(c))  # a menu saved before CS-5 carries the old flag
             if b and (text == b or text.startswith(b + " ")):
                 if best is None or len(b) > len(best[1]):
                     best = (a.get("n"), b)
@@ -477,7 +489,7 @@ def main():
         sys.exit(0)
 
     try:
-        if os.environ.get("CEPA_MODO", "on") == "off":
+        if E.get("CEPA_MODE", "on") == "off":
             sys.exit(0)
 
         cwd = payload.get("cwd") or os.getcwd()
@@ -501,13 +513,13 @@ def main():
             )
             blocks.append(" ".join(lines))
 
-        if not os.environ.get(ENV_WINDOW):
+        if not E.get(ENV_WINDOW):
             try:
                 blocks += intent_lines(root, payload, bool(mode))
             except Exception as e:  # noqa: BLE001 — intent never takes the mode down
                 print(f"[session-mode] intenção: {e}", file=sys.stderr)
 
-        if not os.environ.get(ENV_WINDOW):
+        if not E.get(ENV_WINDOW):
             record_menu_reply(root, payload)
             blocks += menu_lines(root, payload.get("prompt"), payload)
             blocks += epic_lines(root, payload)

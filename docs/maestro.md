@@ -67,7 +67,7 @@ Two alternative source modes:
   (`.claude/queues/NAME/queue.yaml`, written by `/common:queue`) instead of a
   prose file. This is the queue → waves promotion, and the way to use Maestro in
   a Jira repo (the queue accepts the board as a source; `--source` does not).
-  The queue itself is read by `common/bin/cepa-plan promote` and left untouched;
+  The queue itself is read by `common/bin/cepa-queue promote` and left untouched;
   the wave plan needs its own name, different from the queue's.
 
 This is the **only** command that reads the BACKLOG (or any other source).

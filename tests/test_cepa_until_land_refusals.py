@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`cepa-until land --yes` when git refuses to take the run worktree or branch off
+"""`cepa-run land --yes` when git refuses to take the run worktree or branch off
 (CS-2 of pouso-ja-feito-sai-da-lista: the helper shared with `pending`).
 
 Every case runs a real `cepa-until` night against a fake repo, then the landing.
@@ -91,7 +91,7 @@ def test_branch_already_gone_gives_no_warning():
 
 
 def main():
-    print("cepa-until land: recusas do git na remoção\n")
+    print("cepa-run land: recusas do git na remoção\n")
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
             print(f"{name}:")

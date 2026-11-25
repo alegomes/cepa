@@ -41,7 +41,7 @@ manual in `docs/execution-plan.md` because there was no path. It is also the ans
 *"how do I use program-plan in a project with Jira"* — `--source` only accepts a
 file, and the queue accepts the board as a source.
 
-What reads the queue is `common/bin/cepa-plan promote`, not this prose. The rule of
+What reads the queue is `common/bin/cepa-queue promote`, not this prose. The rule of
 what may become a slice lives in the code for the same reason as stages 1 and 2: a
 paragraph that says "promote only the `pending` ones" can only be proven by a grep on
 itself, which shows the PROMISE and never the execution. The blocks annotated with the
@@ -70,7 +70,7 @@ same convention as `--sweep`, measured by `cepa-promptcov`.
    **[from-plan:source]** With `--from-plan NAME`, do not read `BACKLOG.md`: run
 
    ```
-   python3 common/bin/cepa-plan promote <NAME> --repo . --json
+   python3 common/bin/cepa-queue promote <NAME> --repo . --json
    ```
 
    and treat `demands[]` as the universe — in the ORDER they come in, which is the
@@ -79,7 +79,7 @@ same convention as `--sweep`, measured by `cepa-promptcov`.
    session, `blocked` got stuck in a previous run); **show that list to the user**
    instead of keeping quiet — an item they expect to see in the wave and that does not appear is the
    question they will ask, and the answer is already in the JSON. The D7 floor is
-   mechanical here: **exit 4 = stop** and recommend `/common:drain-plan <NAME>`,
+   mechanical here: **exit 4 = stop** and recommend `/common:queue-run <NAME>`,
    which runs the same queue serially, with no worktree at all. Exit 3 = the name
    points to a waves plan, not to a queue.
 
@@ -165,7 +165,7 @@ same convention as `--sweep`, measured by `cepa-promptcov`.
    chosen name.
 
    **[from-plan:traceable-source]** Write into `source:` the line that
-   `cepa-plan promote` returns in `source` — it says which queue, which
+   `cepa-queue promote` returns in `source` — it says which queue, which
    path and how many items out of how many came, and it is the other end of the thread that
    each slice's `demanda:` (the item's `id`) starts. Without it the waves plan
    is born orphaned: months later nobody knows which queue that slice came from, nor in
@@ -214,11 +214,11 @@ same convention as `--sweep`, measured by `cepa-promptcov`.
 ## Notes
 
 - This command does NOT execute demands, does not create worktrees, does not bring up the gatekeeper.
-- **[from-plan:queue-untouched]** Promoting does not touch the queue: `cepa-plan promote`
+- **[from-plan:queue-untouched]** Promoting does not touch the queue: `cepa-queue promote`
   only reads, and the items remain `pending` there. The queue remains the document of the
   ORDER; the waves plan is a hypothesis about a slice of it. The risk that
   remains is human and is worth saying out loud to the user at the close: the same
-  item now has two possible executors (`/common:drain-plan` and the wave), and
+  item now has two possible executors (`/common:queue-run` and the wave), and
   running both builds it twice.
 - Surface is a promise about writing, not reading — the child may read the whole
   repo; it only writes inside the globs (layer 1 of the generated settings).

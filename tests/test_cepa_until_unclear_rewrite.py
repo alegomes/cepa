@@ -2,7 +2,7 @@
 """CS-7 of docs/spec/perguntas-da-largada-legiveis.md: after `?` ("I don't understand
 the question"), the reader rewrites the question right there, within 60 seconds, the
 new question shows in the block of the SAME item and the panel asks for the answer
-again; `queue.yaml` then carries the new question (through `cepa-plan reword-route
+again; `queue.yaml` then carries the new question (through `cepa-queue reword-route
 --replace`, the only door), with `human_pending`, `status` and `evidence` unchanged.
 
 Its own file so the proof gate can run it alone:
@@ -64,7 +64,7 @@ def test_question_mark_rewrites_in_the_same_block_and_asks_again():
         qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
         before = _items(qfile)["b1"]
         reader, log = _reader(tmp)
-        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_UNTIL_LEITOR=str(reader))
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER=str(reader))
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), env=env,
                          inputs=[("[w] I write the answer", "?"),
@@ -99,7 +99,7 @@ def test_reader_without_item_declaration_records_nothing_and_warns():
     """CS-1 of resposta-do-decide-vira-trabalho: the reader returns a rewritten
     question without `item_se_nao` and the item stores no declaration: no silent
     "nenhum". queue.yaml stays byte for byte, the warning names the item and the
-    `cepa-plan reword-route ... --if-no-item "<title>|nenhum"` command, and the
+    `cepa-queue reword-route ... --if-no-item "<title>|nenhum"` command, and the
     owner's panel does not crash (the item stays for later)."""
     with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
         it = item("b1", status="pending", human_pending=ROUTE)
@@ -110,7 +110,7 @@ def test_reader_without_item_declaration_records_nothing_and_warns():
         qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
         before = qfile.read_bytes()
         reader, _ = _reader(tmp, declare=False)
-        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_UNTIL_LEITOR=str(reader))
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER=str(reader))
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), env=env,
                          inputs=[("[w] I write the answer", "?"),
@@ -120,7 +120,7 @@ def test_reader_without_item_declaration_records_nothing_and_warns():
         check("CS-1 reader: queue file unchanged, byte for byte",
               qfile.read_bytes() == before, _items(qfile))
         check("CS-1 reader: the warning names the item and the command",
-              "cepa-plan reword-route fila b1" in plain
+              "cepa-queue reword-route fila b1" in plain
               and "--if-no-item" in plain and "nenhum" in plain, plain[-2000:])
         check("CS-1 reader: no silent `nenhum` was recorded",
               "item_se_nao" not in str((_items(qfile)["b1"].get("owner_summary") or {})),
@@ -249,7 +249,7 @@ def test_a_rewrite_with_the_same_question_is_not_a_rewrite():
 
 
 def test_reword_route_replace_overwrites_question_and_keeps_the_route():
-    """`cepa-plan reword-route --replace` overwrites kind, question and effects (the
+    """`cepa-queue reword-route --replace` overwrites kind, question and effects (the
     owner said the old ones were unclear); without it, nothing already there changes."""
     with tempfile.TemporaryDirectory() as tmp:
         it = item("b1", status="pending", human_pending=ROUTE)

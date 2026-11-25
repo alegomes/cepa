@@ -13,7 +13,7 @@ in the same environment it simulates. Later success criteria add their cases
 here, reusing `make_shim`, `make_repo` and `run_direct`.
 
 Cases:
-  CS-1  `cepa-plan ready` lists the ready item, exit 0, no "PyYAML" on stderr
+  CS-1  `cepa-queue ready` lists the ready item, exit 0, no "PyYAML" on stderr
   CS-2  the other 11 (cepa-dor, cepa-until, cepa-until-digest, five maestro-*,
         waivers.py, classify_needs_human.py, board-flow-fleet-validate.sh) each
         reach a real YAML read: no "PyYAML" / yaml ImportError on stderr and the
@@ -32,7 +32,7 @@ Cases:
         proof-verdict-guard, ui-proof-verdict-guard. Function level: _jiramut,
         _autonomy, expertise-append, reflection-gate, jira-create-fields-gate.
   CS-6  the plugin's vendored copy wins over any other PyYAML: with PYTHONPATH on
-        a folder whose `yaml/__init__.py` raises "fake yaml imported", cepa-plan
+        a folder whose `yaml/__init__.py` raises "fake yaml imported", cepa-queue
         ready still exits 0 (real interpreter, with PyYAML if installed, and -S), and
         so does one representative per plugin and kind (cepa-dor, maestro-poll,
         classify_needs_human.py, board-flow-fleet-validate.sh, acceptance-gate,
@@ -58,7 +58,7 @@ from _isolated_telemetry import isolate
 isolate()
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 BIN = REPO / "common" / "bin"
 MAESTRO = REPO / "maestro" / "bin"
 BOARD_FLOW = REPO / "board-flow"
@@ -151,7 +151,7 @@ def cs2(tmp, shim):
           r.stdout + r.stderr)
 
     # cepa-until: --dry-run prints the run plan from the queue, no claude.
-    r = run_direct(BIN / "cepa-until", ["q", "--for", "1h", "--dry-run", "--dirty-ok",
+    r = run_direct(BIN / "cepa-run", ["q", "--for", "1h", "--dry-run", "--dirty-ok",
                                   "--no-verify"],
                    root, shim)
     no_yaml_complaint("CS-2 cepa-until", r)
@@ -167,7 +167,7 @@ def cs2(tmp, shim):
                    '{"evento": "item_start", "id": "A1", "title": "um"}\n'
                    '{"evento": "run_end", "motivo": "end-of-queue"}\n')
     write(prog / "until" / "r.log", "")
-    r = run_direct(BIN / "cepa-until-digest", [str(ledger)], root, shim)
+    r = run_direct(BIN / "cepa-run", ["digest", str(ledger)], root, shim)
     no_yaml_complaint("CS-2 cepa-until-digest", r)
     check("CS-2 cepa-until-digest shows the item status read from the YAML",
           "uniq-status-digest" in r.stdout, r.stdout + r.stderr)
@@ -747,11 +747,11 @@ def cs6(tmp, shim, real):
     for label, sh in (("real", real), ("-S", shim)):
         n = f"CS-6 [{label}]"
         r = run_direct(CEPA_PLAN, ["ready"], root, sh, extra_env=env)
-        check(f"{n} cepa-plan ready exit 0 with a fake yaml on PYTHONPATH",
+        check(f"{n} cepa-queue ready exit 0 with a fake yaml on PYTHONPATH",
               r.returncode == 0, f"exit {r.returncode}: {r.stderr.strip()[-400:]}")
-        check(f"{n} cepa-plan ready lists the ready item", "X-1" in r.stdout,
+        check(f"{n} cepa-queue ready lists the ready item", "X-1" in r.stdout,
               r.stdout)
-        clean(f"{n} cepa-plan", r)
+        clean(f"{n} cepa-queue", r)
 
         r = run_direct(BIN / "cepa-dor", [str(plan)], root, sh, extra_env=env)
         check(f"{n} cepa-dor read the plan",
@@ -801,7 +801,7 @@ def cs6(tmp, shim, real):
         clean(f"{n} _jiramut.logical_status", r)
 
         # ---- CS-6 sim: the other thirteen files ----
-        r = run_direct(BIN / "cepa-until", ["q", "--for", "1h", "--dry-run",
+        r = run_direct(BIN / "cepa-run", ["q", "--for", "1h", "--dry-run",
                                             "--dirty-ok", "--no-verify"],
                        root, sh, extra_env=env)
         check(f"{n} cepa-until dry-run read the queue (names item X-1)",
@@ -809,7 +809,7 @@ def cs6(tmp, shim, real):
               f"exit {r.returncode}: {(r.stdout + r.stderr)[-300:]}")
         clean(f"{n} cepa-until", r)
 
-        r = run_direct(BIN / "cepa-until-digest", [str(dledger)], root, sh,
+        r = run_direct(BIN / "cepa-run", ["digest", str(dledger)], root, sh,
                        extra_env=env)
         check(f"{n} cepa-until-digest shows the item status read from the YAML",
               "uniq-status-digest" in r.stdout, r.stdout + r.stderr[-300:])
@@ -873,9 +873,9 @@ def main():
 
         # CS-1
         r = run_direct(CEPA_PLAN, ["ready"], root, shim)
-        check("CS-1 cepa-plan ready exit 0 without PyYAML",
+        check("CS-1 cepa-queue ready exit 0 without PyYAML",
               r.returncode == 0, f"exit {r.returncode}: {r.stderr.strip()}")
-        check("CS-1 cepa-plan ready lists the ready item",
+        check("CS-1 cepa-queue ready lists the ready item",
               "X-1" in r.stdout, r.stdout)
         check("CS-1 no 'PyYAML' on stderr", "PyYAML" not in r.stderr, r.stderr)
 

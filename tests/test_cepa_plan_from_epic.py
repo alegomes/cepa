@@ -2,7 +2,7 @@
 """CS-6 of cycle 1 of the Cepa in a spiral Epic: a cycle's queue comes out of the Epic.
 
 Run with `python3 tests/test_cepa_plan_from_epic.py`. Surface: the CLI
-`common/bin/cepa-plan`, called as a subprocess — what `/common:plan
+`common/bin/cepa-queue`, called as a subprocess — what `/common:queue
 --from-epic` tells to run.
 
 What these tests charge:
@@ -32,7 +32,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 EPIC_REAL = REPO / "docs" / "epics" / "cepa-em-espiral.md"
 CMD = REPO / "common" / "commands" / "queue.md"
 
@@ -533,7 +533,7 @@ def test_warnings_and_refusals_of_malformed_epic(base):
 def test_prose_contract():
     f = CMD.read_text(encoding="utf-8")
     check("plan.md manda a leitura do Epic passar pelo `from-epic`",
-          "cepa-plan from-epic" in f)
+          "cepa-queue from-epic" in f)
     check("plan.md declara --from-epic e --cycle no argument-hint",
           "--from-epic docs/epics/<name>.md --cycle N" in f.split("\n---", 1)[0])
 

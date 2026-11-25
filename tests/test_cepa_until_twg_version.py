@@ -32,7 +32,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_UNTIL = REPO / "common" / "bin" / "cepa-until"
+CEPA_UNTIL = REPO / "common" / "bin" / "cepa-run"
 
 FAILURES = []
 
@@ -130,7 +130,7 @@ def run_until(root, binv, plan, args, timeout=120, extra_env=None, path=None):
     env.update(extra_env or {})
     env["PATH"] = f"{binv}:{path}" if path is not None else f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(plan)
-    env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
+    env.setdefault("CEPA_RUN_READER", "off")  # the pre-read must not call the fake claude
     env.setdefault("CEPA_WORKTREE_HOME", str(Path(root).parent / "worktrees"))
     calls = Path(root).parent / "chamadas.jsonl"
     env["FAKE_CHAMADAS"] = str(calls)

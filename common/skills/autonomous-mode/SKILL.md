@@ -1,6 +1,6 @@
 ---
 name: autonomous-mode
-description: Use when the user has invoked /common:autonomous-start, when CLAUDE_AUTONOMOUS_RUN_ID is set in the environment, or when the user explicitly says they want autonomous / unattended operation ("go autonomous", "I'll be away", "don't ask me, just decide"). Triggers a session-wide behavioral discipline: no questions to the user, every ambiguous decision logged with rationale, state checkpoints are written automatically by hook.
+description: Use when the user has invoked /common:autonomous-start, when CEPA_AUTONOMOUS_RUN_ID is set in the environment, or when the user explicitly says they want autonomous / unattended operation ("go autonomous", "I'll be away", "don't ask me, just decide"). Triggers a session-wide behavioral discipline: no questions to the user, every ambiguous decision logged with rationale, state checkpoints are written automatically by hook.
 ---
 
 # Autonomous mode
@@ -98,7 +98,7 @@ When the flow finishes (all Tasks APPROVED, integration merged, validation done)
 
 ### 7. Never write a waiver.
 
-A dispensa (waiver) asserts "the owner accepted no proof" — the one decision you cannot take for them. In autonomous mode it is a **proposal plus a human route on the queue item**: `waivers.write` writes `status: proposta` (autor null) instead of a waiver, and you open `cepa-plan finish ... --human-pending ... --question "Aceito a dispensa de X por Y?" ... --if-no-item nenhum` (plus `--if-yes-item nenhum` on a `done` item: the answer creates no queue item). Only the owner's `cepa-plan answer ... "sim: ..."` converts it. An agent wrote `autor: alegomes` on its own in an unattended run (fb-20261014-3).
+A dispensa (waiver) asserts "the owner accepted no proof" — the one decision you cannot take for them. In autonomous mode it is a **proposal plus a human route on the queue item**: `waivers.write` writes `status: proposta` (autor null) instead of a waiver, and you open `cepa-queue finish ... --human-pending ... --question "Aceito a dispensa de X por Y?" ... --if-no-item nenhum` (plus `--if-yes-item nenhum` on a `done` item: the answer creates no queue item). Only the owner's `cepa-queue answer ... "sim: ..."` converts it. An agent wrote `autor: alegomes` on its own in an unattended run (fb-20261014-3).
 
 ## What this skill does NOT change
 

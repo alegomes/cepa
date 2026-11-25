@@ -1,0 +1,65 @@
+schema_version: 2
+card: reforma-de-nomes-CS-4
+verdict: proven
+reviewed_at: 2026-11-25T05:30:00-03:00
+base_commit: d0c02ab
+head_commit: ef5dbf3
+issue_type: Feature
+repo_kind: harness            # repo Python + sh (cepa), não Quarkus. Superfície = o launcher `cepa` e `cepa help`
+review: 1
+scope:
+  changed_classes:
+    - class: "common/bin/cepa (recusa `intencao`/`modos` com exit 2 e 'X is now Y'; show_help sem o rótulo de apelido)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes rodam o launcher real como subprocesso
+    - class: "common/hooks/_clihelp.py (launcher_help sem a linha 'Old subcommand names')"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-intencao e common/bin/cepa-modos (removidos)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/sh, sem pitest; perturbação em worktree detached descartável (/tmp/proof-cs4-a em ef5dbf3), removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "baseline em ef5dbf3: test_cepa_cli_old_aliases_gone.py '8 passed'; test_cepa_prove.py '27 teste(s) ok'; test_cepa_intent 'tudo ok'; test_modes_single_source 'ok — 7 modos'; test_session_intent_contract OK; test_whereami_intent OK; test_intent_telemetry 'all ... passed'; test_cepa_chaining OK."
+        - "P1 common/bin/cepa: recusa de `intencao` com `exit 0` em vez de `exit 2`: RED em test_cepa_cli_old_aliases_gone.py (3 failed, 5 passed: intencao_is_refused, refusal_without_arguments_and_with_flags, refusal_through_help_and_upper_case) e em test_cepa_prove.py (FAIL '`cepa intencao` recusa e diz ...', 1 falha). Restaurado."
+        - "P2 mensagem de `modos` trocada para 'modos is now modos2': RED em test_cepa_cli_old_aliases_gone.py (3 failed) e test_cepa_prove.py (FAIL '`cepa modos` recusa e diz ...'). Restaurado."
+        - "P3 recriado common/bin/cepa-intencao executável: RED em test_cepa_cli_old_aliases_gone.py (3 failed: alias_files_do_not_exist, help_has_no_old_names, help_fallback_in_plain_sh). Removido."
+        - "P4 recriado common/bin/cepa-modos: RED nos mesmos 3 testes e em test_cepa_prove.py (FAIL 'os apelidos antigos saíram da lista'). Removido."
+        - "P5 _clihelp.py de d0c02ab (seção 'Old subcommand names') com os dois arquivos de apelido de volta: RED em test_cepa_cli_old_aliases_gone.py (3 failed) e test_cepa_prove.py (FAIL 'os apelidos antigos saíram da lista'). Restaurado com git reset --hard."
+        - "P6 common/bin/cepa de d0c02ab (sem recusa, com o ramo de apelido do show_help): RED em test_cepa_cli_old_aliases_gone.py (4 failed: as quatro de recusa). Restaurado."
+        - "Sobreviventes: nenhum. O ramo sh de show_help (rótulo de apelido removido) é coberto por test_help_fallback_in_plain_sh_does_not_list_them, que ficou RED em P3/P4 com os alias files presentes; não isolei esse trecho sozinho (sem alias file ele é código morto)."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs4-a HEAD`; baselines acima; P1/P2: `sed -i ''` em /tmp/proof-cs4-a/common/bin/cepa + `python3 -m pytest -q tests/test_cepa_cli_old_aliases_gone.py` + `python3 tests/test_cepa_prove.py`, `git checkout --` do arquivo;
+        P3/P4: criar o arquivo + os mesmos testes + rm; P5/P6: `git checkout d0c02ab -- <arquivos>` + os mesmos testes + `git reset --hard HEAD`.
+        `git worktree remove --force /tmp/proof-cs4-a`; `git worktree list | grep -c proof` -> 0. tests/run-all.sh não rodado (é do supervisor).
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "sem ferramenta de cobertura. Os trechos de comportamento (recusa dos dois nomes, exit code, mensagem, arquivos de apelido, seção de help do python, ramo de apelido do show_help) foram quebrados e ficaram RED (P1 a P6)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff remove apelidos e fixa a recusa de duas palavras fixas; nenhuma entrada nova de fora é lida. Os testes já cobrem maiúsculas, `help <nome>`, `--help <nome>` e flags/argumentos depois do nome."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature. Vermelho no base: worktree em d0c02ab + `git checkout ef5dbf3 -- tests`: test_cepa_cli_old_aliases_gone.py '7 failed, 1 passed'; test_cepa_prove.py '3 falha(s)' (lista sem apelidos, recusa de intencao, recusa de modos); test_modes_single_source.py '1 falha(s)'; test_cepa_intent.py '1 falha(s): atalho cepa-intencao não existe mais'. Verdes nos dois lados: test_cepa_chaining.py (a edição é só um comentário de docstring)."
+changed_behaviour_not_pinned:
+  - "tests/test_cepa_chaining.py: a edição do diff troca só o texto de uma docstring (cepa-intencao -> cepa-intent); não há comportamento a perturbar."
+  - "test_session_intent_contract.py, test_whereami_intent.py, test_intent_telemetry.py: não rodei no base nem perturbei; são atualizações de referência ao nome novo e passam em ef5dbf3."
+build_completo: "delegado ao supervisor do run (tests/run-all.sh); não rodado por mim, por instrução."
+routing_reason: >-
+  Os testes novos ficam vermelhos em d0c02ab e verdes em ef5dbf3. Cada trecho de comportamento (exit code da recusa, mensagem, arquivos de apelido, seção do help, ramo sh do help) quebrado de propósito deixou o teste que o cobre RED, e voltou ao verde ao restaurar. Nada assumed/skipped. PROVEN.

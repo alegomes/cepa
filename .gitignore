@@ -49,7 +49,7 @@ compass/.claude-plugin/types/
 # Estado vivo de cada run do cepa-until (pid, heartbeat, item corrente); nunca foi versionado.
 .claude/queues/*/until/*.estado.json
 
-# Cópia que o `cepa-plan write` faz da fila anterior antes de regravá-la (comentários
+# Cópia que o `cepa-queue write` faz da fila anterior antes de regravá-la (comentários
 # escritos à mão sobrevivem ali). Rede de segurança local, não registro: versionada
 # ou solta, sujava a main a cada regravação (until-arvore-limpa CS-9). O layout antigo
 # (.claude/programs/<fila>/plan.yaml) gera o mesmo backup com o nome velho.

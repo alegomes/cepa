@@ -78,7 +78,7 @@ MODES = {
         "write": ["docs/discovery/**", "docs/spec/**", "docs/epics/**", ".claude/**", "BACKLOG.md"],
         "actions": [
             {"label": "Detail an idea until it becomes a build-ready specification", "command": "/common:spec <the idea>", "ask": "What is the idea?"},
-            {"label": "Continue an open specification", "command": "/common:spec --continuar <slug>", "ask": "Which specification (slug)?"},
+            {"label": "Continue an open specification", "command": "/common:spec --continue <slug>", "ask": "Which specification (slug)?"},
             {"label": "Design a large package in cycles", "command": "/common:epic <name>", "ask": "What is the package name?"},
             {"label": "Record a user signal", "command": "/discovery:capture <the signal>", "ask": "What is the signal?", "needs": ["plugin:discovery"]},
             {"label": "Turn the ready specification into a build queue", "command": "/common:queue <name> --from-spec", "ask": "What is the queue name?"},
@@ -105,7 +105,7 @@ MODES = {
         "write": "tudo",
         "actions": [
             {"label": "Do the next item in the queue", "command": "/common:next"},
-            {"label": "Run the whole queue in a batch", "command": "/common:drain-plan <queue>", "ask": "Which queue?"},
+            {"label": "Run the whole queue in a batch", "command": "/common:queue-run <queue>", "ask": "Which queue?"},
             {"label": "Execute a Jira card", "command": "/board-flow:execute <key>", "ask": "What is the card key?", "needs": ["file:board-flow.yaml"]},
             {"label": "Fix a bug", "command": ["/board-flow:capture Bug: <description>", "/board-flow:fix <created key>"], "ask": "What is the card key or the bug description?", "needs": ["file:board-flow.yaml"]},
             {"label": "Fix a bug", "command": "/build-solo:reproduce-fix-verify <description>", "ask": "What is the bug description?", "needs": ["topology:build-solo"]},

@@ -45,7 +45,7 @@ Rules:
   - `--purpose` requires `--reason`. `--plan` resets the cursor (step 1) and
     stores the previous plan in the history (`previous_plan`, items joined by " | ").
   - Plan items contain no ':'; a plan has 1 to PLAN_MAX items (more than that
-    is a program: `plan.yaml` / `/common:plan`). Refusal = nothing is written.
+    is a program: `plan.yaml` / `/common:queue`). Refusal = nothing is written.
   - `continue` is the "I'll continue" answer to the question the `session-mode.py`
     hook asks when the intent was written by another session (decision D1): it
     swaps only `session_id` and `branch` for the current ones. Purpose, plan,
@@ -83,7 +83,7 @@ Rules:
     /common:recap (opening line) run. It never writes and exits 0 in every
     state. The first line is `state: empty|normal|fulfilled|other-session`;
     the "other session" rule is the hook's (`_modes.same_session`). In a
-    `cepa-until` run (`CEPA_UNTIL_RUN`) the state is always `empty` with the
+    `cepa-until` run (`CEPA_RUN`) the state is always `empty` with the
     line `delegate: /common:next`: there the intent is the plan.yaml item. The
     second line, `opening:`, is the recap's ("purpose / step N of M"), absent
     in the empty and other-session states.
@@ -119,6 +119,7 @@ import _clihelp  # noqa: E402
 import _modes as M  # noqa: E402
 import _wtlib  # noqa: E402
 import _state  # noqa: E402  (which run this is and whether it is alive)
+import _cepaenv as E  # noqa: E402  (the CEPA_ environment names; the old ones still read)
 
 try:
     import _telemetry as T
@@ -148,7 +149,7 @@ def validate_plan(items):
     items = [i.strip() for i in items]
     if not 1 <= len(items) <= M.PLAN_MAX:
         refuse(f"o plano tem {len(items)} itens; aceito de 1 a {M.PLAN_MAX}. "
-               "Mais que isso é programa: use plan.yaml (/common:plan).")
+               "Mais que isso é programa: use plan.yaml (/common:queue).")
     for i in items:
         if not i:
             refuse("item de plano vazio.")
@@ -261,7 +262,7 @@ def show_intent(d):
     print(f"passo desde {d.get('step_since', '?')} · aberto em {d.get('opened_at', '?')}")
 
 
-RUN_ENV = "CEPA_UNTIL_RUN"  # the marker cepa-until exports on every run
+RUN_ENV = "CEPA_RUN"  # the marker cepa-until exports on every run
 
 
 def format_age(stamp):
@@ -279,7 +280,7 @@ def run_liveness_line(root):
     """One line from `_state`: which cepa-until run this is and whether it is alive."""
     try:
         # The run records live in the MAIN clone, while a run executes in its own worktree.
-        r = _state.run_of(_state.main_root(root), run_id=os.environ.get(RUN_ENV),
+        r = _state.run_of(_state.main_root(root), run_id=E.get(RUN_ENV) or None,
                           tree=os.getcwd())
     except Exception:  # noqa: BLE001  (a reading failure must not break whereami)
         return None
@@ -297,7 +298,7 @@ def show_state(root, current):
 
 def _show_state(root, current):
     plan = (current or {}).get("plan")
-    if os.environ.get(RUN_ENV):
+    if E.get(RUN_ENV):
         print("state: empty")
         print("delegate: /common:next")
         line = run_liveness_line(root)

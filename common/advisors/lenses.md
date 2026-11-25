@@ -9,7 +9,7 @@ Regras de montagem do painel (não re-decidir no comando):
 - As **5 lentes default rodam sempre** — elas são o piso do painel, não opções.
 - A área da decisão adiciona **até 2 lentes especialistas** da sua seção.
 - **Teto absoluto: 7 lentes.** Mais que isso é ruído, não cobertura.
-- `--lentes=a,b,c` sobrepõe tudo (default e especialistas) — o usuário monta o
+- `--lenses=a,b,c` (a antiga `--lentes` segue aceita) sobrepõe tudo (default e especialistas) — o usuário monta o
   painel à mão, ainda sob o teto de 7.
 
 ---
@@ -71,7 +71,11 @@ Regras de montagem do painel (não re-decidir no comando):
 
 ## Lentes especialistas por área
 
-### Área: seguranca
+Os nomes das áreas, em `--area`, são `security`, `api-contract`, `data`, `ux` e
+`architecture`. Os nomes antigos `seguranca`, `api-contrato`, `dados` e
+`arquitetura` seguem aceitos e valem as mesmas áreas.
+
+### Área: security
 
 #### threat-modeler
 
@@ -93,7 +97,7 @@ Regras de montagem do painel (não re-decidir no comando):
   cada ataque como uma sequência concreta de passos, não como categoria
   abstrata de risco.
 
-### Área: api-contrato
+### Área: api-contract
 
 #### consumidor-externo
 
@@ -114,7 +118,7 @@ Regras de montagem do painel (não re-decidir no comando):
   ausência de estratégia de versionamento. Contrato publicado é promessa —
   o custo de quebrá-la depois é sempre maior do que parece agora.
 
-### Área: dados
+### Área: data
 
 #### dba-volume-indices
 
@@ -156,7 +160,7 @@ Regras de montagem do painel (não re-decidir no comando):
   passo, que erro te deixa sem saída. O tempo até o primeiro sucesso é a sua
   métrica — aponte tudo que o estica.
 
-### Área: arquitetura
+### Área: architecture
 
 #### operador-sre
 

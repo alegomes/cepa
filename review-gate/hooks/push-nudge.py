@@ -17,7 +17,7 @@ SELF-SCOPING & QUIET
   - Only on a push of a FEATURE branch (not the protected default_dest).
   - One nudge per branch+commit: a tiny .claude/review-gate-nudge.json records
     what was last nudged, so re-pushing the same tip doesn't nag.
-  - env REVIEW_GATE_NUDGE=off disables it.
+  - env CEPA_REVIEW_GATE_NUDGE=off disables it.
 
 Always exit 0.
 """
@@ -43,8 +43,14 @@ _PUSH_FAILED = (
 )
 
 
+def _env(new, old, default=""):
+    """The new `CEPA_` name of a variable; the name it had before is still read.
+    The new one wins; an empty value counts as unset."""
+    return os.environ.get(new) or os.environ.get(old) or default
+
+
 def main():
-    if os.environ.get("REVIEW_GATE_NUDGE", "").lower() == "off":
+    if _env("CEPA_REVIEW_GATE_NUDGE", "REVIEW_GATE_NUDGE").lower() == "off":
         sys.exit(0)
     raw = sys.stdin.read()
     try:
@@ -96,7 +102,7 @@ def main():
         f"usuário rodar /review-gate:open (roda o gate de higiene e abre o PR "
         f"para '{protected}'). É sugestão, não obrigação — se a branch ainda é "
         f"trabalho-em-progresso, ignore em silêncio. (Desliga com "
-        f"REVIEW_GATE_NUDGE=off.)"
+        f"CEPA_REVIEW_GATE_NUDGE=off.)"
     )
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PostToolUse", "additionalContext": msg}}))

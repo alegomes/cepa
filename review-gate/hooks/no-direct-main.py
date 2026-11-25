@@ -34,7 +34,7 @@ not `git push`/`git merge`, so it is invisible here and never blocked. Correct.
 ESCAPE HATCH (deliberate, human-placed — never auto)
 ----------------------------------------------------
   - `.claude/allow-direct-main` marker file at project root, OR
-  - env REVIEW_GATE_ALLOW_DIRECT=1
+  - env CEPA_REVIEW_GATE_ALLOW_DIRECT=1
 Either opts this repo (or this run) out of the fence — for bootstrap, hotfix,
 or a repo where direct-to-main is genuinely the policy. Mirrors `.claude/
 no-build`: the fence never decides on its own to step aside.
@@ -145,6 +145,12 @@ def _merge_into_protected(command, protected, current):
     return False
 
 
+def _env(new, old, default=""):
+    """The new `CEPA_` name of a variable; the name it had before is still read.
+    The new one wins; an empty value counts as unset."""
+    return os.environ.get(new) or os.environ.get(old) or default
+
+
 def main():
     raw = sys.stdin.read()
     try:
@@ -166,7 +172,7 @@ def main():
 
     # Escape hatch.
     if (cwd / ".claude" / "allow-direct-main").exists() \
-            or os.environ.get("REVIEW_GATE_ALLOW_DIRECT") == "1":
+            or _env("CEPA_REVIEW_GATE_ALLOW_DIRECT", "REVIEW_GATE_ALLOW_DIRECT") == "1":
         sys.exit(0)
 
     protected = C.protected_branch(cwd)
@@ -187,7 +193,7 @@ def main():
         f"  → Open the PR instead:  /review-gate:open\n"
         f"  → Merge a reviewed PR:  /review-gate:merge  (runs the QA gate first)\n"
         f"  Genuinely need the direct path (bootstrap / hotfix)? Opt out honestly:\n"
-        f"  create .claude/allow-direct-main, or set REVIEW_GATE_ALLOW_DIRECT=1.",
+        f"  create .claude/allow-direct-main, or set CEPA_REVIEW_GATE_ALLOW_DIRECT=1.",
         file=sys.stderr,
     )
     sys.exit(2)

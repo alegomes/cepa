@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests of /common:queue-status and of the `cepa-plan status` it calls.
+"""Tests of /common:queue-status and of the `cepa-queue status` it calls.
 
 Run with `python3 tests/test_common_queue_status.py` (it only needs PyYAML).
 
@@ -22,7 +22,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 CMD = REPO / "common" / "commands" / "queue-status.md"
 
 FAILURES = []
@@ -182,20 +182,17 @@ def test_from_inside_a_worktree_reads_the_main_clone(base):
 
 def test_command_contract(_base):
     t = CMD.read_text(encoding="utf-8")
-    check("o comando chama o `cepa-plan status`",
-          'bin/cepa-plan" status $ARGUMENTS' in t)
+    check("o comando chama o `cepa-queue status`",
+          'bin/cepa-queue" status $ARGUMENTS' in t)
     check("manda mostrar a saída na íntegra", "**in full**" in t)
     check("declara que só lê", "**Read-only.**" in t)
     check("o título é /common:queue-status", "# /common:queue-status" in t)
 
 
-def test_old_name_fila_is_deprecated_alias(_base):
-    t = (REPO / "common" / "commands" / "fila.md").read_text(encoding="utf-8")
-    check("/common:fila continua existindo como alias deprecado",
-          "# /common:fila (deprecated)" in t)
-    check("...e manda rodar /common:queue-status com os mesmos argumentos",
-          "/common:queue-status" in t and "$ARGUMENTS" in t)
-    check("...sem manter segunda cópia dos passos", "cepa-plan" not in t)
+def test_old_name_fila_is_gone(_base):
+    # CS-3 (reforma-de-nomes, Q5): no file stays behind under the old name.
+    check("/common:fila não existe mais como comando",
+          not (REPO / "common" / "commands" / "fila.md").exists())
 
 
 def test_one_item_in_full(base):
@@ -225,7 +222,7 @@ def test_one_item_on_the_terminal_screen(base):
     d = git_repo(base, "um-item-tela")
     longo = "validar à mão. " + "detalhe " * 60 + "FIM-DO-TEXTO"
     write_queue(d, [item("a"), item("b", human_pending=longo)])
-    env = dict(os.environ, CEPA_COR="sempre", COLUMNS="80")
+    env = dict(os.environ, CEPA_COLOR="sempre", COLUMNS="80")
     r = subprocess.run([sys.executable, str(CEPA_PLAN), "status", "fila", "b",
                         "--repo", "."], capture_output=True, text=True,
                        cwd=str(d), env=env)
@@ -245,7 +242,7 @@ def test_whole_queue_on_the_terminal_screen(base):
     import os, re
     d = git_repo(base, "fila-tela")
     write_queue(d, ITEMS)
-    env = dict(os.environ, CEPA_COR="sempre", COLUMNS="80")
+    env = dict(os.environ, CEPA_COLOR="sempre", COLUMNS="80")
     r = subprocess.run([sys.executable, str(CEPA_PLAN), "status", "fila",
                         "--repo", "."], capture_output=True, text=True,
                        cwd=str(d), env=env)
@@ -272,7 +269,7 @@ def test_help_documents_item(base):
     check("status --help documenta o id",
           "shows only this item" in r.stdout, r.stdout)
     r = run(base, "--help")
-    check("--help geral tem o exemplo", "cepa plan show wego WEGO-123" in r.stdout,
+    check("--help geral tem o exemplo", "cepa queue show wego WEGO-123" in r.stdout,
           r.stdout)
     r = run(base, "show", "--help")
     check("show --help documenta o id e a resolução no Epic",
@@ -375,7 +372,7 @@ def test_show_item_on_the_terminal_screen_splits_why_and_evidence(base):
     import os, re
     d = git_repo(base, "show-item-tela")
     write_epic_queue(d)
-    env = dict(os.environ, CEPA_COR="sempre", COLUMNS="100")
+    env = dict(os.environ, CEPA_COLOR="sempre", COLUMNS="100")
     r = subprocess.run([sys.executable, str(CEPA_PLAN), "show", "fila", "C1-1",
                         "--repo", "."], capture_output=True, text=True,
                        cwd=str(d), env=env)
@@ -463,7 +460,7 @@ def test_show_queue_header(base):
     r = run(d, "show", "fila", "--repo", ".")
     check("show <fila> sem id mostra a fonte e aponta o show <id>",
           r.returncode == 0 and "fonte: docs/epics/e.md, ciclo 1" in r.stdout
-          and "cepa-plan show fila <id>" in r.stdout, r.stdout + r.stderr)
+          and "cepa-queue show fila <id>" in r.stdout, r.stdout + r.stderr)
 
 
 def test_show_item_without_epic_says_so(base):
@@ -475,7 +472,7 @@ def test_show_item_without_epic_says_so(base):
           and "teste" in r.stdout, r.stdout)
     r = run(d, "status", "fila", "a", "--repo", ".")
     check("status <fila> <id> segue funcionando e aponta o show",
-          r.returncode == 0 and "cepa plan show fila a" in r.stderr, r.stderr)
+          r.returncode == 0 and "cepa queue show fila a" in r.stderr, r.stderr)
 
 
 def main():
@@ -500,7 +497,7 @@ def main():
                    test_refuses_wave_plan,
                    test_from_inside_a_worktree_reads_the_main_clone,
                    test_command_contract,
-                   test_old_name_fila_is_deprecated_alias):
+                   test_old_name_fila_is_gone):
             print(f"\n{fn.__name__}")
             fn(base)
     print()

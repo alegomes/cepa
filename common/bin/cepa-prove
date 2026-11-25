@@ -57,7 +57,7 @@ breaker, quota pause, log — and TWO things only a supervisor can do:
    `cepa-until`: without it the first permission prompt hangs the round and
    the night dies in silence. `--with-permissions` turns it off.
 5. **The round knows it is unattended** through the same mark `cepa-until`
-   sets (`CEPA_UNTIL_RUN=1`): `/board-flow:prove-drain` then takes its single
+   sets (`CEPA_RUN=1`): `/board-flow:prove-drain` then takes its single
    confirmation as yes + (a) instead of asking a terminal nobody is reading,
    and the session hooks behave as in a window (no intent, no background
    wait).
@@ -99,7 +99,7 @@ import _clihelp  # noqa: E402
 def _load_until():
     """`cepa-until` as a module: the clock, quota, network and screen helpers
     live there, and a second copy of each would diverge."""
-    loader = importlib.machinery.SourceFileLoader("cepa_until", str(HERE / "cepa-until"))
+    loader = importlib.machinery.SourceFileLoader("cepa_until", str(HERE / "cepa-run"))
     spec = importlib.util.spec_from_loader("cepa_until", loader)
     mod = importlib.util.module_from_spec(spec)
     loader.exec_module(mod)
@@ -379,7 +379,7 @@ def _main(argv=None):
                 "live run, dirty tree outside docs/proof/"),
             (130, "interrupted (Ctrl-C)"),
         ],
-        see_also=["cepa until: the same supervisor for the repo's queue",
+        see_also=["cepa run: the same supervisor for the repo's queue",
                   "/board-flow:prove-drain: what each round runs",
                   "/board-flow:decide: the NEEDS-HUMAN cards left in Review"])
     window = ap.add_mutually_exclusive_group(required=True)

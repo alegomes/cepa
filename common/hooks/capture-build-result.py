@@ -38,10 +38,10 @@ zero tests is recorded as EMPTY, never SUCCESS — see refine_empty().
 
 Never blocks. Failures are stderr-only.
 
-Debugging: set CAPTURE_BUILD_DEBUG=1 to dump every invocation's
+Debugging: set CEPA_CAPTURE_BUILD_DEBUG=1 to dump every invocation's
 payload + classification details to /tmp/capture-build-debug.log
-(or to $CAPTURE_BUILD_DEBUG_LOG if set). Same pattern as
-HEX_PATHLOCK_DEBUG.
+(or to $CEPA_CAPTURE_BUILD_DEBUG_LOG if set). Same pattern as
+CEPA_HEX_PATHLOCK_DEBUG.
 
 Root-install marker (2026-09-27): when a Maven command classifies SUCCESS and
 one of its segments ran `install` over the WHOLE reactor (no `-pl`/`--projects`,
@@ -135,6 +135,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _wtlib as L  # noqa: E402
+import _cepaenv as E  # noqa: E402
 import _shellscan as S  # noqa: E402
 import _mvnscan as M  # noqa: E402
 
@@ -594,7 +595,7 @@ def classify(command: str, response_text: str, exit_code, interrupted: bool = Fa
             f"no marker in response_text (len={len(response_text)}), "
             f"no exit_code (exit_code={exit_code!r}). "
             f"CC's Bash tool_response often omits exit_code on success — "
-            f"give this pattern text markers. Set CAPTURE_BUILD_DEBUG=1 to inspect."
+            f"give this pattern text markers. Set CEPA_CAPTURE_BUILD_DEBUG=1 to inspect."
         )
 
     declared = _classify_check_script(command, response_text, exit_code,
@@ -744,14 +745,14 @@ def refine_empty(command: str, kind: str, status, text: str):
 # ─── debug logging ────────────────────────────────────────────────────
 
 def debug_log(payload, response_text, exit_code, status, kind, reason):
-    """When CAPTURE_BUILD_DEBUG=1, append a JSON line to the debug log
+    """When CEPA_CAPTURE_BUILD_DEBUG=1, append a JSON line to the debug log
     capturing what the hook saw + how it classified. Default log path
     is /tmp/capture-build-debug.log; override with
-    CAPTURE_BUILD_DEBUG_LOG."""
-    if os.environ.get("CAPTURE_BUILD_DEBUG") != "1":
+    CEPA_CAPTURE_BUILD_DEBUG_LOG."""
+    if E.get("CEPA_CAPTURE_BUILD_DEBUG") != "1":
         return
 
-    log_path = os.environ.get("CAPTURE_BUILD_DEBUG_LOG", "/tmp/capture-build-debug.log")
+    log_path = E.get("CEPA_CAPTURE_BUILD_DEBUG_LOG", "/tmp/capture-build-debug.log")
 
     tool_response = payload.get("tool_response")
     response_top_keys = (

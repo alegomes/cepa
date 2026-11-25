@@ -101,7 +101,7 @@ def run_prove(root, binv, tmp, args, timeout=120, path=None, extra_env=None):
     env.update(extra_env or {})
     env["PATH"] = path if path is not None else f"{binv}:{env['PATH']}"
     env["FAKE_TMP"] = str(tmp)
-    env["CEPA_UNTIL_GRACA_SIGTERM"] = "2"
+    env["CEPA_RUN_SIGTERM_GRACE"] = "2"
     p = subprocess.run([sys.executable, str(CEPA_PROVE), "--repo", str(root)] + list(args),
                        capture_output=True, text=True, env=env, timeout=timeout)
     calls_path = Path(tmp) / "chamadas.jsonl"
@@ -247,7 +247,7 @@ def test_until_with_permissions_and_cwd():
 
 
 def test_env_marks_the_round_as_unattended():
-    """The round must see CEPA_UNTIL_RUN: it is what makes prove-drain skip its
+    """The round must see CEPA_RUN: it is what makes prove-drain skip its
     only confirmation."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp)
@@ -256,10 +256,10 @@ def test_env_marks_the_round_as_unattended():
         body = probe.read_text()
         probe.write_text(body.replace(
             "text = ''\n",
-            "open(os.path.join(tmp, 'env'), 'w').write(os.environ.get('CEPA_UNTIL_RUN', ''))\n"
+            "open(os.path.join(tmp, 'env'), 'w').write(os.environ.get('CEPA_RUN', ''))\n"
             "text = ''\n"))
         run_prove(root, binv, tmp, ["--for", "2h"])
-        check("CEPA_UNTIL_RUN=1 no ambiente da rodada",
+        check("CEPA_RUN=1 no ambiente da rodada",
               (Path(tmp) / "env").read_text() == "1")
 
 
@@ -394,12 +394,12 @@ def test_cepa_dispatches_to_sibling_scripts():
     p = subprocess.run([str(CEPA), "prove", "--help"], capture_output=True, text=True, timeout=60)
     check("`cepa prove --help` roda o cepa-prove", p.returncode == 0 and "prove-drain" in p.stdout,
           (p.stdout + p.stderr)[-300:])
-    p = subprocess.run([str(CEPA), "until", "--help"], capture_output=True, text=True, timeout=60)
-    check("`cepa until --help` roda o cepa-until", p.returncode == 0 and "queue" in p.stdout,
+    p = subprocess.run([str(CEPA), "run", "--help"], capture_output=True, text=True, timeout=60)
+    check("`cepa run --help` roda o cepa-run", p.returncode == 0 and "queue" in p.stdout,
           (p.stdout + p.stderr)[-300:])
     p = subprocess.run([str(CEPA), "help"], capture_output=True, text=True, timeout=60)
     check("`cepa help` lista os subcomandos", p.returncode == 0
-          and "until" in p.stdout and "prove" in p.stdout and "doctor" in p.stdout,
+          and "\n  run  " in p.stdout and "runs the repo's queue" in p.stdout and "prove" in p.stdout and "doctor" in p.stdout,
           (p.stdout + p.stderr)[-500:])
     check("...com a primeira linha de cada docstring",
           "Review" in p.stdout and "time window" in p.stdout, p.stdout[-800:])
@@ -442,7 +442,7 @@ def test_cepa_still_launches_a_session_for_flags_and_non_scripts():
         fake.write_text(f"#!{sys.executable}\nimport sys, json\n"
                         f"open({str(Path(tmp) / 'argv')!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
         fake.chmod(0o755)
-        env = dict(os.environ, CLAUDE_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT="off")
+        env = dict(os.environ, CEPA_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT="off")
         env.pop("CEPA_PROMPT", None)   # the machine's default prompt would pad the argv
         for args in (["--version"], ["FOO-1"], ["plan the migration"]):
             # cwd outside any git repo: the launcher then "just is claude".
@@ -460,20 +460,27 @@ def test_cepa_still_launches_a_session_for_flags_and_non_scripts():
 
 def test_cepa_help_flags_and_typos():
     """Discovery of the subcommands (2026-11-04): `--help`/`-h` print the same
-    list as `cepa help` plus the launcher's flags; deprecated aliases carry a
-    clean label; a lone word within two typos of a sibling is refused with the
+    list as `cepa help` plus the launcher's flags; the old aliases `intencao`
+    and `modos` are gone from the list (CS-4, 2026-11-25) and each one is
+    refused naming the new subcommand; a lone word within two typos of a sibling is refused with the
     nearest name instead of opening a session whose first message is the typo."""
     ref = subprocess.run([str(CEPA), "help"], capture_output=True, text=True, timeout=60).stdout
     for flag in ("--help", "-h"):
         p = subprocess.run([str(CEPA), flag], capture_output=True, text=True, timeout=60)
         check(f"`cepa {flag}` lista os subcomandos como `cepa help`",
-              p.returncode == 0 and p.stdout == ref and "until" in p.stdout, (p.stdout + p.stderr)[-300:])
+              p.returncode == 0 and p.stdout == ref and "\n  run  " in p.stdout, (p.stdout + p.stderr)[-300:])
     check("...e a seção de flags do launcher", "launcher flags:" in ref and "--slice" in ref
           and "--mode" in ref and "--prompt" in ref, ref[-600:])
-    check("...e os aliases com rótulo limpo", "intencao (= intent)" in ref
-          and "modos (= modes)" in ref and "Deprecated" not in ref, ref)
+    check("...e os apelidos antigos saíram da lista", "\n  intencao" not in ref
+          and "\n  modos" not in ref and "(= intent)" not in ref and "(= modes)" not in ref
+          and "Old subcommand names" not in ref
+          and "Deprecated" not in ref and "\n  intent  " in ref and "\n  modes  " in ref, ref)
+    for old, new in (("intencao", "intent"), ("modos", "modes")):
+        p = subprocess.run([str(CEPA), old], capture_output=True, text=True, timeout=60)
+        check(f"`cepa {old}` recusa e diz `{old} is now {new}`",
+              p.returncode == 2 and f"{old} is now {new}" in p.stderr, (p.stdout + p.stderr)[-300:])
     # `feed` is 4 edits from `feedback`: only the prefix fast path finds it.
-    for typo, near in (("untl", "until"), ("prov", "prove"), ("docto", "doctor"), ("feed", "feedback")):
+    for typo, near in (("runn", "run"), ("prov", "prove"), ("docto", "doctor"), ("feed", "feedback")):
         p = subprocess.run([str(CEPA), typo], capture_output=True, text=True, timeout=60)
         check(f"`cepa {typo}` recusa e sugere `cepa {near}`",
               p.returncode == 2 and "did you mean" in p.stderr
@@ -486,7 +493,7 @@ def test_cepa_help_flags_and_typos():
         fake.write_text(f"#!{sys.executable}\nimport sys, json\n"
                         f"open({str(Path(tmp) / 'argv')!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
         fake.chmod(0o755)
-        env = dict(os.environ, CLAUDE_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT="off")
+        env = dict(os.environ, CEPA_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT="off")
         env.pop("CEPA_PROMPT", None)
         # `untl foo` is two words: a prompt, never a typo, even with `untl` in it.
         for args in (["go"], ["xyzzyqq"], ["untl", "foo"]):
@@ -504,8 +511,8 @@ def test_mode_menu_points_to_cepa_help():
     import pty, select
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp)
-        env = dict(os.environ, CEPA_PREFLIGHT="off", CEPA_MODO="")
-        env.pop("CEPA_MODO_DEFAULT", None)
+        env = dict(os.environ, CEPA_PREFLIGHT="off", CEPA_MODE="")
+        env.pop("CEPA_MODE_DEFAULT", None)
         pid, fd = pty.fork()
         if pid == 0:
             os.chdir(root)
@@ -678,7 +685,7 @@ def test_herdr_pane_is_released_on_sigterm_and_ctrl_c_mid_round():
             for k in ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH"):
                 full.pop(k, None)
             full.update(env, PATH=f"{binv}:{os.environ['PATH']}", FAKE_TMP=str(tmp),
-                        CEPA_UNTIL_GRACA_SIGTERM="2")
+                        CEPA_RUN_SIGTERM_GRACE="2")
             proc = subprocess.Popen([sys.executable, str(CEPA_PROVE), "--repo", str(root),
                                      "--for", "2h"], env=full, stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, text=True)
@@ -740,7 +747,7 @@ def run_prove_on_hc(root, binv, tmp, args, hc_id="t9", tty=True):
         env["HC_TERMINAL_ID"] = hc_id
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_TMP"] = str(tmp)
-    env["CEPA_UNTIL_GRACA_SIGTERM"] = "2"
+    env["CEPA_RUN_SIGTERM_GRACE"] = "2"
     argv = [sys.executable, str(CEPA_PROVE), "--repo", str(root)] + list(args)
     if not tty:
         r = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=120)

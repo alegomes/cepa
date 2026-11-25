@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`cepa-plan ready` lists the items ready to be built now, across EVERY
+"""`cepa-queue ready` lists the items ready to be built now, across EVERY
 single-track queue of the repo (owner, 2026-11-05: "os itens prontos para serem
 construídos de todas as filas disponíveis").
 
@@ -22,7 +22,7 @@ Against the real CLI, in a temporary git repo with three queues:
   - a queue stuck only on a pending dependency says "nada pronto"
   - `adiados` names every deferred item with build_batch's reason
   - --json carries `filas`, `prontos`, `total_prontos`
-  - the launcher `cepa plan ready` reaches the same subcommand
+  - the launcher `cepa queue ready` reaches the same subcommand
   - no queue at all -> exit 2
 
 Run with `python3 tests/test_cepa_plan_ready.py`.
@@ -40,7 +40,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 CEPA = REPO / "common" / "bin" / "cepa"
 FAILURES = []
 
@@ -136,12 +136,12 @@ def main():
               all(p["why"] == "porque" for p in beta["prontos"]))
 
         # The owner asked for "um comando cepa": the launcher is the surface.
-        r = subprocess.run(["sh", str(CEPA), "plan", "ready", "--json",
+        r = subprocess.run(["sh", str(CEPA), "queue", "ready", "--json",
                             "--repo", str(root)],
                            capture_output=True, text=True, cwd=str(root))
-        check("cepa plan ready (launcher) exit 0", r.returncode == 0, r.stderr)
+        check("cepa queue ready (launcher) exit 0", r.returncode == 0, r.stderr)
         via_launcher = json.loads(r.stdout)
-        check("cepa plan ready lists the same queues and total",
+        check("cepa queue ready lists the same queues and total",
               [q["queue"] for q in via_launcher["filas"]] == ["alpha", "beta", "delta", "gamma"]
               and via_launcher["total_prontos"] == 3, r.stdout[:300])
 
@@ -162,7 +162,7 @@ def main():
               "fila alpha · 0 de 0 pendentes prontos — fila fechada" in out, out)
         check("queue held by the owner names the items and the command",
               "fila gamma · 0 de 1 pendentes prontos — esperam você: G-1 "
-              "(cepa until decide gamma)" in out, out)
+              "(cepa run decide gamma)" in out, out)
         check("beta header counts ready over pending",
               "fila beta · 3 de 5 pendentes prontos" in out, out)
         check("queue stuck on a pending dependency says so",
@@ -249,7 +249,7 @@ def main():
     if FAILURES:
         print(f"✗ {len(FAILURES)} falha(s): {', '.join(FAILURES)}")
         return 1
-    print("✓ cepa-plan ready")
+    print("✓ cepa-queue ready")
     return 0
 
 

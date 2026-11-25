@@ -67,7 +67,7 @@ except Exception:  # noqa: BLE001 — without the helper this gate knows nothing
 APELIDOS = {
     "prove-drain": "board-flow:prove-drain",
     "drain": "board-flow:drain",
-    "drain-plan": "common:drain-plan",
+    "queue-run": "common:queue-run",
     "triage": "board-flow:triage",
     "decide": "board-flow:decide",
     "execute": "board-flow:execute",

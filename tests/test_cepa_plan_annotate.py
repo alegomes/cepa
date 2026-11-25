@@ -8,10 +8,10 @@ touch a done item (it would erase the closer's evidence) and no subcommand
 could add a note, so the stale text made another agent state that C1-17 was
 not merged.
 
-Red test (BACKLOG.md § `cepa plan finish` não deixa corrigir a evidência de um
+Red test (BACKLOG.md § `cepa queue finish` não deixa corrigir a evidência de um
 item done que ficou falsa):
 
-  - `cepa-plan annotate <fila> <id> --note TEXT` on a `done` (or `dropped`)
+  - `cepa-queue annotate <fila> <id> --note TEXT` on a `done` (or `dropped`)
     item appends `{texto, em, autor}` to the item's `anotacoes`, and never
     touches `evidence`, `status` nor `head_commit` (the record only grows);
   - a second note is appended, the first stays;
@@ -43,7 +43,7 @@ FAILURES = []
 ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
            GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t", NO_COLOR="1",
            CLAUDE_SESSION_ID="sessao-que-anota")
-for v in ("CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID", "CLAUDE_CODE_SESSION_ID"):
+for v in ("CEPA_RUN", "CEPA_UNTIL_RUN", "CEPA_AUTONOMOUS_RUN_ID", "CLAUDE_AUTONOMOUS_RUN_ID", "CLAUDE_CODE_SESSION_ID"):
     ENV.pop(v, None)
 
 OLD = "C1-17 no branch until/x: sem merge e sem push"

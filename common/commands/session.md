@@ -21,7 +21,7 @@ dripped in along the way.
 ## Variables
 
 - `$ARGUMENTS` — the routine's name and its arguments.
-  Recognised routines: `prove-drain`, `drain`, `drain-plan`, `triage`,
+  Recognised routines: `prove-drain`, `drain`, `queue-run`, `triage`,
   `decide`, `execute`, `autonomous`, `docs`, or any installed slash command
   (pass the name without the `/`, e.g. `board-flow:prove-drain`).
 - `--help [routine]` — lists the routines and the parameters of each, and runs
@@ -70,8 +70,8 @@ Answer format, in plain Brazilian Portuguese (pt-BR):
 ### 1. Resolve the routine (without asking)
 
 Map the first token of `$ARGUMENTS` to the real command: `prove-drain` →
-`/board-flow:prove-drain`, `drain` → `/board-flow:drain`, `drain-plan` →
-`/common:drain-plan` (the batch over the queue, no Jira), `triage` →
+`/board-flow:prove-drain`, `drain` → `/board-flow:drain`, `queue-run` →
+`/common:queue-run` (the batch over the queue, no Jira), `triage` →
 `/board-flow:triage`, `decide` → `/board-flow:decide`, `execute` →
 `/board-flow:execute`, `autonomous` → `/common:autonomous-start`, `docs` →
 `/docs:survey`. A name with `:` is used literally.

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""`cepa plan waiting` shows routes the owner already answered "não" only as a
+"""`cepa queue waiting` shows routes the owner already answered "não" only as a
 count per queue, with the date of the last one and the command that revisits
 them (spec docs/spec/decisoes-de-todas-as-filas.md, CS-3; Q4: a route answered
 "no" is not asked again, and is not listed as a line either).
 
-"Answered no" is the rule `cepa-until decide` already uses (one reader,
-`_ownertext.last_owner_no`): the owner's LAST answer, which `cepa-plan answer`
+"Answered no" is the rule `cepa-run decide` already uses (one reader,
+`_ownertext.last_owner_no`): the owner's LAST answer, which `cepa-queue answer`
 prepends to the evidence, is a "não".
 
 Against the real CLI, in a temporary git repo:
 
   - CS-3 red test: `a1` with a "não" of 2026-11-18 is not a line, and the
     queue prints "1 que você já respondeu \"não\" (última em 18/11)" with
-    `cepa until decide a`
+    `cepa run decide a`
   - the count and the date are the queue's: two "não", the latest wins; a
     route answered "sim" later, or a "não" further down, is still a line
   - a queue holding only answered routes still shows its section
@@ -40,7 +40,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 FAILURES = []
 
 
@@ -56,7 +56,7 @@ def run(repo, *args):
 
 
 def answered(date, text="não: deixa como está", older=""):
-    """Evidence as `cepa-plan answer` leaves it: the last answer first."""
+    """Evidence as `cepa-queue answer` leaves it: the last answer first."""
     ev = f"Resposta do dono em {date}: {text}"
     return ev + (f"\n\n{older}" if older else "\n\nevidência original")
 
@@ -120,10 +120,10 @@ def red_test():
               any(" a2 — " in l for l in sec), p.stdout)
         check("a contagem com a data e o comando para revisitar",
               any("1 que você já respondeu \"não\" (última em 18/11)" in l
-                  and "cepa until decide a" in l for l in sec), p.stdout)
+                  and "cepa run decide a" in l for l in sec), p.stdout)
         check("a linha exata da contagem",
               "  1 que você já respondeu \"não\" (última em 18/11): para "
-              "revisitar, cepa until decide a" in sec, sec)
+              "revisitar, cepa run decide a" in sec, sec)
         check("a contagem vem depois das linhas de item",
               sec and "já respondeu" in sec[-1], sec)
         check("o cabeçalho conta só as linhas",
@@ -147,7 +147,7 @@ def latest_and_rules():
         sec = section(p.stdout, "a") or []
         check("três respondidos \"não\" (um deles travado), última em 18/11",
               "  3 que você já respondeu \"não\" (última em 18/11): para "
-              "revisitar, cepa until decide a" in sec, sec)
+              "revisitar, cepa run decide a" in sec, sec)
         check("um \"sim\" depois de um \"não\" continua como linha",
               any(" a3 — " in l for l in sec), sec)
         check("um \"não\" que não é a última resposta continua como linha",
@@ -169,7 +169,7 @@ def only_answered_queue():
         check("a seção `a` existe, com só a contagem",
               section(p.stdout, "a") == [
                   "  1 que você já respondeu \"não\" (última em 18/11): para "
-                  "revisitar, cepa until decide a"], p.stdout)
+                  "revisitar, cepa run decide a"], p.stdout)
         check("a seção `a` vem antes de `b`",
               0 <= p.stdout.find("fila a\n") < p.stdout.find("fila b\n"),
               p.stdout)
@@ -187,7 +187,7 @@ def only_answered_queue():
         check("--json: `respondidas_nao` da fila `a`",
               qs.get("a", {}).get("respondidas_nao") ==
               {"total": 1, "ultima": "2026-11-18",
-               "comando": "cepa until decide a"}, qs.get("a"))
+               "comando": "cepa run decide a"}, qs.get("a"))
         check("--json: `respondidas_nao` nulo na fila sem \"não\"",
               "respondidas_nao" in qs.get("b", {})
               and qs["b"]["respondidas_nao"] is None, qs.get("b"))
@@ -227,12 +227,12 @@ def oldest_first_and_header_name():
         check("a data é a mais recente (19/11), não a da primeira rota",
               section(p.stdout, "minha-fila") == [
                   "  3 que você já respondeu \"não\" (última em 19/11): para "
-                  "revisitar, cepa until decide minha-fila"], p.stdout)
+                  "revisitar, cepa run decide minha-fila"], p.stdout)
         data = json.loads(run(root, "waiting", "--json").stdout)
         check("--json: última e comando com o nome da fila",
               data["filas"][0]["respondidas_nao"] ==
               {"total": 3, "ultima": "2026-11-19",
-               "comando": "cepa until decide minha-fila"}, data)
+               "comando": "cepa run decide minha-fila"}, data)
 
 
 def word_must_end():

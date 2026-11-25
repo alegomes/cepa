@@ -158,7 +158,7 @@ sem ela o modo é rótulo, não fronteira.
 
   Lentes: as do registro que já existe em `common/advisors/lenses.md` — 5 fixas
   (`contrarian`, `fundamentalista`, `expansionista`, `outsider`, `executor`) e
-  as especialistas por área (segurança, api-contrato, dados, ux, arquitetura),
+  as especialistas por área (security, api-contract, data, ux, architecture),
   teto de 7. **Ressalva:** o `advisors` é prospectivo (roda sobre um documento
   de decisão, antes de decidir) e a Reflexão é retrospectiva (roda sobre o
   construído). O vocabulário se reaproveita; os `system-prompt-fragment` de cada
@@ -350,7 +350,7 @@ pertencem a modo nenhum.
 **O escape não é barato de propósito.** Não há `# modo-ok`: o agente digitaria e
 seguiria, que é a mesma fuga de novo. O escape é encerrar o modo e abrir o modo
 do trabalho que se quer fazer — uma sessão nova, e é o custo certo, porque
-trocar de atividade deveria custar. O `CEPA_MODO=off` continua desligando a
+trocar de atividade deveria custar. O `CEPA_MODE=off` continua desligando a
 mecânica inteira, e a mensagem de bloqueio não o oferece.
 
 **Construção indecidível avisa, não barra.** `python3 -c`, `patch`, `ed` e

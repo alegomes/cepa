@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`cepa plan waiting --json` returns queues, items, runs and totals as valid
+"""`cepa queue waiting --json` returns queues, items, runs and totals as valid
 JSON (spec docs/spec/decisoes-de-todas-as-filas.md, CS-5). Read only.
 
 Against the real CLI, in a temporary git repo:
@@ -10,10 +10,10 @@ Against the real CLI, in a temporary git repo:
     `filas[0].itens[0].id == "a1"`, `total_itens == 2` and the key `runs`
   - the top-level keys are exactly root, filas, total_itens, runs, and the
     second queue is `b` with b1
-  - `runs` is a list even when `cepa-until pending` has nothing to say
+  - `runs` is a list even when `cepa-run pending` has nothing to say
   - stdout stays parseable when a queue is unreadable: the warning goes to
     stderr, never into the JSON
-  - the launcher `cepa plan waiting --json` prints the same JSON
+  - the launcher `cepa queue waiting --json` prints the same JSON
 
 Before CS-1 (commit 42bc4df^) the subcommand did not exist and this test
 fails on the exit code.
@@ -33,7 +33,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 CEPA = REPO / "common" / "bin" / "cepa"
 FAILURES = []
 
@@ -45,7 +45,7 @@ def check(name, cond, detail=""):
 
 
 def run(repo, *args, launcher=False):
-    cmd = ([str(CEPA), "plan"] if launcher
+    cmd = ([str(CEPA), "queue"] if launcher
            else [sys.executable, str(CEPA_PLAN)]) + list(args)
     return subprocess.run(cmd, capture_output=True, text=True, cwd=str(repo))
 
@@ -116,7 +116,7 @@ def red_test():
               first.get("motivo") == "item travado"
               and first.get("pergunta") == "Rodo X à mão?", p.stdout)
         lp = run(root, "waiting", "--json", launcher=True)
-        check("o lançador `cepa plan waiting --json` imprime o mesmo JSON",
+        check("o lançador `cepa queue waiting --json` imprime o mesmo JSON",
               lp.returncode == 0 and parse(lp.stdout)[0] == parse(p.stdout)[0],
               lp.stdout + lp.stderr)
 

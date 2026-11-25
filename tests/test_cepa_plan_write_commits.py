@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Every `cepa-plan` write commits the queue or warns that a commit is missing, and
+"""Every `cepa-queue` write commits the queue or warns that a commit is missing, and
 `responde` refuses text that does not answer the route.
 
-Origin (BACKLOG.md § "`cepa-plan responde` leaves `plan.yaml` dirty and accepts
+Origin (BACKLOG.md § "`cepa-queue responde` leaves `plan.yaml` dirty and accepts
 any sentence as an answer", fb-20261015-1 and fb-20261014-4):
 
   - on 2026-10-15 the owner ran `responde` three times and each time plan.yaml
@@ -17,7 +17,7 @@ Behavior, against the real CLI in a real git repo:
   - `responde` and `add` commit only plan.yaml in the same step (`git status`
     clean afterwards); `--no-commit` writes and says a commit is missing;
   - `start` and `finish` warn that a commit is missing (and which command); `--commit`
-    commits; inside a run (`CEPA_UNTIL_RUN=1`) the warning says the clone
+    commits; inside a run (`CEPA_RUN=1`) the warning says the clone
     stays that way on purpose;
   - a commit with other changes in the tree warns that it took only the queue;
   - `responde "não entendi"`, `"?"`, or a question: exit 6, nothing written, the
@@ -60,9 +60,10 @@ def last_commit(root):
 
 ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
            GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+ENV.pop("CEPA_RUN", None)
+
+
 ENV.pop("CEPA_UNTIL_RUN", None)
-
-
 def plan(root, *args, env=None):
     return subprocess.run([sys.executable, str(CEPA_PLAN)] + list(args)
                           + ["--repo", str(root)],
@@ -150,7 +151,7 @@ def test_answer_refuses_text_that_does_not_answer_the_route():
 
 def test_clarification_refusal_points_to_the_question_mark_key():
     """CS-11: a text that asks for clarification is refused (exit 6, nothing
-    written) with a hint to the `?` key of `cepa-until decide <queue>`, not with
+    written) with a hint to the `?` key of `cepa-run decide <queue>`, not with
     "answer this question". The other refusal reasons keep the old hint."""
     with tempfile.TemporaryDirectory() as tmp:
         stuck = item("a1", status="blocked")
@@ -160,8 +161,8 @@ def test_clarification_refusal_points_to_the_question_mark_key():
         before = queue_file.read_text()
         rc, out = answer(root, "a1", "não entendi a pergunta")
         check("recusa o pedido de esclarecimento com exit 6", rc == 6, (rc, out))
-        check("...citando a tecla ? do cepa-until decide da fila",
-              "`?`" in out and "cepa-until decide fila" in out, out)
+        check("...citando a tecla ? do cepa-run decide da fila",
+              "`?`" in out and "cepa-run decide fila" in out, out)
         check("...sem mandar responder a pergunta",
               "responda a essa pergunta" not in out, out)
         check("...ainda oferecendo o --force", "--force" in out, out)
@@ -170,7 +171,7 @@ def test_clarification_refusal_points_to_the_question_mark_key():
         rc, out = answer(root, "a1", "e agora?")
         check("outra recusa (pergunta) segue com exit 6", rc == 6, (rc, out))
         check("...e com a dica de sempre",
-              "responda a essa pergunta" in out and "cepa-until decide" not in out, out)
+              "responda a essa pergunta" in out and "cepa-run decide" not in out, out)
 
 
 def test_answer_force_writes_the_refused_text():
@@ -274,7 +275,7 @@ def test_start_and_finish_warn_to_commit_and_commit_commits():
         check("...commita a fila", last_commit(root) == "queue fila: a1 -> blocked",
               last_commit(root))
         check("...e deixa a árvore limpa", status(root) == "", status(root))
-        env = dict(ENV, CEPA_UNTIL_RUN="1")
+        env = dict(ENV, CEPA_RUN="1")
         p = plan(root, "start", "fila", "a2", env=env)
         check("dentro de um run, start diz que o clone fica assim de propósito",
               "de propósito" in p.stdout and "Falta commitar" not in p.stdout,
@@ -334,7 +335,7 @@ def old_answer(root, ident, plain_text, *extra):
 
 
 def test_old_names_still_work_and_the_commit_says_queue():
-    """`cepa-plan responde --resposta` (and --forca/--mantem/--autor) does the same
+    """`cepa-queue responde --resposta` (and --forca/--mantem/--autor) does the same
     as `answer --answer` (--force/--keep/--author); the queue commit starts with
     `queue <name>:`."""
     results = []

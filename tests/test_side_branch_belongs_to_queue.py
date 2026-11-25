@@ -5,7 +5,7 @@ every queue that has an item with the same id (fb-20261120-2, fb-20261120-3).
 Queues reuse ids (`CS-1`, `CS-6`). On 2026-11-20 the run `2026-11-20-1609` of
 the queue `pyyaml` deleted at its start three side branches of OTHER queues,
 because `clean_side_branches` only asked "is CS-6 done in pyyaml?". And
-`cepa-plan status` of a queue just born listed the red branches of two other
+`cepa-queue status` of a queue just born listed the red branches of two other
 queues as "código fora do main". The run in the branch name is the link: each
 run writes `.claude/queues/<queue>/until/<run>.jsonl`.
 
@@ -15,7 +15,7 @@ run writes `.claude/queues/<queue>/until/<run>.jsonl`.
      name the branch; a branch that is not a side branch -> None.
   2. `clean_side_branches` of queue A deletes A's side branch of a `done` item
      and keeps B's side branch whose id is also `done` in A.
-  3. `cepa-plan status` of queue A does not list B's side branch with the same
+  3. `cepa-queue status` of queue A does not list B's side branch with the same
      id as A's code outside main, and still lists A's own.
 
 Against the real code, in a temporary git repo. Run with
@@ -32,8 +32,8 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
-CEPA_UNTIL = REPO / "common" / "bin" / "cepa-until"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
+CEPA_UNTIL = REPO / "common" / "bin" / "cepa-run"
 sys.path.insert(0, str(REPO / "common" / "hooks"))
 import _queuepath as qp  # noqa: E402
 
@@ -175,7 +175,7 @@ def clean_checks():
 
 
 def status_checks():
-    print("cepa-plan status: another queue's side branch is not this item's code")
+    print("cepa-queue status: another queue's side branch is not this item's code")
     with tempfile.TemporaryDirectory() as tmp:
         root = new_repo(tmp)
         write_queue(root, "until-arvore-limpa", [

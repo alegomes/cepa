@@ -29,11 +29,11 @@ herdar.
 ## Como funciona
 
 1. Lê o artefato e **infere a área** da decisão, confirmando com você antes do
-   fan-out ("parece decisão de api-contrato — painel: 5 default +
+   fan-out ("parece decisão de api-contract — painel: 5 default +
    consumidor-externo + versionamento. Ok?"). `--area=<x>` pula a confirmação.
 2. Monta o painel: **5 lentes fixas sempre** (contrarian, fundamentalista,
    expansionista, outsider, executor) + **até 2 especialistas** da área. Teto: 7.
-   `--lentes=a,b,c` monta o painel à mão. Registry completo em
+   `--lenses=a,b,c` monta o painel à mão. Registry completo em
    `common/advisors/lenses.md`.
 3. Fan-out **paralelo e isolado** via Workflow tool — cada lente devolve JSON
    estruturado (achados com severidade e localização, veredito, premissas que
@@ -53,14 +53,14 @@ contra uma decisão de contrato errada, caro contra um rename. Daí o piso de us
 
 ```
 /common:advisors docs/design/ui-proof-gate.md
-# → "parece decisão de arquitetura — painel: 5 default + operador-sre +
+# → "parece decisão de architecture — painel: 5 default + operador-sre +
 #    custo-de-manutencao (7 lentes). Ok?"
 
-/common:advisors specs/openapi.yaml --area=api-contrato
+/common:advisors specs/openapi.yaml --area=api-contract
 # pula a confirmação; painel: 5 default + consumidor-externo +
 # versionamento-breaking-change
 
-/common:advisors docs/adr/007-cache.md --lentes=contrarian,executor,dba-volume-indices
+/common:advisors docs/adr/007-cache.md --lenses=contrarian,executor,dba-volume-indices
 # painel à mão, 3 lentes
 ```
 

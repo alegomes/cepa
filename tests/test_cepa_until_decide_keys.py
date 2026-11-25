@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CS-2 of docs/spec/teclas-em-ingles.md: the route panel (`cepa-until decide`)
+"""CS-2 of docs/spec/teclas-em-ingles.md: the route panel (`cepa-run decide`)
 shows and accepts `y` (yes) and `w` (I write the answer). The chips read
 `[y] yes (recommended)` and `[w] I write the answer`, the legend has one line
 starting with `y = ` and another with `w = `, and the old `[s]`, `[t]`, `s = `,
@@ -27,7 +27,7 @@ ANCHOR = "[Enter] later"
 
 def _decide(inputs, with_analysis=True):
     """Builds a queue whose a1 stopped with an owner question, optionally writes the
-    run's analysis (`recomendo: sim`), runs the real `cepa-until decide` in a pty
+    run's analysis (`recomendo: sim`), runs the real `cepa-run decide` in a pty
     with `inputs`. Returns (rc, screen without ANSI, item a1)."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1"), item("a2")])

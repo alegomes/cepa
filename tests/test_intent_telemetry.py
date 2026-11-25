@@ -104,6 +104,7 @@ def new_repo(name):
 
 def cli(repo, *args, sid="sess-1234-abcd"):
     env = {**os.environ, "CEPA_TELEMETRY_DIR": str(tel3), "CLAUDE_CODE_SESSION_ID": sid}
+    env.pop("CEPA_RUN", None)
     env.pop("CEPA_UNTIL_RUN", None)
     return subprocess.run([sys.executable, str(BIN), *args], cwd=repo, env=env,
                           capture_output=True, text=True)
@@ -142,18 +143,19 @@ check("intenção de outra sessão: não emite", len(finals()) == 2 and r.return
 r = cli(repo, "close", "--step", "1")
 check("close recusa opções de escrita", r.returncode == 2, str(r.returncode))
 
-# old names: `encerrar`, `gravar --proposito ...`, `--passo` and the `cepa-intencao` shortcut
+# old names: `encerrar`, `gravar --proposito ...`, and `--passo`
 # emit the same events
 repo_a = new_repo("r-antigo")
-BIN_OLD = REPO / "common" / "bin" / "cepa-intencao"
+BIN_OLD = REPO / "common" / "bin" / "cepa-intent"
 env_a = {**os.environ, "CEPA_TELEMETRY_DIR": str(tel3), "CLAUDE_CODE_SESSION_ID": "sess-1234-abcd"}
+env_a.pop("CEPA_RUN", None)
 env_a.pop("CEPA_UNTIL_RUN", None)
 def cli_old(repo, *args):
     return subprocess.run([sys.executable, str(BIN_OLD), *args], cwd=repo, env=env_a,
                           capture_output=True, text=True)
 before_n = len(finals())
 r = cli_old(repo_a, "gravar", "--proposito", "p", "--para-quando", "q", "--plano", "a", "b")
-check("antigo: `cepa-intencao gravar --proposito ...` grava", r.returncode == 0, r.stderr)
+check("antigo: `cepa-intent gravar --proposito ...` grava", r.returncode == 0, r.stderr)
 cli_old(repo_a, "--passo", "2")
 r = cli_old(repo_a, "encerrar")
 check("antigo: `encerrar` emite intent.finished_at_last_step no último passo",

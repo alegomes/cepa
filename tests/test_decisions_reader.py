@@ -2,7 +2,7 @@
 """CS-2 of docs/spec/tres-portas-spec-epic.md (item 6 of O2', base of item 3):
 the reader of the "Decided without asking" section lives in a shared module,
 `common/hooks/_decisions.py`, which the spec-readiness-gate hook imports and
-`cepa-plan decisions` (item 3) will reuse. It reads the new section name and
+`cepa-queue decisions` (item 3) will reuse. It reads the new section name and
 the old one ("Decidido sem perguntar") and returns the lines with and without
 a verdict (`· mantida em`, `· vetada em`, `· refinada em`).
 

@@ -5,7 +5,7 @@ an owner action.
 
 Against the real CLI, in a real git repo, in a PTY (`answer` only runs on a TTY):
   - red test: declaration with `precisa_do_dono: true`; after `answer --answer
-    "sim: ..."` the new item has `human_pending` filled and `cepa-plan queue
+    "sim: ..."` the new item has `human_pending` filled and `cepa-queue queue
     --json` lists it among the deferred with reason `human_pending`;
   - the route is the one the spec decided without asking: `route_kind:
     owner-task`, the declared title as the pending text, a closed question, and

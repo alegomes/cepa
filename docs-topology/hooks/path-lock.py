@@ -62,10 +62,16 @@ def detect_agent(payload: dict) -> str:
     return "orchestrator"
 
 
+def _env(new, old, default=""):
+    """The new `CEPA_` name of a variable; the name it had before is still read.
+    The new one wins; an empty value counts as unset."""
+    return os.environ.get(new) or os.environ.get(old) or default
+
+
 def debug_log(payload: dict, resolved_agent: str) -> None:
-    if os.environ.get("DOCS_PATHLOCK_DEBUG") != "1":
+    if _env("CEPA_DOCS_PATHLOCK_DEBUG", "DOCS_PATHLOCK_DEBUG") != "1":
         return
-    log_path = os.environ.get("DOCS_PATHLOCK_DEBUG_LOG", "/tmp/docs-pathlock-debug.log")
+    log_path = _env("CEPA_DOCS_PATHLOCK_DEBUG_LOG", "DOCS_PATHLOCK_DEBUG_LOG", "/tmp/docs-pathlock-debug.log")
     identity_keys = ("agent_type", "agent_name", "subagent_name", "agent", "subagent_type")
     snapshot = {
         "top_level_keys": sorted(payload.keys()),

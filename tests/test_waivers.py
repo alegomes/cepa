@@ -21,11 +21,12 @@ TODAY = date(2026, 8, 3)
 
 @pytest.fixture(autouse=True)
 def outside_autonomous_run(monkeypatch):
-    """The suite may run inside a cepa-until window (`CEPA_UNTIL_RUN`
+    """The suite may run inside a cepa-until window (`CEPA_RUN`
     set): the tests that expect a real waiver need a clean environment.
     """
+    monkeypatch.delenv("CEPA_RUN", raising=False)
     monkeypatch.delenv("CEPA_UNTIL_RUN", raising=False)
-    monkeypatch.delenv("CLAUDE_AUTONOMOUS_RUN_ID", raising=False)
+    monkeypatch.delenv("CEPA_AUTONOMOUS_RUN_ID", raising=False)
 
 
 def _write(repo, **kw):
@@ -119,11 +120,11 @@ def test_what_was_recorded_is_human_readable(tmp_path):
 
 # ── autonomous run: a waiver is a proposal, only the owner converts (fb-20261014-3) ──
 
-RUN_VARS = ["CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID"]
+RUN_VARS = ["CEPA_RUN", "CEPA_AUTONOMOUS_RUN_ID"]
 
 
 def _in_run(monkeypatch, var):
-    monkeypatch.setenv(var, "1" if var == "CEPA_UNTIL_RUN" else "run-42")
+    monkeypatch.setenv(var, "1" if var == "CEPA_RUN" else "run-42")
 
 
 def _outside_run(monkeypatch):
@@ -149,7 +150,7 @@ def test_in_autonomous_run_recording_becomes_proposal(tmp_path, monkeypatch, var
 
 
 def test_run_id_appears_in_proposto_por(tmp_path, monkeypatch):
-    _in_run(monkeypatch, "CLAUDE_AUTONOMOUS_RUN_ID")
+    _in_run(monkeypatch, "CEPA_AUTONOMOUS_RUN_ID")
     d = yaml.safe_load(open(_write(str(tmp_path))))
     assert "run-42" in d["proposto_por"]
 
@@ -168,7 +169,7 @@ def test_convert_and_refuse_are_forbidden_in_the_run(tmp_path, monkeypatch, var)
 
 def test_owner_converts_the_proposal_into_a_valid_waiver(tmp_path, monkeypatch):
     repo = str(tmp_path)
-    _in_run(monkeypatch, "CEPA_UNTIL_RUN")
+    _in_run(monkeypatch, "CEPA_RUN")
     _write(repo, queue="fila", item="a1")
     _outside_run(monkeypatch)
     waivers.convert(repo, "teste-cego", "PlugSignAdapter", "alegomes",
@@ -195,7 +196,7 @@ def test_convert_without_proposal_or_over_real_waiver(tmp_path):
 
 def test_refuse_leaves_the_proposal_without_effect(tmp_path, monkeypatch):
     repo = str(tmp_path)
-    _in_run(monkeypatch, "CEPA_UNTIL_RUN")
+    _in_run(monkeypatch, "CEPA_RUN")
     path = _write(repo)
     _outside_run(monkeypatch)
     waivers.decline(repo, "teste-cego", "PlugSignAdapter", "não: prova de verdade", today=TODAY)
@@ -240,11 +241,11 @@ def test_propose_overwrites_old_proposal_and_requires_fields(tmp_path):
 
 def test_propose_does_not_reopen_what_the_owner_refused(tmp_path, monkeypatch):
     repo = str(tmp_path)
-    _in_run(monkeypatch, "CEPA_UNTIL_RUN")
+    _in_run(monkeypatch, "CEPA_RUN")
     path = _write(repo)
     _outside_run(monkeypatch)
     waivers.decline(repo, "teste-cego", "PlugSignAdapter", "não: prova de verdade", today=TODAY)
-    _in_run(monkeypatch, "CEPA_UNTIL_RUN")
+    _in_run(monkeypatch, "CEPA_RUN")
     assert _write(repo, rationale="outra tentativa") == path
     d = yaml.safe_load(open(path))
     assert d["status"] == "recusada"

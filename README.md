@@ -53,7 +53,7 @@ does the work.
 |---|---|---|---|
 | **Epic** | A package of work worth a demonstration. Lists the invariants that must never regress and a ladder of cycles. Written by `/common:epic`. | `docs/epics/<name>.md` | Months |
 | **cycle** | One rung of the ladder. Closes when its demonstration script runs on screen and in the backend. `/common:queue --from-epic --cycle N` turns it into a queue. | A section of the Epic | Weeks, many sessions |
-| **queue** | The ordered list of items for one slice of work, with the reason each item sits where it sits. Written only by `/common:queue`. Read by `/common:next`, `/common:queue-status`, `/common:drain-plan` and `cepa-until`. | `.claude/queues/<name>/queue.yaml` | Until its last item closes |
+| **queue** | The ordered list of items for one slice of work, with the reason each item sits where it sits. Written only by `/common:queue`. Read by `/common:next`, `/common:queue-status`, `/common:queue-run` and `cepa-until`. | `.claude/queues/<name>/queue.yaml` | Until its last item closes |
 | **item** | One line of a queue: `id`, `title`, `why`, `status`, `blocked_by`, `human_pending`, `evidence`. In a repo with Jira its mirror on the board is a **card**. The board keeps the status. The queue keeps the order and the why. | Inside the queue | Hours to days |
 
 The session has two attributes:
@@ -70,9 +70,8 @@ Demands wait in **inboxes** before they get an order: `BACKLOG.md`, the feedback
 (`cepa-feedback`), `.claude/deviations.md`, GitHub issues and, with Jira, the backlog column.
 Nothing runs from an inbox. `/common:queue` turns what is there into items.
 
-The old names are kept as deprecated aliases during the transition: `/common:plan` runs
-`/common:queue`, `/common:fila` runs `/common:queue-status`, `/common:modos` runs
-`/common:modes`, `cepa-intencao` and `cepa-modos` run `cepa-intent` and `cepa-modes`. The
+The old slash-command names are gone (the commands are now `/common:queue`, `/common:queue-status`,
+`/common:modes`); the CLI aliases `cepa intencao` and `cepa modos` are gone too: they are refused with a line naming `cepa intent` and `cepa modes`. The
 `parallel-waves` queues of `maestro` are frozen since 2026-10-08 and archived in
 `.claude/programs/archive/`.
 
@@ -397,7 +396,7 @@ only one allowed to touch that system.
 
 The tracker and the git host are adapters. The process is the product. Without `board-flow`
 the same build, acceptance and proof steps exist, driven from a queue file instead of a
-board (`/common:queue`, `/common:drain-plan`).
+board (`/common:queue`, `/common:queue-run`).
 
 How the pieces sit together:
 

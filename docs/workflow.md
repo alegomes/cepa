@@ -13,7 +13,7 @@ flowchart TB
     triage["<b>/board-flow:triage</b><br/>cards already in Jira"]
     queue["<b>/common:queue</b><br/>writes the queue"]
     next["<b>/common:next</b><br/>names the next step"]
-    exec["<b>/common:drain-plan</b> with you in the session<br/>or <b>cepa-until</b> with nobody watching"]
+    exec["<b>/common:queue-run</b> with you in the session<br/>or <b>cepa-until</b> with nobody watching"]
     answer["You answer what is left pending"]
     check["You check the result"]
     more{"Does the Epic have another cycle?"}
@@ -69,7 +69,7 @@ Before generating the queue from an Epic or a spec, settle the decisions the age
 
 | You want to | Command | How it works |
 |---|---|---|
-| Stay with it | `/common:drain-plan <queue>` | Runs a few items in a row in the open session (`--max`, 3 by default) |
+| Stay with it | `/common:queue-run <queue>` | Runs a few items in a row in the open session (`--max`, 3 by default) |
 | Leave it running alone | `cepa-until <queue> --for 8h` or `--until 07:00`, in the terminal | Opens a new session for each item until the time runs out, and proves each change |
 | Do one specific item | `/board-flow:execute <CARD>` | Runs one Jira card from start to finish |
 
@@ -86,7 +86,7 @@ If the repo uses Jira and work is left in the Review column, `/board-flow:prove 
 
 ## Step 5: check and move on
 
-**When the queue came from an Epic, run the cycle's script yourself.** Be careful: `cepa-plan epics`, which shows the state of the Epic, marks a cycle as closed (`fechado`) when every item of its queue has finished. It does not know whether anyone watched the demonstration. That check is yours.
+**When the queue came from an Epic, run the cycle's script yourself.** Be careful: `cepa-queue epics`, which shows the state of the Epic, marks a cycle as closed (`fechado`) when every item of its queue has finished. It does not know whether anyone watched the demonstration. That check is yours.
 
 After that:
 

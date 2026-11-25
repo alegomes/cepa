@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""The six stop/deferral reasons of `cepa-plan queue --json`, in English.
+"""The six stop/deferral reasons of `cepa-queue queue --json`, in English.
 
 Same alias method as f26a765/84fde4d: the NEW name is what gets emitted
 (`end-of-queue`, `cap`, `blocked`, `reserved`, `depends-on-deferred`,
 `blocked-before`); the old Portuguese spelling stays available in `reason_pt`
 and readers accept both. What these cases prove:
 
-  1. `cepa-plan queue --json` emits each new value, and `reason_pt` carries the
+  1. `cepa-queue queue --json` emits each new value, and `reason_pt` carries the
      old one, for all 6 situations;
   2. `cepa-until` (the `decide` path, which consults OWNER_REASON and
      NO_OWNER_REASON) behaves the same for the old and the new spelling of each
@@ -30,8 +30,8 @@ import test_common_drain_plan as T  # noqa: E402
 isolate()
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_UNTIL = REPO / "common" / "bin" / "cepa-until"
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_UNTIL = REPO / "common" / "bin" / "cepa-run"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 
 PAIRS = {
     "end-of-queue": "fim-da-fila",
@@ -92,13 +92,13 @@ def test_cepa_plan_emits_english_and_keeps_the_old_in_reason_pt(base):
 def test_cepa_plan_alias_helpers():
     plan = load(CEPA_PLAN, "cepa_plan_alias")
     for new, old in PAIRS.items():
-        check(f"cepa-plan: reason_alias({old!r}) == reason_alias({new!r})",
+        check(f"cepa-queue: reason_alias({old!r}) == reason_alias({new!r})",
               plan.reason_alias(old) == plan.reason_alias(new) == new)
-        check(f"cepa-plan: reason_pt({new!r}) == {old!r}",
+        check(f"cepa-queue: reason_pt({new!r}) == {old!r}",
               plan.reason_pt(new) == old == plan.reason_pt(old))
-    check("cepa-plan: valor desconhecido passa como está",
+    check("cepa-queue: valor desconhecido passa como está",
           plan.reason_alias("human_pending") == "human_pending")
-    check("cepa-plan e cepa-until têm o mesmo mapa",
+    check("cepa-queue e cepa-until têm o mesmo mapa",
           plan.REASON_ALIASES == load(CEPA_UNTIL, "cepa_until_alias").REASON_ALIASES)
 
 

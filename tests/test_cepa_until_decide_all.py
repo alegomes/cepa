@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-"""`cepa until decide --all` (spec `decisoes-de-todas-as-filas`).
+"""`cepa run decide --all` (spec `decisoes-de-todas-as-filas`).
 
-CS-7: on a terminal, `cepa until decide --all` asks the owner questions of
-every queue in ONE panel, a section per queue in the order of `cepa plan
+CS-7: on a terminal, `cepa run decide --all` asks the owner questions of
+every queue in ONE panel, a section per queue in the order of `cepa queue
 ready`, numbered across the whole list; each answer is recorded in the queue
 of its own item, and one commit at the end holds every queue file an answer
 changed. Before it, the command exited 2 refusing the queue `'--all'`, and the
-owner had to run `cepa until decide <fila>` once per queue, guessing which
+owner had to run `cepa run decide <fila>` once per queue, guessing which
 queues held a question.
 
-CS-8: `cepa until decide` with no argument does the same as `--all`.
+CS-8: `cepa run decide` with no argument does the same as `--all`.
 
 CS-9: in that panel a route already answered "no" is not asked (one line per
 queue counts them), and a queue with its own live run is left out with one line
 naming the queue and its run.
 
-CS-10: off a terminal, `cepa until decide --all` prints the pending questions of
+CS-10: off a terminal, `cepa run decide --all` prints the pending questions of
 every queue as text, asks nothing and commits nothing.
 
-CS-11: with no open route in any queue, `cepa until decide --all` says "nada
+CS-11: with no open route in any queue, `cepa run decide --all` says "nada
 espera você" in one line and exits 0 without committing; before, it printed
 nothing at all, and the owner could not tell "nothing waits" from "it broke".
 
-Against the real CLI (`cepa-until decide --all`) in a pseudo-terminal, in a
+Against the real CLI (`cepa-run decide --all`) in a pseudo-terminal, in a
 temporary git repo with two queues, `a` and `b`, each holding one item with an
 open owner route.
 
@@ -62,7 +62,7 @@ def _owner_item(ident, route, question, status="pending"):
 
 def _decide_all_on_tty(tmp, root, inputs, args=("--all",)):
     env = al._tty_env(tmp)
-    env["CEPA_UNTIL_LEITOR"] = "off"
+    env["CEPA_RUN_READER"] = "off"
     rc, out = dec.on_tty(
         [sys.executable, str(CEPA_UNTIL), "decide", *args, "--repo", str(root)],
         str(root), inputs=inputs, env=env, timeout=90)
@@ -128,9 +128,9 @@ def test_cs7_decide_all_asks_every_queue_in_one_panel_and_records_each_answer():
 
 
 def test_cs7_decide_all_asks_the_leftover_task_of_a_delivered_item():
-    """`cepa until decide <fila>` asks the task a `done` item left for the owner;
+    """`cepa run decide <fila>` asks the task a `done` item left for the owner;
     the panel of every queue asks it too, or the owner would still need the
-    per-queue command for the tasks `cepa plan waiting` lists as theirs."""
+    per-queue command for the tasks `cepa queue waiting` lists as theirs."""
     with tempfile.TemporaryDirectory() as tmp:
         root, paths = al._repo(tmp, {
             "a": [_owner_item("a1", "rotacionar o segredo",
@@ -242,8 +242,8 @@ def _pty_session(cmd, cwd, env, steps, timeout=90):
 
 def _decide_all_env(tmp, wait="1"):
     env = al._tty_env(tmp)
-    env["CEPA_UNTIL_LEITOR"] = "off"
-    env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+    env["CEPA_RUN_READER"] = "off"
+    env["CEPA_RUN_ANSWER_WAIT"] = wait
     return env
 
 
@@ -283,7 +283,7 @@ def test_cs7_ctrl_c_keeps_what_was_answered_and_says_where_to_answer_the_rest():
         check("...a linha diz que nada mais é perguntado",
               "questions interrupted; nothing else is asked." in out, out[-1200:])
         check("...nomeia o decide da fila que sobrou",
-              "To answer later: cepa-until decide b" in out, out[-1200:])
+              "To answer later: cepa-run decide b" in out, out[-1200:])
         check("...sem falar de run", "the run goes on" not in out, out[-1200:])
         check("...sem repetir 'to answer later'",
               out.lower().count("to answer later") == 1, out[-1200:])
@@ -311,14 +311,14 @@ def test_cs7_q_stops_the_panel_and_says_nothing_else_is_asked():
         check("...a linha diz que nada mais é perguntado",
               "questions stopped with q; nothing else is asked." in out, out[-1200:])
         check("...nomeia o decide das duas filas",
-              "cepa-until decide a" in out and "cepa-until decide b" in out,
+              "cepa-run decide a" in out and "cepa-run decide b" in out,
               out[-1200:])
         check("...sem falar de run", "the run goes on" not in out, out[-1200:])
         check("...e não pergunta a segunda", "Liberei b?" not in out, out[-1200:])
 
 
 def test_cs7_decide_all_commits_the_waiver_the_answer_converted():
-    """A "yes" to a proposed waiver turns it into a waiver (`cepa plan answer`);
+    """A "yes" to a proposed waiver turns it into a waiver (`cepa queue answer`);
     the one commit of `decide --all` carries that file with the queue, as the
     commit of `decide <fila>` does."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -340,7 +340,7 @@ def test_cs7_decide_all_commits_the_waiver_the_answer_converted():
 
 
 def test_cs8_bare_decide_on_a_terminal_is_the_all_panel():
-    """CS-8: `cepa until decide` with no argument does what `--all` does. The
+    """CS-8: `cepa run decide` with no argument does what `--all` does. The
     CS-7 repo, on a terminal: one panel with sections `a` and `b` numbered 1
     and 2, each answer in its own queue file, one commit touching both. Before
     CS-8 the bare call exited 2 for the missing argument."""
@@ -406,7 +406,7 @@ def test_cs8_bare_decide_off_a_terminal_is_the_same_as_all():
 
 
 def test_cs7_launch_panel_of_all_still_leaves_out_the_leftover_tasks():
-    """The launch panel of `cepa until --all` shares the function: a task left on a
+    """The launch panel of `cepa run --all` shares the function: a task left on a
     delivered item holds no run back, so it is still not asked there (only
     `decide --all` asks it), and a cut panel still says the run goes on."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -426,7 +426,7 @@ def test_cs7_launch_panel_of_all_still_leaves_out_the_leftover_tasks():
 def test_cs9_decide_all_skips_the_no_answers_and_the_queue_with_a_live_run():
     """CS-9, the spec's own script: `a1` already answered "no" on 2026-11-18,
     queue `c` with a live run of its own and `b1` with an open route. The panel
-    asks only `b1`; one line counts the "no" of `a` and names `cepa-until decide
+    asks only `b1`; one line counts the "no" of `a` and names `cepa-run decide
     a`; one line names queue `c` and its run, whose question is not asked."""
     with tempfile.TemporaryDirectory() as tmp:
         old = _owner_item("a1", "liberar a", "Liberei a?")
@@ -452,7 +452,7 @@ def test_cs9_decide_all_skips_the_no_answers_and_the_queue_with_a_live_run():
         no_line = [l for l in out.splitlines() if "already answered" in l]
         check("...uma linha conta a negada de a, com a data e o comando",
               len(no_line) == 1 and "queue `a`" in no_line[0]
-              and "18/11" in no_line[0] and "cepa-until decide a" in no_line[0],
+              and "18/11" in no_line[0] and "cepa-run decide a" in no_line[0],
               str(no_line) + out[-1500:])
         live_line = [l for l in out.splitlines() if "queue `c`" in l]
         check("...uma linha nomeia a fila c e o run dela",
@@ -461,7 +461,7 @@ def test_cs9_decide_all_skips_the_no_answers_and_the_queue_with_a_live_run():
               and f"pid {alive.pid}" in live_line[0],
               str(live_line) + out[-1500:])
         check("...e diz onde responder c depois que o run acabar",
-              live_line and "cepa-until decide c" in live_line[0], str(live_line))
+              live_line and "cepa-run decide c" in live_line[0], str(live_line))
         c1 = _item_of(paths["c"], "c1")
         b1 = _item_of(paths["b"], "b1")
         check("c1 segue esperando, sem resposta gravada",
@@ -552,7 +552,7 @@ def test_cs10_decide_all_off_a_terminal_lists_every_question_and_commits_nothing
         check("...não pergunta nada (sem o menu de resposta)",
               "[y] yes" not in out and "questions interrupted" not in out, out)
         check("...diz onde responder, num terminal",
-              "in a terminal: cepa-until decide --all" in out, out)
+              "in a terminal: cepa-run decide --all" in out, out)
         head = al._git(root, "rev-parse", "HEAD").strip()
         check("...e o git log não ganha commit", head == head_before, head)
         check("...e as filas ficam como estavam",
@@ -602,7 +602,7 @@ def test_cs10_stdin_not_a_tty_lists_even_when_stdout_is_a_terminal():
             "b": [_owner_item("b1", "liberar b", "Liberei a fila b?")]})
         head_before = al._git(root, "rev-parse", "HEAD").strip()
         env = al._tty_env(tmp)
-        env["CEPA_UNTIL_LEITOR"] = "off"
+        env["CEPA_RUN_READER"] = "off"
         master, slave = pty.openpty()
         proc = subprocess.Popen(
             [sys.executable, str(CEPA_UNTIL), "decide", "--all", "--repo",
@@ -738,7 +738,7 @@ def test_cs11_the_launch_panel_with_nothing_waiting_stays_silent():
 
 
 def test_cs11_an_unreadable_queue_is_not_nothing():
-    """`cepa plan ready` drops a queue it cannot read (a warning on its stderr
+    """`cepa queue ready` drops a queue it cannot read (a warning on its stderr
     only): that queue may hold a question, so `decide --all` does not say "nada
     espera você", and it names the queue on stderr. Exit 0, no commit."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -774,7 +774,7 @@ def _cepa_until_module():
 
 
 def test_cs11_a_listed_queue_that_cannot_be_queried_is_not_nothing():
-    """`cepa plan ready` lists queue `b`, but `cepa plan queue b` fails right
+    """`cepa queue ready` lists queue `b`, but `cepa queue queue b` fails right
     after (the file changed in between, a timeout): what `b` holds is unknown,
     so the panel of `decide --all` does not say "nada espera você"."""
     import contextlib
@@ -784,7 +784,7 @@ def test_cs11_a_listed_queue_that_cannot_be_queried_is_not_nothing():
         root, _ = _no_route_repo(tmp)
         real = mod.query_queue
         mod.query_queue = lambda name, repo, **kw: (
-            (None, "`cepa-plan queue` did not answer within 60s") if name == "b"
+            (None, "`cepa-queue queue` did not answer within 60s") if name == "b"
             else real(name, repo, **kw))
         out = io.StringIO()
         with contextlib.redirect_stdout(out):

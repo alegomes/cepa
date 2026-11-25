@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""`cepa-plan responde` converts the waiver PROPOSED by the agent into a waiver.
+"""`cepa-queue responde` converts the waiver PROPOSED by the agent into a waiver.
 
 Origin (BACKLOG.md § "Waiver recorded in the owner's name during an autonomous
 run", fb-20261014-3): in an autonomous run the agent records a proposal
 (`board-flow/bin/waivers.py` `propor`: `status: proposta`, `autor: null`, `fila`,
 `item`) and opens the human route on the item. Only the owner's `responde`, in a terminal,
-converts it. The `cepa-plan` conversion is an INLINE TWIN of `waivers.convert` /
+converts it. The `cepa-queue` conversion is an INLINE TWIN of `waivers.convert` /
 `waivers.decline` (it does not import the module); this test uses the real `waivers` to
 write the proposal and to read the result, so it proves the two agree
 on the file schema.
@@ -35,7 +35,7 @@ FAILURES = []
 
 ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
            GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
-for v in ("CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID"):
+for v in ("CEPA_RUN", "CEPA_UNTIL_RUN", "CEPA_AUTONOMOUS_RUN_ID", "CLAUDE_AUTONOMOUS_RUN_ID"):
     ENV.pop(v, None)
 
 REASON, SCOPE = "teste-cego", "PlugSignAdapter"
@@ -62,17 +62,17 @@ def builds(tmp, ident="a1", proposal_queue="fila", proposal_item=None):
     root = build_repo(tmp, [stuck])
     subprocess.run(["git", "-C", str(root), "config", "user.name", "Dona Fulana"], check=True)
     # The proposal is born as it is born in a run: with the run environment on.
-    before = os.environ.get("CEPA_UNTIL_RUN")
-    os.environ["CEPA_UNTIL_RUN"] = "1"
+    before = os.environ.get("CEPA_RUN")
+    os.environ["CEPA_RUN"] = "1"
     try:
         path = waivers.write(str(root), REASON, SCOPE, "o fornecedor não é alcançável",
                               "alegomes", "quando o adapter mudar",
                               queue=proposal_queue, item=proposal_item or ident)
     finally:
         if before is None:
-            os.environ.pop("CEPA_UNTIL_RUN")
+            os.environ.pop("CEPA_RUN")
         else:
-            os.environ["CEPA_UNTIL_RUN"] = before
+            os.environ["CEPA_RUN"] = before
     return root, Path(path)
 
 

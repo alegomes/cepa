@@ -31,7 +31,7 @@ Contracts guarded here:
     scripts; the silence of before let the line break the mode without a trace;
   - the message says what to do (record through off-mode-capture, or end the
     mode) and does NOT announce the kill switch: a cheap escape is the same escape again;
-  - CEPA_MODO=off turns the gate off.
+  - CEPA_MODE=off turns the gate off.
 
 No third-party deps — run with `python3 tests/test_write_mode_gate.py`.
 """
@@ -305,14 +305,14 @@ def test_message_says_what_to_do():
         check("mensagem oferece encerrar o modo",
               "end this mode" in p.stderr.lower(), p.stderr[:300])
         check("mensagem NÃO anuncia o kill switch",
-              "CEPA_MODO" not in p.stderr, p.stderr[:300])
+              "CEPA_MODE" not in p.stderr, p.stderr[:300])
 
 
 def test_kill_switch():
     with Repo() as r:
         r.mode("exploration")
-        p = r.edit("common/hooks/novo.py", env={"CEPA_MODO": "off"})
-        check("CEPA_MODO=off desliga o gate", p.returncode == 0, p.stderr[:160])
+        p = r.edit("common/hooks/novo.py", env={"CEPA_MODE": "off"})
+        check("CEPA_MODE=off desliga o gate", p.returncode == 0, p.stderr[:160])
 
 
 def test_table_comes_from_modes_py():

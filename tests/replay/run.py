@@ -25,13 +25,16 @@ DEFAULT_REPO = HERE.parent.parent
 HOOK_DIRS = ("common/hooks", "build-hex/hooks")
 WORKTREE = "worktree"
 # Env vars that change hook behavior and must not leak in from the caller.
-SCRUBBED_ENV = ("CEPA_BASHLOCK_ENFORCE", "HEX_PATHLOCK_DEBUG", "CEPA_UNTIL_RUN",
-                "CLAUDE_AUTONOMOUS_RUN_ID", "CEPA_SEED", "CCW_SEED",
+SCRUBBED_ENV = ("CEPA_BASHLOCK_ENFORCE", "CEPA_HEX_PATHLOCK_DEBUG", "CEPA_RUN",
+                "CEPA_AUTONOMOUS_RUN_ID", "CEPA_SEED",
+                # the names these had before CS-6 are still read, so they leak too
+                "HEX_PATHLOCK_DEBUG", "CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID", "CCW_SEED",
                 # path-lock.py:detect_agent falls back to these when the payload
                 # has no agent_type, so a caller running as a subagent would
                 # turn a "main session" call into a gated one.
                 "CLAUDE_AGENT_NAME", "CLAUDE_SUBAGENT_NAME",
-                "HEX_PATHLOCK_DEBUG_LOG", "CAPTURE_BUILD_DEBUG", "CEPA_TELEMETRY_DEBUG")
+                "CEPA_HEX_PATHLOCK_DEBUG_LOG", "CEPA_CAPTURE_BUILD_DEBUG", "CAPTURE_BUILD_DEBUG",
+                "CEPA_TELEMETRY_DEBUG")
 
 
 def scrubbed(environ):

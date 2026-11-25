@@ -4,7 +4,7 @@
 WHY THIS EXISTS
 ---------------
 On 2026-11-02 a session built WEGO-2416 and WEGO-2012, recorded the evidence,
-and left both items `pending`: `cepa-plan finish --status done` refuses an item
+and left both items `pending`: `cepa-queue finish --status done` refuses an item
 of a build-hex/build-team queue without the validation-lead verdict in
 `docs/validation/<id>.yaml`. The gate held. The session then ended its turn
 asking the owner "do I run the validator now?", and the two items waited for
@@ -13,7 +13,7 @@ is validated in the same session, without a question.
 
 MECHANISM
 ---------
-`cepa-plan finish` leaves a marker in
+`cepa-queue finish` leaves a marker in
 `~/.claude/cepa-validation-owed/<session-id>/<queue>__<item>.json` when it
 refuses `done` for lack of the verdict, or when it returns the item to
 `pending` without one. `done` or `blocked` on the item removes it. This hook
@@ -31,7 +31,7 @@ reads the folder of the session that is stopping:
     already continued by a Stop hook)  -> allow, so it never loops
 
 Fails open: unreadable input, no session id, unreadable marker -> allow.
-Turned off with CEPA_MODO=off.
+Turned off with CEPA_MODE=off.
 """
 
 import json
@@ -39,6 +39,9 @@ import os
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _cepaenv as E  # noqa: E402
 
 
 def owed_dir(session_id):
@@ -77,12 +80,12 @@ def message(entries):
         if verdict_exists(repo, i):
             lines.append(f"- {i} (fila {q}): o veredito já está em "
                          f"{repo}/docs/validation/{i}.yaml. Feche com "
-                         f"`cepa-plan finish {q} {i} --status done --evidence "
+                         f"`cepa-queue finish {q} {i} --status done --evidence "
                          f"\"...\" --repo {repo} --commit`.")
         else:
             lines.append(f"- {i} (fila {q}): delegue ao validation-lead, que "
                          f"grava {repo}/docs/validation/{i}.yaml, e feche com "
-                         f"`cepa-plan finish {q} {i} --status done`. Se o "
+                         f"`cepa-queue finish {q} {i} --status done`. Se o "
                          "validador não puder rodar, feche como `blocked` com "
                          "o motivo. Se o item não foi construído nesta "
                          f"sessão, apague {path}.")
@@ -90,7 +93,7 @@ def message(entries):
 
 
 def main():
-    if os.environ.get("CEPA_MODO", "").lower() == "off":
+    if E.get("CEPA_MODE", "").lower() == "off":
         return 0
     try:
         data = json.load(sys.stdin)

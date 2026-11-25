@@ -35,7 +35,7 @@ def command():
                   "revision", "final check"):
         check(f"nomeia o passo '{step}'", step in clean)
     check("argument-hint com as flags",
-          "argument-hint: <target> [--builders=3] [--angulos=a,b,c] [--slug=<slug>]" in f)
+          "argument-hint: <target> [--builders=3] [--angles=a,b,c] [--slug=<slug>]" in f)
     check("declara custo opt-in", "opt-in" in clean and "600k" in clean
           and "9 agents" in clean)
     check("recusa código provável / tarefa mecânica",

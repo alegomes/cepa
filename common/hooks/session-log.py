@@ -120,7 +120,7 @@ def escape_headers(prompt: str) -> str:
     Written verbatim, a prompt that carries such a line (a pasted log, the
     text of a slash command) splits itself in two when read back, and the
     second half passes for a separate prompt with the time written in it.
-    `cepa-plan answer --from-chat` reads this file to check what the owner
+    `cepa-queue answer --from-chat` reads this file to check what the owner
     typed, so that split would let text inside a slash command pass for a
     prose answer of the owner. `\\## x` renders the same in markdown and is no
     longer a header to any reader.

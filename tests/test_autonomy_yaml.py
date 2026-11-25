@@ -27,7 +27,7 @@ REPO = Path(__file__).resolve().parent.parent
 YAML_PATH = REPO / "common" / "autonomy.yaml"
 CLI = REPO / "common" / "bin" / "cepa-autonomy"
 SHIM = REPO / "board-flow" / "bin" / "cepa-autonomy"
-SHIM_PLAN = REPO / "board-flow" / "bin" / "cepa-plan"
+SHIM_PLAN = REPO / "board-flow" / "bin" / "cepa-queue"
 DECIDE = REPO / "board-flow" / "commands" / "decide.md"
 
 sys.path.insert(0, str(REPO / "common" / "hooks"))
@@ -256,9 +256,9 @@ def test_cli_classify_and_list():
 
 def test_board_flow_shortcut_resolves_the_cepa_autonomy_of_common(tmp):
     check(SHIM.read_bytes() == SHIM_PLAN.read_bytes(),
-          "board-flow/bin/cepa-autonomy é cópia byte a byte do shim cepa-plan (o alvo vem do nome)")
+          "board-flow/bin/cepa-autonomy é cópia byte a byte do shim cepa-queue (o alvo vem do nome)")
     check(os.access(SHIM, os.X_OK), "o atalho é executável")
-    # fake repo layout: the shim must find <repo>/common/bin/cepa-autonomy, not cepa-plan
+    # fake repo layout: the shim must find <repo>/common/bin/cepa-autonomy, not cepa-queue
     repo = Path(tmp) / "repo"
     (repo / "board-flow" / "bin").mkdir(parents=True)
     (repo / "common" / "bin").mkdir(parents=True)
@@ -266,7 +266,7 @@ def test_board_flow_shortcut_resolves_the_cepa_autonomy_of_common(tmp):
     shim.write_bytes(SHIM.read_bytes())
     fake = repo / "common" / "bin" / "cepa-autonomy"
     fake.write_text("import sys; print('fake-autonomy', *sys.argv[1:]); sys.exit(11)\n")
-    (repo / "common" / "bin" / "cepa-plan").write_text("import sys; print('ERRADO'); sys.exit(99)\n")
+    (repo / "common" / "bin" / "cepa-queue").write_text("import sys; print('ERRADO'); sys.exit(99)\n")
     r = subprocess.run([sys.executable, str(shim), "listar", "--json"], capture_output=True, text=True)
     check(r.returncode == 11 and "fake-autonomy listar --json" in r.stdout,
           f"o atalho executa o homônimo do common e repassa argv e exit (veio {r.returncode}: {r.stdout!r})")

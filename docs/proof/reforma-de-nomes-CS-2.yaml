@@ -1,0 +1,192 @@
+schema_version: 2
+card: reforma-de-nomes-CS-2
+verdict: proven
+reviewed_at: 2026-11-25T03:30:00-03:00
+base_commit: 26d2a0b
+head_commit: c54b90d
+issue_type: Feature
+repo_kind: harness            # repo Python + sh (cepa), não Quarkus. Superfície = CLI `cepa` e `cepa-run`
+review: 5
+sha_map: "após cherry-pick do supervisor: ba517aa = 202b45d, 8f86f7e = ee7df24, 7b9554a = 8cf6c66, 474e698 = 5a8801a; c54b90d é novo (uma linha de .claude-plugin/marketplace.json). Os SHAs antigos seguem na branch until/2026-11-24-2017-vermelho-CS-2."
+scope:
+  changed_classes:
+    - class: "common/bin/cepa (bloco que recusa `until` / `until-digest`, também via help, em qualquer caixa, exit 2)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # o teste roda o launcher real
+    - class: "common/bin/cepa (show_help, fallback sh: pula `until` e `until-digest`)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa (nearest_subcommand: pula `until` e `until-digest`)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/_clihelp.py (launcher_help: pula os dois atalhos)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-run (renomeado de cepa-until: despacho `/common:queue-run <fila> --max 1`, linha do dry-run --all, linha do dry-run por fila, subcomando `digest`, detecção de supervisor vivo pelos dois nomes, prog= dos subcomandos, argv de retomada do herdr `cepa run pending`)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until e common/bin/cepa-until-digest (atalhos de transição, execv para cepa-run)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-queue (_live_run reconhece cepa-run e cepa-until; caminho do cepa-run; mensagens `cepa-run decide`)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-prove, common/bin/cepa-doctor (caminho do script agora cepa-run; see_also `cepa run`)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "bin/install.sh (UNTIL_BIN aponta para cepa-run; texto)"
+      module: install
+      external_observable: false
+      substituted_by_double: null
+    - class: "common/commands/queue-run.md (entrada fina do comando novo; `interaction: routine`)"
+      module: command
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/_run_digest.py (read_jsonl: `if isinstance(e, dict): events.append(e)`, hoje 7b9554a; alcançado por `cepa run digest <arquivo>`)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # o L4 roda o launcher real; o teste do item roda o digest real
+    - class: ".claude-plugin/marketplace.json (descrição do plugin common cita `/queue-run`, c54b90d; exigida por tests/test_marketplace_common_description.py)"
+      module: marketplace
+      external_observable: true
+      substituted_by_double: null   # o teste lê o marketplace.json real e a pasta common/commands real
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/sh, sem pitest; perturbação manual em worktree detached descartável, removido ao fim de cada revisão."
+    perturbation:
+      status: pass
+      results:
+        - "(revisão 5) Linha nova .claude-plugin/marketplace.json (c54b90d, ` (and /queue-run, its new name)` após `/drain-plan`). Worktree detached /tmp/proof-cs2-e em c54b90d. GREEN de partida: `python3 tests/test_marketplace_common_description.py` -> 'tudo ok (35 comandos na descrição)', rc 0. Perturbada (remove ` (and /queue-run, its new name)` com sed; git diff --stat: 1 arquivo, 1 linha): RED, 'FAIL todo comando do common está na descrição  fora da descrição: /queue-run', '1 falha(s)', rc 1. Restaurada (`git checkout -- .claude-plugin/marketplace.json`, git status limpo): GREEN de novo, rc 0, 'tudo ok (35 comandos na descrição)'. Worktree removido."
+        - "(revisão 5) Equivalência conferida por mim: `git diff 5a8801a c54b90d --stat` -> só `.claude-plugin/marketplace.json | 2 +-` (1 insertion, 1 deletion); o diff é a inserção de ' (and /queue-run, its new name)' na descrição do common. Fonte idêntica a 5a8801a fora dessa linha; o que as revisões 1 a 4 provaram vale. Ressalva: a equivalência entre os SHAs novos (ba517aa, 8f86f7e, 7b9554a, 474e698) e os antigos (202b45d, ee7df24, 8cf6c66, 5a8801a) foi verificada só no ponto final (5a8801a vs c54b90d), não commit a commit; o conteúdo final é o que importa para a prova."
+        - "(revisão 5) Vizinhos do item em c54b90d, sem perturbação: `python3 -m pytest tests/test_cepa_run_rename_cli.py tests/test_queue_rename.py -q` -> '42 passed in 17.18s'; `python3 tests/test_cepa_until_digest.py` -> '✓ tudo verde' (o rc impresso na ocasião era o do `tail`, então a evidência é a linha final do próprio teste)."
+        - "(revisão 4) Linha nova common/bin/_run_digest.py:126 `if isinstance(e, dict):`. Worktree detached /tmp/proof-cs2-d em 8cf6c66. GREEN de partida: `python3 tests/test_cepa_until_digest.py` -> 50 verificações ok, '✓ tudo verde', rc 0. Perturbada (`if isinstance(e, dict):` -> `if True:`, anexa tudo): RED, '✗ 3 falha(s): linha JSON que nao e objeto: sem Traceback, ...mesmo exit code do registro sem essas linhas, ...mesmo stdout do registro sem essas linhas'. Restaurada (`git checkout -- common/bin/_run_digest.py`): GREEN de novo, rc 0, '✓ tudo verde'. Worktree removido."
+        - "(revisão 2, vale: fonte inalterada) GREEN de partida em ee7df24: tests/test_cepa_run_rename_cli.py 15 passed in 6.06s; tests/test_queue_rename.py 27 passed in 10.04s; tests/test_default_yes_inject.py 'all green'."
+        - "Pendência 1 (vizinho vermelho): `python3 tests/_run_with_timeout.py 540 python3 tests/test_cepa_until_dead_supervisor.py` em ee7df24 sem perturbação -> rc 0, 84 verificações ok, 0 FAIL, '✓ tudo verde' (em 202b45d eram 9 falhas). FECHADA."
+        - "S1 re-perturbada: common/bin/cepa-queue:5682 sem a alternativa `\"cepa-run\" in r.stdout` -> RED em tests/test_queue_rename.py::test_migrate_refuses_live_cepa_run (1 failed, 26 passed in 12.27s). FECHADA."
+        - "S2 re-perturbada: common/bin/cepa-run:932 `/common:queue-run <queue>` -> `/common:drain-plan <queue>` -> RED em tests/test_cepa_run_rename_cli.py::test_run_all_dry_run_item_line_cites_queue_run (1 failed, 14 passed in 5.89s). FECHADA."
+        - "P16 common/commands/queue-run.md `interaction: routine` -> `conversational`: RED em tests/test_default_yes_inject.py ('FAIL queue-run injeta a mesma politica que drain-plan rc=0 ctx=\"\"', 1 FAILURES). Restaurado; test_cepa_run_rename_cli.py voltou a 15 passed."
+        - "P17 common/bin/cepa-run:1341 argv do herdr `[\"cepa\", \"run\", \"pending\", ...]` -> `\"until\"`: RED em tests/test_cepa_until.py (arquivo inteiro, `timeout 540`, rc 1, 259 ok): 4 falhas, todas as checagens do argv de retomada. Nenhum teste fora de test_cepa_until.py cobre essa linha (grep). Linha de base do arquivo inteiro NÃO rodada sem perturbação; as 4 falhas estão restritas às checagens do argv, as outras 259 passaram."
+        - "P18 common/bin/cepa-run:7454 (linha de item do dry-run por fila) `/common:queue-run` -> `/common:drain-plan`: RED em tests/test_cepa_run_rename_cli.py (3 failed, 12 passed in 6.08s). Restaurado; 15 passed."
+        - "P10 common/bin/cepa-run:1021 `request = f\"/common:queue-run ...\"` -> `/common:drain-plan`: continua VERDE em tests/test_cepa_run_rename_cli.py (15 passed) porque o dry-run não monta `request`. RED em tests/test_cepa_until_cut_rule.py (2 falhas). Pego por vizinho, não pelo arquivo do item."
+        - "Amostradas de novo na revisão 2 (ainda RED): P1 common/bin/cepa:186 `until)` -> `untilX)` (2 failed, 13 passed); P9 common/bin/cepa-run:7022 `\"digest\"` -> `\"digestX\"` (2 failed, 13 passed)."
+        - "Valem da revisão 1 (fonte inalterada, não re-rodadas): P2, P3, P4, P5, P6, P7a, P7b, P8b, P11, P12, P13, P14, P15."
+        - "Sobreviventes que restam: nenhum no arquivo do item para linhas de comportamento, exceto P10/1021 (pego só pelo vizinho test_cepa_until_cut_rule.py)."
+      run: >-
+        (revisão 5) `git worktree add --detach /tmp/proof-cs2-e c54b90d`; `cd /tmp/proof-cs2-e && timeout 100 python3 tests/test_marketplace_common_description.py` -> rc 0, 'tudo ok (35 comandos na descrição)';
+        remoção de ' (and /queue-run, its new name)' de .claude-plugin/marketplace.json -> mesmo comando: rc 1, 'FAIL ... fora da descrição: /queue-run', '1 falha(s)';
+        `git checkout -- .claude-plugin/marketplace.json` -> rc 0, 'tudo ok (35 comandos na descrição)'; `git worktree remove --force /tmp/proof-cs2-e` (git worktree list sem proof).
+        No worktree da run: `python3 -m pytest tests/test_cepa_run_rename_cli.py tests/test_queue_rename.py -q` -> 42 passed in 17.18s; `python3 tests/test_cepa_until_digest.py` -> '✓ tudo verde'.
+        (revisão 4) `git worktree add --detach /tmp/proof-cs2-d 8cf6c66`; `cd /tmp/proof-cs2-d && timeout 100 python3 tests/test_cepa_until_digest.py` -> rc 0, 50 ok, '✓ tudo verde';
+        `sed -i '' 's/        if isinstance(e, dict):/        if True:/' common/bin/_run_digest.py` -> mesmo comando: '✗ 3 falha(s)'; `git checkout -- common/bin/_run_digest.py` -> rc 0, 50 ok, '✓ tudo verde'; `git worktree remove --force /tmp/proof-cs2-d`.
+        (revisão 2) `git worktree add --detach /tmp/proof-cs2-b ee7df24`; perturbações com `sed -i ''` seguidas de
+        `python3 -m pytest tests/test_cepa_run_rename_cli.py -q` (15 passed baseline), `tests/test_queue_rename.py -q` (27 passed baseline),
+        `python3 tests/test_default_yes_inject.py`, `timeout 540 python3 tests/test_cepa_until.py` (P17) e `timeout 100 python3 tests/test_cepa_until_cut_rule.py` (P10).
+        Resultados: S1 `1 failed, 26 passed in 12.27s`; S2 `1 failed, 14 passed in 5.89s`; P18 `3 failed, 12 passed in 6.08s`; P16 1 FAILURE; P17 4 falhas; P1 `2 failed, 13 passed in 7.91s`; P9 `2 failed, 13 passed in 6.10s`; P10 `15 passed` + 2 FAIL em cut_rule.
+        Suíte completa (tests/run-all.sh) não rodada: é do supervisor.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "sem ferramenta de cobertura. Todo trecho de comportamento alterado desde 26d2a0b foi quebrado por perturbação e ficou RED (revisões 1, 2, 4 e 5; ver l3), incluindo a linha nova de _run_digest.py e a linha nova de marketplace.json. Linhas de texto (docstrings, comentários, mensagens de dono, see_also, textos de install.sh) não foram perturbadas e são só nome; declaro a amostragem, não a cobertura delas."
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: >-
+      (revisão 5) Nenhuma entrada nova: o único diff desde 5a8801a é texto de descrição em marketplace.json, que nenhum comando do CLI lê como entrada. Não re-rodei o L4; vale o da revisão 4 porque o código de produção é idêntico.
+      (revisão 4, só o achado da revisão 3, em 8cf6c66) cwd=/tmp/proof-cs2-l4d (git init), uma chamada por comando,
+      `CEPA_MODO=off timeout 20 /Users/alegomes/cepa-worktrees/cepa-until-2026-11-24-2017/common/bin/cepa run digest <arquivo>`:
+      arquivo `[1,2]` -> rc 0, resumo impresso, sem traceback; `"str"` -> rc 0, sem traceback; `42` -> rc 0, sem traceback; `null` -> rc 0, sem traceback;
+      arquivo misto (`{"event":"start"}`, `[1,2]`, `"str"`, `42`, `null`) -> rc 0, resumo impresso, sem traceback
+      (contagens {} porque o digest lê a chave "evento", não "event"; o ponto da checagem é não morrer).
+      O resto do L4 (revisão 3: recusas de until/until-digest em todas as formas, digest com arquivo ausente, diretório, /dev/null, vazio, `{not json`)
+      vale: o código de produção não mudou desde ee7df24, exceto read_jsonl.
+    historico_revisao_3: >-
+      Achado: `cepa run digest <arquivo>` com linha JSON válida que não é objeto (`[1,2]`, `"str"`, `42`, `null`) morria com traceback
+      (AttributeError em _run_digest.py:336, rc 1); pré-existente em 26d2a0b (cepa-until-digest:335). Menor: linha com JSON inválido
+      é ignorada em silêncio (rc 0, resumo vazio), herdado. Corrigido o primeiro (hoje 7b9554a); o segundo segue como comportamento herdado, não bloqueante.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-2 da reforma de nomes dos comandos); a prova é a perturbação."
+waiver_proposto_nao_escrito: >-
+  Não escrevi waiver. L2, L3 e L4 passam sem dispensa.
+neighbour_regression:
+  head_ee7df24: "tests/test_cepa_until_dead_supervisor.py verde (rc 0, 84 ok, 0 FAIL). Vale em c54b90d: o único código de produção alterado depois foi read_jsonl em _run_digest.py e a linha do marketplace.json (git diff ee7df24 c54b90d não foi rodado por mim; a cadeia é ee7df24 -> 8cf6c66 [_run_digest.py e seu teste] -> 5a8801a [registros] -> c54b90d [marketplace.json])."
+routing_reason: >-
+  Revisão 5. Os commits foram reaplicados por cherry-pick (SHAs novos) e ganharam um commit, c54b90d, que cita /queue-run na descrição do plugin common
+  porque a suíte completa do supervisor ficou vermelha em tests/test_marketplace_common_description.py ("fora da descrição: /queue-run").
+  `git diff 5a8801a c54b90d --stat` mostra só .claude-plugin/marketplace.json (1 linha); logo o que as revisões 1 a 4 provaram vale.
+  A linha nova é load-bearing: sem ela o teste fica RED (rc 1, 1 falha), com ela GREEN (rc 0, 35 comandos). Vizinhos do item verdes (42 passed; digest tudo verde).
+  L2 pass, L3 pass, L4 clean, nada assumed/skipped. PROVEN.
+  Ressalvas declaradas, não bloqueantes: P10 (common/bin/cepa-run:1021) só é pego pelo teste vizinho test_cepa_until_cut_rule.py; a linha de base inteira de
+  test_cepa_until.py não foi rodada sem perturbação (P17); a suíte completa (tests/run-all.sh) é do supervisor e não foi rodada por mim. Não escrevi waiver.
+
+# ─────────────────────────── Histórico: revisão 4 (head 8cf6c66, hoje 7b9554a) ───────────────────────────
+review_4:
+  verdict: proven
+  reviewed_at: 2026-11-25T02:40:00-03:00
+  head_commit: 8cf6c66
+  routing: "Achado da revisão 3 (traceback do digest em linha JSON que não é objeto) corrigido em read_jsonl (`isinstance(e, dict)`); perturbar com `if True:` deixou test_cepa_until_digest.py RED (3 falhas), restaurada 50 ok. L4 re-checado pelo launcher real: rc 0 sem traceback. L2 pass, L3 pass, L4 clean. PROVEN."
+  ressalva: "P10 (common/bin/cepa-run:1021) só pego pelo vizinho test_cepa_until_cut_rule.py; linha de base inteira de test_cepa_until.py não rodada sem perturbação (P17)."
+
+# ─────────────────────────── Histórico: revisão 3 (head ee7df24) ───────────────────────────
+review_3:
+  verdict: needs-human
+  reviewed_at: 2026-11-25T02:10:00-03:00
+  head_commit: ee7df24
+  l4_status: findings
+  l4_finding: "`cepa run digest` morria com traceback (rc 1, _run_digest.py:336) em linha JSON que não é objeto; pré-existente em 26d2a0b (cepa-until-digest:335). Menor: linha JSON inválida ignorada em silêncio."
+  l4_run: "recusas de until/until-digest em todas as formas (caixa, --help, help, ajuda, subcommands, -h, --, vazio, aspas com $(...) e `;`) -> rc 2 sem executar nada; digest com arquivo ausente, diretório, /dev/null -> rc 2 mensagem limpa; `[1,2]` e arquivo misto -> rc 1 TRACEBACK (idem no base 26d2a0b)."
+  routing: "L2 e L3 passam; só o L4 com achado impedia PROVEN. Recomendação: abrir card pequeno ou corrigir (corrigido em 8cf6c66)."
+
+# ─────────────────────────── Histórico: revisão 2 (head ee7df24) ───────────────────────────
+review_2:
+  verdict: needs-human
+  reviewed_at: 2026-11-25T01:20:00-03:00
+  head_commit: ee7df24
+  l4_status: skipped
+  l4_run: "Não rodei entradas hostis à mão: o hook bash-path-lock negou duas tentativas de invocar `cepa` com argumentos de um laço e não contornei. Evidência indireta: test_old_names_are_refused_whatever_their_case e test_quoted_prompt_starting_with_until_is_not_refused."
+  routing: "Três pendências da revisão 1 fechadas (vizinho dead_supervisor verde; S1 e S2 RED; P16/P17/P18 RED). Só o L4 skipped impedia PROVEN. NEEDS-HUMAN; recomendação: dispensar o L4 ou uma terceira rodada com comandos literais (revisão 3)."
+
+# ─────────────────────────── Histórico: revisão 1 (head 202b45d) ───────────────────────────
+review_1:
+  verdict: unproven
+  reviewed_at: 2026-11-24T23:55:00-03:00
+  head_commit: 202b45d
+  reasons:
+    - "tests/test_cepa_until_dead_supervisor.py: 9 falhas sem perturbação (8 verificações esperavam `usage: cepa until {sub}` onde cepa-run agora imprime `usage: cepa run {sub}`; 1 exigia `cepa-run pending` em common/commands/until-review.md). Verde em 26d2a0b."
+    - "Sobrevivente S1 common/bin/cepa-queue:5682: tirar `\"cepa-run\" in r.stdout` de _live_run mantinha tests/test_cepa_run_rename_cli.py (13 passed) e tests/test_queue_rename.py (26 passed) verdes; o único teste da linha usava o nome `cepa-until`."
+    - "Sobrevivente S2 common/bin/cepa-run:932 (linha `item   :` do dry-run --all): trocar `/common:queue-run` por `/common:drain-plan` mantinha 13 passed; nenhum teste do repo afirmava a linha."
+  perturbations_red:
+    - "P1 common/bin/cepa:186 braço `until)` -> `untilX)`: RED (2 failed, 11 passed)"
+    - "P2 common/bin/cepa:189 braço `until-digest)` -> `until-digestX)`: RED (2 failed, 11 passed)"
+    - "P3 common/bin/cepa:181 `_old=\"$_w2\"` -> `$_w1` (recusa via help): RED (3 failed, 10 passed)"
+    - "P4 common/bin/cepa:124 show_help sem pular until/until-digest: RED (1 failed, 12 passed)"
+    - "P5 common/bin/cepa:154 nearest_subcommand sem pular: RED (1 failed, 12 passed)"
+    - "P6 common/hooks/_clihelp.py:348 sem pular: RED (1 failed, 12 passed)"
+    - "P7a/P7b common/bin/cepa-run:6641 tira `cepa-run` / `cepa-until` da detecção de supervisor vivo: RED (1 failed, 12 passed cada)"
+    - "P8b common/bin/cepa-queue:5682 tira `cepa-until`: RED em tests/test_queue_rename.py::test_migrate_refuses_live_cepa_until_run (1 failed, 25 passed)"
+    - "P9 common/bin/cepa-run:7022 `\"digest\"` -> `\"digestX\"`: RED (2 failed, 11 passed)"
+    - "P10 common/bin/cepa-run:1021 despacho -> drain-plan: verde no teste do item, RED em tests/test_cepa_until_cut_rule.py (2 falhas)"
+    - "P11 cepa-until execv `cepa-run` -> `cepa-runX`: RED (1 failed, 12 passed)"
+    - "P12 cepa-until-digest sem o argumento `digest`: RED (1 failed, 12 passed)"
+    - "P13 common/commands/queue-run.md sem `$ARGUMENTS`: RED (1 failed, 12 passed)"
+    - "P14 common/bin/cepa-prove caminho cepa-run -> cepa-runX: RED em tests/test_cepa_prove.py"
+    - "P15 common/bin/cepa-doctor:1070 caminho cepa-run -> cepa-runX: RED em tests/test_cepa_until_dead_supervisor.py (3 falhas a mais que a linha base)"
+  l2_status: gap
+  l4_status: skipped
+  routing: "UNPROVEN: vizinho vermelho + dois sobreviventes; ambos determinísticos e fechados pelo autor."

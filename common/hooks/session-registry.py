@@ -2,7 +2,7 @@
 """SessionStart / SessionEnd hook: the live-session registry + worktree hygiene.
 
 SessionStart:
-  1. Adopt the launcher's claim (CLAUDE_WT_CLAIM) → rekey it to this session_id,
+  1. Adopt the launcher's claim (CEPA_WT_CLAIM) → rekey it to this session_id,
      or register a fresh entry if claude was started without `cepa`.
   2. Reclaim dead entries (PID-checked).
   3. Warn if another LIVE session shares this exact working tree.
@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _wtlib as L  # noqa: E402
 import _handoff as H  # noqa: E402
 import _pluginver as V  # noqa: E402
+import _cepaenv as E  # noqa: E402
 
 
 def emit_context(text: str) -> None:
@@ -36,7 +37,7 @@ def emit_context(text: str) -> None:
 
 
 # The marker that `cepa-until` exports on every run (see ENV_WINDOW there).
-RUN_ENV = "CEPA_UNTIL_RUN"
+RUN_ENV = "CEPA_RUN"
 
 
 def resume_notice(session_id: str, cwd: str, root: str, env=None):
@@ -56,13 +57,13 @@ def resume_notice(session_id: str, cwd: str, root: str, env=None):
     # the SAME branch, so the handoff is the previous run's, about ANOTHER
     # item. Handing it over with "pick up where you left off" made the
     # WEGO-2321 run rewrite the WEGO-2337 report (run 2026-09-27-0832). The
-    # run's item is whatever drain-plan reserves. It does not reserve the
+    # run's item is whatever queue-run reserves. It does not reserve the
     # handoff: the owner still resumes it in the morning.
-    if env.get(RUN_ENV):
+    if E.get(RUN_ENV, "", env):
         return (
             "[resume] Handoff deste branch NÃO entregue: esta sessão é uma rodada "
             "do cepa-until, e o handoff é da rodada anterior, sobre outro item. "
-            "O seu item é o que o /common:drain-plan reservar com `cepa-plan start`; "
+            "O seu item é o que o /common:queue-run reservar com `cepa-queue start`; "
             "não continue trabalho de outro id."
         )
     meta, auto, note = H.parse(path)
@@ -124,7 +125,7 @@ def on_start(session_id: str, cwd: str) -> None:
     sdir.mkdir(parents=True, exist_ok=True)
 
     # 1. Adopt the launcher's claim, if any.
-    claim_id = os.environ.get("CLAUDE_WT_CLAIM", "").strip()
+    claim_id = E.get("CEPA_WT_CLAIM", "").strip()
     entry = {}
     if claim_id:
         claimed = L.find_entry(root, claim_id)

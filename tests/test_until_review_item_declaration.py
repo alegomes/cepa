@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """CS-1 of docs/spec/resposta-do-decide-vira-trabalho.md: the contract the agents read.
-`common/commands/until-review.md` must document `item_se_sim`, `item_se_nao` and
+`common/commands/run-review.md` must document `item_se_sim`, `item_se_nao` and
 `nenhum` as mandatory in the `cepa-decisoes` block, under the same definition of an
 answer without return (yes on a `done` item, no on any route), with an example that
-parses and carries `item_se_nao`; `drain-plan.md` must mention `--if-no-item`.
+parses and carries `item_se_nao`; `queue-run.md` must mention `--if-no-item`.
 
 Fast and standalone: `python3 tests/test_until_review_item_declaration.py`.
 """
@@ -29,7 +29,7 @@ def _flat(text):
 
 
 def test_until_review_documents_the_item_declaration():
-    review = (COMMANDS / "until-review.md").read_text(encoding="utf-8")
+    review = (COMMANDS / "run-review.md").read_text(encoding="utf-8")
     flat = _flat(review)
     for word in ("item_se_sim", "item_se_nao", "nenhum"):
         check(f"until-review mentions {word}", word in flat, "")
@@ -46,12 +46,12 @@ def test_until_review_documents_the_item_declaration():
           '"nenhum"' in review and "precisa_do_dono" in review, "")
     check("...says a question that promises work must declare it",
           "promises work" in flat and "MUST declare" in flat, "")
-    check("...points to the cepa-plan flags",
+    check("...points to the cepa-queue flags",
           "--if-yes-item" in review and "--if-no-item" in review, "")
 
 
 def test_until_review_example_block_parses_and_declares_item_se_nao():
-    review = (COMMANDS / "until-review.md").read_text(encoding="utf-8")
+    review = (COMMANDS / "run-review.md").read_text(encoding="utf-8")
     m = re.search(r"```json cepa-decisoes\n(.*?)\n```", review, re.S)
     check("until-review has an example cepa-decisoes block", m is not None, "")
     if not m:
@@ -75,7 +75,7 @@ def test_until_review_example_block_parses_and_declares_item_se_nao():
 
 
 def test_drain_plan_mentions_if_no_item():
-    drain = (COMMANDS / "drain-plan.md").read_text(encoding="utf-8")
+    drain = (COMMANDS / "queue-run.md").read_text(encoding="utf-8")
     check("drain-plan mentions --if-no-item", "--if-no-item" in drain, "")
 
 

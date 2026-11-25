@@ -3,7 +3,7 @@
 
 No third-party deps — run with `python3 tests/test_cepa_help_layout.py`.
 
-Before common/hooks/_clihelp.py each command wrote its own help: `cepa plan
+Before common/hooks/_clihelp.py each command wrote its own help: `cepa queue
 help` was an argparse error while `cepa doctor help` worked, some helps had
 examples and exit codes and others did not, Portuguese and English aliases
 were mixed. This test walks every command and every subcommand it lists and
@@ -26,6 +26,9 @@ REPO = Path(__file__).resolve().parent.parent
 BIN = REPO / "common" / "bin"
 CEPA = BIN / "cepa"
 ALIASES = {"intencao", "modos"}
+# `cepa-plan`, `cepa-until` and `cepa-until-digest` are transition shims for runs
+# in flight (CS-1, CS-2), not commands: they are neither listed nor dispatched.
+ALIASES = ALIASES | {"plan", "until", "until-digest"}
 # Old Portuguese names that are aliases of an English one. They must keep
 # working but never be listed in a help.
 HIDDEN = ["responde", "aterrissados", "ordena", "divergencia", "--proposito",
@@ -35,7 +38,7 @@ HIDDEN = ["responde", "aterrissados", "ordena", "divergencia", "--proposito",
           "encerrar", "decidir", "triar", "--alvo", "--origem"]
 
 FAILURES = []
-ENV = {k: v for k, v in os.environ.items() if k not in ("CEPA_COR", "NO_COLOR")}
+ENV = {k: v for k, v in os.environ.items() if k not in ("CEPA_COLOR", "NO_COLOR")}
 ENV["COLUMNS"] = "100"
 
 
@@ -132,10 +135,10 @@ def test_every_command():
 def test_color_only_on_request():
     plain = run(BIN / "cepa-hotspots", "--help").stdout
     check("piped help has no escape codes", "\033" not in plain)
-    env = dict(ENV, CEPA_COR="sempre")
+    env = dict(ENV, CEPA_COLOR="sempre")
     p = subprocess.run([str(BIN / "cepa-hotspots"), "--help"], capture_output=True,
                        text=True, env=env, cwd=REPO)
-    check("CEPA_COR=sempre colors headings", "\033[" in p.stdout and "── " in p.stdout,
+    check("CEPA_COLOR=sempre colors headings", "\033[" in p.stdout and "── " in p.stdout,
           p.stdout[:300])
 
 

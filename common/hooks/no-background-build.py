@@ -29,7 +29,7 @@ notification RE-INVOKES the session. Under `claude -p` it does not hold, and
 that is exactly where `cepa-until` runs. This hook closes that door only where
 it is a trap.
 
-SCOPE -- fires only with `CEPA_UNTIL_RUN` in the environment, which
+SCOPE -- fires only with `CEPA_RUN` in the environment, which
 `cepa-until` exports to every subprocess. Outside it the hook does not exist:
 in an interactive session sending the build to the background is the right
 thing.
@@ -109,6 +109,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _cepaenv as E  # noqa: E402
 try:
     import _telemetry as T
 except Exception:  # telemetry must never break the gate
@@ -130,7 +131,7 @@ except Exception:  # without the shared engine, analyze the raw line
 
 
 _ESCAPE = "fundo-ok"
-ENV_WINDOW = "CEPA_UNTIL_RUN"
+ENV_WINDOW = "CEPA_RUN"
 
 # Commands that produce a VERDICT -- somebody has to read the result, and that
 # somebody is exactly who does not exist in the next turn.
@@ -168,7 +169,7 @@ def blocks(command: str, background: bool, environ=None):
     halves -- inside and outside the window -- without touching its own process.
     """
     env = os.environ if environ is None else environ
-    if not env.get(ENV_WINDOW):
+    if not E.get(ENV_WINDOW, "", env):
         return None
     if not command or _ESCAPE in command:
         return None
@@ -214,7 +215,7 @@ _ENDLESS_WATCHER = re.compile(
 def watcher_blocks(tool_input, environ=None):
     """(via, snippet) if this Monitor does not end on its own inside the window."""
     env = os.environ if environ is None else environ
-    if not env.get(ENV_WINDOW):
+    if not E.get(ENV_WINDOW, "", env):
         return None
     tool_input = tool_input or {}
     command = tool_input.get("command") or ""
@@ -371,7 +372,7 @@ def _finished(path):
 def stop_reason(payload, environ=None):
     """The stop block text, or None if there is nothing to collect."""
     env = os.environ if environ is None else environ
-    if not env.get(ENV_WINDOW):
+    if not E.get(ENV_WINDOW, "", env):
         return None
     # Anti-loop: if this stop ALREADY came from a block, do not block again.
     # One chance to collect is the squeeze; trapping the session would trade a
@@ -409,7 +410,7 @@ def stop_reason(payload, environ=None):
         "    2. Se um vigia já cumpriu o papel, encerre-o com `TaskStop` antes "
         "de parar.\n"
         "    3. Se o item não cabe no turno, NOMEIE O DESFECHO antes de parar: "
-        "`cepa-plan finish <fila> <id> --status blocked --evidence \"...\" "
+        "`cepa-queue finish <fila> <id> --status blocked --evidence \"...\" "
         "--blocker \"<o motivo em palavras leigas>\"`, e "
         "deixe o clone na branch da largada — foi a branch parada numa "
         "integração que encerrou a janela de 2026-09-03 com 6h54 de sobra.")
@@ -485,7 +486,7 @@ def main():
         "       em primeiro plano não é espera ativa: o `no-busy-wait` não o\n"
         "       bloqueia, ele barra laço com `sleep`.\n"
         "    2. Se o build não cabe no turno, NOMEIE O DESFECHO antes de parar:\n"
-        "       `cepa-plan finish <fila> <id> --status blocked --evidence`\n"
+        "       `cepa-queue finish <fila> <id> --status blocked --evidence`\n"
         "       \"build disparado e não colhido: <comando>, log em <caminho>\"\n"
         "       `--blocker \"os testes não terminaram dentro do turno\"`.\n"
         "       Um item com desfecho volta sabendo onde parou.\n"

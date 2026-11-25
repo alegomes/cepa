@@ -1,0 +1,29 @@
+key: CS-4-reforma-de-nomes
+queue: reforma-de-nomes
+item: CS-4
+status: complete
+head_commit: ef5dbf3
+diff_range: d0c02ab..ef5dbf3
+criteria:
+  - id: AC1
+    text: "CS-4: `cepa intencao` sai com 2 com 'intencao is now intent'; `cepa modos` sai com 2 com 'modos is now modes'; os arquivos common/bin/cepa-intencao e common/bin/cepa-modos nao existem; a saida de `cepa help` nao contem 'Old subcommand names' (docs/spec/reforma-de-nomes-dos-comandos.md, ### CS-4)"
+    altitude: cli
+    surface: "o launcher common/bin/cepa invocado como subprocesso (exit code, stderr, stdout de `cepa help`) mais existencia de arquivos em common/bin/"
+    clauses:
+      intencao_exit_2_message: "complete. Rodei a mao: `cepa intencao` -> '✗ cepa: intencao is now intent (run: cepa intent ...)', rc=2."
+      modos_exit_2_message: "complete. Rodei a mao: `cepa modos` -> '✗ cepa: modos is now modes (run: cepa modes ...)', rc=2."
+      cepa_intencao_file_absent: "complete. `ls common/bin/cepa-intencao`: No such file or directory (git rm no diff)."
+      cepa_modos_file_absent: "complete. `ls common/bin/cepa-modos`: No such file or directory (git rm no diff)."
+      help_no_old_names_line: "complete. `cepa help | grep -c 'Old subcommand names'` = 0; o codigo que gerava a linha (_clihelp.py e o rotulo de alias em show_help de cepa) foi removido no diff."
+    test: "tests/test_cepa_cli_old_aliases_gone.py (8 testes) e check em test_cepa_help_flags_and_typos de tests/test_cepa_prove.py"
+    layer: cli (subprocess do launcher real, inclusive o caminho de ajuda em sh puro sem _clihelp.py; nenhum mock)
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_cli_old_aliases_gone.py -q -> '8 passed in 1.04s' (N=8). python3 tests/test_cepa_prove.py -> '✓ 27 teste(s) ok', com as linhas 'ok ...e os apelidos antigos saíram da lista', 'ok `cepa intencao` recusa e diz `intencao is now intent`', 'ok `cepa modos` recusa e diz `modos is now modes`'. Vizinhos tocados pelo diff, cada um em primeiro plano, sem FAIL: test_cepa_intent.py 'tudo ok'; test_modes_single_source.py 'ok — 7 modos...'; test_cepa_chaining.py 'OK'; test_intent_telemetry.py 'all intent telemetria tests passed'; test_session_intent_contract.py 'OK'; test_whereami_intent.py 'OK'. Suite completa (tests/run-all.sh) nao rodada aqui, e do supervisor."
+independent_checks:
+  prove_rewrite_is_legitimate_not_weakened: "Lido o diff de tests/test_cepa_prove.py. O check antigo exigia 'intencao (= intent)' e 'modos (= modes)' em `cepa help`; o criterio inverte isso, entao reescrever era obrigatorio. O novo check e mais forte que o antigo: exige ausencia de '\\n  intencao', '\\n  modos', '(= intent)', '(= modes)', 'Old subcommand names' e 'Deprecated', exige a presenca de intent e modes na lista, e acrescenta duas asserções novas (exit 2 e mensagem 'X is now Y' para cada nome antigo). Nenhuma asserção removida sem substituto; o criterio literal esta coberto."
+  other_touched_tests_not_weakened: "test_cepa_intent: o teste do atalho cepa-intencao (grava/show) foi trocado por 'o arquivo nao existe' (inversao pedida pelo criterio). test_modes_single_source: comparacao cepa-modos vs cepa-modes trocada por 'cepa-modos nao existe'; a comparacao de cepa-modes com as flags antigas segue. Demais so repontam o nome do script para cepa-intent."
+  refusal_before_dispatch: "O case em common/bin/cepa recusa antes de qualquer despacho; o teste confere stdout vazio e nenhum .claude criado, e cobre `help intencao`, `--help modos`, caixa alta e flags."
+gap: null
+suggested_followup: null
+observations_outside_the_literal_criterion:
+  residual_old_names_in_tests: "Os testes ainda usam o subcomando `intencao`/`gravar` etc. dentro de cepa-intent como nomes antigos aceitos; isso e de outros itens da reforma (acoes/flags), nao do CS-4."

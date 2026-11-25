@@ -4,7 +4,7 @@ argument-hint: <new-name>  [<old-name>]   (omit old-name to rename the worktree 
 interaction: routine
 ---
 
-# /common:worktree-name
+# /common:worktree-rename
 
 ## Purpose
 

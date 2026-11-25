@@ -85,7 +85,7 @@ REPO = Path(__file__).resolve().parent.parent
 # it reads from here.
 TOPOLOGIES = {
     "build-team": ["build-team", "multiteam"],
-    "build-hex": ["build-hex", "hex", "HEX_PATHLOCK_DEBUG"],
+    "build-hex": ["build-hex", "hex", "CEPA_HEX_PATHLOCK_DEBUG"],
     "discovery": ["discovery"],
     "design": ["design"],
     "docs-topology": ["docs-topology", "docs"],

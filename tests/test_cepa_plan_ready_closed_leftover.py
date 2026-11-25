@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CS-6 of decisoes-de-todas-as-filas: `cepa plan ready` no longer calls a queue
+"""CS-6 of decisoes-de-todas-as-filas: `cepa queue ready` no longer calls a queue
 "tudo concluído ou descartado" when a `done` item still left a task for the
 owner (an open `human_pending`). Owner, 2026-11-20 (fb-20261120-1): the pyyaml
 queue showed as closed with two questions hidden in CS-4 and CS-6.
@@ -7,7 +7,7 @@ queue showed as closed with two questions hidden in CS-4 and CS-6.
 Against the real CLI, in a temporary git repo:
 
   - queue `p`: every item `done`, two with an open route -> "fila fechada, 2
-    tarefas esperam você (cepa until decide p)", and NOT "tudo concluído ou
+    tarefas esperam você (cepa run decide p)", and NOT "tudo concluído ou
     descartado" on p's line
   - queue `s`: one leftover task -> singular "1 tarefa espera você"
   - queue `q`: done/dropped with no route -> still "tudo concluído ou descartado"
@@ -16,7 +16,7 @@ Against the real CLI, in a temporary git repo:
   - a route on a `dropped` item is not a leftover task, nor one on an
     open (`pending`/`blocked`) item
   - --json carries `tarefas_sobrando` per queue
-  - the launcher `cepa plan ready` prints the same line
+  - the launcher `cepa queue ready` prints the same line
 
 Run with `python3 tests/test_cepa_plan_ready_closed_leftover.py`.
 """
@@ -33,7 +33,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 CEPA = REPO / "common" / "bin" / "cepa"
 FAILURES = []
 
@@ -99,13 +99,13 @@ def main():
         p = line_of(out, "p")
         check("p: closed queue names the 2 leftover tasks and the command",
               p == "fila p · 0 de 0 pendentes prontos — fila fechada, 2 tarefas "
-                   "esperam você (cepa until decide p)", repr(p))
+                   "esperam você (cepa run decide p)", repr(p))
         check("p: does not say 'tudo concluído ou descartado'",
               "tudo concluído ou descartado" not in p, repr(p))
         s = line_of(out, "s")
         check("s: one leftover task is singular, dropped route not counted",
               s == "fila s · 0 de 0 pendentes prontos — fila fechada, 1 tarefa "
-                   "espera você (cepa until decide s)", repr(s))
+                   "espera você (cepa run decide s)", repr(s))
         q = line_of(out, "q")
         check("q: closed with no route still says tudo concluído ou descartado",
               q == "fila q · 0 de 0 pendentes prontos — fila fechada: tudo "
@@ -115,7 +115,7 @@ def main():
               "esperam você" not in rr and "espera você" not in rr, repr(rr))
         check("r: nor is the queue 'tudo concluído', the route is still open",
               rr == "fila r · 0 de 0 pendentes prontos — fila fechada: 1 tarefa "
-                    "que você respondeu não (cepa until decide r)", repr(rr))
+                    "que você respondeu não (cepa run decide r)", repr(rr))
 
         r = subprocess.run([sys.executable, str(CEPA_PLAN), "ready", "--json",
                             "--repo", str(root)],
@@ -130,10 +130,10 @@ def main():
               == {"p": 0, "q": 0, "r": 1, "s": 0, "t": 0},
               {k: v.get("tarefas_respondidas_nao") for k, v in data.items()})
 
-        r = subprocess.run(["sh", str(CEPA), "plan", "ready",
+        r = subprocess.run(["sh", str(CEPA), "queue", "ready",
                             "--repo", str(root)],
                            capture_output=True, text=True, cwd=str(root))
-        check("launcher `cepa plan ready` prints the same p line",
+        check("launcher `cepa queue ready` prints the same p line",
               line_of(r.stdout, "p") == p and r.returncode == 0,
               repr(line_of(r.stdout, "p")) + r.stderr)
 

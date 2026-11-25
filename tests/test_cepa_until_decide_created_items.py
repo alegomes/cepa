@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """CS-7 of docs/spec/resposta-do-decide-vira-trabalho.md: the closing of
-`cepa-until decide` lists the items the owner's answers created.
+`cepa-run decide` lists the items the owner's answers created.
 
 Origin (2026-11-18, kairos-etapa-1 queue of wego-digitacao-backend): the owner
 answered a run of "Ponho na fila um item para ...?" and nothing on screen said
 which work those answers put on the queue. CS-2 creates the declared item and
-`cepa-plan answer` prints it inside each answer's output; the closing is where the
+`cepa-queue answer` prints it inside each answer's output; the closing is where the
 owner reads the result of the whole panel, so it ends with one line
 "itens criados pelas suas respostas:" followed by the id and title of each one.
 
-Against the real `decide`, with the real `cepa-plan answer` behind it, in a PTY
+Against the real `decide`, with the real `cepa-queue answer` behind it, in a PTY
 (`answer` only runs on a TTY), in a real git repo:
   - red test: one answer that creates an item ends the closing with the line and
     the item's id and title, read back from the queue;
   - two items created, one of them waiting on the owner: both listed, in answer
     order, the second marked as waiting;
   - no answer creates an item (a declared `nenhum`, a "não" kept open): no line;
-  - the same on a colored terminal (`CEPA_UNTIL_COR=sempre`);
+  - the same on a colored terminal (`CEPA_RUN_COLOR=sempre`);
   - the panel of `--all` (entries `<queue>/<id>: ...`) names the queue too.
 """
 import importlib.machinery
@@ -38,7 +38,7 @@ FAILURES = []
 
 ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
            GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
-for v in ("CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID"):
+for v in ("CEPA_RUN", "CEPA_UNTIL_RUN", "CEPA_AUTONOMOUS_RUN_ID", "CLAUDE_AUTONOMOUS_RUN_ID"):
     ENV.pop(v, None)
 
 HEADER = "itens criados pelas suas respostas:"
@@ -68,8 +68,8 @@ def route(ident, yes_item, no_item="nenhum"):
 
 
 def load_until(color):
-    before = os.environ.get("CEPA_UNTIL_COR")
-    os.environ["CEPA_UNTIL_COR"] = color
+    before = os.environ.get("CEPA_RUN_COLOR")
+    os.environ["CEPA_RUN_COLOR"] = color
     try:
         name = f"cepa_until_cs7_{color}"
         loader = importlib.machinery.SourceFileLoader(name, str(CEPA_UNTIL))
@@ -78,9 +78,9 @@ def load_until(color):
         loader.exec_module(mod)
     finally:
         if before is None:
-            del os.environ["CEPA_UNTIL_COR"]
+            del os.environ["CEPA_RUN_COLOR"]
         else:
-            os.environ["CEPA_UNTIL_COR"] = before
+            os.environ["CEPA_RUN_COLOR"] = before
     return mod
 
 
@@ -181,7 +181,7 @@ def test_all_panel_names_the_queue():
     applied = ["kairos/a1: a1 → `done` em x · rota humana fechada\n"
                "  item novo criado pela resposta: a1-sim — calibrar X "
                "(no fim da fila, `pending`)"]
-    m.Panel(m.SCREEN, out.append).close_panel([], applied, [], "cepa-until decide")
+    m.Panel(m.SCREEN, out.append).close_panel([], applied, [], "cepa-run decide")
     got = listed([l for l in "\n".join(out).splitlines() if l.strip()])
     check("no painel de --all o item leva o nome da fila",
           got == ["kairos/a1-sim — calibrar X"], got)

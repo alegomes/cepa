@@ -77,7 +77,7 @@ def test_menu_rate_per_mode():
                    "command": "/common:spec"})
         ev += [{"event": "mode_menu.shown", "mode": "construction"} for _ in range(2)]
         ev += [{"event": "mode_menu.chosen", "mode": "construction", "action": 2,
-                "command": "/common:drain-plan"} for _ in range(2)]
+                "command": "/common:queue-run"} for _ in range(2)]
         ev.append({"event": "mode_menu.shown", "mode": "exploration"})
         ev.append({"event": "session_start"})
         write_ledger(tmp, ev)

@@ -40,7 +40,7 @@ deliberate difference from `/board-flow:drain`).
 - Max cards: parse `--max N`. Default 5.
 - Scope flags: detect `--no-scope` and `--scope "<jql>"` (mutually exclusive; if both appear, abort with "pass either --scope or --no-scope, not both"). Build the **scope directive**: `--no-scope` → `Scope: none`; `--scope "<jql>"` → `Scope: <jql>`; neither → omit the line (atlassian-expert resolves the effective scope from config).
 - Skip list: parse `--skip K1,K2,...` into the **skip directive** `Skip: K1, K2` (omit the line when the flag is absent). It travels next to the scope directive in every listing delegation; `atlassian-expert` turns it into `AND key NOT IN (...)` after the effective scope.
-- **Unattended round (`CEPA_UNTIL_RUN` set in the environment).** The process is a `claude -p` fired by `cepa-prove`, with nobody to answer: step 3 does not ask. Take the answer as yes + (a) for the whole batch, and say so in one line of the report ("confirmação assumida: janela desatendida").
+- **Unattended round (`CEPA_RUN` set in the environment).** The process is a `claude -p` fired by `cepa-prove`, with nobody to answer: step 3 does not ask. Take the answer as yes + (a) for the whole batch, and say so in one line of the report ("confirmação assumida: janela desatendida").
 - **The run's claim id**: generate one, now, as described in
   **Card reservation**. It identifies THIS run on every card
   it touches.
@@ -101,7 +101,7 @@ run that announced itself as the ONLY stop charges two. That's how it was until
 22/08/2026. A dry "yes" still counts: it's (a), the default.
 
 If the run came from `/common:session`, these answers were already collected at
-the start — don't ask again. In an unattended round (`CEPA_UNTIL_RUN` set, see
+the start — don't ask again. In an unattended round (`CEPA_RUN` set, see
 step 1) there is nobody to ask: yes + (a), without showing the screen as a
 question.
 

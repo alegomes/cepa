@@ -121,7 +121,7 @@ def test_ready_spec_with_pending_decision_warns():
         check("...com o caminho da spec pronta",
               "docs/spec/pronta.md" in out, out)
         check("...e o comando que abre o veto",
-              "/common:spec --continuar pronta" in out, out)
+              "/common:spec --continue pronta" in out, out)
         check("...não cita a spec em draft",
               "rascunho.md" not in out, out)
         check("...não cita o Epic em rascunho",

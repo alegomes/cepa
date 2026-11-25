@@ -6,7 +6,7 @@
 declare itself `Status: pronta` when each cycle of the ladder has a
 demonstration script with an observable effect on screen and in backend, the list of
 invariants is not empty and the "Decidido sem perguntar" section exists. Without the sieve, the Epic
-closes out of tiredness just as the specification would, and `/common:plan --from-epic`
+closes out of tiredness just as the specification would, and `/common:queue --from-epic`
 (CS-6) derives a queue from a cycle nobody knows how to demonstrate.
 
 What these tests pin down:
@@ -283,7 +283,7 @@ def test_discovery_writes_docs_epics():
         (root / ".claude").mkdir()
         (root / ".claude" / "session-mode").write_text("modo: descoberta\n")
         env = dict(os.environ)
-        env.pop("CEPA_MODO", None)
+        env.pop("CEPA_MODE", None)
         payload = {
             "tool_name": "Write",
             "cwd": str(root),

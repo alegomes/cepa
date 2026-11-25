@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """CS-12 of docs/spec/perguntas-da-largada-legiveis.md: the prompt `cepa-until` hands to
-each item's agent teaches how to open a route the way `cepa-plan finish` now demands
+each item's agent teaches how to open a route the way `cepa-queue finish` now demands
 (CS-1): `--route-kind` with its three values, a closed `--question`, and `--if-yes` /
 `--if-no` saying what each answer does to the work.
 
@@ -32,8 +32,8 @@ def _has_route_rule(request):
 
 
 def _kinds_match_cepa_plan(request):
-    """The values taught are exactly the ones `cepa-plan finish` accepts."""
-    src = (Path(__file__).resolve().parent.parent / "common/bin/cepa-plan").read_text()
+    """The values taught are exactly the ones `cepa-queue finish` accepts."""
+    src = (Path(__file__).resolve().parent.parent / "common/bin/cepa-queue").read_text()
     return all(f'"{k}"' in src or f"'{k}'" in src for k in KINDS)
 
 
@@ -41,10 +41,10 @@ def test_route_rule_every_item_request_carries_it():
     mod = load_module()
     plain = mod.build_command("fila", "until/b", False)[2]
     check("route unit: the request still starts with the drain-plan call",
-          plain.startswith("/common:drain-plan fila --max 1 --na-branch until/b\n\n"), plain)
+          plain.startswith("/common:queue-run fila --max 1 --on-branch until/b\n\n"), plain)
     check("route unit: the request carries --route-kind, its three values, a closed "
           "--question and --if-yes/--if-no", _has_route_rule(plain), plain)
-    check("route unit: the three values are the ones cepa-plan finish accepts",
+    check("route unit: the three values are the ones cepa-queue finish accepts",
           _kinds_match_cepa_plan(plain), plain)
     bare = mod.build_command("fila", "", False)[2]
     check("route unit: without a run branch the request still carries the rule",

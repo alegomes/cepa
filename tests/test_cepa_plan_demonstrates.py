@@ -2,7 +2,7 @@
 """CS-1 of cycle 1 of the Cepa in a spiral Epic: `demonstrates:` in the queue header.
 
 Run with `python3 tests/test_cepa_plan_demonstrates.py`. Surface: the CLI
-`common/bin/cepa-plan`, called as a subprocess.
+`common/bin/cepa-queue`, called as a subprocess.
 
 The field says what the queue DEMONSTRATES when it ends ("the operator loads the PDF and sees
 3 answers"). It is optional: a queue without it stays valid. What these tests
@@ -27,7 +27,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 
 FAILURES = []
 

@@ -103,7 +103,7 @@ wego (Bitbucket) → **local launcher**. Remaining for the wego pilot:
   and iterates, stopping on first BLOCKED (`board-flow/commands/drain.md`).
 - **Per-card autonomous runs:** `/common:autonomous-start` + the `autonomous-checkpoint`
   hook + `docs/autonomous/<run-id>/state.yaml` already handle run-id generation, state, and
-  dispatch into the project's topology. `CLAUDE_AUTONOMOUS_RUN_ID` can be set externally
+  dispatch into the project's topology. `CEPA_AUTONOMOUS_RUN_ID` can be set externally
   (the hook just reads `os.environ`), which is exactly what a headless launcher needs.
 - **Cron substrate:** the Claude Code `/schedule` skill (cloud routines) is the cron — no
   repo-side scheduler to build.
@@ -161,7 +161,7 @@ Because of the above, the wego execution fleet is a **local** automation, not a 
   `EnvironmentVariables` (e.g. including `~/.local/bin`). **This is the #1 footgun**: without
   `twg` the agent falls to the cloud path, finds no `mcp__Atlassian__*`, and must reply
   `BLOCKED` (it hard-fails loudly, never reads an empty board).
-- **Skip the confirmation gate:** run under `autonomous-mode` (`CLAUDE_AUTONOMOUS_RUN_ID` set
+- **Skip the confirmation gate:** run under `autonomous-mode` (`CEPA_AUTONOMOUS_RUN_ID` set
   in the job env, or the job invokes `/common:autonomous-start`).
 - **Validation-first:** the first local job runs preflight + list-To-Do only (no build, no
   transition), so the whole local stack (`twg` authenticates, board-flow.yaml read, WEGO
@@ -191,7 +191,7 @@ shape that works, distilled from the tests:
   `extra_marketplaces` (the marketplace is the plugin repo itself). *Loading plugins in a
   routine is still unverified — the next validation step after the clone question.*
 - **Skip the confirmation gate:** `drain`/`triage`/`prove-drain` ask for interactive
-  confirmation. Run the routine under **`autonomous-mode`** (set `CLAUDE_AUTONOMOUS_RUN_ID`
+  confirmation. Run the routine under **`autonomous-mode`** (set `CEPA_AUTONOMOUS_RUN_ID`
   or invoke `/common:autonomous-start`), which encodes "never ask the user."
 - **Reading a routine's result:** the `RemoteTrigger` API exposes **no transcript**, and
   `persist_session:false` sessions aren't retrievable. The working trick used throughout these

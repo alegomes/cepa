@@ -14,7 +14,7 @@ As duas primeiras portas alimentam uma entrevista nova. A terceira é o que sobr
 |---|---|
 | Brief do `discovery` | o comando procura em `docs/discovery/` sozinho e rotula cada proposta como `evidência` |
 | Spec do `planning-lead` | o comando procura em `spec/` e `specs/` sozinho e rotula cada proposta como `proposta de agente` |
-| Decisões sem veredito | o `doctor` avisa, o fechamento conta, o comando abre a revisão e `cepa-plan verdict` grava |
+| Decisões sem veredito | o `doctor` avisa, o fechamento conta, o comando abre a revisão e `cepa-queue verdict` grava |
 | Card do `discovery` no Jira | aponta o caminho do brief e o repositório onde ele vive |
 
 Para ver onde estas portas entram no trabalho inteiro, leia [workflow.md](workflow.md).
@@ -44,7 +44,7 @@ Para ver onde estas portas entram no trabalho inteiro, leia [workflow.md](workfl
 2. Cada proposta tirada dela chega com o rótulo `proposta de agente`. O rótulo é diferente do da porta 1 de propósito: o `planning-lead` não falou com usuário nenhum, ele imaginou. Trate como palpite de colega, não como evidência.
 3. O que a spec decidiu sem você não vira pergunta respondida. Entra na seção `## Decided without asking` do documento novo, com a origem anotada, para você vetar.
 
-**Cuidado.** A spec do `planning-lead` não tem `**Surface:**` nem `**Red test:**`. O `spec-readiness-gate` (o hook que bloqueia uma spec que se declara pronta sem passar no crivo) não a lê e o `cepa-plan from-spec` não a transforma em fila. Ela só serve como insumo da entrevista, nunca como substituta.
+**Cuidado.** A spec do `planning-lead` não tem `**Surface:**` nem `**Red test:**`. O `spec-readiness-gate` (o hook que bloqueia uma spec que se declara pronta sem passar no crivo) não a lê e o `cepa-queue from-spec` não a transforma em fila. Ela só serve como insumo da entrevista, nunca como substituta.
 
 ## Porta 3: as decisões sem veredito
 
@@ -58,20 +58,20 @@ Para ver onde estas portas entram no trabalho inteiro, leia [workflow.md](workfl
 
 - No `/common:doctor`: a área `decisoes` aparece como aviso ⚠, com um arquivo por linha e o comando que abre a revisão. Conta só specs e Epics fechados, porque um documento em `draft` ainda está em entrevista.
 - No fechamento de uma spec ou Epic: ao passar de `draft` para pronto, o hook mostra "N decisões sem veredito neste arquivo". Mostra o zero também, e mostra "sem seção Decided without asking" quando a seção não existe.
-- Em qualquer momento: `cepa-plan decisions` lista tudo de `docs/spec/` e `docs/epics/`. `cepa-plan decisions <arquivo>` lista um arquivo só.
+- Em qualquer momento: `cepa-queue decisions` lista tudo de `docs/spec/` e `docs/epics/`. `cepa-queue decisions <arquivo>` lista um arquivo só.
 
 **Como dar o veredito.**
 
-1. Reabra o documento: `/common:spec --continuar <slug>` para spec, `/common:epic <nome>` para Epic.
+1. Reabra o documento: `/common:spec --continue <slug>` para spec, `/common:epic <nome>` para Epic.
 2. Antes de retomar qualquer outra coisa, o comando mostra as decisões sem veredito. Na spec são até quatro por rodada. No Epic é uma por turno, em prosa.
-3. Responda mantida, vetada (com a razão) ou refinada (com o texto novo). O agente grava com `cepa-plan verdict <arquivo> <n> <veredito>`, que põe a data do dia e o formato exato.
+3. Responda mantida, vetada (com a razão) ou refinada (com o texto novo); o comando recebe `kept`, `vetoed` ou `refined` (os antigos `mantida`, `vetada` e `refinada` seguem aceitos). O agente grava com `cepa-queue verdict <arquivo> <n> <veredito>`, que põe a data do dia e o formato exato.
 4. Pode pular. A decisão pulada fica sem marcador, volta no próximo `doctor` e não trava a entrevista.
 
-**Sem abrir a entrevista.** Rode você mesmo `cepa-plan verdict <arquivo> <n> mantida`, `... vetada --reason "<razão>"` ou `... refinada --text "<texto novo>"`, com o `<n>` que o `cepa-plan decisions` mostra. Escrever o marcador à mão também vale: o `cepa-plan decisions` lê do mesmo jeito.
+**Sem abrir a entrevista.** Rode você mesmo `cepa-queue verdict <arquivo> <n> kept`, `... vetoed --reason "<razão>"` ou `... refined --text "<texto novo>"`, com o `<n>` que o `cepa-queue decisions` mostra. Escrever o marcador à mão também vale: o `cepa-queue decisions` lê do mesmo jeito.
 
 **O que o veto não faz.**
 
-- Não desfaz código. Se uma fila já foi gerada do arquivo, o `cepa-plan verdict` avisa "isto já virou código na fila X" e diz quantos itens dela estão `done`. Desfazer é um item novo de fila, decidido por você.
+- Não desfaz código. Se uma fila já foi gerada do arquivo, o `cepa-queue verdict` avisa "isto já virou código na fila X" e diz quantos itens dela estão `done`. Desfazer é um item novo de fila, decidido por você.
 - Não muda o `Status` do documento. Uma decisão vetada só vira pergunta em aberto se você mandar, no mesmo turno.
 - Não passa pelo `/common:debrief`. O debrief continua sendo a revisão das decisões de runs autônomos. As decisões de entrevista se revisam na própria entrevista.
 

@@ -1,0 +1,108 @@
+schema_version: 2
+card: reforma-de-nomes-CS-1
+verdict: needs-human
+reviewed_at: 2026-11-24T22:20:00-03:00
+base_commit: 7ac8dd2
+head_commit: d8c82b5
+issue_type: Feature
+repo_kind: harness            # repo Python + sh (cepa), não Quarkus. Superfície = CLI `cepa` e `cepa-queue`
+waiver_proposto: .claude/waivers/nada-a-provar--common-bin-cepa-queue.yaml   # proposta (status: proposta, autor: null), NÃO assinada; não conta como dispensa
+scope:
+  changed_classes:
+    - class: "common/bin/cepa (bloco que recusa `cepa plan` / `cepa help plan` em qualquer caixa, exit 2)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # o teste roda o launcher real
+    - class: "common/bin/cepa (show_help, fallback sh: pula `plan`)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa (nearest_subcommand: pula `plan`)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/_clihelp.py (launcher_help: pula sub `plan`)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-plan (shim de transição, execv para cepa-queue)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "board-flow/bin/cepa-queue (TARGET = nome do próprio arquivo)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/session-mode.py (epic_lines localiza bin/cepa-queue)"
+      module: hook
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (CEPA_PLAN = HERE / cepa-queue)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-queue (renomeado de cepa-plan; diff = nome do programa nas mensagens)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/sh, sem pitest; perturbação manual em worktree detached descartável (/tmp/proof-cs1c-a, d8c82b5), removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "Revisão 1 (head 286de89): P1 a P10 RED; P11 sobrevivia (fallback sh do show_help inalcançável com python3 no PATH); P12 equivalente."
+        - "Revisão 2 (head cf1bf82): P11 fechado pelo teste novo; P11, P5, P1, P4, P6, P7 re-rodadas RED. P2, P3, P8, P9, P10 valem da revisão 1 (fonte inalterada). P12 equivalente (TARGET = cepa-plan só diverge quando o shim for removido, CS-11/CS-12)."
+        - "Revisão 3 (head d8c82b5; `git diff cf1bf82..d8c82b5` em common/bin/cepa = recusa passa a comparar `$_w1`/`$_w2`, minúsculas via tr; testes novos test_plan_is_refused_whatever_its_case e test_quoted_prompt_starting_with_plan_is_not_refused)."
+        - "GREEN de partida em d8c82b5: `python3 -m pytest tests/test_cepa_queue_rename_cli.py -q` -> 8 passed in 3.77s."
+        - "(P13a) common/bin/cepa:175 `_w1=$1` (sem minúscula) -> RED: test_plan_is_refused_whatever_its_case (1 failed, 7 passed in 3.74s)."
+        - "(P13b) common/bin/cepa:177 `_w2=$2` (sem minúscula) -> RED: test_plan_is_refused_whatever_its_case (1 failed, 7 passed in 3.62s)."
+        - "(P1 re-rodada contra a condição reescrita) common/bin/cepa:178 remove `[ \"$_w1\" = \"plan\" ] ||` -> RED: test_plan_is_refused_with_the_new_name e test_plan_is_refused_whatever_its_case (2 failed, 6 passed in 4.17s)."
+        - "(P2 re-rodada) common/bin/cepa:178 troca o braço `help plan` por `false` -> RED: test_plan_is_refused_with_the_new_name e test_plan_is_refused_whatever_its_case (2 failed, 6 passed in 3.89s)."
+        - "Cada perturbação restaurada com `git checkout --` e conferida: `git status --short` limpo no worktree antes de removê-lo."
+        - "Amostragem declarada: P3, P4, P5, P6, P7, P8, P9, P10, P11 não re-rodadas nesta revisão (linhas inalteradas desde cf1bf82; resultado da revisão anterior vale). O diff 7ac8dd2..d8c82b5 também toca textos de renome em cepa-doctor, cepa-feedback, cepa-autonomy, _state.py, _ownertext.py, commands/*.md etc.; são troca de nome em mensagem/documento e não foram perturbados um a um."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs1c-a d8c82b5`; em cada perturbação `sed -i ''` em /tmp/proof-cs1c-a/common/bin/cepa seguida de
+        `python3 -m pytest tests/test_cepa_queue_rename_cli.py -q`, restaurada com `git -C /tmp/proof-cs1c-a checkout -- common/bin/cepa`.
+        Linha base `8 passed in 3.77s`; P13a `1 failed, 7 passed in 3.74s`; P13b `1 failed, 7 passed in 3.62s`; P1 `2 failed, 6 passed in 4.17s`; P2 `2 failed, 6 passed in 3.89s`.
+        Suíte completa (tests/run-all.sh) não rodada: é do supervisor. Nenhum teste de minutos rodado.
+  l2_coverage:
+    status: assumed
+    technique: perturbation
+    uncovered_lines:
+      - "common/bin/cepa-queue: texto do nome do programa nas mensagens (renomeado de cepa-plan; nenhuma perturbação quebrou essas linhas)"
+    waivers: []
+    run: "sem ferramenta de cobertura. Todas as linhas de comportamento de CS-1 (recusa em qualquer caixa, fallback sh, nearest_subcommand, _clihelp, shim, atalho board-flow, session-mode, cepa-until) foram quebradas e ficaram RED. Resta common/bin/cepa-queue (mensagens com o novo nome), sem perturbação. Existe a PROPOSTA .claude/waivers/nada-a-provar--common-bin-cepa-queue.yaml (status: proposta, autor: null), que não é dispensa assinada e não conta; a dispensa assinada existente (nada-a-provar--common-bin-cepa-plan.yaml) vale para o caminho antigo (agora o shim)."
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: >-
+      Launcher real em d8c82b5 (`sh common/bin/cepa ...`, stdin /dev/null, CEPA_PREFLIGHT=off, claude substituído por stub via CLAUDE_WT_CLAUDE_BIN):
+      `cepa PLAN status` -> '✗ cepa: plan is now queue (run: cepa queue ...)' rc=2;
+      `cepa Plan` -> mesma recusa rc=2;
+      `cepa help PLAN` -> mesma recusa rc=2;
+      `cepa pLaN ''` -> mesma recusa rc=2 (stub não chamado: sem arquivo de rastro);
+      `cepa "Plan the release"` -> NÃO recusado, rc=0, o stub recebeu o argumento `Plan the release` (prompt livre segue o caminho normal).
+      Achado da revisão anterior (`cepa PLAN`/`cepa help PLAN` passavam em macOS por causa do sistema de arquivos que ignora caixa) está fechado.
+      Revisão 2 já havia coberto `cepa plan`, `cepa plan ''`, `cepa help plan x`, `cepa --help plan` (recusados) e `cepa "plan status"` (texto livre, não executa nada).
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-1 da reforma de nomes dos comandos); a prova é a perturbação."
+routing_reason: >-
+  O achado de L4 da revisão anterior foi corrigido: `cepa PLAN status`, `cepa Plan`,
+  `cepa help PLAN` e `cepa pLaN ''` agora são recusados (rc=2) e `cepa "Plan the
+  release"` segue sem ser recusado. As linhas novas são sustentadas pelos testes:
+  tirar a minúscula de `$1` ou de `$2`, remover a recusa de `$1` (P1) ou o braço
+  `help plan` (P2) deixa o teste vermelho. O que ainda impede PROVEN é só L2:
+  common/bin/cepa-queue (apenas o nome do programa nas mensagens) segue sem
+  perturbação e a dispensa dele é uma proposta não assinada
+  (.claude/waivers/nada-a-provar--common-bin-cepa-queue.yaml), que não conta;
+  quando o dono assinar essa dispensa, L2 vira `waived` e o veredito vira PROVEN.
+  Recomendação default: assinar a dispensa, porque o arquivo só mudou de nome nas
+  mensagens e nenhum comportamento mudou.

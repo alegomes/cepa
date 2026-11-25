@@ -387,19 +387,19 @@ if [ -f "${CEPA_BIN}" ]; then
   echo "    alias claude='${CEPA_BIN}'"
   echo ""
   echo "  Aliasing 'claude' is recommended; cepa falls back to the real binary via"
-  echo "  CLAUDE_WT_CLAUDE_BIN. Prefer not to override 'claude'? Alias it as 'cepa':"
+  echo "  CEPA_WT_CLAUDE_BIN. Prefer not to override 'claude'? Alias it as 'cepa':"
   echo "    alias cepa='${CEPA_BIN}'"
   echo ""
   echo "  Renamed from 'ccw' on 2026-07-30. If your rc still aliases the old name,"
   echo "  update it — the old path no longer exists and the alias will break."
 fi
 
-# --- Executor de janela: cepa-until (roda a fila por N horas, sem ninguém) ---
+# --- Executor de janela: cepa-run (roda a fila por N horas, sem ninguém) ---
 # Anunciado aqui pelo mesmo motivo do launcher: é um binário que VOCÊ chama do
 # terminal, não um comando de barra que a sessão descobre sozinha. Sem esta
 # linha, só quem estava na conversa em que ele nasceu saberia que existe.
 
-UNTIL_BIN="${REPO_DIR}/common/bin/cepa-until"
+UNTIL_BIN="${REPO_DIR}/common/bin/cepa-run"
 if [ -f "${UNTIL_BIN}" ]; then
   chmod +x "${UNTIL_BIN}" 2>/dev/null || true
   echo ""
@@ -408,15 +408,15 @@ if [ -f "${UNTIL_BIN}" ]; then
   echo "  para aproveitar ociosidade (a noite). Um item por subprocesso, então"
   echo "  estouro de contexto não encerra a janela."
   echo ""
-  echo "    cepa-until <fila> --for 12h        # ou --until 07:00"
-  echo "    cepa-until <fila> --for 3h --dry-run   # o plano do run, sem executar"
+  echo "    cepa-run <fila> --for 12h        # ou --until 07:00"
+  echo "    cepa-run <fila> --for 3h --dry-run   # o plano do run, sem executar"
   echo ""
   echo "  Larga com --dangerously-skip-permissions (sem isso o subprocesso trava"
   echo "  no 1º pedido e a noite morre calada) e RECUSA árvore suja. O doctor"
   echo "  cobra a árvore suja na abertura, para você não descobrir às 23h."
   echo ""
   echo "  Todo cepa-* também responde por 'cepa <subcomando>' (cepa help lista):"
-  echo "    cepa until <fila> --for 12h    # o mesmo que cepa-until"
+  echo "    cepa run <fila> --for 12h    # o mesmo que cepa-run"
   echo "    cepa prove --for 3h            # prova a coluna Review, um card por subprocesso"
 fi
 

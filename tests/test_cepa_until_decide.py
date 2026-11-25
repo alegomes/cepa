@@ -9,9 +9,9 @@ WEGO-2336 was in the middle of 600 characters of evidence.
 
 What these cases prove:
 
-  - `cepa-plan finish --pergunta` records the item's closed question, and
+  - `cepa-queue finish --pergunta` records the item's closed question, and
     `queue` returns it together with the deferred item;
-  - `cepa-plan responde` turns a `blocked` back into `pending` and closes the human
+  - `cepa-queue responde` turns a `blocked` back into `pending` and closes the human
     route, with the owner's answer in the evidence, and ONLY in a terminal (a `claude -p`
     agent has no TTY and does not close the route in place of the human);
   - `decide` asks to land and each item that only the owner unblocks, applies
@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_cepa_until import (  # noqa: E402
     CEPA_UNTIL, fake_claude, item, build_repo, run_until)
 
-CEPA_PLAN = CEPA_UNTIL.parent / "cepa-plan"
+CEPA_PLAN = CEPA_UNTIL.parent / "cepa-queue"
 FAILURES = []
 
 
@@ -58,8 +58,8 @@ def load_module(color="nunca"):
     """Loads cepa-until with the terminal decoration turned off: the in-process
     cases read the plain text, even when they run in a terminal. With
     `color="sempre"` it turns on, for the case that proves the decorated layout."""
-    before = os.environ.get("CEPA_UNTIL_COR")
-    os.environ["CEPA_UNTIL_COR"] = color
+    before = os.environ.get("CEPA_RUN_COLOR")
+    os.environ["CEPA_RUN_COLOR"] = color
     try:
         loader = importlib.machinery.SourceFileLoader("cepa_until",
                                                       str(CEPA_UNTIL))
@@ -68,9 +68,9 @@ def load_module(color="nunca"):
         loader.exec_module(mod)
     finally:
         if before is None:
-            del os.environ["CEPA_UNTIL_COR"]
+            del os.environ["CEPA_RUN_COLOR"]
         else:
-            os.environ["CEPA_UNTIL_COR"] = before
+            os.environ["CEPA_RUN_COLOR"] = before
     return mod
 
 
@@ -141,7 +141,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
     check("fecho com placar e o comando de volta",
           "── closing ─" in plain_text and "answered now 2" in plain_text
           and "for later 1" in plain_text
-          and "cepa-until decide fila/run1" in plain_text, plain_text)
+          and "cepa-run decide fila/run1" in plain_text, plain_text)
     triggers = ("Land now? [y/N/q] ", "[w] I write the answer",
                 "Anything to add, in one line? [Enter skips, v opens the editor] ")
     all_ = raw + "\n".join(prompts)
@@ -222,7 +222,7 @@ def on_tty(cmd, cwd, inputs=(), env=None, timeout=120):
 
 
 def test_decide_on_an_hc_terminal_reports_needs_you_while_it_asks():
-    """`cepa-until decide` in a terminal of the Herdr desktop app (`HC_TERMINAL_ID`):
+    """`cepa-run decide` in a terminal of the Herdr desktop app (`HC_TERMINAL_ID`):
     each question that waits at the keyboard says `state=blocked:kind=question`
     (the Agents panel's "Needs you"), the typed answer puts it back to `working`
     while it is applied, and the exit drops the status and the title (owner,
@@ -287,7 +287,7 @@ def _last_hc(out):
 
 
 def test_decide_on_an_hc_terminal_clears_on_ctrl_c_and_on_an_exception():
-    """The exit of `cepa-until decide` drops the status and the title on Ctrl+C at a
+    """The exit of `cepa-run decide` drops the status and the title on Ctrl+C at a
     question (real process, pty) and when the questions die on an exception."""
     with tempfile.TemporaryDirectory() as tmp:
         stuck = item("a1", status="blocked")
@@ -391,7 +391,7 @@ def test_run_on_an_hc_terminal_that_nobody_answers_ends_in_needs_you():
         root = build_repo(tmp, [item("a1"), item("a2")])
         binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
         env = _hc_env(env_do_run(tmp, root, binv))
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        env["CEPA_RUN_ANSWER_WAIT"] = "2"
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"], str(root),
@@ -399,7 +399,7 @@ def test_run_on_an_hc_terminal_that_nobody_answers_ends_in_needs_you():
         message = "fila: finished, questions wait for you"
         state, title = _last_hc(out)
         check("run hc sem resposta: sai 0 e a pergunta expirou",
-              rc == 0 and "cepa-until decide fila/" in out, out[-800:])
+              rc == 0 and "cepa-run decide fila/" in out, out[-800:])
         check("run hc sem resposta: termina em blocked kind=question",
               state == "state=blocked:kind=question:app=cepa-until:msg="
               + base64.b64encode(message.encode()).decode(), repr(state))
@@ -595,7 +595,7 @@ def test_decide_asks_and_applies_each_answer():
     check("cascata não vira pergunta, só aparece como não sendo do dono",
           "W-4 (depends on a deferred item" in plain_text, plain_text)
     check("o fecho diz como voltar",
-          "cepa-until decide fila/run1" in plain_text, plain_text)
+          "cepa-run decide fila/run1" in plain_text, plain_text)
     check("aplicados listam aterrissar e W-1",
           applied == ["merge into the clone's branch", "W-1: W-1 ok"], applied)
 
@@ -776,7 +776,7 @@ def test_run_without_terminal_lists_the_pending_and_the_command():
         check("...com a pergunta do item, não a evidência",
               "a1: Fecho o card como medir depois do go-live?" in nxt, p.stdout[-1500:])
         check("...e o comando para responder",
-              "cepa-until decide fila/" in p.stdout, p.stdout[-800:])
+              "cepa-run decide fila/" in p.stdout, p.stdout[-800:])
 
 
 def test_run_on_terminal_ends_asking_and_applies():
@@ -790,7 +790,7 @@ def test_run_on_terminal_ends_asking_and_applies():
         env = dict(os.environ)
         env["PATH"] = f"{binv}:{env['PATH']}"
         env["FAKE_PLANO"] = str(plan_of(root))
-        env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
+        env.setdefault("CEPA_RUN_READER", "off")  # the pre-read must not call the fake claude
         env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
         env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
         rc, out = on_tty(
@@ -813,13 +813,13 @@ def test_run_on_terminal_without_answer_exits_after_the_wait():
     """Item until-processo-nao-sai: an overnight run ends with nobody at the
     keyboard. The end-of-run prompt had no limit and PID 84993 (run WEGO
     2026-10-07-2132) stayed alive 15 days blocked in `input()`. With no
-    keystroke inside CEPA_UNTIL_ESPERA_RESPOSTA the run prints the
-    `cepa-until decide` command and exits 0, applying nothing."""
+    keystroke inside CEPA_RUN_ANSWER_WAIT the run prints the
+    `cepa-run decide` command and exits 0, applying nothing."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1"), item("a2")])
         binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        env["CEPA_RUN_ANSWER_WAIT"] = "2"
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"], str(root),
@@ -828,7 +828,7 @@ def test_run_on_terminal_without_answer_exits_after_the_wait():
         check("o menu foi mostrado",
               "Fecho o card como medir depois do go-live?" in out, out[-1500:])
         check("imprime o comando para responder depois",
-              "cepa-until decide fila/" in out, out[-1500:])
+              "cepa-run decide fila/" in out, out[-1500:])
         check("nada foi aplicado",
               items_of(root)["a1"]["status"] == "blocked", items_of(root)["a1"])
 
@@ -855,7 +855,7 @@ def env_do_run(tmp, root, binv):
     env = dict(os.environ)
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(plan_of(root))
-    env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
+    env.setdefault("CEPA_RUN_READER", "off")  # the pre-read must not call the fake claude
     env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
     env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
     return env
@@ -863,7 +863,7 @@ def env_do_run(tmp, root, binv):
 
 def test_decide_on_terminal_asks_to_land_and_lands_with_y():
     """AC1: `y` at the `decide` prompt really lands. CS-4 of fim-do-until-sem-espera:
-    the END OF THE RUN no longer asks it; `cepa-until decide <fila>/<run>`, by hand,
+    the END OF THE RUN no longer asks it; `cepa-run decide <fila>/<run>`, by hand,
     still does."""
     from test_cepa_until_land import with_origin, state
     from test_cepa_until_run_branch import WORKS, VERIFY, git
@@ -952,30 +952,30 @@ def test_agent_instructions_ask_for_the_question():
     """AC6: without these lines, the agent goes back to blocking an item without a question and the
     analysis goes back to not recording the block the terminal reads."""
     commands = CEPA_UNTIL.parent.parent / "commands"
-    review = (commands / "until-review.md").read_text(encoding="utf-8")
-    drain = (commands / "drain-plan.md").read_text(encoding="utf-8")
+    review = (commands / "run-review.md").read_text(encoding="utf-8")
+    drain = (commands / "queue-run.md").read_text(encoding="utf-8")
     check("until-review manda gravar o bloco cepa-decisoes",
           "```json cepa-decisoes" in review, "")
     check("...cobrindo todos os adiados da fila, pelo queue",
-          "deferred" in review and "cepa-plan queue" in review, "")
+          "deferred" in review and "cepa-queue queue" in review, "")
     check("...e diz que as ações vêm da lista fechada",
           "closed list" in review, "")
     check("drain-plan manda gravar --question ao travar",
           "--question" in drain, "")
-    p = subprocess.run([sys.executable, str(CEPA_UNTIL.parent / "cepa-plan"),
+    p = subprocess.run([sys.executable, str(CEPA_UNTIL.parent / "cepa-queue"),
                         "finish", "--help"], capture_output=True, text=True,
                        timeout=30)
     help_ = " ".join(p.stdout.split())
-    for given_name, plain_text in (("until-review", review), ("drain-plan", drain),
-                        ("cepa-plan finish --help", help_)):
+    for given_name, plain_text in (("run-review", review), ("queue-run", drain),
+                        ("cepa-queue finish --help", help_)):
         plain_text = " ".join(plain_text.replace("**", "").split())
-        # The commands and cepa-plan's help were translated to English.
+        # The commands and cepa-queue's help were translated to English.
         sentences = {
-            "drain-plan": ("Up to 25 words", "without a branch name",
+            "queue-run": ("Up to 25 words", "without a branch name",
                            "the item goes back to the queue"),
             # the terminal menu is printed in pt-BR by cepa-until and the
             # command quotes it literally.
-            "until-review": ("Up to 25 words", "no branch name",
+            "run-review": ("Up to 25 words", "no branch name",
                              "volta para a fila"),
         }.get(given_name, ("25 words", "no branch, class or file name",
                            "the item returns to the queue"))
@@ -992,7 +992,7 @@ def test_agent_instructions_ask_for_the_question():
 
 
 REVIEW_WITH_BLOCK = (
-    "if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+    "if ARGS and ARGS[1].startswith('/common:run-review'):\n"
     "    print('RELATORIO')\n"
     "    print('```json cepa-decisoes')\n"
     "    print(json.dumps({'itens': [{'id': 'a1', 'pergunta': "
@@ -1026,7 +1026,7 @@ def test_end_stopped_by_quota_also_asks():
         stuck["evidence"] = "sem produção"
         stuck["owner_question"] = "Fecho o card?"
         root = build_repo(tmp, [stuck, item("a2")])
-        body = ("if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+        body = ("if ARGS and ARGS[1].startswith('/common:run-review'):\n"
                  "    sys.exit(0)\n"
                  "print(json.dumps({'type': 'result', 'result': "
                  "\"You've hit your session limit\"}))\n")
@@ -1142,7 +1142,7 @@ def test_already_landed_run_does_not_ask_again():
 
 def test_decidir_s_and_n_on_terminal_reach_the_plan():
     """AC2 at the end: `n` and `s` typed in a real terminal go through the real
-    `cepa-plan responde` and record "não: <question>" (item as it is)
+    `cepa-queue responde` and record "não: <question>" (item as it is)
     and "sim: <question>" (item back to the queue)."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1"), item("a2")])
@@ -1295,7 +1295,7 @@ def test_cs1_long_pasted_answer_with_accents_reaches_the_item():
               rc == 0 and a1["status"] == "pending", (rc, a1.get("status"),
                                                       out[-800:]))
         # The owner's text is the end of the answer segment; after it
-        # `cepa-plan responde` appends its fixed trailer ("O item voltou de
+        # `cepa-queue responde` appends its fixed trailer ("O item voltou de
         # `blocked` para `pending`."), so "ends with" is read up to there.
         check("cs1: a resposta na evidência termina com os 1.500 bytes intactos",
               f"{long_text}. O item voltou de" in str(a1.get("evidence", "")),
@@ -1854,7 +1854,7 @@ def test_old_blocked_item_gets_a_true_generic_reason():
 
 def test_supervisor_block_writes_a_lay_reason():
     """`block_item` is the supervisor closing an item nobody explained; it
-    passes `cepa-plan`'s new rule with its own lay reason."""
+    passes `cepa-queue`'s new rule with its own lay reason."""
     m = load_module()
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
@@ -1867,7 +1867,7 @@ def test_supervisor_block_writes_a_lay_reason():
 
 
 def test_finish_item_reopens_an_item_the_agent_closed_done():
-    """DUR-2: `cepa-plan finish` refuses a second finish on a terminal item;
+    """DUR-2: `cepa-queue finish` refuses a second finish on a terminal item;
     the supervisor's `finish_item` must pass `--supervisor` (red full build puts
     the agent's `done` back to `pending`)."""
     m = load_module()
@@ -1899,7 +1899,7 @@ def _launch_on_tty(answers, wait="600", items=None, extra=(), timeout=90):
                           [item("a1", human_pending="provision the Keycloak role")])
         binv = fake_claude(tmp, "pass")
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+        env["CEPA_RUN_ANSWER_WAIT"] = wait
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis", *extra], str(root),
@@ -1950,7 +1950,7 @@ def test_launch_without_terminal_keeps_ending_with_no_item_start():
         env = dict(os.environ)
         env["PATH"] = f"{binv}:{env['PATH']}"
         env["FAKE_PLANO"] = str(plan_of(root))
-        env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
+        env.setdefault("CEPA_RUN_READER", "off")  # the pre-read must not call the fake claude
         env.setdefault("CEPA_WORKTREE_HOME", str(Path(root).parent / "worktrees"))
         calls_f = Path(root).parent / "chamadas.jsonl"
         env["FAKE_CHAMADAS"] = str(calls_f)
@@ -2058,7 +2058,7 @@ def test_launch_cs3_panel_before_the_first_item_leaves_the_delivered_route_out()
 
 
 def _answered(day, answer="não: Fecho o card?", old=""):
-    """Evidence as `cepa-plan answer --keep` leaves it: the answer prepended."""
+    """Evidence as `cepa-queue answer --keep` leaves it: the answer prepended."""
     return (f"Resposta do dono em {day}: {answer}. O dono manteve o item como estava "
             f"(`pending`, rota humana aberta). Evidência anterior: {old or 'x'}")
 
@@ -2136,7 +2136,7 @@ def _cs10_check(label, items, answers, count):
         root = build_repo(tmp, items)
         binv = fake_claude(tmp, "pass")
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        env["CEPA_RUN_ANSWER_WAIT"] = "2"
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"], str(root),
@@ -2156,7 +2156,7 @@ def _cs10_check(label, items, answers, count):
         check(f"{label}: no ledger events", _launch_events(root) == [], out[-800:])
         if count:
             check(f"{label}: wait-for-you line with count {count}",
-                  f"{count} item(s) wait for you: cepa-until decide fila" in out,
+                  f"{count} item(s) wait for you: cepa-run decide fila" in out,
                   out[-1500:])
         else:
             check(f"{label}: nothing waits for the owner, so no wait-for-you line",
@@ -2267,7 +2267,7 @@ def test_launch_guard_needs_both_stdin_and_stdout_on_a_terminal():
         root = build_repo(tmp, [item("a1", human_pending="provision the Keycloak role")])
         binv = fake_claude(tmp, "pass")
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        env["CEPA_RUN_ANSWER_WAIT"] = "2"
         cmd = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
                "--for", "2h", "--no-verify", "--no-analysis"]
         # a) stdin = pty, stdout = pipe
@@ -2358,14 +2358,14 @@ def _fake_reader(tmp, mode):
 
 def _pre_read_launch(mode, leitor=None, extra=(), x_item=None):
     """No terminal (stdin DEVNULL): queue with x1 and y1, the fake reader plugged
-    through CEPA_UNTIL_LEITOR (or `leitor` as given). Returns (stdout, events, items,
+    through CEPA_RUN_READER (or `leitor` as given). Returns (stdout, events, items,
     reader_calls)."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [x_item or item("x1"), item("y1")])
         binv = fake_claude(tmp, "pass")
         script, log = _fake_reader(tmp, mode)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = leitor if leitor is not None else str(script)
+        env["CEPA_RUN_READER"] = leitor if leitor is not None else str(script)
         p = subprocess.run(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis", *extra],
@@ -2484,7 +2484,7 @@ def test_pre_read_cs5_cepa_plan_refusing_both_attempts_runs_the_item_with_the_er
 
 
 def test_pre_read_cs5_orphan_reservation_needs_the_supervisor_flag():
-    # `cepa-plan queue` returns an `in_progress` item with an orphan reservation as
+    # `cepa-queue queue` returns an `in_progress` item with an orphan reservation as
     # executable; without `--supervisor`, `finish` refuses a claim that is not the
     # caller's (finish_gate), so the route would never open.
     x = dict(item("x1", status="in_progress"),
@@ -2503,8 +2503,8 @@ def test_pre_read_cs5_route_opened_by_the_pre_read_shows_in_the_launch_panel():
         binv = fake_claude(tmp, "pass")
         script, log = _fake_reader(tmp, "pre")
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(script)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        env["CEPA_RUN_READER"] = str(script)
+        env["CEPA_RUN_ANSWER_WAIT"] = "2"
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"], str(root),
@@ -2526,7 +2526,7 @@ def test_pre_read_cs5_nothing_left_after_the_pre_read_means_no_run():
         binv = fake_claude(tmp, "pass")
         script, log = _fake_reader(tmp, "pre")
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(script)
+        env["CEPA_RUN_READER"] = str(script)
         p = subprocess.run(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"],
@@ -2571,8 +2571,8 @@ def test_pre_read_cs5_ceiling_kills_a_slow_reader_and_the_item_runs():
         root = build_repo(tmp, [item("x1")])
         binv = fake_claude(tmp, "pass")
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = f"{sys.executable} -c 'import time; time.sleep(60)'"
-        env["CEPA_UNTIL_TETO_LEITURA"] = "1"
+        env["CEPA_RUN_READER"] = f"{sys.executable} -c 'import time; time.sleep(60)'"
+        env["CEPA_RUN_READER_CEILING"] = "1"
         t0 = time.time()
         p = subprocess.run(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
@@ -2588,13 +2588,13 @@ def test_pre_read_cs5_ceiling_kills_a_slow_reader_and_the_item_runs():
 # ── CS-7: the pre-read stops at the ceiling and the unread item runs as today ──
 
 def _cs7_launch(items, reader, ceiling="1", body="pass"):
-    """Real launch with `reader` as CEPA_UNTIL_LEITOR; returns (out, events)."""
+    """Real launch with `reader` as CEPA_RUN_READER; returns (out, events)."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, items)
         binv = fake_claude(tmp, body)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = reader(tmp) if callable(reader) else reader
-        env["CEPA_UNTIL_TETO_LEITURA"] = ceiling
+        env["CEPA_RUN_READER"] = reader(tmp) if callable(reader) else reader
+        env["CEPA_RUN_READER_CEILING"] = ceiling
         p = subprocess.run(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"],
@@ -2695,8 +2695,8 @@ def _pref_launch(mode="pref", tty_inputs=None, wait="5"):
         binv = fake_claude(tmp, "pass")
         script, _ = _fake_reader(tmp, mode)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(script)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+        env["CEPA_RUN_READER"] = str(script)
+        env["CEPA_RUN_ANSWER_WAIT"] = wait
         cmd = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
                "--for", "2h", "--no-verify", "--no-analysis"]
         if tty_inputs is None:
@@ -2719,7 +2719,7 @@ def test_pre_read_cs6_without_answer_the_prompt_carries_the_default_and_the_summ
     check("cs6 default: the prompt says it was the agent's default",
           "the owner did not answer" in reqs.get("x1", ""), str(reqs))
     check("cs6 default: the prompt still starts with the drain-plan request",
-          reqs.get("x1", "").startswith("/common:drain-plan fila --max 1"), str(reqs))
+          reqs.get("x1", "").startswith("/common:queue-run fila --max 1"), str(reqs))
     check("cs6 default: y1's prompt has no note", "pre-read" not in reqs.get("y1", "x"),
           str(reqs))
     tail = out[out.find("ended at"):]
@@ -2792,12 +2792,12 @@ def test_pre_read_cs6_note_and_command_units():
     check("cs6 unit: no preference, no note", mod.preference_note("x1", None) == "")
     plain = mod.build_command("fila", "until/b", False)
     check("cs6 unit: without a note the request carries no pre-read paragraph",
-          plain[2].startswith("/common:drain-plan fila --max 1 --na-branch until/b")
+          plain[2].startswith("/common:queue-run fila --max 1 --on-branch until/b")
           and "Go with:" not in plain[2], str(plain))
     pref = {"texto": "T.", "padrao": "P", "escolha": "R", "fonte": "dono"}
     with_note = mod.build_command("fila", "until/b", False, note=mod.preference_note("x1", pref))
     check("cs6 unit: the note follows the request in its own paragraph",
-          with_note[2].startswith("/common:drain-plan fila --max 1 --na-branch until/b\n\n")
+          with_note[2].startswith("/common:queue-run fila --max 1 --on-branch until/b\n\n")
           and "Go with: R" in with_note[2] and "item you reserve is x1" in with_note[2],
           str(with_note))
     sneaky = dict(pref, escolha="--offline --max 9 usar a-b")
@@ -2851,8 +2851,8 @@ def _cs8_launch(items, mode="pre", inputs=None, wait="5", delay=2):
         binv = fake_claude(tmp, "pass")
         reader, done = _slow_reader(tmp, mode, delay)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(reader)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = wait
+        env["CEPA_RUN_READER"] = str(reader)
+        env["CEPA_RUN_ANSWER_WAIT"] = wait
         seen = {}
 
         def first_answer():
@@ -3010,8 +3010,8 @@ def test_launch_cs8_empty_queue_route_and_preference_from_the_pre_read_share_one
             "        'pergunta': 'Posso usar o formato curto?'}))\n")
         reader.chmod(0o755)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(reader)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "5"
+        env["CEPA_RUN_READER"] = str(reader)
+        env["CEPA_RUN_ANSWER_WAIT"] = "5"
         _, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"], str(root),
@@ -3065,8 +3065,8 @@ def test_launch_cs9_option_on_terminal_skips_the_pre_read_and_the_panel():
         binv = fake_claude(tmp, "pass")
         reader, log = _mixed_reader(tmp)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(reader)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        env["CEPA_RUN_READER"] = str(reader)
+        env["CEPA_RUN_ANSWER_WAIT"] = "2"
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis", "--no-pre-read"],
@@ -3102,7 +3102,7 @@ def test_launch_cs9_option_has_a_portuguese_alias_and_is_in_the_help():
         binv = fake_claude(tmp, "pass")
         reader, log = _mixed_reader(tmp)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(reader)
+        env["CEPA_RUN_READER"] = str(reader)
         q = subprocess.run(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis", "--sem-leitura"],
@@ -3126,8 +3126,8 @@ def test_launch_cs9_without_terminal_reads_and_lists_the_questions_as_text():
         binv = fake_claude(tmp, "pass")
         reader, log = _mixed_reader(tmp)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(reader)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "600"
+        env["CEPA_RUN_READER"] = str(reader)
+        env["CEPA_RUN_ANSWER_WAIT"] = "600"
         rfd, wfd = os.pipe()
         try:
             proc = subprocess.Popen(
@@ -3159,7 +3159,7 @@ def test_launch_cs9_without_terminal_reads_and_lists_the_questions_as_text():
     check("cs9 no terminal: the preference line names the default",
           "runs with the agent's default: usar o formato curto" in out, out[-2500:])
     check("cs9 no terminal: the listing says where to answer",
-          "cepa-until decide fila" in out, out[-2500:])
+          "cepa-run decide fila" in out, out[-2500:])
     check("cs9 no terminal: no panel prompt",
           not any(m in out for m in ("[w] I write the answer", "question(s) for you",
                                      "Your choice", "nobody answered in")), out[-2500:])
@@ -3186,7 +3186,7 @@ def test_pre_read_as_text_unit():
     joined = "\n".join(lines)
     check("cs9 unit: a preference alone is listed, without the decide line",
           "b (runs with the agent's default: P): t" in joined
-          and "cepa-until decide" not in joined, joined)
+          and "cepa-run decide" not in joined, joined)
 
 
 def main():

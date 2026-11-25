@@ -4,7 +4,7 @@
 No dependencies — run with `python3 tests/test_cepa_topology.py`.
 Exits non-zero on failure.
 
-`/common:drain-plan` executes each item the way `/common:autonomous-start`
+`/common:queue-run` executes each item the way `/common:autonomous-start`
 dispatches: reads `.claude/topology` and calls `/<topology>:plan-build-validate`, or
 `/<topology>:reproduce-fix-verify` when the item is a defect. cepa did not have the
 file, and step 1 of autonomous-start aborted ("No topology configured").

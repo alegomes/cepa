@@ -21,9 +21,9 @@ In an autonomous run (`claude -p` from `cepa-until`, or
 recorded there is the agent waiving proof on the owner's behalf (fb-20261014-3:
 a run wrote `autor: alegomes` on its own). So in that mode `write` becomes
 `propose`: the file is born as a PROPOSAL (`status: proposta`, `autor: null`),
-`load` does not see it, and only the owner's `cepa-plan answer`, in a terminal,
+`load` does not see it, and only the owner's `cepa-queue answer`, in a terminal,
 converts it into a waiver (`convert`). Inline twin of the conversion:
-`common/bin/cepa-plan` (`cmd_answer`).
+`common/bin/cepa-queue` (`cmd_answer`).
 """
 from __future__ import annotations
 
@@ -65,12 +65,20 @@ def _key(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", (text or "").lower())
 
 
+def _autonomous_run_id(env=None):
+    """`CEPA_AUTONOMOUS_RUN_ID`; the name it had before (CLAUDE_AUTONOMOUS_RUN_ID)
+    is still read. The new one wins."""
+    env = os.environ if env is None else env
+    return env.get("CEPA_AUTONOMOUS_RUN_ID") or env.get("CLAUDE_AUTONOMOUS_RUN_ID")
+
+
 def in_autonomous_run(env=None) -> bool:
-    """True when the process is a run with no owner in front: `CEPA_UNTIL_RUN`
-    (set by `cepa-until` on every `claude -p`) or `CLAUDE_AUTONOMOUS_RUN_ID`
+    """True when the process is a run with no owner in front: `CEPA_RUN`
+    (set by `cepa-run` on every `claude -p`) or `CEPA_AUTONOMOUS_RUN_ID`
     (set by /common:autonomous-start)."""
     env = os.environ if env is None else env
-    return bool(env.get("CEPA_UNTIL_RUN") or env.get("CLAUDE_AUTONOMOUS_RUN_ID"))
+    return bool(env.get("CEPA_RUN") or env.get("CEPA_UNTIL_RUN")
+                or _autonomous_run_id(env))
 
 
 def load(repo: str) -> list[dict]:
@@ -188,7 +196,7 @@ def propose(repo: str, reason: str, scope: str, rationale: str,
         return dest
 
     by = proposed_by
-    run_id = os.environ.get("CLAUDE_AUTONOMOUS_RUN_ID")
+    run_id = _autonomous_run_id()
     if run_id and run_id not in by:
         by = f"{by} (run {run_id})"
     d = {
@@ -278,7 +286,7 @@ def write(repo: str, reason: str, scope: str, rationale: str, author: str,
     agent waiving proof on the owner's behalf (fb-20261014-3, `autor: alegomes`
     written on its own). There is no parameter that forces the real waiver in
     this mode — on purpose. `queue`/`item` tie the proposal to the queue item
-    so `cepa-plan answer` can find it."""
+    so `cepa-queue answer` can find it."""
     if in_autonomous_run():
         for n, v in (("razao", rationale), ("autor", author),
                      ("revisit_trigger", revisit_trigger),

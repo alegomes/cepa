@@ -4,15 +4,15 @@
 Run with `python3 tests/test_common_next.py` (needs nothing installed).
 
 Why it exists: the "the plan says / the board says" comparison lived only in the prose
-of this command. On 2026-08-28 it became `cepa-plan reconcile`, code with a test,
-precisely so the batch executor (/common:drain-plan) uses the SAME rule instead
-of a second copy that drifts. Only that the `drain-plan.md` side gained a contract
+of this command. On 2026-08-28 it became `cepa-queue reconcile`, code with a test,
+precisely so the batch executor (/common:queue-run) uses the SAME rule instead
+of a second copy that drifts. Only that the `queue-run.md` side gained a contract
 test and this one did not: if someone rewrites this file to go back to
 eyeballing the comparison, the two commands diverge again and nothing goes red.
 The completeness auditor blocked commit b71a404 for exactly this gap.
 
 What these tests do NOT prove: that the reconciliation is right. That is
-tests/test_common_drain_plan.py, which exercises the real `cepa-plan reconcile`.
+tests/test_common_drain_plan.py, which exercises the real `cepa-queue reconcile`.
 Here the question is only whether the command CALLS the comparator.
 """
 
@@ -40,14 +40,14 @@ def test_calls_the_comparator_instead_of_eyeballing():
     check("a leitura do quadro é delegada a quem tem as ferramentas",
           "atlassian-expert" in f,
           "este comando não pode chamar ferramenta do Atlassian direto")
-    check("e a comparação passa pelo `cepa-plan reconcile`",
-          "cepa-plan reconcile" in f,
+    check("e a comparação passa pelo `cepa-queue reconcile`",
+          "cepa-queue reconcile" in f,
           "sem isso a tabela plano × quadro volta a ser interpretada a cada "
-          "run, e o /common:drain-plan passa a usar uma regra diferente da "
+          "run, e o /common:queue-run passa a usar uma regra diferente da "
           "deste comando")
     check("o passo Sync grava pelo mesmo comparador, com --apply",
-          "cepa-plan reconcile" in f and "--apply" in f,
-          "gravar por fora do cepa-plan contorna todas as recusas dele")
+          "cepa-queue reconcile" in f and "--apply" in f,
+          "gravar por fora do cepa-queue contorna todas as recusas dele")
     check("e proíbe editar o YAML à mão",
           "editing the yaml by hand" in clean or "à mão" in clean)
 
@@ -64,7 +64,7 @@ def test_the_limits_reconciliation_cannot_cross():
     # fb-20261109-3: the answer the owner gave in the chat is recorded by the
     # agent, not handed back as a command for the owner to run in a terminal
     check("manda gravar a resposta do chat com --from-chat",
-          "cepa-plan answer" in clean and "--from-chat" in clean
+          "cepa-queue answer" in clean and "--from-chat" in clean
           and "record it yourself" in clean)
     check("e não manda mais só entregar o comando ao usuário",
           "so hand the user the command" not in clean)

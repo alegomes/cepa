@@ -14,7 +14,7 @@ Against the real CLI, in a real git repo, in a PTY (`answer` only runs on a TTY)
   - the new id never collides with an existing one;
   - `nenhum`, `--keep`, `--drop`, a "não" and the "sim" of a `blocked` item
     (which returns the item itself to the queue) create nothing;
-  - the queue still validates afterwards (`cepa-plan queue` exits 0 and returns
+  - the queue still validates afterwards (`cepa-queue queue` exits 0 and returns
     the new item).
 """
 import json
@@ -35,7 +35,7 @@ FAILURES = []
 
 ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
            GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
-for v in ("CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID"):
+for v in ("CEPA_RUN", "CEPA_UNTIL_RUN", "CEPA_AUTONOMOUS_RUN_ID", "CLAUDE_AUTONOMOUS_RUN_ID"):
     ENV.pop(v, None)
 
 QUESTION = "Ponho na fila um item para calibrar X?"

@@ -1,5 +1,5 @@
 ---
-description: Run the build-solo bug-fix flow — pair-dev writes a failing regression test first, then the fix, pair-reviewer reviews, the orchestrator runs the full test suite and commits. The flow /common:autonomous-start and /common:drain-plan dispatch defects to when .claude/topology says build-solo.
+description: Run the build-solo bug-fix flow — pair-dev writes a failing regression test first, then the fix, pair-reviewer reviews, the orchestrator runs the full test suite and commits. The flow /common:autonomous-start and /common:queue-run dispatch defects to when .claude/topology says build-solo.
 argument-hint: <bug description, error message, or failing test>
 interaction: routine
 ---
@@ -9,7 +9,7 @@ interaction: routine
 ## Purpose
 
 Confirmed bug → red regression test → fix → green suite → review, at pair
-size. `/common:autonomous-start` and `/common:drain-plan` send defects to
+size. `/common:autonomous-start` and `/common:queue-run` send defects to
 `/<topology>:reproduce-fix-verify`; without this command a `build-solo` repo
 aborts on the first bug in its queue.
 

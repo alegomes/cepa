@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The Epic's "where are we", derived: `cepa-plan epics`, the session hook and /common:whereami.
+"""The Epic's "where are we", derived: `cepa-queue epics`, the session hook and /common:whereami.
 
 Run with `python3 tests/test_epic_where.py`. Decision (queue item
 `onde-estamos-do-epic`): the summary is not a block written into the Epic; it is
@@ -42,7 +42,7 @@ from _isolated_telemetry import isolate
 isolate()
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 HOOK = REPO / "common" / "hooks" / "session-mode.py"
 WHEREAMI = REPO / "common" / "commands" / "whereami.md"
 EPIC_CMD = REPO / "common" / "commands" / "epic.md"
@@ -101,7 +101,7 @@ def epics(repo_path, *args):
 
 
 def run_hook(cwd, env=None, **payload):
-    e = {k: v for k, v in os.environ.items() if k != "CEPA_UNTIL_RUN"}
+    e = {k: v for k, v in os.environ.items() if k not in ("CEPA_RUN", "CEPA_UNTIL_RUN")}
     e.update(env or {})
     return subprocess.run(
         [sys.executable, str(HOOK)],
@@ -314,7 +314,7 @@ def test_hook():
         check("hook com 2 prompts antes: sem [epic]", "[epic]" not in ctx(p),
               ctx(p))
         write_log(r, [])
-        p = run_hook(r.path, env={"CEPA_UNTIL_RUN": "1"}, session_id="s1",
+        p = run_hook(r.path, env={"CEPA_RUN": "1"}, session_id="s1",
                      prompt="oi")
         check("hook em run do cepa-until: sem [epic]", "[epic]" not in ctx(p),
               ctx(p))
@@ -324,7 +324,7 @@ def test_hook():
 
 
 def test_hook_fail_silent():
-    """`cepa-plan epics` failing (rc 3, or missing) must not break the hook."""
+    """`cepa-queue epics` failing (rc 3, or missing) must not break the hook."""
     with TmpRepo() as r, tempfile.TemporaryDirectory() as plug:
         r.epic("x", EPIC_X)
         r.queue("x-c1", "x", [item("A-1", "done")])
@@ -335,7 +335,7 @@ def test_hook_fail_silent():
         shutil.copytree(HOOK.parent, hooks,
                         ignore=shutil.ignore_patterns("__pycache__"))
         (Path(plug) / "bin").mkdir()
-        fake = Path(plug) / "bin" / "cepa-plan"
+        fake = Path(plug) / "bin" / "cepa-queue"
         for variant in ("exit 3", "missing"):
             if variant == "exit 3":
                 fake.write_text("import sys\nsys.exit(3)\n")
@@ -347,7 +347,7 @@ def test_hook_fail_silent():
                                   "prompt": "oi"}),
                 capture_output=True, text=True, timeout=30,
                 env={k: v for k, v in os.environ.items()
-                     if k != "CEPA_UNTIL_RUN"})
+                     if k not in ("CEPA_RUN", "CEPA_UNTIL_RUN")})
             check(f"fail-silent ({variant}): rc 0", p.returncode == 0,
                   p.stderr)
             check(f"fail-silent ({variant}): sem [epic]",
@@ -358,7 +358,7 @@ def test_hook_fail_silent():
 
 def test_whereami_step0_runs():
     txt = WHEREAMI.read_text(encoding="utf-8")
-    m = re.search(r'^\s*(python3 "\$\{CLAUDE_PLUGIN_ROOT\}/bin/cepa-plan" '
+    m = re.search(r'^\s*(python3 "\$\{CLAUDE_PLUGIN_ROOT\}/bin/cepa-queue" '
                   r'epics --repo \.)\s*$', txt, re.M)
     check("whereami.md: linha do passo 0 extraível", m is not None)
     if not m:
@@ -367,6 +367,7 @@ def test_whereami_step0_runs():
         r.epic("x", EPIC_X)
         r.queue("x-c1", "x", [item("A-1", "done")])
         env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(REPO / "common")}
+        env.pop("CEPA_RUN", None)
         env.pop("CEPA_UNTIL_RUN", None)
         p = subprocess.run(["bash", "-c", m.group(1)], cwd=r.path, env=env,
                            capture_output=True, text=True, timeout=60)
@@ -379,11 +380,11 @@ def test_whereami_step0_runs():
 def test_docs():
     w = WHEREAMI.read_text(encoding="utf-8")
     check("whereami.md traz o comando do passo 0",
-          'cepa-plan" epics --repo .' in w)
+          'cepa-queue" epics --repo .' in w)
     check("whereami.md mantém a linha do cepa-intent state",
           'cepa-intent" state' in w)
-    check("epic.md menciona cepa-plan epics",
-          "cepa-plan epics" in EPIC_CMD.read_text(encoding="utf-8"))
+    check("epic.md menciona cepa-queue epics",
+          "cepa-queue epics" in EPIC_CMD.read_text(encoding="utf-8"))
 
 
 def test_real_repo():

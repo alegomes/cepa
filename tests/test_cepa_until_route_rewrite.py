@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """CS-4 of docs/spec/perguntas-da-largada-legiveis.md: the launch rewrites an old route
 (an open `human_pending` with no written question or no kind) as a closed question and
-records the result in the item, through `cepa-plan reword-route`.
+records the result in the item, through `cepa-queue reword-route`.
 
 What these cases prove:
 
@@ -11,7 +11,7 @@ What these cases prove:
   - without a terminal the rewrite is recorded too, and nothing is asked;
   - a reader that prints garbage or fails leaves the item as it was and the launch goes on;
   - a route that already has question and kind never reaches the reader;
-  - `cepa-plan reword-route` refuses what it must, fills only what is missing and never
+  - `cepa-queue reword-route` refuses what it must, fills only what is missing and never
     touches `human_pending`, `status` nor `evidence`.
 
 Its own file (helpers borrowed from test_cepa_until_decide.py) so the proof gate can run
@@ -98,10 +98,10 @@ def _launch(items, mode="ok", tty=True, inputs=(), ceiling=None):
         binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
         reader, log = _route_reader(tmp, mode)
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(reader)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "5"
+        env["CEPA_RUN_READER"] = str(reader)
+        env["CEPA_RUN_ANSWER_WAIT"] = "5"
         if ceiling is not None:
-            env["CEPA_UNTIL_TETO_LEITURA"] = str(ceiling)
+            env["CEPA_RUN_READER_CEILING"] = str(ceiling)
         cmd = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
                "--for", "2h", "--no-verify", "--no-analysis"]
         if tty:
@@ -405,7 +405,7 @@ def test_is_old_route_selects_only_open_human_pending_routes():
               mod.is_old_route(ad(human_pending=blank)) is False)
 
 
-# ── cepa-plan reword-route ───────────────────────────────────────────────────
+# ── cepa-queue reword-route ───────────────────────────────────────────────────
 
 def _reword(root, ident, kind="external-block", question=QUESTION, if_yes=IF_YES,
             if_no=IF_NO, no_item="nenhum"):
@@ -500,8 +500,8 @@ def test_an_interrupted_pool_kills_its_own_running_readers():
             f"open({str(pidfile)!r}, 'w').write(str(os.getpid()))\n"
             "time.sleep(30)\n")
         script.chmod(0o755)
-        before = os.environ.get("CEPA_UNTIL_LEITOR")
-        os.environ["CEPA_UNTIL_LEITOR"] = str(script)
+        before = os.environ.get("CEPA_RUN_READER")
+        os.environ["CEPA_RUN_READER"] = str(script)
         pid = None
 
         def one(it, deadline):
@@ -544,9 +544,9 @@ def test_an_interrupted_pool_kills_its_own_running_readers():
                 except OSError:
                     pass
             if before is None:
-                os.environ.pop("CEPA_UNTIL_LEITOR", None)
+                os.environ.pop("CEPA_RUN_READER", None)
             else:
-                os.environ["CEPA_UNTIL_LEITOR"] = before
+                os.environ["CEPA_RUN_READER"] = before
 
 
 def main():

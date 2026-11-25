@@ -73,7 +73,7 @@ The nudge fires on a good cut point, with a higher bar than the gentle
 that stays quiet:
 
 - a **subject pivot AND a recent commit** (the prior work just closed), or
-- a **long session** (past `CLAUDE_WT_SESSION_SOFTCAP`, default 45 prompts).
+- a **long session** (past `CEPA_WT_SESSION_SOFTCAP`, default 45 prompts).
 
 On agreement it runs `/common:handoff`. It's a suggestion, never a block.
 
@@ -81,9 +81,9 @@ On agreement it runs `/common:handoff`. It's a suggestion, never a block.
 
 | Env var | Default | Effect |
 |---|---|---|
-| `CLAUDE_WT_NUDGE` | on | `=off` silences the wrap-up nudge (keeps subject detection). |
-| `CLAUDE_WT_SUBJECT` | on | `=off` disables subject detection entirely (and the nudge with it). |
-| `CLAUDE_WT_SESSION_SOFTCAP` | `45` | Prompt count past which a long session nudges. |
+| `CEPA_WT_NUDGE` | on | `=off` silences the wrap-up nudge (keeps subject detection). |
+| `CEPA_WT_SUBJECT` | on | `=off` disables subject detection entirely (and the nudge with it). |
+| `CEPA_WT_SESSION_SOFTCAP` | `45` | Prompt count past which a long session nudges. |
 
 ## Typical flow
 

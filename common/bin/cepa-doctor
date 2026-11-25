@@ -66,6 +66,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
 import _clihelp  # noqa: E402
 import _state  # noqa: E402  (catalogue of the state deposits; run liveness)
+import _cepaenv as E  # noqa: E402  (the CEPA_ environment names; the old ones still read)
 try:
     import _pluginver as PV
 except Exception:  # noqa: BLE001 — doctor degrades, never dies because of this
@@ -90,7 +91,7 @@ except Exception:  # noqa: BLE001
     WT = None
 
 # The reader of "Decided without asking" is the one the readiness gate and
-# `cepa-plan decisions` use: the count here is the count they see.
+# `cepa-queue decisions` use: the count here is the count they see.
 try:
     import _decisions
 except Exception:  # noqa: BLE001
@@ -580,8 +581,7 @@ def check_project(cwd: Path):
                     d = (datetime.now(timezone.utc).timestamp() - int(out2.strip())) / 86400
                     if d > 14:
                         warn("worktrees", f"{Path(wt_path).name} ({branch}) sem commit há {d:.0f}d — merge ou /common:worktree-discard")
-    wt_home = Path(os.environ.get("CEPA_WORKTREE_HOME")
-                   or os.environ.get("CCW_WORKTREE_HOME")
+    wt_home = Path(E.get("CEPA_WORKTREE_HOME")
                    or (Path.home() / "cepa-worktrees"))
     if wt_home.is_dir():
         prefix = f"{root.name}-"
@@ -669,7 +669,7 @@ def check_decisions(root: Path):
             res = _decisions.read(text)
             if res is None or not res.pending:
                 continue
-            cmd = (f"/common:spec --continuar {path.stem}" if kind == "spec"
+            cmd = (f"/common:spec --continue {path.stem}" if kind == "spec"
                    else f"/common:epic {path.stem}")
             pending.append((len(res.pending), str(path.relative_to(root)), cmd))
     total = sum(n for n, _p, _c in pending)
@@ -801,7 +801,7 @@ def check_dirty_tree(root: Path):
     dirty = [l for l in dirty if (_dirt.counts_as_dirt(l) if _dirt else l.strip())]
     if not dirty:
         ok("execucao", f"fila `{queue}` pendente e árvore limpa — "
-                       f"`cepa-until {queue} --for 12h` larga sem recusa")
+                       f"`cepa-run {queue} --for 12h` larga sem recusa")
         return
     warn("execucao",
          f"árvore com {len(dirty)} arquivo(s) pendente(s) e a fila `{queue}` com "
@@ -928,7 +928,7 @@ def check_twg_version(root: Path):
 #
 # Reports, never fixes: closing an orphan card or inventing a `**Plano:**` in
 # BACKLOG.md is the owner's decision, not the doctor's. Delegates the whole
-# calculation to `cepa-plan divergence`, which knows how to compare queue × BACKLOG (the
+# calculation to `cepa-queue divergence`, which knows how to compare queue × BACKLOG (the
 # live Jira read, cards_sem_item/itens_com_card_done, goes in the `--live` step
 # of /common:doctor, which passes `--board`).
 
@@ -966,7 +966,7 @@ def check_plan_divergence(root: Path):
     queue = resolve_single_track_queue(root)
     if queue is None:
         return  # no resolvable queue (none or more than one) — nothing to compare
-    cepa_plan = Path(__file__).resolve().parent / "cepa-plan"
+    cepa_plan = Path(__file__).resolve().parent / "cepa-queue"
     if not cepa_plan.is_file():
         return
     try:
@@ -978,7 +978,7 @@ def check_plan_divergence(root: Path):
         warn("plano", f"divergência da fila `{queue}` não rodou: {e}")
         return
     if p.returncode not in (0,):
-        return  # no queue / wave plan / read error — silent, cepa-plan already logs
+        return  # no queue / wave plan / read error — silent, cepa-queue already logs
     try:
         output = json.loads(p.stdout)
     except (ValueError, json.JSONDecodeError):
@@ -1030,7 +1030,7 @@ def check_queue_layout(root: Path):
     if legacy:
         ok("fila", f"{len(legacy)} fila(s) no layout antigo "
                    f"(.claude/programs: {', '.join(legacy)}) — "
-                   "`cepa-plan migrate --all` move para .claude/queues")
+                   "`cepa-queue migrate --all` move para .claude/queues")
 
 
 def check_awaiting_merge(root: Path):
@@ -1067,7 +1067,7 @@ def check_until_waiting(root: Path):
     owner (C6 of docs/estrategia-fim-do-cepa-until.md). The run does not touch the main
     branch, and without this warning nothing reminds anyone it is waiting: the same failure
     mode as the maestro wave nobody landed."""
-    until = Path(__file__).resolve().parent / "cepa-until"
+    until = Path(__file__).resolve().parent / "cepa-run"
     if not until.is_file() or not has_plans_dir(root):
         return
     try:
@@ -1397,7 +1397,7 @@ def help_parser():
             "  - forgotten agent worktree INSIDE the repo (.claude/worktrees/)\n"
             "  - handoffs not updated for >30d\n"
             "  - single-track queue diverging from BACKLOG.md\n"
-            "  - cepa until runs waiting for the owner or with a dead supervisor\n"
+            "  - cepa run: runs waiting for the owner or with a dead supervisor\n"
             "  - environment manifest (docs/env.yaml): ports held by a process from\n"
             "    ANOTHER directory and `services` containers missing from docker ps\n"
             "  - installed `twg` version against the one declared in the environment\n"

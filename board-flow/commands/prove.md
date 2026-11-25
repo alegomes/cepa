@@ -267,7 +267,7 @@ itself, and this section would compete with it; skip it there.
   claims* — it does not close *a human looked at it*, and the two get conflated
   precisely here. If the route is the explicit null ("not applicable — internal
   substrate"), say so: "nothing to check by hand" is the answer, not silence.
-- **Next in the plan:** read `<queues>/<project_key>/queue.yaml` (or, in a repo not migrated yet, `<main-root>/.claude/programs/<project_key>/plan.yaml`; `cepa-plan status <project_key>` resolves both) (schema
+- **Next in the plan:** read `<queues>/<project_key>/queue.yaml` (or, in a repo not migrated yet, `<main-root>/.claude/programs/<project_key>/plan.yaml`; `cepa-queue status <project_key>` resolves both) (schema
   `common/plan-schema.yaml`, `mode: single-track`) and name the next `pending`
   item not `blocked_by` an unfinished one — key, title, and its `why`. Mark the
   proven card `done` there, carrying its Human validation route into

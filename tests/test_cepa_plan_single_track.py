@@ -4,7 +4,7 @@
 mechanical half of the design — `add` (A1), `ordena` (A2) and `divergencia` (A3).
 
 Run with `python3 tests/test_cepa_plan_single_track.py` (it only needs the PyYAML
-that `cepa-plan` itself uses). Same family as `test_common_plan.py`:
+that `cepa-queue` itself uses). Same family as `test_common_plan.py`:
 BEHAVIOR of the writer, with subprocess against the real CLI, in temporary
 git repos.
 
@@ -26,7 +26,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 
 FAILURES = []
 
@@ -90,7 +90,7 @@ def test_add_refuses_missing_queue(base):
     d = git_repo(base, "add-sem-fila")
     r = run(d, "add", "fila", "X", "--title", "x", "--repo", ".")
     check("recusa: fila não existe", r.returncode == 2, r.stdout)
-    check("a recusa aponta o /common:plan como quem cria a fila",
+    check("a recusa aponta o /common:queue como quem cria a fila",
           "/common:queue" in r.stderr, r.stderr)
 
 

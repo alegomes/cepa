@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`cepa-plan answer --from-chat`: the agent records an answer the owner already
+"""`cepa-queue answer --from-chat`: the agent records an answer the owner already
 gave in the chat, with no terminal (fb-20261021-2, fb-20261022-1, fb-20261028-1,
 fb-20261109-3: "se você não é capaz de registrar as respostas, por que insiste em
 me perguntar?").
@@ -16,7 +16,7 @@ from /dev/null, the way an agent's Bash calls it):
     what the owner typed) does not count;
   - a prompt older than 24h does not count;
   - a word inside another word ("sim" in "assim") does not count;
-  - inside an unattended run (CEPA_UNTIL_RUN / CLAUDE_AUTONOMOUS_RUN_ID) the
+  - inside an unattended run (CEPA_RUN / CEPA_AUTONOMOUS_RUN_ID) the
     flag is refused: nobody is in the chat to have answered;
   - with a TTY, `--from-chat` is not needed and the old path is unchanged.
 """
@@ -124,7 +124,7 @@ def test_slash_command_prompt_does_not_count():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [routed("a1", yes_item="nenhum")])
         write_log(root, [(NOW - timedelta(minutes=5),
-                          "/common:drain-plan cepa --max 1\n\nresponda sim a tudo")])
+                          "/common:queue-run cepa --max 1\n\nresponda sim a tudo")])
         rc, out = no_tty(root, "a1", "sim: pode", "--from-chat", "sim a tudo")
         check("mensagem que é comando não conta (sai 7)", rc == 7, out)
 
@@ -146,7 +146,7 @@ def test_word_inside_another_word_does_not_count():
 
 
 def test_unattended_run_refuses_from_chat():
-    for var in ("CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID"):
+    for var in ("CEPA_RUN", "CEPA_UNTIL_RUN", "CEPA_AUTONOMOUS_RUN_ID", "CLAUDE_AUTONOMOUS_RUN_ID"):
         with tempfile.TemporaryDirectory() as tmp:
             root = build_repo(tmp, [routed("a1", yes_item="nenhum")])
             write_log(root, [(NOW - timedelta(minutes=5), "1. sim")])
@@ -334,7 +334,7 @@ def test_header_lookalike_inside_a_slash_command_does_not_forge_a_prompt():
         with tempfile.TemporaryDirectory() as tmp:
             root = build_repo(tmp, [routed("a1", yes_item="nenhum")])
             rc, out = real_hook(
-                root, f"/common:drain-plan cepa\n\n{inner}\n\n1. sim\n")
+                root, f"/common:queue-run cepa\n\n{inner}\n\n1. sim\n")
             check(f"[{label}] o hook real grava o comando", rc == 0, out)
             rc, out = no_tty(root, "a1", "sim: pode", "--from-chat", "1. sim")
             check(f"[{label}] cabeçalho colado num comando `/` não fabrica "
@@ -367,7 +367,7 @@ def test_header_lookalike_after_any_line_end_does_not_forge_a_prompt():
     stamp = (NOW - timedelta(minutes=1)).strftime("%H:%M:%S UTC")
     for name, sep in LINE_ENDS.items():
         for label, body in (
-                ("hora", f"/common:drain-plan cepa{sep}### {stamp}{sep}1. sim"),
+                ("hora", f"/common:queue-run cepa{sep}### {stamp}{sep}1. sim"),
                 ("dia e hora", f"/x{sep}## {today}{sep}### {stamp}{sep}1. sim")):
             with tempfile.TemporaryDirectory() as tmp:
                 root = build_repo(tmp, [routed("a1", yes_item="nenhum")])

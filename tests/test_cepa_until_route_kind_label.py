@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """CS-2 of docs/spec/perguntas-da-largada-legiveis.md: a route recorded with a kind
-(`route_kind`, written by `cepa-plan finish --route-kind`, CS-1) shows up in the
+(`route_kind`, written by `cepa-queue finish --route-kind`, CS-1) shows up in the
 panel with the label of its kind beside the route text, and with the question the
 agent wrote. Before, the label was always "Task", whatever the route was.
 
@@ -32,7 +32,7 @@ def _routed(ident, status, kind, route, question):
 
 
 def test_decide_on_terminal_labels_each_route_by_its_kind():
-    """Red test of CS-2, as a process in a pseudo-terminal: `cepa-until decide fila`
+    """Red test of CS-2, as a process in a pseudo-terminal: `cepa-run decide fila`
     over an `external-block` item shows "Blocked outside" beside the route text and
     the recorded question. The other two kinds, and a delivered (`done`) item, get
     their own label and their own question too."""
@@ -100,12 +100,12 @@ def test_decide_without_terminal_names_the_kind_too():
 
 
 def test_queue_hands_route_kind_to_the_panel():
-    """The deferred item `cepa-plan queue` returns carries `route_kind`: without it
+    """The deferred item `cepa-queue queue` returns carries `route_kind`: without it
     the panel has no kind to show."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [_routed("b1", "pending", "external-block",
                                         "falta a chave", "A chave existe?")])
-        plan = CEPA_UNTIL.parent / "cepa-plan"
+        plan = CEPA_UNTIL.parent / "cepa-queue"
         import json
         p = subprocess.run([sys.executable, str(plan), "queue", "fila", "--repo",
                             str(root), "--json"], capture_output=True, text=True)

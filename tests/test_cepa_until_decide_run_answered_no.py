@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""decide-de-run-nao-repete-nao-respondido: `cepa until decide <queue>/<run>` (the
+"""decide-de-run-nao-repete-nao-respondido: `cepa run decide <queue>/<run>` (the
 questions of ONE run) does not ask again the routes the owner already answered "não"
 and whose conditions did not change (the item's evidence still STARTS with that
 "não", `last_owner_no`); one line per queue says how many, the latest date and that
-`cepa-until decide <queue>` revisits them. `cepa-until decide <queue>` (no run) still
+`cepa-run decide <queue>` revisits them. `cepa-run decide <queue>` (no run) still
 asks every route: it is the way to revisit them.
 
 Origin: after answering 30 questions of run `all/2026-11-21-1244`, the run's decide
@@ -28,8 +28,8 @@ import test_cepa_until_run_branch as rb  # noqa: E402
 check = dec.check
 FAILURES = dec.FAILURES
 CEPA_UNTIL = al.CEPA_UNTIL
-if os.environ.get("CEPA_UNTIL_SCRIPT"):
-    CEPA_UNTIL = Path(os.environ["CEPA_UNTIL_SCRIPT"]).resolve()
+if os.environ.get("CEPA_RUN_SCRIPT"):
+    CEPA_UNTIL = Path(os.environ["CEPA_RUN_SCRIPT"]).resolve()
     dec.CEPA_UNTIL = al.CEPA_UNTIL = base.CEPA_UNTIL = CEPA_UNTIL
 ANSI = dec.ANSI
 RUN = "2026-11-21-1244"
@@ -93,8 +93,8 @@ def test_run_decide_on_a_terminal_skips_the_answered_no_and_asks_the_open_one():
     check("exits 0", rc == 0, out[-1500:])
     check("one line: count, date dd/mm and the command to revisit",
           len(line) == 1 and "1 route(s)" in line[0] and "06/11" in line[0]
-          and "cepa-until decide fila" in line[0]
-          and "cepa-until decide fila/" not in line[0], str(line) + out[-1000:])
+          and "cepa-run decide fila" in line[0]
+          and "cepa-run decide fila/" not in line[0], str(line) + out[-1000:])
     check("the open route is asked and the answered one is not",
           "1 question(s) for you" in out and "fresh route text" in out
           and "old route text" not in out, out[-1500:])
@@ -112,7 +112,7 @@ def test_run_decide_without_terminal_does_not_list_the_answered_no():
           and "waiting on you: 1" in out, out)
     check("the summary line is there with count, date and command",
           len(line) == 1 and "1 route(s)" in line[0] and "06/11" in line[0]
-          and "cepa-until decide fila" in line[0], out)
+          and "cepa-run decide fila" in line[0], out)
 
 
 def test_run_decide_with_only_answered_no_routes_prints_the_line_and_asks_nothing():
@@ -189,10 +189,10 @@ def test_all_run_has_one_line_per_queue_and_does_not_ask_the_answered_no():
         la = lines_with(text, "queue `a`")
         lb = lines_with(text, "queue `b`")
         check(f"{label}: a line for queue a", len(la) == 1 and "1 route(s)" in la[0]
-              and "06/11" in la[0] and "cepa-until decide a" in la[0], text[-1500:])
+              and "06/11" in la[0] and "cepa-run decide a" in la[0], text[-1500:])
         check(f"{label}: a line for queue b with its count and latest date",
               len(lb) == 1 and "2 route(s)" in lb[0] and "11/11" in lb[0]
-              and "cepa-until decide b" in lb[0], text[-1500:])
+              and "cepa-run decide b" in lb[0], text[-1500:])
 
 
 def test_end_of_run_report_does_not_hand_back_the_answered_no():
@@ -258,10 +258,10 @@ def test_next_panel_counts_the_answered_no_and_does_not_say_nothing_left():
     check("one row per queue", len(line) == 2, str(rows))
     check("the row has the count, the latest date and the way to revisit",
           line and "2 route(s)" in line[0] and "21/11" in line[0]
-          and line[0].endswith("cepa-until decide fila"), str(line))
+          and line[0].endswith("cepa-run decide fila"), str(line))
     check("the other queue's row names that queue",
           len(line) == 2 and "1 route(s)" in line[1] and "11/11" in line[1]
-          and line[1].endswith("cepa-until decide b"), str(line))
+          and line[1].endswith("cepa-run decide b"), str(line))
     check("a route answered no is not 'nothing left for you'",
           not any("nothing left for you" in r for r in rows), str(rows))
     check("the row is not a numbered question",
@@ -353,7 +353,7 @@ def test_the_end_of_a_real_run_counts_the_answered_no_in_next():
     line = lines_with(nxt, "already answered")
     check("one row: count, date, the command that revisits",
           len(line) == 1 and "1 route(s)" in line[0] and "06/11" in line[0]
-          and "cepa-until decide fila" in line[0]
+          and "cepa-run decide fila" in line[0]
           and not line[0].rstrip().endswith("--yes"), nxt)
     owner = lines_with(nxt, "owner question(s)")
     check("the open route is the one owner question",

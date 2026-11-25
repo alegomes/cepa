@@ -39,8 +39,9 @@ from _isolated_telemetry import isolate  # noqa: E402
 isolate()
 # Run inside a cepa-until round, the window's mark turns off the
 # resume (see test_until_does_not_inherit_handoff.py); here the normal session is tested.
-os.environ.pop("CEPA_UNTIL_RUN", None)
+os.environ.pop("CEPA_RUN", None)
 
+os.environ.pop("CEPA_UNTIL_RUN", None)
 import _handoff as H  # noqa: E402
 import _wtlib as L  # noqa: E402
 

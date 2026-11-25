@@ -29,7 +29,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-DIGEST = Path(__file__).resolve().parent.parent / "common" / "bin" / "cepa-until-digest"
+DIGEST = Path(__file__).resolve().parent.parent / "common" / "bin" / "cepa-run"
 from test_cepa_until import (  # noqa: E402
     FAILURES, check, fake_claude, item, ledger_of, build_repo, run_until)
 
@@ -333,7 +333,7 @@ def log_text(root):
 def load_cepa_until():
     """The real `common/bin/cepa-until` loaded as a module, for the direct checks."""
     from importlib.machinery import SourceFileLoader
-    path = Path(__file__).resolve().parent.parent / "common" / "bin" / "cepa-until"
+    path = Path(__file__).resolve().parent.parent / "common" / "bin" / "cepa-run"
     return SourceFileLoader("cepa_until_mod", str(path)).load_module()
 
 
@@ -407,7 +407,7 @@ def test_cepa_repo_reinstalls_after_green_build_of_a_hook():
         check("o .log traz o trecho com o rótulo reinstall",
               "· reinstall · sh bin/install.sh --clean" in log_text(root))
         ledger = sorted((root / ".claude/programs/fila/until").glob("*.jsonl"))[-1]
-        d = subprocess.run([sys.executable, str(DIGEST), str(ledger)],
+        d = subprocess.run([sys.executable, str(DIGEST), "digest", str(ledger)],
                            capture_output=True, text=True)
         check("o digest mostra o sha dos hooks por rodada",
               f"hooks {ev[0]['sha_depois']}" in d.stdout, d.stdout[-1500:])

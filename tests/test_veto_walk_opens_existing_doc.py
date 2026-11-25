@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """CS-7 of docs/spec/tres-portas-spec-epic.md (item 4 of O2'): `/common:spec
---continuar`/`--fechar` and `/common:epic` on an existing document open with the
+--continue`/`--close` and `/common:epic` on an existing document open with the
 "caminhada do veto" (veto walk) before resuming the interview or the sieve.
 
 Proof by reading the command text. Read only inside step 1 (the step that opens
 an existing document), which must come before the interview step:
-- the call to `cepa-plan decisions` (lists the decisions without a verdict);
-- the call to `cepa-plan verdict` (the only writer of the marker; the agent never
+- the call to `cepa-queue decisions` (lists the decisions without a verdict);
+- the call to `cepa-queue verdict` (the only writer of the marker; the agent never
   writes the marker by hand);
 - the pace: up to four per round in spec.md, one per turn in epic.md;
 - a skipped decision does not block ("pular não trava") and stays without marker.
@@ -59,10 +59,10 @@ def check_common(label, text, open_prefix, interview_prefix):
           o_pos is not None and i_pos is not None and o_pos < i_pos)
     body = body or ""
     check(f"{label}: names the veto walk", "caminhada do veto" in body)
-    check(f"{label}: calls `cepa-plan decisions`", "cepa-plan decisions" in body)
-    check(f"{label}: calls `cepa-plan verdict`", "cepa-plan verdict" in body)
+    check(f"{label}: calls `cepa-queue decisions`", "cepa-queue decisions" in body)
+    check(f"{label}: calls `cepa-queue verdict`", "cepa-queue verdict" in body)
     check(f"{label}: the three verdicts are named",
-          all(w in body for w in ("mantida", "vetada", "refinada")))
+          all(w in body for w in ("kept", "vetoed", "refined")))
     check(f"{label}: agent never writes the marker by hand",
           re.search(r"(?i)never\b.{0,80}\bby hand", body) is not None)
     check(f"{label}: skipped decision does not block",
@@ -84,23 +84,23 @@ def check_order(label, path, walk, later):
 
 
 def check_numbers(label, body):
-    check(f"{label}: use the number as `cepa-plan decisions` prints it, never renumber",
-          "exactly as `cepa-plan decisions` prints it" in body and "never renumber" in body)
+    check(f"{label}: use the number as `cepa-queue decisions` prints it, never renumber",
+          "exactly as `cepa-queue decisions` prints it" in body and "never renumber" in body)
 
 
 def check_pins(label, body, doc):
-    check(f"{label}: the call line runs `cepa-plan decisions {doc}`",
-          f"run `cepa-plan decisions {doc}`" in body)
-    check(f"{label}: the record line is `cepa-plan verdict {doc} <n> mantida|vetada|refinada`",
-          f"`cepa-plan verdict {doc} <n> mantida|vetada|refinada`" in body)
+    check(f"{label}: the call line runs `cepa-queue decisions {doc}`",
+          f"run `cepa-queue decisions {doc}`" in body)
+    check(f"{label}: the record line is `cepa-queue verdict {doc} <n> kept|vetoed|refined`",
+          f"`cepa-queue verdict {doc} <n> kept|vetoed|refined`" in body)
     check(f"{label}: walks only the decisions without a verdict",
           "Walk only the ones without" in body)
     check(f"{label}: a skipped decision is offered again next time",
           re.search(r"(?i)\bit is offered again\b|\boffers it again\b", body) is not None)
-    check(f"{label}: `vetada` needs `--reason`",
-          re.search(r"`vetada`\s+needs\s+`--reason`", body) is not None)
-    check(f"{label}: `refinada` needs `--text`",
-          re.search(r"`refinada`\s+needs\s+`--text`", body) is not None)
+    check(f"{label}: `vetoed` needs `--reason`",
+          re.search(r"`vetoed`\s+needs\s+`--reason`", body) is not None)
+    check(f"{label}: `refined` needs `--text`",
+          re.search(r"`refined`\s+needs\s+`--text`", body) is not None)
 
 
 def test_spec():
@@ -111,12 +111,12 @@ def test_spec():
     check_numbers("spec.md", body)
     check_order("spec.md", SPEC, "The veto walk (caminhada do veto).", "write the skeleton with")
     check_pins("spec.md", body, "docs/spec/<slug>.md")
-    check("spec.md: --continuar/--fechar bullet routes through the walk first",
-          re.search(r"`--continuar <slug>` or `--fechar <slug>`: read the file, open with the "
+    check("spec.md: --continue/--close bullet routes through the walk first",
+          re.search(r"`--continue <slug>` or `--close <slug>`: read the file, open with the "
                     r"veto walk below, and only then go to step 4 \(continue\) or 5 \(close\)", body)
           is not None)
-    check("spec.md: covers --continuar and --fechar",
-          "--continuar" in body and "--fechar" in body)
+    check("spec.md: covers --continue and --close",
+          "--continue" in body and "--close" in body)
 
 
 def test_epic():
@@ -126,7 +126,7 @@ def test_epic():
     check_order("epic.md", EPIC, "The veto walk (caminhada do veto).", "Otherwise (the file does not exist)")
     check_pins("epic.md", body, "docs/epics/<name>.md")
     check("epic.md: walk comes before the first gap and before the sieve",
-          "Before the first gap and before the sieve, run `cepa-plan decisions" in body)
+          "Before the first gap and before the sieve, run `cepa-queue decisions" in body)
     check("epic.md: limit of one per turn",
           re.search(r"(?i)\bone\b.{0,30}\bper turn\b", body) is not None)
 
@@ -138,7 +138,7 @@ def walk_paragraph(text):
 
 
 MARKER = "`· mantida em` / `· vetada em` / `· refinada em`"
-R2 = ('If `cepa-plan verdict` prints "já virou código na fila" (the file is the `source:` of a '
+R2 = ('If `cepa-queue verdict` prints "já virou código na fila" (the file is the `source:` of a '
       "derived queue), pass the warning on to the owner as it came.")
 
 
@@ -155,7 +155,7 @@ def test_walk_sentences():
         ("R2 warning is passed on to the owner, as it came", R2),
         ("`Never write the marker by hand` is its own sentence",
          "never renumber. Never write the " + MARKER + " marker by hand:"),
-        ("`Record ... in the same turn`", "in the same turn with `cepa-plan verdict"),
+        ("`Record ... in the same turn`", "in the same turn with `cepa-queue verdict"),
         ("a vetoed decision becomes an open question only if the owner says so",
          "`Status` does not change by veto; a vetoed decision becomes an open question "
          "only if the owner says so in the same turn."),
@@ -164,18 +164,18 @@ def test_walk_sentences():
     ]
     check_sentences("spec.md", spec, common + [
         ("asks the owner for one answer per decision",
-         "and ask the owner for one answer per decision: keep it (`mantida`), veto it "
-         "(`vetada`, with the reason) or refine it (`refinada`, with the new text)."),
-        ("applies `On an existing file`", "On an existing file (`--continuar`, `--fechar`, "
+         "and ask the owner for one answer per decision: keep it (`kept`), veto it "
+         "(`vetoed`, with the reason) or refine it (`refined`, with the new text)."),
+        ("applies `On an existing file`", "On an existing file (`--continue`, `--close`, "
          'or the "continue that one" answer), before resuming the interview or the sieve, '
-         "run `cepa-plan decisions docs/spec/<slug>.md`."),
-        ("offers `mantida` in the walk itself (three verdicts)",
-         "keep it (`mantida`), veto it (`vetada`, with the reason) or refine it (`refinada`"),
+         "run `cepa-queue decisions docs/spec/<slug>.md`."),
+        ("offers `kept` in the walk itself (three verdicts)",
+         "keep it (`kept`), veto it (`vetoed`, with the reason) or refine it (`refined`"),
     ])
     check_sentences("epic.md", epic, common + [
-        ("offers `mantida` in the walk itself (three verdicts)",
-         "ask the owner to keep it (`mantida`), veto it (`vetada`, with the reason) or refine it "
-         "(`refinada`, with the new text)."),
+        ("offers `kept` in the walk itself (three verdicts)",
+         "ask the owner to keep it (`kept`), veto it (`vetoed`, with the reason) or refine it "
+         "(`refined`, with the new text)."),
     ])
     spec_text = re.sub(r"\s+", " ", SPEC.read_text(encoding="utf-8"))
     check("spec.md: `When creating a new file` is its own paragraph after the walk",

@@ -49,7 +49,7 @@ brings all of that forward to a moment when fixing is cheap.
 
    The `plano` area (when it shows up) is the single-track queue
    (`.claude/queues/<fila>/queue.yaml`) compared with the project's
-   `BACKLOG.md` — the `cepa-plan divergence` the script already ran on its
+   `BACKLOG.md` — the `cepa-queue divergence` the script already ran on its
    own: BACKLOG.md sections without `**Plano:**` and a `**Plano:**` citing an id
    that does not exist in that queue. It only shows up when the repo has
    `BACKLOG.md` AND a queue that resolves without ambiguity (via
@@ -72,7 +72,7 @@ brings all of that forward to a moment when fixing is cheap.
    of `docs/epics/` that left `draft` (`rascunho` counts as `draft`: its
    decisions are counted by the readiness gate when it closes). It is a ⚠ with
    the total and one file per line, each with the command that opens the veto:
-   `/common:spec --continuar <slug>` for a spec, `/common:epic <nome>` for an
+   `/common:spec --continue <slug>` for a spec, `/common:epic <nome>` for an
    Epic. With zero pending it is a ✓ with the zero; a repo with neither
    directory does not show it. Report only: the veto is the owner's, and no
    `--fix` touches it.
@@ -93,7 +93,7 @@ brings all of that forward to a moment when fixing is cheap.
    it to a temporary file and run:
 
    ```
-   python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" divergence <fila> \
+   python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-queue" divergence <fila> \
      --board <arquivo-temporário> --backlog BACKLOG.md --repo . --json
    ```
 

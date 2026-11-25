@@ -1,7 +1,7 @@
 """One help layout for `cepa` and every `cepa-*` command.
 
 Before this module each command wrote its own help: some had examples, some
-exit codes, some only argparse's default dump; `cepa plan help` was an error
+exit codes, some only argparse's default dump; `cepa queue help` was an error
 while `cepa doctor help` worked; Portuguese and English aliases were mixed in
 the same listing. `Parser` is an `argparse.ArgumentParser` that renders every
 help in the same order and the same look:
@@ -19,14 +19,14 @@ help in the same order and the same look:
 Rules it enforces, so no command has to remember them:
 
   * `help` as the first word is the same as `--help`, at every level
-    (`cepa plan help`, `cepa plan write help`); `-h`, `--help` and `help`
+    (`cepa queue help`, `cepa queue write help`); `-h`, `--help` and `help`
     print the same text and exit 0.
   * Only the first long name of each option is shown, and subcommand aliases
     are hidden: the old Portuguese names still work, the help shows one name.
   * A usage error prints `✗ <prog>: <reason>`, the usage line and where the
     full help is, and exits 2. An unknown subcommand names the nearest one.
   * On a terminal (the same test `_tui` uses: tty, no NO_COLOR, TERM not
-    dumb, CEPA_COR forces) headings become rules and names get color. Piped,
+    dumb, CEPA_COLOR forces) headings become rules and names get color. Piped,
     the text is plain, `heading:` lines and all.
 
 The summary defaults to the first docstring line of the running script
@@ -92,7 +92,7 @@ class Parser(argparse.ArgumentParser):
       exit_codes   list of (code, meaning)
       see_also     list of strings (commands, docs)
       commands     list of (name, help) for subcommands dispatched by hand,
-                   before argparse runs (cepa-until does this)
+                   before argparse runs (cepa-run does this)
       groups       list of (title, [subcommand names]) to list subcommands
                    by family instead of in definition order
       options_title  heading of the options section (default "options")
@@ -339,12 +339,14 @@ def launcher_help(bin_dir):
     """`cepa help`: the launcher's own help, in the same layout. The list of
     subcommands is the `cepa-*` scripts next to the launcher, each described
     by its first docstring line."""
-    commands, old = [], []
+    commands = []
     for name in sorted(os.listdir(bin_dir)):
         path = os.path.join(bin_dir, name)
         if not name.startswith("cepa-") or not os.access(path, os.X_OK):
             continue
         sub = name[len("cepa-"):]
+        if sub in ("plan", "until", "until-digest"):  # transition shims for runs in flight, not commands
+            continue
         try:
             with open(path, encoding="utf-8") as fh:
                 fh.readline()
@@ -353,10 +355,6 @@ def launcher_help(bin_dir):
             line = ""
         desc = re.sub(r'^("""|#)\s*', "", line.strip())
         desc = re.sub(rf"^cepa-{re.escape(sub)}\s*[—-]+\s*", "", desc)
-        m = re.search(r"renamed to cepa-([\w-]+)", desc)
-        if m:
-            old.append(f"{sub} (= {m.group(1)})")
-            continue
         commands.append((sub, desc.rstrip(".")))
 
     ap = Parser(
@@ -376,14 +374,14 @@ def launcher_help(bin_dir):
             ("cepa --mode construction", "open a session in construction mode"),
             ("cepa -s billing-api", "resume or create the session/billing-api worktree"),
             ("cepa --mode help", "what each work mode is for"),
-            ("cepa plan status", "run a subcommand"),
-            ("cepa help plan", "the help of one subcommand (same as cepa plan --help)"),
+            ("cepa queue status", "run a subcommand"),
+            ("cepa help queue", "the help of one subcommand (same as cepa queue --help)"),
             ("cepa --resume", "any other argument goes to claude"),
         ],
         exit_codes=[(0, "help printed, or the exit code of claude / the subcommand"),
                     (2, "invalid usage: unknown mode, missing value, typo in a subcommand")],
-        see_also=["environment: CEPA_MODO=off (no mode), CEPA_PREFLIGHT=off, "
-                  "CEPA_PERMISSOES=classificador, CEPA_ENCADEAR=off, CEPA_PROMPT=<name|path>",
+        see_also=["environment: CEPA_MODE=off (no mode), CEPA_PREFLIGHT=off, "
+                  "CEPA_PERMISSIONS=classifier, CEPA_CHAIN=off, CEPA_PROMPT=<name|path>",
                   "docs/modos-de-trabalho.md: the work modes"],
         add_help=False,
         options_title="launcher flags",
@@ -413,9 +411,6 @@ def launcher_help(bin_dir):
                     help="REPLACES the whole system prompt (use only with a prompt "
                          "that stands on its own)")
     text = ap.render(_screen(sys.stdout))
-    if old:
-        text += _screen(sys.stdout).c(
-            "cinza", "Old subcommand names still work: " + ", ".join(old) + ".") + "\n"
     sys.stdout.write(text)
 
 

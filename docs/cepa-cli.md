@@ -40,10 +40,10 @@ silent preflight: nothing is printed unless something needs you.
 | Check the harness installation | `cepa doctor` |
 | Know what mode you are in and what closes it | `cepa modes`, `cepa modes --exit` |
 | Record or advance the session's intent | `cepa intent` |
-| Write, inspect or reconcile the single-track queue | `cepa plan <subcommand>` |
-| Run the queue unattended for a time window | `cepa until <queue> --for 12h` |
-| Read what an unattended run left for you | `cepa until decide <queue>/<run>`, `cepa until pending` |
-| Summarise an unattended run for a review | `cepa until-digest <run>.jsonl` |
+| Write, inspect or reconcile the single-track queue | `cepa queue <subcommand>` |
+| Run the queue unattended for a time window | `cepa run <queue> --for 12h` |
+| Read what an unattended run left for you | `cepa run decide <queue>/<run>`, `cepa run pending` |
+| Summarise an unattended run for a review | `cepa run digest <run>.jsonl` |
 | Prove the Jira Review column for a time window | `cepa prove --for 3h` |
 | Complain about the harness without leaving the task | `cepa feedback add "..."` |
 | See the harness's own numbers | `cepa metrics`, `cepa metrics scorecard` |
@@ -53,8 +53,8 @@ silent preflight: nothing is printed unless something needs you.
 | Find a repo's registry files before planning waves | `cepa hotspots <repo>` |
 | Measure test coverage of a conversational command | `cepa promptcov <cmd.md> <test.py>` |
 
-`cepa intencao` and `cepa modos` are the old names of `intent` and `modes`;
-they still work and are listed as aliases.
+`cepa intencao` and `cepa modos` (the old names of `intent` and `modes`) are
+refused with exit 2 and a line that names the new command.
 
 ## Conventions shared by every script
 
@@ -73,6 +73,32 @@ they still work and are listed as aliases.
 - **Refusals name the reason.** A script never writes half a thing: a rule
   that fails (empty `why`, a `blocked` item without a question, a plan with a
   blocking cycle) refuses before touching the disk, and says which rule.
+
+## Environment variables
+
+Every variable Cepa owns starts with `CEPA_` and has an English name, for
+example `CEPA_MODE=off`, `CEPA_CHAIN=off`, `CEPA_PERMISSIONS=classifier`,
+`CEPA_PROMPT_MODE=replace`, `CEPA_COLOR=always`, `CEPA_RUN_*` (what `cepa run`
+reads) and `CEPA_WT_*` (the worktree launcher). Compatibility: the old names
+are still read, the new one wins when both are set, and the old values
+`classificador` and `substitui` are still accepted. The old -> new table lives
+in `common/hooks/_cepaenv.py`.
+
+| Old name (still read) | New name |
+|---|---|
+| `CEPA_MODO`, `CEPA_MODO_DEFAULT` | `CEPA_MODE`, `CEPA_MODE_DEFAULT` |
+| `CEPA_ENCADEAR` | `CEPA_CHAIN` |
+| `CEPA_PERMISSOES` (old value `classificador`) | `CEPA_PERMISSIONS` (`classifier`) |
+| `CEPA_PROMPT_MODO` (old value `substitui`) | `CEPA_PROMPT_MODE` (`replace`) |
+| `CEPA_COR` | `CEPA_COLOR` |
+| `CEPA_UNTIL_RUN` | `CEPA_RUN` |
+| `CEPA_UNTIL_<X>` (Portuguese `<X>`) | `CEPA_RUN_<X in English>`: `READER_CEILING`, `NETWORK_PROBE`, `PROBE_INTERVAL`, `READER_MODEL`, `RESET_MARGIN`, `LIVE_LINE`, `ANALYSIS_LIMIT`, `READER`, `HEARTBEAT`, `SIGTERM_GRACE`, `ANSWER_WAIT`, `COLOR` |
+| `CEPA_HEARTBEAT_ORFA` | `CEPA_HEARTBEAT_ORPHAN` |
+| `CLAUDE_AUTONOMOUS_RUN_ID` | `CEPA_AUTONOMOUS_RUN_ID` |
+| `CLAUDE_WT_<X>` | `CEPA_WT_<X>` |
+| `CCW_<X>` | `CEPA_<X>` |
+| `CAPTURE_BUILD_DEBUG`, `LEAD_WORKTREE_DEBUG` (and `_LOG`) | `CEPA_CAPTURE_BUILD_DEBUG`, `CEPA_LEAD_WORKTREE_DEBUG` |
+| `HEX_PATHLOCK_DEBUG`, `DOCS_PATHLOCK_DEBUG`, `REVIEW_GATE_ALLOW_DIRECT`, `REVIEW_GATE_NUDGE` | the same with the `CEPA_` prefix |
 
 ## Reference, one section per script
 
@@ -167,7 +193,7 @@ cepa-feedback triage <id> --destination "<where>" [--note ...] [--queue QUEUE --
 ```
 
 `triage --queue` also appends the item to a single-track queue through
-`cepa-plan add`. Exit `0` ok, `2` invalid usage, `3` unknown id, `4` already
+`cepa-queue add`. Exit `0` ok, `2` invalid usage, `3` unknown id, `4` already
 triaged. The slash command is `/common:feedback`.
 
 ### `cepa-hotspots`
@@ -239,12 +265,12 @@ closed, `1` still open, `2` the mode has no mechanical verdict. The slash
 command is `/common:modes`; the design is in
 [modos-de-trabalho.md](modos-de-trabalho.md).
 
-### `cepa-plan`
+### `cepa-queue`
 
 The mechanical writer of the single-track queue,
 `.claude/queues/<name>/queue.yaml`, the document that keeps the order of the
 items and the `why` of each position. `/common:queue` holds the conversation
-and hands the list here; `/common:drain-plan` and `cepa-until` execute it;
+and hands the list here; `/common:queue-run` and `cepa-run` execute it;
 `/common:next` and `/common:queue-status` read it. It only knows
 `mode: single-track`; waves belong to `/maestro:program-plan`.
 
@@ -316,42 +342,42 @@ tool results are also sized in characters so you can see what entered.
 cepa-tokens [--file FILE.jsonl] [--all] [--days N] [--emit] [--json]
 ```
 
-### `cepa-until`
+### `cepa-run`
 
 Runs the repo's single-track queue for a time window with nobody awake. One
-item per subprocess (`claude -p "/common:drain-plan <queue> --max 1"`), inside
+item per subprocess (`claude -p "/common:queue-run <queue> --max 1"`), inside
 the `until/<run>` worktree the supervisor opens at launch; a full build after
 every `done` item (red: the item becomes `blocked` and the branch goes back);
 circuit breakers on consecutive failures and consecutive `blocked` items; a
 pause for the account's 5-hour quota. Nothing goes to `main` or `origin`.
 
 ```
-cepa-until <queue> (--for 12h | --until 07:00) [--repo DIR]
+cepa-run <queue> (--for 12h | --until 07:00) [--repo DIR]
            [--max-failures 3] [--max-blocked 3] [--attempts-per-item 2]
            [--min-reserve 45m] [--slack 60m] [--with-permissions] [--dirty-ok]
            [--verify CMD | --no-verify] [--no-analysis] [--full-title] [--dry-run]
 
-cepa-until pending [--repo DIR] [--json]       runs waiting for the owner, dead supervisors
-cepa-until decide <queue>[/<run>] [--repo DIR]   one closed question at a time, applied on the spot
-cepa-until land <queue>/<run> [--yes]      merge + full build + push to the clone's branch, local tag landed/<queue>/<run>
-cepa-until close-dead <queue>/<run> [--yes]     the build a dead supervisor never ran
+cepa-run pending [--repo DIR] [--json]       runs waiting for the owner, dead supervisors
+cepa-run decide <queue>[/<run>] [--repo DIR]   one closed question at a time, applied on the spot
+cepa-run land <queue>/<run> [--yes]      merge + full build + push to the clone's branch, local tag landed/<queue>/<run>
+cepa-run close-dead <queue>/<run> [--yes]     the build a dead supervisor never ran
 ```
 
-Full design, with the dated decisions, in [cepa-until.md](cepa-until.md).
+`cepa run ...` is the same command through the launcher (`cepa until` and `cepa-until` were its old names; the launcher refuses `cepa until` with the new name, and `cepa-until` stays only as a transition shim until the end of the reform). Full design, with the dated decisions, in [cepa-until.md](cepa-until.md).
 
-### `cepa-until-digest`
+### `cepa run digest`
 
-The summary of a `cepa-until` run that fits in one session. The run's `.log`
+The summary of a `cepa run` run that fits in one session. The run's `.log`
 is stream-json of every subprocess and runs past 10 MB; this script chooses
 mechanically what to read and says what it chose: the whole ledger, each
 round's final report (`--result-max` characters), agent calls by type, tool
 errors, cost, the process signals (a worktree opened by anyone other than the
 proof-reviewer, a build gate bypassed with another module's green), the tail
 of each supervisor build, and the current status and evidence of every item
-touched. `/common:until-review` interprets it; this script does not opine.
+touched. `/common:run-review` interprets it; this script does not opine.
 
 ```
-cepa-until-digest <run>.jsonl [--result-max 3000]
+cepa run digest <run>.jsonl [--result-max 3000]
 ```
 
 Exit `0` ok, `2` the ledger does not exist.

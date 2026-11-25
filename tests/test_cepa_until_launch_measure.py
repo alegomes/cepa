@@ -36,8 +36,8 @@ def _launch(tty, mode="pref", pref_answer=""):
         binv = fake_claude(tmp, "pass")
         reader, _ = _fake_reader(tmp, mode)  # "pref": x1 -> one preference, y1 -> nothing
         env = env_do_run(tmp, root, binv)
-        env["CEPA_UNTIL_LEITOR"] = str(reader)
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "5"
+        env["CEPA_RUN_READER"] = str(reader)
+        env["CEPA_RUN_ANSWER_WAIT"] = "5"
         cmd = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
                "--for", "2h", "--no-verify", "--no-analysis"]
         if tty:
@@ -115,7 +115,7 @@ def test_launch_measure_cs13_panel_cut_after_the_first_answer():
                                 for i in (1, 2, 3)] + [item("y1")])
         binv = fake_claude(tmp, "pass")
         env = env_do_run(tmp, root, binv)  # pre-read off
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "3"
+        env["CEPA_RUN_ANSWER_WAIT"] = "3"
         rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
              "--for", "2h", "--no-verify", "--no-analysis"], str(root), env=env,

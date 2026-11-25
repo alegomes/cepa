@@ -16,7 +16,7 @@ checker's rule disagree) was in its sixth sentence (WEGO-2381, run
 2026-10-31-1033). The owner: "Sua escrita é enigmática, cheia de códigos e
 pressupostos de entendimento."
 
-`problems()` is the rule of the human section, used by `cepa-plan finish`
+`problems()` is the rule of the human section, used by `cepa-queue finish`
 (refuses) and by `cepa-until decide` (warns about the analysis's text).
 """
 import re
@@ -30,7 +30,7 @@ FIELDS = (
     ("se_nao", "--if-no", "Se não"),
 )
 
-# The Portuguese flag each English one replaced. Still accepted by `cepa-plan
+# The Portuguese flag each English one replaced. Still accepted by `cepa-queue
 # finish`; the keys inside `owner_summary` (column 1 above) are stored data and
 # keep their Portuguese names.
 OLD_FLAGS = {
@@ -85,7 +85,7 @@ def problems(text, limit=WORDS_PER_FIELD):
 # that do not (the "sim" of a route on a `done` item, the "não" of any route) must
 # say which queue item they create, or say "nenhum" on purpose. The declaration is
 # stored in `owner_summary` under `item_se_sim` / `item_se_nao`, as the string
-# "nenhum" or as {"titulo": str, "precisa_do_dono": bool}. `cepa-plan answer`
+# "nenhum" or as {"titulo": str, "precisa_do_dono": bool}. `cepa-queue answer`
 # (CS-2/CS-3) reads it; this module only validates and shapes it.
 ITEM_KEYS = (
     # (key in owner_summary, title flag, needs-owner flag, answer it belongs to)
@@ -117,7 +117,7 @@ def item_declaration(key, text, needs_owner=False):
 
 
 def item_flags(summary):
-    """CLI flags that carry the declarations of an `owner_summary` into `cepa-plan`."""
+    """CLI flags that carry the declarations of an `owner_summary` into `cepa-queue`."""
     out = []
     for key, flag, flag_owner, _ in ITEM_KEYS:
         v = (summary or {}).get(key)
@@ -130,9 +130,9 @@ def item_flags(summary):
     return out
 
 
-# The owner's answer that `cepa-plan answer` prepends to the evidence. Read by
+# The owner's answer that `cepa-queue answer` prepends to the evidence. Read by
 # `cepa-until decide` (a route answered "no" is not asked again in the launch
-# panel) and `cepa-plan waiting` (it is only counted, CS-3 of
+# panel) and `cepa-queue waiting` (it is only counted, CS-3 of
 # decisoes-de-todas-as-filas): one reader, so both agree on what "answered no" is.
 OWNER_NO = re.compile(r"Resposta do dono em (\d{4})-(\d{2})-(\d{2}): n(?:ão|ao)\b",
                       re.I)
@@ -140,7 +140,7 @@ OWNER_NO = re.compile(r"Resposta do dono em (\d{4})-(\d{2})-(\d{2}): n(?:ão|ao)
 
 def last_owner_no(evidence):
     """The date (`YYYY-MM-DD`) of the owner's LAST answer when it was "não", else None.
-    `cepa-plan answer` prepends each answer to the evidence, so the last one is the
+    `cepa-queue answer` prepends each answer to the evidence, so the last one is the
     text's start: a later "sim" or free text, or an older "não" further down, does
     not count."""
     m = OWNER_NO.match((evidence or "").lstrip())

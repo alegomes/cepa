@@ -1,6 +1,6 @@
 ---
 description: Panel of advisors over a decision artifact (design doc, ADR, plan, PR) — a parallel and ISOLATED fan-out of review lenses (5 fixed + up to 2 domain specialists), followed by a synthesis that NAMES the disagreements between lenses instead of mediating. Prospective — runs BEFORE the decision is closed. To review past decisions of a run use /common:debrief; to hunt bugs in the diff use /code-review.
-argument-hint: <artifact> [--area=seguranca|api-contrato|dados|ux|arquitetura] [--lentes=a,b,c]
+argument-hint: <artifact> [--area=security|api-contract|data|ux|architecture] [--lenses=a,b,c]
 interaction: routine
 ---
 
@@ -18,9 +18,11 @@ is usually exactly where two lenses disagree.
 ## Variables
 
 - `$ARGUMENTS` — `<artifact>` (path or PR reference; required),
-  `--area=<x>` (declares the area and skips the inference confirmation),
-  `--lentes=a,b,c` (assembles the panel by hand; overrides default AND
-  specialists).
+  `--area=<x>` (declares the area and skips the inference confirmation; the
+  old values `seguranca`, `api-contrato`, `dados` and `arquitetura` are still
+  accepted and mean `security`, `api-contract`, `data` and `architecture`),
+  `--lenses=a,b,c` (assembles the panel by hand; overrides default AND
+  specialists; `--lentes` is still accepted).
 
 ## Instructions
 
@@ -47,19 +49,19 @@ If the path does not exist, stop and say so.
 
 ### 2. Infer the area + confirm
 
-If `--area` was passed: validate it against the registry's areas (`seguranca`,
-`api-contrato`, `dados`, `ux`, `arquitetura`) and **skip the confirmation**.
+If `--area` was passed: validate it against the registry's areas (`security`,
+`api-contract`, `data`, `ux`, `architecture`) and **skip the confirmation**.
 Invalid area → list the valid ones and stop.
 
 Otherwise, **infer the area** from the artifact's content (contracts and
-endpoints → api-contrato; auth/secrets/attack surface → seguranca;
-schema/volume/retention → dados; user screens/flows → ux;
-components/deploy/coupling → arquitetura; nothing dominant → no area, panel
+endpoints → api-contract; auth/secrets/attack surface → security;
+schema/volume/retention → data; user screens/flows → ux;
+components/deploy/coupling → architecture; nothing dominant → no area, panel
 with only the 5 defaults). Then **confirm with the user before the fan-out**.
 The rendered confirmation is in Brazilian Portuguese (pt-BR):
 
-> Looks like an **api-contrato** decision — panel: 5 default + consumidor-externo +
-> versionamento-breaking-change (7 lenses). Ok? (or tell me another area / `--lentes=...`)
+> Looks like an **api-contract** decision — panel: 5 default + consumidor-externo +
+> versionamento-breaking-change (7 lenses). Ok? (or tell me another area / `--lenses=...`)
 
 Wait for the answer. The user may accept, change the area or dictate the
 lenses.
@@ -71,7 +73,7 @@ Read `common/advisors/lenses.md` and build the list of lenses:
 - **Default:** the 5 fixed ones (contrarian, fundamentalista, expansionista,
   outsider, executor) + **up to 2** specialists from the confirmed area.
   **Absolute ceiling: 7.**
-- **`--lentes=a,b,c`:** overrides everything — use exactly those lenses (any
+- **`--lenses=a,b,c`:** overrides everything — use exactly those lenses (any
   combination of names from the registry), still under the ceiling of 7. A name
   outside the registry → list the valid ones and stop.
 

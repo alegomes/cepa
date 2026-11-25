@@ -49,8 +49,9 @@ def run_hook(command, background=False, in_window=True):
     import os
     env = dict(os.environ)
     if in_window:
-        env["CEPA_UNTIL_RUN"] = "1"
+        env["CEPA_RUN"] = "1"
     else:
+        env.pop("CEPA_RUN", None)
         env.pop("CEPA_UNTIL_RUN", None)
     payload = {"tool_name": "Bash",
                "tool_input": {"command": command,
@@ -77,7 +78,7 @@ def test_inside_window_background_build_is_blocked():
     check("...e a recusa explica que não há turno seguinte",
           "NÃO HÁ TURNO SEGUINTE" in p.stderr, p.stderr[:300])
     check("...e diz o que fazer no lugar (primeiro plano ou desfecho nomeado)",
-          "PRIMEIRO PLANO" in p.stderr and "cepa-plan finish" in p.stderr,
+          "PRIMEIRO PLANO" in p.stderr and "cepa-queue finish" in p.stderr,
           p.stderr[:400])
 
 
@@ -150,7 +151,7 @@ def test_quoted_text_is_not_shell():
 
 def test_unreadable_payload_releases_instead_of_blowing_up():
     import os
-    env = dict(os.environ); env["CEPA_UNTIL_RUN"] = "1"
+    env = dict(os.environ); env["CEPA_RUN"] = "1"
     p = subprocess.run([sys.executable, str(HOOK)], input="{nao json",
                        capture_output=True, text=True, env=env)
     check("payload quebrado não bloqueia nem estoura", p.returncode == 0,
@@ -159,7 +160,7 @@ def test_unreadable_payload_releases_instead_of_blowing_up():
 
 def test_other_tool_passes_straight_through():
     import os
-    env = dict(os.environ); env["CEPA_UNTIL_RUN"] = "1"
+    env = dict(os.environ); env["CEPA_RUN"] = "1"
     payload = {"tool_name": "Write", "tool_input": {"file_path": "/tmp/x"}}
     p = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload),
                        capture_output=True, text=True, env=env)
@@ -172,8 +173,9 @@ def run_monitor(entry, in_window=True):
     import os
     env = dict(os.environ)
     if in_window:
-        env["CEPA_UNTIL_RUN"] = "1"
+        env["CEPA_RUN"] = "1"
     else:
+        env.pop("CEPA_RUN", None)
         env.pop("CEPA_UNTIL_RUN", None)
     payload = {"hook_event_name": "PreToolUse", "tool_name": "Monitor",
                "tool_input": entry}
@@ -233,8 +235,9 @@ def run_stop(path, in_window=True, stop_hook_active=False):
     import os
     env = dict(os.environ)
     if in_window:
-        env["CEPA_UNTIL_RUN"] = "1"
+        env["CEPA_RUN"] = "1"
     else:
+        env.pop("CEPA_RUN", None)
         env.pop("CEPA_UNTIL_RUN", None)
     payload = {"hook_event_name": "Stop", "transcript_path": str(path),
                "stop_hook_active": stop_hook_active}

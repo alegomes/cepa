@@ -63,7 +63,7 @@ Six decisions that came from damage already paid for in this repo:
    command would be the same escape again — the agent types it and moves on.
    The honest escape is to end the mode and open the mode of the work you want
    to do, which is a new session, and that is the right cost: switching
-   activity SHOULD cost something. `CEPA_MODO=off` turns the whole mechanism
+   activity SHOULD cost something. `CEPA_MODE=off` turns the whole mechanism
    off and is visible, but the block message does not offer it — the next
    failure mode, if it is offered, is the agent starting to ask to turn the
    gate off, and then the hole has only moved.
@@ -130,6 +130,7 @@ import _modes  # noqa: E402
 import _shellscan as S  # noqa: E402
 import _telemetry as T  # noqa: E402
 import _wtlib  # noqa: E402
+import _cepaenv as E  # noqa: E402
 
 _FILE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 
@@ -612,7 +613,7 @@ def main():
         sys.exit(0)
 
     try:
-        if os.environ.get("CEPA_MODO", "on") == "off":
+        if E.get("CEPA_MODE", "on") == "off":
             sys.exit(0)
 
         cwd = payload.get("cwd") or os.getcwd()

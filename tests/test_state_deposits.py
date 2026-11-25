@@ -9,7 +9,7 @@ What it proves:
       entry in a `.claude/` is reported by `unknown_entries`;
   (b) the one liveness rule: a `rodando` record is alive only with a fresh
       heartbeat (and a live pid on the same host); no heartbeat is never `vivo`;
-  (c) the four commands' bins import and use the module, and `cepa-plan` has no
+  (c) the four commands' bins import and use the module, and `cepa-queue` has no
       copy of the heartbeat constant any more;
   (d) `cepa-doctor` warns in the `estado` area when `.claude/` has a stray entry.
 """
@@ -174,13 +174,13 @@ def test_runs_reader():
 
 
 def test_bins_use_the_module():
-    for name in ("cepa-plan", "cepa-doctor", "cepa-until-digest", "cepa-intent"):
+    for name in ("cepa-queue", "cepa-doctor", "_run_digest.py", "cepa-intent"):
         text = (REPO / "common" / "bin" / name).read_text(encoding="utf-8")
         used = len(re.findall(r"_state\.\w+|from _state import", text))
         check(f"{name} importa e usa _state", "import _state" in text and used >= 1,
               f"usos={used}")
-    plan = (REPO / "common" / "bin" / "cepa-plan").read_text(encoding="utf-8")
-    check("cepa-plan não define mais HEARTBEAT_STALE_SEC",
+    plan = (REPO / "common" / "bin" / "cepa-queue").read_text(encoding="utf-8")
+    check("cepa-queue não define mais HEARTBEAT_STALE_SEC",
           not re.search(r"^HEARTBEAT_STALE_SEC\s*=", plan, re.M))
 
 
@@ -320,19 +320,19 @@ def _digest_fixture(tmp, estado):
 
 
 def test_digest_shows_run_liveness_line():
-    digest = REPO / "common" / "bin" / "cepa-until-digest"
+    digest = REPO / "common" / "bin" / "cepa-run"
     with tempfile.TemporaryDirectory() as tmp:
         ledger = _digest_fixture(tmp, {"run": "r", "estado": "rodando",
                                        "host": _wtlib.host(), "pid": os.getpid(),
                                        "heartbeat": beat(7200)})
-        r = subprocess.run([sys.executable, str(digest), str(ledger)],
+        r = subprocess.run([sys.executable, str(digest), "digest", str(ledger)],
                            capture_output=True, text=True)
         line = next((ln for ln in r.stdout.splitlines() if ln.startswith("- run:")), "")
         check("o digest traz a linha `- run:` dizendo MORTO", "MORTO" in line,
               r.stdout[:400] + r.stderr[-200:])
     with tempfile.TemporaryDirectory() as tmp:
         ledger = _digest_fixture(tmp, None)
-        r = subprocess.run([sys.executable, str(digest), str(ledger)],
+        r = subprocess.run([sys.executable, str(digest), "digest", str(ledger)],
                            capture_output=True, text=True)
         check("sem .estado.json o digest não traz a linha `- run:`",
               r.returncode == 0 and "- run:" not in r.stdout, r.stdout[:300] + r.stderr[-200:])
@@ -361,7 +361,7 @@ def test_intent_state_inside_a_run_says_if_it_is_alive():
             (u / "r.estado.json").write_text(json.dumps(
                 {"run": "r1", "estado": "rodando", "host": _wtlib.host(),
                  "pid": os.getpid(), "arvore": str(wtree), "heartbeat": heartbeat}))
-            env = {**os.environ, "CEPA_UNTIL_RUN": "r1"}
+            env = {**os.environ, "CEPA_RUN": "r1"}
             return subprocess.run([sys.executable, str(intent), "state"], cwd=wtree,
                                   capture_output=True, text=True, env=env).stdout
 
@@ -411,10 +411,10 @@ def test_non_dict_estado_files_are_ignored():
 
 
 def test_digest_ignores_a_non_dict_estado():
-    digest = REPO / "common" / "bin" / "cepa-until-digest"
+    digest = REPO / "common" / "bin" / "cepa-run"
     with tempfile.TemporaryDirectory() as tmp:
         ledger = _digest_fixture(tmp, [])
-        r = subprocess.run([sys.executable, str(digest), str(ledger)],
+        r = subprocess.run([sys.executable, str(digest), "digest", str(ledger)],
                            capture_output=True, text=True)
         check("`.estado.json` com `[]`: sem linha `- run:` e saída 0",
               r.returncode == 0 and "- run:" not in r.stdout, r.stdout[:200] + r.stderr[-300:])
@@ -438,7 +438,7 @@ def test_intent_run_lookup_by_each_key_alone():
             (u / "r.estado.json").write_text(json.dumps(
                 {"run": "r1", "estado": "rodando", "host": _wtlib.host(),
                  "pid": os.getpid(), "arvore": arvore, "heartbeat": beat(3)}))
-            env = {**os.environ, "CEPA_UNTIL_RUN": env_run}
+            env = {**os.environ, "CEPA_RUN": env_run}
             return subprocess.run([sys.executable, str(intent), "state"], cwd=wtree,
                                   capture_output=True, text=True, env=env).stdout
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """CS-12 of docs/spec/perguntar-antes-do-run.md: the prompt `cepa-until` hands to each
-item's agent carries the cut rule — `cepa-plan finish --decision` for a behavior choice
+item's agent carries the cut rule — `cepa-queue finish --decision` for a behavior choice
 already committed on the run branch, `--human-pending` kept for a proof waiver, moving a
 card to Done and a task outside the repository.
 
@@ -31,14 +31,14 @@ def test_cut_rule_cs12_every_item_request_carries_it():
     mod = load_module()
     plain = mod.build_command("fila", "until/b", False)[2]
     check("cs12 unit: the request still starts with the drain-plan call",
-          plain.startswith("/common:drain-plan fila --max 1 --na-branch until/b\n\n"), plain)
+          plain.startswith("/common:queue-run fila --max 1 --on-branch until/b\n\n"), plain)
     check("cs12 unit: the request without a note carries the cut rule",
           _has_cut_rule(plain), plain)
     check("cs12 unit: the rule names the finish flags, not drain-plan's",
-          "cepa-plan finish" in plain, plain)
+          "cepa-queue finish" in plain, plain)
     bare = mod.build_command("fila", "", False)[2]
     check("cs12 unit: without a run branch the request still carries the rule",
-          bare.startswith("/common:drain-plan fila --max 1\n\n") and _has_cut_rule(bare),
+          bare.startswith("/common:queue-run fila --max 1\n\n") and _has_cut_rule(bare),
           bare)
     pref = {"texto": "T.", "padrao": "P", "escolha": "R", "fonte": "padrao"}
     noted = mod.build_command("fila", "until/b", False,

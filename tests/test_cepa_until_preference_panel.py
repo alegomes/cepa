@@ -85,8 +85,8 @@ def test_cs9_long_preference_fits_80_columns_inside_the_frame():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("x1"), item("y1")])
         env = env_do_run(tmp, root, fake_claude(tmp, "pass"))
-        env["CEPA_UNTIL_LEITOR"] = str(_long_reader(tmp))
-        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "5"
+        env["CEPA_RUN_READER"] = str(_long_reader(tmp))
+        env["CEPA_RUN_ANSWER_WAIT"] = "5"
         env.pop("COLUMNS", None)
         cmd = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
                "--for", "2h", "--no-verify", "--no-analysis"]

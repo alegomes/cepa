@@ -12,7 +12,7 @@ another machine still alive. This file proves the answers are written:
     `item_end` record the same id; `run_start` says `versao_registro: 2`;
   - `end_reason_of` returns one member of the closed set, in the documented precedence;
   - `estado.json` gets a `heartbeat` that advances while an item runs;
-  - `cepa-plan` decides a reservation held from ANOTHER host by the heartbeat's age;
+  - `cepa-queue` decides a reservation held from ANOTHER host by the heartbeat's age;
   - a `reservado` deferral lands in the record as `item_pulado`, once per item.
 
 Run: python3 tests/test_cepa_until_session.py
@@ -36,7 +36,7 @@ from test_cepa_until_quota import (  # noqa: E402
     load_module, EVENT, CEILING_TEXT, MARGIN)
 
 REPO = Path(__file__).resolve().parents[1]
-CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 FAILURES = []
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
@@ -198,7 +198,7 @@ def test_heartbeat_advances_while_the_item_runs():
             "marca(primeiro(), status='done')\n")
         binv = fake_claude(tmp, body)
         p, _ = run_until(root, binv, plan_of(root), ["--for", "2h"],
-                         extra_env={"CEPA_UNTIL_HEARTBEAT": "1"})
+                         extra_env={"CEPA_RUN_HEARTBEAT": "1"})
         views = [json.loads(l) for l in seen.read_text().splitlines()]
         check("o fake leu o estado duas vezes", len(views) == 2, p.stdout[-400:] + p.stderr[-400:])
         a, b = views
@@ -214,7 +214,7 @@ def test_heartbeat_advances_while_the_item_runs():
               str(b))
 
 
-# ── 4. orphan by heartbeat age (cepa-plan) ──────────────────────────────────
+# ── 4. orphan by heartbeat age (cepa-queue) ──────────────────────────────────
 
 def load_plan_module():
     loader = importlib.machinery.SourceFileLoader("cepa_plan", str(CEPA_PLAN))
@@ -347,7 +347,7 @@ def test_item_reserved_by_a_live_run_elsewhere_is_logged_once_as_skipped():
         check("a1 reservado em outro host: um item_pulado", len(skipped) == 1
               and skipped[0]["id"] == "a1" and skipped[0]["motivo"] == "reservado",
               str(skipped))
-        check("...com o detalhe que o cepa-plan devolveu",
+        check("...com o detalhe que o cepa-queue devolveu",
               OTHER_HOST in str(skipped[0].get("detalhe")), str(skipped))
         check("...e o a2 rodou normalmente",
               [e["id"] for e in ev if e.get("evento") == "item_start"] == ["a2"])

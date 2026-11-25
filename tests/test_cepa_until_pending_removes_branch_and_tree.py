@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`cepa-until pending` removes the branch and the worktree of the run it closes
+"""`cepa-run pending` removes the branch and the worktree of the run it closes
 and saves the worktree's git-ignored files (spec docs/spec/pouso-ja-feito-sai-da-lista.md, CS-2).
 
 Against the real CLI, in a temporary git repo with a remote:

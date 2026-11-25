@@ -35,7 +35,7 @@ FAILURES = []
 
 # The launcher runner of tests/test_cepa_prompt.py, reduced to what is needed
 # here (that module runs its whole suite on import, so it cannot be imported).
-for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODO"):
+for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODE"):
     os.environ.pop(_k, None)
 CEPA = BIN / "cepa"
 MARK = "---CEPA-ARG---"
@@ -211,8 +211,8 @@ def test_launcher_prompt_replace():
         lib.mkdir()
 
         def launch(*args):
-            env = {**os.environ, "CLAUDE_WT_CLAUDE_BIN": str(fake), "CEPA_PREFLIGHT": "off",
-                   "CEPA_MODO": "off", "CEPA_PROMPTS_HOME": str(lib)}
+            env = {**os.environ, "CEPA_WT_CLAUDE_BIN": str(fake), "CEPA_PREFLIGHT": "off",
+                   "CEPA_MODE": "off", "CEPA_PROMPTS_HOME": str(lib)}
             return subprocess.run([str(CEPA), *args], cwd=repo, env=env,
                                   stdin=subprocess.DEVNULL, capture_output=True,
                                   text=True, timeout=30)

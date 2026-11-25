@@ -4,15 +4,15 @@ not reported as ready (owner, 2026-11-10, fb-20261110-1).
 
 The case: C1-18 of wego-faturamento-backend went `blocked` with the validation
 caveats and two owner decisions buried in the prose of `evidence`. The owner
-answered "sim" to the route, the item went back to `pending`, and `cepa plan
+answered "sim" to the route, the item went back to `pending`, and `cepa queue
 status` said "pronto: o próximo cepa-until pega". When the owner asked what was
 left to unblock it, several pending points came up that no field of the item
 carried.
 
-Red test (BACKLOG.md § `cepa-plan status` diz que o item está pronto e a
+Red test (BACKLOG.md § `cepa-queue status` diz que o item está pronto e a
 pergunta sobre o desbloqueio revela pendências que nunca apareceram):
 
-  - `cepa-plan finish ... --pendencia "<texto>"` (repeatable) records each one
+  - `cepa-queue finish ... --pendencia "<texto>"` (repeatable) records each one
     in the item's `pendencias`, open;
   - an item with an open pending point is NOT `pronto` in `status` (JSON and
     text), even after the owner's answer returns it to `pending`; it stays
@@ -44,7 +44,7 @@ from test_cepa_until_decide import CEPA_PLAN, on_tty  # noqa: E402
 FAILURES = []
 ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
            GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t", NO_COLOR="1")
-for v in ("CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID"):
+for v in ("CEPA_RUN", "CEPA_UNTIL_RUN", "CEPA_AUTONOMOUS_RUN_ID", "CLAUDE_AUTONOMOUS_RUN_ID"):
     ENV.pop(v, None)
 
 P1 = "a fila de leituras trava com 20 lotes aguardando conferência"
@@ -149,7 +149,7 @@ def test_point_survives_the_answer_and_item_is_not_ready():
         screen = subprocess.run(
             [sys.executable, str(CEPA_PLAN), "status", "fila", "--repo", str(root)],
             capture_output=True, text=True, cwd=root, timeout=60,
-            env={k: v for k, v in dict(ENV, CEPA_COR="sempre", COLUMNS="200").items()
+            env={k: v for k, v in dict(ENV, CEPA_COLOR="sempre", COLUMNS="200").items()
                  if k != "NO_COLOR"})
         flat = re.sub(r"\x1b\[[0-9;]*m", "", screen.stdout)
         a1_screen = flat.split("a1", 1)[-1].split("a2", 1)[0]

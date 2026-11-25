@@ -106,8 +106,8 @@ def listens_after(port, secs, by=30):
 
 
 def environment(port, interval="0.5"):
-    return {"CEPA_UNTIL_SONDA_REDE": f"127.0.0.1:{port}",
-            "CEPA_UNTIL_SONDA_INTERVALO": interval}
+    return {"CEPA_RUN_NETWORK_PROBE": f"127.0.0.1:{port}",
+            "CEPA_RUN_PROBE_INTERVAL": interval}
 
 
 # ── 1. the network drops and comes back: resumes the same item without spending its turn ─

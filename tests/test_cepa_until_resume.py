@@ -61,7 +61,7 @@ def commit(root, msg):
 
 def orphan(ident):
     """`in_progress` item whose reservation is from another machine and is past 24h:
-    `cepa-plan queue` returns it as executable."""
+    `cepa-queue queue` returns it as executable."""
     it = item(ident, status="in_progress")
     it["claimed_by"] = {"session_id": "morta", "pid": 1,
                         "hostname": "outra-maquina", "cwd": "/nao/existe",

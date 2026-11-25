@@ -8,7 +8,7 @@ delivered what round N-1 wrote, with the rule "continue from where you left off"
 never reserved the item and rewrote the report of WEGO-2337, from the previous round.
 
 Contracts:
-  - with `CEPA_UNTIL_RUN` in the environment, the handoff content is NOT delivered;
+  - with `CEPA_RUN` in the environment, the handoff content is NOT delivered;
     the notice says that the round's item is whatever the drain-plan reserves;
   - the round does not consume the handoff (neither `resumed_by` nor a reservation file),
     so the owner can still resume it in the morning;
@@ -65,14 +65,14 @@ def scenario():
 
 def test_round_does_not_receive_the_handoff():
     root, path = scenario()
-    out = R.resume_notice("rodada-2", root, root, env={"CEPA_UNTIL_RUN": "1"}) or ""
+    out = R.resume_notice("rodada-2", root, root, env={"CEPA_RUN": "1"}) or ""
     check("conteúdo da rodada anterior não é entregue", "WEGO-2337" not in out, out)
-    check("aviso aponta para o item reservado pelo drain-plan", "drain-plan" in out, out)
+    check("aviso aponta para o item reservado pelo queue-run", "queue-run" in out, out)
 
 
 def test_round_does_not_consume_the_handoff():
     root, path = scenario()
-    R.resume_notice("rodada-2", root, root, env={"CEPA_UNTIL_RUN": "1"})
+    R.resume_notice("rodada-2", root, root, env={"CEPA_RUN": "1"})
     meta, _, _ = H.parse(path)
     check("frontmatter sem resumed_by", "resumed_by" not in meta, meta)
     check("sem arquivo de reserva", not path.with_suffix(".claim").exists())
@@ -98,9 +98,9 @@ def _session_start(marker):
     path = H.handoff_path(str(repo), "until/noite")
     H.write(path, {"session_id": "rodada-1", "branch": "until/noite",
                    "updated_at": L.now_iso()}, auto="- relatorio do WEGO-2337")
-    env = {k: v for k, v in os.environ.items() if k != "CEPA_UNTIL_RUN"}
+    env = {k: v for k, v in os.environ.items() if k not in ("CEPA_RUN", "CEPA_UNTIL_RUN")}
     if marker:
-        env["CEPA_UNTIL_RUN"] = "1"
+        env["CEPA_RUN"] = "1"
     r = subprocess.run(
         [sys.executable, str(HOOKS / "session-registry.py")],
         input=json.dumps({"hook_event_name": "SessionStart", "session_id": "rodada-2",

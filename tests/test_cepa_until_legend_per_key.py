@@ -59,7 +59,7 @@ def _blocks(plain, idents):
 
 
 def test_decide_on_terminal_has_no_done_already_and_one_legend_line_per_key():
-    """Red test of CS-3, as a process in a pseudo-terminal: `cepa-until decide fila`
+    """Red test of CS-3, as a process in a pseudo-terminal: `cepa-run decide fila`
     over an item with `human_pending` and no question does not contain "done
     already" nor "the task closes and the item goes back", and the legend has a line
     for each key of the menu. A delivered (`done`) route with no question, the other

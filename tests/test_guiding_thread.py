@@ -98,7 +98,7 @@ def main():
     # ── producer: triage produces order + why and DELIVERS (loss 1) ─────────
     # Until stage 2 (2026-08-25) triage also WROTE plan.yaml, and these
     # two guards charged for that. It stopped: now it writes the handoff of the
-    # classification and the writer is /common:plan --from-jira. What the queue
+    # classification and the writer is /common:queue --from-jira. What the queue
     # must not lose remains the same — order, `why` per item, and the merge that does not
     # erase `human_pending` —, so the guards point to where those three
     # things came to live, instead of vanishing with the old stage.
@@ -116,7 +116,7 @@ def main():
           "why" in triage and "re-priorisation from scratch" in triage)
     check("a fusão que não apaga `human_pending` continua exigida",
           "human_pending" in triage and "re-triage that wiped it" in triage,
-          "quem funde agora é o cepa-plan; o triage precisa continuar dizendo "
+          "quem funde agora é o cepa-queue; o triage precisa continuar dizendo "
           "o que está em jogo, senão a regra some do lugar onde ela é lida")
 
     # ── closing that points forward (loss 2) ────────────────────────────────

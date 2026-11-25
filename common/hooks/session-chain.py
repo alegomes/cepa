@@ -52,6 +52,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _wtlib as L  # noqa: E402
+import _cepaenv as E  # noqa: E402
 try:
     from _modes import normalize_mode as _normalize_mode
 except Exception:  # noqa: BLE001 — chaining never breaks because of the table
@@ -100,7 +101,7 @@ def main() -> int:
         rc = int(rc_s)
     except ValueError:
         rc = 0
-    if os.environ.get("CEPA_ENCADEAR", "on") == "off" or not launch_id:
+    if E.get("CEPA_CHAIN", "on") == "off" or not launch_id:
         return rc
     root = L.main_root(os.getcwd())
     if not root:
@@ -158,7 +159,7 @@ def main() -> int:
                 pass
     sl = chain_slice(spec, repo, os.environ.get("CEPA_CHAIN_FROM_WORKTREE") == "1", prompt)
     where = f"{repo}, worktree session/{sl}" if sl else repo
-    print(f"↻ cepa: próxima sessão em {where} (modo {mode}) — CEPA_ENCADEAR=off desliga",
+    print(f"↻ cepa: próxima sessão em {where} (modo {mode}) — CEPA_CHAIN=off desliga",
           file=sys.stderr)
     os.chdir(repo)
     os.environ.pop("CEPA_CHAIN_FROM_WORKTREE", None)

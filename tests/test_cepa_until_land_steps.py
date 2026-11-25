@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`cepa-until land --yes` prints numbered steps (CS-7 of fim-do-until-sem-espera).
+"""`cepa-run land --yes` prints numbered steps (CS-7 of fim-do-until-sem-espera).
 
 The output opens with a header (run branch → destination, commit count, fast-forward
 or not, return point), then `[1/3] merge`, `[2/3] full build` and `[3/3] push`, each

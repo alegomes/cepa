@@ -2,7 +2,7 @@
 
 One reader, two callers (item 6 of O2', base of item 3, in
 docs/spec/tres-portas-spec-epic.md): the `spec-readiness-gate` hook counts the
-lines without a verdict on the passage to ready, and `cepa-plan decisions`
+lines without a verdict on the passage to ready, and `cepa-queue decisions`
 lists them. Two copies of "what counts as a decision" and "what counts as a
 verdict" would drift apart, and the count the owner sees at closing would stop
 matching the list the command shows.
@@ -16,7 +16,7 @@ What it reads:
     file's words, lines joined by a space. A checkbox (`- [ ]`) is a question,
     not a decision; a template line (`<...>`) or a filler (`n/a`, `tbd`) is not
     a decision either;
-  * the verdict is the marker `cepa-plan verdict` writes at the end of the
+  * the verdict is the marker `cepa-queue verdict` writes at the end of the
     item: `· mantida em`, `· vetada em` or `· refinada em`.
 
 Stdlib only: it is imported from a hook, which runs on every Write.

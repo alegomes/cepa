@@ -2502,6 +2502,13 @@ def _build_message(n, agent, command, allowed, unknown_dirs=()):
     return text.replace("__CEPAARITH__", "$((…))")
 
 
+def _run_card():
+    """The autonomous run's id, for the telemetry event: `CEPA_AUTONOMOUS_RUN_ID`;
+    the name it had before (CLAUDE_AUTONOMOUS_RUN_ID) is still read, the new one wins."""
+    return (os.environ.get("CEPA_AUTONOMOUS_RUN_ID")
+            or os.environ.get("CLAUDE_AUTONOMOUS_RUN_ID") or "")
+
+
 def main():
     raw = sys.stdin.read()
     try:
@@ -2549,7 +2556,7 @@ def main():
     except _Denied as n:
         _t_emit("bash_pathlock_deny", cwd=cwd_s, agent=agent, bucket=n.bucket,
                 verb=n.verb, cmd_hash=_cmd_hash(command),
-                card=os.environ.get("CLAUDE_AUTONOMOUS_RUN_ID", ""))
+                card=_run_card())
         print(_build_message(n, agent, command, allowed, ctx.unknown_dirs),
               file=sys.stderr)
         sys.exit(2)

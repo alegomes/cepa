@@ -1,0 +1,83 @@
+schema_version: 2
+card: reforma-de-nomes-CS-5
+verdict: proven
+reviewed_at: 2026-11-25T09:10:00-03:00
+base_commit: 9a75f57
+head_commit: 0ede2ff
+issue_type: Feature
+repo_kind: harness            # repo Python + sh (cepa), não Quarkus. Superfície = CLI cepa-queue, hook de menu, comandos slash
+review: 1
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-queue (cmd_verdict, VERDICT_MARKER, choices do verdict; finish --open-point/--resolve-open-point com os nomes antigos como alias)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes rodam o cepa-queue real como subprocesso
+    - class: "common/hooks/_modes.py (menu de descoberta imprime /common:spec --continue <slug>)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/session-mode.py (LEGACY_FLAGS, _modern, menu_choice)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null   # o teste carrega o módulo real e chama menu_choice
+    - class: "common/bin/cepa-run (build_command envia --on-branch)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # o cepa-run real roda; só o binário `claude`, do outro lado da fronteira, é falso (P9 quebrou o cepa-run e o teste ficou RED)
+    - class: "common/bin/cepa-doctor (comando impresso /common:spec --continue)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/commands/*.md (argument-hint e linhas 'still accepted')"
+      module: commands
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/sh, sem pitest; perturbação em worktree detached descartável (/tmp/proof-cs5-a em 0ede2ff), removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "baseline em 0ede2ff: test_slash_flags_in_english.py '11 passed'; test_cepa_until_run_branch.py 'tudo verde'; test_doctor_decisions.py 'todos ok'; test_flags_hint_variables.py 'tudo ok (68 comandos varridos)'."
+        - "P1 cepa-queue VERDICT_MARKER 'kept' -> 'kept' (marker diferente do antigo): RED em test_verdict_english_values_write_the_same_marker_as_the_old_ones (1 failed, 10 passed). Restaurado."
+        - "P2 cepa-queue choices do verdict sem mantida|vetada|refinada: RED, 2 failed (same_marker_as_the_old_ones, errors_name_the_value_typed). Restaurado."
+        - "P3 finish sem o alias --pendencia: RED em test_finish_open_point_records_the_same_as_pendencia (1 failed). Restaurado."
+        - "P4 finish sem o alias --resolve-pendencia: RED, 2 failed (open_point_records_the_same_as_pendencia, finish_help_shows_english_flags_first). Restaurado."
+        - "P5 finish sem o nome novo --open-point: RED, 3 failed (inclui resolve_point_alias_still_accepted e finish_help). Restaurado."
+        - "P6 finish sem o nome novo --resolve-open-point: RED, 2 failed. Restaurado."
+        - "P7 common/hooks/_modes.py volta a imprimir --continuar: RED em test_menu_prints_continue_not_continuar. Restaurado."
+        - "P8 session-mode.py LEGACY_FLAGS = {}: RED em test_old_flag_prompt_is_recognised_as_the_menu_action (1 failed). Restaurado."
+        - "P9 cepa-run build_command volta a --na-branch: RED em tests/test_cepa_until_run_branch.py (FAIL 'o pedido ao claude leva --on-branch'); o teste novo não cobre esta linha, o vizinho ajustado sim. Restaurado."
+        - "P10 cepa-doctor imprime --continuar: RED em tests/test_doctor_decisions.py (FAIL '...e o comando que abre o veto'). Restaurado."
+        - "P11 spec.md argument-hint com --continuar/--fechar/--lista: RED em test_argument_hints_are_english_only. Restaurado."
+        - "P12 gauntlet.md sem 'still accepted': RED em test_each_command_body_says_the_old_form_is_still_accepted. Restaurado."
+        - "P13 queue-run.md hint com --na-branch; P14 run-review.md hint com --fila; P15 advisors.md hint com --lentes; P16 next.md hint com --plan: cada um RED em test_argument_hints_are_english_only (1 failed). Restaurados."
+        - "Sobreviventes: nenhum. Amostra: dos seis comandos com hint (spec, advisors, gauntlet, queue-run, run-review, next) perturbei o hint de cinco e a linha 'still accepted' de um (gauntlet); os demais passam pelo mesmo laço do teste. Texto de help/mensagens de erro do cepa-queue é coberto por errors_name_the_value_typed e finish_help_shows_english_flags_first (RED em P2/P4/P5), sem perturbar cada frase."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs5-a 0ede2ff`; cada Pn: `sed -i ''` no arquivo do worktree + `python3 -m pytest -q tests/test_slash_flags_in_english.py` (ou `python3 tests/test_cepa_until_run_branch.py` / `python3 tests/test_doctor_decisions.py` para P9/P10) + `git -C /tmp/proof-cs5-a checkout -- <arquivo>`; `git status --short | wc -l` -> 0 no fim.
+        `git worktree remove --force /tmp/proof-cs5-a`; `git worktree list | grep -c proof` -> 0. tests/run-all.sh não rodado (é do supervisor).
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "sem ferramenta de cobertura. Cada trecho de comportamento (valores do verdict, aliases de finish, menu, menu_choice, cepa-run, cepa-doctor, hints e linhas 'still accepted') foi quebrado e ficou RED (P1 a P16)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff só renomeia flags e valores e mantém os antigos como alias; nenhuma entrada nova de fora é lida. As escolhas do verdict continuam num conjunto fechado do argparse."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature. Vermelho no base: worktree /tmp/proof-cs5-b em 9a75f57 + `git checkout 0ede2ff -- tests/test_slash_flags_in_english.py` + `python3 -m pytest -q tests/test_slash_flags_in_english.py`: '10 failed, 1 passed' (o que passa é o do alias antigo --resolve-pendencia, que já valia no base). Verde em 0ede2ff: '11 passed'."
+changed_behaviour_not_pinned:
+  - "tests/test_cepa_mode.py, test_cepa_until_cut_rule/decide/route_rule, test_common_drain_plan, test_gauntlet_command, test_veto_walk_opens_existing_doc: vizinhos ajustados para a grafia nova; não perturbei um a um (cobertos pelos mesmos trechos perturbados acima)."
+  - "docs/*.md, advisors/lenses.md, gauntlet/angulos.md, validation-lead.md: só texto de documentação, sem comportamento a perturbar."
+build_completo: "delegado ao supervisor do run (tests/run-all.sh); não rodado por mim, por instrução."
+routing_reason: >-
+  O teste novo fica vermelho no base (10 de 11) e verde em 0ede2ff (11 de 11). Cada trecho de comportamento quebrado de propósito (marker do verdict, valores antigos do verdict, aliases e nomes novos de finish, menu, menu_choice, cepa-run, cepa-doctor, hints, linha 'still accepted') deixou o teste que o cobre RED e voltou ao verde ao restaurar. Nada assumed/skipped. PROVEN.

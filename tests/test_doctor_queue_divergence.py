@@ -4,7 +4,7 @@
 ## Why this check exists
 
 The "single queue" (BACKLOG.md, Jira and plan.yaml converge on plan.yaml) only
-holds if something charges for the divergence among the three. `cepa-plan divergencia` does
+holds if something charges for the divergence among the three. `cepa-queue divergencia` does
 the calculation (BACKLOG.md sections without `**Plano:**`, `**Plano:**` citing an id that
 does not exist in the queue); this check only calls that command and translates the result into
 ✓/⚠, at the session opening that already runs the doctor. It never fixes — closing a

@@ -7,7 +7,7 @@ Run with `python3 tests/test_cepa_until.py` (it only needs PyYAML).
 
 The supervisor has a single responsibility: deciding WHEN to fire one more
 subprocess and when to stop. Everything that happens INSIDE the subprocess belongs to
-`/common:drain-plan` and the topology, and no test here touches that.
+`/common:queue-run` and the topology, and no test here touches that.
 
 So `claude` is replaced by a fake script on the PATH, which does what
 drain-plan would do with the plan (mark `done`, open `human_pending`, do
@@ -42,7 +42,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_UNTIL = REPO / "common" / "bin" / "cepa-until"
+CEPA_UNTIL = REPO / "common" / "bin" / "cepa-run"
 
 FAILURES = []
 
@@ -111,7 +111,7 @@ def fake_claude(tmp, body):
         "        if it['id'] == ident:\n"
         "            it.update(campos)\n"
         "    grava(p)\n"
-        # Mirrors the deferral rule of `cepa-plan build_batch`: an item with an open
+        # Mirrors the deferral rule of `cepa-queue build_batch`: an item with an open
         # `human_pending` is NOT handed to the executor again. Without this the
         # fake marks the same item forever and the test measures itself.
         "def primeiro_pendente():\n"
@@ -137,7 +137,7 @@ def run_until(root, binv, plan, args, timeout=120, extra_env=None, repo_arg=None
     env.update(extra_env or {})
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(plan)
-    env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
+    env.setdefault("CEPA_RUN_READER", "off")  # the pre-read must not call the fake claude
     env.setdefault("CEPA_WORKTREE_HOME", str(Path(root).parent / "worktrees"))
     calls = Path(root).parent / "chamadas.jsonl"
     env["FAKE_CHAMADAS"] = str(calls)
@@ -241,7 +241,7 @@ def test_minimum_reserve_prevents_starting_an_item_that_does_not_fit():
 def test_item_environment_turns_on_the_window_and_zeroes_the_wait_ceiling():
     """What the subprocess receives in the environment is contract, not detail.
 
-    `CEPA_UNTIL_RUN` is what makes the window's hooks exist. And
+    `CEPA_RUN` is what makes the window's hooks exist. And
     `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` is what keeps `claude -p` from killing
     itself at 10 minutes with background work pending — that is how
     WEGO-2224 died half done on 2026-09-03 and the 8h window closed with
@@ -258,8 +258,8 @@ def test_item_environment_turns_on_the_window_and_zeroes_the_wait_ceiling():
         plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
         run_until(root, binv, plan, ["--for", "2h"])
         env = json.loads(target.read_text())
-        check("o subprocesso nasce com CEPA_UNTIL_RUN",
-              env.get("CEPA_UNTIL_RUN") == "1", repr(env.get("CEPA_UNTIL_RUN")))
+        check("o subprocesso nasce com CEPA_RUN",
+              env.get("CEPA_RUN") == "1", repr(env.get("CEPA_RUN")))
         check("...e com o teto de espera por segundo plano zerado",
               env.get("CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS") == "0",
               repr(env.get("CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS")))
@@ -567,7 +567,7 @@ def test_previous_run_record_is_not_dirt():
 
 
 def test_bak_of_the_queue_rewrite_is_not_dirt():
-    """`cepa-plan write` copies the previous queue to `plan.yaml.bak` before
+    """`cepa-queue write` copies the previous queue to `plan.yaml.bak` before
     rewriting (it is where the hand-written comments stay). The file is born
     untracked, and before the filter every queue rewrite blocked the next
     run until someone deleted the `.bak` by hand (seen on 2026-09-29, queue
@@ -584,7 +584,7 @@ def test_bak_of_the_queue_rewrite_is_not_dirt():
              "human_pending": None}]),
             encoding="utf-8")
         w = subprocess.run([sys.executable, str(REPO / "common" / "bin" /
-                                                "cepa-plan"),
+                                                "cepa-queue"),
                             "write", "fila", "--items", str(item_list),
                             "--repo", str(root)],
                            capture_output=True, text=True)
@@ -749,7 +749,7 @@ def test_missing_queue_refuses_before_firing():
         env = dict(os.environ)
         env["PATH"] = f"{binv}:{env['PATH']}"
         env["FAKE_PLANO"] = str(plan)
-        env.setdefault("CEPA_UNTIL_LEITOR", "off")  # the pre-read must not call the fake claude
+        env.setdefault("CEPA_RUN_READER", "off")  # the pre-read must not call the fake claude
         env["FAKE_CHAMADAS"] = str(root.parent / "chamadas.jsonl")
         p = subprocess.run([sys.executable, str(CEPA_UNTIL), "nao-existe",
                             "--repo", str(root), "--for", "2h"],
@@ -879,7 +879,7 @@ def test_header_says_how_many_items_run_and_how_many_wait_for_the_owner():
 
 def test_header_wait_count_ignores_items_deferred_for_another_reason():
     """CS-1: only an open `human_pending` counts as "waiting for the owner". An item
-    that `cepa-plan queue` defers for another reason (here `depends-on-deferred`:
+    that `cepa-queue queue` defers for another reason (here `depends-on-deferred`:
     a3 is blocked by a2, which is itself deferred) is in neither number."""
     with tempfile.TemporaryDirectory() as tmp:
         a3 = item("a3")
@@ -889,7 +889,7 @@ def test_header_wait_count_ignores_items_deferred_for_another_reason():
                                 a3])
         binv = fake_claude(tmp, "pass")
         plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
-        q = subprocess.run([sys.executable, str(REPO / "common" / "bin" / "cepa-plan"), "queue", "fila", "--max",
+        q = subprocess.run([sys.executable, str(REPO / "common" / "bin" / "cepa-queue"), "queue", "fila", "--max",
                             "1000000", "--repo", str(root), "--json"],
                            capture_output=True, text=True)
         deferred = json.loads(q.stdout).get("deferred") or []
@@ -923,7 +923,7 @@ def test_header_says_unavailable_when_the_uncapped_queue_read_fails():
 
         def flaky(name, repo, max_items=1):
             if max_items > 1:
-                return None, "boom: cepa-plan fell over"
+                return None, "boom: cepa-queue fell over"
             return real(name, repo, max_items=max_items)
         mod.query_queue = flaky
         out = io.StringIO()
@@ -935,7 +935,7 @@ def test_header_says_unavailable_when_the_uncapped_queue_read_fails():
         check("there is one '1st item:' line", len(lines) == 1, out.getvalue()[:800])
         line = lines[0] if lines else ""
         check("...saying unavailable with the error",
-              "start: unavailable (queue read failed: boom: cepa-plan fell over)" in line, line)
+              "start: unavailable (queue read failed: boom: cepa-queue fell over)" in line, line)
         check("...and with no count", " run, " not in line, line)
 
 
@@ -1011,7 +1011,7 @@ def test_process_that_ignores_sigterm_is_killed_by_sigkill():
                             "--slack", "0.05m"],
                            timeout=200,
                            extra_env={"FAKE_FILHO": str(mark),
-                                      "CEPA_UNTIL_GRACA_SIGTERM": "2"})
+                                      "CEPA_RUN_SIGTERM_GRACE": "2"})
         ends = [e for e in ledger_of(root) if e.get("evento") == "item_end"]
         check("o item que ignora SIGTERM ainda é registrado como timeout",
               ends and ends[0]["timeout"] is True, str(ends))
@@ -1186,7 +1186,7 @@ def test_attempt_ceiling_takes_the_item_off_the_front_and_the_queue_moves():
         check("...o item preso ficou `blocked`",
               after["a1"]["status"] == "blocked", str(after["a1"]))
         check("...com a evidência dizendo que foi o supervisor, não um veredito",
-              "consecutive `cepa-until` attempts" in (after["a1"]["evidence"] or ""),
+              "consecutive `cepa-run` attempts" in (after["a1"]["evidence"] or ""),
               str(after["a1"].get("evidence"))[:200])
         check("...a reserva órfã foi limpa junto",
               not after["a1"].get("claimed_by"), str(after["a1"]))
@@ -1315,7 +1315,7 @@ def test_live_run_of_the_same_queue_refuses_the_launch():
 
 def test_plan_of_another_queue_dirtied_by_the_live_run_is_not_dirt():
     """The `plan.yaml` of ANOTHER queue, which a live run of it writes via
-    `cepa-plan start/finish`, is not dirt; any other difference is."""
+    `cepa-queue start/finish`, is not dirt; any other difference is."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
         other = root / ".claude" / "programs" / "outra" / "plan.yaml"
@@ -1561,20 +1561,20 @@ def test_a_broken_or_slow_herdr_does_not_change_the_run():
                   took < 20, f"{took:.1f}s")
 
 
-# ── herdr: reports carry `cepa until pending --repo <path>` as resume command (CS-6) ──
+# ── herdr: reports carry `cepa run pending --repo <path>` as resume command (CS-6) ──
 
 def test_herdr_reports_carry_the_pending_command_as_resume_argv():
     """CS-6 of docs/spec/herdr-agent-status.md: each report-agent ends in
-    `-- cepa until pending --repo <absolute repo path>`; never the launch command."""
+    `-- cepa run pending --repo <absolute repo path>`; never the launch command."""
     with tempfile.TemporaryDirectory() as tmp:
         p, argvs, log, _ = herdr_scenario(tmp)
         root = str((Path(tmp) / "repo").resolve())
         reports = [a for a in argvs if a[1] == "report-agent"]
         releases = [a for a in argvs if a[1] == "release-agent"]
         check("herdr resume: dois relatórios", len(reports) == 2, str(argvs) + p.stderr[-200:])
-        tail = ["--", "cepa", "until", "pending", "--repo", root]
+        tail = ["--", "cepa", "run", "pending", "--repo", root]
         for a in reports:
-            check("herdr resume: o relatório termina em `-- cepa until pending --repo <raiz>`",
+            check("herdr resume: o relatório termina em `-- cepa run pending --repo <raiz>`",
                   a[-len(tail):] == tail and a.count("--") == 1, str(a))
             after = a[a.index("--") + 1:] if "--" in a else []
             check("herdr resume: depois de `--` não há --for, --until nem o nome da fila",
@@ -1609,7 +1609,7 @@ def test_herdr_resume_argv_names_the_main_clone_when_run_from_a_linked_worktree(
         reports = [a for a in argvs if a[1] == "report-agent"]
         check("herdr worktree: dois relatórios", len(reports) == 2,
               str(argvs) + p.stderr[-300:])
-        tail = ["--", "cepa", "until", "pending", "--repo", main]
+        tail = ["--", "cepa", "run", "pending", "--repo", main]
         for a in reports:
             check("herdr worktree: termina em `--repo <clone principal>`",
                   a[-len(tail):] == tail, str(a))
@@ -1672,7 +1672,7 @@ def test_herdr_outside_or_broken_leaves_the_run_and_its_ledger_unchanged():
 
 
 def test_herdr_is_not_called_from_a_subcommand():
-    """CS-5 (c): `cepa until pending` with HERDR_ENV=1 creates no herdr log."""
+    """CS-5 (c): `cepa run pending` with HERDR_ENV=1 creates no herdr log."""
     with tempfile.TemporaryDirectory() as tmp:
         p, argvs, log, statuses = herdr_scenario(tmp)
         check("herdr (c): a run de preparação chamou o herdr (log existe)",
@@ -1796,7 +1796,7 @@ def hc_scenario(tmp, hc_id="t9", tty=True):
     env["FAKE_CHAMADAS"] = str(Path(root).parent / "chamadas.jsonl")
     # The pre-read must not call the fake claude: it marks the first pending item
     # done on ANY call, so a1 was closed by the pre-read and only a2 ran.
-    env["CEPA_UNTIL_LEITOR"] = "off"
+    env["CEPA_RUN_READER"] = "off"
     argv = [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
             "--for", "2h", "--no-verify", "--no-analysis"]
     if not tty:
@@ -1990,7 +1990,7 @@ def test_hc_a_run_that_ends_with_an_unanswered_question_stays_in_needs_you():
 
 
 def test_hc_blocked_is_not_reported_outside_the_armed_run():
-    """A prompt read outside the armed run and outside `cepa-until decide` (which sets
+    """A prompt read outside the armed run and outside `cepa-run decide` (which sets
     `_hc_asking`, test_cepa_until_decide.py) reports nothing to the Agents panel."""
     mod = _until_module()
     got, written = _read_line_on_fake_tty(mod, armed=False)

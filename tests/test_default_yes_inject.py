@@ -100,9 +100,9 @@ def test_session_follows_the_target():
     rc, ctx = run("/common:session prove-drain --max 5")
     check("session + rotina injeta", rc == 0 and "board-flow:prove-drain" in ctx,
           f"rc={rc} ctx={ctx[:150]!r}")
-    rc, ctx = run("/common:session drain-plan wego --max 2")
-    check("session + apelido drain-plan injeta",
-          rc == 0 and "common:drain-plan" in ctx, f"rc={rc} ctx={ctx[:150]!r}")
+    rc, ctx = run("/common:session queue-run wego --max 2")
+    check("session + apelido queue-run injeta",
+          rc == 0 and "common:queue-run" in ctx, f"rc={rc} ctx={ctx[:150]!r}")
     rc, ctx = run("/common:session common:spec uma ideia")
     check("session + conversacional não injeta", rc == 0 and ctx == "",
           f"rc={rc} ctx={ctx[:150]!r}")
@@ -147,6 +147,15 @@ def test_every_command_declares_interaction():
         if not val or val.group(1) not in ("routine", "conversational"):
             missing.append(str(f.relative_to(REPO)))
     check("todo comando declara interaction válido", not missing, str(missing))
+
+
+def test_queue_run_gets_the_unattended_injection():
+    """The supervisor dispatches `/common:queue-run`; it must be as autonomous as
+    `/common:drain-plan` was (queue-run.md has to be `interaction: routine`)."""
+    rc_new, ctx_new = run("/common:queue-run x --max 1")
+    check("queue-run injeta a politica default-yes",
+          rc_new == 0 and "default-yes" in ctx_new,
+          f"rc={rc_new} ctx={ctx_new[:150]!r}")
 
 
 for fn in list(globals().values()):

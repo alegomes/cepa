@@ -16,7 +16,7 @@ The cases below pin the fix:
   - `done` without a commit on the night branch is pointed out in the record;
   - a repo without a known build does not start without `--verify` or `--sem-verify`;
   - the summary separates delivered from stuck;
-  - the end analysis calls `/common:until-review` and writes `<run>.review.md`.
+  - the end analysis calls `/common:run-review` and writes `<run>.review.md`.
 """
 
 import json
@@ -34,7 +34,7 @@ from test_cepa_until import (  # noqa: E402
     FAILURES, check, fake_claude, item, ledger_of, build_repo, run_until)
 
 
-# A fake `claude` that works like drain-plan with `--na-branch`: commits
+# A fake `claude` that works like drain-plan with `--on-branch`: commits
 # in the directory it woke up in. Records the content it saw of `a1.txt` so the
 # test knows whether the 2nd card saw the 1st.
 WORKS = (
@@ -96,8 +96,8 @@ def test_subprocess_runs_on_the_night_branch_and_the_clone_stays_put():
         check("...que fica fora do clone",
               not Path(start["arvore"]).resolve().is_relative_to(root.resolve()),
               start["arvore"])
-        check("o pedido ao claude leva --na-branch",
-              calls and all(f"--na-branch {branch}" in c[1] for c in calls),
+        check("o pedido ao claude leva --on-branch",
+              calls and all(f"--on-branch {branch}" in c[1] for c in calls),
               str(calls))
         check("o 2º card enxerga o commit do 1º",
               len(seen_ones) == 2 and seen_ones[1]["viu_a1"], str(seen_ones))
@@ -107,7 +107,7 @@ def test_subprocess_runs_on_the_night_branch_and_the_clone_stays_put():
               git(root, "rev-list", "--count", f"{start['base']}..{branch}")
               == "2", p.stdout[-600:])
         check("o resumo diz como aterrissar",
-              f"cepa-until land fila/{branch.split('/', 1)[1]}"
+              f"cepa-run land fila/{branch.split('/', 1)[1]}"
               in p.stdout, p.stdout[-600:])
 
 
@@ -197,10 +197,10 @@ def test_repo_without_known_build_does_not_start_without_saying_which():
         env = dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}")
         p = subprocess.run(
             [sys.executable, str(Path(__file__).resolve().parents[1] / "common"
-                                 / "bin" / "cepa-until"),
+                                 / "bin" / "cepa-run"),
              "fila", "--repo", str(root), "--for", "2h", "--no-analysis"],
             capture_output=True, text=True, timeout=60,
-            env={**env, "FAKE_PLANO": str(plan_of(root)), "CEPA_UNTIL_LEITOR": "off",
+            env={**env, "FAKE_PLANO": str(plan_of(root)), "CEPA_RUN_READER": "off",
                  "FAKE_CHAMADAS": str(Path(tmp) / "chamadas.jsonl"),
                  "CEPA_WORKTREE_HOME": str(Path(tmp) / "worktrees")})
         check("sem mvnw/gradlew e sem flag, recusa", p.returncode == 2,
@@ -229,11 +229,11 @@ def test_mvnw_at_root_becomes_the_default_build():
         env_args = ["--for", "2h", "--dry-run"]
         p = subprocess.run(
             [sys.executable, str(Path(__file__).resolve().parents[1] / "common"
-                                 / "bin" / "cepa-until"),
+                                 / "bin" / "cepa-run"),
              "fila", "--repo", str(root), *env_args],
             capture_output=True, text=True, timeout=60,
             env=dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
-                     FAKE_PLANO="x", CEPA_UNTIL_LEITOR="off", FAKE_CHAMADAS=str(Path(tmp) / "c.jsonl")))
+                     FAKE_PLANO="x", CEPA_RUN_READER="off", FAKE_CHAMADAS=str(Path(tmp) / "c.jsonl")))
         check("sem --verify, o banner mostra ./mvnw -B clean verify",
               "./mvnw -B clean verify" in p.stdout, p.stdout + p.stderr)
 
@@ -242,11 +242,11 @@ def _run_without_verify_flag(tmp, root, binv):
     """Without `--verify` nor `--sem-verify`: whoever chooses is `cepa-until`."""
     return subprocess.run(
         [sys.executable, str(Path(__file__).resolve().parents[1] / "common"
-                             / "bin" / "cepa-until"),
+                             / "bin" / "cepa-run"),
          "fila", "--repo", str(root), "--for", "2h", "--no-analysis"],
         capture_output=True, text=True, timeout=120,
         env=dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
-                 FAKE_PLANO=str(plan_of(root)), CEPA_UNTIL_LEITOR="off",
+                 FAKE_PLANO=str(plan_of(root)), CEPA_RUN_READER="off",
                  FAKE_CHAMADAS=str(Path(tmp) / "chamadas.jsonl"),
                  CEPA_WORKTREE_HOME=str(Path(tmp) / "worktrees"),
                  # away from the real ledger of /common:metrics
@@ -321,7 +321,7 @@ def test_no_build_without_suite_still_waives():
 def test_end_analysis_writes_the_review_beside_the_record():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
-        body = ("if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+        body = ("if ARGS and ARGS[1].startswith('/common:run-review'):\n"
                  "    print('RELATORIO DA NOITE')\n"
                  "    sys.exit(0)\n"
                  "marca(primeiro_pendente(), status='blocked', evidence='x')\n")
@@ -329,8 +329,8 @@ def test_end_analysis_writes_the_review_beside_the_record():
         p, calls = run_until(root, binv, plan_of(root),
                            ["--for", "2h", "--com-analise"])
         requests = [c[1] for c in calls]
-        check("a última chamada é o /common:until-review do registro",
-              requests and requests[-1].startswith("/common:until-review ")
+        check("a última chamada é o /common:run-review do registro",
+              requests and requests[-1].startswith("/common:run-review ")
               and requests[-1].endswith(".jsonl"), str(requests))
         revs = list((root / ".claude" / "programs" / "fila" / "until")
                     .glob("*.review.md"))
@@ -345,7 +345,7 @@ def test_end_analysis_writes_the_review_beside_the_record():
 def test_run_stopped_by_quota_does_not_run_the_analysis():
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
-        body = ("if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+        body = ("if ARGS and ARGS[1].startswith('/common:run-review'):\n"
                  "    sys.exit(0)\n"
                  "print(json.dumps({'type': 'result', 'result': "
                  "\"You've hit your session limit\"}))\n")
@@ -355,10 +355,10 @@ def test_run_stopped_by_quota_does_not_run_the_analysis():
         end = [e for e in ledger_of(root) if e["evento"] == "run_end"][0]
         check("o run parou pela cota", end["motivo"] == "limite-de-uso", str(end))
         check("...e a análise não foi chamada",
-              not any(c[1].startswith("/common:until-review") for c in calls),
+              not any(c[1].startswith("/common:run-review") for c in calls),
               str(calls))
         check("...mas o resumo diz como rodá-la depois",
-              "/common:until-review" in p.stdout, p.stdout[-400:])
+              "/common:run-review" in p.stdout, p.stdout[-400:])
 
 
 # ── all attempts go to the side branch (Revision 3, step 1; C4) ─────────────
@@ -555,7 +555,7 @@ def test_stuck_item_without_commit_leaves_the_branch_alone():
 # ── red resolves without the owner (Revision 3, steps 4a, 4b, 4d, 4e) ───────
 
 # A fake `claude` that, on each call, notes the `evidence` the item had when
-# it was picked: it is the note the agent would see in `cepa-plan start`.
+# it was picked: it is the note the agent would see in `cepa-queue start`.
 WORKS_AND_READS = WORKS.replace(
     "ident = primeiro_pendente()\n",
     "ident = primeiro_pendente()\n"
@@ -817,7 +817,7 @@ def state_of(root):
 
 
 # The fake `claude` notes the run state it sees: during the item, and in the end
-# analysis (the `/common:until-review` call).
+# analysis (the `/common:run-review` call).
 LOOKS_AT_STATE = (
     "import glob\n"
     "def _estado():\n"
@@ -827,7 +827,7 @@ LOOKS_AT_STATE = (
     "with open(os.environ['FAKE_CHAMADAS'] + '.estado', 'a') as f:\n"
     "    f.write(json.dumps({'args0': ARGS[1][:30] if len(ARGS) > 1 else '',\n"
     "                        'estado': _estado()}) + '\\n')\n"
-    "if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+    "if ARGS and ARGS[1].startswith('/common:run-review'):\n"
     "    print(json.dumps({'type': 'result', 'result': 'analise'}))\n"
     "    sys.exit(0)\n")
 
@@ -850,11 +850,11 @@ def test_2_run_state_running_then_waiting_owner_before_the_analysis():
         p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", VERIFY, "--com-analise"])
         seen_ones = seen_state(root)
-        during = [v for v in seen_ones if not v["args0"].startswith("/common:until")]
+        during = [v for v in seen_ones if not v["args0"].startswith("/common:run-review")]
         check("durante o item, o estado é rodando",
               during and all((v["estado"] or {}).get("estado") == "rodando"
                               for v in during), str(during)[:400])
-        analysis = [v for v in seen_ones if v["args0"].startswith("/common:until")]
+        analysis = [v for v in seen_ones if v["args0"].startswith("/common:run-review")]
         state_dict = (analysis[0]["estado"] or {}) if analysis else {}
         check("a análise já encontra o estado final gravado",
               state_dict.get("estado") == "esperando-dono", str(analysis)[:400])
@@ -1034,11 +1034,11 @@ def _banner_with(tmp, files):
     binv = fake_claude(tmp, WORKS)
     return subprocess.run(
         [sys.executable, str(Path(__file__).resolve().parents[1] / "common"
-                             / "bin" / "cepa-until"),
+                             / "bin" / "cepa-run"),
          "fila", "--repo", str(root), "--for", "2h", "--dry-run"],
         capture_output=True, text=True, timeout=60,
         env=dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
-                 FAKE_PLANO="x", CEPA_UNTIL_LEITOR="off", FAKE_CHAMADAS=str(Path(tmp) / "c.jsonl"),
+                 FAKE_PLANO="x", CEPA_RUN_READER="off", FAKE_CHAMADAS=str(Path(tmp) / "c.jsonl"),
                  CEPA_WORKTREE_HOME=str(Path(tmp) / "worktrees"),
                  CEPA_TELEMETRY_DIR=str(Path(tmp) / "telemetria")))
 

@@ -503,8 +503,8 @@ See [`hooks.md`](hooks.md)#hook-didnt-fire.
 ### Symptom: "Hook fires but blocks for no reason"
 
 ```sh
-export HEX_PATHLOCK_DEBUG=1
-# build-hex only. docs-topology has the equivalent DOCS_PATHLOCK_DEBUG
+export CEPA_HEX_PATHLOCK_DEBUG=1
+# build-hex only. docs-topology has the equivalent CEPA_DOCS_PATHLOCK_DEBUG
 # (log at /tmp/docs-pathlock-debug.log by default). build-team, discovery,
 # design, and marketing have no per-topology debug var today. For those,
 # fall back to `claude --debug` (below) or a temporary print statement.
