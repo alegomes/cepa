@@ -1,12 +1,13 @@
 schema_version: 2
 card: reforma-de-nomes-CS-2
 verdict: proven
-reviewed_at: 2026-11-25T02:40:00-03:00
+reviewed_at: 2026-11-25T03:30:00-03:00
 base_commit: 26d2a0b
-head_commit: 8cf6c66
+head_commit: c54b90d
 issue_type: Feature
 repo_kind: harness            # repo Python + sh (cepa), não Quarkus. Superfície = CLI `cepa` e `cepa-run`
-review: 4
+review: 5
+sha_map: "após cherry-pick do supervisor: ba517aa = 202b45d, 8f86f7e = ee7df24, 7b9554a = 8cf6c66, 474e698 = 5a8801a; c54b90d é novo (uma linha de .claude-plugin/marketplace.json). Os SHAs antigos seguem na branch until/2026-11-24-2017-vermelho-CS-2."
 scope:
   changed_classes:
     - class: "common/bin/cepa (bloco que recusa `until` / `until-digest`, também via help, em qualquer caixa, exit 2)"
@@ -49,10 +50,14 @@ scope:
       module: command
       external_observable: true
       substituted_by_double: null
-    - class: "common/bin/_run_digest.py (read_jsonl: `if isinstance(e, dict): events.append(e)`, commit 8cf6c66; alcançado por `cepa run digest <arquivo>`)"
+    - class: "common/bin/_run_digest.py (read_jsonl: `if isinstance(e, dict): events.append(e)`, hoje 7b9554a; alcançado por `cepa run digest <arquivo>`)"
       module: cli
       external_observable: true
       substituted_by_double: null   # o L4 roda o launcher real; o teste do item roda o digest real
+    - class: ".claude-plugin/marketplace.json (descrição do plugin common cita `/queue-run`, c54b90d; exigida por tests/test_marketplace_common_description.py)"
+      module: marketplace
+      external_observable: true
+      substituted_by_double: null   # o teste lê o marketplace.json real e a pasta common/commands real
   base_commit_resolved: true
 levels:
   l3_load_bearing:
@@ -64,6 +69,9 @@ levels:
     perturbation:
       status: pass
       results:
+        - "(revisão 5) Linha nova .claude-plugin/marketplace.json (c54b90d, ` (and /queue-run, its new name)` após `/drain-plan`). Worktree detached /tmp/proof-cs2-e em c54b90d. GREEN de partida: `python3 tests/test_marketplace_common_description.py` -> 'tudo ok (35 comandos na descrição)', rc 0. Perturbada (remove ` (and /queue-run, its new name)` com sed; git diff --stat: 1 arquivo, 1 linha): RED, 'FAIL todo comando do common está na descrição  fora da descrição: /queue-run', '1 falha(s)', rc 1. Restaurada (`git checkout -- .claude-plugin/marketplace.json`, git status limpo): GREEN de novo, rc 0, 'tudo ok (35 comandos na descrição)'. Worktree removido."
+        - "(revisão 5) Equivalência conferida por mim: `git diff 5a8801a c54b90d --stat` -> só `.claude-plugin/marketplace.json | 2 +-` (1 insertion, 1 deletion); o diff é a inserção de ' (and /queue-run, its new name)' na descrição do common. Fonte idêntica a 5a8801a fora dessa linha; o que as revisões 1 a 4 provaram vale. Ressalva: a equivalência entre os SHAs novos (ba517aa, 8f86f7e, 7b9554a, 474e698) e os antigos (202b45d, ee7df24, 8cf6c66, 5a8801a) foi verificada só no ponto final (5a8801a vs c54b90d), não commit a commit; o conteúdo final é o que importa para a prova."
+        - "(revisão 5) Vizinhos do item em c54b90d, sem perturbação: `python3 -m pytest tests/test_cepa_run_rename_cli.py tests/test_queue_rename.py -q` -> '42 passed in 17.18s'; `python3 tests/test_cepa_until_digest.py` -> '✓ tudo verde' (o rc impresso na ocasião era o do `tail`, então a evidência é a linha final do próprio teste)."
         - "(revisão 4) Linha nova common/bin/_run_digest.py:126 `if isinstance(e, dict):`. Worktree detached /tmp/proof-cs2-d em 8cf6c66. GREEN de partida: `python3 tests/test_cepa_until_digest.py` -> 50 verificações ok, '✓ tudo verde', rc 0. Perturbada (`if isinstance(e, dict):` -> `if True:`, anexa tudo): RED, '✗ 3 falha(s): linha JSON que nao e objeto: sem Traceback, ...mesmo exit code do registro sem essas linhas, ...mesmo stdout do registro sem essas linhas'. Restaurada (`git checkout -- common/bin/_run_digest.py`): GREEN de novo, rc 0, '✓ tudo verde'. Worktree removido."
         - "(revisão 2, vale: fonte inalterada) GREEN de partida em ee7df24: tests/test_cepa_run_rename_cli.py 15 passed in 6.06s; tests/test_queue_rename.py 27 passed in 10.04s; tests/test_default_yes_inject.py 'all green'."
         - "Pendência 1 (vizinho vermelho): `python3 tests/_run_with_timeout.py 540 python3 tests/test_cepa_until_dead_supervisor.py` em ee7df24 sem perturbação -> rc 0, 84 verificações ok, 0 FAIL, '✓ tudo verde' (em 202b45d eram 9 falhas). FECHADA."
@@ -77,8 +85,12 @@ levels:
         - "Valem da revisão 1 (fonte inalterada, não re-rodadas): P2, P3, P4, P5, P6, P7a, P7b, P8b, P11, P12, P13, P14, P15."
         - "Sobreviventes que restam: nenhum no arquivo do item para linhas de comportamento, exceto P10/1021 (pego só pelo vizinho test_cepa_until_cut_rule.py)."
       run: >-
+        (revisão 5) `git worktree add --detach /tmp/proof-cs2-e c54b90d`; `cd /tmp/proof-cs2-e && timeout 100 python3 tests/test_marketplace_common_description.py` -> rc 0, 'tudo ok (35 comandos na descrição)';
+        remoção de ' (and /queue-run, its new name)' de .claude-plugin/marketplace.json -> mesmo comando: rc 1, 'FAIL ... fora da descrição: /queue-run', '1 falha(s)';
+        `git checkout -- .claude-plugin/marketplace.json` -> rc 0, 'tudo ok (35 comandos na descrição)'; `git worktree remove --force /tmp/proof-cs2-e` (git worktree list sem proof).
+        No worktree da run: `python3 -m pytest tests/test_cepa_run_rename_cli.py tests/test_queue_rename.py -q` -> 42 passed in 17.18s; `python3 tests/test_cepa_until_digest.py` -> '✓ tudo verde'.
         (revisão 4) `git worktree add --detach /tmp/proof-cs2-d 8cf6c66`; `cd /tmp/proof-cs2-d && timeout 100 python3 tests/test_cepa_until_digest.py` -> rc 0, 50 ok, '✓ tudo verde';
-        `sed -i '' 's/        if isinstance(e, dict):/        if True:/' common/bin/_run_digest.py` -> mesmo comando: '✗ 3 falha(s)'; `git checkout -- common/bin/_run_digest.py` -> rc 0, 50 ok, '✓ tudo verde'; `git worktree remove --force /tmp/proof-cs2-d` (git worktree list sem proof).
+        `sed -i '' 's/        if isinstance(e, dict):/        if True:/' common/bin/_run_digest.py` -> mesmo comando: '✗ 3 falha(s)'; `git checkout -- common/bin/_run_digest.py` -> rc 0, 50 ok, '✓ tudo verde'; `git worktree remove --force /tmp/proof-cs2-d`.
         (revisão 2) `git worktree add --detach /tmp/proof-cs2-b ee7df24`; perturbações com `sed -i ''` seguidas de
         `python3 -m pytest tests/test_cepa_run_rename_cli.py -q` (15 passed baseline), `tests/test_queue_rename.py -q` (27 passed baseline),
         `python3 tests/test_default_yes_inject.py`, `timeout 540 python3 tests/test_cepa_until.py` (P17) e `timeout 100 python3 tests/test_cepa_until_cut_rule.py` (P10).
@@ -89,38 +101,47 @@ levels:
     technique: perturbation
     uncovered_lines: []
     waivers: []
-    run: "sem ferramenta de cobertura. Todo trecho de comportamento alterado desde 26d2a0b foi quebrado por perturbação e ficou RED (revisões 1, 2 e 4; ver l3), incluindo a linha nova de _run_digest.py. Linhas de texto (docstrings, comentários, mensagens de dono, see_also, textos de install.sh) não foram perturbadas e são só nome; declaro a amostragem, não a cobertura delas."
+    run: "sem ferramenta de cobertura. Todo trecho de comportamento alterado desde 26d2a0b foi quebrado por perturbação e ficou RED (revisões 1, 2, 4 e 5; ver l3), incluindo a linha nova de _run_digest.py e a linha nova de marketplace.json. Linhas de texto (docstrings, comentários, mensagens de dono, see_also, textos de install.sh) não foram perturbadas e são só nome; declaro a amostragem, não a cobertura delas."
   l4_adversarial_input:
     status: clean
     reason: ""
     findings: []
     run: >-
+      (revisão 5) Nenhuma entrada nova: o único diff desde 5a8801a é texto de descrição em marketplace.json, que nenhum comando do CLI lê como entrada. Não re-rodei o L4; vale o da revisão 4 porque o código de produção é idêntico.
       (revisão 4, só o achado da revisão 3, em 8cf6c66) cwd=/tmp/proof-cs2-l4d (git init), uma chamada por comando,
       `CEPA_MODO=off timeout 20 /Users/alegomes/cepa-worktrees/cepa-until-2026-11-24-2017/common/bin/cepa run digest <arquivo>`:
       arquivo `[1,2]` -> rc 0, resumo impresso, sem traceback; `"str"` -> rc 0, sem traceback; `42` -> rc 0, sem traceback; `null` -> rc 0, sem traceback;
       arquivo misto (`{"event":"start"}`, `[1,2]`, `"str"`, `42`, `null`) -> rc 0, resumo impresso, sem traceback
       (contagens {} porque o digest lê a chave "evento", não "event"; o ponto da checagem é não morrer).
-      Nenhuma outra entrada rodada. /tmp/proof-cs2-l4d removido; nenhum /tmp/proof-cs2* restante; nenhum processo meu em execução.
       O resto do L4 (revisão 3: recusas de until/until-digest em todas as formas, digest com arquivo ausente, diretório, /dev/null, vazio, `{not json`)
       vale: o código de produção não mudou desde ee7df24, exceto read_jsonl.
     historico_revisao_3: >-
       Achado: `cepa run digest <arquivo>` com linha JSON válida que não é objeto (`[1,2]`, `"str"`, `42`, `null`) morria com traceback
       (AttributeError em _run_digest.py:336, rc 1); pré-existente em 26d2a0b (cepa-until-digest:335). Menor: linha com JSON inválido
-      é ignorada em silêncio (rc 0, resumo vazio), herdado. Corrigido o primeiro em 8cf6c66; o segundo segue como comportamento herdado, não bloqueante.
+      é ignorada em silêncio (rc 0, resumo vazio), herdado. Corrigido o primeiro (hoje 7b9554a); o segundo segue como comportamento herdado, não bloqueante.
   bugfix_regression_red_at_base:
     status: n/a
     run: "Feature (CS-2 da reforma de nomes dos comandos); a prova é a perturbação."
 waiver_proposto_nao_escrito: >-
   Não escrevi waiver. L2, L3 e L4 passam sem dispensa.
 neighbour_regression:
-  head_ee7df24: "tests/test_cepa_until_dead_supervisor.py verde (rc 0, 84 ok, 0 FAIL). Vale em 8cf6c66: o único código de produção alterado depois foi read_jsonl em _run_digest.py (git diff ee7df24 HEAD --stat: _run_digest.py e tests/test_cepa_until_digest.py)."
+  head_ee7df24: "tests/test_cepa_until_dead_supervisor.py verde (rc 0, 84 ok, 0 FAIL). Vale em c54b90d: o único código de produção alterado depois foi read_jsonl em _run_digest.py e a linha do marketplace.json (git diff ee7df24 c54b90d não foi rodado por mim; a cadeia é ee7df24 -> 8cf6c66 [_run_digest.py e seu teste] -> 5a8801a [registros] -> c54b90d [marketplace.json])."
 routing_reason: >-
-  Revisão 4. O único achado da revisão 3 (traceback do digest em linha JSON que não é objeto) foi corrigido em 8cf6c66 (`isinstance(e, dict)` em read_jsonl).
-  Perturbar a correção (`if True:`) deixa test_non_object_json_lines_are_skipped_like_invalid_json RED (3 falhas); restaurada, 50 ok e verde.
-  Re-checagem externa pelo launcher real: `[1,2]`, `"str"`, `42`, `null` e arquivo misto dão rc 0 sem traceback. Todo o resto das revisões 1 a 3 vale:
-  `git diff ee7df24 HEAD --stat` mostra só _run_digest.py e tests/test_cepa_until_digest.py. L2 pass, L3 pass, L4 clean, nada assumed/skipped. PROVEN.
-  Ressalva declarada, não bloqueante: P10 (common/bin/cepa-run:1021) só é pego pelo teste vizinho test_cepa_until_cut_rule.py, e a linha de base inteira de
-  test_cepa_until.py não foi rodada sem perturbação (P17). Não escrevi waiver.
+  Revisão 5. Os commits foram reaplicados por cherry-pick (SHAs novos) e ganharam um commit, c54b90d, que cita /queue-run na descrição do plugin common
+  porque a suíte completa do supervisor ficou vermelha em tests/test_marketplace_common_description.py ("fora da descrição: /queue-run").
+  `git diff 5a8801a c54b90d --stat` mostra só .claude-plugin/marketplace.json (1 linha); logo o que as revisões 1 a 4 provaram vale.
+  A linha nova é load-bearing: sem ela o teste fica RED (rc 1, 1 falha), com ela GREEN (rc 0, 35 comandos). Vizinhos do item verdes (42 passed; digest tudo verde).
+  L2 pass, L3 pass, L4 clean, nada assumed/skipped. PROVEN.
+  Ressalvas declaradas, não bloqueantes: P10 (common/bin/cepa-run:1021) só é pego pelo teste vizinho test_cepa_until_cut_rule.py; a linha de base inteira de
+  test_cepa_until.py não foi rodada sem perturbação (P17); a suíte completa (tests/run-all.sh) é do supervisor e não foi rodada por mim. Não escrevi waiver.
+
+# ─────────────────────────── Histórico: revisão 4 (head 8cf6c66, hoje 7b9554a) ───────────────────────────
+review_4:
+  verdict: proven
+  reviewed_at: 2026-11-25T02:40:00-03:00
+  head_commit: 8cf6c66
+  routing: "Achado da revisão 3 (traceback do digest em linha JSON que não é objeto) corrigido em read_jsonl (`isinstance(e, dict)`); perturbar com `if True:` deixou test_cepa_until_digest.py RED (3 falhas), restaurada 50 ok. L4 re-checado pelo launcher real: rc 0 sem traceback. L2 pass, L3 pass, L4 clean. PROVEN."
+  ressalva: "P10 (common/bin/cepa-run:1021) só pego pelo vizinho test_cepa_until_cut_rule.py; linha de base inteira de test_cepa_until.py não rodada sem perturbação (P17)."
 
 # ─────────────────────────── Histórico: revisão 3 (head ee7df24) ───────────────────────────
 review_3:

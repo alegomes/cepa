@@ -2,7 +2,8 @@ key: CS-2-reforma-de-nomes
 queue: reforma-de-nomes
 item: CS-2
 status: complete
-diff_range: 26d2a0b..ee7df24
+diff_range: 26d2a0b..c54b90d
+reaudit: "Reauditoria estreita apos a build do supervisor ficar vermelha em tests/test_marketplace_common_description.py (/queue-run fora da descricao do plugin common). Os commits foram reaplicados por cherry-pick (SHAs novos: ba517aa=202b45d, 8f86f7e=ee7df24, 7b9554a=8cf6c66, 474e698=5a8801a) e c54b90d acrescentou /queue-run a descricao. Conferido: `git diff 5a8801a c54b90d --name-only` lista so .claude-plugin/marketplace.json (1 linha); `git diff ee7df24 8f86f7e` e `git diff 8cf6c66 7b9554a` vazios (mesma arvore); `git diff 5a8801a 474e698` vazio. O registro anterior cobria 26d2a0b..ee7df24 e nao incluia o commit do digest (8cf6c66/7b9554a): ele corrige um defeito anterior ao rename (linha JSON que nao e objeto derrubava o resumo com Traceback), nao muda o que o criterio literal pede, e tem teste proprio em subprocesso (test_non_object_json_lines_are_skipped_like_invalid_json, em tests/test_cepa_until_digest.py). Nao afeta o veredito; agora esta dentro do intervalo."
 criteria:
   - id: AC1
     text: "CS-2: `cepa run` faz o que `cepa until` fazia, e `cepa until` é recusado com o nome novo (docs/spec/reforma-de-nomes-dos-comandos.md)"
@@ -17,7 +18,7 @@ criteria:
     test: "tests/test_cepa_run_rename_cli.py (15 testes)"
     layer: cli-subprocess
     evidence: verified
-    run: "python3 -m pytest tests/test_cepa_run_rename_cli.py -q -> '15 passed in 6.20s' (N=15). Suíte completa e test_cepa_until*.py ficam com o supervisor da run (não rodados aqui por tempo)."
+    run: "Em c54b90d: python3 -m pytest tests/test_cepa_run_rename_cli.py -q -> '15 passed in 5.46s' (N=15). python3 tests/test_marketplace_common_description.py -> 'tudo ok (35 comandos na descrição)', rc=0 (antes vermelho por /queue-run). python3 -m pytest tests/test_cepa_until_digest.py tests/test_queue_rename.py -q -> '44 passed in 15.86s'. Conferido à mão: `cepa until x --for 1h --dry-run` -> 'until is now run', rc=2; `cepa until-digest x` -> 'until-digest is now run digest', rc=2; `cepa run digest /nonexistent.jsonl` -> 'does not exist', rc=2. Suíte completa (tests/run-all.sh) fica com o supervisor, não rodada aqui."
     observations_outside_the_literal_criterion:
       transition_shims: "common/bin/cepa-until e cepa-until-digest existem de propósito (run em voo), marcados 'TRANSITION SHIM', fora da ajuda, do despacho e da sugestão de typo (test_transition_shims_are_not_commands). Não aceito pelo cartão; decisão do dono no review (mesmo padrão do CS-1)."
       queue_run_thin_entry: "common/commands/queue-run.md é entrada fina que roda /common:drain-plan até o CS-3; afirmado por test_the_new_command_file_exists_and_points_at_drain_plan. O critério só exige que o plano cite `/common:queue-run <fila> --max 1`, o que é demonstrado."
