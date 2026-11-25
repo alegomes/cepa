@@ -1869,7 +1869,7 @@ def owner_lines(lines, queue):
         out.append(f"esperam você: {len(holding)} itens parados"
                    + (f" ({', '.join(str(l['id']) for l in holding)})" if holding else "")
                    + f" e {len(leftover)} tarefas que sobraram em itens "
-                   f"concluídos. Responda uma por uma: cepa-until decide {queue}")
+                   f"concluídos. Responda uma por uma: cepa-run decide {queue}")
     return out
 
 
@@ -2051,7 +2051,7 @@ def ready_of_queue(root, name, target=None):
     # CS-6 (decisoes-de-todas-as-filas): a `done` item with an open route is
     # a task the owner still has, so a queue with one is not "tudo concluído".
     # A route whose last answer was "não" is counted apart, by the same reader
-    # `waiting` and `cepa-until decide` use: decide does not ask it again.
+    # `waiting` and `cepa-run decide` use: decide does not ask it again.
     leftover = [it for it in items if status_of(it) == "done"
                 and it.get("human_pending") is not None]
     leftover_no = sum(1 for it in leftover
@@ -2129,18 +2129,18 @@ def cmd_ready(root, as_json):
             n = q["tarefas_sobrando"]
             tasks = ("1 tarefa espera você" if n == 1
                      else f"{n} tarefas esperam você")
-            print(head + f" — fila fechada, {tasks} (cepa until decide "
+            print(head + f" — fila fechada, {tasks} (cepa run decide "
                   f"{q['queue']})")
         elif q["abertos"] == 0 and q["tarefas_respondidas_nao"]:
             n = q["tarefas_respondidas_nao"]
             print(head + f" — fila fechada: {n} tarefa"
                   f"{'' if n == 1 else 's'} que você respondeu não "
-                  f"(cepa until decide {q['queue']})")
+                  f"(cepa run decide {q['queue']})")
         elif q["abertos"] == 0:
             print(head + " — fila fechada: tudo concluído ou descartado")
         elif q["esperam_dono"]:
             print(head + f" — esperam você: {', '.join(q['esperam_dono'])}"
-                  f" (cepa until decide {q['queue']})")
+                  f" (cepa run decide {q['queue']})")
         else:
             print(head + " — nada pronto: os abertos esperam outro item ou "
                   "estão reservados")
@@ -2150,7 +2150,7 @@ def cmd_ready(root, as_json):
 #
 # Owner, 2026-11-20 (docs/spec/decisoes-de-todas-as-filas.md): `ready` lists
 # what an agent can take; nothing listed what waits on HIM, and he guessed
-# which queues to open with `cepa until decide <fila>`. The reasons are the
+# which queues to open with `cepa run decide <fila>`. The reasons are the
 # three cepa-until already uses for the owner (OWNER_REASON there: blocked-
 # before, human_pending, pos-entrega), translated: one vocabulary for
 # `waiting` and `decide`.
@@ -2202,7 +2202,7 @@ def waiting_of_queue(root, name, target=None):
         if not found:
             continue
         # CS-3 (Q4): a route whose last owner answer was "não" is not a line,
-        # only counted, by the same reader `cepa-until decide` uses to not ask
+        # only counted, by the same reader `cepa-run decide` uses to not ask
         # it again.
         date = _ownertext.last_owner_no(it.get("evidence"))
         if date:
@@ -2213,27 +2213,27 @@ def waiting_of_queue(root, name, target=None):
                      "pergunta": found[1]})
     queue = qp.queue_name_of(plan, name)
     no = ({"total": len(answered_no), "ultima": max(answered_no),
-           "comando": f"cepa until decide {queue}"} if answered_no else None)
+           "comando": f"cepa run decide {queue}"} if answered_no else None)
     return {"queue": queue, "path": str(target), "itens": rows,
             "respondidas_nao": no}, None
 
 
 def waiting_runs_of(root):
-    """(runs, warning) waiting on the owner, read from `cepa-until pending
+    """(runs, warning) waiting on the owner, read from `cepa-run pending
     --json`: the spec forbids a rule of its own for "a run waiting" (two rules
     would drift), so the source is the command `/common:next` and the doctor
     already read. Each run is one dict with `alvo` (`<fila>/<run>`), `como`
     (what is waiting) and `comando` (what resolves it)."""
-    until = Path(__file__).resolve().parent / "cepa-until"
+    until = Path(__file__).resolve().parent / "cepa-run"
     try:
         p = subprocess.run([sys.executable, str(until), "pending", "--json",
                             "--repo", str(root)],
                            capture_output=True, text=True, timeout=120)
         data = json.loads(p.stdout) if p.returncode == 0 else None
     except (OSError, subprocess.SubprocessError, ValueError) as e:
-        return [], f"cepa-until pending falhou ({e})"
+        return [], f"cepa-run pending falhou ({e})"
     if not isinstance(data, dict):
-        return [], ("cepa-until pending falhou (saiu com "
+        return [], ("cepa-run pending falhou (saiu com "
                     f"{p.returncode}): {(p.stderr or '').strip()[:200]}")
     runs = []
     for m in data.get("mortos") or []:
@@ -4026,7 +4026,7 @@ def cmd_finish(root, name, ident, status, evidence, human_pending, repo=".",
 # S5-nivel-atendimento as "Resposta do dono", and needed a corrective commit:
 # `answer` recorded whatever it received. Now it shows the route's question
 # and refuses (exit 6) text that asks for clarification or that is itself a
-# question. The answer assembled by `cepa-until decide` starts with
+# question. The answer assembled by `cepa-run decide` starts with
 # "sim: " / "não: " followed by the drafted question, and so passes straight
 # through: the question there is a quotation, not a doubt. `--force` records
 # anyway.
@@ -4144,7 +4144,7 @@ def answer_creates(it, st, route, answer, keep, drop):
     open route on a `done` item. The "sim" of a `pending`/`blocked` item returns
     the item itself to the queue, `--keep` leaves the route open (the question is
     asked again) and `--drop` gives the leftover task up. The "não" reaches
-    `answer` as `--keep` from `cepa-until decide`, so creating its item here would
+    `answer` as `--keep` from `cepa-run decide`, so creating its item here would
     create it again at every re-ask; it stays out of this item."""
     if keep or drop or route is None or st != "done":
         return None
@@ -4490,7 +4490,7 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
         parts.append(f"Evidência anterior: {previous}")
     it["evidence"] = " ".join(parts)
     if not keep:
-        # Kept, the question stays open and the next `cepa-until decide` redoes it.
+        # Kept, the question stays open and the next `cepa-run decide` redoes it.
         it.pop("owner_question", None)
         it.pop("owner_summary", None)
     it.pop("claimed_by", None)
@@ -4506,7 +4506,7 @@ def cmd_answer(root, name, ident, answer, keep=False, force=False,
         print(f"{ident} → `{status_of(it)}` em {target}"
               + (" · rota humana fechada" if route is not None else ""))
     if created is not None:
-        # One line, never wrapped: the closing of `cepa-until decide` reads it back
+        # One line, never wrapped: the closing of `cepa-run decide` reads it back
         # to list the items the answers created (CS-7).
         _tui.verbatim(f"  item novo criado pela resposta: {created['id']} — "
                       f"{created['title']} (no fim da fila, `pending`"
@@ -4766,7 +4766,7 @@ def reconcile(items, board, missing_keys, role_of):
 #
 # On the overnight branch the rule is "no merge, no push, no Done": the card
 # is proven there and stays in Review, which is right while the code lives
-# only on that branch. `cepa-until land` then merges it into main and
+# only on that branch. `cepa-run land` then merges it into main and
 # never speaks to Jira, so nothing moved those cards afterwards. On
 # 2026-11-03 eleven WEGO cards sat in Review with PROVEN proof, complete
 # acceptance and code on main since the landing (fb-20261103-1). This lists
@@ -5679,7 +5679,7 @@ def _live_run(old_dir):
             continue
         r = subprocess.run(["ps", "-o", "command=", "-p", str(int(pid))],
                            capture_output=True, text=True)
-        if "cepa-until" in r.stdout:
+        if "cepa-run" in r.stdout or "cepa-until" in r.stdout:
             return f"run {est.get('run') or path.name}, pid {pid}"
     return None
 
@@ -5826,7 +5826,7 @@ def archive_waiting_reasons(name, plan, runs_of):
     """CS-2: the sentences for what a closed queue still has waiting on the
     owner, by the rule `waiting` uses (`waiting_of_item`: a `done` item with a
     route left; a `dropped` item never counts) plus the leftover points of
-    `finish --pendencia` and the runs `cepa-until pending` lists. A route the
+    `finish --pendencia` and the runs `cepa-run pending` lists. A route the
     owner answered "não" is still open, so it blocks too (`waiting` only
     hides it). `runs_of()` returns the cached `(runs, warning)`; it is called
     here, once per sweep, only for a queue that is otherwise closed."""
@@ -5857,7 +5857,7 @@ def archive_waiting_reasons(name, plan, runs_of):
         if r.get("fila") in names:
             reasons.append(f"o run {r.get('run')} espera você "
                            f"({r.get('como')}); resolva com: "
-                           f"{r.get('comando') or 'cepa until pending'}")
+                           f"{r.get('comando') or 'cepa run pending'}")
     return reasons
 
 
@@ -5865,7 +5865,7 @@ def archive_blockers(root, name, qfile, today, plan=None, runs_of=None):
     """Why a CLOSED queue is not archived: a list of plain sentences, empty
     when it can go. One place on purpose: a new refusal reason is one more
     `append` here. All the reasons that apply are listed. What waits on the
-    owner is read FIRST: reading the runs (`cepa-until pending`) may close a
+    owner is read FIRST: reading the runs (`cepa-run pending`) may close a
     landed run and write its record inside this folder, and the age and the
     uncommitted-changes checks below have to see that."""
     waiting = (archive_waiting_reasons(name, plan, runs_of)
@@ -6089,7 +6089,7 @@ def cmd_archive(root, dry_run, no_commit):
     moved = []
     cache = []
 
-    def runs_of():  # `cepa-until pending` once per sweep, and only when asked
+    def runs_of():  # `cepa-run pending` once per sweep, and only when asked
         if not cache:
             cache.append(waiting_runs_of(root))
         return cache[0]
@@ -6171,7 +6171,7 @@ def main(argv=None):
             "the ORDER of the items and the WHY of each position, which is what a\n"
             "tracker loses. This script is its mechanical writer: it validates,\n"
             "resolves the right root, refuses collisions and writes. /common:queue\n"
-            "drives the conversation; /common:drain-plan and cepa until execute;\n"
+            "drives the conversation; /common:drain-plan and cepa run execute;\n"
             "/common:next and /common:queue-status read.\n"
             "\n"
             "It knows only `mode: single-track`. A wave plan is another document,\n"
@@ -6386,14 +6386,14 @@ def main(argv=None):
             "travado), an open human route on an item not closed (tarefa só\n"
             "sua) and a route left on a `done` item (tarefa que sobrou em item\n"
             "concluído). Each line: id, reason, the question cut to one line.\n"
-            "To answer them: cepa until decide <fila>.\n"
+            "To answer them: cepa run decide <fila>.\n"
             "\n"
             "A route whose last answer was \"não\" is not a line: the queue only\n"
             "counts them, with the date of the last one and the command that\n"
             "revisits them (`respondidas_nao` in --json).\n"
             "\n"
             "A section of its own lists the runs waiting on you (the same ones\n"
-            "`cepa until pending` lists: ready to land, merged with a red build,\n"
+            "`cepa run pending` lists: ready to land, merged with a red build,\n"
             "supervisor dead), each with the command that resolves it."),
         examples=[("cepa queue waiting", "every queue, for a human"),
                   ("cepa queue waiting --json", "for code")],
@@ -6442,7 +6442,7 @@ def main(argv=None):
                     help="says what it would move, without moving")
     ar.add_argument("--no-commit", action="store_true", dest="no_commit",
                     help="moves and stages, but leaves the commit to the caller "
-                         "(`cepa until land`, wrap-up)")
+                         "(`cepa run land`, wrap-up)")
     ar.add_argument("--repo", default=".", metavar="DIR", help=repo_help)
 
     sh = sub.add_parser(
@@ -6649,7 +6649,7 @@ def main(argv=None):
                          "words, no branch, class or file name, "
                          "with your recommendation (\"Close the card as 'measure "
                          "after go-live' and return it to the queue? I recommend yes: "
-                         "...\"). `cepa-until decide` shows it in a fixed "
+                         "...\"). `cepa-run decide` shows it in a fixed "
                          "menu: yes = the item returns to the queue with this "
                          "answer, no = it stays as is. Use with `blocked` "
                          "and with `--human-pending`")
@@ -6683,7 +6683,7 @@ def main(argv=None):
                          "in plain words (\"the batch skips inactive "
                          "credentials\"). Recorded in the item's `decisions` with "
                          "its commit and listed in the run summary; it opens no "
-                         "route and `cepa-until decide` never asks about it. "
+                         "route and `cepa-run decide` never asks about it. "
                          "Repeatable. NOT for a proof waiver, moving a card to "
                          "Done or a task outside the repo: those stay "
                          "--human-pending")

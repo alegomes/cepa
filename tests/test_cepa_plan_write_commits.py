@@ -150,7 +150,7 @@ def test_answer_refuses_text_that_does_not_answer_the_route():
 
 def test_clarification_refusal_points_to_the_question_mark_key():
     """CS-11: a text that asks for clarification is refused (exit 6, nothing
-    written) with a hint to the `?` key of `cepa-until decide <queue>`, not with
+    written) with a hint to the `?` key of `cepa-run decide <queue>`, not with
     "answer this question". The other refusal reasons keep the old hint."""
     with tempfile.TemporaryDirectory() as tmp:
         stuck = item("a1", status="blocked")
@@ -160,8 +160,8 @@ def test_clarification_refusal_points_to_the_question_mark_key():
         before = queue_file.read_text()
         rc, out = answer(root, "a1", "não entendi a pergunta")
         check("recusa o pedido de esclarecimento com exit 6", rc == 6, (rc, out))
-        check("...citando a tecla ? do cepa-until decide da fila",
-              "`?`" in out and "cepa-until decide fila" in out, out)
+        check("...citando a tecla ? do cepa-run decide da fila",
+              "`?`" in out and "cepa-run decide fila" in out, out)
         check("...sem mandar responder a pergunta",
               "responda a essa pergunta" not in out, out)
         check("...ainda oferecendo o --force", "--force" in out, out)
@@ -170,7 +170,7 @@ def test_clarification_refusal_points_to_the_question_mark_key():
         rc, out = answer(root, "a1", "e agora?")
         check("outra recusa (pergunta) segue com exit 6", rc == 6, (rc, out))
         check("...e com a dica de sempre",
-              "responda a essa pergunta" in out and "cepa-until decide" not in out, out)
+              "responda a essa pergunta" in out and "cepa-run decide" not in out, out)
 
 
 def test_answer_force_writes_the_refused_text():

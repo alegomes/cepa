@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`cepa-until pending` closes the `esperando-dono` record whose branch is gone, by
+"""`cepa-run pending` closes the `esperando-dono` record whose branch is gone, by
 the commit recorded in its `aterrissar` action (spec
 docs/spec/pouso-ja-feito-sai-da-lista.md, CS-4).
 
@@ -26,7 +26,7 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_UNTIL = REPO / "common" / "bin" / "cepa-until"
+CEPA_UNTIL = REPO / "common" / "bin" / "cepa-run"
 FAILURES = []
 OLD_STAMP = "2020-01-02T03:04:05"
 

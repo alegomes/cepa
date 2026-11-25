@@ -3,22 +3,22 @@
 owner, each with the command that resolves it (spec
 docs/spec/decisoes-de-todas-as-filas.md, CS-2).
 
-The section reads the same source as `cepa until pending` (the spec forbids a
+The section reads the same source as `cepa run pending` (the spec forbids a
 rule of its own for "a run waiting"), so the fixtures here are the run states
 that make `pending` list a run, and every case checks both commands agree.
 
 Against the real CLI, in a temporary git repo:
 
   - CS-2 red test: a run of queue `a` waiting to land, `waiting` prints a runs
-    section with `a/<run>` and `cepa-until land a/<run>`, exit 0
+    section with `a/<run>` and `cepa-run land a/<run>`, exit 0
   - `--json` carries the same run under `runs`
   - a run whose branch already landed in the destination is not listed
   - a run merged with a red build says so and offers `land ... --yes`
-  - a run whose supervisor died offers `cepa-until close-dead a/<run>`
+  - a run whose supervisor died offers `cepa-run close-dead a/<run>`
   - with no run waiting, the section is not printed
   - the fields of each run in --json (alvo, fila, run, como, comando)
   - the "Fica com você" count is shown only when the run left items
-  - when `cepa until pending` fails (exit, not JSON, not an object), the
+  - when `cepa run pending` fails (exit, not JSON, not an object), the
     command still exits 0, warns on stderr and lists no run
 
 Run with `python3 tests/test_cepa_plan_waiting_runs.py`.
@@ -37,7 +37,7 @@ except ImportError:
 
 REPO = Path(__file__).resolve().parent.parent
 CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
-CEPA_UNTIL = REPO / "common" / "bin" / "cepa-until"
+CEPA_UNTIL = REPO / "common" / "bin" / "cepa-run"
 FAILURES = []
 RUN = "2026-11-20-0100"
 
@@ -116,7 +116,7 @@ def red_test():
         root = repo_with_night(tmp)
         write_state(root, **LAND)
         listed = pending(root)["runs"]
-        check("o próprio `cepa until pending` lista o run (fixture válida)",
+        check("o próprio `cepa run pending` lista o run (fixture válida)",
               [(r["fila"], r["run"]) for r in listed] == [("a", RUN)], listed)
         p = run(root, "waiting")
         check("sai com 0", p.returncode == 0, p.stderr)
@@ -125,8 +125,8 @@ def red_test():
         sec = sec or []
         check("a seção diz quantos runs", sec[:1] == ["runs que esperam você · 1"],
               sec)
-        check("a seção traz a/<run> com `cepa-until land a/<run>`",
-              any(f"a/{RUN}" in l and f"cepa-until land a/{RUN}" in l
+        check("a seção traz a/<run> com `cepa-run land a/<run>`",
+              any(f"a/{RUN}" in l and f"cepa-run land a/{RUN}" in l
                   and "espera aterrissar em `main`" in l for l in sec[1:]),
               p.stdout)
         check("a seção vem depois das filas, separada por linha em branco",
@@ -135,7 +135,7 @@ def red_test():
               p.stdout)
         check("a linha abre com o alvo e não diz \"Fica com você\" sem itens",
               sec[1:] == [f"  a/{RUN} — espera aterrissar em `main` — "
-                          f"cepa-until land a/{RUN}"], sec)
+                          f"cepa-run land a/{RUN}"], sec)
         check("sem falha do pending, nenhum aviso de runs",
               "aviso: runs" not in p.stderr + p.stdout, p.stderr)
         j = run(root, "waiting", "--json")
@@ -143,13 +143,13 @@ def red_test():
         check("--json traz o run em `runs`, com todos os campos",
               data.get("runs") == [{"alvo": f"a/{RUN}", "fila": "a", "run": RUN,
                                     "como": "espera aterrissar em `main`",
-                                    "comando": f"cepa-until land a/{RUN}"}],
+                                    "comando": f"cepa-run land a/{RUN}"}],
               j.stdout)
         write_state(root, fica_com_voce=[{"id": "a1"}, {"id": "a2"}], **LAND)
         p = run(root, "waiting")
         check("com itens em \"Fica com você\", a linha diz quantos",
               f"a/{RUN} — espera aterrissar em `main` (2 item(ns) em "
-              f"\"Fica com você\") — cepa-until land a/{RUN}" in p.stdout,
+              f"\"Fica com você\") — cepa-run land a/{RUN}" in p.stdout,
               p.stdout)
 
 
@@ -166,14 +166,14 @@ def landed_red_and_dead():
         write_state(root, estado="interrompido", sinal="SIGTERM")
         p = run(root, "waiting")
         sec = runs_section(p.stdout) or []
-        check("supervisor morto: listado com `cepa-until close-dead a/<run>`",
+        check("supervisor morto: listado com `cepa-run close-dead a/<run>`",
               sec[1:] == [f"  a/{RUN} — o supervisor morreu no meio do run — "
-                          f"cepa-until close-dead a/{RUN}"], p.stdout)
+                          f"cepa-run close-dead a/{RUN}"], p.stdout)
         j = json.loads(run(root, "waiting", "--json").stdout)
         check("supervisor morto: campos no --json",
               j.get("runs") == [{"alvo": f"a/{RUN}", "fila": "a", "run": RUN,
                                  "como": "o supervisor morreu no meio do run",
-                                 "comando": f"cepa-until close-dead a/{RUN}"}], j)
+                                 "comando": f"cepa-run close-dead a/{RUN}"}], j)
 
         # With a remote, a merge only in the local `main` is not landed (spec
         # pouso-ja-feito-sai-da-lista: the upstream decides; no upstream, the
@@ -191,7 +191,7 @@ def landed_red_and_dead():
         check("build vermelho: diz isso e oferece `land ... --yes`",
               sec[1:] == [f"  a/{RUN} — entrou em `main` com build vermelho, "
                           "sem push: commite o conserto e rode de novo — "
-                          f"cepa-until land a/{RUN} --yes"], p.stdout)
+                          f"cepa-run land a/{RUN} --yes"], p.stdout)
 
         write_state(root, **LAND)
         check("já aterrissado: o `pending` não lista", pending(root)["runs"] == [])
@@ -208,19 +208,19 @@ def plugin_with_fake_until(tmp, body):
     for d in ("hooks", "_vendor"):
         (plugin / d).symlink_to(REPO / "common" / d)
     (plugin / "bin" / "cepa-queue").write_text(CEPA_PLAN.read_text())
-    (plugin / "bin" / "cepa-until").write_text(body)
+    (plugin / "bin" / "cepa-run").write_text(body)
     return plugin / "bin" / "cepa-queue"
 
 
 def pending_fails():
-    print("quando o `cepa until pending` falha")
+    print("quando o `cepa run pending` falha")
     cases = [
         ("sai com 1", "import sys\nsys.stderr.write('boom')\nsys.exit(1)\n",
-         "cepa-until pending falhou (saiu com 1): boom"),
+         "cepa-run pending falhou (saiu com 1): boom"),
         ("saída que não é JSON", "print('não é json')\n",
-         "cepa-until pending falhou ("),
+         "cepa-run pending falhou ("),
         ("JSON que não é objeto", "print('[]')\n",
-         "cepa-until pending falhou (saiu com 0)"),
+         "cepa-run pending falhou (saiu com 0)"),
     ]
     for name, body, warning in cases:
         with tempfile.TemporaryDirectory() as tmp:

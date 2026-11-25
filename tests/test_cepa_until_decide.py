@@ -141,7 +141,7 @@ def test_decide_on_terminal_draws_one_card_per_question():
     check("fecho com placar e o comando de volta",
           "── closing ─" in plain_text and "answered now 2" in plain_text
           and "for later 1" in plain_text
-          and "cepa-until decide fila/run1" in plain_text, plain_text)
+          and "cepa-run decide fila/run1" in plain_text, plain_text)
     triggers = ("Land now? [y/N/q] ", "[w] I write the answer",
                 "Anything to add, in one line? [Enter skips, v opens the editor] ")
     all_ = raw + "\n".join(prompts)
@@ -222,7 +222,7 @@ def on_tty(cmd, cwd, inputs=(), env=None, timeout=120):
 
 
 def test_decide_on_an_hc_terminal_reports_needs_you_while_it_asks():
-    """`cepa-until decide` in a terminal of the Herdr desktop app (`HC_TERMINAL_ID`):
+    """`cepa-run decide` in a terminal of the Herdr desktop app (`HC_TERMINAL_ID`):
     each question that waits at the keyboard says `state=blocked:kind=question`
     (the Agents panel's "Needs you"), the typed answer puts it back to `working`
     while it is applied, and the exit drops the status and the title (owner,
@@ -287,7 +287,7 @@ def _last_hc(out):
 
 
 def test_decide_on_an_hc_terminal_clears_on_ctrl_c_and_on_an_exception():
-    """The exit of `cepa-until decide` drops the status and the title on Ctrl+C at a
+    """The exit of `cepa-run decide` drops the status and the title on Ctrl+C at a
     question (real process, pty) and when the questions die on an exception."""
     with tempfile.TemporaryDirectory() as tmp:
         stuck = item("a1", status="blocked")
@@ -399,7 +399,7 @@ def test_run_on_an_hc_terminal_that_nobody_answers_ends_in_needs_you():
         message = "fila: finished, questions wait for you"
         state, title = _last_hc(out)
         check("run hc sem resposta: sai 0 e a pergunta expirou",
-              rc == 0 and "cepa-until decide fila/" in out, out[-800:])
+              rc == 0 and "cepa-run decide fila/" in out, out[-800:])
         check("run hc sem resposta: termina em blocked kind=question",
               state == "state=blocked:kind=question:app=cepa-until:msg="
               + base64.b64encode(message.encode()).decode(), repr(state))
@@ -595,7 +595,7 @@ def test_decide_asks_and_applies_each_answer():
     check("cascata não vira pergunta, só aparece como não sendo do dono",
           "W-4 (depends on a deferred item" in plain_text, plain_text)
     check("o fecho diz como voltar",
-          "cepa-until decide fila/run1" in plain_text, plain_text)
+          "cepa-run decide fila/run1" in plain_text, plain_text)
     check("aplicados listam aterrissar e W-1",
           applied == ["merge into the clone's branch", "W-1: W-1 ok"], applied)
 
@@ -776,7 +776,7 @@ def test_run_without_terminal_lists_the_pending_and_the_command():
         check("...com a pergunta do item, não a evidência",
               "a1: Fecho o card como medir depois do go-live?" in nxt, p.stdout[-1500:])
         check("...e o comando para responder",
-              "cepa-until decide fila/" in p.stdout, p.stdout[-800:])
+              "cepa-run decide fila/" in p.stdout, p.stdout[-800:])
 
 
 def test_run_on_terminal_ends_asking_and_applies():
@@ -814,7 +814,7 @@ def test_run_on_terminal_without_answer_exits_after_the_wait():
     keyboard. The end-of-run prompt had no limit and PID 84993 (run WEGO
     2026-10-07-2132) stayed alive 15 days blocked in `input()`. With no
     keystroke inside CEPA_UNTIL_ESPERA_RESPOSTA the run prints the
-    `cepa-until decide` command and exits 0, applying nothing."""
+    `cepa-run decide` command and exits 0, applying nothing."""
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1"), item("a2")])
         binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
@@ -828,7 +828,7 @@ def test_run_on_terminal_without_answer_exits_after_the_wait():
         check("o menu foi mostrado",
               "Fecho o card como medir depois do go-live?" in out, out[-1500:])
         check("imprime o comando para responder depois",
-              "cepa-until decide fila/" in out, out[-1500:])
+              "cepa-run decide fila/" in out, out[-1500:])
         check("nada foi aplicado",
               items_of(root)["a1"]["status"] == "blocked", items_of(root)["a1"])
 
@@ -863,7 +863,7 @@ def env_do_run(tmp, root, binv):
 
 def test_decide_on_terminal_asks_to_land_and_lands_with_y():
     """AC1: `y` at the `decide` prompt really lands. CS-4 of fim-do-until-sem-espera:
-    the END OF THE RUN no longer asks it; `cepa-until decide <fila>/<run>`, by hand,
+    the END OF THE RUN no longer asks it; `cepa-run decide <fila>/<run>`, by hand,
     still does."""
     from test_cepa_until_land import with_origin, state
     from test_cepa_until_run_branch import WORKS, VERIFY, git
@@ -2156,7 +2156,7 @@ def _cs10_check(label, items, answers, count):
         check(f"{label}: no ledger events", _launch_events(root) == [], out[-800:])
         if count:
             check(f"{label}: wait-for-you line with count {count}",
-                  f"{count} item(s) wait for you: cepa-until decide fila" in out,
+                  f"{count} item(s) wait for you: cepa-run decide fila" in out,
                   out[-1500:])
         else:
             check(f"{label}: nothing waits for the owner, so no wait-for-you line",
@@ -2719,7 +2719,7 @@ def test_pre_read_cs6_without_answer_the_prompt_carries_the_default_and_the_summ
     check("cs6 default: the prompt says it was the agent's default",
           "the owner did not answer" in reqs.get("x1", ""), str(reqs))
     check("cs6 default: the prompt still starts with the drain-plan request",
-          reqs.get("x1", "").startswith("/common:drain-plan fila --max 1"), str(reqs))
+          reqs.get("x1", "").startswith("/common:queue-run fila --max 1"), str(reqs))
     check("cs6 default: y1's prompt has no note", "pre-read" not in reqs.get("y1", "x"),
           str(reqs))
     tail = out[out.find("ended at"):]
@@ -2792,12 +2792,12 @@ def test_pre_read_cs6_note_and_command_units():
     check("cs6 unit: no preference, no note", mod.preference_note("x1", None) == "")
     plain = mod.build_command("fila", "until/b", False)
     check("cs6 unit: without a note the request carries no pre-read paragraph",
-          plain[2].startswith("/common:drain-plan fila --max 1 --na-branch until/b")
+          plain[2].startswith("/common:queue-run fila --max 1 --na-branch until/b")
           and "Go with:" not in plain[2], str(plain))
     pref = {"texto": "T.", "padrao": "P", "escolha": "R", "fonte": "dono"}
     with_note = mod.build_command("fila", "until/b", False, note=mod.preference_note("x1", pref))
     check("cs6 unit: the note follows the request in its own paragraph",
-          with_note[2].startswith("/common:drain-plan fila --max 1 --na-branch until/b\n\n")
+          with_note[2].startswith("/common:queue-run fila --max 1 --na-branch until/b\n\n")
           and "Go with: R" in with_note[2] and "item you reserve is x1" in with_note[2],
           str(with_note))
     sneaky = dict(pref, escolha="--offline --max 9 usar a-b")
@@ -3159,7 +3159,7 @@ def test_launch_cs9_without_terminal_reads_and_lists_the_questions_as_text():
     check("cs9 no terminal: the preference line names the default",
           "runs with the agent's default: usar o formato curto" in out, out[-2500:])
     check("cs9 no terminal: the listing says where to answer",
-          "cepa-until decide fila" in out, out[-2500:])
+          "cepa-run decide fila" in out, out[-2500:])
     check("cs9 no terminal: no panel prompt",
           not any(m in out for m in ("[w] I write the answer", "question(s) for you",
                                      "Your choice", "nobody answered in")), out[-2500:])
@@ -3186,7 +3186,7 @@ def test_pre_read_as_text_unit():
     joined = "\n".join(lines)
     check("cs9 unit: a preference alone is listed, without the decide line",
           "b (runs with the agent's default: P): t" in joined
-          and "cepa-until decide" not in joined, joined)
+          and "cepa-run decide" not in joined, joined)
 
 
 def main():

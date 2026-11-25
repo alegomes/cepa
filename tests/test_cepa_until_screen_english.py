@@ -95,7 +95,7 @@ def test_every_other_site_that_prints_the_action():
         question=lambda _p: next(answers), output=screen.append,
         answer=lambda i, t, keep=False: (0, "ok"), land=lambda: 0)
     check("o que fica para depois diz merge into e mantém o comando",
-          any(x.startswith("merge into `main`: cepa-until land fila/run1 --yes")
+          any(x.startswith("merge into `main`: cepa-run land fila/run1 --yes")
               for x in after), after)
 
 

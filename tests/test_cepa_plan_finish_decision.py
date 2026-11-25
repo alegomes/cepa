@@ -6,7 +6,7 @@ summary lists it with the commit.
 Red test declared in the spec: `cepa-queue finish <fila> <id> done --decision
 "lote pula credencial inativa" --commit <hash>` leaves `human_pending` null and
 records the choice in `decisions`; the end-of-run summary lists it with the
-commit; `cepa-until decide <fila>` does not ask about it. Before CS-11,
+commit; `cepa-run decide <fila>` does not ask about it. Before CS-11,
 `--decision` was refused as an unknown argument.
 
 One deliberate difference from the spec text, recorded in the item's
@@ -247,7 +247,7 @@ def test_run_summary_lists_the_decision_with_its_commit_and_decide_skips_it():
         d = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide", "fila",
                             "--repo", str(root)], capture_output=True, text=True,
                            stdin=subprocess.DEVNULL, timeout=60)
-        check("cepa-until decide <fila> não pergunta sobre a decisão",
+        check("cepa-run decide <fila> não pergunta sobre a decisão",
               d.returncode == 0 and DECISION not in d.stdout
               and "- a1" not in d.stdout, d.stdout + d.stderr)
 

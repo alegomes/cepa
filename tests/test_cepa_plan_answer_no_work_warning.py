@@ -18,7 +18,7 @@ Against the real CLI, in a real git repo, in a PTY (`answer` only runs on a TTY)
   - no warning when the route declares `nenhum`, when the declared item is
     created, on `--keep` (the question stays open), on `--drop` (the owner gave
     the leftover up) and on a `blocked` item (its "sim" returns it to the queue);
-  - the closing of `cepa-until decide` repeats the warning for each such item.
+  - the closing of `cepa-run decide` repeats the warning for each such item.
 """
 import importlib.machinery
 import importlib.util

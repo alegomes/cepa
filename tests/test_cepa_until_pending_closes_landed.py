@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`cepa-until pending` closes the run whose merge already reached the upstream
+"""`cepa-run pending` closes the run whose merge already reached the upstream
 of the destination branch (spec docs/spec/pouso-ja-feito-sai-da-lista.md, CS-1).
 
 Against the real CLI, in a temporary git repo with a remote:
@@ -32,7 +32,7 @@ from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_UNTIL = REPO / "common" / "bin" / "cepa-until"
+CEPA_UNTIL = REPO / "common" / "bin" / "cepa-run"
 FAILURES = []
 OLD_STAMP = "2020-01-02T03:04:05"
 

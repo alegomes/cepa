@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`cepa-until pending` reinstalls the plugins when it closes a landed run, with the
+"""`cepa-run pending` reinstalls the plugins when it closes a landed run, with the
 same rule and the same guards as `land` (spec docs/spec/pouso-ja-feito-sai-da-lista.md,
 CS-6; owner's answer: "yes, like `land`, same rule and same guards").
 

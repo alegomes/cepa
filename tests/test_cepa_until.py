@@ -42,7 +42,7 @@ except ImportError:
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_UNTIL = REPO / "common" / "bin" / "cepa-until"
+CEPA_UNTIL = REPO / "common" / "bin" / "cepa-run"
 
 FAILURES = []
 
@@ -1561,20 +1561,20 @@ def test_a_broken_or_slow_herdr_does_not_change_the_run():
                   took < 20, f"{took:.1f}s")
 
 
-# ── herdr: reports carry `cepa until pending --repo <path>` as resume command (CS-6) ──
+# ── herdr: reports carry `cepa run pending --repo <path>` as resume command (CS-6) ──
 
 def test_herdr_reports_carry_the_pending_command_as_resume_argv():
     """CS-6 of docs/spec/herdr-agent-status.md: each report-agent ends in
-    `-- cepa until pending --repo <absolute repo path>`; never the launch command."""
+    `-- cepa run pending --repo <absolute repo path>`; never the launch command."""
     with tempfile.TemporaryDirectory() as tmp:
         p, argvs, log, _ = herdr_scenario(tmp)
         root = str((Path(tmp) / "repo").resolve())
         reports = [a for a in argvs if a[1] == "report-agent"]
         releases = [a for a in argvs if a[1] == "release-agent"]
         check("herdr resume: dois relatórios", len(reports) == 2, str(argvs) + p.stderr[-200:])
-        tail = ["--", "cepa", "until", "pending", "--repo", root]
+        tail = ["--", "cepa", "run", "pending", "--repo", root]
         for a in reports:
-            check("herdr resume: o relatório termina em `-- cepa until pending --repo <raiz>`",
+            check("herdr resume: o relatório termina em `-- cepa run pending --repo <raiz>`",
                   a[-len(tail):] == tail and a.count("--") == 1, str(a))
             after = a[a.index("--") + 1:] if "--" in a else []
             check("herdr resume: depois de `--` não há --for, --until nem o nome da fila",
@@ -1609,7 +1609,7 @@ def test_herdr_resume_argv_names_the_main_clone_when_run_from_a_linked_worktree(
         reports = [a for a in argvs if a[1] == "report-agent"]
         check("herdr worktree: dois relatórios", len(reports) == 2,
               str(argvs) + p.stderr[-300:])
-        tail = ["--", "cepa", "until", "pending", "--repo", main]
+        tail = ["--", "cepa", "run", "pending", "--repo", main]
         for a in reports:
             check("herdr worktree: termina em `--repo <clone principal>`",
                   a[-len(tail):] == tail, str(a))
@@ -1672,7 +1672,7 @@ def test_herdr_outside_or_broken_leaves_the_run_and_its_ledger_unchanged():
 
 
 def test_herdr_is_not_called_from_a_subcommand():
-    """CS-5 (c): `cepa until pending` with HERDR_ENV=1 creates no herdr log."""
+    """CS-5 (c): `cepa run pending` with HERDR_ENV=1 creates no herdr log."""
     with tempfile.TemporaryDirectory() as tmp:
         p, argvs, log, statuses = herdr_scenario(tmp)
         check("herdr (c): a run de preparação chamou o herdr (log existe)",
@@ -1990,7 +1990,7 @@ def test_hc_a_run_that_ends_with_an_unanswered_question_stays_in_needs_you():
 
 
 def test_hc_blocked_is_not_reported_outside_the_armed_run():
-    """A prompt read outside the armed run and outside `cepa-until decide` (which sets
+    """A prompt read outside the armed run and outside `cepa-run decide` (which sets
     `_hc_asking`, test_cepa_until_decide.py) reports nothing to the Agents panel."""
     mod = _until_module()
     got, written = _read_line_on_fake_tty(mod, armed=False)

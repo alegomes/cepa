@@ -85,7 +85,7 @@ def test_until_decidir_and_decide_dispatch_the_same():
                                capture_output=True, text=True, timeout=60)
             res.append((p.returncode, mask(p.stdout), mask(p.stderr)))
     check("until: `decidir` chega no decide (alvo ruim recusado, rc != 0)",
-          res[0][0] != 0 and "cepa-until decide:" in res[0][2], res[0])
+          res[0][0] != 0 and "cepa-run decide:" in res[0][2], res[0])
     check("until: `decidir` == `decide`", res[0] == res[1], res)
 
 

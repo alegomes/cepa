@@ -28,7 +28,7 @@ import test_cepa_plan_route_item_declaration as plan_t  # noqa: E402
 from test_cepa_plan_route_item_declaration import (  # noqa: E402
     make_repo, item_a, run, queue_file, QUESTION, ROUTE)
 
-CEPA_UNTIL = HERE.parent / "common" / "bin" / "cepa-until"
+CEPA_UNTIL = HERE.parent / "common" / "bin" / "cepa-run"
 FAILURES = []
 
 

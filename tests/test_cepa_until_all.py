@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""`cepa until --all` (spec `until-todas-as-filas`).
+"""`cepa run --all` (spec `until-todas-as-filas`).
 
-CS-1: `cepa until --all --for 8h --dry-run` lists the ready items of every
+CS-1: `cepa run --all --for 8h --dry-run` lists the ready items of every
 queue, grouped by queue and in the order of `cepa queue ready`, and exits 0
 without executing anything. Before the flag existed the call exited 2: the
 queue name was a required positional.
@@ -34,7 +34,7 @@ check = base.check
 FAILURES = base.FAILURES
 REPO = Path(__file__).resolve().parent.parent
 CEPA = REPO / "common" / "bin" / "cepa"
-CEPA_UNTIL = REPO / "common" / "bin" / "cepa-until"
+CEPA_UNTIL = REPO / "common" / "bin" / "cepa-run"
 
 
 def _queue(root, name, items):
@@ -68,7 +68,7 @@ def _run(tmp, root, args, via_launcher=True, claude_body="pass"):
     env["CEPA_UNTIL_LEITOR"] = "off"
     env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
     env["FAKE_CEPA_PLAN"] = str(REPO / "common" / "bin" / "cepa-queue")
-    cmd = ([str(CEPA), "until"] if via_launcher
+    cmd = ([str(CEPA), "run"] if via_launcher
            else [sys.executable, str(CEPA_UNTIL)])
     p = subprocess.run(cmd + list(args) + ["--repo", str(root)],
                        capture_output=True, text=True, env=env, timeout=120,
@@ -895,7 +895,7 @@ def _target_command(tmp, root, sub, target, *extra):
 
 def test_target_all_run_reads_the_state_of_the_all_folder():
     """The end-of-run report names a `--all` run `all/<run>`, and its state lives
-    in `.claude/queues/_all/until/`. On 2026-11-17 `cepa-until land
+    in `.claude/queues/_all/until/`. On 2026-11-17 `cepa-run land
     all/2026-11-16-1426 --yes`, copied from that report, exited 2 with "could
     not read the run state at .claude/queues/all/until/...": `land` looked for a
     folder named after the label. The three commands that take `<queue>/<run>`
@@ -915,7 +915,7 @@ def test_target_all_run_reads_the_state_of_the_all_folder():
         run_id = states[0].name.replace(".estado.json", "")
         target = f"all/{run_id}"
         check("o relatório do run manda rodar `land all/<run>`",
-              f"cepa-until land {target}" in p.stdout, p.stdout[-1500:])
+              f"cepa-run land {target}" in p.stdout, p.stdout[-1500:])
         for sub in ("land", "decide", "close-dead"):
             r = _target_command(tmp, root, sub, target)
             check(f"`{sub} {target}` lê o estado do run",
@@ -987,8 +987,8 @@ def _stuck(ident, question):
 
 def test_cs6_record_in_all_folder_pending_lists_it_and_land_yes_lands():
     """The spec's own script: after a `--all` run the record is
-    `.claude/queues/_all/until/<run>.jsonl`, `cepa until pending` lists
-    `all/<run>` and `cepa until land all/<run> --yes` lands the branch."""
+    `.claude/queues/_all/until/<run>.jsonl`, `cepa run pending` lists
+    `all/<run>` and `cepa run land all/<run> --yes` lands the branch."""
     with tempfile.TemporaryDirectory() as tmp:
         root, _paths = _repo(tmp, {"a": [base.item("a1")],
                                    "b": [base.item("b1")]})
@@ -1005,10 +1005,10 @@ def test_cs6_record_in_all_folder_pending_lists_it_and_land_yes_lands():
         check("...e nenhuma pasta `all` e criada",
               not (root / ".claude" / "queues" / "all").exists())
         target = f"all/{run_id}"
-        r = subprocess.run([str(CEPA), "until", "pending", "--repo", str(root)],
+        r = subprocess.run([str(CEPA), "run", "pending", "--repo", str(root)],
                            capture_output=True, text=True, timeout=60)
-        check("`cepa until pending` lista all/<run> com o comando do land",
-              r.returncode == 0 and f"cepa-until land {target}" in r.stdout
+        check("`cepa run pending` lista all/<run> com o comando do land",
+              r.returncode == 0 and f"cepa-run land {target}" in r.stdout
               and f"queue all · run {run_id}" in r.stdout,
               f"rc={r.returncode} out={r.stdout} err={r.stderr[-300:]}")
         r = _target_command(tmp, root, "land", target, "--yes")
@@ -1019,7 +1019,7 @@ def test_cs6_record_in_all_folder_pending_lists_it_and_land_yes_lands():
               "a:a1" in subjects and "b:b1" in subjects, str(subjects))
         check("...a branch do run foi removida", _branches(root) == [],
               str(_branches(root)))
-        r = subprocess.run([str(CEPA), "until", "pending", "--repo", str(root)],
+        r = subprocess.run([str(CEPA), "run", "pending", "--repo", str(root)],
                            capture_output=True, text=True, timeout=60)
         check("...e o run sai do `pending`", target not in r.stdout, r.stdout)
 
@@ -1045,7 +1045,7 @@ def test_cs6_decide_all_run_lists_what_every_queue_holds_for_the_owner():
               and "a/x1: Fecho o card da fila a?" in nxt
               and "b/x1: Fecho o card da fila b?" in nxt
               and "merge into" in nxt
-              and f"cepa-until decide all/{run_id}" in nxt, p.stdout[-1500:])
+              and f"cepa-run decide all/{run_id}" in nxt, p.stdout[-1500:])
         r = _target_command(tmp, root, "decide", f"all/{run_id}")
         out = r.stdout + r.stderr
         check("`decide all/<run>` sai com 0", r.returncode == 0, out[-600:])
@@ -1058,7 +1058,7 @@ def test_cs6_decide_all_run_lists_what_every_queue_holds_for_the_owner():
         check("...e o da fila b, mesmo id, com a dele",
               "b/x1" in out and "Fecho o card da fila b?" in out, out[-800:])
         check("...e manda voltar com o alvo all/<run>",
-              f"cepa-until decide all/{run_id}" in out, out[-800:])
+              f"cepa-run decide all/{run_id}" in out, out[-800:])
 
 
 def test_cs6_decide_all_run_on_a_terminal_answers_each_item_in_its_queue():
@@ -1189,7 +1189,7 @@ def test_cs6_all_run_on_a_terminal_only_lists_at_the_end_and_never_asks():
               and "Fecho o card da fila a?" in plain, plain[-1500:])
         run_id = _all_run_id(root)
         check("...e manda voltar com `decide all/<run>`",
-              run_id is not None and f"cepa-until decide all/{run_id}" in plain,
+              run_id is not None and f"cepa-run decide all/{run_id}" in plain,
               plain[-1500:])
         check("...sem abrir o painel de perguntas",
               "[w] I write the answer" not in plain
@@ -1299,7 +1299,7 @@ def test_cs6_close_dead_all_run_closes_it_and_leaves_it_ready_to_land():
             "mortos") or []
         check("pending acusa o run morto com o comando close-dead all/<run>",
               len(dead_ones) == 1
-              and dead_ones[0].get("fechar") == f"cepa-until close-dead {target}",
+              and dead_ones[0].get("fechar") == f"cepa-run close-dead {target}",
               r.stdout + r.stderr)
         m = dead_ones[0] if dead_ones else {}
         check("...o item em voo e b/b1, lido na fila b: `done`",
@@ -1319,7 +1319,7 @@ def test_cs6_close_dead_all_run_closes_it_and_leaves_it_ready_to_land():
                             / f"{run_id}.estado.json").read_text())
         check("...o estado vira esperando-dono com `land all/<run>`",
               state.get("estado") == "esperando-dono"
-              and any(f"cepa-until land {target}" in str(x.get("comando"))
+              and any(f"cepa-run land {target}" in str(x.get("comando"))
                       for x in state.get("acoes") or []), str(state))
         record = f".claude/queues/_all/until/{run_id}.jsonl"
         check("...e o registro fechado entra num commit do run all/<run>",
@@ -1363,7 +1363,7 @@ def _owner_item(ident, route, question):
 
 def test_cs7_launch_panel_is_one_panel_grouped_by_queue_and_yes_runs_the_item():
     """The spec's own script: queue `a` and queue `b` each hold one item with an
-    open owner route; `cepa until --all --for 1h` on a terminal shows ONE panel
+    open owner route; `cepa run --all --for 1h` on a terminal shows ONE panel
     with a section per queue, and "yes" to the item of `a` makes it run in this
     run (`item_start` with `fila: a`), while the "no" to `b` keeps it waiting."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -1402,7 +1402,7 @@ def test_cs7_launch_panel_is_one_panel_grouped_by_queue_and_yes_runs_the_item():
 
 def test_cs7_launch_panel_without_answer_carries_on_and_says_where_to_answer():
     """Nobody at the terminal: the panel does not hang; one line says so and
-    names `cepa-until decide` for the queues, and nothing runs."""
+    names `cepa-run decide` for the queues, and nothing runs."""
     with tempfile.TemporaryDirectory() as tmp:
         root, paths = _repo(tmp, {
             "a": [_owner_item("a1", "liberar a", "Liberei a?")],
@@ -1410,7 +1410,7 @@ def test_cs7_launch_panel_without_answer_carries_on_and_says_where_to_answer():
         rc, out, events = _launch_all_on_tty(tmp, root, [], wait="2")
         check("sem resposta o --all sai com 0", rc == 0, out[-1500:])
         check("...diz que ninguém respondeu", "nobody answered" in out, out[-1500:])
-        check("...e aponta o decide da fila", "cepa-until decide a" in out,
+        check("...e aponta o decide da fila", "cepa-run decide a" in out,
               out[-1500:])
         check("...sem item_start", not any(e.get("evento") == "item_start"
                                            for e in events), str(events))
@@ -1488,7 +1488,7 @@ def test_cs7_q_ends_the_whole_panel_not_only_the_section_of_its_queue():
               "queue `b`" not in launch and "Liberei b?" not in launch,
               launch[-2000:])
         check("...diz onde responder depois, nas duas filas",
-              "cepa-until decide a" in launch and "cepa-until decide b" in launch,
+              "cepa-run decide a" in launch and "cepa-run decide b" in launch,
               launch[-1500:])
         check("...e nada roda", not any(e.get("evento") == "item_start"
                                         for e in events), str(events))
@@ -1510,7 +1510,7 @@ def test_cs7_a_route_already_answered_no_is_summarized_and_not_asked():
         check("sai com 0", rc == 0, out[-1500:])
         check("...uma linha resume a rota de a já respondida não",
               "queue `a`: 1 route(s) you already answered" in launch
-              and "10/11" in launch and "cepa-until decide a" in launch,
+              and "10/11" in launch and "cepa-run decide a" in launch,
               launch[-2000:])
         check("...a pergunta de a não é feita de novo",
               "Liberei a?" not in launch.split("question(s) for you", 1)[-1],
@@ -1559,7 +1559,7 @@ def _live_all_run(root, pid, run="2026-11-17-0900"):
 
 
 def test_cs8_live_all_run_refuses_a_second_all_and_a_single_queue_run():
-    """CS-8: with a `--all` run alive, `cepa until --all --for 1h` and
+    """CS-8: with a `--all` run alive, `cepa run --all --for 1h` and
     `cepa until a --for 1h` exit 2 naming `all/<run>`, and run nothing."""
     with tempfile.TemporaryDirectory() as tmp:
         root, paths = _repo(tmp, {"a": [base.item("a1")],
@@ -1611,7 +1611,7 @@ def test_cs8_dead_all_run_does_not_refuse_a_single_queue_run():
 
 def test_cs9_nothing_ready_in_any_queue_exits_0_says_so_and_creates_no_branch():
     """CS-9: every queue closed or waiting for the owner, the panel refused
-    (`--no-pre-read`): `cepa until --all --for 1h` exits 0, says no queue has a
+    (`--no-pre-read`): `cepa run --all --for 1h` exits 0, says no queue has a
     ready item, runs nothing and leaves no new `until/*` branch."""
     with tempfile.TemporaryDirectory() as tmp:
         root, paths = _repo(tmp, {

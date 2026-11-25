@@ -30,7 +30,7 @@ import test_common_drain_plan as T  # noqa: E402
 isolate()
 
 REPO = Path(__file__).resolve().parent.parent
-CEPA_UNTIL = REPO / "common" / "bin" / "cepa-until"
+CEPA_UNTIL = REPO / "common" / "bin" / "cepa-run"
 CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
 
 PAIRS = {

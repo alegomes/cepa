@@ -31,7 +31,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
-CEPA_UNTIL = REPO / "common" / "bin" / "cepa-until"
+CEPA_UNTIL = REPO / "common" / "bin" / "cepa-run"
 MAESTRO_PROGRAMS = REPO / "maestro" / "bin" / "maestro-programs"
 
 
@@ -438,7 +438,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import shutil  # noqa: E402
 
 DOCTOR = REPO / "common" / "bin" / "cepa-doctor"
-DIGEST = REPO / "common" / "bin" / "cepa-until-digest"
+DIGEST = REPO / "common" / "bin" / "cepa-run"
 
 
 def to_new_layout(root, name="fila"):
@@ -594,13 +594,13 @@ def test_cepa_until_run_landing_pending_and_doctor_see_new_queue():
         p = subprocess.run([sys.executable, str(CEPA_UNTIL), "pendentes",
                             "--repo", str(root)], capture_output=True, text=True,
                            cwd=str(root), timeout=60)
-        assert f"cepa-until land fila/{run_id}" in p.stdout, p.stdout + p.stderr
+        assert f"cepa-run land fila/{run_id}" in p.stdout, p.stdout + p.stderr
 
         d = subprocess.run([sys.executable, str(DOCTOR), "--projeto"],
                            cwd=str(root), capture_output=True, text=True,
                            timeout=120, env=dict(os.environ, CEPA_DOCTOR_INSTALL="off"))
         out = d.stdout + d.stderr
-        assert "[until]" in out and f"cepa-until land fila/{run_id}" in out, out[-1500:]
+        assert "[until]" in out and f"cepa-run land fila/{run_id}" in out, out[-1500:]
 
         (root / ".claude" / "doctor-last-run").unlink(missing_ok=True)  # doctor trace
         env = dict(os.environ, CEPA_WORKTREE_HOME=str(Path(tmp) / "worktrees"))
@@ -629,7 +629,7 @@ def test_digest_reads_neighbor_file_queue_yaml_outside_git_repo():
     """[U8] without git, the queue is the file beside the record: queue.yaml."""
     with tempfile.TemporaryDirectory() as tmp:
         ledger, filename = _build_new_run(tmp)
-        p = subprocess.run([sys.executable, str(DIGEST), str(ledger)],
+        p = subprocess.run([sys.executable, str(DIGEST), "digest", str(ledger)],
                            capture_output=True, text=True, timeout=60)
         assert p.returncode == 0, p.stderr
         assert "depende do A1 que não está na main" in p.stdout, p.stdout[-900:]
@@ -656,7 +656,7 @@ def test_digest_reads_the_main_clone_queue_in_new_layout():
             {"id": "A1", "status": "done", "blocked_by": [], "evidence": "ok"},
             {"id": "A2", "status": "done", "blocked_by": [],
              "evidence": "FECHADO NO CLONE PRINCIPAL"}]}), encoding="utf-8")
-        p = subprocess.run([sys.executable, str(DIGEST), str(ledger)],
+        p = subprocess.run([sys.executable, str(DIGEST), "digest", str(ledger)],
                            capture_output=True, text=True, timeout=60)
         assert p.returncode == 0, p.stderr
         assert "FECHADO NO CLONE PRINCIPAL" in p.stdout, p.stdout[-900:]

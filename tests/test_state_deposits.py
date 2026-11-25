@@ -174,7 +174,7 @@ def test_runs_reader():
 
 
 def test_bins_use_the_module():
-    for name in ("cepa-queue", "cepa-doctor", "cepa-until-digest", "cepa-intent"):
+    for name in ("cepa-queue", "cepa-doctor", "_run_digest.py", "cepa-intent"):
         text = (REPO / "common" / "bin" / name).read_text(encoding="utf-8")
         used = len(re.findall(r"_state\.\w+|from _state import", text))
         check(f"{name} importa e usa _state", "import _state" in text and used >= 1,
@@ -320,19 +320,19 @@ def _digest_fixture(tmp, estado):
 
 
 def test_digest_shows_run_liveness_line():
-    digest = REPO / "common" / "bin" / "cepa-until-digest"
+    digest = REPO / "common" / "bin" / "cepa-run"
     with tempfile.TemporaryDirectory() as tmp:
         ledger = _digest_fixture(tmp, {"run": "r", "estado": "rodando",
                                        "host": _wtlib.host(), "pid": os.getpid(),
                                        "heartbeat": beat(7200)})
-        r = subprocess.run([sys.executable, str(digest), str(ledger)],
+        r = subprocess.run([sys.executable, str(digest), "digest", str(ledger)],
                            capture_output=True, text=True)
         line = next((ln for ln in r.stdout.splitlines() if ln.startswith("- run:")), "")
         check("o digest traz a linha `- run:` dizendo MORTO", "MORTO" in line,
               r.stdout[:400] + r.stderr[-200:])
     with tempfile.TemporaryDirectory() as tmp:
         ledger = _digest_fixture(tmp, None)
-        r = subprocess.run([sys.executable, str(digest), str(ledger)],
+        r = subprocess.run([sys.executable, str(digest), "digest", str(ledger)],
                            capture_output=True, text=True)
         check("sem .estado.json o digest não traz a linha `- run:`",
               r.returncode == 0 and "- run:" not in r.stdout, r.stdout[:300] + r.stderr[-200:])
@@ -411,10 +411,10 @@ def test_non_dict_estado_files_are_ignored():
 
 
 def test_digest_ignores_a_non_dict_estado():
-    digest = REPO / "common" / "bin" / "cepa-until-digest"
+    digest = REPO / "common" / "bin" / "cepa-run"
     with tempfile.TemporaryDirectory() as tmp:
         ledger = _digest_fixture(tmp, [])
-        r = subprocess.run([sys.executable, str(digest), str(ledger)],
+        r = subprocess.run([sys.executable, str(digest), "digest", str(ledger)],
                            capture_output=True, text=True)
         check("`.estado.json` com `[]`: sem linha `- run:` e saída 0",
               r.returncode == 0 and "- run:" not in r.stdout, r.stdout[:200] + r.stderr[-300:])

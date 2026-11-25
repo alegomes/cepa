@@ -5,7 +5,7 @@ CS-4). Read only.
 
 "Nothing waiting" means: no item line in any queue, no route already answered
 "não" being counted, no run waiting, and nothing hidden from the list (an
-unreadable queue or a failed `cepa until pending`). When something is hidden,
+unreadable queue or a failed `cepa run pending`). When something is hidden,
 the command cannot claim there is nothing, so it keeps the counter header.
 
 Against the real CLI, in a temporary git repo:
@@ -15,7 +15,7 @@ Against the real CLI, in a temporary git repo:
   - no `.claude/queues/` → exit 2 (and no "nada espera você")
   - the launcher `cepa queue waiting` reaches the same subcommand
   - a route answered "não" is still counted: not "nada espera você"
-  - an unreadable queue, or a failed `cepa until pending`, keeps the header
+  - an unreadable queue, or a failed `cepa run pending`, keeps the header
   - --json keeps its shape (empty `filas`, `total_itens` 0, `runs` [])
 
 Run with `python3 tests/test_cepa_plan_waiting_nothing.py`.
@@ -163,10 +163,10 @@ def not_nothing():
         for d in ("hooks", "_vendor"):
             (plugin / d).symlink_to(REPO / "common" / d)
         (plugin / "bin" / "cepa-queue").write_text(CEPA_PLAN.read_text())
-        (plugin / "bin" / "cepa-until").write_text(
+        (plugin / "bin" / "cepa-run").write_text(
             "import sys\nsys.stderr.write('boom')\nsys.exit(1)\n")
         p = run(root, "waiting", plan=plugin / "bin" / "cepa-queue")
-        check("`cepa until pending` falhou: não afirma \"nada\" e avisa",
+        check("`cepa run pending` falhou: não afirma \"nada\" e avisa",
               p.returncode == 0 and NOTHING not in p.stdout
               and p.stdout.startswith("esperam você · 0 filas · 0 itens")
               and "aviso: runs fora da lista" in p.stderr,

@@ -3,7 +3,7 @@
 
 A clean run (the clone's branch did not move since the start, the last full build
 of the run branch is green, nothing stuck or waiting on the owner) launched with
-`--auto-land` does by itself what `cepa-until land --yes` does: merge, full build,
+`--auto-land` does by itself what `cepa-run land --yes` does: merge, full build,
 push, return point recorded, and the state ends `aterrissado`.
 
 Every case runs a real `cepa-until` against a fake repo with a fake `claude`.
@@ -553,7 +553,7 @@ def test_end_of_run_on_terminal_never_asks_land_now_and_prints_the_command():
             check(f"{label}: a tela não diz que nada espera pelo dono (o merge espera)",
                   "nothing is waiting on you" not in plain, plain[-1500:])
             check(f"{label}: a tela traz o comando do merge",
-                  re.search(r"merge into `\S+`: cepa-until land fila/\S+ --yes",
+                  re.search(r"merge into `\S+`: cepa-run land fila/\S+ --yes",
                             plain) is not None, plain[-1500:])
             check(f"{label}: o estado fica esperando-dono",
                   st.get("estado") == "esperando-dono", str(st))
@@ -582,7 +582,7 @@ def test_end_of_run_with_an_owner_item_still_asks_it_but_not_the_landing():
         check("...e o fim não pergunta Land now?", "Land now?" not in plain,
               plain[-1500:])
         check("...e traz o comando do merge",
-              "cepa-until land fila/" in plain and "--yes" in plain, plain[-1500:])
+              "cepa-run land fila/" in plain and "--yes" in plain, plain[-1500:])
         check("...com a questão numerada como 1/1 (o merge não conta)",
               "── 1 question(s) for you" in plain and "┌─ 1/1 · a1" in plain,
               plain[-1500:])

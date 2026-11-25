@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""decide-agrupa-perguntas-iguais: `cepa until decide` groups equal questions and asks
+"""decide-agrupa-perguntas-iguais: `cepa run decide` groups equal questions and asks
 once per group.
 
 Origin (run `all/2026-11-21-1244`, feedback fb-20261123-8): 26 delivered items in 4
@@ -12,7 +12,7 @@ and the route kind is the same. A group is ONE card, asked before the one-by-one
 across queues in the `--all` panel; each member records its own answer in its own queue.
 
 In-process cases drive `decide` / `ask_at_launch_all` with a scripted keyboard and a
-recording `answer`; one case runs the real `cepa-until decide --all` in a pty with the
+recording `answer`; one case runs the real `cepa-run decide --all` in a pty with the
 real `cepa-queue answer` behind it.
 
 Run with `python3 tests/test_cepa_until_decide_groups.py`, exit 1 on any failure.
@@ -465,7 +465,7 @@ def test_all_panel_y_and_for_later_and_failure():
           and "not recorded: b/b1 — item b1: refused" in out
           and "for later: 3" in out, out)
     check("the back-command names the queues that still hold questions",
-          "cepa-until decide b" in out, out)
+          "cepa-run decide b" in out, out)
 
 
 def test_all_panel_o_and_enter_and_q():
@@ -601,10 +601,10 @@ def test_all_panel_handed_back_items_are_named_when_the_owner_quits_or_is_cut():
         tail = out[out.rindex("To answer later"):] if "To answer later" in out else out
         check(f"{label}: nothing answered", not calls, calls)
         check(f"{label}: both queues of the handed-back items are in the closing line",
-              "cepa-until decide a" in tail and "cepa-until decide b" in tail, out)
+              "cepa-run decide a" in tail and "cepa-run decide b" in tail, out)
         if label == "q":
             check("q: the queue of the group never opened is named too",
-                  "cepa-until decide c" in tail, out)
+                  "cepa-run decide c" in tail, out)
     m = dec.load_module()
     with tempfile.TemporaryDirectory() as tmp:
         queues, ws = _all_two_groups()
@@ -621,7 +621,7 @@ def test_all_panel_handed_back_items_are_named_when_the_owner_quits_or_is_cut():
             m.ask_at_launch_all(root, wait=60, leftovers=True)
     out = buf.getvalue()
     check("NoAnswer after o: both queues named", "nobody answered" in out
-          and "cepa-until decide a" in out and "cepa-until decide b" in out, out)
+          and "cepa-run decide a" in out and "cepa-run decide b" in out, out)
 
 
 def test_all_panel_handed_back_items_count_once_in_asked():
@@ -1025,7 +1025,7 @@ def test_pending_as_text_counts_the_landing_and_asks_the_listing_for_the_repo():
 
 def _delivered_repo(tmp, ids=("a", "b", "c")):
     """A git repo whose queue `fila` holds delivered items (done, with a route left) and
-    a proposed waiver each: what `cepa-until decide fila` lists."""
+    a proposed waiver each: what `cepa-run decide fila` lists."""
     queue = []
     for i in ids:
         it = base.item(i, status="done", human_pending=f"route of {i}")
@@ -1290,7 +1290,7 @@ def _three_groups():
 
 
 def _all_back(names):
-    return " · ".join(f"cepa-until decide {n}" for n in names)
+    return " · ".join(f"cepa-run decide {n}" for n in names)
 
 
 def test_all_panel_quit_or_cut_on_the_first_of_three_groups_names_every_queue_once():
@@ -1310,7 +1310,7 @@ def test_all_panel_quit_or_cut_on_the_first_of_three_groups_names_every_queue_on
         check(f"{label}: the closing line says why and names the six queues, each once, "
               "in the order of the groups",
               f"{says} To answer later: {_all_back('abcdef')}" in out
-              and out.count("cepa-until decide a") == 1, out)
+              and out.count("cepa-run decide a") == 1, out)
         check(f"{label}: the card counters are 1/3 and no closing panel follows",
               "[1/3] 2 items, one question" in out and "Answered now" not in out, out)
 
@@ -1545,8 +1545,8 @@ def test_all_panel_two_members_of_one_queue_name_that_queue_once():
         root, _ = _all_repo(tmp, queues, [waiver("c", "c1"), waiver("c", "c2")])
         out, calls, _ = _panel(root, ["q"])
     check("q on a group with two members in one queue: the queue is named once",
-          "To answer later: cepa-until decide c\n" in out + "\n"
-          and out.count("cepa-until decide c") == 1, out)
+          "To answer later: cepa-run decide c\n" in out + "\n"
+          and out.count("cepa-run decide c") == 1, out)
 
 
 def test_all_panel_a_with_one_member_lacking_a_recommendation_keeps_the_numbering():
@@ -1697,8 +1697,8 @@ def test_all_panel_gives_its_wait_limit_to_the_group_card_through_the_real_reade
           waits == [120], waits)
     check("nobody answered the group card: the panel is cut with the wait in minutes and "
           "names the queues",
-          "nobody answered in 2 min" in out and "To answer later: cepa-until decide a "
-          "· cepa-until decide b" in out, out)
+          "nobody answered in 2 min" in out and "To answer later: cepa-run decide a "
+          "· cepa-run decide b" in out, out)
     waits.clear()
     m2 = dec.load_module()
     m2.input = no_keyboard

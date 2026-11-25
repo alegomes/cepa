@@ -32,7 +32,7 @@ def _routed(ident, status, kind, route, question):
 
 
 def test_decide_on_terminal_labels_each_route_by_its_kind():
-    """Red test of CS-2, as a process in a pseudo-terminal: `cepa-until decide fila`
+    """Red test of CS-2, as a process in a pseudo-terminal: `cepa-run decide fila`
     over an `external-block` item shows "Blocked outside" beside the route text and
     the recorded question. The other two kinds, and a delivered (`done`) item, get
     their own label and their own question too."""

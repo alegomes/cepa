@@ -10,7 +10,7 @@ per queue. A fifth control queue `velha` (plainly closed) IS archived in the
 same sweep, to prove the refusals are specific.
 
 The run is the real thing: a night branch plus a state file that makes the real
-`cepa-until pending --json` list it (the fixture approach of
+`cepa-run pending --json` list it (the fixture approach of
 tests/test_cepa_plan_waiting_runs.py). The "could not check the runs" case swaps
 the sibling `cepa-until` of a copy of cepa-queue for a script that fails.
 
@@ -81,7 +81,7 @@ def with_point(it):
 
 def with_run(root, name, days=8, fila=None):
     """A night branch one commit ahead of `main` and a state file that makes
-    `cepa-until pending` list the run of queue `name` as waiting to land.
+    `cepa-run pending` list the run of queue `name` as waiting to land.
     `fila` is the queue name the run recorded, when it is not the folder's."""
     git(root, "checkout", "-qb", f"until/{RUN}")
     (root / "f.txt").write_text("night\n")
@@ -134,7 +134,7 @@ def test_declared_red_test():
               "rota-0" in rota and "tarefa sua" in rota, rota)
         check("red: rota is not told as a leftover point", "ponto" not in rota, rota)
         check("red: run names the run and repeats the command",
-              RUN in run and f"cepa-until land run/{RUN}" in run, run)
+              RUN in run and f"cepa-run land run/{RUN}" in run, run)
         check("red: run has no age or dirty-folder reason (commit is 8 days old)",
               "último commit" not in run and "não commitadas" not in run, run)
         check("red: vazia says it has no item", "nenhum item" in vazia, vazia)
@@ -249,15 +249,15 @@ def test_runs_are_checked_at_most_once_and_only_for_closed_queues():
         for d in ("hooks", "_vendor"):
             (plugin / d).symlink_to(REPO / "common" / d)
         (plugin / "bin" / "cepa-queue").write_text(CEPA_PLAN.read_text())
-        real_until = REPO / "common" / "bin" / "cepa-until"
-        (plugin / "bin" / "cepa-until").write_text(
+        real_until = REPO / "common" / "bin" / "cepa-run"
+        (plugin / "bin" / "cepa-run").write_text(
             "import subprocess, sys\n"
             f"open({str(log)!r}, 'a').write('call\\n')\n"
             f"sys.exit(subprocess.call([sys.executable, {str(real_until)!r}, *sys.argv[1:]]))\n")
         p = cli_at(plugin / "bin" / "cepa-queue", root, "archive")
         calls = log.read_text().count("call") if log.exists() else 0
         check("once: exit 0", p.returncode == 0, p.stderr)
-        check("once: cepa-until pending called exactly once for 3 closed queues",
+        check("once: cepa-run pending called exactly once for 3 closed queues",
               calls == 1, str(calls))
         check("once: the run still blocks its queue", "a-run" in line_of(p.stdout, "a-run")
               and RUN in line_of(p.stdout, "a-run"), p.stdout)
@@ -271,7 +271,7 @@ def test_runs_are_checked_at_most_once_and_only_for_closed_queues():
         for d in ("hooks", "_vendor"):
             (plugin / d).symlink_to(REPO / "common" / d)
         (plugin / "bin" / "cepa-queue").write_text(CEPA_PLAN.read_text())
-        (plugin / "bin" / "cepa-until").write_text(
+        (plugin / "bin" / "cepa-run").write_text(
             "open(%r, 'w').write('x')\n" % str(Path(tmp) / "called"))
         cli_at(plugin / "bin" / "cepa-queue", root, "archive")
         check("lazy: no closed queue, cepa-until never called",
@@ -291,7 +291,7 @@ def test_runs_check_failure_fails_closed():
             for d in ("hooks", "_vendor"):
                 (plugin / d).symlink_to(REPO / "common" / d)
             (plugin / "bin" / "cepa-queue").write_text(CEPA_PLAN.read_text())
-            (plugin / "bin" / "cepa-until").write_text(body)
+            (plugin / "bin" / "cepa-run").write_text(body)
             p = cli_at(plugin / "bin" / "cepa-queue", root, "archive")
             l = line_of(p.stdout, "velha")
             check(f"fail-closed ({label}): exit 0", p.returncode == 0, p.stderr)
@@ -304,13 +304,13 @@ def test_runs_check_failure_fails_closed():
 
 def fake_until(tmp, body):
     """A copy of the plugin whose `cepa-until` is `body`: the only way to make
-    `cepa-until pending` answer something a real repo cannot be put into."""
+    `cepa-run pending` answer something a real repo cannot be put into."""
     plugin = Path(tmp) / "plugin"
     (plugin / "bin").mkdir(parents=True)
     for d in ("hooks", "_vendor"):
         (plugin / d).symlink_to(REPO / "common" / d)
     (plugin / "bin" / "cepa-queue").write_text(CEPA_PLAN.read_text())
-    (plugin / "bin" / "cepa-until").write_text(body)
+    (plugin / "bin" / "cepa-run").write_text(body)
     return plugin / "bin" / "cepa-queue"
 
 
@@ -397,12 +397,12 @@ def test_run_without_a_command_does_not_print_none():
         p = cli_at(fake_until(tmp, body), root, "archive")
         l = line_of(p.stdout, "velha")
         check("no command: stays and names the run", "r9" in l, p.stdout)
-        check("no command: points at `cepa until pending`, never None",
-              "None" not in l and "cepa until pending" in l, l)
+        check("no command: points at `cepa run pending`, never None",
+              "None" not in l and "cepa run pending" in l, l)
 
 
 def test_what_the_run_check_writes_counts_for_the_same_sweep():
-    """`cepa-until pending` may close a landed run and write its record inside
+    """`cepa-run pending` may close a landed run and write its record inside
     the queue folder. The sweep reads the runs BEFORE it measures the folder,
     so a queue changed by that read is not moved in the same sweep."""
     body = ("import json, sys\nfrom pathlib import Path\n"

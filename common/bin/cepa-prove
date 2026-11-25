@@ -99,7 +99,7 @@ import _clihelp  # noqa: E402
 def _load_until():
     """`cepa-until` as a module: the clock, quota, network and screen helpers
     live there, and a second copy of each would diverge."""
-    loader = importlib.machinery.SourceFileLoader("cepa_until", str(HERE / "cepa-until"))
+    loader = importlib.machinery.SourceFileLoader("cepa_until", str(HERE / "cepa-run"))
     spec = importlib.util.spec_from_loader("cepa_until", loader)
     mod = importlib.util.module_from_spec(spec)
     loader.exec_module(mod)

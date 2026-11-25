@@ -211,7 +211,7 @@ def test_next_says_why_the_merge_is_not_recommended_and_only_a_clean_run_recomme
         check("run não limpa: a linha diz por que não recomenda",
               "not recommended: a2 is stuck" in nxt, nxt)
         check("...e o merge continua oferecido, com o comando",
-              re.search(r"1\. merge into `main`: cepa-until land fila/\S+ --yes", nxt),
+              re.search(r"1\. merge into `main`: cepa-run land fila/\S+ --yes", nxt),
               nxt)
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
@@ -240,14 +240,14 @@ def test_next_is_numbered_merge_then_owner_questions_then_reinstall():
     lines = ["".join(sg[1] for sg in r) for r in rows]
     heads = [l for l in lines if re.match(r"\d\. ", l)]
     check("três itens numerados, na ordem merge, perguntas, reinstalação",
-          len(heads) == 3 and heads[0].startswith("1. merge into `main`: cepa-until land "
+          len(heads) == 3 and heads[0].startswith("1. merge into `main`: cepa-run land "
                                                   "fila/r1 --yes")
           and heads[1].startswith("2. 1 owner question(s): a2")
           and heads[2].startswith("3. after the merge, run `bin/install.sh`"),
           "\n".join(lines))
     check("a pergunta e o comando decide vêm sob o item 2",
           lines.index("   a2: Libero o acesso?") < lines.index(
-              "   cepa-until decide fila/r1 (one by one, in a terminal)")
+              "   cepa-run decide fila/r1 (one by one, in a terminal)")
           and lines.index(heads[1]) < lines.index("   a2: Libero o acesso?")
           < lines.index(heads[2]), "\n".join(lines))
     check("o motivo de não recomendar vem sob o merge",
@@ -259,7 +259,7 @@ def test_next_is_numbered_merge_then_owner_questions_then_reinstall():
              m.next_rows(Path("/nao/existe"), "fila", "r1", st2, "/nao/existe", {})]
     check("run que fundiu sozinha diz isso e não oferece o comando",
           lines[0].startswith("1. merged into `main` by this run")
-          and not any("cepa-until land" in l for l in lines), "\n".join(lines))
+          and not any("cepa-run land" in l for l in lines), "\n".join(lines))
     lines = ["".join(sg[1] for sg in r) for r in
              m.next_rows(Path("/nao/existe"), "fila", "r1",
                          {"estado": "encerrado"}, "/nao/existe", {})]
@@ -293,7 +293,7 @@ def test_auto_landed_run_says_so_in_next_and_names_no_second_merge():
               p.stdout[-1500:])
         check("o Next diz que a run fundiu sozinha",
               "1. merged into `main` by this run (--auto-land): nothing to do" in nxt, nxt)
-        check("...e não oferece o comando do merge", "cepa-until land" not in nxt, nxt)
+        check("...e não oferece o comando do merge", "cepa-run land" not in nxt, nxt)
 
 
 def test_a_long_item_id_and_wide_terminal_values_still_fit():
@@ -336,7 +336,7 @@ def test_an_item_already_asked_in_this_run_is_named_but_its_question_is_not_repe
                          "/nao/existe", asked_only)]
     check("só perguntado: item numerado com o comando para responder de novo",
           lines[0] == "1. already asked in this run, still open: a1"
-          and lines[1] == "   cepa-until decide fila/r1 (to answer again)", "\n".join(lines))
+          and lines[1] == "   cepa-run decide fila/r1 (to answer again)", "\n".join(lines))
     both = {"deferred": [{"id": "b2", "reason": "human_pending", "question": "Libero?"}],
             "asked": ["a1"]}
     lines = ["".join(sg[1] for sg in r) for r in

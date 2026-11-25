@@ -394,12 +394,12 @@ def test_cepa_dispatches_to_sibling_scripts():
     p = subprocess.run([str(CEPA), "prove", "--help"], capture_output=True, text=True, timeout=60)
     check("`cepa prove --help` roda o cepa-prove", p.returncode == 0 and "prove-drain" in p.stdout,
           (p.stdout + p.stderr)[-300:])
-    p = subprocess.run([str(CEPA), "until", "--help"], capture_output=True, text=True, timeout=60)
-    check("`cepa until --help` roda o cepa-until", p.returncode == 0 and "queue" in p.stdout,
+    p = subprocess.run([str(CEPA), "run", "--help"], capture_output=True, text=True, timeout=60)
+    check("`cepa run --help` roda o cepa-run", p.returncode == 0 and "queue" in p.stdout,
           (p.stdout + p.stderr)[-300:])
     p = subprocess.run([str(CEPA), "help"], capture_output=True, text=True, timeout=60)
     check("`cepa help` lista os subcomandos", p.returncode == 0
-          and "until" in p.stdout and "prove" in p.stdout and "doctor" in p.stdout,
+          and "run" in p.stdout and "prove" in p.stdout and "doctor" in p.stdout,
           (p.stdout + p.stderr)[-500:])
     check("...com a primeira linha de cada docstring",
           "Review" in p.stdout and "time window" in p.stdout, p.stdout[-800:])

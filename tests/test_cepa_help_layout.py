@@ -26,9 +26,9 @@ REPO = Path(__file__).resolve().parent.parent
 BIN = REPO / "common" / "bin"
 CEPA = BIN / "cepa"
 ALIASES = {"intencao", "modos"}
-# `cepa-plan` is a transition shim for runs in flight (CS-1), not a command: it
-# is neither listed nor dispatched.
-ALIASES = ALIASES | {"plan"}
+# `cepa-plan`, `cepa-until` and `cepa-until-digest` are transition shims for runs
+# in flight (CS-1, CS-2), not commands: they are neither listed nor dispatched.
+ALIASES = ALIASES | {"plan", "until", "until-digest"}
 # Old Portuguese names that are aliases of an English one. They must keep
 # working but never be listed in a help.
 HIDDEN = ["responde", "aterrissados", "ordena", "divergencia", "--proposito",

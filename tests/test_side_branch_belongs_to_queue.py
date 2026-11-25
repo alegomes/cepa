@@ -33,7 +33,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 CEPA_PLAN = REPO / "common" / "bin" / "cepa-queue"
-CEPA_UNTIL = REPO / "common" / "bin" / "cepa-until"
+CEPA_UNTIL = REPO / "common" / "bin" / "cepa-run"
 sys.path.insert(0, str(REPO / "common" / "hooks"))
 import _queuepath as qp  # noqa: E402
 

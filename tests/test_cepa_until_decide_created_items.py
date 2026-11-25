@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """CS-7 of docs/spec/resposta-do-decide-vira-trabalho.md: the closing of
-`cepa-until decide` lists the items the owner's answers created.
+`cepa-run decide` lists the items the owner's answers created.
 
 Origin (2026-11-18, kairos-etapa-1 queue of wego-digitacao-backend): the owner
 answered a run of "Ponho na fila um item para ...?" and nothing on screen said
@@ -181,7 +181,7 @@ def test_all_panel_names_the_queue():
     applied = ["kairos/a1: a1 → `done` em x · rota humana fechada\n"
                "  item novo criado pela resposta: a1-sim — calibrar X "
                "(no fim da fila, `pending`)"]
-    m.Panel(m.SCREEN, out.append).close_panel([], applied, [], "cepa-until decide")
+    m.Panel(m.SCREEN, out.append).close_panel([], applied, [], "cepa-run decide")
     got = listed([l for l in "\n".join(out).splitlines() if l.strip()])
     check("no painel de --all o item leva o nome da fila",
           got == ["kairos/a1-sim — calibrar X"], got)

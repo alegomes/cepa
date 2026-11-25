@@ -109,7 +109,7 @@ def test_hostile_queue_name_does_not_become_a_command():
         env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
         p = subprocess.run(
             [sys.executable,
-             str(Path(__file__).resolve().parent.parent / "common" / "bin" / "cepa-until"),
+             str(Path(__file__).resolve().parent.parent / "common" / "bin" / "cepa-run"),
              hostile, "--repo", str(root), "--for", "2h"],
             capture_output=True, text=True, env=env, timeout=120)
         without_traceback(p, "nome de fila hostil")

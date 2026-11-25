@@ -801,7 +801,7 @@ def check_dirty_tree(root: Path):
     dirty = [l for l in dirty if (_dirt.counts_as_dirt(l) if _dirt else l.strip())]
     if not dirty:
         ok("execucao", f"fila `{queue}` pendente e árvore limpa — "
-                       f"`cepa-until {queue} --for 12h` larga sem recusa")
+                       f"`cepa-run {queue} --for 12h` larga sem recusa")
         return
     warn("execucao",
          f"árvore com {len(dirty)} arquivo(s) pendente(s) e a fila `{queue}` com "
@@ -1067,7 +1067,7 @@ def check_until_waiting(root: Path):
     owner (C6 of docs/estrategia-fim-do-cepa-until.md). The run does not touch the main
     branch, and without this warning nothing reminds anyone it is waiting: the same failure
     mode as the maestro wave nobody landed."""
-    until = Path(__file__).resolve().parent / "cepa-until"
+    until = Path(__file__).resolve().parent / "cepa-run"
     if not until.is_file() or not has_plans_dir(root):
         return
     try:
@@ -1397,7 +1397,7 @@ def help_parser():
             "  - forgotten agent worktree INSIDE the repo (.claude/worktrees/)\n"
             "  - handoffs not updated for >30d\n"
             "  - single-track queue diverging from BACKLOG.md\n"
-            "  - cepa until runs waiting for the owner or with a dead supervisor\n"
+            "  - cepa run: runs waiting for the owner or with a dead supervisor\n"
             "  - environment manifest (docs/env.yaml): ports held by a process from\n"
             "    ANOTHER directory and `services` containers missing from docker ps\n"
             "  - installed `twg` version against the one declared in the environment\n"

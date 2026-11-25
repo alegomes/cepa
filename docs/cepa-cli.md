@@ -41,9 +41,9 @@ silent preflight: nothing is printed unless something needs you.
 | Know what mode you are in and what closes it | `cepa modes`, `cepa modes --exit` |
 | Record or advance the session's intent | `cepa intent` |
 | Write, inspect or reconcile the single-track queue | `cepa queue <subcommand>` |
-| Run the queue unattended for a time window | `cepa until <queue> --for 12h` |
-| Read what an unattended run left for you | `cepa until decide <queue>/<run>`, `cepa until pending` |
-| Summarise an unattended run for a review | `cepa until-digest <run>.jsonl` |
+| Run the queue unattended for a time window | `cepa run <queue> --for 12h` |
+| Read what an unattended run left for you | `cepa run decide <queue>/<run>`, `cepa run pending` |
+| Summarise an unattended run for a review | `cepa run digest <run>.jsonl` |
 | Prove the Jira Review column for a time window | `cepa prove --for 3h` |
 | Complain about the harness without leaving the task | `cepa feedback add "..."` |
 | See the harness's own numbers | `cepa metrics`, `cepa metrics scorecard` |
@@ -244,7 +244,7 @@ command is `/common:modes`; the design is in
 The mechanical writer of the single-track queue,
 `.claude/queues/<name>/queue.yaml`, the document that keeps the order of the
 items and the `why` of each position. `/common:queue` holds the conversation
-and hands the list here; `/common:drain-plan` and `cepa-until` execute it;
+and hands the list here; `/common:drain-plan` and `cepa-run` execute it;
 `/common:next` and `/common:queue-status` read it. It only knows
 `mode: single-track`; waves belong to `/maestro:program-plan`.
 
@@ -316,32 +316,32 @@ tool results are also sized in characters so you can see what entered.
 cepa-tokens [--file FILE.jsonl] [--all] [--days N] [--emit] [--json]
 ```
 
-### `cepa-until`
+### `cepa-run`
 
 Runs the repo's single-track queue for a time window with nobody awake. One
-item per subprocess (`claude -p "/common:drain-plan <queue> --max 1"`), inside
+item per subprocess (`claude -p "/common:queue-run <queue> --max 1"`), inside
 the `until/<run>` worktree the supervisor opens at launch; a full build after
 every `done` item (red: the item becomes `blocked` and the branch goes back);
 circuit breakers on consecutive failures and consecutive `blocked` items; a
 pause for the account's 5-hour quota. Nothing goes to `main` or `origin`.
 
 ```
-cepa-until <queue> (--for 12h | --until 07:00) [--repo DIR]
+cepa-run <queue> (--for 12h | --until 07:00) [--repo DIR]
            [--max-failures 3] [--max-blocked 3] [--attempts-per-item 2]
            [--min-reserve 45m] [--slack 60m] [--with-permissions] [--dirty-ok]
            [--verify CMD | --no-verify] [--no-analysis] [--full-title] [--dry-run]
 
-cepa-until pending [--repo DIR] [--json]       runs waiting for the owner, dead supervisors
-cepa-until decide <queue>[/<run>] [--repo DIR]   one closed question at a time, applied on the spot
-cepa-until land <queue>/<run> [--yes]      merge + full build + push to the clone's branch, local tag landed/<queue>/<run>
-cepa-until close-dead <queue>/<run> [--yes]     the build a dead supervisor never ran
+cepa-run pending [--repo DIR] [--json]       runs waiting for the owner, dead supervisors
+cepa-run decide <queue>[/<run>] [--repo DIR]   one closed question at a time, applied on the spot
+cepa-run land <queue>/<run> [--yes]      merge + full build + push to the clone's branch, local tag landed/<queue>/<run>
+cepa-run close-dead <queue>/<run> [--yes]     the build a dead supervisor never ran
 ```
 
-Full design, with the dated decisions, in [cepa-until.md](cepa-until.md).
+`cepa run ...` is the same command through the launcher (`cepa until` and `cepa-until` were its old names; the launcher refuses `cepa until` with the new name, and `cepa-until` stays only as a transition shim until the end of the reform). Full design, with the dated decisions, in [cepa-until.md](cepa-until.md).
 
-### `cepa-until-digest`
+### `cepa run digest`
 
-The summary of a `cepa-until` run that fits in one session. The run's `.log`
+The summary of a `cepa run` run that fits in one session. The run's `.log`
 is stream-json of every subprocess and runs past 10 MB; this script chooses
 mechanically what to read and says what it chose: the whole ledger, each
 round's final report (`--result-max` characters), agent calls by type, tool
@@ -351,7 +351,7 @@ of each supervisor build, and the current status and evidence of every item
 touched. `/common:until-review` interprets it; this script does not opine.
 
 ```
-cepa-until-digest <run>.jsonl [--result-max 3000]
+cepa run digest <run>.jsonl [--result-max 3000]
 ```
 
 Exit `0` ok, `2` the ledger does not exist.

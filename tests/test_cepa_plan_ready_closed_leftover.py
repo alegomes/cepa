@@ -7,7 +7,7 @@ queue showed as closed with two questions hidden in CS-4 and CS-6.
 Against the real CLI, in a temporary git repo:
 
   - queue `p`: every item `done`, two with an open route -> "fila fechada, 2
-    tarefas esperam você (cepa until decide p)", and NOT "tudo concluído ou
+    tarefas esperam você (cepa run decide p)", and NOT "tudo concluído ou
     descartado" on p's line
   - queue `s`: one leftover task -> singular "1 tarefa espera você"
   - queue `q`: done/dropped with no route -> still "tudo concluído ou descartado"
@@ -99,13 +99,13 @@ def main():
         p = line_of(out, "p")
         check("p: closed queue names the 2 leftover tasks and the command",
               p == "fila p · 0 de 0 pendentes prontos — fila fechada, 2 tarefas "
-                   "esperam você (cepa until decide p)", repr(p))
+                   "esperam você (cepa run decide p)", repr(p))
         check("p: does not say 'tudo concluído ou descartado'",
               "tudo concluído ou descartado" not in p, repr(p))
         s = line_of(out, "s")
         check("s: one leftover task is singular, dropped route not counted",
               s == "fila s · 0 de 0 pendentes prontos — fila fechada, 1 tarefa "
-                   "espera você (cepa until decide s)", repr(s))
+                   "espera você (cepa run decide s)", repr(s))
         q = line_of(out, "q")
         check("q: closed with no route still says tudo concluído ou descartado",
               q == "fila q · 0 de 0 pendentes prontos — fila fechada: tudo "
@@ -115,7 +115,7 @@ def main():
               "esperam você" not in rr and "espera você" not in rr, repr(rr))
         check("r: nor is the queue 'tudo concluído', the route is still open",
               rr == "fila r · 0 de 0 pendentes prontos — fila fechada: 1 tarefa "
-                    "que você respondeu não (cepa until decide r)", repr(rr))
+                    "que você respondeu não (cepa run decide r)", repr(rr))
 
         r = subprocess.run([sys.executable, str(CEPA_PLAN), "ready", "--json",
                             "--repo", str(root)],

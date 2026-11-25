@@ -151,7 +151,7 @@ def cs2(tmp, shim):
           r.stdout + r.stderr)
 
     # cepa-until: --dry-run prints the run plan from the queue, no claude.
-    r = run_direct(BIN / "cepa-until", ["q", "--for", "1h", "--dry-run", "--dirty-ok",
+    r = run_direct(BIN / "cepa-run", ["q", "--for", "1h", "--dry-run", "--dirty-ok",
                                   "--no-verify"],
                    root, shim)
     no_yaml_complaint("CS-2 cepa-until", r)
@@ -167,7 +167,7 @@ def cs2(tmp, shim):
                    '{"evento": "item_start", "id": "A1", "title": "um"}\n'
                    '{"evento": "run_end", "motivo": "end-of-queue"}\n')
     write(prog / "until" / "r.log", "")
-    r = run_direct(BIN / "cepa-until-digest", [str(ledger)], root, shim)
+    r = run_direct(BIN / "cepa-run", ["digest", str(ledger)], root, shim)
     no_yaml_complaint("CS-2 cepa-until-digest", r)
     check("CS-2 cepa-until-digest shows the item status read from the YAML",
           "uniq-status-digest" in r.stdout, r.stdout + r.stderr)
@@ -801,7 +801,7 @@ def cs6(tmp, shim, real):
         clean(f"{n} _jiramut.logical_status", r)
 
         # ---- CS-6 sim: the other thirteen files ----
-        r = run_direct(BIN / "cepa-until", ["q", "--for", "1h", "--dry-run",
+        r = run_direct(BIN / "cepa-run", ["q", "--for", "1h", "--dry-run",
                                             "--dirty-ok", "--no-verify"],
                        root, sh, extra_env=env)
         check(f"{n} cepa-until dry-run read the queue (names item X-1)",
@@ -809,7 +809,7 @@ def cs6(tmp, shim, real):
               f"exit {r.returncode}: {(r.stdout + r.stderr)[-300:]}")
         clean(f"{n} cepa-until", r)
 
-        r = run_direct(BIN / "cepa-until-digest", [str(dledger)], root, sh,
+        r = run_direct(BIN / "cepa-run", ["digest", str(dledger)], root, sh,
                        extra_env=env)
         check(f"{n} cepa-until-digest shows the item status read from the YAML",
               "uniq-status-digest" in r.stdout, r.stdout + r.stderr[-300:])

@@ -162,7 +162,7 @@ def main():
               "fila alpha · 0 de 0 pendentes prontos — fila fechada" in out, out)
         check("queue held by the owner names the items and the command",
               "fila gamma · 0 de 1 pendentes prontos — esperam você: G-1 "
-              "(cepa until decide gamma)" in out, out)
+              "(cepa run decide gamma)" in out, out)
         check("beta header counts ready over pending",
               "fila beta · 3 de 5 pendentes prontos" in out, out)
         check("queue stuck on a pending dependency says so",

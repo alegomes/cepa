@@ -92,7 +92,7 @@ class Parser(argparse.ArgumentParser):
       exit_codes   list of (code, meaning)
       see_also     list of strings (commands, docs)
       commands     list of (name, help) for subcommands dispatched by hand,
-                   before argparse runs (cepa-until does this)
+                   before argparse runs (cepa-run does this)
       groups       list of (title, [subcommand names]) to list subcommands
                    by family instead of in definition order
       options_title  heading of the options section (default "options")
@@ -345,7 +345,7 @@ def launcher_help(bin_dir):
         if not name.startswith("cepa-") or not os.access(path, os.X_OK):
             continue
         sub = name[len("cepa-"):]
-        if sub == "plan":  # transition shim for runs in flight, not a command
+        if sub in ("plan", "until", "until-digest"):  # transition shims for runs in flight, not commands
             continue
         try:
             with open(path, encoding="utf-8") as fh:

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""cepa-until land installs the plugins from the clone after the green build.
+"""cepa-run land installs the plugins from the clone after the green build.
 
 Spec `registro-de-plugins-pasta-estavel`, CS-6. A run that reinstalls the plugins
 leaves the fixed folder (`~/.claude/cepa-live`) with the content of the run
 worktree, and the landing removes that worktree. Until now the owner had to
 remember to run `bin/install.sh` in the main clone after landing. Now, in the cepa
 repo only (`.claude-plugin/marketplace.json` named `cepa` plus `bin/install.sh`),
-`cepa-until land <queue>/<run> --yes` runs the installer itself, with the clone as
+`cepa-run land <queue>/<run> --yes` runs the installer itself, with the clone as
 directory, after the merge and the green build, and the run record gains
 `instalado_no_pouso`.
 
@@ -592,7 +592,7 @@ def test_cs8_no_rollback_without_an_install_that_failed():
 
 
 def main():
-    print("cepa-until land: install from the clone after the green build\n")
+    print("cepa-run land: install from the clone after the green build\n")
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
             print(f"{name}:")

@@ -10,7 +10,7 @@ Against the real CLI, in a temporary git repo:
     `filas[0].itens[0].id == "a1"`, `total_itens == 2` and the key `runs`
   - the top-level keys are exactly root, filas, total_itens, runs, and the
     second queue is `b` with b1
-  - `runs` is a list even when `cepa-until pending` has nothing to say
+  - `runs` is a list even when `cepa-run pending` has nothing to say
   - stdout stays parseable when a queue is unreadable: the warning goes to
     stderr, never into the JSON
   - the launcher `cepa queue waiting --json` prints the same JSON

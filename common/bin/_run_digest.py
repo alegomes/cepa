@@ -1,0 +1,551 @@
+#!/usr/bin/env python3
+"""The code of `cepa run digest` (cepa-run runs this file; it is not a command of
+its own): summarizes a cepa run so it fits in one session.
+
+## Why it exists
+
+`cepa run` leaves two files per run: the ledger (`<run>.jsonl`, a few KB) and
+the raw output of each `claude` subprocess (`<run>.log`, stream-json). The
+`.log` of the 2026-09-23 run on WEGO is 10.6 MB, about 2.6 million tokens
+(10,617,662 bytes ÷ ~4 bytes per token): it fits in no session. An analysis
+that reads the `.log` by grep reads what grep found, and what it did not find
+silently disappears.
+
+This script picks what to read MECHANICALLY, and says what it picked:
+
+  - the whole ledger (start, end, each item, each build);
+  - for each round, the final report of `claude` (the stream-json `result`),
+    the agent calls by type, the tool errors and the cost;
+  - for each round, the PROCESS SIGNALS: a worktree opened by anyone other
+    than the proof-reviewer, and a report of a build gate bypassed with the
+    green of another module (see `TEXT_SIGNALS`, below);
+  - for each full supervisor build, the tail of the output;
+  - the CURRENT `status` and `evidence` of each touched item, read from the plan.
+
+Whoever interprets is `/common:until-review`. This script does not opine.
+
+Usage:
+    cepa run digest .claude/programs/WEGO/until/2026-09-23-1826.jsonl
+    cepa run digest <run>.jsonl --result-max 4000
+"""
+
+import json
+import re
+import subprocess
+import sys
+from collections import Counter
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+# The plugin's own PyYAML copy goes FIRST so it wins over any installed one.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "_vendor"))
+import _tui  # noqa: E402
+import _clihelp  # noqa: E402
+import _state  # noqa: E402  (the run liveness rule: one copy)
+import _queuepath as qp  # noqa: E402  (the queue lives in two layouts during the transition)
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
+DEFAULT_RESULT_MAX = 3000
+ERRORS_PER_ROUND = 5
+VERIFY_TAIL = 15
+SIGNALS_PER_ROUND = 8
+SIGNAL_EXCERPT = 160
+
+# ## Process SIGNALS
+#
+# In the 2026-09-27-1632 WEGO run the `qa-engineer` opened a disposable
+# worktree (forbidden by the night rules) in WEGO-2327 and WEGO-2329, and in
+# 2329 it bypassed the hook that blocks a commit with a red build by presenting
+# the green build of ANOTHER module. None of that showed up in this summary: the
+# `qa-engineer` is a grandchild of the orchestrator (engineering-lead →
+# qa-engineer), and the stream-json of `claude -p` only carries the tool calls
+# of direct children. What the log HAS is the report each agent hands back to
+# whoever called it (the `tool_result` of the `Agent` call), and the files the
+# child writes (the engineering-lead's RESULT.md cited both deviations). The
+# signals below are searched for in those texts, besides the visible tool calls.
+#
+# TEXT signals are only searched for in the report returned by an agent and in
+# the content an agent writes (Write/Edit): the result of any other tool
+# carries the hint the path-lock hook prints ("prove RED by reverting code:
+# disposable worktree OUTSIDE the root"), and reading a RESULT.md repeats what
+# it already said — each of those became a false signal.
+#
+# Each signal comes out with WHO (the agent whose call or report brought it) and
+# a literal excerpt. This script does not judge: a `--detach` worktree of the
+# proof-reviewer for perturbation is allowed (and is annotated as such), and
+# /common:until-review decides.
+TEXT_SIGNALS = [
+    ("worktree descartável relatada",
+     re.compile(r"worktree\s+descart[aá]vel|c[oó]pia\s+descart[aá]vel"
+                r"|worktree\s+tempor[aá]ri[ao]", re.I)),
+    ("build verde de outro módulo / gate de build contornado",
+     re.compile(r"build\s+verde\s+de\s+outro\s+m[oó]dulo"
+                r"|outro\s+m[oó]dulo[^.\n]{0,60}(?:verde|BUILD SUCCESS)"
+                r"|contorn(?:ei|ou|amos|ad[oa]|ando)\b[^.\n]{0,80}(?:gate|hook)"
+                r"|re-?estabelec\w*[^.\n]{0,40}baseline\s+verde"
+                r"|re-establishing\s+green\s+build", re.I)),
+]
+WORKTREE_ADD = re.compile(r"git\s+(?:-C\s+\S+\s+)?worktree\s+add\b")
+
+
+def _content_text(c):
+    t = c.get("content")
+    if isinstance(t, list):
+        t = " ".join(str(x.get("text", "")) for x in t if isinstance(x, dict))
+    return str(t or "")
+
+
+def _excerpt(text, m):
+    start = max(0, m.start() - SIGNAL_EXCERPT // 2)
+    end = min(len(text), m.end() + SIGNAL_EXCERPT)
+    return " ".join(text[start:end].split())
+
+
+def signals_in_text(text, who, origin):
+    found = []
+    for name, rx in TEXT_SIGNALS:
+        m = rx.search(text)
+        if m:
+            found.append({"signal": name, "who": who, "origin": origin,
+                          "excerpt": _excerpt(text, m)})
+    return found
+
+
+def read_jsonl(path):
+    events = []
+    for line in Path(path).read_text(encoding="utf-8",
+                                     errors="replace").splitlines():
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return events
+
+
+def log_segments(path):
+    """[(header, [lines])], one per `===== <when> · <command>` that the
+    supervisor writes before each subprocess and each build."""
+    segs, current = [], None
+    try:
+        f = open(path, encoding="utf-8", errors="replace")
+    except OSError:
+        return segs
+    with f:
+        for line in f:
+            if line.startswith("===== "):
+                current = (line[6:].strip(), [])
+                segs.append(current)
+            elif current is not None:
+                current[1].append(line)
+    return segs
+
+
+def summarize_round(lines, result_max):
+    """What matters from ONE `claude` subprocess in stream-json."""
+    agents, errors, result, signals = Counter(), [], None, []
+    # id of the `Agent` call → type of the agent called: it says WHOSE the
+    # returned report (tool_result) is and whose each tool call is
+    # (parent_tool_use_id).
+    agent_by_call = {}
+
+    def author(e):
+        parent = e.get("parent_tool_use_id")
+        return agent_by_call.get(parent, "orquestrador" if not parent
+                                 else f"agente {parent[:12]}")
+
+    for line in lines:
+        try:
+            e = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        kind = e.get("type")
+        if kind == "assistant":
+            for c in (e.get("message") or {}).get("content") or []:
+                if not isinstance(c, dict) or c.get("type") != "tool_use":
+                    continue
+                name, inp = c.get("name"), c.get("input") or {}
+                if name in ("Agent", "Task"):
+                    target = inp.get("subagent_type") or "?"
+                    agents[target] += 1
+                    if c.get("id"):
+                        agent_by_call[c["id"]] = target
+                    if inp.get("isolation") == "worktree":
+                        signals.append({"signal": "worktree aberta (Agent com "
+                                                  "isolation=worktree)",
+                                        "who": author(e),
+                                        "origin": f"chamada a {target}",
+                                        "excerpt": ""})
+                elif name == "EnterWorktree":
+                    signals.append({"signal": "worktree aberta (EnterWorktree)",
+                                    "who": author(e), "origin": "ferramenta",
+                                    "excerpt": json.dumps(inp,
+                                                          ensure_ascii=False)[:SIGNAL_EXCERPT]})
+                elif name == "Bash":
+                    cmd = str(inp.get("command") or "")
+                    m = WORKTREE_ADD.search(cmd)
+                    if m:
+                        flag = ("--detach" if "--detach" in cmd
+                                else "-b" if re.search(r"\s-b\s", cmd)
+                                else "sem --detach")
+                        signals.append({"signal": f"worktree aberta ({flag})",
+                                        "who": author(e), "origin": "Bash",
+                                        "excerpt": _excerpt(cmd, m)})
+                elif name in ("Write", "Edit", "MultiEdit"):
+                    text = str(inp.get("content") or inp.get("new_string")
+                               or "")
+                    target = str(inp.get("file_path") or "")
+                    signals.extend(signals_in_text(
+                        text, author(e), f"{name} em {Path(target).name}"))
+        elif kind == "user":
+            for c in (e.get("message") or {}).get("content") or []:
+                if not isinstance(c, dict) or c.get("type") != "tool_result":
+                    continue
+                text = _content_text(c)
+                if c.get("is_error"):
+                    errors.append(" ".join(text.split())[:240])
+                returned_by = agent_by_call.get(c.get("tool_use_id"))
+                if returned_by:
+                    signals.extend(signals_in_text(text, returned_by,
+                                                   "relatório devolvido"))
+        elif kind == "result":
+            result = e
+    seen, unique = set(), []
+    for sn in signals:
+        key = (sn["signal"], sn["who"], sn["excerpt"][:80])
+        if key not in seen:
+            seen.add(key)
+            unique.append(sn)
+    # the proof-reviewer's worktree is the allowed one: it goes last, so the
+    # SIGNALS_PER_ROUND cap does not hide the one that is not
+    signals = sorted(unique, key=lambda sn: sn["signal"].startswith("worktree")
+                     and "proof-reviewer" in sn["who"])
+    r = result or {}
+    text = r.get("result") if isinstance(r.get("result"), str) else ""
+    truncated = len(text) > result_max
+    return {
+        "agents": dict(agents),
+        "errors": errors,
+        "cost": r.get("total_cost_usd"),
+        "turns": r.get("num_turns"),
+        "is_error": r.get("is_error"),
+        "terminal": r.get("terminal_reason") or r.get("subtype"),
+        "report": text[:result_max] + ("\n[… cortado]" if truncated else ""),
+        "has_result": result is not None,
+        "signals": signals,
+    }
+
+
+def plan_items(plan_path):
+    if yaml is None or not plan_path.is_file():
+        return {}
+    try:
+        plan = yaml.safe_load(plan_path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+    return {str(it.get("id")): it for it in plan.get("items") or []
+            if isinstance(it, dict)}
+
+
+def proposed_waivers(plan_path, ledger=None):
+    """Waivers the agent PROPOSED and the owner has not answered yet
+    (`.claude/waivers/*.yaml` with `status: proposta`).
+
+    Looks in two folders: the main clone's (next to the queue) and the ledger
+    tree's (`<root>/.claude/programs/<queue>/until/<run>.jsonl`). The run
+    writes the proposal in the tree where it runs, which in a `cepa run`
+    worktree is outside the main clone, and in host repos `.claude/` is ignored
+    by git, so it never gets there by commit. The union does not repeat the
+    same file.
+
+    Fail-safe: a missing folder or an unreadable file lists nothing and does
+    not break the summary."""
+    if yaml is None:
+        return []
+    folders = []
+    try:
+        folders.append(Path(plan_path).parents[3] / ".claude" / "waivers")
+    except IndexError:
+        pass
+    if ledger is not None:
+        try:
+            folders.append(Path(ledger).resolve().parents[4] / ".claude" / "waivers")
+        except IndexError:
+            pass
+    found, seen = [], set()
+    for folder in folders:
+        try:
+            files = sorted(folder.glob("*.yaml"))
+        except OSError:
+            continue
+        for f in files:
+            try:
+                key = f.resolve()
+                if key in seen:
+                    continue
+                d = yaml.safe_load(f.read_text(encoding="utf-8"))
+            except (OSError, yaml.YAMLError):
+                continue
+            seen.add(key)
+            if isinstance(d, dict) and d.get("status") == "proposta":
+                found.append(d)
+    return found
+
+
+def _proposal_line(d):
+    return (f"{d.get('motivo')} em {d.get('escopo')} — pergunta: "
+            f"{' '.join(str(d.get('pergunta') or '(sem pergunta gravada)').split())}")
+
+
+def queue_plan_path(ledger, queue):
+    """The real queue file (queue.yaml, or plan.yaml in the old layout): the
+    MAIN clone's, not that of the tree `cepa run` was launched from.
+
+    The ledger lives in `<tree>/.claude/queues/<queue>/until/` (or
+    `.claude/programs/...`). When that tree is a linked worktree, the queue file
+    next to it is a copy nobody updates: whoever writes the queue is
+    `cepa-queue`, always in the main clone (the parent of
+    `git rev-parse --git-common-dir`, the same rule as its `main_root`). On
+    2026-09-26 this summary read the copy and showed 21 `pending` items that
+    were already closed. Outside a git repo, the ledger's neighbor is what is
+    left.
+    """
+    folder = ledger.parent.parent
+    neighbor = folder / qp.NEW_FILE
+    if not neighbor.exists() and ((folder / qp.LEGACY_FILE).exists()
+                                  or folder.parent.name == "programs"):
+        neighbor = folder / qp.LEGACY_FILE
+    r = subprocess.run(["git", "-C", str(ledger.parent), "rev-parse",
+                        "--git-common-dir"], capture_output=True, text=True)
+    if r.returncode != 0:
+        return neighbor
+    common = Path(r.stdout.strip())
+    if not common.is_absolute():
+        common = (ledger.parent / common).resolve()
+    root = common.parent if common.name == ".git" else common
+    return qp.queue_file(root, queue or ledger.parent.parent.name)
+
+
+def build_digest(ledger, result_max):
+    ledger = Path(ledger).resolve()
+    log = ledger.with_suffix(".log")
+    events = read_jsonl(ledger)
+    start = next((e for e in events if e.get("evento") == "run_start"), {})
+    end = next((e for e in events if e.get("evento") == "run_end"), {})
+    plan_path = queue_plan_path(ledger, start.get("fila"))
+    plan = plan_items(plan_path)
+
+    # `reinstall`/`rollback` are the supervisor's own `bin/install.sh` runs (DUR-3): not
+    # a round and not a build.
+    own = (" · verify · ", " · reinstall · ", " · rollback · ")
+    rounds = [s for s in log_segments(log) if not any(m in s[0] for m in own)
+              and "/common:until-review" not in s[0]]
+    builds = [s for s in log_segments(log) if " · verify · " in s[0]]
+    starts = [e for e in events if e.get("evento") == "item_start"]
+    ends = [e for e in events if e.get("evento") == "item_end"]
+
+    out = [f"# Resumo do run {ledger.stem}", ""]
+    state_file = ledger.with_name(ledger.stem + ".estado.json")
+    if state_file.exists():
+        try:
+            est = json.loads(state_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            est = None
+        if isinstance(est, dict):
+            _, why = _state.run_liveness(est)
+            out.append(f"- run: {why}")
+    out.append(f"- registro: `{ledger}`")
+    out.append(f"- saída bruta: `{log}` "
+               f"({log.stat().st_size if log.exists() else 0} bytes; este "
+               "resumo lê dela só o que está listado abaixo)")
+    out.append(f"- fila: `{start.get('fila')}` · branch: `{start.get('branch')}`"
+               f" · base: `{(start.get('base') or '')[:10]}`"
+               f" · build: `{start.get('verify')}`")
+    out.append(f"- largada: {start.get('quando')} · prazo: {start.get('prazo')}"
+               f" · fim: {end.get('quando')} · motivo: `{end.get('motivo')}`")
+    out.append(f"- detalhe do fim: {end.get('detalhe')}")
+    counts = {k: v for k, v in end.items()
+              if isinstance(v, int) and k not in ("max_falhas",)}
+    out.append(f"- contagens: {json.dumps(counts, ensure_ascii=False)}")
+    if len(rounds) != len(starts):
+        out.append(f"- ATENÇÃO: {len(starts)} item_start no registro e "
+                   f"{len(rounds)} rodadas no `.log` — o pareamento abaixo "
+                   "pode estar deslocado")
+    # Acceptance of the new record format: every `item_end` of a `versao_registro >= 2`
+    # run carries the session id and the end reason. Old records are not judged.
+    version = start.get("versao_registro")
+    if isinstance(version, int) and version >= 2:
+        missing = [str(e.get("id")) for e in ends
+                   if not e.get("session_id") or not e.get("motivo_fim")]
+        if missing:
+            out.append("- ATENÇÃO: item_end sem session_id/motivo_fim: "
+                       + ", ".join(missing))
+    for e in events:
+        if e.get("evento") == "hooks_reinstalados" and not e.get("ok"):
+            out.append(f"- ATENÇÃO: reinstalação de hooks falhou no item {e.get('id')}")
+    out.append("")
+
+    out.append("## Eventos do registro fora das rodadas")
+    for e in events:
+        if e.get("evento") not in ("run_start", "run_end", "item_start",
+                                   "item_end"):
+            out.append(f"- {json.dumps(e, ensure_ascii=False)}")
+    out.append("")
+
+    total_cost = 0.0
+    out.append("## Rodadas")
+    for i, st in enumerate(starts):
+        ident = st.get("id")
+        en = ends[i] if i < len(ends) else {}
+        r = summarize_round(rounds[i][1], result_max) if i < len(rounds) else None
+        cost = (r or {}).get("cost")
+        if isinstance(cost, (int, float)):
+            total_cost += cost
+        out.append(f"### {i + 1}. {ident} — {st.get('title')}")
+        out.append(f"- desfecho no registro: status `{en.get('status')}`, "
+                   f"{en.get('segundos')} s, exit {en.get('exit_code')}, "
+                   f"commits na branch da noite: {en.get('commits')}, "
+                   f"tentativa {en.get('tentativa')}, "
+                   f"sessão {en.get('session_id') or st.get('session_id')}, "
+                   f"fim `{en.get('motivo_fim')}`"
+                   + (f" · hooks {st['hooks_sha']}" if st.get("hooks_sha") else ""))
+        if r:
+            out.append(f"- custo US$ {cost} · {r['turns']} turnos · "
+                       f"fim `{r['terminal']}`"
+                       + (" · is_error" if r["is_error"] else ""))
+            if r["agents"]:
+                out.append("- agentes chamados: "
+                           + ", ".join(f"{k} ×{v}" for k, v in
+                                       sorted(r["agents"].items())))
+            else:
+                out.append("- agentes chamados: nenhum")
+            if r["errors"]:
+                out.append(f"- erros de ferramenta: {len(r['errors'])}; os "
+                           f"primeiros {min(len(r['errors']), ERRORS_PER_ROUND)}:")
+                for error in r["errors"][:ERRORS_PER_ROUND]:
+                    out.append(f"  - {error}")
+            if r["signals"]:
+                out.append(f"- sinais de processo: {len(r['signals'])}"
+                           + (f"; os primeiros {SIGNALS_PER_ROUND}:"
+                              if len(r["signals"]) > SIGNALS_PER_ROUND else ":"))
+                for sn in r["signals"][:SIGNALS_PER_ROUND]:
+                    proof = (sn["signal"].startswith("worktree")
+                             and "proof-reviewer" in sn["who"])
+                    out.append(f"  - {sn['signal']} · quem: {sn['who']}"
+                               + (" (prova por perturbação: permitida na noite)"
+                                  if proof else "")
+                               + f" · onde: {sn['origin']}"
+                               + (f" · «{sn['excerpt']}»" if sn["excerpt"] else ""))
+            else:
+                out.append("- sinais de processo: nenhum (nenhuma worktree "
+                           "aberta, nenhum relato de gate contornado)")
+            if not r["has_result"]:
+                out.append("- SEM `result` final: o subprocesso morreu antes de "
+                           "relatar")
+            out.append("")
+            out.append("Relatório final da rodada:")
+            out.append("")
+            out.append("> " + (r["report"] or "(vazio)").replace("\n", "\n> "))
+        out.append("")
+
+    if builds:
+        out.append("## Builds completos do supervisor")
+        for header, lines in builds:
+            out.append(f"### {header}")
+            out.append("```")
+            out.extend(l.rstrip() for l in lines[-VERIFY_TAIL:])
+            out.append("```")
+        out.append("")
+
+    touched = []
+    for st in starts:
+        if st.get("id") not in touched:
+            touched.append(st.get("id"))
+    out.append("## Estado ATUAL na fila dos itens tocados")
+    out.append(f"(lido agora de `{plan_path}`, não do momento do run)")
+    proposals = proposed_waivers(plan_path, ledger)
+    for ident in touched:
+        it = plan.get(str(ident))
+        if not it:
+            out.append(f"- {ident}: não está mais na fila")
+            continue
+        out.append(f"- {ident}: `{it.get('status')}`"
+                   + (f" · blocked_by {it.get('blocked_by')}"
+                      if it.get("blocked_by") else " · blocked_by vazio")
+                   + (f" · rota humana: {it.get('human_pending')}"
+                      if it.get("human_pending") else ""))
+        if it.get("evidence"):
+            out.append(f"  - evidence: {' '.join(str(it['evidence']).split())}")
+        for d in proposals:
+            if str(d.get("item")) == str(ident):
+                out.append("  - dispensa proposta pelo agente: "
+                           + _proposal_line(d))
+    out.append("")
+    out.append("## Dispensas propostas pelo agente, sem resposta do dono")
+    if proposals:
+        for d in proposals:
+            out.append(f"- {_proposal_line(d)} · item: "
+                       f"{d.get('item') or 'sem item'}")
+    else:
+        out.append("nenhuma")
+    out.append("")
+    out.append(f"Custo somado das rodadas: US$ {total_cost:.2f} (soma do "
+               "`total_cost_usd` de cada `result`).")
+    return "\n".join(out) + "\n"
+
+
+def main(argv=None):
+    ap = _clihelp.Parser(
+        prog="cepa run digest",
+        summary="summarizes a finished run so it fits in one session",
+        description=(
+            "A run leaves two files: the record (<run>.jsonl, a few KB) and the\n"
+            "raw output of each subprocess (<run>.log, which goes past 10 MB and\n"
+            "fits in no session). This command MECHANICALLY picks what to read,\n"
+            "and says what it picked:\n"
+            "  - the whole record (start, end, each item, each build)\n"
+            "  - per round: claude's final report, agent calls by type,\n"
+            "    tool errors and cost\n"
+            "  - per round, the PROCESS SIGNALS: a worktree opened by someone other\n"
+            "    than the proof-reviewer, a build gate bypassed with another\n"
+            "    module's green\n"
+            "  - the tail of each full build the supervisor ran\n"
+            "  - the CURRENT status and evidence of each touched item, read from the queue\n"
+            "\n"
+            "/common:until-review interprets it. This command has no opinion."),
+        examples=[
+            ("cepa run digest .claude/queues/wego/until/<run>.jsonl",
+             "the digest of one run"),
+            ("cepa run digest <run>.jsonl --result-max 4000",
+             "longer final reports per round"),
+        ],
+        exit_codes=[
+            (0, "digest printed"),
+            (2, "invalid usage (also with no arguments), or the record does not exist"),
+        ],
+        see_also=["cepa run: writes the record this command reads",
+                  "/common:until-review: reads this digest and says what to do"])
+    ap.add_argument("ledger", metavar="LEDGER",
+                    help="the <run>.jsonl that cepa run wrote (the .log next to it "
+                         "is read too)")
+    ap.add_argument("--result-max", type=int, default=DEFAULT_RESULT_MAX, metavar="N",
+                    help=f"how many characters of each round's final report "
+                         f"go into the summary (default: {DEFAULT_RESULT_MAX})")
+    argv = sys.argv[1:] if argv is None else argv
+    if not argv:
+        ap.print_help(sys.stderr)
+        return 2
+    a = ap.parse_args(argv)
+    if not Path(a.ledger).is_file():
+        print(f"cepa run digest: {a.ledger} does not exist", file=sys.stderr)
+        return 2
+    sys.stdout.write(build_digest(a.ledger, a.result_max))
+    return 0
+
+
+if __name__ == "__main__":
+    _tui.install()
+    sys.exit(main())

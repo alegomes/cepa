@@ -99,7 +99,7 @@ MODES_BIN="$SCRIPT_DIR/cepa-modes"
 INTENT_BIN="$SCRIPT_DIR/cepa-intent"
 
 # `cepa <subcommand>`: the single entry to the `cepa-*` scripts next to this
-# file (2026-11-03). `cepa until <queue> --for 3h` runs `cepa-until ...`,
+# file (2026-11-03). `cepa run <queue> --for 3h` runs `cepa-run ...`,
 # `cepa help` (also `--help`, `-h`) lists them plus the launcher's own flags.
 # Only an EXACT match of a sibling script dispatches: a flag, a Jira key or a
 # quoted prompt is a session launch, as before. The `cepa-*` names keep
@@ -121,7 +121,7 @@ show_help() {
   for _s in "$SCRIPT_DIR"/cepa-*; do
     [ -x "$_s" ] || continue
     _name="${_s##*/cepa-}"
-    [ "$_name" = "plan" ] && continue   # transition shim, not a command
+    case "$_name" in plan|until|until-digest) continue ;; esac   # transition shims, not commands
     # Line 2 of a python script is `"""cepa-x — summary`; shell scripts
     # carry `# cepa-x — summary`. Anything else prints just the name.
     _desc=$(sed -n 2p "$_s" | sed -e 's/^"""//' -e 's/^# *//' -e "s/^cepa-$_name *[—-]* *//")
@@ -151,7 +151,7 @@ nearest_subcommand() {
   for _s in "$SCRIPT_DIR"/cepa-*; do
     [ -x "$_s" ] || continue
     _name="${_s##*/cepa-}"
-    [ "$_name" = "plan" ] && continue   # transition shim, not a command
+    case "$_name" in plan|until|until-digest) continue ;; esac   # transition shims, not commands
     case "$_name" in "$1"*) printf '%s\n' "$_name"; return 0 ;; esac
     _d=$(awk -v a="$1" -v b="$_name" 'BEGIN{
       la=length(a); lb=length(b);
@@ -167,18 +167,29 @@ nearest_subcommand() {
   return 0
 }
 
-# `cepa plan` became `cepa queue` (2026-11-24). Refused with the new name before
-# any dispatch, so nothing runs. (`common/bin/cepa-plan` still exists as a
-# transition shim for runs in flight; it is not a command and is skipped below.)
+# `cepa plan` became `cepa queue`, `cepa until` became `cepa run` and
+# `cepa until-digest` became `cepa run digest` (2026-11-24). Refused with the new
+# name before any dispatch, so nothing runs. (`common/bin/cepa-plan`, `cepa-until`
+# and `cepa-until-digest` still exist as transition shims for runs in flight; they
+# are not commands and are skipped everywhere above and below.)
 if [ $# -ge 1 ]; then
   # Case-insensitive: on a case-insensitive filesystem `cepa-PLAN` finds the shim.
   _w1=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
   _w2=""
   [ $# -ge 2 ] && _w2=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')
-  if [ "$_w1" = "plan" ] || { [ "$_w2" = "plan" ] && case "$1" in help|ajuda|subcommands|subcomandos|--help|-h) true ;; *) false ;; esac; }; then
-    printf '✗ cepa: plan is now queue (run: cepa queue ...)\n' >&2
-    exit 2
-  fi
+  _old="$_w1"
+  case "$1" in help|ajuda|subcommands|subcomandos|--help|-h) _old="$_w2" ;; esac
+  case "$_old" in
+    plan)
+      printf '✗ cepa: plan is now queue (run: cepa queue ...)\n' >&2
+      exit 2 ;;
+    until)
+      printf '✗ cepa: until is now run (run: cepa run ...)\n' >&2
+      exit 2 ;;
+    until-digest)
+      printf '✗ cepa: until-digest is now run digest (run: cepa run digest ...)\n' >&2
+      exit 2 ;;
+  esac
 fi
 
 if [ $# -ge 1 ]; then

@@ -16,7 +16,7 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parents[1]
-DIGEST = REPO / "common" / "bin" / "cepa-until-digest"
+DIGEST = REPO / "common" / "bin" / "cepa-run"
 FAILURES = []
 
 
@@ -138,7 +138,7 @@ def build_run(tmp, n_rounds_in_log=2, extra_round_1=()):
 
 
 def run_digest(ledger, *args):
-    return subprocess.run([sys.executable, str(DIGEST), str(ledger), *args],
+    return subprocess.run([sys.executable, str(DIGEST), "digest", str(ledger), *args],
                           capture_output=True, text=True, timeout=60)
 
 

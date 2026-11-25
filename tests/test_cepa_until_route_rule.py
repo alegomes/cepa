@@ -41,7 +41,7 @@ def test_route_rule_every_item_request_carries_it():
     mod = load_module()
     plain = mod.build_command("fila", "until/b", False)[2]
     check("route unit: the request still starts with the drain-plan call",
-          plain.startswith("/common:drain-plan fila --max 1 --na-branch until/b\n\n"), plain)
+          plain.startswith("/common:queue-run fila --max 1 --na-branch until/b\n\n"), plain)
     check("route unit: the request carries --route-kind, its three values, a closed "
           "--question and --if-yes/--if-no", _has_route_rule(plain), plain)
     check("route unit: the three values are the ones cepa-queue finish accepts",

@@ -107,7 +107,7 @@ def test_subprocess_runs_on_the_night_branch_and_the_clone_stays_put():
               git(root, "rev-list", "--count", f"{start['base']}..{branch}")
               == "2", p.stdout[-600:])
         check("o resumo diz como aterrissar",
-              f"cepa-until land fila/{branch.split('/', 1)[1]}"
+              f"cepa-run land fila/{branch.split('/', 1)[1]}"
               in p.stdout, p.stdout[-600:])
 
 
@@ -197,7 +197,7 @@ def test_repo_without_known_build_does_not_start_without_saying_which():
         env = dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}")
         p = subprocess.run(
             [sys.executable, str(Path(__file__).resolve().parents[1] / "common"
-                                 / "bin" / "cepa-until"),
+                                 / "bin" / "cepa-run"),
              "fila", "--repo", str(root), "--for", "2h", "--no-analysis"],
             capture_output=True, text=True, timeout=60,
             env={**env, "FAKE_PLANO": str(plan_of(root)), "CEPA_UNTIL_LEITOR": "off",
@@ -229,7 +229,7 @@ def test_mvnw_at_root_becomes_the_default_build():
         env_args = ["--for", "2h", "--dry-run"]
         p = subprocess.run(
             [sys.executable, str(Path(__file__).resolve().parents[1] / "common"
-                                 / "bin" / "cepa-until"),
+                                 / "bin" / "cepa-run"),
              "fila", "--repo", str(root), *env_args],
             capture_output=True, text=True, timeout=60,
             env=dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
@@ -242,7 +242,7 @@ def _run_without_verify_flag(tmp, root, binv):
     """Without `--verify` nor `--sem-verify`: whoever chooses is `cepa-until`."""
     return subprocess.run(
         [sys.executable, str(Path(__file__).resolve().parents[1] / "common"
-                             / "bin" / "cepa-until"),
+                             / "bin" / "cepa-run"),
          "fila", "--repo", str(root), "--for", "2h", "--no-analysis"],
         capture_output=True, text=True, timeout=120,
         env=dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
@@ -1034,7 +1034,7 @@ def _banner_with(tmp, files):
     binv = fake_claude(tmp, WORKS)
     return subprocess.run(
         [sys.executable, str(Path(__file__).resolve().parents[1] / "common"
-                             / "bin" / "cepa-until"),
+                             / "bin" / "cepa-run"),
          "fila", "--repo", str(root), "--for", "2h", "--dry-run"],
         capture_output=True, text=True, timeout=60,
         env=dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
