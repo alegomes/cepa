@@ -1,0 +1,145 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/run-ate-esgotar-a-fila.md (11 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-25
+
+schema_version: 2
+mode: single-track
+queue: run-ate-esgotar-a-fila
+source: docs/spec/run-ate-esgotar-a-fila.md (11 critérios de sucesso; ordem herdada
+  do texto)
+items:
+- id: CS-1
+  title: '`cepa run <fila> --to-the-end --dry-run` imprime o plano de uma run sem
+    prazo e sai com 0, e largar sem nenhuma das três flags de janela continua recusado'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num repo
+    de teste com a fila `a` (1 item pronto), `cepa run a --to-the-end --dry-run`
+    sai com 0 e a saída contém "no deadline"; `cepa run a --dry-run` sai com 2;
+    `cepa run --help` lista `--to-the-end`. Hoje o primeiro comando sai com 2 porque
+    o argumento não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: a run sem prazo executa todos os itens prontos e termina com o motivo `end-of-queue`
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: fila
+    `a` com 2 itens prontos e um `claude` falso que commita e fecha cada item como
+    `done`; `cepa run a --to-the-end` termina com os dois itens `done`, o `run_end`
+    do registro traz o motivo `end-of-queue` e o `run_start` traz `prazo` nulo e
+    `sem_prazo` verdadeiro. Hoje o comando é recusado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: na run sem prazo, falhas seguidas não encerram a run
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: fila
+    `a` com 4 itens independentes; o `claude` falso falha todas as tentativas dos
+    3 primeiros e fecha o quarto como `done`; `cepa run a --to-the-end` termina
+    com os 3 primeiros `blocked`, o quarto `done` e o motivo `end-of-queue`, sem
+    `disjuntor` nem `fila-travada` no registro. Hoje o comando é recusado, e com
+    `--for 1h` a run termina em `disjuntor` antes do quarto item.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: na run sem prazo, o corte pelo teto de 5h sempre espera o reset e retoma
+    o mesmo item
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: o `claude`
+    falso imprime "limit reached · resets <hora daqui a 1 minuto>" na primeira tentativa
+    e fecha o item como `done` na segunda; com `CEPA_UNTIL_MARGEM_RESET=0`, `cepa
+    run a --to-the-end` grava o evento `limite_de_uso` com `espera` verdadeiro e
+    termina com o item `done`. Hoje o comando é recusado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: o teto semanal encerra a run com o motivo `limite-semanal`
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: o `claude`
+    falso imprime "You''ve hit your weekly limit · resets Nov 30, 4pm"; `cepa run
+    a --to-the-end` termina com o motivo `limite-semanal` no `run_end` e o item
+    continua `pending`. Hoje o comando é recusado, e com `--for 1h` o motivo gravado
+    é `limite-de-uso`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: três cortes seguidos pelo teto de 5h, sem item avançar entre eles, encerram
+    a run sem prazo
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: o `claude`
+    falso imprime o corte de 5h com reset daqui a 1 minuto em toda tentativa; com
+    `CEPA_UNTIL_MARGEM_RESET=0`, `cepa run a --to-the-end` termina com o motivo
+    `limite-de-uso` depois do terceiro evento `limite_de_uso`. Hoje o comando é
+    recusado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: na run sem prazo, a queda de rede é esperada sem limite de quedas
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com `CEPA_UNTIL_SONDA_REDE`
+    apontando para uma porta local fechada e o `claude` falso saindo com erro de
+    rede 4 vezes seguidas, abrir a porta faz `cepa run a --to-the-end` retomar o
+    mesmo item e fechá-lo como `done`, sem o motivo `sem-rede` no registro. Hoje
+    o comando é recusado, e com `--for 1h` a run termina em `sem-rede` na terceira
+    queda.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-8
+  title: a tentativa que passa de `--item-ceiling` é morta, conta como falha do
+    item e a run segue
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: fila
+    `a` com 2 itens independentes; o `claude` falso dorme 60s no primeiro e fecha
+    o segundo como `done`; `cepa run a --to-the-end --item-ceiling 0.05m --attempts-per-item
+    1` grava `item_end` do primeiro com `motivo_fim` igual a `teto-do-item`, deixa
+    o primeiro `blocked` e o segundo `done`. Hoje o comando é recusado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-9
+  title: '`cepa run --all --to-the-end` roda todas as filas sem prazo'
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: filas
+    `a` e `b`, cada uma com 1 item pronto, e o `claude` falso que fecha como `done`;
+    `cepa run --all --to-the-end` termina com os dois itens `done` e os dois commits
+    na mesma branch `until/<run>`. Hoje o comando é recusado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-10
+  title: flags que só fazem sentido com prazo ou que religam disjuntor são recusadas
+    junto de `--to-the-end`, e `--item-ceiling` é recusada sem ela
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: `cepa
+    run a --to-the-end` combinado com cada uma de `--for 1h`, `--slack 30m`, `--min-reserve
+    10m`, `--max-failures 3` e `--max-blocked 3` sai com 2 e a mensagem cita a flag
+    recusada; `cepa run a --for 1h --item-ceiling 1h` sai com 2 citando `--item-ceiling`.
+    Hoje todas saem com 2 por argumento desconhecido, sem citar a combinação.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-11
+  title: os leitores do registro aceitam uma run sem prazo
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: com um
+    `*.estado.json` de run sem prazo (`prazo` nulo) em estado `rodando` e pid vivo
+    na fila `a`: `cepa run a --for 1h` sai com 2 citando a run viva; `cepa run pending`
+    sai com 0; `cepa run digest <run>.jsonl` imprime "prazo: sem prazo". Hoje o
+    primeiro comando falha em `datetime.fromisoformat` ao ler o prazo nulo.'
+  status: pending
+  blocked_by: []
+  human_pending: null
