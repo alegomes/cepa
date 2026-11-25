@@ -120,9 +120,11 @@ def read_jsonl(path):
     for line in Path(path).read_text(encoding="utf-8",
                                      errors="replace").splitlines():
         try:
-            events.append(json.loads(line))
+            e = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if isinstance(e, dict):
+            events.append(e)
     return events
 
 

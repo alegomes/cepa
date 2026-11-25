@@ -472,6 +472,23 @@ def test_broken_yaml_alongside_proposal_does_not_crash_summary():
               p.stdout[-500:])
 
 
+def test_non_object_json_lines_are_skipped_like_invalid_json():
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = build_run(tmp)
+        clean = run_digest(ledger)
+        lines = ledger.read_text().splitlines()
+        junk = ["[1,2]", '"str"', "42", "null"]
+        ledger.write_text("\n".join(lines[:2] + junk + lines[2:4] + junk[::-1]
+                                    + lines[4:]) + "\n")
+        p = run_digest(ledger)
+        check("linha JSON que nao e objeto: sem Traceback", "Traceback" not in p.stderr,
+              p.stderr[-500:])
+        check("...mesmo exit code do registro sem essas linhas",
+              p.returncode == clean.returncode, f"{p.returncode} vs {clean.returncode}")
+        check("...mesmo stdout do registro sem essas linhas", p.stdout == clean.stdout,
+              p.stdout[-500:])
+
+
 def test_missing_record_exits_2():
     p = run_digest("/nao/existe.jsonl")
     check("registro inexistente sai 2", p.returncode == 2, p.stderr)
