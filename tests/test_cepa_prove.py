@@ -460,8 +460,9 @@ def test_cepa_still_launches_a_session_for_flags_and_non_scripts():
 
 def test_cepa_help_flags_and_typos():
     """Discovery of the subcommands (2026-11-04): `--help`/`-h` print the same
-    list as `cepa help` plus the launcher's flags; deprecated aliases carry a
-    clean label; a lone word within two typos of a sibling is refused with the
+    list as `cepa help` plus the launcher's flags; the old aliases `intencao`
+    and `modos` are gone from the list (CS-4, 2026-11-25) and each one is
+    refused naming the new subcommand; a lone word within two typos of a sibling is refused with the
     nearest name instead of opening a session whose first message is the typo."""
     ref = subprocess.run([str(CEPA), "help"], capture_output=True, text=True, timeout=60).stdout
     for flag in ("--help", "-h"):
@@ -470,8 +471,14 @@ def test_cepa_help_flags_and_typos():
               p.returncode == 0 and p.stdout == ref and "\n  run  " in p.stdout, (p.stdout + p.stderr)[-300:])
     check("...e a seção de flags do launcher", "launcher flags:" in ref and "--slice" in ref
           and "--mode" in ref and "--prompt" in ref, ref[-600:])
-    check("...e os aliases com rótulo limpo", "intencao (= intent)" in ref
-          and "modos (= modes)" in ref and "Deprecated" not in ref, ref)
+    check("...e os apelidos antigos saíram da lista", "\n  intencao" not in ref
+          and "\n  modos" not in ref and "(= intent)" not in ref and "(= modes)" not in ref
+          and "Old subcommand names" not in ref
+          and "Deprecated" not in ref and "\n  intent  " in ref and "\n  modes  " in ref, ref)
+    for old, new in (("intencao", "intent"), ("modos", "modes")):
+        p = subprocess.run([str(CEPA), old], capture_output=True, text=True, timeout=60)
+        check(f"`cepa {old}` recusa e diz `{old} is now {new}`",
+              p.returncode == 2 and f"{old} is now {new}" in p.stderr, (p.stdout + p.stderr)[-300:])
     # `feed` is 4 edits from `feedback`: only the prefix fast path finds it.
     for typo, near in (("runn", "run"), ("prov", "prove"), ("docto", "doctor"), ("feed", "feedback")):
         p = subprocess.run([str(CEPA), typo], capture_output=True, text=True, timeout=60)
