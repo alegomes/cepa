@@ -171,7 +171,11 @@ nearest_subcommand() {
 # any dispatch, so nothing runs. (`common/bin/cepa-plan` still exists as a
 # transition shim for runs in flight; it is not a command and is skipped below.)
 if [ $# -ge 1 ]; then
-  if [ "$1" = "plan" ] || { [ $# -ge 2 ] && [ "$2" = "plan" ] && case "$1" in help|ajuda|subcommands|subcomandos|--help|-h) true ;; *) false ;; esac; }; then
+  # Case-insensitive: on a case-insensitive filesystem `cepa-PLAN` finds the shim.
+  _w1=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  _w2=""
+  [ $# -ge 2 ] && _w2=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')
+  if [ "$_w1" = "plan" ] || { [ "$_w2" = "plan" ] && case "$1" in help|ajuda|subcommands|subcomandos|--help|-h) true ;; *) false ;; esac; }; then
     printf '✗ cepa: plan is now queue (run: cepa queue ...)\n' >&2
     exit 2
   fi

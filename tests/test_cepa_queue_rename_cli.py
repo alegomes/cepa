@@ -77,6 +77,40 @@ def test_plan_is_refused_with_the_new_name():
             assert MARK not in r.stdout and MARK not in r.stderr, argv
 
 
+def test_plan_is_refused_whatever_its_case():
+    # macOS is case-insensitive: `cepa-PLAN` would find the shim, so the refusal
+    # must not depend on the case of the word.
+    with tempfile.TemporaryDirectory() as base:
+        d = _repo_with_queue(base)
+        for argv in ([CEPA, "PLAN", "status", "fila", "--repo", "."],
+                     [CEPA, "Plan", "status", "fila", "--repo", "."],
+                     [CEPA, "help", "PLAN"],
+                     [CEPA, "help", "Plan"]):
+            r = _run(argv, d)
+            assert r.returncode == 2, (argv, r.returncode, r.stdout, r.stderr)
+            assert "plan is now queue" in r.stderr, (argv, r.stderr)
+            assert MARK not in r.stdout and MARK not in r.stderr, argv
+
+
+def test_quoted_prompt_starting_with_plan_is_not_refused():
+    with tempfile.TemporaryDirectory() as base:
+        d = Path(base)
+        stub = d / "claude-stub"
+        trace = d / "claude-args"
+        stub.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "' + str(trace) + '"\n',
+                        encoding="utf-8")
+        stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+        env = _env()
+        env.update({"CLAUDE_WT_CLAUDE_BIN": str(stub), "CEPA_MODO": "off",
+                    "CEPA_ENCADEAR": "off", "CEPA_MENU": "off"})
+        subprocess.run(["git", "-C", str(d), "init", "-q"], check=True)
+        r = subprocess.run([str(CEPA), "Plan the release"], capture_output=True,
+                           text=True, cwd=str(d), env=env, timeout=120)
+        assert "plan is now queue" not in r.stderr, r.stderr
+        assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+        assert trace.exists() and "Plan the release" in trace.read_text(), (r.stdout, r.stderr)
+
+
 def test_help_lists_queue_and_not_plan():
     with tempfile.TemporaryDirectory() as base:
         d = Path(base)
