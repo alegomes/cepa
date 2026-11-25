@@ -378,12 +378,12 @@ def menu_choice(pending, prompt):
         n = int(m.group(1))
         for a in actions:
             if a.get("n") == n and a.get("commands"):
-                return n, bare_command(a["commands"][0])
+                return n, _modern(bare_command(a["commands"][0]))
         return None
     best = None
     for a in actions:
         for c in a.get("commands") or []:
-            b = bare_command(c)
+            b = _modern(bare_command(c))  # a menu saved before CS-5 carries the old flag
             if b and (text == b or text.startswith(b + " ")):
                 if best is None or len(b) > len(best[1]):
                     best = (a.get("n"), b)

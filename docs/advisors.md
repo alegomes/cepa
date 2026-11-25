@@ -53,7 +53,7 @@ contra uma decisão de contrato errada, caro contra um rename. Daí o piso de us
 
 ```
 /common:advisors docs/design/ui-proof-gate.md
-# → "parece decisão de arquitetura — painel: 5 default + operador-sre +
+# → "parece decisão de architecture — painel: 5 default + operador-sre +
 #    custo-de-manutencao (7 lentes). Ok?"
 
 /common:advisors specs/openapi.yaml --area=api-contract

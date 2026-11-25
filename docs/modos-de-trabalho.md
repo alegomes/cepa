@@ -158,7 +158,7 @@ sem ela o modo é rótulo, não fronteira.
 
   Lentes: as do registro que já existe em `common/advisors/lenses.md` — 5 fixas
   (`contrarian`, `fundamentalista`, `expansionista`, `outsider`, `executor`) e
-  as especialistas por área (segurança, api-contrato, dados, ux, arquitetura),
+  as especialistas por área (security, api-contract, data, ux, architecture),
   teto de 7. **Ressalva:** o `advisors` é prospectivo (roda sobre um documento
   de decisão, antes de decidir) e a Reflexão é retrospectiva (roda sobre o
   construído). O vocabulário se reaproveita; os `system-prompt-fragment` de cada

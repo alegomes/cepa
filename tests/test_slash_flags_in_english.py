@@ -240,3 +240,16 @@ def test_old_flag_prompt_is_recognised_as_the_menu_action():
         2, "/common:spec --continue")
     assert sm.menu_choice(pending, "/common:spec --continue x") == (
         2, "/common:spec --continue")
+
+
+def test_menu_saved_before_the_rename_still_matches():
+    """A `.claude/mode-menu-pending` written before CS-5 carries `--continuar`;
+    the choice still matches and is recorded with the English flag."""
+    sm = _session_mode()
+    pending = {"actions": [
+        {"n": 1, "commands": ["/common:spec"]},
+        {"n": 2, "commands": ["/common:spec --continuar <slug>"]},
+    ]}
+    assert sm.menu_choice(pending, "/common:spec --continue x") == (2, "/common:spec --continue")
+    assert sm.menu_choice(pending, "/common:spec --continuar x") == (2, "/common:spec --continue")
+    assert sm.menu_choice(pending, "2") == (2, "/common:spec --continue")
