@@ -1,0 +1,29 @@
+key: CS-5-reforma-de-nomes
+queue: reforma-de-nomes
+item: CS-5
+status: complete
+head_commit: 0ede2ff
+diff_range: 9a75f57..0ede2ff
+criteria:
+  - id: AC1
+    text: "CS-5: `cepa modes menu discovery` imprime `/common:spec --continue <slug>` e nao `--continuar`; o `argument-hint` de spec.md, advisors.md, gauntlet.md, queue-run.md e run-review.md contem `--continue`, `--close`, `--list`, `--lenses`, `--angles`, `--on-branch` e `--queue` e nenhuma forma em portugues; `cepa queue verdict <arquivo> 1 kept` grava o mesmo marcador que `mantida`, e `mantida` continua aceito; `cepa queue finish ... --open-point \"x\"` grava o mesmo que `--pendencia \"x\"`, que continua aceito (docs/spec/reforma-de-nomes-dos-comandos.md, ### CS-5, lido com P3 e os bullets 'Decided without asking' de nomes de flags e de marcador)"
+    altitude: cli
+    surface: "o launcher common/bin/cepa e common/bin/cepa-queue invocados como subprocesso (stdout, exit code, arquivo gravado); o front matter e o corpo dos arquivos common/commands/*.md (comando de barra e prosa executada por agente, entao 'a flag antiga continua aceita' e uma frase no corpo); o hook session-mode.py"
+    clauses:
+      menu_prints_continue_not_continuar: "complete. Rodei a mao `common/bin/cepa modes --menu discovery`: linha 2 '2) Continue an open specification: /common:spec --continue <slug>', sem '--continuar'. A forma `cepa modes menu discovery` do texto vermelho e criada pelo CS-7; hoje o menu e `--menu`, e o teste usa `--menu` (o criterio de fundo, o menu em ingles, esta demonstrado). Fonte do menu: _modes.py trocado no diff."
+      argument_hints_english_only: "complete. Li os 5 argument-hint: spec `--continue <slug> | --close <slug> | --list`; advisors `[--area=security|api-contract|data|ux|architecture] [--lenses=a,b,c]`; gauntlet `[--angles=a,b,c]`; queue-run `[--on-branch <branch>]`; run-review `[--queue NAME]`. Nenhuma forma em portugues. next.md (`--queue`) tambem foi coberto, alem do que o criterio lista. O teste checa presenca das inglesas e ausencia de --continuar/--fechar/--lista/--lentes/--angulos/--na-branch/--fila/seguranca/api-contrato/dados/arquitetura/--plan."
+      old_flag_still_accepted: "complete. Cada corpo diz 'is still accepted' junto da forma antiga (spec --continuar/--fechar/--lista, advisors --lentes e valores de --area, gauntlet --angulos, queue-run --na-branch, run-review --fila, next --plan). Como o comando de barra e prosa, essa frase e o comportamento; o teste a exige perto de cada forma antiga. O hook session-mode.py ainda reconhece o prompt digitado com `--continuar` como a acao 2 do menu (teste proprio)."
+      verdict_kept_same_marker_as_mantida: "complete. Teste roda cepa-queue verdict com kept/vetoed/refined e com mantida/vetada/refinada em documentos identicos e exige arquivos finais iguais, com o marcador '· <antigo> em' (o marcador nao muda, como decidido). Erros nomeiam o valor digitado ('vetoed exige --reason'). `cepa queue verdict --help` mostra {kept,vetoed,refined}."
+      finish_open_point_same_as_pendencia: "complete. Teste com repo de fila real: `finish --open-point x um --open-point x dois` e `--resolve-open-point 1` gravam o mesmo plan.yaml que `--pendencia` e `--resolve-pendencia`, ambos == [('x um', resolvida, 'feito'), ('x dois', aberta)]; `--resolve-point` tambem segue aceito; a ajuda de `finish` mostra as inglesas e nao as portuguesas na linha de uso."
+    test: "tests/test_slash_flags_in_english.py (11 testes)"
+    layer: "cli (subprocess do launcher e do cepa-queue reais, repo git temporario, plan.yaml real; hook carregado por importlib; sem mock)"
+    evidence: verified
+    run: "python3 -m pytest tests/test_slash_flags_in_english.py -q -> '11 passed in 4.05s' (N=11). Vizinhos tocados pelo diff, cada um em primeiro plano: pytest tests/test_cepa_mode.py -> '50 passed in 19.62s'; pytest test_cepa_until_cut_rule -> '1 passed'; pytest test_cepa_until_route_rule -> '1 passed'; pytest test_doctor_decisions -> '5 passed'; pytest test_veto_walk_opens_existing_doc -> '3 passed'; scripts (python3 tests/X.py, rc=0): test_cepa_until_run_branch '✓ tudo verde', test_cepa_until_decide '✓ tudo verde' (lento, ~4 a 9 min), test_common_drain_plan 'all green', test_flags_hint_variables 'tudo ok (68 comandos varridos)', test_gauntlet_command 'tudo ok'. Suite completa (tests/run-all.sh) nao rodada aqui, e do supervisor."
+independent_checks:
+  neighbor_edits_are_renames_not_weakening: "Li o diff de test_cepa_mode, test_common_drain_plan, test_gauntlet_command, test_veto_walk_opens_existing_doc, test_cepa_until_decide: so trocam a forma portuguesa pela inglesa (--na-branch->--on-branch, mantida->kept etc.), com as mesmas asserções e a mesma forca. Nenhuma asserção removida."
+  old_forms_not_dropped_silently: "O criterio exige que as antigas sigam aceitas; ha teste para verdict (valores antigos gravam o mesmo), finish (--pendencia, --resolve-pendencia), prompt com --continuar no hook e frase 'still accepted' em cada comando."
+gap: null
+suggested_followup: null
+observations_outside_the_literal_criterion:
+  menu_subcommand_form: "O texto vermelho cita `cepa modes menu discovery`; essa forma so existe depois do CS-7. Quando o CS-7 entrar, o teste test_menu_prints_continue_not_continuar continua valido (usa --menu, que o CS-7 manda manter aceito)."
+  residual_old_names_elsewhere: "Mencoes portuguesas remanescentes em docs vivos fora dos tocados sao varridas pelo CS-11, nao por este item."
