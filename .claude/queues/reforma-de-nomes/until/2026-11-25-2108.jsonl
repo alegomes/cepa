@@ -43,3 +43,4 @@
 {"evento": "analise", "feita": true, "arquivo": "/Users/alegomes/coding/cepa/.claude/queues/reforma-de-nomes/until/2026-11-25-2108.review.md", "erro": null, "quando": "2026-11-26T06:34:12"}
 {"evento": "instalado_no_pouso", "repo": "/Users/alegomes/coding/cepa", "ok": false, "segundos": 1, "motivo": "exited 1", "quando": "2026-11-26T07:29:17"}
 {"evento": "reinstalacao_desfeita", "repo": "/Users/alegomes/coding/cepa", "ok": false, "motivo": "exited 1", "segundos": 0, "quando": "2026-11-26T07:29:17"}
+{"evento": "instalado_no_pouso", "repo": "/Users/alegomes/coding/cepa", "ok": true, "segundos": 23, "motivo": null, "quando": "2026-11-26T07:35:59"}
