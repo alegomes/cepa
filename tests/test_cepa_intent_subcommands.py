@@ -175,9 +175,12 @@ ALL_OPTS = {"--purpose", "--by-when", "--plan", "--reason", "--landed", "--conte
             "--step"}
 for act in ACTIONS:
     outs = {}
+    # `remind help` is a reminder text, not a help request (tested below)
     for form in (["--help"], ["-h"], ["help"]):
         p = cepa(TMP, act, *form)  # outside any git repo: help never needs one
         outs[form[0]] = p
+    if act == "remind":
+        outs["help"] = outs["--help"]
     p = outs["--help"]
     check(f"`{act} --help` sai 0", p.returncode == 0, p.stderr)
     check(f"`{act} --help`, `-h` e `help` imprimem o mesmo",
