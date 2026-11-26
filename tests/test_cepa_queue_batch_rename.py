@@ -102,6 +102,18 @@ def test_every_subcommand_is_in_one_of_the_two_blocks():
             assert h.returncode == 0, (name, h.stderr)
 
 
+def test_help_examples_teach_batch_not_the_refused_name():
+    # The examples are what an owner copies: they must not teach the form the
+    # launcher now refuses (CS-8 proof survivor S1).
+    with tempfile.TemporaryDirectory() as base:
+        for argv in ([CEPA, "queue", "--help"], [CEPA, "queue", "batch", "--help"]):
+            r = _run(argv, base)
+            assert r.returncode == 0, (argv, r.stderr)
+            ex = r.stdout.split("\nexamples", 1)[1].split("\nexit codes", 1)[0]
+            assert "cepa queue batch wego" in ex, (argv, ex)
+            assert "cepa queue queue" not in r.stdout, (argv, r.stdout)
+
+
 def test_batch_prints_what_queue_printed():
     with tempfile.TemporaryDirectory() as base:
         d = _repo_with_queue(base)
