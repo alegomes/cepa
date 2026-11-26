@@ -4107,14 +4107,18 @@ GROUP_NOTE = "respondida em grupo de"
 RECOMMENDS = re.compile(r"\bRecomendo\s+(sim|não|nao)\b", re.IGNORECASE)
 
 
-def _apply_answer(repo, ans_queue, ans_ident, text, keep=False, drop=False):
+def _apply_answer(repo, ans_queue, ans_ident, text, keep=False, drop=False,
+                  force=False):
     """`cepa-queue answer <queue> <id>`: (rc, output). `decide` records each answer
-    through it, one item at a time or one per member of a group."""
+    through it, one item at a time or one per member of a group. `force` passes
+    `--force` (CS-3 of duvida-sobre-a-pergunta-do-decide): only for text the owner
+    cleared at the doubt prompt."""
     p = subprocess.run(
         [sys.executable, str(CEPA_PLAN), "answer", ans_queue, ans_ident,
          "--answer", text, "--repo", str(repo)]
         + (["--keep"] if keep else [])
         + (["--drop"] if drop else [])
+        + (["--force"] if force else [])
         + ([] if _answer_commit else ["--no-commit"])
         + (["--multiline"] if "\n" in text else []),
         capture_output=True, text=True, timeout=60)
@@ -4387,9 +4391,9 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     analysis = analysis or {}
     by_item = analysis.get("itens") or {}
     if answer is None:
-        def answer(ident, text, keep=False, drop=False):
+        def answer(ident, text, keep=False, drop=False, force=False):
             ans_queue, ans_ident = split_label(repo, queue, ident)
-            return _apply_answer(repo, ans_queue, ans_ident, text, keep, drop)
+            return _apply_answer(repo, ans_queue, ans_ident, text, keep, drop, force)
     if unclear is None:
         # CS-6 (perguntas-da-largada-legiveis): "I did not understand" goes to the
         # global feedback ledger `/common:feedback` triages, target `cepa-run`;
@@ -4627,6 +4631,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             prompt = screen.menu(chips, recommended_letter(d))
             valid = {"y", "n", "w", "v", "d", "", "q", "?"} | ({"e"} if show else set())
             doubt = ""
+            not_a_doubt = False
             while True:
                 raw = str(question(prompt))
                 r = raw.strip().lower()
@@ -4668,6 +4673,11 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                     if is_yes_default(question(screen.follow_up(
                             "Is this a doubt about the question? [Y/n] "))):
                         r, doubt = "?", typed_w
+                    else:
+                        # CS-3: the owner said "not a doubt"; that is the only
+                        # thing that lets the panel record text `cepa-queue
+                        # answer` would refuse (it passes `--force`).
+                        not_a_doubt = True
             if r != "?":
                 break
             kw = {"doubt": doubt} if doubt else {}
@@ -4733,9 +4743,10 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                         else "")
                      + (f". {extra}" if extra else ""))
         if text:
+            fk = {"force": True} if not_a_doubt else {}
             rc, msg = (answer(ident, text, drop=True) if drop
-                       else answer(ident, text) if give_back
-                       else answer(ident, text, keep=True))
+                       else answer(ident, text, **fk) if give_back
+                       else answer(ident, text, keep=True, **fk))
             if rc == 0:
                 applied.append(f"{ident}: {msg}")
                 progress["answered"] = progress.get("answered", 0) + 1

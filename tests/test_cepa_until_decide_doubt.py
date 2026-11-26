@@ -109,17 +109,22 @@ def _w_session(typed, then):
         return rc, ANSI.sub("", out), before, qfile.read_bytes()
 
 
-def test_n_at_the_doubt_prompt_goes_to_send_back_and_n_records_nothing():
+def test_n_at_the_doubt_prompt_goes_to_send_back_and_n_keeps_the_item():
     """`n` is not yes: the text is treated as an answer and the usual
-    "Send the item back" question comes. `n` there too: nothing recorded
-    (recording after `n` is CS-3)."""
+    "Send the item back" question comes. `n` there too: as for any `w` answer, the
+    text is recorded and the item stays where it was (CS-3 made it record; it
+    recorded nothing in the interim build)."""
+    import yaml
     failed_before = len(FAILURES)
     rc, plain, before, after = _w_session(DOUBT, [(ASK, "n"), (SEND_BACK, "n")])
     check("CS-1 pty n: decide exits 0", rc == 0, plain[-1500:])
     check("CS-1 pty n: the doubt prompt is shown", ASK in plain, plain[-1500:])
     check("CS-1 pty n: after `n` comes the send-back question",
           SEND_BACK in plain, plain[-1500:])
-    check("CS-1 pty n: queue.yaml is byte-identical", after == before, "")
+    now = {i["id"]: i for i in yaml.safe_load(after)["items"]}["b1"]
+    check("CS-3 pty n+n: the text is recorded and the item is not sent back",
+          DOUBT in str(now.get("evidence")) and now.get("status") == "pending"
+          and "not recorded" not in plain, (now, plain[-800:]))
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
@@ -438,6 +443,129 @@ def test_default_feedback_line_for_plain_question_mark_has_no_doubt_label():
         check("CS-2 ledger: plain `?` writes one line without the doubt label",
               len(lines) == 1 and "b1" in lines[0].get("texto", "")
               and "dúvida do dono" not in lines[0].get("texto", ""), lines)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def _calls(replies, editor_text=None):
+    """`decide` with an injected `answer` that records every call with its keyword
+    arguments (`keep`, `force`...): a list of (text, kwargs)."""
+    m = load_module()
+    calls, it = [], iter(replies)
+    if editor_text is not None:
+        m.edit_in_editor = lambda *a, **k: editor_text
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+             question=lambda _p: next(it, ""), output=lambda *_: None,
+             answer=lambda ident, text, **k: calls.append((text, k)) or (0, "ok"),
+             unclear=lambda *a, **k: (0, "ok"),
+             rewrite=lambda *a, **k: (None, "no"))
+    return calls
+
+
+def test_n_at_the_doubt_prompt_then_y_records_the_text_with_force():
+    """CS-3, unit: the owner's `n` is what authorizes the record, so `force` goes
+    to the answer, and the text is the typed one."""
+    failed_before = len(FAILURES)
+    calls = _calls(["w", DOUBT, "n", "y"])
+    check("CS-3 unit: one answer, with the typed text and force",
+          len(calls) == 1 and calls[0][0] == DOUBT and calls[0][1].get("force") is True,
+          calls)
+    check("CS-3 unit: `y` sends the item back (no keep)",
+          calls and not calls[0][1].get("keep"), calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_n_at_the_doubt_prompt_then_n_keeps_the_item_with_force():
+    """`n` at "Send the item back" is today's keep-the-item answer; the text was
+    already cleared by the owner, so force goes along."""
+    failed_before = len(FAILURES)
+    calls = _calls(["w", DOUBT, "n", "n"])
+    check("CS-3 unit n+n: recorded with keep and force",
+          len(calls) == 1 and calls[0][0] == DOUBT
+          and calls[0][1].get("keep") is True and calls[0][1].get("force") is True,
+          calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_ordinary_text_is_answered_without_force():
+    failed_before = len(FAILURES)
+    calls = _calls(["w", "variante B", "y"])
+    check("CS-3 unit: ordinary text, no force",
+          len(calls) == 1 and calls[0][0] == "variante B"
+          and not calls[0][1].get("force"), calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_punctuation_only_text_is_answered_without_force():
+    """Never went through the doubt prompt: the refusal stays (CS-8)."""
+    failed_before = len(FAILURES)
+    calls = _calls(["w", "...", "y"])
+    check("CS-3 unit: punctuation-only text, no force",
+          len(calls) == 1 and calls[0][0] == "..." and not calls[0][1].get("force"),
+          calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_v_text_is_answered_without_force():
+    """`v` does not ask the doubt yet (CS-4): its text keeps being refused."""
+    failed_before = len(FAILURES)
+    calls = _calls(["v", "y"], editor_text=DOUBT)
+    check("CS-3 unit: `v` text, no force",
+          len(calls) == 1 and calls[0][0] == DOUBT and not calls[0][1].get("force"),
+          calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_force_does_not_leak_to_the_next_item():
+    failed_before = len(FAILURES)
+    m = load_module()
+    calls, it = [], iter(["w", DOUBT, "n", "y", "w", "variante B", "y"])
+    m.decide(Path("/nao/existe"), "fila", None, {},
+             [_deferred(), _deferred(id="b2", question="Outra pergunta?")], {},
+             question=lambda _p: next(it, ""), output=lambda *_: None,
+             answer=lambda ident, text, **k: calls.append((text, k)) or (0, "ok"))
+    check("CS-3 unit: force only on the first item",
+          len(calls) == 2 and calls[0][1].get("force") is True
+          and not calls[1][1].get("force"), calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_n_at_the_doubt_prompt_then_y_records_the_answer_in_the_panel():
+    """Red test of CS-3, as a process in a pseudo-terminal."""
+    import yaml
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=30, inputs=[
+            ("[w] I write the answer", "w"),
+            ("Your answer, in one line", DOUBT),
+            (ASK, "n"),
+            (SEND_BACK, "y"),
+        ])
+        plain = ANSI.sub("", out)
+        now = {i["id"]: i for i in yaml.safe_load(qfile.read_text())["items"]}["b1"]
+        check("CS-3 pty: decide exits 0", rc == 0, plain[-1500:])
+        check("CS-3 pty: the typed text is in the evidence as the owner's answer",
+              f"Resposta do dono em" in str(now.get("evidence"))
+              and DOUBT in str(now.get("evidence")), now)
+        check("CS-3 pty: the screen shows the recorded confirmation",
+              "not recorded" not in plain and "answered now 1" in plain, plain[-1500:])
+        check("CS-3 pty: no question between `n` and the send-back one",
+              plain.count("[Y/n]") == 1, plain[-1500:])
+        assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_punctuation_only_text_is_still_refused_by_the_panel():
+    failed_before = len(FAILURES)
+    rc, plain, before, after = _w_session("...", [(SEND_BACK, "y")])
+    check("CS-3 pty punct: refused as before", "not recorded" in plain
+          and "resposta recusada" in plain, plain[-1500:])
+    check("CS-3 pty punct: queue.yaml is byte-identical", after == before, "")
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
