@@ -3823,3 +3823,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: digest-run-all-le-cada-fila
+  title: '`cepa run digest` lê `queues/all/queue.yaml` numa run de todas as filas
+    e dá todo item como sumido'
+  why: 'Origem: feedback fb-20261123-4 (2026-11-23); BACKLOG.md § `cepa run digest`
+    lê `queues/all/queue.yaml` numa run de todas as filas e dá todo item como sumido
+    (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
