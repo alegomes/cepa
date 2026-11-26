@@ -1,0 +1,68 @@
+schema_version: 2
+card: duvida-sobre-a-pergunta-do-decide-CS-3
+verdict: proven
+reviewed_at: 2026-11-26T17:00:00-03:00
+base_commit: 2d70789
+head_commit: 3ebb958
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa). Superficie = painel `cepa run decide` lido em pseudo-terminal
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-run (_apply_answer e o closure `answer` padrao ganham `force` -> `--force` no cepa-queue answer)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # o teste pty roda o cepa-run decide real e o cepa-queue real; os testes unitarios injetam `answer` so para ler os kwargs
+    - class: "common/bin/cepa-run (decide: flag not_a_doubt ligada so pelo `n` do prompt de duvida do `w`; force so quando ligada, em `y` e em `n`/keep)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+  note: "cepa-run identico entre 8eb723c e 3ebb958 (git diff --stat vazio); 3ebb958 so mexeu em tests/test_cepa_until_decide_doubt.py (+27 linhas, 3 testes do `n`/keep)."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbacao manual em worktree descartavel detached em 3ebb958, removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida em 3ebb958: 28 passed (7.4s). Cada perturbacao tocou exatamente 1 linha (git diff --numstat = 1 1)."
+        - "(P1) 4121 `--force` condicional -> `([])` -> RED: 2 failed, 26 passed."
+        - "(P2) 4121 `--force` -> `--forced` -> RED: 2 failed."
+        - "(P3) 4396 closure padrao nao repassa force -> RED: 2 failed."
+        - "(P4) 4680 `not_a_doubt = True` -> `pass` -> RED: 5 failed."
+        - "(P5) 4634 inicial `not_a_doubt = False` -> `True` -> RED: 8 failed."
+        - "(P6) 4746 `if not_a_doubt else` -> `if True else` -> RED: 8 failed."
+        - "(P7) 4746 `if not_a_doubt else` -> `if False else` -> RED: 5 failed."
+        - "(P8) 4748 ramo y sem **fk -> RED: 3 failed."
+        - "(P9) 4749 ramo n/keep sem **fk -> RED: 2 failed."
+        - "(P10) 4746 `{'force': True}` -> `{'force': False}` -> RED: 5 failed."
+        - "(P11) 4748 ramo y: `**fk` -> `force=True` (sempre) -> RED: 5 failed."
+        - "(P12, antes sobrevivente) 4749 ramo n/keep: `keep=True, **fk` -> `keep=True, force=True` -> RED: 3 failed, 25 passed (primeira passada: 25 passed verde)."
+        - "(P12v) 4749 variante `force=bool(text)` -> RED: 3 failed, 25 passed."
+        - "Os 3 testes novos de 3ebb958 (texto comum, pontuacao e `v`, cada um com `n`) sao os que fecham P12/P12v."
+        - "Restauracao: `git checkout 3ebb958 -- common/bin/cepa-run` apos cada perturbacao; worktree removido (`git worktree remove --force`). Nenhum timeout de pty."
+        - "Comparacao com o base 2d70789 (cepa-run revertido) nao foi repetida nesta passada: o hook de caminho barrou o `git checkout` composto; a primeira passada ja registrou 5 failed contra o base."
+      run: >-
+        `git worktree add --detach <scratchpad>/wt 3ebb958`; cada perturbacao por sed em linha unica, restaurada por
+        `git checkout 3ebb958 -- common/bin/cepa-run`; teste: `python3 -m pytest tests/test_cepa_until_decide_doubt.py -q`
+        em primeiro plano, timeout 250s. Baseline 28 passed; P1 2f/26p; P2 2f; P3 2f; P4 5f; P5 8f; P6 8f; P7 5f; P8 3f; P9 2f;
+        P10 5f; P11 5f; P12 3f/25p; P12v 3f/25p. Suite completa nao rodada.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    run: "todas as linhas de comportamento mudadas (4121, 4396, 4634, 4680, 4746, 4748, 4749) foram quebradas e ficaram vermelhas (P1..P12v, `pytest tests/test_cepa_until_decide_doubt.py -q`)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "A unica entrada e o texto que o dono digita no teclado do proprio terminal (painel local, sem parser de dado externo, sem modulo api-rest); o texto segue como argumento de `cepa-queue answer`, que e quem decide recusar ou nao."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-3 de docs/spec/duvida-sobre-a-pergunta-do-decide.md); a prova e a perturbacao."
+routing_reason: >-
+  O sobrevivente da primeira passada (4749, ramo `n` mandando force sempre) agora fica
+  vermelho: os 3 testes novos de 3ebb958 o pegam, e a variante `force=bool(text)` tambem.
+  Todas as 13 perturbacoes ficam vermelhas, cada uma mudando uma linha so. PROVEN.

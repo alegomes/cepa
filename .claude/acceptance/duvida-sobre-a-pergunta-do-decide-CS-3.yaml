@@ -1,0 +1,21 @@
+key: CS-3
+queue: duvida-sobre-a-pergunta-do-decide
+status: complete
+criteria:
+  - id: AC1
+    text: "docs/spec/duvida-sobre-a-pergunta-do-decide.md CS-3 (cli): in the CS-1 scenario (pty, w on a panel item of cepa run decide, typing 'O que é a variante O?'), answering n at 'Is this a doubt about the question? [Y/n]' and then y at 'Send the item back to the queue with that answer?' records the text in the item's evidence as the owner's answer and the screen shows the recorded confirmation. Before, the screen showed 'not recorded: resposta recusada' and nothing was recorded."
+    altitude: cli
+    surface: "common/bin/cepa-run decide panel (cepa-until decide fila --repo ...) in a pty, keys w, doubt text, n, y; answer recorded by the real cepa-queue answer subprocess (--force)"
+    test: "tests/test_cepa_until_decide_doubt.py::test_n_at_the_doubt_prompt_then_y_records_the_answer_in_the_panel (pty via on_tty; real cepa-until process, real cepa-queue answer, no injected answer fake)"
+    layer: cli-pty
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -> '25 passed in 6.76s'"
+    sub_criteria:
+      evidence_recorded: "pty test reads plan.yaml: evidence contains 'Resposta do dono em' and the typed text. Demonstrated at the pty surface."
+      confirmation_on_screen: "pty test asserts 'not recorded' absent and 'answered now 1' present. Demonstrated at the pty surface."
+      no_extra_question: "pty test asserts exactly one [Y/n] between n and the send-back question."
+      complements: "test_n_at_the_doubt_prompt_goes_to_send_back_and_n_keeps_the_item (pty, n+n), test_punctuation_only_text_is_still_refused_by_the_panel (pty, refusal stays), and unit tests with injected answer (force only after the owner's n, not leaking to next item, not for ordinary text, punctuation or v) complement but are not the evidence."
+    readings:
+      queue_file: "The fixture reads .claude/programs/fila/plan.yaml, same as CS-1/CS-2."
+      scope: "CS-4..CS-11 are later items, not gaps here."
+gap: null
