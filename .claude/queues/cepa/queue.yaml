@@ -3781,3 +3781,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: no-busy-wait-libera-monitor
+  title: '`no-busy-wait` barra o laço `until` do Monitor, que é a ferramenta certa
+    para esperar'
+  why: 'Origem: feedback fb-20261122-3 (2026-11-22); BACKLOG.md § `no-busy-wait`
+    barra o laço `until` do Monitor, que é a ferramenta certa para esperar (ainda
+    não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
