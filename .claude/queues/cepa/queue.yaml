@@ -3920,3 +3920,15 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: pasta-orfa-de-worktree-apagada
+  title: A limpeza automática apaga o worktree de uma conversa que ainda vai ser
+    retomada
+  why: 'Episódio fb-20261124-8 (2026-11-24) prova que auto-clean-nao-apaga-sessao-viva
+    (done) não cobriu o caso; BACKLOG.md § A limpeza automática apaga o worktree
+    de uma conversa que ainda vai ser retomada (ainda não priorizado: entrou no
+    fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
