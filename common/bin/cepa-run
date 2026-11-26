@@ -4393,7 +4393,12 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     if answer is None:
         def answer(ident, text, keep=False, drop=False, force=False):
             ans_queue, ans_ident = split_label(repo, queue, ident)
-            return _apply_answer(repo, ans_queue, ans_ident, text, keep, drop, force)
+            # `force` is forwarded only when true, so a caller whose `_apply_answer`
+            # predates CS-3 (no `force` parameter) is called exactly as before.
+            if force:
+                return _apply_answer(repo, ans_queue, ans_ident, text, keep, drop,
+                                     force=True)
+            return _apply_answer(repo, ans_queue, ans_ident, text, keep, drop)
     if unclear is None:
         # CS-6 (perguntas-da-largada-legiveis): "I did not understand" goes to the
         # global feedback ledger `/common:feedback` triages, target `cepa-run`;
