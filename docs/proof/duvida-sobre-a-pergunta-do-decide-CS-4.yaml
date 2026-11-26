@@ -1,0 +1,63 @@
+schema_version: 2
+card: duvida-sobre-a-pergunta-do-decide-CS-4
+verdict: proven
+reviewed_at: 2026-11-26T19:00:00-03:00
+base_commit: af0f3b8
+head_commit: c45f5c4
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa). Superficie = painel `cepa run decide` lido em pseudo-terminal
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-run (decide: o texto do editor (`v`) passa a seguir o mesmo caminho do texto do `w`: variavel unica typed_w, pergunta 'Is this a doubt about the question? [Y/n]', sim -> reescrita `?` com o texto como duvida, nao -> flag not_a_doubt e --force em y e n/keep)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes pty rodam o cepa-run decide real; os testes unitarios injetam `question`/`unclear`/`answer` so para ler argumentos, sem substituir a logica mudada
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbacao manual em worktree descartavel detached em c45f5c4, removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida em c45f5c4: tests/test_cepa_until_decide_doubt.py 34 passed (8.47s); tests/test_cepa_until_decide_groups.py rc=0. Cada perturbacao tocou exatamente 1 linha (git diff --numstat = 1 1)."
+        - "(A) 4670 `if r in (\"w\", \"v\")` -> `(\"w\",)` (v sai do bloco) -> RED: 8 failed; groups rc=0."
+        - "(B) 4671 `if r == \"w\"` -> `if True` (v tambem le o prompt de uma linha) -> RED: 8 failed; groups rc=0."
+        - "(C) 4671 `r == \"w\"` -> `r in (\"w\",\"v\")` -> RED: 8 failed; groups rc=0."
+        - "(D) 4676 `typed_w = typed` -> `typed_w = \"\"` -> RED: 8 failed."
+        - "(E) 4677 `looks_like_doubt(typed_w)` -> `False` -> RED: test_doubt_typed_in_w_asks_if_it_is_a_doubt_before_recording failed (-x)."
+        - "(F) 4682 `if is_yes_default` -> `if not is_yes_default` -> RED: mesmo teste failed (-x)."
+        - "(G) 4684 `r, doubt = \"?\", typed_w` -> `\"?\", \"\"` -> RED: test_yes_at_the_doubt_prompt_after_v_rewrites_with_the_editor_text failed (-x), ou seja, o campo duvida_do_dono do texto do editor e guardado por teste de v."
+        - "(H) 4689 `not_a_doubt = True` -> `pass` -> RED: test_n_at_the_doubt_prompt_goes_to_send_back_and_n_keeps_the_item failed (-x), groups rc=0; so com os testes de v (-k test_v_doubt_text_then_n): 2 failed (..._then_y_records_the_text_with_force e ..._then_n_keeps_the_item_with_force)."
+        - "(I) 4734 `elif r in (\"w\", \"v\")` -> `(\"w\",)` -> RED: test_v_text_is_answered_without_force failed (-x)."
+        - "(J) 4736 `text = typed_w` -> `text = typed` -> RED: test_n_at_the_doubt_prompt_goes_to_send_back_and_n_keeps_the_item failed (-x); para `v` seria equivalente (typed_w == typed), o teste de `w` pega."
+        - "(K) 4677 v sempre pergunta (`or r == \"v\"`) -> RED: test_v_text_is_answered_without_force failed (-x); 1 failed, 23 passed."
+        - "Novos testes contra o cepa-run da base af0f3b8 (git diff --numstat vs head = 6 10): 5 failed, 29 passed (127.6s) -> RED em test_doubt_typed_through_v_asks_if_it_is_a_doubt_before_recording, test_yes_at_the_doubt_prompt_after_v_rewrites_with_the_editor_text, test_v_doubt_with_yes_unit_reader_gets_the_doubt_and_nothing_is_answered, test_v_doubt_text_then_n_then_y_records_the_text_with_force, test_v_doubt_text_then_n_then_n_keeps_the_item_with_force. Os 29 que passam na base sao os que guardam comportamento preservado (v comum sem prompt e sem force, editor vazio, w)."
+        - "Equivalente/sem teste proprio: (J) para o ramo `v` e equivalente (mesmo valor), mas o ramo `w` o mata. Nenhuma linha de comportamento mudada ficou sem teste vermelho. A linha 4734 e a 4736 so foram reformuladas no diff (comentario e variavel), e ainda assim foram perturbadas (I, J)."
+        - "Nas perturbacoes A..D e B/C as falhas incluem esperas de pty (~130s por rodada completa); `-x` foi usado nas demais para parar na primeira falha vermelha. Uma primeira rodada de E sem -x estourou o timeout de 280s sem linha de resumo; foi refeita com -x e deu RED explicito. Nenhum timeout sem perturbacao. Rodadas estritamente em sequencia."
+        - "Restauracao: `git checkout c45f5c4 -- common/bin/cepa-run` apos cada perturbacao (`git diff --numstat` vazio); worktree removido (`git worktree remove --force`); arvore principal intocada, so este yaml escrito."
+      run: >-
+        `git worktree add --detach <scratchpad>/wt c45f5c4`; perturbacao por perl em linha unica, restaurada por
+        `git checkout c45f5c4 -- common/bin/cepa-run`; testes: `python3 -m pytest tests/test_cepa_until_decide_doubt.py -q`
+        (com -x nas perturbacoes E..K) e `python3 tests/test_cepa_until_decide_groups.py` (A, B, C, H), primeiro plano, timeout explicito.
+        Baseline 34 passed + groups rc=0; A 8f; B 8f; C 8f; D 8f; E,F,G,H,I,J,K RED (1 failed com -x); base af0f3b8 5f/29p. Suite completa nao rodada.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    run: "todas as linhas de comportamento mudadas (4670, 4671, 4676, 4677, 4682, 4684, 4689, 4734, 4736) foram quebradas e ficaram vermelhas (A..K)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "A unica entrada e o texto que o dono digita ou salva no editor do proprio terminal (painel local, sem parser de dado externo, sem modulo api-rest); o texto segue como argumento de `cepa-queue answer`, que e quem decide recusar ou nao."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-4 de docs/spec/duvida-sobre-a-pergunta-do-decide.md); a prova e a perturbacao, e os 5 testes novos de v ficam vermelhos contra o cepa-run da base."
+routing_reason: >-
+  As 11 perturbacoes do comportamento mudado (v no mesmo bloco do w, leitura do texto do editor, deteccao de duvida, pergunta
+  Y/n, campo da duvida no reescrever, flag not_a_doubt, ramo de envio de v, texto enviado) ficam vermelhas, cada uma mudando
+  uma linha so, e os 5 testes novos de v ficam vermelhos contra o cepa-run da base. Unico equivalente: text = typed para o
+  ramo v, morto pelo ramo w. PROVEN.
