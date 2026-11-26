@@ -1,10 +1,10 @@
 schema_version: 2
 card: reforma-de-nomes-CS-7
-review: 2
-verdict: unproven
-reviewed_at: 2026-11-25T23:00:00-03:00
+review: 3
+verdict: proven
+reviewed_at: 2026-11-25T23:30:00-03:00
 base_commit: 6f3d63b
-head_commit: 2404cbc
+head_commit: d280e9f
 issue_type: Feature
 repo_kind: harness            # repo Python + sh (cepa), não Quarkus. Superfície = CLI `cepa intent ...` e `cepa modes ...`
 scope:
@@ -22,7 +22,7 @@ scope:
       external_observable: false
       substituted_by_double: null
   base_commit_resolved: true
-  review_1_to_2: "5e9de96..2404cbc mudou só tests/test_cepa_intent_subcommands.py, tests/test_cepa_modes_subcommands.py (+ acceptance e a prova da revisão 1); o código-fonte é idêntico ao da revisão 1."
+  review_2_to_3: "2404cbc..d280e9f mudou só tests/test_cepa_modes_subcommands.py (+4 linhas, o assert da frase do --json) e o arquivo de prova; o código-fonte (common/bin/*) é idêntico ao das revisões 1 e 2 (confirmado por git diff --stat 2404cbc..HEAD)."
 levels:
   l3_load_bearing:
     technique: perturbation
@@ -30,22 +30,21 @@ levels:
       status: n/a
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "Revisão 1, os 2 sobreviventes de comportamento agora ficam VERMELHOS: I7 (remover a recusa `edit não aceita --step`) -> tests/test_cepa_intent_subcommands.py rc=1; M5 (tirar `--sem-cor` da lista de chaves antes do subcomando) -> tests/test_cepa_modes_subcommands.py rc=1."
-        - "Revisão 1, sobreviventes de texto de ajuda (21 alvos listados): 19 ficam VERMELHOS (I17 lista de ações, I22 posicional N, I23 posicional TEXT, I33 texto da recusa de posicional, I34 saídas de write, I35/I38 resumos de show/close, I36 saída de state, I39/I40 linhas step/edit do --help geral, M12 MODE da ajuda de exit, M14 --json fora do menu, M17/M18/M19 resumos de exit/menu/purposes, M20 saídas de exit, M21/M22/M23 linhas do --help geral de modes). Reescrevi essas perturbações (o driver da revisão 1 não sobrevive ao worktree), com os mesmos alvos mas não byte a byte; mais I41..I49 e M24..M26, todos RED."
-        - "SOBREVIVE M13 (cepa-modes): trocar o texto da descrição da opção `--json` na ajuda de `cepa modes menu` (`the list as JSON, for code`) não deixa nada vermelho. O teste só fixa que `--json` aparece (presença), não a frase. Só a redação de uma linha de ajuda; nenhum comportamento. Saída muda (confirmado por diff da ajuda)."
-        - "EQUIVALENTE M16 (cepa-modes): `nargs=None if arg == \"MODE\" else \"?\"` -> `nargs=None` na ajuda de `exit` não muda um byte da saída de `cepa modes exit --help` (confirmado por diff: output identical; o `usage=` é passado explícito). Não é lacuna do teste; não há o que pinar."
-        - "Amostra dos mortos da revisão 1 que continuam RED: step repetido (B1), step sem N (B2), step não numérico (B3), edit sem opções (B4), item de plano que é subcomando (B5), `remind help` como texto (B6), palavra `help` em ação desligada (B7), `--no-color` antes do subcomando (B8), `--json` antes do subcomando (B9), `help` em subcomando de modes (B10), descarte de head/rest (M26), alias antigo `--proposito` (B11, só no vizinho tests/test_cepa_intent.py: RED). Nota: `--propositoX` sobreviveu, mas é equivalente (abreviação de prefixo do argparse); refeito com `--xproposito`: RED."
-        - "Total desta revisão: 46 perturbações distintas (I7, M5, 10 de ajuda do intent, I41..I49, 4+4+3 de ajuda do modes, M24..M26, B1..B11); 44 RED, 1 sobrevivente real (M13), 1 equivalente (M16). B12 (limite do intervalo do passo) não foi rodada de novo (exigia reescrita sob medida; morta na revisão 1)."
+        - "M13 (o sobrevivente da revisão 2): trocar `the list as JSON, for code` por `the list as JSON` em common/bin/cepa-modes:242 -> tests/test_cepa_modes_subcommands.py rc=1, falha 'ajuda de `menu`: frase do --json'. Agora VERMELHO."
+        - "I7 (remover a recusa `edit não aceita --step`, cepa-intent:658) -> tests/test_cepa_intent_subcommands.py rc=1, falha '`edit --purpose X --reason Y --step 2` sai 2 e não escreve'. Continua VERMELHO."
+        - "M5 (tirar `--sem-cor` da lista de chaves antes do subcomando, cepa-modes:224) -> tests/test_cepa_modes_subcommands.py rc=1, 3 falhas (`--sem-cor purposes|exit|menu`). Continua VERMELHO."
+        - "M16 (cepa-modes, `nargs=None if arg == \"MODE\" else \"?\"` -> `nargs=None` na ajuda de `exit`): classificado EQUIVALENTE na revisão 2 (diff da saída de `cepa modes exit --help` idêntico, o `usage=` é explícito); não há comportamento a fixar, não conta como sobrevivente. Não reexecutado: o código-fonte não mudou."
+        - "Herdado das revisões 1 e 2 (fonte idêntica, testes só ganharam um assert): 44 das perturbações da revisão 2 vermelhas, mais os 19 de texto de ajuda e B1..B11."
       run: >-
-        `git worktree add --detach /tmp/proof-cs7b HEAD` (HEAD=2404cbc); base verde: `python3 tests/test_cepa_intent_subcommands.py` -> `tudo ok`, `python3 tests/test_cepa_modes_subcommands.py` -> `tudo ok`, `python3 tests/test_cepa_intent.py` -> `tudo ok`, `python3 tests/test_cepa_help_layout.py` -> `all green`. Driver /tmp/cs7drv/drv.py troca o trecho, roda `python3 tests/<arquivo>.py`, lê o código de saída (rc=1 = RED) e restaura com `git checkout -- <arquivo>`. Worktree removido: `git worktree remove --force /tmp/proof-cs7b`; árvore principal limpa. tests/run-all.sh não rodado.
+        `git worktree add --detach /tmp/proof-cs7c HEAD` (HEAD=d280e9f); base verde: `python3 tests/test_cepa_modes_subcommands.py` -> `tudo ok`, `python3 tests/test_cepa_intent_subcommands.py` -> `tudo ok`. Cada perturbação por sed no worktree, `python3 tests/<arquivo>.py`, rc lido (rc=1 = RED), restaurada com `git checkout --`: M13 rc=1, I7 rc=1, M5 rc=1. Worktree removido (`git worktree remove --force /tmp/proof-cs7c`); árvore principal limpa. tests/run-all.sh não rodado.
   l2_coverage:
     status: pass
     technique: perturbation
     uncovered_lines: []
     waivers: []
-    run: "I7 e M5, os dois comportamentos sem teste na revisão 1, foram quebrados no HEAD e deixaram tests/test_cepa_intent_subcommands.py rc=1 e tests/test_cepa_modes_subcommands.py rc=1: executados e observados por teste."
+    run: "M13, I7 e M5, os comportamentos/frases antes sem teste, foram quebrados no HEAD e deixaram os testes de subcomandos rc=1: executados e observados por teste."
   l4_adversarial_input:
     status: n/a
     reason: "o diff só reescreve subcomando em flag já existente e imprime ajuda; os valores continuam passando pelos mesmos leitores e recusas do CLI (nenhuma entrada nova de fora)."
@@ -53,8 +52,7 @@ levels:
   bugfix_regression_red_at_base:
     status: n/a
     run: "Feature, não Bug."
-changed_behaviour_not_pinned:
-  - "cepa-modes: texto da descrição da opção `--json` na ajuda de `cepa modes menu` (M13); só a presença de `--json` é fixada."
+changed_behaviour_not_pinned: []
 build_completo: "delegado ao supervisor do run (tests/run-all.sh); não rodado por mim, por instrução."
 routing_reason: >-
-  Os dois comportamentos que faltavam na revisão 1 (recusa de `edit` com `--step`, e `--sem-cor` antes do subcomando de `cepa modes`) agora ficam vermelhos quando quebrados, e a amostra dos já mortos continua vermelha. Resta um sobrevivente, só de redação de ajuda: a frase da opção `--json` em `cepa modes menu --help` (M13). Pela regra (mutante sobrevivente em linha alterada = não é carga-portante) o veredito é UNPROVEN; um assert de uma linha em tests/test_cepa_modes_subcommands.py fecha. Sugestão ao humano: aceitar esse sobrevivente sem teste, ou fixar a frase; eu não renuncio.
+  O único sobrevivente da revisão 2 (a frase da opção `--json` na ajuda de `cepa modes menu`, M13) agora deixa o teste vermelho quando quebrado; I7 e M5 continuam vermelhos e a base está verde. M16 é equivalente (saída idêntica byte a byte). O código-fonte não mudou desde a revisão 2, então as demais perturbações (todas vermelhas) continuam valendo. Nenhum nível assumido, pulado ou sobrevivente: PROVEN.
