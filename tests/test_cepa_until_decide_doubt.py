@@ -60,30 +60,113 @@ def test_doubt_typed_in_w_asks_if_it_is_a_doubt_before_recording():
         assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
-def test_doubt_typed_through_v_does_not_show_the_new_prompt_yet():
-    """`v` is CS-4, a later item: today `v` still goes straight to the
-    "Send the item back" prompt."""
+def _fake_editor(tmp, text):
+    editor = Path(tmp) / "fake-editor.sh"
+    editor.write_text(f"#!/bin/sh\nprintf '%s' '{text}' > \"$1\"\n")
+    editor.chmod(0o755)
+    return editor
+
+
+def _v_env(editor, fb, reader="off"):
+    env = {k: v for k, v in os.environ.items() if k not in ("VISUAL", "EDITOR")}
+    env.update(CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER=str(reader), EDITOR=str(editor))
+    return env
+
+
+def test_doubt_typed_through_v_asks_if_it_is_a_doubt_before_recording():
+    """Red test of CS-4, as a process in a pseudo-terminal: a fake editor saves
+    "não entendi a pergunta"; `v` shows the doubt prompt. Before, the screen
+    showed "not recorded: resposta recusada" and the item went to later."""
     failed_before = len(FAILURES)
     with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
-        editor = Path(tmp) / "fake-editor.sh"
-        editor.write_text(f"#!/bin/sh\nprintf '%s' '{DOUBT}' > \"$1\"\n")
-        editor.chmod(0o755)
+        editor = _fake_editor(tmp, "não entendi a pergunta")
         it = item("b1", status="pending", human_pending="falta escolher a variante")
         it["owner_question"] = QUESTION
         it["route_kind"] = "external-block"
         root = build_repo(tmp, [it])
-        env = {k: v for k, v in os.environ.items() if k not in ("VISUAL", "EDITOR")}
-        env.update(CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off", EDITOR=str(editor))
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        before = qfile.read_bytes()
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
-        rc, out = on_tty(cmd, str(root), env=env, timeout=30, inputs=[
+        rc, out = on_tty(cmd, str(root), env=_v_env(editor, fb), timeout=30, inputs=[
             ("[v] write in the editor", "v"),
-            ("Send the item back to the queue", "n"),
+            (ASK, ""),
         ])
         plain = ANSI.sub("", out)
-        check("CS-1 pty v: decide exits 0", rc == 0, plain[-1500:])
-        check("CS-1 pty v: the new prompt is not shown for v yet",
-              ASK not in plain, plain[-1500:])
+        check("CS-4 pty v: decide exits 0", rc == 0, plain[-1500:])
+        check("CS-4 pty v: the panel asks if it is a doubt about the question",
+              ASK in plain, plain[-1500:])
+        check("CS-4 pty v: nothing is refused as 'not recorded'",
+              "not recorded" not in plain and "resposta recusada" not in plain,
+              plain[-1500:])
+        check("CS-4 pty v: no send-back question for the doubt",
+              "Send the item back to the queue with that answer?" not in plain,
+              plain[-1500:])
+        check("CS-4 pty v: queue.yaml is byte-identical (no reader, nothing recorded)",
+              qfile.read_bytes() == before, qfile.read_text())
         assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_yes_at_the_doubt_prompt_after_v_rewrites_with_the_editor_text():
+    """CS-4, yes: same as CS-2 but the doubt comes from the editor."""
+    import yaml
+    failed_before = len(FAILURES)
+    typed = "não entendi a pergunta"
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        editor = _fake_editor(tmp, typed)
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        reader, log = _doubt_reader(tmp)
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=_v_env(editor, fb, reader), timeout=90,
+                         inputs=[
+            ("[v] write in the editor", "v"),
+            (ASK, ""),
+            ("answer it again", None),
+            ("[v] write in the editor", ""),
+        ])
+        plain = ANSI.sub("", out)
+        check("CS-4 pty yes: decide exits 0", rc == 0, plain[-1500:])
+        reqs = [r for r in _requests(log) if r.get("tarefa") == "reescrever-pergunta"]
+        check("CS-4 pty yes: one rewrite request", len(reqs) == 1, reqs)
+        if reqs:
+            check("CS-4 pty yes: the request carries the editor text as the doubt",
+                  reqs[0].get("duvida_do_dono") == typed, reqs[0])
+        check("CS-4 pty yes: the new question shows in the same item block",
+              NEW_Q in plain.split("badly written", 1)[-1]
+              and plain.count("· b1") == 1, plain)
+        now = {i["id"]: i for i in yaml.safe_load(qfile.read_text())["items"]}["b1"]
+        check("CS-4 pty yes: new question recorded, no answer, no doubt text on the item",
+              now.get("owner_question") == NEW_Q and now.get("status") == "pending"
+              and typed not in qfile.read_text() and "answered now 0" in plain, now)
+        lines = _ledger(fb)
+        check("CS-4 pty yes: one feedback line with id, question and doubt",
+              len(lines) == 1 and "b1" in lines[0].get("texto", "")
+              and QUESTION in lines[0].get("texto", "")
+              and typed in lines[0].get("texto", ""), lines)
+        assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_v_doubt_with_yes_unit_reader_gets_the_doubt_and_nothing_is_answered():
+    failed_before = len(FAILURES)
+    m = load_module()
+    m.edit_in_editor = lambda *a, **k: DOUBT
+    marks, rewrites, answers, it = [], [], [], iter(["v", "", ""])
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+             question=lambda _p: next(it, ""), output=lambda *_: None,
+             answer=lambda ident, text, **k: answers.append(text) or (0, "ok"),
+             unclear=lambda ident, text, doubt="": marks.append((ident, text, doubt))
+             or (0, "ok"),
+             rewrite=lambda ad, text, doubt="": rewrites.append((text, doubt))
+             or (NEW, None))
+    check("CS-4 unit yes: the rewrite got the question and the editor text",
+          rewrites == [(QUESTION, DOUBT)], rewrites)
+    check("CS-4 unit yes: the feedback mark got the editor text",
+          marks == [("b1", QUESTION, DOUBT)], marks)
+    check("CS-4 unit yes: no answer recorded", answers == [], answers)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
 SEND_BACK = "Send the item back to the queue with that answer? [y/N]"
@@ -506,12 +589,72 @@ def test_punctuation_only_text_is_answered_without_force():
 
 
 def test_v_text_is_answered_without_force():
-    """`v` does not ask the doubt yet (CS-4): its text keeps being refused."""
+    """CS-4: ORDINARY `v` text never meets the doubt prompt, so no force (before
+    CS-4 this case used the doubt text DOUBT, which now meets the prompt)."""
     failed_before = len(FAILURES)
-    calls = _calls(["v", "y"], editor_text=DOUBT)
+    calls = _calls(["v", "y"], editor_text="variante B")
     check("CS-3 unit: `v` text, no force",
-          len(calls) == 1 and calls[0][0] == DOUBT and not calls[0][1].get("force"),
+          len(calls) == 1 and calls[0][0] == "variante B" and not calls[0][1].get("force"),
           calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_v_doubt_text_then_n_then_y_records_the_text_with_force():
+    failed_before = len(FAILURES)
+    calls = _calls(["v", "n", "y"], editor_text=DOUBT)
+    check("CS-4 unit v n+y: one answer, the editor text, with force, sent back",
+          len(calls) == 1 and calls[0][0] == DOUBT and calls[0][1].get("force") is True
+          and not calls[0][1].get("keep"), calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_v_doubt_text_then_n_then_n_keeps_the_item_with_force():
+    failed_before = len(FAILURES)
+    calls = _calls(["v", "n", "n"], editor_text=DOUBT)
+    check("CS-4 unit v n+n: recorded with keep and force",
+          len(calls) == 1 and calls[0][0] == DOUBT
+          and calls[0][1].get("keep") is True and calls[0][1].get("force") is True,
+          calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_v_ordinary_text_does_not_show_the_doubt_prompt_and_has_no_force():
+    failed_before = len(FAILURES)
+    for reply, keep in (("y", False), ("n", True)):
+        shown = []
+        m = load_module()
+        m.edit_in_editor = lambda *a, **k: "variante B"
+        calls, it = [], iter(["v", reply])
+        m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+                 question=lambda p: shown.append(p) or next(it, ""),
+                 output=lambda *_: None,
+                 answer=lambda ident, text, **k: calls.append((text, k)) or (0, "ok"))
+        check(f"CS-4 unit v ordinary {reply}: no doubt prompt",
+              not any("doubt about the question" in str(p) for p in shown), shown)
+        check(f"CS-4 unit v ordinary {reply}: answered, no force",
+              len(calls) == 1 and calls[0][0] == "variante B"
+              and "force" not in calls[0][1]
+              and bool(calls[0][1].get("keep")) == keep, calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_v_empty_editor_asks_nothing_and_records_nothing():
+    failed_before = len(FAILURES)
+    shown = []
+    m = load_module()
+    m.edit_in_editor = lambda *a, **k: ""
+    calls, it, screen = [], iter(["v", ""]), []
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+             question=lambda p: shown.append(p) or next(it, ""),
+             output=screen.append,
+             answer=lambda ident, text, **k: calls.append((text, k)) or (0, "ok"))
+    check("CS-4 unit v empty: no doubt prompt, no send-back, nothing recorded",
+          calls == [] and not any("doubt about the question" in str(p)
+                                  or "Send the item back" in str(p) for p in shown),
+          (calls, shown))
+    check("CS-4 unit v empty: the same menu comes back with the editor message",
+          "nothing written in the editor" in "\n".join(screen)
+          and len(shown) == 2, (shown, screen))
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
@@ -534,10 +677,11 @@ def test_punctuation_only_text_kept_with_n_is_answered_with_keep_and_without_for
 
 
 def test_v_text_kept_with_n_is_answered_with_keep_and_without_force():
+    """CS-4: with ORDINARY `v` text (the doubt text now meets the prompt)."""
     failed_before = len(FAILURES)
-    calls = _calls(["v", "n"], editor_text=DOUBT)
+    calls = _calls(["v", "n"], editor_text="variante B")
     check("CS-3 unit: `v` text + n, keep and no force",
-          len(calls) == 1 and calls[0][0] == DOUBT
+          len(calls) == 1 and calls[0][0] == "variante B"
           and calls[0][1].get("keep") is True and "force" not in calls[0][1], calls)
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 

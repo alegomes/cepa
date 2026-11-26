@@ -4667,11 +4667,15 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                                           if code else "") + "nothing written in the editor")
                         continue
                 break
-            if r == "w":
-                typed_w = str(question(screen.follow_up(
-                    "Your answer, in one line (the next run reads this): "))).strip()
+            if r in ("w", "v"):
+                if r == "w":
+                    typed_w = str(question(screen.follow_up(
+                        "Your answer, in one line (the next run reads this): "))).strip()
+                else:
+                    # CS-4: the editor text takes the same path as the `w` text.
+                    typed_w = typed
                 if typed_w and looks_like_doubt(typed_w):
-                    # CS-1/CS-2: text that looks like a doubt is asked about before
+                    # CS-1/CS-2/CS-4: text that looks like a doubt is asked about before
                     # anything is recorded. Yes acts like `?` with the text as the
                     # owner's doubt (same rewrite path); no falls through to the
                     # answer path (CS-3).
@@ -4728,8 +4732,8 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             text = (("tarefa encerrada" if delivered else "descartado")
                     + f": {base}" + (f". {extra}" if extra else ""))
         elif r in ("w", "v"):
-            # `w` was read, and the doubt asked, inside the menu loop above.
-            text = typed if r == "v" else typed_w
+            # `w`/`v` text was read, and the doubt asked, above.
+            text = typed_w
             if text:
                 give_back = is_yes(question(screen.follow_up(
                     "Send the item back to the queue with that answer? [y/N] ")))
