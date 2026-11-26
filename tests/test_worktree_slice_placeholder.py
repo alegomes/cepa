@@ -24,6 +24,13 @@ import re
 import sys
 from pathlib import Path
 
+# The test only READS session-registry.py and session-worktrees.py, but the
+# sweep in test_isolated_telemetry.py asks every test that cites an emitter
+# hook to isolate: citing becomes executing in one commit.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _isolated_telemetry import isolate  # noqa: E402
+isolate()
+
 REPO = Path(__file__).resolve().parent.parent
 CMDS = REPO / "common" / "commands"
 FAMILY = ["worktree-start", "worktree-merge", "worktree-discard",
