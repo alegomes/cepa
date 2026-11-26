@@ -1,0 +1,139 @@
+# queue.yaml — fila `single-track`, escrita por /common:queue.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/duvida-sobre-a-pergunta-do-decide.md (11 critérios de sucesso; ordem herdada do texto)
+# Escrito em: 2026-11-26
+
+schema_version: 2
+mode: single-track
+queue: duvida-sobre-a-pergunta-do-decide
+source: docs/spec/duvida-sobre-a-pergunta-do-decide.md (11 critérios de sucesso;
+  ordem herdada do texto)
+items:
+- id: CS-1
+  title: texto que parece dúvida, digitado em `w`, faz o painel perguntar se é dúvida
+    antes de gravar
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
+    escolher `w` num item do painel e digitar "O que é a variante O?" mostra a linha
+    "Is this a doubt about the question? [Y/n]" e o `queue.yaml` continua igual;
+    hoje a tela pergunta "Send the item back to the queue with that answer? [y/N]"
+    e depois mostra "not recorded".'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: com sim, a pergunta é reescrita com a dúvida do dono e reaparece no mesmo
+    item
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: no cenário
+    do CS-1, responder Enter com um leitor falso que grava o pedido recebido: o
+    pedido traz "O que é a variante O?" como dúvida do dono, a tela mostra a pergunta
+    nova no bloco do mesmo item e pede a resposta de novo, o item segue sem resposta
+    gravada e o arquivo de feedback ganha uma linha com o id do item, a pergunta
+    e a dúvida; hoje o leitor nunca é chamado a partir de `w`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: com não, o texto é gravado como resposta sem sair do painel
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: no cenário
+    do CS-1, responder `n` e depois `y` em "Send the item back to the queue with
+    that answer?" grava "O que é a variante O?" na evidência do item como resposta
+    do dono e a tela mostra a confirmação de gravado; hoje a tela mostra "not recorded:
+    resposta recusada" e nada é gravado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: a dúvida digitada no editor (`v`) segue o mesmo caminho do `w`
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal
+    com um editor falso que salva "não entendi a pergunta", escolher `v` mostra
+    "Is this a doubt about the question? [Y/n]"; hoje a tela mostra "not recorded:
+    resposta recusada" e o item vai para depois.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-5
+  title: a tecla `?` pede em uma linha opcional o que o dono não entendeu
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal
+    com um leitor falso que grava o pedido recebido, apertar `?` mostra "What did
+    you not understand? [Enter skips]"; digitar "variante O" faz o pedido ao leitor
+    trazer esse texto, e Enter vazio faz o pedido ir sem dúvida, como hoje; hoje
+    `?` chama o leitor sem perguntar nada.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: depois de um `?` sem texto, uma dúvida digitada dispara a segunda reescrita,
+    e a terceira tentativa deixa o item para depois
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal
+    com um leitor falso que conta as chamadas, apertar `?` com Enter vazio e depois
+    digitar uma dúvida em `w` chama o leitor duas vezes e mostra a segunda pergunta
+    nova no mesmo item; uma terceira dúvida não chama o leitor, mostra uma linha
+    dizendo que o item fica para depois e o item aparece em "for later" no fecho;
+    hoje o leitor é chamado no máximo uma vez por item.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-7
+  title: um segundo `?` sem texto não dispara reescrita
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: no cenário
+    do CS-6, apertar `?` duas vezes com Enter vazio nas duas chama o leitor uma
+    vez só, e a tela diz que a pergunta não será reescrita de novo sem uma dúvida
+    escrita; hoje a mensagem diz só "the reader rewrites once per item", sem citar
+    que uma dúvida escrita dispara outra.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-8
+  title: texto recusado devolve o menu do mesmo item e a mensagem não cita `--force`
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
+    escolher `w` e digitar "..." mostra uma linha de recusa sem a palavra "--force",
+    que cita só teclas presentes no menu daquele item, e o menu do mesmo item reaparece
+    pronto para outra tecla; hoje a tela mostra "repita com --force" e passa ao
+    item seguinte.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-9
+  title: a mensagem de recusa não cita a tecla `e` quando o item não tem detalhe
+    técnico
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: no cenário
+    do CS-8 com um item sem `evidence`, a linha de recusa não traz "[e]"; com um
+    item com `evidence`, traz; hoje a recusa não cita tecla nenhuma.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-10
+  title: a legenda da tecla `?` diz que a pergunta é reescrita em seguida
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
+    a linha da legenda que começa com "? =" contém "rewritten" e "60"; hoje ela
+    diz "it is recorded as badly written and nothing is answered".'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-11
+  title: a legenda do Enter diz que a dúvida pode ir a uma sessão de chat, com a
+    fila e o item
+  why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
+    entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal
+    com a fila `f1` e o item `C1-47`, a linha da legenda que começa com "Enter ="
+    contém "chat", "f1" e "C1-47"; hoje ela diz "leaves the question for later".'
+  status: pending
+  blocked_by: []
+  human_pending: null

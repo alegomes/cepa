@@ -3770,3 +3770,165 @@ items:
       comando de barra não se passe por resposta do dono
     commit: e3a316811d63bb93056eafdb4a9b310e5f9234ff
   head_commit: bdf1b9566fe9761c35f0feb27a6a1735943d4316
+- id: run-morta-fica-running
+  title: Uma run que morre continua `running` no estado e `cepa run pending` não
+    a lista
+  why: 'Origem: feedback fb-20261122-2 (2026-11-22); BACKLOG.md § Uma run que morre
+    continua `running` no estado e `cepa run pending` não a lista (ainda não priorizado:
+    entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
+- id: no-busy-wait-libera-monitor
+  title: '`no-busy-wait` barra o laço `until` do Monitor, que é a ferramenta certa
+    para esperar'
+  why: 'Origem: feedback fb-20261122-3 (2026-11-22); BACKLOG.md § `no-busy-wait`
+    barra o laço `until` do Monitor, que é a ferramenta certa para esperar (ainda
+    não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
+- id: answer-relata-dispensa-gravada
+  title: '`cepa queue answer` diz que não fez nada e grava a dispensa sem commit'
+  why: 'Origem: feedback fb-20261122-4 (2026-11-22); BACKLOG.md § `cepa queue answer`
+    diz que não fez nada e grava a dispensa sem commit (ainda não priorizado: entrou
+    no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
+- id: fim-da-run-legivel-sem-print
+  title: O fim de uma run só fica legível depois que o dono manda print para o modelo
+    traduzir
+  why: 'Origem: feedback fb-20261123-1 (2026-11-23); BACKLOG.md § O fim de uma run
+    só fica legível depois que o dono manda print para o modelo traduzir (ainda
+    não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
+- id: review-md-depois-do-auto-land
+  title: O `.review.md` pede o merge que o `--auto-land` já fez
+  why: 'Origem: feedback fb-20261123-3 (2026-11-23); BACKLOG.md § O `.review.md`
+    pede o merge que o `--auto-land` já fez (ainda não priorizado: entrou no fim
+    da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
+- id: digest-run-all-le-cada-fila
+  title: '`cepa run digest` lê `queues/all/queue.yaml` numa run de todas as filas
+    e dá todo item como sumido'
+  why: 'Origem: feedback fb-20261123-4 (2026-11-23); BACKLOG.md § `cepa run digest`
+    lê `queues/all/queue.yaml` numa run de todas as filas e dá todo item como sumido
+    (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
+- id: retorno-vermelho-fecha-rota
+  title: Retorno vermelho deixa aberta a rota humana do item entregue e o item seguinte
+    fica fora do lote
+  why: 'Origem: feedback fb-20261123-5 (2026-11-23); BACKLOG.md § Retorno vermelho
+    deixa aberta a rota humana do item entregue e o item seguinte fica fora do lote
+    (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
+- id: supervisor-nao-repete-build-vermelho
+  title: O supervisor da run refaz build completo de 40 minutos sobre vermelho determinístico
+  why: 'Origem: feedback fb-20261123-6 (2026-11-23); BACKLOG.md § O supervisor da
+    run refaz build completo de 40 minutos sobre vermelho determinístico (ainda
+    não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
+- id: agentes-rodam-checagens-do-repo
+  title: Agentes fecham item sem rodar os testes do repo inteiro e abrem worktree
+    própria em `/tmp`
+  why: 'Origem: feedback fb-20261123-7 (2026-11-23); BACKLOG.md § Agentes fecham
+    item sem rodar os testes do repo inteiro e abrem worktree própria em `/tmp`
+    (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
+- id: relatorio-confere-run-rodando
+  title: Relatório do agente diz que há run rodando sem conferir
+  why: 'Origem: feedback fb-20261124-2 (2026-11-24); BACKLOG.md § Relatório do agente
+    diz que há run rodando sem conferir (ainda não priorizado: entrou no fim da
+    fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
+- id: decide-da-run-pergunta-sobras
+  title: '`cepa run decide <fila>/<run>` não pergunta as tarefas de itens entregues
+    que o relatório da run con'
+  why: 'Origem: feedback fb-20261126-1 (2026-11-26); BACKLOG.md § `cepa run decide
+    <fila>/<run>` não pergunta as tarefas de itens entregues que o relatório da
+    run conta como "for you" (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
+- id: comando-unico-cepa-sub
+  title: O Cepa manda rodar `cepa-run`, `cepa-queue` e `cepa-until` em vez de `cepa
+    <sub>`
+  why: 'Origem: feedback fb-20261126-2 (2026-11-26); BACKLOG.md § O Cepa manda rodar
+    `cepa-run`, `cepa-queue` e `cepa-until` em vez de `cepa <sub>` (ainda não priorizado:
+    entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
+- id: notificacao-nao-reabre-sessao
+  title: Depois do `wrap-up`, o relatório seguinte reabre uma frente nova
+  why: 'Episódio fb-20261122-1 (2026-11-22) prova que report-style-lint-reabre-apos-pedido-novo
+    (done) não cobriu o caso; BACKLOG.md § Depois do `wrap-up`, o relatório seguinte
+    reabre uma frente nova (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
+- id: path-lock-raiz-pelo-git
+  title: A trava de caminhos aplica as regras do repo da sessão a um arquivo de
+    outro repo
+  why: 'Episódio fb-20261123-2 (2026-11-23) prova que path-lock-le-regras-do-repo-do-arquivo
+    (done) não cobriu o caso; BACKLOG.md § A trava de caminhos aplica as regras
+    do repo da sessão a um arquivo de outro repo (ainda não priorizado: entrou no
+    fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
+- id: pasta-orfa-de-worktree-apagada
+  title: A limpeza automática apaga o worktree de uma conversa que ainda vai ser
+    retomada
+  why: 'Episódio fb-20261124-8 (2026-11-24) prova que auto-clean-nao-apaga-sessao-viva
+    (done) não cobriu o caso; BACKLOG.md § A limpeza automática apaga o worktree
+    de uma conversa que ainda vai ser retomada (ainda não priorizado: entrou no
+    fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true

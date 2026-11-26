@@ -41,3 +41,6 @@
 {"evento": "painel_antes_de_fechar", "itens": ["CS-12"], "quando": "2026-11-26T06:21:14"}
 {"evento": "run_end", "motivo": "end-of-queue", "detalhe": "the queue is finished: no runnable item is left, and 5 were deferred (each with its reason in the report)", "itens": 8, "com_progresso": 6, "sem_progresso": 0, "esgotados": 0, "limite_de_uso": 0, "esperas_de_cota": 0, "quedas_de_rede": 0, "cota_apertada": 0, "entregues": 5, "travados": 1, "verify_vermelho": 2, "done_sem_commit": 0, "filas_fora": [], "quando": "2026-11-26T06:31:14"}
 {"evento": "analise", "feita": true, "arquivo": "/Users/alegomes/coding/cepa/.claude/queues/reforma-de-nomes/until/2026-11-25-2108.review.md", "erro": null, "quando": "2026-11-26T06:34:12"}
+{"evento": "instalado_no_pouso", "repo": "/Users/alegomes/coding/cepa", "ok": false, "segundos": 1, "motivo": "exited 1", "quando": "2026-11-26T07:29:17"}
+{"evento": "reinstalacao_desfeita", "repo": "/Users/alegomes/coding/cepa", "ok": false, "motivo": "exited 1", "segundos": 0, "quando": "2026-11-26T07:29:17"}
+{"evento": "instalado_no_pouso", "repo": "/Users/alegomes/coding/cepa", "ok": true, "segundos": 23, "motivo": null, "quando": "2026-11-26T07:35:59"}
