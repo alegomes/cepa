@@ -82,8 +82,10 @@ set -e
 # Environment names (CS-6). Every variable cepa owns has the CEPA_ prefix and an
 # English name; the name it had before is still read. `cepa_env NEW [DEFAULT]`
 # prints the value of NEW, else of its old name, else DEFAULT: the new one wins
-# and an empty value counts as unset. The old value spellings are still accepted
-# (CEPA_PERMISSIONS=classificador, CEPA_PROMPT_MODE=substitui).
+# and an empty value counts as unset. The old value `substitui` of CEPA_PROMPT_MODE is
+# translated here. The old value `classificador` of CEPA_PERMISSIONS needs no
+# translation: the only reader compares with `bypass`, so any other value (classifier,
+# classificador) is the classifier; tests/test_env_names_in_english.py runs it end to end.
 # Shell twin of common/hooks/_cepaenv.py, which holds the full table; only the
 # variables this launcher reads are here, and tests/test_env_names_in_english.py
 # checks that the two agree.
@@ -105,7 +107,6 @@ cepa_env() {
     [ -z "$_ce_old" ] || _ce_v=$(eval "printf '%s' \"\${$_ce_old:-}\"")
   fi
   case "$1=$_ce_v" in
-    CEPA_PERMISSIONS=classificador) _ce_v=classifier ;;
     CEPA_PROMPT_MODE=substitui) _ce_v=replace ;;
   esac
   printf '%s' "${_ce_v:-${2-}}"
