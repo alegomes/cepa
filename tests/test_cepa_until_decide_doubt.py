@@ -731,6 +731,37 @@ def test_n_at_the_doubt_prompt_then_y_records_the_answer_in_the_panel():
         assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
+def test_v_doubt_then_n_then_y_records_the_editor_text_through_the_real_answer():
+    """CS-4, "no" outcome, as a process in a pseudo-terminal and with the real
+    `cepa-queue answer`: the editor text is recorded as the owner's answer."""
+    import yaml
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        editor = _fake_editor(tmp, "não entendi a pergunta")
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=_v_env(editor, fb), timeout=30, inputs=[
+            ("[v] write in the editor", "v"),
+            (ASK, "n"),
+            (SEND_BACK, "y"),
+        ])
+        plain = ANSI.sub("", out)
+        now = {i["id"]: i for i in yaml.safe_load(qfile.read_text())["items"]}["b1"]
+        check("CS-4 pty v n y: decide exits 0", rc == 0, plain[-1500:])
+        check("CS-4 pty v n y: the editor text is in the evidence as the owner's answer",
+              "Resposta do dono em" in str(now.get("evidence"))
+              and "não entendi a pergunta" in str(now.get("evidence")), now)
+        check("CS-4 pty v n y: the screen shows the recorded confirmation",
+              "answered now 1" in plain, plain[-1500:])
+        check("CS-4 pty v n y: nothing is refused as 'not recorded'",
+              "not recorded" not in plain, plain[-1500:])
+        assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
 def test_punctuation_only_text_is_still_refused_by_the_panel():
     failed_before = len(FAILURES)
     rc, plain, before, after = _w_session("...", [(SEND_BACK, "y")])
