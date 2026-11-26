@@ -3887,3 +3887,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: comando-unico-cepa-sub
+  title: O Cepa manda rodar `cepa-run`, `cepa-queue` e `cepa-until` em vez de `cepa
+    <sub>`
+  why: 'Origem: feedback fb-20261126-2 (2026-11-26); BACKLOG.md § O Cepa manda rodar
+    `cepa-run`, `cepa-queue` e `cepa-until` em vez de `cepa <sub>` (ainda não priorizado:
+    entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
