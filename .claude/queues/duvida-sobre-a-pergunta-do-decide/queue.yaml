@@ -144,9 +144,16 @@ items:
     nova no mesmo item; uma terceira dúvida não chama o leitor, mostra uma linha
     dizendo que o item fica para depois e o item aparece em "for later" no fecho;
     hoje o leitor é chamado no máximo uma vez por item.'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  claimed_by:
+    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
+    pid: 45882
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
+    branch: session/chain-1126-1336
+    started_at: '2026-11-26T23:51:25+00:00'
 - id: CS-7
   title: um segundo `?` sem texto não dispara reescrita
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
