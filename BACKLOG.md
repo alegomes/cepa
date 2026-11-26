@@ -115,6 +115,14 @@ Três partes, decididas pelo dono em 2026-11-10:
 
 ---
 
+### Episódio `fb-20261124-8`
+
+O conserto `99690f5` impede a remoção de worktree de sessão viva, mas a sessão que já tinha perdido a worktree deixou a pasta `cepa-worktrees/cepa-until-fup` só com `.claude/`. Ela continuava lá em 2026-11-26.
+
+> wrap-up de sessão cujo worktree foi apagado pelo auto_clean: sobra a pasta /Users/alegomes/cepa-worktrees/cepa-until-fup só com .claude/ (session-log, claims); a trava do Claude Code impede apagar o cwd da própria sessão e nenhum hook a remove depois. Remover à mão: rm -rf /Users/alegomes/cepa-worktrees/cepa-until-fup
+>
+> `fb-20261124-8`, 2026-11-24 · cepa · main · discovery · `None`
+
 ## Branch lateral de um run é casada com o item de outra fila que tem o mesmo id
 
 Registrado em 2026-11-14 a pedido do dono, ao gerar a fila `until-arvore-limpa`.
@@ -4814,6 +4822,14 @@ A segunda metade de `fb-20261105-1` (abaixo, na seção do `write-mode-gate`) re
 
 **Status do episódio:** feito na branch `until/2026-11-05-2029` (2026-11-05, item `report-style-lint-reabre-apos-pedido-novo`, common 3.3.0): `session_closed` virou máquina de estados; prompt do dono que não é mero aceite ("sim", "1. sim", "ok") reabre a sessão, linha injetada pelo harness (`isMeta`, "Stop hook feedback:", `tool_result`) não reabre, novo wrap-up + "Safe to exit" fecha de novo. Testes (i)..(t2) em `tests/test_report_style_lint.py`; prova PROVEN em `docs/proof/report-style-lint-reabre-apos-pedido-novo.yaml`.
 
+### Episódio `fb-20261122-1`
+
+O conserto de `report-style-lint-reabre-apos-pedido-novo` não cobre a notificação de subagente: uma linha `<task-notification>` depois de "Safe to exit" ainda reabre a sessão.
+
+> report-style-lint: session_closed trata uma linha <task-notification> (notificação de subagente/tarefa, não-isMeta) depois de 'Safe to exit' como pedido novo do dono e reabre a sessão, então a checagem pergunta-pos-wrap-up deixa de valer. Notado em 2026-11-21 ao escrever o teste (p) do item lista-de-decisoes-substituida-declarada (until/2026-11-21-1244): o teste precisou usar tool_result em vez de notificação. Correção provável: reaproveitar _is_owner_prompt/MACHINE_TAG em session_closed.
+>
+> `fb-20261122-1`, 2026-11-22 · cepa · until/2026-11-21-1244 · None · `report-style-lint.py session_closed`
+
 ## `/common:plan` aceita item de feedback sem conferir se o `BACKLOG.md` já o dá como feito
 
 **Plano:** sem item ainda (abrir na fila `cepa` quando entrar na rodada)
@@ -5434,6 +5450,14 @@ Ficou de fora, de propósito: aplicar as regras de B (o `build-hex.yaml` de B) �
 
 ---
 
+### Episódio `fb-20261123-2`
+
+Caso novo, depois do conserto de 2026-11-21: a trava tira a raiz do `cwd` da sessão. Depois de um `cd` para subpasta, o engineering-lead não conseguiu gravar e gastou cerca de 9 minutos.
+
+> bash-path-lock pega a raiz do projeto do cwd da sessão (payload cwd, linha 438 do hook); depois que o orquestrador fez cd para uma subpasta, o engineering-lead não conseguiu gravar a correção na rodada kairos-etapa-1/2026-11-23-0838 e gastou ~9 min (533.089 ms) diagnosticando. A raiz deveria vir de git rev-parse --show-toplevel, não do cwd.
+>
+> `fb-20261123-2`, 2026-11-23 · wego-digitacao-backend · main · construction · `build-hex:bash-path-lock`
+
 ## Fora da raiz, a trava do Bash só confere o texto: link, glob e valor colado na opção ainda alcançam a raiz
 
 **Status:** pendente · **Lar provável:** `common/hooks/_templates/bash-path-lock.py.tmpl` (`_refs_root`, balde 3) · **Origem:** revisão de par do item `path-lock-le-regras-do-repo-do-arquivo`, 2026-11-22
@@ -5520,3 +5544,219 @@ O cabeçalho `prontos para construir · 2 filas · 0 itens` conta só os itens q
 ### Esboço
 
 O cabeçalho passa a dizer também quantos itens esperam o dono, com as mesmas palavras do painel do mod (pendentes, bloqueados). Teste que falta: fila com 1 pendente com ação humana e 1 bloqueado, o cabeçalho não pode ser lido como fila vazia.
+
+## Uma run que morre continua `running` no estado e `cepa run pending` não a lista
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-run`, `pending`) · **Origem:** feedback `fb-20261122-2`, 2026-11-22
+
+### Problema
+
+A run `kairos-etapa-1/2026-11-21-1407` morreu ao começar o C1-34. O processo não existia mais, mas o `.estado.json` seguia `running` e o `pending` não a contou entre as mortas. A worktree da run ficou para trás.
+
+### Palavras do dono
+
+> Rodada kairos-etapa-1/2026-11-21-1407 do wego-digitacao-backend morreu às 14:21 ao começar o C1-34 (pid 38611 não existe mais), mas o estado.json segue dizendo 'running' e cepa-until pending não a lista entre as mortas. Sem commit perdido; a worktree wego-digitacao-backend-until-2026-11-21-1407 ficou para trás.
+>
+> `fb-20261122-2`, 2026-11-22 · wego-digitacao-backend · main · construction · `cepa-until`
+
+### Esboço
+
+O `pending` confere se o pid gravado está vivo antes de confiar no `running`. Teste que falta: estado `running` com pid inexistente aparece como morta, com o comando `cepa run close-dead`.
+
+## `no-busy-wait` barra o laço `until` do Monitor, que é a ferramenta certa para esperar
+
+**Status:** pendente · **Lar provável:** common (`common/hooks/no-busy-wait.py`) · **Origem:** feedback `fb-20261122-3`, 2026-11-22
+
+### Problema
+
+Nos itens C1-54 e C1-55 da run `kairos-etapa-1/2026-11-21-1424` o hook barrou laços `until` passados ao Monitor. O Monitor é o jeito suportado de esperar uma condição. No C1-55 um observador de log que sobrou segurou a sessão até o agente matá-lo.
+
+### Palavras do dono
+
+> O hook que barra laço de espera (no-busy-wait) bloqueou laços until do Monitor nos itens C1-54 e C1-55 da rodada kairos-etapa-1/2026-11-21-1424, e o Monitor é a ferramenta suportada para esperar. No C1-55, um observador de log que sobrou segurou a sessão aberta até o agente matá-lo.
+>
+> `fb-20261122-3`, 2026-11-22 · wego-digitacao-backend · main · construction · `no-busy-wait`
+
+### Esboço
+
+O hook deixa passar o laço quando a chamada é do Monitor e continua barrando o `sleep` em primeiro plano no Bash. Teste que falta: payload do Monitor com `until` passa, Bash com `while ...; sleep` é barrado.
+
+## `cepa queue answer` diz que não fez nada e grava a dispensa sem commit
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-queue`, `answer`) · **Origem:** feedback `fb-20261122-4`, 2026-11-22
+
+### Problema
+
+Em `kairos-etapa-1`, `answer C1-54` respondeu que o item estava `done` e sem rota aberta, mas aceitou a dispensa em `docs/waivers` e deixou o arquivo em stage sem commit. O `land` seguinte recusou por mudança sem commit.
+
+### Palavras do dono
+
+> cepa-plan answer kairos-etapa-1 C1-54 respondeu 'C1-54 está done e sem rota humana aberta: não há o que responder', mas aceitou a dispensa em docs/waivers (gravou autor e resposta_do_dono) e deixou o arquivo staged sem commit. Isso fez o cepa-until land recusar por mudança sem commit. A mensagem diz que nada aconteceu quando algo aconteceu.
+>
+> `fb-20261122-4`, 2026-11-22 · wego-digitacao-backend · main · construction · `cepa-plan`
+
+### Esboço
+
+A saída diz o que foi gravado (a dispensa aceita) e o comando faz o commit do arquivo que mudou, como o `decide` já faz. Teste que falta: item `done` com dispensa proposta, o `answer` relata a dispensa e a árvore termina limpa.
+
+## O fim de uma run só fica legível depois que o dono manda print para o modelo traduzir
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-run`, relatório final e `.review.md`) · **Origem:** feedback `fb-20261123-1`, 2026-11-23
+
+### Problema
+
+O painel final e o `.review.md` cortam as perguntas com reticências, citam o caminho absoluto do script em vez do comando instalado e trazem afirmações vencidas (arquivo dado como sem commit que já estava no commit). Em 2026-11-26 o dono voltou a mandar dois prints do fim da run `lotes-de-faturamento-c1/2026-11-25-2015` para saber o que fazer.
+
+### Palavras do dono
+
+> Registre um feedback no Cepa para que o fechamento de uma run já traga todas essas informações e não demande a submissão de um print ao modelo de AI para ser traduzido em linguagem mais simples e completa. [contexto anotado pelo agente: o painel final do cepa-until e o .review.md saem em inglês, truncam as perguntas pendentes com reticências, citam 'python3 /Users/.../common/bin/cepa-plan' em vez do comando instalado 'cepa-plan', e trazem afirmações defasadas no fechamento (queue.yaml 'sem commit' que já estava no commit 72b922b; pedido para registrar defeito já registrado). O dono precisou mandar print a cada fim de rodada para ter as pendências em pt-BR, completas e com passo a passo.]
+>
+> `fb-20261123-1`, 2026-11-23 · wego-digitacao-backend · main · construction · `cepa-until`
+
+### Esboço
+
+Cada item que espera o dono sai com a pergunta inteira, o que fazer em um passo e o comando. Teste que falta: fim de run com pergunta maior que a largura do terminal mostra o texto inteiro.
+
+## O `.review.md` pede o merge que o `--auto-land` já fez
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-run`, fim da run) · **Origem:** feedback `fb-20261123-3`, 2026-11-23
+
+### Problema
+
+Na run `kairos-etapa-1/2026-11-23-0838` o `.review.md` foi escrito antes do merge automático e pediu ao dono o merge que a run já tinha feito e enviado (merge `9038cdb`).
+
+### Palavras do dono
+
+> O .review.md da rodada kairos-etapa-1/2026-11-23-0838 foi escrito antes do --auto-land e pede ao dono para aterrissar uma rodada que o próprio cepa-until já tinha juntado à main e enviado (merge 9038cdb, push às 09:47). O relatório de fechamento contradiz o painel e precisa ser regerado ou anotado depois do auto-land.
+>
+> `fb-20261123-3`, 2026-11-23 · wego-digitacao-backend · main · construction · `cepa-until`
+
+### Esboço
+
+O `.review.md` é escrito depois do merge automático, ou ganha uma linha que registra o merge feito. Teste que falta: run limpa com `--auto-land` termina com um `.review.md` que não pede merge.
+
+## `cepa run digest` lê `queues/all/queue.yaml` numa run de todas as filas e dá todo item como sumido
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-run`, `digest`) · **Origem:** feedback `fb-20261123-4`, 2026-11-23
+
+### Problema
+
+Nas runs `all/2026-11-21-1244` e `all/2026-11-23-1116` o resumo leu a pasta de registro `all` como se fosse uma fila, deu todo item como sumido da fila e nenhuma dispensa proposta. A segunda ocorrência está em `fb-20261124-5`, item (1).
+
+### Palavras do dono
+
+> cepa-until-digest reads queues/all/queue.yaml in an all-queues run and reports every item as gone from the queue (run all/2026-11-21-1244)
+>
+> `fb-20261123-4`, 2026-11-23 · cepa · main · discovery · `cepa-until`
+
+### Esboço
+
+O `digest` de uma run `all/<run>` lê a fila de cada item. Teste que falta: digest de uma run de duas filas acha os itens nas duas.
+
+## Retorno vermelho deixa aberta a rota humana do item entregue e o item seguinte fica fora do lote
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-run`) · **Origem:** feedback `fb-20261123-5`, 2026-11-23
+
+### Problema
+
+Na run `all/2026-11-21-1244`, `capture-build-result-flutter` e `plan-answer-aceita-resposta-do-chat` ficaram fora do lote seguinte porque um retorno vermelho deixou aberta a rota humana do item já entregue.
+
+### Palavras do dono
+
+> a red return leaves the delivered item's human route open, so the pending item stays out of the next batch (capture-build-result-flutter, plan-answer-aceita-resposta-do-chat in run all/2026-11-21-1244)
+>
+> `fb-20261123-5`, 2026-11-23 · cepa · main · discovery · `cepa-until`
+
+### Esboço
+
+Teste que falta: item entregue, retorno vermelho, o item pendente que dependia dele entra no lote seguinte.
+
+## O supervisor da run refaz build completo de 40 minutos sobre vermelho determinístico
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-run`, supervisor) · **Origem:** feedback `fb-20261123-6`, 2026-11-23
+
+### Problema
+
+Na run `all/2026-11-21-1244` o supervisor repetiu um build de 42 minutos que tinha falhado num teste determinístico, e perdeu 85 minutos. A run `all/2026-11-23-1116` (`fb-20261124-5`) repetiu o padrão com 47 minutos, somou um teste intermitente que custou 46 minutos e uma diferença de ambiente: os agentes rodam os testes com `CEPA_UNTIL_RUN` e o supervisor sem, o que custou dois builds vermelhos (95 minutos).
+
+### Palavras do dono
+
+> the supervisor repeats a 42-minute full build when the first one failed on a deterministic test; run all/2026-11-21-1244 lost 85 minutes to this
+>
+> `fb-20261123-6`, 2026-11-23 · cepa · main · discovery · `cepa-until`
+
+### Esboço
+
+O supervisor reroda só os testes que falharam antes de decidir repetir o build inteiro, e os agentes rodam os testes com o mesmo ambiente do supervisor. Teste que falta: build vermelho num teste determinístico não dispara um segundo build completo.
+
+## Agentes fecham item sem rodar os testes do repo inteiro e abrem worktree própria em `/tmp`
+
+**Status:** pendente · **Lar provável:** common (fluxos `build-solo` e `cepa run`) · **Origem:** feedback `fb-20261123-7`, 2026-11-23
+
+### Problema
+
+Na run `all/2026-11-21-1244` os agentes fecharam itens sem rodar as checagens que valem para o repo inteiro (`test_state_deposits`, `test_guiding_thread`, `test_isolated_telemetry`), e o orquestrador abriu worktrees próprias em `/tmp` para se conferir.
+
+### Palavras do dono
+
+> agents close items without running the repo-wide checks (test_state_deposits, test_guiding_thread, test_isolated_telemetry) and the orchestrator opens its own /tmp worktrees for self-checks (run all/2026-11-21-1244)
+>
+> `fb-20261123-7`, 2026-11-23 · cepa · main · discovery · `cepa-until`
+
+### Esboço
+
+Teste que falta: item que quebra `test_state_deposits` não fecha como entregue.
+
+## Relatório do agente diz que há run rodando sem conferir
+
+**Status:** pendente · **Lar provável:** common (relatório do `/common:spec`) · **Origem:** feedback `fb-20261124-2`, 2026-11-24
+
+### Problema
+
+O relatório do `/common:spec` afirmou que havia uma run em andamento e o dono corrigiu: não havia.
+
+### Palavras do dono
+
+> Não tem cepa until rodando
+>
+> `fb-20261124-2`, 2026-11-24 · cepa · session/now-what · discovery · `agente (relatório do /common:spec)`
+
+### Esboço
+
+Antes de citar uma run em andamento, o relatório consulta `cepa run pending` ou o estado da run. Teste que falta: relatório com run citada sem estado `running` é barrado.
+
+## `cepa run decide <fila>/<run>` não pergunta as tarefas de itens entregues que o relatório da run conta como "for you"
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-run`, `owner_deferred`) · **Origem:** feedback `fb-20261126-1`, 2026-11-26
+
+### Problema
+
+O relatório final da run `lotes-de-faturamento-c1/2026-11-25-2015` contou 8 itens "for you". O `decide` com fila e run perguntou o merge e 2 itens travados (C1-15, C1-16) e deixou de fora as dispensas C1-4 a C1-7 e as tarefas C1-10 e C1-14. A causa: `owner_deferred` só junta `delivered_leftovers` quando não recebe o nome da run.
+
+### Palavras do dono
+
+> cepa run decide lotes-de-faturamento-c1/2026-11-25-2015 não perguntou as dispensas e tarefas (C1-4..7, C1-10, C1-14) que o relatório da mesma run listou como 'waiting on you'. Dono: 'Por quê? Não são todas tarefas do run especificado?'
+>
+> `fb-20261126-1`, 2026-11-26 · wego-faturamento-backend · main · construction · `cepa-run`
+
+### Esboço
+
+O `decide` de uma run pergunta tudo o que o relatório daquela run contou para o dono. Teste que falta: run com uma dispensa proposta num item entregue, `decide <fila>/<run>` pergunta a dispensa.
+
+## O Cepa manda rodar `cepa-run`, `cepa-queue` e `cepa-until` em vez de `cepa <sub>`
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-*`, textos impressos) · **Origem:** feedback `fb-20261126-2`, 2026-11-26
+
+### Problema
+
+As frases que dizem ao dono o que rodar usam a forma com hífen (`To answer them: cepa-run decide <fila>`). Só no `cepa-run` são 63. O lançador `cepa` já encaminha `cepa run` para `cepa-run`, e o dono quer lembrar de um comando só.
+
+### Palavras do dono
+
+> O Cepa imprime comandos na forma cepa-run/cepa-queue/cepa-until (ex.: 'To answer them: cepa-run decide <fila>'). O dono prefere a forma única 'cepa <sub>' (cepa run decide) em toda mensagem.
+>
+> `fb-20261126-2`, 2026-11-26 · cepa · session/landing-fup · discovery · `cepa-run`
+
+### Esboço
+
+Toda frase impressa para o dono usa `cepa <sub>`. Teste que falta: varrer a saída de ajuda e as frases de próximo passo e falhar em qualquer `cepa-<sub>`.
