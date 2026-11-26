@@ -167,6 +167,129 @@ def test_item_that_changes_a_hook_is_not_deferred():
               not ev(led, "verify", id="a2", par="a3"), str(led))
 
 
+# WORKS, but the item named in FAKE_BLOQUEIA closes `blocked` without a
+# commit, and the one named in FAKE_TROCA switches the worktree's branch.
+WORKS_ODD = WORKS_HOOK.replace(
+    "ident = primeiro_pendente()\n",
+    "ident = primeiro_pendente()\n"
+    "if ident == os.environ.get('FAKE_BLOQUEIA'):\n"
+    "    marca(ident, status='blocked', evidence='condicao de fora')\n"
+    "    sys.exit(0)\n"
+    "if ident == os.environ.get('FAKE_TROCA'):\n"
+    "    import subprocess as _sp\n"
+    "    _sp.run(['git', 'checkout', '-qb', 'outra'], check=True)\n"
+    "    sys.exit(0)\n", 1)
+
+
+def run_odd(tmp, ids, args=(), suite=None, **env):
+    root = build_repo(tmp, [item(i) for i in ids])
+    calls = Path(tmp) / "suite-calls"
+    (root / "tests").mkdir(exist_ok=True)
+    f = root / "tests" / "run-all.sh"
+    f.write_text(suite or FAKE_SUITE.format(calls=str(calls)))
+    f.chmod(0o755)
+    _commits(root, "suite")
+    binv = fake_claude(tmp, WORKS_ODD)
+    p, _ = run_until(root, binv, plan_of(root),
+                     ["--for", "2h", "--verify", SUITE] + list(args),
+                     extra_env=env)
+    seen = ([json.loads(l) for l in calls.read_text().splitlines()]
+            if calls.exists() else [])
+    return root, p, seen, ledger_of(root)
+
+
+def test_no_defer_when_the_window_does_not_fit_two_suites():
+    # The suite takes ~15s; the window leaves under 2 x 15s above the reserve
+    # when a2 closes, so a2 gets its own suite instead of waiting for a pair.
+    with tempfile.TemporaryDirectory() as tmp:
+        calls = Path(tmp) / "suite-calls"
+        slow = FAKE_SUITE.format(calls=str(calls)).replace(
+            "import json, os, sys\n", "import json, os, sys, time\ntime.sleep(15)\n", 1)
+        root, p, seen, led = run_odd(
+            tmp, ["a1", "a2"], ["--for", "120m", "--min-reserve", "119.5m", "--slack", "0.1m"], suite=slow)
+        check("a1 e a2 done", all(status(root, i)["status"] == "done"
+                                  for i in ("a1", "a2")), p.stdout[-800:])
+        check("a2 não é adiado com a janela curta",
+              not ev(led, "verify_adiado"), str([e for e in led if 'verify' in e['evento']]))
+        check("a2 tem a própria suíte", len(seen) == 2, str(seen))
+
+
+def test_next_item_blocked_keeps_its_own_outcome_and_the_deferred_is_checked():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, seen, led = run_odd(tmp, ["a1", "a2", "a3"],
+                                     FAKE_QUEBRA="a2", FAKE_BLOQUEIA="a3")
+        check("a2 adiado", ev(led, "verify_adiado", id="a2"), str(led))
+        check("a2 conferido no próprio commit e vermelho",
+              ev(led, "verify", id="a2", adiado=True, verde=False), str(led))
+        check("a2 tem volta vermelha", ev(led, "volta_vermelha", id="a2"), str(led))
+        check("a3 fica blocked", status(root, "a3")["status"] == "blocked",
+              str(status(root, "a3")))
+        check("a3 não ganha volta vermelha", not ev(led, "volta_vermelha", id="a3"),
+              str(led))
+        check("a3 aparece na lista de itens do resumo com o próprio motivo",
+              "   - a3: `blocked`: condicao de fora" in p.stdout, p.stdout[-1500:])
+
+
+def test_branch_switch_leaves_the_deferred_unchecked_and_says_so():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, seen, led = run_odd(tmp, ["a1", "a2", "a3"], FAKE_TROCA="a3")
+        check("a2 adiado", ev(led, "verify_adiado", id="a2"), str(led))
+        check("o run para por troca de branch",
+              any(e.get("evento") == "run_end" and e.get("motivo") == "branch-mudou"
+                  for e in led), str(led))
+        check("o registro grava verify_adiado_sem_conferir para a2",
+              ev(led, "verify_adiado_sem_conferir", id="a2"), str(led))
+        check("nenhuma suíte roda depois da troca", len(seen) == 1, str(seen))
+        import subprocess
+        out = subprocess.run(["git", "log", "-1", "--format=%s", "outra"],
+                             cwd=Path(tmp) / "worktrees", capture_output=True,
+                             text=True)
+        check("o resumo avisa que a2 ficou sem suíte",
+              "a2" in p.stdout and "deferred full build did not run" in p.stdout,
+              p.stdout[-1500:])
+
+
+def test_all_queues_red_middle_blames_the_item_in_its_own_queue():
+    import os
+    import test_cepa_until_all as al
+    with tempfile.TemporaryDirectory() as tmp:
+        root, paths = al._repo(tmp, {"a": [item("a1"), item("a2")],
+                                     "b": [item("b1")]})
+        calls = Path(tmp) / "suite-calls"
+        (root / "tests").mkdir(exist_ok=True)
+        f = root / "tests" / "run-all.sh"
+        f.write_text(FAKE_SUITE.format(calls=str(calls)))
+        f.chmod(0o755)
+        _commits(root, "suite")
+        body = al.DONE_IN_ITS_QUEUE.replace(
+            "open(queue + '-' + ident + '.txt', 'w').write('feito')\n",
+            "open('a' + queue + ident + '.txt', 'w').write('feito')\n"
+            "if queue + '/' + ident == os.environ.get('FAKE_QUEBRA_ALL'):\n"
+            "    open('quebra.txt', 'w').write('x')\n", 1)
+        os.environ["FAKE_QUEBRA_ALL"] = "a/a2"
+        try:
+            p, _ = al._run(tmp, root, ["--all", "--for", "1h", "--verify", SUITE,
+                                       "--no-analysis", "--max-failures", "10"],
+                           claude_body=body)
+        finally:
+            os.environ.pop("FAKE_QUEBRA_ALL", None)
+        led = [json.loads(l) for l in next(
+            (root / ".claude" / "queues" / "_all" / "until").glob("*.jsonl"))
+            .read_text().splitlines()]
+        order = [(e.get("fila"), e["id"]) for e in led if e["evento"] == "item_start"]
+        check("a ordem é a/a1, a/a2, b/b1", order[:3] == [("a", "a1"), ("a", "a2"),
+                                                       ("b", "b1")], str(order))
+        check("a/a2 adiado", ev(led, "verify_adiado", id="a2"), str(led))
+        voltas = [(e.get("fila"), e["id"]) for e in led if e["evento"] == "volta_vermelha"]
+        check("a volta vermelha é de a/a2, na fila a", ("a", "a2") in voltas
+              and ("b", "b1") not in voltas, str(voltas))
+        st_b = al._statuses(paths["b"])
+        check("b/b1 termina done (voltou sem culpa e refez)", st_b.get("b1") == "done",
+              f"{st_b} {p.stdout[-1200:]}")
+        st_a = al._statuses(paths["a"])
+        check("a/a2 não fica done", st_a.get("a2") != "done", str(st_a))
+
+
 def main():
     print("cepa-run — suíte por par de itens\n")
     for name, fn in sorted(globals().items()):

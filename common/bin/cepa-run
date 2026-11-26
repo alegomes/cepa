@@ -8671,11 +8671,14 @@ def _main(argv=None):
                       f"`{side_branch}` and the run branch went back to "
                       f"{since[:10]}")
         # O1: the deferred item is checked now unless this item was its pair.
-        if deferred and deferred["key"] != key:
-            red, undo_error = check_deferred(f"{ident} did not close `done` "
-                                             "with commits")
-            if red:
-                back_now = pair_back = True
+        # The current item keeps its own accounting (outcome, attempts, network,
+        # breaker): the red return, if any, is the deferred item's. Not after a
+        # branch switch: the undo would reset a branch that is not the run's;
+        # the check after the loop records it as unchecked.
+        if (deferred and deferred["key"] != key
+                and read_branch(tree) == (start_branch, None)):
+            _red, undo_error = check_deferred(f"{ident} did not close `done` "
+                                              "with commits")
             if undo_error:
                 end_reason = "verify-vermelho"
                 end_detail = (f"the deferred build of the previous item went red "
@@ -8981,7 +8984,8 @@ def _main(argv=None):
     # O1: an item still waiting for its pair is checked before the run closes.
     # Not after a branch switch or a broken git: the undo would reset a branch
     # that is not the run's.
-    if deferred and end_reason in ("branch-mudou", "git-quebrado"):
+    if deferred and (end_reason in ("branch-mudou", "git-quebrado")
+                     or read_branch(tree) != (start_branch, None)):
         log_event({"evento": "verify_adiado_sem_conferir",
                    "id": deferred["ident"], "motivo": end_reason})
         outcome(deferred["ident"], "travado",
