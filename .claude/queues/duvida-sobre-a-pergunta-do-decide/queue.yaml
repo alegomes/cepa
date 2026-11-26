@@ -116,16 +116,24 @@ items:
     you not understand? [Enter skips]"; digitar "variante O" faz o pedido ao leitor
     trazer esse texto, e Enter vazio faz o pedido ir sem dúvida, como hoje; hoje
     `?` chama o leitor sem perguntar nada.'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  claimed_by:
-    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
-    pid: 45882
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
-    branch: session/chain-1126-1336
-    started_at: '2026-11-26T22:44:22+00:00'
+  evidence: 'commits 1cb3ae3 (codigo + testes, 5 arquivos de teste que apertam ?
+    ganharam o Enter extra), edaeb5a (checagem de saida 0 que a auditoria pediu),
+    3ed33b2 (2 testes de strip que a prova pediu), 5c7c035 (arquivos dos portoes)
+    em session/chain-1126-1336. pair-reviewer OK-WITH-NOTES, sem correcao. completion-auditor
+    COMPLETE na 2a passada (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-5.yaml).
+    proof-reviewer PROVEN em 3ed33b2, 9 de 9 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-5.yaml);
+    1a passada UNPROVEN com 1 sobrevivente (.strip()). tests/run-all.sh em 1cb3ae3:
+    260 de 260, tudo verde; cepa-run identico entre 1cb3ae3 e 3ed33b2. Decisoes:
+    segundo ? num item ja reescrito NAO pergunta (condicao ''not rewritten'', teste
+    test_second_question_mark_on_the_item_does_not_ask) e isso muda no CS-6/CS-7;
+    item sem rota aberta pergunta e o texto vai so ao feedback. Observacao da revisao:
+    asserts ''ASK in plain'' / ''SEND_BACK in plain'' nas linhas 50, 97, 204, 206
+    de tests/test_cepa_until_decide_doubt.py passam sozinhos em timeout de pty;
+    o rc == 0 da linha anterior cobre.'
+  head_commit: 5c7c0352b1b16ea02607812dbdba5c53afcb55c2
 - id: CS-6
   title: depois de um `?` sem texto, uma dúvida digitada dispara a segunda reescrita,
     e a terceira tentativa deixa o item para depois
