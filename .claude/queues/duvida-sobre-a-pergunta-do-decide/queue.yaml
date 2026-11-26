@@ -71,16 +71,23 @@ items:
     that answer?" grava "O que é a variante O?" na evidência do item como resposta
     do dono e a tela mostra a confirmação de gravado; hoje a tela mostra "not recorded:
     resposta recusada" e nada é gravado.'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  claimed_by:
-    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
-    pid: 45882
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
-    branch: session/chain-1126-1336
-    started_at: '2026-11-26T20:03:28+00:00'
+  evidence: 'commits 8eb723c (codigo + testes), 3ebb958 (3 testes que a prova pediu),
+    50cdc24 (correcao: a closure answer so repassa force quando verdadeiro), 70454bc
+    e af0f3b8 (arquivos dos portoes) em session/chain-1126-1336. pair-reviewer OK.
+    completion-auditor COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-3.yaml,
+    feito em 8eb723c; a correcao 50cdc24 nao muda o criterio). proof-reviewer PROVEN
+    em 50cdc24, 16 de 16 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-3.yaml);
+    1a passada UNPROVEN com 1 sobrevivente. tests/run-all.sh em 8eb723c: 1 falha
+    real (tests/test_cepa_until_decide_groups.py, TypeError no fake de _apply_answer
+    com assinatura antiga), corrigida em 50cdc24; tests/run-all.sh em 50cdc24: 260
+    de 260, tudo verde. n na pergunta de duvida + n em Send the item back grava
+    o texto com keep (item fica onde estava), como uma resposta comum em w ja fazia.
+    Painel de itens agrupados nao passa force: texto que parece duvida segue recusado
+    la, fora do escopo da spec.'
+  head_commit: af0f3b812a9795b3e5d1b16c1736e050c30fd012
 - id: CS-4
   title: a dúvida digitada no editor (`v`) segue o mesmo caminho do `w`
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
