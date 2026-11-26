@@ -237,6 +237,94 @@ p = subprocess.run([str(LAUNCHER), "intent", "step", "2"], cwd=r, env=ENV,
 check("`cepa intent step 2` pelo lançador move o cursor",
       p.returncode == 0 and M.read_intent(r)["step"] == 2, p.stdout + p.stderr)
 
+# --- proof survivors: edit + --step, and the pinned text of each action help --
+r = new_repo("edit-step")
+before = intent_file(r)
+p = cepa(r, "edit", "--purpose", "X", "--reason", "Y", "--step", "2")
+check("`edit --purpose X --reason Y --step 2` sai 2 e não escreve",
+      p.returncode == 2 and intent_file(r) == before and "edit não aceita --step" in p.stderr,
+      p.stdout + p.stderr)
+p = cepa(r, "edit", "--plan", "a", "b", "--step", "2")
+check("`edit --plan a b --step 2` sai 2 e não escreve",
+      p.returncode == 2 and intent_file(r) == before, p.stderr)
+
+p = cepa(r, "write", "texto", "--purpose", "a", "--by-when", "b", "--plan", "c")
+check("texto posicional fora de `remind` é recusado com a mensagem certa",
+      p.returncode == 2 and "o texto posicional só vale com `remind` (e o número com `step`)"
+      in p.stderr and intent_file(r) == before, p.stderr)
+p = cepa(r, "bogus")
+check("ação inválida lista todas as ações aceitas",
+      p.returncode == 2 and "choose from write, show, continue, state, close, remind, "
+      "reminders, step, edit" in p.stderr, p.stderr)
+
+OK, USAGE = "ok", "invalid usage, not a git repo, or a writer rule refused (nothing written)"
+NONE = "no intent recorded in this worktree"
+HELP_SPEC = {  # action: (summary line, positional or None, {exit code: meaning})
+    "write": ("Records a new intent: purpose, stopping point and plan.", None,
+              {"0": OK, "2": USAGE, "4": "an intent exists and --reason is missing"}),
+    "show": ("Prints the current intent (the default with no action)", None,
+             {"0": OK, "3": NONE}),
+    "continue": ("Adopts, in this session, the intent recorded by another session.", None,
+                 {"0": OK, "2": USAGE, "3": NONE}),
+    "state": ("Read-only: classifies the intent and prints the ready-made answer.", None,
+              {"0": "ok, in every state", "2": USAGE}),
+    "close": ("What /common:wrap-up runs: end-of-session telemetry.", None,
+              {"0": "ok, always", "2": USAGE}),
+    "step": ("Moves the cursor: step N is now in progress.",
+             ("N", "the step in progress, 1-based; M+1 = plan fulfilled"),
+             {"0": OK, "2": "invalid usage, or N outside the plan (nothing written)",
+              "3": NONE}),
+    "edit": ("Changes the purpose or the plan of the existing intent.", None,
+             {"0": OK, "2": USAGE, "3": NONE}),
+    "remind": ("Records an owner reminder with its date and a context sentence.",
+               ("TEXT", "the reminder, in the owner's words"),
+               {"0": OK, "2": USAGE}),
+    "reminders": ("Read-only: lists the owner's reminders, with date and context.", None,
+                  {"0": OK, "2": USAGE}),
+}
+
+
+def section(text, title):
+    """Lines of `title:` up to the next blank line."""
+    lines = text.splitlines()
+    if f"{title}:" not in lines:
+        return None
+    out = []
+    for l in lines[lines.index(f"{title}:") + 1:]:
+        if not l.strip():
+            break
+        out.append(l.strip())
+    return out
+
+
+for act, (summary, positional, exits) in HELP_SPEC.items():
+    out = cepa(TMP, act, "--help").stdout
+    lines = out.splitlines()
+    check(f"ajuda de `{act}`: resumo", summary in lines, out)
+    args = section(out, "arguments")
+    if positional:
+        check(f"ajuda de `{act}`: posicional {positional[0]}",
+              args is not None and len(args) == 1 and args[0].split()[0] == positional[0]
+              and positional[1] in " ".join(args[0].split()), args)
+    else:
+        check(f"ajuda de `{act}`: sem posicional", args is None, args)
+    got = {}
+    for l in section(out, "exit codes") or []:
+        code, _, meaning = l.partition("  ")
+        got[code] = meaning.strip()
+    check(f"ajuda de `{act}`: códigos de saída", got == exits, f"{got} vs {exits}")
+    check(f"ajuda de `{act}`: seção de exemplos", bool(section(out, "examples")), out)
+
+main_help = cepa(TMP, "--help").stdout
+for frag in ("  step N     moves the cursor: step N is in progress (M+1 = plan fulfilled)",
+             "  edit       changes the purpose (--purpose, needs --reason) or the plan (--plan)",
+             "  show       prints the current intent", "  write      records a new intent",
+             "  remind     records an owner reminder", "  reminders  read-only: lists"):
+    check(f"`cepa intent --help` lista: {frag.strip()[:30]}", frag in main_help, main_help)
+check("`cepa intent --help` cita as ações step e edit no argumento ACTION",
+      "write, show, step, edit, continue, state, close, remind or reminders" in
+      " ".join(main_help.split()), main_help)
+
 if FAILURES:
     print(f"\n{len(FAILURES)} falha(s): {FAILURES}")
     sys.exit(1)

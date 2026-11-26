@@ -106,6 +106,70 @@ check("`cepa modes --help` mostra as formas com subcomando como principais",
 rc, out, _ = modes("menu", "discovery", bin_="launcher")
 check("`cepa modes menu discovery` pelo lançador", rc == 0 and out.startswith("1) "), out)
 
+# --- proof survivors: --sem-cor before the subcommand, and the pinned help ---
+for new, old in ((["--sem-cor", "purposes"], ["--purposes", "--no-color"]),
+                 (["--sem-cor", "exit", "exploration"], ["--exit", "exploration"]),
+                 (["--sem-cor", "menu", "discovery"], ["--menu", "discovery"])):
+    rn, ro = modes(*new), modes(*old)
+    check(f"`cepa modes {' '.join(new)}` == `{' '.join(old)}` (stdout, stderr, rc)",
+          rn == ro and rn[0] in (0, 1), f"{rn} != {ro}")
+
+
+def section(text, title):
+    lines = text.splitlines()
+    if f"{title}:" not in lines:
+        return None
+    out = []
+    for l in lines[lines.index(f"{title}:") + 1:]:
+        if not l.strip():
+            break
+        out.append(l.strip())
+    return out
+
+
+MODE_HELP = {  # subcommand: (usage line, summary, positional help or None, --json?, exits)
+    "exit": ("usage: cepa modes exit [MODE]",
+             "The exit verdict of this session's mode (or of MODE), read from disk.",
+             "the work mode (default: the mode of this session)", False,
+             {"0": "the mode is closed", "1": "the mode is still open",
+              "2": "no mode declared in this tree, unknown mode, or no mechanical verdict here"}),
+    "menu": ("usage: cepa modes menu MODE [--json]",
+             "The numbered menu of common actions of MODE, filtered by this repo.",
+             "the work mode", True, {"0": "ok", "2": "unknown mode"}),
+    "purposes": ("usage: cepa modes purposes",
+                 "One line per mode: what it is for.", None, False, {"0": "ok"}),
+}
+for sub, (usage, summary, pos, has_json, exits) in MODE_HELP.items():
+    out = modes(sub, "--help")[1]
+    lines = out.splitlines()
+    check(f"ajuda de `{sub}`: usage", lines[0] == usage, lines[:1])
+    check(f"ajuda de `{sub}`: resumo", summary in lines, out)
+    args = section(out, "arguments")
+    if pos:
+        check(f"ajuda de `{sub}`: posicional MODE",
+              args is not None and len(args) == 1 and args[0].split()[0] == "MODE"
+              and pos in " ".join(args[0].split()), args)
+    else:
+        check(f"ajuda de `{sub}`: sem posicional", args is None, args)
+    opts = " ".join(section(out, "options") or [])
+    check(f"ajuda de `{sub}`: --json {'aparece' if has_json else 'não aparece'}",
+          ("--json" in opts) == has_json, opts)
+    got = {}
+    for l in section(out, "exit codes") or []:
+        code, _, meaning = l.partition("  ")
+        got[code] = meaning.strip()
+    check(f"ajuda de `{sub}`: códigos de saída", got == exits, f"{got} vs {exits}")
+    check(f"ajuda de `{sub}`: exemplos com `cepa modes {sub}`",
+          any(l.startswith(f"cepa modes {sub}") for l in section(out, "examples") or []), out)
+
+main_help = modes("--help")[1]
+for frag in ("  menu MODE  the mode's menu of common actions",
+             "  exit [MODE]  the exit verdict of this session's mode (or of MODE)",
+             "  purposes   one line per mode: what it is for",
+             "The flag forms --menu MODE, --exit and --purposes are still accepted.",
+             "  cepa modes purposes", "  cepa modes exit", "  cepa modes menu discovery"):
+    check(f"`cepa modes --help` traz: {frag.strip()[:34]}", frag in main_help, main_help)
+
 if FAILURES:
     print(f"\n{len(FAILURES)} falha(s): {FAILURES}")
     sys.exit(1)
