@@ -3792,3 +3792,13 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: answer-relata-dispensa-gravada
+  title: '`cepa queue answer` diz que não fez nada e grava a dispensa sem commit'
+  why: 'Origem: feedback fb-20261122-4 (2026-11-22); BACKLOG.md § `cepa queue answer`
+    diz que não fez nada e grava a dispensa sem commit (ainda não priorizado: entrou
+    no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
