@@ -1,0 +1,29 @@
+key: CS-6-reforma-de-nomes
+queue: reforma-de-nomes
+item: CS-6
+status: complete
+head_commit: e7ac47b
+diff_range: 78a0f4f..e7ac47b
+criteria:
+  - id: AC1
+    text: "CS-6: um teste varre common/bin/ e common/hooks/ e falha se achar variavel lida sem prefixo CEPA_ ou que esta na tabela de nomes antigos, fora da funcao que le a antiga como reserva; `CEPA_MODE=off cepa --help` e `CEPA_MODO=off cepa --help` saem com 0; a secao 'environment' da ajuda cita CEPA_MODE=off, CEPA_CHAIN=off e CEPA_PERMISSIONS=classifier e nenhuma forma antiga; com a nova e a antiga definidas com valores diferentes, vale a nova (docs/spec/reforma-de-nomes-dos-comandos.md, ### CS-6, lido com P4 e o bullet 'Nomes novos das variaveis')"
+    altitude: cli
+    surface: "o launcher common/bin/cepa invocado como subprocesso (exit code e stdout de --help); os scripts common/bin/* e common/hooks/*.py lidos como arvore (varredura por AST para Python e texto para o sh); os hooks e cepa-run exercitados com o ambiente novo, antigo e os dois"
+    clauses:
+      scan_fails_on_unprefixed_or_old_read: "complete. test_no_old_or_unprefixed_variable_is_read_in_common varre common/bin e common/hooks (AST no Python, texto no launcher sh) e passa. A varredura nao e vazia: test_scan_flags_fabricated_python e test_scan_flags_fabricated_shell mostram que ela acusa CEPA_MODO, CCW_SEED e MY_THING fabricados; test_foreign_list_says_whose_each_name_is documenta as variaveis de terceiros. Conferi a mao: grep de CEPA_MODO|CLAUDE_WT_|CCW_|CEPA_UNTIL_ em common/bin e common/hooks so acha a tabela _cepaenv.py, a funcao _cepa_old_name do launcher e comentarios de compatibilidade."
+      help_exits_zero_both_names: "complete. Rodei a mao `CEPA_MODE=off common/bin/cepa --help` rc=0 e `CEPA_MODO=off common/bin/cepa --help` rc=0 (o teste test_help_exits_zero_under_both_names faz o mesmo)."
+      help_environment_section: "complete. A linha 'environment:' da ajuda traz CEPA_MODE=off, CEPA_CHAIN=off e CEPA_PERMISSIONS=classifier; grep por CEPA_MODO|CEPA_ENCADEAR|CEPA_PERMISSOES|classificador na ajuda inteira: nada. O teste cobre todos os nomes da tabela RENAMED."
+      new_wins_when_both_set: "complete. test_helper_old_alone_new_wins_and_values (helper Python), test_mode_switch_old_alone_and_new_wins_in_write_mode_gate, test_chain_switch_old_alone_and_new_wins_in_session_chain, test_launcher_old_mode_name_alone_skips_the_mode (sh), test_cepa_run_reads_old_run_names_and_new_wins, test_wtlib_seed_and_worktree_home_old_and_new, test_session_launch_reads_old_wt_names; test_python_table_is_the_contract e test_shell_table_agrees_with_python garantem que as duas tabelas (Python e sh) concordam. Valores antigos classificador e substitui continuam aceitos; Cepa so grava o nome novo nos filhos (test_cepa_sets_the_new_names_for_what_it_launches)."
+    test: "tests/test_env_names_in_english.py (34 testes)"
+    layer: "cli (subprocess do launcher real e de cepa-run; hooks executados como processo com env controlado; varredura da arvore real; sem mock)"
+    evidence: verified
+    run: "env -u CEPA_UNTIL_RUN -u CEPA_RUN python3 -m pytest tests/test_env_names_in_english.py tests/test_waivers.py -q -> '64 passed in 12.41s' (N=64); so o arquivo do criterio: '34 passed' (N=34). A mao: CEPA_MODE=off common/bin/cepa --help rc=0; CEPA_MODO=off common/bin/cepa --help rc=0; linha 'environment:' cita CEPA_MODE=off, CEPA_CHAIN=off, CEPA_PERMISSIONS=classifier; grep de CEPA_MODO|CEPA_ENCADEAR|CEPA_PERMISSOES|classificador na ajuda: 0. Suite completa nao rodada (do supervisor)."
+independent_checks:
+  neighbor_edits_are_renames_not_weakening: "Li as linhas removidas dos testes vizinhos no diff: so trocam CEPA_MODO/CEPA_UNTIL_RUN/CEPA_PROMPT_MODO=substitui pelo nome novo, com as mesmas asserções. Nao vi asserção removida sem substituta."
+  e7ac47b_launcher_change: "e7ac47b removeu do launcher so a traducao CEPA_PERMISSIONS=classificador; o unico leitor (common/bin/cepa:698) compara com bypass, entao classificador continua tratado como classificador; ha teste ponta a ponta. Tabela _cepaenv.py conferida: traducao direta do nome atual com prefixo CEPA_ (UNTIL_X -> RUN_<X em ingles>, CLAUDE_WT_ -> CEPA_WT_, CCW_ -> CEPA_, demais ganham CEPA_), coerente com a decisao do dono."
+  old_names_not_dropped_silently: "O criterio exige a antiga ainda lida; ha teste de cada familia (CEPA_MODO, CEPA_ENCADEAR, CEPA_PERMISSOES=classificador, CEPA_UNTIL_*, CLAUDE_WT_*, CCW_*) lendo so a antiga."
+gap: null
+suggested_followup: null
+observations_outside_the_literal_criterion:
+  stale_docstring_name: "O docstring de common/hooks/_cepaenv.py chama o gemeo sh de `_cepa_old_name`; a funcao de leitura no launcher e `cepa_env` (que chama `_cepa_old_name`). Nao afeta o criterio."
+  residual_old_names_elsewhere: "Mencoes antigas remanescentes em docs vivos fora dos tocados sao varridas pelo CS-11, nao por este item."
