@@ -3876,3 +3876,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: decide-da-run-pergunta-sobras
+  title: '`cepa run decide <fila>/<run>` não pergunta as tarefas de itens entregues
+    que o relatório da run con'
+  why: 'Origem: feedback fb-20261126-1 (2026-11-26); BACKLOG.md § `cepa run decide
+    <fila>/<run>` não pergunta as tarefas de itens entregues que o relatório da
+    run conta como "for you" (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
