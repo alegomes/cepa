@@ -92,7 +92,7 @@ Subcommands:
       to promote); 4 = D7 floor (< 4 demands) — below it the fork loses to
       /common:queue-run, which executes the same queue with no worktree at all.
 
-  cepa-queue queue <nome> [--max N] [--repo DIR] [--json]
+  cepa-queue batch <nome> [--max N] [--repo DIR] [--json]
       The items `/common:queue-run` can execute NOW, in queue order, and the
       reason the batch stops where it stops. It does not execute and writes
       nothing. Walks the list from the start and stops at the first thing it
@@ -6190,12 +6190,15 @@ def main(argv=None):
             "It knows only `mode: single-track`. A wave plan is another document,\n"
             "with another author (/maestro:program-plan) and another reader\n"
             "(/maestro:run)."),
+        # Two blocks (docs/spec/reforma-de-nomes-dos-comandos.md, CS-8): what the
+        # owner types, then what the slash commands and `cepa run` call.
         groups=[
-            ("sources (read only, return JSON)", ["from-spec", "from-epic", "from-triage"]),
-            ("writing", ["write", "add", "verdict", "migrate", "archive", "check-name", "validate"]),
-            ("reading", ["queue", "status", "show", "epics", "decisions", "promote", "order"]),
-            ("one item's cycle", ["start", "finish", "reword-route", "answer", "annotate"]),
-            ("against the Jira board", ["reconcile", "landed", "divergence"]),
+            ("for you", ["status", "show", "ready", "waiting", "epics", "answer", "add"]),
+            ("used by the commands", [
+                "batch", "start", "finish", "write", "from-spec", "from-epic",
+                "from-triage", "verdict", "decisions", "reword-route", "annotate",
+                "promote", "order", "reconcile", "landed", "divergence", "migrate",
+                "archive", "check-name", "validate"]),
         ],
         examples=[
             ("cepa queue write wego --from-spec docs/spec/assinatura.md",
@@ -6204,7 +6207,7 @@ def main(argv=None):
              "the queue of one Epic cycle"),
             ("cepa queue status", "the whole queue, by status"),
             ("cepa queue show wego WEGO-123", "one item in full, nothing cut"),
-            ("cepa queue queue wego --max 3", "what the next batch may execute"),
+            ("cepa queue batch wego --max 3", "what the next batch may execute"),
             ("cepa queue start wego WEGO-123", "reserve an item"),
             ('cepa queue finish wego WEGO-123 --status done --evidence "commit abc, build green"',
              "record the outcome"),
@@ -6329,8 +6332,13 @@ def main(argv=None):
                     (2, "invalid usage, unreadable handoff, refused (reason named)")])
     t.add_argument("handoff", metavar="handoff", help="JSON/YAML file, or '-' for stdin")
 
+    # `queue` was the old name of `batch` (CS-8). `cepa queue queue` is refused by
+    # the launcher; the hidden alias stays only for the runs in flight whose
+    # slash command still says `python3 common/bin/cepa-queue queue` (removed
+    # with the other transition shims, CS-11/CS-12).
     q = sub.add_parser(
-        "queue", help="lists the items the batch may execute now, and where it stops",
+        "batch", aliases=["queue"],
+        help="lists the items the batch may execute now, and where it stops",
         description=(
             "The items /common:queue-run can execute NOW, in queue order. Does not\n"
             "execute and writes nothing. Walks the list from the start and stops at\n"
@@ -6339,8 +6347,8 @@ def main(argv=None):
             "reserved by another session, or the cap. Skipping a stuck item to reach\n"
             "the one below would reorder the queue silently, which is what this\n"
             "document exists to prevent."),
-        examples=[("cepa queue queue wego", "the next batch, default cap"),
-                  ("cepa queue queue wego --max 1 --json", "only the next item, for code")],
+        examples=[("cepa queue batch wego", "the next batch, default cap"),
+                  ("cepa queue batch wego --max 1 --json", "only the next item, for code")],
         exit_codes=[(0, "batch listed (even empty)"),
                     (2, f"invalid usage, {not_git}, {no_queue}, invalid queue"),
                     (3, waves)])
@@ -7126,7 +7134,10 @@ def main(argv=None):
         return cmd_waiting(root, a.as_json)
     if a.cmd == "epics":
         return cmd_epics(root, a.as_json, a.brief)
-    if a.cmd == "queue":
+    if a.cmd in ("batch", "queue"):
+        if a.cmd == "queue":
+            print("cepa-queue: queue is now batch (run: cepa queue batch ...)",
+                  file=sys.stderr)
         return cmd_queue(root, a.name, a.max_items, a.as_json)
     if a.cmd == "promote":
         return cmd_promote(root, a.name, a.as_json, a.when)

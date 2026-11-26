@@ -122,7 +122,7 @@ queue. A key names a project; a queue is one slice of work inside it. On
 and `WEGO-in-progress/` side by side — two slices of one project, which a
 key-based lookup cannot tell apart and resolves silently to the first.
 
-Rules every reader follows (`/common:next`, `cepa-queue status`, `cepa-queue queue`
+Rules every reader follows (`/common:next`, `cepa-queue status`, `cepa-queue batch`
 with no name):
 
 - one single-track queue → that one, whatever the name;
@@ -298,7 +298,7 @@ queue in the order the queue keeps. Until then the only bulk executor was
 `/board-flow:drain`, whose source is the board column ordered by `priority and
 rank` — precisely the order this document exists to replace — so the owner wrote
 an order down and the only way to run it in bulk was one that ignored it. Which
-items are runnable *right now* is mechanical too (`cepa-queue queue`), for the
+items are runnable *right now* is mechanical too (`cepa-queue batch`), for the
 same reason as stages 1 and 2: as prose, "respect the order" is provable only by
 grepping the prose. The batch walks the list from the top and **stops** at the
 first thing it cannot resolve alone — an open `human_pending` (the owner's call,

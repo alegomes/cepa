@@ -136,7 +136,7 @@ def test_new_queue_is_born_in_queues(d):
 @with_repo
 def test_legacy_queue_is_read_and_marked_in_place(d):
     folder = legacy_queue(d, commit_all=False)
-    r = plan(d, "queue", "x", "--json", "--repo", ".")
+    r = plan(d, "batch", "x", "--json", "--repo", ".")
     assert r.returncode == 0, r.stderr
     assert json.loads(r.stdout)["path"].endswith("programs/x/plan.yaml")
     assert plan(d, "start", "x", "A", "--repo", ".").returncode == 0

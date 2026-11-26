@@ -224,6 +224,13 @@ if [ $# -ge 1 ]; then
       printf '✗ cepa: modos is now modes (run: cepa modes ...)\n' >&2
       exit 2 ;;
   esac
+  # `cepa queue queue` became `cepa queue batch` (CS-8). Only the typed form is
+  # refused: `common/bin/cepa-queue queue`, by path, still answers for the runs
+  # in flight, with a note on stderr.
+  if [ "$_w1" = "queue" ] && [ "$_w2" = "queue" ]; then
+    printf '✗ cepa: queue is now batch (run: cepa queue batch ...)\n' >&2
+    exit 2
+  fi
 fi
 
 if [ $# -ge 1 ]; then

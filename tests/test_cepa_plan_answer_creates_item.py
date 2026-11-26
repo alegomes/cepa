@@ -105,7 +105,7 @@ def test_red_test_yes_creates_the_declared_item_at_the_end():
               origin["status"] == "done" and origin["human_pending"] is None, origin)
         check("a evidência do item de origem nomeia o item criado",
               str(new["id"]) in str(origin.get("evidence") or ""), origin)
-        q = subprocess.run([sys.executable, str(CEPA_PLAN), "queue", "fila",
+        q = subprocess.run([sys.executable, str(CEPA_PLAN), "batch", "fila",
                             "--max", "5", "--repo", str(root), "--json"],
                            capture_output=True, text=True, env=ENV)
         check("a fila continua válida (`queue` sai 0)", q.returncode == 0, q.stderr)
@@ -143,7 +143,7 @@ def test_hostile_text_survives_the_yaml_round_trip():
         ev = str(new.get("evidence") or "")
         check("texto hostil: a evidência guarda as duas linhas da resposta",
               'pode: "sim" # mesmo' in ev and "- segunda linha: com 'aspas'" in ev, ev)
-        q = subprocess.run([sys.executable, str(CEPA_PLAN), "queue", "fila",
+        q = subprocess.run([sys.executable, str(CEPA_PLAN), "batch", "fila",
                             "--repo", str(root), "--json"],
                            capture_output=True, text=True, env=ENV)
         check("texto hostil: a fila continua válida", q.returncode == 0, q.stderr)

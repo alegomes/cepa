@@ -432,7 +432,7 @@ def test_finish_writes_the_question_and_queue_returns_it():
               == "Fecho o card como medir depois do go-live?",
               items_of(root)["a1"])
         q = subprocess.run(
-            [sys.executable, str(CEPA_PLAN), "queue", "fila", "--json",
+            [sys.executable, str(CEPA_PLAN), "batch", "fila", "--json",
              "--repo", str(root)], capture_output=True, text=True)
         deferred = json.loads(q.stdout)["deferred"][0]
         check("o queue devolve a pergunta junto com o adiado",
@@ -956,8 +956,8 @@ def test_agent_instructions_ask_for_the_question():
     drain = (commands / "queue-run.md").read_text(encoding="utf-8")
     check("until-review manda gravar o bloco cepa-decisoes",
           "```json cepa-decisoes" in review, "")
-    check("...cobrindo todos os adiados da fila, pelo queue",
-          "deferred" in review and "cepa-queue queue" in review, "")
+    check("...cobrindo todos os adiados da fila, pelo batch",
+          "deferred" in review and "cepa-queue batch" in review, "")
     check("...e diz que as ações vêm da lista fechada",
           "closed list" in review, "")
     check("drain-plan manda gravar --question ao travar",
@@ -1776,7 +1776,7 @@ def test_finish_keeps_agent_and_human_sections_apart():
               and set(it["owner_summary"]) == {"pedido", "pronto", "impede",
                                                "se_sim", "se_nao"}, it)
         q = subprocess.run(
-            [sys.executable, str(CEPA_PLAN), "queue", "fila", "--json",
+            [sys.executable, str(CEPA_PLAN), "batch", "fila", "--json",
              "--repo", str(root)], capture_output=True, text=True)
         deferred = json.loads(q.stdout)["deferred"][0]
         check("o queue devolve a seção humana junto com o adiado",

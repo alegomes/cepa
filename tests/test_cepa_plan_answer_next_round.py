@@ -62,7 +62,7 @@ def print_scenario(needs_owner=False):
 
 
 def queue(root, max_items=1):
-    p = subprocess.run([sys.executable, str(CEPA_PLAN), "queue", "fila",
+    p = subprocess.run([sys.executable, str(CEPA_PLAN), "batch", "fila",
                         "--max", str(max_items), "--repo", str(root), "--json"],
                        capture_output=True, text=True, env=ENV)
     return p.returncode, json.loads(p.stdout or "{}"), p.stderr

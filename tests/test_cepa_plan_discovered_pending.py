@@ -166,7 +166,7 @@ def test_point_survives_the_answer_and_item_is_not_ready():
         check("show: o status diz pegável com pendência aberta",
               "mesmo com pendência aberta" in shown, shown)
 
-        q = cli(root, "queue", "fila", "--max", "5", "--json")
+        q = cli(root, "batch", "fila", "--max", "5", "--json")
         batch = {b["id"]: b for b in json.loads(q.stdout)["batch"]}
         check("queue --json: a1 segue no lote, com as pendências",
               batch.get("a1", {}).get("pendencias") == [P1, P2], q.stdout)

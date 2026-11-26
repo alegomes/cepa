@@ -334,7 +334,7 @@ def test_wait_criteria_and_orphans(base):
         check("a linha `source` conta as peças e nomeia o item do roteiro",
               "3 peças" in str(plan.get("source"))
               and "C1-R" in str(plan.get("source")), repr(plan.get("source")))
-        q = run(d, "queue", "fx-cob", "--repo", ".", "--json")
+        q = run(d, "batch", "fx-cob", "--repo", ".", "--json")
         lot = json.loads(q.stdout) if q.returncode == 0 else {}
         check("o lote não executa a peça que espera o humano, nem o roteiro",
               [i["id"] for i in lot.get("batch") or []] == ["C1-2", "C1-3"]

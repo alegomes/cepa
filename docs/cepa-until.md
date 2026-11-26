@@ -42,7 +42,7 @@ It does not reserve items, record outcomes, know the topology or know what a car
 tested:
 
 - `cepa-queue start` reserves the item and **signs** the reservation (session, pid, host).
-- `cepa-queue queue` hands back as runnable any reservation whose pid died. A dead subprocess
+- `cepa-queue batch` hands back as runnable any reservation whose pid died. A dead subprocess
   cannot lock the queue forever.
 - `cepa-queue finish` records the outcome, including the route only a human can close.
 
@@ -96,7 +96,7 @@ instead of starting an item that would be cut halfway.
 ## When it stops
 
 At the first of: deadline reached, no runnable item in the queue (`end-of-queue`, `blocked`,
-`blocked-before`, as reported by `cepa-queue queue`), circuit breaker, a stuck queue, or a
+`blocked-before`, as reported by `cepa-queue batch`), circuit breaker, a stuck queue, or a
 usage cap whose wait does not fit in the window. (The queue reasons used to be Portuguese —
 `fim-da-fila`, `teto`, `bloqueado`, `reservado`, `depende-de-adiado`, `bloqueado-antes`; the old
 spelling is still accepted during the transition.)
