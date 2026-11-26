@@ -3855,3 +3855,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: agentes-rodam-checagens-do-repo
+  title: Agentes fecham item sem rodar os testes do repo inteiro e abrem worktree
+    própria em `/tmp`
+  why: 'Origem: feedback fb-20261123-7 (2026-11-23); BACKLOG.md § Agentes fecham
+    item sem rodar os testes do repo inteiro e abrem worktree própria em `/tmp`
+    (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
