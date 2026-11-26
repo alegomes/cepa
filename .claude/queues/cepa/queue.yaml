@@ -3898,3 +3898,13 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: notificacao-nao-reabre-sessao
+  title: Depois do `wrap-up`, o relatório seguinte reabre uma frente nova
+  why: 'Episódio fb-20261122-1 (2026-11-22) prova que report-style-lint-reabre-apos-pedido-novo
+    (done) não cobriu o caso; BACKLOG.md § Depois do `wrap-up`, o relatório seguinte
+    reabre uma frente nova (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
