@@ -71,9 +71,16 @@ items:
     that answer?" grava "O que é a variante O?" na evidência do item como resposta
     do dono e a tela mostra a confirmação de gravado; hoje a tela mostra "not recorded:
     resposta recusada" e nada é gravado.'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  claimed_by:
+    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
+    pid: 45882
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
+    branch: session/chain-1126-1336
+    started_at: '2026-11-26T20:03:28+00:00'
 - id: CS-4
   title: a dúvida digitada no editor (`v`) segue o mesmo caminho do `w`
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
