@@ -38,7 +38,7 @@ silent preflight: nothing is printed unless something needs you.
 | You want to... | Command |
 |---|---|
 | Check the harness installation | `cepa doctor` |
-| Know what mode you are in and what closes it | `cepa modes`, `cepa modes --exit` |
+| Know what mode you are in and what closes it | `cepa modes`, `cepa modes exit` |
 | Record or advance the session's intent | `cepa intent` |
 | Write, inspect or reconcile the single-track queue | `cepa queue <subcommand>` |
 | Run the queue unattended for a time window | `cepa run <queue> --for 12h` |
@@ -219,13 +219,16 @@ of one to six steps, and the cursor. Readers: `/common:whereami`,
 
 ```
 cepa-intent write --purpose "..." --by-when "..." --plan "step 1" "step 2" [--reason ...]
-cepa-intent --step N                  # step N is now in progress; M+1 = plan fulfilled
-cepa-intent --purpose "..." --reason "..."
-cepa-intent --plan "a" "b" [--reason ...]
-cepa-intent [show] | continue | state | close
+cepa-intent step N                    # step N is now in progress; M+1 = plan fulfilled
+cepa-intent edit --purpose "..." --reason "..."
+cepa-intent edit --plan "a" "b" [--reason ...]
+cepa-intent [show] | continue | state | close | remind | reminders
+cepa-intent <action> --help           # the help of that action only
 ```
 
-Rules: a plan item has no `:`; with `write`, the action comes before `--plan`
+Rules: the flag forms `--step N`, `--purpose` and `--plan` with no action are
+still accepted (the same as `step N` and `edit`); a plan item has no `:`; with
+`write` or `edit`, the action comes before `--plan`
 (which consumes everything up to the next option); `--purpose` and a rewrite
 over an existing intent require `--reason`; `continue` adopts another
 session's intent; `state` and `close` only read. The old action names
@@ -257,10 +260,14 @@ session hook reads. For each mode: what it is for, what it enters with, what
 it produces, what closes it, and the mechanical gate.
 
 ```
-cepa-modes [<mode>] [--purposes] [--exit] [--json] [--no-color]
+cepa-modes [<mode>] [--json] [--no-color]
+cepa-modes purposes
+cepa-modes exit [<mode>]
+cepa-modes menu <mode>
 ```
 
-`--exit` is the exit verdict of this session's mode, read from the disk: `0`
+The flag forms `--purposes`, `--exit` and `--menu <mode>` are still accepted.
+`exit` is the exit verdict of this session's mode, read from the disk: `0`
 closed, `1` still open, `2` the mode has no mechanical verdict. The slash
 command is `/common:modes`; the design is in
 [modos-de-trabalho.md](modos-de-trabalho.md).
