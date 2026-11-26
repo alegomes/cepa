@@ -95,16 +95,19 @@ items:
     com um editor falso que salva "não entendi a pergunta", escolher `v` mostra
     "Is this a doubt about the question? [Y/n]"; hoje a tela mostra "not recorded:
     resposta recusada" e o item vai para depois.'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  claimed_by:
-    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
-    pid: 45882
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
-    branch: session/chain-1126-1336
-    started_at: '2026-11-26T21:42:51+00:00'
+  evidence: 'commits c45f5c4 (codigo + testes), c9d7b3f (teste pty que a auditoria
+    pediu), fcb2946 (arquivos dos portoes) em session/chain-1126-1336. pair-reviewer
+    OK-WITH-NOTES, sem correcao. completion-auditor COMPLETE na 2a passada (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-4.yaml);
+    1a passada INCOMPLETE por faltar o caso pty v + nao + sim com o cepa-queue answer
+    real. proof-reviewer PROVEN em c45f5c4, 11 de 11 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-4.yaml).
+    tests/run-all.sh em c45f5c4: 260 de 260, tudo verde; cepa-run identico entre
+    c45f5c4 e c9d7b3f. w e v usam um caminho so (typed_w). Observacao da revisao:
+    texto longo do editor com ''nao entendi'' no meio tambem dispara a pergunta
+    de duvida; nao ha teste de texto de varias linhas pelo v.'
+  head_commit: fcb29462aa99aacc47fffd3db3f1253af716ac60
 - id: CS-5
   title: a tecla `?` pede em uma linha opcional o que o dono não entendeu
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
