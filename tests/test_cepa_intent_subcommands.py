@@ -195,6 +195,18 @@ for act in ACTIONS:
     check(f"`{act} --help` não lista os exemplos de outras ações", not others, others)
     check(f"`{act} --help` não traz a lista de ações", "ACTION is one of" not in p.stdout)
 
+# `remind help` is a reminder whose text is "help"; only --help / -h ask for help
+r = new_repo("remind-help")
+for word in ("help", "ajuda"):
+    p = cepa(r, "remind", word, "--context", "x")
+    check(f"`remind {word} --context x` grava um lembrete com o texto {word!r}",
+          p.returncode == 0 and p.stdout.startswith("lembrete gravado")
+          and f": {word}" in p.stdout, p.stdout + p.stderr)
+check("os dois lembretes ficaram gravados", len(M.read_reminders(r)) == 2)
+p = cepa(r, "remind", "--help")
+check("`remind --help` segue imprimindo a ajuda do remind",
+      p.returncode == 0 and p.stdout.startswith("usage: cepa intent remind"), p.stdout)
+
 # a help request never writes, even next to other args
 r = new_repo("help-nowrite")
 before = intent_file(r)

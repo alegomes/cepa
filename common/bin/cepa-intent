@@ -564,7 +564,10 @@ def maybe_action_help(argv):
     if name not in ACTION_HELP:
         return
     rest = argv[1:]
-    if rest[:1] and rest[0] in _clihelp.HELP_WORDS or any(x in ("-h", "--help") for x in rest):
+    # For `remind` the word after the action is the reminder text, so `help` and
+    # `ajuda` stay text there; only --help / -h ask for help.
+    word_is_help = name != "remind" and rest[:1] and rest[0] in _clihelp.HELP_WORDS
+    if word_is_help or any(x in ("-h", "--help") for x in rest):
         action_parser(name).parse_args(["--help"])
 
 
