@@ -3932,3 +3932,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: fechamento-do-run-sem-conclusao
+  title: A tela de fechamento do cepa run não diz o que aconteceu, o que ficou pendente
+    nem o que fazer
+  why: 'Origem: feedback fb-20261126-4 (2026-11-26); BACKLOG.md § A tela de fechamento
+    do cepa run não diz o que aconteceu, o que ficou pendente nem o que fazer (ainda
+    não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
