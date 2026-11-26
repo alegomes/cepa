@@ -25,9 +25,21 @@ items:
     "Is this a doubt about the question? [Y/n]" e o `queue.yaml` continua igual;
     hoje a tela pergunta "Send the item back to the queue with that answer? [y/N]"
     e depois mostra "not recorded".'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 7f90cd8 (codigo + teste pty), 052f01d (4 testes que a prova
+    pediu), d961c36 (arquivos dos portoes) em session/chain-1126-1336. pair-reviewer
+    OK-WITH-NOTES, as 3 notas corrigidas. completion-auditor COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-1.yaml).
+    proof-reviewer PROVEN em 052f01d, 9 de 9 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-1.yaml);
+    1a passada tinha dado UNPROVEN com 4 sobreviventes. tests/run-all.sh em 052f01d:
+    257 de 260 arquivos verdes; test_cepa_until_decide_all, test_cepa_until_network
+    e test_common_queue_status vermelhos na suite com a maquina sob carga e verdes
+    rodados sozinhos no mesmo commit (falhas de tempo). Interino ate CS-2/CS-3:
+    sim deixa o item para depois, nao segue o fluxo antigo. v so entra no CS-4;
+    o teste test_doubt_typed_through_v_does_not_show_the_new_prompt_yet fixa isso
+    e precisa ser invertido no CS-4.'
+  head_commit: d961c368e9fd8b1200ae0da280ce7e54052a324b
 - id: CS-2
   title: com sim, a pergunta é reescrita com a dúvida do dono e reaparece no mesmo
     item
@@ -38,9 +50,19 @@ items:
     nova no bloco do mesmo item e pede a resposta de novo, o item segue sem resposta
     gravada e o arquivo de feedback ganha uma linha com o id do item, a pergunta
     e a dúvida; hoje o leitor nunca é chamado a partir de `w`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits cd9178d (codigo + testes), 71ec023 (2 testes que a prova pediu),
+    2d70789 (arquivos dos portoes) em session/chain-1126-1336. pair-reviewer OK-WITH-NOTES,
+    sem correcao a aplicar. completion-auditor COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-2.yaml).
+    proof-reviewer PROVEN em 71ec023, 15 de 15 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-2.yaml);
+    1a passada UNPROVEN com 2 sobreviventes. tests/run-all.sh iniciado em cd9178d:
+    260 de 260 arquivos, tudo verde; cepa-run identico entre cd9178d e 71ec023.
+    Campo novo no pedido de reescrita: duvida_do_dono. Limite segue em 1 reescrita
+    por item: o teste test_doubt_after_a_rewrite_does_not_call_the_reader_again
+    fixa isso e muda no CS-6.'
+  head_commit: 2d707892102144c1c5aab30ae6c37dada35db00c
 - id: CS-3
   title: com não, o texto é gravado como resposta sem sair do painel
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
