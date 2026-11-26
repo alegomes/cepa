@@ -1,0 +1,65 @@
+key: suite-speed-java
+status: complete
+diff_range: debd87c..40b3c7f (re-auditoria 2)
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: red ./gradlew verify repeated as `./gradlew <task> --tests <Class>`, opções originais mantidas
+    test: test_gradle_red_repeats_only_the_failed_class + test_parsers_read_the_real_outputs
+    layer: cli ponta a ponta + parser contra saída real (gradle-red.txt e gradle-red-multi.txt brutos)
+    evidence: verified
+    run: "python3 tests/test_cepa_run_java_builds.py em 40b3c7f -> '✓ tudo verde' (nenhum 'FALHOU'). repeat_command direto: './gradlew test --tests Foo' e '--tests=Foo -i' voltam inalterados (build inteiro); './gradlew test -x lint' -> './gradlew -x lint :app:test --tests FooTest'; gradle-red-multi -> duas tarefas com --tests."
+    status: complete
+  - id: AC2
+    altitude: cli
+    surface: red ./mvnw verify repeated with -Dtest/-Dit.test + failIfNoSpecifiedTests=false
+    test: test_maven_red_repeats_only_the_failed_classes + test_parsers_read_the_real_outputs
+    layer: cli ponta a ponta + parser contra saída real (maven-red.txt e maven-red-multi.txt brutos)
+    evidence: verified
+    run: "maven-red -> ['FooTest']; maven-red-multi (reactor, 2 módulos) -> ['ATest','BTest'] -> 'mvn -B verify -fae -Dtest=ATest,BTest -Dit.test=ATest,BTest -Dsurefire.failIfNoSpecifiedTests=false -Dfailsafe.failIfNoSpecifiedTests=false'. Testes novos: 'FooTest » ...' entra, método com ponto dá a classe, linha ilegível zera a lista, composto é desconhecido. Resolvidos os gaps 2a e 2b da rodada anterior."
+    status: complete
+  - id: AC3
+    altitude: cli
+    surface: red Gradle/Maven that names no test repeats the whole build
+    test: test_gradle_compile_red_repeats_the_whole_build + parsers vazios
+    layer: cli ponta a ponta
+    evidence: verified
+    run: "'ok sem teste nomeado a 2ª rodada é o build inteiro'; '✓ tudo verde'"
+    status: complete
+  - id: AC4
+    altitude: cli
+    surface: one full build per pair; red pair runs failed tests at the middle commit; only culprit leaves
+    test: test_gradle_build_runs_once_per_pair_and_blames_the_right_item (inclui maven)
+    layer: cli ponta a ponta
+    evidence: verified
+    run: "'ok o build rodou 2 vezes para 3 itens', 'ok maven: par vermelho roda só as classes com falha no commit do meio', 'ok maven: a2 fica done e só a3 tem volta vermelha'; '✓ tudo verde'"
+    status: complete
+  - id: AC5
+    altitude: cli
+    surface: other --verify keeps one build per item and whole-command repetition
+    test: test_other_verify_keeps_one_build_per_item
+    layer: cli ponta a ponta
+    evidence: verified
+    run: "'ok nenhum item é adiado', 'ok um build por item', 'ok comando composto é tratado como build desconhecido'. Comandos com `;&|<>`$` viram None (inclui `-Pmsg='a&b'` e `-Dx=$Y`: conservador, só perde a economia)."
+    status: complete
+  - id: AC6
+    altitude: parser
+    surface: parsers match real tool output
+    test: test_parsers_read_the_real_outputs
+    layer: parser contra capturas reais, inclusive multi-módulo (Gradle --continue --parallel; Maven reactor --fail-at-end)
+    evidence: verified
+    run: "conferido por mim nos arquivos brutos: gradle-red, gradle-red-multi, maven-red, maven-red-multi dão as listas corretas."
+    status: complete
+  - id: AC7
+    altitude: cli
+    surface: verde na repetição estreita é seguido de um build inteiro (cobre_o_resto) no item único, no item adiado checado sozinho e no commit do meio do par vermelho
+    test: test_green_on_the_failed_class_is_followed_by_the_whole_build; test_deferred_item_alone_also_gets_the_whole_build_after_a_narrow_green; 'maven: verde nas classes no meio é seguido do build inteiro no meio'
+    layer: cli ponta a ponta
+    evidence: verified
+    run: "python3 tests/test_cepa_run_java_builds.py em 40b3c7f -> todos 'ok', '✓ tudo verde'; o teste do adiado aparece na lista de testes rodados."
+    status: complete
+suite_evidence: >
+  Pendente, não verificado por mim: suíte inteira em 40b3c7f (log suite-java-final.log, em
+  andamento). Antes: d3fb4fc teve 261/263 (decide_all passa na repetição; network é teste de
+  temporização, intermitente segundo o coordenador). A complete aqui vale para os critérios
+  AC1-AC7 e depende do log só para "comportamento existente intacto".
