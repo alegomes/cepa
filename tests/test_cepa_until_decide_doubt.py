@@ -819,6 +819,7 @@ def test_question_mark_asks_and_the_typed_text_reaches_the_reader_and_feedback()
 def test_question_mark_with_empty_enter_sends_no_doubt():
     failed_before = len(FAILURES)
     rc, plain, reqs, lines = _key_session("")
+    check("CS-5 pty empty: decide exits 0", rc == 0, plain[-1500:])
     check("CS-5 pty empty: the line is shown", SEEN in plain, plain[-1500:])
     check("CS-5 pty empty: one rewrite request without a doubt field",
           len(reqs) == 1 and "duvida_do_dono" not in reqs[0], reqs)
