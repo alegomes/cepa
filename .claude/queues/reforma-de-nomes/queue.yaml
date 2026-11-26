@@ -243,16 +243,28 @@ items:
     e `CEPA_PERMISSIONS=classifier` e nenhuma das formas antigas; com a nova e a
     antiga definidas com valores diferentes, vale a nova. Hoje a varredura acha
     `CEPA_MODO`, `CLAUDE_WT_CLAIM` e `CCW_SEED`, entre outras.'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  claimed_by:
-    session_id: 885ae67e-a5c1-4b82-9282-4b6fad798674
-    pid: 79404
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-until-2026-11-24-2017
-    branch: until/2026-11-24-2017
-    started_at: '2026-11-25T13:02:32+00:00'
+  evidence: 'Reserva órfã recuperada (sessão 885ae67e do run until/2026-11-24-2017
+    morreu antes do finish). A implementação d1cb3cd já estava na main e nesta branch;
+    o run morto deixou num stash (0aac4f0) os testes que matam os sobreviventes
+    S1..S9 da prova 1, aplicados e commitados em e7ac47b (remove também a tradução
+    morta de CEPA_PERMISSIONS=classificador no lançador sh; o único leitor compara
+    com bypass). Gates no HEAD e7ac47b: completion-auditor COMPLETE (.claude/acceptance/CS-6-reforma-de-nomes.yaml),
+    proof-reviewer PROVEN revisão 2 (docs/proof/reforma-de-nomes-CS-6.yaml: 47 perturbações,
+    0 sobreviventes), commit 6f3d63b. Testes: env -u CEPA_UNTIL_RUN pytest tests/test_env_names_in_english.py
+    tests/test_waivers.py -> 64 passed; suíte completa é do supervisor. Segui a
+    resposta do dono no lançamento: nomes que a especificação não fixa usam tradução
+    direta do nome atual com prefixo CEPA_ (CLAUDE_WT_CLAIM->CEPA_WT_CLAIM, CCW_SEED->CEPA_SEED,
+    CAPTURE_BUILD_DEBUG->CEPA_CAPTURE_BUILD_DEBUG, LEAD_WORKTREE_DEBUG->CEPA_LEAD_WORKTREE_DEBUG);
+    única exceção CEPA_UNTIL_RUN->CEPA_RUN em vez de CEPA_RUN_RUN. Código na branch
+    noturna until/2026-11-25-2108.'
+  head_commit: 6f3d63bbf14406595142002546bc984c475c1d43
+  decisions:
+  - texto: Variáveis que a especificação não nomeia ganham o nome atual traduzido
+      ao pé da letra com prefixo CEPA_, e a marca de run CEPA_UNTIL_RUN vira CEPA_RUN
+    commit: d1cb3cd87bbc6f72bcff7d8f63ad3f51c86b365d
 - id: CS-7
   title: '`cepa intent` e `cepa modes` dizem a ação por subcomando'
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -262,9 +274,30 @@ items:
     modes purposes` imprimem o que `--exit`, `--menu discovery` e `--purposes` imprimem
     hoje; `cepa intent --step 3` e `cepa modes --exit` continuam aceitos. Hoje `cepa
     intent step 3` é erro de uso.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-11-25-2108 (sem merge nem push; o codigo
+    fica na branch do run): 8241265 (subcomandos step/edit e ajuda por acao em common/bin/cepa-intent;
+    exit/menu/purposes em common/bin/cepa-modes; docs/cepa-cli.md), 641ccdf+5e9de96
+    (remind help volta a gravar lembrete, regressao apontada pelo pair-reviewer),
+    2404cbc+d280e9f (testes que matam os sobreviventes da prova). pair-reviewer:
+    OK-WITH-NOTES (nota 1 corrigida). completion-auditor: COMPLETE (.claude/acceptance/CS-7-reforma-de-nomes.yaml,
+    72cea78). proof-reviewer: review 1 UNPROVEN (2 comportamentos + 22 textos de
+    ajuda), review 2 UNPROVEN (1 texto), review 3 PROVEN em d280e9f (docs/proof/reforma-de-nomes-CS-7.yaml,
+    7d84c2d). Testes: tests/test_cepa_intent_subcommands.py e tests/test_cepa_modes_subcommands.py
+    (novos) + test_cepa_intent, test_cepa_intent_reminders, test_intent_telemetry,
+    test_session_intent*, test_whereami_intent, test_modes_single_source, test_cepa_help_layout
+    e vizinhos verdes. Suite inteira NAO rodada aqui (e do supervisor). Ficou de
+    fora: comandos, skills e docs que ainda chamam --step/--menu (varredura do CS-11).'
+  head_commit: 7d84c2d0b1c7255e93f9bb09abca5c3bf2191ed5
+  decisions:
+  - texto: Um item de plano chamado exatamente step ou edit passa a ser recusado,
+      como já acontecia com write e show, porque agora são nomes de ação
+    commit: 641ccdf409a4506fa88e7712ddf8bf1c8f45ce41
+  - texto: No remind, a palavra help depois da ação é o texto do lembrete; só --help
+      e -h pedem a ajuda
+    commit: 641ccdf409a4506fa88e7712ddf8bf1c8f45ce41
 - id: CS-8
   title: a ajuda do `cepa queue` abre com os subcomandos do dono, e `queue` vira
     `batch`
@@ -275,10 +308,29 @@ items:
     os demais; `cepa queue batch <fila> --max 3` imprime o que `cepa plan queue
     <fila> --max 3` imprime hoje; `cepa queue queue <fila>` sai com 2 com "queue
     is now batch". Depois do CS-1.'
-  status: pending
+  status: done
   blocked_by:
   - CS-1
   human_pending: null
+  evidence: 'Return 1/2: cherry-picked the 5 commits of until/2026-11-25-2108-vermelho-CS-8
+    (bf577a7 impl, a5d1784 acceptance COMPLETE .claude/acceptance/CS-8-reforma-de-nomes.yaml,
+    5d8041b UNPROVEN, afb382d survivor S1 killed, dd21a9e proof PROVEN docs/proof/reforma-de-nomes-CS-8.yaml
+    at 38d55fa). Supervisor red cause (both builds): tests/test_cepa_plan_verdict.py
+    split cepa queue --help on the old writing:/reading: groups CS-8 replaced. Fixed
+    in 787571e: the check now requires verdict in ''used by the commands'' and absent
+    from ''for you'' (assertion kept, not disabled). Source unchanged since the
+    PROVEN proof. Ran locally: test_cepa_plan_verdict, test_cepa_queue_batch_rename,
+    test_cepa_queue_rename_cli, test_cepa_help_layout, all ok; full build left to
+    the supervisor. Code is on the overnight branch until/2026-11-25-2108. No board.'
+  decisions:
+  - texto: O nome antigo 'queue' é recusado só quando digitado ('cepa queue queue'
+      sai com 2); chamado pelo caminho do script, continua respondendo com um aviso,
+      para não quebrar as rodadas já em andamento, até a limpeza final da reforma
+    commit: 4dea4afbd34159b2956db01a92838bb56dfa1d01
+  - texto: a ajuda do cepa queue lista verdict no bloco dos comandos, não no bloco
+      do dono
+    commit: 787571ecf26c0a056abeed618d7b2ca96aef457f
+  head_commit: 787571ecf26c0a056abeed618d7b2ca96aef457f
 - id: CS-9
   title: o que está congelado aparece num bloco "frozen" no fim da ajuda
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -287,9 +339,23 @@ items:
     todos os outros subcomandos; em docs/commands.md e docs/cepa-cli.md, os comandos
     `/maestro:*`, `cepa dor` e `cepa hotspots` estão numa seção final "Frozen".
     Hoje estão em ordem alfabética junto dos demais.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'code e6436fa on until/2026-11-25-2108: _clihelp Parser frozen= kwarg
+    + FROZEN=(dor,hotspots) in launcher_help; cepa shell fallback lists them after
+    ''frozen:''; docs/commands.md and docs/cepa-cli.md end in ''## Frozen'' with
+    /maestro:*, cepa dor, cepa hotspots. Test tests/test_help_frozen_block.py (red
+    at 787571e). Acceptance COMPLETE .claude/acceptance/CS-9-reforma-de-nomes.yaml
+    (9cbdf80); proof PROVEN docs/proof/reforma-de-nomes-CS-9.yaml (9de7620, 7 perturbations
+    red). Ran only touched tests + neighbors; full build is the supervisor''s. Left
+    out: Part 1 ''I have >=4 independent demands'' paragraph in commands.md still
+    points at /maestro:* (not in the criterion).'
+  head_commit: 9de7620cda82189093276102c60c71bf61108d80
+  decisions:
+  - texto: a ajuda lista os congelados numa linha 'frozen:' no fim do bloco de subcomandos,
+      com o mesmo recuo dos outros, inclusive na ajuda de reserva sem python3
+    commit: e6436fa16dcb8c1ed007f28f5eb12be4fee4cd2d
 - id: CS-10
   title: a família worktree usa `<slice>` em todos os comandos
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -298,9 +364,26 @@ items:
     `worktree-rename.md` e `worktree-label.md` e falha se algum citar `<name>`,
     `<new-name>` ou `<old-name>` no lugar de `<slice>`, `<new-slice>` e `<old-slice>`.
     Hoje `worktree-discard.md` e `worktree-name.md` usam `<name>`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Attempt 2. Cherry-picked code commits from until/2026-11-25-2108-vermelho-CS-10
+    (a5eddeb,49085ae,9324158 -> 0ef196e,c93fe25,f3f45ea). Cause of red full build:
+    tests/test_isolated_telemetry.py static sweep (test cites session-registry/session-worktrees
+    without isolate()). Fix 7a3720b adds isolate() to tests/test_worktree_slice_placeholder.py.
+    Gates: proof-reviewer PROVEN at 7a3720b (7 perturbations red, 16 failures at
+    base; docs/proof/reforma-de-nomes-CS-10.yaml), completion-auditor COMPLETE (.claude/acceptance/CS-10-reforma-de-nomes.yaml),
+    artifacts in b35d1a1. 27 neighbor tests green; full build left to the supervisor.
+    Code is on the overnight branch until/2026-11-25-2108.'
+  decisions:
+  - texto: as dicas que os hooks mostram no início da sessão e a tabela de comandos
+      também passaram a dizer <slice>, além dos arquivos de comando
+    commit: 9324158ec6bc2aa67d37ca0dcbd130b34f0faa2e
+  - texto: o teste novo só lê os arquivos dos hooks, mas ganhou o isolamento de
+      telemetria mesmo assim, porque a regra da suíte vale para todo teste que cita
+      um hook que grava telemetria
+    commit: 7a3720b6cd1b28d5376ac1167bf6424f47a89611
+  head_commit: b35d1a10f9dd0bb36d9f7c56369dea115184f6fb
 - id: CS-12
   title: os 12 plugins e suas pastas têm o nome novo
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -314,7 +397,7 @@ items:
     `design/`, `marketing/`, `review-gate/`, `maestro/` ou `compass/` na raiz. A
     suíte inteira passa com os scripts em `cepa/bin/`. Depois do CS-1, CS-2, CS-3,
     CS-4, CS-5, CS-6, CS-7, CS-8, CS-9 e CS-10.'
-  status: pending
+  status: blocked
   blocked_by:
   - CS-1
   - CS-2
@@ -327,6 +410,35 @@ items:
   - CS-9
   - CS-10
   human_pending: null
+  evidence: 'Not started; no commit. Precondition in docs/spec/reforma-de-nomes-dos-comandos.md:139
+    (''a troca entra com nenhuma run aberta'') is false: this item runs inside cepa-run
+    reforma-de-nomes (pid 96227) and a second run is open (cepa-run lotes-de-faturamento-c1,
+    pid 33374, claude -p /common:queue-run ... pid 56806). Concrete breakage: cepa-run''s
+    cepa-repo exception reinstalls with ''sh bin/install.sh --clean'' from this
+    worktree after a green done that touches <plugin>/hooks or <plugin>/bin (it
+    already did at 2026-11-26T09:18, ~/.claude/ops/last-install.json repo_dir=this
+    worktree). CS-12 renames every plugin folder, so --clean would uninstall common/board-flow/...
+    and install cepa/cepa-board/..., while ~/.claude/settings.json still enables
+    common@cepa..compass@cepa (migration of those keys is CS-14, not done) and the
+    other run''s next round calls /common:queue-run -> unknown command. Scale measured:
+    867 files / 4645 path references to the old root folders. Safe paths: run CS-12
+    in an attended session with no cepa-run open, and land/reinstall together with
+    CS-14 (enabled-keys migration) so the install never sees old keys without plugins;
+    also owner PATH/aliases pointing at /Users/alegomes/coding/cepa/common/bin/cepa
+    break at land.'
+  owner_question: 'Faço a troca dos nomes numa sessão acompanhada, sem rodada desatendida
+    aberta? Recomendo sim: dentro de uma rodada, a reinstalação automática derruba
+    as outras sessões'
+  owner_summary:
+    pedido: trocar o nome dos 12 plugins e das pastas deles para os nomes novos
+      começando com cepa
+    pronto: 'nada foi mexido; medi o tamanho da troca: 867 arquivos citam as pastas
+      antigas'
+    impede: a rodada reinstala os plugins sozinha depois de cada item; com os nomes
+      novos, as sessões abertas e a outra rodada perdem os comandos que usam hoje
+    se_sim: a troca é feita numa sessão acompanhada por você, sem rodada aberta,
+      junto com o ajuste das configurações que ligam os plugins
+    se_nao: o item fica parado e os quatro que dependem dele também
 - id: CS-13
   title: toda referência a comando, skill ou agente usa o prefixo novo e aponta
     para algo que existe
