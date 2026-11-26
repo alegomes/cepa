@@ -402,7 +402,7 @@ def test_answering_the_new_question_records_the_new_text_not_the_doubt():
 
 def test_plain_question_mark_sends_no_doubt():
     failed_before = len(FAILURES)
-    _, _, marks, rewrites, _ = _inject(["?", ""])
+    _, _, marks, rewrites, _ = _inject(["?", "", ""])
     check("CS-2 unit: `?` rewrite has no doubt", rewrites == [(QUESTION, "")], rewrites)
     check("CS-2 unit: `?` mark has no doubt", marks == [("b1", QUESTION, "")], marks)
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
@@ -419,7 +419,7 @@ def test_n_at_the_doubt_prompt_does_not_call_the_rewrite():
 def test_doubt_after_a_rewrite_does_not_call_the_reader_again():
     """Today's limit stays: one rewrite per item, whatever key triggered it."""
     failed_before = len(FAILURES)
-    text, later, marks, rewrites, answers = _inject(["?", "w", DOUBT, ""])
+    text, later, marks, rewrites, answers = _inject(["?", "", "w", DOUBT, ""])
     check("CS-2 unit: the reader ran once", len(rewrites) == 1, rewrites)
     check("CS-2 unit: the doubt reached the feedback mark",
           marks == [("b1", QUESTION, ""), ("b1", NEW_Q, DOUBT)], marks)
@@ -456,7 +456,7 @@ def test_default_rewrite_puts_the_doubt_in_the_reader_payload():
           len(reads) == 1 and reads[0].get("duvida_do_dono") == DOUBT
           and reads[0].get("pergunta_mal_escrita") == QUESTION, reads)
     reads.clear()
-    replies = iter(["?", ""])
+    replies = iter(["?", "", ""])
     m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
              question=lambda _p: next(replies, ""), output=screen.append,
              answer=lambda *a, **k: (0, "ok"),
@@ -516,7 +516,7 @@ def test_default_feedback_line_for_plain_question_mark_has_no_doubt_label():
         m = load_module()
         os.environ["CEPA_FEEDBACK_DIR"] = fb
         try:
-            replies = iter(["?", ""])
+            replies = iter(["?", "", ""])
             m.decide(Path(fb), "fila", None, {}, [_deferred(human_pending=None)], {},
                      question=lambda _p: next(replies, ""), output=lambda *_: None,
                      answer=lambda *a, **k: (0, "ok"))
@@ -768,6 +768,126 @@ def test_punctuation_only_text_is_still_refused_by_the_panel():
     check("CS-3 pty punct: refused as before", "not recorded" in plain
           and "resposta recusada" in plain, plain[-1500:])
     check("CS-3 pty punct: queue.yaml is byte-identical", after == before, "")
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+# ---- CS-5: the `?` key asks, in one optional line, what was not understood ------
+
+KEY_ASK = "What did you not understand? [Enter skips]"
+# `on_tty` rewrites a trigger it matched as <trigger>; on a timeout it only lists the
+# unmatched ones as "still waiting", which also contains the text.
+SEEN = f"<{KEY_ASK}>"
+
+
+def _key_session(typed):
+    """`?` in a pty with the fake reader; `typed` answers the new line. Returns
+    (plain output, rewrite requests, feedback lines)."""
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        reader, log = _doubt_reader(tmp)
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER=str(reader))
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=90, inputs=[
+            ("[w] I write the answer", "?"),
+            (KEY_ASK, typed),
+            ("answer it again", None),
+            ("[w] I write the answer", ""),
+        ])
+        reqs = [r for r in _requests(log) if r.get("tarefa") == "reescrever-pergunta"]
+        return rc, ANSI.sub("", out), reqs, _ledger(fb)
+
+
+def test_question_mark_asks_and_the_typed_text_reaches_the_reader_and_feedback():
+    """Red test of CS-5, as a process in a pseudo-terminal."""
+    failed_before = len(FAILURES)
+    rc, plain, reqs, lines = _key_session("variante O")
+    check("CS-5 pty: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-5 pty: `?` shows the optional line", SEEN in plain, plain[-1500:])
+    check("CS-5 pty: one rewrite request", len(reqs) == 1, reqs)
+    if reqs:
+        check("CS-5 pty: the request carries the typed text as the doubt",
+              reqs[0].get("duvida_do_dono") == "variante O", reqs[0])
+    check("CS-5 pty: one feedback line with the typed text",
+          len(lines) == 1 and "dúvida do dono: variante O" in lines[0].get("texto", ""),
+          lines)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_question_mark_with_empty_enter_sends_no_doubt():
+    failed_before = len(FAILURES)
+    rc, plain, reqs, lines = _key_session("")
+    check("CS-5 pty empty: the line is shown", SEEN in plain, plain[-1500:])
+    check("CS-5 pty empty: one rewrite request without a doubt field",
+          len(reqs) == 1 and "duvida_do_dono" not in reqs[0], reqs)
+    check("CS-5 pty empty: the feedback line has no doubt label",
+          len(lines) == 1 and "dúvida do dono" not in lines[0].get("texto", ""), lines)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def _prompts(replies, deferred=None):
+    """`decide` with a `question` that records every prompt; the injected fakes take
+    `doubt` so the typed text can be seen. Returns (prompts, marks, rewrites)."""
+    m = load_module()
+    shown, marks, rewrites, it = [], [], [], iter(replies)
+    m.decide(Path("/nao/existe"), "fila", None, {}, deferred or [_deferred()], {},
+             question=lambda p: shown.append(str(p)) or next(it, ""),
+             output=lambda *_: None, answer=lambda *a, **k: (0, "ok"),
+             unclear=lambda ident, text, doubt="": marks.append(doubt) or (0, "ok"),
+             rewrite=lambda ad, text, doubt="": rewrites.append(doubt) or (NEW, None))
+    return shown, marks, rewrites
+
+
+def test_doubt_confirmed_from_w_is_not_asked_again_by_the_question_mark_line():
+    failed_before = len(FAILURES)
+    shown, marks, rewrites = _prompts(["w", DOUBT, "", ""])
+    check("CS-5 unit w: the `?` line is not asked", not any(KEY_ASK in p for p in shown),
+          shown)
+    check("CS-5 unit w: the doubt still reaches mark and reader",
+          marks == [DOUBT] and rewrites == [DOUBT], (marks, rewrites))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_question_mark_line_text_flows_through_the_same_doubt_path():
+    failed_before = len(FAILURES)
+    shown, marks, rewrites = _prompts(["?", "variante O", ""])
+    check("CS-5 unit: asked once", sum(KEY_ASK in p for p in shown) == 1, shown)
+    check("CS-5 unit: text reaches mark and reader",
+          marks == ["variante O"] and rewrites == ["variante O"], (marks, rewrites))
+    shown, marks, rewrites = _prompts(["?", "", ""])
+    check("CS-5 unit empty: no doubt to mark or reader",
+          marks == [""] and rewrites == [""], (marks, rewrites))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_second_question_mark_on_the_item_does_not_ask():
+    """Decided: when the reader will not be called (one rewrite per item, until
+    CS-6/CS-7), the line is not asked and no doubt goes to the mark."""
+    failed_before = len(FAILURES)
+    shown, marks, rewrites = _prompts(["?", "variante O", "?", ""])
+    check("CS-5 unit second: asked only on the first `?`",
+          sum(KEY_ASK in p for p in shown) == 1, shown)
+    check("CS-5 unit second: the second mark carries no doubt",
+          marks == ["variante O", ""] and len(rewrites) == 1, (marks, rewrites))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_question_mark_on_an_item_without_open_route_still_asks_and_marks():
+    """Decided: the text goes to the feedback line even though the reader is not
+    called (same as a doubt typed in `w` on such an item)."""
+    failed_before = len(FAILURES)
+    m = load_module()
+    reads, shown, marks, it = [], [], [], iter(["?", "variante O", ""])
+    m.read_route = lambda *a, **k: reads.append(a) or (NEW, None)
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred(human_pending=None)], {},
+             question=lambda p: shown.append(str(p)) or next(it, ""),
+             output=lambda *_: None, answer=lambda *a, **k: (0, "ok"),
+             unclear=lambda ident, text, doubt="": marks.append(doubt) or (0, "ok"))
+    check("CS-5 no route: the line is asked", any(KEY_ASK in p for p in shown), shown)
+    check("CS-5 no route: the reader is not called, the text goes to the mark",
+          reads == [] and marks == ["variante O"], (reads, marks))
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 

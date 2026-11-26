@@ -4689,6 +4689,13 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                         not_a_doubt = True
             if r != "?":
                 break
+            if not doubt and not rewritten:
+                # CS-5: the `?` key asks, in one optional line, what the owner did not
+                # understand; the text takes the same `doubt` path as a doubt typed in
+                # `w`/`v` (which is never asked again: it is already in `doubt`). A
+                # second `?` on the item does not ask: the reader will not be called.
+                doubt = str(question(screen.follow_up(
+                    "What did you not understand? [Enter skips] "))).strip()
             kw = {"doubt": doubt} if doubt else {}
             rc, msg = unclear(ident, shown_question, **kw)
             screen.recorded("question recorded as badly written; no answer on the "
