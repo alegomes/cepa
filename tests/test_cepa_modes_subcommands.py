@@ -154,6 +154,10 @@ for sub, (usage, summary, pos, has_json, exits) in MODE_HELP.items():
     opts = " ".join(section(out, "options") or [])
     check(f"ajuda de `{sub}`: --json {'aparece' if has_json else 'não aparece'}",
           ("--json" in opts) == has_json, opts)
+    if has_json:
+        check(f"ajuda de `{sub}`: frase do --json",
+              any(l.startswith("--json") and l.endswith("the list as JSON, for code")
+                  for l in section(out, "options") or []), out)
     got = {}
     for l in section(out, "exit codes") or []:
         code, _, meaning = l.partition("  ")
