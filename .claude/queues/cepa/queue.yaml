@@ -3845,3 +3845,13 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: supervisor-nao-repete-build-vermelho
+  title: O supervisor da run refaz build completo de 40 minutos sobre vermelho determinístico
+  why: 'Origem: feedback fb-20261123-6 (2026-11-23); BACKLOG.md § O supervisor da
+    run refaz build completo de 40 minutos sobre vermelho determinístico (ainda
+    não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
