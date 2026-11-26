@@ -38,6 +38,14 @@
 # processos do arquivo é morto (os filhos do pty junto), o arquivo conta como
 # falha marcada [TIMEOUT] no resumo, e a suíte segue para o próximo. O teto é
 # aplicado por tests/_run_with_timeout.py porque o macOS não tem `timeout` GNU.
+#
+# ## Por que cada linha diz quanto o arquivo levou
+#
+# No run reforma-de-nomes/2026-11-25-2108 a suíte comeu 393 de 495 min e nada
+# dizia qual arquivo pesava. Cada linha termina com "(Ns)" e o resumo traz o
+# bloco "mais lentos:" (os 10 mais lentos, o mais lento primeiro). As linhas
+# "  - tests/x.py" de "com falha:" não mudam: o cepa-run lê essas linhas para
+# repetir só os arquivos que falharam.
 
 set -uo pipefail
 
@@ -101,6 +109,7 @@ fi
 
 # ── roda ──────────────────────────────────────────────────────────────────
 falhas=() ; rodados=0
+duracoes=()   # "segundos arquivo", para o bloco "mais lentos:"
 TIMEOUT_RC=124   # convenção do GNU timeout, devolvida por _run_with_timeout.py
 
 echo
@@ -108,17 +117,20 @@ echo "── família script (${#scripts[@]}) ──"
 # `${arr[@]+...}` é o guarda de array vazio: o bash 3.2 que vem no macOS trata
 # "${arr[@]}" de um array vazio como variável não-definida sob `set -u` e aborta.
 for t in ${scripts[@]+"${scripts[@]}"}; do
+  inicio=$(date +%s)
   saida=$("$PYTHON" "$LIMITADOR" "$TETO" "$PYTHON" "$t" 2>&1) ; rc=$?
+  seg=$(( $(date +%s) - inicio ))
+  duracoes+=("$seg $t")
   rodados=$((rodados + 1))
   if [ "$rc" -eq 0 ]; then
-    printf '  ok    %s\n' "$t"
+    printf '  ok    %s  (%ss)\n' "$t" "$seg"
   elif [ "$rc" -eq "$TIMEOUT_RC" ]; then
     falhas+=("$t  [TIMEOUT ${TETO}s]")
-    printf 'TIMEOUT %s  (passou de %ss e foi morto)\n' "$t" "$TETO"
+    printf 'TIMEOUT %s  (passou de %ss e foi morto)  (%ss)\n' "$t" "$TETO" "$seg"
     printf '%s\n' "$saida" | tail -5 | sed 's/^/          /'
   else
     falhas+=("$t")
-    printf 'FALHA   %s  (saída %d)\n' "$t" "$rc"
+    printf 'FALHA   %s  (saída %d)  (%ss)\n' "$t" "$rc" "$seg"
     printf '%s\n' "$saida" | grep -E '^FAIL|failure|Error|Traceback' | sed 's/^/          /' | head -12
   fi
 done
@@ -131,12 +143,15 @@ if [ "${#pytests[@]}" -gt 0 ]; then
     # Um pytest por arquivo (não uma chamada só): o teto vale por arquivo, e
     # assim o resumo nomeia exatamente qual travou em vez de acusar todos.
     for t in "${pytests[@]}"; do
+      inicio=$(date +%s)
       saida=$("$PYTHON" "$LIMITADOR" "$TETO" "$PYTHON" -m pytest "$t" -q 2>&1) ; rc=$?
+      seg=$(( $(date +%s) - inicio ))
+      duracoes+=("$seg $t")
       rodados=$((rodados + 1))
-      echo "  $t"
+      echo "  $t  (${seg}s)"
       if [ "$rc" -eq "$TIMEOUT_RC" ]; then
         falhas+=("$t  [TIMEOUT ${TETO}s]")
-        printf 'TIMEOUT %s  (passou de %ss e foi morto)\n' "$t" "$TETO"
+        printf 'TIMEOUT %s  (passou de %ss e foi morto)  (%ss)\n' "$t" "$TETO" "$seg"
         printf '%s\n' "$saida" | tail -5 | sed 's/^/          /'
       else
         printf '%s\n' "$saida" | tail -3 | sed 's/^/    /'
@@ -152,6 +167,11 @@ fi
 echo
 echo "─────────────────────────────────────────"
 echo "arquivos rodados: $rodados de ${#todos[@]}"
+if [ "${#duracoes[@]}" -gt 0 ]; then
+  echo "mais lentos:"
+  printf '%s\n' "${duracoes[@]}" | sort -rn -k1,1 | head -10 \
+    | while read -r seg t; do printf '  %ss  %s\n' "$seg" "$t"; done
+fi
 if [ "$pulados_pytest" -gt 0 ]; then
   echo "NÃO rodados (SKIP_PYTEST=1, pytest ausente): $pulados_pytest"
   printf '  - %s\n' "${pytests[@]}"

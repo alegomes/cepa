@@ -1,0 +1,43 @@
+key: suite-speed-a1-a2
+status: complete
+diff_range: 98022ed..a857f51
+criteria:
+  - id: A1
+    altitude: cli
+    surface: >
+      Saída de tests/run-all.sh: cada linha de arquivo termina em "(Ns)",
+      resumo fecha com bloco "mais lentos:" (10 mais lentos, o mais lento
+      primeiro); linhas "  - tests/x.py" sob "com falha:" inalteradas.
+    test: tests/test_run_all_durations.py
+    layer: cli/subprocess (copia o run-all.sh real para um diretório temporário com arquivos de teste sintéticos)
+    evidence: verified
+    run: "python3 tests/test_run_all_durations.py -> 10 checks ok, 'ok: 0 falha(s)' (inclui 11+ arquivos, limite de 10, ordem decrescente, linha '  - tests/test_broken.py' sem sufixo)"
+  - id: A2
+    altitude: cli
+    surface: >
+      cepa-until/cepa-run: no vermelho de tests/run-all.sh a repetição roda
+      `tests/run-all.sh <arquivos de "com falha:">`; sem lista repete a suíte
+      inteira; outros --verify repetem o comando inteiro; ledger .jsonl grava
+      "repeticao": 2 com "arquivos".
+    test: >
+      tests/test_cepa_run_repeat_failed.py (3 cenários ponta a ponta via
+      cepa-until com claude falso e run-all.sh falso); caso "outros builds":
+      tests/test_cepa_until_run_branch.py test_4a
+    layer: cli/subprocess + ledger .jsonl
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_run_repeat_failed.py -> 9 checks ok, '✓ tudo verde'.
+      test_4a_second_green_build_closes_done_and_records_the_instability
+      (chamado direto) -> 4 checks ok, FAILURES vazio.
+      Conexão com a superfície real (verificação adicional, feita à mão, sem teste
+      commitado): run-all.sh REAL copiado para diretório temporário com um arquivo
+      bom e um ruim -> exit 1; common/bin/cepa-run failed_suite_files(log) devolveu
+      ['tests/test_bad.py']; `bash tests/run-all.sh tests/test_bad.py` rodou só esse
+      arquivo ('filtro: ... -> 1 arquivo(s)', 'com falha: 1'). Também
+      `tests/run-all.sh tests/test_run_all_durations.py tests/_nonexistent.py`
+      -> '1 arquivo(s)', tudo verde.
+    note: >
+      Observação, não lacuna do critério: o elo run-all.sh real -> failed_suite_files
+      -> run-all.sh real só é provado pela minha verificação manual; os testes
+      commitados usam a suíte falsa. Se o formato de "com falha:" mudar, nenhum teste
+      automático cobre o par real. Cartão de acompanhamento opcional (decisão do dono).

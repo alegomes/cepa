@@ -5760,3 +5760,29 @@ As frases que dizem ao dono o que rodar usam a forma com hífen (`To answer them
 ### Esboço
 
 Toda frase impressa para o dono usa `cepa <sub>`. Teste que falta: varrer a saída de ajuda e as frases de próximo passo e falhar em qualquer `cepa-<sub>`.
+
+---
+
+## O repo do Cepa não tem proof-reviewer, então o modo construction nunca fecha aqui
+
+Registrado em 2026-11-26 a pedido do dono ("3. sim"), no fim da sessão
+`session/solong`.
+
+### Problema
+
+O modo construction fecha quando o completion-auditor dá COMPLETE e o proof-reviewer
+dá PROVEN. O único proof-reviewer de código que existe é o do `build-hex`, escrito para
+projetos Quarkus (PIT, `@QuarkusTest`, RestAssured); o `common:ui-proof-reviewer` prova
+telas. Nenhum dos dois sabe provar uma mudança em `common/bin/*` ou `tests/run-all.sh`.
+Na sessão de 2026-11-26 (A1, A2, O1 no `cepa-run`) o auditor deu COMPLETE e a parte
+PROVEN ficou sem rodar, sem que nada avisasse.
+
+### Esboço de solução
+
+Um revisor de prova para repos de script Python/bash: para cada trecho de comportamento
+do diff, quebrar o trecho numa worktree descartável, rodar o arquivo de teste que o
+cobre e exigir vermelho. Ou, enquanto ele não existe, o modo construction declarar o
+gate PROVEN como não aplicável quando a topologia do repo não tem proof-reviewer, e
+dizer isso no fechamento.
+**Lar:** `common/agents/` (revisor novo), o hook que injeta o critério de saída do
+modo, `docs/modos-de-trabalho.md`.
