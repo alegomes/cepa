@@ -196,7 +196,7 @@ the `CEPA_PROMPT` default — see [system-prompt-customizado.md](system-prompt-c
 | `/common:worktree-list` | (none) | Read-only dashboard of all session worktrees: commits ahead, clean/dirty, live/idle, age, areas touched, conflict prediction against base, build status. |
 | `/common:worktree-merge` | `<slice>` | Verifies the branch is green, merges `session/<slice>` into the current branch (surfacing conflicts normally), then removes the worktree and deletes the branch. The "land it" half. |
 | `/common:worktree-discard` | `<slice>` | Removes the worktree and deletes its branch after showing exactly what work would be lost. The "throw it away" half. |
-| `/common:worktree-rename` | `[<name>]` | Renames the current (or a named) session worktree to something readable (`session/<name>`). Optional — naming is never required. |
+| `/common:worktree-rename` | `<new-slice> [<old-slice>]` | Renames the current (or a named) session worktree to something readable (`session/<new-slice>`). Optional — naming is never required. |
 | `/common:worktree-label` | `[<purpose…>]` (no args = show; `--clear` to remove) | Gets or sets a free-text note of what a session worktree is *for*. Stored as the branch's git description, so it survives the session and never renames the branch. |
 
 ## build-hex

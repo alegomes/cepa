@@ -14,7 +14,10 @@ reforma-de-nomes, CS-10 (docs/spec/reforma-de-nomes-dos-comandos.md, P8):
     `<old-slice>`;
   - the body of every `common/commands/worktree-*.md` uses the same words
     (a hint that says `<slice>` over a body that says `<name>` is the drift
-    this item removes).
+    this item removes);
+  - the session-start hints (`session-registry.py`, `session-worktrees.py`)
+    and the worktree rows of docs/commands.md say `<slice>` too, since they
+    are where the owner reads the usage most often.
 """
 
 import re
@@ -73,6 +76,24 @@ def main():
             hits = [i + 1 for i, l in enumerate(text.splitlines()) if old in l]
             check(f"{path.name} body does not use {old}", not hits,
                   f"lines {hits}")
+
+    # the hint the hooks print at session start, and the commands reference
+    hooks = REPO / "common" / "hooks"
+    for path in [hooks / "session-registry.py", hooks / "session-worktrees.py"]:
+        text = path.read_text()
+        for cmd in ["worktree-merge", "worktree-discard"]:
+            uses = re.findall(rf"/common:{cmd} (<[^>]+>)", text)
+            check(f"{path.name} cites /common:{cmd} with an argument",
+                  bool(uses))
+            check(f"{path.name} cites /common:{cmd} <slice>",
+                  uses and all(u == "<slice>" for u in uses), str(uses))
+    rows = [l for l in (REPO / "docs" / "commands.md").read_text().splitlines()
+            if l.startswith("| `/common:worktree-")]
+    check("docs/commands.md has the worktree rows", len(rows) >= 6, str(len(rows)))
+    for row in rows:
+        for old in OLD:
+            check(f"docs/commands.md row {row.split('|')[1].strip()} "
+                  f"does not use {old}", old not in row, row)
 
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s)")
