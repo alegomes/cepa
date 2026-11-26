@@ -3770,3 +3770,14 @@ items:
       comando de barra não se passe por resposta do dono
     commit: e3a316811d63bb93056eafdb4a9b310e5f9234ff
   head_commit: bdf1b9566fe9761c35f0feb27a6a1735943d4316
+- id: run-morta-fica-running
+  title: Uma run que morre continua `running` no estado e `cepa run pending` não
+    a lista
+  why: 'Origem: feedback fb-20261122-2 (2026-11-22); BACKLOG.md § Uma run que morre
+    continua `running` no estado e `cepa run pending` não a lista (ainda não priorizado:
+    entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
