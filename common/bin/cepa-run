@@ -2177,6 +2177,10 @@ def build_kind(command):
     Any other `--verify` keeps one whole build per item."""
     if command == SUITE_WITHOUT_BUILD:
         return "suite"
+    # A compound command (`a && b`, a pipe, a redirect) is not narrowed: the
+    # repetition would drop or mis-flag the other half.
+    if re.search(r"[;&|<>`$]", command or ""):
+        return None
     try:
         words = shlex.split(command or "")
     except ValueError:
@@ -2187,6 +2191,15 @@ def build_kind(command):
     if name in ("mvnw", "mvn"):
         return "maven"
     return None
+
+
+# Gradle options whose value is the next word (`-x lint`); the others are
+# flags or carry the value in the same word (`-Pk=v`, `--console=plain`).
+GRADLE_OPTIONS_WITH_VALUE = {
+    "-x", "--exclude-task", "-p", "--project-dir", "-I", "--init-script",
+    "-c", "--settings-file", "-b", "--build-file", "-g", "--gradle-user-home",
+    "--project-cache-dir", "--console", "--max-workers", "--warning-mode",
+    "--priority", "--include-build"}
 
 
 def failed_gradle_tests(text):
@@ -2227,15 +2240,19 @@ def failed_maven_tests(text):
         if not m:
             inside = False
             continue
-        token = re.sub(r":\d+$", "", m.group(1))
+        token = re.sub(r":\d+$", "", m.group(1).split("(", 1)[0])
         if ">" in token:
             cls = token.split(">", 1)[0]
         elif "." in token:
             cls = token.rsplit(".", 1)[0]
+        elif re.match(r"^\[ERROR\]   \S+ »", line):
+            cls = token          # "FooTest » IllegalState": the class itself broke
         else:
-            continue
+            return []            # a line this reader cannot name: never a partial list
         cls = cls.split("$", 1)[0].rsplit(".", 1)[-1]
-        if re.match(r"^[A-Za-z_]\w*$", cls) and cls not in classes:
+        if not re.match(r"^[A-Za-z_]\w*$", cls):
+            return []
+        if cls not in classes:
             classes.append(cls)
     return classes
 
@@ -2272,7 +2289,14 @@ def repeat_command(command, failed):
         for pair in failed:
             task, cls = pair.split(" ", 1)
             by_task.setdefault(task, []).append(cls)
-        words = [shlex.quote(shlex.split(command)[0])]
+        given = shlex.split(command)
+        words, takes_value = [shlex.quote(given[0])], False
+        for word in given[1:]:
+            # Keeps the options of the original command (`-x lint`,
+            # `-Pprofile=ci`, `--no-daemon`) and drops only its tasks.
+            if takes_value or word.startswith("-"):
+                words.append(shlex.quote(word))
+            takes_value = word in GRADLE_OPTIONS_WITH_VALUE
         for task, classes in by_task.items():
             words.append(shlex.quote(task))
             for cls in classes:
@@ -8085,6 +8109,13 @@ def _main(argv=None):
     last_suite_sec = None
 
     known_build = build_kind(verify)
+    # Gradle and Maven stop at the first module whose tests fail, so the
+    # modules after it never ran: green on the failed tests alone proves
+    # nothing about them, and the full build runs once more to cover the rest.
+    # `tests/run-all.sh` runs every file whatever fails, so it needs none.
+    stops_early = known_build in ("gradle", "maven")
+    COVER = ("green on the failed tests; the build stops at the first failure, "
+             "so the full build runs again to cover the rest")
 
     def suite_repeat(failed):
         """The command that repeats only `failed`, or the whole build."""
@@ -8212,6 +8243,17 @@ def _main(argv=None):
                        "segundos": int(sec2), "motivo": reason2,
                        "repeticao": 2, "adiado": True,
                        **({"arquivos": failed} if failed else {})})
+            if green and failed and stops_early:
+                step(COVER)
+                left = (deadline + slack - datetime.now()).total_seconds()
+                green, sec3, reason2 = verify_at(repo, pair["mid"], verify, left,
+                                                 log, on_launch=launched,
+                                                 on_tick=tick)
+                in_flight.pop("pid_filho", None)
+                log_event({"evento": "verify", "id": pair["ident"],
+                           "verde": green, "segundos": int(sec3),
+                           "motivo": reason2, "repeticao": 3, "adiado": True,
+                           "cobre_o_resto": True})
         if green:
             step(f"green ({human(timedelta(seconds=sec))}): {pair['ident']} stays")
             return False, None
@@ -8592,6 +8634,21 @@ def _main(argv=None):
                               "segundos": int(sec2), "motivo": reason2,
                               "repeticao": 2,
                               **({"arquivos": failed} if failed else {})})
+                    if green and failed and stops_early:
+                        step(COVER)
+                        left = (deadline + slack - datetime.now()).total_seconds()
+                        offset3 = log_size(log)
+                        green, sec3, reason2 = run_verify(
+                            verify, tree, left, log, on_launch=launched,
+                            on_tick=tick)
+                        in_flight.pop("pid_filho", None)
+                        log_event({"evento": "verify", "id": ident,
+                                   "verde": green, "segundos": int(sec3),
+                                   "motivo": reason2, "repeticao": 3,
+                                   "cobre_o_resto": True})
+                        if not green:
+                            failed = failed_tests(verify, log, offset3)
+                            again = suite_repeat(failed) if failed else verify
                 else:
                     reason2 = "did not fit in what is left of the window"
                 if green:
@@ -8622,6 +8679,18 @@ def _main(argv=None):
                            "motivo": mid_reason, "par": ident, "no_meio": True,
                            "commit": pair["mid"],
                            **({"arquivos": failed} if failed else {})})
+                if mid_green and failed and stops_early:
+                    step(COVER + f" on {pair['mid'][:10]}")
+                    left = (deadline + slack - datetime.now()).total_seconds()
+                    mid_green, mid_sec, mid_reason = verify_at(
+                        repo, pair["mid"], verify, left, log,
+                        on_launch=launched, on_tick=tick)
+                    in_flight.pop("pid_filho", None)
+                    log_event({"evento": "verify", "id": pair["ident"],
+                               "verde": mid_green, "segundos": int(mid_sec),
+                               "motivo": mid_reason, "par": ident,
+                               "no_meio": True, "commit": pair["mid"],
+                               "cobre_o_resto": True})
                 if mid_green:
                     step(f"{pair['ident']} is green on its own commit: "
                          f"{ident} broke the suite")

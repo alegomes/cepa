@@ -8,6 +8,9 @@ projects are hit the most". Contract guarded here:
     `./gradlew <task> --tests <Class>`; a red `./mvnw ...` repeats the same
     command with `-Dtest=` and `-Dit.test=` set to the failed classes;
   - a red that names no test (compilation) repeats the whole build;
+  - Gradle and Maven stop at the first module that fails, so green on the
+    failed tests alone is not green: the whole build runs once more to cover
+    the modules that never ran;
   - the full build runs once per pair of `done` items, as with run-all.sh;
   - any other `--verify` keeps one whole build per item and repeats it whole.
 
@@ -89,6 +92,78 @@ org.opentest4j.AssertionFailedError: expected: <1> but was: <2>
 [ERROR] -> [Help 1]
 """
 
+# Real: two modules red, `gradle build --continue --parallel`.
+GRADLE_RED_TWO_MODULES = """\
+> Task :app:testClasses UP-TO-DATE
+> Task :lib:compileTestJava
+> Task :lib:processTestResources NO-SOURCE
+> Task :lib:testClasses
+
+> Task :app:test FAILED
+
+FooTest > bad() FAILED
+    org.opentest4j.AssertionFailedError at FooTest.java:5
+
+FooTest > Inner > innerBad() FAILED
+    org.opentest4j.AssertionFailedError at FooTest.java:6
+
+3 tests completed, 2 failed
+
+> Task :lib:test FAILED
+
+BarTest > bad() FAILED
+    org.opentest4j.AssertionFailedError at BarTest.java:3
+
+1 test completed, 1 failed
+
+FAILURE: Build completed with 2 failures.
+
+1: Task failed with an exception.
+-----------
+* What went wrong:
+Execution failed for task ':app:test'.
+
+* Try:
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+==============================================================================
+
+2: Task failed with an exception.
+-----------
+* What went wrong:
+Execution failed for task ':lib:test'.
+
+* Try:
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+==============================================================================
+
+BUILD FAILED in 1s
+6 actionable tasks: 4 executed, 2 up-to-date
+"""
+
+# Real: Maven reactor of two modules, `--fail-at-end`; BTest breaks in @BeforeAll.
+MAVEN_RED_REACTOR = """\
+[INFO] Reactor Build Order:
+[INFO]   from pom.xml
+[INFO]   from a/pom.xml
+[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.019 s <<< FAILURE! -- in com.a.ATest
+[INFO] Results:
+[ERROR] Failures: 
+[ERROR]   ATest.bad:3 x
+[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0
+[INFO]   from b/pom.xml
+[ERROR] Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.011 s <<< FAILURE! -- in com.b.BTest
+[INFO] Results:
+[ERROR] Errors: 
+[ERROR]   BTest.up:3 IllegalState no
+[ERROR] Tests run: 1, Failures: 0, Errors: 1, Skipped: 0
+[INFO] Reactor Summary for mm 1:
+[INFO] mm ................................................. SUCCESS [  0.119 s]
+[ERROR] a .................................................. FAILURE [  1.668 s]
+[ERROR] b .................................................. FAILURE [  0.263 s]
+[ERROR] BUILD FAILURE
+[ERROR]   mvn <args> -rf :a
+"""
+
 # Fake build tool: notes (argv, a*.txt it sees); red while `quebra.txt` is in
 # the tree it runs in, printing RED_OUTPUT (real tool output).
 FAKE_BUILD = (
@@ -96,7 +171,8 @@ FAKE_BUILD = (
     "import json, sys\n"
     "from pathlib import Path\n"
     "calls = Path({calls!r})\n"
-    "broken = Path('quebra.txt').exists()\n"
+    "first = not calls.exists()\n"
+    "broken = Path('quebra.txt').exists() or ({flaky!r} and first)\n"
     "files = sorted(p.name for p in Path('.').glob('a*.txt'))\n"
     "with calls.open('a') as f:\n"
     "    f.write(json.dumps({{'argv': sys.argv[1:], 'files': files}}) + '\\n')\n"
@@ -116,11 +192,11 @@ def module():
     return mod
 
 
-def run(tmp, ids, tool, verify, red, breaks=""):
+def run(tmp, ids, tool, verify, red, breaks="", flaky=False):
     root = build_repo(tmp, [item(i) for i in ids])
     calls = Path(tmp) / "build-calls"
     script = root / tool
-    script.write_text(FAKE_BUILD.format(calls=str(calls), red=red))
+    script.write_text(FAKE_BUILD.format(calls=str(calls), red=red, flaky=flaky))
     script.chmod(0o755)
     _commits(root, "build tool")
     binv = fake_claude(tmp, WORKS)
@@ -153,6 +229,13 @@ def test_parsers_read_the_real_outputs():
     check("maven: falha sem bloco de testes devolve lista vazia",
           mod.failed_maven_tests("[ERROR] BUILD FAILURE\n[ERROR] COMPILATION ERROR :\n") == [],
           "")
+    check("gradle real, dois módulos com --continue: uma entrada por módulo",
+          mod.failed_gradle_tests(GRADLE_RED_TWO_MODULES)
+          == [":app:test FooTest", ":lib:test BarTest"],
+          str(mod.failed_gradle_tests(GRADLE_RED_TWO_MODULES)))
+    check("maven real, reactor de dois módulos: as classes dos dois",
+          mod.failed_maven_tests(MAVEN_RED_REACTOR) == ["ATest", "BTest"],
+          str(mod.failed_maven_tests(MAVEN_RED_REACTOR)))
     check("gradle: o comando repete só a tarefa e a classe",
           mod.repeat_command("./gradlew build", [":app:test FooTest", ":lib:test BarTest"])
           == "./gradlew :app:test --tests FooTest :lib:test --tests BarTest", "")
@@ -161,6 +244,26 @@ def test_parsers_read_the_real_outputs():
           == "./mvnw -B clean verify -Dtest=FooTest,ChildTest -Dit.test=FooTest,ChildTest "
              "-Dsurefire.failIfNoSpecifiedTests=false "
              "-Dfailsafe.failIfNoSpecifiedTests=false", "")
+    check("gradle: a repetição guarda as opções do comando e troca só as tarefas",
+          mod.repeat_command("./gradlew check -Pprofile=ci -x lint --no-daemon",
+                             [":a:test FooTest"])
+          == "./gradlew -Pprofile=ci -x lint --no-daemon :a:test --tests FooTest",
+          mod.repeat_command("./gradlew check -Pprofile=ci -x lint --no-daemon",
+                             [":a:test FooTest"]))
+    block = "[ERROR] Errors:\n[ERROR]   BarTest.x:3 » Runtime boom\n"
+    check("maven: classe que quebra inteira ('FooTest » ...') entra na lista",
+          mod.failed_maven_tests(block + "[ERROR]   FooTest » IllegalState no\n")
+          == ["BarTest", "FooTest"], "")
+    check("maven: método com ponto nos parâmetros dá a classe",
+          mod.failed_maven_tests("[ERROR] Failures:\n[ERROR]   FooTest.a(1.5):3 x\n")
+          == ["FooTest"], "")
+    check("maven: linha que o leitor não entende zera a lista (nunca lista parcial)",
+          mod.failed_maven_tests(block + "[ERROR]   Run 1: FooTest.flaky:10 x\n") == [],
+          "")
+    check("comando composto é tratado como build desconhecido",
+          mod.build_kind("./gradlew test && ./gradlew lint") is None
+          and mod.build_kind("./mvnw verify && ./mvnw site") is None
+          and mod.build_kind("./mvnw verify | tee x.log") is None, "")
     check("build desconhecido não é estreitado",
           mod.build_kind("test ! -f quebra.txt") is None
           and mod.build_kind("npm test") is None
@@ -181,6 +284,21 @@ def test_gradle_red_repeats_only_the_failed_class():
               rep and rep[0].get("arquivos") == [":app:test FooTest"], str(rep))
         check("vermelho de novo: a1 não fica done",
               status(root, "a1")["status"] != "done", str(status(root, "a1")))
+
+
+def test_green_on_the_failed_class_is_followed_by_the_whole_build():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, seen, led = run(tmp, ["a1"], "gradlew", "./gradlew build",
+                                 GRADLE_RED, flaky=True)
+        check("vermelho, depois só a classe, depois o build inteiro",
+              [c["argv"] for c in seen] ==
+              [["build"], [":app:test", "--tests", "FooTest"], ["build"]],
+              f"{seen} {p.stdout[-600:]}")
+        check("o registro marca a 3ª rodada como a que cobre o resto",
+              ev(led, "verify", id="a1", repeticao=3, cobre_o_resto=True, verde=True),
+              str(led))
+        check("a1 fecha done", status(root, "a1")["status"] == "done",
+              str(status(root, "a1")))
 
 
 def test_gradle_compile_red_repeats_the_whole_build():
@@ -217,10 +335,16 @@ def test_gradle_build_runs_once_per_pair_and_blames_the_right_item():
                                  "./mvnw -B clean verify", MAVEN_RED, breaks="a3")
         mid = ev(led, "verify", id="a2", no_meio=True)
         check("maven: par vermelho roda só as classes com falha no commit do meio",
-              len(mid) == 1 and mid[0]["verde"] is True
+              len(mid) == 2 and mid[0]["verde"] is True
+              and mid[0].get("arquivos") == ["FooTest", "ChildTest"]
               and any(c["files"] == ["a1.txt", "a2.txt"]
                       and "-Dtest=FooTest,ChildTest" in c["argv"] for c in seen),
               f"{mid} {seen}")
+        at_mid = [c["argv"] for c in seen if c["files"] == ["a1.txt", "a2.txt"]]
+        check("maven: verde nas classes no meio é seguido do build inteiro no meio",
+              len(mid) == 2 and mid[-1].get("cobre_o_resto") is True
+              and mid[-1]["verde"] is True
+              and at_mid[-1] == ["-B", "clean", "verify"], f"{mid} {at_mid}")
         check("maven: a2 fica done e só a3 tem volta vermelha",
               status(root, "a2")["status"] == "done"
               and ev(led, "volta_vermelha", id="a3")
