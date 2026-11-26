@@ -1,0 +1,63 @@
+schema_version: 2
+card: reforma-de-nomes-CS-8
+verdict: unproven
+reviewed_at: 2026-11-26T00:10:00-03:00
+base_commit: 7d84c2d
+head_commit: 70ce2f1            # o código é 4dea4af; 70ce2f1 só acrescenta o arquivo de aceite
+issue_type: Feature
+repo_kind: harness              # repo Python + sh (cepa), não Quarkus. Superfície = CLI `cepa queue ...` e `common/bin/cepa-queue`
+scope:
+  changed_classes:
+    - class: "common/bin/cepa (recusa de `cepa queue queue`, exit 2)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes rodam o lançador `cepa` real como subprocesso
+    - class: "common/bin/cepa-queue (grupos da ajuda, parser batch + alias queue oculto, despacho + nota em stderr, exemplos)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-run (query_queue chama `batch`)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # o teste roda o cepa-run real contra uma cópia de bin/ cujo cepa-queue só registra o subcomando e repassa ao real
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "S1 SOBREVIVEU: trocar os dois exemplos da ajuda de `cepa queue --help` / `cepa queue batch --help` (common/bin/cepa-queue, linhas dos `examples=`) de `cepa queue batch wego ...` de volta para `cepa queue queue wego ...` -> test_cepa_queue_batch_rename.py 6 passed, test_cepa_queue_rename_cli.py 8 passed (VERDE com a quebra). A ajuda passaria a ensinar o comando que o lançador agora recusa com exit 2."
+        - "P1 (remover a recusa `queue queue` em common/bin/cepa) -> VERMELHO: test_typed_queue_queue_is_refused_with_the_new_name"
+        - "P2 (recusa sai com exit 1 em vez de 2) -> VERMELHO: o mesmo teste"
+        - "P3 (tirar o alias `queue` do parser) -> VERMELHO: test_batch_prints_what_queue_printed e test_script_path_keeps_queue_for_runs_in_flight_with_a_note"
+        - "P4 (apagar a nota 'queue is now batch' do stderr do alias) -> VERMELHO: test_script_path_keeps_queue_for_runs_in_flight_with_a_note"
+        - "P5 (cepa-run volta a chamar `queue`) -> VERMELHO: test_supervisor_reads_the_queue_through_batch"
+        - "P6 (trocar a ordem `ready`/`waiting` no bloco 'for you') -> VERMELHO: test_help_opens_with_the_owner_block_then_the_commands_block"
+        - "P7 (renomear o título do bloco 'used by the commands') -> VERMELHO: os dois testes de ajuda"
+        - "P8 (tirar `batch` do bloco 'used by the commands') -> VERMELHO: test_help_opens_with_the_owner_block_then_the_commands_block"
+        - "P9 (despacho só para `queue`, `batch` sem rota) -> VERMELHO: 3 testes (batch prints, script path, supervisor)"
+      run: >-
+        `git worktree add --detach /tmp/proof-cs8 HEAD` (HEAD=70ce2f1); CEPA_TELEMETRY_DIR=/tmp/cepa-telemetry-tests. Base verde: `python3 tests/test_cepa_queue_batch_rename.py` -> `6 passed`; `python3 tests/test_cepa_queue_rename_cli.py` -> `8 passed`; `python3 tests/test_cepa_plan_decisions.py` -> `all ok`; `python3 tests/test_common_drain_plan.py` -> `all green`. Cada perturbação por sed no worktree (caminhos absolutos), `python3 tests/test_cepa_queue_batch_rename.py` (mais test_cepa_queue_rename_cli.py na S1), restaurada com `git checkout --`. P1..P9 vermelhas (N>0 testes, 1 a 3 falhas); S1 verde com a quebra. Worktree removido (`git worktree remove --force /tmp/proof-cs8`); árvore principal limpa. tests/run-all.sh não rodado.
+  l2_coverage:
+    status: gap
+    technique: perturbation
+    uncovered_lines:
+      - "common/bin/cepa-queue:examples= do grupo raiz e do subparser `batch` (as linhas `cepa queue batch wego --max 3` e `cepa queue batch wego`/`--max 1 --json`)"
+    waivers: []
+    run: "Todas as linhas de comportamento (recusa, alias, nota, despacho, grupos, cepa-run) foram quebradas e deixaram teste vermelho (P1..P9); só os exemplos da ajuda, quebrados em S1, não deixam teste vermelho."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff só renomeia um subcomando e reordena a ajuda; os argumentos continuam passando pelos mesmos leitores e recusas do CLI (nenhuma entrada nova de fora)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature, não Bug."
+changed_behaviour_not_pinned:
+  - "common/bin/cepa-queue: exemplos da ajuda (`cepa queue batch wego ...`) não são fixados por nenhum teste; S1."
+build_completo: "delegado ao supervisor do run (tests/run-all.sh); não rodado por mim, por instrução."
+routing_reason: >-
+  O comportamento do critério está provado: ajuda com os dois blocos na ordem certa, `batch` imprime o que `queue` imprimia (comparação byte a byte), `cepa queue queue` sai 2 com 'queue is now batch', o alias por caminho continua com nota, e o cepa-run chama `batch`; todas as 9 quebras ficaram vermelhas. Sobra um sobrevivente: os exemplos da ajuda podem voltar a dizer `cepa queue queue ...` (o comando agora recusado) e nenhum teste acusa. UNPROVEN por sobrevivente em linha alterada, mesmo precedente do CS-7 revisão 2 (frase da ajuda sem teste).
