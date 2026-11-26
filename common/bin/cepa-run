@@ -3572,6 +3572,49 @@ def is_yes(r):
     return str(r or "").strip().lower() in ("y", "yes")
 
 
+def _queue_module():
+    """`cepa-queue` loaded as a module, once, so the panel can call its rules
+    instead of keeping a copy that drifts (it is a script without `.py`, hence
+    the loader). Returns None when it cannot be loaded."""
+    if "mod" not in _QUEUE_MODULE:
+        try:
+            import importlib.machinery
+            import importlib.util
+            loader = importlib.machinery.SourceFileLoader("cepa_queue_rules",
+                                                          str(CEPA_PLAN))
+            spec = importlib.util.spec_from_loader("cepa_queue_rules", loader)
+            mod = importlib.util.module_from_spec(spec)
+            loader.exec_module(mod)
+            _QUEUE_MODULE["mod"] = mod
+        except (Exception, SystemExit):  # noqa: BLE001
+            # `cepa-queue` does sys.exit(2) when PyYAML is missing; that must not
+            # take the panel down.
+            _QUEUE_MODULE["mod"] = None
+    return _QUEUE_MODULE["mod"]
+
+
+_QUEUE_MODULE = {}
+
+
+def looks_like_doubt(text):
+    """CS-1 of docs/spec/duvida-sobre-a-pergunta-do-decide.md: the text typed in
+    `w` reads as a doubt about the question (ends in `?` or asks for
+    clarification); `v` joins in CS-4. It is `cepa-queue`'s `not_an_answer` rule,
+    the very one `cepa-queue answer` refuses with, minus the punctuation-only
+    case (no word at all: a refusal, not a doubt), checked here by itself."""
+    if not re.search(r"\w", str(text or "")):
+        return False
+    mod = _queue_module()
+    if mod is None:
+        return False
+    return bool(mod.not_an_answer(text))
+
+
+def is_yes_default(r):
+    """Yes at a `[Y/n]` confirmation: Enter, `y` or `yes`."""
+    return str(r or "").strip().lower() in ("", "y", "yes")
+
+
 class NoAnswer(TimeoutError):
     """Nobody typed within the wait."""
 
@@ -4651,6 +4694,16 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             text = (typed if r == "v" else
                     str(question(screen.follow_up("Your answer, in one line (the "
                                                   "next run reads this): "))).strip())
+            if r == "w" and text and looks_like_doubt(text):
+                # CS-1: asked before anything is recorded. CS-2 (yes: rewrite the
+                # question with this text as the owner's doubt) plugs in at
+                # `is_doubt`; CS-3 (no: record the text as the answer) is the
+                # fall-through below. Interim: yes records nothing and the item
+                # stays for later.
+                is_doubt = is_yes_default(question(screen.follow_up(
+                    "Is this a doubt about the question? [Y/n] ")))
+                if is_doubt:
+                    text = ""
             if text:
                 give_back = is_yes(question(screen.follow_up(
                     "Send the item back to the queue with that answer? [y/N] ")))
