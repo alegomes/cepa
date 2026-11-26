@@ -3866,3 +3866,13 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: relatorio-confere-run-rodando
+  title: Relatório do agente diz que há run rodando sem conferir
+  why: 'Origem: feedback fb-20261124-2 (2026-11-24); BACKLOG.md § Relatório do agente
+    diz que há run rodando sem conferir (ainda não priorizado: entrou no fim da
+    fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
