@@ -1,0 +1,26 @@
+key: CS-8-reforma-de-nomes
+queue: reforma-de-nomes
+item: CS-8
+status: complete
+head_commit: 4dea4af
+diff_range: 7d84c2d..4dea4af
+criteria:
+  - id: AC1
+    text: "CS-8: em `cepa queue --help`, um bloco 'for you' com status, show, ready, waiting, epics, answer e add aparece antes de um bloco 'used by the commands' com os demais; `cepa queue batch <fila> --max 3` imprime o que `cepa plan queue <fila> --max 3` imprime hoje; `cepa queue queue <fila>` sai com 2 com 'queue is now batch' (docs/spec/reforma-de-nomes-dos-comandos.md, ### CS-8). `cepa plan` nao existe desde o CS-1; o equivalente de hoje e `cepa-queue queue` por caminho."
+    altitude: cli
+    surface: "launcher common/bin/cepa (queue ...) e common/bin/cepa-queue como subprocesso; stdout, stderr e exit code"
+    clauses:
+      help_two_blocks_in_order: "complete. `cepa queue --help` e `cepa-queue --help` listam exatamente ['for you','used by the commands'], o primeiro com status,show,ready,waiting,epics,answer,add nessa ordem; o segundo com batch/start/finish, sem repetir os do primeiro e sem 'queue'; nada fora dos dois blocos; todo subcomando listado responde --help com 0. Conferi a mao a saida do launcher."
+      batch_equals_old_queue: "complete. `cepa queue batch fila --max 3` e `cepa-queue queue fila --max 3` com stdout identico em repo git temporario; --json traz 3 itens e stop cap no item 4."
+      typed_queue_queue_refused: "complete. `cepa queue queue fila` e `cepa Queue QUEUE ...` saem 2, uma linha em stderr com 'queue is now batch', sem vazar itens. Conferi a mao: rc=2."
+      in_flight_compat: "complete (alem do literal). Por caminho, `cepa-queue queue` ainda responde 0 com nota em stderr; `cepa-run` chama `batch` (teste com wrapper registrando o subcomando)."
+    test: "tests/test_cepa_queue_batch_rename.py; tests/test_cepa_queue_rename_cli.py"
+    layer: "cli (subprocess do launcher e do cepa-queue reais; sem mock; repos git temporarios)"
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_queue_batch_rename.py -q -> 6 passed in 5.01s; python3 -m pytest tests/test_cepa_queue_rename_cli.py -q -> 8 passed in 2.54s. Suite completa nao rodada (do supervisor)."
+independent_checks:
+  docs_updated: "docs/cepa-cli.md, docs/commands.md, docs/cepa-until.md, docs/execution-plan.md e os comandos common/commands/*.md alterados no diff; testes antigos migrados de `queue` para `batch`."
+gap: null
+suggested_followup: null
+observations_outside_the_literal_criterion:
+  python_direct_launcher: "common/bin/cepa e script de shell; `python3 common/bin/cepa` falha por sintaxe, comportamento esperado e nao regressao."
