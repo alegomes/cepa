@@ -863,6 +863,24 @@ def test_question_mark_line_text_flows_through_the_same_doubt_path():
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
+def test_question_mark_line_of_only_spaces_is_an_empty_enter():
+    failed_before = len(FAILURES)
+    shown, marks, rewrites = _prompts(["?", "   ", ""])
+    check("CS-5 unit spaces: the line is asked once",
+          sum(KEY_ASK in p for p in shown) == 1, shown)
+    check("CS-5 unit spaces: no doubt to mark or reader",
+          marks == [""] and rewrites == [""], (marks, rewrites))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_question_mark_line_text_is_stripped_before_it_is_passed_on():
+    failed_before = len(FAILURES)
+    shown, marks, rewrites = _prompts(["?", "  variante O  ", ""])
+    check("CS-5 unit strip: mark and reader get exactly the trimmed text",
+          marks == ["variante O"] and rewrites == ["variante O"], (marks, rewrites))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
 def test_second_question_mark_on_the_item_does_not_ask():
     """Decided: when the reader will not be called (one rewrite per item, until
     CS-6/CS-7), the line is not asked and no doubt goes to the mark."""
