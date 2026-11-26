@@ -2113,6 +2113,26 @@ def run_verify(command, tree, limit_sec, log, on_launch=None, on_tick=None,
     return code == 0, spent, (None if code == 0 else f"exited {code}")
 
 
+def verify_at(repo, commit, command, limit_sec, log, on_launch=None,
+              on_tick=None, label="verify"):
+    """`run_verify` on `commit` in a throwaway detached worktree, so the run
+    worktree (and the item on top of `commit`) is left as it is. Used by the
+    pair check (O1) to test the commit between two items."""
+    base = Path(tempfile.mkdtemp(prefix="cepa-pair-"))
+    where = base / "tree"
+    code, output = git(["worktree", "add", "-q", "--detach", str(where), commit],
+                       repo)
+    if code != 0:
+        shutil.rmtree(base, ignore_errors=True)
+        return False, 0, f"could not open a worktree at {commit[:10]}: {output}"
+    try:
+        return run_verify(command, where, limit_sec, log, on_launch=on_launch,
+                          on_tick=on_tick, label=label)
+    finally:
+        git(["worktree", "remove", "--force", str(where)], repo)
+        shutil.rmtree(base, ignore_errors=True)
+
+
 def log_size(log):
     try:
         return os.path.getsize(log)
@@ -7934,8 +7954,151 @@ def _main(argv=None):
     # One cost per session (`round_costs`), not per `result` block.
     costs = {}
 
-    def outcome(ident, kind, text):
-        outcomes[(cur, ident)] = (kind, text)
+    def outcome(ident, kind, text, queue=None):
+        outcomes[(queue or cur, ident)] = (kind, text)
+
+    # O1 (owner, 2026-11-26): with `tests/run-all.sh` as the build, the full
+    # suite runs once per pair of `done` items instead of once per item. In
+    # run reforma-de-nomes/2026-11-25-2108 the suite took 393 of 495 min.
+    # `deferred` is the 1st item of the pair, still unchecked: its key, queue,
+    # queue file and the commit it ended on (`mid`). An item that changed a
+    # hook is never deferred, because its hooks are only reinstalled after a
+    # green build and the next item would run with the old ones.
+    deferred = None
+    last_suite_sec = None
+
+    def suite_repeat(failed):
+        """The command that repeats only `failed`, or the whole suite."""
+        if failed:
+            return " ".join([verify] + [shlex.quote(f) for f in failed])
+        return verify
+
+    def red_return(k, ident_, queue_, plan_path_, reason, reason2, extra=""):
+        """Takes a `done` item whose full build went red off the run branch
+        and gives it back to `pending` (or `blocked` on the last return).
+        Returns (back, side_branch, undo_error, new_status)."""
+        back = red_returns(ledger_dir, ident_,
+                           queue_ if a.all_queues else None) + 1
+        since, n_before = first[k]
+        side_branch, undo_error = undo_item(
+            repo, tree, run_id, ident_, since,
+            in_the_middle=in_the_middle_of(k, n_before), back=back,
+            queue=queue_ if a.all_queues else None)
+        last = back >= MAX_RED_RETURNS or bool(undo_error)
+        new_status = "blocked" if last else "pending"
+        if side_branch:
+            # The reset already took the attempts away; the next one starts from zero.
+            first.pop(k, None)
+            inherited.discard(k)
+            evid = (f"This is return {back} of "
+                    f"{MAX_RED_RETURNS}: the item closed `done`, "
+                    f"but the full build of the run branch "
+                    f"(`{verify}`) {reason}, and the 2nd build "
+                    f"{reason2 or 'was red as well'}. {extra}Output in the "
+                    f"`.log` of run {run_id}. The commits of every "
+                    f"attempt are in `{side_branch}` and the run "
+                    f"branch went back to {since[:10]}. ")
+            if last:
+                evid += ("Marked `blocked`: the item already came back with the "
+                         "note and went red again. The card in "
+                         "Jira may have moved to Review before the "
+                         "build — check it.")
+            else:
+                evid += ("The item went back to `pending`: reuse the "
+                         "side branch (`git cherry-pick` or `git merge` "
+                         "inside the attempt) or redo it; the supervisor's "
+                         "build judges the result. Disabling or "
+                         "deleting the failing test does not count as "
+                         "a fix.")
+        else:
+            evid = (f"The item closed `done`, but the full build of the "
+                    f"run branch (`{verify}`) {reason}. "
+                    f"Output in the `.log` of run {run_id}. I could NOT "
+                    f"take the commits off the run branch: "
+                    f"{undo_error}")
+        finish_error = finish_item(
+            queue_, repo, ident_, new_status, evid,
+            "the agent delivered, but the project's full test suite "
+            "failed after it, and failed again when the "
+            "item came back to be fixed." if new_status == "blocked"
+            else None)
+        reds.append((ident_, side_branch, reason))
+        log_event({"evento": "verify_vermelho", "id": ident_,
+                   "lateral": side_branch, "erro": undo_error or finish_error})
+        if side_branch:
+            log_event({"evento": "volta_vermelha", "id": ident_,
+                       **({"fila": queue_} if a.all_queues else {}),
+                       "volta": back, "lateral": side_branch,
+                       "motivo": reason, "motivo_2": reason2,
+                       "status": new_status})
+        step(f"RED ({reason}): {ident_}'s commits "
+             f"kept in `{side_branch}`, item marked `{new_status}`"
+             + (f" (return {back}/{MAX_RED_RETURNS})" if side_branch else ""))
+        return back, side_branch, undo_error, new_status
+
+    def pair_culprit_off(pair, reason, reason2, extra=""):
+        """The deferred item broke the suite: it leaves the run branch, and so
+        does anything committed on top of it. Returns the undo error or None."""
+        pk = pair["key"]
+        if pk in delivered:
+            delivered.remove(pk)
+        back, side_branch, undo_error, new_status = red_return(
+            pk, pair["ident"], pair["cur"], pair["plan_path"], reason, reason2,
+            extra)
+        if side_branch:
+            # What sat on top of the item went with it to the side branch:
+            # the attempts of those items now start from the reset HEAD.
+            head = head_of(tree)
+            for k, (since, n_before) in list(first.items()):
+                if since and git(["merge-base", "--is-ancestor", since,
+                                  "HEAD"], tree)[0] != 0:
+                    first[k] = (head, n_before)
+        outcome(pair["ident"],
+                "volta-vermelha" if new_status == "pending" else "travado",
+                f"red return {back}/{MAX_RED_RETURNS} ({reason}) found by the "
+                f"pair check; commits in `{side_branch}`, "
+                + ("went back to `pending` with the note"
+                   if new_status == "pending" else "marked `blocked`"),
+                queue=pair["cur"])
+        if new_status == "blocked":
+            reread, _ = read_item(pair["plan_path"], pair["ident"])
+            reread = reread or {}
+            blocked_items.append((pair["ident"], reread.get("human_pending"),
+                                  reread.get("evidence")))
+        return undo_error
+
+    def check_deferred(why):
+        """Runs the deferred item's full build on its own commit, in a
+        throwaway worktree. Red twice: the item leaves the run branch.
+        Returns (red, undo_error)."""
+        nonlocal deferred
+        pair, deferred = deferred, None
+        step(f"full build of {pair['ident']}, deferred ({why}), on its "
+             f"commit {pair['mid'][:10]}")
+        left = (deadline + slack - datetime.now()).total_seconds()
+        offset = log_size(log)
+        green, sec, reason = verify_at(repo, pair["mid"], verify, left, log,
+                                       on_launch=launched, on_tick=tick)
+        in_flight.pop("pid_filho", None)
+        log_event({"evento": "verify", "id": pair["ident"], "verde": green,
+                   "segundos": int(sec), "motivo": reason, "adiado": True,
+                   "commit": pair["mid"]})
+        reason2 = None
+        if not green:
+            failed = failed_suite_files(log, offset)
+            left = (deadline + slack - datetime.now()).total_seconds()
+            green, sec2, reason2 = verify_at(repo, pair["mid"],
+                                             suite_repeat(failed), left, log,
+                                             on_launch=launched, on_tick=tick)
+            in_flight.pop("pid_filho", None)
+            log_event({"evento": "verify", "id": pair["ident"], "verde": green,
+                       "segundos": int(sec2), "motivo": reason2,
+                       "repeticao": 2, "adiado": True,
+                       **({"arquivos": failed} if failed else {})})
+        if green:
+            step(f"green ({human(timedelta(seconds=sec))}): {pair['ident']} stays")
+            return False, None
+        return True, pair_culprit_off(pair, reason, reason2)
 
     end_reason, end_detail = None, None
     # The 5h quota seen through the `rate_limit_event`s: the start reading of each
@@ -8248,6 +8411,7 @@ def _main(argv=None):
                               if readings else None)})
 
         back_now = False
+        pair_back = False  # O1: the red return was the previous item's
         unstable = False
         # The full build of the night branch, after each `done` that
         # committed. The supervisor runs it, not the agent: the agent may
@@ -8258,8 +8422,25 @@ def _main(argv=None):
             log_event({"evento": "done_sem_commit", "id": ident})
             step("`done` with no commit on the run branch: the "
                   "work, if any, ended up on another branch")
+        elif (run_state == "done" and verify == SUITE_WITHOUT_BUILD
+              and deferred is None and last_suite_sec
+              and key in first
+              and not changed_hooks(tree, first[key][0])
+              and (deadline + slack - datetime.now()).total_seconds()
+                  >= 2 * last_suite_sec + reserve.total_seconds()):
+            deferred = {"key": key, "ident": ident, "cur": cur,
+                        "plan_path": plan_path, "mid": head_of(tree)}
+            log_event({"evento": "verify_adiado", "id": ident,
+                       "commit": deferred["mid"]})
+            step("full build deferred: it runs after the next item, "
+                 "on both (one suite per pair of items)")
         elif run_state == "done" and verify:
-            step(f"full build: {verify}")
+            pair = deferred if deferred and deferred["key"] != key else None
+            if pair:
+                deferred = None
+                step(f"full build: {verify} (checks {pair['ident']} and {ident})")
+            else:
+                step(f"full build: {verify}")
             left = (deadline + slack - datetime.now()).total_seconds()
             in_flight["fase"] = "verify"
             log_offset = log_size(log)
@@ -8267,7 +8448,12 @@ def _main(argv=None):
                 verify, tree, left, log, on_launch=launched, on_tick=tick)
             in_flight.pop("pid_filho", None)
             log_event({"evento": "verify", "id": ident, "verde": green,
-                      "segundos": int(verify_sec), "motivo": verify_reason})
+                      "segundos": int(verify_sec), "motivo": verify_reason,
+                      **({"par": pair["ident"]} if pair else {})})
+            if verify == SUITE_WITHOUT_BUILD and verify_reason != \
+                    "did not finish within the window":
+                last_suite_sec = verify_sec
+            failed = []
             if not green:
                 # Second full build on the same code (Revision 3, exception
                 # taken to rule 4 of green-or-revert, requested by the owner on
@@ -8276,11 +8462,9 @@ def _main(argv=None):
                 left = (deadline + slack - datetime.now()).total_seconds()
                 failed = (failed_suite_files(log, log_offset)
                           if verify == SUITE_WITHOUT_BUILD else [])
-                if failed:
-                    again = " ".join([verify] + [shlex.quote(f) for f in failed])
-                    what = f"only the {len(failed)} failed file(s)"
-                else:
-                    again, what = verify, "the full build"
+                again = suite_repeat(failed) if failed else verify
+                what = (f"only the {len(failed)} failed file(s)" if failed
+                        else "the full build")
                 if (failed and left > 0) or left >= verify_sec:
                     step(f"red ({verify_reason}); running {what} "
                          "again, on the same code")
@@ -8303,7 +8487,70 @@ def _main(argv=None):
                     step("green on the 2nd try: flaky build, "
                           "recorded in telemetry")
                     unstable = True
-            if green:
+            pair_broke = False
+            if pair and green:
+                log_event({"evento": "verify", "id": pair["ident"], "verde": True,
+                           "par": ident, "commit": pair["mid"]})
+            elif pair:
+                # Red on the pair: the failed files on the commit between the two
+                # items say which one broke the suite.
+                left = (deadline + slack - datetime.now()).total_seconds()
+                step(f"red on the pair; running {what} on {pair['mid'][:10]}, "
+                     f"the commit {pair['ident']} ended on")
+                mid_green, mid_sec, mid_reason = verify_at(
+                    repo, pair["mid"], again, left, log, on_launch=launched,
+                    on_tick=tick)
+                in_flight.pop("pid_filho", None)
+                log_event({"evento": "verify", "id": pair["ident"],
+                           "verde": mid_green, "segundos": int(mid_sec),
+                           "motivo": mid_reason, "par": ident, "no_meio": True,
+                           "commit": pair["mid"],
+                           **({"arquivos": failed} if failed else {})})
+                if mid_green:
+                    step(f"{pair['ident']} is green on its own commit: "
+                         f"{ident} broke the suite")
+                else:
+                    pair_broke = True
+                    step(f"{pair['ident']} is already red on its own commit: "
+                         f"it broke the suite, and {ident} leaves the run "
+                         "branch with it")
+                    undo_error = pair_culprit_off(
+                        pair, verify_reason, reason2,
+                        extra=(f"The suite also failed on {pair['mid'][:10]}, "
+                               f"the commit this item ended on, before {ident}. "))
+                    if not undo_error:
+                        first.pop(key, None)
+                        inherited.discard(key)
+                        reread, _ = read_item(plan_path, ident)
+                        ev = str((reread or {}).get("evidence") or "").strip()
+                        finish_item(cur, repo, ident, "pending",
+                                    (ev + " " if ev else "")
+                                    + f"[supervisor] The suite was red after "
+                                    f"this item, but the cause is "
+                                    f"{pair['ident']}, the item before it: the "
+                                    f"same files fail on {pair['mid'][:10]}. "
+                                    f"This item's commits went to the side "
+                                    f"branch of {pair['ident']} with its own; "
+                                    "the item went back to `pending` with no "
+                                    "red return of its own.")
+                        run_state = "pending"
+                        outcome(ident, "em-andamento",
+                                f"back to `pending`: {pair['ident']}, the item "
+                                "before it, broke the suite; no fault of its own")
+                        back_now = pair_back = True
+                    else:
+                        outcome(ident, "travado",
+                                f"red build after {pair['ident']} and I could not "
+                                f"undo the commits: {undo_error}")
+                        end_reason = "verify-vermelho"
+                        end_detail = (f"the build went red after {pair['ident']} "
+                                      f"and I could not undo its commits "
+                                      f"({undo_error}); the next card would start "
+                                      "on top of broken code")
+                        break
+            if pair_broke:
+                pass
+            elif green:
                 step(f"green ({human(timedelta(seconds=verify_sec))})")
                 hook_files = (changed_hooks(tree, first[key][0])
                               if cepa_repo(tree) and key in first else [])
@@ -8360,65 +8607,10 @@ def _main(argv=None):
                             reinstall_failures.append((ident, why))
                             reinstall_broken = True
             else:
-                back = red_returns(ledger_dir, ident,
-                                   cur if a.all_queues else None) + 1
-                since, n_before = first[key]
-                side_branch, undo_error = undo_item(
-                    repo, tree, run_id, ident, since,
-                    in_the_middle=in_the_middle_of(key, n_before), back=back,
-                    queue=cur if a.all_queues else None)
-                last = back >= MAX_RED_RETURNS or bool(undo_error)
-                new_status = "blocked" if last else "pending"
+                back, side_branch, undo_error, new_status = red_return(
+                    key, ident, cur, plan_path, verify_reason, reason2)
                 if side_branch:
-                    # The reset already took the attempts away; the next one starts from zero.
-                    first.pop(key, None)
-                    inherited.discard(key)
-                    evid = (f"This is return {back} of "
-                            f"{MAX_RED_RETURNS}: the item closed `done`, "
-                            f"but the full build of the run branch "
-                            f"(`{verify}`) {verify_reason}, and the 2nd build "
-                            f"{reason2 or 'was red as well'}. Output in the "
-                            f"`.log` of run {run_id}. The commits of every "
-                            f"attempt are in `{side_branch}` and the run "
-                            f"branch went back to {since[:10]}. ")
-                    if last:
-                        evid += ("Marked `blocked`: the item already came back with the "
-                                 "note and went red again. The card in "
-                                 "Jira may have moved to Review before the "
-                                 "build — check it.")
-                    else:
-                        evid += ("The item went back to `pending`: reuse the "
-                                 "side branch (`git cherry-pick` or `git merge` "
-                                 "inside the attempt) or redo it; the supervisor's "
-                                 "build judges the result. Disabling or "
-                                 "deleting the failing test does not count as "
-                                 "a fix.")
-                else:
-                    evid = (f"The item closed `done`, but the full build of the "
-                            f"run branch (`{verify}`) {verify_reason}. "
-                            f"Output in the `.log` of run {run_id}. I could NOT "
-                            f"take the commits off the run branch: "
-                            f"{undo_error}")
-                finish_error = finish_item(
-                    cur, repo, ident, new_status, evid,
-                    "the agent delivered, but the project's full test suite "
-                    "failed after it, and failed again when the "
-                    "item came back to be fixed." if new_status == "blocked"
-                    else None)
-                reds.append((ident, side_branch, verify_reason))
-                log_event({"evento": "verify_vermelho", "id": ident,
-                          "lateral": side_branch, "erro": undo_error or finish_error})
-                if side_branch:
-                    log_event({"evento": "volta_vermelha", "id": ident,
-                              **({"fila": cur} if a.all_queues else {}),
-                              "volta": back, "lateral": side_branch,
-                              "motivo": verify_reason, "motivo_2": reason2,
-                              "status": new_status})
                     back_now = True
-                step(f"RED ({verify_reason}): commits "
-                      f"kept in `{side_branch}`, item marked `{new_status}`"
-                      + (f" (return {back}/{MAX_RED_RETURNS})"
-                         if side_branch else ""))
                 run_state = new_status
                 if undo_error:
                     outcome(ident, "travado",
@@ -8478,6 +8670,18 @@ def _main(argv=None):
                 step(f"`blocked` with commits: kept them in "
                       f"`{side_branch}` and the run branch went back to "
                       f"{since[:10]}")
+        # O1: the deferred item is checked now unless this item was its pair.
+        if deferred and deferred["key"] != key:
+            red, undo_error = check_deferred(f"{ident} did not close `done` "
+                                             "with commits")
+            if red:
+                back_now = pair_back = True
+            if undo_error:
+                end_reason = "verify-vermelho"
+                end_detail = (f"the deferred build of the previous item went red "
+                              f"and I could not undo its commits ({undo_error}); "
+                              "the next card would start on top of broken code")
+                break
         if run_state == "done":
             delivered.append(key)
         elif run_state == "blocked":
@@ -8489,7 +8693,9 @@ def _main(argv=None):
             blocked_items.append((ident, reread.get("human_pending"),
                              reread.get("evidence")))
 
-        if back_now:
+        if pair_back:
+            pass  # the outcomes were written by the pair check
+        elif back_now:
             outcome(ident, "volta-vermelha" if run_state == "pending" else
                      "travado",
                      f"red return {back}/{MAX_RED_RETURNS} "
@@ -8772,6 +8978,21 @@ def _main(argv=None):
                                "window on the same problem")
                 break
 
+    # O1: an item still waiting for its pair is checked before the run closes.
+    # Not after a branch switch or a broken git: the undo would reset a branch
+    # that is not the run's.
+    if deferred and end_reason in ("branch-mudou", "git-quebrado"):
+        log_event({"evento": "verify_adiado_sem_conferir",
+                   "id": deferred["ident"], "motivo": end_reason})
+        outcome(deferred["ident"], "travado",
+                "delivered, but its deferred full build did not run: the run "
+                f"stopped first ({end_reason}); run `{verify}` before landing",
+                queue=deferred["cur"])
+    elif deferred:
+        _red, undo_error = check_deferred("the run is closing")
+        if undo_error:
+            log_event({"evento": "verify_adiado_sem_desfazer",
+                       "erro": undo_error})
     in_flight.clear()
     notify_hooks(ident if items else "the inheritance at the start")
     log_event({"evento": "run_end", "motivo": end_reason, "detalhe": end_detail,
