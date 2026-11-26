@@ -3908,3 +3908,15 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: path-lock-raiz-pelo-git
+  title: A trava de caminhos aplica as regras do repo da sessão a um arquivo de
+    outro repo
+  why: 'Episódio fb-20261123-2 (2026-11-23) prova que path-lock-le-regras-do-repo-do-arquivo
+    (done) não cobriu o caso; BACKLOG.md § A trava de caminhos aplica as regras
+    do repo da sessão a um arquivo de outro repo (ainda não priorizado: entrou no
+    fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
