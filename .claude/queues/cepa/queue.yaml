@@ -3802,3 +3802,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: fim-da-run-legivel-sem-print
+  title: O fim de uma run só fica legível depois que o dono manda print para o modelo
+    traduzir
+  why: 'Origem: feedback fb-20261123-1 (2026-11-23); BACKLOG.md § O fim de uma run
+    só fica legível depois que o dono manda print para o modelo traduzir (ainda
+    não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
