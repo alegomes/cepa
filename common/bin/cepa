@@ -151,14 +151,22 @@ show_help() {
   echo "cepa [launcher flags]      — opens a claude session (as before)"
   echo ""
   echo "subcommands:"
-  for _s in "$SCRIPT_DIR"/cepa-*; do
-    [ -x "$_s" ] || continue
-    _name="${_s##*/cepa-}"
-    case "$_name" in plan|until|until-digest) continue ;; esac   # transition shims, not commands
-    # Line 2 of a python script is `"""cepa-x — summary`; shell scripts
-    # carry `# cepa-x — summary`. Anything else prints just the name.
-    _desc=$(sed -n 2p "$_s" | sed -e 's/^"""//' -e 's/^# *//' -e "s/^cepa-$_name *[—-]* *//")
-    printf '  %-14s %s\n' "$_name" "$_desc"
+  # Frozen subcommands (dor, hotspots) go last, under a "frozen:" line (CS-9).
+  for _pass in current frozen; do
+    [ "$_pass" = frozen ] && echo "  frozen:"
+    for _s in "$SCRIPT_DIR"/cepa-*; do
+      [ -x "$_s" ] || continue
+      _name="${_s##*/cepa-}"
+      case "$_name" in plan|until|until-digest) continue ;; esac   # transition shims, not commands
+      case "$_name" in
+        dor|hotspots) [ "$_pass" = frozen ] || continue ;;
+        *) [ "$_pass" = current ] || continue ;;
+      esac
+      # Line 2 of a python script is `"""cepa-x — summary`; shell scripts
+      # carry `# cepa-x — summary`. Anything else prints just the name.
+      _desc=$(sed -n 2p "$_s" | sed -e 's/^"""//' -e 's/^# *//' -e "s/^cepa-$_name *[—-]* *//")
+      printf '  %-14s %s\n' "$_name" "$_desc"
+    done
   done
   echo ""
   echo "launcher flags:"

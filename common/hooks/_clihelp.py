@@ -95,12 +95,14 @@ class Parser(argparse.ArgumentParser):
                    before argparse runs (cepa-run does this)
       groups       list of (title, [subcommand names]) to list subcommands
                    by family instead of in definition order
+      frozen       subcommand names that are frozen (kept, not for new work):
+                   listed last, under a "frozen:" line, after every other one
       options_title  heading of the options section (default "options")
     """
 
     def __init__(self, *args, summary=None, examples=None, exit_codes=None,
-                 see_also=None, commands=None, groups=None, options_title="options",
-                 **kw):
+                 see_also=None, commands=None, groups=None, frozen=None,
+                 options_title="options", **kw):
         if sys.version_info >= (3, 14):
             kw.setdefault("color", False)
         kw.setdefault("formatter_class", argparse.RawDescriptionHelpFormatter)
@@ -113,6 +115,7 @@ class Parser(argparse.ArgumentParser):
         self.see_also = list(see_also or [])
         self.commands = list(commands or [])
         self.groups = list(groups or [])
+        self.frozen = list(frozen or [])
         self.options_title = options_title
         for a in self._actions:
             if isinstance(a, argparse._HelpAction):
@@ -238,6 +241,10 @@ class Parser(argparse.ArgumentParser):
         subs += [(n, h) for n, h in self.commands]
         if subs:
             head("subcommands")
+            # Frozen subcommands go last, under their own line, so nobody reads
+            # them as part of the current toolset (reforma-de-nomes, CS-9).
+            cold = [(n, h) for n, h in subs if n in self.frozen]
+            subs = [(n, h) for n, h in subs if n not in self.frozen]
             if self.groups:
                 by_name = dict(subs)
                 listed = set()
@@ -251,6 +258,9 @@ class Parser(argparse.ArgumentParser):
                     rows(rest, col=col)
             else:
                 rows(subs)
+            if cold:
+                out.append("  " + s.c("negrito", "frozen:"))
+                rows(cold, col=min(max(len(n) for n, _ in subs + cold) + 4, 30))
 
         positionals = [a for a in self._actions if not a.option_strings
                        and not isinstance(a, argparse._SubParsersAction)
@@ -335,6 +345,12 @@ class _NoColor:
         return f"{title}:"
 
 
+# Subcommands that are frozen: they keep working, but nobody starts new work on
+# them (the Maestro, frozen since 2026-10-08, and its two helpers). `cepa help`
+# lists them last, under a "frozen:" line (reforma-de-nomes, CS-9).
+FROZEN = ("dor", "hotspots")
+
+
 def launcher_help(bin_dir):
     """`cepa help`: the launcher's own help, in the same layout. The list of
     subcommands is the `cepa-*` scripts next to the launcher, each described
@@ -370,6 +386,7 @@ def launcher_help(bin_dir):
             "preflight (cepa doctor, at most every 12h) and starts in bypassPermissions\n"
             "(the harness hooks still apply)."),
         commands=commands,
+        frozen=list(FROZEN),
         examples=[
             ("cepa --mode construction", "open a session in construction mode"),
             ("cepa -s billing-api", "resume or create the session/billing-api worktree"),

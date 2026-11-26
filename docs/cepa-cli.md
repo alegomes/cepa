@@ -49,8 +49,6 @@ silent preflight: nothing is printed unless something needs you.
 | See the harness's own numbers | `cepa metrics`, `cepa metrics scorecard` |
 | See where a session's time or tokens went | `cepa clock`, `cepa tokens` |
 | Ask the autonomy file whether an action asks or does | `cepa autonomy classify ...` |
-| Gate a parallel-waves plan before forking | `cepa dor <plan.yaml>` |
-| Find a repo's registry files before planning waves | `cepa hotspots <repo>` |
 | Measure test coverage of a conversational command | `cepa promptcov <cmd.md> <test.py>` |
 
 `cepa intencao` and `cepa modos` (the old names of `intent` and `modes`) are
@@ -158,27 +156,6 @@ That pair is the launcher's preflight. The live check against Jira is not
 here (no MCP in a script): `/common:doctor --live` delegates it. Exit `0` all
 ok, `1` warnings, `2` failures. See [harness-ops.md](harness-ops.md).
 
-### `cepa-dor`
-
-Definition of Ready for the slices of a parallel-waves `plan.yaml`: `READY`
-or `NOT-READY` per slice, with the gaps named. Read-only; the intake gate that
-`/maestro:program-plan` iterates with you.
-
-```
-cepa-dor <plan.yaml> [--wave N] [--fork-point REF] [--repo DIR] [--json]
-                     [--enforcement-zone GLOB ...]
-```
-
-Checks: schema version and `mode: parallel-waves` (a single-track queue is
-refused); at least four demands; surfaces disjoint from the other slices on
-the plan's registry files (an intersection elsewhere is a warning, not a
-veto); nothing inside the enforcement zone; an acceptance criterion (an
-executable `acceptance_cmd` in a `.claude/no-build` repo); an observable
-Given/When/Then or a declared `acceptance_form: substrate`; no open
-strategic decision; minimum context; green baseline at the fork point. Exit
-`0` all READY, `1` READY with warnings, `2` some NOT-READY or invalid plan.
-See [maestro.md](maestro.md).
-
 ### `cepa-feedback`
 
 The harness's own complaint notebook. The ledger is global
@@ -195,21 +172,6 @@ cepa-feedback triage <id> --destination "<where>" [--note ...] [--queue QUEUE --
 `triage --queue` also appends the item to a single-track queue through
 `cepa-queue add`. Exit `0` ok, `2` invalid usage, `3` unknown id, `4` already
 triaged. The slash command is `/common:feedback`.
-
-### `cepa-hotspots`
-
-Measures a repository's registry files ("arquivos-cartório"): the files
-almost every demand writes to, which a wave plan must declare in
-`cartorios:` so `cepa-dor` can veto overlapping surfaces. Method: replay each
-pair of real merges of the history with `git merge-tree`, count a point per
-file that conflicts, rank. Without enough history it returns an empty list
-and says why, never a heuristic.
-
-```
-cepa-hotspots <repo> [--ref REF] [--min-pairs N] [--limit N] [--json]
-```
-
-Exit `0` list produced (even empty), `1` insufficient history, `2` error.
 
 ### `cepa-intent`
 
@@ -388,3 +350,55 @@ cepa run digest <run>.jsonl [--result-max 3000]
 ```
 
 Exit `0` ok, `2` the ledger does not exist.
+
+## Frozen
+
+Frozen commands still work, but nobody starts new work on them. The Maestro
+(`/maestro:program-plan`, `/maestro:run`, `/maestro:resume`) has been frozen
+since 2026-10-08: its session fork and merge train will be absorbed by the
+`cepa run` conductor ([maestro.md](maestro.md)). `cepa dor` and `cepa hotspots`
+only serve its parallel-waves plans. `cepa help` lists the two last, under a
+`frozen:` line, and the slash commands are in the Frozen section of
+[commands.md](commands.md).
+
+| You want to... | Command |
+|---|---|
+| Plan, run or resume a parallel-waves program | `/maestro:program-plan`, `/maestro:run`, `/maestro:resume` |
+| Gate a parallel-waves plan before forking | `cepa dor <plan.yaml>` |
+| Find a repo's registry files before planning waves | `cepa hotspots <repo>` |
+
+### `cepa-dor`
+
+Definition of Ready for the slices of a parallel-waves `plan.yaml`: `READY`
+or `NOT-READY` per slice, with the gaps named. Read-only; the intake gate that
+`/maestro:program-plan` iterates with you.
+
+```
+cepa-dor <plan.yaml> [--wave N] [--fork-point REF] [--repo DIR] [--json]
+                     [--enforcement-zone GLOB ...]
+```
+
+Checks: schema version and `mode: parallel-waves` (a single-track queue is
+refused); at least four demands; surfaces disjoint from the other slices on
+the plan's registry files (an intersection elsewhere is a warning, not a
+veto); nothing inside the enforcement zone; an acceptance criterion (an
+executable `acceptance_cmd` in a `.claude/no-build` repo); an observable
+Given/When/Then or a declared `acceptance_form: substrate`; no open
+strategic decision; minimum context; green baseline at the fork point. Exit
+`0` all READY, `1` READY with warnings, `2` some NOT-READY or invalid plan.
+See [maestro.md](maestro.md).
+
+### `cepa-hotspots`
+
+Measures a repository's registry files ("arquivos-cartório"): the files
+almost every demand writes to, which a wave plan must declare in
+`cartorios:` so `cepa-dor` can veto overlapping surfaces. Method: replay each
+pair of real merges of the history with `git merge-tree`, count a point per
+file that conflicts, rank. Without enough history it returns an empty list
+and says why, never a heuristic.
+
+```
+cepa-hotspots <repo> [--ref REF] [--min-pairs N] [--limit N] [--json]
+```
+
+Exit `0` list produced (even empty), `1` insufficient history, `2` error.

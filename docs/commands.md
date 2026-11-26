@@ -305,7 +305,16 @@ The card-lifecycle workflow plugin (talks to Jira today). Pairs with any team.
 | `/board-flow:decide` | `[--max N] [--scope "<jql>"] [--no-scope] [--dry-run]` | Turns the Review column into a short list of closed questions. Reads each card's proof artifact, classifies the NEEDS-HUMAN reason (see [needs-human-motivos.md](needs-human-motivos.md)), removes what is nobody's decision (Docker down, missing tool), groups the rest by reason and asks **one** question per group with a recommendation. You answer in a batch and it applies. Runs no proof. |
 | `/board-flow:advance` | `<jira-key>` | Generic column-by-column transition driven by `lifecycles[]` in `board-flow.yaml`. Used by discovery (and any topology with a custom lifecycle). Runs the column's `on_enter` agent if declared, confirms `enter_gate` precondition with you if declared, transitions with Implementation Summary if `requires_summary: true` (or status name contains `review`/`qa`). |
 
-## maestro
+## Frozen
+
+Frozen commands still work, but nobody starts new work on them: the Maestro
+has been frozen since 2026-10-08 (its session fork and merge train will be
+absorbed by the `cepa run` conductor; see [maestro.md](maestro.md)), and
+`cepa dor` and `cepa hotspots` only serve its wave plans. They are listed
+here, last, so they are not read as part of the current toolset; `cepa help`
+does the same, under a `frozen:` line.
+
+### maestro
 
 Multi-harness orchestration: plan a universe of ≥4 demands into waves of
 concurrent Claude Code sessions and land them with one action. **Not yet live
@@ -319,8 +328,14 @@ Full guide: [maestro.md](maestro.md).
 | `/maestro:run` | `<name> [--wave N] [--shadow] [--port P]` | The single action for the current wave: gc of orphans → intake gate → bring up the gatekeeper (shadow-mode on the 1st program) → fork each slice into a `herdr` worktree with generated settings + the normative wrapper → file-based event loop (`DONE`/`FAIL`/`TIMEOUT`/`ESCALATED` per slice) → merge train reusing `worktree-merge`'s guards with a verify after **each** merge → report. Reads only `plan.yaml`. Requires `herdr` running. |
 | `/maestro:resume` | `<name>` | Rebuild an interrupted wave from `wave-state.yaml` (written on every transition), reconcile against reality (health-check gatekeeper, confirm live panes, re-read markers), continue the event loop / merge train. Idempotent. Modeled on `/common:autonomous-resume`. |
 
-Three helpers you can run by hand: `python3 common/bin/cepa-dor <plan> --wave N`
-(the intake gate — `READY`/`NOT-READY` per slice),
+### Frozen terminal commands
+
+| Command | Argument | What it does |
+|---|---|---|
+| `cepa dor` | `<plan.yaml> [--wave N] [--fork-point REF] [--json]` | The intake gate of a parallel-waves plan: `READY`/`NOT-READY` per slice, with the gaps named. See [cepa-cli.md](cepa-cli.md#cepa-dor). |
+| `cepa hotspots` | `<repo> [--ref REF] [--min-pairs N] [--limit N] [--json]` | Measures a repository's registry files (the files almost every demand writes to), which a wave plan declares in `cartorios:`. See [cepa-cli.md](cepa-cli.md#cepa-hotspots). |
+
+Two more helpers you can run by hand:
 `python3 maestro/bin/maestro-fork-settings <plan> <slice>` (preview a child's
 generated `settings.json`), and `python3 common/bin/cepa-queue validate <name|file>`
 (takes the queue name, resolved at the main clone even from a worktree, or a file
