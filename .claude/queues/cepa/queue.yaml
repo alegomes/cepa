@@ -3813,3 +3813,13 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: review-md-depois-do-auto-land
+  title: O `.review.md` pede o merge que o `--auto-land` já fez
+  why: 'Origem: feedback fb-20261123-3 (2026-11-23); BACKLOG.md § O `.review.md`
+    pede o merge que o `--auto-land` já fez (ainda não priorizado: entrou no fim
+    da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
