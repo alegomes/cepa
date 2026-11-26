@@ -416,6 +416,28 @@ def test_default_feedback_line_carries_the_doubt():
         check("CS-2 ledger: one line with item, question and doubt",
               len(lines) == 1 and all(x in lines[0].get("texto", "")
                                       for x in ("b1", QUESTION, DOUBT)), lines)
+        check("CS-2 ledger: the label is followed by the doubt text",
+              len(lines) == 1 and f"dúvida do dono: {DOUBT}" in lines[0].get("texto", ""),
+              lines)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_default_feedback_line_for_plain_question_mark_has_no_doubt_label():
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as fb:
+        m = load_module()
+        os.environ["CEPA_FEEDBACK_DIR"] = fb
+        try:
+            replies = iter(["?", ""])
+            m.decide(Path(fb), "fila", None, {}, [_deferred(human_pending=None)], {},
+                     question=lambda _p: next(replies, ""), output=lambda *_: None,
+                     answer=lambda *a, **k: (0, "ok"))
+        finally:
+            del os.environ["CEPA_FEEDBACK_DIR"]
+        lines = _ledger(fb)
+        check("CS-2 ledger: plain `?` writes one line without the doubt label",
+              len(lines) == 1 and "b1" in lines[0].get("texto", "")
+              and "dúvida do dono" not in lines[0].get("texto", ""), lines)
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
