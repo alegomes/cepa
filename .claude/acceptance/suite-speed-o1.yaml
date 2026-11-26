@@ -1,0 +1,104 @@
+key: suite-speed-o1
+status: complete
+diff_range: fe2bcd1..f7740c1
+criteria:
+  - id: AC1a
+    altitude: cli
+    surface: >
+      cepa-until/cepa-run com --verify tests/run-all.sh: uma suíte por par de
+      itens done; o 1º item é conferido sozinho; o registro .jsonl grava
+      verify_adiado e verify com par=.
+    test: tests/test_cepa_run_pair_verify.py::test_green_queue_runs_one_suite_per_pair
+    layer: cli ponta a ponta (claude falso + run-all.sh falso)
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_run_pair_verify.py -q -> 6 passed;
+      python3 tests/test_cepa_run_pair_verify.py -> 'ok a suíte rodou 2 vezes
+      para 3 itens', 'ok o registro grava verify_adiado para a2' ... '✓ tudo verde'"
+    status: complete
+  - id: AC1b
+    altitude: cli
+    surface: Item só é adiado se a janela comporta 2x a última suíte + reserva.
+    test: tests/test_cepa_run_pair_verify.py::test_no_defer_when_the_window_does_not_fit_two_suites
+    layer: cli ponta a ponta
+    evidence: verified
+    run: "python3 tests/test_cepa_run_pair_verify.py -> 'ok a2 não é adiado com a janela curta', 'ok a2 tem a própria suíte', '✓ tudo verde'"
+    status: complete
+  - id: AC2
+    altitude: cli
+    surface: >
+      Par vermelho: roda os arquivos de "com falha:" no commit do meio, em
+      worktree descartável; meio verde tira só o 2º; meio vermelho tira o 1º
+      (volta vermelha contada) e o 2º volta a pending sem volta vermelha.
+    test: >
+      test_red_pair_with_green_middle_takes_off_only_the_second e
+      test_red_middle_takes_off_the_first_and_the_second_goes_back_clean
+    layer: cli ponta a ponta
+    evidence: verified
+    run: "python3 tests/test_cepa_run_pair_verify.py -> todos os 'ok' dos dois
+      testes, '✓ tudo verde' (pytest: 6 passed)"
+    status: complete
+  - id: AC3a
+    altitude: cli
+    surface: >
+      Item ainda esperando o par quando a fila acaba é conferido no próprio
+      commit antes de run_end; vermelho tira da branch.
+    test: >
+      test_item_waiting_for_its_pair_is_checked_before_the_run_closes e
+      test_deferred_red_at_the_end_takes_the_item_off
+    layer: cli ponta a ponta
+    evidence: verified
+    run: "python3 tests/test_cepa_run_pair_verify.py -> 'ok a conferência vem
+      antes do run_end', 'ok a2 sai da branch do run'"
+    status: complete
+  - id: AC3b
+    altitude: cli
+    surface: >
+      Item adiado conferido quando o item seguinte termina não-done; o item
+      seguinte mantém o próprio outcome/contabilidade; troca de branch registra
+      "não conferido" e não roda suíte.
+    test: >
+      test_next_item_blocked_keeps_its_own_outcome_and_the_deferred_is_checked e
+      test_branch_switch_leaves_the_deferred_unchecked_and_says_so
+    layer: cli ponta a ponta
+    evidence: verified
+    run: "python3 tests/test_cepa_run_pair_verify.py -> 'ok a3 aparece na lista de itens do resumo com o próprio motivo', 'ok a3 não ganha volta vermelha', 'ok o registro grava verify_adiado_sem_conferir para a2', 'ok nenhuma suíte roda depois da troca', '✓ tudo verde'"
+    note: >
+      Só o caso a3 blocked + a2 vermelho é testado; pending-com-commits e
+      sem-progresso passam pelo mesmo flush (check_deferred sem setar back_now,
+      lido no código, linhas ~8680-8690 de common/bin/cepa-run), sem ramo próprio.
+    status: complete
+  - id: AC3c
+    altitude: cli
+    surface: --all, adiado e par em filas diferentes, meio vermelho.
+    test: tests/test_cepa_run_pair_verify.py::test_all_queues_red_middle_blames_the_item_in_its_own_queue
+    layer: cli ponta a ponta
+    evidence: verified
+    run: "python3 tests/test_cepa_run_pair_verify.py -> 'ok a volta vermelha é de a/a2, na fila a', 'ok b/b1 termina done (voltou sem culpa e refez)', '✓ tudo verde'"
+    status: complete
+  - id: AC4
+    altitude: cli
+    surface: Item que mudou hook/bin de plugin (changed_hooks) nunca é adiado.
+    test: tests/test_cepa_run_pair_verify.py::test_item_that_changes_a_hook_is_not_deferred
+    layer: cli ponta a ponta
+    evidence: verified
+    run: "python3 tests/test_cepa_run_pair_verify.py -> 'ok a2 mexe em hook e não
+      é adiado', 'ok a2 tem a própria suíte'"
+    status: complete
+  - id: AC5
+    altitude: cli
+    surface: Outros builds (mvnw, gradlew, --verify <cmd>) inalterados.
+    test: >
+      tests/run-all.sh em HEAD f7740c1 (262 de 262 arquivos); caminho red_return
+      com --verify <cmd> em tests/test_cepa_until_run_branch.py
+      (test_red_build_takes_the_item_off_the_branch..., test_4a, test_4b)
+    layer: cli ponta a ponta
+    evidence: verified
+    run: >
+      Conferi o log suite-f7740c1.log (scratchpad): HEAD = f7740c16, commit às
+      10:47:42, log gravado às 12:14:13 (depois do commit); 'arquivos rodados:
+      262 de 262', 256 linhas 'ok', nenhuma falha, 'tudo verde';
+      'ok tests/test_cepa_until_run_branch.py (218s)'. Rodei também
+      python3 tests/test_cepa_run_repeat_failed.py -> '✓ tudo verde'. Minha
+      própria reexecução de test_cepa_until_run_branch.py passou de 180s e não
+      terminou a tempo de eu ler; vale o log da suíte completa.
+    status: complete
