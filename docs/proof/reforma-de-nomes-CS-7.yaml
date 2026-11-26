@@ -1,0 +1,63 @@
+schema_version: 2
+card: reforma-de-nomes-CS-7
+verdict: unproven
+reviewed_at: 2026-11-25T22:00:00-03:00
+base_commit: 6f3d63b
+head_commit: 5e9de96
+issue_type: Feature
+repo_kind: harness            # repo Python + sh (cepa), não Quarkus. Superfície = CLI `cepa intent ...` e `cepa modes ...`
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-intent (ações step/edit, ajuda por ação, OPTS/ACTION_HELP, recusa de item de plano step/edit)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes rodam o lançador `cepa intent` real como subprocesso
+    - class: "common/bin/cepa-modes (SUBCOMMANDS, subcommand_argv, ajuda por subcomando)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "docs/cepa-cli.md"
+      module: docs
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "66 perturbações em common/bin/cepa-intent (I1..I40) e common/bin/cepa-modes (M1..M26); cada uma roda o arquivo de teste coberto e exige RED."
+        - "KILLED (comportamento): step N (valor, repetido, ausente, não numérico, texto residual), edit sem opções, edit como edição, item de plano step/edit, ajuda por ação (-h/--help/help, alias pt-BR, remind trata 'help' como texto), opções por ação (write/edit/close/remind), flags de cada subcomando de modes, --no-color/--json antes do subcomando, descarte de head/rest, reescrita desligada, exemplos da ajuda. Aliases antigos --proposito/--para-quando/--plano/--motivo sobrevivem em tests/test_cepa_intent_subcommands.py mas morrem em tests/test_cepa_intent.py (vizinho): RED."
+        - "SURVIVED I7 (cepa-intent): remover a recusa `edit` + `--step` não deixa nada vermelho. Só `edit --step 1` é testado, e ele cai na recusa seguinte (edit sem --purpose/--plan). `edit --purpose X --reason Y --step 2` não está fixado."
+        - "SURVIVED M5 (cepa-modes): tirar `--sem-cor` da lista de chaves aceitas antes do subcomando não deixa nada vermelho (`cepa modes --sem-cor exit` não testado; só --no-color e --json são)."
+        - "SURVIVED só de texto de ajuda (nenhum teste fixa o texto): I17 (lista de ações na mensagem de escolha inválida), I22 (posicional N na ajuda de step), I23 (posicional TEXT na ajuda de remind), I33 (texto da recusa de posicional), I34/I35/I36/I38 (códigos de saída e resumos), I39/I40 (linhas step/edit no --help geral), M12/M13/M14/M16 (MODE e --json na ajuda de exit/menu), M17..M20 (resumos e saídas), M21..M23 (linhas do --help geral de modes)."
+        - "Total: 66 perturbações; 38 RED nos testes cobrindo o diff, 4 RED só no vizinho (aliases antigos), 24 sobreviventes (2 de comportamento: I7 e M5; 22 de texto de ajuda)."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs7 HEAD`; `cd /tmp/proof-cs7 && python3 -I .driver.py tests/test_cepa_intent_subcommands.py` (e o mesmo com tests/test_cepa_modes_subcommands.py, tests/test_cepa_intent.py, tests/test_cepa_help_layout.py para os sobreviventes); o driver troca o trecho, roda `python3 tests/<arquivo>.py` sem CEPA_UNTIL_RUN, lê o código de saída e restaura o arquivo. Base verde: `tudo ok` nos dois arquivos de teste. Worktree removido: `git worktree remove --force /tmp/proof-cs7`. tests/run-all.sh não rodado.
+  l2_coverage:
+    status: gap
+    technique: perturbation
+    uncovered_lines:
+      - "common/bin/cepa-intent: recusa `edit não aceita --step` combinada com --purpose/--plan"
+      - "common/bin/cepa-modes: `--sem-cor` antes do subcomando (subcommand_argv, lista de chaves)"
+    waivers: []
+    run: "I7 e M5 foram quebrados e nenhum teste ficou vermelho: os dois comportamentos não são executados por teste que os observe. Sem ferramenta de cobertura."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff só reescreve subcomando em flag já existente e imprime ajuda; os valores continuam passando pelos mesmos leitores e recusas do CLI (nenhuma entrada nova de fora)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature, não Bug."
+changed_behaviour_not_pinned:
+  - "cepa-intent: `edit --purpose X --reason Y --step 2` (a recusa de edit + --step)."
+  - "cepa-modes: `cepa modes --sem-cor exit|menu|purposes`."
+  - "texto de ajuda (resumos, códigos de saída, posicionais, linhas do --help geral) de step, show, state, remind, exit, menu, purposes: não fixado."
+  - "docs/cepa-cli.md: só texto."
+build_completo: "delegado ao supervisor do run (tests/run-all.sh); não rodado por mim, por instrução."
+routing_reason: >-
+  Dos 66 trechos quebrados, 2 comportamentos reais sobrevivem: a recusa de `edit` junto com `--step` e o alias `--sem-cor` antes do subcomando de `cepa modes`. Um teste cada fecha os dois (edit --purpose X --reason Y --step 2 sai 2 sem escrever; `cepa modes --sem-cor purposes` igual a `--purposes`). Os demais sobreviventes são só texto de ajuda; sugestão ao humano: aceitar sem teste, ou fixar os resumos principais. UNPROVEN.
