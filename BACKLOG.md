@@ -5795,7 +5795,7 @@ modo, `docs/modos-de-trabalho.md`.
 
 ### Problema
 
-Na run `all/2026-11-26-0838` do `wego-faturamento-backend` o dono leu a tela de fechamento (o texto que o `cepa run` imprime quando a janela acaba) e não soube dizer o que tinha acontecido. A run gastou 4h01 (14.435 s ÷ 3.600) e US$ 40,15 num item só, o C1-49, e nada chegou à `main`. O item estava pronto com 39 commits num branch lateral e só foi reprovado porque 2 testes de 2111 esperavam 59 rotas no contrato e o item criou 4 (59 + 4 = 63). Nada disso está na tela. Quatro defeitos, todos vistos nessa run:
+Na run `all/2026-11-26-0838` do `wego-faturamento-backend` o dono leu a tela de fechamento (o texto que o `cepa run` imprime quando a janela acaba) e não soube dizer o que tinha acontecido. A run gastou 4h01 (14.435 s ÷ 3.600) e US$ 40,15 num item só, o C1-49, e nada chegou à `main`. O item estava pronto com 39 commits num branch lateral e só foi reprovado porque 2 testes de 2111 esperavam 59 rotas no contrato e o item criou 4 (59 + 4 = 63). Nada disso está na tela. Cinco defeitos, todos vistos nessa run:
 
 1. **A tela não tem conclusão.** A linha de contagem diz `1 attempt(s) · 0 delivered · 0 stuck · 0 no progress · 0 for you · 0 commit(s)`. O dono tem de deduzir dela que o trabalho existe e está guardado.
 2. **"0 commit(s)" e "no commits, removed" contradizem os 39 commits salvos.** As duas frases falam do branch da run. O branch lateral `until/2026-11-26-0838-vermelho-kairos-etapa-1-C1-49` aparece só numa linha do item, cortada por largura.
