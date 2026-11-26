@@ -515,6 +515,33 @@ def test_v_text_is_answered_without_force():
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
+def test_ordinary_text_kept_with_n_is_answered_with_keep_and_without_force():
+    failed_before = len(FAILURES)
+    calls = _calls(["w", "variante B", "n"])
+    check("CS-3 unit: ordinary text + n, keep and no force",
+          len(calls) == 1 and calls[0][0] == "variante B"
+          and calls[0][1].get("keep") is True and "force" not in calls[0][1], calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_punctuation_only_text_kept_with_n_is_answered_with_keep_and_without_force():
+    failed_before = len(FAILURES)
+    calls = _calls(["w", "...", "n"])
+    check("CS-3 unit: punctuation-only text + n, keep and no force",
+          len(calls) == 1 and calls[0][0] == "..."
+          and calls[0][1].get("keep") is True and "force" not in calls[0][1], calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_v_text_kept_with_n_is_answered_with_keep_and_without_force():
+    failed_before = len(FAILURES)
+    calls = _calls(["v", "n"], editor_text=DOUBT)
+    check("CS-3 unit: `v` text + n, keep and no force",
+          len(calls) == 1 and calls[0][0] == DOUBT
+          and calls[0][1].get("keep") is True and "force" not in calls[0][1], calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
 def test_force_does_not_leak_to_the_next_item():
     failed_before = len(FAILURES)
     m = load_module()
