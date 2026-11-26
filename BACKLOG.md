@@ -5786,3 +5786,39 @@ gate PROVEN como não aplicável quando a topologia do repo não tem proof-revie
 dizer isso no fechamento.
 **Lar:** `common/agents/` (revisor novo), o hook que injeta o critério de saída do
 modo, `docs/modos-de-trabalho.md`.
+
+---
+
+## A tela de fechamento do `cepa run` não diz o que aconteceu, o que ficou pendente nem o que fazer
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-run`, bloco de fechamento e painel `Next`; `common/skills/run-review`) · **Origem:** feedback `fb-20261126-4` e `fb-20261126-6`, 2026-11-26
+
+### Problema
+
+Na run `all/2026-11-26-0838` do `wego-faturamento-backend` o dono leu a tela de fechamento (o texto que o `cepa run` imprime quando a janela acaba) e não soube dizer o que tinha acontecido. A run gastou 4h01 (14.435 s ÷ 3.600) e US$ 40,15 num item só, o C1-49, e nada chegou à `main`. O item estava pronto com 39 commits num branch lateral e só foi reprovado porque 2 testes de 2111 esperavam 59 rotas no contrato e o item criou 4 (59 + 4 = 63). Nada disso está na tela. Quatro defeitos, todos vistos nessa run:
+
+1. **A tela não tem conclusão.** A linha de contagem diz `1 attempt(s) · 0 delivered · 0 stuck · 0 no progress · 0 for you · 0 commit(s)`. O dono tem de deduzir dela que o trabalho existe e está guardado.
+2. **"0 commit(s)" e "no commits, removed" contradizem os 39 commits salvos.** As duas frases falam do branch da run. O branch lateral `until/2026-11-26-0838-vermelho-kairos-etapa-1-C1-49` aparece só numa linha do item, cortada por largura.
+3. **A causa do vermelho não aparece.** A tela diz `RED (exited 1)` duas vezes. Os dois testes que falharam e a mensagem `expected: <59> but was: <63>` estão no `.log` e no `<run>.review.md` (a análise que `/common:run-review` escreve no fim), e a tela cita esse arquivo só pelo caminho.
+4. **A tela e a análise discordam sobre o que espera o dono.** O painel `Next` mostra "1 owner question(s)". O `<run>.review.md` da mesma run diz "2 decisions and 4 tasks", entre elas rodar a fila de novo, que é o passo que entrega o item.
+5. **O comando de commit manual falha pelo mesmo motivo do commit automático.** O git recusou o commit dos registros porque o `.gitignore` do repo ignora `.claude/*` (linha 65), e o `queue.yaml` é o único dos três arquivos que é versionado. A tela imprime como causa a dica genérica do git (`Disable this message with "git config set advice.addIgnoredFile false"`) e sugere um `git add` com os mesmos três arquivos, que é recusado de novo.
+
+### Palavras do dono
+
+> Olha o resultado desse run. Ao final, não achei que está claro o que aconteceu. Qual é a conclusão? Em um TL;DR, o que aconteceu, quais são as pendências e o que devo fazer?
+>
+> `fb-20261126-4`, 2026-11-26 · cepa · session/response-confusion · construction · `cepa-until`
+
+> Eu não quero apenas a explicação ad-hoc. Eu quero que você aprimore o sistema de trabalho. Registre isso no Cepa como algo a ser melhorado.
+>
+> `fb-20261126-6`, 2026-11-26 · cepa · session/response-confusion · construction · `cepa-until`
+
+### Esboço
+
+A tela termina com um bloco de três partes, nesta ordem, escrito depois que a análise fica pronta: o que aconteceu (uma a três frases, com onde o trabalho está), o que ficou pendente (a mesma contagem que o `<run>.review.md` dá) e um comando só para rodar agora. Além disso:
+
+- item reprovado no build mostra os testes que falharam e a primeira linha da falha, tirados da saída do build;
+- a contagem de commits separa o que entrou no branch da run do que ficou salvo em branch lateral, com o nome do branch inteiro;
+- commit de registros deixa de fora os arquivos que o git ignora e diz quais foram, em vez de imprimir a dica do git e um comando que repete a recusa.
+
+Testes que faltam: run com um item reprovado no build termina com o bloco de três partes, nomeia o teste que falhou e o branch lateral, e o comando de commit sugerido roda com exit 0 num repo que ignora `.claude/*`.
