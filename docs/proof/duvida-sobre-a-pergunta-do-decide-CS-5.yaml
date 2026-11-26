@@ -1,0 +1,55 @@
+schema_version: 2
+card: duvida-sobre-a-pergunta-do-decide-CS-5
+verdict: proven
+reviewed_at: 2026-11-26T21:00:00-03:00
+base_commit: fcb2946
+head_commit: 3ed33b2
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa). Superficie = painel `cepa run decide` lido em pseudo-terminal
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-run (decide: sob `if not doubt and not rewritten:` o `?` pergunta 'What did you not understand? [Enter skips] ', o texto (strip) vira `doubt` e segue o caminho da duvida do w/v)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes pty rodam o cepa-run decide real com leitor falso so na fronteira (CEPA_RUN_READER) e CEPA_FEEDBACK_DIR; os unitarios injetam `question`/`unclear`/`rewrite` so para ler argumentos, sem substituir a logica mudada
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbacao manual em worktree descartavel detached em 3ed33b2, removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "Baseline em 3ed33b2: tests/test_cepa_until_decide_doubt.py 43 passed (15.37s). common/bin/cepa-run identico entre 1cb3ae3 e HEAD; so o arquivo de testes mudou (+19 linhas). Cada perturbacao tocou 1 linha (git diff --numstat = 1 1)."
+        - "(A) 4692 -> `if not rewritten:` -> RED: test_doubt_typed_in_w_asks_if_it_is_a_doubt_before_recording (1 failed, 30.42s)."
+        - "(B) 4692 -> `if not doubt:` -> RED: test_second_question_mark_on_the_item_does_not_ask (1 failed, 41 passed, 13.21s)."
+        - "(C) 4692 -> `if True:` -> RED: test_doubt_typed_in_w_asks_if_it_is_a_doubt_before_recording (1 failed, 30.37s)."
+        - "(D) 4692 -> `if not doubt or not rewritten:` -> RED: mesmo teste de w (1 failed, 30.44s)."
+        - "(E) 4692 -> `if False:` -> RED: test_doubt_after_a_rewrite_does_not_call_the_reader_again (1 failed, 13 passed, 7.72s)."
+        - "(F) 4698 'What did you not understand?' -> 'What was unclear?' -> RED: test_question_mark_asks_and_the_typed_text_reaches_the_reader_and_feedback (1 failed, 2 passed, 90.71s; falha por texto ausente ate o timeout de 90s do helper pty)."
+        - "(G) 4698 `.strip()` removido -> RED: test_question_mark_line_of_only_spaces_is_an_empty_enter (1 failed, 39 passed, 13.92s; 'no doubt to mark or reader' recebeu ['   '])."
+        - "(H) 4697 `doubt = str(question(` -> `_d = str(question(` -> RED: test_question_mark_asks_and_the_typed_text_reaches_the_reader_and_feedback (1 failed, 35 passed, 15.11s)."
+        - "(I) 4698 '[Enter skips] ' -> '[Enter] ' -> RED: mesmo teste de F (1 failed, 2 passed, 90.72s)."
+        - "Restauracao por `git checkout HEAD -- common/bin/cepa-run` entre perturbacoes; worktree removido; arvore principal intocada. Base fcb2946 nao reexecutada (primeira passada: 6 failed/35 passed)."
+      run: >-
+        `git worktree add --detach <scratchpad>/wt HEAD` (3ed33b2); perturbacao por perl em linha unica;
+        `python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -x` (-k question_mark em F e I).
+        Baseline 43 passed; A..I todas RED. Suite completa nao rodada.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    run: "todas as linhas de comportamento mudadas (4692, 4697, 4698 texto, 4698 strip) foram quebradas e ficaram vermelhas (A..I)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "A unica entrada e o texto que o dono digita no proprio terminal (painel local, sem parser de dado externo, sem modulo api-rest); o texto segue como argumento de `cepa-feedback add` e como campo do pedido ao leitor, que decidem o que fazer com ele."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-5 de docs/spec/duvida-sobre-a-pergunta-do-decide.md); a prova e a perturbacao."
+routing_reason: >-
+  Segunda passada: o unico sobrevivente da primeira (G, remover o `.strip()`) agora fica vermelho com os dois testes novos
+  de espacos; as outras oito perturbacoes (A..F, H, I) continuam vermelhas no novo head. PROVEN.
