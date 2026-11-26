@@ -116,9 +116,16 @@ items:
     you not understand? [Enter skips]"; digitar "variante O" faz o pedido ao leitor
     trazer esse texto, e Enter vazio faz o pedido ir sem dúvida, como hoje; hoje
     `?` chama o leitor sem perguntar nada.'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  claimed_by:
+    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
+    pid: 45882
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
+    branch: session/chain-1126-1336
+    started_at: '2026-11-26T22:44:22+00:00'
 - id: CS-6
   title: depois de um `?` sem texto, uma dúvida digitada dispara a segunda reescrita,
     e a terceira tentativa deixa o item para depois
