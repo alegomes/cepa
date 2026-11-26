@@ -273,8 +273,8 @@ def on_start(session_id: str, cwd: str) -> None:
                 head = f"{c['branch']} {cap}".rstrip()
                 lines.append(f"  • {head} — {', '.join(bits) or 'no commits'}, "
                              f"{c['age']} old{live}")
-            lines.append("  Land with `/common:worktree-merge <name>`, inspect with "
-                         "`/common:worktree-list`, drop with `/common:worktree-discard <name>`, "
+            lines.append("  Land with `/common:worktree-merge <slice>`, inspect with "
+                         "`/common:worktree-list`, drop with `/common:worktree-discard <slice>`, "
                          "or label one with `/common:worktree-label <purpose>` so you "
                          "remember what it's for.")
             notices.append("\n".join(lines))

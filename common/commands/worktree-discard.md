@@ -1,6 +1,6 @@
 ---
 description: Discard a session worktree that was a dead end — remove the worktree and delete its branch, after showing you exactly what work would be lost. The "throw it away" half of the lifecycle, opposite /common:worktree-merge.
-argument-hint: <name>   (the session slice name, e.g. billing-api — with or without the session/ prefix)
+argument-hint: <slice>   (the session slice name, e.g. billing-api — with or without the session/ prefix)
 interaction: routine
 ---
 
@@ -18,22 +18,22 @@ and requires confirmation first.
 
 ## Variables
 
-- `$ARGUMENTS` — `<name>`: the slice name (`billing-api` or `session/billing-api`).
+- `$ARGUMENTS` — `<slice>`: the slice name (`billing-api` or `session/billing-api`).
 
 ## Steps
 
-1. **Resolve.** Normalize `<name>` to branch `session/<name>` and find its
+1. **Resolve.** Normalize `<slice>` to branch `session/<slice>` and find its
    worktree via `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/session-worktrees.py"`
    (or `git worktree list`). If it doesn't exist, stop and list what does.
 
 2. **Show what would be lost — then confirm.** Report the branch's unmerged
-   commits (`git log --oneline <base>..session/<name>`) and any uncommitted
+   commits (`git log --oneline <base>..session/<slice>`) and any uncommitted
    changes (`git -C <worktree> status --porcelain`). Call out **untracked files
    explicitly** (the `??` lines) — these live nowhere else and are gone for good.
    Seeded files (`.env` and the like, copied from the main tree at creation) are
    expected and safe to lose; genuinely new untracked work is not — flag it.
    Tell the user plainly: *"This will permanently delete N commits and these
-   untracked files: … in `session/<name>`. Confirm?"* **Wait for explicit
+   untracked files: … in `session/<slice>`. Confirm?"* **Wait for explicit
    confirmation.** Do not proceed on anything short of a clear yes.
 
 3. **Refuse if a live session is using it.** If the worktree has a live session
@@ -47,7 +47,7 @@ and requires confirmation first.
      without `--force`). The rescue copies them to the main worktree's
      `.claude/rescued/<branch>/`. Relay whatever it prints.
    - `git worktree remove --force <worktree-path>`
-   - `git branch -D session/<name>`
+   - `git branch -D session/<slice>`
    - Report what was removed.
 
 ## Notes

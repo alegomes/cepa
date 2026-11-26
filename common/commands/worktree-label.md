@@ -26,7 +26,7 @@ set it whenever you know the purpose (the wrap-up nudge will also offer).
   - **text** → set the label of the current worktree to that text.
   - **`--clear`** → remove the label.
   - To target another worktree instead of the current one, the helper takes
-    `--branch session/<name>`.
+    `--branch session/<slice>`.
 
 ## Steps
 
@@ -38,7 +38,7 @@ set it whenever you know the purpose (the wrap-up nudge will also offer).
 
    - With no arguments it reads; with text it sets; with `--clear` it removes.
    - If you're not inside a `session/*` worktree and no `--branch` was given, the
-     helper says so — pass `--branch session/<name>` to target a specific one.
+     helper says so — pass `--branch session/<slice>` to target a specific one.
 
 2. On a set, confirm the new label and remind that it now shows in
    `/common:worktree-list` and the next SessionStart reminder.
