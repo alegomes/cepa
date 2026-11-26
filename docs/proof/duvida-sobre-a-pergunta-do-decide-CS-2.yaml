@@ -1,0 +1,70 @@
+schema_version: 2
+card: duvida-sobre-a-pergunta-do-decide-CS-2
+verdict: proven
+reviewed_at: 2026-11-26T15:00:00-03:00
+base_commit: d961c36
+head_commit: 71ec023
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa). Superficie = painel `cepa run decide` lido em pseudo-terminal
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-run (decide: bloco do `w` movido para dentro do laco do menu; sim ao [Y/n] vira `?` com a duvida)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes rodam o cepa-run decide real em pty; o leitor (reader) e o cepa-feedback ficam na borda
+    - class: "common/bin/cepa-run (unclear(..., doubt) e rewrite(..., doubt))"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbacao manual em worktree descartavel detached em 71ec023, removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida em 71ec023: 17 passed (9s). cepa-run identico entre cd9178d e 71ec023 (git diff --stat so toca tests/test_cepa_until_decide_doubt.py, +22 linhas)."
+        - "Cada perturbacao tocou exatamente 1 linha (git diff --numstat = 1 1)."
+        - "(Q1) unclear:4400 `if doubt:` -> `if False:` -> RED: 2 failed, 15 passed."
+        - "(Q8) unclear:4400 `if doubt:` -> `if True:` -> RED: 1 failed, 16 passed (ANTES sobrevivia; agora pego)."
+        - "(Q2) rewrite:4424 `if doubt:` -> `if False:` -> RED: 2 failed."
+        - "(Q9) rewrite:4424 `if doubt:` -> `if True:` -> RED: 1 failed."
+        - "(Q15) rotulo ` | dúvida do dono: ` -> ` | x: ` (4403) -> RED: 1 failed (ANTES sobrevivia; agora pego)."
+        - "(Q3) kw sempre {} (4673) -> RED: 7 failed."
+        - "(Q3a) unclear sem **kw (4674) -> RED: 6 failed."
+        - "(Q3b) rewrite sem **kw (4685) -> RED: 3 failed."
+        - "(Q4) duvida repassada vira texto fixo (4673) -> RED: 7 failed."
+        - "(Q5) sim nao troca r por `?` (4670 `doubt = typed_w`) -> RED: 9 failed (127s)."
+        - "(Q6) bloco do `w` no laco desligado (4660 `if False:`) -> RED: 11 failed."
+        - "(Q7') sim invertido no [Y/n] (4668 `if not is_yes_default(`) -> RED: 11 failed (126s). Variante do Q7 original (sempre verdadeiro), mais simples de aplicar em 1 linha."
+        - "(Q11) `text = typed_w` -> `text = typed` (4717) -> RED: 4 failed."
+        - "(Q14) chave do payload `duvida_do_dono` -> `duvida` (4427) -> RED: 2 failed."
+        - "(N1, nova) gate `looks_like_doubt(typed_w)` -> `True` (4663): qualquer texto do w pergunta se e duvida -> RED: 2 failed (68s)."
+        - "Nao perturbado, equivalente: remover `typed_w and` do gate (looks_like_doubt('') ja e False); remover `typed_w = None` (so e lido quando r == 'w', que sempre o atribui antes)."
+        - "Restauracao confirmada: apos todas, `git status --short` limpo e 17 passed."
+      run: >-
+        `git worktree add --detach <scratchpad>/wt 71ec023`; cada perturbacao por sed em linha unica com caminho absoluto, restaurada com
+        `git -C <wt> checkout 71ec023 -- <wt>/common/bin/cepa-run`; teste: `python3 -m pytest tests/test_cepa_until_decide_doubt.py -q`
+        em primeiro plano. Baseline 17 passed; Q1 2f; Q8 1f; Q2 2f; Q9 1f; Q15 1f; Q3 7f; Q3a 6f; Q3b 3f; Q4 7f; Q14 2f;
+        Q5 9f; Q6 11f; Q11 4f; Q7' 11f; N1 2f. Nenhum timeout de pty sem perturbacao. Worktree removido com `git worktree remove --force`.
+        Suite completa nao rodada.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    run: "todas as mudancas de comportamento de cepa-run (guardas de unclear e rewrite, rotulo, kw, bloco do w, gate, sim/nao, text) foram quebradas e deixaram o teste vermelho (Q1..Q15, N1); nenhuma linha de comportamento ficou sem perturbacao vermelha."
+  l4_adversarial_input:
+    status: n/a
+    reason: "A unica entrada nova e o texto que o dono digita no teclado do proprio terminal (painel local, sem parser de dado externo, sem modulo api-rest). O texto vai ao leitor e ao feedback como dado, nunca ao queue.yaml (coberto por test_answering_the_new_question_records_the_new_text_not_the_doubt)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-2 de docs/spec/duvida-sobre-a-pergunta-do-decide.md); a prova e a perturbacao. Na primeira passada, 8 testes novos RED contra o base d961c36."
+routing_reason: >-
+  Segunda passada em 71ec023. Os dois sobreviventes da primeira passada (a guarda
+  `if doubt:` de unclear e o rotulo da linha de feedback) agora ficam vermelhos, e
+  todas as outras perturbacoes (Q1..Q14) e uma nova (N1) tambem. Nada sobrevive. PROVEN.

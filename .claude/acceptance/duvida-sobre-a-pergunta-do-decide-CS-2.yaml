@@ -1,0 +1,21 @@
+key: CS-2
+queue: duvida-sobre-a-pergunta-do-decide
+status: complete
+criteria:
+  - id: AC1
+    text: "docs/spec/duvida-sobre-a-pergunta-do-decide.md CS-2 (cli): in the CS-1 scenario (pty, w on a panel item of cepa run decide, typing 'O que é a variante O?'), answering Enter at 'Is this a doubt about the question? [Y/n]' with a fake reader that records the request: (a) the request carries the text as the owner's doubt; (b) the screen shows the new question in the block of the same item and asks for the answer again; (c) the item still has no recorded answer; (d) the feedback file gains a line with the item id, the question and the doubt. Before, the reader was never called from w."
+    altitude: cli
+    surface: "common/bin/cepa-run decide panel (run as a process: cepa-until decide fila --repo ...) in a pty, keys w, doubt text, Enter at the doubt prompt, with CEPA_RUN_READER pointing to a fake reader script and CEPA_FEEDBACK_DIR to a temp dir"
+    test: "tests/test_cepa_until_decide_doubt.py::test_yes_at_the_doubt_prompt_rewrites_the_question_with_the_doubt (pty via on_tty; real cepa-until process, real cepa-feedback and cepa-queue; fake reader logs each request as JSON)"
+    layer: cli-pty
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -> '16 passed in 8.34s'"
+    sub_criteria:
+      a: "pty test reads the reader's log: exactly one 'reescrever-pergunta' request, duvida_do_dono == DOUBT and pergunta_mal_escrita == the question shown. Demonstrated at the pty surface."
+      b: "pty test asserts NEW_Q appears after 'badly written', the item header '· b1' appears once (same block), and '[w] I write the answer' appears again after 'answer it again'. Demonstrated at the pty surface."
+      c: "pty test asserts item status stays pending in plan.yaml, 'answered now 0' and 'for later 1' on screen, and no 'Send the item back' question. Demonstrated at the pty surface."
+      d: "pty test reads feedback-*.jsonl in CEPA_FEEDBACK_DIR: exactly one line whose texto contains b1, the question and the doubt (written by the real cepa-feedback subprocess, not an injected fake). Demonstrated at the pty surface."
+    readings:
+      queue_file: "The spec says queue.yaml; the file the fixture builds and reads is .claude/programs/fila/plan.yaml, same as in CS-1."
+      scope: "CS-3 (no at the prompt records the text as answer) and CS-4 (v) are later items. Unit tests with injected fakes (unclear/rewrite) only complement the pty test, they are not the evidence for (a)-(d)."
+gap: null
