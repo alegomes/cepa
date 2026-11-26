@@ -171,8 +171,8 @@ FAKE_BUILD = (
     "import json, sys\n"
     "from pathlib import Path\n"
     "calls = Path({calls!r})\n"
-    "first = not calls.exists()\n"
-    "broken = Path('quebra.txt').exists() or ({flaky!r} and first)\n"
+    "n = len(calls.read_text().splitlines()) + 1 if calls.exists() else 1\n"
+    "broken = Path('quebra.txt').exists() or n == {flaky!r}\n"
     "files = sorted(p.name for p in Path('.').glob('a*.txt'))\n"
     "with calls.open('a') as f:\n"
     "    f.write(json.dumps({{'argv': sys.argv[1:], 'files': files}}) + '\\n')\n"
@@ -192,7 +192,8 @@ def module():
     return mod
 
 
-def run(tmp, ids, tool, verify, red, breaks="", flaky=False):
+def run(tmp, ids, tool, verify, red, breaks="", flaky=0):
+    """`flaky`: the number of the one call that is red with no cause."""
     root = build_repo(tmp, [item(i) for i in ids])
     calls = Path(tmp) / "build-calls"
     script = root / tool
@@ -250,6 +251,11 @@ def test_parsers_read_the_real_outputs():
           == "./gradlew -Pprofile=ci -x lint --no-daemon :a:test --tests FooTest",
           mod.repeat_command("./gradlew check -Pprofile=ci -x lint --no-daemon",
                              [":a:test FooTest"]))
+    check("gradle: comando que já traz --tests não é estreitado",
+          mod.repeat_command("./gradlew test --tests Foo", [":a:test FooTest"])
+          == "./gradlew test --tests Foo"
+          and mod.repeat_command("./gradlew test --tests=Foo", [":a:test FooTest"])
+          == "./gradlew test --tests=Foo", "")
     block = "[ERROR] Errors:\n[ERROR]   BarTest.x:3 » Runtime boom\n"
     check("maven: classe que quebra inteira ('FooTest » ...') entra na lista",
           mod.failed_maven_tests(block + "[ERROR]   FooTest » IllegalState no\n")
@@ -289,7 +295,7 @@ def test_gradle_red_repeats_only_the_failed_class():
 def test_green_on_the_failed_class_is_followed_by_the_whole_build():
     with tempfile.TemporaryDirectory() as tmp:
         root, p, seen, led = run(tmp, ["a1"], "gradlew", "./gradlew build",
-                                 GRADLE_RED, flaky=True)
+                                 GRADLE_RED, flaky=1)
         check("vermelho, depois só a classe, depois o build inteiro",
               [c["argv"] for c in seen] ==
               [["build"], [":app:test", "--tests", "FooTest"], ["build"]],
@@ -299,6 +305,24 @@ def test_green_on_the_failed_class_is_followed_by_the_whole_build():
               str(led))
         check("a1 fecha done", status(root, "a1")["status"] == "done",
               str(status(root, "a1")))
+
+
+def test_deferred_item_alone_also_gets_the_whole_build_after_a_narrow_green():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, seen, led = run(tmp, ["a1", "a2"], "gradlew", "./gradlew build",
+                                 GRADLE_RED, flaky=2)
+        check("a2 foi adiado e conferido sozinho no fim",
+              ev(led, "verify_adiado", id="a2")
+              and ev(led, "verify", id="a2", adiado=True, verde=False), str(led))
+        check("vermelho, só a classe, depois o build inteiro, tudo no commit de a2",
+              [c["argv"] for c in seen[1:]] ==
+              [["build"], [":app:test", "--tests", "FooTest"], ["build"]],
+              f"{seen} {p.stdout[-600:]}")
+        check("a 3ª rodada do adiado fica marcada como a que cobre o resto",
+              ev(led, "verify", id="a2", adiado=True, repeticao=3,
+                 cobre_o_resto=True, verde=True), str(led))
+        check("a2 fica done", status(root, "a2")["status"] == "done",
+              str(status(root, "a2")))
 
 
 def test_gradle_compile_red_repeats_the_whole_build():

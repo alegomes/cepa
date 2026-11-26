@@ -2290,6 +2290,8 @@ def repeat_command(command, failed):
             task, cls = pair.split(" ", 1)
             by_task.setdefault(task, []).append(cls)
         given = shlex.split(command)
+        if any(w.startswith("--tests") for w in given):
+            return command       # already filtered by the owner: not narrowed
         words, takes_value = [shlex.quote(given[0])], False
         for word in given[1:]:
             # Keeps the options of the original command (`-x lint`,
