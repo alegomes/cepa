@@ -1,0 +1,28 @@
+key: CS-7-reforma-de-nomes
+queue: reforma-de-nomes
+item: CS-7
+status: complete
+head_commit: 5e9de96
+diff_range: 6f3d63b..5e9de96
+criteria:
+  - id: AC1
+    text: "CS-7: `cepa intent step 3` move o cursor para o passo 3; `cepa intent write --help` imprime a ajuda so do `write`; `cepa modes exit`, `cepa modes menu discovery` e `cepa modes purposes` imprimem o que `--exit`, `--menu discovery` e `--purposes` imprimem hoje; `cepa intent --step 3` e `cepa modes --exit` continuam aceitos. Mais o bullet 'Decided without asking': edit sem acao vira `cepa intent step N` e `cepa intent edit --purpose/--plan --reason`; `cepa modes [MODE]` sem subcomando ainda imprime a tabela (docs/spec/reforma-de-nomes-dos-comandos.md, ### CS-7)"
+    altitude: cli
+    surface: "common/bin/cepa-intent e common/bin/cepa-modes invocados como subprocesso, e o launcher common/bin/cepa (intent/modes); exit code, stdout, stderr e o arquivo de intencao em disco"
+    clauses:
+      intent_step_moves_cursor: "complete. `step 3` sai 0, grava step==3, imprime 'passo 3/3', emite intent.cursor_advanced de=1 para=3; `step 2` == `--step 2`; `--step 3` e `--passo 1` seguem aceitos; recusas (sem numero, com --purpose, com --step) sai 2; sem intencao sai 3. Tambem pelo launcher."
+      intent_write_help_only_write: "complete. Para cada acao (write, show, continue, state, close, remind, reminders, step, edit): `--help`, `-h` e `help` imprimem o mesmo, abrem com 'usage: cepa intent <acao>', listam so as opcoes da acao, exemplos so da acao, sem 'ACTION is one of'. `remind help` grava lembrete (nao e ajuda). Rodei a mao `cepa intent write --help` pelo launcher: abre com 'usage: cepa intent write'."
+      modes_subcommands_equal_flags: "complete. Pares comparados em stdout+stderr+rc: exit/--exit (com e sem modo, design), menu discovery/--menu discovery (com --json e modo desconhecido), purposes/--purposes (com --json, --no-color). `menu discovery` pelo launcher imprime menu numerado."
+      flags_still_accepted: "complete. `cepa intent --step 3` e `--purpose X --reason Y`/`--plan a b` sem acao aceitos; `--saida`/`--propositos` e `--json` aceitos. Rodei a mao `cepa modes --exit exploration` rc=0 com a mesma saida de `cepa modes exit exploration`."
+      edit_action: "complete. `edit --purpose --reason` troca proposito e guarda o anterior; `edit --plan` troca plano, volta ao passo 1, guarda o anterior; sem --reason recusa (2) para purpose; sem --purpose/--plan sai 2; `edit --step` sai 2; emite intent.written."
+      modes_bare_prints_table: "complete. `cepa modes` rc=0 com 'Modos de trabalho'; `cepa modes exploration` imprime so um modo; nenhum modo tem nome de subcomando (teste de colisao)."
+    test: "tests/test_cepa_intent_subcommands.py; tests/test_cepa_modes_subcommands.py"
+    layer: "cli (subprocess dos binarios reais e do launcher; sem mock; repos git temporarios)"
+    evidence: verified
+    run: "env -u CEPA_UNTIL_RUN -u CEPA_RUN python3 tests/test_cepa_intent_subcommands.py -> 103 linhas 'ok', termina em 'tudo ok' (N=103); python3 tests/test_cepa_modes_subcommands.py -> 30 linhas 'ok', 'tudo ok' (N=30). Suite completa nao rodada (do supervisor)."
+independent_checks:
+  docs_updated: "docs/cepa-cli.md alterado no diff junto com os dois binarios."
+gap: null
+suggested_followup: null
+observations_outside_the_literal_criterion:
+  old_names_in_docs: "Varredura de nomes antigos em menus e docs vivos fica para o CS-11."
