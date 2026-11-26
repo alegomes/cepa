@@ -3834,3 +3834,14 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: retorno-vermelho-fecha-rota
+  title: Retorno vermelho deixa aberta a rota humana do item entregue e o item seguinte
+    fica fora do lote
+  why: 'Origem: feedback fb-20261123-5 (2026-11-23); BACKLOG.md § Retorno vermelho
+    deixa aberta a rota humana do item entregue e o item seguinte fica fora do lote
+    (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
