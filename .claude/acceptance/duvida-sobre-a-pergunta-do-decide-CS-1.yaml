@@ -1,0 +1,16 @@
+key: CS-1
+queue: duvida-sobre-a-pergunta-do-decide
+status: complete
+criteria:
+  - id: AC1
+    text: "docs/spec/duvida-sobre-a-pergunta-do-decide.md CS-1 (cli): in a pseudo-terminal, choosing w on an item of the cepa run decide panel and typing 'O que é a variante O?' shows 'Is this a doubt about the question? [Y/n]' and queue.yaml stays the same; before, the screen asked 'Send the item back to the queue with that answer? [y/N]' and then showed 'not recorded'."
+    altitude: cli
+    surface: "common/bin/cepa-run decide panel (run as a process: cepa-until decide fila --repo ...) in a pty, keys w then the doubt text then Enter"
+    test: "tests/test_cepa_until_decide_doubt.py::test_doubt_typed_in_w_asks_if_it_is_a_doubt_before_recording (pty via on_tty; asserts the ASK line, absence of 'Send the item back' and 'not recorded', and plan.yaml byte-identical); guard: test_doubt_typed_through_v_does_not_show_the_new_prompt_yet (v does not show the prompt, CS-4 scope)"
+    layer: cli-pty
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -> '2 passed in 1.55s'; python3 tests/test_cepa_until_decide_doubt.py -> 8 'ok' lines, 'tudo verde'"
+    readings:
+      queue_file: "The spec says queue.yaml; in this repo the queue file the fixture builds and compares is .claude/programs/fila/plan.yaml (same file the tests of test_cepa_until.py use). Compared byte for byte before and after."
+      scope: "Interim behavior (yes on the new prompt records nothing, item stays for later) is intentional; CS-2/CS-3/CS-4 own the rest."
+gap: null
