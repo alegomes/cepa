@@ -106,6 +106,47 @@ def test_red_again_on_the_failed_files_gives_the_item_back():
               status(root, "a1")["status"] != "done", str(status(root, "a1")))
 
 
+def test_real_run_all_feeds_the_real_parser_and_takes_its_list():
+    """The pair the fake suite above stands in for: the real run-all.sh writes
+    "com falha:", cepa-run's parser reads it, and the real run-all.sh accepts
+    the list back as its filter."""
+    import importlib.machinery
+    import importlib.util
+    import os
+    import shutil
+    import subprocess
+    here = Path(__file__).resolve().parent
+    loader = importlib.machinery.SourceFileLoader(
+        "cepa_run_mod", str(here.parent / "common" / "bin" / "cepa-run"))
+    spec = importlib.util.spec_from_loader("cepa_run_mod", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    with tempfile.TemporaryDirectory() as tmp:
+        tests = Path(tmp) / "tests"
+        tests.mkdir()
+        for f in ("run-all.sh", "_run_with_timeout.py"):
+            shutil.copy(here / f, tests / f)
+        (tests / "test_good.py").write_text("print('ok')\n")
+        (tests / "test_bad.py").write_text("import sys\nsys.exit(1)\n")
+        env = dict(os.environ, SKIP_PYTEST="1")
+        log = Path(tmp) / "run.log"
+        log.write_text("antes\n")
+        offset = mod.log_size(log)
+        r = subprocess.run(["bash", str(tests / "run-all.sh")], env=env,
+                           capture_output=True, text=True, timeout=60)
+        with log.open("a") as f:
+            f.write(r.stdout + r.stderr)
+        failed = mod.failed_suite_files(log, offset)
+        check("o parser lê a lista do run-all.sh real",
+              failed == ["tests/test_bad.py"], f"{failed} {r.stdout[-400:]}")
+        r2 = subprocess.run(["bash", str(tests / "run-all.sh")] + failed, env=env,
+                            capture_output=True, text=True, timeout=60)
+        out = r2.stdout
+        check("o run-all.sh real aceita a lista e roda só esse arquivo",
+              "→ 1 arquivo(s)" in out and "test_good.py" not in out
+              and "  - tests/test_bad.py" in out, out)
+
+
 def main():
     print("cepa-run — repetir só os arquivos com falha\n")
     for name, fn in sorted(globals().items()):
