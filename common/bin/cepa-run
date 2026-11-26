@@ -4394,9 +4394,13 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # CS-6 (perguntas-da-largada-legiveis): "I did not understand" goes to the
         # global feedback ledger `/common:feedback` triages, target `cepa-run`;
         # the item gets no answer (spec Q3, "Decided without asking").
-        def unclear(ident, text):
+        def unclear(ident, text, doubt=""):
             msg = (f"pergunta mal escrita no painel do cepa-run (fila {queue}, "
                    f"item {ident}): {text}")
+            if doubt:
+                # CS-2 (duvida-sobre-a-pergunta-do-decide): the triage needs to know
+                # which term was obscure.
+                msg += f" | dúvida do dono: {doubt}"
             try:
                 p = subprocess.run(
                     [sys.executable, str(HERE / "cepa-feedback"), "add", msg,
@@ -4412,11 +4416,15 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # reword-route --replace` (this script never edits queue.yaml). Only an open
         # route can be reworded: a delivered item or one without a route keeps the
         # CS-6 path (recorded as unclear, left for later).
-        def rewrite(ad, shown):
+        def rewrite(ad, shown, doubt=""):
             if ad.get("human_pending") is None or ad.get("reason") == "pos-entrega":
                 return None, "the item has no open route to reword"
             payload = dict(route_payload(ad), tarefa=UNCLEAR_TASK,
                            pergunta_mal_escrita=shown)
+            if doubt:
+                # CS-2: the owner's typed doubt, next to the badly written question.
+                # Never written to queue.yaml.
+                payload["duvida_do_dono"] = doubt
             try:
                 route, error = read_route(repo, payload,
                                           time.monotonic() + UNCLEAR_REWRITE_SEC,
@@ -4564,6 +4572,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # question, the terminal asks the default one, instead of showing the evidence and
         # leaving the owner to find the question on his own.
         rewritten = False
+        typed_w = None
         # CS-7: `?` rewrites the question once and the block asks again; the second
         # `?` on the same item does not call the reader (spec, "Decided without
         # asking": no loop holding the launch).
@@ -4617,6 +4626,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             screen.legend(legend_lines(chips, summary, delivered))
             prompt = screen.menu(chips, recommended_letter(d))
             valid = {"y", "n", "w", "v", "d", "", "q", "?"} | ({"e"} if show else set())
+            doubt = ""
             while True:
                 raw = str(question(prompt))
                 r = raw.strip().lower()
@@ -4647,9 +4657,21 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                                           if code else "") + "nothing written in the editor")
                         continue
                 break
+            if r == "w":
+                typed_w = str(question(screen.follow_up(
+                    "Your answer, in one line (the next run reads this): "))).strip()
+                if typed_w and looks_like_doubt(typed_w):
+                    # CS-1/CS-2: text that looks like a doubt is asked about before
+                    # anything is recorded. Yes acts like `?` with the text as the
+                    # owner's doubt (same rewrite path); no falls through to the
+                    # answer path (CS-3).
+                    if is_yes_default(question(screen.follow_up(
+                            "Is this a doubt about the question? [Y/n] "))):
+                        r, doubt = "?", typed_w
             if r != "?":
                 break
-            rc, msg = unclear(ident, shown_question)
+            kw = {"doubt": doubt} if doubt else {}
+            rc, msg = unclear(ident, shown_question, **kw)
             screen.recorded("question recorded as badly written; no answer on the "
                             "item" if rc == 0 else msg, ok=rc == 0)
             # CS-8: a failed rewrite, or the second `?`, says so in one line and the
@@ -4660,7 +4682,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 break
             rewritten = True
             screen.note(f"rewriting the question, up to {UNCLEAR_REWRITE_SEC} s")
-            new_route, error = rewrite(ad, shown_question)
+            new_route, error = rewrite(ad, shown_question, **kw)
             if new_route is None:
                 screen.warning(f"question not rewritten, the item stays for later "
                                f"and the panel goes on: {failure_reason(error)}")
@@ -4691,19 +4713,8 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             text = (("tarefa encerrada" if delivered else "descartado")
                     + f": {base}" + (f". {extra}" if extra else ""))
         elif r in ("w", "v"):
-            text = (typed if r == "v" else
-                    str(question(screen.follow_up("Your answer, in one line (the "
-                                                  "next run reads this): "))).strip())
-            if r == "w" and text and looks_like_doubt(text):
-                # CS-1: asked before anything is recorded. CS-2 (yes: rewrite the
-                # question with this text as the owner's doubt) plugs in at
-                # `is_doubt`; CS-3 (no: record the text as the answer) is the
-                # fall-through below. Interim: yes records nothing and the item
-                # stays for later.
-                is_doubt = is_yes_default(question(screen.follow_up(
-                    "Is this a doubt about the question? [Y/n] ")))
-                if is_doubt:
-                    text = ""
+            # `w` was read, and the doubt asked, inside the menu loop above.
+            text = typed if r == "v" else typed_w
             if text:
                 give_back = is_yes(question(screen.follow_up(
                     "Send the item back to the queue with that answer? [y/N] ")))

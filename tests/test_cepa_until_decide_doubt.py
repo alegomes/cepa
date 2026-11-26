@@ -16,7 +16,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_cepa_until import CEPA_UNTIL, build_repo, item  # noqa: E402
-from test_cepa_until_decide import ANSI, FAILURES, check, on_tty  # noqa: E402
+from test_cepa_until_decide import (  # noqa: E402
+    ANSI, FAILURES, check, load_module, on_tty)
+from pathlib import Path  # noqa: E402,F811
 
 QUESTION = "A variante O já foi escolhida?"
 DOUBT = "O que é a variante O?"
@@ -158,6 +160,263 @@ def test_looks_like_doubt_survives_cepa_queue_exiting_with_2():
             mod.CEPA_PLAN = old_plan
             mod._QUEUE_MODULE.clear()
     assert result is False, result
+
+
+# ---- CS-2: yes at the doubt prompt rewrites the question with the doubt ----------
+
+NEW_Q = "Você já escolheu qual versão do plano vai usar?"
+NEW_YES = "O item volta para a fila e o próximo run usa a versão escolhida."
+NEW_NO = "O item continua esperando a escolha."
+
+
+def _doubt_reader(tmp):
+    """Fake reader: logs every request it gets (as JSON, one per line) and answers
+    a new closed question for the rewrite job."""
+    script = Path(tmp) / "leitor.py"
+    log = Path(tmp) / "leitor-pedidos.jsonl"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys\n"
+        "it = json.load(sys.stdin)\n"
+        f"open({str(log)!r}, 'a').write(json.dumps(it) + '\\n')\n"
+        "if it.get('tarefa') == 'reescrever-pergunta':\n"
+        f"    print(json.dumps({{'route_kind': 'owner-task', 'question': {NEW_Q!r},\n"
+        f"        'if_yes': {NEW_YES!r}, 'if_no': {NEW_NO!r}, 'item_se_nao': 'nenhum'}}))\n"
+        "else:\n"
+        "    print(json.dumps({'tipo': None}))\n")
+    script.chmod(0o755)
+    return script, log
+
+
+def _requests(log):
+    import json
+    if not Path(log).exists():
+        return []
+    return [json.loads(l) for l in Path(log).read_text().splitlines() if l.strip()]
+
+
+def _ledger(d):
+    import json
+    out = []
+    for f in sorted(Path(d).glob("feedback-*.jsonl")):
+        out += [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+    return out
+
+
+def test_yes_at_the_doubt_prompt_rewrites_the_question_with_the_doubt():
+    """Red test of CS-2, as a process in a pseudo-terminal."""
+    import yaml
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        reader, log = _doubt_reader(tmp)
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER=str(reader))
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=90, inputs=[
+            ("[w] I write the answer", "w"),
+            ("Your answer, in one line", DOUBT),
+            (ASK, ""),
+            ("answer it again", None),
+            ("[w] I write the answer", ""),
+        ])
+        plain = ANSI.sub("", out)
+        check("CS-2 pty: decide exits 0", rc == 0, plain[-1500:])
+        reqs = [r for r in _requests(log) if r.get("tarefa") == "reescrever-pergunta"]
+        check("CS-2 pty: the reader got one rewrite request", len(reqs) == 1, reqs)
+        if reqs:
+            check("CS-2 pty: the request carries the doubt",
+                  reqs[0].get("duvida_do_dono") == DOUBT, reqs[0])
+            check("CS-2 pty: the request carries the question shown",
+                  reqs[0].get("pergunta_mal_escrita") == QUESTION, reqs[0])
+        tail = plain.split("answer it again", 1)[-1]
+        check("CS-2 pty: the new question shows after the rewrite", NEW_Q in plain.split(
+            "badly written", 1)[-1], plain)
+        check("CS-2 pty: same block, the item header shows once",
+              plain.count("· b1") == 1, plain)
+        check("CS-2 pty: the panel asks for the answer again",
+              "[w] I write the answer" in tail, tail)
+        check("CS-2 pty: no 'Send the item back' question for the doubt",
+              "Send the item back to the queue with that answer?" not in plain, plain)
+        now = {i["id"]: i for i in yaml.safe_load(qfile.read_text())["items"]}["b1"]
+        check("CS-2 pty: queue.yaml has the new question and no doubt text",
+              now.get("owner_question") == NEW_Q and DOUBT not in qfile.read_text(), now)
+        check("CS-2 pty: the item is still without answer",
+              now.get("status") == "pending" and "answered now 0" in plain
+              and "for later 1" in plain, plain[-1500:])
+        lines = _ledger(fb)
+        check("CS-2 pty: one feedback line", len(lines) == 1, lines)
+        if lines:
+            txt = lines[0].get("texto", "")
+            check("CS-2 pty: feedback has item id, question and doubt",
+                  "b1" in txt and QUESTION in txt and DOUBT in txt, txt)
+        assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def _deferred(**kw):
+    d = {"id": "b1", "title": "t", "reason": "human_pending",
+         "human_pending": "falta escolher a variante", "question": QUESTION,
+         "evidence": "x", "route_kind": "external-block"}
+    d.update(kw)
+    return d
+
+
+NEW = {"route_kind": "owner-task", "question": NEW_Q, "if_yes": NEW_YES,
+       "if_no": NEW_NO}
+
+
+def _inject(replies, deferred=None, rewrite=None):
+    """`decide` with injected unclear/rewrite that record what they receive."""
+    m = load_module()
+    screen, marks, rewrites, answers = [], [], [], []
+    it = iter(replies)
+
+    def unclear(ident, text, doubt=""):
+        marks.append((ident, text, doubt))
+        return 0, "ok"
+
+    def rw(ad, text, doubt=""):
+        rewrites.append((text, doubt))
+        return (NEW, None) if rewrite is None else rewrite
+
+    _, later = m.decide(Path("/nao/existe"), "fila", None, {}, deferred or [_deferred()],
+                        {}, question=lambda _p: next(it, ""), output=screen.append,
+                        answer=lambda ident, text, **k: answers.append(text) or (0, "ok"),
+                        unclear=unclear, rewrite=rw)
+    return "\n".join(screen), later, marks, rewrites, answers
+
+
+def test_doubt_goes_to_the_rewrite_and_to_the_feedback_mark():
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(["w", DOUBT, "", ""])
+    check("CS-2 unit: rewrite got the question and the doubt",
+          rewrites == [(QUESTION, DOUBT)], rewrites)
+    check("CS-2 unit: the feedback mark got the doubt",
+          marks == [("b1", QUESTION, DOUBT)], marks)
+    check("CS-2 unit: no answer recorded", answers == [], answers)
+    check("CS-2 unit: the new question shows in the same panel",
+          NEW_Q in text and text.count(QUESTION) >= 1, text)
+    check("CS-2 unit: the item is left for later", len(later) == 1, later)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_answering_the_new_question_records_the_new_text_not_the_doubt():
+    failed_before = len(FAILURES)
+    _, later, _, rewrites, answers = _inject(["w", DOUBT, "", "y", ""])
+    check("CS-2 unit: answered after the rewrite",
+          len(answers) == 1 and NEW_Q in answers[0] and DOUBT not in answers[0], answers)
+    check("CS-2 unit: nothing left for later", later == [], later)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_plain_question_mark_sends_no_doubt():
+    failed_before = len(FAILURES)
+    _, _, marks, rewrites, _ = _inject(["?", ""])
+    check("CS-2 unit: `?` rewrite has no doubt", rewrites == [(QUESTION, "")], rewrites)
+    check("CS-2 unit: `?` mark has no doubt", marks == [("b1", QUESTION, "")], marks)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_n_at_the_doubt_prompt_does_not_call_the_rewrite():
+    failed_before = len(FAILURES)
+    _, _, marks, rewrites, _ = _inject(["w", DOUBT, "n", "n"])
+    check("CS-2 unit: `n` calls no rewrite and no mark", rewrites == [] and marks == [],
+          (rewrites, marks))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_doubt_after_a_rewrite_does_not_call_the_reader_again():
+    """Today's limit stays: one rewrite per item, whatever key triggered it."""
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(["?", "w", DOUBT, ""])
+    check("CS-2 unit: the reader ran once", len(rewrites) == 1, rewrites)
+    check("CS-2 unit: the doubt reached the feedback mark",
+          marks == [("b1", QUESTION, ""), ("b1", NEW_Q, DOUBT)], marks)
+    check("CS-2 unit: says it is not rewritten again", "not rewritten again" in text, text)
+    check("CS-2 unit: no answer, item for later", answers == [] and len(later) == 1,
+          (answers, later))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_failed_rewrite_with_a_doubt_leaves_the_item_for_later():
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(
+        ["w", DOUBT, ""], rewrite=(None, "reader off"))
+    check("CS-2 unit: doubt reached the mark", marks == [("b1", QUESTION, DOUBT)], marks)
+    check("CS-2 unit: failure line", "question not rewritten" in text, text)
+    check("CS-2 unit: no answer, item for later", answers == [] and len(later) == 1,
+          (answers, later))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_default_rewrite_puts_the_doubt_in_the_reader_payload():
+    failed_before = len(FAILURES)
+    m = load_module()
+    reads, screen = [], []
+    m.read_route = lambda repo, payload, deadline, prompt=None: (
+        reads.append(payload) or (NEW, None))
+    m.reword_route = lambda *a, **k: None
+    replies = iter(["w", DOUBT, "", ""])
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+             question=lambda _p: next(replies, ""), output=screen.append,
+             answer=lambda *a, **k: (0, "ok"),
+             unclear=lambda ident, text, doubt="": (0, "ok"))
+    check("CS-2 payload: one read with the doubt next to the bad question",
+          len(reads) == 1 and reads[0].get("duvida_do_dono") == DOUBT
+          and reads[0].get("pergunta_mal_escrita") == QUESTION, reads)
+    reads.clear()
+    replies = iter(["?", ""])
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+             question=lambda _p: next(replies, ""), output=screen.append,
+             answer=lambda *a, **k: (0, "ok"),
+             unclear=lambda ident, text, doubt="": (0, "ok"))
+    check("CS-2 payload: `?` alone has no doubt field",
+          len(reads) == 1 and "duvida_do_dono" not in reads[0], reads)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_item_without_open_route_sends_the_doubt_to_feedback_and_waits():
+    """No open route (default rewrite): the reader is not called, the doubt is in the
+    feedback line, nothing is answered, the item stays for later."""
+    failed_before = len(FAILURES)
+    m = load_module()
+    reads, screen, marks = [], [], []
+    m.read_route = lambda *a, **k: reads.append(a) or (NEW, None)
+    replies = iter(["w", DOUBT, ""])
+    _, later = m.decide(
+        Path("/nao/existe"), "fila", None, {}, [_deferred(human_pending=None)], {},
+        question=lambda _p: next(replies, ""), output=screen.append,
+        answer=lambda *a, **k: marks.append("answered") or (0, "ok"),
+        unclear=lambda ident, text, doubt="": marks.append(doubt) or (0, "ok"))
+    check("CS-2 no route: the reader was not called", reads == [], reads)
+    check("CS-2 no route: the doubt went to the feedback mark and nothing was answered",
+          marks == [DOUBT], marks)
+    check("CS-2 no route: the item stays for later", len(later) == 1, later)
+    check("CS-2 no route: the screen says why", "no open route" in " ".join(" ".join(screen).split()),
+          screen)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_default_feedback_line_carries_the_doubt():
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as fb:
+        m = load_module()
+        os.environ["CEPA_FEEDBACK_DIR"] = fb
+        try:
+            replies = iter(["w", DOUBT, ""])
+            m.decide(Path(fb), "fila", None, {}, [_deferred(human_pending=None)], {},
+                     question=lambda _p: next(replies, ""), output=lambda *_: None,
+                     answer=lambda *a, **k: (0, "ok"))
+        finally:
+            del os.environ["CEPA_FEEDBACK_DIR"]
+        lines = _ledger(fb)
+        check("CS-2 ledger: one line with item, question and doubt",
+              len(lines) == 1 and all(x in lines[0].get("texto", "")
+                                      for x in ("b1", QUESTION, DOUBT)), lines)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
 if __name__ == "__main__":
