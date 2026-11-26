@@ -1,0 +1,59 @@
+schema_version: 2
+card: reforma-de-nomes-CS-9
+review: 1
+verdict: proven
+reviewed_at: 2026-11-26T01:10:00-03:00
+base_commit: 787571e
+head_commit: 9cbdf80            # código em e6436fa; 9cbdf80 só acrescenta o arquivo de aceite
+issue_type: Feature
+repo_kind: harness              # repo Python + sh (cepa), não Quarkus. Superfície = `cepa help` e docs/commands.md, docs/cepa-cli.md
+scope:
+  changed_classes:
+    - class: "common/hooks/_clihelp.py (kwarg frozen= em Parser.render, FROZEN em launcher_help)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # o teste roda o lançador `cepa help` real como subprocesso
+    - class: "common/bin/cepa (show_help de fallback, laço em duas passadas)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # o teste copia o lançador para um bin/ sem _clihelp e roda o real
+    - class: "docs/commands.md, docs/cepa-cli.md (seção final Frozen)"
+      module: docs
+      external_observable: true
+      substituted_by_double: null   # o teste lê os arquivos reais
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "P1 FROZEN = () em _clihelp.py -> test_help_frozen_block.py `1 failure(s)` (cepa help: one `frozen:` line). VERMELHO."
+        - "P2 apagar a linha `frozen:` impressa pelo render -> 1 falha, mesmo teste. VERMELHO."
+        - "P3 render ignora self.frozen (cold = []) -> 1 falha, mesmo teste. VERMELHO."
+        - "P4 fallback do shell sem o `echo \"  frozen:\"` -> 1 falha (cepa help (no _clihelp): one `frozen:` line). VERMELHO."
+        - "P5 fallback do shell com dor|hotspots na passada `current` -> 3 falhas (dor/hotspots depois da linha, ordem, últimos do bloco). VERMELHO."
+        - "P6 docs/commands.md volta ao 787571e -> 1 falha (a última seção `## ` não é Frozen). VERMELHO."
+        - "P7 docs/cepa-cli.md volta ao 787571e -> 4 falhas (última seção não é Frozen; /maestro:* fora de Frozen). VERMELHO."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs9 e6436fa`; CEPA_TELEMETRY_DIR=/tmp/cepa-telemetry-tests. Base verde (e6436fa): `python3 tests/test_help_frozen_block.py` -> `all ok`; `tests/test_cepa_help_layout.py` -> `all green`; `tests/test_commands_catalog.py` -> `tudo ok (68 comandos no catálogo)`; `tests/test_cepa_queue_batch_rename.py` -> `7 passed`. P1..P5 por sed no worktree (caminhos absolutos) e P6/P7 por `git checkout 787571e -- <doc>`, cada uma restaurada logo depois; todas vermelhas em tests/test_help_frozen_block.py. Worktree removido (`git worktree remove --force /tmp/proof-cs9`); árvore principal limpa. tests/run-all.sh não rodado.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "Todo comportamento alterado (kwarg e saída do render, constante FROZEN, as duas passadas do fallback, as duas seções Frozen) foi quebrado e deixou o teste vermelho (P1..P7). A mudança em tests/test_cepa_help_layout.py só ajusta a ordem esperada; o test_cepa_help_layout.py segue verde na base."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff só reordena a ajuda e reorganiza dois documentos; não lê nenhuma entrada nova de fora."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature, não Bug."
+changed_behaviour_not_pinned: []
+build_completo: "delegado ao supervisor do run (tests/run-all.sh); não rodado por mim, por instrução."
+routing_reason: >-
+  `dor` e `hotspots` aparecem depois de uma linha `frozen:` e de todos os outros subcomandos, tanto no `cepa help` quanto no fallback de shell, e as duas docs terminam numa seção Frozen. Sete quebras deliberadas (três no render Python, duas no fallback, uma por doc) deixaram o teste novo vermelho; a base está verde nos quatro testes vizinhos. Nenhum nível assumido, pulado ou sobrevivente: PROVEN.
