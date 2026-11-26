@@ -107,7 +107,7 @@ def test_queue_hands_route_kind_to_the_panel():
                                         "falta a chave", "A chave existe?")])
         plan = CEPA_UNTIL.parent / "cepa-queue"
         import json
-        p = subprocess.run([sys.executable, str(plan), "queue", "fila", "--repo",
+        p = subprocess.run([sys.executable, str(plan), "batch", "fila", "--repo",
                             str(root), "--json"], capture_output=True, text=True)
         deferred = json.loads(p.stdout).get("deferred") or []
         check("CS-2 queue: the deferred item carries route_kind",

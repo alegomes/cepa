@@ -82,8 +82,10 @@ set -e
 # Environment names (CS-6). Every variable cepa owns has the CEPA_ prefix and an
 # English name; the name it had before is still read. `cepa_env NEW [DEFAULT]`
 # prints the value of NEW, else of its old name, else DEFAULT: the new one wins
-# and an empty value counts as unset. The old value spellings are still accepted
-# (CEPA_PERMISSIONS=classificador, CEPA_PROMPT_MODE=substitui).
+# and an empty value counts as unset. The old value `substitui` of CEPA_PROMPT_MODE is
+# translated here. The old value `classificador` of CEPA_PERMISSIONS needs no
+# translation: the only reader compares with `bypass`, so any other value (classifier,
+# classificador) is the classifier; tests/test_env_names_in_english.py runs it end to end.
 # Shell twin of common/hooks/_cepaenv.py, which holds the full table; only the
 # variables this launcher reads are here, and tests/test_env_names_in_english.py
 # checks that the two agree.
@@ -105,7 +107,6 @@ cepa_env() {
     [ -z "$_ce_old" ] || _ce_v=$(eval "printf '%s' \"\${$_ce_old:-}\"")
   fi
   case "$1=$_ce_v" in
-    CEPA_PERMISSIONS=classificador) _ce_v=classifier ;;
     CEPA_PROMPT_MODE=substitui) _ce_v=replace ;;
   esac
   printf '%s' "${_ce_v:-${2-}}"
@@ -150,14 +151,22 @@ show_help() {
   echo "cepa [launcher flags]      — opens a claude session (as before)"
   echo ""
   echo "subcommands:"
-  for _s in "$SCRIPT_DIR"/cepa-*; do
-    [ -x "$_s" ] || continue
-    _name="${_s##*/cepa-}"
-    case "$_name" in plan|until|until-digest) continue ;; esac   # transition shims, not commands
-    # Line 2 of a python script is `"""cepa-x — summary`; shell scripts
-    # carry `# cepa-x — summary`. Anything else prints just the name.
-    _desc=$(sed -n 2p "$_s" | sed -e 's/^"""//' -e 's/^# *//' -e "s/^cepa-$_name *[—-]* *//")
-    printf '  %-14s %s\n' "$_name" "$_desc"
+  # Frozen subcommands (dor, hotspots) go last, under a "frozen:" line (CS-9).
+  for _pass in current frozen; do
+    [ "$_pass" = frozen ] && echo "  frozen:"
+    for _s in "$SCRIPT_DIR"/cepa-*; do
+      [ -x "$_s" ] || continue
+      _name="${_s##*/cepa-}"
+      case "$_name" in plan|until|until-digest) continue ;; esac   # transition shims, not commands
+      case "$_name" in
+        dor|hotspots) [ "$_pass" = frozen ] || continue ;;
+        *) [ "$_pass" = current ] || continue ;;
+      esac
+      # Line 2 of a python script is `"""cepa-x — summary`; shell scripts
+      # carry `# cepa-x — summary`. Anything else prints just the name.
+      _desc=$(sed -n 2p "$_s" | sed -e 's/^"""//' -e 's/^# *//' -e "s/^cepa-$_name *[—-]* *//")
+      printf '  %-14s %s\n' "$_name" "$_desc"
+    done
   done
   echo ""
   echo "launcher flags:"
@@ -223,6 +232,13 @@ if [ $# -ge 1 ]; then
       printf '✗ cepa: modos is now modes (run: cepa modes ...)\n' >&2
       exit 2 ;;
   esac
+  # `cepa queue queue` became `cepa queue batch` (CS-8). Only the typed form is
+  # refused: `common/bin/cepa-queue queue`, by path, still answers for the runs
+  # in flight, with a note on stderr.
+  if [ "$_w1" = "queue" ] && [ "$_w2" = "queue" ]; then
+    printf '✗ cepa: queue is now batch (run: cepa queue batch ...)\n' >&2
+    exit 2
+  fi
 fi
 
 if [ $# -ge 1 ]; then

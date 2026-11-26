@@ -259,3 +259,39 @@ def test_corrupted_yaml_is_ignored_without_taking_down_the_other_waivers(tmp_pat
         "motivo: [unclosed", encoding="utf-8")
     assert [w["motivo"] for w in waivers.load(repo)] == ["teste-cego"]
     assert waivers.proposals(repo) == []
+
+
+# --- CS-6: the run id that ends up in `proposto_por` -------------------------
+# The fixture above strips the new and the old name of the run markers, so each case
+# below starts from a clean environment and sets only what it tests.
+
+def _proposed_by(tmp_path, monkeypatch, env):
+    for k in ("CEPA_AUTONOMOUS_RUN_ID", "CLAUDE_AUTONOMOUS_RUN_ID"):
+        monkeypatch.delenv(k, raising=False)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    d = tmp_path / ("r%d" % len(list(tmp_path.iterdir())))
+    d.mkdir()
+    path = waivers.propose(str(d), reason="teste-cego", scope="X", rationale="r",
+                           revisit_trigger="t", proposed_by="agente", today=TODAY)
+    return yaml.safe_load(open(path))["proposto_por"]
+
+
+def test_propose_records_the_run_id_new_name(tmp_path, monkeypatch):
+    assert _proposed_by(tmp_path, monkeypatch, {"CEPA_AUTONOMOUS_RUN_ID": "run-new"}) \
+        == "agente (run run-new)"
+
+
+def test_propose_records_the_run_id_old_name_alone(tmp_path, monkeypatch):
+    assert _proposed_by(tmp_path, monkeypatch, {"CLAUDE_AUTONOMOUS_RUN_ID": "run-old"}) \
+        == "agente (run run-old)"
+
+
+def test_propose_new_run_id_wins_over_the_old(tmp_path, monkeypatch):
+    got = _proposed_by(tmp_path, monkeypatch, {"CEPA_AUTONOMOUS_RUN_ID": "run-new",
+                                               "CLAUDE_AUTONOMOUS_RUN_ID": "run-old"})
+    assert got == "agente (run run-new)"
+
+
+def test_propose_without_a_run_id_adds_nothing(tmp_path, monkeypatch):
+    assert _proposed_by(tmp_path, monkeypatch, {}) == "agente"

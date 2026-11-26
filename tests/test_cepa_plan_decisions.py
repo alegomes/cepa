@@ -139,11 +139,11 @@ with tempfile.TemporaryDirectory() as tmp:
     check("counts line: 3 decisões, 1 sem veredito, 2 com veredito",
           "3 decisões, 1 sem veredito, 2 com veredito" in r.stdout, r.stdout)
 
-    # --help lists `decisions` in the "reading" group.
+    # --help lists `decisions` in the "used by the commands" block (CS-8).
     h = run("--help").stdout
-    reading = h.split("  reading:", 1)[-1].split("\n  one item's cycle:", 1)[0]
-    check("--help lists decisions under reading",
-          "  reading:" in h and "decisions" in reading, h)
+    reading = h.split("  used by the commands:", 1)[-1].split("\noptions", 1)[0]
+    check("--help lists decisions under used by the commands",
+          "  used by the commands:" in h and "decisions" in reading, h)
 
     # File without the section: says so, does not crash.
     bare = repo / "docs" / "spec" / "c.md"

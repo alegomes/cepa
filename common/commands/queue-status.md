@@ -9,7 +9,7 @@ interaction: conversational
 ## Purpose
 
 The other queue commands answer other questions. `/common:next` names **one**
-next step. `/common:queue-run` executes. `cepa-queue queue` shows only what the
+next step. `/common:queue-run` executes. `cepa-queue batch` shows only what the
 next batch would run, hides what has already closed and stops at the first
 stuck item. None answers "how is the queue right now?", and on 2026-09-28 the
 only way out was to open the 72-item `queue.yaml` by hand.

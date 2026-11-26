@@ -179,7 +179,7 @@ item to the queue or closes the human route with the owner's answer, or, with
 provides the wording of the question and your recommendation.
 
 Cover **all deferred items of the queue**, not only this run's: run
-`python3 common/bin/cepa-queue queue <fila> --max 1 --json --repo <raiz>` and
+`python3 common/bin/cepa-queue batch <fila> --max 1 --json --repo <raiz>` and
 take the `deferred` list. Those with reason `blocked-before` (old spelling `bloqueado-antes` is still accepted) and
 `human_pending` go in; `reserved` and `depends-on-deferred` are not the owner's
 and stay out. An item that already has a `question` (the question the agent

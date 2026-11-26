@@ -11,24 +11,29 @@ to inject the exit condition on every turn. One table, two readers.
 
 Usage:
     cepa-modes              # the whole table; marks the current session's mode and
-                            # ends with that mode's menu (the same text as --menu)
+                            # ends with that mode's menu (the same text as `menu`)
     cepa-modes <name>       # a single mode, with entry/produces/exit/gate
-    cepa-modes --purposes # one line per mode: what it is for
+    cepa-modes purposes     # one line per mode: what it is for
     cepa-modes --json
-    cepa-modes --exit       # the exit verdict of this session's mode, from the disk
-    cepa-modes --menu <name> # the mode's menu of common actions, numbered, filtered by this repo
+    cepa-modes exit [<name>] # the exit verdict of this session's (or the given) mode, from the disk
+    cepa-modes menu <name>  # the mode's menu of common actions, numbered, filtered by this repo
+    cepa-modes <subcommand> --help   # the help of that subcommand only
 
-`--exit` is the verdict that exploration lacked: it reads docs/reviews/ and
+The flag forms `--purposes`, `--exit` and `--menu <name>` are still accepted
+(`exit`, `purposes` and `menu` are the subcommand forms of them; no mode is
+named like a subcommand).
+
+`exit` is the verdict that exploration lacked: it reads docs/reviews/ and
 says which of the three parts of the exit condition are on disk (panel saved,
 strategy document it ran over, owner's decision on each named disagreement).
 rc 0 = closed, 1 = still open, 2 = the mode has no mechanical verdict here.
 
-`--menu` is the ONLY place that builds the menu text (`actions` of `_modes.py`).
+`menu` is the ONLY place that builds the menu text (`actions` of `_modes.py`).
 An action whose `needs` the repo does not meet (`file:<path>` at the repo root,
 `topology:<name>` = content of `.claude/topology`, `plugin:<name>` installed and
 enabled, checked like `cepa-doctor` does via `_pluginver.scan`) is left out; of
 variants sharing a label only the first that passes shows; at most 5 lines.
-A mode with no actions prints nothing and returns 0. `--menu <mode> --json` is the
+A mode with no actions prints nothing and returns 0. `menu <mode> --json` is the
 same list as data, read by the session-mode hook on the opening turn.
 """
 
@@ -185,6 +190,60 @@ def render_block(name, info, current, color):
     return "\n".join(lines)
 
 
+# The subcommand forms (CS-7): each rewrites to the flag it names, so the two
+# forms are the same code path and print the same thing.
+SUBCOMMANDS = {
+    "exit": ("--exit", "[MODE]",
+             "the exit verdict of this session's mode (or of MODE), read from disk",
+             "Reads docs/reviews/ and says which of the three parts of the exit condition\n"
+             "are on disk (panel saved, the strategy document it ran over, the owner's\n"
+             "decision on each named disagreement). Only exploration has a mechanical verdict.",
+             [("cepa modes exit", "the verdict of this session's mode"),
+              ("cepa modes exit exploration", "the verdict of exploration")],
+             [(0, "the mode is closed"), (1, "the mode is still open"),
+              (2, "no mode declared in this tree, unknown mode, or no mechanical verdict here")]),
+    "menu": ("--menu", "MODE",
+             "the numbered menu of common actions of MODE, filtered by this repo",
+             "Prints N) label: command, dropping the actions this repo cannot run (at most 5).\n"
+             "A mode with no actions prints nothing. With --json, the same list as data.",
+             [("cepa modes menu discovery", "the menu of discovery"),
+              ("cepa modes menu discovery --json", "the same list as JSON")],
+             [(0, "ok"), (2, "unknown mode")]),
+    "purposes": ("--purposes", "",
+                 "one line per mode: what it is for",
+                 "Same as the table, reduced to the purpose of each mode.",
+                 [("cepa modes purposes", "one line per mode")],
+                 [(0, "ok")]),
+}
+
+
+def subcommand_argv(argv):
+    """`cepa modes exit|menu|purposes ...` -> the flag form of the same words.
+    `<sub> --help` / `<sub> help` prints the help of that subcommand only."""
+    lead = 0  # the plain switches may come before the subcommand: `--no-color exit`
+    while lead < len(argv) and argv[lead] in ("--no-color", "--sem-cor", "--json"):
+        lead += 1
+    if lead >= len(argv) or argv[lead] not in SUBCOMMANDS:
+        return argv
+    head, argv = argv[:lead], argv[lead:]
+    flag, arg, summary, desc, examples, exits = SUBCOMMANDS[argv[0]]
+    rest = argv[1:]
+    if rest[:1] and rest[0] in _clihelp.HELP_WORDS or any(x in ("-h", "--help") for x in rest):
+        sub = _clihelp.Parser(prog=f"cepa modes {argv[0]}", summary=summary,
+                              usage=f"cepa modes {argv[0]}" + (f" {arg}" if arg else "")
+                              + (" [--json]" if argv[0] == "menu" else ""),
+                              description=desc, examples=examples, exit_codes=exits,
+                              see_also=["cepa modes --help: the whole command"])
+        if arg:
+            sub.add_argument("mode", metavar="MODE", nargs=None if arg == "MODE" else "?",
+                             help="the work mode" + ("" if arg == "MODE" else
+                                                     " (default: the mode of this session)"))
+        if argv[0] == "menu":
+            sub.add_argument("--json", action="store_true", help="the list as JSON, for code")
+        sub.parse_args(["--help"])
+    return [*head, flag, *rest]
+
+
 def main():
     ap = _clihelp.Parser(
         prog="cepa modes",
@@ -195,19 +254,23 @@ def main():
             "is the table and nothing else. The source is common/hooks/_modes.py,\n"
             "the same one the session hook reads.\n"
             "\n"
-            "--menu MODE prints that mode's menu of common actions (numbered, with the\n"
-            "command of each), dropping the ones this repo cannot run.\n"
+            "SUBCOMMAND is one of (`cepa modes SUBCOMMAND --help` shows only that one):\n"
+            "  menu MODE  the mode's menu of common actions (numbered, with the command\n"
+            "             of each), dropping the ones this repo cannot run\n"
+            "  exit [MODE]  the exit verdict of this session's mode (or of MODE)\n"
+            "  purposes   one line per mode: what it is for\n"
+            "The flag forms --menu MODE, --exit and --purposes are still accepted.\n"
             "\n"
-            "--exit is the verdict exploration lacked: it reads docs/reviews/ and says\n"
+            "exit is the verdict exploration lacked: it reads docs/reviews/ and says\n"
             "which of the three parts of the exit condition are on disk (panel saved,\n"
             "the strategy document it ran over, the owner's decision on each named\n"
             "disagreement). Only exploration has a mechanical verdict."),
         examples=[
             ("cepa modes", "the whole table; marks this session's mode and ends with its menu"),
             ("cepa modes exploration", "one mode: enters with, produces, closes when, gate"),
-            ("cepa modes --purposes", "one line per mode: what it is for"),
-            ("cepa modes --exit", "the exit verdict of this session's mode"),
-            ("cepa modes --menu discovery", "the numbered menu of common actions of a mode"),
+            ("cepa modes purposes", "one line per mode: what it is for"),
+            ("cepa modes exit", "the exit verdict of this session's mode"),
+            ("cepa modes menu discovery", "the numbered menu of common actions of a mode"),
             ("cepa modes --json", "the table as JSON (pt-BR keys), for code"),
         ],
         exit_codes=[
@@ -229,7 +292,7 @@ def main():
                     help="the numbered menu of common actions of MODE, filtered by this repo")
     ap.add_argument("--no-color", "--sem-cor", action="store_true", dest="no_color",
                     help="no terminal colors")
-    args = ap.parse_args()
+    args = ap.parse_args(subcommand_argv(sys.argv[1:]))
 
     color = not args.no_color and sys.stdout.isatty()
     if not color:

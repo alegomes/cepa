@@ -1,0 +1,23 @@
+key: CS-9-reforma-de-nomes
+queue: reforma-de-nomes
+item: CS-9
+status: complete
+head_commit: e6436fa
+diff_range: 787571e..e6436fa
+criteria:
+  - id: AC1
+    text: "CS-9: em `cepa help`, `dor` e `hotspots` aparecem depois de uma linha 'frozen' e depois de todos os outros subcomandos; em docs/commands.md e docs/cepa-cli.md, os comandos `/maestro:*`, `cepa dor` e `cepa hotspots` estao numa secao final 'Frozen' (docs/spec/reforma-de-nomes-dos-comandos.md, ### CS-9)."
+    altitude: cli
+    surface: "launcher common/bin/cepa (`cepa help`, caminho python e fallback de shell) via subprocesso; docs/commands.md e docs/cepa-cli.md lidos do disco"
+    clauses:
+      help_frozen_after_all_others: "complete. Teste roda o launcher real; bloco `subcommands:` tem exatamente uma linha `frozen:`, depois dela so dor e hotspots (nessa ordem), antes dela todos os outros subcomandos na ordem esperada. Conferi a mao a saida de `cepa help`: ... tokens / frozen: / dor / hotspots."
+      shell_fallback: "complete. O teste cobre tambem o help do fallback sem python3."
+      docs_final_frozen_section: "complete. Em ambos os docs a ultima secao `## ` e `Frozen` (commands.md linha 308; cepa-cli.md linha 354) com /maestro:program-plan, /maestro:run, /maestro:resume, cepa dor e cepa hotspots; nenhum aparece em linha de tabela ou titulo de referencia antes dela."
+    test: "tests/test_help_frozen_block.py (novo); tests/test_cepa_help_layout.py (ajustado)"
+    layer: "cli (subprocesso do launcher real, sem mock) + leitura dos docs"
+    evidence: verified
+    run: "python3 tests/test_help_frozen_block.py -> 'all ok' (exit 0); python3 tests/test_cepa_help_layout.py -> 'all green'; python3 tests/test_commands_catalog.py -> 'tudo ok (68 comandos no catalogo)'. Suite completa nao rodada (do supervisor). Esses scripts nao imprimem contagem 'N passed'; a contagem esta nas linhas 'ok' individuais (dezenas de checks impressos)."
+independent_checks:
+  docs_updated: "docs/commands.md e docs/cepa-cli.md alterados no diff; common/hooks/_clihelp.py e common/bin/cepa (fallback) alterados."
+gap: null
+suggested_followup: null

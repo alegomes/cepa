@@ -79,7 +79,7 @@ In order, first hit wins:
    fine, and is what `/common:queue <project_key> --from-jira` does — but the
    name is a label, not a lookup key.
 
-This is the same rule `cepa-queue status` / `cepa-queue queue` apply when no name
+This is the same rule `cepa-queue status` / `cepa-queue batch` apply when no name
 is given (one queue → that one; several → `há mais de uma fila; diga qual`, i.e. "there is more than one queue; say which"), so
 the prose and the tool cannot drift.
 

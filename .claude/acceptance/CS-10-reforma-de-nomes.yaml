@@ -1,0 +1,20 @@
+key: CS-10-reforma-de-nomes
+queue: reforma-de-nomes
+item: CS-10
+status: complete
+head_commit: 7a3720b
+diff_range: 9de7620..7a3720b
+criteria:
+  - id: AC1
+    text: "a familia worktree usa `<slice>` em todos os comandos (red test: le o argument-hint de worktree-start/merge/discard/rename/label.md e falha se citar <name>, <new-name> ou <old-name>)"
+    altitude: application
+    surface: "frontmatter argument-hint dos cinco common/commands/worktree-*.md, lidos do disco"
+    test: "tests/test_worktree_slice_placeholder.py"
+    layer: "leitura direta dos arquivos de comando, sem mock; tambem corpo dos comandos, hints dos hooks de sessao e linhas worktree de docs/commands.md"
+    evidence: verified
+    run: "python3 tests/test_worktree_slice_placeholder.py -> 75 'ok', 0 'FAIL', 'all passed', exit 0 (N=75 > 0). Vizinho: python3 tests/test_isolated_telemetry.py -> 'all telemetria-isolada tests passed', exit 0."
+    independent_checks: "grep de <name>/<new-name>/<old-name> em worktree-*.md e nos dois hooks: zero. Hints conferidos: start/merge/discard <slice>, rename <new-slice> [<old-slice>], label [<purpose>] (sem placeholder antigo). Unica ocorrencia de <name> em docs/commands.md e /maestro:run, fora da familia."
+    status: complete
+    gap: null
+gap: null
+suggested_followup: null

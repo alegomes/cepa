@@ -39,7 +39,7 @@ def check(name, cond, detail=""):
 
 
 def queue_json(root):
-    q = subprocess.run([sys.executable, str(CEPA_PLAN), "queue", "fila",
+    q = subprocess.run([sys.executable, str(CEPA_PLAN), "batch", "fila",
                         "--max", "5", "--repo", str(root), "--json"],
                        capture_output=True, text=True, env=ENV)
     return q.returncode, json.loads(q.stdout or "{}"), q.stderr

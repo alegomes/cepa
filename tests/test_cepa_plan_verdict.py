@@ -24,6 +24,7 @@ Run: python3 tests/test_cepa_plan_verdict.py
 
 import datetime
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -313,11 +314,16 @@ with tempfile.TemporaryDirectory() as tmp:
     check("--text collapsed to one line",
           r.returncode == 0 and lines[5] == f"- Segunda bem nova · refinada em {TODAY}", lines[5])
 
-    # --help lists verdict under writing.
+    # --help lists verdict in the "used by the commands" block (CS-8 of
+    # reforma-de-nomes replaced the old writing/reading groups with
+    # "for you" / "used by the commands"; verdict is not an owner verb).
     h = run("--help").stdout
-    writing = h.split("  writing:", 1)[-1].split("\n  reading:", 1)[0]
-    check("--help lists verdict under writing",
-          "  writing:" in h and "verdict" in writing, h)
+    for_you = h.split("  for you:", 1)[-1].split("\n  used by the commands:", 1)[0]
+    used = h.split("  used by the commands:", 1)[-1].split("\noptions:", 1)[0]
+    check("--help lists verdict under used by the commands",
+          "  used by the commands:" in h
+          and re.search(r"^\s+verdict\s", used, re.M) is not None
+          and re.search(r"^\s+verdict\s", for_you, re.M) is None, h)
 
 print()
 if FAILURES:

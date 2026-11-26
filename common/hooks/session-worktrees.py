@@ -70,8 +70,8 @@ def main():
                   "rewrite it from elsewhere until that window lands or closes.")
         print()
 
-    print("Land: /common:worktree-merge <name> · "
-          "Drop: /common:worktree-discard <name> · "
+    print("Land: /common:worktree-merge <slice> · "
+          "Drop: /common:worktree-discard <slice> · "
           "Label: /common:worktree-label <purpose> · "
           "(finished+clean worktrees are auto-removed on next session start)")
     print('A “quoted” caption is a label you set; "(assunto≈ …)" is a weak '

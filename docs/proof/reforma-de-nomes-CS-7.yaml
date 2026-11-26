@@ -1,0 +1,58 @@
+schema_version: 2
+card: reforma-de-nomes-CS-7
+review: 3
+verdict: proven
+reviewed_at: 2026-11-25T23:30:00-03:00
+base_commit: 6f3d63b
+head_commit: d280e9f
+issue_type: Feature
+repo_kind: harness            # repo Python + sh (cepa), não Quarkus. Superfície = CLI `cepa intent ...` e `cepa modes ...`
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-intent (ações step/edit, ajuda por ação, OPTS/ACTION_HELP, recusa de item de plano step/edit)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes rodam o lançador `cepa intent` real como subprocesso
+    - class: "common/bin/cepa-modes (SUBCOMMANDS, subcommand_argv, ajuda por subcomando)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "docs/cepa-cli.md"
+      module: docs
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+  review_2_to_3: "2404cbc..d280e9f mudou só tests/test_cepa_modes_subcommands.py (+4 linhas, o assert da frase do --json) e o arquivo de prova; o código-fonte (common/bin/*) é idêntico ao das revisões 1 e 2 (confirmado por git diff --stat 2404cbc..HEAD)."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "M13 (o sobrevivente da revisão 2): trocar `the list as JSON, for code` por `the list as JSON` em common/bin/cepa-modes:242 -> tests/test_cepa_modes_subcommands.py rc=1, falha 'ajuda de `menu`: frase do --json'. Agora VERMELHO."
+        - "I7 (remover a recusa `edit não aceita --step`, cepa-intent:658) -> tests/test_cepa_intent_subcommands.py rc=1, falha '`edit --purpose X --reason Y --step 2` sai 2 e não escreve'. Continua VERMELHO."
+        - "M5 (tirar `--sem-cor` da lista de chaves antes do subcomando, cepa-modes:224) -> tests/test_cepa_modes_subcommands.py rc=1, 3 falhas (`--sem-cor purposes|exit|menu`). Continua VERMELHO."
+        - "M16 (cepa-modes, `nargs=None if arg == \"MODE\" else \"?\"` -> `nargs=None` na ajuda de `exit`): classificado EQUIVALENTE na revisão 2 (diff da saída de `cepa modes exit --help` idêntico, o `usage=` é explícito); não há comportamento a fixar, não conta como sobrevivente. Não reexecutado: o código-fonte não mudou."
+        - "Herdado das revisões 1 e 2 (fonte idêntica, testes só ganharam um assert): 44 das perturbações da revisão 2 vermelhas, mais os 19 de texto de ajuda e B1..B11."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs7c HEAD` (HEAD=d280e9f); base verde: `python3 tests/test_cepa_modes_subcommands.py` -> `tudo ok`, `python3 tests/test_cepa_intent_subcommands.py` -> `tudo ok`. Cada perturbação por sed no worktree, `python3 tests/<arquivo>.py`, rc lido (rc=1 = RED), restaurada com `git checkout --`: M13 rc=1, I7 rc=1, M5 rc=1. Worktree removido (`git worktree remove --force /tmp/proof-cs7c`); árvore principal limpa. tests/run-all.sh não rodado.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "M13, I7 e M5, os comportamentos/frases antes sem teste, foram quebrados no HEAD e deixaram os testes de subcomandos rc=1: executados e observados por teste."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff só reescreve subcomando em flag já existente e imprime ajuda; os valores continuam passando pelos mesmos leitores e recusas do CLI (nenhuma entrada nova de fora)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature, não Bug."
+changed_behaviour_not_pinned: []
+build_completo: "delegado ao supervisor do run (tests/run-all.sh); não rodado por mim, por instrução."
+routing_reason: >-
+  O único sobrevivente da revisão 2 (a frase da opção `--json` na ajuda de `cepa modes menu`, M13) agora deixa o teste vermelho quando quebrado; I7 e M5 continuam vermelhos e a base está verde. M16 é equivalente (saída idêntica byte a byte). O código-fonte não mudou desde a revisão 2, então as demais perturbações (todas vermelhas) continuam valendo. Nenhum nível assumido, pulado ou sobrevivente: PROVEN.

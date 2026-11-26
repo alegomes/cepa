@@ -38,7 +38,7 @@ silent preflight: nothing is printed unless something needs you.
 | You want to... | Command |
 |---|---|
 | Check the harness installation | `cepa doctor` |
-| Know what mode you are in and what closes it | `cepa modes`, `cepa modes --exit` |
+| Know what mode you are in and what closes it | `cepa modes`, `cepa modes exit` |
 | Record or advance the session's intent | `cepa intent` |
 | Write, inspect or reconcile the single-track queue | `cepa queue <subcommand>` |
 | Run the queue unattended for a time window | `cepa run <queue> --for 12h` |
@@ -49,8 +49,6 @@ silent preflight: nothing is printed unless something needs you.
 | See the harness's own numbers | `cepa metrics`, `cepa metrics scorecard` |
 | See where a session's time or tokens went | `cepa clock`, `cepa tokens` |
 | Ask the autonomy file whether an action asks or does | `cepa autonomy classify ...` |
-| Gate a parallel-waves plan before forking | `cepa dor <plan.yaml>` |
-| Find a repo's registry files before planning waves | `cepa hotspots <repo>` |
 | Measure test coverage of a conversational command | `cepa promptcov <cmd.md> <test.py>` |
 
 `cepa intencao` and `cepa modos` (the old names of `intent` and `modes`) are
@@ -158,27 +156,6 @@ That pair is the launcher's preflight. The live check against Jira is not
 here (no MCP in a script): `/common:doctor --live` delegates it. Exit `0` all
 ok, `1` warnings, `2` failures. See [harness-ops.md](harness-ops.md).
 
-### `cepa-dor`
-
-Definition of Ready for the slices of a parallel-waves `plan.yaml`: `READY`
-or `NOT-READY` per slice, with the gaps named. Read-only; the intake gate that
-`/maestro:program-plan` iterates with you.
-
-```
-cepa-dor <plan.yaml> [--wave N] [--fork-point REF] [--repo DIR] [--json]
-                     [--enforcement-zone GLOB ...]
-```
-
-Checks: schema version and `mode: parallel-waves` (a single-track queue is
-refused); at least four demands; surfaces disjoint from the other slices on
-the plan's registry files (an intersection elsewhere is a warning, not a
-veto); nothing inside the enforcement zone; an acceptance criterion (an
-executable `acceptance_cmd` in a `.claude/no-build` repo); an observable
-Given/When/Then or a declared `acceptance_form: substrate`; no open
-strategic decision; minimum context; green baseline at the fork point. Exit
-`0` all READY, `1` READY with warnings, `2` some NOT-READY or invalid plan.
-See [maestro.md](maestro.md).
-
 ### `cepa-feedback`
 
 The harness's own complaint notebook. The ledger is global
@@ -196,21 +173,6 @@ cepa-feedback triage <id> --destination "<where>" [--note ...] [--queue QUEUE --
 `cepa-queue add`. Exit `0` ok, `2` invalid usage, `3` unknown id, `4` already
 triaged. The slash command is `/common:feedback`.
 
-### `cepa-hotspots`
-
-Measures a repository's registry files ("arquivos-cartório"): the files
-almost every demand writes to, which a wave plan must declare in
-`cartorios:` so `cepa-dor` can veto overlapping surfaces. Method: replay each
-pair of real merges of the history with `git merge-tree`, count a point per
-file that conflicts, rank. Without enough history it returns an empty list
-and says why, never a heuristic.
-
-```
-cepa-hotspots <repo> [--ref REF] [--min-pairs N] [--limit N] [--json]
-```
-
-Exit `0` list produced (even empty), `1` insufficient history, `2` error.
-
 ### `cepa-intent`
 
 The single writer of `.claude/session-intent`: purpose, stopping point, a plan
@@ -219,13 +181,16 @@ of one to six steps, and the cursor. Readers: `/common:whereami`,
 
 ```
 cepa-intent write --purpose "..." --by-when "..." --plan "step 1" "step 2" [--reason ...]
-cepa-intent --step N                  # step N is now in progress; M+1 = plan fulfilled
-cepa-intent --purpose "..." --reason "..."
-cepa-intent --plan "a" "b" [--reason ...]
-cepa-intent [show] | continue | state | close
+cepa-intent step N                    # step N is now in progress; M+1 = plan fulfilled
+cepa-intent edit --purpose "..." --reason "..."
+cepa-intent edit --plan "a" "b" [--reason ...]
+cepa-intent [show] | continue | state | close | remind | reminders
+cepa-intent <action> --help           # the help of that action only
 ```
 
-Rules: a plan item has no `:`; with `write`, the action comes before `--plan`
+Rules: the flag forms `--step N`, `--purpose` and `--plan` with no action are
+still accepted (the same as `step N` and `edit`); a plan item has no `:`; with
+`write` or `edit`, the action comes before `--plan`
 (which consumes everything up to the next option); `--purpose` and a rewrite
 over an existing intent require `--reason`; `continue` adopts another
 session's intent; `state` and `close` only read. The old action names
@@ -257,10 +222,14 @@ session hook reads. For each mode: what it is for, what it enters with, what
 it produces, what closes it, and the mechanical gate.
 
 ```
-cepa-modes [<mode>] [--purposes] [--exit] [--json] [--no-color]
+cepa-modes [<mode>] [--json] [--no-color]
+cepa-modes purposes
+cepa-modes exit [<mode>]
+cepa-modes menu <mode>
 ```
 
-`--exit` is the exit verdict of this session's mode, read from the disk: `0`
+The flag forms `--purposes`, `--exit` and `--menu <mode>` are still accepted.
+`exit` is the exit verdict of this session's mode, read from the disk: `0`
 closed, `1` still open, `2` the mode has no mechanical verdict. The slash
 command is `/common:modes`; the design is in
 [modos-de-trabalho.md](modos-de-trabalho.md).
@@ -278,7 +247,7 @@ and hands the list here; `/common:queue-run` and `cepa-run` execute it;
 |---|---|
 | Sources (read only, return JSON) | `from-spec <spec.md>`, `from-epic <epic.md> --cycle N`, `from-triage <handoff.json\|->` |
 | Writing | `write <name> (--items F \| --from-spec F \| --from-epic F --cycle N \| --from-triage F) [--source ...] [--when YYYY-MM-DD] [--on-missing refuse\|keep\|drop] [--dry-run]`, `add <name> <id> --title ... [--before ID --why ...] [--blocked-by ID,ID]`, `migrate [<name> \| --all] [--dry-run]`, `check-name <name>`, `validate <name \| file> [--repo DIR]` |
-| Reading | `queue <name> [--max N]`, `ready`, `status [<name>] [--status S]`, `show <name>`, `epics [--brief]`, `promote <name> [--when ...]`, `order <name> --keys K1,K2` |
+| Reading | `batch <name> [--max N]`, `ready`, `status [<name>] [--status S]`, `show <name>`, `epics [--brief]`, `promote <name> [--when ...]`, `order <name> --keys K1,K2` |
 | One item's cycle | `start <name> <id> [--commit]`, `finish <name> <id> --status done\|blocked\|pending --evidence ... [--human-pending ROUTE --route-kind owner-task\|external-block\|open-question --question ... --if-yes ... --if-no ...] [--question ...] [--asked\|--ready\|--blocker\|--if-yes\|--if-no TEXT] [--commit]`, `reword-route <name> <id> --route-kind K --question Q --if-yes Y --if-no N [--replace]` (fills what an old open route lacks, or with `--replace` overwrites a question the owner marked unclear with `?`; never touches `human_pending`, `status` or `evidence`), `answer <name> <id> --answer ... [--keep \| --drop] [--force] [--author ...] [--no-commit]`, `annotate <name> <id> --note TEXT [--author WHO]` (appends a dated note to a `done` or `dropped` item whose evidence went stale; never touches `evidence`, `status` or `head_commit`, and `show` prints the notes before the evidence) |
 | Against the Jira board | `reconcile <name> --board FILE [--apply]`, `landed --board FILE [--into REF]`, `divergence <name> [--board FILE] [--backlog FILE]` |
 
@@ -381,3 +350,55 @@ cepa run digest <run>.jsonl [--result-max 3000]
 ```
 
 Exit `0` ok, `2` the ledger does not exist.
+
+## Frozen
+
+Frozen commands still work, but nobody starts new work on them. The Maestro
+(`/maestro:program-plan`, `/maestro:run`, `/maestro:resume`) has been frozen
+since 2026-10-08: its session fork and merge train will be absorbed by the
+`cepa run` conductor ([maestro.md](maestro.md)). `cepa dor` and `cepa hotspots`
+only serve its parallel-waves plans. `cepa help` lists the two last, under a
+`frozen:` line, and the slash commands are in the Frozen section of
+[commands.md](commands.md).
+
+| You want to... | Command |
+|---|---|
+| Plan, run or resume a parallel-waves program | `/maestro:program-plan`, `/maestro:run`, `/maestro:resume` |
+| Gate a parallel-waves plan before forking | `cepa dor <plan.yaml>` |
+| Find a repo's registry files before planning waves | `cepa hotspots <repo>` |
+
+### `cepa-dor`
+
+Definition of Ready for the slices of a parallel-waves `plan.yaml`: `READY`
+or `NOT-READY` per slice, with the gaps named. Read-only; the intake gate that
+`/maestro:program-plan` iterates with you.
+
+```
+cepa-dor <plan.yaml> [--wave N] [--fork-point REF] [--repo DIR] [--json]
+                     [--enforcement-zone GLOB ...]
+```
+
+Checks: schema version and `mode: parallel-waves` (a single-track queue is
+refused); at least four demands; surfaces disjoint from the other slices on
+the plan's registry files (an intersection elsewhere is a warning, not a
+veto); nothing inside the enforcement zone; an acceptance criterion (an
+executable `acceptance_cmd` in a `.claude/no-build` repo); an observable
+Given/When/Then or a declared `acceptance_form: substrate`; no open
+strategic decision; minimum context; green baseline at the fork point. Exit
+`0` all READY, `1` READY with warnings, `2` some NOT-READY or invalid plan.
+See [maestro.md](maestro.md).
+
+### `cepa-hotspots`
+
+Measures a repository's registry files ("arquivos-cartório"): the files
+almost every demand writes to, which a wave plan must declare in
+`cartorios:` so `cepa-dor` can veto overlapping surfaces. Method: replay each
+pair of real merges of the history with `git merge-tree`, count a point per
+file that conflicts, rank. Without enough history it returns an empty list
+and says why, never a heuristic.
+
+```
+cepa-hotspots <repo> [--ref REF] [--min-pairs N] [--limit N] [--json]
+```
+
+Exit `0` list produced (even empty), `1` insufficient history, `2` error.

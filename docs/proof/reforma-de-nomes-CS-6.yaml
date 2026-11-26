@@ -1,0 +1,84 @@
+schema_version: 2
+card: reforma-de-nomes-CS-6
+verdict: proven
+reviewed_at: 2026-11-25T11:30:00-03:00
+base_commit: 78a0f4f
+head_commit: e7ac47b
+issue_type: Feature
+repo_kind: harness            # repo Python + sh (cepa), não Quarkus. Superfície = CLI cepa/cepa-run e hooks em common/hooks
+review: 2
+scope:
+  changed_classes:
+    - class: "common/hooks/_cepaenv.py (tabela RENAMED, OLD_VALUES, get)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null   # os testes carregam o módulo real
+    - class: "common/bin/cepa (cepa_env e _cepa_old_name, gêmeo em sh; linha CEPA_PERMISSIONS=classificador removida em e7ac47b)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # o teste roda o lançador real como subprocesso; só o binário claude é falso
+    - class: "common/bin/cepa-run (leituras CEPA_RUN_*)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/* (write-mode-gate, session-chain, refactor-gate, reflection-gate, session-mode, session-launch, session-registry, session-subject, autonomous-checkpoint, _wtlib, _state, _tui)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+    - class: "board-flow/bin/waivers.py (_autonomous_run_id, propose)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "build-hex/hooks/path-lock.py, docs-topology/hooks/path-lock.py, review-gate/hooks/no-direct-main.py e push-nudge.py (função _env)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+    - class: "bash-path-lock.py (_run_card) e cópias geradas"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/sh, sem pitest; perturbação em worktree detached descartável (/tmp/proof-cs6-b em e7ac47b), removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "Baseline em e7ac47b com `env -u CEPA_UNTIL_RUN` (o ambiente do run traz o nome antigo): test_env_names_in_english.py + test_waivers.py + test_env_manifest_path.py = 64 passed; test_cepa_slice_isolation.py = all ok."
+        - "S1 (linha CEPA_PERMISSIONS=classificador do cepa_env): a linha foi REMOVIDA no e7ac47b. Verifiquei que é código morto: grep em todo o repo (fora de docs/.claude/tests) acha um único leitor, common/bin/cepa:698 `[ \"$(cepa_env CEPA_PERMISSIONS bypass)\" = \"bypass\" ]`, que só compara com bypass; classifier e classificador caem no mesmo ramo. Os dois usos de _cepaenv.OLD_VALUES (lado Python) seguem testados. Perturbar o leitor (nome errado, ou printenv sem reserva) fica RED (test_launcher_permissions_values_end_to_end + test_launcher_old_mode_name_alone_skips_the_mode)."
+        - "S2 session-subject.py CEPA_WT_SUBJECT, _THRESHOLD, _MINPROMPTS (nome novo +X): RED test_subject_hook_switch_and_thresholds; CEPA_WT_NUDGE: RED test_subject_hook_nudge_and_softcap."
+        - "S3 autonomous-checkpoint.py CEPA_AUTONOMOUS_RUN_ID: RED test_autonomous_checkpoint_run_id."
+        - "S4 CEPA_MODE em refactor-gate, reflection-gate, session-mode: RED test_mode_switch_refactor_gate / _reflection_gate / _session_mode_hook (1 failed cada)."
+        - "S5 session-registry CEPA_WT_CLAIM: RED test_session_registry_adopts_the_claim; _state CEPA_HEARTBEAT_ORPHAN: RED test_state_orphan_heartbeat_constant."
+        - "S6 waivers._autonomous_run_id: ordem invertida RED test_propose_new_run_id_wins_over_the_old; só nome novo RED test_propose_records_the_run_id_old_name_alone; só nome antigo RED (7 failed, incl. test_run_id_appears_in_proposto_por)."
+        - "S7 _env(new, old) nos 4 leitores (build-hex path-lock, docs-topology path-lock, no-direct-main, push-nudge): para cada um, ordem invertida, sem a antiga e sem a nova = 12 perturbações, todas RED (test_pathlock_debug_log_new_and_old, test_review_gate_allow_direct_new_and_old, test_review_gate_nudge_new_and_old)."
+        - "S8 _run_card em bash-path-lock.py de build-hex e docs-topology: ordem invertida, só nova, só antiga = 6 perturbações, todas RED (test_bash_path_lock_card_in_every_copy)."
+        - "S9 cepa-run CEPA_RUN_HEARTBEAT: RED test_cepa_run_tunables (asserção, não estouro de tempo); CEPA_RUN_ANSWER_WAIT e CEPA_RUN_RESET_MARGIN também RED no mesmo teste."
+        - "Amostra nova: write-mode-gate CEPA_MODE RED; session-chain CEPA_CHAIN RED; _wtlib CEPA_SEED RED; _tui CEPA_COLOR RED; session-launch CEPA_WT_ROOT (4 failures) e CEPA_WT_SLICE (5 failures) RED em tests/test_cepa_slice_isolation.py (verdes nos 64 de test_env_names, vizinho os mata); _cepaenv.get sem a tradução de valor RED; sh cepa_env sem a tradução substitui->replace RED; leitor CEPA_PERMISSIONS errado RED; _cepa_old_name sem a linha CEPA_PERMISSIONS RED (3 failed)."
+        - "Total: 47 perturbações (14 + 18 + 13 + 2; uma tentativa não casou o trecho e não conta); 0 sobreviventes. Cada RED foi lido pelo nome do teste que falhou: todos são testes comportamentais, não só a varredura estática."
+        - "Não perturbadas: as 5 cópias restantes do bash-path-lock (geradas do mesmo gabarito); ajuda/docs; os ~70 testes ajustados em e7ac47b/d1cb3cd (vizinhos)."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs6-b HEAD`; cada perturbação: `cd /tmp/proof-cs6-b && python3 -I .perturb.py <arquivo> '<trecho>' '<novo>' -- python3 -m pytest -q -rf tests/test_env_names_in_english.py tests/test_waivers.py` (com CEPA_UNTIL_RUN removido do ambiente; test_cepa_slice_isolation.py via `python3 tests/test_cepa_slice_isolation.py`), onde .perturb.py troca o trecho, roda o comando e restaura com `git checkout -- <arquivo>`. `git worktree remove --force /tmp/proof-cs6-b`; `git worktree list | grep -c proof` -> 0. tests/run-all.sh não rodado.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "cada leitor alterado (S2 a S9 e a amostra nova) foi quebrado e deixou vermelho um teste que o executa; S1 é linha removida, sem leitor que a observe (grep: único leitor compara com bypass). Sem ferramenta de cobertura."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff só renomeia variáveis de ambiente e mantém as antigas como reserva; nenhuma entrada nova vinda de fora é lida (o valor continua sendo texto de ambiente do dono)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature, não Bug."
+changed_behaviour_not_pinned:
+  - "docs/*.md, docs/cepa-cli.md, comandos .md: só texto, cobertos pela varredura test_live_text_shows_only_new_names_outside_compatibility_lines."
+  - "5 cópias geradas do bash-path-lock não perturbadas uma a uma."
+build_completo: "delegado ao supervisor do run (tests/run-all.sh); não rodado por mim, por instrução."
+routing_reason: >-
+  Os 9 grupos que sobreviveram na revisão 1 (S1 a S9) agora ficam vermelhos quando quebrados, cada um por um teste que liga o gancho com a variável nova e com a antiga, e a amostra nova nos leitores (47 perturbações (14 + 18 + 13 + 2; uma tentativa não casou o trecho e não conta) no total) também. S1 foi resolvido apagando a tradução do valor classificador no lançador, e confirmei que ela não tinha efeito: o único leitor de CEPA_PERMISSIONS compara com bypass. PROVEN.

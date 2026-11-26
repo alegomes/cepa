@@ -25,8 +25,8 @@ flag), whether it will merge cleanly or **conflict** (predicted via
 2. If the user asks about a specific worktree, read its details from the same
    output; don't re-derive by hand.
 
-3. Close with the relevant next step: `/common:worktree-merge <name>` to land
-   one, `/common:worktree-discard <name>` to drop a dead end. Note that
+3. Close with the relevant next step: `/common:worktree-merge <slice>` to land
+   one, `/common:worktree-discard <slice>` to drop a dead end. Note that
    finished+clean worktrees are auto-removed on the next session start, so the
    list only ever shows things that still need a decision.
 

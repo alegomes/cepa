@@ -100,7 +100,7 @@ def write_queue(d, item_list, given_name="fila"):
 
 
 def queue(d, given_name="fila", *extra):
-    r = run(d, "queue", given_name, "--json", "--repo", ".", *extra)
+    r = run(d, "batch", given_name, "--json", "--repo", ".", *extra)
     return r, (json.loads(r.stdout) if r.returncode == 0 else None)
 
 
@@ -453,7 +453,7 @@ def test_command_contract(base):
     # without backticks: the instruction cannot depend on how markdown formatted it
     clean = f.replace("`", "").lower()
     check("manda montar o lote pelo cepa-queue, não pelo olho",
-          "cepa-queue queue" in f,
+          "cepa-queue batch" in f,
           "sem isso a ordem da fila volta a ser interpretada a cada run")
     check("reserva o item antes de executar", "cepa-queue start" in f)
     check("registra o desfecho de cada item", "cepa-queue finish" in f)

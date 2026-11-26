@@ -17,17 +17,21 @@ Why a single writer, instead of the agent editing the YAML:
 Format, reader and serializer live in `_modes.py`; there is no second parser here.
 
 The old actions and options (gravar/mostrar/continuar/estado/encerrar,
---proposito/--para-quando/--plano/--passo/--motivo) are still accepted.
+--proposito/--para-quando/--plano/--passo/--motivo) are still accepted, and so
+are the flag forms `--step N` and `--purpose`/`--plan` with no action (the same
+as `step N` and `edit`).
 
 Usage:
     cepa-intent write --purpose "..." --by-when "..." \
                       --plan "levantar" "escrever" "decidir"
-    cepa-intent --step 2            # step 1 is done, step 2 is in progress
-    cepa-intent --step 4            # with a 3-item plan: plan fulfilled
-    cepa-intent --purpose "novo" --reason "o dono reformulou"
-    cepa-intent --plan "a" "b" [--reason "..."]
-    # with `write`, the subcommand ALWAYS comes before `--plan` (which consumes
-    # everything up to the next option): `--plan a b write` would be the item "write".
+    cepa-intent step 2              # step 1 is done, step 2 is in progress
+    cepa-intent step 4              # with a 3-item plan: plan fulfilled
+    cepa-intent edit --purpose "novo" --reason "o dono reformulou"
+    cepa-intent edit --plan "a" "b" [--reason "..."]
+    # with `write` or `edit`, the subcommand ALWAYS comes before `--plan` (which
+    # consumes everything up to the next option): `--plan a b write` would be the
+    # item "write".
+    cepa-intent write --help        # the help of that action only (every action has one)
     cepa-intent [show]            # prints the current intent
     cepa-intent continue          # adopts, in this session, another session's intent
     cepa-intent state             # read-only: classifies and prints (whereami)
@@ -392,11 +396,13 @@ def land_session(root, current, m, step):
 
 
 # Actions: the old (pt-BR) name -> the new one. The old name is still accepted
-# and is mapped right after parsing.
+# and is mapped right after parsing. `step` and `edit` are new (CS-7): they are
+# the subcommand forms of `--step N` and of the action-less `--purpose`/`--plan`.
 ACTIONS = {"gravar": "write", "mostrar": "show", "continuar": "continue",
            "estado": "state", "encerrar": "close",
            "lembrar": "remind", "lembretes": "reminders"}
-ACTION_NAMES = tuple(ACTIONS) + tuple(ACTIONS.values())
+NEW_ACTIONS = ("step", "edit")
+ACTION_NAMES = tuple(ACTIONS) + tuple(ACTIONS.values()) + NEW_ACTIONS
 
 
 class _ActionChoices(tuple):
@@ -407,7 +413,166 @@ class _ActionChoices(tuple):
         return value in ACTION_NAMES
 
 
+# Every option is defined ONCE here; the main parser and each per-action help
+# add the ones they need by name (`add_opt`), so the text is never written twice.
+OPTS = {
+    "context": (("--context",), dict(
+        dest="context", metavar="SENTENCE",
+        help="remind: ONE sentence on where/why it came up (mandatory)")),
+    "at": (("--at",), dict(
+        dest="at", metavar="YYYY-MM-DD",
+        help="remind: the date of the reminder (default: today, UTC)")),
+    "purpose": (("--purpose", "--proposito"), dict(
+        dest="purpose", metavar="TEXT",
+        help="what this session wants to deliver, in one sentence")),
+    "by_when": (("--by-when", "--para-quando"), dict(
+        dest="by_when", metavar="WHEN",
+        help="the stopping point: a date, a time or a condition")),
+    "plan": (("--plan", "--plano"), dict(
+        nargs="+", dest="plan", metavar="STEP",
+        help="the steps, one argument per step (1 to %d, no ':')" % M.PLAN_MAX)),
+    "step": (("--step", "--passo"), dict(
+        type=int, dest="step", metavar="N",
+        help="the step IN PROGRESS (1-based); M+1 = plan fulfilled "
+             "(the same as the `step` action)")),
+    "landed": (("--landed",), dict(
+        action="store_true",
+        help="only with close: the wrap-up merged and pushed, so the "
+             "plan is fulfilled (cursor to M+1)")),
+    "reason": (("--reason", "--motivo"), dict(
+        dest="reason", metavar="TEXT",
+        help="why the intent changed; required with --purpose and when "
+             "rewriting with write")),
+}
+
+
+def add_opt(ap, name):
+    flags, kw = OPTS[name]
+    ap.add_argument(*flags, **kw)
+
+
+_EXIT_OK = (0, "ok")
+_EXIT_USAGE = (2, "invalid usage, not a git repo, or a writer rule refused (nothing written)")
+_EXIT_NONE = (3, "no intent recorded in this worktree")
+
+# One small help per action: summary, description, the positional it takes (if
+# any), the options that apply to it, examples and exit codes.
+ACTION_HELP = {
+    "write": dict(
+        summary="records a new intent: purpose, stopping point and plan",
+        description=(
+            "Over an existing intent it requires --reason: the previous purpose and\n"
+            "plan go to the history. The action comes BEFORE --plan (which consumes\n"
+            "everything up to the next option). A plan has 1 to %d items, none with ':'."
+            % M.PLAN_MAX),
+        opts=["purpose", "by_when", "plan", "reason"],
+        examples=[('cepa intent write --purpose "..." --by-when "today" --plan "survey" "write" "decide"',
+                   "record an intent"),
+                  ('cepa intent write --purpose "..." --by-when "today" --plan "a" "b" --reason "new scope"',
+                   "rewrite an existing one")],
+        exits=[_EXIT_OK, _EXIT_USAGE,
+               (4, "an intent exists and --reason is missing")]),
+    "show": dict(
+        summary="prints the current intent (the default with no action)",
+        description="Read-only: the summary line, purpose, stopping point, plan and cursor.",
+        opts=[],
+        examples=[("cepa intent show", "print it"), ("cepa intent", "the same")],
+        exits=[_EXIT_OK, _EXIT_NONE]),
+    "continue": dict(
+        summary="adopts, in this session, the intent recorded by another session",
+        description=("Swaps only the session id and the branch for the current ones;\n"
+                     "purpose, plan and cursor stay as they were."),
+        opts=[],
+        examples=[("cepa intent continue", "answer \"I'll continue\" to the session hook")],
+        exits=[_EXIT_OK, _EXIT_USAGE, _EXIT_NONE]),
+    "state": dict(
+        summary="read-only: classifies the intent and prints the ready-made answer",
+        description=("The first line is state: empty, normal, fulfilled or other-session.\n"
+                     "What /common:whereami, /common:next and /common:recap run. It ends\n"
+                     "with the owner's reminders, when there are any."),
+        opts=[],
+        examples=[("cepa intent state", "classify it")],
+        exits=[(0, "ok, in every state"), _EXIT_USAGE]),
+    "close": dict(
+        summary="what /common:wrap-up runs: end-of-session telemetry",
+        description=("Only reads, and exits 0 in every state. With --landed (after merge\n"
+                     "and push) it marks the plan fulfilled (cursor to M+1)."),
+        opts=["landed"],
+        examples=[("cepa intent close", "end-of-session telemetry"),
+                  ("cepa intent close --landed", "the wrap-up landed: plan fulfilled")],
+        exits=[(0, "ok, always"), _EXIT_USAGE]),
+    "step": dict(
+        summary="moves the cursor: step N is now in progress",
+        description=("N is 1 to M (the plan size); M+1 means the plan is fulfilled. The same\n"
+                     "as `--step N`. Emits intent.cursor_advanced."),
+        positional=("N", "the step in progress, 1-based; M+1 = plan fulfilled"),
+        opts=[],
+        examples=[("cepa intent step 2", "step 1 done, step 2 in progress"),
+                  ("cepa intent step 4", "with a 3-item plan: plan fulfilled")],
+        exits=[_EXIT_OK, (2, "invalid usage, or N outside the plan (nothing written)"),
+               _EXIT_NONE]),
+    "edit": dict(
+        summary="changes the purpose or the plan of the existing intent",
+        description=("--purpose requires --reason (the previous purpose goes to the history).\n"
+                     "--plan replaces the plan, resets the cursor to step 1 and keeps the\n"
+                     "previous plan in the history. At least one of the two is required.\n"
+                     "The same as the action-less `--purpose` / `--plan`."),
+        opts=["purpose", "plan", "reason"],
+        examples=[('cepa intent edit --purpose "new" --reason "the owner rephrased it"',
+                   "change the purpose"),
+                  ('cepa intent edit --plan "a" "b"', "new plan, cursor back to step 1")],
+        exits=[_EXIT_OK, _EXIT_USAGE, _EXIT_NONE]),
+    "remind": dict(
+        summary="records an owner reminder with its date and a context sentence",
+        description=("Appends to .claude/reminders of the main clone, which every worktree\n"
+                     "sees. --context is mandatory: without it the owner cannot recognize\n"
+                     "the decision later."),
+        positional=("TEXT", "the reminder, in the owner's words"),
+        opts=["context", "at"],
+        examples=[('cepa intent remind "revisitar o ADR 14" --context "spec de contratos"',
+                   "record it (today's date)")],
+        exits=[_EXIT_OK, _EXIT_USAGE]),
+    "reminders": dict(
+        summary="read-only: lists the owner's reminders, with date and context",
+        description="`state` ends with the same block when there is at least one.",
+        opts=[],
+        examples=[("cepa intent reminders", "list them")],
+        exits=[_EXIT_OK, _EXIT_USAGE]),
+}
+
+
+def action_parser(name):
+    spec = ACTION_HELP[name]
+    ap = _clihelp.Parser(prog=f"cepa intent {name}", summary=spec["summary"],
+                         description=spec["description"], examples=spec["examples"],
+                         exit_codes=spec["exits"],
+                         see_also=["cepa intent --help: all the actions"])
+    if "positional" in spec:
+        ap.add_argument(spec["positional"][0], metavar=spec["positional"][0],
+                        help=spec["positional"][1])
+    for o in spec["opts"]:
+        add_opt(ap, o)
+    return ap
+
+
+def maybe_action_help(argv):
+    """`cepa intent <action> --help` (or `<action> help`): the help of that
+    action only. Prints and exits 0; returns when it is not a help request."""
+    if not argv:
+        return
+    name = ACTIONS.get(argv[0], argv[0])
+    if name not in ACTION_HELP:
+        return
+    rest = argv[1:]
+    # For `remind` the word after the action is the reminder text, so `help` and
+    # `ajuda` stay text there; only --help / -h ask for help.
+    word_is_help = name != "remind" and rest[:1] and rest[0] in _clihelp.HELP_WORDS
+    if word_is_help or any(x in ("-h", "--help") for x in rest):
+        action_parser(name).parse_args(["--help"])
+
+
 def main():
+    maybe_action_help(sys.argv[1:])
     ap = _clihelp.Parser(
         prog="cepa intent",
         description=(
@@ -417,9 +582,11 @@ def main():
             "only this command writes it. Readers: /common:whereami, /common:next,\n"
             "/common:recap and the session hook.\n"
             "\n"
-            "ACTION is one of:\n"
+            "ACTION is one of (`cepa intent ACTION --help` shows only that one):\n"
             "  write      records a new intent; over an existing one it requires --reason\n"
             "  show       prints the current intent (the default with no action)\n"
+            "  step N     moves the cursor: step N is in progress (M+1 = plan fulfilled)\n"
+            "  edit       changes the purpose (--purpose, needs --reason) or the plan (--plan)\n"
             "  continue   adopts in this session the intent recorded by another session\n"
             "  state      read-only: classifies it (empty, normal, fulfilled, other-session)\n"
             "  close      what /common:wrap-up runs: end-of-session telemetry\n"
@@ -427,56 +594,44 @@ def main():
             "  remind     records an owner reminder with its date and a context sentence\n"
             "  reminders  read-only: lists the owner's reminders (state ends with them too)\n"
             "\n"
-            "With no action, --step/--purpose/--plan edit the existing intent. A plan\n"
-            "item has no ':'; with `write`, the action comes BEFORE --plan (which\n"
-            "consumes everything up to the next option). The write is atomic and\n"
-            "creates .claude/ if missing."),
+            "The flag forms `--step N` and `--purpose`/`--plan` with no action are still\n"
+            "accepted. A plan item has no ':'; with `write` or `edit`, the action comes\n"
+            "BEFORE --plan (which consumes everything up to the next option). The write\n"
+            "is atomic and creates .claude/ if missing."),
         examples=[
             ('cepa intent write --purpose "..." --by-when "today" --plan "survey" "write" "decide"',
              "record an intent"),
-            ("cepa intent --step 2", "step 1 done, step 2 in progress"),
-            ("cepa intent --step 4", "with a 3-item plan: plan fulfilled"),
-            ('cepa intent --purpose "new" --reason "the owner rephrased it"', "change the purpose"),
-            ('cepa intent --plan "a" "b"', "new plan, cursor back to step 1"),
+            ("cepa intent step 2", "step 1 done, step 2 in progress"),
+            ("cepa intent step 4", "with a 3-item plan: plan fulfilled"),
+            ('cepa intent edit --purpose "new" --reason "the owner rephrased it"', "change the purpose"),
+            ('cepa intent edit --plan "a" "b"', "new plan, cursor back to step 1"),
             ("cepa intent", "show the current intent"),
             ("cepa intent state", "classify it, read-only"),
             ("cepa intent close --landed", "the wrap-up landed: plan fulfilled"),
             ('cepa intent remind "revisitar o ADR 14" --context "spec de contratos"',
              "record an owner reminder (today's date)"),
             ("cepa intent reminders", "list the owner's reminders"),
+            ("cepa intent write --help", "the help of one action"),
         ],
         exit_codes=[
             (0, "ok (state and close always exit 0 when called without extra options)"),
             (2, "invalid usage, not a git repo, or a writer rule refused (nothing written)"),
-            (3, "no intent recorded (show, continue, --step/--purpose/--plan)"),
+            (3, "no intent recorded (show, continue, step, edit)"),
             (4, "an intent exists and --reason is missing to rewrite it with write"),
         ],
         see_also=["/common:whereami: reads the intent and the cursor",
                   "common/hooks/_modes.py: format, reader and serializer of the file"])
-    ap.add_argument("--context", dest="context", metavar="SENTENCE",
-                    help="remind: ONE sentence on where/why it came up (mandatory)")
-    ap.add_argument("--at", dest="at", metavar="YYYY-MM-DD",
-                    help="remind: the date of the reminder (default: today, UTC)")
-    ap.add_argument("action", nargs="?", choices=_ActionChoices(ACTIONS.values()),
+    add_opt(ap, "context")
+    add_opt(ap, "at")
+    ap.add_argument("action", nargs="?", choices=_ActionChoices(
+                        tuple(ACTIONS.values()) + NEW_ACTIONS),
                     metavar="ACTION",
-                    help="one of write, show, continue, state, close, remind or reminders "
-                         "(default: show)")
+                    help="one of write, show, step, edit, continue, state, close, remind "
+                         "or reminders (default: show)")
     ap.add_argument("text", nargs="?", metavar="TEXT",
-                    help="only for remind: the reminder, in the owner's words")
-    ap.add_argument("--purpose", "--proposito", dest="purpose", metavar="TEXT",
-                    help="what this session wants to deliver, in one sentence")
-    ap.add_argument("--by-when", "--para-quando", dest="by_when", metavar="WHEN",
-                    help="the stopping point: a date, a time or a condition")
-    ap.add_argument("--plan", "--plano", nargs="+", dest="plan", metavar="STEP",
-                    help="the steps, one argument per step (1 to %d, no ':')" % M.PLAN_MAX)
-    ap.add_argument("--step", "--passo", type=int, dest="step", metavar="N",
-                    help="the step IN PROGRESS (1-based); M+1 = plan fulfilled")
-    ap.add_argument("--landed", action="store_true",
-                    help="only with close: the wrap-up merged and pushed, so the "
-                         "plan is fulfilled (cursor to M+1)")
-    ap.add_argument("--reason", "--motivo", dest="reason", metavar="TEXT",
-                    help="why the intent changed; required with --purpose and when "
-                         "rewriting with write")
+                    help="remind: the reminder, in the owner's words; step: the step number N")
+    for o in ("purpose", "by_when", "plan", "step", "landed", "reason"):
+        add_opt(ap, o)
     a = ap.parse_args()
     a.action = ACTIONS.get(a.action, a.action)  # the old name becomes the new one
 
@@ -488,7 +643,22 @@ def main():
         refuse("não estou num repositório git; a intenção vive em <repo>/.claude/.")
     current = M.read_intent(root)
     exists = bool(current) and bool(current.get("purpose")) and bool(current.get("plan"))
-    edits = a.step is not None or (a.action is None and (a.purpose or a.plan))
+    if a.action == "step":  # `step N` is the subcommand form of `--step N`
+        if a.step is not None:
+            refuse("diga o passo uma vez só: `step N` ou `--step N`.")
+        if a.text is None:
+            refuse("step exige o número do passo: `cepa-intent step N`.")
+        try:
+            a.step = int(a.text)
+        except ValueError:
+            refuse(f"passo {a.text!r} não é um número; use `cepa-intent step N`.")
+        a.text = None
+    if a.action == "edit":
+        if a.step is not None:
+            refuse("edit não aceita --step; para mover o cursor use `step N`.")
+        if not (a.purpose or a.plan):
+            refuse("edit exige --purpose (com --reason) e/ou --plan.")
+    edits = a.step is not None or (a.action in (None, "edit") and (a.purpose or a.plan))
 
     if a.landed and a.action != "close":
         refuse("--landed só vale com `close`.")
@@ -499,7 +669,7 @@ def main():
         return
 
     if a.text is not None and a.action != "remind":
-        refuse("o texto posicional só vale com `remind`.")
+        refuse("o texto posicional só vale com `remind` (e o número com `step`).")
     if a.action != "remind" and (a.context is not None or a.at is not None):
         refuse("--context e --at só valem com `remind`.")
 

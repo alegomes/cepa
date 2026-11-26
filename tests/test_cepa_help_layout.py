@@ -103,7 +103,11 @@ def test_launcher():
     layout("cepa", ref, "cepa")
     check("cepa: launcher flags section", "\nlauncher flags:\n" in ref, ref)
     listed = subcommands(ref)
-    check("cepa: lists every subcommand", listed == commands(), (listed, commands()))
+    # Frozen ones (CS-9) come last, after a `frozen:` line; tests/test_help_frozen_block.py
+    # owns that rule, this one only wants every subcommand listed.
+    frozen = ["dor", "hotspots"]
+    want = [c for c in commands() if c not in frozen] + frozen
+    check("cepa: lists every subcommand", listed == want, (listed, want))
     p = run(CEPA, "help", "nope")
     check("cepa help <unknown>: exit 2", p.returncode == 2 and "is not a subcommand"
           in p.stderr, p.stderr)

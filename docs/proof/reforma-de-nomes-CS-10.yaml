@@ -1,0 +1,55 @@
+schema_version: 2
+card: reforma-de-nomes-CS-10
+review: 3
+verdict: proven
+reviewed_at: 2026-11-26T03:00:00-03:00
+base_commit: 9de7620
+head_commit: 7a3720b            # inclui o isolamento de telemetria do teste (7a3720b)
+issue_type: Feature
+repo_kind: harness              # repo Python + sh (cepa), nao Quarkus. Superficie = texto dos comandos, dicas dos hooks e docs/commands.md
+scope:
+  changed_classes:
+    - { class: "common/commands/worktree-discard.md (hint + corpo)", module: commands, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/worktree-rename.md (hint + corpo)", module: commands, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/worktree-label.md (corpo)", module: commands, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/worktree-list.md (corpo)", module: commands, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/session-registry.py (dica worktree-merge/discard)", module: hooks, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/session-worktrees.py (dica worktree-merge/discard)", module: hooks, external_observable: true, substituted_by_double: null }
+    - { class: "docs/commands.md (linha do /common:worktree-rename)", module: docs, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "P1 session-registry.py volta ao 9de7620 -> `2 failure(s)`. VERMELHO."
+        - "P2 session-worktrees.py volta ao 9de7620 -> `2 failure(s)`. VERMELHO."
+        - "P3 docs/commands.md volta ao 9de7620 -> `1 failure(s)`. VERMELHO."
+        - "P4 worktree-discard.md volta ao 9de7620 -> `3 failure(s)`. VERMELHO."
+        - "P5 worktree-rename.md volta ao 9de7620 -> `6 failure(s)`. VERMELHO."
+        - "P6 worktree-label.md volta ao 9de7620 -> `1 failure(s)`. VERMELHO."
+        - "P7 worktree-list.md volta ao 9de7620 -> `1 failure(s)`. VERMELHO."
+        - "Base inteira (common/ e docs/ em 9de7620, teste do HEAD) -> `16 failure(s)`. VERMELHO."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs10c 7a3720b`. Verde em 7a3720b: `python3 tests/test_worktree_slice_placeholder.py` -> `all passed`. Cada perturbacao por `git -C /tmp/proof-cs10c checkout 9de7620 -- <arquivo>`, teste rodado, restaurada por `git checkout 7a3720b -- <arquivo>`; apos P7 `git status --short` vazio e teste `all passed`. P1 e P2 foram disparadas em paralelo no mesmo worktree (contagens 2 e 2 iguais as da review anterior, em 9324158; sem contaminacao aparente); P3..P7 em sequencia. Vizinhos verdes em 7a3720b: test_slash_command_rename.py `all ok`; test_ghost_worktrees_warning.py `all passed`; test_commands_catalog.py `tudo ok (68 comandos no catalogo)`; test_isolated_telemetry.py `all telemetria-isolada tests passed` (a varredura que falhou no build completo agora passa). Worktree removido (`git worktree remove --force`). tests/run-all.sh nao rodado.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "Todos os arquivos alterados de producao (4 comandos, 2 hooks, 1 linha de docs) foram revertidos ao base e deixaram o teste vermelho (P1..P7)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff so renomeia um placeholder em texto de comandos, dicas de hooks e uma linha de doc; nao le nenhuma entrada nova de fora."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature, nao Bug. (Vermelho no base coberto em P-base: 16 falhas.)"
+changed_behaviour_not_pinned: []
+build_completo: "delegado ao supervisor do run (tests/run-all.sh); nao rodado por mim, por instrucao."
+routing_reason: >-
+  A familia /common:worktree-* chama o argumento de <slice> (<new-slice>/<old-slice> no rename) nos hints, nos corpos, nas dicas dos dois hooks e em docs/commands.md. Sete reversoes deliberadas ao base deixaram o teste vermelho, a base inteira da 16 falhas, e o commit 7a3720b (isolamento de telemetria) manteve o teste verde e a varredura test_isolated_telemetry passando. Nenhum nivel assumido, pulado ou sobrevivente: PROVEN.

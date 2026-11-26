@@ -1,6 +1,6 @@
 ---
 description: Give the current (or a named) session worktree a meaningful name. Auto-isolated sessions get neutral names like session/0611-1430; rename one to session/<something-readable> once you know what it's about. Optional — naming is never required.
-argument-hint: <new-name>  [<old-name>]   (omit old-name to rename the worktree you're currently in)
+argument-hint: <new-slice>  [<old-slice>]   (omit old-slice to rename the worktree you're currently in)
 interaction: routine
 ---
 
@@ -19,19 +19,19 @@ never a problem, just less pretty.
 
 ## Variables
 
-- `$ARGUMENTS` — `<new-name>` and optionally `<old-name>`:
+- `$ARGUMENTS` — `<new-slice>` and optionally `<old-slice>`:
   - one arg → rename the session worktree you're currently in to
-    `session/<new-name>`.
-  - two args → rename `session/<old-name>` to `session/<new-name>`.
+    `session/<new-slice>`.
+  - two args → rename `session/<old-slice>` to `session/<new-slice>`.
 
 ## Steps
 
 1. **Resolve the target.** With one arg, confirm the current branch is a
    `session/*` branch (`git rev-parse --abbrev-ref HEAD`); if not, ask which
-   worktree to rename. With two args, locate `session/<old-name>`.
+   worktree to rename. With two args, locate `session/<old-slice>`.
 
-2. **Guard.** Refuse if `session/<new-name>` already exists. Normalize
-   `<new-name>` to kebab-case.
+2. **Guard.** Refuse if `session/<new-slice>` already exists. Normalize
+   `<new-slice>` to kebab-case.
 
 3. **Rename the branch.** `git branch -m session/<old> session/<new>`
    (or `git branch -m session/<new>` when renaming the current branch).
@@ -43,7 +43,7 @@ never a problem, just less pretty.
    match, and the dashboard shows both.
 
 5. **Report.** Confirm the new name and remind that merge/discard now use it:
-   `/common:worktree-merge <new-name>`.
+   `/common:worktree-merge <new-slice>`.
 
 ## Notes
 

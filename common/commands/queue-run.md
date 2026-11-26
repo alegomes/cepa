@@ -62,7 +62,7 @@ as having no queue, which is the state this document exists to get rid of.
 **The batch is built by `cepa-queue`, not by your eye.** While the rules for
 "what can run now" lived in a command's prose, the only possible test was to
 grep the prose — which proves the command PROMISES to respect the order, never
-that a run did. Run `cepa-queue queue` and execute what it returned.
+that a run did. Run `cepa-queue batch` and execute what it returned.
 
 **Never edit `queue.yaml` by hand** — not with `Write`, not with `sed`. Marking
 goes through `cepa-queue start` / `cepa-queue finish`, which refuse an outcome
@@ -185,7 +185,7 @@ tree. You don't resolve this by hand (`cepa-queue` resolves it by the same rule)
 but you need to know, because it is the path that goes in the report.
 
 ```
-python3 common/bin/cepa-queue queue <nome> --max N --repo . --json
+python3 common/bin/cepa-queue batch <nome> --max N --repo . --json
 ```
 
 What comes back: `batch` (the items runnable now, in queue order, each with the
@@ -207,9 +207,9 @@ The stop reasons, and what each one wants from you:
 
 (Transition window: the reasons used to be written in Portuguese — `teto`, `fim-da-fila`, `bloqueado`, `reservado`, `depende-de-adiado`, `bloqueado-antes`. The JSON still carries the old spelling in `reason_pt` next to `reason`, and readers accept both.)
 
-And `queue` also returns `deferred` — the **deferred** items, which don't run
+And `batch` also returns `deferred` — the **deferred** items, which don't run
 now and **don't stop the batch**. Deferring is an execution decision: the item
-leaves this batch and comes back in the next `queue`, and the order recorded in
+leaves this batch and comes back in the next `batch`, and the order recorded in
 `queue.yaml` does not change. The four reasons:
 
 | deferral reason | what happened |
@@ -221,7 +221,7 @@ leaves this batch and comes back in the next `queue`, and the order recorded in
 
 A fourth situation is neither deferral nor stop: an `in_progress` whose owning
 session **no longer exists** (dead pid on the same host, or a reservation from
-another machine older than 24h) is an **orphan reservation** — `queue` returns it
+another machine older than 24h) is an **orphan reservation** — `batch` returns it
 as runnable, with a warning, and `start` claims it. The alternative was the queue
 locking forever because of a run that ended. An `in_progress` **with no recorded
 owner** (queue marked before this field existed), on the other hand, is deferred
@@ -286,7 +286,7 @@ For each item of the batch, in order:
      `--max`, because no work ran on it.
 
      The reservation is signed: `start` records `claimed_by` (session, pid, host,
-     tree, time), which is what answers, in the next `queue`, whether it is a live
+     tree, time), which is what answers, in the next `batch`, whether it is a live
      session or a dead run. If the output says it recovered an **orphan
      reservation** (it prints "reserva órfã recuperada"), say so in the report —
      it means a previous run died in the middle of that item, and what it left
@@ -594,7 +594,7 @@ A single report, in the `plain-report` format, written in Brazilian Portuguese
   the cards transitioned by this run (In Progress, In Review and stuck ones
   commented), and the ones left pending transition. Without a board, one line saying the queue status is
   self-reported.
-- **Where the batch stopped and what is left:** the `stop` of the next `queue` and
+- **Where the batch stopped and what is left:** the `stop` of the next `batch` and
   how many pending items remain.
 - **What now:** `/common:next` for the next step, or this command again if the
   stop was `cap`.

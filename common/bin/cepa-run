@@ -29,7 +29,7 @@ and doesn't know what a card is. Whoever does all of that is `/common:queue-run`
 which already have the needed state machine, built and tested:
 
   - `cepa-queue start` reserves the item by SIGNING the reservation (session, pid, host);
-  - `cepa-queue queue` returns as executable the reservation whose pid died — the
+  - `cepa-queue batch` returns as executable the reservation whose pid died — the
     "orphan reservation". It is what keeps a dead subprocess from locking the queue
     forever, and it is exactly the guarantee a supervisor needs;
   - `cepa-queue finish` records the outcome, including the route that only the human closes.
@@ -146,7 +146,7 @@ over a drop that was neither the item's nor the account's. The rule:
 ## When it stops
 
 It stops at the first of: deadline reached, queue with no executable item (the reason comes from
-`cepa-queue queue` — `end-of-queue`, `blocked`, `blocked-before`; the old Portuguese spelling is still accepted), circuit breaker,
+`cepa-queue batch` — `end-of-queue`, `blocked`, `blocked-before`; the old Portuguese spelling is still accepted), circuit breaker,
 or account usage ceiling whose wait doesn't fit in the window.
 An item that comes out `blocked` STOPS the batch — a `cepa-queue` rule, inherited from
 `/board-flow:drain`: re-running measures the same stall.
@@ -785,21 +785,21 @@ LIVE_LINE_INTERVAL = float(E.get("CEPA_RUN_LIVE_LINE", "30"))
 # ── reading the queue ───────────────────────────────────────────────────────
 
 def query_queue(name, repo, max_items=1):
-    """`cepa-queue queue --max <max_items> --json` (1 by default). Returns (data, error)."""
+    """`cepa-queue batch --max <max_items> --json` (1 by default). Returns (data, error)."""
     try:
         p = subprocess.run(
-            [sys.executable, str(CEPA_PLAN), "queue", name,
+            [sys.executable, str(CEPA_PLAN), "batch", name,
              "--max", str(max_items), "--repo", str(repo), "--json"],
             capture_output=True, text=True, timeout=60)
     except subprocess.TimeoutExpired:
-        return None, "`cepa-queue queue` did not answer within 60s"
+        return None, "`cepa-queue batch` did not answer within 60s"
     if p.returncode != 0:
         return None, (p.stderr or p.stdout or "").strip() or \
-            f"`cepa-queue queue` exited {p.returncode}"
+            f"`cepa-queue batch` exited {p.returncode}"
     try:
         return json.loads(p.stdout), None
     except json.JSONDecodeError as e:
-        return None, f"`cepa-queue queue` did not return JSON ({e})"
+        return None, f"`cepa-queue batch` did not return JSON ({e})"
 
 
 def query_ready(repo, unreadable=None):
@@ -3395,7 +3395,7 @@ def auto_land(repo, queue, run_id, state_path, ledger, left=None):
 # section (`owner_summary.impede`). Until 2026-11-01 it said "travou por algo
 # de fora do código" for every blocked item, and on WEGO-2381 that was false:
 # the work was done and two rules disagreed.
-# Transition window (same method as f26a765/84fde4d): `cepa-queue queue` now emits
+# Transition window (same method as f26a765/84fde4d): `cepa-queue batch` now emits
 # the English reason; the old Portuguese spelling is still accepted on input
 # (older queue output, saved `deferred` lists). Mirrors cepa-queue REASON_ALIASES.
 REASON_ALIASES = {
@@ -7403,7 +7403,7 @@ def _main(argv=None):
                    else "--dangerously-skip-permissions ON"))
     # Forecast (CS-1): `data` is capped at `--max 1`, so the count comes from a
     # second, uncapped read of the same queue. Even uncapped it is not the whole
-    # queue: `cepa-queue queue` stops walking at the first item whose `blocked_by`
+    # queue: `cepa-queue batch` stops walking at the first item whose `blocked_by`
     # is unmet and outside the batch (`stop = blocked`), so the items after it are
     # in neither `batch` nor `deferred`. The count is what runs / waits for the
     # owner now, up to that first unmet dependency. If the read fails, say so
@@ -7780,7 +7780,7 @@ def _main(argv=None):
         child = (flight or {}).get("pid_filho")
         # The child runs in its own session and would go on by itself: a card changing
         # with nobody to run the full build afterwards. Dead, its reservation
-        # becomes orphan and the next `queue` returns the item.
+        # becomes orphan and the next `batch` returns the item.
         terminated = (terminate_group(child, min(SIGTERM_GRACE, 10))
                      if child else None)
         log_event({"evento": "run_interrompido", "sinal": name,
@@ -7793,7 +7793,7 @@ def _main(argv=None):
               + f". Recorded in {short_path(ledger, repo)}.", file=sys.stderr)
         if child:
             print(f"  the child process (pid {child}) "
-                  + ("was terminated; the next `queue` returns the item as an "
+                  + ("was terminated; the next `batch` returns the item as an "
                      "orphan reservation." if terminated else
                      "did NOT die, and goes on without a supervisor."), file=sys.stderr)
         print(f"  to run the missing build and leave the run ready to "
@@ -8992,6 +8992,6 @@ if __name__ == "__main__":
         sys.exit(main())
     except KeyboardInterrupt:
         print("\ncepa-run: interrupted. The in-flight item may have stayed "
-              "reserved — the next `queue` returns it as an orphan reservation.",
+              "reserved — the next `batch` returns it as an orphan reservation.",
               file=sys.stderr)
         sys.exit(130)

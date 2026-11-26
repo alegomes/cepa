@@ -485,11 +485,27 @@ def _load_hook(fname):
         sys.path.remove(str(HOOKS))
 
 
+ALL_NAMES = (set(OLD_TO_NEW) | set(OLD_TO_NEW.values())
+             | set(OTHER_PLUGINS_OLD_TO_NEW) | set(OTHER_PLUGINS_OLD_TO_NEW.values()))
+
+
+def _clean_env(extra=None):
+    """A child environment built explicitly: NEITHER the new nor the old name of any
+    variable under test leaks in from the shell that runs the suite (that shell is
+    often inside a `cepa run` and exports the old CEPA_UNTIL_RUN=1), then `extra`."""
+    env = {k: v for k, v in os.environ.items()
+           if k not in ALL_NAMES and not k.startswith(("CEPA_", "CLAUDE_WT_", "CCW_"))}
+    # every CEPA_ name is dropped (CEPA_PROMPT=... leaks too); telemetry stays isolated
+    env["CEPA_TELEMETRY_DIR"] = os.path.join(tempfile.gettempdir(), "cepa-telemetry-tests")
+    env.update(extra or {})
+    return env
+
+
 def _with_env(env, fn):
     saved = dict(os.environ)
     try:
         for k in list(os.environ):
-            if k in OLD_TO_NEW or k in OLD_TO_NEW.values():
+            if k in ALL_NAMES:
                 del os.environ[k]
         os.environ.update(env)
         return fn()
@@ -506,6 +522,8 @@ def _gate_reaches_work(fname, patch, env, argv=(), stdin=""):
     """True when `main()` of the hook goes past its on/off switch under `env`."""
     import io
     mod = _load_hook(fname)
+    wt = sys.modules.get("_wtlib")
+    saved = dict(vars(wt)) if wt else {}     # the patch must not leak into other tests
     patch(mod)
 
     def go():
@@ -521,7 +539,11 @@ def _gate_reaches_work(fname, patch, env, argv=(), stdin=""):
             return False
         finally:
             sys.stdin, sys.argv = old_stdin, old_argv
-    return _with_env(env, go)
+    try:
+        return _with_env(env, go)
+    finally:
+        if wt:
+            vars(wt).update(saved)
 
 
 def _boom(*a, **k):
@@ -707,6 +729,412 @@ def test_live_text_shows_only_new_names_outside_compatibility_lines():
             if rx.search(line) and not COMPAT_WORDS.search(line) and not in_table:
                 offenders.append(f"{rel}:{i}: {rx.search(line).group(1)}")
     assert not offenders, "old names in live text:\n  " + "\n  ".join(offenders[:40])
+
+
+# --- 7. each reader RUNS: the new name takes effect, the old name alone takes
+#        effect, and with both set to different values the new one wins ----------
+
+def _assert_precedence(effect, new, old, a, b):
+    """`effect(env_extra)` runs the real reader under a clean environment plus
+    `env_extra` and returns what is observable. `a` and `b` are two values that
+    produce different observations."""
+    out_a, out_b = effect({new: a}), effect({new: b})
+    assert out_a != out_b, f"{new}: {a!r} and {b!r} are not told apart"
+    assert effect({old: a}) == out_a, f"{old} alone ({a!r}) does not take effect"
+    assert effect({old: b}) == out_b, f"{old} alone ({b!r}) does not take effect"
+    assert effect({new: a, old: b}) == out_a, f"{new}={a!r} must beat {old}={b!r}"
+    assert effect({new: b, old: a}) == out_b, f"{new}={b!r} must beat {old}={a!r}"
+
+
+def _git_repo(td, name="repo"):
+    repo = Path(td) / name
+    repo.mkdir(parents=True)
+    subprocess.run(["git", "-C", str(repo), "init", "-q", "-b", "main"], check=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t",
+                    "commit", "-q", "--allow-empty", "-m", "i"], check=True)
+    return repo.resolve()
+
+
+def _run_hook_script(script, payload, env_extra, cwd, args=()):
+    return subprocess.run([sys.executable, str(script), *args], input=json.dumps(payload),
+                          capture_output=True, text=True, timeout=60, cwd=str(cwd),
+                          env=_clean_env(env_extra))
+
+
+# S4: the CEPA_MODE=off switch of the three hooks that did not have an executing test
+
+def test_mode_switch_refactor_gate():
+    with tempfile.TemporaryDirectory() as td:
+        repo = _git_repo(td)
+        (repo / ".claude").mkdir()
+        (repo / ".claude" / "session-mode").write_text("mode: refactor\nbudget: null\n")
+        payload = {"cwd": str(repo), "tool_name": "Edit",
+                   "tool_input": {"file_path": "e2e/checkout.spec.ts"}}
+
+        def effect(env):
+            r = _run_hook_script(HOOKS / "refactor-gate.py", payload, env, repo)
+            return r.returncode
+        assert effect({}) == 2     # the gate is armed: an external test edit blocks
+        _assert_precedence(effect, "CEPA_MODE", "CEPA_MODO", "off", "on")
+
+
+def test_mode_switch_reflection_gate():
+    loose = ("recorte: fronteiras\nfechado: true\nachados:\n"
+             "  - o_que: \"o resolver duplica a query\"\n    onde: \"X.java:88\"\n")
+    with tempfile.TemporaryDirectory() as td:
+        payload = {"cwd": td, "tool_name": "Write",
+                   "tool_input": {"file_path": ".claude/reflection/f.yaml", "content": loose}}
+
+        def effect(env):
+            return _run_hook_script(HOOKS / "reflection-gate.py", payload, env, td).returncode
+        assert effect({}) == 2
+        _assert_precedence(effect, "CEPA_MODE", "CEPA_MODO", "off", "on")
+
+
+def test_mode_switch_session_mode_hook():
+    with tempfile.TemporaryDirectory() as td:
+        repo = _git_repo(td)
+        (repo / ".claude").mkdir()
+        (repo / ".claude" / "session-mode").write_text("mode: construction\n")
+        payload = {"cwd": str(repo), "prompt": "hello", "session_id": "s1",
+                   "hook_event_name": "UserPromptSubmit"}
+
+        def effect(env):
+            r = _run_hook_script(HOOKS / "session-mode.py", payload, env, repo)
+            assert r.returncode == 0, r.stderr
+            return bool(r.stdout.strip())
+        assert effect({}) is True
+        _assert_precedence(effect, "CEPA_MODE", "CEPA_MODO", "off", "on")
+
+
+# S2: the subject hook (CEPA_WT_SUBJECT*, CEPA_WT_NUDGE, CEPA_WT_SESSION_SOFTCAP)
+
+def _subject_effect(prompts, centroid, prompt, fixed=None):
+    td = tempfile.mkdtemp()
+    repo = _git_repo(td)
+    sys.path.insert(0, str(HOOKS))
+    try:
+        import _wtlib as L
+    finally:
+        sys.path.remove(str(HOOKS))
+
+    def effect(env):
+        L.write_entry(str(repo), "sess-1", {
+            "session_id": "sess-1", "cwd": str(repo), "pid": os.getpid(),
+            "subject": {"centroid": dict(centroid), "prompts": prompts, "last_flag": -10}})
+        payload = {"session_id": "sess-1", "cwd": str(repo), "prompt": prompt}
+        r = _run_hook_script(HOOKS / "session-subject.py", payload,
+                             dict(fixed or {}, **env), repo)
+        assert r.returncode == 0, r.stderr
+        return bool(r.stdout.strip())
+    return effect
+
+
+_PIVOT = "quarterly invoices reconciliation spreadsheet deadline"
+_SEEN = {"alpha": 3, "beta": 3, "gamma": 3, "delta": 3}
+
+
+def test_subject_hook_switch_and_thresholds():
+    pivot = _subject_effect(5, _SEEN, _PIVOT)
+    assert pivot({}) is True      # the baseline: a pivot is flagged
+    _assert_precedence(pivot, "CEPA_WT_SUBJECT", "CLAUDE_WT_SUBJECT", "off", "on")
+    _assert_precedence(pivot, "CEPA_WT_SUBJECT_THRESHOLD", "CLAUDE_WT_SUBJECT_THRESHOLD",
+                       "0.0", "0.9")
+    _assert_precedence(pivot, "CEPA_WT_SUBJECT_MINPROMPTS", "CLAUDE_WT_SUBJECT_MINPROMPTS",
+                       "99", "1")
+
+
+def test_subject_hook_nudge_and_softcap():
+    long_session = _subject_effect(7, _SEEN, "alpha beta", fixed={"CEPA_WT_SESSION_SOFTCAP": "5"})
+    assert long_session({}) is True
+    _assert_precedence(long_session, "CEPA_WT_NUDGE", "CLAUDE_WT_NUDGE", "off", "on")
+    capped = _subject_effect(7, _SEEN, "alpha beta")
+    assert capped({}) is False    # 7 prompts is under the default cap of 45
+    _assert_precedence(capped, "CEPA_WT_SESSION_SOFTCAP", "CLAUDE_WT_SESSION_SOFTCAP",
+                       "99", "5")
+
+
+# S3: the autonomous checkpoint writes into docs/autonomous/<run id>/state.yaml
+
+def test_autonomous_checkpoint_run_id():
+    with tempfile.TemporaryDirectory() as td:
+        for rid in ("RUN-A", "RUN-B"):
+            d = Path(td) / "docs" / "autonomous" / rid
+            d.mkdir(parents=True)
+            (d / "state.yaml").write_text("entries:\n")
+        payload = {"cwd": td, "tool_name": "Task",
+                   "tool_input": {"subagent_type": "x", "description": "d"},
+                   "tool_response": {"content": "done"}}
+
+        def effect(env):
+            for rid in ("RUN-A", "RUN-B"):
+                (Path(td) / "docs" / "autonomous" / rid / "state.yaml").write_text("entries:\n")
+            r = _run_hook_script(HOOKS / "autonomous-checkpoint.py", payload, env, td)
+            assert r.returncode == 0, r.stderr
+            return [rid for rid in ("RUN-A", "RUN-B")
+                    if (Path(td) / "docs" / "autonomous" / rid / "state.yaml")
+                    .read_text() != "entries:\n"]
+        assert effect({}) == []
+        _assert_precedence(effect, "CEPA_AUTONOMOUS_RUN_ID", "CLAUDE_AUTONOMOUS_RUN_ID",
+                           "RUN-A", "RUN-B")
+
+
+# S5: the registry adopts the launcher's claim; the orphan-heartbeat constant
+
+def _load_hook_fresh(fname, env):
+    sys.path.insert(0, str(HOOKS))
+    try:
+        return _with_env(env, lambda: _load_hook(fname))
+    finally:
+        if str(HOOKS) in sys.path:
+            sys.path.remove(str(HOOKS))
+
+
+def test_session_registry_adopts_the_claim():
+    import contextlib
+    import io
+    with tempfile.TemporaryDirectory() as td:
+        repo = _git_repo(td)
+        sys.path.insert(0, str(HOOKS))
+        try:
+            import _wtlib as L
+        finally:
+            sys.path.remove(str(HOOKS))
+
+        def effect(env):
+            for c in ("claim-a", "claim-b"):
+                L.write_entry(str(repo), c, {"cwd": str(repo), "branch": "main", "marker": c})
+            full = dict(env, HOME=td, CEPA_TELEMETRY_DIR=str(Path(td) / "tel"))
+
+            def go():
+                mod = _load_hook("session-registry.py")
+                with contextlib.redirect_stdout(io.StringIO()):
+                    mod.on_start("sess-1", str(repo))
+                return (L.find_entry(str(repo), "sess-1") or {}).get("marker")
+            return _with_env(full, go)
+        assert effect({}) is None
+        _assert_precedence(effect, "CEPA_WT_CLAIM", "CLAUDE_WT_CLAIM", "claim-a", "claim-b")
+
+
+def _module_attr(path, attr, env, loader="script"):
+    def go():
+        if loader == "script":
+            m = _load_script(path, "cs6_" + path.name.replace("-", "_"))
+        else:
+            sys.path.insert(0, str(HOOKS))
+            try:
+                spec = importlib.util.spec_from_file_location("cs6_" + path.stem, path)
+                m = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(m)
+            finally:
+                sys.path.remove(str(HOOKS))
+        return getattr(m, attr)
+    return _with_env(env, go)
+
+
+def test_state_orphan_heartbeat_constant():
+    def effect(env):
+        return _module_attr(HOOKS / "_state.py", "HEARTBEAT_STALE_SEC", env, "hook")
+    assert effect({}) == 900.0
+    _assert_precedence(effect, "CEPA_HEARTBEAT_ORPHAN", "CEPA_HEARTBEAT_ORFA", "111", "222")
+
+
+# S9: every tunable of `cepa run`
+
+RUN_CONSTANTS = [
+    ("ANSWER_WAIT_SEC", "CEPA_RUN_ANSWER_WAIT", "CEPA_UNTIL_ESPERA_RESPOSTA"),
+    ("ANALYSIS_LIMIT_SEC", "CEPA_RUN_ANALYSIS_LIMIT", "CEPA_UNTIL_LIMITE_ANALISE"),
+    ("SIGTERM_GRACE", "CEPA_RUN_SIGTERM_GRACE", "CEPA_UNTIL_GRACA_SIGTERM"),
+    ("RESET_MARGIN", "CEPA_RUN_RESET_MARGIN", "CEPA_UNTIL_MARGEM_RESET"),
+    ("HEARTBEAT_INTERVAL", "CEPA_RUN_HEARTBEAT", "CEPA_UNTIL_HEARTBEAT"),
+    ("NETWORK_PROBE", "CEPA_RUN_NETWORK_PROBE", "CEPA_UNTIL_SONDA_REDE"),
+    ("PROBE_INTERVAL", "CEPA_RUN_PROBE_INTERVAL", "CEPA_UNTIL_SONDA_INTERVALO"),
+    ("LIVE_LINE_INTERVAL", "CEPA_RUN_LIVE_LINE", "CEPA_UNTIL_LINHA_VIVA"),
+    ("READER_CEILING_SEC", "CEPA_RUN_READER_CEILING", "CEPA_UNTIL_TETO_LEITURA"),
+]
+
+
+def test_cepa_run_tunables():
+    for attr, new, old in RUN_CONSTANTS:
+        a, b = ("host-a:1", "host-b:2") if attr == "NETWORK_PROBE" else ("11", "22")
+
+        def effect(env, attr=attr):
+            return _module_attr(BIN / "cepa-run", attr, env)
+        _assert_precedence(effect, new, old, a, b)
+
+
+def test_cepa_run_reader_and_color():
+    def reader(env):
+        def go():
+            m = _load_script(BIN / "cepa-run", "cs6_run_reader")
+            return m.reader_command({"id": "x"})[0]
+        return _with_env(env, go)
+    _assert_precedence(reader, "CEPA_RUN_READER", "CEPA_UNTIL_LEITOR", "/bin/reader-a", "/bin/reader-b")
+
+    def model(env):
+        def go():
+            m = _load_script(BIN / "cepa-run", "cs6_run_model")
+            cmd = m.reader_command({"id": "x"})[0]
+            return cmd[cmd.index("--model") + 1] if "--model" in cmd else None
+        return _with_env(env, go)
+    assert model({}) is None
+    _assert_precedence(model, "CEPA_RUN_READER_MODEL", "CEPA_UNTIL_MODELO_LEITOR", "m-a", "m-b")
+
+    class _Pipe:
+        def isatty(self):
+            return False
+
+    def run_color(env):
+        def go():
+            m = _load_script(BIN / "cepa-run", "cs6_run_color")
+            return m.Screen(_Pipe()).enabled
+        return _with_env(env, go)
+    _assert_precedence(run_color, "CEPA_RUN_COLOR", "CEPA_UNTIL_COR", "always", "never")
+
+    def tui_color(env):
+        def go():
+            sys.path.insert(0, str(HOOKS))
+            try:
+                spec = importlib.util.spec_from_file_location("cs6_tui", HOOKS / "_tui.py")
+                m = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(m)
+            finally:
+                sys.path.remove(str(HOOKS))
+            return m.Screen(_Pipe()).enabled
+        return _with_env(env, go)
+    _assert_precedence(tui_color, "CEPA_COLOR", "CEPA_COR", "always", "never")
+
+
+# S1: the launcher, end to end. The old VALUE `classificador` needs no translation:
+# only `bypass` (the default) arms the bypass flag, anything else is the classifier.
+
+def test_launcher_permissions_values_end_to_end():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        fake = td / "fake-claude"
+        fake.write_text('#!/bin/sh\nprintf "CLAUDE_ARGS:%s\\n" "$*"\n')
+        fake.chmod(0o755)
+        repo = _git_repo(td)
+
+        def effect(env):
+            r = subprocess.run([str(CEPA), "-p", "x"], capture_output=True, text=True,
+                               cwd=str(repo), timeout=60,
+                               env=_clean_env(dict(env, HOME=str(td), NO_COLOR="1",
+                                                   CEPA_PREFLIGHT="off", CEPA_MODE="off",
+                                                   CEPA_WT_CLAUDE_BIN=str(fake),
+                                                   CEPA_WORKTREE_HOME=str(td / "wt"))))
+            assert "CLAUDE_ARGS:" in r.stdout, (r.stdout, r.stderr)
+            return "--dangerously-skip-permissions" in r.stdout
+        assert effect({}) is True                                  # the default is bypass
+        assert effect({"CEPA_PERMISSIONS": "classificador"}) is False   # old value, new name
+        assert effect({"CEPA_PERMISSOES": "classificador"}) is False    # old value, old name
+        assert effect({"CEPA_PERMISSIONS": "classifier"}) is False
+        _assert_precedence(effect, "CEPA_PERMISSIONS", "CEPA_PERMISSOES", "bypass", "classifier")
+
+
+# S7: the `_env(new, old)` of the hooks of the other plugins
+
+def _plugin_name(hook):
+    return json.loads((hook.parent.parent / ".claude-plugin" / "plugin.json")
+                      .read_text(encoding="utf-8"))["name"]
+
+
+def test_pathlock_debug_log_new_and_old():
+    for rel, agent, prefix in (("build-hex/hooks/path-lock.py", "qa-engineer", "HEX"),
+                               ("docs-topology/hooks/path-lock.py", "doc-author", "DOCS")):
+        hook = REPO / rel
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            payload = {"tool_name": "Write", "agent_type": f"{_plugin_name(hook)}:{agent}",
+                       "cwd": str(root), "tool_input": {"file_path": str(root / "f.txt")}}
+            logs = {"a": root / "a.log", "b": root / "b.log"}
+
+            def switch(env, hook=hook, payload=payload, root=root):
+                for f in root.glob("*.log"):
+                    f.unlink()
+                _run_hook_script(hook, payload, dict(env, **{
+                    "CEPA_" + prefix + "_PATHLOCK_DEBUG_LOG": str(root / "d.log")}
+                    if not any(k.endswith("_DEBUG_LOG") for k in env) else {}), root)
+                return sorted(f.name for f in root.glob("*.log"))
+
+            # the DEBUG switch: "1" writes the log, anything else does not
+            _assert_precedence(switch, f"CEPA_{prefix}_PATHLOCK_DEBUG",
+                               f"{prefix}_PATHLOCK_DEBUG", "1", "0")
+
+            def where(env, hook=hook, payload=payload, root=root):
+                for f in root.glob("*.log"):
+                    f.unlink()
+                _run_hook_script(hook, payload, dict(env, **{
+                    "CEPA_" + prefix + "_PATHLOCK_DEBUG": "1"}), root)
+                return sorted(f.name for f in root.glob("*.log"))
+            _assert_precedence(
+                where, f"CEPA_{prefix}_PATHLOCK_DEBUG_LOG", f"{prefix}_PATHLOCK_DEBUG_LOG",
+                str(logs["a"]), str(logs["b"]))
+
+
+def _review_repo(td):
+    repo = _git_repo(td)
+    (repo / "review-gate.yaml").write_text("protected_branch: main\n")
+    return repo
+
+
+def test_review_gate_allow_direct_new_and_old():
+    with tempfile.TemporaryDirectory() as td:
+        repo = _review_repo(td)
+        payload = {"tool_name": "Bash", "cwd": str(repo),
+                   "tool_input": {"command": "git push origin main"}}
+
+        def effect(env):
+            return _run_hook_script(REPO / "review-gate/hooks/no-direct-main.py",
+                                    payload, env, repo).returncode
+        assert effect({}) == 2        # armed: a direct push to main is fenced
+        _assert_precedence(effect, "CEPA_REVIEW_GATE_ALLOW_DIRECT", "REVIEW_GATE_ALLOW_DIRECT",
+                           "1", "0")
+
+
+def test_review_gate_nudge_new_and_old():
+    with tempfile.TemporaryDirectory() as td:
+        repo = _review_repo(td)
+        subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-b", "feat/x"], check=True)
+        payload = {"tool_name": "Bash", "cwd": str(repo),
+                   "tool_input": {"command": "git push origin feat/x"},
+                   "tool_response": {"stdout": "ok"}}
+
+        def effect(env):
+            (repo / ".claude" / "review-gate-nudge.json").unlink(missing_ok=True)
+            r = _run_hook_script(REPO / "review-gate/hooks/push-nudge.py", payload, env, repo)
+            return bool(r.stdout.strip())
+        assert effect({}) is True
+        _assert_precedence(effect, "CEPA_REVIEW_GATE_NUDGE", "REVIEW_GATE_NUDGE", "off", "on")
+
+
+# S8: the run id in the telemetry event of every generated bash-path-lock copy
+
+def test_bash_path_lock_card_in_every_copy():
+    lanes = {"build-hex": "qa-engineer", "build-team": "qa-engineer", "design": "ux-architect",
+             "discovery": "user-researcher", "docs-topology": "doc-author",
+             "marketing": "copywriter"}
+    for top, agent in lanes.items():
+        hook = REPO / top / "hooks" / "bash-path-lock.py"
+        with tempfile.TemporaryDirectory() as td:
+            proj = Path(td) / "proj"
+            proj.mkdir()
+            tel = Path(td) / "tel"
+            payload = {"tool_name": "Bash", "tool_input": {"command": "frobnicate --all"},
+                       "agent_type": f"{_plugin_name(hook)}:{agent}", "cwd": str(proj)}
+
+            def effect(env, hook=hook, payload=payload, tel=tel, proj=proj):
+                for f in tel.glob("*.jsonl"):
+                    f.unlink()
+                r = _run_hook_script(hook, payload, dict(env, CEPA_TELEMETRY_DIR=str(tel)), proj)
+                assert r.returncode == 2, (top, r.returncode, r.stderr)
+                cards = [json.loads(l).get("card") for f in tel.glob("*.jsonl")
+                         for l in f.read_text().splitlines()
+                         if '"bash_pathlock_deny"' in l]
+                return cards
+            assert effect({}) == [""], top
+            _assert_precedence(effect, "CEPA_AUTONOMOUS_RUN_ID", "CLAUDE_AUTONOMOUS_RUN_ID",
+                               "RUN-A", "RUN-B")
 
 
 if __name__ == "__main__":

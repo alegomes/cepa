@@ -1,0 +1,56 @@
+schema_version: 2
+card: reforma-de-nomes-CS-8
+review: 2
+verdict: proven
+reviewed_at: 2026-11-26T00:40:00-03:00
+base_commit: 7d84c2d
+head_commit: 38d55fa            # código em 4dea4af; 70ce2f1 só o arquivo de aceite; 38d55fa só acrescenta um teste
+issue_type: Feature
+repo_kind: harness              # repo Python + sh (cepa), não Quarkus. Superfície = CLI `cepa queue ...` e `common/bin/cepa-queue`
+scope:
+  changed_classes:
+    - class: "common/bin/cepa (recusa de `cepa queue queue`, exit 2)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes rodam o lançador `cepa` real como subprocesso
+    - class: "common/bin/cepa-queue (grupos da ajuda, parser batch + alias queue oculto, despacho + nota em stderr, exemplos)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-run (query_queue chama `batch`)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # o teste roda o cepa-run real contra uma cópia de bin/ cujo cepa-queue só registra o subcomando e repassa ao real
+  base_commit_resolved: true
+  review_1_to_2: "70ce2f1..38d55fa mudou só tests/test_cepa_queue_batch_rename.py (+12 linhas, test_help_examples_teach_batch_not_the_refused_name) e o arquivo de prova; common/bin/* idêntico (git diff --stat 70ce2f1 38d55fa)."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "S1 (sobrevivente da revisão 1), metade 1: trocar o exemplo `cepa queue batch wego --max 3` por `cepa queue queue wego --max 3` na ajuda raiz (common/bin/cepa-queue) -> test_cepa_queue_batch_rename.py `1 failed, 6 passed` (test_help_examples_teach_batch_not_the_refused_name). Agora VERMELHO."
+        - "S1, metade 2: trocar `examples=[(\"cepa queue batch wego\", ...` por `cepa queue queue wego` na ajuda do subparser `batch` -> `1 failed, 6 passed`, o mesmo teste. VERMELHO."
+        - "P1..P9 da revisão 1 (recusa removida, exit 1, alias tirado, nota apagada, cepa-run volta a `queue`, ordem ready/waiting, título do bloco, `batch` fora do bloco, despacho só `queue`): todas VERMELHAS no 70ce2f1. Não reexecutadas: o código-fonte é idêntico no 38d55fa e o único diff nos testes é um teste novo (só acrescenta asserts), então nenhuma delas pode ter ficado verde."
+      run: >-
+        `git worktree add --detach /tmp/proof-cs8b 38d55fa`; CEPA_TELEMETRY_DIR=/tmp/cepa-telemetry-tests. Base verde: `python3 tests/test_cepa_queue_batch_rename.py` -> `7 passed`; `python3 tests/test_cepa_queue_rename_cli.py` -> `8 passed`. (test_cepa_plan_decisions.py `all ok` e test_common_drain_plan.py `all green` no 70ce2f1, fonte idêntica, não repetidos.) S1 por sed no worktree (caminhos absolutos), restaurada com `git checkout --`: ambas as metades `1 failed, 6 passed`. Worktree removido (`git worktree remove --force /tmp/proof-cs8b`); árvore principal limpa. tests/run-all.sh não rodado.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "Todas as linhas de comportamento e de ajuda alteradas (recusa, alias, nota, despacho, grupos, cepa-run, exemplos) foram quebradas e deixaram teste vermelho (P1..P9 na revisão 1, S1 nesta)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff só renomeia um subcomando e reordena a ajuda; os argumentos continuam passando pelos mesmos leitores e recusas do CLI (nenhuma entrada nova de fora)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature, não Bug."
+changed_behaviour_not_pinned: []
+build_completo: "delegado ao supervisor do run (tests/run-all.sh); não rodado por mim, por instrução."
+routing_reason: >-
+  O único sobrevivente da revisão 1 (os exemplos da ajuda voltando a dizer `cepa queue queue`) agora deixa o teste novo vermelho nas duas posições; a base está verde (7 + 8 testes). O código-fonte não mudou desde a revisão 1, então as 9 quebras de comportamento, todas vermelhas, continuam valendo. Nenhum nível assumido, pulado ou sobrevivente: PROVEN.

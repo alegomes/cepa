@@ -889,7 +889,7 @@ def test_header_wait_count_ignores_items_deferred_for_another_reason():
                                 a3])
         binv = fake_claude(tmp, "pass")
         plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
-        q = subprocess.run([sys.executable, str(REPO / "common" / "bin" / "cepa-queue"), "queue", "fila", "--max",
+        q = subprocess.run([sys.executable, str(REPO / "common" / "bin" / "cepa-queue"), "batch", "fila", "--max",
                             "1000000", "--repo", str(root), "--json"],
                            capture_output=True, text=True)
         deferred = json.loads(q.stdout).get("deferred") or []
