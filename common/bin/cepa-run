@@ -2113,6 +2113,41 @@ def run_verify(command, tree, limit_sec, log, on_launch=None, on_tick=None,
     return code == 0, spent, (None if code == 0 else f"exited {code}")
 
 
+def log_size(log):
+    try:
+        return os.path.getsize(log)
+    except OSError:
+        return 0
+
+
+def failed_suite_files(log, offset):
+    """The files `tests/run-all.sh` listed under "com falha:" in the part of the
+    run's `.log` written after `offset`, without the "[TIMEOUT Ns]" suffix.
+    Empty when the suite did not get to its summary (then the whole suite repeats).
+
+    Repeating only these on a red (owner, 2026-11-26): in run
+    reforma-de-nomes/2026-11-25-2108 CS-8 and CS-10 repeated the whole suite
+    and the same file failed again, 98 min with no new information."""
+    try:
+        with open(log, "rb") as f:
+            f.seek(offset)
+            text = f.read().decode("utf-8", "replace")
+    except OSError:
+        return []
+    lines = text.splitlines()
+    start = max((i for i, l in enumerate(lines) if l.startswith("com falha:")),
+                default=None)
+    if start is None:
+        return []
+    files = []
+    for line in lines[start + 1:]:
+        m = re.match(r"^  - (tests/\S+)", line)
+        if not m:
+            break
+        files.append(m.group(1))
+    return files
+
+
 def undo_item(repo, tree, run_id, ident, since, in_the_middle=(),
                 suffix="vermelho", back=1, queue=None):
     """Takes off the night branch the commits of an item whose build went
@@ -8227,6 +8262,7 @@ def _main(argv=None):
             step(f"full build: {verify}")
             left = (deadline + slack - datetime.now()).total_seconds()
             in_flight["fase"] = "verify"
+            log_offset = log_size(log)
             green, verify_sec, verify_reason = run_verify(
                 verify, tree, left, log, on_launch=launched, on_tick=tick)
             in_flight.pop("pid_filho", None)
@@ -8238,16 +8274,24 @@ def _main(argv=None):
                 # 09/26). With no time for it, it is a red return: the next
                 # attempt does the rest.
                 left = (deadline + slack - datetime.now()).total_seconds()
-                if left >= verify_sec:
-                    step(f"red ({verify_reason}); running the "
-                          "full build again, on the same code")
-                    green, sec2, reason2 = run_verify(verify, tree, left,
+                failed = (failed_suite_files(log, log_offset)
+                          if verify == SUITE_WITHOUT_BUILD else [])
+                if failed:
+                    again = " ".join([verify] + [shlex.quote(f) for f in failed])
+                    what = f"only the {len(failed)} failed file(s)"
+                else:
+                    again, what = verify, "the full build"
+                if (failed and left > 0) or left >= verify_sec:
+                    step(f"red ({verify_reason}); running {what} "
+                         "again, on the same code")
+                    green, sec2, reason2 = run_verify(again, tree, left,
                                                        log, on_launch=launched,
                                                        on_tick=tick)
                     in_flight.pop("pid_filho", None)
                     log_event({"evento": "verify", "id": ident, "verde": green,
                               "segundos": int(sec2), "motivo": reason2,
-                              "repeticao": 2})
+                              "repeticao": 2,
+                              **({"arquivos": failed} if failed else {})})
                 else:
                     reason2 = "did not fit in what is left of the window"
                 if green:
