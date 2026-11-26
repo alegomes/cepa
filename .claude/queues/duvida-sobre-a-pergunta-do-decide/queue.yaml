@@ -95,9 +95,16 @@ items:
     com um editor falso que salva "não entendi a pergunta", escolher `v` mostra
     "Is this a doubt about the question? [Y/n]"; hoje a tela mostra "not recorded:
     resposta recusada" e o item vai para depois.'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  claimed_by:
+    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
+    pid: 45882
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
+    branch: session/chain-1126-1336
+    started_at: '2026-11-26T21:42:51+00:00'
 - id: CS-5
   title: a tecla `?` pede em uma linha opcional o que o dono não entendeu
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
