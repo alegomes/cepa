@@ -239,9 +239,16 @@ items:
     entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
     a linha da legenda que começa com "? =" contém "rewritten" e "60"; hoje ela
     diz "it is recorded as badly written and nothing is answered".'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  claimed_by:
+    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
+    pid: 45882
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
+    branch: session/chain-1126-1336
+    started_at: '2026-11-27T03:40:25+00:00'
 - id: CS-11
   title: a legenda do Enter diz que a dúvida pode ir a uma sessão de chat, com a
     fila e o item
