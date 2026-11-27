@@ -3943,6 +3943,17 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+  finish_recusado:
+  - quando: '2026-11-27T08:57:39+00:00'
+    quem:
+      session_id: 07f4a8905fa14c7a9d01e12c2e750540
+      hostname: Alexandres-MacBook-Pro.local
+      pid: 29761
+    status_pedido: done
+    motivo: '`done` exige a árvore limpa e há 8 caminho(s) sem commit em /Users/alegomes/coding/cepa:
+      .claude/queues/pyyaml/until/2026-11-20-1609.laterais/2026-11-14-0953-vermelho-CS-6.patch,
+      .claude/queues/pyyaml/until/2026-11-20-1609.laterais/2026-11-14-0956-vermelho-CS-6.patch,
+      .claude/queues/pyyaml/until/202'
 - id: painel-next-alinhado-ao-bloco-final
   title: O painel Next do cepa run mostra outra contagem e a grafia antiga do comando
   why: 'Decisão do dono em 2026-11-27 (anotar para depois); BACKLOG.md § O painel
