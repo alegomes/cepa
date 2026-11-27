@@ -5791,7 +5791,7 @@ modo, `docs/modos-de-trabalho.md`.
 
 ## A tela de fechamento do `cepa run` não diz o que aconteceu, o que ficou pendente nem o que fazer
 
-**Status:** pendente · **Lar provável:** common (`common/bin/cepa-run`, bloco de fechamento e painel `Next`; `common/skills/run-review`) · **Origem:** feedback `fb-20261126-4` e `fb-20261126-6`, 2026-11-26
+**Status:** feito em 2026-11-27 (commit `4ed9e96`, item `fechamento-do-run-sem-conclusao` da fila `cepa`), menos as duas partes das seções seguintes, que o dono mandou anotar para depois · **Lar:** common (`common/bin/cepa-run`, bloco de fechamento) · **Origem:** feedback `fb-20261126-4` e `fb-20261126-6`, 2026-11-26
 
 ### Problema
 
@@ -5822,3 +5822,31 @@ A tela termina com um bloco de três partes, nesta ordem, escrito depois que a a
 - commit de registros deixa de fora os arquivos que o git ignora e diz quais foram, em vez de imprimir a dica do git e um comando que repete a recusa.
 
 Testes que faltam: run com um item reprovado no build termina com o bloco de três partes, nomeia o teste que falhou e o branch lateral, e o comando de commit sugerido roda com exit 0 num repo que ignora `.claude/*`.
+
+---
+
+## O painel `Next` do `cepa run` mostra outra contagem e a grafia antiga do comando
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-run`, painel `Next` da tela de fechamento) · **Origem:** decisão do dono em 2026-11-27 ("1. não. Anote para fazer depois"), ao receber o item `fechamento-do-run-sem-conclusao`
+
+### Problema
+
+A tela de fechamento ganhou no commit `4ed9e96` um bloco final de três linhas (`What happened`, `Pending for you`, `Run now`). O painel `Next`, que vem logo antes, ficou como era: mostra só as perguntas que a fila guarda ("1 owner question(s)"), enquanto o bloco mostra a contagem da análise da run ("2 decisions and 4 tasks"), e manda rodar `cepa-run decide`, enquanto o bloco manda `cepa run decide`. O bloco explica a diferença numa frase, mas a mesma tela ainda traz dois números e duas grafias do mesmo comando. O `completion-auditor` apontou isso como ressalva ao dar COMPLETE.
+
+### Esboço
+
+O painel `Next` usa a mesma contagem do bloco final quando a análise existe, e toda frase dele usa `cepa <sub>`. Teste que falta: numa run com análise, o número do painel `Next` e o do `Pending for you` são iguais, e a tela não contém `cepa-run`.
+
+---
+
+## Run interrompida por Ctrl-C ou erro fatal termina sem o bloco de três linhas
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-run`, função `interrupt` e as saídas anteriores a `commit_records`) · **Origem:** decisão do dono em 2026-11-27 ("2. não. Anote para fazer depois"), ao receber o item `fechamento-do-run-sem-conclusao`
+
+### Problema
+
+O bloco final de três linhas (`What happened`, `Pending for you`, `Run now`) só é impresso quando a run termina pelo caminho normal. Uma run cortada por Ctrl-C ou por erro fatal termina com a tela antiga, sem conclusão e sem um comando para rodar. O `pair-reviewer` apontou a lacuna na revisão do commit `4ed9e96` e recomendou tratar à parte, porque é outro caminho do código.
+
+### Esboço
+
+A saída por interrupção imprime o mesmo bloco com o que o supervisor sabe até ali: o item que estava em andamento, onde ficaram os commits dele e o comando que retoma. Precisa de desenho próprio, porque nesse caminho a análise da run não roda. Teste que falta: run interrompida no meio de um item termina com as três linhas e nomeia o item em andamento.
