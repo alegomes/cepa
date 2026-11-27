@@ -259,6 +259,13 @@ items:
     entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal
     com a fila `f1` e o item `C1-47`, a linha da legenda que começa com "Enter ="
     contém "chat", "f1" e "C1-47"; hoje ela diz "leaves the question for later".'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  claimed_by:
+    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
+    pid: 45882
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
+    branch: session/chain-1126-1336
+    started_at: '2026-11-27T04:32:52+00:00'
