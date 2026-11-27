@@ -1584,6 +1584,70 @@ def test_d_still_works_with_an_answer_of_the_old_signature():
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
+def _question_mark_legend(plain):
+    """The legend entry that starts with "? =" as one string, its wrapped
+    continuation joined, or "". The card borders are stripped; the entry ends at the
+    next legend line (they start with a key and " = ") or at a blank panel line."""
+    import re
+    lines = [l.strip("│ ").strip() for l in plain.splitlines()]
+    for n, l in enumerate(lines):
+        if l.startswith("? = "):
+            got = [l]
+            for nxt in lines[n + 1:]:
+                if not nxt or re.match(r"^\S+ = ", nxt) or nxt.startswith("["):
+                    break
+                got.append(nxt)
+            return " ".join(got)
+    return ""
+
+
+def test_question_mark_legend_says_the_question_is_rewritten_in_up_to_60_s_in_a_pty():
+    """Red test of CS-10, as a process in a pseudo-terminal: the legend line that
+    starts with "? =" says "rewritten" and "60"."""
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=30, inputs=[(MENU, "")])
+        plain = ANSI.sub("", out)
+    check("CS-10 pty: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-10 pty: the menu was seen (a timeout cannot pass)", f"<{MENU}>" in plain,
+          plain[-1500:])
+    line = _question_mark_legend(plain)
+    check("CS-10 pty: there is a legend line starting with `? =`", bool(line),
+          plain[-1500:])
+    check("CS-10 pty: the `?` line says the question is rewritten", "rewritten" in line,
+          line)
+    check("CS-10 pty: the `?` line says 60", "60" in line, line)
+    check("CS-10 pty: the `?` line still says nothing is answered",
+          "nothing is answered" in line, line)
+    check("CS-10 pty: the old wording is gone", "badly written" not in line, line)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_question_mark_legend_entry_follows_the_rewrite_ceiling_constant():
+    """CS-10 unit: the whole entry, and its number is `UNCLEAR_REWRITE_SEC`."""
+    failed_before = len(FAILURES)
+    mod = _load_cepa_run_module()
+    chips = [("?", "I don't understand the question")]
+    got = mod.legend_lines(chips, {})
+    want = ("? = I did not understand the question: it is rewritten right away, "
+            f"in up to {mod.UNCLEAR_REWRITE_SEC} s, and nothing is answered")
+    check("CS-10 unit: the entry is exactly the new one", got == [want], got)
+    check("CS-10 unit: the number is the constant, 60",
+          f"up to {mod.UNCLEAR_REWRITE_SEC} s" in got[0] and mod.UNCLEAR_REWRITE_SEC == 60,
+          got)
+    mod.UNCLEAR_REWRITE_SEC = 17
+    after = mod.legend_lines(chips, {})[0]
+    check("CS-10 unit: with the constant changed, the entry follows it",
+          "up to 17 s" in after and "60" not in after, after)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

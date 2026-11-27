@@ -3538,8 +3538,11 @@ def legend_lines(chips, summary, delivered=False):
     effect.update({"w": "you write the answer in one line; the next run reads it",
                    "v": "you write the answer in the editor; the next run reads it",
                    "e": "shows the technical detail, written for agents",
-                   "?": "I did not understand the question: it is recorded as "
-                        "badly written and nothing is answered",
+                   # CS-10 (duvida-sobre-a-pergunta-do-decide): the ceiling is the
+                   # constant defined further down, read when the legend is built.
+                   "?": "I did not understand the question: it is rewritten right "
+                        f"away, in up to {UNCLEAR_REWRITE_SEC} s, and nothing is "
+                        "answered",
                    "Enter": "leaves the question for later",
                    "q": "stops the questions; the rest stays for later"})
     return [f"{key} = {effect[key]}" for key, _ in chips if key in effect]
