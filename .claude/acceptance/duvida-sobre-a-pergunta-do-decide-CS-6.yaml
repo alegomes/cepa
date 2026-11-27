@@ -1,0 +1,25 @@
+key: CS-6
+queue: duvida-sobre-a-pergunta-do-decide
+status: complete
+pass: 1
+criteria:
+  - id: AC1
+    text: "docs/spec/duvida-sobre-a-pergunta-do-decide.md CS-6 (cli): depois de um `?` sem texto, uma dúvida digitada dispara a segunda reescrita, e a terceira tentativa deixa o item para depois."
+    altitude: cli
+    surface: "common/bin/cepa-run decide panel (cepa-until decide fila --repo ...) in a pty, keys ? (empty Enter) then w + doubt; counting fake reader subprocess (_versioned_reader) that logs each request"
+    test: "tests/test_cepa_until_decide_doubt.py::test_doubt_after_an_empty_question_mark_rewrites_twice_in_the_same_item; ::test_a_third_doubt_does_not_call_the_reader_and_leaves_the_item_for_later (plus pty ::test_doubt_then_an_empty_question_mark_rewrites_once, ::test_after_two_rewrites_the_question_mark_does_not_ask_in_a_pty, ::test_the_two_rewrites_counter_does_not_leak_to_the_next_item_in_a_pty)"
+    layer: cli-pty
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -> '55 passed in 20.78s'; -k 'rewrites or third or empty_question_mark' -> '12 passed, 43 deselected in 10.34s' (N=12 > 0)"
+    sub_criteria:
+      reader_called_twice: "complete. real subprocess reader logs every request; test asserts len(reqs) == 2, first request without duvida_do_dono, second with duvida_do_dono == DOUBT and the first new question as pergunta_mal_escrita."
+      second_new_question_same_item: "complete. asserts the consumed marker '<versão 2 do plano>' in the output (the reader answers by call count, so it is the second call's question) and the item header '· b1' appears once."
+      third_doubt_no_call: "complete. third `w`+doubt+'Is this a doubt' confirmation: reqs stays 2, no 'versão 3' on screen, feedback line still written (3 lines)."
+      for_later_line: "complete. a line after the second new question contains 'not rewritten again', 'for later' and 'twice'."
+      item_in_for_later_at_close: "complete. text after the last 'closing' has 'for later 1' and 'answered now 0'."
+      no_pass_on_timeout: "complete. every pty test asserts rc == 0 first; on_tty SIGKILLs on timeout so rc is -9. Awaited triggers are checked through the consumed-trigger marker '<...>', not a bare substring (V1, V2, KEY_ASK in the doubt+? test)."
+    readings:
+      scope: "CS-7 (wording of a second empty `?`) and CS-8..CS-11 are later items, not gaps here. The doubt+empty-? pty test only pins that no second call happens and a not-rewritten line shows."
+      production_change: "common/bin/cepa-run: boolean `rewritten` became counter `rewrites`; `?` asks the line while rewrites < 2; rewrite #2 needs a written doubt; at rewrites >= 2 a warning 'the reader rewrites at most twice per item' and the item stays for later. Counter is per item (pty leak test)."
+      before_state: "Old unit test asserted one reader call; it was rewritten to expect two, which is the intended inversion of 'hoje o leitor é chamado no máximo uma vez'."
+gap: ""
