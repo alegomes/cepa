@@ -4580,11 +4580,11 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # 10/15: "99% of the time I don't know what to answer"). With no written
         # question, the terminal asks the default one, instead of showing the evidence and
         # leaving the owner to find the question on his own.
-        rewritten = False
+        rewrites = 0
         typed_w = None
-        # CS-7: `?` rewrites the question once and the block asks again; the second
-        # `?` on the same item does not call the reader (spec, "Decided without
-        # asking": no loop holding the launch).
+        # CS-7/CS-6: the first rewrite always happens; the second only with a written
+        # doubt (typed in `w`/`v` or in the `?` line); there is never a third (spec,
+        # "Decided without asking": no loop holding the launch).
         while True:
             screen.blank()
             shown_question = question_text
@@ -4689,11 +4689,11 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                         not_a_doubt = True
             if r != "?":
                 break
-            if not doubt and not rewritten:
+            if not doubt and rewrites < 2:
                 # CS-5: the `?` key asks, in one optional line, what the owner did not
                 # understand; the text takes the same `doubt` path as a doubt typed in
-                # `w`/`v` (which is never asked again: it is already in `doubt`). A
-                # second `?` on the item does not ask: the reader will not be called.
+                # `w`/`v` (which is never asked again: it is already in `doubt`). After
+                # two rewrites it does not ask: the reader will not be called again.
                 doubt = str(question(screen.follow_up(
                     "What did you not understand? [Enter skips] "))).strip()
             kw = {"doubt": doubt} if doubt else {}
@@ -4702,11 +4702,15 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                             "item" if rc == 0 else msg, ok=rc == 0)
             # CS-8: a failed rewrite, or the second `?`, says so in one line and the
             # item stays for later; the panel goes on to the next item.
-            if rewritten:
+            if rewrites >= 2:
+                screen.warning("question not rewritten again, the item stays for "
+                               "later: the reader rewrites at most twice per item")
+                break
+            if rewrites == 1 and not doubt:
                 screen.warning("question not rewritten again, the item stays for "
                                "later: the reader rewrites once per item")
                 break
-            rewritten = True
+            rewrites += 1
             screen.note(f"rewriting the question, up to {UNCLEAR_REWRITE_SEC} s")
             new_route, error = rewrite(ad, shown_question, **kw)
             if new_route is None:

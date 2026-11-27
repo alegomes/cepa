@@ -416,15 +416,20 @@ def test_n_at_the_doubt_prompt_does_not_call_the_rewrite():
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
-def test_doubt_after_a_rewrite_does_not_call_the_reader_again():
-    """Today's limit stays: one rewrite per item, whatever key triggered it."""
+def test_doubt_after_an_empty_question_mark_calls_the_reader_a_second_time():
+    """CS-6 (was: "one rewrite per item, whatever key triggered it"): rewrite #1
+    happens with or without a doubt; rewrite #2 happens because this attempt carries
+    a written doubt."""
     failed_before = len(FAILURES)
-    text, later, marks, rewrites, answers = _inject(["?", "", "w", DOUBT, ""])
-    check("CS-2 unit: the reader ran once", len(rewrites) == 1, rewrites)
-    check("CS-2 unit: the doubt reached the feedback mark",
+    text, later, marks, rewrites, answers = _inject(["?", "", "w", DOUBT, "", ""])
+    check("CS-6 unit: the reader ran twice", len(rewrites) == 2, rewrites)
+    check("CS-6 unit: the second request carries the doubt and the rewritten question",
+          rewrites == [(QUESTION, ""), (NEW_Q, DOUBT)], rewrites)
+    check("CS-6 unit: the doubt reached the feedback mark",
           marks == [("b1", QUESTION, ""), ("b1", NEW_Q, DOUBT)], marks)
-    check("CS-2 unit: says it is not rewritten again", "not rewritten again" in text, text)
-    check("CS-2 unit: no answer, item for later", answers == [] and len(later) == 1,
+    check("CS-6 unit: nothing says it is not rewritten again",
+          "not rewritten again" not in text, text)
+    check("CS-6 unit: no answer, item for later", answers == [] and len(later) == 1,
           (answers, later))
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
@@ -881,15 +886,21 @@ def test_question_mark_line_text_is_stripped_before_it_is_passed_on():
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
-def test_second_question_mark_on_the_item_does_not_ask():
-    """Decided: when the reader will not be called (one rewrite per item, until
-    CS-6/CS-7), the line is not asked and no doubt goes to the mark."""
+def test_second_question_mark_asks_after_one_rewrite_and_not_after_two():
+    """CS-6 (was: a second `?` never asks): after ONE rewrite a written doubt can
+    still trigger rewrite #2, so the line is asked; after TWO it cannot, so it is not
+    and no doubt goes to the mark."""
     failed_before = len(FAILURES)
-    shown, marks, rewrites = _prompts(["?", "variante O", "?", ""])
-    check("CS-5 unit second: asked only on the first `?`",
-          sum(KEY_ASK in p for p in shown) == 1, shown)
-    check("CS-5 unit second: the second mark carries no doubt",
-          marks == ["variante O", ""] and len(rewrites) == 1, (marks, rewrites))
+    shown, marks, rewrites = _prompts(["?", "variante O", "?", "", ""])
+    check("CS-6 unit one rewrite: the line is asked on both `?`",
+          sum(KEY_ASK in p for p in shown) == 2, shown)
+    check("CS-6 unit one rewrite: an empty second line calls no reader and marks no doubt",
+          marks == ["variante O", ""] and rewrites == ["variante O"], (marks, rewrites))
+    shown, marks, rewrites = _prompts(["w", DOUBT, "", "w", DOUBT, "", "?", ""])
+    check("CS-6 unit two rewrites: the line is not asked", not any(KEY_ASK in p for p in shown),
+          shown)
+    check("CS-6 unit two rewrites: the `?` is marked without doubt, no third call",
+          marks == [DOUBT, DOUBT, ""] and rewrites == [DOUBT, DOUBT], (marks, rewrites))
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
@@ -907,6 +918,244 @@ def test_question_mark_on_an_item_without_open_route_still_asks_and_marks():
     check("CS-5 no route: the line is asked", any(KEY_ASK in p for p in shown), shown)
     check("CS-5 no route: the reader is not called, the text goes to the mark",
           reads == [] and marks == ["variante O"], (reads, marks))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+# ---- CS-6: up to two rewrites per item; the second needs a written doubt ----------
+
+def _versioned_reader(tmp):
+    """Fake reader that counts its rewrite calls: call n answers the question
+    "Você já escolheu a versão n do plano que vai usar?" and logs every request."""
+    script = Path(tmp) / "leitor-contador.py"
+    log = Path(tmp) / "leitor-pedidos.jsonl"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys\n"
+        "it = json.load(sys.stdin)\n"
+        f"log = {str(log)!r}\n"
+        "import os\n"
+        "old = [l for l in open(log).read().splitlines() if l.strip()] if os.path.exists(log) else []\n"
+        "n = 1 + sum(1 for l in old if json.loads(l).get('tarefa') == 'reescrever-pergunta')\n"
+        "open(log, 'a').write(json.dumps(it) + '\\n')\n"
+        "if it.get('tarefa') == 'reescrever-pergunta':\n"
+        "    print(json.dumps({'route_kind': 'owner-task',\n"
+        "        'question': f'Você já escolheu a versão {n} do plano que vai usar?',\n"
+        f"        'if_yes': {NEW_YES!r}, 'if_no': {NEW_NO!r}, 'item_se_nao': 'nenhum'}}))\n"
+        "else:\n"
+        "    print(json.dumps({'tipo': None}))\n")
+    script.chmod(0o755)
+    return script, log
+
+
+V1, V2, V3 = "versão 1 do plano", "versão 2 do plano", "versão 3 do plano"
+MENU = "[w] I write the answer"
+YOUR = "Your answer, in one line"
+
+
+def _two_rewrite_session(inputs_for, items=1):
+    """pty with the counting reader. `inputs_for(root)` returns the `on_tty` inputs.
+    Returns (rc, plain output, rewrite requests, feedback lines)."""
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        its = []
+        for n in range(items):
+            it = item(f"b{n + 1}", status="pending", human_pending="falta escolher a variante")
+            it["owner_question"] = QUESTION if n == 0 else "O certificado do banco já chegou?"
+            it["route_kind"] = "external-block"
+            its.append(it)
+        root = build_repo(tmp, its)
+        reader, log = _versioned_reader(tmp)
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER=str(reader))
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=120, inputs=inputs_for())
+        reqs = [r for r in _requests(log) if r.get("tarefa") == "reescrever-pergunta"]
+        return rc, ANSI.sub("", out), reqs, _ledger(fb)
+
+
+def test_doubt_after_an_empty_question_mark_rewrites_twice_in_the_same_item():
+    """Red test of CS-6, as a process in a pseudo-terminal: `?` with an empty Enter,
+    then a doubt typed in `w`: the reader runs twice and the second new question shows
+    in the same item block."""
+    failed_before = len(FAILURES)
+    rc, plain, reqs, lines = _two_rewrite_session(lambda: [
+        (MENU, "?"), (KEY_ASK, ""), (V1, None),
+        (MENU, "w"), (YOUR, DOUBT), (ASK, ""), (V2, None),
+        (MENU, ""),
+    ])
+    check("CS-6 pty: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-6 pty: the first new question was shown", f"<{V1}>" in plain, plain[-1500:])
+    check("CS-6 pty: the second new question was shown", f"<{V2}>" in plain, plain[-1500:])
+    check("CS-6 pty: the reader ran twice", len(reqs) == 2, reqs)
+    if len(reqs) == 2:
+        check("CS-6 pty: the first request has no doubt", "duvida_do_dono" not in reqs[0],
+              reqs[0])
+        check("CS-6 pty: the second request carries the doubt on the first new question",
+              reqs[1].get("duvida_do_dono") == DOUBT
+              and V1 in reqs[1].get("pergunta_mal_escrita", ""), reqs[1])
+    check("CS-6 pty: same item block, the header shows once", plain.count("· b1") == 1,
+          plain[-1500:])
+    check("CS-6 pty: nothing says it is not rewritten again",
+          "not rewritten again" not in plain, plain[-1500:])
+    check("CS-6 pty: one feedback line per attempt", len(lines) == 2, lines)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_a_third_doubt_does_not_call_the_reader_and_leaves_the_item_for_later():
+    failed_before = len(FAILURES)
+    rc, plain, reqs, lines = _two_rewrite_session(lambda: [
+        (MENU, "?"), (KEY_ASK, ""), (V1, None),
+        (MENU, "w"), (YOUR, DOUBT), (ASK, ""), (V2, None),
+        (MENU, "w"), (YOUR, DOUBT), (ASK, ""),
+    ])
+    check("CS-6 pty third: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-6 pty third: the second new question was shown", f"<{V2}>" in plain,
+          plain[-1500:])
+    check("CS-6 pty third: the reader ran only twice", len(reqs) == 2, reqs)
+    check("CS-6 pty third: no third question", V3 not in plain, plain[-1500:])
+    tail = plain.split(V2, 1)[-1]
+    line = next((l for l in tail.splitlines() if "not rewritten again" in l), "")
+    check("CS-6 pty third: a line says the item stays for later",
+          "for later" in line and "twice" in line, tail[-1500:])
+    close = plain.rsplit("closing", 1)[-1]
+    check("CS-6 pty third: the item is in for later at the close",
+          "for later 1" in close and "answered now 0" in close, plain[-1500:])
+    check("CS-6 pty third: the feedback line of the third attempt is still written",
+          len(lines) == 3 and all(DOUBT in l.get("texto", "") for l in lines[1:]), lines)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_doubt_then_an_empty_question_mark_rewrites_once():
+    failed_before = len(FAILURES)
+    rc, plain, reqs, lines = _two_rewrite_session(lambda: [
+        (MENU, "w"), (YOUR, DOUBT), (ASK, ""), (V1, None),
+        (MENU, "?"), (KEY_ASK, ""),
+    ])
+    check("CS-6 pty doubt+?: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-6 pty doubt+?: the first new question was shown", f"<{V1}>" in plain,
+          plain[-1500:])
+    check("CS-6 pty doubt+?: the line was asked on the second `?`",
+          f"<{KEY_ASK}>" in plain, plain[-1500:])
+    check("CS-6 pty doubt+?: one rewrite only", len(reqs) == 1, reqs)
+    check("CS-6 pty doubt+?: no second question", V2 not in plain, plain[-1500:])
+    check("CS-6 pty doubt+?: a line says it is not rewritten again",
+          "not rewritten again" in plain.split(V1, 1)[-1], plain[-1500:])
+    check("CS-6 pty doubt+?: the item is in for later at the close",
+          "for later 1" in plain.rsplit("closing", 1)[-1], plain[-1500:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_after_two_rewrites_the_question_mark_does_not_ask_in_a_pty():
+    failed_before = len(FAILURES)
+    rc, plain, reqs, _ = _two_rewrite_session(lambda: [
+        (MENU, "?"), (KEY_ASK, ""), (V1, None),
+        (MENU, "w"), (YOUR, DOUBT), (ASK, ""), (V2, None),
+        (MENU, "?"),
+    ])
+    check("CS-6 pty ?x3: decide exits 0 (nothing waited on a line)", rc == 0, plain[-1500:])
+    check("CS-6 pty ?x3: the line was asked only on the first `?`",
+          plain.count(KEY_ASK) == 1, plain[-1500:])
+    check("CS-6 pty ?x3: two rewrites, no third", len(reqs) == 2 and V3 not in plain, reqs)
+    check("CS-6 pty ?x3: the item stays for later",
+          "for later 1" in plain.rsplit("closing", 1)[-1], plain[-1500:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_the_two_rewrites_counter_does_not_leak_to_the_next_item_in_a_pty():
+    failed_before = len(FAILURES)
+    rc, plain, reqs, _ = _two_rewrite_session(lambda: [
+        (MENU, "?"), (KEY_ASK, ""), (V1, None),
+        (MENU, "w"), (YOUR, DOUBT), (ASK, ""), (V2, None),
+        (MENU, ""),
+        ("O certificado do banco já chegou?", None),
+        (MENU, "?"), (KEY_ASK, ""), (V3, None),
+        (MENU, ""),
+    ], items=2)
+    check("CS-6 pty leak: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-6 pty leak: the second item got its own first rewrite",
+          f"<{V3}>" in plain and len(reqs) == 3, (len(reqs), plain[-1500:]))
+    if len(reqs) == 3:
+        check("CS-6 pty leak: the third request is about the second item's question",
+              "certificado" in reqs[2].get("pergunta_mal_escrita", ""), reqs[2])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_two_doubts_in_a_row_rewrite_twice_and_the_second_doubt_reaches_the_reader():
+    failed_before = len(FAILURES)
+    other = "O que é a versão do plano?"
+    text, later, marks, rewrites, answers = _inject(["w", DOUBT, "", "w", other, "", ""])
+    check("CS-6 unit doubt+doubt: two reader calls with each doubt",
+          rewrites == [(QUESTION, DOUBT), (NEW_Q, other)], rewrites)
+    check("CS-6 unit doubt+doubt: nothing says it is not rewritten again",
+          "not rewritten again" not in text, text)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_doubt_then_an_empty_question_mark_calls_the_reader_once_and_says_so():
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(["w", DOUBT, "", "?", "", ""])
+    check("CS-6 unit doubt+?: one reader call", rewrites == [(QUESTION, DOUBT)], rewrites)
+    check("CS-6 unit doubt+?: both attempts marked, the second without doubt",
+          marks == [("b1", QUESTION, DOUBT), ("b1", NEW_Q, "")], marks)
+    check("CS-6 unit doubt+?: says it is not rewritten again, for later",
+          "not rewritten again" in text and len(later) == 1, (text, later))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_empty_question_mark_then_a_question_mark_with_text_rewrites_twice():
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(["?", "", "?", "variante O", ""])
+    check("CS-6 unit ?+?text: two calls and the text reaches the reader",
+          rewrites == [(QUESTION, ""), (NEW_Q, "variante O")], rewrites)
+    check("CS-6 unit ?+?text: the text reaches the mark",
+          marks[-1] == ("b1", NEW_Q, "variante O"), marks)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_second_question_mark_line_of_only_spaces_is_not_a_written_doubt():
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(["?", "", "?", "   ", ""])
+    check("CS-6 unit spaces: blank text is no doubt, no second call",
+          len(rewrites) == 1 and marks[-1] == ("b1", NEW_Q, ""), (rewrites, marks))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_a_doubt_typed_in_the_editor_triggers_the_second_rewrite():
+    failed_before = len(FAILURES)
+    m = load_module()
+    m.edit_in_editor = lambda *a, **k: DOUBT
+    rewrites, it = [], iter(["?", "", "v", "", ""])
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+             question=lambda _p: next(it, ""), output=lambda *_: None,
+             answer=lambda *a, **k: (0, "ok"),
+             unclear=lambda ident, text, doubt="": (0, "ok"),
+             rewrite=lambda ad, text, doubt="": rewrites.append((text, doubt)) or (NEW, None))
+    check("CS-6 unit v: the editor doubt after an empty `?` is the second call",
+          rewrites == [(QUESTION, ""), (NEW_Q, DOUBT)], rewrites)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_a_third_attempt_with_a_doubt_calls_no_reader_and_still_marks_it():
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(
+        ["?", "", "w", DOUBT, "", "w", "O que é o plano?", ""])
+    check("CS-6 unit third: only two reader calls", len(rewrites) == 2, rewrites)
+    check("CS-6 unit third: the third doubt is still marked",
+          len(marks) == 3 and marks[2] == ("b1", NEW_Q, "O que é o plano?"), marks)
+    check("CS-6 unit third: a line says the item stays for later",
+          "not rewritten again" in text and "twice" in text and len(later) == 1,
+          (text, later))
+    check("CS-6 unit third: nothing was answered", answers == [], answers)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_the_two_rewrites_counter_does_not_leak_to_the_next_item():
+    failed_before = len(FAILURES)
+    shown, marks, rewrites = _prompts(
+        ["w", DOUBT, "", "w", DOUBT, "", "", "?", "", ""],
+        deferred=[_deferred(), _deferred(id="b2", question="Outra pergunta?")])
+    check("CS-6 unit leak: the second item gets its own first rewrite",
+          len(rewrites) == 3, rewrites)
+    check("CS-6 unit leak: the second item's `?` asks the line",
+          sum(KEY_ASK in p for p in shown) == 1, shown)
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 

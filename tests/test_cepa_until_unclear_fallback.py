@@ -118,7 +118,9 @@ def test_second_question_mark_says_so_and_moves_on():
     says the question will not be rewritten again and the item stays for later."""
     new = {"route_kind": "owner-task", "question": NEW_Q, "if_yes": "volta",
            "if_no": "espera"}
-    text, later, rewrites, marks = _run(["?", "", "?", ""], (new, None))
+    # the second `?` asks the optional line (CS-6) and gets an empty Enter; the
+    # last Enter is the next item's menu
+    text, later, rewrites, marks = _run(["?", "", "?", "", ""], (new, None))
     check("CS-8 second: the reader ran once", len(rewrites) == 1, rewrites)
     check("CS-8 second: both `?` recorded", marks == [OLD_Q, NEW_Q], marks)
     tail = text.split("question rewritten", 1)[-1]

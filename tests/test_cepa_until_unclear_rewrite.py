@@ -177,7 +177,8 @@ def test_second_question_mark_does_not_call_the_reader_again():
     deferred = [{"id": "b1", "title": "t", "reason": "human_pending",
                  "human_pending": ROUTE, "question": OLD_Q, "evidence": "x",
                  "route_kind": "external-block"}]
-    replies = iter(["?", "", "?"])
+    # the second `?` asks the optional line (CS-6): an empty Enter, no rewrite
+    replies = iter(["?", "", "?", ""])
     new = {"route_kind": "owner-task", "question": NEW_Q, "if_yes": NEW_YES,
            "if_no": NEW_NO}
     _, later = m.decide(Path("/nao/existe"), "fila", None, {}, deferred, {},
