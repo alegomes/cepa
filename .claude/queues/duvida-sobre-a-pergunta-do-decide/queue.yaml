@@ -168,16 +168,19 @@ items:
     vez só, e a tela diz que a pergunta não será reescrita de novo sem uma dúvida
     escrita; hoje a mensagem diz só "the reader rewrites once per item", sem citar
     que uma dúvida escrita dispara outra.'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  claimed_by:
-    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
-    pid: 45882
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
-    branch: session/chain-1126-1336
-    started_at: '2026-11-27T00:52:09+00:00'
+  evidence: 'commits 0a598b7 (frase + testes), e22fa6b (arquivos dos portoes) em
+    session/chain-1126-1336. pair-reviewer OK-WITH-NOTES, sem correcao. completion-auditor
+    COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-7.yaml); na
+    1a rodada dele um teste do CS-2 oscilou sob carga e passou na 2a. proof-reviewer
+    PROVEN em 0a598b7, 4 de 4 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-7.yaml).
+    tests/run-all.sh em 0a598b7: 260 de 260, tudo verde. Frase nova: ''question
+    not rewritten again without a written doubt, the item stays for later''. Observacao
+    da revisao: a frase nao diz como escrever a duvida (linha do ? ou w); a spec
+    nao pede.'
+  head_commit: e22fa6b986c28a64587cac95022718a97fe7f212
 - id: CS-8
   title: texto recusado devolve o menu do mesmo item e a mensagem não cita `--force`
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
