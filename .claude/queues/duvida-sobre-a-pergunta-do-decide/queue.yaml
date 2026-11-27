@@ -168,9 +168,16 @@ items:
     vez só, e a tela diz que a pergunta não será reescrita de novo sem uma dúvida
     escrita; hoje a mensagem diz só "the reader rewrites once per item", sem citar
     que uma dúvida escrita dispara outra.'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  claimed_by:
+    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
+    pid: 45882
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
+    branch: session/chain-1126-1336
+    started_at: '2026-11-27T00:52:09+00:00'
 - id: CS-8
   title: texto recusado devolve o menu do mesmo item e a mensagem não cita `--force`
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
