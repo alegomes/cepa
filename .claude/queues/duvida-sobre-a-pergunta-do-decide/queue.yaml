@@ -189,9 +189,16 @@ items:
     que cita só teclas presentes no menu daquele item, e o menu do mesmo item reaparece
     pronto para outra tecla; hoje a tela mostra "repita com --force" e passa ao
     item seguinte.'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  claimed_by:
+    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
+    pid: 45882
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
+    branch: session/chain-1126-1336
+    started_at: '2026-11-27T01:39:48+00:00'
 - id: CS-9
   title: a mensagem de recusa não cita a tecla `e` quando o item não tem detalhe
     técnico
