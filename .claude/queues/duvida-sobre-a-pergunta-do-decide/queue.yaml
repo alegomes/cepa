@@ -239,16 +239,19 @@ items:
     entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
     a linha da legenda que começa com "? =" contém "rewritten" e "60"; hoje ela
     diz "it is recorded as badly written and nothing is answered".'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  claimed_by:
-    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
-    pid: 45882
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
-    branch: session/chain-1126-1336
-    started_at: '2026-11-27T03:40:25+00:00'
+  evidence: 'commits 799d5bc (legenda + testes), df3d18d (arquivos dos portoes)
+    em session/chain-1126-1336. pair-reviewer OK-WITH-NOTES, sem correcao. completion-auditor
+    COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-10.yaml).
+    proof-reviewer PROVEN em 799d5bc, 9 de 9 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-10.yaml).
+    tests/run-all.sh em 799d5bc: 260 de 260, tudo verde. Legenda nova: ''? = I did
+    not understand the question: it is rewritten right away, in up to 60 s, and
+    nothing is answered'', numero vindo de UNCLEAR_REWRITE_SEC. Observacao da revisao:
+    4 testes que cortam a tela em ''badly written'' passaram a depender da mensagem
+    impressa depois da tecla.'
+  head_commit: df3d18de0aed3ca5f9fb0623eacb5caa2308ba86
 - id: CS-11
   title: a legenda do Enter diz que a dúvida pode ir a uma sessão de chat, com a
     fila e o item
