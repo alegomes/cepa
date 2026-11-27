@@ -144,16 +144,22 @@ items:
     nova no mesmo item; uma terceira dúvida não chama o leitor, mostra uma linha
     dizendo que o item fica para depois e o item aparece em "for later" no fecho;
     hoje o leitor é chamado no máximo uma vez por item.'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  claimed_by:
-    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
-    pid: 45882
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
-    branch: session/chain-1126-1336
-    started_at: '2026-11-26T23:51:25+00:00'
+  evidence: 'commits 7170cd4 (codigo + testes), 72ed672 (2 testes de frase que a
+    prova pediu), e9309df (arquivos dos portoes) em session/chain-1126-1336. pair-reviewer
+    OK-WITH-NOTES, sem correcao. completion-auditor COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-6.yaml).
+    proof-reviewer PROVEN em 72ed672, 19 de 19 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-6.yaml;
+    corrigi no yaml a contagem ''20'' para ''19'' a pedido do proprio proof-reviewer);
+    1a passada UNPROVEN com 2 sobreviventes. tests/run-all.sh em 7170cd4: 259 de
+    260; tests/test_cepa_until_quota.py saiu com 143 (SIGTERM, processo morto de
+    fora) e passou sozinho no mesmo codigo (73 ok, 0 FAIL); cepa-run identico entre
+    7170cd4 e 72ed672. Contador rewrites por item no lugar do booleano rewritten.
+    Para o CS-7: a frase ''the reader rewrites once per item'' (segundo ? sem texto)
+    esta fixada por test_empty_question_mark_twice_says_the_reader_rewrites_once_per_item
+    e precisa mudar junto; comentario defasado em cepa-run ~4703.'
+  head_commit: e9309df8154fd53eaefc0442a4e118e797eb8ca0
 - id: CS-7
   title: um segundo `?` sem texto não dispara reescrita
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
