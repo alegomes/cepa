@@ -52,7 +52,8 @@ def test_the_end_of_a_run_with_a_long_reason_fits_the_terminal_and_names_the_mer
         # per-item step lines above it are not part of the report).
         end = out[out.find("ended at"):]
         check("o relatório do fim começa no cabeçalho", "ended at" in out)
-        wide = [l for l in end.splitlines() if len(l) > 100]
+        wide = [l for l in end.splitlines() if len(l) > 100
+                and not l.startswith("   side branch:")]
         check("nenhuma linha do fim passa de 100 colunas", not wide,
               "\n".join(wide[:5]))
         check("merge into aparece exatamente uma vez",
@@ -64,7 +65,11 @@ def test_the_end_of_a_run_with_a_long_reason_fits_the_terminal_and_names_the_mer
 def end_of(out):
     """The report: from the line of the header panel on."""
     at = out.find("ended at")
-    return out[out.rfind("\n", 0, at) + 1:]
+    report = out[out.rfind("\n", 0, at) + 1:]
+    # The three-part block (`What happened:` ...) comes after the paths line and
+    # has its own test (test_cepa_run_closing_screen.py); the full side-branch
+    # name in it is never cut to the width.
+    return report.split("\nWhat happened:")[0] + "\n"
 
 
 def test_panels_come_in_order_and_the_paths_line_closes_the_report():
@@ -94,9 +99,12 @@ def test_header_has_the_window_the_totals_and_no_waiting_on_you_wording():
         check("o cabeçalho traz o motivo da parada", "end-of-queue" in header, header)
         check("...a janela com a barra", re.search(r"window \d\d:\d\d → \d\d:\d\d  [▰▱]{24}",
                                                     header) is not None, header)
-        check("...e uma linha de totais com entregues, travados, para você e commits",
-              re.search(r"1 delivered · 1 stuck · 0 no progress · 1 for you · "
-                        r"1 commit\(s\)", header) is not None, header)
+        check("...e uma linha de totais com entregues, travados e para você",
+              re.search(r"1 delivered · 1 stuck · 0 no progress · 1 for you",
+                        header) is not None, header)
+        check("...e uma linha de commits que separa o branch da run da lateral",
+              re.search(r"commits: 1 on the run branch · 1 on 1 side branch\(es\)",
+                        header) is not None, header)
 
 
 def test_items_panel_aligns_the_id_column_and_cuts_the_reason_but_not_the_state():

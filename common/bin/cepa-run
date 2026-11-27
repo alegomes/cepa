@@ -2168,6 +2168,72 @@ def failed_suite_files(log, offset):
     return files
 
 
+# How many failure lines the closing screen shows per item, and how long each is.
+BUILD_FAILURE_SHOWN = 6
+BUILD_FAILURE_WIDTH = 200
+_BUILD_HEADER = re.compile(r"^===== \S+ · verify · .*$", re.M)
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+# One pattern per build style; the first style with a match wins.
+_FAILURE_STYLES = (
+    # Maven surefire: "[ERROR]   Class.method:89 message ==> expected: <59> ..."
+    re.compile(r"^\[ERROR\]\s{2,}([\w$.]+(?::\d+\b| » ).*)$"),
+    # pytest short summary: "FAILED tests/test_x.py::test_y - AssertionError: ..."
+    re.compile(r"^((?:FAILED|ERROR) \S+::\S+.*)$"),
+    # this repo's own scripts: "FAIL  <case>  <detail>"
+    re.compile(r"^(FAIL\s+\S.*)$"),
+)
+_UNITTEST_HEAD = re.compile(r"^((?:FAIL|ERROR): \S+ \(.*\))\s*$")
+_UNITTEST_CAUSE = re.compile(r"^(?:\w+\.)*\w*(?:Error|Exception|Failure)\b.*$")
+
+
+def last_build_output(log, tail_bytes=4_000_000):
+    """The output of the last full build the supervisor wrote to the run's `.log`:
+    from its `===== ... · verify · <command>` header to the end. The log can be
+    megabytes (the agents' output is in it), so only its tail is read."""
+    try:
+        with open(log, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(0, size - tail_bytes))
+            text = f.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
+    heads = list(_BUILD_HEADER.finditer(text))
+    return text[heads[-1].end():] if heads else text
+
+
+def build_failures(output, shown=BUILD_FAILURE_SHOWN):
+    """(count, lines, found): the tests the build output says failed, each with the
+    first line of its failure, at most `shown` lines. `found` is False when no
+    known style matched and `lines` are the last non-empty lines of the output.
+    Styles: Maven surefire, pytest, unittest, and this repo's `FAIL  <case>`."""
+    lines = [_ANSI.sub("", l).rstrip() for l in (output or "").splitlines()]
+    cut = lambda t: (t if len(t) <= BUILD_FAILURE_WIDTH  # noqa: E731
+                     else t[:BUILD_FAILURE_WIDTH - 1] + "…")
+    for style in _FAILURE_STYLES:
+        hits = []
+        for l in lines:
+            m = style.match(l.strip())
+            if m and m.group(1).strip() not in hits:
+                hits.append(m.group(1).strip())
+        if hits:
+            return len(hits), [cut(h) for h in hits[:shown]], True
+    hits = []
+    for i, l in enumerate(lines):
+        m = _UNITTEST_HEAD.match(l)
+        if not m:
+            continue
+        cause = next((x.strip() for x in lines[i + 1:i + 25]
+                      if _UNITTEST_CAUSE.match(x.strip())), "")
+        hit = m.group(1) + (f": {cause}" if cause else "")
+        if hit not in hits:
+            hits.append(hit)
+    if hits:
+        return len(hits), [cut(h) for h in hits[:shown]], True
+    tail = [l.strip() for l in lines if l.strip()][-shown:]
+    return 0, [cut(t) for t in tail], False
+
+
 def undo_item(repo, tree, run_id, ident, since, in_the_middle=(),
                 suffix="vermelho", back=1, queue=None):
     """Takes off the night branch the commits of an item whose build went
@@ -2958,6 +3024,58 @@ def clone_state_blocking_commit(root):
     return None
 
 
+# What the last `commit_run_records` / `owner_commit_command` left out because git
+# ignores it: [(path relative to the clone, "<file>:<line>: <pattern>")]. The two
+# screen lines that report the commit read it (`note_left_out`).
+LEFT_OUT = []
+
+
+def git_ignored(root, rel):
+    """{path: "<file>:<line>: <pattern>"} for the paths in `rel` that git ignores.
+    `git check-ignore` does not report tracked files, so a queue.yaml that is
+    versioned stays in even when `.gitignore` has `.claude/*`."""
+    if not rel:
+        return {}
+    try:
+        p = subprocess.run(["git", "check-ignore", "-v", "-z", "--stdin"],
+                           input="\0".join(rel) + "\0",
+                           cwd=str(root), capture_output=True, text=True,
+                           timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    if p.returncode != 0:
+        return {}
+    parts = p.stdout.split("\0")
+    found = {}
+    for i in range(0, len(parts) - 3, 4):
+        source, line, pattern, path = parts[i:i + 4]
+        if pattern.startswith("!"):
+            continue  # a negation: git does NOT ignore this path
+        found[path] = f"{source}:{line}: {pattern}"
+    return found
+
+
+LEFT_OUT_SHOWN = set()
+
+
+def note_left_out(out=print):
+    """Says which record files stayed out of the commit and why (the rule of each
+    one), once per file: a second commit at the end of the run (a signal right
+    after the normal end) does not repeat it."""
+    fresh = [(path, why) for path, why in LEFT_OUT if path not in LEFT_OUT_SHOWN]
+    LEFT_OUT.clear()
+    if not fresh:
+        return
+    by_rule = {}
+    for path, why in fresh:
+        by_rule.setdefault(why, []).append(path)
+        LEFT_OUT_SHOWN.add(path)
+    out("   left out of the commit because git ignores them: "
+        + "; ".join(f"{', '.join(paths)} (rule {why})"
+                    for why, paths in by_rule.items())
+        + ". The rest was committed; they stay on disk")
+
+
 def commit_run_records(repo, paths, message):
     """Commits, on the main clone's branch, the run's own paths that git sees as
     changed or new (spec `until-arvore-limpa`, CS-1): the queue marks, the
@@ -2980,6 +3098,10 @@ def commit_run_records(repo, paths, message):
             rel.append(str(Path(path).resolve().relative_to(root.resolve())))
         except ValueError:
             continue  # outside the clone: not this commit's business
+    LEFT_OUT.clear()
+    ignored = git_ignored(root, rel)
+    LEFT_OUT.extend((r, ignored[r]) for r in rel if r in ignored)
+    rel = [r for r in rel if r not in ignored]
     if not rel:
         return None, None
     try:
@@ -2991,15 +3113,23 @@ def commit_run_records(repo, paths, message):
         return None, str(e)
     if st.returncode != 0:
         return None, (st.stderr or "").strip() or f"git status exited {st.returncode}"
-    dirty = [entry[3:] for entry in st.stdout.split("\0") if len(entry) > 3]
+    entries = [entry for entry in st.stdout.split("\0") if len(entry) > 3]
+    dirty = [entry[3:] for entry in entries]
     if not dirty:
         return None, None
     blocked = clone_state_blocking_commit(root)
     if blocked:
         return None, NotAttempted(blocked)
-    code, output = git(["add", "--", *dirty], root)
-    if code != 0:
-        return None, output or f"`git add` exited {code} with no message"
+    # `git add` only for the files git does not track yet: `git commit --only`
+    # takes the tracked ones by itself, and `git add` of a tracked file that
+    # `.gitignore` also matches (a versioned queue.yaml under `.claude/*`) is
+    # refused with git's "paths are ignored" hint, the failure of run
+    # all/2026-11-26-0838.
+    fresh = [entry[3:] for entry in entries if entry.startswith("??")]
+    if fresh:
+        code, output = git(["add", "--", *fresh], root)
+        if code != 0:
+            return None, output or f"`git add` exited {code} with no message"
     code, output = git(["commit", "-q", "-m", message, "--only", "--", *dirty], root)
     if code != 0:
         # A hook that exits 1 without printing leaves git silent too: without
@@ -3031,9 +3161,30 @@ def owner_commit_command(repo, paths, message):
             rel.append(str(Path(path).resolve().relative_to(root.resolve())))
         except ValueError:
             continue
+    # Same selection as `commit_run_records`: no file git ignores (`git add` refuses
+    # it and the whole command fails) and none that does not exist.
+    ignored = git_ignored(root, rel)
+    rel = [r for r in rel if r not in ignored and (root / r).exists()]
+    fresh = list(rel)  # when git status cannot be read: add them all, as before
+    try:
+        st = subprocess.run(["git", "status", "--porcelain", "-z",
+                             "--untracked-files=all", "--", *rel],
+                            cwd=str(root), capture_output=True, text=True,
+                            timeout=120)
+        if st.returncode == 0:  # only what changed: `commit --only` of a clean path fails
+            entries = [e for e in st.stdout.split("\0") if len(e) > 3]
+            rel = [e[3:] for e in entries]
+            fresh = [e[3:] for e in entries if e.startswith("??")]
+    except (OSError, subprocess.SubprocessError):
+        pass
+    if not rel:
+        return "# nothing to commit: git ignores the record files or they did not change"
     quoted = " ".join(shlex.quote(r) for r in rel)
     clone = shlex.quote(str(root))
-    return (f"git -C {clone} add -- {quoted} && git -C {clone} commit "
+    # `add` only for files git does not track yet (same rule as `commit_run_records`).
+    add = (f"git -C {clone} add -- {' '.join(shlex.quote(r) for r in fresh)} && "
+           if fresh else "")
+    return (f"{add}git -C {clone} commit "
             f"-m {shlex.quote(message)} --only -- {quoted}")
 
 
@@ -3069,6 +3220,7 @@ def print_commit_made(sha, what="the queue marks and the run records"):
     `decide`, `close-dead` and `land` subcommands say it the same way)."""
     print(SCREEN.c("cinza", f"   commit: {sha[:7]} on the clone's branch, "
                             f"with {what} (not pushed)"))
+    note_left_out()
 
 
 def print_commit_refused(reason, command, skipped, what="the run records"):
@@ -3082,6 +3234,7 @@ def print_commit_refused(reason, command, skipped, what="the run records"):
     else:
         print(f"   commit: git refused the commit of {what} "
               f"({reason}); they stay in the clone without a commit")
+    note_left_out()
     print(f"   to commit by hand: {command}")
 
 
@@ -3134,6 +3287,8 @@ def commit_subcommand_records(repo, queue, run_id, verb, summary,
             signal.signal(sig, handler)
     if sha:
         print_commit_made(sha, what)
+    elif not error:
+        note_left_out()
     elif error:
         print_commit_refused(refusal_reason(error),
                              # Only paths that exist: `git add` of a `.review.md`
@@ -5077,6 +5232,114 @@ def paths_line(entries, room):
         return fit(", ".join(n for n, _p in entries) + ": "
                    + f"{paths[0].parent}/{stems.pop()}.{{{exts}}}", room)
     return fit(full, room)
+
+
+def review_pending(review):
+    """(sentence, decisions) from the `**For you:** N decisions and M tasks.` line
+    of `<run>.review.md`: the sentence as the analysis wrote it (without the final
+    period) and the number of decisions in it. Without the line, the number of
+    questions in the `cepa-decisoes` block. (None, None) when the file cannot be
+    read or says neither."""
+    try:
+        text = Path(review).read_text(encoding="utf-8")
+    except (OSError, TypeError):
+        return None, None
+    m = re.search(r"\*\*For you:\*\*\s*([^\n]+)", text)
+    if m:
+        sentence = m.group(1).strip().rstrip(".").strip()
+        n = re.search(r"(\d+)\s+decision", sentence)
+        if n:
+            return sentence, int(n.group(1))
+        return sentence, (0 if re.search(r"\bnothing\b|\bno\b|\bnone\b", sentence,
+                                         re.I) else None)
+    found = len((analysis_decisions(text).get("itens") or {}))
+    return (f"{found} decision(s)", found) if found else (None, None)
+
+
+def closing_block(queue, run_id, all_queues, start_branch, commits, delivered,
+                  stuck, no_progress, side_saved, side_total, review, review_why, owner_count,
+                  land_pending, red_ids, repo, landed=None):
+    """The last thing on the closing screen (fb-20261126-4/-6): three parts, in
+    this order. What happened (one to three sentences, with where the work is),
+    what is pending for the owner (the count the `.review.md` gives; the run's own
+    record when the analysis is missing, and it says so) and ONE command to run
+    now. Returns the lines to print; names are never cut to the terminal width."""
+    out = []
+    sides = [(n_, c_) for n_, c_ in side_saved]
+    saved = side_total
+    # 1. what happened
+    if landed:
+        first = (f"{delivered} item(s) delivered and already merged into "
+                 f"`{landed}` by this run (--auto-land).")
+    elif isinstance(commits, int) and commits > 0:
+        first = (f"{delivered} item(s) delivered, with {commits} commit(s) now on "
+                 f"the run branch `{start_branch}`, not merged yet.")
+    else:
+        first = "Nothing entered the run branch" + (
+            f" ({delivered} item(s) delivered, but they have no commit there)."
+            if delivered else ".")
+    sentences = [first]
+    if sides:
+        sentences.append(
+            f"{saved} commit(s) were saved on "
+            f"{'a side branch' if len(sides) == 1 else 'side branches'} "
+            "(items the full build rejected or that used up their attempts) "
+            "and are not on the run branch.")
+    if stuck or no_progress:
+        sentences.append(f"{stuck} item(s) stayed stuck and {no_progress} made no "
+                         "progress.")
+    width = max(SCREEN.width(), 40)
+    wrap = lambda label, text: textwrap.wrap(  # noqa: E731
+        label + text, width, subsequent_indent="   ", break_long_words=False,
+        break_on_hyphens=False)
+    out.extend(wrap("What happened: ", " ".join(sentences)))
+    for name, count in sides:
+        out.append(f"   side branch: {name}"
+                   + (f" ({count} commit(s))" if count is not None else ""))
+    # 2. what is pending
+    sentence, decisions = review_pending(review) if review else (None, None)
+    no_count = bool(review) and sentence is None
+    if sentence is not None:
+        pending = f"{sentence} (the count in the analysis)"
+        if owner_count is not None and decisions is not None \
+                and owner_count != decisions:
+            pending += (f"; the Next panel above lists only the {owner_count} "
+                        "question(s) the queue holds")
+    else:
+        parts = ([f"{owner_count} owner question(s)"] if owner_count else [])
+        if land_pending:
+            parts.append("the merge of the run branch")
+        if len(red_ids) + stuck:
+            parts.append(f"{len(red_ids) + stuck} item(s) stuck or sent back to "
+                         "the queue")
+        pending = (" and ".join(parts) or "nothing") + (
+            " (counted from the run's own record: "
+            + ("the analysis exists but gives no count" if no_count else
+               f"the analysis is missing, it {review_why}" if review_why else
+               "the analysis is missing") + ")")
+        decisions = owner_count
+    out.extend(wrap("Pending for you: ", pending))
+    # 3. one command
+    if decisions:
+        command, why = (f"cepa run decide {queue}/{run_id}",
+                        "answers the pending questions one by one")
+    elif land_pending:
+        command, why = (f"cepa run land {queue}/{run_id} --yes",
+                        "merges the run branch into your branch and runs the full build")
+    elif red_ids or stuck or no_progress:
+        command, why = (("cepa run --all" if all_queues else f"cepa run {queue}")
+                        + " --for 2h",
+                        "runs the queue again; the items put back are tried again")
+    else:
+        command, why = None, None
+    if command:
+        # The command on one line, never wrapped: it is what the owner copies.
+        out.append(f"Run now: {command}")
+        out.extend(textwrap.wrap(why[0].upper() + why[1:] + ".", width,
+                                 initial_indent="   ", subsequent_indent="   "))
+    else:
+        out.append("Run now: nothing; the run left no command for you")
+    return out
 
 
 # How many owner questions the "Next" panel spells out, one row each; the rest is
@@ -7349,6 +7612,8 @@ def _main(argv=None):
             sha, error = commit_run_records(
                 repo, [root / p for p in all_paths],
                 f"until: collect records of dead runs ({names})")
+            if not sha and not error:
+                note_left_out(lambda m: print(m, file=sys.stderr))
             if sha:
                 print(SCREEN.c("cinza", f"cepa-run: collected {len(all_paths)} loose "
                                         f"record(s) of dead runs ({names}) in "
@@ -7821,6 +8086,8 @@ def _main(argv=None):
             skipped = isinstance(error, NotAttempted)
             note_refused_commit(review_path, reason, command, skipped)
             print_commit_refused(reason, command, skipped)
+        else:
+            note_left_out()
 
     def interrupt(signum, _frame):
         name = signal.Signals(signum).name
@@ -7887,6 +8154,13 @@ def _main(argv=None):
     # taking an item out of the queue with a reason is not a run failure —, but the summary
     # can't add them up: on 09/23 "25 with progress" hid 20 stalled.
     delivered, blocked_items, reds, without_commit = [], [], [], []
+    # Per item the supervisor's build rejected: (queue, id, side branch, reason,
+    # failed-test count, lines, whether the lines are test failures), read from
+    # the build output the supervisor already put in the `.log`.
+    red_causes = []
+    # The build output of the red build, taken right after it ran: a build on the
+    # middle commit (pair check) comes after it in the `.log` and may be green.
+    red_output = [None]
 
     consecutive_failures = 0
     # The `blocked` of the current sequence. Only an outcome that is not `blocked`
@@ -8023,8 +8297,14 @@ def _main(argv=None):
             "item came back to be fixed." if new_status == "blocked"
             else None)
         reds.append((ident_, side_branch, reason))
+        n_failed, fail_lines, matched = build_failures(
+            red_output[0] if red_output[0] is not None else last_build_output(log))
+        red_output[0] = None
+        red_causes.append((queue_, ident_, side_branch, reason, n_failed,
+                           fail_lines, matched))
         log_event({"evento": "verify_vermelho", "id": ident_,
-                   "lateral": side_branch, "erro": undo_error or finish_error})
+                   "lateral": side_branch, "erro": undo_error or finish_error,
+                   "falhas": fail_lines, "testes_falhos": n_failed})
         if side_branch:
             log_event({"evento": "volta_vermelha", "id": ident_,
                        **({"fila": queue_} if a.all_queues else {}),
@@ -8098,6 +8378,7 @@ def _main(argv=None):
         if green:
             step(f"green ({human(timedelta(seconds=sec))}): {pair['ident']} stays")
             return False, None
+        red_output[0] = last_build_output(log)
         return True, pair_culprit_off(pair, reason, reason2)
 
     end_reason, end_detail = None, None
@@ -8487,6 +8768,8 @@ def _main(argv=None):
                     step("green on the 2nd try: flaky build, "
                           "recorded in telemetry")
                     unstable = True
+            if not green:
+                red_output[0] = last_build_output(log)
             pair_broke = False
             if pair and green:
                 log_event({"evento": "verify", "id": pair["ident"], "verde": True,
@@ -9018,13 +9301,31 @@ def _main(argv=None):
     # `aterrissar` remains. What no command executes goes to "fica com você".
     actions = []
     commits = 0
+    # What sits on side branches (an item the build rejected, an exhausted item):
+    # counted against the run branch's tip, so what the run branch also holds is
+    # not counted twice. Taken before `close_empty_branch` removes the branch.
+    tip = head_of(tree) or run_base
+    side_saved = []
+    code, refs = git(["for-each-ref", "--format=%(refname:short)",
+                      f"refs/heads/{start_branch}-*"], repo)
+    for side_name in (refs.splitlines() if code == 0 else []):
+        c, n_side = git(["rev-list", "--count", f"{tip}..{side_name}"], repo)
+        side_saved.append((side_name, int(n_side) if c == 0 and n_side.isdigit()
+                           else None))
+    side_total = 0
+    if side_saved:
+        # Union, not the sum: two side branches can share commits.
+        c, n_all = git(["rev-list", "--count", *[n_ for n_, _c in side_saved],
+                        f"^{tip}"], repo)
+        side_total = (int(n_all) if c == 0 and n_all.isdigit()
+                      else sum(n_ or 0 for _n, n_ in side_saved))
     if close_empty_branch(repo, tree, start_branch, run_base):
-        branch_row = [("cinza", "run branch: "), (None, f"no commits, removed "
-                       f"`{start_branch}` and its worktree", True)]
+        branch_row = [("cinza", "run branch: "), (None, f"no commits entered it, "
+                       f"removed `{start_branch}` and its worktree", True)]
     else:
         c, n = git(["rev-list", "--count", f"{run_base}..HEAD"], tree)
         n = n if c == 0 else "?"
-        commits = n
+        commits = int(n) if str(n).isdigit() else n
         branch_row = [("cinza", "run branch: "), ("ciano", f"`{start_branch}`"),
                       (None, f" ({n} commit(s)) at {short_path(tree, repo)}", True)]
         actions.append(land_action(repo, tree, a.queue, run_id, n))
@@ -9092,7 +9393,6 @@ def _main(argv=None):
                         f"{len(blocked_items)} stuck"),
         (None, " · "), (colored(len(failed), "vermelho"), f"{len(failed)} no progress"),
         (None, " · "), (colored(for_you, "amarelo"), f"{for_you} for you"),
-        (None, f" · {commits} commit(s)"),
     ] + ([(None, " · "), ("negrito", "US$ " + f"{cost:.2f}".replace(".", ","))]
          if costs else []))
     if costs:
@@ -9100,6 +9400,10 @@ def _main(argv=None):
         head_rows.append([("cinza", f"cost: sum of `total_cost_usd` over {len(costs)} "
                            f"round(s): {' + '.join(br(v) for v in costs.values())}",
                            True)])
+    head_rows.append([("cinza", "commits: "), (None, (
+        f"{commits} on the run branch"
+        + (f" · {side_total} on "
+           f"{len(side_saved)} side branch(es)" if side_saved else "")), True)])
     head_rows.append(branch_row)
     for h in inheritance:
         head_rows.append([("cinza", f"inherited at the start: `{h['branch']}`; "
@@ -9146,6 +9450,28 @@ def _main(argv=None):
             rows.append(lead + [("cinza" if SCREEN.enabled else None, text, True)])
         report_panel(f"Items ({len(outcomes)})", rows)
 
+    # ── panel 2b: why the supervisor's full build rejected an item ───────
+    if red_causes:
+        rows = []
+        room_ = panel_room()
+        # One entry per item (the last red is the one that is left); the lines
+        # are wrapped, not cut: the failure text is the point of the panel.
+        last_red = {(q_, i_): rest for q_, i_, *rest in red_causes}
+        for (queue_, ident_), (side_, reason_, n_failed, fail_lines,
+                               matched) in last_red.items():
+            who = f"{queue_}/{ident_}" if a.all_queues and queue_ else ident_
+            head = (f"{n_failed} test(s) failed in the full build ({reason_})"
+                    if matched else
+                    f"the full build failed ({reason_}); no test name found, "
+                    "last lines of its output")
+            rows += [[("negrito" if k == 0 else None, t_)] for k, t_ in enumerate(
+                textwrap.wrap(f"{who}: {head}", room_) or [who])]
+            for fl in fail_lines:
+                rows += [[("cinza", "   " + t_)]
+                         for t_ in textwrap.wrap(fl, room_ - 3,
+                                                 subsequent_indent="  ")]
+        report_panel("Why the full build failed", rows)
+
     # ── panel 3: the decisions ───────────────────────────────────────────
     groups = {}
     for fkey, pref in followed.items():
@@ -9181,6 +9507,7 @@ def _main(argv=None):
     final_state[0] = True
 
     owner_report = {}
+    analysis_failure = [None]  # why the analysis is missing, for the closing block
 
     def ask_owner(review=None):
         # The summary above only counts; here each pending item becomes a question (09/30).
@@ -9233,6 +9560,27 @@ def _main(argv=None):
         if review:
             entries.append(("analysis", short_path(review, repo)))
         print(SCREEN.c("cinza", "\n   " + paths_line(entries, panel_room())))
+        if a.no_analysis:
+            why_missing = "was not asked for (--no-analysis)"
+        elif items == 0:
+            why_missing = "was not run (nothing was executed)"
+        elif analysis_failure[0]:
+            why_missing = analysis_failure[0]
+        else:
+            why_missing = None
+        owner_n = len(owner_questions((owner_report or {}).get("deferred")))
+        print()
+        for line in closing_block(
+                a.queue, run_id, a.all_queues, start_branch, commits,
+                len(delivered), len(blocked_items), len(failed), side_saved,
+                side_total, review, why_missing, owner_n, bool(pending_action(left_over)),
+                sorted({r_[1] for r_ in red_causes}), repo,
+                landed=(next((x.get("destino") or "the clone's branch"
+                              for x in left_over.get("acoes") or []
+                              if isinstance(x, dict) and x.get("id") == "aterrissar"),
+                             "the clone's branch")
+                        if left_over.get("estado") == "aterrissado" else None)):
+            print(line)
         return result
 
     # The analysis spends quota: stopping on the quota and then analyzing hits the
@@ -9244,6 +9592,7 @@ def _main(argv=None):
               f"`/common:run-review {short_path(ledger, repo)}` once the quota "
               "is back")
         log_event({"evento": "analise", "feita": False, "motivo": "cota"})
+        analysis_failure[0] = "did not run (the run stopped on the quota)"
         return commit_records(ask_owner())
     print("   analysis: running /common:run-review…")
     review, review_error = analyze_run(repo, tree if tree.exists() else None,
@@ -9253,6 +9602,7 @@ def _main(argv=None):
     if not review:
         print(f"   analysis: failed ({review_error}) — run `/common:run-review "
               f"{short_path(ledger, repo)}` by hand")
+        analysis_failure[0] = f"failed ({review_error})"
     return commit_records(ask_owner(review), review)
 
 

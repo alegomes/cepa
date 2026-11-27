@@ -349,7 +349,9 @@ def test_the_end_of_a_real_run_counts_the_answered_no_in_next():
                               extra_env={"COLUMNS": "160"})
         out = ANSI.sub("", p.stdout + p.stderr)
     check("the run ended with the final report", "── Next" in out, out[-1500:])
-    nxt = out.split("── Next")[-1]
+    # The Next panel only: the closing block ("What happened:" on) has its own
+    # "Pending for you" line, which also says "owner question(s)".
+    nxt = out.split("── Next")[-1].split("\nWhat happened:")[0]
     line = lines_with(nxt, "already answered")
     check("one row: count, date, the command that revisits",
           len(line) == 1 and "1 route(s)" in line[0] and "06/11" in line[0]
