@@ -259,13 +259,16 @@ items:
     entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal
     com a fila `f1` e o item `C1-47`, a linha da legenda que começa com "Enter ="
     contém "chat", "f1" e "C1-47"; hoje ela diz "leaves the question for later".'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  claimed_by:
-    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
-    pid: 45882
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
-    branch: session/chain-1126-1336
-    started_at: '2026-11-27T04:32:52+00:00'
+  evidence: 'commits 5404baa (legenda + testes), a460d3f (arquivos dos portoes)
+    em session/chain-1126-1336. pair-reviewer OK-WITH-NOTES, sem correcao. completion-auditor
+    COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-11.yaml).
+    proof-reviewer PROVEN em 5404baa, 23 de 23 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-11.yaml).
+    tests/run-all.sh em 5404baa: 260 de 260, tudo verde. Legenda nova: ''Enter =
+    leaves the question for later; a doubt can go to a chat session (queue <fila>,
+    item <id>)'', fila e id vindos de split_label; sem fila ou id, o texto antigo.
+    O codigo dos 11 itens esta na branch session/chain-1126-1336, sem merge e sem
+    push.'
+  head_commit: a460d3f4a408ffb600a31ca8c66d88ccdc05bcfd
