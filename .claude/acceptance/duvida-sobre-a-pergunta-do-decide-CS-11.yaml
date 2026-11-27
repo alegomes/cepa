@@ -1,0 +1,23 @@
+key: CS-11
+queue: duvida-sobre-a-pergunta-do-decide
+status: complete
+pass: 1
+criteria:
+  - id: AC1
+    text: "docs/spec/duvida-sobre-a-pergunta-do-decide.md CS-11 (cli): a legenda do Enter diz que a dúvida pode ir a uma sessão de chat, com a fila e o item (pty: fila f1 e item C1-47; a linha que começa com 'Enter =' contém 'chat', 'f1' e 'C1-47'; antes dizia 'leaves the question for later'). Q4: só uma frase, sem mecanismo novo."
+    altitude: cli
+    surface: "common/bin/cepa-run decide panel (cepa-until decide f1 --repo ...) in a pty; legend line found by its 'Enter =' prefix, wrapped continuation joined"
+    test: "tests/test_cepa_until_decide_doubt.py::test_enter_legend_names_chat_queue_and_item_in_a_pty (plus ::test_each_item_shows_its_own_id_in_its_own_enter_line_in_a_pty, ::test_all_queues_panel_shows_each_items_own_queue_and_bare_id_in_a_pty, ::test_enter_legend_of_an_all_run_label_shows_the_items_own_queue_and_bare_id, ::test_enter_legend_entry_with_and_without_queue_and_item)"
+    layer: cli-pty
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -> '80 passed in 25.72s' (N=80 > 0); filtered -k 'enter_legend or each_item_shows or all_queues_panel' -> '5 passed, 75 deselected' (N=5)"
+    sub_criteria:
+      real_panel_in_pty: "complete. the test builds a real git repo with a queue really named f1 (.claude/queues/f1/queue.yaml) and an item really named C1-47, and spawns `cepa-until decide f1 --repo` through on_tty; the legend comes from legend_lines in cepa-run called by decide with the item's own queue and bare id (split_label), not a stub."
+      line_found_by_prefix: "complete. _enter_legends finds lines starting 'Enter = ' after stripping card borders and joins wrapped continuation until a blank line, the next 'key = ' entry or a '[' line."
+      f1_and_C1_47_on_that_line: "complete. 'chat', 'f1', 'C1-47' and 'for later' are asserted on the joined Enter line only (not on the whole screen), and the test asserts exactly one such line, so the item header showing the id cannot satisfy it."
+      no_pass_on_timeout: "complete. asserts rc == 0 (on_tty SIGKILLs at the deadline, so a timeout gives a non-zero status and a '<on_tty: no answer within ...>' marker), asserts the menu text is on screen, asserts exactly one Enter line (empty list fails), and a final assert fails if any check recorded a failure."
+      per_item_and_all_queues: "complete. extra pty tests show two items each naming only its own id, and the --all panel naming each item's own queue and bare id once."
+      unit_pins: "complete. whole entry pinned; without queue or without item (or neither) keeps today's entry; positional `delivered` call and the other entries unchanged."
+      outermost_layer_changed: "complete. the diff changes legend_lines and its call in decide in common/bin/cepa-run, the text the user sees; one sentence only, no new mechanism (Q4)."
+      mutation_reasoning: "not run (source read-only for me). Reverting to 'leaves the question for later' removes 'chat', 'f1' and 'C1-47' from the line, so the pty test fails."
+    gap: null

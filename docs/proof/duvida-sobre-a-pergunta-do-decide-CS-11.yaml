@@ -1,0 +1,74 @@
+schema_version: 2
+card: duvida-sobre-a-pergunta-do-decide-CS-11
+verdict: proven
+reviewed_at: 2026-11-27T02:00:00-03:00
+base_commit: df3d18d
+head_commit: 5404baa
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa). Superficie = painel `cepa run decide` lido em pseudo-terminal
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-run (legend_lines: nova assinatura com queue/ident; a entrada de Enter vira \"leaves the question for later; a doubt can go to a chat session (queue {queue}, item {ident})\" quando `queue and ident`, senao o texto antigo)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes pty rodam o cepa-run decide real; leitor falso so na fronteira (CEPA_RUN_READER=off / CEPA_FEEDBACK_DIR). Os unitarios chamam legend_lines/decide reais (decide com callbacks injetados nas bordas: question/answer/unclear/rewrite).
+    - class: "common/bin/cepa-run (decide: own_queue, own_ident = split_label(repo, queue, ident) e legend_lines(..., queue=own_queue, ident=own_ident))"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbacao em worktree descartavel detached em 5404baa, removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "Baseline sem perturbacao em 5404baa: 80 passed in 25.84s (`python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -x`)."
+        - "(A1) 'chat' -> 'talk': RED pty test_enter_legend_names_chat_queue_and_item_in_a_pty ('the Enter line says chat'); 1 failed, 75 passed in 24.13s. numstat 1 1."
+        - "(A2) 'for later' removido da entrada nova: RED o mesmo teste pty ('still says the item stays for later'); 1 failed, 75 passed in 24.14s. numstat 1 1."
+        - "(A3) 'a doubt can go to a' -> 'it can go to a': RED so o unitario test_enter_legend_entry_with_and_without_queue_and_item ('the entry is exactly the new one'); 1 failed, 79 passed in 25.43s. O pty nao pega (o criterio pede chat/fila/item/for later). numstat 1 1."
+        - "(B1) {queue} removido: RED pty ('names the queue f1'); 1 failed, 75 passed in 24.04s (repetido isolado: 24.66s, mesmo resultado). numstat 1 1."
+        - "(B2) {queue} -> literal f1: RED pty do painel todas-as-filas test_all_queues_panel_shows_each_items_own_queue_and_bare_id_in_a_pty (a fila b mostraria f1); 1 failed, 77 passed in 25.31s. O pty da fila f1 fica verde, como deve. numstat 1 1."
+        - "(B3) fila e item trocados entre si: RED pty do painel todas-as-filas; 1 failed, 77 passed in 25.43s. O pty da fila f1 fica verde (os dois nomes continuam na linha, so invertidos). numstat 1 1."
+        - "(B4) item mostra a fila ({queue} nos dois lugares): RED pty ('names the item C1-47'); 1 failed, 75 passed in 24.60s. numstat 1 1."
+        - "(C1) {ident} removido: RED pty ('names the item C1-47'); 1 failed, 75 passed in 24.32s. numstat 1 1."
+        - "(C2) {ident} -> literal C1-47: RED pty dos dois itens ('the second names C1-48 and not C1-47'); 1 failed, 76 passed in 24.64s. O pty de um item fica verde, como deve. numstat 1 1."
+        - "(C3) fila mostra o item ({ident} nos dois lugares): RED pty ('names the queue f1'); 1 failed, 75 passed in 24.39s. numstat 1 1."
+        - "(D1) condicao `queue and ident` -> True: RED so o unitario (4 checks: sem fila e item, so fila, so item, `delivered` posicional); 1 failed, 79 passed in 26.15s. numstat 1 1."
+        - "(D2) condicao -> False: RED pty ('says chat', 'names the queue f1', 'names the item C1-47'); 1 failed, 75 passed in 24.33s. numstat 1 1."
+        - "(D3) condicao -> `queue or ident`: RED so o unitario (so fila, so item); 1 failed, 79 passed in 25.81s. numstat 1 1."
+        - "(D4) condicao -> so `queue`: RED so o unitario ('only the queue gives today's entry'); 1 failed, 79 passed in 25.44s. numstat 1 1."
+        - "(D5) condicao -> so `ident`: RED so o unitario ('only the item gives today's entry'); 1 failed, 79 passed in 24.91s. numstat 1 1."
+        - "(E1) texto de reserva 'for later' -> 'for now': RED so o unitario (4 checks do texto de hoje); 1 failed, 79 passed in 25.00s. numstat 1 1."
+        - "(E2) texto de reserva sem 'for later': RED so o unitario; 1 failed, 79 passed in 25.63s. numstat 1 1."
+        - "(F1) chamada em decide passa a `queue` do painel em vez de own_queue: RED so o unitario do rotulo `all/<run>` (test_enter_legend_of_an_all_run_label_shows_the_items_own_queue_and_bare_id); 1 failed, 78 passed in 25.80s. O pty --all fica verde porque la a fila do painel ja e a da fila do item. numstat 1 1."
+        - "(F2) chamada passa o `ident` cru em vez de own_ident: RED so o unitario do rotulo `all/<run>` (o prefixo `a/` apareceria); 1 failed, 78 passed in 25.81s. numstat 1 1."
+        - "(F3) chamada sem `queue=`: RED pty; 1 failed, 75 passed in 24.17s. numstat 1 1."
+        - "(F4) chamada sem `ident=`: RED pty; 1 failed, 75 passed in 23.95s. numstat 1 1."
+        - "(F5) resultados de split_label trocados (own_ident, own_queue = ...): RED pty do painel todas-as-filas; 1 failed, 77 passed in 25.78s. numstat 1 1."
+        - "(G1) chave \"Enter\" -> \"Esc\": RED pty ('exactly one legend line starts with `Enter =`' e mais 4); 1 failed, 75 passed in 24.01s. numstat 1 1."
+        - "Totais: 23 perturbacoes, 23 vermelhas por AssertionError com linha de resumo do pytest, 0 sobreviventes. Pty vermelho em A1, A2, B1, B2, B3, B4, C1, C2, C3, D2, F3, F4, F5, G1 (14); so o unitario vermelho em A3, D1, D3, D4, D5, E1, E2, F1, F2 (9); 14 + 9 = 23."
+        - "Parte sem teste vermelho: nenhuma. Equivalentes: nenhum. Vigiados so pelo unitario: a frase 'a doubt can go to a', o texto de reserva, as condicoes que nao sao `False`, e as duas chamadas que so divergem no painel `all/<run>` (F1, F2)."
+        - "Vermelho no cepa-run da base (cepa-run revertido a df3d18d no worktree): `python3 -m pytest tests/test_cepa_until_decide_doubt.py -q` -> FAILED os 5 testes novos (3 pty, o unitario do rotulo e o unitario da entrada; legend_lines() got an unexpected keyword argument 'queue'); 5 failed, 75 passed in 25.50s."
+      run: >-
+        `git worktree add --detach <scratchpad>/wt11 5404baa`; cada perturbacao aplicada so no texto indicado de common/bin/cepa-run (substituicao exata, uma ocorrencia, por script dentro do worktree), conferida com `git diff --numstat` (1 1 em todas), desfeita com `git checkout 5404baa -- common/bin/cepa-run`;
+        `python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -x` em primeiro plano, uma rodada por vez (80 passed baseline; base: 5 failed, 75 passed). Worktree removido; arvore primaria intocada salvo este yaml. Suite completa nao rodada.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "as linhas de comportamento alteradas (a entrada de Enter em legend_lines: texto, marcadores, condicao, texto de reserva, chave; e em decide: split_label e as duas chaves da chamada) foram quebradas em 23 partes e todas ficaram vermelhas: 23 de 23; assinatura e comentarios nao sao comportamento alem do que as perturbacoes F3/F4 ja cobrem."
+  l4_adversarial_input:
+    status: n/a
+    reason: "A unica entrada e o texto que o dono digita no proprio terminal (painel local, sem parser de dado externo, sem modulo api-rest); este diff so muda a frase da legenda da tecla Enter na tela e nao abre entrada nova."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-11 de docs/spec/duvida-sobre-a-pergunta-do-decide.md); a prova e a perturbacao. Os testes novos ficam vermelhos no cepa-run da base: 5 failed, 75 passed."
+routing_reason: >-
+  Quebrei de 23 jeitos a linha de Enter da legenda e a chamada que a alimenta (a palavra 'chat', 'for later', a frase da duvida, a fila e o item como marcadores removidos, fixos ou trocados, as cinco formas da condicao, o texto de reserva, as duas chaves da chamada, o par de retorno de split_label e a tecla a que a entrada esta presa) e todos ficaram vermelhos por assercao, com o nome do teste e a linha de resumo do pytest. Catorze foram pegos pelos testes no terminal real; nove (a frase da duvida, a condicao quando nao e False, o texto de reserva e as duas chamadas que so divergem no painel `all/<run>`) so pelos unitarios, o que e coerente com o criterio. Os cinco testes novos ficam vermelhos no cepa-run da base. Zero sobreviventes entre 23 perturbacoes. PROVEN.
