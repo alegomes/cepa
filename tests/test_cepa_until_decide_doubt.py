@@ -1648,6 +1648,165 @@ def test_question_mark_legend_entry_follows_the_rewrite_ceiling_constant():
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
+def _owner_item(ident):
+    it = item(ident, status="pending", human_pending="falta escolher a variante")
+    # one question per item: equal questions would be grouped in one card
+    it["owner_question"] = f"{QUESTION} ({ident})"
+    it["route_kind"] = "external-block"
+    return it
+
+
+def _enter_legends(plain):
+    """Every legend entry that starts with "Enter =", one string each, its wrapped
+    continuation joined and the card borders stripped (same approach as
+    `_question_mark_legend`)."""
+    import re
+    lines = [l.strip("│ ").strip() for l in plain.splitlines()]
+    found = []
+    for n, l in enumerate(lines):
+        if l.startswith("Enter = "):
+            got = [l]
+            for nxt in lines[n + 1:]:
+                if not nxt or re.match(r"^\S+ = ", nxt) or nxt.startswith("["):
+                    break
+                got.append(nxt)
+            found.append(" ".join(got))
+    return found
+
+
+def test_enter_legend_names_chat_queue_and_item_in_a_pty():
+    """Red test of CS-11, as a process in a pseudo-terminal: queue `f1`, item
+    `C1-47`; the legend line that starts with "Enter =" says chat, f1 and C1-47 and
+    still says the item stays for later."""
+    import test_cepa_until_all as al
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        root, _paths = al._repo(tmp, {"f1": [_owner_item("C1-47")]})
+        env = al._tty_env(tmp)
+        env.update(CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "f1", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=30, inputs=[(MENU, "")])
+        plain = ANSI.sub("", out)
+    check("CS-11 pty: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-11 pty: the menu was seen (a timeout cannot pass)", f"<{MENU}>" in plain,
+          plain[-1500:])
+    lines = _enter_legends(plain)
+    check("CS-11 pty: exactly one legend line starts with `Enter =`", len(lines) == 1,
+          plain[-1500:])
+    line = lines[0] if lines else ""
+    check("CS-11 pty: the Enter line says chat", "chat" in line, line)
+    check("CS-11 pty: the Enter line names the queue f1", "f1" in line, line)
+    check("CS-11 pty: the Enter line names the item C1-47", "C1-47" in line, line)
+    check("CS-11 pty: the Enter line still says the item stays for later",
+          "for later" in line, line)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_each_item_shows_its_own_id_in_its_own_enter_line_in_a_pty():
+    """CS-11, two items on the same panel: each Enter line names its own item."""
+    import test_cepa_until_all as al
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        root, _paths = al._repo(tmp, {"f1": [_owner_item("C1-47"),
+                                             _owner_item("C1-48")]})
+        env = al._tty_env(tmp)
+        env.update(CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "f1", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=40,
+                         inputs=[(MENU, ""), (MENU, "")])
+        plain = ANSI.sub("", out)
+    check("CS-11 two pty: decide exits 0", rc == 0, plain[-1500:])
+    lines = _enter_legends(plain)
+    check("CS-11 two pty: two Enter lines, one per item", len(lines) == 2,
+          plain[-1500:])
+    check("CS-11 two pty: the first names C1-47 and not C1-48",
+          len(lines) == 2 and "C1-47" in lines[0] and "C1-48" not in lines[0], lines)
+    check("CS-11 two pty: the second names C1-48 and not C1-47",
+          len(lines) == 2 and "C1-48" in lines[1] and "C1-47" not in lines[1], lines)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_all_queues_panel_shows_each_items_own_queue_and_bare_id_in_a_pty():
+    """CS-11, the all-queues panel (`decide --all`): items from queues `a` and `b`;
+    each Enter line names its own queue and the bare id, the queue once."""
+    import test_cepa_until_all as al
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        root, _paths = al._repo(tmp, {"a": [_owner_item("a1")],
+                                      "b": [_owner_item("b1")]})
+        env = al._tty_env(tmp)
+        env.update(CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "--all", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=60,
+                         inputs=[(MENU, ""), (MENU, "")])
+        plain = ANSI.sub("", out)
+    check("CS-11 all pty: decide exits 0", rc == 0, plain[-1500:])
+    lines = _enter_legends(plain)
+    check("CS-11 all pty: two Enter lines", len(lines) == 2, plain[-1500:])
+    want = ["(queue a, item a1)", "(queue b, item b1)"]
+    for n, w in enumerate(want):
+        got = lines[n] if len(lines) > n else ""
+        check(f"CS-11 all pty: Enter line {n + 1} is exactly the item's own {w}",
+              w in got and "/" not in got.split("chat session", 1)[-1], got)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_enter_legend_of_an_all_run_label_shows_the_items_own_queue_and_bare_id():
+    """CS-11 unit: in an end-of-run `all/<run>` panel the item is called `a/a1` and
+    `decide` hands `legend_lines` the queue `a` and the id `a1` (`split_label`), not
+    the panel's queue `all` and not the prefixed label."""
+    failed_before = len(FAILURES)
+    m = load_module()
+    seen = []
+    real = m.legend_lines
+    m.legend_lines = lambda *a, **k: (seen.append((a, k)), real(*a, **k))[1]
+    it = iter([""])
+    shown = []
+    m.decide(Path("/nao/existe"), "all", None, {}, [_deferred(id="a/a1", fila="a")], {},
+             question=lambda _p: next(it, ""), output=shown.append,
+             answer=lambda *a, **k: (0, "ok"), unclear=lambda *a, **k: (0, "ok"),
+             rewrite=lambda *a, **k: (None, "no"))
+    kws = [k for _a, k in seen]
+    check("CS-11 label unit: the legend got the item's own queue and bare id",
+          kws and all(k.get("queue") == "a" and k.get("ident") == "a1" for k in kws),
+          kws)
+    text = " ".join(" ".join(str(x) for x in shown).split())
+    check("CS-11 label unit: the line on screen has the queue once and no prefixed id",
+          "(queue a, item a1)" in text and "a/a1)" not in text, text[-600:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_enter_legend_entry_with_and_without_queue_and_item():
+    """CS-11 unit: the whole entry; without queue or item it is today's entry; the
+    other entries do not change."""
+    failed_before = len(FAILURES)
+    mod = _load_cepa_run_module()
+    chips = [("Enter", "later")]
+    got = mod.legend_lines(chips, {}, queue="f1", ident="C1-47")
+    check("CS-11 unit: the entry is exactly the new one",
+          got == ["Enter = leaves the question for later; a doubt can go to a chat "
+                  "session (queue f1, item C1-47)"], got)
+    today = ["Enter = leaves the question for later"]
+    check("CS-11 unit: no queue and no item gives today's entry",
+          mod.legend_lines(chips, {}) == today, mod.legend_lines(chips, {}))
+    check("CS-11 unit: only the queue gives today's entry",
+          mod.legend_lines(chips, {}, queue="f1") == today, "queue only")
+    check("CS-11 unit: only the item gives today's entry",
+          mod.legend_lines(chips, {}, ident="C1-47") == today, "item only")
+    check("CS-11 unit: the positional `delivered` call keeps working",
+          mod.legend_lines(chips, {}, True) == today, "delivered")
+    every = [("y", ""), ("n", ""), ("w", ""), ("v", ""), ("d", ""), ("e", ""),
+             ("?", ""), ("Enter", ""), ("q", "")]
+    plain = mod.legend_lines(every, {})
+    named = mod.legend_lines(every, {}, queue="f1", ident="C1-47")
+    check("CS-11 unit: every other entry is the same, in the same order",
+          [l for l in named if not l.startswith("Enter")]
+          == [l for l in plain if not l.startswith("Enter")]
+          and [l.split(" = ")[0] for l in named] == [l.split(" = ")[0] for l in plain],
+          named)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

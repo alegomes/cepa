@@ -3515,7 +3515,7 @@ ROUTE_KIND_LABEL = {"owner-task": "Task for you",
                     "open-question": "Open question"}
 
 
-def legend_lines(chips, summary, delivered=False):
+def legend_lines(chips, summary, delivered=False, queue=None, ident=None):
     """One line per key of the menu, in the menu's order: what each key does.
     The mechanics never change (`y` returns the item to the queue, `n` keeps it);
     what the owner needs is what that means for the WORK, which only the agent
@@ -3523,7 +3523,11 @@ def legend_lines(chips, summary, delivered=False):
     fila"). CS-3 (perguntas-da-largada-legiveis): the legend used to be a single
     line naming three of the keys, and the question described "yes" a second
     way; now only the legend says it, once per key, and "task" and "item" never
-    share a line (L3)."""
+    share a line (L3).
+    CS-11 (duvida-sobre-a-pergunta-do-decide): with the item's own `queue` and bare
+    `ident`, the Enter entry also says a doubt can go to a chat session and names
+    both, so the owner knows what to quote there. Without either it keeps the
+    plain entry."""
     yes = summary.get("se_sim")
     no = summary.get("se_nao")
     if delivered:
@@ -3543,7 +3547,9 @@ def legend_lines(chips, summary, delivered=False):
                    "?": "I did not understand the question: it is rewritten right "
                         f"away, in up to {UNCLEAR_REWRITE_SEC} s, and nothing is "
                         "answered",
-                   "Enter": "leaves the question for later",
+                   "Enter": ("leaves the question for later; a doubt can go to a "
+                             f"chat session (queue {queue}, item {ident})"
+                             if queue and ident else "leaves the question for later"),
                    "q": "stops the questions; the rest stays for later"})
     return [f"{key} = {effect[key]}" for key, _ in chips if key in effect]
 
@@ -4663,7 +4669,11 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 chips.append(E_CHIP)
             chips += [("?", "I don't understand"), ("Enter", "later"), ("q", "quit")]
             screen.blank()
-            screen.legend(legend_lines(chips, summary, delivered))
+            # CS-11: the item's OWN queue and bare id (`split_label`: in a `--all`
+            # run the label is `queue/id`), the same source the answer uses.
+            own_queue, own_ident = split_label(repo, queue, ident)
+            screen.legend(legend_lines(chips, summary, delivered,
+                                       queue=own_queue, ident=own_ident))
             prompt = screen.menu(chips, recommended_letter(d))
             valid = {"y", "n", "w", "v", "d", "", "q", "?"} | ({"e"} if show else set())
             doubt = ""
