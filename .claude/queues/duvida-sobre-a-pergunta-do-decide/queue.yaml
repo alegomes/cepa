@@ -189,16 +189,29 @@ items:
     que cita só teclas presentes no menu daquele item, e o menu do mesmo item reaparece
     pronto para outra tecla; hoje a tela mostra "repita com --force" e passa ao
     item seguinte.'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  claimed_by:
-    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
-    pid: 45882
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
-    branch: session/chain-1126-1336
-    started_at: '2026-11-27T01:39:48+00:00'
+  evidence: 'commits dd8741e (codigo + testes; o passo de gravacao foi movido para
+    dentro do laco do item), 90f53af (d sem motivo passa force + checagem ''toda
+    tecla citada esta no menu''), 910f66c (testes da frase inteira e de accepts_force
+    que a prova pediu), 2777ff0 (arquivos dos portoes) em session/chain-1126-1336.
+    pair-reviewer OK-WITH-NOTES com 1 nota corrigida. completion-auditor COMPLETE
+    na 2a passada (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-8.yaml).
+    proof-reviewer PROVEN em 910f66c, 44 de 44 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-8.yaml:
+    10 refeitas no commit novo, 34 carregadas da 1a passada porque o cepa-run nao
+    mudou); 1a passada UNPROVEN com 5 sobreviventes. tests/run-all.sh em 90f53af:
+    260 de 260, tudo verde; cepa-run identico entre 90f53af e 910f66c. DECISAO TOMADA
+    SEM PERGUNTAR ao dono: o descarte (d) passa --force, porque o texto ''descartado:
+    <pergunta>'' e montado pelo painel e era recusado quando a pergunta termina
+    em ''?'' (defeito anterior a esta fila); sem isso a frase nova do CS-8 culpava
+    um texto que o dono nao digitou. Frase: ''text not recorded: it does not read
+    as an answer. [?] I don''t understand the question, [Enter] leave it for later''
+    (refusal_line(keys)); o CS-9 acrescenta [e] na lista. Painel de itens agrupados
+    nao foi tocado: la o texto sempre comeca com sim:/nao: e o codigo 6 nao ocorre.
+    Achado: tests/test_cepa_until_decide.py so acusa falha rodado como script, com
+    pytest o check() nao derruba o teste.'
+  head_commit: 2777ff020bae3ff1cb930b41b47ab54f622fb90e
 - id: CS-9
   title: a mensagem de recusa não cita a tecla `e` quando o item não tem detalhe
     técnico
