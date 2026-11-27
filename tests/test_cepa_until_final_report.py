@@ -52,7 +52,8 @@ def test_the_end_of_a_run_with_a_long_reason_fits_the_terminal_and_names_the_mer
         # per-item step lines above it are not part of the report).
         end = out[out.find("ended at"):]
         check("o relatório do fim começa no cabeçalho", "ended at" in out)
-        wide = [l for l in end.splitlines() if len(l) > 100]
+        wide = [l for l in end.splitlines() if len(l) > 100
+                and not l.startswith("   side branch:")]
         check("nenhuma linha do fim passa de 100 colunas", not wide,
               "\n".join(wide[:5]))
         check("merge into aparece exatamente uma vez",
@@ -64,7 +65,11 @@ def test_the_end_of_a_run_with_a_long_reason_fits_the_terminal_and_names_the_mer
 def end_of(out):
     """The report: from the line of the header panel on."""
     at = out.find("ended at")
-    return out[out.rfind("\n", 0, at) + 1:]
+    report = out[out.rfind("\n", 0, at) + 1:]
+    # The three-part block (`What happened:` ...) comes after the paths line and
+    # has its own test (test_cepa_run_closing_screen.py); the full side-branch
+    # name in it is never cut to the width.
+    return report.split("\nWhat happened:")[0] + "\n"
 
 
 def test_panels_come_in_order_and_the_paths_line_closes_the_report():
@@ -94,9 +99,12 @@ def test_header_has_the_window_the_totals_and_no_waiting_on_you_wording():
         check("o cabeçalho traz o motivo da parada", "end-of-queue" in header, header)
         check("...a janela com a barra", re.search(r"window \d\d:\d\d → \d\d:\d\d  [▰▱]{24}",
                                                     header) is not None, header)
-        check("...e uma linha de totais com entregues, travados, para você e commits",
-              re.search(r"1 delivered · 1 stuck · 0 no progress · 1 for you · "
-                        r"1 commit\(s\)", header) is not None, header)
+        check("...e uma linha de totais com entregues, travados e para você",
+              re.search(r"1 delivered · 1 stuck · 0 no progress · 1 for you",
+                        header) is not None, header)
+        check("...e uma linha de commits que separa o branch da run da lateral",
+              re.search(r"commits: 1 on the run branch · 1 on 1 side branch\(es\)",
+                        header) is not None, header)
 
 
 def test_items_panel_aligns_the_id_column_and_cuts_the_reason_but_not_the_state():
@@ -211,7 +219,7 @@ def test_next_says_why_the_merge_is_not_recommended_and_only_a_clean_run_recomme
         check("run não limpa: a linha diz por que não recomenda",
               "not recommended: a2 is stuck" in nxt, nxt)
         check("...e o merge continua oferecido, com o comando",
-              re.search(r"1\. merge into `main`: cepa-run land fila/\S+ --yes", nxt),
+              re.search(r"1\. merge into `main`: cepa run land fila/\S+ --yes", nxt),
               nxt)
     with tempfile.TemporaryDirectory() as tmp:
         root = build_repo(tmp, [item("a1")])
@@ -240,14 +248,14 @@ def test_next_is_numbered_merge_then_owner_questions_then_reinstall():
     lines = ["".join(sg[1] for sg in r) for r in rows]
     heads = [l for l in lines if re.match(r"\d\. ", l)]
     check("três itens numerados, na ordem merge, perguntas, reinstalação",
-          len(heads) == 3 and heads[0].startswith("1. merge into `main`: cepa-run land "
+          len(heads) == 3 and heads[0].startswith("1. merge into `main`: cepa run land "
                                                   "fila/r1 --yes")
           and heads[1].startswith("2. 1 owner question(s): a2")
           and heads[2].startswith("3. after the merge, run `bin/install.sh`"),
           "\n".join(lines))
     check("a pergunta e o comando decide vêm sob o item 2",
           lines.index("   a2: Libero o acesso?") < lines.index(
-              "   cepa-run decide fila/r1 (one by one, in a terminal)")
+              "   cepa run decide fila/r1 (one by one, in a terminal)")
           and lines.index(heads[1]) < lines.index("   a2: Libero o acesso?")
           < lines.index(heads[2]), "\n".join(lines))
     check("o motivo de não recomendar vem sob o merge",
@@ -259,7 +267,7 @@ def test_next_is_numbered_merge_then_owner_questions_then_reinstall():
              m.next_rows(Path("/nao/existe"), "fila", "r1", st2, "/nao/existe", {})]
     check("run que fundiu sozinha diz isso e não oferece o comando",
           lines[0].startswith("1. merged into `main` by this run")
-          and not any("cepa-run land" in l for l in lines), "\n".join(lines))
+          and not any("cepa run land" in l for l in lines), "\n".join(lines))
     lines = ["".join(sg[1] for sg in r) for r in
              m.next_rows(Path("/nao/existe"), "fila", "r1",
                          {"estado": "encerrado"}, "/nao/existe", {})]
@@ -293,7 +301,7 @@ def test_auto_landed_run_says_so_in_next_and_names_no_second_merge():
               p.stdout[-1500:])
         check("o Next diz que a run fundiu sozinha",
               "1. merged into `main` by this run (--auto-land): nothing to do" in nxt, nxt)
-        check("...e não oferece o comando do merge", "cepa-run land" not in nxt, nxt)
+        check("...e não oferece o comando do merge", "cepa run land" not in nxt, nxt)
 
 
 def test_a_long_item_id_and_wide_terminal_values_still_fit():
@@ -336,7 +344,7 @@ def test_an_item_already_asked_in_this_run_is_named_but_its_question_is_not_repe
                          "/nao/existe", asked_only)]
     check("só perguntado: item numerado com o comando para responder de novo",
           lines[0] == "1. already asked in this run, still open: a1"
-          and lines[1] == "   cepa-run decide fila/r1 (to answer again)", "\n".join(lines))
+          and lines[1] == "   cepa run decide fila/r1 (to answer again)", "\n".join(lines))
     both = {"deferred": [{"id": "b2", "reason": "human_pending", "question": "Libero?"}],
             "asked": ["a1"]}
     lines = ["".join(sg[1] for sg in r) for r in

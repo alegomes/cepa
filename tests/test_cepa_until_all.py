@@ -915,7 +915,7 @@ def test_target_all_run_reads_the_state_of_the_all_folder():
         run_id = states[0].name.replace(".estado.json", "")
         target = f"all/{run_id}"
         check("o relatório do run manda rodar `land all/<run>`",
-              f"cepa-run land {target}" in p.stdout, p.stdout[-1500:])
+              f"cepa run land {target}" in p.stdout, p.stdout[-1500:])
         for sub in ("land", "decide", "close-dead"):
             r = _target_command(tmp, root, sub, target)
             check(f"`{sub} {target}` lê o estado do run",
@@ -1045,7 +1045,7 @@ def test_cs6_decide_all_run_lists_what_every_queue_holds_for_the_owner():
               and "a/x1: Fecho o card da fila a?" in nxt
               and "b/x1: Fecho o card da fila b?" in nxt
               and "merge into" in nxt
-              and f"cepa-run decide all/{run_id}" in nxt, p.stdout[-1500:])
+              and f"cepa run decide all/{run_id}" in nxt, p.stdout[-1500:])
         r = _target_command(tmp, root, "decide", f"all/{run_id}")
         out = r.stdout + r.stderr
         check("`decide all/<run>` sai com 0", r.returncode == 0, out[-600:])
@@ -1189,7 +1189,7 @@ def test_cs6_all_run_on_a_terminal_only_lists_at_the_end_and_never_asks():
               and "Fecho o card da fila a?" in plain, plain[-1500:])
         run_id = _all_run_id(root)
         check("...e manda voltar com `decide all/<run>`",
-              run_id is not None and f"cepa-run decide all/{run_id}" in plain,
+              run_id is not None and f"cepa run decide all/{run_id}" in plain,
               plain[-1500:])
         check("...sem abrir o painel de perguntas",
               "[w] I write the answer" not in plain

@@ -5789,6 +5789,70 @@ modo, `docs/modos-de-trabalho.md`.
 
 ---
 
+## A tela de fechamento do `cepa run` não diz o que aconteceu, o que ficou pendente nem o que fazer
+
+**Status:** feito em 2026-11-27 (commit `4ed9e96`, item `fechamento-do-run-sem-conclusao` da fila `cepa`), menos a parte da run interrompida, na última seção, que o dono mandou anotar para depois · **Lar:** common (`common/bin/cepa-run`, bloco de fechamento) · **Origem:** feedback `fb-20261126-4` e `fb-20261126-6`, 2026-11-26
+
+### Problema
+
+Na run `all/2026-11-26-0838` do `wego-faturamento-backend` o dono leu a tela de fechamento (o texto que o `cepa run` imprime quando a janela acaba) e não soube dizer o que tinha acontecido. A run gastou 4h01 (14.435 s ÷ 3.600) e US$ 40,15 num item só, o C1-49, e nada chegou à `main`. O item estava pronto com 39 commits num branch lateral e só foi reprovado porque 2 testes de 2111 esperavam 59 rotas no contrato e o item criou 4 (59 + 4 = 63). Nada disso está na tela. Cinco defeitos, todos vistos nessa run:
+
+1. **A tela não tem conclusão.** A linha de contagem diz `1 attempt(s) · 0 delivered · 0 stuck · 0 no progress · 0 for you · 0 commit(s)`. O dono tem de deduzir dela que o trabalho existe e está guardado.
+2. **"0 commit(s)" e "no commits, removed" contradizem os 39 commits salvos.** As duas frases falam do branch da run. O branch lateral `until/2026-11-26-0838-vermelho-kairos-etapa-1-C1-49` aparece só numa linha do item, cortada por largura.
+3. **A causa do vermelho não aparece.** A tela diz `RED (exited 1)` duas vezes. Os dois testes que falharam e a mensagem `expected: <59> but was: <63>` estão no `.log` e no `<run>.review.md` (a análise que `/common:run-review` escreve no fim), e a tela cita esse arquivo só pelo caminho.
+4. **A tela e a análise discordam sobre o que espera o dono.** O painel `Next` mostra "1 owner question(s)". O `<run>.review.md` da mesma run diz "2 decisions and 4 tasks", entre elas rodar a fila de novo, que é o passo que entrega o item.
+5. **O comando de commit manual falha pelo mesmo motivo do commit automático.** O git recusou o commit dos registros porque o `.gitignore` do repo ignora `.claude/*` (linha 65), e o `queue.yaml` é o único dos três arquivos que é versionado. A tela imprime como causa a dica genérica do git (`Disable this message with "git config set advice.addIgnoredFile false"`) e sugere um `git add` com os mesmos três arquivos, que é recusado de novo.
+
+### Palavras do dono
+
+> Olha o resultado desse run. Ao final, não achei que está claro o que aconteceu. Qual é a conclusão? Em um TL;DR, o que aconteceu, quais são as pendências e o que devo fazer?
+>
+> `fb-20261126-4`, 2026-11-26 · cepa · session/response-confusion · construction · `cepa-until`
+
+> Eu não quero apenas a explicação ad-hoc. Eu quero que você aprimore o sistema de trabalho. Registre isso no Cepa como algo a ser melhorado.
+>
+> `fb-20261126-6`, 2026-11-26 · cepa · session/response-confusion · construction · `cepa-until`
+
+### Esboço
+
+A tela termina com um bloco de três partes, nesta ordem, escrito depois que a análise fica pronta: o que aconteceu (uma a três frases, com onde o trabalho está), o que ficou pendente (a mesma contagem que o `<run>.review.md` dá) e um comando só para rodar agora. Além disso:
+
+- item reprovado no build mostra os testes que falharam e a primeira linha da falha, tirados da saída do build;
+- a contagem de commits separa o que entrou no branch da run do que ficou salvo em branch lateral, com o nome do branch inteiro;
+- commit de registros deixa de fora os arquivos que o git ignora e diz quais foram, em vez de imprimir a dica do git e um comando que repete a recusa.
+
+Testes que faltam: run com um item reprovado no build termina com o bloco de três partes, nomeia o teste que falhou e o branch lateral, e o comando de commit sugerido roda com exit 0 num repo que ignora `.claude/*`.
+
+---
+
+## O painel `Next` do `cepa run` mostra outra contagem e a grafia antiga do comando
+
+**Status:** feito em 2026-11-27 (commit `98caacf`, item `painel-next-alinhado-ao-bloco-final` da fila `cepa`), sem a suíte completa, a pedido do dono: rodaram 8 arquivos de teste que leem o texto do painel · **Lar:** common (`common/bin/cepa-run`, painel `Next` da tela de fechamento) · **Origem:** decisão do dono em 2026-11-27 (anotado para depois e retomado no mesmo dia: "quero voltar atrás. Faça o alinhamento do Next")
+
+### Problema
+
+A tela de fechamento ganhou no commit `4ed9e96` um bloco final de três linhas (`What happened`, `Pending for you`, `Run now`). O painel `Next`, que vem logo antes, ficou como era: mostra só as perguntas que a fila guarda ("1 owner question(s)"), enquanto o bloco mostra a contagem da análise da run ("2 decisions and 4 tasks"), e manda rodar `cepa-run decide`, enquanto o bloco manda `cepa run decide`. O bloco explica a diferença numa frase, mas a mesma tela ainda traz dois números e duas grafias do mesmo comando. O `completion-auditor` apontou isso como ressalva ao dar COMPLETE.
+
+### Esboço
+
+O painel `Next` usa a mesma contagem do bloco final quando a análise existe, e toda frase dele usa `cepa <sub>`. Teste que falta: numa run com análise, o número do painel `Next` e o do `Pending for you` são iguais, e a tela não contém `cepa-run`.
+
+---
+
+## Run interrompida por Ctrl-C ou erro fatal termina sem o bloco de três linhas
+
+**Status:** pendente · **Lar provável:** common (`common/bin/cepa-run`, função `interrupt` e as saídas anteriores a `commit_records`) · **Origem:** decisão do dono em 2026-11-27 ("2. não. Anote para fazer depois"), ao receber o item `fechamento-do-run-sem-conclusao`
+
+### Problema
+
+O bloco final de três linhas (`What happened`, `Pending for you`, `Run now`) só é impresso quando a run termina pelo caminho normal. Uma run cortada por Ctrl-C ou por erro fatal termina com a tela antiga, sem conclusão e sem um comando para rodar. O `pair-reviewer` apontou a lacuna na revisão do commit `4ed9e96` e recomendou tratar à parte, porque é outro caminho do código.
+
+### Esboço
+
+A saída por interrupção imprime o mesmo bloco com o que o supervisor sabe até ali: o item que estava em andamento, onde ficaram os commits dele e o comando que retoma. Precisa de desenho próprio, porque nesse caminho a análise da run não roda. Teste que falta: run interrompida no meio de um item termina com as três linhas e nomeia o item em andamento.
+
+---
+
 ## A conferência no commit do meio roda sem os arquivos que estão fora do git
 
 Registrado em 2026-11-26 a pedido do dono ("3. sim"), no fim da sessão

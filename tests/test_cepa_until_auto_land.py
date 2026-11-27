@@ -553,7 +553,7 @@ def test_end_of_run_on_terminal_never_asks_land_now_and_prints_the_command():
             check(f"{label}: a tela não diz que nada espera pelo dono (o merge espera)",
                   "nothing is waiting on you" not in plain, plain[-1500:])
             check(f"{label}: a tela traz o comando do merge",
-                  re.search(r"merge into `\S+`: cepa-run land fila/\S+ --yes",
+                  re.search(r"merge into `\S+`: cepa run land fila/\S+ --yes",
                             plain) is not None, plain[-1500:])
             check(f"{label}: o estado fica esperando-dono",
                   st.get("estado") == "esperando-dono", str(st))
@@ -582,7 +582,7 @@ def test_end_of_run_with_an_owner_item_still_asks_it_but_not_the_landing():
         check("...e o fim não pergunta Land now?", "Land now?" not in plain,
               plain[-1500:])
         check("...e traz o comando do merge",
-              "cepa-run land fila/" in plain and "--yes" in plain, plain[-1500:])
+              "cepa run land fila/" in plain and "--yes" in plain, plain[-1500:])
         check("...com a questão numerada como 1/1 (o merge não conta)",
               "── 1 question(s) for you" in plain and "┌─ 1/1 · a1" in plain,
               plain[-1500:])
