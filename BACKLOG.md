@@ -5827,7 +5827,7 @@ Testes que faltam: run com um item reprovado no build termina com o bloco de tr�
 
 ## O painel `Next` do `cepa run` mostra outra contagem e a grafia antiga do comando
 
-**Status:** feito em 2026-11-27 (commit `98caacf`, item `painel-next-alinhado-ao-bloco-final` da fila `cepa`), sem a suíte completa, a pedido do dono: rodaram os 9 arquivos de teste que leem o texto do painel · **Lar:** common (`common/bin/cepa-run`, painel `Next` da tela de fechamento) · **Origem:** decisão do dono em 2026-11-27 (anotado para depois e retomado no mesmo dia: "quero voltar atrás. Faça o alinhamento do Next")
+**Status:** feito em 2026-11-27 (commit `98caacf`, item `painel-next-alinhado-ao-bloco-final` da fila `cepa`), sem a suíte completa, a pedido do dono: rodaram 8 arquivos de teste que leem o texto do painel · **Lar:** common (`common/bin/cepa-run`, painel `Next` da tela de fechamento) · **Origem:** decisão do dono em 2026-11-27 (anotado para depois e retomado no mesmo dia: "quero voltar atrás. Faça o alinhamento do Next")
 
 ### Problema
 
