@@ -1151,16 +1151,48 @@ def _flat(text):
     return " ".join(text.split())
 
 
-def test_empty_question_mark_twice_says_the_reader_rewrites_once_per_item():
+def test_empty_question_mark_twice_says_it_is_not_rewritten_without_a_written_doubt():
     failed_before = len(FAILURES)
     text, later, marks, rewrites, answers = _inject(["?", "", "?", "", ""])
-    check("CS-6 unit ?+?: one reader call and the item stays for later",
+    flat = _flat(text)
+    check("CS-7 unit ?+?: one reader call and the item stays for later",
           len(rewrites) == 1 and len(later) == 1, (rewrites, later))
-    # CS-7, the next queue item, changes this wording and must update this assertion.
-    check("CS-6 unit ?+?: the screen says the reader rewrites once per item",
-          "the reader rewrites once per item" in _flat(text), text)
-    check("CS-6 unit ?+?: it does not say the two-rewrite sentence",
-          "at most twice per item" not in _flat(text), text)
+    check("CS-7 unit ?+?: the screen says it is not rewritten again without a written doubt",
+          "not rewritten again without a written doubt" in flat, text)
+    check("CS-7 unit ?+?: the screen says the item stays for later",
+          "the item stays for later" in flat, text)
+    check("CS-7 unit ?+?: the old once-per-item sentence is gone",
+          "once per item" not in flat, text)
+    check("CS-7 unit ?+?: it does not say the two-rewrite sentence",
+          "at most twice per item" not in flat, text)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_two_empty_question_marks_call_the_reader_once_and_say_so_in_a_pty():
+    """Red test of CS-7, as a process in a pseudo-terminal: `?` with an empty Enter,
+    then `?` with an empty Enter again: the reader runs once and the screen says the
+    question is not rewritten again without a written doubt."""
+    failed_before = len(FAILURES)
+    rc, plain, reqs, _ = _two_rewrite_session(lambda: [
+        (MENU, "?"), (KEY_ASK, ""), (V1, None),
+        (MENU, "?"), (KEY_ASK, ""),
+    ])
+    check("CS-7 pty: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-7 pty: the first new question was shown", f"<{V1}>" in plain, plain[-1500:])
+    check("CS-7 pty: the line was asked on both `?`", plain.count(KEY_ASK) == 2,
+          plain[-1500:])
+    check("CS-7 pty: the reader ran once", len(reqs) == 1, reqs)
+    check("CS-7 pty: no second question", V2 not in plain, plain[-1500:])
+    line = next((l for l in plain.split(V1, 1)[-1].splitlines()
+                 if "not rewritten again" in l), "")
+    check("CS-7 pty: a line says it is not rewritten again without a written doubt",
+          "without a written doubt" in line, plain[-1500:])
+    check("CS-7 pty: the same line says the item stays for later",
+          "for later" in line, plain[-1500:])
+    check("CS-7 pty: the old once-per-item sentence is gone", "once per item" not in plain,
+          plain[-1500:])
+    check("CS-7 pty: the item is in for later at the close",
+          "for later 1" in plain.rsplit("closing", 1)[-1], plain[-1500:])
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 

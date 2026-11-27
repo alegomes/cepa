@@ -4700,15 +4700,15 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             rc, msg = unclear(ident, shown_question, **kw)
             screen.recorded("question recorded as badly written; no answer on the "
                             "item" if rc == 0 else msg, ok=rc == 0)
-            # CS-8: a failed rewrite, or the second `?`, says so in one line and the
-            # item stays for later; the panel goes on to the next item.
+            # Three outcomes: a third attempt, or a second `?` with no written doubt,
+            # says so in one line and the item stays for later; otherwise it rewrites.
             if rewrites >= 2:
                 screen.warning("question not rewritten again, the item stays for "
                                "later: the reader rewrites at most twice per item")
                 break
             if rewrites == 1 and not doubt:
-                screen.warning("question not rewritten again, the item stays for "
-                               "later: the reader rewrites once per item")
+                screen.warning("question not rewritten again without a written "
+                               "doubt, the item stays for later")
                 break
             rewrites += 1
             screen.note(f"rewriting the question, up to {UNCLEAR_REWRITE_SEC} s")
