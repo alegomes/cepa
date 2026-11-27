@@ -219,9 +219,16 @@ items:
     entre si · superfície onde se observa: cli · teste vermelho declarado: no cenário
     do CS-8 com um item sem `evidence`, a linha de recusa não traz "[e]"; com um
     item com `evidence`, traz; hoje a recusa não cita tecla nenhuma.'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
+  claimed_by:
+    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
+    pid: 45882
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
+    branch: session/chain-1126-1336
+    started_at: '2026-11-27T02:52:41+00:00'
 - id: CS-10
   title: a legenda da tecla `?` diz que a pergunta é reescrita em seguida
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
