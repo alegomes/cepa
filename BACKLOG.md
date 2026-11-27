@@ -5791,7 +5791,7 @@ modo, `docs/modos-de-trabalho.md`.
 
 ## A tela de fechamento do `cepa run` não diz o que aconteceu, o que ficou pendente nem o que fazer
 
-**Status:** feito em 2026-11-27 (commit `4ed9e96`, item `fechamento-do-run-sem-conclusao` da fila `cepa`), menos as duas partes das seções seguintes, que o dono mandou anotar para depois · **Lar:** common (`common/bin/cepa-run`, bloco de fechamento) · **Origem:** feedback `fb-20261126-4` e `fb-20261126-6`, 2026-11-26
+**Status:** feito em 2026-11-27 (commit `4ed9e96`, item `fechamento-do-run-sem-conclusao` da fila `cepa`), menos a parte da run interrompida, na última seção, que o dono mandou anotar para depois · **Lar:** common (`common/bin/cepa-run`, bloco de fechamento) · **Origem:** feedback `fb-20261126-4` e `fb-20261126-6`, 2026-11-26
 
 ### Problema
 
@@ -5827,7 +5827,7 @@ Testes que faltam: run com um item reprovado no build termina com o bloco de tr�
 
 ## O painel `Next` do `cepa run` mostra outra contagem e a grafia antiga do comando
 
-**Status:** pendente · **Lar provável:** common (`common/bin/cepa-run`, painel `Next` da tela de fechamento) · **Origem:** decisão do dono em 2026-11-27 ("1. não. Anote para fazer depois"), ao receber o item `fechamento-do-run-sem-conclusao`
+**Status:** feito em 2026-11-27 (commit `98caacf`, item `painel-next-alinhado-ao-bloco-final` da fila `cepa`), sem a suíte completa, a pedido do dono: rodaram os 9 arquivos de teste que leem o texto do painel · **Lar:** common (`common/bin/cepa-run`, painel `Next` da tela de fechamento) · **Origem:** decisão do dono em 2026-11-27 (anotado para depois e retomado no mesmo dia: "quero voltar atrás. Faça o alinhamento do Next")
 
 ### Problema
 
