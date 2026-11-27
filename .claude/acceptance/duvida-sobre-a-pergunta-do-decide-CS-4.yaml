@@ -1,0 +1,22 @@
+key: CS-4
+queue: duvida-sobre-a-pergunta-do-decide
+status: complete
+pass: 2
+criteria:
+  - id: AC1
+    text: "docs/spec/duvida-sobre-a-pergunta-do-decide.md CS-4 (cli): a dúvida digitada no editor (`v`) segue o mesmo caminho do `w`. Com um editor falso que salva 'não entendi a pergunta', `v` mostra 'Is this a doubt about the question? [Y/n]'; sim reescreve a pergunta com o texto como dúvida do dono; não grava o texto como resposta."
+    altitude: cli
+    surface: "common/bin/cepa-run decide panel (cepa-until decide fila --repo ...) in a pty, key v, fake EDITOR script saving the doubt text"
+    test: "tests/test_cepa_until_decide_doubt.py::test_doubt_typed_through_v_asks_if_it_is_a_doubt_before_recording; ::test_yes_at_the_doubt_prompt_after_v_rewrites_with_the_editor_text; ::test_v_doubt_then_n_then_y_records_the_editor_text_through_the_real_answer"
+    layer: cli-pty
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -> '35 passed in 9.04s'; the 3 demonstrating tests plus the unit v test selected with -k -> '4 passed, 31 deselected' (N=4 > 0)"
+    sub_criteria:
+      red_test_prompt: "complete. pty, fake editor: ASK shown, 'not recorded' and 'resposta recusada' absent, no send-back question, plan.yaml byte-identical."
+      yes_outcome: "complete. pty: reader request carries the editor text as duvida_do_dono, new question in the item block, no answer recorded, one feedback line."
+      no_outcome: "complete. New pty test runs the panel as a subprocess (no injected answer, so the real cepa-queue answer runs), presses v, n at the doubt prompt, y at 'Send the item back', and asserts plan.yaml evidence has 'Resposta do dono em' plus the editor text, screen shows 'answered now 1', 'not recorded' absent, exit 0. Unit tests cover the force/keep variants (v+n+y, v+n+n)."
+    readings:
+      queue_file: "Fixture reads .claude/programs/fila/plan.yaml, same as CS-1..CS-3."
+      scope: "CS-5..CS-11 are later items, not gaps here."
+      production_change: "common/bin/cepa-run: `w` and `v` now share one branch (typed_w = typed for v), so the doubt prompt and the answer path are literally the same code."
+gap: ""

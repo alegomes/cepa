@@ -68,6 +68,7 @@ def test_question_mark_rewrites_in_the_same_block_and_asks_again():
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), env=env,
                          inputs=[("[w] I write the answer", "?"),
+                                 ("What did you not understand?", ""),
                                  ("[w] I write the answer", "")], timeout=90)
         plain = ANSI.sub("", out)
         check("CS-7 pty: decide exits 0", rc == 0, plain[-1500:])
@@ -114,6 +115,7 @@ def test_reader_without_item_declaration_records_nothing_and_warns():
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), env=env,
                          inputs=[("[w] I write the answer", "?"),
+                                 ("What did you not understand?", ""),
                                  ("[w] I write the answer", "")], timeout=90)
         plain = ANSI.sub("", out)
         check("CS-1 reader: decide exits 0 (no crash)", rc == 0, plain[-1500:])
@@ -152,7 +154,7 @@ def test_new_question_answered_records_the_new_text():
     deferred = [{"id": "b1", "title": "t", "reason": "human_pending",
                  "human_pending": ROUTE, "question": OLD_Q, "evidence": "x",
                  "route_kind": "external-block"}]
-    replies = iter(["?", "y", ""])
+    replies = iter(["?", "", "y", ""])
     new = {"route_kind": "owner-task", "question": NEW_Q, "if_yes": NEW_YES,
            "if_no": NEW_NO}
     m.decide(Path("/nao/existe"), "fila", None, {}, deferred, {},
@@ -175,7 +177,8 @@ def test_second_question_mark_does_not_call_the_reader_again():
     deferred = [{"id": "b1", "title": "t", "reason": "human_pending",
                  "human_pending": ROUTE, "question": OLD_Q, "evidence": "x",
                  "route_kind": "external-block"}]
-    replies = iter(["?", "?"])
+    # the second `?` asks the optional line (CS-6): an empty Enter, no rewrite
+    replies = iter(["?", "", "?", ""])
     new = {"route_kind": "owner-task", "question": NEW_Q, "if_yes": NEW_YES,
            "if_no": NEW_NO}
     _, later = m.decide(Path("/nao/existe"), "fila", None, {}, deferred, {},
@@ -206,7 +209,7 @@ def _default_rewrite_run(read_result):
     deferred = [{"id": "b1", "title": "t", "reason": "human_pending",
                  "human_pending": ROUTE, "question": OLD_Q, "evidence": "x",
                  "route_kind": "external-block"}]
-    replies = iter(["?", ""])
+    replies = iter(["?", "", ""])
     _, later = m.decide(Path("/nao/existe"), "fila", None, {}, deferred, {},
                         question=lambda _p: next(replies, ""), output=screen.append,
                         answer=lambda *a, **k: (0, "ok"),

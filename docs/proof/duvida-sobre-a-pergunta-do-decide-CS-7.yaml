@@ -1,0 +1,52 @@
+schema_version: 2
+card: duvida-sobre-a-pergunta-do-decide-CS-7
+verdict: proven
+reviewed_at: 2026-11-26T23:30:00-03:00
+base_commit: e9309df
+head_commit: 0a598b7
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa). Superficie = painel `cepa run decide` lido em pseudo-terminal
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-run (decide: a frase do ramo `rewrites == 1 and not doubt` mudou de 'question not rewritten again, the item stays for later: the reader rewrites once per item' para 'question not rewritten again without a written doubt, the item stays for later'; comentario reescrito; condicao do ramo e contador NAO mudaram neste diff e nao entram na conta)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # o teste pty roda o cepa-run decide real com leitor falso so na fronteira (CEPA_RUN_READER) e CEPA_FEEDBACK_DIR; o teste unitario injeta `question`/`unclear`/`rewrite` so para ler argumentos
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbacao em worktree descartavel detached em 0a598b7, removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "Baseline em 0a598b7: tests/test_cepa_until_decide_doubt.py 58 passed (19.23s). Cada perturbacao tocou so o pretendido (git diff --numstat = 1 1; a quarta = 2 2, as duas linhas da frase). Todas as vermelhas sao AssertionError (nao NameError/TypeError). Em cada uma o teste pty tambem foi rodado sozinho (-k two_empty_question_marks_call_the_reader_once)."
+        - "(p1) 4710 'without a written' -> 'without a typed' -> RED test_empty_question_mark_twice_says_it_is_not_rewritten_without_a_written_doubt (1 failed, 54 passed, 17.06s); pty: RED 'CS-7 pty: a line says it is not rewritten again without a written doubt' (1 failed, 57 deselected, 1.23s)"
+        - "(p2) 4711 'the item stays for later' -> 'the item goes away' -> RED mesmo teste unitario, 'the screen says the item stays for later' (1 failed, 54 passed, 17.42s); pty: RED 'CS-7 pty: the same line says the item stays for later' (1 failed, 57 deselected, 1.22s)"
+        - "(p3) 4710 'not rewritten again' -> 'not changed again' -> RED test_doubt_then_an_empty_question_mark_rewrites_once (check 'CS-6 pty doubt+?: a line says it is not rewritten again') (1 failed, 45 passed, 14.27s); pty CS-7 sozinho: RED nas duas checagens da linha (1 failed, 57 deselected, 1.24s)"
+        - "(p4) frase revertida para a antiga ('...the item stays for later: the reader rewrites once per item', 2 linhas, numstat 2 2) -> RED teste unitario CS-7 ('without a written doubt' ausente e 'old once-per-item sentence is gone') (1 failed, 54 passed, 17.16s); pty: RED as mesmas duas ideias (1 failed, 57 deselected, 1.17s)"
+        - "Vermelho no cepa-run da base: com common/bin/cepa-run revertido ao e9309df (git diff --numstat e9309df vazio) e os testes de 0a598b7, rodada completa do arquivo: 2 failed, 56 passed (18.34s): test_empty_question_mark_twice_says_it_is_not_rewritten_without_a_written_doubt e test_two_empty_question_marks_call_the_reader_once_and_say_so_in_a_pty; o pty sozinho: 1 failed, 57 deselected (1.17s)."
+      run: >-
+        `git worktree add --detach <scratchpad>/wt 0a598b7`; cada perturbacao aplicada com `git -C <wt> apply <patch>` (patch de uma frase), checada com `git diff --numstat`, desfeita com `git apply -R`;
+        `python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -x`. Baseline 58 passed; 4 perturbacoes, 4 vermelhas por AssertionError; 0 sobreviventes; mais a verificacao contra a base (2 vermelhos). Suite completa nao rodada.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "as duas linhas de comportamento alteradas (4710-4711) foram quebradas em cada parte distintiva e na reversao e ficaram vermelhas: 4 vermelhas em 4 (ver l3)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "A unica entrada e o texto que o dono digita no proprio terminal (painel local, sem parser de dado externo, sem modulo api-rest); este diff so troca uma frase de aviso na tela e nao abre entrada nova."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-7 de docs/spec/duvida-sobre-a-pergunta-do-decide.md); a prova e a perturbacao. Os testes novos ficam vermelhos no cepa-run da base e9309df (2 failed, 56 passed)."
+routing_reason: >-
+  A frase nova ('not rewritten again without a written doubt, the item stays for later') e a unica linha de comportamento do diff. Cada
+  parte dela (sem duvida escrita; o item fica para depois; nao reescrita de novo) e a volta a frase antiga deixam o teste unitario e o
+  teste em pseudo-terminal vermelhos por AssertionError, e os testes novos ficam vermelhos contra o cepa-run da base. 4 perturbacoes, 4
+  vermelhas, nenhuma sobrevivente, nenhum nivel assumido. PROVEN.

@@ -1,0 +1,24 @@
+key: CS-7
+queue: duvida-sobre-a-pergunta-do-decide
+status: complete
+pass: 1
+criteria:
+  - id: AC1
+    text: "docs/spec/duvida-sobre-a-pergunta-do-decide.md CS-7 (cli): um segundo `?` sem texto não dispara reescrita."
+    altitude: cli
+    surface: "common/bin/cepa-run decide panel (cepa-until decide fila --repo ...) in a pty, keys ? (empty Enter) twice; counting fake reader subprocess (_versioned_reader) that logs each request"
+    test: "tests/test_cepa_until_decide_doubt.py::test_two_empty_question_marks_call_the_reader_once_and_say_so_in_a_pty (plus unit ::test_empty_question_mark_twice_says_it_is_not_rewritten_without_a_written_doubt)"
+    layer: cli-pty
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -> '58 passed in 18.80s' (second run). First run: '1 failed, 57 passed in 19.64s', the failure was test_yes_at_the_doubt_prompt_rewrites_the_question_with_the_doubt (a CS-2 test, untouched by the diff); alone with 3 CS-7 tests: '4 passed in 3.73s'. Treated as load flake while another full suite runs on the tree."
+    sub_criteria:
+      reader_called_once: "complete. real subprocess reader logs every request; test asserts len(reqs) == 1 after `?`+Enter, `?`+Enter, and that the line was asked on both (plain.count(KEY_ASK) == 2) and no second question (V2 absent)."
+      screen_sentence: "complete. a line after the first new question contains 'not rewritten again', and that same line has 'without a written doubt' and 'for later'. Production string: 'question not rewritten again without a written doubt, the item stays for later'."
+      old_sentence_gone: "complete. pty asserts 'once per item' not in plain; unit asserts it too."
+      item_in_for_later_at_close: "complete. 'for later 1' after the last 'closing'."
+      no_pass_on_timeout: "complete. rc == 0 asserted first; on_tty SIGKILLs on timeout and appends an '<on_tty: no answer within ...>' marker, so rc is nonzero. Awaited triggers are consumed-marker based (V1, KEY_ASK); the sentence is searched in the text after V1 and an absent line gives '' which fails the check."
+    readings:
+      scope: "CS-8..CS-11 are later items, not gaps here."
+      production_change: "common/bin/cepa-run: the warning for rewrites == 1 and no doubt changed from 'the reader rewrites once per item' to 'question not rewritten again without a written doubt, the item stays for later'. Behavior (reader not called) was already from CS-6; CS-7 only changes the wording, and the pty test pins both."
+      before_state: "Old unit test pinned 'the reader rewrites once per item' with a comment saying CS-7 must update it; it was updated, not weakened."
+gap: ""

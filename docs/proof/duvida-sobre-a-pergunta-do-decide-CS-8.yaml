@@ -1,0 +1,59 @@
+schema_version: 2
+card: duvida-sobre-a-pergunta-do-decide-CS-8
+verdict: proven
+reviewed_at: 2026-11-27T00:30:00-03:00
+base_commit: e22fa6b
+head_commit: 910f66c
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa). Superficie = painel `cepa run decide` lido em pseudo-terminal
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-run (ANSWER_REFUSED_RC; refusal_line; accepts_force; decide: bloco de gravacao d/w/v/y/n + answer movido para dentro do laco do item, com o ramo `rc == ANSWER_REFUSED_RC` que mostra a linha de recusa e faz `continue`; `force=True` no `d`)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes pty rodam o cepa-run decide real com o `cepa-queue answer` real; leitor falso so na fronteira (CEPA_RUN_READER=off / CEPA_FEEDBACK_DIR). Os testes unitarios injetam `answer`/`unclear`/`rewrite` so para ler argumentos e codigos de retorno.
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbacao em worktree descartavel detached em 910f66c, removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "SEGUNDA PASSADA em 910f66c. `git diff 90f53af..HEAD --stat`: so tests/test_cepa_until_decide_doubt.py (47 insercoes, 0 remocoes); `git diff 90f53af..HEAD -- common/bin/cepa-run` vazio (0 linhas). `git diff 90f53af..HEAD -- tests/test_cepa_until_decide_doubt.py` tem zero linhas removidas (so a linha de cabecalho `--- a/`): nenhum teste nem asserção foi removido ou enfraquecido."
+        - "REEXECUTADAS no novo head (11 rodadas, cada uma `git diff --numstat` = 1 1, uma linha so; todas por AssertionError):"
+        - "Baseline sem perturbacao em 910f66c: 70 passed in 22.90s (eram 68; +2 testes novos)."
+        - "(S1) cabecalho `text not recorded:` -> `not recorded:` (cepa-run:4063): RED test_refused_text_shows_a_line_without_force_and_the_same_menu_again, 'CS-8 pty: the whole sentence, with the labels the panel passes, is on screen' (1 failed, 58 passed in 19.11s). Primeira passada: SOBREVIVIA."
+        - "(S2) separador `, ` -> `; ` (cepa-run:4064): RED o mesmo teste, mesma checagem (1 failed, 58 passed in 19.77s). Primeira passada: SOBREVIVIA."
+        - "(S3) rotulo da tecla `?` 'I don't understand the question' -> 'I do not get it' (cepa-run:4764): RED o mesmo teste, mesma checagem (1 failed, 58 passed in 18.71s). Primeira passada: SOBREVIVIA."
+        - "(S4) rotulo da tecla Enter 'leave it for later' -> 'skip' (cepa-run:4765): RED o mesmo teste, mesma checagem (1 failed, 58 passed in 19.46s). Primeira passada: SOBREVIVIA."
+        - "(S5) `except` de accepts_force devolvendo True (cepa-run:4384): RED test_accepts_force_is_false_when_the_signature_cannot_be_read, 'assert True is False' (1 failed, 60 passed in 19.19s). Primeira passada: SOBREVIVIA."
+        - "Amostra dos 39 vermelhos da primeira passada, um de cinco grupos (reexecutados no novo head):"
+        - "(1) ANSWER_REFUSED_RC 6->7 [grupo codigo de recusa]: RED test_punctuation_only_text_is_still_refused_by_the_panel, 'CS-3 pty punct: refused as before' (1 failed, 34 passed in 8.11s)"
+        - "(6) `continue` -> `pass` no ramo de recusa [grupo menu do mesmo item volta]: RED test_refused_text_shows_a_line_without_force_and_the_same_menu_again (1 failed, 58 passed in 18.74s)"
+        - "(11) frase com `; use --force` [grupo texto da linha de recusa]: RED o mesmo teste (1 failed, 58 passed in 18.91s)"
+        - "(21) `d` sem force (`dk = {}`) [grupo force no descarte]: RED test_d_with_an_empty_why_on_a_question_mark_item_records_the_discard_in_a_pty (1 failed, 67 passed in 51.44s)"
+        - "(31) bloco movido, `keep=True` removido [grupo bloco movido para dentro do laco]: RED test_n_at_the_doubt_prompt_then_n_keeps_the_item_with_force (1 failed, 20 passed in 5.94s)"
+        - "CARREGADAS da primeira passada, NAO reexecutadas (valem porque common/bin/cepa-run e identico entre 90f53af e HEAD e os testes so ganharam asserções): as outras 34 perturbacoes vermelhas, numeradas (2)-(5), (7)-(10), (12)-(20), (22)-(30), (32)-(39) na tabela da primeira passada (1 linha, ou 2 nas de menu/instr). Totais: 39 vermelhas da primeira passada = 5 reexecutadas + 34 carregadas; mais 5 ex-sobreviventes agora vermelhos = 44 perturbacoes, 44 vermelhas, 0 sobreviventes. Reexecutadas no novo head: 10 perturbacoes + baseline; carregadas: 34."
+        - "Vermelho no cepa-run da base (primeira passada, carregado): com common/bin/cepa-run revertido ao e22fa6b os testes de 90f53af davam 9 failed, 59 passed; nao reexecutado."
+      run: >-
+        `git worktree add --detach <scratchpad>/wt HEAD` (910f66c); cada perturbacao aplicada com `sed -i` so na linha de common/bin/cepa-run, conferida com `git diff --numstat` (1 1), desfeita com `git -C <wt> checkout -- common/bin/cepa-run`;
+        `python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -x` em primeiro plano. Baseline: 70 passed in 22.90s. 5 ex-sobreviventes: 5 de 5 RED (resumos acima). Amostra de 5 grupos: 5 de 5 RED. Worktree removido ao fim; arvore primaria intocada salvo este yaml. Suite completa nao rodada.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "toda linha de comportamento alterada foi quebrada e ficou vermelha: 44 de 44 (5 reexecutadas no 910f66c + 5 amostradas + 34 carregadas; os 5 ex-sobreviventes agora vermelhos em 910f66c, ex.: `python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -x` S1 -> 1 failed, 58 passed in 19.11s)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "A unica entrada e o texto que o dono digita no proprio terminal (painel local, sem parser de dado externo, sem modulo api-rest); este diff so muda o que o painel faz depois de a fila recusar o texto e a mensagem na tela, e nao abre entrada nova."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-8 de docs/spec/duvida-sobre-a-pergunta-do-decide.md); a prova e a perturbacao."
+routing_reason: >-
+  Segunda passada: os cinco sobreviventes da primeira (o inicio `text `, o separador entre teclas, o rotulo da tecla `?`, o rotulo da tecla Enter e o ramo defensivo de accepts_force) agora ficam vermelhos por asserção no 910f66c, e uma amostra de cinco grupos dos 39 vermelhos antigos continua vermelha. O cepa-run nao mudou entre 90f53af e HEAD, e os testes so ganharam linhas (zero removidas), entao os outros 34 vermelhos da primeira passada valem. Zero sobreviventes entre 44 perturbacoes. PROVEN.

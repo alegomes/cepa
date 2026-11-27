@@ -1,0 +1,56 @@
+schema_version: 2
+card: duvida-sobre-a-pergunta-do-decide-CS-10
+verdict: proven
+reviewed_at: 2026-11-27T01:20:00-03:00
+base_commit: 01c79a5
+head_commit: 799d5bc
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa). Superficie = painel `cepa run decide` lido em pseudo-terminal
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-run (legend_lines: a entrada da tecla `?` agora e f\"I did not understand the question: it is rewritten right away, in up to {UNCLEAR_REWRITE_SEC} s, and nothing is answered\"; antes: \"it is recorded as badly written and nothing is answered\")"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # o teste pty roda o cepa-run decide real; leitor falso so na fronteira (CEPA_RUN_READER=off / CEPA_FEEDBACK_DIR). O teste unitario chama legend_lines real.
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbacao em worktree descartavel detached em 799d5bc, removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "Baseline sem perturbacao em 799d5bc: 75 passed in 24.98s (`python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -x`)."
+        - "(P1) 'rewritten' -> 'replaced': RED test_question_mark_legend_says_the_question_is_rewritten_in_up_to_60_s_in_a_pty (pty); 1 failed, 73 passed in 23.65s. numstat 1 1."
+        - "(P2) 'right away' removido: RED test_question_mark_legend_entry_follows_the_rewrite_ceiling_constant (unitario, frase inteira); 1 failed, 74 passed in 23.46s. O pty nao pega (o criterio pede so 'rewritten' e '60'). numstat 2 2."
+        - "(P3) {UNCLEAR_REWRITE_SEC} -> literal 60: RED o teste unitario (a constante trocada para 17 nao e seguida); 1 failed, 74 passed in 23.52s. O pty fica verde, como deve (60 e o valor real). numstat 1 1."
+        - "(P4) -> literal 45: RED o teste pty; 1 failed, 73 passed in 23.71s. numstat 1 1."
+        - "(P5) -> {UNCLEAR_REWRITE_SEC + 1}: RED o teste pty (61 nao contem 60); 1 failed, 73 passed in 23.87s. numstat 1 1."
+        - "(P6) unidade ' s' removida (`up to {UNCLEAR_REWRITE_SEC}, and`): RED o teste unitario; 1 failed, 74 passed in 23.71s. O pty nao pega. numstat 1 1."
+        - "(P7) 'and nothing is answered' removido: RED o teste pty (check 'still says nothing is answered'); 1 failed, 73 passed in 24.06s. numstat 1 2."
+        - "(P8) entrada revertida para a frase antiga: RED o teste pty; 1 failed, 73 passed in 23.80s. numstat 2 3."
+        - "(P9) chave `\"?\"` -> `\"!\"` (a linha `? =` some): RED o teste pty; 1 failed, 73 passed in 23.76s. numstat 1 1."
+        - "Totais: 9 perturbacoes, 9 vermelhas por AssertionError com linha de resumo do pytest, 0 sobreviventes. Pty vermelho em P1, P4, P5, P7, P8, P9 (6); so o unitario vermelho em P2, P3, P6 (3); 6 + 3 = 9."
+        - "Parte sem teste vermelho: nenhuma. 'right away', o literal 60 e ' s' so sao vigiados pelo teste unitario, nao pelo pty."
+        - "Vermelho no cepa-run da base (cepa-run revertido a 01c79a5 no worktree): `python3 -m pytest tests/test_cepa_until_decide_doubt.py -q` -> FAILED test_question_mark_legend_says_the_question_is_rewritten_in_up_to_60_s_in_a_pty e FAILED test_question_mark_legend_entry_follows_the_rewrite_ceiling_constant; 2 failed, 73 passed in 23.99s."
+      run: >-
+        `git worktree add --detach <scratchpad>/wt10 799d5bc`; cada perturbacao aplicada so no texto indicado de common/bin/cepa-run (substituicao exata, uma ocorrencia), conferida com `git diff --numstat`, desfeita com `git checkout -- common/bin/cepa-run`;
+        `python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -x` em primeiro plano, uma rodada por vez (75 passed baseline; P1/P4/P5/P7/P8/P9 1 failed 73 passed; P2/P3/P6 1 failed 74 passed); base: 2 failed, 73 passed. Worktree removido; arvore primaria intocada salvo este yaml. Suite completa nao rodada.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "a unica linha de comportamento alterada (a entrada da tecla `?` em legend_lines) foi quebrada em 9 partes e todas ficaram vermelhas: 9 de 9; o comentario novo nao e comportamento."
+  l4_adversarial_input:
+    status: n/a
+    reason: "A unica entrada e o texto que o dono digita no proprio terminal (painel local, sem parser de dado externo, sem modulo api-rest); este diff so muda a frase da legenda da tecla `?` na tela e nao abre entrada nova."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-10 de docs/spec/duvida-sobre-a-pergunta-do-decide.md); a prova e a perturbacao. Os dois testes novos ficam vermelhos no cepa-run da base: 2 failed, 73 passed."
+routing_reason: >-
+  Quebrei de nove jeitos a frase da legenda da tecla `?` (a palavra 'rewritten', 'right away', o numero como literal 60, como 45 e como constante + 1, a unidade ' s', 'nothing is answered', a frase antiga de volta, e a tecla a que a entrada esta presa) e todos ficaram vermelhos por assercao, com o nome do teste e a linha de resumo do pytest. Seis foram pegos pelo teste no terminal real; tres (tirar 'right away', fixar o 60 em literal, tirar ' s') so pelo teste unitario, o que e coerente: o criterio so exige 'rewritten' e '60' na tela, e o unitario cobre a frase inteira e o acompanhamento da constante. Os dois testes novos ficam vermelhos no cepa-run da base. Zero sobreviventes entre 9 perturbacoes. PROVEN.

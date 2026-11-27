@@ -1244,6 +1244,7 @@ def test_cs6_decide_all_run_reword_lands_in_the_queue_of_the_item():
             ("Land now?", "n"),
             ("[w] I write the answer", ""),
             ("[w] I write the answer", "?"),
+            ("What did you not understand?", ""),
             ("[w] I write the answer", "")])
         plain = dec.ANSI.sub("", out)
         check("decide all/<run> com `?` sai com 0", rc == 0, plain[-1500:])

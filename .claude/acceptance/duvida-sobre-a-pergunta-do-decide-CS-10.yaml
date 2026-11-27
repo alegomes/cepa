@@ -1,0 +1,22 @@
+key: CS-10
+queue: duvida-sobre-a-pergunta-do-decide
+status: complete
+pass: 1
+criteria:
+  - id: AC1
+    text: "docs/spec/duvida-sobre-a-pergunta-do-decide.md CS-10 (cli): a legenda da tecla `?` diz que a pergunta é reescrita em seguida (pty: a linha que começa com '? =' contém 'rewritten' e '60'; antes dizia 'it is recorded as badly written and nothing is answered')."
+    altitude: cli
+    surface: "common/bin/cepa-run decide panel (cepa-until decide fila --repo ...) in a pty; legend line found by its '? =' prefix, wrapped continuation joined"
+    test: "tests/test_cepa_until_decide_doubt.py::test_question_mark_legend_says_the_question_is_rewritten_in_up_to_60_s_in_a_pty (plus unit ::test_question_mark_legend_entry_follows_the_rewrite_ceiling_constant)"
+    layer: cli-pty
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -> '75 passed in 24.29s' (N=75 > 0); filtered -k question_mark_legend -> '2 passed, 73 deselected' (N=2)"
+    sub_criteria:
+      real_panel_in_pty: "complete. the test spawns `cepa-until decide fila --repo` through on_tty with a real repo and an item with owner_question; the legend comes from legend_lines in cepa-run, not a stub."
+      line_found_by_prefix: "complete. _question_mark_legend finds the line starting '? = ' after stripping card borders and joins wrapped continuation lines until a blank line, the next 'key = ' entry or a '[' line."
+      says_rewritten_and_60: "complete. asserts 'rewritten' and '60' on that joined line only, plus 'nothing is answered' kept and 'badly written' gone."
+      no_pass_on_timeout: "complete. asserts rc == 0 (on_tty kills past the deadline), asserts the menu '<[w] I write the answer>' is on screen, asserts the line is non-empty (empty string fails 'rewritten'), and a final assert fails if any check recorded a failure."
+      number_follows_constant: "complete. unit test pins the whole entry and that 60 is UNCLEAR_REWRITE_SEC (changed to 17, the entry follows); source builds the text from the constant at call time."
+      outermost_layer_changed: "complete. the diff changes legend_lines in common/bin/cepa-run, the text the user sees."
+      mutation_reasoning: "not run (source read-only for me). Reverting the legend text makes 'rewritten' and '60' absent from the line, so the pty test fails."
+    gap: null
