@@ -219,16 +219,20 @@ items:
     entre si · superfície onde se observa: cli · teste vermelho declarado: no cenário
     do CS-8 com um item sem `evidence`, a linha de recusa não traz "[e]"; com um
     item com `evidence`, traz; hoje a recusa não cita tecla nenhuma.'
-  status: in_progress
+  status: done
   blocked_by: []
   human_pending: null
-  claimed_by:
-    session_id: 28f73a19-9aa9-4ca9-bd32-820af14978b7
-    pid: 45882
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/cepa-worktrees/cepa-chain-1126-1336
-    branch: session/chain-1126-1336
-    started_at: '2026-11-27T02:52:41+00:00'
+  evidence: 'commits a5ba2f4 (codigo + testes), 01c79a5 (arquivos dos portoes) em
+    session/chain-1126-1336. pair-reviewer OK-WITH-NOTES, sem correcao. completion-auditor
+    COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-9.yaml). proof-reviewer
+    PROVEN em a5ba2f4, 8 de 8 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-9.yaml).
+    tests/run-all.sh em a5ba2f4: 260 de 260, tudo verde. Constante E_CHIP compartilhada
+    pelo menu e pela recusa; a recusa usa o mesmo show do menu; [e] vem primeiro,
+    na ordem do menu. Com evidence: ''text not recorded: it does not read as an
+    answer. [e] technical detail, [?] I don''t understand the question, [Enter]
+    leave it for later''. O rotulo de e no menu so e conferido por tests/test_cepa_until_decide.py
+    rodado como script.'
+  head_commit: 01c79a545296e27979776ba9cd67eb159ce9ba7d
 - id: CS-10
   title: a legenda da tecla `?` diz que a pergunta é reescrita em seguida
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
