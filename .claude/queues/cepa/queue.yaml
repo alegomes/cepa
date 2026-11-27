@@ -3953,3 +3953,13 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: bloco-final-na-run-interrompida
+  title: Run interrompida por Ctrl-C ou erro fatal termina sem o bloco de três linhas
+  why: 'Decisão do dono em 2026-11-27 (anotar para depois); BACKLOG.md § Run interrompida
+    por Ctrl-C ou erro fatal termina sem o bloco de três linhas (ainda não priorizado:
+    entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
