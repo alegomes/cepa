@@ -4050,6 +4050,20 @@ class Panel:
                             else self.t.c("vermelho", f"✗ not recorded: {msg}")))
 
 
+# CS-8 (duvida-sobre-a-pergunta-do-decide): `cepa-queue answer` exits with this code
+# for text that is not an answer. Its message cites `--force`, which the panel does not
+# have, so the panel says its own line and gives the same item's menu back.
+ANSWER_REFUSED_RC = 6
+
+
+def refusal_line(keys):
+    """CS-8: the one line shown when `cepa-queue answer` refuses the text. `keys` is the
+    list of (key, label) the item's menu always has (CS-9 adds the conditional ones);
+    only those keys are cited."""
+    return ("text not recorded: it does not read as an answer. "
+            + ", ".join(f"[{k}] {label}" for k, label in keys))
+
+
 # CS-8: the longest rewrite-failure reason the panel prints.
 FAILURE_REASON_MAX = 200
 
@@ -4688,6 +4702,53 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                         # answer` would refuse (it passes `--force`).
                         not_a_doubt = True
             if r != "?":
+                text, give_back, drop = "", False, False
+                if r == "d":
+                    drop = True
+                    base = question_text or route or "the item"
+                    extra = str(question(screen.follow_up(
+                        "Why, in one line? [Enter skips, v opens the editor] "))).strip()
+                    if extra.lower() == "v":
+                        extra = edit_in_editor(ident, question_text or route,
+                                               ad.get("title"))
+                    text = (("tarefa encerrada" if delivered else "descartado")
+                            + f": {base}" + (f". {extra}" if extra else ""))
+                elif r in ("w", "v"):
+                    # `w`/`v` text was read, and the doubt asked, above.
+                    text = typed_w
+                    if text:
+                        give_back = is_yes(question(screen.follow_up(
+                            "Send the item back to the queue with that answer? [y/N] ")))
+                elif r in ("y", "n"):
+                    give_back = r == "y"
+                    base = question_text or route or "unblock the item"
+                    # There is always room for a comment, also on `y` with a
+                    # written question: the owner wanted to say something beyond yes/no and
+                    # the next run reads what he wrote (10/15).
+                    extra = str(question(screen.follow_up(
+                        "Anything to add, in one line? [Enter skips, v opens the editor] "))).strip()
+                    if extra.lower() == "v":
+                        extra = edit_in_editor(ident, question_text or route,
+                                               ad.get("title"))
+                    text = (("sim" if give_back else "não") + f": {base}"
+                             + (f" Instrução: {instruction}" if give_back and instruction
+                                else "")
+                             + (f". {extra}" if extra else ""))
+                rc = msg = None
+                if text:
+                    fk = {"force": True} if not_a_doubt else {}
+                    rc, msg = (answer(ident, text, drop=True) if drop
+                               else answer(ident, text, **fk) if give_back
+                               else answer(ident, text, keep=True, **fk))
+                    if rc == ANSWER_REFUSED_RC:
+                        # CS-8: text that is not an answer. Nothing was recorded; the
+                        # same item's menu comes back (`doubt`, `not_a_doubt` and the
+                        # typed text are set again at the top of the loop, `rewrites`
+                        # is kept). CS-9 adds `[e]` here when the item has `evidence`.
+                        screen.warning(refusal_line(
+                            [("?", "I don't understand the question"),
+                             ("Enter", "leave it for later")]))
+                        continue
                 break
             if not doubt and rewrites < 2:
                 # CS-5: the `?` key asks, in one optional line, what the owner did not
@@ -4732,41 +4793,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             continue
         if r == "q":
             stopped = True
-        text, give_back, drop = "", False, False
-        if r == "d":
-            drop = True
-            base = question_text or route or "the item"
-            extra = str(question(screen.follow_up(
-                "Why, in one line? [Enter skips, v opens the editor] "))).strip()
-            if extra.lower() == "v":
-                extra = edit_in_editor(ident, question_text or route, ad.get("title"))
-            text = (("tarefa encerrada" if delivered else "descartado")
-                    + f": {base}" + (f". {extra}" if extra else ""))
-        elif r in ("w", "v"):
-            # `w`/`v` text was read, and the doubt asked, above.
-            text = typed_w
-            if text:
-                give_back = is_yes(question(screen.follow_up(
-                    "Send the item back to the queue with that answer? [y/N] ")))
-        elif r in ("y", "n"):
-            give_back = r == "y"
-            base = question_text or route or "unblock the item"
-            # There is always room for a comment, also on `y` with a
-            # written question: the owner wanted to say something beyond yes/no and
-            # the next run reads what he wrote (10/15).
-            extra = str(question(screen.follow_up(
-                "Anything to add, in one line? [Enter skips, v opens the editor] "))).strip()
-            if extra.lower() == "v":
-                extra = edit_in_editor(ident, question_text or route, ad.get("title"))
-            text = (("sim" if give_back else "não") + f": {base}"
-                     + (f" Instrução: {instruction}" if give_back and instruction
-                        else "")
-                     + (f". {extra}" if extra else ""))
         if text:
-            fk = {"force": True} if not_a_doubt else {}
-            rc, msg = (answer(ident, text, drop=True) if drop
-                       else answer(ident, text, **fk) if give_back
-                       else answer(ident, text, keep=True, **fk))
             if rc == 0:
                 applied.append(f"{ident}: {msg}")
                 progress["answered"] = progress.get("answered", 0) + 1

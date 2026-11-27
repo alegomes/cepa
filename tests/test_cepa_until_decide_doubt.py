@@ -223,7 +223,8 @@ def test_ordinary_text_in_w_does_not_show_the_doubt_prompt():
 
 def test_punctuation_only_text_in_w_does_not_show_the_doubt_prompt():
     failed_before = len(FAILURES)
-    rc, plain, before, after = _w_session("...", [(SEND_BACK, "n")])
+    # CS-8: the refusal gives the same item's menu back, so `q` closes the panel.
+    rc, plain, before, after = _w_session("...", [(SEND_BACK, "n"), (MENU, "q")])
     check("CS-1 pty punct: decide exits 0", rc == 0, plain[-1500:])
     check("CS-1 pty punct: no doubt prompt", ASK not in plain, plain[-1500:])
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
@@ -768,10 +769,13 @@ def test_v_doubt_then_n_then_y_records_the_editor_text_through_the_real_answer()
 
 
 def test_punctuation_only_text_is_still_refused_by_the_panel():
+    """Still not recorded (CS-8 changed what the screen says and where the item goes:
+    the refusal line replaces the raw `cepa-queue` message, which cited `--force`,
+    and the same item's menu comes back instead of the next item)."""
     failed_before = len(FAILURES)
-    rc, plain, before, after = _w_session("...", [(SEND_BACK, "y")])
+    rc, plain, before, after = _w_session("...", [(SEND_BACK, "y"), (MENU, "q")])
     check("CS-3 pty punct: refused as before", "not recorded" in plain
-          and "resposta recusada" in plain, plain[-1500:])
+          and "does not read as an answer" in plain, plain[-1500:])
     check("CS-3 pty punct: queue.yaml is byte-identical", after == before, "")
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
@@ -1220,6 +1224,177 @@ def test_the_two_rewrites_counter_does_not_leak_to_the_next_item():
           len(rewrites) == 3, rewrites)
     check("CS-6 unit leak: the second item's `?` asks the line",
           sum(KEY_ASK in p for p in shown) == 1, shown)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+# ---- CS-8: refused text gives back the same item's menu, with no `--force` -----
+
+REFUSED = "does not read as an answer"
+
+
+def _refusal_text(screen):
+    """The refusal line as one string, wrapped continuation included (it ends at the
+    first blank line), or ""."""
+    import re
+    if REFUSED not in screen:
+        return ""
+    return _flat(re.split(r"\n[│ ]*\n", screen.split(REFUSED, 1)[1])[0])
+
+
+UNIT_MENU = "w = you write the answer"  # the menu line without a terminal
+
+
+def _refusal_session(typed="...", then=None, items=1):
+    """pty, real `cepa-queue answer`: `w` + `typed` + "y" at the send-back question
+    (refused by `cepa-queue`), then the `then` inputs. Returns (rc, plain, before,
+    after, the items by id at the end)."""
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        its = []
+        for n in range(items):
+            it = item(f"b{n + 1}", status="pending",
+                      human_pending="falta escolher a variante")
+            it["owner_question"] = QUESTION if n == 0 else "O certificado do banco já chegou?"
+            it["route_kind"] = "external-block"
+            its.append(it)
+        root = build_repo(tmp, its)
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        before = qfile.read_bytes()
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=30, inputs=[
+            (MENU, "w"), (YOUR, typed), (SEND_BACK, "y"), *(then or [])])
+        plain = ANSI.sub("", out)
+        import yaml
+        now = {i["id"]: i for i in yaml.safe_load(qfile.read_text())["items"]}
+        return rc, plain, before, qfile.read_bytes(), now
+
+
+def test_refused_text_shows_a_line_without_force_and_the_same_menu_again():
+    """Red test of CS-8, as a process in a pseudo-terminal and with the real
+    `cepa-queue answer`: "..." in `w` is refused (exit code 6); the screen has no
+    "--force", the refusal line cites `?` and Enter, the same item's menu comes back
+    (the item header once, the menu line twice), and a valid answer on that same item
+    is then recorded."""
+    import yaml
+    failed_before = len(FAILURES)
+    rc, plain, before, after, items = _refusal_session(then=[
+        (MENU, "w"), (YOUR, "variante B"), (SEND_BACK, "y")])
+    now = items["b1"]
+    check("CS-8 pty: decide exits 0 (no timeout)", rc == 0, plain[-1500:])
+    check("CS-8 pty: the screen never says --force", "--force" not in plain, plain[-1500:])
+    check("CS-8 pty: the raw cepa-queue message is not relayed",
+          "resposta recusada" not in plain and "repita com" not in plain, plain[-1500:])
+    line = next((l for l in plain.splitlines() if REFUSED in l), "")
+    flat = _refusal_text(plain)
+    check("CS-8 pty: a refusal line is shown", bool(line), plain[-1500:])
+    check("CS-8 pty: the line cites ? and Enter", "[?]" in flat and "[Enter]" in flat, flat)
+    check("CS-8 pty: the line does not cite [e] (that is CS-9)", "[e]" not in flat, flat)
+    check("CS-8 pty: the item header appears once", plain.count("1/1 · b1") == 1,
+          plain[-800:])
+    check("CS-8 pty: the menu line appears twice", plain.count(MENU) == 2, plain[-1500:])
+    check("CS-8 pty: the valid answer on the same item is recorded",
+          "Resposta do dono em" in str(now.get("evidence"))
+          and "variante B" in str(now.get("evidence")) and "answered now 1" in plain,
+          (now, plain[-1200:]))
+    check("CS-8 pty: the refused text was never recorded",
+          before != after and "..." not in str(now.get("evidence")), now)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_refused_text_leaves_the_queue_file_untouched_and_enter_defers_the_item():
+    failed_before = len(FAILURES)
+    rc, plain, before, after, _ = _refusal_session(then=[(MENU, "")])
+    check("CS-8 pty enter: decide exits 0 (no timeout)", rc == 0, plain[-1500:])
+    check("CS-8 pty enter: queue file byte-identical", after == before, "")
+    check("CS-8 pty enter: the menu came back", plain.count(MENU) == 2, plain[-1500:])
+    check("CS-8 pty enter: Enter leaves the item in for later 1",
+          "for later 1" in plain.rsplit("closing", 1)[-1] and "answered now 0" in plain,
+          plain[-1200:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_refusal_does_not_reset_the_rewrites_counter_in_a_pty():
+    """`?` (rewrite 1), then a refused "..." and `?` with no text: the reader must
+    not run again (the counter survived the refusal)."""
+    failed_before = len(FAILURES)
+    rc, plain, reqs, _ = _two_rewrite_session(lambda: [
+        (MENU, "?"), (KEY_ASK, ""), (V1, None),
+        (MENU, "w"), (YOUR, "..."), (SEND_BACK, "y"),
+        (MENU, "?"), (KEY_ASK, ""),
+    ])
+    check("CS-8 pty counter: decide exits 0 (no timeout)", rc == 0, plain[-1500:])
+    check("CS-8 pty counter: the refusal line showed", REFUSED in plain, plain[-1500:])
+    check("CS-8 pty counter: the reader ran once only", len(reqs) == 1, reqs)
+    check("CS-8 pty counter: the second `?` says it is not rewritten again",
+          "not rewritten again without a written doubt" in _flat(plain), plain[-1200:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def _refusal_unit(replies, results, deferred=None):
+    """`decide` with an `answer` fake (old signature plus `**k`) returning `results`
+    one by one as (rc, msg); returns (screen text, calls, later)."""
+    m = load_module()
+    screen, calls, it, res = [], [], iter(replies), iter(results)
+    _, later = m.decide(
+        Path("/nao/existe"), "fila", None, {}, deferred or [_deferred(evidence="")], {},
+        question=lambda _p: next(it, ""), output=screen.append,
+        answer=lambda ident, text, **k: calls.append((text, k)) or next(res, (0, "ok")),
+        unclear=lambda *a, **k: (0, "ok"), rewrite=lambda *a, **k: (None, "no"))
+    return "\n".join(screen), calls, later
+
+
+def test_rc_6_from_an_injected_answer_returns_the_menu_of_the_same_item():
+    failed_before = len(FAILURES)
+    text, calls, later = _refusal_unit(
+        ["w", "texto", "y", "w", "outro texto", "y"],
+        [(6, "resposta recusada: repita com --force"), (0, "gravado")])
+    check("CS-8 unit rc6: two attempts on the same item", len(calls) == 2, calls)
+    check("CS-8 unit rc6: the second attempt recorded, nothing for later",
+          later == [] and "gravado" in text, (later, text))
+    check("CS-8 unit rc6: the menu showed twice", text.count(UNIT_MENU) == 2, text)
+    check("CS-8 unit rc6: no --force and no raw message on screen",
+          "--force" not in text and "repita" not in text, text)
+    check("CS-8 unit rc6: the first refusal is not shown as `not recorded: <raw>`",
+          "not recorded: resposta" not in text, text)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_the_force_flag_does_not_survive_a_refusal_into_the_next_attempt():
+    failed_before = len(FAILURES)
+    # first attempt: doubt text, "n" at the doubt prompt (force on), refused;
+    # second attempt: ordinary text, no doubt prompt, so no force.
+    text, calls, later = _refusal_unit(
+        ["w", DOUBT, "n", "y", "w", "variante B", "y"], [(6, "recusa"), (0, "ok")])
+    check("CS-8 unit force: first attempt carried force", calls[0][1].get("force") is True, calls)
+    check("CS-8 unit force: second attempt does not", len(calls) == 2
+          and not calls[1][1].get("force"), calls)
+    check("CS-8 unit force: the second text is the one recorded",
+          calls[-1][0].endswith("variante B") or "variante B" in calls[-1][0], calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_another_recording_failure_still_sends_the_item_to_later_with_its_message():
+    failed_before = len(FAILURES)
+    text, calls, later = _refusal_unit(["w", "texto", "y", "w"], [(2, "disco cheio")])
+    check("CS-8 unit rc2: today's message is shown", "not recorded: disco cheio" in text, text)
+    check("CS-8 unit rc2: the item goes to later", len(later) == 1, later)
+    check("CS-8 unit rc2: the menu is not shown again", len(calls) == 1
+          and text.count(UNIT_MENU) == 1, (calls, text))
+    check("CS-8 unit rc2: no refusal line", REFUSED not in text, text)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_refusal_on_a_y_answer_also_returns_the_menu_and_keeps_the_key_set():
+    """The refusal line is built from the item's keys; with no `evidence` the menu has
+    no `e` and the line cites none."""
+    failed_before = len(FAILURES)
+    text, calls, later = _refusal_unit(["y", "", "q"], [(6, "recusa")])
+    line = _refusal_text(text)
+    check("CS-8 unit y: the line is shown", bool(line), text)
+    check("CS-8 unit y: no [e] in the line", "[e]" not in line, line)
+    check("CS-8 unit y: the menu came back and `q` ended the panel",
+          text.count(UNIT_MENU) == 2 and len(later) == 1 and len(calls) == 1,
+          (text, later))
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
