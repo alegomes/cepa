@@ -1244,7 +1244,7 @@ def _refusal_text(screen):
 UNIT_MENU = "w = you write the answer"  # the menu line without a terminal
 
 
-def _refusal_session(typed="...", then=None, items=1):
+def _refusal_session(typed="...", then=None, items=1, evidence=None):
     """pty, real `cepa-queue answer`: `w` + `typed` + "y" at the send-back question
     (refused by `cepa-queue`), then the `then` inputs. Returns (rc, plain, before,
     after, the items by id at the end)."""
@@ -1255,6 +1255,8 @@ def _refusal_session(typed="...", then=None, items=1):
                       human_pending="falta escolher a variante")
             it["owner_question"] = QUESTION if n == 0 else "O certificado do banco já chegou?"
             it["route_kind"] = "external-block"
+            if evidence and n == 0:
+                it["evidence"] = evidence
             its.append(it)
         root = build_repo(tmp, its)
         qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
@@ -1324,6 +1326,74 @@ def _load_cepa_run_module():
 
 PANEL_REFUSAL_SENTENCE = ("text not recorded: it does not read as an answer. "
                           "[?] I don't understand the question, [Enter] leave it for later")
+
+
+PANEL_REFUSAL_SENTENCE_E = ("text not recorded: it does not read as an answer. "
+                            "[e] technical detail, [?] I don't understand the question, "
+                            "[Enter] leave it for later")
+
+
+def test_refusal_line_with_the_three_pairs_is_the_exact_sentence():
+    """CS-9 unit: `[e]` first, then `?` and Enter, joined as the two-pair line is."""
+    mod = _load_cepa_run_module()
+    got = mod.refusal_line([("e", "technical detail"),
+                            ("?", "I don't understand the question"),
+                            ("Enter", "leave it for later")])
+    assert got == PANEL_REFUSAL_SENTENCE_E, got
+
+
+def _refusal_screen_facts(plain):
+    """(sentence, cited keys, menu keys) of the first refusal on a pty screen; the
+    sentence ends at the first blank panel line, the menu keys are read from the
+    item's first menu, above the refusal."""
+    import re
+    flat = _refusal_text(plain)
+    sentence = flat.split(" │ │ ", 1)[0]
+    menu_keys = set(re.findall(r"\[([^\]\s]+)\]", plain.split(REFUSED, 1)[0]
+                              .rsplit("1/1 · b1", 1)[-1]))
+    return sentence, set(re.findall(r"\[([^\]\s]+)\]", sentence)), menu_keys
+
+
+def test_refusal_cites_e_with_its_label_when_the_item_has_evidence_in_a_pty():
+    """CS-9 red test: same scenario as CS-8 (`w`, "..."), item WITH `evidence`."""
+    import re
+    failed_before = len(FAILURES)
+    rc, plain, before, after, items = _refusal_session(
+        evidence="log do agente: variante O = ...", then=[(MENU, "")])
+    check("CS-9 pty e: decide exits 0 (no timeout)", rc == 0, plain[-1500:])
+    check("CS-9 pty e: a refusal line is shown", REFUSED in plain, plain[-1500:])
+    sentence, cited, menu_keys = _refusal_screen_facts(plain)
+    check("CS-9 pty e: the line cites [e] with the menu's own label",
+          "[e] technical detail" in sentence, sentence)
+    whole = _flat(re.sub(r"[│┃|]", " ", plain))
+    check("CS-9 pty e: the whole sentence is on screen",
+          PANEL_REFUSAL_SENTENCE_E in whole, whole[-1500:])
+    check("CS-9 pty e: `e` is on that item's menu and every cited key is too",
+          "e" in menu_keys and {"e", "?", "Enter"} <= cited <= menu_keys,
+          (cited, menu_keys, sentence))
+    check("CS-9 pty e: the same item's menu came back, nothing recorded",
+          plain.count(MENU) == 2 and after == before, plain[-1500:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_refusal_does_not_cite_e_when_the_item_has_no_evidence_in_a_pty():
+    """CS-9 red test, other half: no `evidence`, so no `[e]` on the menu or the line,
+    and the sentence is today's."""
+    import re
+    failed_before = len(FAILURES)
+    rc, plain, before, after, items = _refusal_session(then=[(MENU, "")])
+    check("CS-9 pty no-e: decide exits 0 (no timeout)", rc == 0, plain[-1500:])
+    check("CS-9 pty no-e: a refusal line is shown", REFUSED in plain, plain[-1500:])
+    sentence, cited, menu_keys = _refusal_screen_facts(plain)
+    check("CS-9 pty no-e: the refusal sentence has no [e]", "[e]" not in sentence, sentence)
+    check("CS-9 pty no-e: the menu has no [e] either",
+          "e" not in menu_keys and "technical detail" not in plain, (menu_keys, plain[-1500:]))
+    whole = _flat(re.sub(r"[│┃|]", " ", plain))
+    check("CS-9 pty no-e: the sentence is exactly today's",
+          PANEL_REFUSAL_SENTENCE in whole, whole[-1500:])
+    check("CS-9 pty no-e: every cited key is on the menu",
+          cited == {"?", "Enter"} and cited <= menu_keys, (cited, menu_keys))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
 def test_refusal_line_is_the_exact_sentence_for_the_keys_the_panel_passes():

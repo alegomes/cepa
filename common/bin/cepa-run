@@ -4056,9 +4056,13 @@ class Panel:
 ANSWER_REFUSED_RC = 6
 
 
+# The menu chip for the technical detail; the menu and the refusal line (CS-9) share it.
+E_CHIP = ("e", "technical detail")
+
+
 def refusal_line(keys):
     """CS-8: the one line shown when `cepa-queue answer` refuses the text. `keys` is the
-    list of (key, label) the item's menu always has (CS-9 adds the conditional ones);
+    list of (key, label) the item's menu has (`[e]` only when the item shows it, CS-9);
     only those keys are cited."""
     return ("text not recorded: it does not read as an answer. "
             + ", ".join(f"[{k}] {label}" for k, label in keys))
@@ -4653,7 +4657,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                      ("d", "the task no longer applies" if delivered
                       else "discard the item")]
             if show:
-                chips.append(("e", "technical detail"))
+                chips.append(E_CHIP)
             chips += [("?", "I don't understand"), ("Enter", "later"), ("q", "quit")]
             screen.blank()
             screen.legend(legend_lines(chips, summary, delivered))
@@ -4759,10 +4763,12 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                         # CS-8: text that is not an answer. Nothing was recorded; the
                         # same item's menu comes back (`doubt`, `not_a_doubt` and the
                         # typed text are set again at the top of the loop, `rewrites`
-                        # is kept). CS-9 adds `[e]` here when the item has `evidence`.
+                        # is kept). CS-9: `[e]` is cited, first as on the menu, only
+                        # when this item's menu offers it (the same `show`).
                         screen.warning(refusal_line(
-                            [("?", "I don't understand the question"),
-                             ("Enter", "leave it for later")]))
+                            ([E_CHIP] if show else [])
+                            + [("?", "I don't understand the question"),
+                               ("Enter", "leave it for later")]))
                         continue
                 break
             if not doubt and rewrites < 2:
