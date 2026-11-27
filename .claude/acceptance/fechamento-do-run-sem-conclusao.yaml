@@ -1,0 +1,45 @@
+key: fechamento-do-run-sem-conclusao
+status: complete
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: "stdout of a real `cepa run` (tail of the closing screen)"
+    test: "tests/test_cepa_run_closing_screen.py::test_red_item_ends_with_the_three_part_block, test_the_count_comes_from_the_review_and_the_command_is_cepa_run, test_without_the_analysis_the_block_still_comes_and_says_so"
+    layer: cli-e2e
+    evidence: verified
+    run: "python3 tests/test_cepa_run_closing_screen.py -> 38 ok lines, 'tudo verde'; also drove a red run and read the real screen"
+    status: complete
+    note: "order, last-in-screen, review count (2 decisions and 4 tasks) and single command asserted. The 1-3 sentence limit is not asserted by a test (observed: 3 sentences). The older 'Next' panel above the block still says '1 owner question(s)' and 'cepa-run decide'; the block says why."
+  - id: AC2
+    altitude: cli
+    surface: "'Why the full build failed' panel + verify_vermelho jsonl event"
+    test: "test_the_failed_tests_and_their_first_line_are_on_the_screen, test_pair_check_with_a_green_middle_keeps_the_failure_of_the_red_build, test_failure_extraction_styles"
+    layer: cli-e2e
+    evidence: verified
+    run: "same file run, all ok"
+    status: complete
+  - id: AC3
+    altitude: cli
+    surface: "commits line and block 'side branch:' lines at COLUMNS=80"
+    test: "test_red_item_ends_with_the_three_part_block"
+    layer: cli-e2e
+    evidence: verified
+    run: "same file run, all ok; side name (>80 chars) printed whole in the block"
+    status: complete
+    note: "the 'Items' panel and the run-branch removal line still truncate with an ellipsis; the criterion only covers the side-branch name in the count/block, which is whole."
+  - id: AC4
+    altitude: cli
+    surface: "run commit message on screen + by-hand command executed via sh"
+    test: "test_commit_leaves_out_the_ignored_records_and_says_which, test_refused_commit_suggests_a_command_that_runs_with_exit_0"
+    layer: cli-e2e
+    evidence: verified
+    run: "same file run, all ok (command exits 0 in repo ignoring .claude/*)"
+    status: complete
+  - id: AC5
+    altitude: cli
+    surface: "the tests named in the section"
+    test: "red item test (names failed test and side branch) + exit-0 command test above"
+    layer: cli-e2e
+    evidence: verified
+    run: "python3 tests/test_cepa_run_closing_screen.py; also test_cepa_until_final_report.py and test_cepa_until_decide_run_answered_no.py -> tudo verde"
+    status: complete
