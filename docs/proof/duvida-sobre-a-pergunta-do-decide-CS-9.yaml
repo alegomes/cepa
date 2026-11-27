@@ -1,0 +1,56 @@
+schema_version: 2
+card: duvida-sobre-a-pergunta-do-decide-CS-9
+verdict: proven
+reviewed_at: 2026-11-27T00:50:00-03:00
+base_commit: 2777ff0
+head_commit: a5ba2f4
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa). Superficie = painel `cepa run decide` lido em pseudo-terminal
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-run (E_CHIP = (\"e\", \"technical detail\") compartilhada; decide: `chips.append(E_CHIP)` no menu; ramo de recusa chama refusal_line(([E_CHIP] if show else []) + [(\"?\", ...), (\"Enter\", ...)]))"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes pty rodam o cepa-run decide real com o `cepa-queue answer` real; leitor falso so na fronteira (CEPA_RUN_READER=off / CEPA_FEEDBACK_DIR). O teste unitario de refusal_line chama a funcao real.
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbacao em worktree descartavel detached em a5ba2f4, removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "Baseline sem perturbacao em a5ba2f4: 73 passed in 24.81s (`python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -x`)."
+        - "(P1) `[E_CHIP] if show else []` -> `if True` (cepa-run:4769): RED test_refused_text_shows_a_line_without_force_and_the_same_menu_again (CS-8, item sem evidence ganha `[e]`); 1 failed, 58 passed in 19.63s. numstat 1 1."
+        - "(P2) -> `if False`: RED test_refusal_cites_e_with_its_label_when_the_item_has_evidence_in_a_pty; 1 failed, 60 passed in 19.58s. numstat 1 1."
+        - "(P3) -> `if not show`: RED test_refused_text_shows_a_line_without_force_and_the_same_menu_again; 1 failed, 58 passed in 18.71s. numstat 1 1."
+        - "(P4) chave de E_CHIP `e` -> `x` (cepa-run:4060): RED test_refusal_cites_e_with_its_label_when_the_item_has_evidence_in_a_pty; 1 failed, 60 passed in 20.43s. numstat 1 1."
+        - "(P5) rotulo de E_CHIP `technical detail` -> `tech detail`: RED o mesmo teste; 1 failed, 60 passed in 20.71s. numstat 1 1."
+        - "(P6) `[e]` movido para depois de `?` (antes de Enter): RED o mesmo teste; 1 failed, 60 passed in 21.04s. numstat 3 2 (a linha de posicao ocupa 3 linhas; so o que o ramo monta muda)."
+        - "(P7) `[e]` movido para o fim: RED o mesmo teste; 1 failed, 60 passed in 31.65s. numstat 3 3."
+        - "(P8) chip do menu `chips.append(E_CHIP)` -> `chips.append((\"e\", \"more info\"))` (cepa-run:4660): o arquivo de CS-9 (test_cepa_until_decide_doubt.py) NAO o pega (73 passed in 23.09s) porque so le o rotulo na linha de recusa; e pego por OUTRO arquivo, rodado como script: `python3 tests/test_cepa_until_decide.py` -> rc 1, FAIL 'menu em chips dentro do cartao, com a recomendada marcada' e FAIL 'o menu completo, com evidencia: s, n, t, e, Enter, q' (2 falhas). numstat 1 1."
+        - "Totais: 8 perturbacoes, 8 vermelhas por AssertionError/FAIL, 0 sobreviventes. Dessas, 7 vermelhas no arquivo de CS-9 (P1-P7) e 1 (P8) vermelha so em tests/test_cepa_until_decide.py."
+        - "Equivalente, nao contada: reler `bool(ad.get(\"evidence\"))` em vez de `show` no ramo de recusa (mesmo valor, `show` e exatamente isso)."
+        - "Vermelho no cepa-run da base (cepa-run revertido a 2777ff0): `python3 -m pytest tests/test_cepa_until_decide_doubt.py -q` -> FAILED test_refusal_cites_e_with_its_label_when_the_item_has_evidence_in_a_pty, 1 failed, 72 passed in 24.65s. Os outros dois testes novos (frase exata de tres pares via refusal_line; sem evidence sem `[e]`) passam na base, como esperado: descrevem o que ja era verdade ou so a funcao pura."
+        - "Honestidade de uma rodada: duas perturbacoes (P3, P4) foram rodadas ao mesmo tempo por engano no mesmo worktree; os dois resultados foram descartados e as duas foram reexecutadas uma de cada vez, e os numeros acima sao dessas reexecucoes."
+      run: >-
+        `git worktree add --detach <scratchpad>/wt a5ba2f4`; cada perturbacao aplicada so no texto indicado de common/bin/cepa-run (substituicao exata, uma ocorrencia), conferida com `git diff --numstat`, desfeita com `git checkout -- common/bin/cepa-run`;
+        `python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -x` em primeiro plano, uma rodada por vez (73 passed baseline; P1 1 failed 58 passed; P2/P4/P5/P6/P7 1 failed 60 passed; P3 1 failed 58 passed); P8 com `python3 tests/test_cepa_until_decide.py` (rc 1, 2 FAIL). Worktree removido; arvore primaria intocada salvo este yaml. Suite completa nao rodada.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "toda linha de comportamento alterada foi quebrada e ficou vermelha: 8 de 8 (condicao do ramo, chave, rotulo, posicao em duas variantes, chip do menu); o texto novo de docstring/comentarios nao e comportamento."
+  l4_adversarial_input:
+    status: n/a
+    reason: "A unica entrada e o texto que o dono digita no proprio terminal (painel local, sem parser de dado externo, sem modulo api-rest); este diff so muda quais teclas a linha de recusa cita na tela e nao abre entrada nova."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-9 de docs/spec/duvida-sobre-a-pergunta-do-decide.md); a prova e a perturbacao. Teste novo de evidence vermelho no cepa-run da base: 1 failed, 72 passed."
+routing_reason: >-
+  Quebrei de oito jeitos o que o diff muda (a condicao que decide se `[e]` aparece, a tecla e o rotulo da constante compartilhada, duas posicoes erradas do `[e]` na linha, e o rotulo do menu) e todos ficaram vermelhos por assercao, com o nome do teste e a linha de resumo do pytest. Um ponto de atencao sem risco: o rotulo da tecla `e` no menu nao e vigiado pelo arquivo de testes de CS-9, so por tests/test_cepa_until_decide.py (rodado como script); como o repo roda os dois, nada fica sem teste. O teste novo de item com evidence fica vermelho no cepa-run da base. Zero sobreviventes entre 8 perturbacoes. PROVEN.
