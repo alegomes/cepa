@@ -4375,6 +4375,16 @@ def ask_group(screen, g, i, n, question, apply, progress, with_queue=False):
     return applied, for_later, one_by_one, False
 
 
+def accepts_force(fn):
+    """True when `fn` can take a `force` keyword (a `force` parameter or `**kwargs`)."""
+    import inspect
+    try:
+        params = inspect.signature(fn).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(p.name == "force" or p.kind == p.VAR_KEYWORD for p in params)
+
+
 def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
            output=print, answer=None, land=None, wait=None, first=1, of=None,
            opened=False, note=None, close=True, progress=None, unclear=None,
@@ -4737,7 +4747,12 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                 rc = msg = None
                 if text:
                     fk = {"force": True} if not_a_doubt else {}
-                    rc, msg = (answer(ident, text, drop=True) if drop
+                    # `d`: the panel built this text and the discard is the owner's
+                    # explicit choice, so it is recorded even when the question it
+                    # quotes ends in "?". An injected `answer` of the old signature
+                    # (no `force`, no `**kwargs`) is called as before.
+                    dk = {"force": True} if accepts_force(answer) else {}
+                    rc, msg = (answer(ident, text, drop=True, **dk) if drop
                                else answer(ident, text, **fk) if give_back
                                else answer(ident, text, keep=True, **fk))
                     if rc == ANSWER_REFUSED_RC:

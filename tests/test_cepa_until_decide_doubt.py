@@ -1289,6 +1289,15 @@ def test_refused_text_shows_a_line_without_force_and_the_same_menu_again():
     check("CS-8 pty: a refusal line is shown", bool(line), plain[-1500:])
     check("CS-8 pty: the line cites ? and Enter", "[?]" in flat and "[Enter]" in flat, flat)
     check("CS-8 pty: the line does not cite [e] (that is CS-9)", "[e]" not in flat, flat)
+    import re
+    menu_keys = set(re.findall(r"\[([^\]\s]+)\]", plain.split(REFUSED, 1)[0]
+                               .rsplit("1/1 · b1", 1)[-1]))
+    # `_refusal_text` can run on into the menu below; the refusal sentence itself
+    # ends at the first blank menu line (` │ │ ` once flattened).
+    sentence = flat.split(" │ │ ", 1)[0]
+    cited = set(re.findall(r"\[([^\]\s]+)\]", sentence))
+    check("CS-8 pty: every key the line cites is on the item's menu",
+          len(cited) >= 2 and cited <= menu_keys, (cited, menu_keys, sentence))
     check("CS-8 pty: the item header appears once", plain.count("1/1 · b1") == 1,
           plain[-800:])
     check("CS-8 pty: the menu line appears twice", plain.count(MENU) == 2, plain[-1500:])
@@ -1395,6 +1404,66 @@ def test_refusal_on_a_y_answer_also_returns_the_menu_and_keeps_the_key_set():
     check("CS-8 unit y: the menu came back and `q` ended the panel",
           text.count(UNIT_MENU) == 2 and len(later) == 1 and len(calls) == 1,
           (text, later))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_d_with_an_empty_why_on_a_question_mark_item_records_the_discard_in_a_pty():
+    """The panel builds the `d` text itself ("descartado: <question>"); when the
+    question ends in "?" the real `cepa-queue answer` would refuse it (exit 6). The
+    discard is the owner's explicit choice, so it is recorded, with no refusal line
+    and no "--force" on screen."""
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=30, inputs=[
+            (MENU, "d"), ("Why", "")])
+        plain = ANSI.sub("", out)
+        import yaml
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        now = {i["id"]: i for i in yaml.safe_load(qfile.read_text())["items"]}["b1"]
+    check("d pty: decide exits 0", rc == 0, plain[-1200:])
+    check("d pty: the item is dropped with the question in the evidence",
+          now.get("status") == "dropped" and QUESTION in str(now.get("evidence")), now)
+    check("d pty: no refusal line and no --force on screen",
+          REFUSED not in plain and "--force" not in plain and "not recorded" not in plain,
+          plain[-1200:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_d_passes_force_and_drop_and_y_n_w_do_not_force():
+    failed_before = len(FAILURES)
+    calls = _calls(["d", ""])
+    check("d unit: drop and force, empty reason",
+          len(calls) == 1 and calls[0][1].get("drop") is True
+          and calls[0][1].get("force") is True, calls)
+    calls = _calls(["d", "já feito por outro card"])
+    check("d unit: drop and force, typed reason",
+          len(calls) == 1 and calls[0][1].get("drop") is True
+          and calls[0][1].get("force") is True
+          and "já feito por outro card" in calls[0][0], calls)
+    for keys, label in ((["y", ""], "y"), (["n", ""], "n"), (["w", "variante B", "y"], "w")):
+        calls = _calls(keys)
+        check(f"d unit: `{label}` passes no force",
+              len(calls) == 1 and not calls[0][1].get("force"), calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_d_still_works_with_an_answer_of_the_old_signature():
+    failed_before = len(FAILURES)
+    m = load_module()
+    calls, it = [], iter(["d", ""])
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+             question=lambda _p: next(it, ""), output=lambda *_: None,
+             answer=lambda i, t, keep=False, drop=False: (
+                 calls.append((i, t, keep, drop)), (0, "ok"))[1],
+             unclear=lambda *a, **k: (0, "ok"), rewrite=lambda *a, **k: (None, "no"))
+    check("d unit old signature: called once with drop", len(calls) == 1 and calls[0][3],
+          calls)
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
 
 
