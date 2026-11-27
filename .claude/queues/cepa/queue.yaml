@@ -3943,3 +3943,13 @@ items:
   human_pending: null
   evidence: null
   sem_epic: true
+- id: painel-next-alinhado-ao-bloco-final
+  title: O painel Next do cepa run mostra outra contagem e a grafia antiga do comando
+  why: 'Decisão do dono em 2026-11-27 (anotar para depois); BACKLOG.md § O painel
+    Next do cepa run mostra outra contagem e a grafia antiga do comando (ainda não
+    priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+  sem_epic: true
