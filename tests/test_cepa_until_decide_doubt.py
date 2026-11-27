@@ -1298,6 +1298,9 @@ def test_refused_text_shows_a_line_without_force_and_the_same_menu_again():
     cited = set(re.findall(r"\[([^\]\s]+)\]", sentence))
     check("CS-8 pty: every key the line cites is on the item's menu",
           len(cited) >= 2 and cited <= menu_keys, (cited, menu_keys, sentence))
+    whole = _flat(re.sub(r"[│┃|]", " ", plain))
+    check("CS-8 pty: the whole sentence, with the labels the panel passes, is on screen",
+          PANEL_REFUSAL_SENTENCE in whole, whole[-1500:])
     check("CS-8 pty: the item header appears once", plain.count("1/1 · b1") == 1,
           plain[-800:])
     check("CS-8 pty: the menu line appears twice", plain.count(MENU) == 2, plain[-1500:])
@@ -1308,6 +1311,50 @@ def test_refused_text_shows_a_line_without_force_and_the_same_menu_again():
     check("CS-8 pty: the refused text was never recorded",
           before != after and "..." not in str(now.get("evidence")), now)
     assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def _load_cepa_run_module():
+    from importlib.machinery import SourceFileLoader
+    from importlib.util import module_from_spec, spec_from_loader
+    loader = SourceFileLoader("cepa_run_doubt_cs8", str(CEPA_UNTIL))
+    mod = module_from_spec(spec_from_loader("cepa_run_doubt_cs8", loader))
+    loader.exec_module(mod)
+    return mod
+
+
+PANEL_REFUSAL_SENTENCE = ("text not recorded: it does not read as an answer. "
+                          "[?] I don't understand the question, [Enter] leave it for later")
+
+
+def test_refusal_line_is_the_exact_sentence_for_the_keys_the_panel_passes():
+    mod = _load_cepa_run_module()
+    got = mod.refusal_line([("?", "I don't understand the question"),
+                            ("Enter", "leave it for later")])
+    assert got == PANEL_REFUSAL_SENTENCE, got
+    assert mod.refusal_line([("a", "x")]) == (
+        "text not recorded: it does not read as an answer. [a] x")
+
+
+def test_accepts_force_is_false_when_the_signature_cannot_be_read():
+    import inspect
+    mod = _load_cepa_run_module()
+
+    class Opaque:
+        @property
+        def __signature__(self):
+            raise ValueError("no signature")
+
+        def __call__(self, **kw):
+            return None
+
+    try:
+        inspect.signature(Opaque())
+    except (TypeError, ValueError):
+        pass
+    else:
+        raise AssertionError("fixture must make inspect.signature raise")
+    assert mod.accepts_force(Opaque()) is False
+    assert mod.accepts_force(lambda force=False: None) is True
 
 
 def test_refused_text_leaves_the_queue_file_untouched_and_enter_defers_the_item():
