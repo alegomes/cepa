@@ -5850,3 +5850,32 @@ O bloco final de três linhas (`What happened`, `Pending for you`, `Run now`) s�
 ### Esboço
 
 A saída por interrupção imprime o mesmo bloco com o que o supervisor sabe até ali: o item que estava em andamento, onde ficaram os commits dele e o comando que retoma. Precisa de desenho próprio, porque nesse caminho a análise da run não roda. Teste que falta: run interrompida no meio de um item termina com as três linhas e nomeia o item em andamento.
+
+---
+
+## A conferência no commit do meio roda sem os arquivos que estão fora do git
+
+Registrado em 2026-11-26 a pedido do dono ("3. sim"), no fim da sessão
+`session/solong`.
+
+### Problema
+
+Com um build conhecido (`tests/run-all.sh`, Gradle, Maven), o `cepa run` roda o build
+completo uma vez a cada 2 itens. Quando o par fica vermelho, ele confere o commit entre
+os dois itens numa worktree nova (`verify_at` em `common/bin/cepa-run`, que faz
+`git worktree add --detach`). Essa cópia só tem o que está no git. Um projeto cujo build
+depende de arquivo ignorado (`.env`, `local.properties`, certificado local) falha ali
+por falta do arquivo, e o `cepa run` conclui que o 1º item do par quebrou o build: tira
+os commits dele da branch e devolve os dois itens para `pending`. O resultado final não
+fica errado (o item refeito sozinho ganha o próprio build na árvore do run), mas o run
+perde o trabalho de dois itens. O mesmo vale para o item adiado conferido sozinho no fim
+da fila. Ainda não visto num run real: nenhum projeto Java rodou com o par até esta data.
+
+### Esboço de solução
+
+Antes do build na cópia limpa, copiar da árvore do run os arquivos ignorados que o build
+lê (uma lista em `.claude/`, ou os ignorados fora das pastas de saída como `build/`,
+`target/`, `node_modules/`). Ou: quando o vermelho do meio não nomeia nenhum teste que
+também falhou no par, não culpar o 1º item e conferir o par de outro jeito.
+**Lar:** `common/bin/cepa-run` (`verify_at`, `check_deferred`, o trecho "Red on the pair"),
+`tests/test_cepa_run_pair_verify.py`.

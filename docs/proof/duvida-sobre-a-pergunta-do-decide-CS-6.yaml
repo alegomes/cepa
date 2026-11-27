@@ -1,0 +1,66 @@
+schema_version: 2
+card: duvida-sobre-a-pergunta-do-decide-CS-6
+verdict: proven
+reviewed_at: 2026-11-26T23:00:00-03:00
+base_commit: 5c7c035
+head_commit: 72ed672
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa). Superficie = painel `cepa run decide` lido em pseudo-terminal
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-run (decide: `rewritten` booleano virou contador `rewrites`; `?` pergunta a linha de duvida se `not doubt and rewrites < 2`; `rewrites >= 2` recusa com 'at most twice per item'; `rewrites == 1 and not doubt` recusa com 'once per item'; `rewrites += 1`; contador zerado por item)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes pty rodam o cepa-run decide real com leitor falso so na fronteira (CEPA_RUN_READER) e CEPA_FEEDBACK_DIR; os unitarios injetam `question`/`unclear`/`rewrite` so para ler argumentos
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbacao em worktree descartavel detached em 72ed672, removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "Segunda passagem em 72ed672 (common/bin/cepa-run identico a 7170cd4: git diff 7170cd4..HEAD so toca o arquivo de testes). Baseline: tests/test_cepa_until_decide_doubt.py 57 passed (17.82s). Cada perturbacao tocou so o pretendido (git diff --numstat = 1 1; f2 = 4 4). Todas as vermelhas sao AssertionError (nao NameError/TypeError)."
+        - "(a1) 4692 `rewrites < 2` -> `< 1` -> RED test_second_question_mark_asks_after_one_rewrite_and_not_after_two (1 failed, 41 passed, 10.34s)"
+        - "(a2) 4692 `< 2` -> `< 3` -> RED mesmo teste (1 failed, 41 passed, 10.76s)"
+        - "(a3) 4692 `not doubt and` -> `not doubt or` -> RED test_doubt_typed_in_w_asks_if_it_is_a_doubt_before_recording (1 failed, 30.48s)"
+        - "(a4) 4692 metade `not doubt` removida -> RED mesmo teste de w (1 failed, 30.47s)"
+        - "(a5) 4692 metade `rewrites < 2` removida -> RED test_second_question_mark_asks_after_one_rewrite_and_not_after_two (1 failed, 41 passed, 10.98s)"
+        - "(b1) 4705 `rewrites >= 2` -> `>= 3` -> RED mesmo teste (1 failed, 41 passed, 10.92s)"
+        - "(b2) 4705 `>= 2` -> `>= 1` -> RED test_doubt_after_an_empty_question_mark_calls_the_reader_a_second_time (1 failed, 13 passed, 6.38s)"
+        - "(c1) 4709 `== 1` -> `== 0` -> RED test_plain_question_mark_sends_no_doubt (1 failed, 11 passed, 6.03s)"
+        - "(c2) 4709 `== 1` -> `== 2` -> RED test_second_question_mark_asks_after_one_rewrite_and_not_after_two (1 failed, 41 passed, 11.03s)"
+        - "(c4) 4709 `not doubt` -> `doubt` -> RED test_doubt_after_an_empty_question_mark_calls_the_reader_a_second_time (1 failed, 13 passed, 5.93s)"
+        - "(c5) 4709 metade `not doubt` removida -> RED mesmo teste (1 failed, 13 passed, 5.96s)"
+        - "(c6) 4709 metade `rewrites == 1` removida -> RED test_plain_question_mark_sends_no_doubt (1 failed, 11 passed, 5.88s)"
+        - "(d1) 4713 `+= 1` -> `+= 0` -> RED test_second_question_mark_asks_after_one_rewrite_and_not_after_two (1 failed, 41 passed, 10.75s)"
+        - "(d2) 4713 `+= 1` -> `+= 2` -> RED test_doubt_after_an_empty_question_mark_calls_the_reader_a_second_time (1 failed, 13 passed, 5.86s)"
+        - "(e1) 4583 reset por item `rewrites = 0` -> `rewrites = locals().get('rewrites', 0)` -> RED test_the_two_rewrites_counter_does_not_leak_to_the_next_item_in_a_pty (1 failed, 47 passed, 17.48s)"
+        - "(g1) 4707 'at most twice' -> 'at most thrice' -> RED test_a_third_doubt_does_not_call_the_reader_and_leaves_the_item_for_later (1 failed, 44 passed, 13.31s)"
+        - "(h1) 4700 feedback na terceira tentativa suprimido (`(0, '') if rewrites >= 2 else unclear(...)`) -> RED test_second_question_mark_asks_after_one_rewrite_and_not_after_two (1 failed, 41 passed, 10.79s)"
+        - "(g2, antes sobrevivente) 4711 'rewrites once per item' -> 'rewrites twice per item' -> RED test_empty_question_mark_twice_says_the_reader_rewrites_once_per_item (1 failed, 54 passed, 17.44s)"
+        - "(f2, antes sobrevivente) ordem das recusas trocada, forma nao equivalente (4 linhas, numstat 4 4): terceiro `?` sem duvida diz 'once per item' -> RED test_plain_question_mark_after_two_rewrites_says_at_most_twice_per_item (1 failed, 55 passed, 17.51s)"
+        - "Equivalentes da primeira passagem, mantidos: (c3) `rewrites == 1` -> `>= 1` com a ordem original; (f1) troca simples da ordem dos dois ramos (ramos disjuntos)."
+      run: >-
+        `git worktree add --detach <scratchpad>/wt 72ed672`; cada perturbacao por `perl -i -pe` numa linha, desfeita com `git checkout -- common/bin/cepa-run`;
+        `python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -x`. Baseline 57 passed; 19 perturbacoes, 19 vermelhas por AssertionError; 0 sobreviventes. Suite completa nao rodada.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    waivers: []
+    run: "todas as linhas de logica (4583, 4692, 4700, 4705, 4709, 4713) e as duas frases (4707, 4711) foram quebradas e ficaram vermelhas: 19 vermelhas em 19 (ver l3)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "A unica entrada e o texto que o dono digita no proprio terminal (painel local, sem parser de dado externo, sem modulo api-rest); o texto segue como argumento de `cepa-feedback add` e como campo do pedido ao leitor, que decidem o que fazer com ele."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-6 de docs/spec/duvida-sobre-a-pergunta-do-decide.md); a prova e a perturbacao. Primeira passagem: os testes novos ficam vermelhos no cepa-run da base 5c7c035 (12 failed, 43 passed)."
+routing_reason: >-
+  Segunda passagem em 72ed672. Os dois sobreviventes da primeira (a frase 'uma reescrita por item' e a frase 'no maximo duas' quando o
+  terceiro `?` vem sem duvida) agora ficam vermelhos por AssertionError, junto com as outras 18 perturbacoes. Nenhuma sobrevivente,
+  nenhum nivel assumido. PROVEN.

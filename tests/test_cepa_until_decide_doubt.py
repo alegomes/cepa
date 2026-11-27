@@ -1,0 +1,1816 @@
+#!/usr/bin/env python3
+"""CS-1 of docs/spec/duvida-sobre-a-pergunta-do-decide.md: text typed in `w` that
+looks like a doubt ("O que é a variante O?", the `not_an_answer` rule of
+`cepa-queue`) makes the `cepa run decide` panel ask "Is this a doubt about the
+question? [Y/n]" before anything is recorded, and `queue.yaml` stays byte for
+byte the same. Before, the screen asked "Send the item back to the queue with
+that answer? [y/N]" and then showed "not recorded".
+
+Its own file so the proof gate can run it alone:
+`python3 tests/test_cepa_until_decide_doubt.py`, exit 1 on any failure.
+"""
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_cepa_until import CEPA_UNTIL, build_repo, item  # noqa: E402
+from test_cepa_until_decide import (  # noqa: E402
+    ANSI, FAILURES, check, load_module, on_tty)
+from pathlib import Path  # noqa: E402,F811
+
+QUESTION = "A variante O já foi escolhida?"
+DOUBT = "O que é a variante O?"
+ASK = "Is this a doubt about the question? [Y/n]"
+
+
+def test_doubt_typed_in_w_asks_if_it_is_a_doubt_before_recording():
+    """Red test of CS-1, as a process in a pseudo-terminal."""
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        before = qfile.read_bytes()
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        # Enter on the doubt question is yes (default Y); in the interim build it
+        # records nothing and leaves the item for later.
+        rc, out = on_tty(cmd, str(root), env=env, timeout=30, inputs=[
+            ("[w] I write the answer", "w"),
+            ("Your answer, in one line", DOUBT),
+            (ASK, ""),
+        ])
+        plain = ANSI.sub("", out)
+        check("CS-1 pty: decide exits 0", rc == 0, plain[-1500:])
+        check("CS-1 pty: the panel asks if it is a doubt about the question",
+              ASK in plain, plain[-1500:])
+        check("CS-1 pty: the doubt is not offered as an answer to send back",
+              "Send the item back to the queue with that answer?" not in plain, plain)
+        check("CS-1 pty: nothing is refused as 'not recorded'",
+              "not recorded" not in plain, plain)
+        check("CS-1 pty: queue.yaml is byte-identical", qfile.read_bytes() == before,
+              qfile.read_text())
+        check("CS-1 pty: the item is left for later",
+              "answered now 0" in plain and "for later 1" in plain, plain[-1500:])
+        # `check` only records; without this, pytest reports green on a red case.
+        assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def _fake_editor(tmp, text):
+    editor = Path(tmp) / "fake-editor.sh"
+    editor.write_text(f"#!/bin/sh\nprintf '%s' '{text}' > \"$1\"\n")
+    editor.chmod(0o755)
+    return editor
+
+
+def _v_env(editor, fb, reader="off"):
+    env = {k: v for k, v in os.environ.items() if k not in ("VISUAL", "EDITOR")}
+    env.update(CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER=str(reader), EDITOR=str(editor))
+    return env
+
+
+def test_doubt_typed_through_v_asks_if_it_is_a_doubt_before_recording():
+    """Red test of CS-4, as a process in a pseudo-terminal: a fake editor saves
+    "não entendi a pergunta"; `v` shows the doubt prompt. Before, the screen
+    showed "not recorded: resposta recusada" and the item went to later."""
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        editor = _fake_editor(tmp, "não entendi a pergunta")
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        before = qfile.read_bytes()
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=_v_env(editor, fb), timeout=30, inputs=[
+            ("[v] write in the editor", "v"),
+            (ASK, ""),
+        ])
+        plain = ANSI.sub("", out)
+        check("CS-4 pty v: decide exits 0", rc == 0, plain[-1500:])
+        check("CS-4 pty v: the panel asks if it is a doubt about the question",
+              ASK in plain, plain[-1500:])
+        check("CS-4 pty v: nothing is refused as 'not recorded'",
+              "not recorded" not in plain and "resposta recusada" not in plain,
+              plain[-1500:])
+        check("CS-4 pty v: no send-back question for the doubt",
+              "Send the item back to the queue with that answer?" not in plain,
+              plain[-1500:])
+        check("CS-4 pty v: queue.yaml is byte-identical (no reader, nothing recorded)",
+              qfile.read_bytes() == before, qfile.read_text())
+        assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_yes_at_the_doubt_prompt_after_v_rewrites_with_the_editor_text():
+    """CS-4, yes: same as CS-2 but the doubt comes from the editor."""
+    import yaml
+    failed_before = len(FAILURES)
+    typed = "não entendi a pergunta"
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        editor = _fake_editor(tmp, typed)
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        reader, log = _doubt_reader(tmp)
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=_v_env(editor, fb, reader), timeout=90,
+                         inputs=[
+            ("[v] write in the editor", "v"),
+            (ASK, ""),
+            ("answer it again", None),
+            ("[v] write in the editor", ""),
+        ])
+        plain = ANSI.sub("", out)
+        check("CS-4 pty yes: decide exits 0", rc == 0, plain[-1500:])
+        reqs = [r for r in _requests(log) if r.get("tarefa") == "reescrever-pergunta"]
+        check("CS-4 pty yes: one rewrite request", len(reqs) == 1, reqs)
+        if reqs:
+            check("CS-4 pty yes: the request carries the editor text as the doubt",
+                  reqs[0].get("duvida_do_dono") == typed, reqs[0])
+        check("CS-4 pty yes: the new question shows in the same item block",
+              NEW_Q in plain.split("badly written", 1)[-1]
+              and plain.count("· b1") == 1, plain)
+        now = {i["id"]: i for i in yaml.safe_load(qfile.read_text())["items"]}["b1"]
+        check("CS-4 pty yes: new question recorded, no answer, no doubt text on the item",
+              now.get("owner_question") == NEW_Q and now.get("status") == "pending"
+              and typed not in qfile.read_text() and "answered now 0" in plain, now)
+        lines = _ledger(fb)
+        check("CS-4 pty yes: one feedback line with id, question and doubt",
+              len(lines) == 1 and "b1" in lines[0].get("texto", "")
+              and QUESTION in lines[0].get("texto", "")
+              and typed in lines[0].get("texto", ""), lines)
+        assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_v_doubt_with_yes_unit_reader_gets_the_doubt_and_nothing_is_answered():
+    failed_before = len(FAILURES)
+    m = load_module()
+    m.edit_in_editor = lambda *a, **k: DOUBT
+    marks, rewrites, answers, it = [], [], [], iter(["v", "", ""])
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+             question=lambda _p: next(it, ""), output=lambda *_: None,
+             answer=lambda ident, text, **k: answers.append(text) or (0, "ok"),
+             unclear=lambda ident, text, doubt="": marks.append((ident, text, doubt))
+             or (0, "ok"),
+             rewrite=lambda ad, text, doubt="": rewrites.append((text, doubt))
+             or (NEW, None))
+    check("CS-4 unit yes: the rewrite got the question and the editor text",
+          rewrites == [(QUESTION, DOUBT)], rewrites)
+    check("CS-4 unit yes: the feedback mark got the editor text",
+          marks == [("b1", QUESTION, DOUBT)], marks)
+    check("CS-4 unit yes: no answer recorded", answers == [], answers)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+SEND_BACK = "Send the item back to the queue with that answer? [y/N]"
+
+
+def _w_session(typed, then):
+    """`w` + `typed`, then the `then` inputs; returns (rc, plain output, queue
+    file bytes before, after)."""
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        before = qfile.read_bytes()
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=30, inputs=[
+            ("[w] I write the answer", "w"),
+            ("Your answer, in one line", typed),
+            *then,
+        ])
+        return rc, ANSI.sub("", out), before, qfile.read_bytes()
+
+
+def test_n_at_the_doubt_prompt_goes_to_send_back_and_n_keeps_the_item():
+    """`n` is not yes: the text is treated as an answer and the usual
+    "Send the item back" question comes. `n` there too: as for any `w` answer, the
+    text is recorded and the item stays where it was (CS-3 made it record; it
+    recorded nothing in the interim build)."""
+    import yaml
+    failed_before = len(FAILURES)
+    rc, plain, before, after = _w_session(DOUBT, [(ASK, "n"), (SEND_BACK, "n")])
+    check("CS-1 pty n: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-1 pty n: the doubt prompt is shown", ASK in plain, plain[-1500:])
+    check("CS-1 pty n: after `n` comes the send-back question",
+          SEND_BACK in plain, plain[-1500:])
+    now = {i["id"]: i for i in yaml.safe_load(after)["items"]}["b1"]
+    check("CS-3 pty n+n: the text is recorded and the item is not sent back",
+          DOUBT in str(now.get("evidence")) and now.get("status") == "pending"
+          and "not recorded" not in plain, (now, plain[-800:]))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_ordinary_text_in_w_does_not_show_the_doubt_prompt():
+    failed_before = len(FAILURES)
+    rc, plain, before, after = _w_session("variante B", [(SEND_BACK, "n")])
+    check("CS-1 pty plain: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-1 pty plain: no doubt prompt", ASK not in plain, plain[-1500:])
+    check("CS-1 pty plain: goes straight to send-back",
+          SEND_BACK in plain, plain[-1500:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_punctuation_only_text_in_w_does_not_show_the_doubt_prompt():
+    failed_before = len(FAILURES)
+    # CS-8: the refusal gives the same item's menu back, so `q` closes the panel.
+    rc, plain, before, after = _w_session("...", [(SEND_BACK, "n"), (MENU, "q")])
+    check("CS-1 pty punct: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-1 pty punct: no doubt prompt", ASK not in plain, plain[-1500:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_looks_like_doubt_survives_cepa_queue_exiting_with_2():
+    """`cepa-queue` does sys.exit(2) without PyYAML: the panel must not die."""
+    from importlib.machinery import SourceFileLoader
+    from importlib.util import module_from_spec, spec_from_loader
+    loader = SourceFileLoader("cepa_run_doubt", str(CEPA_UNTIL))
+    mod = module_from_spec(spec_from_loader("cepa_run_doubt", loader))
+    loader.exec_module(mod)
+    with tempfile.TemporaryDirectory() as tmp:
+        fake = Path(tmp) / "cepa-queue"
+        fake.write_text("import sys\nsys.exit(2)\n")
+        old_plan = mod.CEPA_PLAN
+        mod.CEPA_PLAN = fake
+        mod._QUEUE_MODULE.clear()
+        try:
+            result = mod.looks_like_doubt("O que é?")
+        finally:
+            mod.CEPA_PLAN = old_plan
+            mod._QUEUE_MODULE.clear()
+    assert result is False, result
+
+
+# ---- CS-2: yes at the doubt prompt rewrites the question with the doubt ----------
+
+NEW_Q = "Você já escolheu qual versão do plano vai usar?"
+NEW_YES = "O item volta para a fila e o próximo run usa a versão escolhida."
+NEW_NO = "O item continua esperando a escolha."
+
+
+def _doubt_reader(tmp):
+    """Fake reader: logs every request it gets (as JSON, one per line) and answers
+    a new closed question for the rewrite job."""
+    script = Path(tmp) / "leitor.py"
+    log = Path(tmp) / "leitor-pedidos.jsonl"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys\n"
+        "it = json.load(sys.stdin)\n"
+        f"open({str(log)!r}, 'a').write(json.dumps(it) + '\\n')\n"
+        "if it.get('tarefa') == 'reescrever-pergunta':\n"
+        f"    print(json.dumps({{'route_kind': 'owner-task', 'question': {NEW_Q!r},\n"
+        f"        'if_yes': {NEW_YES!r}, 'if_no': {NEW_NO!r}, 'item_se_nao': 'nenhum'}}))\n"
+        "else:\n"
+        "    print(json.dumps({'tipo': None}))\n")
+    script.chmod(0o755)
+    return script, log
+
+
+def _requests(log):
+    import json
+    if not Path(log).exists():
+        return []
+    return [json.loads(l) for l in Path(log).read_text().splitlines() if l.strip()]
+
+
+def _ledger(d):
+    import json
+    out = []
+    for f in sorted(Path(d).glob("feedback-*.jsonl")):
+        out += [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+    return out
+
+
+def test_yes_at_the_doubt_prompt_rewrites_the_question_with_the_doubt():
+    """Red test of CS-2, as a process in a pseudo-terminal."""
+    import yaml
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        reader, log = _doubt_reader(tmp)
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER=str(reader))
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=90, inputs=[
+            ("[w] I write the answer", "w"),
+            ("Your answer, in one line", DOUBT),
+            (ASK, ""),
+            ("answer it again", None),
+            ("[w] I write the answer", ""),
+        ])
+        plain = ANSI.sub("", out)
+        check("CS-2 pty: decide exits 0", rc == 0, plain[-1500:])
+        reqs = [r for r in _requests(log) if r.get("tarefa") == "reescrever-pergunta"]
+        check("CS-2 pty: the reader got one rewrite request", len(reqs) == 1, reqs)
+        if reqs:
+            check("CS-2 pty: the request carries the doubt",
+                  reqs[0].get("duvida_do_dono") == DOUBT, reqs[0])
+            check("CS-2 pty: the request carries the question shown",
+                  reqs[0].get("pergunta_mal_escrita") == QUESTION, reqs[0])
+        tail = plain.split("answer it again", 1)[-1]
+        check("CS-2 pty: the new question shows after the rewrite", NEW_Q in plain.split(
+            "badly written", 1)[-1], plain)
+        check("CS-2 pty: same block, the item header shows once",
+              plain.count("· b1") == 1, plain)
+        check("CS-2 pty: the panel asks for the answer again",
+              "[w] I write the answer" in tail, tail)
+        check("CS-2 pty: no 'Send the item back' question for the doubt",
+              "Send the item back to the queue with that answer?" not in plain, plain)
+        now = {i["id"]: i for i in yaml.safe_load(qfile.read_text())["items"]}["b1"]
+        check("CS-2 pty: queue.yaml has the new question and no doubt text",
+              now.get("owner_question") == NEW_Q and DOUBT not in qfile.read_text(), now)
+        check("CS-2 pty: the item is still without answer",
+              now.get("status") == "pending" and "answered now 0" in plain
+              and "for later 1" in plain, plain[-1500:])
+        lines = _ledger(fb)
+        check("CS-2 pty: one feedback line", len(lines) == 1, lines)
+        if lines:
+            txt = lines[0].get("texto", "")
+            check("CS-2 pty: feedback has item id, question and doubt",
+                  "b1" in txt and QUESTION in txt and DOUBT in txt, txt)
+        assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def _deferred(**kw):
+    d = {"id": "b1", "title": "t", "reason": "human_pending",
+         "human_pending": "falta escolher a variante", "question": QUESTION,
+         "evidence": "x", "route_kind": "external-block"}
+    d.update(kw)
+    return d
+
+
+NEW = {"route_kind": "owner-task", "question": NEW_Q, "if_yes": NEW_YES,
+       "if_no": NEW_NO}
+
+
+def _inject(replies, deferred=None, rewrite=None):
+    """`decide` with injected unclear/rewrite that record what they receive."""
+    m = load_module()
+    screen, marks, rewrites, answers = [], [], [], []
+    it = iter(replies)
+
+    def unclear(ident, text, doubt=""):
+        marks.append((ident, text, doubt))
+        return 0, "ok"
+
+    def rw(ad, text, doubt=""):
+        rewrites.append((text, doubt))
+        return (NEW, None) if rewrite is None else rewrite
+
+    _, later = m.decide(Path("/nao/existe"), "fila", None, {}, deferred or [_deferred()],
+                        {}, question=lambda _p: next(it, ""), output=screen.append,
+                        answer=lambda ident, text, **k: answers.append(text) or (0, "ok"),
+                        unclear=unclear, rewrite=rw)
+    return "\n".join(screen), later, marks, rewrites, answers
+
+
+def test_doubt_goes_to_the_rewrite_and_to_the_feedback_mark():
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(["w", DOUBT, "", ""])
+    check("CS-2 unit: rewrite got the question and the doubt",
+          rewrites == [(QUESTION, DOUBT)], rewrites)
+    check("CS-2 unit: the feedback mark got the doubt",
+          marks == [("b1", QUESTION, DOUBT)], marks)
+    check("CS-2 unit: no answer recorded", answers == [], answers)
+    check("CS-2 unit: the new question shows in the same panel",
+          NEW_Q in text and text.count(QUESTION) >= 1, text)
+    check("CS-2 unit: the item is left for later", len(later) == 1, later)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_answering_the_new_question_records_the_new_text_not_the_doubt():
+    failed_before = len(FAILURES)
+    _, later, _, rewrites, answers = _inject(["w", DOUBT, "", "y", ""])
+    check("CS-2 unit: answered after the rewrite",
+          len(answers) == 1 and NEW_Q in answers[0] and DOUBT not in answers[0], answers)
+    check("CS-2 unit: nothing left for later", later == [], later)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_plain_question_mark_sends_no_doubt():
+    failed_before = len(FAILURES)
+    _, _, marks, rewrites, _ = _inject(["?", "", ""])
+    check("CS-2 unit: `?` rewrite has no doubt", rewrites == [(QUESTION, "")], rewrites)
+    check("CS-2 unit: `?` mark has no doubt", marks == [("b1", QUESTION, "")], marks)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_n_at_the_doubt_prompt_does_not_call_the_rewrite():
+    failed_before = len(FAILURES)
+    _, _, marks, rewrites, _ = _inject(["w", DOUBT, "n", "n"])
+    check("CS-2 unit: `n` calls no rewrite and no mark", rewrites == [] and marks == [],
+          (rewrites, marks))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_doubt_after_an_empty_question_mark_calls_the_reader_a_second_time():
+    """CS-6 (was: "one rewrite per item, whatever key triggered it"): rewrite #1
+    happens with or without a doubt; rewrite #2 happens because this attempt carries
+    a written doubt."""
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(["?", "", "w", DOUBT, "", ""])
+    check("CS-6 unit: the reader ran twice", len(rewrites) == 2, rewrites)
+    check("CS-6 unit: the second request carries the doubt and the rewritten question",
+          rewrites == [(QUESTION, ""), (NEW_Q, DOUBT)], rewrites)
+    check("CS-6 unit: the doubt reached the feedback mark",
+          marks == [("b1", QUESTION, ""), ("b1", NEW_Q, DOUBT)], marks)
+    check("CS-6 unit: nothing says it is not rewritten again",
+          "not rewritten again" not in text, text)
+    check("CS-6 unit: no answer, item for later", answers == [] and len(later) == 1,
+          (answers, later))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_failed_rewrite_with_a_doubt_leaves_the_item_for_later():
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(
+        ["w", DOUBT, ""], rewrite=(None, "reader off"))
+    check("CS-2 unit: doubt reached the mark", marks == [("b1", QUESTION, DOUBT)], marks)
+    check("CS-2 unit: failure line", "question not rewritten" in text, text)
+    check("CS-2 unit: no answer, item for later", answers == [] and len(later) == 1,
+          (answers, later))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_default_rewrite_puts_the_doubt_in_the_reader_payload():
+    failed_before = len(FAILURES)
+    m = load_module()
+    reads, screen = [], []
+    m.read_route = lambda repo, payload, deadline, prompt=None: (
+        reads.append(payload) or (NEW, None))
+    m.reword_route = lambda *a, **k: None
+    replies = iter(["w", DOUBT, "", ""])
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+             question=lambda _p: next(replies, ""), output=screen.append,
+             answer=lambda *a, **k: (0, "ok"),
+             unclear=lambda ident, text, doubt="": (0, "ok"))
+    check("CS-2 payload: one read with the doubt next to the bad question",
+          len(reads) == 1 and reads[0].get("duvida_do_dono") == DOUBT
+          and reads[0].get("pergunta_mal_escrita") == QUESTION, reads)
+    reads.clear()
+    replies = iter(["?", "", ""])
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+             question=lambda _p: next(replies, ""), output=screen.append,
+             answer=lambda *a, **k: (0, "ok"),
+             unclear=lambda ident, text, doubt="": (0, "ok"))
+    check("CS-2 payload: `?` alone has no doubt field",
+          len(reads) == 1 and "duvida_do_dono" not in reads[0], reads)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_item_without_open_route_sends_the_doubt_to_feedback_and_waits():
+    """No open route (default rewrite): the reader is not called, the doubt is in the
+    feedback line, nothing is answered, the item stays for later."""
+    failed_before = len(FAILURES)
+    m = load_module()
+    reads, screen, marks = [], [], []
+    m.read_route = lambda *a, **k: reads.append(a) or (NEW, None)
+    replies = iter(["w", DOUBT, ""])
+    _, later = m.decide(
+        Path("/nao/existe"), "fila", None, {}, [_deferred(human_pending=None)], {},
+        question=lambda _p: next(replies, ""), output=screen.append,
+        answer=lambda *a, **k: marks.append("answered") or (0, "ok"),
+        unclear=lambda ident, text, doubt="": marks.append(doubt) or (0, "ok"))
+    check("CS-2 no route: the reader was not called", reads == [], reads)
+    check("CS-2 no route: the doubt went to the feedback mark and nothing was answered",
+          marks == [DOUBT], marks)
+    check("CS-2 no route: the item stays for later", len(later) == 1, later)
+    check("CS-2 no route: the screen says why", "no open route" in " ".join(" ".join(screen).split()),
+          screen)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_default_feedback_line_carries_the_doubt():
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as fb:
+        m = load_module()
+        os.environ["CEPA_FEEDBACK_DIR"] = fb
+        try:
+            replies = iter(["w", DOUBT, ""])
+            m.decide(Path(fb), "fila", None, {}, [_deferred(human_pending=None)], {},
+                     question=lambda _p: next(replies, ""), output=lambda *_: None,
+                     answer=lambda *a, **k: (0, "ok"))
+        finally:
+            del os.environ["CEPA_FEEDBACK_DIR"]
+        lines = _ledger(fb)
+        check("CS-2 ledger: one line with item, question and doubt",
+              len(lines) == 1 and all(x in lines[0].get("texto", "")
+                                      for x in ("b1", QUESTION, DOUBT)), lines)
+        check("CS-2 ledger: the label is followed by the doubt text",
+              len(lines) == 1 and f"dúvida do dono: {DOUBT}" in lines[0].get("texto", ""),
+              lines)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_default_feedback_line_for_plain_question_mark_has_no_doubt_label():
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as fb:
+        m = load_module()
+        os.environ["CEPA_FEEDBACK_DIR"] = fb
+        try:
+            replies = iter(["?", "", ""])
+            m.decide(Path(fb), "fila", None, {}, [_deferred(human_pending=None)], {},
+                     question=lambda _p: next(replies, ""), output=lambda *_: None,
+                     answer=lambda *a, **k: (0, "ok"))
+        finally:
+            del os.environ["CEPA_FEEDBACK_DIR"]
+        lines = _ledger(fb)
+        check("CS-2 ledger: plain `?` writes one line without the doubt label",
+              len(lines) == 1 and "b1" in lines[0].get("texto", "")
+              and "dúvida do dono" not in lines[0].get("texto", ""), lines)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def _calls(replies, editor_text=None):
+    """`decide` with an injected `answer` that records every call with its keyword
+    arguments (`keep`, `force`...): a list of (text, kwargs)."""
+    m = load_module()
+    calls, it = [], iter(replies)
+    if editor_text is not None:
+        m.edit_in_editor = lambda *a, **k: editor_text
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+             question=lambda _p: next(it, ""), output=lambda *_: None,
+             answer=lambda ident, text, **k: calls.append((text, k)) or (0, "ok"),
+             unclear=lambda *a, **k: (0, "ok"),
+             rewrite=lambda *a, **k: (None, "no"))
+    return calls
+
+
+def test_n_at_the_doubt_prompt_then_y_records_the_text_with_force():
+    """CS-3, unit: the owner's `n` is what authorizes the record, so `force` goes
+    to the answer, and the text is the typed one."""
+    failed_before = len(FAILURES)
+    calls = _calls(["w", DOUBT, "n", "y"])
+    check("CS-3 unit: one answer, with the typed text and force",
+          len(calls) == 1 and calls[0][0] == DOUBT and calls[0][1].get("force") is True,
+          calls)
+    check("CS-3 unit: `y` sends the item back (no keep)",
+          calls and not calls[0][1].get("keep"), calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_n_at_the_doubt_prompt_then_n_keeps_the_item_with_force():
+    """`n` at "Send the item back" is today's keep-the-item answer; the text was
+    already cleared by the owner, so force goes along."""
+    failed_before = len(FAILURES)
+    calls = _calls(["w", DOUBT, "n", "n"])
+    check("CS-3 unit n+n: recorded with keep and force",
+          len(calls) == 1 and calls[0][0] == DOUBT
+          and calls[0][1].get("keep") is True and calls[0][1].get("force") is True,
+          calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_ordinary_text_is_answered_without_force():
+    failed_before = len(FAILURES)
+    calls = _calls(["w", "variante B", "y"])
+    check("CS-3 unit: ordinary text, no force",
+          len(calls) == 1 and calls[0][0] == "variante B"
+          and not calls[0][1].get("force"), calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_punctuation_only_text_is_answered_without_force():
+    """Never went through the doubt prompt: the refusal stays (CS-8)."""
+    failed_before = len(FAILURES)
+    calls = _calls(["w", "...", "y"])
+    check("CS-3 unit: punctuation-only text, no force",
+          len(calls) == 1 and calls[0][0] == "..." and not calls[0][1].get("force"),
+          calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_v_text_is_answered_without_force():
+    """CS-4: ORDINARY `v` text never meets the doubt prompt, so no force (before
+    CS-4 this case used the doubt text DOUBT, which now meets the prompt)."""
+    failed_before = len(FAILURES)
+    calls = _calls(["v", "y"], editor_text="variante B")
+    check("CS-3 unit: `v` text, no force",
+          len(calls) == 1 and calls[0][0] == "variante B" and not calls[0][1].get("force"),
+          calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_v_doubt_text_then_n_then_y_records_the_text_with_force():
+    failed_before = len(FAILURES)
+    calls = _calls(["v", "n", "y"], editor_text=DOUBT)
+    check("CS-4 unit v n+y: one answer, the editor text, with force, sent back",
+          len(calls) == 1 and calls[0][0] == DOUBT and calls[0][1].get("force") is True
+          and not calls[0][1].get("keep"), calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_v_doubt_text_then_n_then_n_keeps_the_item_with_force():
+    failed_before = len(FAILURES)
+    calls = _calls(["v", "n", "n"], editor_text=DOUBT)
+    check("CS-4 unit v n+n: recorded with keep and force",
+          len(calls) == 1 and calls[0][0] == DOUBT
+          and calls[0][1].get("keep") is True and calls[0][1].get("force") is True,
+          calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_v_ordinary_text_does_not_show_the_doubt_prompt_and_has_no_force():
+    failed_before = len(FAILURES)
+    for reply, keep in (("y", False), ("n", True)):
+        shown = []
+        m = load_module()
+        m.edit_in_editor = lambda *a, **k: "variante B"
+        calls, it = [], iter(["v", reply])
+        m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+                 question=lambda p: shown.append(p) or next(it, ""),
+                 output=lambda *_: None,
+                 answer=lambda ident, text, **k: calls.append((text, k)) or (0, "ok"))
+        check(f"CS-4 unit v ordinary {reply}: no doubt prompt",
+              not any("doubt about the question" in str(p) for p in shown), shown)
+        check(f"CS-4 unit v ordinary {reply}: answered, no force",
+              len(calls) == 1 and calls[0][0] == "variante B"
+              and "force" not in calls[0][1]
+              and bool(calls[0][1].get("keep")) == keep, calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_v_empty_editor_asks_nothing_and_records_nothing():
+    failed_before = len(FAILURES)
+    shown = []
+    m = load_module()
+    m.edit_in_editor = lambda *a, **k: ""
+    calls, it, screen = [], iter(["v", ""]), []
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+             question=lambda p: shown.append(p) or next(it, ""),
+             output=screen.append,
+             answer=lambda ident, text, **k: calls.append((text, k)) or (0, "ok"))
+    check("CS-4 unit v empty: no doubt prompt, no send-back, nothing recorded",
+          calls == [] and not any("doubt about the question" in str(p)
+                                  or "Send the item back" in str(p) for p in shown),
+          (calls, shown))
+    check("CS-4 unit v empty: the same menu comes back with the editor message",
+          "nothing written in the editor" in "\n".join(screen)
+          and len(shown) == 2, (shown, screen))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_ordinary_text_kept_with_n_is_answered_with_keep_and_without_force():
+    failed_before = len(FAILURES)
+    calls = _calls(["w", "variante B", "n"])
+    check("CS-3 unit: ordinary text + n, keep and no force",
+          len(calls) == 1 and calls[0][0] == "variante B"
+          and calls[0][1].get("keep") is True and "force" not in calls[0][1], calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_punctuation_only_text_kept_with_n_is_answered_with_keep_and_without_force():
+    failed_before = len(FAILURES)
+    calls = _calls(["w", "...", "n"])
+    check("CS-3 unit: punctuation-only text + n, keep and no force",
+          len(calls) == 1 and calls[0][0] == "..."
+          and calls[0][1].get("keep") is True and "force" not in calls[0][1], calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_v_text_kept_with_n_is_answered_with_keep_and_without_force():
+    """CS-4: with ORDINARY `v` text (the doubt text now meets the prompt)."""
+    failed_before = len(FAILURES)
+    calls = _calls(["v", "n"], editor_text="variante B")
+    check("CS-3 unit: `v` text + n, keep and no force",
+          len(calls) == 1 and calls[0][0] == "variante B"
+          and calls[0][1].get("keep") is True and "force" not in calls[0][1], calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_force_does_not_leak_to_the_next_item():
+    failed_before = len(FAILURES)
+    m = load_module()
+    calls, it = [], iter(["w", DOUBT, "n", "y", "w", "variante B", "y"])
+    m.decide(Path("/nao/existe"), "fila", None, {},
+             [_deferred(), _deferred(id="b2", question="Outra pergunta?")], {},
+             question=lambda _p: next(it, ""), output=lambda *_: None,
+             answer=lambda ident, text, **k: calls.append((text, k)) or (0, "ok"))
+    check("CS-3 unit: force only on the first item",
+          len(calls) == 2 and calls[0][1].get("force") is True
+          and not calls[1][1].get("force"), calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_n_at_the_doubt_prompt_then_y_records_the_answer_in_the_panel():
+    """Red test of CS-3, as a process in a pseudo-terminal."""
+    import yaml
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=30, inputs=[
+            ("[w] I write the answer", "w"),
+            ("Your answer, in one line", DOUBT),
+            (ASK, "n"),
+            (SEND_BACK, "y"),
+        ])
+        plain = ANSI.sub("", out)
+        now = {i["id"]: i for i in yaml.safe_load(qfile.read_text())["items"]}["b1"]
+        check("CS-3 pty: decide exits 0", rc == 0, plain[-1500:])
+        check("CS-3 pty: the typed text is in the evidence as the owner's answer",
+              f"Resposta do dono em" in str(now.get("evidence"))
+              and DOUBT in str(now.get("evidence")), now)
+        check("CS-3 pty: the screen shows the recorded confirmation",
+              "not recorded" not in plain and "answered now 1" in plain, plain[-1500:])
+        check("CS-3 pty: no question between `n` and the send-back one",
+              plain.count("[Y/n]") == 1, plain[-1500:])
+        assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_v_doubt_then_n_then_y_records_the_editor_text_through_the_real_answer():
+    """CS-4, "no" outcome, as a process in a pseudo-terminal and with the real
+    `cepa-queue answer`: the editor text is recorded as the owner's answer."""
+    import yaml
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        editor = _fake_editor(tmp, "não entendi a pergunta")
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=_v_env(editor, fb), timeout=30, inputs=[
+            ("[v] write in the editor", "v"),
+            (ASK, "n"),
+            (SEND_BACK, "y"),
+        ])
+        plain = ANSI.sub("", out)
+        now = {i["id"]: i for i in yaml.safe_load(qfile.read_text())["items"]}["b1"]
+        check("CS-4 pty v n y: decide exits 0", rc == 0, plain[-1500:])
+        check("CS-4 pty v n y: the editor text is in the evidence as the owner's answer",
+              "Resposta do dono em" in str(now.get("evidence"))
+              and "não entendi a pergunta" in str(now.get("evidence")), now)
+        check("CS-4 pty v n y: the screen shows the recorded confirmation",
+              "answered now 1" in plain, plain[-1500:])
+        check("CS-4 pty v n y: nothing is refused as 'not recorded'",
+              "not recorded" not in plain, plain[-1500:])
+        assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_punctuation_only_text_is_still_refused_by_the_panel():
+    """Still not recorded (CS-8 changed what the screen says and where the item goes:
+    the refusal line replaces the raw `cepa-queue` message, which cited `--force`,
+    and the same item's menu comes back instead of the next item)."""
+    failed_before = len(FAILURES)
+    rc, plain, before, after = _w_session("...", [(SEND_BACK, "y"), (MENU, "q")])
+    check("CS-3 pty punct: refused as before", "not recorded" in plain
+          and "does not read as an answer" in plain, plain[-1500:])
+    check("CS-3 pty punct: queue.yaml is byte-identical", after == before, "")
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+# ---- CS-5: the `?` key asks, in one optional line, what was not understood ------
+
+KEY_ASK = "What did you not understand? [Enter skips]"
+# `on_tty` rewrites a trigger it matched as <trigger>; on a timeout it only lists the
+# unmatched ones as "still waiting", which also contains the text.
+SEEN = f"<{KEY_ASK}>"
+
+
+def _key_session(typed):
+    """`?` in a pty with the fake reader; `typed` answers the new line. Returns
+    (plain output, rewrite requests, feedback lines)."""
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        reader, log = _doubt_reader(tmp)
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER=str(reader))
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=90, inputs=[
+            ("[w] I write the answer", "?"),
+            (KEY_ASK, typed),
+            ("answer it again", None),
+            ("[w] I write the answer", ""),
+        ])
+        reqs = [r for r in _requests(log) if r.get("tarefa") == "reescrever-pergunta"]
+        return rc, ANSI.sub("", out), reqs, _ledger(fb)
+
+
+def test_question_mark_asks_and_the_typed_text_reaches_the_reader_and_feedback():
+    """Red test of CS-5, as a process in a pseudo-terminal."""
+    failed_before = len(FAILURES)
+    rc, plain, reqs, lines = _key_session("variante O")
+    check("CS-5 pty: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-5 pty: `?` shows the optional line", SEEN in plain, plain[-1500:])
+    check("CS-5 pty: one rewrite request", len(reqs) == 1, reqs)
+    if reqs:
+        check("CS-5 pty: the request carries the typed text as the doubt",
+              reqs[0].get("duvida_do_dono") == "variante O", reqs[0])
+    check("CS-5 pty: one feedback line with the typed text",
+          len(lines) == 1 and "dúvida do dono: variante O" in lines[0].get("texto", ""),
+          lines)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_question_mark_with_empty_enter_sends_no_doubt():
+    failed_before = len(FAILURES)
+    rc, plain, reqs, lines = _key_session("")
+    check("CS-5 pty empty: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-5 pty empty: the line is shown", SEEN in plain, plain[-1500:])
+    check("CS-5 pty empty: one rewrite request without a doubt field",
+          len(reqs) == 1 and "duvida_do_dono" not in reqs[0], reqs)
+    check("CS-5 pty empty: the feedback line has no doubt label",
+          len(lines) == 1 and "dúvida do dono" not in lines[0].get("texto", ""), lines)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def _prompts(replies, deferred=None):
+    """`decide` with a `question` that records every prompt; the injected fakes take
+    `doubt` so the typed text can be seen. Returns (prompts, marks, rewrites)."""
+    m = load_module()
+    shown, marks, rewrites, it = [], [], [], iter(replies)
+    m.decide(Path("/nao/existe"), "fila", None, {}, deferred or [_deferred()], {},
+             question=lambda p: shown.append(str(p)) or next(it, ""),
+             output=lambda *_: None, answer=lambda *a, **k: (0, "ok"),
+             unclear=lambda ident, text, doubt="": marks.append(doubt) or (0, "ok"),
+             rewrite=lambda ad, text, doubt="": rewrites.append(doubt) or (NEW, None))
+    return shown, marks, rewrites
+
+
+def test_doubt_confirmed_from_w_is_not_asked_again_by_the_question_mark_line():
+    failed_before = len(FAILURES)
+    shown, marks, rewrites = _prompts(["w", DOUBT, "", ""])
+    check("CS-5 unit w: the `?` line is not asked", not any(KEY_ASK in p for p in shown),
+          shown)
+    check("CS-5 unit w: the doubt still reaches mark and reader",
+          marks == [DOUBT] and rewrites == [DOUBT], (marks, rewrites))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_question_mark_line_text_flows_through_the_same_doubt_path():
+    failed_before = len(FAILURES)
+    shown, marks, rewrites = _prompts(["?", "variante O", ""])
+    check("CS-5 unit: asked once", sum(KEY_ASK in p for p in shown) == 1, shown)
+    check("CS-5 unit: text reaches mark and reader",
+          marks == ["variante O"] and rewrites == ["variante O"], (marks, rewrites))
+    shown, marks, rewrites = _prompts(["?", "", ""])
+    check("CS-5 unit empty: no doubt to mark or reader",
+          marks == [""] and rewrites == [""], (marks, rewrites))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_question_mark_line_of_only_spaces_is_an_empty_enter():
+    failed_before = len(FAILURES)
+    shown, marks, rewrites = _prompts(["?", "   ", ""])
+    check("CS-5 unit spaces: the line is asked once",
+          sum(KEY_ASK in p for p in shown) == 1, shown)
+    check("CS-5 unit spaces: no doubt to mark or reader",
+          marks == [""] and rewrites == [""], (marks, rewrites))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_question_mark_line_text_is_stripped_before_it_is_passed_on():
+    failed_before = len(FAILURES)
+    shown, marks, rewrites = _prompts(["?", "  variante O  ", ""])
+    check("CS-5 unit strip: mark and reader get exactly the trimmed text",
+          marks == ["variante O"] and rewrites == ["variante O"], (marks, rewrites))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_second_question_mark_asks_after_one_rewrite_and_not_after_two():
+    """CS-6 (was: a second `?` never asks): after ONE rewrite a written doubt can
+    still trigger rewrite #2, so the line is asked; after TWO it cannot, so it is not
+    and no doubt goes to the mark."""
+    failed_before = len(FAILURES)
+    shown, marks, rewrites = _prompts(["?", "variante O", "?", "", ""])
+    check("CS-6 unit one rewrite: the line is asked on both `?`",
+          sum(KEY_ASK in p for p in shown) == 2, shown)
+    check("CS-6 unit one rewrite: an empty second line calls no reader and marks no doubt",
+          marks == ["variante O", ""] and rewrites == ["variante O"], (marks, rewrites))
+    shown, marks, rewrites = _prompts(["w", DOUBT, "", "w", DOUBT, "", "?", ""])
+    check("CS-6 unit two rewrites: the line is not asked", not any(KEY_ASK in p for p in shown),
+          shown)
+    check("CS-6 unit two rewrites: the `?` is marked without doubt, no third call",
+          marks == [DOUBT, DOUBT, ""] and rewrites == [DOUBT, DOUBT], (marks, rewrites))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_question_mark_on_an_item_without_open_route_still_asks_and_marks():
+    """Decided: the text goes to the feedback line even though the reader is not
+    called (same as a doubt typed in `w` on such an item)."""
+    failed_before = len(FAILURES)
+    m = load_module()
+    reads, shown, marks, it = [], [], [], iter(["?", "variante O", ""])
+    m.read_route = lambda *a, **k: reads.append(a) or (NEW, None)
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred(human_pending=None)], {},
+             question=lambda p: shown.append(str(p)) or next(it, ""),
+             output=lambda *_: None, answer=lambda *a, **k: (0, "ok"),
+             unclear=lambda ident, text, doubt="": marks.append(doubt) or (0, "ok"))
+    check("CS-5 no route: the line is asked", any(KEY_ASK in p for p in shown), shown)
+    check("CS-5 no route: the reader is not called, the text goes to the mark",
+          reads == [] and marks == ["variante O"], (reads, marks))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+# ---- CS-6: up to two rewrites per item; the second needs a written doubt ----------
+
+def _versioned_reader(tmp):
+    """Fake reader that counts its rewrite calls: call n answers the question
+    "Você já escolheu a versão n do plano que vai usar?" and logs every request."""
+    script = Path(tmp) / "leitor-contador.py"
+    log = Path(tmp) / "leitor-pedidos.jsonl"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys\n"
+        "it = json.load(sys.stdin)\n"
+        f"log = {str(log)!r}\n"
+        "import os\n"
+        "old = [l for l in open(log).read().splitlines() if l.strip()] if os.path.exists(log) else []\n"
+        "n = 1 + sum(1 for l in old if json.loads(l).get('tarefa') == 'reescrever-pergunta')\n"
+        "open(log, 'a').write(json.dumps(it) + '\\n')\n"
+        "if it.get('tarefa') == 'reescrever-pergunta':\n"
+        "    print(json.dumps({'route_kind': 'owner-task',\n"
+        "        'question': f'Você já escolheu a versão {n} do plano que vai usar?',\n"
+        f"        'if_yes': {NEW_YES!r}, 'if_no': {NEW_NO!r}, 'item_se_nao': 'nenhum'}}))\n"
+        "else:\n"
+        "    print(json.dumps({'tipo': None}))\n")
+    script.chmod(0o755)
+    return script, log
+
+
+V1, V2, V3 = "versão 1 do plano", "versão 2 do plano", "versão 3 do plano"
+MENU = "[w] I write the answer"
+YOUR = "Your answer, in one line"
+
+
+def _two_rewrite_session(inputs_for, items=1):
+    """pty with the counting reader. `inputs_for(root)` returns the `on_tty` inputs.
+    Returns (rc, plain output, rewrite requests, feedback lines)."""
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        its = []
+        for n in range(items):
+            it = item(f"b{n + 1}", status="pending", human_pending="falta escolher a variante")
+            it["owner_question"] = QUESTION if n == 0 else "O certificado do banco já chegou?"
+            it["route_kind"] = "external-block"
+            its.append(it)
+        root = build_repo(tmp, its)
+        reader, log = _versioned_reader(tmp)
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER=str(reader))
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=120, inputs=inputs_for())
+        reqs = [r for r in _requests(log) if r.get("tarefa") == "reescrever-pergunta"]
+        return rc, ANSI.sub("", out), reqs, _ledger(fb)
+
+
+def test_doubt_after_an_empty_question_mark_rewrites_twice_in_the_same_item():
+    """Red test of CS-6, as a process in a pseudo-terminal: `?` with an empty Enter,
+    then a doubt typed in `w`: the reader runs twice and the second new question shows
+    in the same item block."""
+    failed_before = len(FAILURES)
+    rc, plain, reqs, lines = _two_rewrite_session(lambda: [
+        (MENU, "?"), (KEY_ASK, ""), (V1, None),
+        (MENU, "w"), (YOUR, DOUBT), (ASK, ""), (V2, None),
+        (MENU, ""),
+    ])
+    check("CS-6 pty: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-6 pty: the first new question was shown", f"<{V1}>" in plain, plain[-1500:])
+    check("CS-6 pty: the second new question was shown", f"<{V2}>" in plain, plain[-1500:])
+    check("CS-6 pty: the reader ran twice", len(reqs) == 2, reqs)
+    if len(reqs) == 2:
+        check("CS-6 pty: the first request has no doubt", "duvida_do_dono" not in reqs[0],
+              reqs[0])
+        check("CS-6 pty: the second request carries the doubt on the first new question",
+              reqs[1].get("duvida_do_dono") == DOUBT
+              and V1 in reqs[1].get("pergunta_mal_escrita", ""), reqs[1])
+    check("CS-6 pty: same item block, the header shows once", plain.count("· b1") == 1,
+          plain[-1500:])
+    check("CS-6 pty: nothing says it is not rewritten again",
+          "not rewritten again" not in plain, plain[-1500:])
+    check("CS-6 pty: one feedback line per attempt", len(lines) == 2, lines)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_a_third_doubt_does_not_call_the_reader_and_leaves_the_item_for_later():
+    failed_before = len(FAILURES)
+    rc, plain, reqs, lines = _two_rewrite_session(lambda: [
+        (MENU, "?"), (KEY_ASK, ""), (V1, None),
+        (MENU, "w"), (YOUR, DOUBT), (ASK, ""), (V2, None),
+        (MENU, "w"), (YOUR, DOUBT), (ASK, ""),
+    ])
+    check("CS-6 pty third: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-6 pty third: the second new question was shown", f"<{V2}>" in plain,
+          plain[-1500:])
+    check("CS-6 pty third: the reader ran only twice", len(reqs) == 2, reqs)
+    check("CS-6 pty third: no third question", V3 not in plain, plain[-1500:])
+    tail = plain.split(V2, 1)[-1]
+    line = next((l for l in tail.splitlines() if "not rewritten again" in l), "")
+    check("CS-6 pty third: a line says the item stays for later",
+          "for later" in line and "twice" in line, tail[-1500:])
+    close = plain.rsplit("closing", 1)[-1]
+    check("CS-6 pty third: the item is in for later at the close",
+          "for later 1" in close and "answered now 0" in close, plain[-1500:])
+    check("CS-6 pty third: the feedback line of the third attempt is still written",
+          len(lines) == 3 and all(DOUBT in l.get("texto", "") for l in lines[1:]), lines)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_doubt_then_an_empty_question_mark_rewrites_once():
+    failed_before = len(FAILURES)
+    rc, plain, reqs, lines = _two_rewrite_session(lambda: [
+        (MENU, "w"), (YOUR, DOUBT), (ASK, ""), (V1, None),
+        (MENU, "?"), (KEY_ASK, ""),
+    ])
+    check("CS-6 pty doubt+?: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-6 pty doubt+?: the first new question was shown", f"<{V1}>" in plain,
+          plain[-1500:])
+    check("CS-6 pty doubt+?: the line was asked on the second `?`",
+          f"<{KEY_ASK}>" in plain, plain[-1500:])
+    check("CS-6 pty doubt+?: one rewrite only", len(reqs) == 1, reqs)
+    check("CS-6 pty doubt+?: no second question", V2 not in plain, plain[-1500:])
+    check("CS-6 pty doubt+?: a line says it is not rewritten again",
+          "not rewritten again" in plain.split(V1, 1)[-1], plain[-1500:])
+    check("CS-6 pty doubt+?: the item is in for later at the close",
+          "for later 1" in plain.rsplit("closing", 1)[-1], plain[-1500:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_after_two_rewrites_the_question_mark_does_not_ask_in_a_pty():
+    failed_before = len(FAILURES)
+    rc, plain, reqs, _ = _two_rewrite_session(lambda: [
+        (MENU, "?"), (KEY_ASK, ""), (V1, None),
+        (MENU, "w"), (YOUR, DOUBT), (ASK, ""), (V2, None),
+        (MENU, "?"),
+    ])
+    check("CS-6 pty ?x3: decide exits 0 (nothing waited on a line)", rc == 0, plain[-1500:])
+    check("CS-6 pty ?x3: the line was asked only on the first `?`",
+          plain.count(KEY_ASK) == 1, plain[-1500:])
+    check("CS-6 pty ?x3: two rewrites, no third", len(reqs) == 2 and V3 not in plain, reqs)
+    check("CS-6 pty ?x3: the item stays for later",
+          "for later 1" in plain.rsplit("closing", 1)[-1], plain[-1500:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_the_two_rewrites_counter_does_not_leak_to_the_next_item_in_a_pty():
+    failed_before = len(FAILURES)
+    rc, plain, reqs, _ = _two_rewrite_session(lambda: [
+        (MENU, "?"), (KEY_ASK, ""), (V1, None),
+        (MENU, "w"), (YOUR, DOUBT), (ASK, ""), (V2, None),
+        (MENU, ""),
+        ("O certificado do banco já chegou?", None),
+        (MENU, "?"), (KEY_ASK, ""), (V3, None),
+        (MENU, ""),
+    ], items=2)
+    check("CS-6 pty leak: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-6 pty leak: the second item got its own first rewrite",
+          f"<{V3}>" in plain and len(reqs) == 3, (len(reqs), plain[-1500:]))
+    if len(reqs) == 3:
+        check("CS-6 pty leak: the third request is about the second item's question",
+              "certificado" in reqs[2].get("pergunta_mal_escrita", ""), reqs[2])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_two_doubts_in_a_row_rewrite_twice_and_the_second_doubt_reaches_the_reader():
+    failed_before = len(FAILURES)
+    other = "O que é a versão do plano?"
+    text, later, marks, rewrites, answers = _inject(["w", DOUBT, "", "w", other, "", ""])
+    check("CS-6 unit doubt+doubt: two reader calls with each doubt",
+          rewrites == [(QUESTION, DOUBT), (NEW_Q, other)], rewrites)
+    check("CS-6 unit doubt+doubt: nothing says it is not rewritten again",
+          "not rewritten again" not in text, text)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_doubt_then_an_empty_question_mark_calls_the_reader_once_and_says_so():
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(["w", DOUBT, "", "?", "", ""])
+    check("CS-6 unit doubt+?: one reader call", rewrites == [(QUESTION, DOUBT)], rewrites)
+    check("CS-6 unit doubt+?: both attempts marked, the second without doubt",
+          marks == [("b1", QUESTION, DOUBT), ("b1", NEW_Q, "")], marks)
+    check("CS-6 unit doubt+?: says it is not rewritten again, for later",
+          "not rewritten again" in text and len(later) == 1, (text, later))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_empty_question_mark_then_a_question_mark_with_text_rewrites_twice():
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(["?", "", "?", "variante O", ""])
+    check("CS-6 unit ?+?text: two calls and the text reaches the reader",
+          rewrites == [(QUESTION, ""), (NEW_Q, "variante O")], rewrites)
+    check("CS-6 unit ?+?text: the text reaches the mark",
+          marks[-1] == ("b1", NEW_Q, "variante O"), marks)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_second_question_mark_line_of_only_spaces_is_not_a_written_doubt():
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(["?", "", "?", "   ", ""])
+    check("CS-6 unit spaces: blank text is no doubt, no second call",
+          len(rewrites) == 1 and marks[-1] == ("b1", NEW_Q, ""), (rewrites, marks))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_a_doubt_typed_in_the_editor_triggers_the_second_rewrite():
+    failed_before = len(FAILURES)
+    m = load_module()
+    m.edit_in_editor = lambda *a, **k: DOUBT
+    rewrites, it = [], iter(["?", "", "v", "", ""])
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+             question=lambda _p: next(it, ""), output=lambda *_: None,
+             answer=lambda *a, **k: (0, "ok"),
+             unclear=lambda ident, text, doubt="": (0, "ok"),
+             rewrite=lambda ad, text, doubt="": rewrites.append((text, doubt)) or (NEW, None))
+    check("CS-6 unit v: the editor doubt after an empty `?` is the second call",
+          rewrites == [(QUESTION, ""), (NEW_Q, DOUBT)], rewrites)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_a_third_attempt_with_a_doubt_calls_no_reader_and_still_marks_it():
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(
+        ["?", "", "w", DOUBT, "", "w", "O que é o plano?", ""])
+    check("CS-6 unit third: only two reader calls", len(rewrites) == 2, rewrites)
+    check("CS-6 unit third: the third doubt is still marked",
+          len(marks) == 3 and marks[2] == ("b1", NEW_Q, "O que é o plano?"), marks)
+    check("CS-6 unit third: a line says the item stays for later",
+          "not rewritten again" in text and "twice" in text and len(later) == 1,
+          (text, later))
+    check("CS-6 unit third: nothing was answered", answers == [], answers)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def _flat(text):
+    return " ".join(text.split())
+
+
+def test_empty_question_mark_twice_says_it_is_not_rewritten_without_a_written_doubt():
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(["?", "", "?", "", ""])
+    flat = _flat(text)
+    check("CS-7 unit ?+?: one reader call and the item stays for later",
+          len(rewrites) == 1 and len(later) == 1, (rewrites, later))
+    check("CS-7 unit ?+?: the screen says it is not rewritten again without a written doubt",
+          "not rewritten again without a written doubt" in flat, text)
+    check("CS-7 unit ?+?: the screen says the item stays for later",
+          "the item stays for later" in flat, text)
+    check("CS-7 unit ?+?: the old once-per-item sentence is gone",
+          "once per item" not in flat, text)
+    check("CS-7 unit ?+?: it does not say the two-rewrite sentence",
+          "at most twice per item" not in flat, text)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_two_empty_question_marks_call_the_reader_once_and_say_so_in_a_pty():
+    """Red test of CS-7, as a process in a pseudo-terminal: `?` with an empty Enter,
+    then `?` with an empty Enter again: the reader runs once and the screen says the
+    question is not rewritten again without a written doubt."""
+    failed_before = len(FAILURES)
+    rc, plain, reqs, _ = _two_rewrite_session(lambda: [
+        (MENU, "?"), (KEY_ASK, ""), (V1, None),
+        (MENU, "?"), (KEY_ASK, ""),
+    ])
+    check("CS-7 pty: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-7 pty: the first new question was shown", f"<{V1}>" in plain, plain[-1500:])
+    check("CS-7 pty: the line was asked on both `?`", plain.count(KEY_ASK) == 2,
+          plain[-1500:])
+    check("CS-7 pty: the reader ran once", len(reqs) == 1, reqs)
+    check("CS-7 pty: no second question", V2 not in plain, plain[-1500:])
+    line = next((l for l in plain.split(V1, 1)[-1].splitlines()
+                 if "not rewritten again" in l), "")
+    check("CS-7 pty: a line says it is not rewritten again without a written doubt",
+          "without a written doubt" in line, plain[-1500:])
+    check("CS-7 pty: the same line says the item stays for later",
+          "for later" in line, plain[-1500:])
+    check("CS-7 pty: the old once-per-item sentence is gone", "once per item" not in plain,
+          plain[-1500:])
+    check("CS-7 pty: the item is in for later at the close",
+          "for later 1" in plain.rsplit("closing", 1)[-1], plain[-1500:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_plain_question_mark_after_two_rewrites_says_at_most_twice_per_item():
+    failed_before = len(FAILURES)
+    text, later, marks, rewrites, answers = _inject(
+        ["?", "", "w", DOUBT, "", "?", ""])
+    flat = _flat(text)
+    check("CS-6 unit ?+doubt+?: the reader ran twice, not a third time",
+          len(rewrites) == 2, rewrites)
+    check("CS-6 unit ?+doubt+?: the screen says the reader rewrites at most twice per item",
+          "at most twice per item" in flat, text)
+    check("CS-6 unit ?+doubt+?: it does not say the once-per-item sentence",
+          "once per item" not in flat, text)
+    check("CS-6 unit ?+doubt+?: the item stays for later", len(later) == 1, later)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_the_two_rewrites_counter_does_not_leak_to_the_next_item():
+    failed_before = len(FAILURES)
+    shown, marks, rewrites = _prompts(
+        ["w", DOUBT, "", "w", DOUBT, "", "", "?", "", ""],
+        deferred=[_deferred(), _deferred(id="b2", question="Outra pergunta?")])
+    check("CS-6 unit leak: the second item gets its own first rewrite",
+          len(rewrites) == 3, rewrites)
+    check("CS-6 unit leak: the second item's `?` asks the line",
+          sum(KEY_ASK in p for p in shown) == 1, shown)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+# ---- CS-8: refused text gives back the same item's menu, with no `--force` -----
+
+REFUSED = "does not read as an answer"
+
+
+def _refusal_text(screen):
+    """The refusal line as one string, wrapped continuation included (it ends at the
+    first blank line), or ""."""
+    import re
+    if REFUSED not in screen:
+        return ""
+    return _flat(re.split(r"\n[│ ]*\n", screen.split(REFUSED, 1)[1])[0])
+
+
+UNIT_MENU = "w = you write the answer"  # the menu line without a terminal
+
+
+def _refusal_session(typed="...", then=None, items=1, evidence=None):
+    """pty, real `cepa-queue answer`: `w` + `typed` + "y" at the send-back question
+    (refused by `cepa-queue`), then the `then` inputs. Returns (rc, plain, before,
+    after, the items by id at the end)."""
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        its = []
+        for n in range(items):
+            it = item(f"b{n + 1}", status="pending",
+                      human_pending="falta escolher a variante")
+            it["owner_question"] = QUESTION if n == 0 else "O certificado do banco já chegou?"
+            it["route_kind"] = "external-block"
+            if evidence and n == 0:
+                it["evidence"] = evidence
+            its.append(it)
+        root = build_repo(tmp, its)
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        before = qfile.read_bytes()
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=30, inputs=[
+            (MENU, "w"), (YOUR, typed), (SEND_BACK, "y"), *(then or [])])
+        plain = ANSI.sub("", out)
+        import yaml
+        now = {i["id"]: i for i in yaml.safe_load(qfile.read_text())["items"]}
+        return rc, plain, before, qfile.read_bytes(), now
+
+
+def test_refused_text_shows_a_line_without_force_and_the_same_menu_again():
+    """Red test of CS-8, as a process in a pseudo-terminal and with the real
+    `cepa-queue answer`: "..." in `w` is refused (exit code 6); the screen has no
+    "--force", the refusal line cites `?` and Enter, the same item's menu comes back
+    (the item header once, the menu line twice), and a valid answer on that same item
+    is then recorded."""
+    import yaml
+    failed_before = len(FAILURES)
+    rc, plain, before, after, items = _refusal_session(then=[
+        (MENU, "w"), (YOUR, "variante B"), (SEND_BACK, "y")])
+    now = items["b1"]
+    check("CS-8 pty: decide exits 0 (no timeout)", rc == 0, plain[-1500:])
+    check("CS-8 pty: the screen never says --force", "--force" not in plain, plain[-1500:])
+    check("CS-8 pty: the raw cepa-queue message is not relayed",
+          "resposta recusada" not in plain and "repita com" not in plain, plain[-1500:])
+    line = next((l for l in plain.splitlines() if REFUSED in l), "")
+    flat = _refusal_text(plain)
+    check("CS-8 pty: a refusal line is shown", bool(line), plain[-1500:])
+    check("CS-8 pty: the line cites ? and Enter", "[?]" in flat and "[Enter]" in flat, flat)
+    check("CS-8 pty: the line does not cite [e] (that is CS-9)", "[e]" not in flat, flat)
+    import re
+    menu_keys = set(re.findall(r"\[([^\]\s]+)\]", plain.split(REFUSED, 1)[0]
+                               .rsplit("1/1 · b1", 1)[-1]))
+    # `_refusal_text` can run on into the menu below; the refusal sentence itself
+    # ends at the first blank menu line (` │ │ ` once flattened).
+    sentence = flat.split(" │ │ ", 1)[0]
+    cited = set(re.findall(r"\[([^\]\s]+)\]", sentence))
+    check("CS-8 pty: every key the line cites is on the item's menu",
+          len(cited) >= 2 and cited <= menu_keys, (cited, menu_keys, sentence))
+    whole = _flat(re.sub(r"[│┃|]", " ", plain))
+    check("CS-8 pty: the whole sentence, with the labels the panel passes, is on screen",
+          PANEL_REFUSAL_SENTENCE in whole, whole[-1500:])
+    check("CS-8 pty: the item header appears once", plain.count("1/1 · b1") == 1,
+          plain[-800:])
+    check("CS-8 pty: the menu line appears twice", plain.count(MENU) == 2, plain[-1500:])
+    check("CS-8 pty: the valid answer on the same item is recorded",
+          "Resposta do dono em" in str(now.get("evidence"))
+          and "variante B" in str(now.get("evidence")) and "answered now 1" in plain,
+          (now, plain[-1200:]))
+    check("CS-8 pty: the refused text was never recorded",
+          before != after and "..." not in str(now.get("evidence")), now)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def _load_cepa_run_module():
+    from importlib.machinery import SourceFileLoader
+    from importlib.util import module_from_spec, spec_from_loader
+    loader = SourceFileLoader("cepa_run_doubt_cs8", str(CEPA_UNTIL))
+    mod = module_from_spec(spec_from_loader("cepa_run_doubt_cs8", loader))
+    loader.exec_module(mod)
+    return mod
+
+
+PANEL_REFUSAL_SENTENCE = ("text not recorded: it does not read as an answer. "
+                          "[?] I don't understand the question, [Enter] leave it for later")
+
+
+PANEL_REFUSAL_SENTENCE_E = ("text not recorded: it does not read as an answer. "
+                            "[e] technical detail, [?] I don't understand the question, "
+                            "[Enter] leave it for later")
+
+
+def test_refusal_line_with_the_three_pairs_is_the_exact_sentence():
+    """CS-9 unit: `[e]` first, then `?` and Enter, joined as the two-pair line is."""
+    mod = _load_cepa_run_module()
+    got = mod.refusal_line([("e", "technical detail"),
+                            ("?", "I don't understand the question"),
+                            ("Enter", "leave it for later")])
+    assert got == PANEL_REFUSAL_SENTENCE_E, got
+
+
+def _refusal_screen_facts(plain):
+    """(sentence, cited keys, menu keys) of the first refusal on a pty screen; the
+    sentence ends at the first blank panel line, the menu keys are read from the
+    item's first menu, above the refusal."""
+    import re
+    flat = _refusal_text(plain)
+    sentence = flat.split(" │ │ ", 1)[0]
+    menu_keys = set(re.findall(r"\[([^\]\s]+)\]", plain.split(REFUSED, 1)[0]
+                              .rsplit("1/1 · b1", 1)[-1]))
+    return sentence, set(re.findall(r"\[([^\]\s]+)\]", sentence)), menu_keys
+
+
+def test_refusal_cites_e_with_its_label_when_the_item_has_evidence_in_a_pty():
+    """CS-9 red test: same scenario as CS-8 (`w`, "..."), item WITH `evidence`."""
+    import re
+    failed_before = len(FAILURES)
+    rc, plain, before, after, items = _refusal_session(
+        evidence="log do agente: variante O = ...", then=[(MENU, "")])
+    check("CS-9 pty e: decide exits 0 (no timeout)", rc == 0, plain[-1500:])
+    check("CS-9 pty e: a refusal line is shown", REFUSED in plain, plain[-1500:])
+    sentence, cited, menu_keys = _refusal_screen_facts(plain)
+    check("CS-9 pty e: the line cites [e] with the menu's own label",
+          "[e] technical detail" in sentence, sentence)
+    whole = _flat(re.sub(r"[│┃|]", " ", plain))
+    check("CS-9 pty e: the whole sentence is on screen",
+          PANEL_REFUSAL_SENTENCE_E in whole, whole[-1500:])
+    check("CS-9 pty e: `e` is on that item's menu and every cited key is too",
+          "e" in menu_keys and {"e", "?", "Enter"} <= cited <= menu_keys,
+          (cited, menu_keys, sentence))
+    check("CS-9 pty e: the same item's menu came back, nothing recorded",
+          plain.count(MENU) == 2 and after == before, plain[-1500:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_refusal_does_not_cite_e_when_the_item_has_no_evidence_in_a_pty():
+    """CS-9 red test, other half: no `evidence`, so no `[e]` on the menu or the line,
+    and the sentence is today's."""
+    import re
+    failed_before = len(FAILURES)
+    rc, plain, before, after, items = _refusal_session(then=[(MENU, "")])
+    check("CS-9 pty no-e: decide exits 0 (no timeout)", rc == 0, plain[-1500:])
+    check("CS-9 pty no-e: a refusal line is shown", REFUSED in plain, plain[-1500:])
+    sentence, cited, menu_keys = _refusal_screen_facts(plain)
+    check("CS-9 pty no-e: the refusal sentence has no [e]", "[e]" not in sentence, sentence)
+    check("CS-9 pty no-e: the menu has no [e] either",
+          "e" not in menu_keys and "technical detail" not in plain, (menu_keys, plain[-1500:]))
+    whole = _flat(re.sub(r"[│┃|]", " ", plain))
+    check("CS-9 pty no-e: the sentence is exactly today's",
+          PANEL_REFUSAL_SENTENCE in whole, whole[-1500:])
+    check("CS-9 pty no-e: every cited key is on the menu",
+          cited == {"?", "Enter"} and cited <= menu_keys, (cited, menu_keys))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_refusal_line_is_the_exact_sentence_for_the_keys_the_panel_passes():
+    mod = _load_cepa_run_module()
+    got = mod.refusal_line([("?", "I don't understand the question"),
+                            ("Enter", "leave it for later")])
+    assert got == PANEL_REFUSAL_SENTENCE, got
+    assert mod.refusal_line([("a", "x")]) == (
+        "text not recorded: it does not read as an answer. [a] x")
+
+
+def test_accepts_force_is_false_when_the_signature_cannot_be_read():
+    import inspect
+    mod = _load_cepa_run_module()
+
+    class Opaque:
+        @property
+        def __signature__(self):
+            raise ValueError("no signature")
+
+        def __call__(self, **kw):
+            return None
+
+    try:
+        inspect.signature(Opaque())
+    except (TypeError, ValueError):
+        pass
+    else:
+        raise AssertionError("fixture must make inspect.signature raise")
+    assert mod.accepts_force(Opaque()) is False
+    assert mod.accepts_force(lambda force=False: None) is True
+
+
+def test_refused_text_leaves_the_queue_file_untouched_and_enter_defers_the_item():
+    failed_before = len(FAILURES)
+    rc, plain, before, after, _ = _refusal_session(then=[(MENU, "")])
+    check("CS-8 pty enter: decide exits 0 (no timeout)", rc == 0, plain[-1500:])
+    check("CS-8 pty enter: queue file byte-identical", after == before, "")
+    check("CS-8 pty enter: the menu came back", plain.count(MENU) == 2, plain[-1500:])
+    check("CS-8 pty enter: Enter leaves the item in for later 1",
+          "for later 1" in plain.rsplit("closing", 1)[-1] and "answered now 0" in plain,
+          plain[-1200:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_refusal_does_not_reset_the_rewrites_counter_in_a_pty():
+    """`?` (rewrite 1), then a refused "..." and `?` with no text: the reader must
+    not run again (the counter survived the refusal)."""
+    failed_before = len(FAILURES)
+    rc, plain, reqs, _ = _two_rewrite_session(lambda: [
+        (MENU, "?"), (KEY_ASK, ""), (V1, None),
+        (MENU, "w"), (YOUR, "..."), (SEND_BACK, "y"),
+        (MENU, "?"), (KEY_ASK, ""),
+    ])
+    check("CS-8 pty counter: decide exits 0 (no timeout)", rc == 0, plain[-1500:])
+    check("CS-8 pty counter: the refusal line showed", REFUSED in plain, plain[-1500:])
+    check("CS-8 pty counter: the reader ran once only", len(reqs) == 1, reqs)
+    check("CS-8 pty counter: the second `?` says it is not rewritten again",
+          "not rewritten again without a written doubt" in _flat(plain), plain[-1200:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def _refusal_unit(replies, results, deferred=None):
+    """`decide` with an `answer` fake (old signature plus `**k`) returning `results`
+    one by one as (rc, msg); returns (screen text, calls, later)."""
+    m = load_module()
+    screen, calls, it, res = [], [], iter(replies), iter(results)
+    _, later = m.decide(
+        Path("/nao/existe"), "fila", None, {}, deferred or [_deferred(evidence="")], {},
+        question=lambda _p: next(it, ""), output=screen.append,
+        answer=lambda ident, text, **k: calls.append((text, k)) or next(res, (0, "ok")),
+        unclear=lambda *a, **k: (0, "ok"), rewrite=lambda *a, **k: (None, "no"))
+    return "\n".join(screen), calls, later
+
+
+def test_rc_6_from_an_injected_answer_returns_the_menu_of_the_same_item():
+    failed_before = len(FAILURES)
+    text, calls, later = _refusal_unit(
+        ["w", "texto", "y", "w", "outro texto", "y"],
+        [(6, "resposta recusada: repita com --force"), (0, "gravado")])
+    check("CS-8 unit rc6: two attempts on the same item", len(calls) == 2, calls)
+    check("CS-8 unit rc6: the second attempt recorded, nothing for later",
+          later == [] and "gravado" in text, (later, text))
+    check("CS-8 unit rc6: the menu showed twice", text.count(UNIT_MENU) == 2, text)
+    check("CS-8 unit rc6: no --force and no raw message on screen",
+          "--force" not in text and "repita" not in text, text)
+    check("CS-8 unit rc6: the first refusal is not shown as `not recorded: <raw>`",
+          "not recorded: resposta" not in text, text)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_the_force_flag_does_not_survive_a_refusal_into_the_next_attempt():
+    failed_before = len(FAILURES)
+    # first attempt: doubt text, "n" at the doubt prompt (force on), refused;
+    # second attempt: ordinary text, no doubt prompt, so no force.
+    text, calls, later = _refusal_unit(
+        ["w", DOUBT, "n", "y", "w", "variante B", "y"], [(6, "recusa"), (0, "ok")])
+    check("CS-8 unit force: first attempt carried force", calls[0][1].get("force") is True, calls)
+    check("CS-8 unit force: second attempt does not", len(calls) == 2
+          and not calls[1][1].get("force"), calls)
+    check("CS-8 unit force: the second text is the one recorded",
+          calls[-1][0].endswith("variante B") or "variante B" in calls[-1][0], calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_another_recording_failure_still_sends_the_item_to_later_with_its_message():
+    failed_before = len(FAILURES)
+    text, calls, later = _refusal_unit(["w", "texto", "y", "w"], [(2, "disco cheio")])
+    check("CS-8 unit rc2: today's message is shown", "not recorded: disco cheio" in text, text)
+    check("CS-8 unit rc2: the item goes to later", len(later) == 1, later)
+    check("CS-8 unit rc2: the menu is not shown again", len(calls) == 1
+          and text.count(UNIT_MENU) == 1, (calls, text))
+    check("CS-8 unit rc2: no refusal line", REFUSED not in text, text)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_refusal_on_a_y_answer_also_returns_the_menu_and_keeps_the_key_set():
+    """The refusal line is built from the item's keys; with no `evidence` the menu has
+    no `e` and the line cites none."""
+    failed_before = len(FAILURES)
+    text, calls, later = _refusal_unit(["y", "", "q"], [(6, "recusa")])
+    line = _refusal_text(text)
+    check("CS-8 unit y: the line is shown", bool(line), text)
+    check("CS-8 unit y: no [e] in the line", "[e]" not in line, line)
+    check("CS-8 unit y: the menu came back and `q` ended the panel",
+          text.count(UNIT_MENU) == 2 and len(later) == 1 and len(calls) == 1,
+          (text, later))
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_d_with_an_empty_why_on_a_question_mark_item_records_the_discard_in_a_pty():
+    """The panel builds the `d` text itself ("descartado: <question>"); when the
+    question ends in "?" the real `cepa-queue answer` would refuse it (exit 6). The
+    discard is the owner's explicit choice, so it is recorded, with no refusal line
+    and no "--force" on screen."""
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=30, inputs=[
+            (MENU, "d"), ("Why", "")])
+        plain = ANSI.sub("", out)
+        import yaml
+        qfile = root / ".claude" / "programs" / "fila" / "plan.yaml"
+        now = {i["id"]: i for i in yaml.safe_load(qfile.read_text())["items"]}["b1"]
+    check("d pty: decide exits 0", rc == 0, plain[-1200:])
+    check("d pty: the item is dropped with the question in the evidence",
+          now.get("status") == "dropped" and QUESTION in str(now.get("evidence")), now)
+    check("d pty: no refusal line and no --force on screen",
+          REFUSED not in plain and "--force" not in plain and "not recorded" not in plain,
+          plain[-1200:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_d_passes_force_and_drop_and_y_n_w_do_not_force():
+    failed_before = len(FAILURES)
+    calls = _calls(["d", ""])
+    check("d unit: drop and force, empty reason",
+          len(calls) == 1 and calls[0][1].get("drop") is True
+          and calls[0][1].get("force") is True, calls)
+    calls = _calls(["d", "já feito por outro card"])
+    check("d unit: drop and force, typed reason",
+          len(calls) == 1 and calls[0][1].get("drop") is True
+          and calls[0][1].get("force") is True
+          and "já feito por outro card" in calls[0][0], calls)
+    for keys, label in ((["y", ""], "y"), (["n", ""], "n"), (["w", "variante B", "y"], "w")):
+        calls = _calls(keys)
+        check(f"d unit: `{label}` passes no force",
+              len(calls) == 1 and not calls[0][1].get("force"), calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_d_still_works_with_an_answer_of_the_old_signature():
+    failed_before = len(FAILURES)
+    m = load_module()
+    calls, it = [], iter(["d", ""])
+    m.decide(Path("/nao/existe"), "fila", None, {}, [_deferred()], {},
+             question=lambda _p: next(it, ""), output=lambda *_: None,
+             answer=lambda i, t, keep=False, drop=False: (
+                 calls.append((i, t, keep, drop)), (0, "ok"))[1],
+             unclear=lambda *a, **k: (0, "ok"), rewrite=lambda *a, **k: (None, "no"))
+    check("d unit old signature: called once with drop", len(calls) == 1 and calls[0][3],
+          calls)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def _question_mark_legend(plain):
+    """The legend entry that starts with "? =" as one string, its wrapped
+    continuation joined, or "". The card borders are stripped; the entry ends at the
+    next legend line (they start with a key and " = ") or at a blank panel line."""
+    import re
+    lines = [l.strip("│ ").strip() for l in plain.splitlines()]
+    for n, l in enumerate(lines):
+        if l.startswith("? = "):
+            got = [l]
+            for nxt in lines[n + 1:]:
+                if not nxt or re.match(r"^\S+ = ", nxt) or nxt.startswith("["):
+                    break
+                got.append(nxt)
+            return " ".join(got)
+    return ""
+
+
+def test_question_mark_legend_says_the_question_is_rewritten_in_up_to_60_s_in_a_pty():
+    """Red test of CS-10, as a process in a pseudo-terminal: the legend line that
+    starts with "? =" says "rewritten" and "60"."""
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        it = item("b1", status="pending", human_pending="falta escolher a variante")
+        it["owner_question"] = QUESTION
+        it["route_kind"] = "external-block"
+        root = build_repo(tmp, [it])
+        env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=30, inputs=[(MENU, "")])
+        plain = ANSI.sub("", out)
+    check("CS-10 pty: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-10 pty: the menu was seen (a timeout cannot pass)", f"<{MENU}>" in plain,
+          plain[-1500:])
+    line = _question_mark_legend(plain)
+    check("CS-10 pty: there is a legend line starting with `? =`", bool(line),
+          plain[-1500:])
+    check("CS-10 pty: the `?` line says the question is rewritten", "rewritten" in line,
+          line)
+    check("CS-10 pty: the `?` line says 60", "60" in line, line)
+    check("CS-10 pty: the `?` line still says nothing is answered",
+          "nothing is answered" in line, line)
+    check("CS-10 pty: the old wording is gone", "badly written" not in line, line)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_question_mark_legend_entry_follows_the_rewrite_ceiling_constant():
+    """CS-10 unit: the whole entry, and its number is `UNCLEAR_REWRITE_SEC`."""
+    failed_before = len(FAILURES)
+    mod = _load_cepa_run_module()
+    chips = [("?", "I don't understand the question")]
+    got = mod.legend_lines(chips, {})
+    want = ("? = I did not understand the question: it is rewritten right away, "
+            f"in up to {mod.UNCLEAR_REWRITE_SEC} s, and nothing is answered")
+    check("CS-10 unit: the entry is exactly the new one", got == [want], got)
+    check("CS-10 unit: the number is the constant, 60",
+          f"up to {mod.UNCLEAR_REWRITE_SEC} s" in got[0] and mod.UNCLEAR_REWRITE_SEC == 60,
+          got)
+    mod.UNCLEAR_REWRITE_SEC = 17
+    after = mod.legend_lines(chips, {})[0]
+    check("CS-10 unit: with the constant changed, the entry follows it",
+          "up to 17 s" in after and "60" not in after, after)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def _owner_item(ident):
+    it = item(ident, status="pending", human_pending="falta escolher a variante")
+    # one question per item: equal questions would be grouped in one card
+    it["owner_question"] = f"{QUESTION} ({ident})"
+    it["route_kind"] = "external-block"
+    return it
+
+
+def _enter_legends(plain):
+    """Every legend entry that starts with "Enter =", one string each, its wrapped
+    continuation joined and the card borders stripped (same approach as
+    `_question_mark_legend`)."""
+    import re
+    lines = [l.strip("│ ").strip() for l in plain.splitlines()]
+    found = []
+    for n, l in enumerate(lines):
+        if l.startswith("Enter = "):
+            got = [l]
+            for nxt in lines[n + 1:]:
+                if not nxt or re.match(r"^\S+ = ", nxt) or nxt.startswith("["):
+                    break
+                got.append(nxt)
+            found.append(" ".join(got))
+    return found
+
+
+def test_enter_legend_names_chat_queue_and_item_in_a_pty():
+    """Red test of CS-11, as a process in a pseudo-terminal: queue `f1`, item
+    `C1-47`; the legend line that starts with "Enter =" says chat, f1 and C1-47 and
+    still says the item stays for later."""
+    import test_cepa_until_all as al
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        root, _paths = al._repo(tmp, {"f1": [_owner_item("C1-47")]})
+        env = al._tty_env(tmp)
+        env.update(CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "f1", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=30, inputs=[(MENU, "")])
+        plain = ANSI.sub("", out)
+    check("CS-11 pty: decide exits 0", rc == 0, plain[-1500:])
+    check("CS-11 pty: the menu was seen (a timeout cannot pass)", f"<{MENU}>" in plain,
+          plain[-1500:])
+    lines = _enter_legends(plain)
+    check("CS-11 pty: exactly one legend line starts with `Enter =`", len(lines) == 1,
+          plain[-1500:])
+    line = lines[0] if lines else ""
+    check("CS-11 pty: the Enter line says chat", "chat" in line, line)
+    check("CS-11 pty: the Enter line names the queue f1", "f1" in line, line)
+    check("CS-11 pty: the Enter line names the item C1-47", "C1-47" in line, line)
+    check("CS-11 pty: the Enter line still says the item stays for later",
+          "for later" in line, line)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_each_item_shows_its_own_id_in_its_own_enter_line_in_a_pty():
+    """CS-11, two items on the same panel: each Enter line names its own item."""
+    import test_cepa_until_all as al
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        root, _paths = al._repo(tmp, {"f1": [_owner_item("C1-47"),
+                                             _owner_item("C1-48")]})
+        env = al._tty_env(tmp)
+        env.update(CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "f1", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=40,
+                         inputs=[(MENU, ""), (MENU, "")])
+        plain = ANSI.sub("", out)
+    check("CS-11 two pty: decide exits 0", rc == 0, plain[-1500:])
+    lines = _enter_legends(plain)
+    check("CS-11 two pty: two Enter lines, one per item", len(lines) == 2,
+          plain[-1500:])
+    check("CS-11 two pty: the first names C1-47 and not C1-48",
+          len(lines) == 2 and "C1-47" in lines[0] and "C1-48" not in lines[0], lines)
+    check("CS-11 two pty: the second names C1-48 and not C1-47",
+          len(lines) == 2 and "C1-48" in lines[1] and "C1-47" not in lines[1], lines)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_all_queues_panel_shows_each_items_own_queue_and_bare_id_in_a_pty():
+    """CS-11, the all-queues panel (`decide --all`): items from queues `a` and `b`;
+    each Enter line names its own queue and the bare id, the queue once."""
+    import test_cepa_until_all as al
+    failed_before = len(FAILURES)
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fb:
+        root, _paths = al._repo(tmp, {"a": [_owner_item("a1")],
+                                      "b": [_owner_item("b1")]})
+        env = al._tty_env(tmp)
+        env.update(CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", "--all", "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), env=env, timeout=60,
+                         inputs=[(MENU, ""), (MENU, "")])
+        plain = ANSI.sub("", out)
+    check("CS-11 all pty: decide exits 0", rc == 0, plain[-1500:])
+    lines = _enter_legends(plain)
+    check("CS-11 all pty: two Enter lines", len(lines) == 2, plain[-1500:])
+    want = ["(queue a, item a1)", "(queue b, item b1)"]
+    for n, w in enumerate(want):
+        got = lines[n] if len(lines) > n else ""
+        check(f"CS-11 all pty: Enter line {n + 1} is exactly the item's own {w}",
+              w in got and "/" not in got.split("chat session", 1)[-1], got)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_enter_legend_of_an_all_run_label_shows_the_items_own_queue_and_bare_id():
+    """CS-11 unit: in an end-of-run `all/<run>` panel the item is called `a/a1` and
+    `decide` hands `legend_lines` the queue `a` and the id `a1` (`split_label`), not
+    the panel's queue `all` and not the prefixed label."""
+    failed_before = len(FAILURES)
+    m = load_module()
+    seen = []
+    real = m.legend_lines
+    m.legend_lines = lambda *a, **k: (seen.append((a, k)), real(*a, **k))[1]
+    it = iter([""])
+    shown = []
+    m.decide(Path("/nao/existe"), "all", None, {}, [_deferred(id="a/a1", fila="a")], {},
+             question=lambda _p: next(it, ""), output=shown.append,
+             answer=lambda *a, **k: (0, "ok"), unclear=lambda *a, **k: (0, "ok"),
+             rewrite=lambda *a, **k: (None, "no"))
+    kws = [k for _a, k in seen]
+    check("CS-11 label unit: the legend got the item's own queue and bare id",
+          kws and all(k.get("queue") == "a" and k.get("ident") == "a1" for k in kws),
+          kws)
+    text = " ".join(" ".join(str(x) for x in shown).split())
+    check("CS-11 label unit: the line on screen has the queue once and no prefixed id",
+          "(queue a, item a1)" in text and "a/a1)" not in text, text[-600:])
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+def test_enter_legend_entry_with_and_without_queue_and_item():
+    """CS-11 unit: the whole entry; without queue or item it is today's entry; the
+    other entries do not change."""
+    failed_before = len(FAILURES)
+    mod = _load_cepa_run_module()
+    chips = [("Enter", "later")]
+    got = mod.legend_lines(chips, {}, queue="f1", ident="C1-47")
+    check("CS-11 unit: the entry is exactly the new one",
+          got == ["Enter = leaves the question for later; a doubt can go to a chat "
+                  "session (queue f1, item C1-47)"], got)
+    today = ["Enter = leaves the question for later"]
+    check("CS-11 unit: no queue and no item gives today's entry",
+          mod.legend_lines(chips, {}) == today, mod.legend_lines(chips, {}))
+    check("CS-11 unit: only the queue gives today's entry",
+          mod.legend_lines(chips, {}, queue="f1") == today, "queue only")
+    check("CS-11 unit: only the item gives today's entry",
+          mod.legend_lines(chips, {}, ident="C1-47") == today, "item only")
+    check("CS-11 unit: the positional `delivered` call keeps working",
+          mod.legend_lines(chips, {}, True) == today, "delivered")
+    every = [("y", ""), ("n", ""), ("w", ""), ("v", ""), ("d", ""), ("e", ""),
+             ("?", ""), ("Enter", ""), ("q", "")]
+    plain = mod.legend_lines(every, {})
+    named = mod.legend_lines(every, {}, queue="f1", ident="C1-47")
+    check("CS-11 unit: every other entry is the same, in the same order",
+          [l for l in named if not l.startswith("Enter")]
+          == [l for l in plain if not l.startswith("Enter")]
+          and [l.split(" = ")[0] for l in named] == [l.split(" = ")[0] for l in plain],
+          named)
+    assert len(FAILURES) == failed_before, FAILURES[failed_before:]
+
+
+if __name__ == "__main__":
+    for name, fn in list(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            print(f"\n{name}")
+            fn()
+    print(f"\n{len(FAILURES)} FAIL" if FAILURES else "\ntudo verde")
+    sys.exit(1 if FAILURES else 0)

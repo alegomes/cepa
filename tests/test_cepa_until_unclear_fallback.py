@@ -59,6 +59,7 @@ def test_hung_reader_leaves_the_item_for_later_and_the_panel_goes_on():
         start = time.monotonic()
         rc, out = on_tty(cmd, str(root), env=env,
                          inputs=[("[w] I write the answer", "?"),
+                                 ("What did you not understand?", ""),
                                  ("[w] I write the answer", "")], timeout=120)
         took = time.monotonic() - start
         plain = ANSI.sub("", out)
@@ -101,7 +102,7 @@ def _run(replies, rewrite):
 def test_a_failed_rewrite_says_so_and_moves_on():
     """Any failure of the rewrite (ceiling, reader error, reader off) gives the line,
     leaves the item for later and the next item still asks."""
-    text, later, rewrites, _ = _run(["?", ""], (None, "not read within the ceiling"))
+    text, later, rewrites, _ = _run(["?", "", ""], (None, "not read within the ceiling"))
     check("CS-8 fail: the reader ran once", len(rewrites) == 1, rewrites)
     head, _, tail = text.partition(NOT_REWRITTEN)
     check("CS-8 fail: the not-rewritten line shows", bool(tail), text)
@@ -117,7 +118,9 @@ def test_second_question_mark_says_so_and_moves_on():
     says the question will not be rewritten again and the item stays for later."""
     new = {"route_kind": "owner-task", "question": NEW_Q, "if_yes": "volta",
            "if_no": "espera"}
-    text, later, rewrites, marks = _run(["?", "?", ""], (new, None))
+    # the second `?` asks the optional line (CS-6) and gets an empty Enter; the
+    # last Enter is the next item's menu
+    text, later, rewrites, marks = _run(["?", "", "?", "", ""], (new, None))
     check("CS-8 second: the reader ran once", len(rewrites) == 1, rewrites)
     check("CS-8 second: both `?` recorded", marks == [OLD_Q, NEW_Q], marks)
     tail = text.split("question rewritten", 1)[-1]
@@ -134,7 +137,7 @@ def test_a_hostile_failure_reason_reaches_the_screen_as_one_safe_line():
     sequences (clear screen, window title, NUL) never reach the screen raw, and a
     long reason is cut to one bounded line (proof L4 of CS-8)."""
     hostile = ("recusado\x1b[2J\x1b]0;pwned\x07\x00\r\nlinha nova " + "A" * 5000)
-    text, later, _, _ = _run(["?", ""], (None, hostile))
+    text, later, _, _ = _run(["?", "", ""], (None, hostile))
     line = next((l for l in text.splitlines() if NOT_REWRITTEN in l), "")
     check("CS-8 hostile: the line shows", bool(line), text)
     check("CS-8 hostile: no control character on the screen",
@@ -150,7 +153,7 @@ def test_a_hostile_failure_reason_reaches_the_screen_as_one_safe_line():
 
 def test_the_closing_names_each_item_left_for_later():
     """The closing lists the items left for later by name, not only their count."""
-    text, later, _, _ = _run(["?", ""], (None, "reader exited 1"))
+    text, later, _, _ = _run(["?", "", ""], (None, "reader exited 1"))
     closing = text.rsplit("Answered now", 1)[-1]
     check("CS-8 closing: both items named on the for-later line",
           "○ b1, b2" in closing, closing)

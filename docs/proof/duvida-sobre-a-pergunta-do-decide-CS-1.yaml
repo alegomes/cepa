@@ -1,0 +1,65 @@
+schema_version: 2
+card: duvida-sobre-a-pergunta-do-decide-CS-1
+verdict: proven
+reviewed_at: 2026-11-26T13:00:00-03:00
+base_commit: a7d57e5
+head_commit: 052f01d
+issue_type: Feature
+repo_kind: harness            # repo Python (cepa), nao Quarkus. Superficie = painel `cepa run decide` lido em pseudo-terminal
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-run (decide: bloco `if r == \"w\" and text and looks_like_doubt(text)` com a pergunta [Y/n])"
+      module: cli
+      external_observable: true
+      substituted_by_double: null   # os testes rodam o cepa-until real em pty
+    - class: "common/bin/cepa-run (looks_like_doubt, _queue_module, is_yes_default)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest: repo Python; perturbacao manual em worktree descartavel detached em 052f01d, removido ao fim."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida em 052f01d: 6 passed (19s)."
+        - "Base a7d57e5 (cepa-run do base + testes do head): 3 failed, 3 passed (71s) -> RED nos casos w, n e SystemExit."
+        - "(P1) gate `if False and r == \"w\" ...` -> RED: 2 failed (caso w e caso n)."
+        - "(P2) gate `r in (\"w\",\"v\")` -> RED: test_doubt_typed_through_v_does_not_show_the_new_prompt_yet."
+        - "(P3) ramo sim sem limpar o texto (`text = \"\"` -> `pass`) -> RED: caso w."
+        - "(P4) Enter deixa de ser sim em is_yes_default -> RED: caso w."
+        - "(P5) guarda de pontuacao `\\w` removida (`if False:`) -> RED: test_punctuation_only_text_in_w_does_not_show_the_doubt_prompt."
+        - "(P6) looks_like_doubt sempre True -> RED: test_ordinary_text_in_w_does_not_show_the_doubt_prompt."
+        - "(P7) is_yes_default sempre True -> RED: test_n_at_the_doubt_prompt_goes_to_send_back_and_n_records_nothing."
+        - "(P8) `except (Exception, SystemExit)` -> `except Exception` -> RED: test_looks_like_doubt_survives_cepa_queue_exiting_with_2."
+        - "(P9) _queue_module sempre devolve None -> RED: 2 failed (caso w e caso n)."
+        - "Mutante equivalente nao perturbado: remover `and text` do gate (looks_like_doubt('') ja e False)."
+      run: >-
+        `git worktree add --detach <scratchpad>/wt 052f01d`; cada perturbacao por sed em caminho absoluto, restaurada com
+        `git -C <wt> checkout 052f01d -- common/bin/cepa-run`; teste: `python3 -m pytest tests/test_cepa_until_decide_doubt.py -q`
+        em primeiro plano. Resultados: baseline 6 passed; base a7d57e5 3 failed; P1 2 failed; P2 1 failed; P3 1 failed;
+        P4 1 failed; P5 1 failed; P6 1 failed; P7 1 failed; P8 1 failed; P9 2 failed. Nenhum timeout em pty sem perturbacao.
+        Worktree removido com `git worktree remove --force`. Suite completa nao rodada.
+  l2_coverage:
+    status: pass
+    technique: perturbation
+    uncovered_lines: []
+    run: "todas as mudancas de comportamento (gate w, limite de v, ramos sim/n, guarda \\w, not_an_answer, carregamento do cepa-queue, fallback SystemExit) foram perturbadas e deixaram o teste vermelho (P1..P9)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "A unica entrada nova e o texto que o dono digita no teclado do proprio terminal (painel local, sem parser de dado externo, sem modulo api-rest). Os casos de borda (so pontuacao, texto comum, `n`, cepa-queue que sai com 2) sao testes do proprio card, provados por P5..P8."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Feature (CS-1 de docs/spec/duvida-sobre-a-pergunta-do-decide.md); a prova e a perturbacao."
+routing_reason: >-
+  As nove perturbacoes (gate w, limite de v, ramo sim, Enter como sim, guarda de
+  pontuacao, filtro de texto comum, ramo n, fallback SystemExit, falha ao carregar
+  cepa-queue) deixam o teste em pty vermelho, e o conjunto novo fica vermelho
+  contra o cepa-run do base. Os quatro sobreviventes da primeira passada (P5..P8)
+  agora morrem. PROVEN.

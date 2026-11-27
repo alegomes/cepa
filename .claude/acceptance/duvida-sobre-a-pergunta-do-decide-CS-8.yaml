@@ -1,0 +1,22 @@
+key: CS-8
+queue: duvida-sobre-a-pergunta-do-decide
+status: complete
+pass: 2
+criteria:
+  - id: AC1
+    text: "docs/spec/duvida-sobre-a-pergunta-do-decide.md CS-8 (cli): texto recusado (w + '...') mostra linha sem '--force' que cita só teclas do menu do item, e o menu do mesmo item volta; vale para exit code 6 de `cepa-queue answer`, outras falhas de gravação mandam o item para depois; a frase 'repita com --force' não aparece no painel."
+    altitude: cli
+    surface: "common/bin/cepa-run decide panel (cepa-until decide fila --repo ...) in a pty, keys w + '...' + y, real `cepa-queue answer` refusing with exit code 6"
+    test: "tests/test_cepa_until_decide_doubt.py::test_refused_text_shows_a_line_without_force_and_the_same_menu_again (plus ::test_refused_text_leaves_the_queue_file_untouched_and_enter_defers_the_item, ::test_refusal_does_not_reset_the_rewrites_counter_in_a_pty, ::test_d_with_an_empty_why_on_a_question_mark_item_records_the_discard_in_a_pty; unit ::test_rc_6_from_an_injected_answer_returns_the_menu_of_the_same_item, ::test_another_recording_failure_still_sends_the_item_to_later_with_its_message, ::test_d_passes_force_and_drop_and_y_n_w_do_not_force, ::test_d_still_works_with_an_answer_of_the_old_signature)"
+    layer: cli-pty
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -> '68 passed in 21.50s' (N=68 > 0)"
+    sub_criteria:
+      line_without_force: "complete. pty with the real cepa-queue asserts '--force' not in plain and 'resposta recusada'/'repita com' absent; the refusal sentence is present."
+      only_keys_on_the_menu: "complete (was the pass-1 gap). The pty test now collects the [x] keys of the first menu (text between the item header '1/1 · b1' and the refusal sentence) and the [x] keys of the refusal sentence, and asserts len(cited) >= 2 and cited <= menu_keys. Isolation checked by me with a probe in the scratchpad (/private/tmp/claude-501/-Users-alegomes-cepa-worktrees-cepa-chain-1126-1336/28f73a19-9aa9-4ca9-bd32-820af14978b7/scratchpad/probe.py) on the real pty screen: sentence = '. [?] I don't understand the question, [Enter] | leave it for later' (cut at the wrapped blank line ' | | ', so the menu text below is NOT in it), cited = {Enter, ?}, menu = {n,w,q,?,y/N,y,v,Enter,d}. Mutation: inserting ', [z] fake' into the line on that same screen gives cited = {z, Enter, ?}, subset False, so the assertion would fail. Residual: the cut relies on a blank line between sentence and menu, which holds today; a cited key that is on the menu but conditional (CS-9 [e]) is pinned separately by the '[e]' not in flat check."
+      same_menu_again_and_usable: "complete. header '1/1 · b1' once, MENU line twice, then a valid 'variante B' answer on the same item is recorded in evidence by the real cepa-queue; the refused '...' never reaches evidence."
+      enter_after_refusal_defers: "complete. queue file byte-identical, 'for later 1', 'answered now 0'."
+      other_failures_still_to_later: "complete at unit altitude (injected rc 2 -> 'not recorded: disco cheio', item in later, no refusal line, menu not shown again)."
+      d_force_change: "complete. Read cepa-queue not_an_answer: 'descartado: <question?>' is not matched by DECIDE_ANSWER and ends with '?', so rc 6 would blame text the owner never typed; 'sim:/não:' texts pass the regex. `d` now passes force=True (only when the injected answer accepts force, so old signatures still work), pinned by the pty test with the real cepa-queue (item dropped, QUESTION in evidence, no refusal line, no '--force') and by the unit tests."
+      no_pass_on_timeout: "complete. each pty test asserts rc == 0 first; on_tty kills past the deadline, and inputs are anchor-based."
+    gap: null

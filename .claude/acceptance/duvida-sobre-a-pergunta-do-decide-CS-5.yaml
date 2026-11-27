@@ -1,0 +1,23 @@
+key: CS-5
+queue: duvida-sobre-a-pergunta-do-decide
+status: complete
+pass: 2
+criteria:
+  - id: AC1
+    text: "docs/spec/duvida-sobre-a-pergunta-do-decide.md CS-5 (cli): a tecla `?` pede em uma linha opcional o que o dono não entendeu. Texto digitado vai ao leitor e ao registro de feedback; Enter vazio manda o pedido sem dúvida, como antes."
+    altitude: cli
+    surface: "common/bin/cepa-run decide panel (cepa-until decide fila --repo ...) in a pty, key ?, fake reader that logs the request"
+    test: "tests/test_cepa_until_decide_doubt.py::test_question_mark_asks_and_the_typed_text_reaches_the_reader_and_feedback; ::test_question_mark_with_empty_enter_sends_no_doubt"
+    layer: cli-pty
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -> '41 passed in 12.85s'; -k question_mark -> '8 passed, 33 deselected in 2.77s' (N=8 > 0)"
+    sub_criteria:
+      prompt_shown: "complete. pty tests assert '<What did you not understand? [Enter skips]>' (on_tty's consumed-trigger marker; a timeout lists triggers without the angle brackets)."
+      typed_text_in_reader_request: "complete. real fake-reader subprocess: the logged reescrever-pergunta request has duvida_do_dono == 'variante O'; test also asserts rc == 0."
+      text_in_feedback_record: "complete. exactly one feedback line containing 'dúvida do dono: variante O'."
+      empty_enter_sends_no_doubt: "complete. Gap of pass 1 closed: test now asserts rc == 0 right after _key_session(''). on_tty returns os.waitstatus_to_exitcode of the child, and on timeout it SIGKILLs the child first, so a timeout yields rc -9 and fails the check. Same test asserts the line is shown, one request without duvida_do_dono, and a feedback line without the doubt label."
+    readings:
+      queue_file: "Fixture as in CS-1..CS-4."
+      scope: "CS-6..CS-11 are later items, not gaps here."
+      production_change: "common/bin/cepa-run: when neither doubt nor rewrite exists yet, `?` asks the optional line and feeds the text into the same `doubt` path used by w/v; a second `?` does not ask. Unit tests cover w-then-no-reask, second `?`, and an item without route. Existing pty tests of CS-1/6/7/8 were updated with the new anchor and an empty Enter."
+gap: ""

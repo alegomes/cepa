@@ -25,9 +25,21 @@ items:
     "Is this a doubt about the question? [Y/n]" e o `queue.yaml` continua igual;
     hoje a tela pergunta "Send the item back to the queue with that answer? [y/N]"
     e depois mostra "not recorded".'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 7f90cd8 (codigo + teste pty), 052f01d (4 testes que a prova
+    pediu), d961c36 (arquivos dos portoes) em session/chain-1126-1336. pair-reviewer
+    OK-WITH-NOTES, as 3 notas corrigidas. completion-auditor COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-1.yaml).
+    proof-reviewer PROVEN em 052f01d, 9 de 9 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-1.yaml);
+    1a passada tinha dado UNPROVEN com 4 sobreviventes. tests/run-all.sh em 052f01d:
+    257 de 260 arquivos verdes; test_cepa_until_decide_all, test_cepa_until_network
+    e test_common_queue_status vermelhos na suite com a maquina sob carga e verdes
+    rodados sozinhos no mesmo commit (falhas de tempo). Interino ate CS-2/CS-3:
+    sim deixa o item para depois, nao segue o fluxo antigo. v so entra no CS-4;
+    o teste test_doubt_typed_through_v_does_not_show_the_new_prompt_yet fixa isso
+    e precisa ser invertido no CS-4.'
+  head_commit: d961c368e9fd8b1200ae0da280ce7e54052a324b
 - id: CS-2
   title: com sim, a pergunta é reescrita com a dúvida do dono e reaparece no mesmo
     item
@@ -38,9 +50,19 @@ items:
     nova no bloco do mesmo item e pede a resposta de novo, o item segue sem resposta
     gravada e o arquivo de feedback ganha uma linha com o id do item, a pergunta
     e a dúvida; hoje o leitor nunca é chamado a partir de `w`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits cd9178d (codigo + testes), 71ec023 (2 testes que a prova pediu),
+    2d70789 (arquivos dos portoes) em session/chain-1126-1336. pair-reviewer OK-WITH-NOTES,
+    sem correcao a aplicar. completion-auditor COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-2.yaml).
+    proof-reviewer PROVEN em 71ec023, 15 de 15 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-2.yaml);
+    1a passada UNPROVEN com 2 sobreviventes. tests/run-all.sh iniciado em cd9178d:
+    260 de 260 arquivos, tudo verde; cepa-run identico entre cd9178d e 71ec023.
+    Campo novo no pedido de reescrita: duvida_do_dono. Limite segue em 1 reescrita
+    por item: o teste test_doubt_after_a_rewrite_does_not_call_the_reader_again
+    fixa isso e muda no CS-6.'
+  head_commit: 2d707892102144c1c5aab30ae6c37dada35db00c
 - id: CS-3
   title: com não, o texto é gravado como resposta sem sair do painel
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -49,9 +71,23 @@ items:
     that answer?" grava "O que é a variante O?" na evidência do item como resposta
     do dono e a tela mostra a confirmação de gravado; hoje a tela mostra "not recorded:
     resposta recusada" e nada é gravado.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 8eb723c (codigo + testes), 3ebb958 (3 testes que a prova pediu),
+    50cdc24 (correcao: a closure answer so repassa force quando verdadeiro), 70454bc
+    e af0f3b8 (arquivos dos portoes) em session/chain-1126-1336. pair-reviewer OK.
+    completion-auditor COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-3.yaml,
+    feito em 8eb723c; a correcao 50cdc24 nao muda o criterio). proof-reviewer PROVEN
+    em 50cdc24, 16 de 16 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-3.yaml);
+    1a passada UNPROVEN com 1 sobrevivente. tests/run-all.sh em 8eb723c: 1 falha
+    real (tests/test_cepa_until_decide_groups.py, TypeError no fake de _apply_answer
+    com assinatura antiga), corrigida em 50cdc24; tests/run-all.sh em 50cdc24: 260
+    de 260, tudo verde. n na pergunta de duvida + n em Send the item back grava
+    o texto com keep (item fica onde estava), como uma resposta comum em w ja fazia.
+    Painel de itens agrupados nao passa force: texto que parece duvida segue recusado
+    la, fora do escopo da spec.'
+  head_commit: af0f3b812a9795b3e5d1b16c1736e050c30fd012
 - id: CS-4
   title: a dúvida digitada no editor (`v`) segue o mesmo caminho do `w`
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -59,9 +95,19 @@ items:
     com um editor falso que salva "não entendi a pergunta", escolher `v` mostra
     "Is this a doubt about the question? [Y/n]"; hoje a tela mostra "not recorded:
     resposta recusada" e o item vai para depois.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits c45f5c4 (codigo + testes), c9d7b3f (teste pty que a auditoria
+    pediu), fcb2946 (arquivos dos portoes) em session/chain-1126-1336. pair-reviewer
+    OK-WITH-NOTES, sem correcao. completion-auditor COMPLETE na 2a passada (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-4.yaml);
+    1a passada INCOMPLETE por faltar o caso pty v + nao + sim com o cepa-queue answer
+    real. proof-reviewer PROVEN em c45f5c4, 11 de 11 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-4.yaml).
+    tests/run-all.sh em c45f5c4: 260 de 260, tudo verde; cepa-run identico entre
+    c45f5c4 e c9d7b3f. w e v usam um caminho so (typed_w). Observacao da revisao:
+    texto longo do editor com ''nao entendi'' no meio tambem dispara a pergunta
+    de duvida; nao ha teste de texto de varias linhas pelo v.'
+  head_commit: fcb29462aa99aacc47fffd3db3f1253af716ac60
 - id: CS-5
   title: a tecla `?` pede em uma linha opcional o que o dono não entendeu
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -70,9 +116,24 @@ items:
     you not understand? [Enter skips]"; digitar "variante O" faz o pedido ao leitor
     trazer esse texto, e Enter vazio faz o pedido ir sem dúvida, como hoje; hoje
     `?` chama o leitor sem perguntar nada.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 1cb3ae3 (codigo + testes, 5 arquivos de teste que apertam ?
+    ganharam o Enter extra), edaeb5a (checagem de saida 0 que a auditoria pediu),
+    3ed33b2 (2 testes de strip que a prova pediu), 5c7c035 (arquivos dos portoes)
+    em session/chain-1126-1336. pair-reviewer OK-WITH-NOTES, sem correcao. completion-auditor
+    COMPLETE na 2a passada (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-5.yaml).
+    proof-reviewer PROVEN em 3ed33b2, 9 de 9 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-5.yaml);
+    1a passada UNPROVEN com 1 sobrevivente (.strip()). tests/run-all.sh em 1cb3ae3:
+    260 de 260, tudo verde; cepa-run identico entre 1cb3ae3 e 3ed33b2. Decisoes:
+    segundo ? num item ja reescrito NAO pergunta (condicao ''not rewritten'', teste
+    test_second_question_mark_on_the_item_does_not_ask) e isso muda no CS-6/CS-7;
+    item sem rota aberta pergunta e o texto vai so ao feedback. Observacao da revisao:
+    asserts ''ASK in plain'' / ''SEND_BACK in plain'' nas linhas 50, 97, 204, 206
+    de tests/test_cepa_until_decide_doubt.py passam sozinhos em timeout de pty;
+    o rc == 0 da linha anterior cobre.'
+  head_commit: 5c7c0352b1b16ea02607812dbdba5c53afcb55c2
 - id: CS-6
   title: depois de um `?` sem texto, uma dúvida digitada dispara a segunda reescrita,
     e a terceira tentativa deixa o item para depois
@@ -83,9 +144,22 @@ items:
     nova no mesmo item; uma terceira dúvida não chama o leitor, mostra uma linha
     dizendo que o item fica para depois e o item aparece em "for later" no fecho;
     hoje o leitor é chamado no máximo uma vez por item.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 7170cd4 (codigo + testes), 72ed672 (2 testes de frase que a
+    prova pediu), e9309df (arquivos dos portoes) em session/chain-1126-1336. pair-reviewer
+    OK-WITH-NOTES, sem correcao. completion-auditor COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-6.yaml).
+    proof-reviewer PROVEN em 72ed672, 19 de 19 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-6.yaml;
+    corrigi no yaml a contagem ''20'' para ''19'' a pedido do proprio proof-reviewer);
+    1a passada UNPROVEN com 2 sobreviventes. tests/run-all.sh em 7170cd4: 259 de
+    260; tests/test_cepa_until_quota.py saiu com 143 (SIGTERM, processo morto de
+    fora) e passou sozinho no mesmo codigo (73 ok, 0 FAIL); cepa-run identico entre
+    7170cd4 e 72ed672. Contador rewrites por item no lugar do booleano rewritten.
+    Para o CS-7: a frase ''the reader rewrites once per item'' (segundo ? sem texto)
+    esta fixada por test_empty_question_mark_twice_says_the_reader_rewrites_once_per_item
+    e precisa mudar junto; comentario defasado em cepa-run ~4703.'
+  head_commit: e9309df8154fd53eaefc0442a4e118e797eb8ca0
 - id: CS-7
   title: um segundo `?` sem texto não dispara reescrita
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -94,9 +168,19 @@ items:
     vez só, e a tela diz que a pergunta não será reescrita de novo sem uma dúvida
     escrita; hoje a mensagem diz só "the reader rewrites once per item", sem citar
     que uma dúvida escrita dispara outra.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 0a598b7 (frase + testes), e22fa6b (arquivos dos portoes) em
+    session/chain-1126-1336. pair-reviewer OK-WITH-NOTES, sem correcao. completion-auditor
+    COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-7.yaml); na
+    1a rodada dele um teste do CS-2 oscilou sob carga e passou na 2a. proof-reviewer
+    PROVEN em 0a598b7, 4 de 4 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-7.yaml).
+    tests/run-all.sh em 0a598b7: 260 de 260, tudo verde. Frase nova: ''question
+    not rewritten again without a written doubt, the item stays for later''. Observacao
+    da revisao: a frase nao diz como escrever a duvida (linha do ? ou w); a spec
+    nao pede.'
+  head_commit: e22fa6b986c28a64587cac95022718a97fe7f212
 - id: CS-8
   title: texto recusado devolve o menu do mesmo item e a mensagem não cita `--force`
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
@@ -105,9 +189,29 @@ items:
     que cita só teclas presentes no menu daquele item, e o menu do mesmo item reaparece
     pronto para outra tecla; hoje a tela mostra "repita com --force" e passa ao
     item seguinte.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits dd8741e (codigo + testes; o passo de gravacao foi movido para
+    dentro do laco do item), 90f53af (d sem motivo passa force + checagem ''toda
+    tecla citada esta no menu''), 910f66c (testes da frase inteira e de accepts_force
+    que a prova pediu), 2777ff0 (arquivos dos portoes) em session/chain-1126-1336.
+    pair-reviewer OK-WITH-NOTES com 1 nota corrigida. completion-auditor COMPLETE
+    na 2a passada (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-8.yaml).
+    proof-reviewer PROVEN em 910f66c, 44 de 44 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-8.yaml:
+    10 refeitas no commit novo, 34 carregadas da 1a passada porque o cepa-run nao
+    mudou); 1a passada UNPROVEN com 5 sobreviventes. tests/run-all.sh em 90f53af:
+    260 de 260, tudo verde; cepa-run identico entre 90f53af e 910f66c. DECISAO TOMADA
+    SEM PERGUNTAR ao dono: o descarte (d) passa --force, porque o texto ''descartado:
+    <pergunta>'' e montado pelo painel e era recusado quando a pergunta termina
+    em ''?'' (defeito anterior a esta fila); sem isso a frase nova do CS-8 culpava
+    um texto que o dono nao digitou. Frase: ''text not recorded: it does not read
+    as an answer. [?] I don''t understand the question, [Enter] leave it for later''
+    (refusal_line(keys)); o CS-9 acrescenta [e] na lista. Painel de itens agrupados
+    nao foi tocado: la o texto sempre comeca com sim:/nao: e o codigo 6 nao ocorre.
+    Achado: tests/test_cepa_until_decide.py so acusa falha rodado como script, com
+    pytest o check() nao derruba o teste.'
+  head_commit: 2777ff020bae3ff1cb930b41b47ab54f622fb90e
 - id: CS-9
   title: a mensagem de recusa não cita a tecla `e` quando o item não tem detalhe
     técnico
@@ -115,18 +219,39 @@ items:
     entre si · superfície onde se observa: cli · teste vermelho declarado: no cenário
     do CS-8 com um item sem `evidence`, a linha de recusa não traz "[e]"; com um
     item com `evidence`, traz; hoje a recusa não cita tecla nenhuma.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits a5ba2f4 (codigo + testes), 01c79a5 (arquivos dos portoes) em
+    session/chain-1126-1336. pair-reviewer OK-WITH-NOTES, sem correcao. completion-auditor
+    COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-9.yaml). proof-reviewer
+    PROVEN em a5ba2f4, 8 de 8 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-9.yaml).
+    tests/run-all.sh em a5ba2f4: 260 de 260, tudo verde. Constante E_CHIP compartilhada
+    pelo menu e pela recusa; a recusa usa o mesmo show do menu; [e] vem primeiro,
+    na ordem do menu. Com evidence: ''text not recorded: it does not read as an
+    answer. [e] technical detail, [?] I don''t understand the question, [Enter]
+    leave it for later''. O rotulo de e no menu so e conferido por tests/test_cepa_until_decide.py
+    rodado como script.'
+  head_commit: 01c79a545296e27979776ba9cd67eb159ce9ba7d
 - id: CS-10
   title: a legenda da tecla `?` diz que a pergunta é reescrita em seguida
   why: 'herdado da ordem do texto da especificação; ninguém priorizou os critérios
     entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal,
     a linha da legenda que começa com "? =" contém "rewritten" e "60"; hoje ela
     diz "it is recorded as badly written and nothing is answered".'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 799d5bc (legenda + testes), df3d18d (arquivos dos portoes)
+    em session/chain-1126-1336. pair-reviewer OK-WITH-NOTES, sem correcao. completion-auditor
+    COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-10.yaml).
+    proof-reviewer PROVEN em 799d5bc, 9 de 9 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-10.yaml).
+    tests/run-all.sh em 799d5bc: 260 de 260, tudo verde. Legenda nova: ''? = I did
+    not understand the question: it is rewritten right away, in up to 60 s, and
+    nothing is answered'', numero vindo de UNCLEAR_REWRITE_SEC. Observacao da revisao:
+    4 testes que cortam a tela em ''badly written'' passaram a depender da mensagem
+    impressa depois da tecla.'
+  head_commit: df3d18de0aed3ca5f9fb0623eacb5caa2308ba86
 - id: CS-11
   title: a legenda do Enter diz que a dúvida pode ir a uma sessão de chat, com a
     fila e o item
@@ -134,6 +259,16 @@ items:
     entre si · superfície onde se observa: cli · teste vermelho declarado: num pseudo-terminal
     com a fila `f1` e o item `C1-47`, a linha da legenda que começa com "Enter ="
     contém "chat", "f1" e "C1-47"; hoje ela diz "leaves the question for later".'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commits 5404baa (legenda + testes), a460d3f (arquivos dos portoes)
+    em session/chain-1126-1336. pair-reviewer OK-WITH-NOTES, sem correcao. completion-auditor
+    COMPLETE (.claude/acceptance/duvida-sobre-a-pergunta-do-decide-CS-11.yaml).
+    proof-reviewer PROVEN em 5404baa, 23 de 23 perturbacoes vermelhas (docs/proof/duvida-sobre-a-pergunta-do-decide-CS-11.yaml).
+    tests/run-all.sh em 5404baa: 260 de 260, tudo verde. Legenda nova: ''Enter =
+    leaves the question for later; a doubt can go to a chat session (queue <fila>,
+    item <id>)'', fila e id vindos de split_label; sem fila ou id, o texto antigo.
+    O codigo dos 11 itens esta na branch session/chain-1126-1336, sem merge e sem
+    push.'
+  head_commit: a460d3f4a408ffb600a31ca8c66d88ccdc05bcfd

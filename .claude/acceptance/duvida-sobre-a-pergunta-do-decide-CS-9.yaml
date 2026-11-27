@@ -1,0 +1,20 @@
+key: CS-9
+queue: duvida-sobre-a-pergunta-do-decide
+status: complete
+pass: 1
+criteria:
+  - id: AC1
+    text: "docs/spec/duvida-sobre-a-pergunta-do-decide.md CS-9 (cli): a mensagem de recusa não cita a tecla `e` quando o item não tem detalhe técnico (sem `evidence`: linha de recusa sem '[e]'; com `evidence`: com '[e]')."
+    altitude: cli
+    surface: "common/bin/cepa-run decide panel (cepa-until decide fila --repo ...) in a pty, keys w + '...' + y, real `cepa-queue answer` refusing with exit code 6; item with and without `evidence`"
+    test: "tests/test_cepa_until_decide_doubt.py::test_refusal_does_not_cite_e_when_the_item_has_no_evidence_in_a_pty and ::test_refusal_cites_e_with_its_label_when_the_item_has_evidence_in_a_pty (plus unit ::test_refusal_line_with_the_three_pairs_is_the_exact_sentence)"
+    layer: cli-pty
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_until_decide_doubt.py -q -> '73 passed in 23.30s' (N=73 > 0)"
+    sub_criteria:
+      no_e_without_evidence: "complete. pty, real cepa-queue: sentence (cut at the first blank panel line, so the menu below is not in it) has no '[e]'; the menu has no 'e' key and no 'technical detail' anywhere on screen; whole sentence equals today's two-key one; cited == {?, Enter} and a subset of the menu keys."
+      e_with_evidence: "complete. pty, same scenario, item with evidence: '[e] technical detail' is in the refusal sentence (taken from the text after the refusal marker, not from the menu above); the whole sentence '[e] ..., [?] ..., [Enter] ...' is on screen; 'e' is on that item's menu and cited <= menu keys; the menu came back (MENU twice) and the queue file is unchanged."
+      e_checked_is_the_sentence_not_the_menu: "complete. the [e] assertions run on `sentence`, derived from text after REFUSED ('does not read as an answer'); menu keys are read separately from text before it."
+      no_pass_on_timeout: "complete. both tests assert rc == 0 first (on_tty kills past the deadline) and then the refusal marker is on screen, and a final assert fails if any check recorded a failure."
+      mutation_reasoning: "not run (source is read-only for me). By reading cepa-run: the line is built with ([E_CHIP] if show else []) where show = bool(ad.get('evidence')), the same flag as the menu chip; always-cite fails the no-evidence test, never-cite fails the evidence test."
+    gap: null

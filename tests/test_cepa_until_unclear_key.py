@@ -46,7 +46,8 @@ def test_question_mark_on_terminal_records_feedback_and_leaves_item():
         env = dict(os.environ, CEPA_FEEDBACK_DIR=fb, CEPA_RUN_READER="off")
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", "fila", "--repo", str(root)]
         rc, out = on_tty(cmd, str(root), env=env,
-                         inputs=[("[w] I write the answer", "?")], timeout=60)
+                         inputs=[("[w] I write the answer", "?"),
+                                 ("What did you not understand?", "")], timeout=60)
         plain = ANSI.sub("", out)
         check("CS-6 pty: decide exits 0", rc == 0, plain[-1500:])
         check("CS-6 pty: `?` is not refused as 'not one of the options'",

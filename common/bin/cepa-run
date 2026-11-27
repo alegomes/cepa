@@ -2234,6 +2234,148 @@ def build_failures(output, shown=BUILD_FAILURE_SHOWN):
     return 0, [cut(t) for t in tail], False
 
 
+def build_kind(command):
+    """Which known build `command` is: "suite" (`tests/run-all.sh`), "gradle"
+    or "maven" (by the program it starts with), else None. A known build
+    names the tests that failed, so a red repeats only those and the full
+    build runs once per pair of items (owner, 2026-11-26: "the slowness is
+    not the cepa build alone; Java/Gradle/Maven projects are hit the most").
+    Any other `--verify` keeps one whole build per item."""
+    if command == SUITE_WITHOUT_BUILD:
+        return "suite"
+    # A compound command (`a && b`, a pipe, a redirect) is not narrowed: the
+    # repetition would drop or mis-flag the other half.
+    if re.search(r"[;&|<>`$]", command or ""):
+        return None
+    try:
+        words = shlex.split(command or "")
+    except ValueError:
+        return None
+    name = os.path.basename(words[0]) if words else ""
+    if name in ("gradlew", "gradle"):
+        return "gradle"
+    if name in ("mvnw", "mvn"):
+        return "maven"
+    return None
+
+
+# Gradle options whose value is the next word (`-x lint`); the others are
+# flags or carry the value in the same word (`-Pk=v`, `--console=plain`).
+GRADLE_OPTIONS_WITH_VALUE = {
+    "-x", "--exclude-task", "-p", "--project-dir", "-I", "--init-script",
+    "-c", "--settings-file", "-b", "--build-file", "-g", "--gradle-user-home",
+    "--project-cache-dir", "--console", "--max-workers", "--warning-mode",
+    "--priority", "--include-build"}
+
+
+def failed_gradle_tests(text):
+    """["<task> <class>", ...] from Gradle's plain output: each
+    "> Task :app:test FAILED" and the "FooTest > bar() FAILED" lines after it.
+    Empty when a failed task names no test (compilation, lint): then the whole
+    build repeats."""
+    task, pairs, bare = None, [], False
+    for line in text.splitlines():
+        m = re.match(r"^> Task (:\S+)( FAILED)?\s*$", line)
+        if m:
+            if task and not any(p.startswith(task + " ") for p in pairs):
+                bare = True
+            task = m.group(1) if m.group(2) else None
+            continue
+        m = re.match(r"^(\S+) > .* FAILED\s*$", line)
+        if m and task:
+            pair = f"{task} {m.group(1)}"
+            if pair not in pairs:
+                pairs.append(pair)
+    if task and not any(p.startswith(task + " ") for p in pairs):
+        bare = True
+    return [] if bare else pairs
+
+
+def failed_maven_tests(text):
+    """Test classes from the "[ERROR] Failures:" and "[ERROR] Errors:" blocks
+    of surefire/failsafe ("[ERROR]   FooTest$Inner.bar:6 ..."), as simple
+    class names. Empty when the build failed for another reason."""
+    classes, inside = [], False
+    for line in text.splitlines():
+        if re.match(r"^\[ERROR\] (Failures|Errors):\s*$", line):
+            inside = True
+            continue
+        if not inside:
+            continue
+        m = re.match(r"^\[ERROR\]   (\S+)", line)
+        if not m:
+            inside = False
+            continue
+        token = re.sub(r":\d+$", "", m.group(1).split("(", 1)[0])
+        if ">" in token:
+            cls = token.split(">", 1)[0]
+        elif "." in token:
+            cls = token.rsplit(".", 1)[0]
+        elif re.match(r"^\[ERROR\]   \S+ »", line):
+            cls = token          # "FooTest » IllegalState": the class itself broke
+        else:
+            return []            # a line this reader cannot name: never a partial list
+        cls = cls.split("$", 1)[0].rsplit(".", 1)[-1]
+        if not re.match(r"^[A-Za-z_]\w*$", cls):
+            return []
+        if cls not in classes:
+            classes.append(cls)
+    return classes
+
+
+def failed_tests(command, log, offset):
+    """What the red build `command` named as failed in the part of the run's
+    `.log` written after `offset`: files (suite), "<task> <class>" (Gradle),
+    classes (Maven). Empty for an unknown build or a red that names no test."""
+    kind = build_kind(command)
+    if kind == "suite":
+        return failed_suite_files(log, offset)
+    if kind not in ("gradle", "maven"):
+        return []
+    try:
+        with open(log, "rb") as f:
+            f.seek(offset)
+            text = f.read().decode("utf-8", "replace")
+    except OSError:
+        return []
+    return (failed_gradle_tests(text) if kind == "gradle"
+            else failed_maven_tests(text))
+
+
+def repeat_command(command, failed):
+    """The command that repeats only `failed` (from `failed_tests`), or
+    `command` itself when there is nothing to narrow to."""
+    kind = build_kind(command)
+    if not failed or kind is None:
+        return command
+    if kind == "suite":
+        return " ".join([command] + [shlex.quote(f) for f in failed])
+    if kind == "gradle":
+        by_task = {}
+        for pair in failed:
+            task, cls = pair.split(" ", 1)
+            by_task.setdefault(task, []).append(cls)
+        given = shlex.split(command)
+        if any(w.startswith("--tests") for w in given):
+            return command       # already filtered by the owner: not narrowed
+        words, takes_value = [shlex.quote(given[0])], False
+        for word in given[1:]:
+            # Keeps the options of the original command (`-x lint`,
+            # `-Pprofile=ci`, `--no-daemon`) and drops only its tasks.
+            if takes_value or word.startswith("-"):
+                words.append(shlex.quote(word))
+            takes_value = word in GRADLE_OPTIONS_WITH_VALUE
+        for task, classes in by_task.items():
+            words.append(shlex.quote(task))
+            for cls in classes:
+                words += ["--tests", shlex.quote(cls)]
+        return " ".join(words)
+    names = shlex.quote(",".join(failed))
+    return (f"{command} -Dtest={names} -Dit.test={names} "
+            "-Dsurefire.failIfNoSpecifiedTests=false "
+            "-Dfailsafe.failIfNoSpecifiedTests=false")
+
+
 def undo_item(repo, tree, run_id, ident, since, in_the_middle=(),
                 suffix="vermelho", back=1, queue=None):
     """Takes off the night branch the commits of an item whose build went
@@ -3725,7 +3867,7 @@ ROUTE_KIND_LABEL = {"owner-task": "Task for you",
                     "open-question": "Open question"}
 
 
-def legend_lines(chips, summary, delivered=False):
+def legend_lines(chips, summary, delivered=False, queue=None, ident=None):
     """One line per key of the menu, in the menu's order: what each key does.
     The mechanics never change (`y` returns the item to the queue, `n` keeps it);
     what the owner needs is what that means for the WORK, which only the agent
@@ -3733,7 +3875,11 @@ def legend_lines(chips, summary, delivered=False):
     fila"). CS-3 (perguntas-da-largada-legiveis): the legend used to be a single
     line naming three of the keys, and the question described "yes" a second
     way; now only the legend says it, once per key, and "task" and "item" never
-    share a line (L3)."""
+    share a line (L3).
+    CS-11 (duvida-sobre-a-pergunta-do-decide): with the item's own `queue` and bare
+    `ident`, the Enter entry also says a doubt can go to a chat session and names
+    both, so the owner knows what to quote there. Without either it keeps the
+    plain entry."""
     yes = summary.get("se_sim")
     no = summary.get("se_nao")
     if delivered:
@@ -3748,9 +3894,14 @@ def legend_lines(chips, summary, delivered=False):
     effect.update({"w": "you write the answer in one line; the next run reads it",
                    "v": "you write the answer in the editor; the next run reads it",
                    "e": "shows the technical detail, written for agents",
-                   "?": "I did not understand the question: it is recorded as "
-                        "badly written and nothing is answered",
-                   "Enter": "leaves the question for later",
+                   # CS-10 (duvida-sobre-a-pergunta-do-decide): the ceiling is the
+                   # constant defined further down, read when the legend is built.
+                   "?": "I did not understand the question: it is rewritten right "
+                        f"away, in up to {UNCLEAR_REWRITE_SEC} s, and nothing is "
+                        "answered",
+                   "Enter": ("leaves the question for later; a doubt can go to a "
+                             f"chat session (queue {queue}, item {ident})"
+                             if queue and ident else "leaves the question for later"),
                    "q": "stops the questions; the rest stays for later"})
     return [f"{key} = {effect[key]}" for key, _ in chips if key in effect]
 
@@ -3780,6 +3931,49 @@ def is_yes(r):
     """Yes at a `[y/N]` confirmation: only `y` or `yes` (CS-4 of
     docs/spec/teclas-em-ingles.md). `s` and `sim` count as no, like any other text."""
     return str(r or "").strip().lower() in ("y", "yes")
+
+
+def _queue_module():
+    """`cepa-queue` loaded as a module, once, so the panel can call its rules
+    instead of keeping a copy that drifts (it is a script without `.py`, hence
+    the loader). Returns None when it cannot be loaded."""
+    if "mod" not in _QUEUE_MODULE:
+        try:
+            import importlib.machinery
+            import importlib.util
+            loader = importlib.machinery.SourceFileLoader("cepa_queue_rules",
+                                                          str(CEPA_PLAN))
+            spec = importlib.util.spec_from_loader("cepa_queue_rules", loader)
+            mod = importlib.util.module_from_spec(spec)
+            loader.exec_module(mod)
+            _QUEUE_MODULE["mod"] = mod
+        except (Exception, SystemExit):  # noqa: BLE001
+            # `cepa-queue` does sys.exit(2) when PyYAML is missing; that must not
+            # take the panel down.
+            _QUEUE_MODULE["mod"] = None
+    return _QUEUE_MODULE["mod"]
+
+
+_QUEUE_MODULE = {}
+
+
+def looks_like_doubt(text):
+    """CS-1 of docs/spec/duvida-sobre-a-pergunta-do-decide.md: the text typed in
+    `w` reads as a doubt about the question (ends in `?` or asks for
+    clarification); `v` joins in CS-4. It is `cepa-queue`'s `not_an_answer` rule,
+    the very one `cepa-queue answer` refuses with, minus the punctuation-only
+    case (no word at all: a refusal, not a doubt), checked here by itself."""
+    if not re.search(r"\w", str(text or "")):
+        return False
+    mod = _queue_module()
+    if mod is None:
+        return False
+    return bool(mod.not_an_answer(text))
+
+
+def is_yes_default(r):
+    """Yes at a `[Y/n]` confirmation: Enter, `y` or `yes`."""
+    return str(r or "").strip().lower() in ("", "y", "yes")
 
 
 class NoAnswer(TimeoutError):
@@ -4217,6 +4411,24 @@ class Panel:
                             else self.t.c("vermelho", f"✗ not recorded: {msg}")))
 
 
+# CS-8 (duvida-sobre-a-pergunta-do-decide): `cepa-queue answer` exits with this code
+# for text that is not an answer. Its message cites `--force`, which the panel does not
+# have, so the panel says its own line and gives the same item's menu back.
+ANSWER_REFUSED_RC = 6
+
+
+# The menu chip for the technical detail; the menu and the refusal line (CS-9) share it.
+E_CHIP = ("e", "technical detail")
+
+
+def refusal_line(keys):
+    """CS-8: the one line shown when `cepa-queue answer` refuses the text. `keys` is the
+    list of (key, label) the item's menu has (`[e]` only when the item shows it, CS-9);
+    only those keys are cited."""
+    return ("text not recorded: it does not read as an answer. "
+            + ", ".join(f"[{k}] {label}" for k, label in keys))
+
+
 # CS-8: the longest rewrite-failure reason the panel prints.
 FAILURE_REASON_MAX = 200
 
@@ -4274,14 +4486,18 @@ GROUP_NOTE = "respondida em grupo de"
 RECOMMENDS = re.compile(r"\bRecomendo\s+(sim|não|nao)\b", re.IGNORECASE)
 
 
-def _apply_answer(repo, ans_queue, ans_ident, text, keep=False, drop=False):
+def _apply_answer(repo, ans_queue, ans_ident, text, keep=False, drop=False,
+                  force=False):
     """`cepa-queue answer <queue> <id>`: (rc, output). `decide` records each answer
-    through it, one item at a time or one per member of a group."""
+    through it, one item at a time or one per member of a group. `force` passes
+    `--force` (CS-3 of duvida-sobre-a-pergunta-do-decide): only for text the owner
+    cleared at the doubt prompt."""
     p = subprocess.run(
         [sys.executable, str(CEPA_PLAN), "answer", ans_queue, ans_ident,
          "--answer", text, "--repo", str(repo)]
         + (["--keep"] if keep else [])
         + (["--drop"] if drop else [])
+        + (["--force"] if force else [])
         + ([] if _answer_commit else ["--no-commit"])
         + (["--multiline"] if "\n" in text else []),
         capture_output=True, text=True, timeout=60)
@@ -4524,6 +4740,16 @@ def ask_group(screen, g, i, n, question, apply, progress, with_queue=False):
     return applied, for_later, one_by_one, False
 
 
+def accepts_force(fn):
+    """True when `fn` can take a `force` keyword (a `force` parameter or `**kwargs`)."""
+    import inspect
+    try:
+        params = inspect.signature(fn).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(p.name == "force" or p.kind == p.VAR_KEYWORD for p in params)
+
+
 def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
            output=print, answer=None, land=None, wait=None, first=1, of=None,
            opened=False, note=None, close=True, progress=None, unclear=None,
@@ -4554,16 +4780,25 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
     analysis = analysis or {}
     by_item = analysis.get("itens") or {}
     if answer is None:
-        def answer(ident, text, keep=False, drop=False):
+        def answer(ident, text, keep=False, drop=False, force=False):
             ans_queue, ans_ident = split_label(repo, queue, ident)
+            # `force` is forwarded only when true, so a caller whose `_apply_answer`
+            # predates CS-3 (no `force` parameter) is called exactly as before.
+            if force:
+                return _apply_answer(repo, ans_queue, ans_ident, text, keep, drop,
+                                     force=True)
             return _apply_answer(repo, ans_queue, ans_ident, text, keep, drop)
     if unclear is None:
         # CS-6 (perguntas-da-largada-legiveis): "I did not understand" goes to the
         # global feedback ledger `/common:feedback` triages, target `cepa-run`;
         # the item gets no answer (spec Q3, "Decided without asking").
-        def unclear(ident, text):
+        def unclear(ident, text, doubt=""):
             msg = (f"pergunta mal escrita no painel do cepa-run (fila {queue}, "
                    f"item {ident}): {text}")
+            if doubt:
+                # CS-2 (duvida-sobre-a-pergunta-do-decide): the triage needs to know
+                # which term was obscure.
+                msg += f" | dúvida do dono: {doubt}"
             try:
                 p = subprocess.run(
                     [sys.executable, str(HERE / "cepa-feedback"), "add", msg,
@@ -4579,11 +4814,15 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # reword-route --replace` (this script never edits queue.yaml). Only an open
         # route can be reworded: a delivered item or one without a route keeps the
         # CS-6 path (recorded as unclear, left for later).
-        def rewrite(ad, shown):
+        def rewrite(ad, shown, doubt=""):
             if ad.get("human_pending") is None or ad.get("reason") == "pos-entrega":
                 return None, "the item has no open route to reword"
             payload = dict(route_payload(ad), tarefa=UNCLEAR_TASK,
                            pergunta_mal_escrita=shown)
+            if doubt:
+                # CS-2: the owner's typed doubt, next to the badly written question.
+                # Never written to queue.yaml.
+                payload["duvida_do_dono"] = doubt
             try:
                 route, error = read_route(repo, payload,
                                           time.monotonic() + UNCLEAR_REWRITE_SEC,
@@ -4730,10 +4969,11 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
         # 10/15: "99% of the time I don't know what to answer"). With no written
         # question, the terminal asks the default one, instead of showing the evidence and
         # leaving the owner to find the question on his own.
-        rewritten = False
-        # CS-7: `?` rewrites the question once and the block asks again; the second
-        # `?` on the same item does not call the reader (spec, "Decided without
-        # asking": no loop holding the launch).
+        rewrites = 0
+        typed_w = None
+        # CS-7/CS-6: the first rewrite always happens; the second only with a written
+        # doubt (typed in `w`/`v` or in the `?` line); there is never a third (spec,
+        # "Decided without asking": no loop holding the launch).
         while True:
             screen.blank()
             shown_question = question_text
@@ -4778,12 +5018,18 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                      ("d", "the task no longer applies" if delivered
                       else "discard the item")]
             if show:
-                chips.append(("e", "technical detail"))
+                chips.append(E_CHIP)
             chips += [("?", "I don't understand"), ("Enter", "later"), ("q", "quit")]
             screen.blank()
-            screen.legend(legend_lines(chips, summary, delivered))
+            # CS-11: the item's OWN queue and bare id (`split_label`: in a `--all`
+            # run the label is `queue/id`), the same source the answer uses.
+            own_queue, own_ident = split_label(repo, queue, ident)
+            screen.legend(legend_lines(chips, summary, delivered,
+                                       queue=own_queue, ident=own_ident))
             prompt = screen.menu(chips, recommended_letter(d))
             valid = {"y", "n", "w", "v", "d", "", "q", "?"} | ({"e"} if show else set())
+            doubt = ""
+            not_a_doubt = False
             while True:
                 raw = str(question(prompt))
                 r = raw.strip().lower()
@@ -4814,20 +5060,106 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
                                           if code else "") + "nothing written in the editor")
                         continue
                 break
+            if r in ("w", "v"):
+                if r == "w":
+                    typed_w = str(question(screen.follow_up(
+                        "Your answer, in one line (the next run reads this): "))).strip()
+                else:
+                    # CS-4: the editor text takes the same path as the `w` text.
+                    typed_w = typed
+                if typed_w and looks_like_doubt(typed_w):
+                    # CS-1/CS-2/CS-4: text that looks like a doubt is asked about before
+                    # anything is recorded. Yes acts like `?` with the text as the
+                    # owner's doubt (same rewrite path); no falls through to the
+                    # answer path (CS-3).
+                    if is_yes_default(question(screen.follow_up(
+                            "Is this a doubt about the question? [Y/n] "))):
+                        r, doubt = "?", typed_w
+                    else:
+                        # CS-3: the owner said "not a doubt"; that is the only
+                        # thing that lets the panel record text `cepa-queue
+                        # answer` would refuse (it passes `--force`).
+                        not_a_doubt = True
             if r != "?":
+                text, give_back, drop = "", False, False
+                if r == "d":
+                    drop = True
+                    base = question_text or route or "the item"
+                    extra = str(question(screen.follow_up(
+                        "Why, in one line? [Enter skips, v opens the editor] "))).strip()
+                    if extra.lower() == "v":
+                        extra = edit_in_editor(ident, question_text or route,
+                                               ad.get("title"))
+                    text = (("tarefa encerrada" if delivered else "descartado")
+                            + f": {base}" + (f". {extra}" if extra else ""))
+                elif r in ("w", "v"):
+                    # `w`/`v` text was read, and the doubt asked, above.
+                    text = typed_w
+                    if text:
+                        give_back = is_yes(question(screen.follow_up(
+                            "Send the item back to the queue with that answer? [y/N] ")))
+                elif r in ("y", "n"):
+                    give_back = r == "y"
+                    base = question_text or route or "unblock the item"
+                    # There is always room for a comment, also on `y` with a
+                    # written question: the owner wanted to say something beyond yes/no and
+                    # the next run reads what he wrote (10/15).
+                    extra = str(question(screen.follow_up(
+                        "Anything to add, in one line? [Enter skips, v opens the editor] "))).strip()
+                    if extra.lower() == "v":
+                        extra = edit_in_editor(ident, question_text or route,
+                                               ad.get("title"))
+                    text = (("sim" if give_back else "não") + f": {base}"
+                             + (f" Instrução: {instruction}" if give_back and instruction
+                                else "")
+                             + (f". {extra}" if extra else ""))
+                rc = msg = None
+                if text:
+                    fk = {"force": True} if not_a_doubt else {}
+                    # `d`: the panel built this text and the discard is the owner's
+                    # explicit choice, so it is recorded even when the question it
+                    # quotes ends in "?". An injected `answer` of the old signature
+                    # (no `force`, no `**kwargs`) is called as before.
+                    dk = {"force": True} if accepts_force(answer) else {}
+                    rc, msg = (answer(ident, text, drop=True, **dk) if drop
+                               else answer(ident, text, **fk) if give_back
+                               else answer(ident, text, keep=True, **fk))
+                    if rc == ANSWER_REFUSED_RC:
+                        # CS-8: text that is not an answer. Nothing was recorded; the
+                        # same item's menu comes back (`doubt`, `not_a_doubt` and the
+                        # typed text are set again at the top of the loop, `rewrites`
+                        # is kept). CS-9: `[e]` is cited, first as on the menu, only
+                        # when this item's menu offers it (the same `show`).
+                        screen.warning(refusal_line(
+                            ([E_CHIP] if show else [])
+                            + [("?", "I don't understand the question"),
+                               ("Enter", "leave it for later")]))
+                        continue
                 break
-            rc, msg = unclear(ident, shown_question)
+            if not doubt and rewrites < 2:
+                # CS-5: the `?` key asks, in one optional line, what the owner did not
+                # understand; the text takes the same `doubt` path as a doubt typed in
+                # `w`/`v` (which is never asked again: it is already in `doubt`). After
+                # two rewrites it does not ask: the reader will not be called again.
+                doubt = str(question(screen.follow_up(
+                    "What did you not understand? [Enter skips] "))).strip()
+            kw = {"doubt": doubt} if doubt else {}
+            rc, msg = unclear(ident, shown_question, **kw)
             screen.recorded("question recorded as badly written; no answer on the "
                             "item" if rc == 0 else msg, ok=rc == 0)
-            # CS-8: a failed rewrite, or the second `?`, says so in one line and the
-            # item stays for later; the panel goes on to the next item.
-            if rewritten:
+            # Three outcomes: a third attempt, or a second `?` with no written doubt,
+            # says so in one line and the item stays for later; otherwise it rewrites.
+            if rewrites >= 2:
                 screen.warning("question not rewritten again, the item stays for "
-                               "later: the reader rewrites once per item")
+                               "later: the reader rewrites at most twice per item")
                 break
-            rewritten = True
+            if rewrites == 1 and not doubt:
+                screen.warning("question not rewritten again without a written "
+                               "doubt, the item stays for later")
+                break
+            rewrites += 1
             screen.note(f"rewriting the question, up to {UNCLEAR_REWRITE_SEC} s")
-            new_route, error = rewrite(ad, shown_question)
+            new_route, error = rewrite(ad, shown_question, **kw)
             if new_route is None:
                 screen.warning(f"question not rewritten, the item stays for later "
                                f"and the panel goes on: {failure_reason(error)}")
@@ -4847,41 +5179,7 @@ def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
             continue
         if r == "q":
             stopped = True
-        text, give_back, drop = "", False, False
-        if r == "d":
-            drop = True
-            base = question_text or route or "the item"
-            extra = str(question(screen.follow_up(
-                "Why, in one line? [Enter skips, v opens the editor] "))).strip()
-            if extra.lower() == "v":
-                extra = edit_in_editor(ident, question_text or route, ad.get("title"))
-            text = (("tarefa encerrada" if delivered else "descartado")
-                    + f": {base}" + (f". {extra}" if extra else ""))
-        elif r in ("w", "v"):
-            text = (typed if r == "v" else
-                    str(question(screen.follow_up("Your answer, in one line (the "
-                                                  "next run reads this): "))).strip())
-            if text:
-                give_back = is_yes(question(screen.follow_up(
-                    "Send the item back to the queue with that answer? [y/N] ")))
-        elif r in ("y", "n"):
-            give_back = r == "y"
-            base = question_text or route or "unblock the item"
-            # There is always room for a comment, also on `y` with a
-            # written question: the owner wanted to say something beyond yes/no and
-            # the next run reads what he wrote (10/15).
-            extra = str(question(screen.follow_up(
-                "Anything to add, in one line? [Enter skips, v opens the editor] "))).strip()
-            if extra.lower() == "v":
-                extra = edit_in_editor(ident, question_text or route, ad.get("title"))
-            text = (("sim" if give_back else "não") + f": {base}"
-                     + (f" Instrução: {instruction}" if give_back and instruction
-                        else "")
-                     + (f". {extra}" if extra else ""))
         if text:
-            rc, msg = (answer(ident, text, drop=True) if drop
-                       else answer(ident, text) if give_back
-                       else answer(ident, text, keep=True))
             if rc == 0:
                 applied.append(f"{ident}: {msg}")
                 progress["answered"] = progress.get("answered", 0) + 1
@@ -8257,9 +8555,10 @@ def _main(argv=None):
     def outcome(ident, kind, text, queue=None):
         outcomes[(queue or cur, ident)] = (kind, text)
 
-    # O1 (owner, 2026-11-26): with `tests/run-all.sh` as the build, the full
-    # suite runs once per pair of `done` items instead of once per item. In
-    # run reforma-de-nomes/2026-11-25-2108 the suite took 393 of 495 min.
+    # O1 (owner, 2026-11-26): with a known build (`tests/run-all.sh`, Gradle,
+    # Maven: `build_kind`), the full build runs once per pair of `done` items
+    # instead of once per item. In run reforma-de-nomes/2026-11-25-2108 the
+    # suite took 393 of 495 min. Any other `--verify` keeps one build per item.
     # `deferred` is the 1st item of the pair, still unchecked: its key, queue,
     # queue file and the commit it ended on (`mid`). An item that changed a
     # hook is never deferred, because its hooks are only reinstalled after a
@@ -8267,11 +8566,18 @@ def _main(argv=None):
     deferred = None
     last_suite_sec = None
 
+    known_build = build_kind(verify)
+    # Gradle and Maven stop at the first module whose tests fail, so the
+    # modules after it never ran: green on the failed tests alone proves
+    # nothing about them, and the full build runs once more to cover the rest.
+    # `tests/run-all.sh` runs every file whatever fails, so it needs none.
+    stops_early = known_build in ("gradle", "maven")
+    COVER = ("green on the failed tests; the build stops at the first failure, "
+             "so the full build runs again to cover the rest")
+
     def suite_repeat(failed):
-        """The command that repeats only `failed`, or the whole suite."""
-        if failed:
-            return " ".join([verify] + [shlex.quote(f) for f in failed])
-        return verify
+        """The command that repeats only `failed`, or the whole build."""
+        return repeat_command(verify, failed)
 
     def red_return(k, ident_, queue_, plan_path_, reason, reason2, extra=""):
         """Takes a `done` item whose full build went red off the run branch
@@ -8391,7 +8697,7 @@ def _main(argv=None):
                    "commit": pair["mid"]})
         reason2 = None
         if not green:
-            failed = failed_suite_files(log, offset)
+            failed = failed_tests(verify, log, offset)
             left = (deadline + slack - datetime.now()).total_seconds()
             green, sec2, reason2 = verify_at(repo, pair["mid"],
                                              suite_repeat(failed), left, log,
@@ -8401,6 +8707,17 @@ def _main(argv=None):
                        "segundos": int(sec2), "motivo": reason2,
                        "repeticao": 2, "adiado": True,
                        **({"arquivos": failed} if failed else {})})
+            if green and failed and stops_early:
+                step(COVER)
+                left = (deadline + slack - datetime.now()).total_seconds()
+                green, sec3, reason2 = verify_at(repo, pair["mid"], verify, left,
+                                                 log, on_launch=launched,
+                                                 on_tick=tick)
+                in_flight.pop("pid_filho", None)
+                log_event({"evento": "verify", "id": pair["ident"],
+                           "verde": green, "segundos": int(sec3),
+                           "motivo": reason2, "repeticao": 3, "adiado": True,
+                           "cobre_o_resto": True})
         if green:
             step(f"green ({human(timedelta(seconds=sec))}): {pair['ident']} stays")
             return False, None
@@ -8729,7 +9046,7 @@ def _main(argv=None):
             log_event({"evento": "done_sem_commit", "id": ident})
             step("`done` with no commit on the run branch: the "
                   "work, if any, ended up on another branch")
-        elif (run_state == "done" and verify == SUITE_WITHOUT_BUILD
+        elif (run_state == "done" and known_build
               and deferred is None and last_suite_sec
               and key in first
               and not changed_hooks(tree, first[key][0])
@@ -8740,7 +9057,7 @@ def _main(argv=None):
             log_event({"evento": "verify_adiado", "id": ident,
                        "commit": deferred["mid"]})
             step("full build deferred: it runs after the next item, "
-                 "on both (one suite per pair of items)")
+                 "on both (one build per pair of items)")
         elif run_state == "done" and verify:
             pair = deferred if deferred and deferred["key"] != key else None
             if pair:
@@ -8757,7 +9074,7 @@ def _main(argv=None):
             log_event({"evento": "verify", "id": ident, "verde": green,
                       "segundos": int(verify_sec), "motivo": verify_reason,
                       **({"par": pair["ident"]} if pair else {})})
-            if verify == SUITE_WITHOUT_BUILD and verify_reason != \
+            if known_build and verify_reason != \
                     "did not finish within the window":
                 last_suite_sec = verify_sec
             failed = []
@@ -8767,10 +9084,9 @@ def _main(argv=None):
                 # 09/26). With no time for it, it is a red return: the next
                 # attempt does the rest.
                 left = (deadline + slack - datetime.now()).total_seconds()
-                failed = (failed_suite_files(log, log_offset)
-                          if verify == SUITE_WITHOUT_BUILD else [])
+                failed = failed_tests(verify, log, log_offset)
                 again = suite_repeat(failed) if failed else verify
-                what = (f"only the {len(failed)} failed file(s)" if failed
+                what = (f"only the {len(failed)} failed test file(s) or class(es)" if failed
                         else "the full build")
                 if (failed and left > 0) or left >= verify_sec:
                     step(f"red ({verify_reason}); running {what} "
@@ -8783,6 +9099,21 @@ def _main(argv=None):
                               "segundos": int(sec2), "motivo": reason2,
                               "repeticao": 2,
                               **({"arquivos": failed} if failed else {})})
+                    if green and failed and stops_early:
+                        step(COVER)
+                        left = (deadline + slack - datetime.now()).total_seconds()
+                        offset3 = log_size(log)
+                        green, sec3, reason2 = run_verify(
+                            verify, tree, left, log, on_launch=launched,
+                            on_tick=tick)
+                        in_flight.pop("pid_filho", None)
+                        log_event({"evento": "verify", "id": ident,
+                                   "verde": green, "segundos": int(sec3),
+                                   "motivo": reason2, "repeticao": 3,
+                                   "cobre_o_resto": True})
+                        if not green:
+                            failed = failed_tests(verify, log, offset3)
+                            again = suite_repeat(failed) if failed else verify
                 else:
                     reason2 = "did not fit in what is left of the window"
                 if green:
@@ -8815,6 +9146,18 @@ def _main(argv=None):
                            "motivo": mid_reason, "par": ident, "no_meio": True,
                            "commit": pair["mid"],
                            **({"arquivos": failed} if failed else {})})
+                if mid_green and failed and stops_early:
+                    step(COVER + f" on {pair['mid'][:10]}")
+                    left = (deadline + slack - datetime.now()).total_seconds()
+                    mid_green, mid_sec, mid_reason = verify_at(
+                        repo, pair["mid"], verify, left, log,
+                        on_launch=launched, on_tick=tick)
+                    in_flight.pop("pid_filho", None)
+                    log_event({"evento": "verify", "id": pair["ident"],
+                               "verde": mid_green, "segundos": int(mid_sec),
+                               "motivo": mid_reason, "par": ident,
+                               "no_meio": True, "commit": pair["mid"],
+                               "cobre_o_resto": True})
                 if mid_green:
                     step(f"{pair['ident']} is green on its own commit: "
                          f"{ident} broke the suite")
