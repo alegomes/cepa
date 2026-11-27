@@ -5256,6 +5256,28 @@ def review_pending(review):
     return (f"{found} decision(s)", found) if found else (None, None)
 
 
+def owner_count_text(review, owner_n):
+    """(text, decide): the count of what waits for the owner, one phrase for the
+    `Next` panel and the closing block so they always agree, and whether the
+    owner has something to decide. With decisions in the analysis, its own phrase.
+    With open owner questions in the queue and no decision counted by the analysis,
+    the queue's count (plus the analysis' tasks, if it counts any): the word
+    "nothing" never sits next to a listed question. Without questions, the
+    analysis' phrase, or None when the analysis gives no count."""
+    sentence, decisions = review_pending(review) if review else (None, None)
+    if decisions:
+        return f"{sentence} (from the analysis)", True
+    if owner_n:
+        tasks = re.search(r"(\d+)\s+task", sentence or "")
+        text = f"{owner_n} owner question(s)"
+        if tasks and int(tasks.group(1)):
+            text += f" and {tasks.group(1)} task(s) (tasks from the analysis)"
+        return text, True
+    if sentence is not None:
+        return f"{sentence} (from the analysis)", False
+    return None, False
+
+
 def closing_block(queue, run_id, all_queues, start_branch, commits, delivered,
                   stuck, no_progress, side_saved, side_total, review, review_why, owner_count,
                   land_pending, red_ids, repo, landed=None):
@@ -5300,11 +5322,8 @@ def closing_block(queue, run_id, all_queues, start_branch, commits, delivered,
     sentence, decisions = review_pending(review) if review else (None, None)
     no_count = bool(review) and sentence is None
     if sentence is not None:
-        pending = f"{sentence} (the count in the analysis)"
-        if owner_count is not None and decisions is not None \
-                and owner_count != decisions:
-            pending += (f"; the Next panel above lists only the {owner_count} "
-                        "question(s) the queue holds")
+        pending, decide_now = owner_count_text(review, owner_count or 0)
+        decisions = 1 if decide_now else decisions
     else:
         parts = ([f"{owner_count} owner question(s)"] if owner_count else [])
         if land_pending:
@@ -5347,7 +5366,7 @@ def closing_block(queue, run_id, all_queues, start_branch, commits, delivered,
 NEXT_QUESTIONS_SHOWN = 5
 
 
-def next_rows(repo, queue, run_id, state, ledger, report, left=None):
+def next_rows(repo, queue, run_id, state, ledger, report, left=None, review=None):
     """The rows of the "Next" panel: the merge (named here and nowhere else in the
     end of the run), the owner's questions, then what the run state leaves with the
     owner (the plugin reinstall...). Numbered, in that order."""
@@ -5366,7 +5385,7 @@ def next_rows(repo, queue, run_id, state, ledger, report, left=None):
         n += 1
         dest = action.get("destino")
         rows.append([("negrito", f"{n}. "), ("negrito", action_label(action)),
-                     (None, ": "), ("ciano", f"cepa-run land {queue}/{run_id} --yes", True)])
+                     (None, ": "), ("ciano", f"cepa run land {queue}/{run_id} --yes", True)])
         rows.append([(None, "   "), ("cinza", f"build + push: takes the run branch to "
                                         f"`{dest}`, runs the full build, pushes", True)])
         why = not_clean_reason(repo, queue, state, ledger)
@@ -5379,9 +5398,16 @@ def next_rows(repo, queue, run_id, state, ledger, report, left=None):
                          (None, "the run is clean (fast-forward, green build, nothing "
                           "waiting)", True)])
     owner = owner_questions((report or {}).get("deferred"))
-    if owner:
+    # With an analysis that gives a count, the row states THAT count (the closing
+    # block's `Pending for you` line says the same one); the questions the queue
+    # can name are listed under it. Otherwise the queue's own count.
+    counted, decisions = review_pending(review) if review else (None, None)
+    if owner or decisions:
         n += 1
-        rows.append([("negrito", f"{n}. {len(owner)} owner question(s): "),
+        head = owner_count_text(review, len(owner))[0] or \
+            f"{len(owner)} owner question(s)"
+        rows.append([("negrito", f"{n}. {head}"
+                      + (": " if owner else "")),
                      (None, ", ".join(str(ad.get("id")) for ad in owner), True)])
         by_item = ((report or {}).get("analysis") or {}).get("itens") or {}
         for ad in owner[:NEXT_QUESTIONS_SHOWN]:
@@ -5390,7 +5416,7 @@ def next_rows(repo, queue, run_id, state, ledger, report, left=None):
         if len(owner) > NEXT_QUESTIONS_SHOWN:
             rows.append([(None, "   "), ("cinza", f"... and {len(owner) - NEXT_QUESTIONS_SHOWN}"
                                         " more, all in `decide`")])
-        rows.append([(None, "   "), ("ciano", f"cepa-run decide {queue}/{run_id}"),
+        rows.append([(None, "   "), ("ciano", f"cepa run decide {queue}/{run_id}"),
                      ("cinza", " (one by one, in a terminal)")])
     asked = (report or {}).get("asked")
     if asked and owner:
@@ -5400,7 +5426,7 @@ def next_rows(repo, queue, run_id, state, ledger, report, left=None):
         n += 1
         rows.append([("negrito", f"{n}. already asked in this run, still open: "),
                      (None, ", ".join(asked), True)])
-        rows.append([(None, "   "), ("ciano", f"cepa-run decide {queue}/{run_id}"),
+        rows.append([(None, "   "), ("ciano", f"cepa run decide {queue}/{run_id}"),
                      ("cinza", " (to answer again)")])
     # Routes the owner already answered "no": counted, never asked here again
     # (decide-de-run-nao-repete-nao-respondido); the whole queue revisits them.
@@ -5408,7 +5434,7 @@ def next_rows(repo, queue, run_id, state, ledger, report, left=None):
         latest = max(dates)
         rows.append([("cinza", f"{len(dates)} route(s) you already answered \"no\" "
                       f"(last on {latest[8:10]}/{latest[5:7]}), not asked again: "),
-                     ("ciano", f"cepa-run decide {name}", True)])
+                     ("ciano", f"cepa run decide {name}", True)])
     for stay in state.get("fica_com_voce") or []:
         if stay.get("id") in shown:
             continue
@@ -9550,7 +9576,8 @@ def _main(argv=None):
         except (OSError, ValueError):
             left_over = {}
         next_panel = next_rows(repo, a.queue, run_id, left_over, ledger,
-                               owner_report, left=deadline - datetime.now())
+                               owner_report, left=deadline - datetime.now(),
+                               review=review)
         # The run's last step (CS-1), after the end questions (which write answers
         # into the queue through `cepa-queue answer`) and after the `.review.md`:
         # committing earlier would leave the queue dirty again.

@@ -115,6 +115,29 @@ def test_the_count_comes_from_the_review_and_the_command_is_cepa_run():
               "cepa-run" not in block and "cepa-until" not in block, block)
 
 
+def test_next_panel_and_the_block_state_the_same_count_and_spell_cepa_run():
+    with tempfile.TemporaryDirectory() as tmp:
+        root, p, branch = red_run(tmp)
+        out = p.stdout
+        nxt = out[out.find("── Next"):]
+        panel = nxt[:nxt.find("What happened:")]
+        block = block_of(out)
+        check("o painel Next traz a contagem da análise",
+              "2 decisions and 4 tasks" in panel, panel)
+        check("...a mesma que o 'Pending for you'",
+              "Pending for you: 2 decisions and 4 tasks" in block, block)
+        check("...sem o número da fila ('1 owner question') ao lado",
+              "1 owner question" not in nxt, nxt)
+        check("o painel ainda lista a pergunta que a fila sabe nomear",
+              f"{LONG_ID}:" in panel, panel)
+        check("o bloco não traz mais a nota sobre o painel",
+              "the Next panel above" not in block, block)
+        check("de `── Next` até o fim não há `cepa-run`", "cepa-run" not in nxt, nxt)
+        run_id = branch.split("/", 1)[1]
+        check("o painel manda rodar `cepa run decide`",
+              f"cepa run decide fila/{run_id}" in panel, panel)
+
+
 def test_without_the_analysis_the_block_still_comes_and_says_so():
     with tempfile.TemporaryDirectory() as tmp:
         root, p, branch = red_run(tmp, analysis=False)
@@ -275,6 +298,90 @@ def test_auto_landed_run_says_it_landed_and_offers_no_land_command():
         check("...não diz 'not merged' nem manda rodar land",
               "not merged" not in p.stdout and "cepa run land" not in block, block)
         check("...e não há comando a rodar", "Run now: nothing" in block, block)
+
+
+def _module():
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader("cepa_run_mod4", str(base.CEPA_UNTIL))
+    spec = importlib.util.spec_from_loader("cepa_run_mod4", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+def _panel_and_block(for_you, questions):
+    """The `Next` panel's owner row and the block's pending/command lines for a
+    review whose `**For you:**` line is `for_you`, with `questions` open in the queue."""
+    mod = _module()
+    with tempfile.TemporaryDirectory() as tmp:
+        review = Path(tmp) / "r.review.md"
+        review.write_text(f"# review\n\n**For you:** {for_you}\n")
+        deferred = [{"id": f"a{i + 1}", "reason": "human_pending",
+                     "question": f"pergunta {i + 1}?"} for i in range(questions)]
+        rows = mod.next_rows(Path(tmp), "fila", "r1", {}, review,
+                             {"deferred": deferred}, review=review)
+        panel = [" ".join(t for _c, t, *_r in row) for row in rows]
+        block = mod.closing_block("fila", "r1", False, "until/r1", 0, 0, 0, 0, [],
+                                  0, review, None, questions, False, [], Path(tmp))
+    return panel, block
+
+
+def _agree(label, for_you, questions, expected_count):
+    panel, block = _panel_and_block(for_you, questions)
+    owner_row = next((r for r in panel if r.startswith("1. ")), "")
+    pending = next((l for l in block if l.startswith("Pending for you:")), "")
+    count = pending[len("Pending for you: "):]
+    check(f"{label}: a linha do dono no painel tem a contagem esperada",
+          expected_count in owner_row, owner_row)
+    check(f"{label}: a contagem do painel é a do 'Pending for you'",
+          owner_row[len("1. "):].split(": ")[0].strip() == count.strip(),
+          f"{owner_row!r} vs {pending!r}")
+    check(f"{label}: a linha do dono não diz 'nothing'",
+          "nothing" not in owner_row and "nothing" not in pending, owner_row)
+    check(f"{label}: o comando é o decide", "Run now: cepa run decide fila/r1" in block,
+          str(block))
+
+
+def test_open_question_with_an_analysis_that_counts_no_decision():
+    _agree("análise 'nothing'", "nothing.", 1, "1 owner question(s)")
+    _agree("análise '0 decisions and 2 tasks'", "0 decisions and 2 tasks", 1,
+           "1 owner question(s) and 2 task(s)")
+    _agree("análise '3 tasks.'", "3 tasks.", 1,
+           "1 owner question(s) and 3 task(s)")
+
+
+def test_real_run_with_open_question_and_an_analysis_of_nothing():
+    review = ("# run review\\n\\n**For you:** nothing.\\n\\n### Technical detail\\n\\nx")
+    body = ("if any('run-review' in a for a in ARGS):\n"
+            f"    print('{review}')\n    sys.exit(0)\n" + WORKS)
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item(LONG_ID)])
+        binv = fake_claude(tmp, body)
+        p, _ = run_until(root, binv, plan_of(root),
+                         ["--for", "2h", "--verify", MAVEN_VERIFY, "--com-analise"],
+                         extra_env={"FAKE_QUEBRA": LONG_ID, "COLUMNS": "80"})
+        out = p.stdout
+        nxt = out[out.find("── Next"):]
+        panel = nxt[:nxt.find("What happened:")]
+        block = block_of(out)
+        check("o painel diz a contagem da fila, não 'nothing'",
+              "1. 1 owner question(s)" in panel and "nothing" not in panel, panel)
+        check("o bloco diz a mesma contagem",
+              "Pending for you: 1 owner question(s)" in block, block)
+        check("e o comando é o decide", "Run now: cepa run decide fila/" in block,
+              block)
+
+
+def test_analysis_decisions_without_a_nameable_question_still_show_row_and_command():
+    panel, block = _panel_and_block("2 decisions and 4 tasks.", 0)
+    row = next((r for r in panel if r.startswith("1. ")), "")
+    check("d: a linha existe com a frase da análise",
+          "2 decisions and 4 tasks (from the analysis)" in row, str(panel))
+    check("d: o comando decide aparece", any("cepa run decide fila/r1" in r
+                                              for r in panel), str(panel))
+    check("d: o bloco manda rodar o decide",
+          "Run now: cepa run decide fila/r1" in block, str(block))
 
 
 def test_a_review_without_a_count_is_not_called_missing():

@@ -249,7 +249,8 @@ def test_the_run_summary_points_to_the_command():
         run_id = [e for e in ledger_of(root)
                   if e["evento"] == "run_start"][0]["branch"].split("/", 1)[1]
         cmd = f"cepa-run land fila/{run_id}"
-        check("o terminal mostra o comando", cmd in p.stdout, p.stdout[-800:])
+        check("o terminal mostra o comando (Next, grafia nova)",
+              cmd.replace("cepa-run", "cepa run") in p.stdout, p.stdout[-800:])
         action = (state(root).get("acoes") or [{}])[0]
         check("...e o estado também", cmd in (action.get("comando") or ""), str(action))
 

@@ -399,7 +399,7 @@ def test_run_on_an_hc_terminal_that_nobody_answers_ends_in_needs_you():
         message = "fila: finished, questions wait for you"
         state, title = _last_hc(out)
         check("run hc sem resposta: sai 0 e a pergunta expirou",
-              rc == 0 and "cepa-run decide fila/" in out, out[-800:])
+              rc == 0 and "cepa run decide fila/" in out, out[-800:])
         check("run hc sem resposta: termina em blocked kind=question",
               state == "state=blocked:kind=question:app=cepa-until:msg="
               + base64.b64encode(message.encode()).decode(), repr(state))
@@ -776,7 +776,7 @@ def test_run_without_terminal_lists_the_pending_and_the_command():
         check("...com a pergunta do item, não a evidência",
               "a1: Fecho o card como medir depois do go-live?" in nxt, p.stdout[-1500:])
         check("...e o comando para responder",
-              "cepa-run decide fila/" in p.stdout, p.stdout[-800:])
+              "cepa run decide fila/" in p.stdout, p.stdout[-800:])
 
 
 def test_run_on_terminal_ends_asking_and_applies():
@@ -828,7 +828,7 @@ def test_run_on_terminal_without_answer_exits_after_the_wait():
         check("o menu foi mostrado",
               "Fecho o card como medir depois do go-live?" in out, out[-1500:])
         check("imprime o comando para responder depois",
-              "cepa-run decide fila/" in out, out[-1500:])
+              "cepa run decide fila/" in out, out[-1500:])
         check("nada foi aplicado",
               items_of(root)["a1"]["status"] == "blocked", items_of(root)["a1"])
 
@@ -1014,7 +1014,7 @@ def test_end_with_analysis_asks_with_the_block_wording():
         p, _ = run_until(root, binv, plan_of(root), ["--for", "2h", "--com-analise"])
         end = p.stdout.split("── Next")[-1]
         check("com análise, o fim lista o que espera o dono",
-              "── Next" in p.stdout and "1 owner question(s): a1" in end, p.stdout[-1200:])
+              "── Next" in p.stdout and "1 decision(s) (from the analysis): a1" in end, p.stdout[-1200:])
         check("...com a pergunta redigida pela análise",
               "Movo a medição para o checklist?" in end, end)
 
